@@ -2874,12 +2874,21 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     const { tex: helixTex, data: helixData } = _makeHelixXformTexture(helixIds, helix_axes)
 
     const mat = new THREE.MeshLambertMaterial({ color: 0xffffff })
-    mat.customProgramCacheKey = () => 'sharedLodMid'
+    // Phase 3f stage 2 follow-up: per-material cache key, so the mid-LOD
+    // program isn't shared across sources (same trap that bit the bp
+    // path's static cache key — see worktree gotchas in plan doc).
+    const _midCacheKey = 'sharedLodMid_' + mat.uuid
+    mat.customProgramCacheKey = () => _midCacheKey
+    // u_instanceOffset stays out-of-closure so _updateLodForSource can
+    // write to it each frame. Initialized to 0; correct value (nClose) is
+    // set after bucket counting.
+    const u_instanceOffset = { value: 0 }
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.u_instanceXform = srcEntry.uXformUniform
       shader.uniforms.u_visibilityTex = srcEntry.uVisUniform
       shader.uniforms.u_helixXform    = { value: helixTex }
       shader.uniforms.u_numHelices    = { value: numHelices }
+      shader.uniforms.u_instanceOffset = u_instanceOffset
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
@@ -2889,14 +2898,19 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           uniform sampler2D u_visibilityTex;
           uniform sampler2D u_helixXform;
           uniform float u_numHelices;
+          uniform float u_instanceOffset;
           varying float v_visible;
           `,
         )
         .replace(
           '#include <begin_vertex>',
           `
-          int instanceIdx = int(floor(float(gl_InstanceID) / max(u_numHelices, 1.0)));
-          int helixIdx    = gl_InstanceID - instanceIdx * int(u_numHelices);
+          // Phase 3f stage 2 follow-up: bias instance index by u_instanceOffset
+          // so this mesh reads texture rows starting AFTER close-LOD's range.
+          // Without this, mid-LOD reads the same nearest rows close-LOD already
+          // drew — triple-rendering bug from stage 1.
+          int instanceIdx = int(floor(float(gl_InstanceID) / max(u_numHelices, 1.0))) + int(u_instanceOffset);
+          int helixIdx    = gl_InstanceID - (instanceIdx - int(u_instanceOffset)) * int(u_numHelices);
           v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
           mat4 instTransform = mat4(
             texelFetch(u_instanceXform, ivec2(0, instanceIdx), 0),
@@ -2945,7 +2959,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     mesh.visible = false  // _updateLod flips on when count > 0
     mesh.name = 'sharedLodMid'
     sourceGroup.add(mesh)
-    return { mesh, numHelices, helixTex, helixData }
+    return { mesh, numHelices, helixTex, helixData, u_instanceOffset }
   }
 
   // ── Far-LOD InstancedMesh + shader ───────────────────────────────────────
@@ -2963,12 +2977,17 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     if (numInstances === 0) return null
 
     const mat = new THREE.MeshBasicMaterial({ color: 0xffffff })
-    mat.customProgramCacheKey = () => 'sharedLodFar'
+    // Phase 3f stage 2 follow-up: per-material cache key + u_instanceOffset
+    // so this far-LOD mesh reads texture rows starting after close+mid range.
+    const _farCacheKey = 'sharedLodFar_' + mat.uuid
+    mat.customProgramCacheKey = () => _farCacheKey
+    const u_instanceOffset = { value: 0 }
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.u_instanceXform   = srcEntry.uXformUniform
       shader.uniforms.u_visibilityTex   = srcEntry.uVisUniform
       shader.uniforms.u_billboardRadius = { value: billboardRadius }
       shader.uniforms.u_billboardColor  = { value: new THREE.Vector3(...billboardColor) }
+      shader.uniforms.u_instanceOffset  = u_instanceOffset
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
@@ -2977,13 +2996,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           uniform sampler2D u_instanceXform;
           uniform sampler2D u_visibilityTex;
           uniform float u_billboardRadius;
+          uniform float u_instanceOffset;
           varying float v_visible;
           `,
         )
         .replace(
           '#include <begin_vertex>',
           `
-          int instanceIdx = gl_InstanceID;
+          int instanceIdx = gl_InstanceID + int(u_instanceOffset);
           v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
           // Translation column of the instance transform (column 3).
           vec4 col3 = texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0);
@@ -3032,7 +3052,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     mesh.visible = false
     mesh.name = 'sharedLodFar'
     sourceGroup.add(mesh)
-    return { mesh }
+    return { mesh, u_instanceOffset }
   }
 
   // ── Per-frame LOD assignment + sort-to-front (Phase 3f stage 2) ──────────
@@ -3189,15 +3209,26 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       am.mesh.count = c
       am.mesh.visible = c > 0
     }
+    // Phase 3f stage 2 follow-up: with rows sorted by distance, mid-LOD
+    // reads texture rows starting at nClose, far-LOD starting at nClose+nMid.
+    // Without these offsets, the shaders would read rows 0..nMid-1 / 0..nFar-1
+    // — i.e. the SAME nearest instances close-LOD already drew (triple-render
+    // bug from stage 1, surfaced by the stage-1 evaluator FAIL at 8f185bb).
     if (srcEntry.midLod) {
       const c = nMid * srcEntry.midLod.numHelices
       srcEntry.midLod.mesh.count = c
       srcEntry.midLod.mesh.visible = c > 0
+      if (srcEntry.midLod.u_instanceOffset) {
+        srcEntry.midLod.u_instanceOffset.value = nClose
+      }
     }
     if (srcEntry.farLod) {
       const c = nFar
       srcEntry.farLod.mesh.count = c
       srcEntry.farLod.mesh.visible = c > 0
+      if (srcEntry.farLod.u_instanceOffset) {
+        srcEntry.farLod.u_instanceOffset.value = nClose + nMid
+      }
     }
     srcEntry._lastLodCounts = { close: nClose, mid: nMid, far: nFar }
   }
