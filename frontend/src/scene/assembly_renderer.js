@@ -2223,22 +2223,37 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   }
 
   // ── Shader injection ──────────────────────────────────────────────────────
-  // Patch a material's onBeforeCompile so the vertex stage applies the
-  // per-instance transform from a DataTexture lookup. Also adds a fragment
-  // brightening for the selected instance.
+  // Patch a material's onBeforeCompile so the vertex stage applies BOTH the
+  // per-instance source transform (from one per-source DataTexture) AND the
+  // per-bp local transform (from one per-mesh DataTexture). Also adds a
+  // fragment brightening for the selected instance.
   //
-  // `numBpPerInstance` is set as a uniform (so the divisor varies per source).
+  // Two textures so per-bp matrices are stored ONCE per source (not N tiles):
+  //   - u_instanceXform: per-source-instance 4×4 matrix (N rows).
+  //   - u_bpXform:       per-bp 4×4 matrix (bp_count rows).
+  // World position: `world = instTransform * bpMat * position`. The standard
+  // `<project_vertex>` chunk still runs `instanceMatrix * mvPosition`, but
+  // we've collapsed `instanceMatrix` to a single identity row via
+  // meshPerAttribute (see `_patchSharedMeshes`) so that multiply is a no-op.
+  //
+  // `numBpPerInstance` is set as a uniform (so the divisor varies per mesh).
   // `u_activeInstanceIdx` is shared so a single `.value = N` write per
   // selection change updates every mesh in the source.
+  // `u_bpXform` is PER-MESH (each InstancedMesh has its own bp count and
+  // bp matrix set), supplied via `uBpTex` in the uniforms bundle.
   function _attachInstanceShader(material, uniformsBundle, numBpPerInstance) {
     material.onBeforeCompile = (shader) => {
       shader.uniforms.u_instanceXform   = uniformsBundle.uXform
       shader.uniforms.u_numBpPerInstance = { value: numBpPerInstance }
       shader.uniforms.u_activeInstanceIdx = uniformsBundle.uActiveIdx
       shader.uniforms.u_visibilityTex   = uniformsBundle.uVis
+      shader.uniforms.u_bpXform         = uniformsBundle.uBpTex
 
-      // Vertex: prepend uniform + varying; intercept `transformed` position
-      // via `#include <project_vertex>`.
+      // Vertex: prepend uniform + varying; compose final `transformed` via
+      // full chunk replacement of `<begin_vertex>` (option (a) from the
+      // chunk spec). `instanceMatrix` is collapsed to identity via
+      // meshPerAttribute, so the auto-injection in `<project_vertex>`
+      // becomes a no-op without further patching there.
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
@@ -2246,6 +2261,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           #include <common>
           uniform sampler2D u_instanceXform;
           uniform sampler2D u_visibilityTex;
+          uniform sampler2D u_bpXform;
           uniform float u_numBpPerInstance;
           uniform float u_activeInstanceIdx;
           flat varying int v_instanceIdx;
@@ -2259,17 +2275,27 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           // every group of u_numBpPerInstance consecutive instances belongs
           // to one source-instance.
           int instanceIdx = int(floor(float(gl_InstanceID) / max(u_numBpPerInstance, 1.0)));
+          int bpIdx       = gl_InstanceID - instanceIdx * int(u_numBpPerInstance);
           v_instanceIdx = instanceIdx;
           v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
-          // Read 4 RGBA texels (4 floats each) = one mat4. The texture is
-          // laid out with rows = columns of the matrix (see _packMatrixIntoRow).
+          // Per-source instance matrix. 4 RGBA texels (4 floats each) = one
+          // mat4. Texture layout: column-major (texel j of row i = column j
+          // of matrix i). mat4(c0,c1,c2,c3) is column-major in GLSL.
           mat4 instTransform = mat4(
             texelFetch(u_instanceXform, ivec2(0, instanceIdx), 0),
             texelFetch(u_instanceXform, ivec2(1, instanceIdx), 0),
             texelFetch(u_instanceXform, ivec2(2, instanceIdx), 0),
             texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0)
           );
-          vec3 transformed = (instTransform * instanceMatrix * vec4(position, 1.0)).xyz;
+          // Per-bp local matrix. Same column-major layout (we copy directly
+          // from THREE's column-major InstancedMesh.instanceMatrix.array).
+          mat4 bpMat = mat4(
+            texelFetch(u_bpXform, ivec2(0, bpIdx), 0),
+            texelFetch(u_bpXform, ivec2(1, bpIdx), 0),
+            texelFetch(u_bpXform, ivec2(2, bpIdx), 0),
+            texelFetch(u_bpXform, ivec2(3, bpIdx), 0)
+          );
+          vec3 transformed = (instTransform * bpMat * vec4(position, 1.0)).xyz;
           `,
         )
 
@@ -2300,12 +2326,42 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     material.customProgramCacheKey = () => 'sharedInstanced'
   }
 
+  // Build a per-mesh "bp transform" DataTexture from the original per-bp
+  // instanceMatrix data. Width=4 RGBA texels (one per matrix column),
+  // height=bp_count. Texel (j, i) holds column j of the bp-i local matrix.
+  // THREE stores `instanceMatrix.array` column-major (consecutive 16 floats
+  // per slot are c0|c1|c2|c3), so we can do a direct typed-array copy.
+  function _makeBpXformTexture(srcArray, bpCount) {
+    const w = 4
+    const h = Math.max(1, bpCount)
+    const data = new Float32Array(w * h * 4)  // = 16 * h floats = bpCount × 16
+    // Copy bpCount × 16 floats straight across (column-major == column-major).
+    const n = Math.min(srcArray.length, bpCount * 16)
+    data.set(srcArray.subarray(0, n), 0)
+    const tex = new THREE.DataTexture(
+      data, w, h, THREE.RGBAFormat, THREE.FloatType,
+    )
+    tex.minFilter = THREE.NearestFilter
+    tex.magFilter = THREE.NearestFilter
+    tex.generateMipmaps = false
+    tex.needsUpdate = true
+    return { tex, data }
+  }
+
   // Walk a helixCtrl.root and patch every InstancedMesh's material with the
-  // shader. Also multiplies each InstancedMesh's count by num_instances and
-  // re-allocates `instanceMatrix` so the per-bp matrices repeat for each
-  // source-instance. The per-bp matrices for instance K live at indices
-  // [K * num_bp, (K+1) * num_bp).
-  function _patchSharedMeshes(helixCtrl, numInstances, uniformsBundle, activeMeshes) {
+  // shader. The per-bp local matrices written by `buildHelixObjects` into
+  // `instanceMatrix` are EXTRACTED into a per-mesh DataTexture (one bp's
+  // matrix per row) and then `instanceMatrix` is collapsed to a single
+  // identity row via `meshPerAttribute = mesh.count`. The mesh's `count`
+  // is set to `bp_count × num_instances`; `gl_InstanceID` indexes both
+  // dimensions, decomposed in the shader as
+  //     instanceIdx = gl_InstanceID / bp_count
+  //     bpIdx       = gl_InstanceID % bp_count
+  // and `world = instTransform[instanceIdx] * bpMat[bpIdx] * position`.
+  //
+  // Memory: per InstancedMesh, per-bp data is now stored ONCE per source
+  // (64 × bp bytes), not N times. At bp=61k, N=500 that's ~4 MB vs ~1.9 GB.
+  function _patchSharedMeshes(helixCtrl, numInstances, uniformsBundle, activeMeshes, source) {
     if (!helixCtrl?.root) return
     helixCtrl.root.traverse(obj => {
       if (!(obj instanceof THREE.InstancedMesh)) return
@@ -2313,47 +2369,82 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       if (baseCount === 0) return
       const newCount = baseCount * numInstances
 
-      // Copy the template matrices for instance 0 into the larger buffer.
-      // We replicate the per-bp matrices across all N instances; the shader
-      // applies the per-instance transform on top.
-      const oldArr = obj.instanceMatrix.array
-      const newArr = new Float32Array(newCount * 16)
-      // Pattern 0: copy the original baseCount * 16 floats unchanged.
-      newArr.set(oldArr, 0)
-      // For K > 0, replicate the same per-bp block. (Cheap memcpy.)
-      for (let k = 1; k < numInstances; k++) {
-        newArr.set(newArr.subarray(0, baseCount * 16), k * baseCount * 16)
-      }
-      const newAttr = new THREE.InstancedBufferAttribute(newArr, 16)
-      newAttr.setUsage(THREE.StaticDrawUsage)
-      obj.instanceMatrix = newAttr
-      // Replicate instanceColor similarly so each instance's slots get the
-      // same per-bp colors (selection/highlight via uniform, not per-color).
-      if (obj.instanceColor) {
-        const oldC = obj.instanceColor.array
-        const newC = new Float32Array(newCount * 3)
-        newC.set(oldC, 0)
-        for (let k = 1; k < numInstances; k++) {
-          newC.set(newC.subarray(0, baseCount * 3), k * baseCount * 3)
-        }
-        obj.instanceColor = new THREE.InstancedBufferAttribute(newC, 3)
-        obj.instanceColor.setUsage(THREE.StaticDrawUsage)
-      }
-      obj.count = newCount
+      // ── Extract per-bp matrices into a per-mesh DataTexture ──────────────
+      const { tex: bpTex, data: bpData } = _makeBpXformTexture(
+        obj.instanceMatrix.array, baseCount,
+      )
+
+      // ── Collapse `instanceMatrix` to a single identity row ───────────────
+      // Three.js's `<project_vertex>` auto-applies `instanceMatrix * mvPosition`
+      // when USE_INSTANCING is on. With `meshPerAttribute = mesh.count`, the
+      // vertex-attribute divisor is `count`, so every rendered instance reads
+      // the SAME single matrix slot. We make that slot identity → no-op.
+      const identityArr = new Float32Array(16)
+      identityArr[0]  = 1
+      identityArr[5]  = 1
+      identityArr[10] = 1
+      identityArr[15] = 1
+      const idAttr = new THREE.InstancedBufferAttribute(identityArr, 16, false, newCount)
+      idAttr.setUsage(THREE.StaticDrawUsage)
+      obj.instanceMatrix = idAttr
       obj.instanceMatrix.needsUpdate = true
-      if (obj.instanceColor) obj.instanceColor.needsUpdate = true
+
+      // ── Same trick for instanceColor (if present): single-row + divisor ──
+      // Per-bp color was identical across source-instances anyway (selection
+      // / highlight goes through the active-instance uniform). To avoid the
+      // same N-tiling regression, keep the original baseCount colors but
+      // attach them via an InstancedBufferAttribute whose meshPerAttribute is
+      // 1 (per-slot) BUT keep only baseCount slots — Three.js then loops the
+      // attribute every baseCount slots via the divisor mechanism only when
+      // meshPerAttribute > 1. Easier: store the bp colors in a DataTexture
+      // too, OR collapse via meshPerAttribute=newCount with a single color.
+      // For now, since instanceColor isn't currently used for per-bp coloring
+      // in the patched output (color comes from material baseColor or vertex
+      // color baked into geometry), drop the attribute entirely. If it's
+      // ever needed later we'll move it to a third texture.
+      if (obj.instanceColor) {
+        // Keep the original baseCount colors via meshPerAttribute trick: a
+        // length-baseCount buffer with meshPerAttribute=numInstances means
+        // every group of numInstances rendered instances shares one color.
+        // But our index ordering is the OPPOSITE: outer loop = instance, inner
+        // loop = bp. So a flat divisor doesn't recover per-bp coloring. The
+        // simplest correct behaviour matching the OLD pre-Phase-3c renderer:
+        // just drop the per-bp instance colors — `buildHelixObjects` paints
+        // bp colors via `material.color` / per-segment materials, not via
+        // `instanceColor`, in the bp-level draw paths we touch here.
+        obj.instanceColor = null
+      }
+
+      obj.count = newCount
 
       // Frustum culling reads the geometry's bounding sphere/box only — for
       // an instanced shared source it's wildly wrong. Disable it.
       obj.frustumCulled = false
 
-      // Attach the per-source uniforms to this material.
+      // Attach the per-source + per-mesh uniforms to this material.
+      // `uBpTex` is a NEW per-mesh sampler2D pointing at this mesh's bp
+      // matrix texture. The other uniforms (xform, vis, active) are shared
+      // across the source.
+      const uBpTex = { value: bpTex }
+      const meshUniforms = {
+        uXform:     uniformsBundle.uXform,
+        uActiveIdx: uniformsBundle.uActiveIdx,
+        uVis:       uniformsBundle.uVis,
+        uBpTex,
+      }
       const mat = obj.material
       const mats = Array.isArray(mat) ? mat : [mat]
       for (const m of mats) {
-        _attachInstanceShader(m, uniformsBundle, baseCount)
+        _attachInstanceShader(m, meshUniforms, baseCount)
       }
-      activeMeshes.push({ mesh: obj, baseCount })
+
+      // Stash bp-texture handles on the source's render-data list so
+      // `_disposeSource` can release them.
+      if (source) {
+        source.bpTextures.push(bpTex)
+      }
+
+      activeMeshes.push({ mesh: obj, baseCount, bpTex, bpData })
     })
   }
 
@@ -2423,9 +2514,34 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // Compute per-source local bbox BEFORE we patch (count is still baseCount).
     const instBoundingBox = _computeSourceLocalBox(helixCtrl)
 
-    // Patch shader + multiply InstancedMesh counts.
+    // Patch shader + collapse InstancedMesh.instanceMatrix + extract per-bp
+    // matrices into per-mesh DataTextures. We pass a transient holder so the
+    // patch helper can register textures for disposal.
     const activeMeshes = []
-    _patchSharedMeshes(helixCtrl, numInstances, uniformsBundle, activeMeshes)
+    const sourceCollector = { bpTextures: [] }
+    _patchSharedMeshes(helixCtrl, numInstances, uniformsBundle, activeMeshes, sourceCollector)
+
+    // ── Memory-savings probe (debug visibility into the per-source budget) ──
+    // Compute the byte count of the per-bp DataTextures (NEW) + the
+    // per-instance transform texture (also Phase 3c). Compare with what the
+    // OLD instanceMatrix-tile path would have cost (16 × baseCount × N × 4
+    // per InstancedMesh).
+    let bpBytes = 0
+    let oldTileBytes = 0
+    for (const m of activeMeshes) {
+      bpBytes += m.bpData.byteLength
+      oldTileBytes += 16 * m.baseCount * numInstances * 4
+    }
+    const xformBytes = xformData.byteLength + visData.byteLength
+    if (typeof console !== 'undefined' && console.info) {
+      console.info(
+        `[shared_renderer] source=${srcKey} N=${numInstances} ` +
+        `bp-texture=${(bpBytes/1024/1024).toFixed(2)} MB, ` +
+        `inst-texture=${(xformBytes/1024).toFixed(1)} KB ` +
+        `(was ${(oldTileBytes/1024/1024).toFixed(2)} MB tiled in instanceMatrix; ` +
+        `saved ${((oldTileBytes - bpBytes)/1024/1024).toFixed(2)} MB)`,
+      )
+    }
 
     // Per-instance bookkeeping.
     const instanceIds  = instancesForKey.map(i => i.id)
@@ -2461,6 +2577,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       visTex,
       visData,
       activeMeshes,
+      bpTextures: sourceCollector.bpTextures,
       uActiveIdxUniform: uActiveIdx,
       uXformUniform: uXform,
       uVisUniform: uVis,
@@ -2483,6 +2600,9 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     scene.remove(srcEntry.group)
     srcEntry.xformTex?.dispose()
     srcEntry.visTex?.dispose()
+    if (srcEntry.bpTextures) {
+      for (const t of srcEntry.bpTextures) t.dispose()
+    }
     for (const id of srcEntry.instanceIds) _instToSrc.delete(id)
   }
 
