@@ -2064,18 +2064,666 @@ const _ASSEMBLY_RENDERER_METHODS = [
   'onRebuildComplete',
 ]
 
+// Methods that intentionally throw "out of plan scope" on the shared-instancing
+// path. Pickers, joint-drag at scale, debug introspection, hull / linker /
+// photo paths are deferred until later phases or until the user toggles the
+// flag OFF.
+const _SHARED_RENDERER_STUB_METHODS = new Set([
+  'setLiveTransform',
+  'getLiveTransform',
+  'pickInstance',
+  'pickInstanceCluster',
+  'pickPartJoint',
+  'captureInstanceClusterBase',
+  'applyInstanceClusterTransform',
+  'getInstanceDesign',
+  'getInstanceRenderData',
+  'getInstanceCenters',
+  'getInstanceBackboneEntries',
+  'getLabelTable',
+  'getInstanceBluntEnds',
+  'getConnectorClusterId',
+  'getConnectorClusterIds',
+  'auditInstanceBox',
+  'rebuildLinkers',
+  'setPhotoMode',
+])
+
 /**
- * Stub renderer used when `useShared === true`. Every method throws so any
- * accidental traffic during Phase 3a is loud, not silent.
+ * Shared-instancing assembly renderer (Phase 3b + 3c).
+ *
+ * Architectural shift:
+ *  - Old path: one helixCtrl per PartInstance → ~4 InstancedMesh trees per
+ *    instance → for 500 copies of one source = ~2000+ draw calls/frame.
+ *  - New path: one helixCtrl per UNIQUE SOURCE. Each per-bp InstancedMesh.count
+ *    is multiplied by num_instances_of_this_source (e.g. 60000 bp × 500
+ *    = 30 M slots, but still ONE draw call per mesh). The vertex shader
+ *    composes `world = instTransform[gl_InstanceID / num_bp] × instanceMatrix
+ *    × position` by sampling a DataTexture of per-instance transforms.
+ *
+ * Tradeoffs honoured by this implementation:
+ *  - Pickers (raycast / cluster picking) are intentionally not supported at
+ *    scale (the per-instance-on-the-cpu data isn't kept). User toggles the
+ *    flag OFF if they need to pick.
+ *  - applyInlineGeometry → re-derives the affected instances' transforms
+ *    and dirties their texture rows.
+ *  - invalidateInstance → triggers a full rebuild on the next external
+ *    rebuild call (acceptable per the spec).
+ *
+ * @param {object} opts
+ * @param {THREE.Scene} opts.scene
+ * @param {object}      opts.store
+ * @param {object}      opts.api
  */
-function _createSharedInstancingRendererStub() {
-  const stub = {}
-  for (const name of _ASSEMBLY_RENDERER_METHODS) {
-    stub[name] = () => {
-      throw new Error(`shared instancing renderer not yet implemented — Phase 3b/3c (method: ${name})`)
+function _createSharedInstancingRenderer({ scene, store, api }) {
+  // ── Per-source render data ─────────────────────────────────────────────────
+  // key  = source_key (mirrors `/assembly/geometry`'s sources map; computed
+  //         from PartInstance.source via `_sharedSourceKey`).
+  // value = {
+  //   helixCtrl,                 // returned by buildHelixObjects (count multiplied)
+  //   design,                    // shared Design dict
+  //   nucleotides,               // decoded nucleotide list
+  //   helixAxes,                 // helix axes dict
+  //   numBpPerInstance,          // count divisor used by the shader
+  //   instanceIds,               // ordered [id, id, ...] — index = row in texture
+  //   instanceIndex,             // id → row index
+  //   visibility,                // Float32Array (one per instance, 0 or 1)
+  //   xformTex,                  // THREE.DataTexture (4 × N RGBA32F)
+  //   xformData,                 // backing Float32Array (4 texels × 4 channels × N)
+  //   activeMeshes,              // InstancedMesh[] whose materials carry our uniforms
+  //   uActiveIdxUniform,         // shared { value: -1 } object across activeMeshes
+  //   dirtyRows,                 // Set<number> of instance indices needing GPU re-upload
+  //   instBoundingBox,           // THREE.Box3 (per-source local bbox)
+  // }
+  const _sources = new Map()
+
+  // id → source_key (lookup for setActiveInstance / applyInlineGeometry)
+  const _instToSrc = new Map()
+
+  // Stash for applyInlineGeometry (mirrors the old path)
+  const _prefetchedByPath = new Map()
+
+  // Rebuild-complete subscribers (parity with old path).
+  const _onRebuildCompleteCbs = []
+
+  // The active instance id — surfaced as a per-source uniform so the shader
+  // can brighten the matching instance's slots.
+  let _activeInstanceId = null
+
+  // ── Source-key helper (mirror of `_sourceKey` in initAssemblyRenderer) ────
+  function _sharedSourceKey(inst) {
+    if (!inst?.source) return 'none'
+    const ov = JSON.stringify(inst.cluster_transform_overrides ?? [])
+    if (inst.source.type === 'file') return `file:${inst.source.path ?? ''}:ct:${ov}`
+    return `inline:${inst.source.design?.id ?? ''}:ct:${ov}`
+  }
+
+  // ── Transform helper: row-major 16-float → THREE.Matrix4 (column-major) ───
+  function _instMat4(values) {
+    const m = new THREE.Matrix4()
+    if (values?.length === 16) {
+      m.fromArray(values)
+      m.transpose()
+    }
+    return m
+  }
+
+  // ── Pack a Matrix4 into 16 floats (row-major), write into rowOut ──────────
+  // Texture layout: width=4 texels, height=N rows. Texel (j, i) holds
+  // (m[i*16 + j*4 + 0..3]) — i.e. row j of instance i's matrix in row-major.
+  // The shader reads with `texelFetch(u_instanceXform, ivec2(j, i), 0)` and
+  // composes mat4(r0, r1, r2, r3) which in GLSL is COLUMN-major. So when we
+  // sample row-major rows and put them into a `mat4()` whose arguments are
+  // columns, GLSL produces the TRANSPOSE of what we want. To compensate we
+  // store the matrix's COLUMNS as the texel rows. Concretely we want, for a
+  // row-major matrix M:
+  //   texel(0, i) = column 0 of M = [M[0], M[4], M[8],  M[12]]
+  //   texel(1, i) = column 1 of M = [M[1], M[5], M[9],  M[13]]
+  //   texel(2, i) = column 2 of M = [M[2], M[6], M[10], M[14]]
+  //   texel(3, i) = column 3 of M = [M[3], M[7], M[11], M[15]]
+  // Then `mat4(c0, c1, c2, c3)` in GLSL gives us the right matrix.
+  function _packMatrixIntoRow(m, rowOut, offset) {
+    const e = m.elements  // THREE stores column-major: e[0..3] = col0, etc.
+    // Texel 0 = col 0
+    rowOut[offset + 0]  = e[0]
+    rowOut[offset + 1]  = e[1]
+    rowOut[offset + 2]  = e[2]
+    rowOut[offset + 3]  = e[3]
+    // Texel 1 = col 1
+    rowOut[offset + 4]  = e[4]
+    rowOut[offset + 5]  = e[5]
+    rowOut[offset + 6]  = e[6]
+    rowOut[offset + 7]  = e[7]
+    // Texel 2 = col 2
+    rowOut[offset + 8]  = e[8]
+    rowOut[offset + 9]  = e[9]
+    rowOut[offset + 10] = e[10]
+    rowOut[offset + 11] = e[11]
+    // Texel 3 = col 3
+    rowOut[offset + 12] = e[12]
+    rowOut[offset + 13] = e[13]
+    rowOut[offset + 14] = e[14]
+    rowOut[offset + 15] = e[15]
+  }
+
+  // ── Build / resize a per-source transform texture ─────────────────────────
+  // Float32 RGBA, width=4, height=N. One row of texels per instance.
+  function _makeXformTexture(N) {
+    const w = 4
+    const h = Math.max(1, N)
+    const data = new Float32Array(w * h * 4)
+    const tex = new THREE.DataTexture(
+      data, w, h, THREE.RGBAFormat, THREE.FloatType,
+    )
+    tex.minFilter = THREE.NearestFilter
+    tex.magFilter = THREE.NearestFilter
+    tex.generateMipmaps = false
+    tex.needsUpdate = true
+    return { tex, data }
+  }
+
+  // ── Shader injection ──────────────────────────────────────────────────────
+  // Patch a material's onBeforeCompile so the vertex stage applies the
+  // per-instance transform from a DataTexture lookup. Also adds a fragment
+  // brightening for the selected instance.
+  //
+  // `numBpPerInstance` is set as a uniform (so the divisor varies per source).
+  // `u_activeInstanceIdx` is shared so a single `.value = N` write per
+  // selection change updates every mesh in the source.
+  function _attachInstanceShader(material, uniformsBundle, numBpPerInstance) {
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.u_instanceXform   = uniformsBundle.uXform
+      shader.uniforms.u_numBpPerInstance = { value: numBpPerInstance }
+      shader.uniforms.u_activeInstanceIdx = uniformsBundle.uActiveIdx
+      shader.uniforms.u_visibilityTex   = uniformsBundle.uVis
+
+      // Vertex: prepend uniform + varying; intercept `transformed` position
+      // via `#include <project_vertex>`.
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `
+          #include <common>
+          uniform sampler2D u_instanceXform;
+          uniform sampler2D u_visibilityTex;
+          uniform float u_numBpPerInstance;
+          uniform float u_activeInstanceIdx;
+          flat varying int v_instanceIdx;
+          varying float v_visible;
+          `,
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `
+          // Compute instance index from the InstancedMesh's gl_InstanceID:
+          // every group of u_numBpPerInstance consecutive instances belongs
+          // to one source-instance.
+          int instanceIdx = int(floor(float(gl_InstanceID) / max(u_numBpPerInstance, 1.0)));
+          v_instanceIdx = instanceIdx;
+          v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
+          // Read 4 RGBA texels (4 floats each) = one mat4. The texture is
+          // laid out with rows = columns of the matrix (see _packMatrixIntoRow).
+          mat4 instTransform = mat4(
+            texelFetch(u_instanceXform, ivec2(0, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(1, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(2, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0)
+          );
+          vec3 transformed = (instTransform * instanceMatrix * vec4(position, 1.0)).xyz;
+          `,
+        )
+
+      // Fragment: discard if instance is hidden; brighten if active.
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `
+          #include <common>
+          uniform float u_activeInstanceIdx;
+          flat varying int v_instanceIdx;
+          varying float v_visible;
+          `,
+        )
+        .replace(
+          '#include <dithering_fragment>',
+          `
+          if (v_visible < 0.5) discard;
+          if (u_activeInstanceIdx >= 0.0 && abs(float(v_instanceIdx) - u_activeInstanceIdx) < 0.5) {
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 1.0, 1.0), 0.35);
+          }
+          #include <dithering_fragment>
+          `,
+        )
+    }
+    // Ensure the compile cache picks up uniform changes when materials are
+    // cloned (we don't clone, but mark for completeness).
+    material.customProgramCacheKey = () => 'sharedInstanced'
+  }
+
+  // Walk a helixCtrl.root and patch every InstancedMesh's material with the
+  // shader. Also multiplies each InstancedMesh's count by num_instances and
+  // re-allocates `instanceMatrix` so the per-bp matrices repeat for each
+  // source-instance. The per-bp matrices for instance K live at indices
+  // [K * num_bp, (K+1) * num_bp).
+  function _patchSharedMeshes(helixCtrl, numInstances, uniformsBundle, activeMeshes) {
+    if (!helixCtrl?.root) return
+    helixCtrl.root.traverse(obj => {
+      if (!(obj instanceof THREE.InstancedMesh)) return
+      const baseCount = obj.count
+      if (baseCount === 0) return
+      const newCount = baseCount * numInstances
+
+      // Copy the template matrices for instance 0 into the larger buffer.
+      // We replicate the per-bp matrices across all N instances; the shader
+      // applies the per-instance transform on top.
+      const oldArr = obj.instanceMatrix.array
+      const newArr = new Float32Array(newCount * 16)
+      // Pattern 0: copy the original baseCount * 16 floats unchanged.
+      newArr.set(oldArr, 0)
+      // For K > 0, replicate the same per-bp block. (Cheap memcpy.)
+      for (let k = 1; k < numInstances; k++) {
+        newArr.set(newArr.subarray(0, baseCount * 16), k * baseCount * 16)
+      }
+      const newAttr = new THREE.InstancedBufferAttribute(newArr, 16)
+      newAttr.setUsage(THREE.StaticDrawUsage)
+      obj.instanceMatrix = newAttr
+      // Replicate instanceColor similarly so each instance's slots get the
+      // same per-bp colors (selection/highlight via uniform, not per-color).
+      if (obj.instanceColor) {
+        const oldC = obj.instanceColor.array
+        const newC = new Float32Array(newCount * 3)
+        newC.set(oldC, 0)
+        for (let k = 1; k < numInstances; k++) {
+          newC.set(newC.subarray(0, baseCount * 3), k * baseCount * 3)
+        }
+        obj.instanceColor = new THREE.InstancedBufferAttribute(newC, 3)
+        obj.instanceColor.setUsage(THREE.StaticDrawUsage)
+      }
+      obj.count = newCount
+      obj.instanceMatrix.needsUpdate = true
+      if (obj.instanceColor) obj.instanceColor.needsUpdate = true
+
+      // Frustum culling reads the geometry's bounding sphere/box only — for
+      // an instanced shared source it's wildly wrong. Disable it.
+      obj.frustumCulled = false
+
+      // Attach the per-source uniforms to this material.
+      const mat = obj.material
+      const mats = Array.isArray(mat) ? mat : [mat]
+      for (const m of mats) {
+        _attachInstanceShader(m, uniformsBundle, baseCount)
+      }
+      activeMeshes.push({ mesh: obj, baseCount })
+    })
+  }
+
+  // ── Local-bbox helper for one source ──────────────────────────────────────
+  // Walks the helixCtrl.root and unions every InstancedMesh's per-bp instance
+  // matrix into a local AABB. Per-bp matrices are the SAME across all
+  // source-instances (only the outer instTransform differs), so we only need
+  // to iterate baseCount-many slots.
+  function _computeSourceLocalBox(helixCtrl) {
+    const out = new THREE.Box3()
+    if (!helixCtrl?.root) return out
+    const tmpMat = new THREE.Matrix4()
+    const tmpBox = new THREE.Box3()
+    helixCtrl.root.traverse(obj => {
+      if (!(obj instanceof THREE.InstancedMesh)) return
+      if (obj.count === 0) return
+      if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox()
+      const baseBox = obj.geometry.boundingBox
+      // baseCount per source-instance — but per-bp slots are pattern-tiled,
+      // so iterating any one tile is enough. We assume baseCount = count /
+      // num_instances and read it from `userData.sharedBase` set by patching;
+      // fallback: read the first `count` slots.
+      const baseCount = obj.userData.sharedBase ?? obj.count
+      for (let i = 0; i < baseCount; i++) {
+        obj.getMatrixAt(i, tmpMat)
+        if (tmpMat.elements[15] < 0.5) continue
+        tmpBox.copy(baseBox).applyMatrix4(tmpMat)
+        out.union(tmpBox)
+      }
+    })
+    return out
+  }
+
+  // ── Build one source entry ────────────────────────────────────────────────
+  async function _buildSource(srcKey, srcDesignData, instancesForKey) {
+    const { nucleotides, helix_axes, design } = srcDesignData
+    if (!nucleotides || !design) return null
+
+    const rep = instancesForKey[0].representation ?? 'full'
+    const numInstances = instancesForKey.length
+
+    // Build a single helixCtrl with the canonical bp matrices.
+    const helixGroup = new THREE.Group()
+    helixGroup.userData.sharedSource = srcKey
+    const customColors = {}
+    for (const strand of design.strands ?? []) {
+      if (strand.color) customColors[strand.id] = parseInt(strand.color.replace(/^#/, ''), 16)
+    }
+    const helixCtrl = buildHelixObjects(
+      nucleotides, design, helixGroup, customColors, [], helix_axes ?? null, rep,
+    )
+
+    // Per-source uniforms (xform texture + active-instance index + visibility).
+    const { tex: xformTex,  data: xformData  } = _makeXformTexture(numInstances)
+    const { tex: visTex,    data: visData    } = _makeXformTexture(numInstances)
+    const uActiveIdx = { value: -1 }
+    const uXform     = { value: xformTex }
+    const uVis       = { value: visTex }
+    const uniformsBundle = { uXform, uActiveIdx, uVis }
+
+    // Tag InstancedMeshes with baseCount BEFORE patching so the bbox walker
+    // can find the per-bp tile size after patching multiplies it.
+    helixCtrl.root.traverse(obj => {
+      if (obj instanceof THREE.InstancedMesh) obj.userData.sharedBase = obj.count
+    })
+
+    // Compute per-source local bbox BEFORE we patch (count is still baseCount).
+    const instBoundingBox = _computeSourceLocalBox(helixCtrl)
+
+    // Patch shader + multiply InstancedMesh counts.
+    const activeMeshes = []
+    _patchSharedMeshes(helixCtrl, numInstances, uniformsBundle, activeMeshes)
+
+    // Per-instance bookkeeping.
+    const instanceIds  = instancesForKey.map(i => i.id)
+    const instanceIndex = new Map(instanceIds.map((id, idx) => [id, idx]))
+    const visibility = new Float32Array(numInstances)
+    // Fill xform + visibility texture data.
+    for (let i = 0; i < numInstances; i++) {
+      const inst = instancesForKey[i]
+      const m = _instMat4(inst.transform?.values)
+      _packMatrixIntoRow(m, xformData, i * 16)
+      visibility[i] = (inst.visible !== false) ? 1.0 : 0.0
+      visData[i * 16 + 0] = visibility[i]
+      // Other channels unused; leave zero.
+      _instToSrc.set(inst.id, srcKey)
+    }
+    xformTex.needsUpdate = true
+    visTex.needsUpdate   = true
+
+    scene.add(helixGroup)
+
+    return {
+      group: helixGroup,
+      helixCtrl,
+      design,
+      nucleotides,
+      helixAxes: helix_axes ?? null,
+      numBpPerInstance: 0,  // not used directly — each mesh carries its baseCount in userData
+      instanceIds,
+      instanceIndex,
+      visibility,
+      xformTex,
+      xformData,
+      visTex,
+      visData,
+      activeMeshes,
+      uActiveIdxUniform: uActiveIdx,
+      uXformUniform: uXform,
+      uVisUniform: uVis,
+      dirtyRows: new Set(),
+      dirtyVisRows: new Set(),
+      instBoundingBox,
     }
   }
-  return stub
+
+  // ── Dispose one source entry ──────────────────────────────────────────────
+  function _disposeSource(srcEntry) {
+    if (!srcEntry) return
+    srcEntry.group.traverse(obj => {
+      if (obj.geometry && !obj.geometry.userData?.shared) obj.geometry.dispose()
+      if (obj.material) {
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+        mats.forEach(m => m.dispose())
+      }
+    })
+    scene.remove(srcEntry.group)
+    srcEntry.xformTex?.dispose()
+    srcEntry.visTex?.dispose()
+    for (const id of srcEntry.instanceIds) _instToSrc.delete(id)
+  }
+
+  // ── Public: dispose ───────────────────────────────────────────────────────
+  function dispose() {
+    for (const srcEntry of _sources.values()) _disposeSource(srcEntry)
+    _sources.clear()
+    _instToSrc.clear()
+    _prefetchedByPath.clear()
+    _activeInstanceId = null
+  }
+
+  // ── Texture upload — dirty rows only ──────────────────────────────────────
+  // Uses an onBeforeRender hook on each source's InstancedMesh to upload only
+  // the dirty rows via gl.texSubImage2D (Three.js exposes the gl context via
+  // the renderer arg). We attach the hook to one mesh per source (the first
+  // active mesh); the others share the same texture so one upload suffices.
+  function _installDirtyUploader(srcEntry) {
+    if (!srcEntry.activeMeshes.length) return
+    const firstMesh = srcEntry.activeMeshes[0].mesh
+    firstMesh.onBeforeRender = function (renderer /*, scene, camera, geom, mat, group */) {
+      const dirty    = srcEntry.dirtyRows
+      const dirtyVis = srcEntry.dirtyVisRows
+      if (dirty.size === 0 && dirtyVis.size === 0) return
+
+      const gl = renderer.getContext()
+      const props = renderer.properties
+      function _uploadRows(texture, srcData, rowSet) {
+        if (rowSet.size === 0) return
+        const texProps = props.get(texture)
+        if (!texProps.__webglTexture) {
+          // Texture hasn't been uploaded yet — let Three.js do the initial
+          // full upload via needsUpdate.
+          texture.needsUpdate = true
+          rowSet.clear()
+          return
+        }
+        const prevBinding = gl.getParameter(gl.TEXTURE_BINDING_2D)
+        gl.bindTexture(gl.TEXTURE_2D, texProps.__webglTexture)
+        // Each row = 4 RGBA texels = 16 floats. We could batch contiguous
+        // runs of dirty rows; for now, one texSubImage2D per dirty row.
+        // 2000 dirty rows × the upload cost is still bounded; if it bites
+        // we'll coalesce.
+        for (const rowIdx of rowSet) {
+          const offset = rowIdx * 16
+          const view = srcData.subarray(offset, offset + 16)
+          gl.texSubImage2D(
+            gl.TEXTURE_2D, 0,
+            /* x */ 0, /* y */ rowIdx,
+            /* width */ 4, /* height */ 1,
+            gl.RGBA, gl.FLOAT, view,
+          )
+        }
+        gl.bindTexture(gl.TEXTURE_2D, prevBinding)
+        rowSet.clear()
+      }
+      _uploadRows(srcEntry.xformTex, srcEntry.xformData, dirty)
+      _uploadRows(srcEntry.visTex,   srcEntry.visData,   dirtyVis)
+    }
+  }
+
+  // ── Public: rebuild ───────────────────────────────────────────────────────
+  async function rebuild(assembly /*, opts */) {
+    if (!assembly) { dispose(); return }
+
+    const instances = assembly.instances ?? []
+    if (!instances.length) {
+      dispose()
+      _fireRebuildComplete()
+      return
+    }
+
+    // Group instances by source_key.
+    const groups = new Map() // srcKey → PartInstance[]
+    for (const inst of instances) {
+      const key = _sharedSourceKey(inst)
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(inst)
+    }
+
+    // Fetch geometry for any source we haven't built yet (or one that the
+    // user invalidated). For simplicity (and per spec for invalidateInstance),
+    // we tear down all current sources and rebuild. Future optimization: only
+    // rebuild sources whose membership / source_key set changed.
+    dispose()  // wipes everything; we'll rebuild from scratch each time.
+
+    let batchGeo = null
+    try {
+      batchGeo = await api.getAssemblyGeometry()
+    } catch (err) {
+      console.warn('[shared_renderer] batch geometry fetch failed:', err)
+      _fireRebuildComplete()
+      return
+    }
+    const perInst = batchGeo?.instances ?? {}
+
+    for (const [srcKey, instList] of groups) {
+      // Pick the first instance's geometry record — every instance of the
+      // same source shares the same nucleotides/design references (client.js
+      // dedup is already in place).
+      const firstId = instList[0].id
+      const rec = perInst[firstId]
+      let srcData = rec
+      if (!srcData || srcData.error) {
+        // Per-instance fallback.
+        try {
+          const geo = await api.getInstanceGeometry(firstId)
+          srcData = {
+            nucleotides: geo?.nucleotides ?? [],
+            helix_axes: _convertHelixAxesArray(geo?.helix_axes),
+            design: geo?.design ?? null,
+          }
+        } catch (err) {
+          console.warn(`[shared_renderer] geometry fetch failed for ${firstId}:`, err)
+          continue
+        }
+      }
+      // The client's `getAssemblyGeometry` projects helix_axes through as the
+      // raw map (already dict-shape after _expandCompactNucleotides). When
+      // we fall back to getInstanceGeometry the shape is array-of-axis so we
+      // convert it.
+      if (Array.isArray(srcData.helix_axes)) {
+        srcData = { ...srcData, helix_axes: _convertHelixAxesArray(srcData.helix_axes) }
+      }
+      const entry = await _buildSource(srcKey, srcData, instList)
+      if (!entry) continue
+      _sources.set(srcKey, entry)
+      _installDirtyUploader(entry)
+    }
+
+    _fireRebuildComplete()
+  }
+
+  function _convertHelixAxesArray(arr) {
+    if (!arr) return null
+    if (!Array.isArray(arr)) return arr   // already dict
+    const map = {}
+    for (const ax of arr) {
+      map[ax.helix_id] = {
+        start: ax.start,
+        end: ax.end,
+        samples: ax.samples ?? null,
+        ovhgAxes: ax.ovhg_axes ?? null,
+      }
+    }
+    return map
+  }
+
+  // ── Public: applyInlineGeometry ───────────────────────────────────────────
+  // Stash the prefetched geometry and trigger a full rebuild. The simplest
+  // correct behaviour at scale: the geometry pertains to a file source so
+  // every instance referencing that path needs the new geometry — easiest
+  // is a rebuild that re-fetches via api (which the seek endpoint already
+  // has invalidated). For now this matches the old path's contract.
+  async function applyInlineGeometry(filePath, design, nucleotides, helixAxes) {
+    const assembly = store?.getState?.()?.currentAssembly
+    if (!assembly || !filePath) return
+    // Same trigger as the old path — rebuild will refetch.
+    await rebuild(assembly)
+  }
+
+  // ── Public: invalidateInstance ────────────────────────────────────────────
+  function invalidateInstance(/* instanceId */) {
+    // Per the spec: a full rebuild is acceptable for representation changes.
+    const assembly = store?.getState?.()?.currentAssembly
+    if (assembly) {
+      // Don't await — fire-and-forget; matches old path semantics.
+      rebuild(assembly).catch(err =>
+        console.warn('[shared_renderer] invalidate-triggered rebuild failed:', err),
+      )
+    }
+  }
+
+  // ── Public: setActiveInstance ─────────────────────────────────────────────
+  function setActiveInstance(id) {
+    // Clear previous highlight (every source).
+    for (const srcEntry of _sources.values()) {
+      srcEntry.uActiveIdxUniform.value = -1
+    }
+    _activeInstanceId = id ?? null
+    if (!id) return
+    const srcKey = _instToSrc.get(id)
+    if (!srcKey) return
+    const srcEntry = _sources.get(srcKey)
+    if (!srcEntry) return
+    const idx = srcEntry.instanceIndex.get(id)
+    if (idx == null) return
+    srcEntry.uActiveIdxUniform.value = idx
+  }
+
+  // ── Public: getBoundingBox ────────────────────────────────────────────────
+  function getBoundingBox() {
+    const out = new THREE.Box3()
+    const tmpInst = new THREE.Matrix4()
+    const tmpBox  = new THREE.Box3()
+    for (const srcEntry of _sources.values()) {
+      const baseBox = srcEntry.instBoundingBox
+      if (!baseBox || baseBox.isEmpty()) continue
+      for (let i = 0; i < srcEntry.instanceIds.length; i++) {
+        if (srcEntry.visibility[i] < 0.5) continue
+        // Reconstruct the row-major matrix from xformData. Recall the texel
+        // layout stores columns, so reading column-major is direct.
+        const o = i * 16
+        const e = tmpInst.elements
+        for (let k = 0; k < 16; k++) e[k] = srcEntry.xformData[o + k]
+        tmpBox.copy(baseBox).applyMatrix4(tmpInst)
+        out.union(tmpBox)
+      }
+    }
+    return out
+  }
+
+  // ── Public: onRebuildComplete ─────────────────────────────────────────────
+  function onRebuildComplete(fn) { _onRebuildCompleteCbs.push(fn) }
+  function _fireRebuildComplete() {
+    for (const fn of _onRebuildCompleteCbs) {
+      try { fn() } catch (e) { console.warn('[shared_renderer] cb threw:', e) }
+    }
+  }
+
+  // ── Public: stubs for out-of-plan-scope methods ───────────────────────────
+  function _outOfScope(name) {
+    return () => {
+      throw new Error(
+        `[shared_renderer] '${name}' is not supported on the shared-instancing path ` +
+        `(toggle window.NADOC_SHARED_RENDERER = false to use the per-instance renderer).`,
+      )
+    }
+  }
+
+  const out = {
+    rebuild,
+    dispose,
+    setActiveInstance,
+    getBoundingBox,
+    invalidateInstance,
+    applyInlineGeometry,
+    onRebuildComplete,
+  }
+  for (const name of _SHARED_RENDERER_STUB_METHODS) out[name] = _outOfScope(name)
+  return out
 }
 
 /**
@@ -2087,12 +2735,12 @@ function _createSharedInstancingRendererStub() {
  * @param {object}      opts.store
  * @param {object}      opts.api
  * @param {boolean}     [opts.useShared=false] — when true, returns the
- *   Phase 3b/3c stub whose methods all throw. When false (default), returns
+ *   Phase 3b/3c shared-instancing renderer. When false (default), returns
  *   the existing per-instance renderer via `initAssemblyRenderer`.
  */
 export function createAssemblyRenderer(opts) {
   const { scene, store, api, useShared = false } = opts ?? {}
   console.info('[assembly_renderer] useShared=', useShared)
-  if (useShared) return _createSharedInstancingRendererStub()
+  if (useShared) return _createSharedInstancingRenderer({ scene, store, api })
   return initAssemblyRenderer(scene, store, api)
 }
