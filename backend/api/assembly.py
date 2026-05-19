@@ -824,6 +824,24 @@ def _build_connector_frames(
         if joint.instance_b_id and joint.connector_b_label:
             labels_by_inst.setdefault(joint.instance_b_id, set()).add(joint.connector_b_label)
 
+    frames_by_conn = _build_world_connector_frames(inst_by_id, labels_by_inst, design_for)
+    return frames_by_conn, labels_by_inst
+
+
+def _build_world_connector_frames(
+    inst_by_id: dict,
+    labels_by_inst: dict,
+    design_for,
+) -> dict:
+    """Compute ``{(instance_id, label): 4x4 world frame}`` for the given
+    (instance, label) set, caching local frames by ``(design_object_id,
+    label)`` so N instances sharing one source pay the per-bp deformation
+    cost ONCE per label total.
+
+    Extracted from :func:`_build_connector_frames` so other callers
+    (e.g. ``GET /assembly/connector-frames``) can enumerate their own
+    label sets and still benefit from the same cache.
+    """
     # (design_object_id, label) -> 4x4 local frame. Local frames depend on
     # the design (cluster transforms, helix geometry), not on the
     # instance's world transform, so we can share them across instances
@@ -855,7 +873,7 @@ def _build_connector_frames(
             frame = np.eye(4, dtype=float)
             frame[:3, 3] = pos
             frames_by_conn[(inst_id, label)] = frame
-    return frames_by_conn, labels_by_inst
+    return frames_by_conn
 
 
 def _refresh_connector_frames_for_instance(
@@ -3382,32 +3400,42 @@ def get_all_connector_frames() -> dict:
     except HTTPException:
         return {}
     asm_path = _assembly_source_path(assembly)
-    out: dict = {}
-    # Per-instance design cache so file-source designs are loaded once even
-    # when an instance has many interface points.
+
+    # Reuse the same per-(design, label) local-frame cache as resolve_assembly's
+    # Phase 4e helper. Naively iterating instance×IP and calling
+    # _get_connector_world_frame each time re-runs `deformed_helix_axes` per
+    # call — ~17ms per call × (N_instances × ~2 IPs) = 27 seconds at N=500
+    # before this change; cached version is ~30ms total at N=500.
+    inst_by_id = _build_inst_by_id(assembly)
     design_cache: dict[str, 'Design'] = {}
+    def _design_for(inst) -> 'Optional[Design]':
+        if not inst.interface_points:
+            return None
+        key = _geo_cache_key(inst) or inst.id
+        d = design_cache.get(key)
+        if d is None:
+            try:
+                d = _design_with_instance_overrides(inst, asm_path)
+            except Exception:
+                d = None
+            design_cache[key] = d
+        return d
+
+    labels_by_inst: dict[str, set[str]] = {}
     for inst in assembly.instances:
         if not inst.interface_points:
             continue
-        key = _geo_cache_key(inst) or inst.id
-        design = design_cache.get(key)
-        if design is None:
-            try:
-                design = _design_with_instance_overrides(inst, asm_path)
-            except Exception:
-                design = None
-            design_cache[key] = design
-        per_inst: dict = {}
-        for ip in inst.interface_points:
-            F = _get_connector_world_frame(inst, ip.label, design)
-            if F is None:
-                continue
-            per_inst[ip.label] = {
-                "pos":    F[:3, 3].tolist(),
-                "normal": F[:3, 2].tolist(),
-            }
-        if per_inst:
-            out[inst.id] = per_inst
+        labels_by_inst[inst.id] = {ip.label for ip in inst.interface_points}
+
+    frames_by_conn = _build_world_connector_frames(inst_by_id, labels_by_inst, _design_for)
+
+    out: dict = {}
+    for (inst_id, label), F in frames_by_conn.items():
+        per_inst = out.setdefault(inst_id, {})
+        per_inst[label] = {
+            "pos":    F[:3, 3].tolist(),
+            "normal": F[:3, 2].tolist(),
+        }
     return out
 
 
