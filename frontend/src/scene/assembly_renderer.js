@@ -2313,16 +2313,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         )
         .replace(
           '#include <begin_vertex>',
-          (typeof window !== 'undefined' && window.NADOC_DBG_FIXED_OFFSET) ? `
-          // DEBUG MODE: hardcoded per-instance offset along X axis, ignoring
-          // matrix textures. If you see 200 hinges spread along X, the shader
-          // patch path WORKS and bug is in our matrix data. If you see 1
-          // hinge, the patch is being clobbered downstream.
-          int instanceIdx = int(floor(float(gl_InstanceID) / max(u_numBpPerInstance, 1.0)));
-          v_instanceIdx = instanceIdx;
-          v_visible = 1.0;
-          vec3 transformed = vec3(float(instanceIdx) * 50.0, 0.0, 0.0) + position;
-          ` : `
+          `
           // Compute instance index from the InstancedMesh's gl_InstanceID:
           // every group of u_numBpPerInstance consecutive instances belongs
           // to one source-instance.
