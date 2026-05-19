@@ -241,6 +241,87 @@ async function main() {
         console.log('Shared-renderer InstancedMeshes that COULD draw:', shared.length)
         shared.forEach(s => console.log(' ', s))
       },
+
+      /**
+       * Angular-LOD diagnostic.  Prints a table of every source's last-frame
+       * bucket counts (close/mid/far), the pixel-size range across visible
+       * instances, and the current closePx/farPx thresholds.  Run this
+       * while zooming to see whether maxPxSize is crossing closePx (=60
+       * by default).  If maxPxSize stays below closePx no matter how close
+       * you zoom, the angular math has an upstream bug — call out
+       * pxFactor / bboxDiag values.
+       */
+      probeLod() {
+        const snap = assemblyRenderer.probeLod?.()
+        if (!snap) { console.warn('[dbg] probeLod not exposed (shared path off?)'); return }
+        console.log('--- LOD probe ---')
+        console.log('thresholds:', { closePx: snap.closePx, farPx: snap.farPx })
+        console.table(snap.sources)
+        return snap
+      },
+
+      /**
+       * Tune the angular-LOD thresholds without a reload.  Lower closePx
+       * to make close-LOD trigger more easily; lower farPx to delay the
+       * far billboard.  Example:
+       *   __NADOC_DBG__.setLodThresholds({ closePx: 20, farPx: 4 })
+       */
+      setLodThresholds(opts) {
+        assemblyRenderer.setLodThresholds?.(opts)
+        console.log('[dbg] new thresholds applied:', opts)
+      },
+
+      /**
+       * Toggleable on-canvas HUD that updates every frame with the current
+       * LOD bucket counts + pixel-size range, per source.  Call once to
+       * show; call again to hide.  Useful while zooming/panning to see
+       * the bucket transitions live.
+       */
+      toggleLodHud() {
+        if (window.__NADOC_LOD_HUD__) {
+          window.__NADOC_LOD_HUD__.remove()
+          window.__NADOC_LOD_HUD__ = null
+          if (window.__NADOC_LOD_HUD_RAF__) {
+            cancelAnimationFrame(window.__NADOC_LOD_HUD_RAF__)
+            window.__NADOC_LOD_HUD_RAF__ = null
+          }
+          console.log('[dbg] LOD HUD off')
+          return
+        }
+        const hud = document.createElement('div')
+        hud.style.cssText = `
+          position: fixed; top: 80px; right: 12px; z-index: 10000;
+          background: rgba(13,17,23,0.88); color: #c9d1d9;
+          padding: 8px 12px; border-radius: 6px;
+          font-family: ui-monospace, monospace; font-size: 11px;
+          line-height: 1.5; pointer-events: none;
+          border: 1px solid #30363d; white-space: pre;
+        `
+        document.body.appendChild(hud)
+        window.__NADOC_LOD_HUD__ = hud
+        const tick = () => {
+          const snap = assemblyRenderer.probeLod?.()
+          if (!snap || snap.sources.length === 0) {
+            hud.textContent = 'LOD HUD\n(no sources)'
+          } else {
+            const lines = [`LOD HUD  closePx=${snap.closePx}  farPx=${snap.farPx}`]
+            for (const s of snap.sources) {
+              const c = s.counts ?? { close: '-', mid: '-', far: '-' }
+              const px = (s.minPxSize == null || s.maxPxSize == null)
+                ? '(no data)'
+                : `${s.minPxSize.toFixed(1)}…${s.maxPxSize.toFixed(1)} px`
+              const key = s.srcKey.length > 28 ? s.srcKey.slice(-28) : s.srcKey
+              lines.push(
+                `${key}\n  N=${s.numInstances}  close=${c.close} mid=${c.mid} far=${c.far}\n  pxSize=${px}  bboxDiag=${s.bboxDiag?.toFixed(0) ?? '?'}`,
+              )
+            }
+            hud.textContent = lines.join('\n')
+          }
+          window.__NADOC_LOD_HUD_RAF__ = requestAnimationFrame(tick)
+        }
+        tick()
+        console.log('[dbg] LOD HUD on (call toggleLodHud() again to dismiss)')
+      },
     }
   }
 

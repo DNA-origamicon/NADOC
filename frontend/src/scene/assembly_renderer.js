@@ -3410,6 +3410,30 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       }
     }
     srcEntry._lastLodCounts = { close: nClose, mid: nMid, far: nFar }
+    // Debug: stash per-frame state so `probeLod()` + the HUD can read it
+    // without re-doing the heavy bucket pass.  Compute min/max pixel size
+    // over visible instances in a single cheap loop.
+    let minPx = Infinity, maxPx = -Infinity
+    if (pxFactor > 0) {
+      for (let i = 0; i < N; i++) {
+        if (vis[i] < 0.5) continue
+        const d2 = dist2[i]
+        if (!isFinite(d2) || d2 <= 0) continue
+        const px = pxFactor / Math.sqrt(d2)
+        if (px < minPx) minPx = px
+        if (px > maxPx) maxPx = px
+      }
+    }
+    srcEntry._lastLodDebug = {
+      pxFactor,
+      bboxDiag: pxFactor > 0 ? pxFactor / (renderer?.domElement?.height
+        ? renderer.domElement.height / (2 * Math.tan((camera.fov * Math.PI / 180) / 2))
+        : 1) : 0,
+      closePx: _lodClosePx,
+      farPx: _lodFarPx,
+      minPxSize: isFinite(minPx) ? minPx : null,
+      maxPxSize: isFinite(maxPx) ? maxPx : null,
+    }
   }
 
   // Install a SECOND onBeforeRender hook for LOD updates. It piggybacks on
@@ -3868,6 +3892,32 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       for (const srcEntry of _sources.values()) _updateLodForSource(srcEntry, camera, renderer)
     },
     _sourcesForTest() { return _sources },
+    // Debug: snapshot every source's last-frame LOD bucket counts + pixel
+    // thresholds + min/max pixel size.  Stashed by _updateLodForSource each
+    // frame; this helper formats it into a plain object DevTools can pretty-
+    // print.  Use to diagnose "why isn't bp showing when I zoom in?" —
+    // compare maxPxSize against closePx to see if the angular threshold
+    // is being crossed.
+    probeLod() {
+      const snap = { closePx: _lodClosePx, farPx: _lodFarPx, sources: [] }
+      for (const [srcKey, srcEntry] of _sources.entries()) {
+        const dbg = srcEntry._lastLodDebug ?? null
+        const counts = srcEntry._lastLodCounts ?? null
+        snap.sources.push({
+          srcKey,
+          numInstances: srcEntry.instanceIds.length,
+          counts,
+          bboxDiag: dbg?.bboxDiag ?? null,
+          pxFactor: dbg?.pxFactor ?? null,
+          minPxSize: dbg?.minPxSize ?? null,
+          maxPxSize: dbg?.maxPxSize ?? null,
+          activeMeshes: srcEntry.activeMeshes.length,
+          midLodCount: srcEntry.midLod?.mesh.count ?? null,
+          farLodCount: srcEntry.farLod?.mesh.count ?? null,
+        })
+      }
+      return snap
+    },
   }
   for (const name of _SHARED_RENDERER_STUB_METHODS) out[name] = _outOfScope(name)
   return out
