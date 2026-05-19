@@ -2470,6 +2470,16 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       // an instanced shared source it's wildly wrong. Disable it.
       obj.frustumCulled = false
 
+      // `buildHelixObjects` allocates multiple LOD-specific InstancedMeshes
+      // (bead/cone/slab for full; helixCylinders/overhangCylinders for
+      // cylinders rep) and relies on a downstream `setDetailLevel(rep)` call
+      // to flip `visible` per LOD. The shared path never runs setDetailLevel,
+      // so even cylinder rep meshes with valid count stay invisible.
+      // Force-enable any mesh that we just sized up — count > 0 here means
+      // buildHelixObjects allocated real geometry for it under the requested
+      // LOD, so it MUST render.
+      obj.visible = true
+
       // Track-B instrumentation: when window.NADOC_DBG_RENDER_TRACE is true,
       // every shared-renderer InstancedMesh increments a counter via its
       // onBeforeRender callback. `__NADOC_DBG__.traceFrame()` reads + prints
