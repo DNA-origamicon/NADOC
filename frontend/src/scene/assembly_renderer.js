@@ -2776,6 +2776,29 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       // Stash the texture handle for disposal (alongside bp textures).
       srcEntry.helixXformTex = midLod.helixTex
     }
+
+    // Overhang LOD: a parallel InstancedMesh that draws each overhang
+    // segment alongside sharedLodMid.  Pulls per-segment matrices + colors
+    // from the legacy iOverhangCylinders mesh that buildHelixObjects
+    // populated; that mesh's `count` was zeroed by _patchSharedMeshes's
+    // skip filter but its `instanceMatrix`/`instanceColor` arrays survived
+    // and `userData.sharedBase` retains the original segment count.
+    let legacyOvhgMesh = null
+    helixCtrl.root.traverse(obj => {
+      if (obj instanceof THREE.InstancedMesh && obj.name === 'overhangCylinders') {
+        legacyOvhgMesh = obj
+      }
+    })
+    if (legacyOvhgMesh && (legacyOvhgMesh.userData.sharedBase ?? 0) > 0) {
+      // Restore the original count temporarily so _buildOverhangLodMesh
+      // reads it correctly; reset to 0 afterwards (the legacy mesh stays
+      // hidden — only our shared mesh draws).
+      const origCount = legacyOvhgMesh.userData.sharedBase
+      legacyOvhgMesh.count = origCount
+      const ovhgLod = _buildOverhangLodMesh(srcEntry, legacyOvhgMesh, helixGroup)
+      legacyOvhgMesh.count = 0
+      if (ovhgLod) srcEntry.overhangLod = ovhgLod
+    }
     // Far LOD: billboard sized to the source's mean half-extent so it
     // approximates the actual silhouette.  Half-diagonal (the prior choice)
     // dramatically over-sizes elongated parts — e.g. a 200 × 5 × 5 hinge
@@ -2818,11 +2841,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       for (const t of srcEntry.bpTextures) t.dispose()
     }
     // Phase 3f — release per-source LOD textures (mid-LOD per-helix transform
-    // texture + per-helix colour texture; far-LOD has no extra texture beyond
-    // xformTex which is already released above).
+    // texture + per-helix colour texture + per-segment overhang transform +
+    // colour textures; far-LOD has no extra texture beyond xformTex which is
+    // already released above).
     srcEntry.helixXformTex?.dispose()
     srcEntry.midLod?.helixTex?.dispose()
     srcEntry.midLod?.helixColorTex?.dispose()
+    srcEntry.overhangLod?.ovhgXformTex?.dispose()
+    srcEntry.overhangLod?.ovhgColorTex?.dispose()
     for (const id of srcEntry.instanceIds) _instToSrc.delete(id)
   }
 
@@ -2967,6 +2993,15 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // tag with userData.shared = true so the dispose walk skips it.
   const _LOD_CYL_GEO = new THREE.CylinderGeometry(1, 1, 1, 12, 1, false)
   _LOD_CYL_GEO.userData.shared = true
+  // Half-cylinder for overhang segments — wall of a 180° arc at the legacy
+  // helix radius (matches helix_renderer.js:GEO_HALF_CYL's wall component).
+  // Visually distinguishes overhang protrusions from full helix cylinders
+  // so the user can spot overhang domains / mate-point candidates at the
+  // cylinders LOD.
+  const _LOD_HALF_CYL_GEO = new THREE.CylinderGeometry(
+    1.125, 1.125, 1, 12, 1, false, 0, Math.PI,
+  )
+  _LOD_HALF_CYL_GEO.userData.shared = true
 
   function _buildMidLodMesh(srcEntry, helixIds, helix_axes, sourceGroup) {
     const numHelices = helixIds.length
@@ -3104,6 +3139,155 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       mesh, numHelices, helixIds, helixTex, helixData,
       helixColorTex, helixColorData,
       u_instanceOffset, u_sourceColor,
+    }
+  }
+
+  // ── Overhang-LOD InstancedMesh + shader ──────────────────────────────────
+  // Mirrors the sharedLodMid pattern but draws ONE half-cylinder per overhang
+  // segment (where the legacy iOverhangCylinders mesh draws individual
+  // overhang domains).  This restores the visual cue that overhangs poke
+  // out from the helix axis — important for identifying mate points at
+  // the cylinders LOD.  Each source-instance replicates the same per-segment
+  // set, so total mesh count = numOverhangs × numInstances.  Drawn alongside
+  // sharedLodMid in the mid bucket.
+  //
+  // legacyOverhangMesh: the iOverhangCylinders InstancedMesh from buildHelixObjects.
+  // Carries per-segment matrices (instanceMatrix) + colors (instanceColor) in
+  // source-local space.  We copy them into our own DataTextures so the shared
+  // shader can sample per-segment without needing the source iHelixCtrl alive.
+  function _buildOverhangLodMesh(srcEntry, legacyOverhangMesh, sourceGroup) {
+    const numOverhangs = legacyOverhangMesh?.count ?? 0
+    const numInstances = srcEntry.instanceIds.length
+    if (numOverhangs === 0 || numInstances === 0) return null
+
+    // Per-segment matrix texture, 2D-tiled identically to _makeBpXformTexture.
+    const { tex: ovhgXformTex, data: ovhgXformData } = _makeBpXformTexture(
+      legacyOverhangMesh.instanceMatrix.array, numOverhangs,
+    )
+
+    // Per-segment color texture (tile-W RGBA32F).
+    const tileW = _BP_TEX_TILE_W
+    const h = Math.max(1, Math.ceil(numOverhangs / tileW))
+    const colorData = new Float32Array(tileW * h * 4)
+    const srcColor = legacyOverhangMesh.instanceColor?.array
+    if (srcColor) {
+      for (let i = 0; i < numOverhangs; i++) {
+        colorData[i * 4 + 0] = srcColor[i * 3 + 0]
+        colorData[i * 4 + 1] = srcColor[i * 3 + 1]
+        colorData[i * 4 + 2] = srcColor[i * 3 + 2]
+        colorData[i * 4 + 3] = 1.0
+      }
+    } else {
+      for (let i = 0; i < numOverhangs; i++) {
+        colorData[i * 4 + 0] = 1
+        colorData[i * 4 + 1] = 1
+        colorData[i * 4 + 2] = 1
+        colorData[i * 4 + 3] = 1
+      }
+    }
+    const ovhgColorTex = new THREE.DataTexture(
+      colorData, tileW, h, THREE.RGBAFormat, THREE.FloatType,
+    )
+    ovhgColorTex.minFilter = THREE.NearestFilter
+    ovhgColorTex.magFilter = THREE.NearestFilter
+    ovhgColorTex.generateMipmaps = false
+    ovhgColorTex.needsUpdate = true
+
+    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide })
+    const _ovhgCacheKey = 'sharedLodOvhg_' + mat.uuid
+    mat.customProgramCacheKey = () => _ovhgCacheKey
+    const u_instanceOffset = { value: 0 }
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.u_instanceXform   = srcEntry.uXformUniform
+      shader.uniforms.u_visibilityTex   = srcEntry.uVisUniform
+      shader.uniforms.u_overhangXform   = { value: ovhgXformTex }
+      shader.uniforms.u_overhangColor   = { value: ovhgColorTex }
+      shader.uniforms.u_numOverhangs    = { value: numOverhangs }
+      shader.uniforms.u_instanceOffset  = u_instanceOffset
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `
+          #include <common>
+          #define BP_TILE_W ${_BP_TEX_TILE_W}
+          uniform sampler2D u_instanceXform;
+          uniform sampler2D u_visibilityTex;
+          uniform sampler2D u_overhangXform;
+          uniform float u_numOverhangs;
+          uniform float u_instanceOffset;
+          varying float v_visible;
+          flat varying int v_ovhgIdx;
+          `,
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `
+          int instanceIdx = int(floor(float(gl_InstanceID) / max(u_numOverhangs, 1.0))) + int(u_instanceOffset);
+          int ovhgIdx     = gl_InstanceID - (instanceIdx - int(u_instanceOffset)) * int(u_numOverhangs);
+          int ovhgCol     = ovhgIdx % BP_TILE_W;
+          int ovhgRow     = ovhgIdx / BP_TILE_W;
+          v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
+          v_ovhgIdx = ovhgIdx;
+          mat4 instTransform = mat4(
+            texelFetch(u_instanceXform, ivec2(0, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(1, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(2, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0)
+          );
+          mat4 ovhgMat = mat4(
+            texelFetch(u_overhangXform, ivec2(ovhgCol * 4 + 0, ovhgRow), 0),
+            texelFetch(u_overhangXform, ivec2(ovhgCol * 4 + 1, ovhgRow), 0),
+            texelFetch(u_overhangXform, ivec2(ovhgCol * 4 + 2, ovhgRow), 0),
+            texelFetch(u_overhangXform, ivec2(ovhgCol * 4 + 3, ovhgRow), 0)
+          );
+          vec3 transformed = (instTransform * ovhgMat * vec4(position, 1.0)).xyz;
+          `,
+        )
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `
+          #include <common>
+          uniform sampler2D u_overhangColor;
+          varying float v_visible;
+          flat varying int v_ovhgIdx;
+          `,
+        )
+        .replace(
+          '#include <dithering_fragment>',
+          `
+          if (v_visible < 0.5) discard;
+          int ocol = v_ovhgIdx % BP_TILE_W;
+          int orow = v_ovhgIdx / BP_TILE_W;
+          gl_FragColor.rgb *= texelFetch(u_overhangColor, ivec2(ocol, orow), 0).rgb;
+          #include <dithering_fragment>
+          `,
+        )
+    }
+
+    const capacity = numOverhangs * numInstances
+    const mesh = new THREE.InstancedMesh(_LOD_HALF_CYL_GEO, mat, Math.max(1, capacity))
+    const identityArr = new Float32Array(16)
+    identityArr[0] = 1; identityArr[5] = 1; identityArr[10] = 1; identityArr[15] = 1
+    const idAttr = new THREE.InstancedBufferAttribute(identityArr, 16, false, Math.max(1, capacity))
+    idAttr.setUsage(THREE.StaticDrawUsage)
+    mesh.instanceMatrix = idAttr
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.instanceColor = null
+    mesh.count = 0
+    mesh.frustumCulled = false
+    // Same visible=true trick as sharedLodMid/sharedLodFar so onBeforeRender
+    // hooks fire even before _updateLod's first pass; drawElementsInstanced
+    // with count=0 is a no-op.
+    mesh.visible = true
+    mesh.name = 'sharedLodOverhangs'
+    sourceGroup.add(mesh)
+    return {
+      mesh,
+      numOverhangs,
+      ovhgXformTex, ovhgXformData,
+      ovhgColorTex, ovhgColorData: colorData,
+      u_instanceOffset,
     }
   }
 
@@ -3432,6 +3616,17 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         srcEntry.midLod.u_instanceOffset.value = nClose
       }
     }
+    // Overhang LOD draws alongside mid LOD — same instance offset (after
+    // close bucket), but its per-instance-mesh count is numOverhangs not
+    // numHelices.  Skipping when no overhangs exist avoids spurious draws.
+    if (srcEntry.overhangLod) {
+      const c = nMid * srcEntry.overhangLod.numOverhangs
+      srcEntry.overhangLod.mesh.count = c
+      srcEntry.overhangLod.mesh.visible = true
+      if (srcEntry.overhangLod.u_instanceOffset) {
+        srcEntry.overhangLod.u_instanceOffset.value = nClose
+      }
+    }
     if (srcEntry.farLod) {
       const c = nFar
       srcEntry.farLod.mesh.count = c
@@ -3752,9 +3947,11 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // per-segment instanceColor into the mid-LOD per-helix colour texture.
     const tmpMeshes = []
     let tmpHelixCyl = null
+    let tmpOvhgCyl  = null
     tmpHelixCtrl.root.traverse(obj => {
       if (!(obj instanceof THREE.InstancedMesh)) return
-      if (obj.name === 'helixCylinders') tmpHelixCyl = obj
+      if (obj.name === 'helixCylinders')    tmpHelixCyl = obj
+      if (obj.name === 'overhangCylinders') tmpOvhgCyl  = obj
       if (obj.count === 0) return
       tmpMeshes.push(obj)
     })
@@ -3815,6 +4012,23 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         data[i * 4 + 3] = 1
       }
       midLod.helixColorTex.needsUpdate = true
+    }
+
+    // Per-segment overhang colour update.  Copy the temp iOverhangCylinders
+    // instanceColor (which already reflects coloringMode after the
+    // applyColoring call) into the overhangLod colour texture.
+    if (srcEntry.overhangLod?.ovhgColorTex && tmpOvhgCyl?.instanceColor) {
+      const ovhgLod = srcEntry.overhangLod
+      const src = tmpOvhgCyl.instanceColor.array
+      const dst = ovhgLod.ovhgColorData
+      const n = Math.min(ovhgLod.numOverhangs, Math.floor(src.length / 3))
+      for (let i = 0; i < n; i++) {
+        dst[i * 4 + 0] = src[i * 3 + 0]
+        dst[i * 4 + 1] = src[i * 3 + 1]
+        dst[i * 4 + 2] = src[i * 3 + 2]
+        dst[i * 4 + 3] = 1
+      }
+      ovhgLod.ovhgColorTex.needsUpdate = true
     }
 
     // Far-LOD billboard tint: a single source-average colour from the
