@@ -2762,42 +2762,53 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     }
 
     // ── Phase 3f: build mid-LOD + far-LOD meshes for this source ─────────────
-    // Helix list: every helix.id in the design except virtual linker helices
-    // (which lack axes anyway). We use the design's helix order — stable and
-    // matches what buildHelixObjects iterated.
-    const helixIds = []
-    for (const h of design.helices ?? []) {
-      if (typeof h.id === 'string' && h.id.startsWith('__lnk__')) continue
-      helixIds.push(h.id)
-    }
-    const midLod = _buildMidLodMesh(srcEntry, helixIds, helix_axes ?? {}, helixGroup)
-    if (midLod) {
-      srcEntry.midLod = midLod
-      // Stash the texture handle for disposal (alongside bp textures).
-      srcEntry.helixXformTex = midLod.helixTex
+    // Find the legacy iHelixCylinders + iOverhangCylinders meshes that
+    // buildHelixObjects populated.  _patchSharedMeshes's skip filter zeroed
+    // their `count` but their `instanceMatrix`/`instanceColor` arrays survive
+    // (and `userData.sharedBase` retains the original segment counts).
+    let legacyOvhgMesh = null
+    let legacyHelixCylMesh = null
+    helixCtrl.root.traverse(obj => {
+      if (!(obj instanceof THREE.InstancedMesh)) return
+      if (obj.name === 'overhangCylinders') legacyOvhgMesh = obj
+      if (obj.name === 'helixCylinders')    legacyHelixCylMesh = obj
+    })
+    console.info(
+      `[shared_renderer] source=${srcKey} legacy meshes: ` +
+      `helix=${legacyHelixCylMesh ? (legacyHelixCylMesh.userData.sharedBase ?? legacyHelixCylMesh.count) : 'missing'} ` +
+      `overhang=${legacyOvhgMesh ? (legacyOvhgMesh.userData.sharedBase ?? legacyOvhgMesh.count) : 'missing'}`,
+    )
+
+    // Mid LOD: per-strand-domain helix cylinders — matches legacy detail
+    // (multiple short cylinders per helix, with gaps where overhangs/nicks
+    // fall), not the previous "one continuous cylinder per helix axis"
+    // simplification.
+    if (legacyHelixCylMesh && (legacyHelixCylMesh.userData.sharedBase ?? 0) > 0) {
+      const origCount = legacyHelixCylMesh.userData.sharedBase
+      legacyHelixCylMesh.count = origCount
+      const midLod = _buildMidLodMesh(srcEntry, legacyHelixCylMesh, helixGroup)
+      legacyHelixCylMesh.count = 0
+      if (midLod) {
+        srcEntry.midLod = midLod
+        console.info(`[shared_renderer]   mid LOD built: numSegments=${midLod.numSegments}`)
+      } else {
+        console.warn('[shared_renderer]   _buildMidLodMesh returned null')
+      }
     }
 
-    // Overhang LOD: a parallel InstancedMesh that draws each overhang
-    // segment alongside sharedLodMid.  Pulls per-segment matrices + colors
-    // from the legacy iOverhangCylinders mesh that buildHelixObjects
-    // populated; that mesh's `count` was zeroed by _patchSharedMeshes's
-    // skip filter but its `instanceMatrix`/`instanceColor` arrays survived
-    // and `userData.sharedBase` retains the original segment count.
-    let legacyOvhgMesh = null
-    helixCtrl.root.traverse(obj => {
-      if (obj instanceof THREE.InstancedMesh && obj.name === 'overhangCylinders') {
-        legacyOvhgMesh = obj
-      }
-    })
+    // Overhang LOD: per-segment half-cylinders for protruding overhangs.
+    // Same architecture as mid LOD, just half-cylinder geometry.
     if (legacyOvhgMesh && (legacyOvhgMesh.userData.sharedBase ?? 0) > 0) {
-      // Restore the original count temporarily so _buildOverhangLodMesh
-      // reads it correctly; reset to 0 afterwards (the legacy mesh stays
-      // hidden — only our shared mesh draws).
       const origCount = legacyOvhgMesh.userData.sharedBase
       legacyOvhgMesh.count = origCount
       const ovhgLod = _buildOverhangLodMesh(srcEntry, legacyOvhgMesh, helixGroup)
       legacyOvhgMesh.count = 0
-      if (ovhgLod) srcEntry.overhangLod = ovhgLod
+      if (ovhgLod) {
+        srcEntry.overhangLod = ovhgLod
+        console.info(`[shared_renderer]   overhang LOD built: numSegments=${ovhgLod.numSegments}`)
+      } else {
+        console.warn('[shared_renderer]   _buildOverhangLodMesh returned null')
+      }
     }
     // Far LOD: billboard sized to the source's mean half-extent so it
     // approximates the actual silhouette.  Half-diagonal (the prior choice)
@@ -2840,15 +2851,13 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     if (srcEntry.bpTextures) {
       for (const t of srcEntry.bpTextures) t.dispose()
     }
-    // Phase 3f — release per-source LOD textures (mid-LOD per-helix transform
-    // texture + per-helix colour texture + per-segment overhang transform +
-    // colour textures; far-LOD has no extra texture beyond xformTex which is
-    // already released above).
-    srcEntry.helixXformTex?.dispose()
-    srcEntry.midLod?.helixTex?.dispose()
-    srcEntry.midLod?.helixColorTex?.dispose()
-    srcEntry.overhangLod?.ovhgXformTex?.dispose()
-    srcEntry.overhangLod?.ovhgColorTex?.dispose()
+    // Phase 3f — release per-source LOD textures (mid-LOD per-segment
+    // matrix + colour textures, plus the same pair for overhang LOD; far-
+    // LOD has no extra texture beyond xformTex which is released above).
+    srcEntry.midLod?.segXformTex?.dispose()
+    srcEntry.midLod?.segColorTex?.dispose()
+    srcEntry.overhangLod?.segXformTex?.dispose()
+    srcEntry.overhangLod?.segColorTex?.dispose()
     for (const id of srcEntry.instanceIds) _instToSrc.delete(id)
   }
 
@@ -2988,10 +2997,12 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   }
 
   // ── Mid-LOD InstancedMesh + shader ───────────────────────────────────────
-  // Shared cylinder geometry (unit radius, unit height, Y-axis, centred at
-  // origin). Reused across sources so we don't dispose it in _disposeSource;
-  // tag with userData.shared = true so the dispose walk skips it.
-  const _LOD_CYL_GEO = new THREE.CylinderGeometry(1, 1, 1, 12, 1, false)
+  // Shared cylinder geometry (radius 1.125 nm to match the legacy
+  // helix_renderer's GEO_UNIT_CYL; the per-segment matrices we copy from
+  // iHelixCylinders assume that radius).  Unit height — matrix scale.y
+  // sizes the cylinder to the domain it represents.  Reused across sources
+  // so we don't dispose it in _disposeSource; tag userData.shared = true.
+  const _LOD_CYL_GEO = new THREE.CylinderGeometry(1.125, 1.125, 1, 12, 1, false)
   _LOD_CYL_GEO.userData.shared = true
   // Half-cylinder for overhang segments — wall of a 180° arc at the legacy
   // helix radius (matches helix_renderer.js:GEO_HALF_CYL's wall component).
@@ -3003,92 +3014,110 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   )
   _LOD_HALF_CYL_GEO.userData.shared = true
 
-  function _buildMidLodMesh(srcEntry, helixIds, helix_axes, sourceGroup) {
-    const numHelices = helixIds.length
+  // Generic per-segment InstancedMesh builder.  Both helix and overhang
+  // mid-LOD meshes use the same pattern: copy per-segment matrices + colors
+  // from a legacy InstancedMesh built by buildHelixObjects (iHelixCylinders
+  // / iOverhangCylinders), pack into 2D-tiled DataTextures, and patch the
+  // material's shader to sample them per `gl_InstanceID`.
+  //
+  // The per-instance world transform comes from the shared per-source
+  // xform texture (already set up by `_buildSource`).  Total mesh count =
+  // numSegments × numInstances; the shader decomposes gl_InstanceID via
+  // `u_numSegments` to recover (instanceIdx, segmentIdx).
+  function _buildSegmentLodMesh({
+    srcEntry, legacyMesh, geometry, meshName, sourceGroup, side = THREE.FrontSide,
+  }) {
+    const numSegments  = legacyMesh?.count ?? 0
     const numInstances = srcEntry.instanceIds.length
-    if (numHelices === 0 || numInstances === 0) return null
+    if (numSegments === 0 || numInstances === 0) return null
 
-    const { tex: helixTex, data: helixData } = _makeHelixXformTexture(helixIds, helix_axes)
-
-    // Per-helix colour texture.  One RGBA texel per helix; sampled in the
-    // fragment shader by `helixIdx` so each helix cylinder can carry its own
-    // strand-derived colour.  Initialised to white; `_applyColorsToSource`
-    // fills with averaged segment colours after coloringMode changes.
-    const helixColorData = new Float32Array(Math.max(1, numHelices) * 4)
-    for (let i = 0; i < numHelices; i++) {
-      helixColorData[i * 4 + 0] = 1
-      helixColorData[i * 4 + 1] = 1
-      helixColorData[i * 4 + 2] = 1
-      helixColorData[i * 4 + 3] = 1
-    }
-    const helixColorTex = new THREE.DataTexture(
-      helixColorData, 1, Math.max(1, numHelices), THREE.RGBAFormat, THREE.FloatType,
+    const { tex: segXformTex, data: segXformData } = _makeBpXformTexture(
+      legacyMesh.instanceMatrix.array, numSegments,
     )
-    helixColorTex.minFilter = THREE.NearestFilter
-    helixColorTex.magFilter = THREE.NearestFilter
-    helixColorTex.generateMipmaps = false
-    helixColorTex.needsUpdate = true
 
-    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff })
-    // Phase 3f stage 2 follow-up: per-material cache key, so the mid-LOD
-    // program isn't shared across sources (same trap that bit the bp
-    // path's static cache key — see worktree gotchas in plan doc).
-    const _midCacheKey = 'sharedLodMid_' + mat.uuid
-    mat.customProgramCacheKey = () => _midCacheKey
-    // u_instanceOffset stays out-of-closure so _updateLodForSource can
-    // write to it each frame. Initialized to 0; correct value (nClose) is
-    // set after bucket counting.
+    const tileW = _BP_TEX_TILE_W
+    const h = Math.max(1, Math.ceil(numSegments / tileW))
+    const colorData = new Float32Array(tileW * h * 4)
+    const srcColor = legacyMesh.instanceColor?.array
+    if (srcColor) {
+      for (let i = 0; i < numSegments; i++) {
+        colorData[i * 4 + 0] = srcColor[i * 3 + 0]
+        colorData[i * 4 + 1] = srcColor[i * 3 + 1]
+        colorData[i * 4 + 2] = srcColor[i * 3 + 2]
+        colorData[i * 4 + 3] = 1.0
+      }
+    } else {
+      for (let i = 0; i < numSegments; i++) {
+        colorData[i * 4 + 0] = 1
+        colorData[i * 4 + 1] = 1
+        colorData[i * 4 + 2] = 1
+        colorData[i * 4 + 3] = 1
+      }
+    }
+    const segColorTex = new THREE.DataTexture(
+      colorData, tileW, h, THREE.RGBAFormat, THREE.FloatType,
+    )
+    segColorTex.minFilter = THREE.NearestFilter
+    segColorTex.magFilter = THREE.NearestFilter
+    segColorTex.generateMipmaps = false
+    segColorTex.needsUpdate = true
+
+    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side })
+    // Per-material cache key so each source's program is independent
+    // (avoids the static-cache-key trap from earlier worktree gotchas).
+    const _cacheKey = meshName + '_' + mat.uuid
+    mat.customProgramCacheKey = () => _cacheKey
     const u_instanceOffset = { value: 0 }
-    // u_sourceColor: per-source flat tint applied in the fragment shader.
-    // Legacy fallback for code paths that haven't migrated to u_helixColor;
-    // kept at white so it's a no-op multiply when per-helix data is present.
-    const u_sourceColor = { value: new THREE.Vector3(1, 1, 1) }
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.u_instanceXform = srcEntry.uXformUniform
-      shader.uniforms.u_visibilityTex = srcEntry.uVisUniform
-      shader.uniforms.u_helixXform    = { value: helixTex }
-      shader.uniforms.u_helixColor    = { value: helixColorTex }
-      shader.uniforms.u_numHelices    = { value: numHelices }
-      shader.uniforms.u_instanceOffset = u_instanceOffset
-      shader.uniforms.u_sourceColor   = u_sourceColor
+      shader.uniforms.u_instanceXform   = srcEntry.uXformUniform
+      shader.uniforms.u_visibilityTex   = srcEntry.uVisUniform
+      shader.uniforms.u_segXform        = { value: segXformTex }
+      shader.uniforms.u_segColor        = { value: segColorTex }
+      shader.uniforms.u_numSegments     = { value: numSegments }
+      shader.uniforms.u_instanceOffset  = u_instanceOffset
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
           `
           #include <common>
+          #define BP_TILE_W ${_BP_TEX_TILE_W}
           uniform sampler2D u_instanceXform;
           uniform sampler2D u_visibilityTex;
-          uniform sampler2D u_helixXform;
-          uniform float u_numHelices;
+          uniform sampler2D u_segXform;
+          uniform float u_numSegments;
           uniform float u_instanceOffset;
           varying float v_visible;
-          flat varying int v_helixIdx;
+          flat varying int v_segIdx;
           `,
         )
         .replace(
           '#include <begin_vertex>',
           `
-          // Phase 3f stage 2 follow-up: bias instance index by u_instanceOffset
-          // so this mesh reads texture rows starting AFTER close-LOD's range.
-          // Without this, mid-LOD reads the same nearest rows close-LOD already
-          // drew — triple-rendering bug from stage 1.
-          int instanceIdx = int(floor(float(gl_InstanceID) / max(u_numHelices, 1.0))) + int(u_instanceOffset);
-          int helixIdx    = gl_InstanceID - (instanceIdx - int(u_instanceOffset)) * int(u_numHelices);
+          // Decompose gl_InstanceID = instanceIdx * numSegments + segmentIdx,
+          // then bias instanceIdx by u_instanceOffset so this mesh reads
+          // texture rows starting AFTER the close-LOD's bucket range
+          // (sort-to-front packs rows by bucket).
+          int instanceIdx = int(floor(float(gl_InstanceID) / max(u_numSegments, 1.0))) + int(u_instanceOffset);
+          int segIdx      = gl_InstanceID - (instanceIdx - int(u_instanceOffset)) * int(u_numSegments);
+          int segCol      = segIdx % BP_TILE_W;
+          int segRow      = segIdx / BP_TILE_W;
           v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
-          v_helixIdx = helixIdx;
+          v_segIdx = segIdx;
           mat4 instTransform = mat4(
             texelFetch(u_instanceXform, ivec2(0, instanceIdx), 0),
             texelFetch(u_instanceXform, ivec2(1, instanceIdx), 0),
             texelFetch(u_instanceXform, ivec2(2, instanceIdx), 0),
             texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0)
           );
-          mat4 helixMat = mat4(
-            texelFetch(u_helixXform, ivec2(0, helixIdx), 0),
-            texelFetch(u_helixXform, ivec2(1, helixIdx), 0),
-            texelFetch(u_helixXform, ivec2(2, helixIdx), 0),
-            texelFetch(u_helixXform, ivec2(3, helixIdx), 0)
+          // Per-segment matrix from the 2D-tiled texture (4 RGBA texels per
+          // mat4, packed along the row, wrapping every BP_TILE_W slots).
+          mat4 segMat = mat4(
+            texelFetch(u_segXform, ivec2(segCol * 4 + 0, segRow), 0),
+            texelFetch(u_segXform, ivec2(segCol * 4 + 1, segRow), 0),
+            texelFetch(u_segXform, ivec2(segCol * 4 + 2, segRow), 0),
+            texelFetch(u_segXform, ivec2(segCol * 4 + 3, segRow), 0)
           );
-          vec3 transformed = (instTransform * helixMat * vec4(position, 1.0)).xyz;
+          vec3 transformed = (instTransform * segMat * vec4(position, 1.0)).xyz;
           `,
         )
       shader.fragmentShader = shader.fragmentShader
@@ -3096,27 +3125,28 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           '#include <common>',
           `
           #include <common>
-          uniform vec3 u_sourceColor;
-          uniform sampler2D u_helixColor;
+          #define BP_TILE_W ${_BP_TEX_TILE_W}
+          uniform sampler2D u_segColor;
           varying float v_visible;
-          flat varying int v_helixIdx;
+          flat varying int v_segIdx;
           `,
         )
         .replace(
           '#include <dithering_fragment>',
           `
           if (v_visible < 0.5) discard;
-          // Per-helix strand-color tint (white by default → no-op multiply).
-          vec3 helixCol = texelFetch(u_helixColor, ivec2(0, v_helixIdx), 0).rgb;
-          gl_FragColor.rgb *= helixCol * u_sourceColor;
+          int scol = v_segIdx % BP_TILE_W;
+          int srow = v_segIdx / BP_TILE_W;
+          gl_FragColor.rgb *= texelFetch(u_segColor, ivec2(scol, srow), 0).rgb;
           #include <dithering_fragment>
           `,
         )
     }
 
-    const capacity = numHelices * numInstances
-    const mesh = new THREE.InstancedMesh(_LOD_CYL_GEO, mat, Math.max(1, capacity))
-    // Collapse instanceMatrix to a single identity row (same trick as bp path).
+    const capacity = numSegments * numInstances
+    const mesh = new THREE.InstancedMesh(geometry, mat, Math.max(1, capacity))
+    // Collapse instanceMatrix to identity (bp-path pattern); per-instance
+    // and per-segment transforms ride in textures sampled by the shader.
     const identityArr = new Float32Array(16)
     identityArr[0] = 1; identityArr[5] = 1; identityArr[10] = 1; identityArr[15] = 1
     const idAttr = new THREE.InstancedBufferAttribute(identityArr, 16, false, Math.max(1, capacity))
@@ -3124,22 +3154,36 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     mesh.instanceMatrix = idAttr
     mesh.instanceMatrix.needsUpdate = true
     mesh.instanceColor = null
-    mesh.count = 0  // _updateLod sets the real count
+    mesh.count = 0
     mesh.frustumCulled = false
-    // visible=true unconditionally so onBeforeRender fires every frame
-    // even before _updateLod has run once.  Three.js short-circuits at
-    // `object.visible === false` BEFORE calling onBeforeRender — if this
-    // mesh hosts the LOD-updater hook (when activeMeshes is empty for
-    // cylinders-rep builds), visible=false would mean the hook never
-    // fires → count stays 0 → "only helix axes draw" regression.
+    // visible=true so onBeforeRender hooks fire even before _updateLod's
+    // first pass (Three.js short-circuits at visible=false BEFORE the
+    // callback).  drawElementsInstanced with count=0 is a no-op.
     mesh.visible = true
-    mesh.name = 'sharedLodMid'
+    mesh.name = meshName
     sourceGroup.add(mesh)
     return {
-      mesh, numHelices, helixIds, helixTex, helixData,
-      helixColorTex, helixColorData,
-      u_instanceOffset, u_sourceColor,
+      mesh,
+      numSegments,
+      segXformTex, segXformData,
+      segColorTex, segColorData: colorData,
+      u_instanceOffset,
     }
+  }
+
+  // Backwards-compat wrapper for the helix mid-LOD.  Takes the legacy
+  // iHelixCylinders mesh and builds a per-domain InstancedMesh — gives the
+  // legacy per-strand-domain look (multiple short cylinders per helix, with
+  // gaps where overhangs / nicks fall) instead of the previous "one cylinder
+  // spanning the whole helix" simplification.
+  function _buildMidLodMesh(srcEntry, legacyHelixCylMesh, sourceGroup) {
+    return _buildSegmentLodMesh({
+      srcEntry,
+      legacyMesh: legacyHelixCylMesh,
+      geometry: _LOD_CYL_GEO,
+      meshName: 'sharedLodMid',
+      sourceGroup,
+    })
   }
 
   // ── Overhang-LOD InstancedMesh + shader ──────────────────────────────────
@@ -3156,139 +3200,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // source-local space.  We copy them into our own DataTextures so the shared
   // shader can sample per-segment without needing the source iHelixCtrl alive.
   function _buildOverhangLodMesh(srcEntry, legacyOverhangMesh, sourceGroup) {
-    const numOverhangs = legacyOverhangMesh?.count ?? 0
-    const numInstances = srcEntry.instanceIds.length
-    if (numOverhangs === 0 || numInstances === 0) return null
-
-    // Per-segment matrix texture, 2D-tiled identically to _makeBpXformTexture.
-    const { tex: ovhgXformTex, data: ovhgXformData } = _makeBpXformTexture(
-      legacyOverhangMesh.instanceMatrix.array, numOverhangs,
-    )
-
-    // Per-segment color texture (tile-W RGBA32F).
-    const tileW = _BP_TEX_TILE_W
-    const h = Math.max(1, Math.ceil(numOverhangs / tileW))
-    const colorData = new Float32Array(tileW * h * 4)
-    const srcColor = legacyOverhangMesh.instanceColor?.array
-    if (srcColor) {
-      for (let i = 0; i < numOverhangs; i++) {
-        colorData[i * 4 + 0] = srcColor[i * 3 + 0]
-        colorData[i * 4 + 1] = srcColor[i * 3 + 1]
-        colorData[i * 4 + 2] = srcColor[i * 3 + 2]
-        colorData[i * 4 + 3] = 1.0
-      }
-    } else {
-      for (let i = 0; i < numOverhangs; i++) {
-        colorData[i * 4 + 0] = 1
-        colorData[i * 4 + 1] = 1
-        colorData[i * 4 + 2] = 1
-        colorData[i * 4 + 3] = 1
-      }
-    }
-    const ovhgColorTex = new THREE.DataTexture(
-      colorData, tileW, h, THREE.RGBAFormat, THREE.FloatType,
-    )
-    ovhgColorTex.minFilter = THREE.NearestFilter
-    ovhgColorTex.magFilter = THREE.NearestFilter
-    ovhgColorTex.generateMipmaps = false
-    ovhgColorTex.needsUpdate = true
-
-    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide })
-    const _ovhgCacheKey = 'sharedLodOvhg_' + mat.uuid
-    mat.customProgramCacheKey = () => _ovhgCacheKey
-    const u_instanceOffset = { value: 0 }
-    mat.onBeforeCompile = (shader) => {
-      shader.uniforms.u_instanceXform   = srcEntry.uXformUniform
-      shader.uniforms.u_visibilityTex   = srcEntry.uVisUniform
-      shader.uniforms.u_overhangXform   = { value: ovhgXformTex }
-      shader.uniforms.u_overhangColor   = { value: ovhgColorTex }
-      shader.uniforms.u_numOverhangs    = { value: numOverhangs }
-      shader.uniforms.u_instanceOffset  = u_instanceOffset
-      shader.vertexShader = shader.vertexShader
-        .replace(
-          '#include <common>',
-          `
-          #include <common>
-          #define BP_TILE_W ${_BP_TEX_TILE_W}
-          uniform sampler2D u_instanceXform;
-          uniform sampler2D u_visibilityTex;
-          uniform sampler2D u_overhangXform;
-          uniform float u_numOverhangs;
-          uniform float u_instanceOffset;
-          varying float v_visible;
-          flat varying int v_ovhgIdx;
-          `,
-        )
-        .replace(
-          '#include <begin_vertex>',
-          `
-          int instanceIdx = int(floor(float(gl_InstanceID) / max(u_numOverhangs, 1.0))) + int(u_instanceOffset);
-          int ovhgIdx     = gl_InstanceID - (instanceIdx - int(u_instanceOffset)) * int(u_numOverhangs);
-          int ovhgCol     = ovhgIdx % BP_TILE_W;
-          int ovhgRow     = ovhgIdx / BP_TILE_W;
-          v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
-          v_ovhgIdx = ovhgIdx;
-          mat4 instTransform = mat4(
-            texelFetch(u_instanceXform, ivec2(0, instanceIdx), 0),
-            texelFetch(u_instanceXform, ivec2(1, instanceIdx), 0),
-            texelFetch(u_instanceXform, ivec2(2, instanceIdx), 0),
-            texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0)
-          );
-          mat4 ovhgMat = mat4(
-            texelFetch(u_overhangXform, ivec2(ovhgCol * 4 + 0, ovhgRow), 0),
-            texelFetch(u_overhangXform, ivec2(ovhgCol * 4 + 1, ovhgRow), 0),
-            texelFetch(u_overhangXform, ivec2(ovhgCol * 4 + 2, ovhgRow), 0),
-            texelFetch(u_overhangXform, ivec2(ovhgCol * 4 + 3, ovhgRow), 0)
-          );
-          vec3 transformed = (instTransform * ovhgMat * vec4(position, 1.0)).xyz;
-          `,
-        )
-      shader.fragmentShader = shader.fragmentShader
-        .replace(
-          '#include <common>',
-          `
-          #include <common>
-          uniform sampler2D u_overhangColor;
-          varying float v_visible;
-          flat varying int v_ovhgIdx;
-          `,
-        )
-        .replace(
-          '#include <dithering_fragment>',
-          `
-          if (v_visible < 0.5) discard;
-          int ocol = v_ovhgIdx % BP_TILE_W;
-          int orow = v_ovhgIdx / BP_TILE_W;
-          gl_FragColor.rgb *= texelFetch(u_overhangColor, ivec2(ocol, orow), 0).rgb;
-          #include <dithering_fragment>
-          `,
-        )
-    }
-
-    const capacity = numOverhangs * numInstances
-    const mesh = new THREE.InstancedMesh(_LOD_HALF_CYL_GEO, mat, Math.max(1, capacity))
-    const identityArr = new Float32Array(16)
-    identityArr[0] = 1; identityArr[5] = 1; identityArr[10] = 1; identityArr[15] = 1
-    const idAttr = new THREE.InstancedBufferAttribute(identityArr, 16, false, Math.max(1, capacity))
-    idAttr.setUsage(THREE.StaticDrawUsage)
-    mesh.instanceMatrix = idAttr
-    mesh.instanceMatrix.needsUpdate = true
-    mesh.instanceColor = null
-    mesh.count = 0
-    mesh.frustumCulled = false
-    // Same visible=true trick as sharedLodMid/sharedLodFar so onBeforeRender
-    // hooks fire even before _updateLod's first pass; drawElementsInstanced
-    // with count=0 is a no-op.
-    mesh.visible = true
-    mesh.name = 'sharedLodOverhangs'
-    sourceGroup.add(mesh)
-    return {
-      mesh,
-      numOverhangs,
-      ovhgXformTex, ovhgXformData,
-      ovhgColorTex, ovhgColorData: colorData,
-      u_instanceOffset,
-    }
+    return _buildSegmentLodMesh({
+      srcEntry,
+      legacyMesh: legacyOverhangMesh,
+      geometry: _LOD_HALF_CYL_GEO,
+      meshName: 'sharedLodOverhangs',
+      sourceGroup,
+      side: THREE.DoubleSide,
+    })
   }
 
   // ── Far-LOD InstancedMesh + shader ───────────────────────────────────────
@@ -3609,7 +3528,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // — i.e. the SAME nearest instances close-LOD already drew (triple-render
     // bug from stage 1, surfaced by the stage-1 evaluator FAIL at 8f185bb).
     if (srcEntry.midLod) {
-      const c = nMid * srcEntry.midLod.numHelices
+      const c = nMid * srcEntry.midLod.numSegments
       srcEntry.midLod.mesh.count = c
       srcEntry.midLod.mesh.visible = true  // see comment above re: stuck-LOD trap
       if (srcEntry.midLod.u_instanceOffset) {
@@ -3617,10 +3536,9 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       }
     }
     // Overhang LOD draws alongside mid LOD — same instance offset (after
-    // close bucket), but its per-instance-mesh count is numOverhangs not
-    // numHelices.  Skipping when no overhangs exist avoids spurious draws.
+    // close bucket).  Skipping when no overhangs exist avoids spurious draws.
     if (srcEntry.overhangLod) {
-      const c = nMid * srcEntry.overhangLod.numOverhangs
+      const c = nMid * srcEntry.overhangLod.numSegments
       srcEntry.overhangLod.mesh.count = c
       srcEntry.overhangLod.mesh.visible = true
       if (srcEntry.overhangLod.u_instanceOffset) {
@@ -3974,77 +3892,39 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       am.bpColorTex.needsUpdate = true
     }
 
-    // Per-helix colour for sharedLodMid: average each helix's strand-segment
-    // colours (legacy iHelixCylinders carries one color per cylIdx; we map
-    // cylIdx → helixId via domainCylData, then accumulate per helix).
-    if (srcEntry.midLod?.helixColorTex && tmpHelixCyl?.instanceColor) {
-      const midLod = srcEntry.midLod
-      const helixIds = midLod.helixIds
-      const numHelices = midLod.numHelices
-      const helixIdToIdx = new Map()
-      for (let i = 0; i < helixIds.length; i++) helixIdToIdx.set(helixIds[i], i)
-      const sumR = new Float32Array(numHelices)
-      const sumG = new Float32Array(numHelices)
-      const sumB = new Float32Array(numHelices)
-      const counts = new Int32Array(numHelices)
-      const cylColors = tmpHelixCyl.instanceColor.array
-      const domainCylData = tmpHelixCtrl.domainCylData ?? []
-      for (const dom of domainCylData) {
-        const hIdx = helixIdToIdx.get(dom.helixId)
-        if (hIdx == null) continue
-        const ci = dom.cylIdx * 3
-        sumR[hIdx] += cylColors[ci + 0]
-        sumG[hIdx] += cylColors[ci + 1]
-        sumB[hIdx] += cylColors[ci + 2]
-        counts[hIdx]++
-      }
-      const data = midLod.helixColorData
-      for (let i = 0; i < numHelices; i++) {
-        if (counts[i] > 0) {
-          data[i * 4 + 0] = sumR[i] / counts[i]
-          data[i * 4 + 1] = sumG[i] / counts[i]
-          data[i * 4 + 2] = sumB[i] / counts[i]
-        } else {
-          data[i * 4 + 0] = 1
-          data[i * 4 + 1] = 1
-          data[i * 4 + 2] = 1
-        }
-        data[i * 4 + 3] = 1
-      }
-      midLod.helixColorTex.needsUpdate = true
-    }
-
-    // Per-segment overhang colour update.  Copy the temp iOverhangCylinders
-    // instanceColor (which already reflects coloringMode after the
-    // applyColoring call) into the overhangLod colour texture.
-    if (srcEntry.overhangLod?.ovhgColorTex && tmpOvhgCyl?.instanceColor) {
-      const ovhgLod = srcEntry.overhangLod
-      const src = tmpOvhgCyl.instanceColor.array
-      const dst = ovhgLod.ovhgColorData
-      const n = Math.min(ovhgLod.numOverhangs, Math.floor(src.length / 3))
+    // Per-segment colour updates for mid + overhang LODs.  Both share the
+    // same shape: copy the legacy mesh's instanceColor (3 floats per
+    // segment, populated by helixCtrl.applyColoring during the temp build)
+    // into our 2D-tiled per-segment colour texture (4 floats per segment).
+    function _copySegmentColors(lod, tmpMesh) {
+      if (!lod?.segColorTex || !tmpMesh?.instanceColor) return
+      const src = tmpMesh.instanceColor.array
+      const dst = lod.segColorData
+      const n = Math.min(lod.numSegments, Math.floor(src.length / 3))
       for (let i = 0; i < n; i++) {
         dst[i * 4 + 0] = src[i * 3 + 0]
         dst[i * 4 + 1] = src[i * 3 + 1]
         dst[i * 4 + 2] = src[i * 3 + 2]
         dst[i * 4 + 3] = 1
       }
-      ovhgLod.ovhgColorTex.needsUpdate = true
+      lod.segColorTex.needsUpdate = true
     }
+    _copySegmentColors(srcEntry.midLod, tmpHelixCyl)
+    _copySegmentColors(srcEntry.overhangLod, tmpOvhgCyl)
 
-    // Far-LOD billboard tint: a single source-average colour from the
-    // per-helix colours we just computed (so the far rectangle still
-    // tracks coloringMode without being persistently dark navy).
-    if (srcEntry.midLod?.helixColorData && srcEntry.farLod?.u_billboardColor) {
-      const data = srcEntry.midLod.helixColorData
-      const numHelices = srcEntry.midLod.numHelices
+    // Far-LOD billboard tint: source-average of the mid-LOD per-segment
+    // colours we just wrote, so the far rectangle still tracks coloringMode.
+    if (srcEntry.midLod?.segColorData && srcEntry.farLod?.u_billboardColor) {
+      const data = srcEntry.midLod.segColorData
+      const numSegments = srcEntry.midLod.numSegments
       let r = 0, g = 0, b = 0
-      for (let i = 0; i < numHelices; i++) {
+      for (let i = 0; i < numSegments; i++) {
         r += data[i * 4 + 0]
         g += data[i * 4 + 1]
         b += data[i * 4 + 2]
       }
-      if (numHelices > 0) {
-        srcEntry.farLod.u_billboardColor.value.set(r / numHelices, g / numHelices, b / numHelices)
+      if (numSegments > 0) {
+        srcEntry.farLod.u_billboardColor.value.set(r / numSegments, g / numSegments, b / numSegments)
       }
     }
 
