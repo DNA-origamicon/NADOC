@@ -2007,6 +2007,75 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     }
   }
 
+  // ── Phase 3e follow-up: public setters for shared-path selection/broken ──
+  //
+  // The shared-path joint indicators carry per-instance color via
+  // `instanceColor` (allocated in _allocateSharedJointMeshes). The private
+  // helpers `_writeSharedRingColor` and `_writeSharedNonRingColors` read
+  // `_sharedActiveJointId` + `_sharedJointBroken` and write the right tint
+  // (green for active ring, red for broken shaft/cone/ring, orange default).
+  // _rebuildSharedJoints calls them at build time. These two public setters
+  // expose the same wiring to runtime updates.
+  //
+  // On the legacy per-instance path the broken-mate red is baked into the
+  // material at _buildIndicator time, and there is no analogous "active joint"
+  // highlight today (the green ring was added with the shared path). So both
+  // setters are no-ops when _useSharedJoints === false — callers can fire them
+  // unconditionally without per-path branching, and the per-instance rebuild
+  // will continue to drive broken-mate color via _isBrokenMate as before.
+
+  /**
+   * Mark a joint as the active (selected) one. The ring of the matching
+   * instance slot tints green (ACTIVE_RING_COLOUR); the previously-active
+   * joint's ring (if any) reverts to its default color. Pass null/undefined
+   * to clear the active state entirely.
+   * No-op on the legacy per-instance path.
+   */
+  function setActiveJoint(jointId) {
+    if (!_useSharedJoints) return
+    const prev = _sharedActiveJointId
+    const next = (jointId == null) ? null : jointId
+    if (prev === next) return
+    _sharedActiveJointId = next
+    // Rewrite ring color for the joint(s) whose active-state changed.
+    // _writeSharedRingColor reads _sharedActiveJointId so we just rewrite
+    // the affected slots.
+    if (prev != null) {
+      const iPrev = _sharedJointIdxById.get(prev)
+      if (iPrev !== undefined) _writeSharedRingColor(iPrev, prev)
+    }
+    if (next != null) {
+      const iNext = _sharedJointIdxById.get(next)
+      if (iNext !== undefined) _writeSharedRingColor(iNext, next)
+    }
+    if (_sharedRingMesh?.instanceColor) {
+      _sharedRingMesh.instanceColor.needsUpdate = true
+    }
+  }
+
+  /**
+   * Toggle the broken-mate red tint on a joint's shaft/cone/ring. When the
+   * joint is also the active one, the ring still wins at red (broken takes
+   * priority over active in _writeSharedRingColor) — matching the legacy
+   * per-instance _buildIndicator(broken=true) behavior where the entire
+   * indicator was red.
+   * No-op on the legacy per-instance path or when jointId is unknown.
+   */
+  function setMateBroken(jointId, broken) {
+    if (!_useSharedJoints) return
+    if (jointId == null) return
+    const i = _sharedJointIdxById.get(jointId)
+    if (i === undefined) return
+    const flag = !!broken
+    if (_sharedJointBroken.get(jointId) === flag) return
+    _sharedJointBroken.set(jointId, flag)
+    _writeSharedNonRingColors(i, jointId)
+    _writeSharedRingColor(i, jointId)
+    if (_sharedShaftMesh?.instanceColor) _sharedShaftMesh.instanceColor.needsUpdate = true
+    if (_sharedConeMesh?.instanceColor)  _sharedConeMesh.instanceColor.needsUpdate  = true
+    if (_sharedRingMesh?.instanceColor)  _sharedRingMesh.instanceColor.needsUpdate  = true
+  }
+
   return {
     rebuild,
     enterConnectorDefineMode,
@@ -2025,6 +2094,8 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     showMateConnectorHighlights,
     clearMateConnectorHighlights,
     showMateDebugMarkers,
+    setActiveJoint,
+    setMateBroken,
     /** Update blunt-end connector candidates shown in mate-define mode. */
     setExtraConnectors(data) {
       _extraConnectors = data ?? []
