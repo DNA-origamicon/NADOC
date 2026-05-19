@@ -3064,7 +3064,13 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     mesh.instanceColor = null
     mesh.count = 0  // _updateLod sets the real count
     mesh.frustumCulled = false
-    mesh.visible = false  // _updateLod flips on when count > 0
+    // visible=true unconditionally so onBeforeRender fires every frame
+    // even before _updateLod has run once.  Three.js short-circuits at
+    // `object.visible === false` BEFORE calling onBeforeRender — if this
+    // mesh hosts the LOD-updater hook (when activeMeshes is empty for
+    // cylinders-rep builds), visible=false would mean the hook never
+    // fires → count stays 0 → "only helix axes draw" regression.
+    mesh.visible = true
     mesh.name = 'sharedLodMid'
     sourceGroup.add(mesh)
     return { mesh, numHelices, helixTex, helixData, u_instanceOffset, u_sourceColor }
@@ -3165,7 +3171,10 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     mesh.instanceColor = null
     mesh.count = 0
     mesh.frustumCulled = false
-    mesh.visible = false
+    // Same lesson as sharedLodMid: keep visible=true so onBeforeRender
+    // hooks fire even before _updateLod's first run.  drawElementsInstanced
+    // with count=0 is a zero-cost no-op.
+    mesh.visible = true
     mesh.name = 'sharedLodFar'
     sourceGroup.add(mesh)
     return { mesh, u_instanceOffset, u_billboardColor }
@@ -3407,10 +3416,19 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // the first active mesh, which already carries the dirty-row uploader; we
   // chain them. Three.js calls onBeforeRender(renderer, scene, camera, ...).
   function _installLodUpdater(srcEntry) {
-    if (!srcEntry.activeMeshes.length) return
-    const firstMesh = srcEntry.activeMeshes[0].mesh
-    const prevHook = firstMesh.onBeforeRender
-    firstMesh.onBeforeRender = function (renderer, scn, camera, geom, mat, group) {
+    // Find ANY mesh that's reliably scene-resident every frame so the
+    // onBeforeRender hook actually fires.  Cylinders-rep builds leave
+    // activeMeshes empty (only bp meshes go in there, and bp meshes have
+    // baseCount==0 at that rep), so we fall back to sharedLodMid / sharedLodFar.
+    // Without this fallback _updateLodForSource never runs → sharedLodMid.count
+    // stays 0 → only helix axes draw (regression from 26f9df1).
+    const hookHost =
+      srcEntry.activeMeshes[0]?.mesh
+      ?? srcEntry.midLod?.mesh
+      ?? srcEntry.farLod?.mesh
+    if (!hookHost) return
+    const prevHook = hookHost.onBeforeRender
+    hookHost.onBeforeRender = function (renderer, scn, camera, geom, mat, group) {
       if (typeof prevHook === 'function') {
         prevHook.call(this, renderer, scn, camera, geom, mat, group)
       }
