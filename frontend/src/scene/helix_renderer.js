@@ -170,6 +170,34 @@ function _setConeXZScale(entry, r) {
   entry.instMesh.instanceMatrix.needsUpdate = true
 }
 
+// ── Prebaked-matrix context (Phase 6a — worker-thread fast path) ──────────────
+//
+// When `buildHelixObjectsAsync` runs, it computes the per-bp Matrix4 data off
+// the main thread and stashes the resulting Float32Arrays here BEFORE invoking
+// the synchronous `buildHelixObjects` below. The four per-bp loops inside
+// `buildHelixObjects` check this object and, when present, copy from these
+// buffers directly into each InstancedMesh's `.instanceMatrix.array` instead
+// of recomputing `_tMatrix.compose(...)` + `setMatrixAt(...)` thousands of times.
+//
+// The buffers are cleared in a `finally` block in the async wrapper so the
+// next sync caller (design_renderer.js) sees the untouched math path. There
+// is no public API for setting this directly — it's an implementation seam,
+// not part of `buildHelixObjects`'s contract.
+//
+// Buffer layout (must match `helix_matrix_worker.js`):
+//   beadMatrices    Float32Array  16 * (sphereCount + cubeCount)
+//                   Sphere slots [0..sphereCount), then cube slots
+//                   [sphereCount..sphereCount+cubeCount). Worker indexes by
+//                   beadKind so caller can blit two contiguous slices to
+//                   iSpheres / iCubes respectively.
+//   coneMatrices    Float32Array  16 * coneCount
+//   slabMatrices    Float32Array  16 * slabCount
+//   fluoroMatrices  Float32Array  16 * fluoroCount
+let _prebakedMatrices = null
+
+/** @internal — testing hook for vitest. Do not use from production code. */
+export function __setPrebakedMatricesForTest(obj) { _prebakedMatrices = obj }
+
 // ── Slab helpers ──────────────────────────────────────────────────────────────
 
 function slabQuaternion(bnDir, tanDir) {
@@ -613,18 +641,38 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   let sphereId = 0, cubeId = 0
 
   if (!_skipBeads) {
+    // Phase 6a fast path: when an async caller staged worker-computed matrix
+    // buffers in `_prebakedMatrices`, blit them in one Float32Array.set() each
+    // and skip the per-bp _tMatrix.compose+setMatrixAt loop. The entry-array
+    // construction + setColorAt loops still run (those allocate Vector3 / set
+    // instanceColor, both needed downstream + cheap relative to compose).
+    const _pbBeadMats = _prebakedMatrices?.beadMatrices ?? null
+    const _pbSphereCount = _prebakedMatrices?.sphereCount ?? 0
+    if (_pbBeadMats) {
+      // Sphere slice = first sphereCount matrices; cube slice follows.
+      const sphereByteLen = 16 * _pbSphereCount
+      const cubeByteLen   = 16 * (_prebakedMatrices.cubeCount ?? 0)
+      if (sphereByteLen > 0 && iSpheres.instanceMatrix.array.length >= sphereByteLen) {
+        iSpheres.instanceMatrix.array.set(_pbBeadMats.subarray(0, sphereByteLen))
+      }
+      if (cubeByteLen > 0 && iCubes.instanceMatrix.array.length >= cubeByteLen) {
+        iCubes.instanceMatrix.array.set(_pbBeadMats.subarray(sphereByteLen, sphereByteLen + cubeByteLen))
+      }
+    }
     for (const nuc of assignedGeometry) {
       const color = nucColor(nuc, stapleColorMap, customColors, loopSet)
       const pos   = new THREE.Vector3(...nuc.backbone_position)
-      _tMatrix.compose(pos, ID_QUAT, _tScale.set(1, 1, 1))
+      if (!_pbBeadMats) {
+        _tMatrix.compose(pos, ID_QUAT, _tScale.set(1, 1, 1))
+      }
 
       if (nuc.is_five_prime) {
-        iCubes.setMatrixAt(cubeId, _tMatrix)
+        if (!_pbBeadMats) iCubes.setMatrixAt(cubeId, _tMatrix)
         iCubes.setColorAt(cubeId, _tColor.setHex(color))
         backboneEntries.push({ instMesh: iCubes, id: cubeId, nuc, pos, defaultColor: color })
         cubeId++
       } else {
-        iSpheres.setMatrixAt(sphereId, _tMatrix)
+        if (!_pbBeadMats) iSpheres.setMatrixAt(sphereId, _tMatrix)
         iSpheres.setColorAt(sphereId, _tColor.setHex(color))
         backboneEntries.push({ instMesh: iSpheres, id: sphereId, nuc, pos, defaultColor: color })
         sphereId++
@@ -654,11 +702,20 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   let fluoroId = 0
 
   if (!_skipFluoros) {
+    const _pbFluoroMats = _prebakedMatrices?.fluoroMatrices ?? null
+    if (_pbFluoroMats) {
+      const fluoroByteLen = 16 * (_prebakedMatrices.fluoroCount ?? 0)
+      if (fluoroByteLen > 0 && iFluoros.instanceMatrix.array.length >= fluoroByteLen) {
+        iFluoros.instanceMatrix.array.set(_pbFluoroMats.subarray(0, fluoroByteLen))
+      }
+    }
     for (const nuc of fluoroGeometry) {
       const color = MODIFICATION_COLORS[nuc.modification] ?? 0xffffff
       const pos   = new THREE.Vector3(...nuc.backbone_position)
-      _tMatrix.compose(pos, ID_QUAT, _tScale.set(1, 1, 1))
-      iFluoros.setMatrixAt(fluoroId, _tMatrix)
+      if (!_pbFluoroMats) {
+        _tMatrix.compose(pos, ID_QUAT, _tScale.set(1, 1, 1))
+        iFluoros.setMatrixAt(fluoroId, _tMatrix)
+      }
       iFluoros.setColorAt(fluoroId, _tColor.setHex(color))
       fluoroEntries.push({ instMesh: iFluoros, id: fluoroId, nuc, pos, defaultColor: color })
       fluoroId++
@@ -685,22 +742,53 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   let coneId = 0
 
   if (!_skipCones) {
+    const _pbConeMats   = _prebakedMatrices?.coneMatrices  ?? null
+    const _pbConeMid    = _prebakedMatrices?.coneMidPos    ?? null
+    const _pbConeQuat   = _prebakedMatrices?.coneQuat      ?? null
+    const _pbConeHeight = _prebakedMatrices?.coneHeights   ?? null
+    if (_pbConeMats) {
+      const coneByteLen = 16 * (_prebakedMatrices.coneCount ?? 0)
+      if (coneByteLen > 0 && iCones.instanceMatrix.array.length >= coneByteLen) {
+        iCones.instanceMatrix.array.set(_pbConeMats.subarray(0, coneByteLen))
+      }
+    }
+    let _coneSeq = 0  // index into the side-channel arrays
     for (const [, nucs] of byStrand) {
       const color = nucArrowColor(nucs[0], stapleColorMap, customColors, loopSet)
       for (let i = 0; i < nucs.length - 1; i++) {
-        const from   = new THREE.Vector3(...nucs[i].backbone_position)
-        const to     = new THREE.Vector3(...nucs[i + 1].backbone_position)
-        const dir    = to.clone().sub(from)
-        const dist   = dir.length()
-        const coneHeight = Math.max(0.001, dist)
-        const midPos = from.clone().addScaledVector(dir.clone().normalize(), dist / 2)
-        const quat   = new THREE.Quaternion().setFromUnitVectors(Y_HAT, dir.clone().normalize())
+        const isCrossHelix = nucs[i].helix_id !== nucs[i + 1].helix_id
+        let midPos, quat, coneHeight
+        if (_pbConeMid) {
+          // Worker fast path: pull midPos/quat/height straight from typed
+          // arrays without the cone-pair math + 6 throwaway Vector3 clones.
+          midPos = new THREE.Vector3(
+            _pbConeMid[3 * _coneSeq + 0],
+            _pbConeMid[3 * _coneSeq + 1],
+            _pbConeMid[3 * _coneSeq + 2],
+          )
+          quat = new THREE.Quaternion(
+            _pbConeQuat[4 * _coneSeq + 0],
+            _pbConeQuat[4 * _coneSeq + 1],
+            _pbConeQuat[4 * _coneSeq + 2],
+            _pbConeQuat[4 * _coneSeq + 3],
+          )
+          coneHeight = _pbConeHeight[_coneSeq]
+        } else {
+          const from   = new THREE.Vector3(...nucs[i].backbone_position)
+          const to     = new THREE.Vector3(...nucs[i + 1].backbone_position)
+          const dir    = to.clone().sub(from)
+          const dist   = dir.length()
+          coneHeight   = Math.max(0.001, dist)
+          midPos = from.clone().addScaledVector(dir.clone().normalize(), dist / 2)
+          quat   = new THREE.Quaternion().setFromUnitVectors(Y_HAT, dir.clone().normalize())
+        }
 
         // Cross-helix connections are rendered as arcs; hide the cone.
-        const isCrossHelix = nucs[i].helix_id !== nucs[i + 1].helix_id
         const r = isCrossHelix ? 0 : CONE_RADIUS
-        _tMatrix.compose(midPos, quat, _tScale.set(r, coneHeight, r))
-        iCones.setMatrixAt(coneId, _tMatrix)
+        if (!_pbConeMats) {
+          _tMatrix.compose(midPos, quat, _tScale.set(r, coneHeight, r))
+          iCones.setMatrixAt(coneId, _tMatrix)
+        }
         iCones.setColorAt(coneId, _tColor.setHex(color))
 
         coneEntries.push({
@@ -713,6 +801,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           defaultColor: color,
         })
         coneId++
+        _coneSeq++
       }
     }
     iCones.instanceMatrix.needsUpdate = true
@@ -739,22 +828,52 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   let slabId = 0
 
   if (!_skipSlabs) {
+    const _pbSlabMats   = _prebakedMatrices?.slabMatrices ?? null
+    const _pbSlabQuat   = _prebakedMatrices?.slabQuat     ?? null
+    const _pbSlabCenter = _prebakedMatrices?.slabCenter   ?? null
+    if (_pbSlabMats) {
+      const slabByteLen = 16 * (_prebakedMatrices.slabCount ?? 0)
+      if (slabByteLen > 0 && iSlabs.instanceMatrix.array.length >= slabByteLen) {
+        iSlabs.instanceMatrix.array.set(_pbSlabMats.subarray(0, slabByteLen))
+      }
+    }
+    let _slabSeq = 0
     for (const nuc of assignedGeometry) {
       // Extension beads have no base-pair slabs.
       if (nuc.helix_id.startsWith('__ext_')) continue
       const bnDir  = new THREE.Vector3(...nuc.base_normal)
-      const tanDir = new THREE.Vector3(...nuc.axis_tangent)
-      const quat   = slabQuaternion(bnDir, tanDir)
       const color  = nucSlabColor(nuc, stapleColorMap, customColors, loopSet)
       const bbPos  = new THREE.Vector3(...nuc.backbone_position)
-      const center = slabCenter(bbPos, bnDir, slabParams.distance)
+      let quat, center
+      if (_pbSlabQuat) {
+        // Worker fast path — skip slabQuaternion's cross-product +
+        // makeBasis + setFromRotationMatrix on the main thread.
+        quat = new THREE.Quaternion(
+          _pbSlabQuat[4 * _slabSeq + 0],
+          _pbSlabQuat[4 * _slabSeq + 1],
+          _pbSlabQuat[4 * _slabSeq + 2],
+          _pbSlabQuat[4 * _slabSeq + 3],
+        )
+        center = new THREE.Vector3(
+          _pbSlabCenter[3 * _slabSeq + 0],
+          _pbSlabCenter[3 * _slabSeq + 1],
+          _pbSlabCenter[3 * _slabSeq + 2],
+        )
+      } else {
+        const tanDir = new THREE.Vector3(...nuc.axis_tangent)
+        quat   = slabQuaternion(bnDir, tanDir)
+        center = slabCenter(bbPos, bnDir, slabParams.distance)
+      }
 
-      _tMatrix.compose(center, quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
-      iSlabs.setMatrixAt(slabId, _tMatrix)
+      if (!_pbSlabMats) {
+        _tMatrix.compose(center, quat, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+        iSlabs.setMatrixAt(slabId, _tMatrix)
+      }
       iSlabs.setColorAt(slabId, _tColor.setHex(color))
 
       slabEntries.push({ instMesh: iSlabs, id: slabId, nuc, quat, bnDir, bbPos, center, defaultColor: color })
       slabId++
+      _slabSeq++
     }
     iSlabs.instanceMatrix.needsUpdate = true
     if (iSlabs.instanceColor) iSlabs.instanceColor.needsUpdate = true
@@ -4251,4 +4370,263 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       console.groupEnd()
     },
   }
+}
+
+// ── Async build (Phase 6a — worker-thread per-bp matrix loops) ────────────────
+//
+// `buildHelixObjectsAsync` is a drop-in replacement for `buildHelixObjects` that
+// offloads the heavy per-bp Matrix4 composition loops to a Web Worker, then
+// blits the resulting Float32Array buffers straight into the InstancedMesh
+// `instanceMatrix.array` on the main thread. For small builds it falls back to
+// the sync path inline (spawning the worker for tiny inputs is slower than
+// just doing the math). For a 60 k-bp single-source build it slashes the
+// main-thread wall time from ~3 s to a few hundred ms — see the perf probe in
+// `helix_renderer.async.test.js`.
+//
+// Public sync `buildHelixObjects` is UNCHANGED (design_renderer.js + any sync
+// caller keeps working with no modification). Async callers (assembly_renderer
+// for the assembly view) can opt into this path by awaiting it.
+//
+// Threshold heuristic: below ~10 000 total per-bp slots the worker overhead
+// (~10 ms cold-start) exceeds the savings, so we skip straight to sync. The
+// threshold is intentionally generous because the worker's compute time is
+// negligible compared to the post-call entry-array construction.
+
+// Threshold below which we skip the worker entirely. Total per-bp slots =
+// sphereCount + cubeCount + coneCount + slabCount + fluoroCount.
+const _WORKER_THRESHOLD_SLOTS = 10000
+
+// Singleton worker. Spawned lazily on first use; never explicitly terminated
+// (the runtime GC's it on page unload). Reused across builds so the cold-start
+// hit is amortised after the first build of a session.
+let _matrixWorker = null
+let _matrixWorkerSeq = 0
+const _matrixWorkerPending = new Map() // seq → { resolve, reject }
+
+function _ensureMatrixWorker() {
+  if (_matrixWorker) return _matrixWorker
+  if (typeof Worker === 'undefined') return null
+  try {
+    // Vite handles `?worker` natively: in dev it serves the worker module
+    // file with the right MIME type; in prod it bundles into a separate
+    // chunk. No npm dep needed.
+    _matrixWorker = new Worker(new URL('./helix_matrix_worker.js', import.meta.url), { type: 'module' })
+    _matrixWorker.onmessage = (e) => {
+      const seq = e.data?.__seq
+      const pending = _matrixWorkerPending.get(seq)
+      if (!pending) return
+      _matrixWorkerPending.delete(seq)
+      if (e.data?.error) pending.reject(new Error(e.data.error))
+      else pending.resolve(e.data)
+    }
+    _matrixWorker.onerror = (err) => {
+      // Reject every outstanding request. Drop the worker so the next call
+      // tries to spawn a fresh one.
+      for (const { reject } of _matrixWorkerPending.values()) reject(err)
+      _matrixWorkerPending.clear()
+      _matrixWorker = null
+    }
+  } catch {
+    _matrixWorker = null
+  }
+  return _matrixWorker
+}
+
+function _matrixWorkerCompute(payload) {
+  const w = _ensureMatrixWorker()
+  if (!w) return Promise.reject(new Error('no_worker'))
+  const seq = ++_matrixWorkerSeq
+  return new Promise((resolve, reject) => {
+    _matrixWorkerPending.set(seq, { resolve, reject })
+    payload.__seq = seq
+    // Need a list of transferable buffers from the payload to avoid a copy.
+    const transfer = []
+    for (const k of ['beadPositions', 'beadIds', 'beadKinds', 'fluoroPositions',
+                     'coneFromPos', 'coneToPos', 'coneCrossHelix',
+                     'slabPositions', 'slabNormals', 'slabTangents']) {
+      const v = payload[k]
+      if (v && v.buffer instanceof ArrayBuffer) transfer.push(v.buffer)
+    }
+    w.postMessage(payload, transfer)
+  }).then((res) => {
+    // The worker echoes `__seq` back on the result; strip it so callers see a
+    // clean shape.
+    if (res) delete res.__seq
+    return res
+  })
+}
+
+// Builds the worker-bound payload from the same raw `geometry` + `design`
+// the sync function consumes. The iteration order MUST match the sync loops
+// (assignedGeometry filter, byStrand insertion order, etc.) so the produced
+// matrix slots line up with the InstancedMesh ids the sync function will
+// assign.
+function _buildWorkerPayload(geometry, design) {
+  const _isSsLinkerBridgeNuc = (nuc) =>
+    typeof nuc.strand_id === 'string'
+    && nuc.strand_id.startsWith('__lnk__')
+    && nuc.strand_id.endsWith('__s')
+    && typeof nuc.helix_id === 'string'
+    && nuc.helix_id.startsWith('__lnk__')
+
+  const assigned = []
+  const fluoro   = []
+  const byStrand = new Map()
+  for (const nuc of geometry) {
+    if (_isSsLinkerBridgeNuc(nuc)) continue
+    if (nuc.is_modification) fluoro.push(nuc)
+    else if (nuc.strand_id) assigned.push(nuc)
+    if (nuc.strand_id && !_isSsLinkerBridgeNuc(nuc) && !nuc.is_modification) {
+      if (!byStrand.has(nuc.strand_id)) byStrand.set(nuc.strand_id, [])
+      byStrand.get(nuc.strand_id).push(nuc)
+    }
+  }
+  for (const [, nucs] of byStrand) {
+    nucs.sort((a, b) => {
+      const di = (a.domain_index ?? 0) - (b.domain_index ?? 0)
+      if (di !== 0) return di
+      return a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
+    })
+  }
+
+  // ── Bead payload ──────────────────────────────────────────────────────────
+  // Sphere ids come first in beadMatrices; cubes follow. So we pack two
+  // counters and a per-nuc `kind` byte so the worker can place each into the
+  // right slot.
+  let sphereCount = 0
+  let cubeCount   = 0
+  for (const n of assigned) {
+    if (n.is_five_prime) cubeCount++
+    else sphereCount++
+  }
+  const beadCount = assigned.length
+  const beadPositions = new Float32Array(3 * beadCount)
+  const beadIds       = new Uint32Array(beadCount)
+  const beadKinds     = new Uint8Array(beadCount)
+  let _spIdx = 0, _cuIdx = 0
+  for (let i = 0; i < beadCount; i++) {
+    const n = assigned[i]
+    beadPositions[3 * i + 0] = n.backbone_position[0]
+    beadPositions[3 * i + 1] = n.backbone_position[1]
+    beadPositions[3 * i + 2] = n.backbone_position[2]
+    if (n.is_five_prime) {
+      beadKinds[i] = 1
+      beadIds[i]   = _cuIdx++
+    } else {
+      beadKinds[i] = 0
+      beadIds[i]   = _spIdx++
+    }
+  }
+
+  // ── Fluoro payload ────────────────────────────────────────────────────────
+  const fluoroCount = fluoro.length
+  const fluoroPositions = new Float32Array(3 * fluoroCount)
+  for (let i = 0; i < fluoroCount; i++) {
+    fluoroPositions[3 * i + 0] = fluoro[i].backbone_position[0]
+    fluoroPositions[3 * i + 1] = fluoro[i].backbone_position[1]
+    fluoroPositions[3 * i + 2] = fluoro[i].backbone_position[2]
+  }
+
+  // ── Cone payload ─────────────────────────────────────────────────────────
+  let totalCones = 0
+  for (const [, nucs] of byStrand) totalCones += Math.max(0, nucs.length - 1)
+  const coneFromPos = new Float32Array(3 * totalCones)
+  const coneToPos   = new Float32Array(3 * totalCones)
+  const coneCrossHelix = new Uint8Array(totalCones)
+  let _coneI = 0
+  for (const [, nucs] of byStrand) {
+    for (let i = 0; i < nucs.length - 1; i++) {
+      const a = nucs[i], b = nucs[i + 1]
+      coneFromPos[3 * _coneI + 0] = a.backbone_position[0]
+      coneFromPos[3 * _coneI + 1] = a.backbone_position[1]
+      coneFromPos[3 * _coneI + 2] = a.backbone_position[2]
+      coneToPos[3 * _coneI + 0] = b.backbone_position[0]
+      coneToPos[3 * _coneI + 1] = b.backbone_position[1]
+      coneToPos[3 * _coneI + 2] = b.backbone_position[2]
+      coneCrossHelix[_coneI] = (a.helix_id !== b.helix_id) ? 1 : 0
+      _coneI++
+    }
+  }
+
+  // ── Slab payload ─────────────────────────────────────────────────────────
+  // Slabs iterate `assignedGeometry` but skip helix_id starting with '__ext_'.
+  let slabCount = 0
+  for (const n of assigned) if (!n.helix_id.startsWith('__ext_')) slabCount++
+  const slabPositions = new Float32Array(3 * slabCount)
+  const slabNormals   = new Float32Array(3 * slabCount)
+  const slabTangents  = new Float32Array(3 * slabCount)
+  let _slI = 0
+  for (const n of assigned) {
+    if (n.helix_id.startsWith('__ext_')) continue
+    slabPositions[3 * _slI + 0] = n.backbone_position[0]
+    slabPositions[3 * _slI + 1] = n.backbone_position[1]
+    slabPositions[3 * _slI + 2] = n.backbone_position[2]
+    slabNormals[3 * _slI + 0] = n.base_normal[0]
+    slabNormals[3 * _slI + 1] = n.base_normal[1]
+    slabNormals[3 * _slI + 2] = n.base_normal[2]
+    slabTangents[3 * _slI + 0] = n.axis_tangent[0]
+    slabTangents[3 * _slI + 1] = n.axis_tangent[1]
+    slabTangents[3 * _slI + 2] = n.axis_tangent[2]
+    _slI++
+  }
+
+  return {
+    beadPositions, beadIds, beadKinds, sphereCount, cubeCount,
+    fluoroPositions, fluoroCount,
+    coneFromPos, coneToPos, coneCrossHelix, coneCount: totalCones,
+    slabPositions, slabNormals, slabTangents, slabCount,
+    _totalSlots: beadCount + totalCones + slabCount + fluoroCount,
+  }
+}
+
+/**
+ * Async build path. Same signature as `buildHelixObjects` but returns a
+ * Promise<helixCtrl>. Falls back to the sync path inline when the total
+ * per-bp work is below the worker threshold.
+ *
+ * IMPORTANT: the resulting `helixCtrl` is identical in shape and behaviour to
+ * the sync return value — same `backboneEntries`, `coneEntries`, `slabEntries`
+ * arrays with Vector3/Quaternion entries, same control methods. The async
+ * path only changes WHERE the Matrix4 composition runs (worker vs main).
+ */
+export async function buildHelixObjectsAsync(
+  geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full',
+) {
+  // Build the worker payload first so we can read `_totalSlots` for the
+  // threshold check. Building the payload involves the same filtering the
+  // sync path does, but it's pure ArrayBuffer fill — cheap.
+  const payload = _buildWorkerPayload(geometry, design)
+  if (payload._totalSlots < _WORKER_THRESHOLD_SLOTS) {
+    // Tiny design — worker spawn would cost more than the math itself.
+    return buildHelixObjects(geometry, design, scene, customColors, loopStrandIds, helixAxes, lod)
+  }
+  delete payload._totalSlots
+
+  let prebaked = null
+  try {
+    prebaked = await _matrixWorkerCompute(payload)
+  } catch {
+    // Worker unavailable / errored — gracefully fall back to sync path.
+    return buildHelixObjects(geometry, design, scene, customColors, loopStrandIds, helixAxes, lod)
+  }
+
+  _prebakedMatrices = prebaked
+  try {
+    return buildHelixObjects(geometry, design, scene, customColors, loopStrandIds, helixAxes, lod)
+  } finally {
+    // Always release so the next sync caller (design_renderer.js) is
+    // unaffected, even if buildHelixObjects threw.
+    _prebakedMatrices = null
+  }
+}
+
+/**
+ * @internal — for tests + manual debugging. Returns the current threshold so
+ * callers can probe / override.
+ */
+export const HELIX_WORKER_THRESHOLD_SLOTS = _WORKER_THRESHOLD_SLOTS
+
+/** @internal — exposes the worker-payload builder for vitest perf probes. */
+export function __buildWorkerPayloadForTest(geometry, design) {
+  return _buildWorkerPayload(geometry, design)
 }

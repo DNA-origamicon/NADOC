@@ -61,7 +61,7 @@
  */
 
 import * as THREE from 'three'
-import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
+import { buildHelixObjects, buildHelixObjectsAsync, buildStapleColorMap } from './helix_renderer.js'
 import { buildCrossoverConnections, arcControlPoint, updateExtraBaseInstances } from './crossover_connections.js'
 import { initAtomisticRenderer } from './atomistic_renderer.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
@@ -1221,7 +1221,9 @@ export function initAssemblyRenderer(scene, store, api) {
       // buffers (which would otherwise waste ~25 MB per heavy-origami
       // instance even when hidden — the source of the 2D polymerize OOM).
       const buildLod     = inst.representation ?? 'full'
-      const helixCtrl    = buildHelixObjects(nucleotides, design, instanceGroup, customColors, [], helixAxes, buildLod)
+      // Phase 6a: async helix-build offloads per-bp Matrix4 composition to a
+      // Web Worker for designs above the threshold (sync fallback below).
+      const helixCtrl    = await buildHelixObjectsAsync(nucleotides, design, instanceGroup, customColors, [], helixAxes, buildLod)
 
       // Crossover arc lines — straight colored lines in instance-local space.
       // Added to helixCtrl.root so they hide/show with the CG representation.
@@ -2493,7 +2495,11 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     for (const strand of design.strands ?? []) {
       if (strand.color) customColors[strand.id] = parseInt(strand.color.replace(/^#/, ''), 16)
     }
-    const helixCtrl = buildHelixObjects(
+    // Phase 6a: offload per-bp Matrix4 composition to a Web Worker for large
+    // builds. `buildHelixObjectsAsync` internally falls back to the sync path
+    // for designs below the threshold (~10 k slots) where worker overhead would
+    // dominate. The returned helixCtrl is identical in shape to the sync path.
+    const helixCtrl = await buildHelixObjectsAsync(
       nucleotides, design, helixGroup, customColors, [], helix_axes ?? null, rep,
     )
 
