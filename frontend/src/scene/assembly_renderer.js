@@ -2664,7 +2664,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
 
     scene.add(helixGroup)
 
-    return {
+    const srcEntry = {
       group: helixGroup,
       helixCtrl,
       design,
@@ -2689,6 +2689,32 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       dirtyVisRows: new Set(),
       instBoundingBox,
     }
+
+    // ── Phase 3f: build mid-LOD + far-LOD meshes for this source ─────────────
+    // Helix list: every helix.id in the design except virtual linker helices
+    // (which lack axes anyway). We use the design's helix order — stable and
+    // matches what buildHelixObjects iterated.
+    const helixIds = []
+    for (const h of design.helices ?? []) {
+      if (typeof h.id === 'string' && h.id.startsWith('__lnk__')) continue
+      helixIds.push(h.id)
+    }
+    const midLod = _buildMidLodMesh(srcEntry, helixIds, helix_axes ?? {}, helixGroup)
+    if (midLod) {
+      srcEntry.midLod = midLod
+      // Stash the texture handle for disposal (alongside bp textures).
+      srcEntry.helixXformTex = midLod.helixTex
+    }
+    // Far LOD: billboard sized to the source bbox half-diagonal so it covers
+    // the same screen footprint as the full-bp render at distance.
+    const bboxSize = new THREE.Vector3()
+    instBoundingBox.getSize(bboxSize)
+    const billboardRadius = Math.max(0.5, 0.5 * bboxSize.length())
+    const billboardColor = _averageStrandColorRGB(design)
+    const farLod = _buildFarLodMesh(srcEntry, billboardRadius, billboardColor, helixGroup)
+    if (farLod) srcEntry.farLod = farLod
+
+    return srcEntry
   }
 
   // ── Dispose one source entry ──────────────────────────────────────────────
@@ -2707,7 +2733,367 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     if (srcEntry.bpTextures) {
       for (const t of srcEntry.bpTextures) t.dispose()
     }
+    // Phase 3f — release per-source LOD textures (mid-LOD per-helix transform
+    // texture; far-LOD has no extra texture beyond xformTex which is already
+    // released above).
+    srcEntry.helixXformTex?.dispose()
     for (const id of srcEntry.instanceIds) _instToSrc.delete(id)
+  }
+
+  // ╔══════════════════════════════════════════════════════════════════════════╗
+  // ║  Phase 3f — three-tier LOD ladder                                        ║
+  // ║                                                                          ║
+  // ║  Per source, the close-LOD path (already in place above) is augmented   ║
+  // ║  by two additional InstancedMesh sets that share the same per-source    ║
+  // ║  `xformTex` (per-instance world transforms):                             ║
+  // ║                                                                          ║
+  // ║    • Mid LOD  — one unit-cylinder InstancedMesh.                         ║
+  // ║                 count = numHelices × numInstances.                       ║
+  // ║                 Pre-baked per-helix transform stored in a per-source     ║
+  // ║                 `helixXformTex` (4 RGBA texels × numHelices rows).       ║
+  // ║                 Shader composes  world = instTransform × helixCylMat ×   ║
+  // ║                 position. `gl_InstanceID` decomposes as                  ║
+  // ║                   instanceIdx = gl_InstanceID / numHelices              ║
+  // ║                   helixIdx    = gl_InstanceID % numHelices              ║
+  // ║                                                                          ║
+  // ║    • Far LOD — one quad InstancedMesh.                                   ║
+  // ║                 count = numInstances. Vertex shader reads the instance   ║
+  // ║                 transform's translation column from u_instanceXform and  ║
+  // ║                 expands the quad as a camera-facing billboard sized to   ║
+  // ║                 the source bbox radius.                                  ║
+  // ║                                                                          ║
+  // ║  Each frame, `_updateLod(camera)` runs ONCE per source (hooked via       ║
+  // ║  `onBeforeRender` on one mesh per source) and:                           ║
+  // ║    1. counts how many instances fall into close / mid / far buckets;    ║
+  // ║    2. sets each LOD InstancedMesh's `.count` to that bucket size ×       ║
+  // ║       per-LOD multiplier;                                                ║
+  // ║    3. sets `.visible = true` on any mesh whose count > 0.                ║
+  // ║                                                                          ║
+  // ║  *** STAGE-ONE LIMITATION (per the chunk spec) ***                       ║
+  // ║  This is the "bucket counts only" variant. Texture-row order determines  ║
+  // ║  WHICH instances are at each LOD (rows 0..N_close-1 always render close, ║
+  // ║  rows N_close..N_close+N_mid-1 always render mid, rest render far),      ║
+  // ║  NOT the camera-distance-sorted-to-front variant. Total quality budget   ║
+  // ║  is right, per-instance assignment is wrong. Sort-to-front is a deeper   ║
+  // ║  refactor of the per-instance texture upload path; deferred.             ║
+  // ╚══════════════════════════════════════════════════════════════════════════╝
+
+  // Default thresholds in scene units (nm). Calibrated for typical assemblies
+  // — a ~30-nm origami source's bbox ≈ 30 nm wide, polymerized chain ≈
+  // hundreds of nm long. close < 100 nm catches what's filling the viewport;
+  // mid < 500 nm picks up most of an extended chain; far is everything else.
+  let _lodCloseDist = 100.0
+  let _lodMidDist   = 500.0
+
+  function setLodThresholds(opts) {
+    if (typeof opts?.closeDist === 'number') _lodCloseDist = opts.closeDist
+    if (typeof opts?.midDist   === 'number') _lodMidDist   = opts.midDist
+  }
+
+  // ── Mid-LOD: per-helix transform texture ─────────────────────────────────
+  // Same column-major layout as the per-source xformTex: width = 4 texels,
+  // height = numHelices. Each row holds one mat4 (columns as texels).
+  function _makeHelixXformTexture(helixIds, helix_axes) {
+    const n = helixIds.length
+    const w = 4
+    const h = Math.max(1, n)
+    const data = new Float32Array(w * h * 4)  // 16 floats per helix
+    const tmpM = new THREE.Matrix4()
+    const tmpQ = new THREE.Quaternion()
+    const tmpV = new THREE.Vector3()
+    const tmpS = new THREE.Vector3()
+    const yAxis = new THREE.Vector3(0, 1, 0)
+    const dirV  = new THREE.Vector3()
+    const HELIX_CYL_RADIUS = 1.0  // nm — matches the cylinder LOD rendering
+    for (let i = 0; i < n; i++) {
+      const ax = helix_axes?.[helixIds[i]]
+      if (!ax || !ax.start || !ax.end) {
+        // No axis: write a degenerate (zero-scale) matrix. Renders nothing.
+        for (let k = 0; k < 16; k++) data[i * 16 + k] = 0
+        continue
+      }
+      const sx = ax.start[0], sy = ax.start[1], sz = ax.start[2]
+      const ex = ax.end[0],   ey = ax.end[1],   ez = ax.end[2]
+      const dx = ex - sx, dy = ey - sy, dz = ez - sz
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      if (len < 1e-6) {
+        for (let k = 0; k < 16; k++) data[i * 16 + k] = 0
+        continue
+      }
+      tmpV.set((sx + ex) * 0.5, (sy + ey) * 0.5, (sz + ez) * 0.5)
+      dirV.set(dx / len, dy / len, dz / len)
+      tmpQ.setFromUnitVectors(yAxis, dirV)
+      tmpS.set(HELIX_CYL_RADIUS, len, HELIX_CYL_RADIUS)
+      tmpM.compose(tmpV, tmpQ, tmpS)
+      const e = tmpM.elements
+      // THREE stores column-major (e[0..3] = col0, etc.). Direct copy.
+      for (let k = 0; k < 16; k++) data[i * 16 + k] = e[k]
+    }
+    const tex = new THREE.DataTexture(
+      data, w, h, THREE.RGBAFormat, THREE.FloatType,
+    )
+    tex.minFilter = THREE.NearestFilter
+    tex.magFilter = THREE.NearestFilter
+    tex.generateMipmaps = false
+    tex.needsUpdate = true
+    return { tex, data }
+  }
+
+  // Average per-strand color → vec3 for billboard tint. Falls back to grey.
+  function _averageStrandColorRGB(design) {
+    let r = 0, g = 0, b = 0, n = 0
+    for (const s of design?.strands ?? []) {
+      if (!s.color) continue
+      const v = parseInt(s.color.replace(/^#/, ''), 16)
+      r += ((v >> 16) & 0xff) / 255
+      g += ((v >>  8) & 0xff) / 255
+      b += ( v        & 0xff) / 255
+      n++
+    }
+    if (n === 0) return [0.6, 0.6, 0.6]
+    return [r / n, g / n, b / n]
+  }
+
+  // ── Mid-LOD InstancedMesh + shader ───────────────────────────────────────
+  // Shared cylinder geometry (unit radius, unit height, Y-axis, centred at
+  // origin). Reused across sources so we don't dispose it in _disposeSource;
+  // tag with userData.shared = true so the dispose walk skips it.
+  const _LOD_CYL_GEO = new THREE.CylinderGeometry(1, 1, 1, 12, 1, false)
+  _LOD_CYL_GEO.userData.shared = true
+
+  function _buildMidLodMesh(srcEntry, helixIds, helix_axes, sourceGroup) {
+    const numHelices = helixIds.length
+    const numInstances = srcEntry.instanceIds.length
+    if (numHelices === 0 || numInstances === 0) return null
+
+    const { tex: helixTex, data: helixData } = _makeHelixXformTexture(helixIds, helix_axes)
+
+    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff })
+    mat.customProgramCacheKey = () => 'sharedLodMid'
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.u_instanceXform = srcEntry.uXformUniform
+      shader.uniforms.u_visibilityTex = srcEntry.uVisUniform
+      shader.uniforms.u_helixXform    = { value: helixTex }
+      shader.uniforms.u_numHelices    = { value: numHelices }
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `
+          #include <common>
+          uniform sampler2D u_instanceXform;
+          uniform sampler2D u_visibilityTex;
+          uniform sampler2D u_helixXform;
+          uniform float u_numHelices;
+          varying float v_visible;
+          `,
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `
+          int instanceIdx = int(floor(float(gl_InstanceID) / max(u_numHelices, 1.0)));
+          int helixIdx    = gl_InstanceID - instanceIdx * int(u_numHelices);
+          v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
+          mat4 instTransform = mat4(
+            texelFetch(u_instanceXform, ivec2(0, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(1, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(2, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0)
+          );
+          mat4 helixMat = mat4(
+            texelFetch(u_helixXform, ivec2(0, helixIdx), 0),
+            texelFetch(u_helixXform, ivec2(1, helixIdx), 0),
+            texelFetch(u_helixXform, ivec2(2, helixIdx), 0),
+            texelFetch(u_helixXform, ivec2(3, helixIdx), 0)
+          );
+          vec3 transformed = (instTransform * helixMat * vec4(position, 1.0)).xyz;
+          `,
+        )
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `
+          #include <common>
+          varying float v_visible;
+          `,
+        )
+        .replace(
+          '#include <dithering_fragment>',
+          `
+          if (v_visible < 0.5) discard;
+          #include <dithering_fragment>
+          `,
+        )
+    }
+
+    const capacity = numHelices * numInstances
+    const mesh = new THREE.InstancedMesh(_LOD_CYL_GEO, mat, Math.max(1, capacity))
+    // Collapse instanceMatrix to a single identity row (same trick as bp path).
+    const identityArr = new Float32Array(16)
+    identityArr[0] = 1; identityArr[5] = 1; identityArr[10] = 1; identityArr[15] = 1
+    const idAttr = new THREE.InstancedBufferAttribute(identityArr, 16, false, Math.max(1, capacity))
+    idAttr.setUsage(THREE.StaticDrawUsage)
+    mesh.instanceMatrix = idAttr
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.instanceColor = null
+    mesh.count = 0  // _updateLod sets the real count
+    mesh.frustumCulled = false
+    mesh.visible = false  // _updateLod flips on when count > 0
+    mesh.name = 'sharedLodMid'
+    sourceGroup.add(mesh)
+    return { mesh, numHelices, helixTex, helixData }
+  }
+
+  // ── Far-LOD InstancedMesh + shader ───────────────────────────────────────
+  // A camera-facing quad per instance. Quad geometry: 2 triangles in the XY
+  // plane, size [-0.5, 0.5]. The vertex shader rebuilds the world position
+  // from the instance transform's translation column and offsets by a
+  // camera-aligned right/up basis scaled to `u_billboardRadius`.
+  //
+  // Shared geometry across sources — tagged shared so dispose-walk skips it.
+  const _LOD_QUAD_GEO = new THREE.PlaneGeometry(1.0, 1.0)
+  _LOD_QUAD_GEO.userData.shared = true
+
+  function _buildFarLodMesh(srcEntry, billboardRadius, billboardColor, sourceGroup) {
+    const numInstances = srcEntry.instanceIds.length
+    if (numInstances === 0) return null
+
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff })
+    mat.customProgramCacheKey = () => 'sharedLodFar'
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.u_instanceXform   = srcEntry.uXformUniform
+      shader.uniforms.u_visibilityTex   = srcEntry.uVisUniform
+      shader.uniforms.u_billboardRadius = { value: billboardRadius }
+      shader.uniforms.u_billboardColor  = { value: new THREE.Vector3(...billboardColor) }
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `
+          #include <common>
+          uniform sampler2D u_instanceXform;
+          uniform sampler2D u_visibilityTex;
+          uniform float u_billboardRadius;
+          varying float v_visible;
+          `,
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `
+          int instanceIdx = gl_InstanceID;
+          v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
+          // Translation column of the instance transform (column 3).
+          vec4 col3 = texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0);
+          vec3 worldPos = col3.xyz;
+          // Camera-aligned billboard basis from the inverse view matrix.
+          // viewMatrix is world → view; its inverse columns 0/1 are world-
+          // space camera right/up.
+          mat4 invView = inverse(viewMatrix);
+          vec3 camRight = vec3(invView[0][0], invView[0][1], invView[0][2]);
+          vec3 camUp    = vec3(invView[1][0], invView[1][1], invView[1][2]);
+          vec3 transformed = worldPos
+            + camRight * position.x * u_billboardRadius * 2.0
+            + camUp    * position.y * u_billboardRadius * 2.0;
+          `,
+        )
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `
+          #include <common>
+          uniform vec3 u_billboardColor;
+          varying float v_visible;
+          `,
+        )
+        .replace(
+          '#include <dithering_fragment>',
+          `
+          if (v_visible < 0.5) discard;
+          gl_FragColor.rgb = u_billboardColor;
+          #include <dithering_fragment>
+          `,
+        )
+    }
+
+    const mesh = new THREE.InstancedMesh(_LOD_QUAD_GEO, mat, Math.max(1, numInstances))
+    // Collapse instanceMatrix to a single identity row.
+    const identityArr = new Float32Array(16)
+    identityArr[0] = 1; identityArr[5] = 1; identityArr[10] = 1; identityArr[15] = 1
+    const idAttr = new THREE.InstancedBufferAttribute(identityArr, 16, false, Math.max(1, numInstances))
+    idAttr.setUsage(THREE.StaticDrawUsage)
+    mesh.instanceMatrix = idAttr
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.instanceColor = null
+    mesh.count = 0
+    mesh.frustumCulled = false
+    mesh.visible = false
+    mesh.name = 'sharedLodFar'
+    sourceGroup.add(mesh)
+    return { mesh }
+  }
+
+  // ── Per-frame LOD assignment ─────────────────────────────────────────────
+  // Counts close/mid/far buckets via per-instance camera distance, then sets
+  // the matching `.count` on each LOD InstancedMesh. The close-LOD path uses
+  // multiple InstancedMeshes (one per buildHelixObjects output mesh) so we
+  // scale each by its baseCount. Stage-one limitation: this changes only
+  // bucket SIZES, not WHICH instance lives at each LOD. See header comment.
+  function _updateLodForSource(srcEntry, camera) {
+    if (!srcEntry || !camera) return
+    const N = srcEntry.instanceIds.length
+    if (N === 0) return
+    const closeD2 = _lodCloseDist * _lodCloseDist
+    const midD2   = _lodMidDist   * _lodMidDist
+    const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z
+    let nClose = 0, nMid = 0, nFar = 0
+    const data = srcEntry.xformData
+    for (let i = 0; i < N; i++) {
+      if (srcEntry.visibility[i] < 0.5) continue
+      // Translation column = column 3 in column-major layout. Texel layout in
+      // xformData stores 16 floats per instance with columns concatenated:
+      // c0(4) | c1(4) | c2(4) | c3(4). col3 starts at offset i*16 + 12.
+      const off = i * 16 + 12
+      const dx = data[off + 0] - cx
+      const dy = data[off + 1] - cy
+      const dz = data[off + 2] - cz
+      const d2 = dx * dx + dy * dy + dz * dz
+      if      (d2 < closeD2) nClose++
+      else if (d2 < midD2)   nMid++
+      else                   nFar++
+    }
+    // Apply to close-LOD meshes — each multiplies by its own baseCount.
+    for (const am of srcEntry.activeMeshes) {
+      const c = nClose * am.baseCount
+      am.mesh.count = c
+      am.mesh.visible = c > 0
+    }
+    // Apply to mid-LOD mesh.
+    if (srcEntry.midLod) {
+      const c = nMid * srcEntry.midLod.numHelices
+      srcEntry.midLod.mesh.count = c
+      srcEntry.midLod.mesh.visible = c > 0
+    }
+    // Apply to far-LOD mesh.
+    if (srcEntry.farLod) {
+      const c = nFar
+      srcEntry.farLod.mesh.count = c
+      srcEntry.farLod.mesh.visible = c > 0
+    }
+    // Cache last-known counts for testability.
+    srcEntry._lastLodCounts = { close: nClose, mid: nMid, far: nFar }
+  }
+
+  // Install a SECOND onBeforeRender hook for LOD updates. It piggybacks on
+  // the first active mesh, which already carries the dirty-row uploader; we
+  // chain them. Three.js calls onBeforeRender(renderer, scene, camera, ...).
+  function _installLodUpdater(srcEntry) {
+    if (!srcEntry.activeMeshes.length) return
+    const firstMesh = srcEntry.activeMeshes[0].mesh
+    const prevHook = firstMesh.onBeforeRender
+    firstMesh.onBeforeRender = function (renderer, scn, camera, geom, mat, group) {
+      if (typeof prevHook === 'function') {
+        prevHook.call(this, renderer, scn, camera, geom, mat, group)
+      }
+      _updateLodForSource(srcEntry, camera)
+    }
   }
 
   // ── Public: dispose ───────────────────────────────────────────────────────
@@ -2835,6 +3221,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       if (!entry) continue
       _sources.set(srcKey, entry)
       _installDirtyUploader(entry)
+      _installLodUpdater(entry)
     }
 
     _fireRebuildComplete()
@@ -3107,6 +3494,16 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     onRebuildComplete,
     updateStrandColor,
     updateColoringMode,
+    // Phase 3f — three-tier LOD ladder
+    setLodThresholds,
+    // Phase 3f test/instrumentation hook: drive the per-source LOD bucketing
+    // from a test environment without a real render loop. Iterates every
+    // active source and applies the same bucketing the onBeforeRender hook
+    // would apply each frame.
+    _updateLod(camera) {
+      for (const srcEntry of _sources.values()) _updateLodForSource(srcEntry, camera)
+    },
+    _sourcesForTest() { return _sources },
   }
   for (const name of _SHARED_RENDERER_STUB_METHODS) out[name] = _outOfScope(name)
   return out
