@@ -3207,7 +3207,13 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     for (const am of srcEntry.activeMeshes) {
       const c = nClose * am.baseCount
       am.mesh.count = c
-      am.mesh.visible = c > 0
+      // Phase 3f stage 2 follow-up: keep `visible = true` unconditionally so
+      // the onBeforeRender hook chain keeps firing even when count=0. Three.js
+      // short-circuits at `object.visible === false` BEFORE invoking
+      // onBeforeRender (WebGLRenderer.js#L1327), which would freeze the LOD
+      // state the first time nClose hits zero. drawElementsInstanced with
+      // count=0 is a zero-cost no-op.
+      am.mesh.visible = true
     }
     // Phase 3f stage 2 follow-up: with rows sorted by distance, mid-LOD
     // reads texture rows starting at nClose, far-LOD starting at nClose+nMid.
@@ -3217,7 +3223,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     if (srcEntry.midLod) {
       const c = nMid * srcEntry.midLod.numHelices
       srcEntry.midLod.mesh.count = c
-      srcEntry.midLod.mesh.visible = c > 0
+      srcEntry.midLod.mesh.visible = true  // see comment above re: stuck-LOD trap
       if (srcEntry.midLod.u_instanceOffset) {
         srcEntry.midLod.u_instanceOffset.value = nClose
       }
@@ -3225,7 +3231,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     if (srcEntry.farLod) {
       const c = nFar
       srcEntry.farLod.mesh.count = c
-      srcEntry.farLod.mesh.visible = c > 0
+      srcEntry.farLod.mesh.visible = true  // see comment above re: stuck-LOD trap
       if (srcEntry.farLod.u_instanceOffset) {
         srcEntry.farLod.u_instanceOffset.value = nClose + nMid
       }
