@@ -248,22 +248,37 @@ def encode_assembly_snapshot(assembly: Assembly) -> tuple[str, int]:
     The assembly's own ``feature_log`` and ``feature_log_cursor`` are
     stripped to prevent recursive nesting (snapshots embedded inside
     snapshots).  Returns ``(payload_b64, uncompressed_byte_length)``.
+
+    Phase 5 expand step (path-to-thousands): the payload uses
+    :meth:`Assembly.to_dict_v2_dual` so both v1 + v2 fields land in the
+    snapshot.  ``decode_assembly_snapshot`` prefers v2 on read but falls
+    back to v1 for legacy payloads.  Round-trips both shapes.
     """
+    import json as _json
     stripped = assembly.model_copy(update={
         "feature_log": [],
         "feature_log_cursor": -1,
     })
-    raw = stripped.model_dump_json().encode("utf-8")
+    # Dual-format dump: v1 keys (instances, joints, ...) + v2 keys
+    # (format_version, sources, instances_v2) co-present.
+    raw = _json.dumps(stripped.to_dict_v2_dual()).encode("utf-8")
     gz = gzip.compress(raw, compresslevel=6)
     return base64.b64encode(gz).decode("ascii"), len(raw)
 
 
 def decode_assembly_snapshot(payload_b64: str) -> Assembly:
-    """Inverse of :func:`encode_assembly_snapshot`."""
+    """Inverse of :func:`encode_assembly_snapshot`.
+
+    Auto-detects format_version: v2 payloads are expanded by
+    ``Assembly.from_json`` (which prefers v2 fields when present); v1
+    payloads pass through the same call path (no ``format_version`` key
+    triggers the legacy branch).
+    """
     if not payload_b64:
         raise ValueError("empty assembly snapshot payload")
     raw = gzip.decompress(base64.b64decode(payload_b64.encode("ascii")))
-    return Assembly.model_validate_json(raw)
+    # Assembly.from_json handles both v1 (legacy) and v2 (current).
+    return Assembly.from_json(raw.decode("utf-8"))
 
 
 # ── Diff snapshot encoder / decoder (Phase 4b path-to-thousands) ─────────────

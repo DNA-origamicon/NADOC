@@ -1798,6 +1798,115 @@ class PartInstance(BaseModel):
     cluster_transform_overrides: List[ClusterRigidTransform] = Field(default_factory=list)
     interface_points: List[InterfacePoint] = Field(default_factory=list)
 
+    # ── Wire-format v2 (Phase 2a, path-to-thousands) ───────────────────────────
+    # Compact dict packs the transform as 12 floats (top 3 rows of the 4×4;
+    # last row is the implicit homogeneous [0,0,0,1]) and omits any field
+    # whose value matches the model default.  ``id`` and ``source`` are
+    # always present; ``t12`` is always present (transform is mutated most
+    # often; identity is rare enough that the conditional save isn't worth
+    # the branching cost).  ``src_key`` may be supplied by the caller (e.g.
+    # the assembly response) so an instance can reference a deduplicated
+    # source map instead of inlining the full PartSource; in that case
+    # ``source`` is omitted from the compact dict.
+    def to_compact_dict(self, *, src_key: str | None = None) -> dict:
+        m = self.transform.values
+        t12 = [
+            float(m[0]),  float(m[1]),  float(m[2]),  float(m[3]),
+            float(m[4]),  float(m[5]),  float(m[6]),  float(m[7]),
+            float(m[8]),  float(m[9]),  float(m[10]), float(m[11]),
+        ]
+        out: dict = {"id": self.id, "t12": t12}
+        if src_key is not None:
+            out["src_key"] = src_key
+        else:
+            out["source"] = self.source.model_dump(mode="json")
+        if self.name != "Part":
+            out["name"] = self.name
+        if self.base_transform is not None:
+            out["base_transform"] = self.base_transform.model_dump(mode="json")
+        if self.mode != "flexible":
+            out["mode"] = self.mode
+        if self.visible is not True:
+            out["visible"] = self.visible
+        if self.representation != "full":
+            out["representation"] = self.representation
+        if self.fixed:
+            out["fixed"] = True
+        if self.allow_part_joints:
+            out["allow_part_joints"] = True
+        if self.joint_states:
+            out["joint_states"] = dict(self.joint_states)
+        if self.cluster_transform_overrides:
+            out["cluster_transform_overrides"] = [
+                ct.model_dump(mode="json") for ct in self.cluster_transform_overrides
+            ]
+        if self.interface_points:
+            out["interface_points"] = [
+                ip.model_dump(mode="json") for ip in self.interface_points
+            ]
+        return out
+
+    @classmethod
+    def from_compact_dict(
+        cls,
+        data: dict,
+        *,
+        sources: dict[str, dict] | None = None,
+    ) -> "PartInstance":
+        """Inverse of :meth:`to_compact_dict`.
+
+        If the compact dict carries ``src_key`` instead of ``source``, the
+        ``sources`` map (key → PartSource dict) must be supplied so the
+        reference can be resolved.
+        """
+        # Resolve the source: either inline, or via the sources map.
+        if "source" in data:
+            source_data = data["source"]
+        elif "src_key" in data:
+            if sources is None:
+                raise ValueError(
+                    "from_compact_dict received src_key but no sources map"
+                )
+            src_key = data["src_key"]
+            if src_key not in sources:
+                raise ValueError(f"src_key {src_key!r} not in sources map")
+            source_data = sources[src_key]
+        else:
+            raise ValueError("compact PartInstance dict needs 'source' or 'src_key'")
+
+        # Reconstruct the 4×4 from 12 floats (drop the implicit last row).
+        if "t12" in data:
+            t12 = data["t12"]
+            if len(t12) != 12:
+                raise ValueError(f"t12 must have 12 floats, got {len(t12)}")
+            values = [
+                float(t12[0]), float(t12[1]), float(t12[2]),  float(t12[3]),
+                float(t12[4]), float(t12[5]), float(t12[6]),  float(t12[7]),
+                float(t12[8]), float(t12[9]), float(t12[10]), float(t12[11]),
+                0.0, 0.0, 0.0, 1.0,
+            ]
+            transform_dict = {"values": values}
+        elif "transform" in data:
+            transform_dict = data["transform"]
+        else:
+            transform_dict = None
+
+        # Rebuild the full dict for model_validate.
+        full: dict = {
+            "id": data["id"],
+            "source": source_data,
+        }
+        if transform_dict is not None:
+            full["transform"] = transform_dict
+        for k in (
+            "name", "base_transform", "mode", "visible", "representation",
+            "fixed", "allow_part_joints", "joint_states",
+            "cluster_transform_overrides", "interface_points",
+        ):
+            if k in data:
+                full[k] = data[k]
+        return cls.model_validate(full)
+
 
 class AssemblyJoint(BaseModel):
     """
@@ -1902,9 +2011,85 @@ class Assembly(BaseModel):
 
     @classmethod
     def from_json(cls, text: str) -> "Assembly":
-        """Deserialise from a JSON string."""
-        return cls.model_validate(json.loads(text))
+        """Deserialise from a JSON string.
+
+        Auto-recognises the v2 wire format: if the parsed JSON carries
+        ``format_version: 2`` and a ``sources``/``instances_v2`` block, the
+        v2 fields are preferred; v1 fields (if present) are ignored.
+        """
+        data = json.loads(text)
+        if isinstance(data, dict) and data.get("format_version") == 2 \
+                and "sources" in data and "instances_v2" in data:
+            data = cls._expand_v2_payload(data)
+        return cls.model_validate(data)
 
     def to_json(self, indent: int = 2) -> str:
-        """Serialise to a JSON string."""
-        return self.model_dump_json(indent=indent)
+        """Serialise to a JSON string.
+
+        Includes ``format_version: 2`` + the sparse ``instances_v2`` /
+        ``sources`` block alongside the canonical v1 ``instances`` field
+        so both old + new readers can consume the file.  The expand step
+        of the format-v2 migration — see ``project_path_to_thousands.md``
+        Phase 5.
+        """
+        return json.dumps(self.to_dict_v2_dual(), indent=indent)
+
+    # ── .nass v2 expand (Phase 5 expand step) ──────────────────────────────────
+
+    @staticmethod
+    def _instance_src_key(inst: "PartInstance") -> str:
+        """Stable dedup key derived from a PartInstance's source.
+
+        Inline sources key off ``design.id``; file sources key off the
+        ``path`` (sha256 if present).  This is a self-contained key so the
+        v2 serializer doesn't depend on the API-layer geometry cache.
+        """
+        src = inst.source
+        if src.type == "file":
+            sha = getattr(src, "sha256", None) or ""
+            return f"f:{src.path}:{sha}"
+        # inline
+        return f"i:{src.design.id}"
+
+    def to_dict_v2_dual(self) -> dict:
+        """Dump with BOTH v1 and v2 fields present.
+
+        v1 fields (``instances``, etc.) stay as the existing Pydantic
+        dump shape so legacy readers continue to work.  v2 fields
+        (``format_version`` / ``sources`` / ``instances_v2``) provide the
+        sparse-override + deduplicated-source shape Phase 5 ultimately
+        contracts to.  Both formats round-trip through ``from_json``.
+        """
+        base = self.model_dump()
+        sources: dict[str, dict] = {}
+        instances_v2: list[dict] = []
+        for inst in self.instances:
+            key = self._instance_src_key(inst)
+            if key not in sources:
+                sources[key] = inst.source.model_dump(mode="json")
+            instances_v2.append(inst.to_compact_dict(src_key=key))
+        base["format_version"] = 2
+        base["sources"] = sources
+        base["instances_v2"] = instances_v2
+        return base
+
+    @classmethod
+    def _expand_v2_payload(cls, data: dict) -> dict:
+        """Convert a v2 payload (``instances_v2`` + ``sources``) into the v1
+        dict shape expected by ``Assembly.model_validate``.
+
+        Removes ``format_version``/``sources``/``instances_v2`` from the
+        returned dict and replaces ``instances`` with the expanded list.
+        Caller passes the result straight to ``model_validate``.
+        """
+        sources = data.get("sources") or {}
+        compact_list = data.get("instances_v2") or []
+        expanded: list[dict] = []
+        for compact in compact_list:
+            # Reuse PartInstance's expand logic (validated dict → dict).
+            inst = PartInstance.from_compact_dict(compact, sources=sources)
+            expanded.append(inst.model_dump(mode="json"))
+        out = {k: v for k, v in data.items()
+               if k not in ("format_version", "sources", "instances_v2")}
+        out["instances"] = expanded
+        return out

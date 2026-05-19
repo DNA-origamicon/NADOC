@@ -1868,3 +1868,178 @@ def test_patch_instance_overhang_writes_feature_log_on_both_levels():
 
     asm_state.close_session()
     design_state.close_session()
+
+
+# ── Wire-format v2 + transform-only PATCH (Phase 2b + Phase 2c) ───────────────
+
+
+def test_assembly_response_carries_format_version_2_and_v2_fields():
+    """Every assembly response now includes format_version + sources + instances_v2
+    alongside the legacy v1 ``instances`` field (expand step)."""
+    client.post("/api/assembly")
+    r = client.post("/api/assembly/instances", json={
+        "source": _inline_source_dict(),
+        "name":   "A",
+    })
+    assert r.status_code == 201
+    body = r.json()["assembly"]
+    # v1 fields still present and unchanged.
+    assert "instances" in body
+    assert len(body["instances"]) == 1
+    # v2 fields landed.
+    assert body["format_version"] == 2
+    assert "sources" in body
+    assert "instances_v2" in body
+    assert len(body["instances_v2"]) == 1
+    compact = body["instances_v2"][0]
+    assert "src_key" in compact
+    assert "t12" in compact and len(compact["t12"]) == 12
+    # The src_key in the compact dict resolves inside ``sources``.
+    assert compact["src_key"] in body["sources"]
+
+
+def test_patch_instance_transforms_route_applies_atomically_and_returns_ack():
+    """PATCH /assembly/instances/transforms updates many instances at once and
+    returns only an ack list (no feature_log entry, no full assembly)."""
+    client.post("/api/assembly")
+    # Create 3 instances.
+    ids: list[str] = []
+    for _ in range(3):
+        r = client.post("/api/assembly/instances", json={
+            "source": _inline_source_dict(),
+        })
+        ids.append(r.json()["assembly"]["instances"][-1]["id"])
+
+    # Pack 16-float row-major translations.
+    def _t16(dx, dy, dz):
+        return [
+            1, 0, 0, dx,
+            0, 1, 0, dy,
+            0, 0, 1, dz,
+            0, 0, 0, 1,
+        ]
+
+    r = client.patch("/api/assembly/instances/transforms", json={
+        "transforms": {
+            ids[0]: _t16(1.0, 0.0, 0.0),
+            ids[1]: _t16(2.0, 0.0, 0.0),
+            ids[2]: _t16(3.0, 0.0, 0.0),
+        },
+    })
+    assert r.status_code == 200
+    ack = r.json()
+    assert "updated" in ack
+    assert set(ack["updated"]) == set(ids)
+    # Response shape is ONLY the ack — no "assembly" key.
+    assert "assembly" not in ack
+
+    # Verify the transforms actually landed.
+    a = assembly_state.get_or_404()
+    inst_by_id = {i.id: i for i in a.instances}
+    assert inst_by_id[ids[0]].transform.values[3] == pytest.approx(1.0)
+    assert inst_by_id[ids[1]].transform.values[3] == pytest.approx(2.0)
+    assert inst_by_id[ids[2]].transform.values[3] == pytest.approx(3.0)
+
+
+def test_patch_instance_transforms_accepts_compact_12_float_pack():
+    """PATCH transforms accepts the 12-float compact pack (top 3 rows)."""
+    client.post("/api/assembly")
+    r = client.post("/api/assembly/instances", json={
+        "source": _inline_source_dict(),
+    })
+    inst_id = r.json()["assembly"]["instances"][-1]["id"]
+
+    t12 = [
+        1, 0, 0, 7.5,
+        0, 1, 0, -3.0,
+        0, 0, 1, 0.25,
+    ]
+    r = client.patch("/api/assembly/instances/transforms", json={
+        "transforms": {inst_id: t12},
+    })
+    assert r.status_code == 200
+    a = assembly_state.get_or_404()
+    inst = next(i for i in a.instances if i.id == inst_id)
+    # 12-float pack expanded to a full 16-float row-major matrix.
+    assert inst.transform.values == [
+        1, 0, 0, 7.5,
+        0, 1, 0, -3.0,
+        0, 0, 1, 0.25,
+        0, 0, 0, 1,
+    ]
+
+
+def test_patch_instance_transforms_atomic_on_missing_id():
+    """If any id is unknown, NO transforms get applied (atomicity)."""
+    client.post("/api/assembly")
+    r = client.post("/api/assembly/instances", json={
+        "source": _inline_source_dict(),
+    })
+    real_id = r.json()["assembly"]["instances"][-1]["id"]
+    before_T = list(
+        next(i for i in assembly_state.get_or_404().instances if i.id == real_id)
+        .transform.values
+    )
+
+    r = client.patch("/api/assembly/instances/transforms", json={
+        "transforms": {
+            real_id: [
+                1, 0, 0, 99.0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1,
+            ],
+            "nonexistent-id": [
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1,
+            ],
+        },
+    })
+    assert r.status_code == 404
+    # Real id's transform was NOT changed — atomicity preserved.
+    after_T = list(
+        next(i for i in assembly_state.get_or_404().instances if i.id == real_id)
+        .transform.values
+    )
+    assert after_T == before_T
+
+
+def test_patch_instance_transforms_does_not_grow_undo_stack():
+    """The transform PATCH is silent — drag frames don't pollute undo history."""
+    client.post("/api/assembly")
+    r = client.post("/api/assembly/instances", json={
+        "source": _inline_source_dict(),
+    })
+    inst_id = r.json()["assembly"]["instances"][-1]["id"]
+    depth_before = assembly_state.undo_depth()
+    for k in range(5):
+        client.patch("/api/assembly/instances/transforms", json={
+            "transforms": {
+                inst_id: [
+                    1, 0, 0, float(k),
+                    0, 1, 0, 0,
+                    0, 0, 1, 0,
+                ],
+            },
+        })
+    depth_after = assembly_state.undo_depth()
+    assert depth_after == depth_before
+
+
+def test_assembly_response_v2_sources_deduplicates_shared_source():
+    """Multiple instances of the same source key collapse to a single
+    entry in ``sources``."""
+    client.post("/api/assembly")
+    src = _inline_source_dict()
+    # Re-using the SAME inline source dict means the resulting Design has the
+    # same `id` → same src_key → must dedup.
+    for _ in range(3):
+        client.post("/api/assembly/instances", json={"source": src})
+    r = client.get("/api/assembly")
+    body = r.json()["assembly"]
+    assert len(body["instances"]) == 3
+    assert len(body["instances_v2"]) == 3
+    # Three instances → one unique source (same design id → same src_key).
+    assert len(body["sources"]) == 1

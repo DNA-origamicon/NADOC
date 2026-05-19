@@ -422,3 +422,236 @@ def test_undo_cap_default_for_small_assembly_unchanged():
         assembly_state.set_assembly(Assembly(metadata=DesignMetadata(name=f"v{i}")))
     # Capped at MAX_UNDO_STEPS by the deque maxlen.
     assert assembly_state.undo_depth() == assembly_state.MAX_UNDO_STEPS
+
+
+# ── Wire-format v2 — Phase 2a + Phase 5 expand step ───────────────────────────
+
+
+def _shift_transform(dx: float, dy: float, dz: float) -> Mat4x4:
+    """Return a Mat4x4 representing a pure translation."""
+    return Mat4x4(values=[
+        1, 0, 0, dx,
+        0, 1, 0, dy,
+        0, 0, 1, dz,
+        0, 0, 0, 1,
+    ])
+
+
+def test_part_instance_compact_dict_round_trip_minimal():
+    """Default-only instance round-trips via compact dict + omits all default fields."""
+    inst = PartInstance(
+        id="inst-1",
+        source=PartSourceFile(path="arm.nadoc"),
+    )
+    d = inst.to_compact_dict()
+    # Defaults omitted — only id, source, t12 present.
+    assert set(d.keys()) == {"id", "source", "t12"}
+    assert d["id"] == "inst-1"
+    assert len(d["t12"]) == 12
+    # Identity transform's top 3 rows in row-major order.
+    assert d["t12"] == [
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+    ]
+    restored = PartInstance.from_compact_dict(d)
+    assert restored.id == inst.id
+    assert restored.source.path == "arm.nadoc"
+    assert restored.transform.values == inst.transform.values
+    assert restored.mode == "flexible"
+    assert restored.visible is True
+    assert restored.representation == "full"
+
+
+def test_part_instance_compact_dict_round_trip_full_override():
+    """Non-default fields are emitted and round-trip exactly."""
+    transform = _shift_transform(5.0, -2.0, 0.5)
+    inst = PartInstance(
+        id="inst-2",
+        name="Arm B",
+        source=PartSourceFile(path="arm.nadoc"),
+        transform=transform,
+        mode="rigid",
+        visible=False,
+        representation="cylinders",
+        fixed=True,
+        allow_part_joints=True,
+        joint_states={"j-1": 1.2345},
+    )
+    d = inst.to_compact_dict()
+    # Compact pack the transform: row-major top 3 rows, translation in cols 3/7/11.
+    assert d["t12"][3] == 5.0
+    assert d["t12"][7] == -2.0
+    assert d["t12"][11] == 0.5
+    # All non-default fields present.
+    for key in (
+        "name", "mode", "visible", "representation", "fixed",
+        "allow_part_joints", "joint_states",
+    ):
+        assert key in d, f"expected {key!r} in compact dict"
+
+    restored = PartInstance.from_compact_dict(d)
+    assert restored.name == "Arm B"
+    assert restored.mode == "rigid"
+    assert restored.visible is False
+    assert restored.representation == "cylinders"
+    assert restored.fixed is True
+    assert restored.allow_part_joints is True
+    assert restored.joint_states == {"j-1": pytest.approx(1.2345)}
+    # Transform values restored exactly (last row is the implicit [0,0,0,1]).
+    assert restored.transform.values == transform.values
+
+
+def test_part_instance_compact_dict_via_src_key():
+    """A compact dict carrying ``src_key`` resolves the source from the dedup map."""
+    inst = PartInstance(
+        id="inst-3",
+        source=PartSourceFile(path="arm.nadoc"),
+        transform=_shift_transform(3, 0, 0),
+    )
+    sources = {"f:arm.nadoc:": inst.source.model_dump(mode="json")}
+    d = inst.to_compact_dict(src_key="f:arm.nadoc:")
+    assert "source" not in d
+    assert d["src_key"] == "f:arm.nadoc:"
+    restored = PartInstance.from_compact_dict(d, sources=sources)
+    assert restored.id == "inst-3"
+    assert restored.source.path == "arm.nadoc"
+    assert restored.transform.values[3] == pytest.approx(3.0)
+
+
+def test_assembly_to_json_writes_v1_and_v2_co_present():
+    """``Assembly.to_json`` includes both the legacy and the v2 sections so old
+    readers keep working alongside new readers (Phase 5 expand step)."""
+    a = Assembly(metadata=DesignMetadata(name="Dual"))
+    a.instances.append(PartInstance(
+        id="i1",
+        source=PartSourceFile(path="arm.nadoc"),
+        transform=_shift_transform(1, 2, 3),
+    ))
+    a.instances.append(PartInstance(
+        id="i2",
+        source=PartSourceFile(path="arm.nadoc"),  # same key as i1 → dedup
+        transform=_shift_transform(4, 5, 6),
+    ))
+    a.instances.append(PartInstance(
+        id="i3",
+        source=PartSourceFile(path="leg.nadoc"),
+        transform=_shift_transform(7, 8, 9),
+    ))
+    text = a.to_json()
+    import json as _json
+    payload = _json.loads(text)
+    # v1 fields still present.
+    assert "instances" in payload
+    assert len(payload["instances"]) == 3
+    assert payload["instances"][0]["transform"]["values"][3] == pytest.approx(1.0)
+    # v2 fields landed.
+    assert payload["format_version"] == 2
+    assert "sources" in payload
+    assert "instances_v2" in payload
+    # arm.nadoc deduplicated → 2 unique sources for 3 instances.
+    assert len(payload["sources"]) == 2
+    assert len(payload["instances_v2"]) == 3
+    # Compact dict carries src_key, not inline source.
+    for compact in payload["instances_v2"]:
+        assert "src_key" in compact
+        assert "source" not in compact
+        assert len(compact["t12"]) == 12
+
+
+def test_assembly_from_json_prefers_v2_when_present():
+    """``Assembly.from_json`` uses the v2 fields and ignores v1 when both present
+    (preferred-on-read behaviour of the expand step)."""
+    a = Assembly(metadata=DesignMetadata(name="V2Pref"))
+    a.instances.append(PartInstance(
+        id="i1",
+        source=PartSourceFile(path="arm.nadoc"),
+        transform=_shift_transform(11, 12, 13),
+    ))
+    text = a.to_json()
+    # Mangle the v1 ``instances`` block so we'd detect if the reader fell
+    # back to v1: change i1's transform translation to (-1, -1, -1).
+    import json as _json
+    payload = _json.loads(text)
+    payload["instances"][0]["transform"]["values"][3] = -1.0
+    payload["instances"][0]["transform"]["values"][7] = -1.0
+    payload["instances"][0]["transform"]["values"][11] = -1.0
+    restored = Assembly.from_json(_json.dumps(payload))
+    # v2 path used → transform comes from instances_v2, not the mangled v1.
+    assert restored.instances[0].transform.values[3] == pytest.approx(11.0)
+    assert restored.instances[0].transform.values[7] == pytest.approx(12.0)
+    assert restored.instances[0].transform.values[11] == pytest.approx(13.0)
+
+
+def test_assembly_from_json_falls_back_to_v1_for_legacy_payloads():
+    """A payload without ``format_version`` / ``instances_v2`` still loads via the
+    legacy v1 path."""
+    import json as _json
+    a = Assembly(metadata=DesignMetadata(name="Legacy"))
+    a.instances.append(PartInstance(
+        id="legacy-i1",
+        source=PartSourceFile(path="arm.nadoc"),
+        transform=_shift_transform(2, 4, 6),
+    ))
+    # Build a v1-only payload by hand: strip v2 keys.
+    legacy_dict = a.model_dump()  # pure v1 — no format_version, no sources
+    assert "format_version" not in legacy_dict
+    legacy_text = _json.dumps(legacy_dict)
+    restored = Assembly.from_json(legacy_text)
+    assert restored.instances[0].id == "legacy-i1"
+    assert restored.instances[0].transform.values[3] == pytest.approx(2.0)
+
+
+def test_assembly_v2_save_load_round_trips_through_disk(tmp_path):
+    """An Assembly saved via to_json + reloaded via from_json preserves every
+    field through the dual-format wire shape (full round-trip)."""
+    a = Assembly(metadata=DesignMetadata(name="DiskRT"))
+    for i, dz in enumerate([0.0, 1.5, -2.7]):
+        a.instances.append(PartInstance(
+            id=f"i{i}",
+            name=f"Part {i}",
+            source=PartSourceFile(path="arm.nadoc"),
+            transform=_shift_transform(0, 0, dz),
+            mode="rigid" if i == 1 else "flexible",
+            visible=(i != 2),
+        ))
+    a.joints.append(AssemblyJoint(
+        id="j1", joint_type="revolute",
+        instance_a_id="i0", instance_b_id="i1",
+        axis_origin=[0, 0, 0], axis_direction=[0, 0, 1],
+        current_value=0.5,
+    ))
+
+    path = tmp_path / "rt.nass"
+    path.write_text(a.to_json(), encoding="utf-8")
+    restored = Assembly.from_json(path.read_text(encoding="utf-8"))
+
+    assert restored.metadata.name == "DiskRT"
+    assert len(restored.instances) == 3
+    assert restored.instances[1].mode == "rigid"
+    assert restored.instances[2].visible is False
+    assert restored.instances[2].transform.values[11] == pytest.approx(-2.7)
+    # Joint state survives.
+    assert restored.joints[0].current_value == pytest.approx(0.5)
+
+
+def test_decode_assembly_snapshot_round_trips_v2():
+    """encode_assembly_snapshot / decode_assembly_snapshot uses the dual-format
+    payload (v2 round-trips losslessly)."""
+    from backend.api.assembly_state import (
+        encode_assembly_snapshot, decode_assembly_snapshot,
+    )
+    a = Assembly(metadata=DesignMetadata(name="Snap"))
+    a.instances.append(PartInstance(
+        id="snap-i1",
+        source=PartSourceFile(path="arm.nadoc"),
+        transform=_shift_transform(0.1, 0.2, 0.3),
+        mode="rigid",
+    ))
+    payload, raw_len = encode_assembly_snapshot(a)
+    assert payload != ""
+    assert raw_len > 0
+    restored = decode_assembly_snapshot(payload)
+    assert restored.instances[0].id == "snap-i1"
+    assert restored.instances[0].mode == "rigid"
+    assert restored.instances[0].transform.values[3] == pytest.approx(0.1)

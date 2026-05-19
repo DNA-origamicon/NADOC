@@ -159,8 +159,39 @@ def _geo_cache_set(key: str, value: dict) -> None:
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _assembly_response(assembly: Assembly) -> dict:
-    """Standard response shape for assembly mutations."""
-    return {"assembly": assembly.to_dict()}
+    """Standard response shape for assembly mutations.
+
+    Phase 2b (path-to-thousands wire-format compaction) expand step:
+
+    * v1 fields (``assembly.instances`` etc.) remain unchanged so existing
+      frontend code keeps working.
+    * v2 fields are added at the top of the ``assembly`` dict:
+        - ``format_version: 2``
+        - ``sources``: ``{src_key: PartSource dict}`` — deduplicated by
+          ``_geo_cache_key`` when available so the response matches the
+          dedup key used by ``/assembly/geometry``.  Falls back to
+          ``Assembly._instance_src_key`` for inline/uncacheable sources.
+        - ``instances_v2``: sparse-override compact dicts.  Each carries
+          ``id``, ``src_key``, ``t12`` (12 floats — top 3 rows of the
+          transform), plus only the fields whose value differs from its
+          model default.
+
+    A future contract step will drop the v1 fields once readers have
+    migrated.  DO NOT remove ``assembly.instances`` here — see
+    ``project_path_to_thousands.md`` Phase 5 expand–contract pattern.
+    """
+    full = assembly.to_dict()
+    sources: dict[str, dict] = {}
+    instances_v2: list[dict] = []
+    for inst in assembly.instances:
+        key = _geo_cache_key(inst) or Assembly._instance_src_key(inst)
+        if key not in sources:
+            sources[key] = inst.source.model_dump(mode="json")
+        instances_v2.append(inst.to_compact_dict(src_key=key))
+    full["format_version"] = 2
+    full["sources"] = sources
+    full["instances_v2"] = instances_v2
+    return {"assembly": full}
 
 
 def _find_instance(assembly: Assembly, instance_id: str) -> PartInstance:
@@ -1602,6 +1633,109 @@ def batch_patch_instances(body: BatchPatchRequest) -> dict:
         _enforce_connector_coincidence(assembly, patched_ids, inst_by_id)
     assembly_state.set_assembly(assembly)
     return _assembly_response(assembly)
+
+
+class TransformPatchBody(BaseModel):
+    """Body for ``PATCH /assembly/instances/transforms``.
+
+    Map instance id → flat float list.  Accepts either a 16-float
+    row-major matrix or a 12-float compact pack (top 3 rows; the 4th
+    row is the implicit ``[0,0,0,1]``).
+    """
+    transforms: dict[str, list[float]]
+
+
+def _replace_instances_in_place(
+    assembly: Assembly, new_instances: list[PartInstance],
+) -> Assembly:
+    """Phase 2d — swap the instances list on an Assembly without paying
+    for ``model_copy(update={'instances': ...})``'s per-item revalidation.
+
+    Pydantic v2's default ``revalidate_instances='never'`` means
+    ``model_copy(update=...)`` would not revalidate, but it does still
+    rebuild the entire ``Assembly`` model — copying every other field.
+    For high-frequency drag callers (PATCH transforms) we only need to
+    swap the list pointer; direct in-place mutation is safe because
+    callers serialize Assembly access through ``assembly_state``'s lock.
+
+    Returns the same assembly with ``instances`` replaced.  No copy is
+    made and no validators fire.
+    """
+    # Use object.__setattr__ to bypass Pydantic's __setattr__ slot which
+    # would invoke per-field assignment validators on each call.
+    object.__setattr__(assembly, "instances", new_instances)
+    return assembly
+
+
+def _patch_instance_transform_in_place(
+    inst: PartInstance, values: list[float],
+) -> None:
+    """Apply a transform patch to an existing PartInstance in place,
+    skipping per-field assignment validators.
+
+    Accepts 12-float (compact, top 3 rows) or 16-float (row-major) input.
+    """
+    if len(values) == 12:
+        full_values = [
+            float(values[0]),  float(values[1]),  float(values[2]),  float(values[3]),
+            float(values[4]),  float(values[5]),  float(values[6]),  float(values[7]),
+            float(values[8]),  float(values[9]),  float(values[10]), float(values[11]),
+            0.0, 0.0, 0.0, 1.0,
+        ]
+    elif len(values) == 16:
+        full_values = [float(v) for v in values]
+    else:
+        raise HTTPException(
+            400,
+            detail=f"transform must be 12 or 16 floats, got {len(values)}",
+        )
+    new_mat = Mat4x4(values=full_values)
+    # Bypass per-field assignment validation by stamping directly.
+    object.__setattr__(inst, "transform", new_mat)
+    object.__setattr__(inst, "base_transform", None)
+
+
+@router.patch("/assembly/instances/transforms", status_code=200)
+def patch_instance_transforms(body: TransformPatchBody) -> dict:
+    """Apply many transform updates atomically — no feature_log entry,
+    no full assembly response.
+
+    Targeted at the joint-drag use case: 1-N instances move per frame,
+    paying neither the snapshot encoding (Phase 1b deferred but still a
+    multi-ms cost on large assemblies) nor the wire-format serialization
+    of the full assembly.
+
+    Validation:
+      * Each value list must be 12 floats (top 3 rows; the 4th row is
+        the implicit ``[0,0,0,1]``) or 16 floats (row-major).
+      * Unknown instance ids → 404; ATOMIC: nothing is applied if any id
+        is missing.
+
+    Response:  ``{"updated": [<id>, ...]}`` — caller already knows the
+    transforms it sent; this is just the ack.
+    """
+    assembly = assembly_state.get_or_404()
+    inst_by_id = _build_inst_by_id(assembly)
+
+    # Pre-flight: validate all ids before mutating ANY transform.  This
+    # gives the route the atomicity the docstring promises.
+    for instance_id in body.transforms.keys():
+        if instance_id not in inst_by_id:
+            raise HTTPException(
+                404, detail=f"Instance {instance_id} not found"
+            )
+
+    updated: list[str] = []
+    for instance_id, values in body.transforms.items():
+        inst = inst_by_id[instance_id]
+        _patch_instance_transform_in_place(inst, values)
+        updated.append(instance_id)
+
+    # Silent set — no undo push, no feature log entry.  The drag UX
+    # owns its own snapshot ahead of the gesture; intermediate frames
+    # mustn't fill the undo stack.
+    assembly_state.set_assembly_silent(assembly)
+    return {"updated": updated}
 
 
 @router.patch("/assembly/instances/{instance_id}", status_code=200)
