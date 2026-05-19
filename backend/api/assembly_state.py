@@ -264,3 +264,230 @@ def decode_assembly_snapshot(payload_b64: str) -> Assembly:
         raise ValueError("empty assembly snapshot payload")
     raw = gzip.decompress(base64.b64decode(payload_b64.encode("ascii")))
     return Assembly.model_validate_json(raw)
+
+
+# ── Diff snapshot encoder / decoder (Phase 4b path-to-thousands) ─────────────
+#
+# Same encoding/wire format as the full snapshot (gzip+base64 JSON), but the
+# payload is just the changed slices — added objects, ids of removed objects,
+# and pre+post state of modified objects.  Used by
+# ``_apply_assembly_mutation_with_feature_log`` for bulk ops like polymerize
+# that touch a small fraction of total state; the navigation routes
+# (seek/revert/delete) handle both formats transparently.
+
+def _gzip_b64(raw: bytes) -> str:
+    return base64.b64encode(gzip.compress(raw, compresslevel=6)).decode("ascii")
+
+
+def _ungzip_b64(payload_b64: str) -> bytes:
+    return gzip.decompress(base64.b64decode(payload_b64.encode("ascii")))
+
+
+def _instance_dict(inst) -> dict:
+    """JSON-safe dump of a PartInstance (pydantic v2 model)."""
+    return inst.model_dump(mode="json")
+
+
+def _joint_dict(jt) -> dict:
+    """JSON-safe dump of an AssemblyJoint (pydantic v2 model)."""
+    return jt.model_dump(mode="json")
+
+
+def encode_diff_snapshot(pre: Assembly, post: Assembly) -> dict:
+    """Build diff-snapshot payloads (added/removed_ids/modified) for the
+    ``SnapshotLogEntry`` fields ``diff_added_b64`` / ``diff_removed_ids`` /
+    ``diff_modified_b64``.
+
+    Compares instances + joints by id.  Returns a dict ready to spread into
+    ``SnapshotLogEntry(...)``::
+
+        {
+          "diff_added_b64":    "...",       # added items (full state, forward-apply)
+          "diff_removed_ids":  ["id1",...], # ids dropped pre → post
+          "diff_modified_b64": "...",       # pre + post of modified items, +
+                                            #   full state of removed items
+                                            #   (the inverse-apply payload)
+        }
+    """
+    import json as _json
+
+    pre_inst_by_id  = {i.id: i for i in pre.instances}
+    post_inst_by_id = {i.id: i for i in post.instances}
+    pre_joint_by_id  = {j.id: j for j in pre.joints}
+    post_joint_by_id = {j.id: j for j in post.joints}
+
+    pre_inst_ids,  post_inst_ids  = set(pre_inst_by_id),  set(post_inst_by_id)
+    pre_joint_ids, post_joint_ids = set(pre_joint_by_id), set(post_joint_by_id)
+
+    added_inst_ids   = post_inst_ids  - pre_inst_ids
+    removed_inst_ids = pre_inst_ids   - post_inst_ids
+    added_joint_ids   = post_joint_ids - pre_joint_ids
+    removed_joint_ids = pre_joint_ids  - post_joint_ids
+
+    # Modified = present in both, but content differs.
+    modified_inst_pre:  list = []
+    modified_inst_post: list = []
+    for iid in pre_inst_ids & post_inst_ids:
+        pre_i  = pre_inst_by_id[iid]
+        post_i = post_inst_by_id[iid]
+        if pre_i != post_i:
+            modified_inst_pre.append(_instance_dict(pre_i))
+            modified_inst_post.append(_instance_dict(post_i))
+
+    modified_joint_pre:  list = []
+    modified_joint_post: list = []
+    for jid in pre_joint_ids & post_joint_ids:
+        pre_j  = pre_joint_by_id[jid]
+        post_j = post_joint_by_id[jid]
+        if pre_j != post_j:
+            modified_joint_pre.append(_joint_dict(pre_j))
+            modified_joint_post.append(_joint_dict(post_j))
+
+    added_payload = {
+        "instances": [_instance_dict(post_inst_by_id[i])  for i in added_inst_ids],
+        "joints":    [_joint_dict(post_joint_by_id[j])    for j in added_joint_ids],
+    }
+    modified_payload = {
+        "pre": {
+            "instances": modified_inst_pre,
+            "joints":    modified_joint_pre,
+        },
+        "post": {
+            "instances": modified_inst_post,
+            "joints":    modified_joint_post,
+        },
+        "removed": {
+            "instances": [_instance_dict(pre_inst_by_id[i])  for i in removed_inst_ids],
+            "joints":    [_joint_dict(pre_joint_by_id[j])    for j in removed_joint_ids],
+        },
+    }
+
+    diff_added_b64    = _gzip_b64(_json.dumps(added_payload).encode("utf-8"))
+    diff_modified_b64 = _gzip_b64(_json.dumps(modified_payload).encode("utf-8"))
+    return {
+        "diff_added_b64":    diff_added_b64,
+        "diff_removed_ids":  sorted(removed_inst_ids | removed_joint_ids),
+        "diff_modified_b64": diff_modified_b64,
+    }
+
+
+def _decode_diff_payloads(entry) -> tuple[dict, list[str], dict]:
+    """Decode the three diff_* fields on a SnapshotLogEntry into raw dicts.
+
+    Returns ``(added, removed_ids, modified)`` where ``added`` is
+    ``{"instances": [...], "joints": [...]}``, ``removed_ids`` is the list of
+    ids dropped pre → post, and ``modified`` is
+    ``{"pre": {...}, "post": {...}, "removed": {...}}``.
+    """
+    import json as _json
+    added: dict = {"instances": [], "joints": []}
+    if entry.diff_added_b64:
+        added = _json.loads(_ungzip_b64(entry.diff_added_b64).decode("utf-8"))
+    modified: dict = {
+        "pre":     {"instances": [], "joints": []},
+        "post":    {"instances": [], "joints": []},
+        "removed": {"instances": [], "joints": []},
+    }
+    if entry.diff_modified_b64:
+        modified = _json.loads(_ungzip_b64(entry.diff_modified_b64).decode("utf-8"))
+    return added, list(entry.diff_removed_ids or []), modified
+
+
+def is_diff_entry(entry) -> bool:
+    """True iff *entry* is a diff-snapshot variant (any diff_* field set).
+
+    Legacy entries use ``design_snapshot_gz_b64`` / ``post_state_gz_b64``
+    exclusively and have empty diff_* fields.
+    """
+    return bool(
+        getattr(entry, "diff_added_b64", "")
+        or getattr(entry, "diff_modified_b64", "")
+        or getattr(entry, "diff_removed_ids", None)
+    )
+
+
+def apply_diff_forward(anchor: Assembly, entry) -> Assembly:
+    """Apply the diff payload of *entry* to *anchor* (= pre-state of the op)
+    to produce the post-state.
+
+    Forward apply order: drop removed-ids, replace modified by their POST
+    state, append added items.  Returns a new Assembly; ``anchor``'s
+    feature_log + cursor pass through unchanged (callers patch those).
+    """
+    from backend.core.models import AssemblyJoint, PartInstance
+
+    added, removed_ids, modified = _decode_diff_payloads(entry)
+    removed_set = set(removed_ids)
+    mod_post_inst = {d["id"]: d for d in modified.get("post", {}).get("instances", [])}
+    mod_post_joint = {d["id"]: d for d in modified.get("post", {}).get("joints", [])}
+
+    new_instances: list[PartInstance] = []
+    for inst in anchor.instances:
+        if inst.id in removed_set:
+            continue
+        if inst.id in mod_post_inst:
+            new_instances.append(PartInstance.model_validate(mod_post_inst[inst.id]))
+        else:
+            new_instances.append(inst)
+    for d in added.get("instances", []):
+        new_instances.append(PartInstance.model_validate(d))
+
+    new_joints: list[AssemblyJoint] = []
+    for jt in anchor.joints:
+        if jt.id in removed_set:
+            continue
+        if jt.id in mod_post_joint:
+            new_joints.append(AssemblyJoint.model_validate(mod_post_joint[jt.id]))
+        else:
+            new_joints.append(jt)
+    for d in added.get("joints", []):
+        new_joints.append(AssemblyJoint.model_validate(d))
+
+    return anchor.model_copy(update={
+        "instances": new_instances,
+        "joints":    new_joints,
+    })
+
+
+def apply_diff_inverse(anchor: Assembly, entry) -> Assembly:
+    """Apply the inverse of *entry*'s diff to *anchor* (= post-state of the op)
+    to recover the pre-state.
+
+    Inverse apply order: drop added items, restore removed items (full state
+    from modified.removed), replace modified by their PRE state.
+    """
+    from backend.core.models import AssemblyJoint, PartInstance
+
+    added, _removed_ids, modified = _decode_diff_payloads(entry)
+    added_inst_ids  = {d["id"] for d in added.get("instances", [])}
+    added_joint_ids = {d["id"] for d in added.get("joints", [])}
+    mod_pre_inst   = {d["id"]: d for d in modified.get("pre", {}).get("instances", [])}
+    mod_pre_joint  = {d["id"]: d for d in modified.get("pre", {}).get("joints", [])}
+
+    new_instances: list[PartInstance] = []
+    for inst in anchor.instances:
+        if inst.id in added_inst_ids:
+            continue  # was added by this op — drop to get back to pre
+        if inst.id in mod_pre_inst:
+            new_instances.append(PartInstance.model_validate(mod_pre_inst[inst.id]))
+        else:
+            new_instances.append(inst)
+    # Restore removed-by-this-op items (they existed in pre but not in post).
+    for d in modified.get("removed", {}).get("instances", []):
+        new_instances.append(PartInstance.model_validate(d))
+
+    new_joints: list[AssemblyJoint] = []
+    for jt in anchor.joints:
+        if jt.id in added_joint_ids:
+            continue
+        if jt.id in mod_pre_joint:
+            new_joints.append(AssemblyJoint.model_validate(mod_pre_joint[jt.id]))
+        else:
+            new_joints.append(jt)
+    for d in modified.get("removed", {}).get("joints", []):
+        new_joints.append(AssemblyJoint.model_validate(d))
+
+    return anchor.model_copy(update={
+        "instances": new_instances,
+        "joints":    new_joints,
+    })

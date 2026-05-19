@@ -524,3 +524,178 @@ def test_surgical_delete_replays_through_add_instance_entry():
     asm_after = r_del.json()["assembly"]
     assert len(asm_after["instances"]) == 1
     assert asm_after["instances"][0]["name"] == "P2"
+
+
+# ── Phase 4b: diff-snapshot variant of SnapshotLogEntry ──────────────────────
+
+
+def _seed_large(n_instances: int) -> tuple[Assembly, str]:
+    """Seed assembly with *n_instances* rods chained head-to-tail.  Returns
+    (assembly, joint_id_of_first_pair) so polymerize on that joint produces
+    an entry whose diff-format threshold (>= 100 instances) fires."""
+    design = Design()
+    insts: list[PartInstance] = []
+    joints: list[AssemblyJoint] = []
+    for k in range(n_instances):
+        insts.append(_rod_instance(f"inst-{k}", f"Rod {k}", design, _translation(0, 0, 10.0 * k)))
+    for k in range(n_instances - 1):
+        joints.append(AssemblyJoint(
+            id=f"joint-{k}", name=f"J{k}", joint_type="rigid",
+            instance_a_id=f"inst-{k}", instance_b_id=f"inst-{k + 1}",
+            axis_origin=[0.0, 0.0, 10.0 * (k + 1)], axis_direction=[0.0, 0.0, 1.0],
+            connector_a_label="back", connector_b_label="front",
+        ))
+    asm = Assembly(instances=insts, joints=joints)
+    assembly_state.set_assembly(asm)
+    return asm, joints[0].id
+
+
+def test_diff_snapshot_chosen_for_small_churn_on_large_assembly():
+    """Polymerize on a large seed (>= 100 instances) that adds only a few
+    new instances → entry should be diff format (empty pre payload, set
+    diff_* fields).  Full post payload is still kept for cheap seek."""
+    _seed_large(120)
+    # Add an instance: 1-instance churn against a 120-instance assembly → 1/120 < 10%.
+    design = Design()
+    r = client.post("/api/assembly/instances", json={
+        "source": {"type": "inline", "design": design.model_dump()},
+        "name":   "extra",
+    })
+    assert r.status_code == 201, r.text
+    asm = assembly_state.get_or_404()
+    entry = asm.feature_log[-1]
+    # Diff-format markers: no pre-state full payload (that's the gzip we
+    # skip), but post + diff fields populated.
+    assert entry.design_snapshot_gz_b64 == ""
+    assert entry.post_state_gz_b64 != ""
+    assert entry.diff_added_b64 != ""
+    assert entry.diff_modified_b64 != ""
+
+
+def test_full_snapshot_chosen_for_small_assembly():
+    """Small assembly (< 100 instances) always uses the legacy full snapshot
+    format regardless of churn ratio."""
+    _, jid = _seed()
+    _polymerize(jid, count=3)
+    asm = assembly_state.get_or_404()
+    entry = asm.feature_log[-1]
+    assert entry.design_snapshot_gz_b64 != ""
+    assert entry.post_state_gz_b64 != ""
+    # Diff fields should be empty.
+    assert entry.diff_added_b64 == ""
+    assert entry.diff_modified_b64 == ""
+    assert entry.diff_removed_ids == []
+
+
+def test_diff_snapshot_seek_round_trips_back_to_pre_and_forward_to_post():
+    """Diff entry must support scrubbing the slider back through the op
+    (pre-state) AND forward to the latest (post-state) without losing
+    geometry."""
+    _seed_large(120)
+    n_before = 120
+    design = Design()
+    r = client.post("/api/assembly/instances", json={
+        "source": {"type": "inline", "design": design.model_dump()},
+        "name":   "extra",
+    })
+    assert r.status_code == 201, r.text
+    n_after = len(r.json()["assembly"]["instances"])
+    assert n_after == n_before + 1
+
+    # Confirm the entry is diff-formatted (post payload present, pre payload skipped).
+    entry = assembly_state.get_or_404().feature_log[-1]
+    assert entry.diff_added_b64 != ""
+    assert entry.design_snapshot_gz_b64 == ""
+    assert entry.post_state_gz_b64 != ""
+
+    # Scrub back to -2 (pre-state of first/only entry) → original seed assembly.
+    r_back = client.post("/api/assembly/features/seek", json={"position": -2})
+    assert r_back.status_code == 200, r_back.text
+    asm_back = r_back.json()["assembly"]
+    assert len(asm_back["instances"]) == n_before
+
+    # Scrub forward to -1 → restored full post-state.
+    r_fwd = client.post("/api/assembly/features/seek", json={"position": -1})
+    assert r_fwd.status_code == 200, r_fwd.text
+    asm_fwd = r_fwd.json()["assembly"]
+    assert len(asm_fwd["instances"]) == n_after
+
+
+def test_diff_snapshot_revert_restores_pre_state():
+    """`POST /assembly/features/{i}/revert` on a diff-format entry must
+    reconstruct the pre-state correctly."""
+    _seed_large(120)
+    n_before = 120
+    design = Design()
+    r = client.post("/api/assembly/instances", json={
+        "source": {"type": "inline", "design": design.model_dump()},
+        "name":   "extra",
+    })
+    assert r.status_code == 201, r.text
+    assert len(r.json()["assembly"]["instances"]) == n_before + 1
+
+    # Confirm diff format.
+    entry = assembly_state.get_or_404().feature_log[-1]
+    assert entry.diff_added_b64 != ""
+
+    r_revert = client.post("/api/assembly/features/0/revert")
+    assert r_revert.status_code == 200, r_revert.text
+    asm = r_revert.json()["assembly"]
+    assert len(asm["instances"]) == n_before
+    assert asm["feature_log"] == []
+
+
+def test_diff_snapshot_delete_latest_round_trip():
+    """`DELETE /assembly/features/{latest}` on a diff entry collapses to
+    a revert (no later entries to replay) and must drop the added instance."""
+    _seed_large(120)
+    n_before = 120
+    design = Design()
+    r = client.post("/api/assembly/instances", json={
+        "source": {"type": "inline", "design": design.model_dump()},
+        "name":   "extra",
+    })
+    assert r.status_code == 201, r.text
+
+    r_del = client.delete("/api/assembly/features/0")
+    assert r_del.status_code == 200, r_del.text
+    asm_after = r_del.json()["assembly"]
+    assert len(asm_after["instances"]) == n_before
+    assert asm_after["feature_log"] == []
+
+
+def test_diff_snapshot_encode_decode_helper_round_trip():
+    """Unit-test the encode_diff_snapshot helper: building a diff and
+    forward-applying it to pre should reproduce post; inverse-applying to
+    post should reproduce pre."""
+    from backend.api.assembly_state import (
+        apply_diff_forward,
+        apply_diff_inverse,
+        encode_diff_snapshot,
+    )
+    from backend.core.models import SnapshotLogEntry
+
+    asm_pre, _ = _seed_large(60)
+    # Build a "post" with one added instance + one modified instance.
+    extra = _rod_instance("inst-extra", "extra", Design(), _translation(0, 0, 999.0))
+    modified_first = asm_pre.instances[0].model_copy(update={"name": "Rod 0 renamed"})
+    new_instances = [modified_first] + list(asm_pre.instances[1:]) + [extra]
+    asm_post = asm_pre.model_copy(update={"instances": new_instances})
+
+    diff_fields = encode_diff_snapshot(asm_pre, asm_post)
+    entry = SnapshotLogEntry(
+        op_kind="assembly-add-instance",
+        label="test",
+        timestamp="",
+        params={},
+        **diff_fields,
+    )
+
+    fwd = apply_diff_forward(asm_pre, entry)
+    assert [i.id for i in fwd.instances] == [i.id for i in asm_post.instances]
+    assert fwd.instances[0].name == "Rod 0 renamed"
+    assert any(i.id == "inst-extra" for i in fwd.instances)
+
+    inv = apply_diff_inverse(asm_post, entry)
+    assert [i.id for i in inv.instances] == [i.id for i in asm_pre.instances]
+    assert inv.instances[0].name == "Rod 0"

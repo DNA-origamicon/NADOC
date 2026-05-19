@@ -1022,6 +1022,33 @@ class SnapshotLogEntry(BaseModel):
     post_state_size_bytes: int = 0       # uncompressed POST-state JSON byte length
     evicted: bool = False
 
+    # ── Diff-snapshot variant (Phase 4b path-to-thousands) ───────────────────
+    # For assembly-level mutations that touch a small fraction of state (e.g.
+    # polymerize at scale), we skip gzipping the full pre+post Assembly and
+    # store only the deltas.  When ANY of the three diff_* fields are set,
+    # the entry is a "diff snapshot"; navigation routes reconstruct pre/post
+    # by applying the diff against an anchor (the previous entry's post or
+    # the latest live state).  When all three are empty, the entry is the
+    # legacy full-snapshot format using ``design_snapshot_gz_b64`` /
+    # ``post_state_gz_b64``.
+    #
+    # Field semantics:
+    # * ``diff_added_b64`` — gzip(JSON({"instances": [...], "joints": [...]}))
+    #   of items present in POST but not in PRE.  Forward-apply: extend the
+    #   anchor's instances/joints with these.
+    # * ``diff_removed_ids`` — list of ids dropped from PRE → POST.  Forward-
+    #   apply: filter the anchor's instances + joints by id.
+    # * ``diff_modified_b64`` — gzip(JSON({
+    #       "pre":     {"instances": [...], "joints": [...]},
+    #       "post":    {"instances": [...], "joints": [...]},
+    #       "removed": {"instances": [...], "joints": [...]},
+    #     })).  ``modified.post`` lets us forward-apply against an anchor
+    #     by index-replacement; ``modified.pre`` + ``removed`` together let
+    #     us inverse-apply to recover the pre-state from the post-state.
+    diff_added_b64:    str = ""
+    diff_removed_ids:  List[str] = Field(default_factory=list)
+    diff_modified_b64: str = ""
+
 
 # Subtypes of MinorMutationLogEntry — every minor user-driven mutation that
 # falls into a Fine Routing cluster. Keep in sync with state.mutate_with_minor_log
