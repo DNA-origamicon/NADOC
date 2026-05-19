@@ -2260,6 +2260,21 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       shader.uniforms.u_activeInstanceIdx = uniformsBundle.uActiveIdx
       shader.uniforms.u_visibilityTex   = uniformsBundle.uVis
       shader.uniforms.u_bpXform         = uniformsBundle.uBpTex
+      // Diagnostic: confirm both vertex-shader replaces actually matched. If
+      // `<begin_vertex>` is absent (e.g. material uses a custom shader instead
+      // of Three.js's standard chunks), the bp meshes will render at the
+      // source origin without per-instance positioning — exactly the symptom
+      // we're seeing in dev. One-time log per material kind.
+      const hadCommon = shader.vertexShader.includes('#include <common>')
+      const hadBeginVertex = shader.vertexShader.includes('#include <begin_vertex>')
+      if (!hadCommon || !hadBeginVertex) {
+        console.warn(
+          `[shared_renderer] shader patch FAILED — material ${material.type ?? '(unknown)'} ` +
+          `(name=${material.name ?? '(none)'}) missing chunks: ` +
+          `common=${hadCommon} begin_vertex=${hadBeginVertex}. ` +
+          `bp mesh will render at source origin without per-instance transforms.`,
+        )
+      }
 
       // Vertex: prepend uniform + varying; compose final `transformed` via
       // full chunk replacement of `<begin_vertex>` (option (a) from the
