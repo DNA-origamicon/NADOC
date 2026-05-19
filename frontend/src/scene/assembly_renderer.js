@@ -61,6 +61,7 @@
  */
 
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
 import { buildCrossoverConnections, arcControlPoint, updateExtraBaseInstances } from './crossover_connections.js'
 import { initAtomisticRenderer } from './atomistic_renderer.js'
@@ -2659,6 +2660,11 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     const helixCtrl = buildHelixObjects(
       nucleotides, design, helixGroup, customColors, [], helix_axes ?? null, rep,
     )
+    // Assembly mode never needs the helix axis arrows — they're meant for
+    // single-design editing (and were the only thing visible at default
+    // zoom on large assemblies, which looked like clutter).  Hide them so
+    // they don't pay per-frame matrix/cull cost either.
+    helixCtrl.setAxisArrowsVisible?.(false)
 
     // Per-source uniforms (xform texture + active-instance index + visibility).
     const { tex: xformTex,  data: xformData  } = _makeXformTexture(numInstances)
@@ -3004,15 +3010,21 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // so we don't dispose it in _disposeSource; tag userData.shared = true.
   const _LOD_CYL_GEO = new THREE.CylinderGeometry(1.125, 1.125, 1, 12, 1, false)
   _LOD_CYL_GEO.userData.shared = true
-  // Half-cylinder for overhang segments — wall of a 180° arc at the legacy
-  // helix radius (matches helix_renderer.js:GEO_HALF_CYL's wall component).
-  // Visually distinguishes overhang protrusions from full helix cylinders
-  // so the user can spot overhang domains / mate-point candidates at the
-  // cylinders LOD.
-  const _LOD_HALF_CYL_GEO = new THREE.CylinderGeometry(
-    1.125, 1.125, 1, 12, 1, false, 0, Math.PI,
-  )
-  _LOD_HALF_CYL_GEO.userData.shared = true
+  // Half-cylinder for overhang segments — closed half-tube (180° wall +
+  // rectangular cut-face cap), matching helix_renderer.js's GEO_HALF_CYL.
+  // The closing face turns the otherwise shell-like half-arc into a solid
+  // half-cylinder when viewed from the cut side.  Visually distinguishes
+  // overhang protrusions from full helix cylinders so users can spot
+  // overhang domains / mate-point candidates at the cylinders LOD.
+  const _LOD_HALF_CYL_GEO = (() => {
+    const wall = new THREE.CylinderGeometry(1.125, 1.125, 1, 12, 1, false, 0, Math.PI)
+    const face = new THREE.PlaneGeometry(2.25, 1).rotateY(-Math.PI / 2)
+    const merged = mergeGeometries([wall, face])
+    wall.dispose()
+    face.dispose()
+    merged.userData.shared = true
+    return merged
+  })()
 
   // Generic per-segment InstancedMesh builder.  Both helix and overhang
   // mid-LOD meshes use the same pattern: copy per-segment matrices + colors
