@@ -11956,6 +11956,24 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (placements.length > 0) await api.createFarEnds(placements)
   })
 
+  // ── Debug > Show LOD HUD ────────────────────────────────────────────────────
+  // Toggles the on-canvas LOD overlay (per-source bucket counts + pixel-size
+  // range + thresholds).  The HUD itself is created/dismissed by
+  // `__NADOC_DBG__.toggleLodHud()` — exposed only when the shared assembly
+  // renderer is active (`localStorage.NADOC_SHARED_RENDERER = 'true'`).
+  document.getElementById('menu-debug-lod-hud')?.addEventListener('click', function () {
+    if (!window.__NADOC_DBG__?.toggleLodHud) {
+      showToast(
+        'Shared renderer not active — set localStorage.NADOC_SHARED_RENDERER = "true" then reload.',
+        { severity: 'warn' },
+      )
+      return
+    }
+    window.__NADOC_DBG__.toggleLodHud()
+    const isOn = !!window.__NADOC_LOD_HUD__
+    this.textContent = isOn ? 'Hide LOD HUD' : 'Show LOD HUD'
+  })
+
   // ── Debug > MrDNA Round-Trip Test ────────────────────────────────────────────
   document.getElementById('menu-debug-mrdna-roundtrip')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
