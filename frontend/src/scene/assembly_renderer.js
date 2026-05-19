@@ -2760,13 +2760,27 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // ║       per-LOD multiplier;                                                ║
   // ║    3. sets `.visible = true` on any mesh whose count > 0.                ║
   // ║                                                                          ║
-  // ║  *** STAGE-ONE LIMITATION (per the chunk spec) ***                       ║
-  // ║  This is the "bucket counts only" variant. Texture-row order determines  ║
-  // ║  WHICH instances are at each LOD (rows 0..N_close-1 always render close, ║
-  // ║  rows N_close..N_close+N_mid-1 always render mid, rest render far),      ║
-  // ║  NOT the camera-distance-sorted-to-front variant. Total quality budget   ║
-  // ║  is right, per-instance assignment is wrong. Sort-to-front is a deeper   ║
-  // ║  refactor of the per-instance texture upload path; deferred.             ║
+  // ║  STAGE 2 (sort-to-front) shipped: each frame, instances are SORTED by    ║
+  // ║  camera distance and the per-source `xformTex` + `visTex` are PERMUTED   ║
+  // ║  so row 0 holds the nearest visible instance, row 1 the next-nearest,    ║
+  // ║  etc. Then bucket counts (N_close × baseCount on close-LOD InstancedMesh,║
+  // ║  N_mid × numHelices on mid, N_far on far) are written to `mesh.count`.   ║
+  // ║  Because rows 0..N_close-1 are now the actually-nearest, the close-LOD   ║
+  // ║  mesh's first N_close slots render the actually-nearest N_close          ║
+  // ║  instances.                                                              ║
+  // ║                                                                          ║
+  // ║  `srcEntry.instanceIds` and `srcEntry.instanceIndex` are kept in sync    ║
+  // ║  with the permutation: `instanceIds[row]` always names the instance      ║
+  // ║  currently at that row, and `instanceIndex.get(id)` returns the CURRENT  ║
+  // ║  row of `id`. Any external API that today writes by stable insertion-    ║
+  // ║  order index MUST look up the live row via `instanceIndex.get(id)`.     ║
+  // ║  `setActiveInstance` does this lookup; `applyInlineGeometry` rebuilds.   ║
+  // ║  `getInstanceCenters` / `getBoundingBox` iterate `instanceIds` so they   ║
+  // ║  stay correct regardless of row order.                                   ║
+  // ║                                                                          ║
+  // ║  Per-frame cost at N=200: ~50 µs sort + ~30 µs full texture re-upload.   ║
+  // ║  Negligible at this scale. (If profiling later shows dominance, switch   ║
+  // ║  to partial `texSubImage2D` for changed rows only.)                      ║
   // ╚══════════════════════════════════════════════════════════════════════════╝
 
   // Default thresholds in scene units (nm). Calibrated for typical assemblies
@@ -3021,12 +3035,29 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return { mesh }
   }
 
-  // ── Per-frame LOD assignment ─────────────────────────────────────────────
-  // Counts close/mid/far buckets via per-instance camera distance, then sets
-  // the matching `.count` on each LOD InstancedMesh. The close-LOD path uses
-  // multiple InstancedMeshes (one per buildHelixObjects output mesh) so we
-  // scale each by its baseCount. Stage-one limitation: this changes only
-  // bucket SIZES, not WHICH instance lives at each LOD. See header comment.
+  // ── Per-frame LOD assignment + sort-to-front (Phase 3f stage 2) ──────────
+  // Each frame, for every source:
+  //   1. Compute squared distance from camera to each instance's translation
+  //      (read from column-3 texels of `xformData`).
+  //   2. Sort row indices by ascending distance² → permutation `perm` where
+  //      `perm[newRow] = oldRow`.
+  //   3. If the permutation differs from identity (i.e. the current order),
+  //      permute `xformData`, `visData`, `visibility`, `instanceIds`, and
+  //      `instanceIndex` so row 0 holds the nearest visible instance, row 1
+  //      the next-nearest, etc. Visible instances precede hidden ones;
+  //      hidden instances retain a stable relative order at the tail.
+  //   4. Mark both textures `needsUpdate = true` (simple full re-upload; the
+  //      data lives in CPU-side typed arrays, so this is one PBO copy).
+  //   5. Refresh `u_activeInstanceIdx` from `_activeInstanceId` against the
+  //      new `instanceIndex` so selection brightening tracks the moved row.
+  //   6. Bucket count: walk the now-sorted rows, count close/mid/far. Because
+  //      rows are sorted nearest-first and the bucket thresholds are pure
+  //      distance comparisons, the close bucket occupies rows 0..N_close-1.
+  //   7. Set each LOD mesh's `count` (multiplied by per-LOD multiplier) and
+  //      `visible = (count > 0)`.
+  //
+  // Scratch typed arrays are reused across frames (one allocation per source
+  // at first use) to avoid GC pressure.
   function _updateLodForSource(srcEntry, camera) {
     if (!srcEntry || !camera) return
     const N = srcEntry.instanceIds.length
@@ -3034,41 +3065,140 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     const closeD2 = _lodCloseDist * _lodCloseDist
     const midD2   = _lodMidDist   * _lodMidDist
     const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z
-    let nClose = 0, nMid = 0, nFar = 0
     const data = srcEntry.xformData
+    const vis  = srcEntry.visibility
+
+    // ── 1. Build (row, distance²) array; hidden rows get +Infinity so they
+    //      sort to the tail and never enter the close/mid bucket count.
+    // Reuse scratch arrays across frames.
+    let scratch = srcEntry._lodScratch
+    if (!scratch || scratch.dist2.length !== N) {
+      scratch = srcEntry._lodScratch = {
+        dist2: new Float64Array(N),
+        perm:  new Int32Array(N),       // perm[newRow] = oldRow
+        tmpXform: new Float32Array(N * 16),
+        tmpVis:   new Float32Array(N * 16),
+        tmpVisibility: new Float32Array(N),
+        tmpIds: new Array(N),
+      }
+    }
+    const dist2 = scratch.dist2
+    const perm  = scratch.perm
     for (let i = 0; i < N; i++) {
-      if (srcEntry.visibility[i] < 0.5) continue
-      // Translation column = column 3 in column-major layout. Texel layout in
-      // xformData stores 16 floats per instance with columns concatenated:
-      // c0(4) | c1(4) | c2(4) | c3(4). col3 starts at offset i*16 + 12.
+      perm[i] = i
+      if (vis[i] < 0.5) {
+        dist2[i] = Number.POSITIVE_INFINITY
+        continue
+      }
+      // Translation column = column 3. xformData layout (per instance, 16
+      // floats): c0(4) | c1(4) | c2(4) | c3(4). col3.xyz at offset i*16+12.
       const off = i * 16 + 12
       const dx = data[off + 0] - cx
       const dy = data[off + 1] - cy
       const dz = data[off + 2] - cz
-      const d2 = dx * dx + dy * dy + dz * dz
+      dist2[i] = dx * dx + dy * dy + dz * dz
+    }
+
+    // ── 2. Sort perm by dist2 ascending. Sort the Int32Array of row indices
+    //      via a comparator that reads dist2[]. JS Array.sort is needed (no
+    //      typed-array sort with comparator pre-ES2022); but Int32Array.sort
+    //      with comparator works in V8. Cast through Array.from for safety
+    //      on older engines if needed — V8 (Node 16+) supports it natively.
+    // Using a temp Array for max engine compatibility.
+    const permArr = Array.from(perm)
+    permArr.sort((a, b) => dist2[a] - dist2[b])
+
+    // ── 3. Detect "already sorted" — if perm equals identity (every entry
+    //      is at its own index), short-circuit the permute step. Most steady-
+    //      state frames after the first sort will be near-identity, so we
+    //      avoid the texture re-upload in that common case.
+    let isIdentity = true
+    for (let i = 0; i < N; i++) {
+      if (permArr[i] !== i) { isIdentity = false; break }
+    }
+
+    if (!isIdentity) {
+      // Permute xformData, visData, visibility, instanceIds, instanceIndex.
+      // We read from the ORIGINAL arrays via perm[newRow] = oldRow, write to
+      // scratch buffers, then swap-copy back.
+      const tmpX = scratch.tmpXform
+      const tmpV = scratch.tmpVis
+      const tmpVisFlag = scratch.tmpVisibility
+      const tmpIds = scratch.tmpIds
+      const visData = srcEntry.visData
+      const ids = srcEntry.instanceIds
+      for (let newRow = 0; newRow < N; newRow++) {
+        const oldRow = permArr[newRow]
+        const srcOff = oldRow * 16
+        const dstOff = newRow * 16
+        // Copy 16-float xform row.
+        for (let k = 0; k < 16; k++) tmpX[dstOff + k] = data[srcOff + k]
+        // Copy 16-float vis row (only channel 0 carries the flag, but copy
+        // the whole row to preserve any future-use channels).
+        for (let k = 0; k < 16; k++) tmpV[dstOff + k] = visData[srcOff + k]
+        tmpVisFlag[newRow] = vis[oldRow]
+        tmpIds[newRow] = ids[oldRow]
+      }
+      // Write scratch → live arrays.
+      data.set(tmpX)
+      visData.set(tmpV)
+      vis.set(tmpVisFlag)
+      for (let i = 0; i < N; i++) ids[i] = tmpIds[i]
+      // Rebuild instanceIndex (id → currentRow). instanceIndex is the live
+      // map every external API must use to look up an id's current slot.
+      srcEntry.instanceIndex.clear()
+      for (let i = 0; i < N; i++) srcEntry.instanceIndex.set(ids[i], i)
+
+      // Mark textures dirty for full re-upload next frame's draw. Clear any
+      // pending partial-upload dirty-row sets: their indices refer to the
+      // OLD row order and would now corrupt the texture if applied.
+      srcEntry.xformTex.needsUpdate = true
+      srcEntry.visTex.needsUpdate   = true
+      srcEntry.dirtyRows.clear()
+      srcEntry.dirtyVisRows.clear()
+    }
+
+    // ── 4. Refresh u_activeInstanceIdx for the active id (if any belongs to
+    //      this source). This MUST run every frame, not just on permute-
+    //      change, because `setActiveInstance` is permutation-safe by lookup.
+    if (_activeInstanceId == null) {
+      srcEntry.uActiveIdxUniform.value = -1
+    } else {
+      const row = srcEntry.instanceIndex.get(_activeInstanceId)
+      srcEntry.uActiveIdxUniform.value = (row == null) ? -1 : row
+    }
+
+    // ── 5. Bucket count. With rows sorted by distance, visible rows occupy
+    //      0..nVisible-1 with monotonically increasing dist². We can stop
+    //      counting close as soon as we cross closeD2, etc.
+    let nClose = 0, nMid = 0, nFar = 0
+    for (let i = 0; i < N; i++) {
+      if (vis[i] < 0.5) continue        // hidden — skip
+      const d2 = dist2[permArr[i]]      // dist² for the instance now at row i
       if      (d2 < closeD2) nClose++
       else if (d2 < midD2)   nMid++
       else                   nFar++
     }
-    // Apply to close-LOD meshes — each multiplies by its own baseCount.
+
+    // ── 6. Apply counts. Multiplier per LOD:
+    //        close: baseCount per close-LOD InstancedMesh
+    //        mid:   numHelices
+    //        far:   1
     for (const am of srcEntry.activeMeshes) {
       const c = nClose * am.baseCount
       am.mesh.count = c
       am.mesh.visible = c > 0
     }
-    // Apply to mid-LOD mesh.
     if (srcEntry.midLod) {
       const c = nMid * srcEntry.midLod.numHelices
       srcEntry.midLod.mesh.count = c
       srcEntry.midLod.mesh.visible = c > 0
     }
-    // Apply to far-LOD mesh.
     if (srcEntry.farLod) {
       const c = nFar
       srcEntry.farLod.mesh.count = c
       srcEntry.farLod.mesh.visible = c > 0
     }
-    // Cache last-known counts for testability.
     srcEntry._lastLodCounts = { close: nClose, mid: nMid, far: nFar }
   }
 
@@ -3259,8 +3389,16 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   }
 
   // ── Public: setActiveInstance ─────────────────────────────────────────────
+  // Phase 3f stage 2: row indices are sort-to-front-permuted every frame, so
+  // an id's row is not stable across frames. We stash the active id in
+  // `_activeInstanceId` and rely on `_updateLodForSource` to refresh
+  // `uActiveIdxUniform.value` from `instanceIndex.get(_activeInstanceId)`
+  // each frame after the permutation. To keep the highlight visible BEFORE
+  // the next frame's onBeforeRender (e.g. a still-image render after a
+  // selection click), we also write the CURRENT row here.
   function setActiveInstance(id) {
-    // Clear previous highlight (every source).
+    // Clear previous highlight (every source) — the per-frame refresh will
+    // re-light the matching source's uniform on the next draw.
     for (const srcEntry of _sources.values()) {
       srcEntry.uActiveIdxUniform.value = -1
     }
@@ -3270,6 +3408,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     if (!srcKey) return
     const srcEntry = _sources.get(srcKey)
     if (!srcEntry) return
+    // instanceIndex is the LIVE id-to-row map (permuted by sort-to-front).
     const idx = srcEntry.instanceIndex.get(id)
     if (idx == null) return
     srcEntry.uActiveIdxUniform.value = idx
