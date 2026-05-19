@@ -249,19 +249,23 @@ def encode_assembly_snapshot(assembly: Assembly) -> tuple[str, int]:
     stripped to prevent recursive nesting (snapshots embedded inside
     snapshots).  Returns ``(payload_b64, uncompressed_byte_length)``.
 
-    Phase 5 expand step (path-to-thousands): the payload uses
-    :meth:`Assembly.to_dict_v2_dual` so both v1 + v2 fields land in the
-    snapshot.  ``decode_assembly_snapshot`` prefers v2 on read but falls
-    back to v1 for legacy payloads.  Round-trips both shapes.
+    Phase 5 contract step (path-to-thousands): the payload uses
+    :meth:`Assembly.to_dict_v2` — v2-only (format_version + sources +
+    instances_v2; no legacy ``instances`` list).  Frontend readers
+    (commit ce34c8b) consume v2 and expand client-side.
+    ``decode_assembly_snapshot`` falls back to v1 for legacy payloads
+    via ``Assembly.from_json``'s detection logic.
+
+    Bug fix: previously called ``to_dict_v2_dual`` which Wave B never
+    actually defined — every polymerize / mutation crashed master.
     """
     import json as _json
     stripped = assembly.model_copy(update={
         "feature_log": [],
         "feature_log_cursor": -1,
     })
-    # Dual-format dump: v1 keys (instances, joints, ...) + v2 keys
-    # (format_version, sources, instances_v2) co-present.
-    raw = _json.dumps(stripped.to_dict_v2_dual()).encode("utf-8")
+    # v2-only dump (matches the wire-format _assembly_response now emits).
+    raw = _json.dumps(stripped.to_dict_v2()).encode("utf-8")
     gz = gzip.compress(raw, compresslevel=6)
     return base64.b64encode(gz).decode("ascii"), len(raw)
 
