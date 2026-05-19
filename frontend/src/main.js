@@ -193,7 +193,55 @@ async function main() {
   // browser diagnostic probes without leaking everything to prod. Remove
   // once shared renderer is stable.
   if (useShared) {
-    window.__NADOC_DBG__ = { scene, camera, renderer, assemblyRenderer, store, THREE }
+    window.__NADOC_DBG__ = {
+      scene, camera, renderer, assemblyRenderer, store, THREE,
+
+      /**
+       * Track-B diagnostic. Pre-conditions:
+       *   1. window.NADOC_DBG_RENDER_TRACE = true   (BEFORE the assembly built)
+       *   2. Reload the page and let the assembly finish loading.
+       *
+       * Then call __NADOC_DBG__.traceFrame() to render one frame with reset
+       * counters and dump structured stats: total draw calls, triangles,
+       * lines, per-shared-mesh onBeforeRender hit counts. Lets us see
+       * whether the bp InstancedMeshes are actually being drawn each frame.
+       */
+      traceFrame() {
+        if (renderer._nadocTrace) renderer._nadocTrace.clear()
+        renderer.info.reset()
+        renderer.render(scene, camera)
+        const info = renderer.info
+        console.log('--- traceFrame ---')
+        console.log('renderer.info.render:', { ...info.render })
+        console.log('renderer.info.memory:', { ...info.memory })
+        console.log('renderer.info.programs.length:', info.programs?.length)
+        if (renderer._nadocTrace && renderer._nadocTrace.size > 0) {
+          console.log('Per-shared-mesh onBeforeRender hits this frame:')
+          for (const [id, hits] of renderer._nadocTrace.entries()) {
+            console.log(' ', id, '→', hits)
+          }
+        } else {
+          console.log('No traces — was window.NADOC_DBG_RENDER_TRACE = true at rebuild time?')
+        }
+        // Also collect the shared meshes that should be drawn this frame
+        const shared = []
+        scene.traverse(o => {
+          if (o.isInstancedMesh && o.count > 0 && o.material?.userData?.shader?.uniforms?.u_instanceXform) {
+            shared.push({
+              name: o.name || '(unnamed)',
+              id: o.id,
+              count: o.count,
+              visible: o.visible,
+              materialVisible: o.material.visible,
+              frustumCulled: o.frustumCulled,
+              parentVisible: o.parent?.visible,
+            })
+          }
+        })
+        console.log('Shared-renderer InstancedMeshes that COULD draw:', shared.length)
+        shared.forEach(s => console.log(' ', s))
+      },
+    }
   }
 
   // ── Camera nav: log orbit + auto-pivot + WASD fly mode for large assemblies ─

@@ -2470,6 +2470,21 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       // an instanced shared source it's wildly wrong. Disable it.
       obj.frustumCulled = false
 
+      // Track-B instrumentation: when window.NADOC_DBG_RENDER_TRACE is true,
+      // every shared-renderer InstancedMesh increments a counter via its
+      // onBeforeRender callback. `__NADOC_DBG__.traceFrame()` reads + prints
+      // the counts plus renderer.info totals so we can SEE whether these
+      // meshes are actually being drawn vs silently culled.
+      const _prevOnBefore = obj.onBeforeRender
+      obj.onBeforeRender = function (renderer, scene, camera, geometry, mat, group) {
+        if (_prevOnBefore) _prevOnBefore.call(this, renderer, scene, camera, geometry, mat, group)
+        if (typeof window !== 'undefined' && window.NADOC_DBG_RENDER_TRACE) {
+          if (!renderer._nadocTrace) renderer._nadocTrace = new Map()
+          const id = (obj.name || 'unnamed') + '#' + obj.id
+          renderer._nadocTrace.set(id, (renderer._nadocTrace.get(id) || 0) + 1)
+        }
+      }
+
       // Attach the per-source + per-mesh uniforms to this material.
       // `uBpTex` is a NEW per-mesh sampler2D pointing at this mesh's bp
       // matrix texture. The other uniforms (xform, vis, active) are shared
