@@ -18,6 +18,8 @@ package-lock.json
 frontend/playwright-report/
 frontend/test-results/
 test-results/
+# Shared-renderer diagnostic screenshots — regenerated on every diag run.
+frontend/e2e/screenshots/shared_renderer_diag/
 
 # NAMD binary (download separately from UIUC)
 NAMD_*/
