@@ -840,19 +840,15 @@ def _build_connector_frames(
     assembly,
     inst_by_id: dict,
     design_for,
-) -> tuple[dict, dict]:
+) -> tuple[dict, dict, dict]:
     """Pre-compute ``{(instance_id, label): 4x4 world frame}`` for every
     (instance, connector_label) referenced by an assembly joint.
 
-    Used by :func:`resolve_assembly` to avoid recomputing connector world
-    frames inside the BFS, which would otherwise re-run the per-bp
-    deformation pipeline (``deformed_helix_axes`` / ``deformed_nucleotide
-    _positions``) once per joint touchpoint.
-
-    Returns ``(frames_by_conn, labels_by_inst)``. The second dict lets the
-    caller invalidate cache entries on an instance-by-instance basis when
-    the BFS mutates a transform — see "invalidate-on-write" in
-    :func:`resolve_assembly`.
+    Returns ``(frames_by_conn, labels_by_inst, local_cache)``. The caller
+    MUST keep ``local_cache`` alive across subsequent
+    :func:`_refresh_connector_frames_for_instance` calls (otherwise each
+    refresh re-runs ``deformed_helix_axes`` ~17 ms — a BFS that moves
+    180 instances pays 3 s in waste alone).
 
     Internally, local frames are cached by ``(design_id, label)``. When N
     instances share one source design (the common polymer / crystal case)
@@ -871,23 +867,27 @@ def _build_connector_frames(
         if joint.instance_b_id and joint.connector_b_label:
             labels_by_inst.setdefault(joint.instance_b_id, set()).add(joint.connector_b_label)
 
-    frames_by_conn = _build_world_connector_frames(inst_by_id, labels_by_inst, design_for)
-    return frames_by_conn, labels_by_inst
+    frames_by_conn, local_cache = _build_world_connector_frames(inst_by_id, labels_by_inst, design_for)
+    return frames_by_conn, labels_by_inst, local_cache
 
 
 def _build_world_connector_frames(
     inst_by_id: dict,
     labels_by_inst: dict,
     design_for,
-) -> dict:
+) -> tuple[dict, dict]:
     """Compute ``{(instance_id, label): 4x4 world frame}`` for the given
     (instance, label) set, caching local frames by ``(design_object_id,
     label)`` so N instances sharing one source pay the per-bp deformation
     cost ONCE per label total.
 
-    Extracted from :func:`_build_connector_frames` so other callers
-    (e.g. ``GET /assembly/connector-frames``) can enumerate their own
-    label sets and still benefit from the same cache.
+    Returns ``(frames_by_conn, local_cache)``. The local cache MUST be
+    kept alive by the caller across any subsequent refresh-on-write
+    invocations (see :func:`_refresh_connector_frames_for_instance`) —
+    otherwise refresh re-runs ``deformed_helix_axes`` per moved instance
+    (~17 ms each) and resolve scales catastrophically. Was the resolve
+    regression caught by N=200 bench at 6700 ms (vs Phase 4e's 372 ms
+    at N=500) before this fix.
     """
     # (design_object_id, label) -> 4x4 local frame. Local frames depend on
     # the design (cluster transforms, helix geometry), not on the
@@ -920,7 +920,7 @@ def _build_world_connector_frames(
             frame = np.eye(4, dtype=float)
             frame[:3, 3] = pos
             frames_by_conn[(inst_id, label)] = frame
-    return frames_by_conn
+    return frames_by_conn, local_cache
 
 
 def _refresh_connector_frames_for_instance(
@@ -929,14 +929,20 @@ def _refresh_connector_frames_for_instance(
     inst_by_id: dict,
     inst_id: str,
     design_for,
+    local_cache: dict | None = None,
 ) -> None:
     """Recompute all cache entries for one instance after its transform
     changed. Used by the BFS in :func:`resolve_assembly`.
 
     Only the world multiplication redoes — the design-local frames don't
     change with the instance's pose, so we just re-multiply the current
-    ``inst.transform``. This is a few µs per instance instead of the
-    ~17 ms a fresh :func:`_resolve_blunt_label_local` call would cost.
+    ``inst.transform``. With ``local_cache`` (the dict returned by
+    :func:`_build_world_connector_frames`), this is a few µs per instance.
+    Without it, we'd re-run ``deformed_helix_axes`` per refresh (~17 ms).
+    A BFS that moves 180 instances → 3 s wasted ⇒ catastrophic.
+
+    ``local_cache`` is optional for backwards-compat callers, but the
+    BFS path MUST pass it.
     """
     labels = labels_by_inst.get(inst_id)
     if not labels:
@@ -947,9 +953,22 @@ def _refresh_connector_frames_for_instance(
             frames_by_conn.pop((inst_id, label), None)
         return
     design = design_for(inst)
+    d_key = id(design) if design is not None else 0
     T = _mat4_from_model(inst.transform)
     for label in labels:
-        F_local = _local_frame_for_label(inst, label, design)
+        # Local-frame cache hit path: just re-multiply. Cache miss falls
+        # through to a one-time _local_frame_for_label + memoize. This
+        # path is the difference between O(N) and O(N × deformed_helix_axes)
+        # for the BFS.
+        if local_cache is not None:
+            ck = (d_key, label)
+            if ck in local_cache:
+                F_local = local_cache[ck]
+            else:
+                F_local = _local_frame_for_label(inst, label, design)
+                local_cache[ck] = F_local
+        else:
+            F_local = _local_frame_for_label(inst, label, design)
         if F_local is not None:
             frames_by_conn[(inst_id, label)] = T @ F_local
             continue
@@ -1385,7 +1404,7 @@ def resolve_assembly() -> dict:
     # per-iteration full rebuild. Per-iteration is unsafe if any future code
     # change causes the BFS to re-visit an instance; invalidate-on-write is
     # robust to that.
-    frames_by_conn, labels_by_inst = _build_connector_frames(
+    frames_by_conn, labels_by_inst, frames_local_cache = _build_connector_frames(
         assembly, inst_by_id, _design_for)
 
     # ── Pre-resolve satisfaction check ───────────────────────────────────────
@@ -1509,7 +1528,7 @@ def resolve_assembly() -> dict:
                     for moved_id in fk_vis:
                         _refresh_connector_frames_for_instance(
                             frames_by_conn, labels_by_inst, inst_by_id,
-                            moved_id, _design_for)
+                            moved_id, _design_for, frames_local_cache)
                 except np.linalg.LinAlgError:
                     pass
 
@@ -1590,7 +1609,7 @@ def resolve_assembly() -> dict:
                                 for moved_id in moved_ids:
                                     _refresh_connector_frames_for_instance(
                                         frames_by_conn, labels_by_inst, inst_by_id,
-                                        moved_id, _design_for)
+                                        moved_id, _design_for, frames_local_cache)
 
             visited.add(child_id)
             queue.append(child_id)
@@ -3685,7 +3704,8 @@ def get_all_connector_frames() -> dict:
             continue
         labels_by_inst[inst.id] = {ip.label for ip in inst.interface_points}
 
-    frames_by_conn = _build_world_connector_frames(inst_by_id, labels_by_inst, _design_for)
+    # One-shot endpoint — discard the local_cache; no subsequent refresh.
+    frames_by_conn, _ = _build_world_connector_frames(inst_by_id, labels_by_inst, _design_for)
 
     out: dict = {}
     for (inst_id, label), F in frames_by_conn.items():
