@@ -5074,7 +5074,16 @@ def save_assembly(body: SaveAssemblyRequest = None) -> dict:
         dest      = _WORKSPACE_DIR / out_rel
 
     dest.write_text(assembly.to_json(), encoding="utf-8")
-    return {"path": out_rel, **_assembly_response(assembly)}
+    # Only return the full assembly payload when the in-memory state actually
+    # changed (inline → file-backed conversion).  A pure persist-to-disk has
+    # no client-visible state delta, so omitting the payload prevents the
+    # frontend's _syncFromAssemblyResponse from re-storing currentAssembly,
+    # which would otherwise fire the renderer's currentAssembly subscriber
+    # and trigger a full geometry-refetch rebuild — observed as a multi-
+    # second freeze on every Save of a large assembly.
+    if changed:
+        return {"path": out_rel, **_assembly_response(assembly)}
+    return {"path": out_rel}
 
 
 @router.get("/library/events", status_code=200)
