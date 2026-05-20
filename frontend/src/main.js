@@ -7341,15 +7341,17 @@ Typical debugging workflow for "reverts to 3D" bug:
     return null
   }
 
-  // Compute a placement offset for Duplicate so the clone lands a part-diameter
-  // away (avoids the backend's 5 nm default landing the clone nearly inside the
-  // source on full-size origamis). Mirrors assembly_panel.js's computeDuplicateOffset.
+  // Compute a placement offset for Duplicate so the clone lands JUST OUTSIDE
+  // the source's world-space bounding box along world +X.  Uses the bbox's
+  // actual X-extent (not the max-radius) so a hinge oriented perpendicular
+  // to X gets a tight offset matching its X-width, not its long-axis length.
   function _computeAssemblyDuplicateOffset(sourceId) {
     const entry = assemblyRenderer.getInstanceCenters().find(c => c.id === sourceId)
     if (!entry) return null
-    const GAP = 2.0  // nm
-    const MIN = 10   // nm — keeps tiny parts visibly jumping too
-    const dx = Math.max(MIN, entry.radius * 2 + GAP)
+    const GAP = 2.0  // nm — small breathing room past the touch point
+    const MIN = 5    // nm — keeps single-helix parts visibly jumping too
+    const xExtent = entry.size?.x ?? (entry.radius * 2)
+    const dx = Math.max(MIN, xExtent + GAP)
     return [dx, 0, 0]
   }
 
@@ -8154,17 +8156,18 @@ Typical debugging workflow for "reverts to 3D" bug:
     api,
     onInstanceSelect: (id) => store.setState({ activeInstanceId: id }),
     beforePatchDesign: (instanceId) => assemblyRenderer.invalidateInstance(instanceId),
-    // Duplicate spawns the new instance offset along world +X by the source
-    // part's full diameter (plus a small gap) so the clone is unambiguously
-    // separated even for full-size origamis where the backend's default 5 nm
-    // would land it nearly inside the source.  Falls back to backend default
-    // when the source isn't currently visible / cached.
+    // Duplicate spawns the new instance JUST OUTSIDE the source's world-
+    // space bounding box along +X — uses the bbox's actual X-extent rather
+    // than the max-radius so a hinge oriented perpendicular to X gets a
+    // tight side-to-side offset instead of a long-axis-length gap.
+    // Mirrors _computeAssemblyDuplicateOffset above.
     computeDuplicateOffset: (sourceId) => {
       const entry = assemblyRenderer.getInstanceCenters().find(c => c.id === sourceId)
       if (!entry) return null
-      const GAP = 2.0  // nm
-      const MIN = 10   // nm — keeps tiny parts visibly jumping too
-      const dx = Math.max(MIN, entry.radius * 2 + GAP)
+      const GAP = 2.0
+      const MIN = 5
+      const xExtent = entry.size?.x ?? (entry.radius * 2)
+      const dx = Math.max(MIN, xExtent + GAP)
       return [dx, 0, 0]
     },
     onDefineConnector: (instanceId) => _defineAssemblyConnector(instanceId),

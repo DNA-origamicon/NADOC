@@ -1569,7 +1569,7 @@ export function initAssemblyRenderer(scene, store, api) {
       const center = box.getCenter(new THREE.Vector3())
       const size   = box.getSize(new THREE.Vector3())
       const radius = Math.max(size.x, size.y, size.z) * 0.5
-      out.push({ id, center, radius })
+      out.push({ id, center, radius, size })
     }
     return out
   }
@@ -4181,7 +4181,12 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         const center = tmpBox.getCenter(new THREE.Vector3())
         const size   = tmpBox.getSize(new THREE.Vector3())
         const radius = Math.max(size.x, size.y, size.z) * 0.5
-        out.push({ id: srcEntry.instanceIds[i], center, radius })
+        // Include the world-space bbox `size` (xyz extents) so callers
+        // computing axis-specific offsets (e.g. duplicate placement) can
+        // use the actual extent along their axis of interest instead of
+        // the max-radius (which over-spaces parts oriented perpendicular
+        // to that axis).  `size` is a fresh Vector3 — callers may mutate.
+        out.push({ id: srcEntry.instanceIds[i], center, radius, size })
       }
     }
     return out
