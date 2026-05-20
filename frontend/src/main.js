@@ -7473,7 +7473,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       _mrAssemblyCtx = ctx
       _translateRotateActive = true
       store.setState({ translateRotateActive: true })
-      document.getElementById('mode-indicator').textContent = 'MOVE — Tab: move/rotate · ✓: confirm · Esc: exit'
+      document.getElementById('mode-indicator').textContent = 'MOVE — Tab: move/rotate · click elsewhere: commit · Esc: cancel'
       _attachGroupGizmo(activeInstanceId, ctx)
       _mrSetClusterOptions([{ id: activeInstanceId, name: _instForGizmo?.name ?? 'Selected part' }], activeInstanceId)
       if (_mrClusterSel) _mrClusterSel.disabled = true
@@ -7482,7 +7482,11 @@ Typical debugging workflow for "reverts to 3D" bug:
       _mrSetSelectedPivot('centroid')
       _mrSetTransformValuesFromMatrix(ctx.primaryStart)
       if (_mrPanel) _mrPanel.style.display = ''
-      _confirmBtn.style.display = 'flex'
+      // No confirm checkmark in assembly mode — committing happens by
+      // clicking anywhere other than the selected instance (see
+      // _onAssemblyClick), or via Esc to cancel.  The checkmark is still
+      // used by the design-mode cluster gizmo path below.
+      _confirmBtn.style.display = 'none'
       return
     }
 
@@ -9443,12 +9447,35 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   async function _onAssemblyClick(e) {
     if (e.button !== 0) return
-    if (_translateRotateActive) return   // gizmo handles its own pointer events
     if (!_assemblyPtrDownAt) return
     const dx = e.clientX - _assemblyPtrDownAt.x
     const dy = e.clientY - _assemblyPtrDownAt.y
     _assemblyPtrDownAt = null
     if (dx * dx + dy * dy > 25) return   // was a drag, not a click
+
+    // While the move/rotate gizmo is active, a click ON the selected
+    // instance is left to the gizmo (it intercepts its own handle hits at
+    // pointerdown; a click on the instance body is a no-op so the user can
+    // grab handles freely).  A click ANYWHERE ELSE — empty space or a
+    // different instance — commits the pending transform, then falls
+    // through to normal selection (which may select + re-arm the gizmo on
+    // the new target, or clear the selection).  Replaces the green-check
+    // confirm button.
+    if (_translateRotateActive) {
+      // A click that landed on a gizmo handle (translate arrow / rotate
+      // ring) must not commit — the user is grabbing the gizmo.  The
+      // TransformControls `axis` is non-null while the cursor is over a
+      // handle.  Likewise a drag that just finished is handled by the
+      // gizmo's own dragging-changed → onCommit path.
+      if (instanceGizmo.getActiveAxis() || instanceGizmo.isDragging()) return
+      const hitDuringGizmo = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
+      if (hitDuringGizmo && hitDuringGizmo.id === store.getState().activeInstanceId) {
+        return  // click on the active instance body → leave the gizmo alone
+      }
+      await _confirmTranslateRotateTool()
+      // Fall through: this same click now (re)selects whatever was under it.
+    }
+
     const inst   = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
     const prevId = store.getState().activeInstanceId
 

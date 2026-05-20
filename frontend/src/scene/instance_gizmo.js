@@ -235,5 +235,10 @@ export function initInstanceGizmo(store, controls) {
     setMatrix,
     isActive: () => _instanceId !== null,
     getMode:  () => _mode,
+    isDragging: () => _isDragging,
+    // The TransformControls `axis` is non-null whenever the cursor is over
+    // (or dragging) one of the gizmo handles.  Callers use this to tell a
+    // click-on-handle apart from a click-on-empty-space.
+    getActiveAxis: () => _tc?.axis ?? null,
   }
 }
