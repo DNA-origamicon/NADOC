@@ -37,6 +37,7 @@
  */
 
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import {
   BDNA_RISE_PER_BP,
   HONEYCOMB_ROW_PITCH,
@@ -892,6 +893,598 @@ function _hullMeshPhong(opacity) {
   })
 }
 
+// Drop extrusion blocks whose volume is below `fraction` of the total — removes
+// tiny stub segments that clutter the hull. Takes [{geo, vol}], returns the geos
+// to keep (disposing the dropped ones). Never returns empty: if every block is
+// below threshold (e.g. many equal blocks), keeps the largest so the hull
+// doesn't vanish.
+function _filterSmallBlocks(boxes, fraction) {
+  if (!boxes.length) return []
+  const total = boxes.reduce((s, b) => s + b.vol, 0)
+  const thresh = fraction * total
+  let kept = boxes.filter(b => b.vol >= thresh)
+  if (!kept.length) {
+    let big = boxes[0]
+    for (const b of boxes) if (b.vol > big.vol) big = b
+    kept = [big]
+  }
+  const keptSet = new Set(kept)
+  for (const b of boxes) if (!keptSet.has(b)) b.geo.dispose()
+  return kept.map(b => b.geo)
+}
+
+// Bundle frame for a set of helices: average axis direction → (U, dir, V),
+// origin = centroid of helix midpoints. Same convention as _scanExtrusionGroup.
+function _bundleFrame(helixIds, helixAxes) {
+  const dir = new THREE.Vector3()
+  const mids = []
+  for (const hid of helixIds) {
+    const ax = helixAxes[hid]
+    if (!ax?.start || !ax?.end) continue
+    const s = new THREE.Vector3(...ax.start), e = new THREE.Vector3(...ax.end)
+    dir.add(e.clone().sub(s))
+    mids.push(s.clone().add(e).multiplyScalar(0.5))
+  }
+  if (!mids.length) return null
+  if (dir.lengthSq() < 1e-12) dir.set(0, 0, 1)
+  dir.normalize()
+  const U = new THREE.Vector3()
+  const cz = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0))
+  if (cz.lengthSq() > 1e-4) U.copy(cz).normalize()
+  else U.crossVectors(dir, new THREE.Vector3(0, 0, 1)).normalize()
+  const V = new THREE.Vector3().crossVectors(U, dir).normalize()
+  const origin = new THREE.Vector3()
+  for (const m of mids) origin.add(m)
+  origin.divideScalar(mids.length)
+  return { dir, U, V, origin }
+}
+
+/**
+ * Color-coded overhang markers for the hull: one small flat quad per overhang,
+ * snapped flush (parallel + slightly offset) to the lateral hull face nearest
+ * its root, colored by the overhang strand's color. Merged into a single
+ * vertex-colored mesh (one draw call). Returns a THREE.Group or null.
+ *
+ * Each cluster's bundle frame (U/dir/V) + cross-section rect (matching the
+ * rendered boxes' faces, padded by half the helix spacing) determines the face
+ * plane; the quad's normal is that face's normal so it lies parallel to it.
+ */
+function _buildOverhangMarkers(design, helixAxes, clusters, geometry, helixBp, hullMeshes) {
+  const overhangs = design?.overhangs
+  if (!overhangs?.length || !helixAxes || !clusters?.length || !hullMeshes?.length) return null
+
+  const strandColor = new Map()
+  for (const s of design.strands ?? []) if (s.color) strandColor.set(s.id, s.color)
+
+  // Current (transformed) overhang nucleotide positions, grouped by overhang id
+  // (NOT the stored base-frame pivot, which goes stale under cluster transforms).
+  const ohNuc = new Map()
+  for (const n of geometry ?? []) {
+    if (!n.overhang_id || !n.backbone_position) continue
+    let arr = ohNuc.get(n.overhang_id)
+    if (!arr) { arr = []; ohNuc.set(n.overhang_id, arr) }
+    arr.push(n.backbone_position)
+  }
+
+  // Per-cluster bundle frame (origin + axis dir, from dsDNA helices) for the
+  // radial cast direction; helix → cluster index for every helix.
+  const frames = []
+  const helixToCluster = new Map()
+  clusters.forEach((cl, ci) => {
+    const allIds = cl.helix_ids ?? []
+    for (const hid of allIds) if (!helixToCluster.has(hid)) helixToCluster.set(hid, ci)
+    const dsIds = allIds.filter(hid => (helixBp?.get(hid) ?? 1) > 0)
+    frames.push(_bundleFrame(dsIds.length ? dsIds : allIds, helixAxes))
+  })
+
+  // Hull meshes need an up-to-date world matrix for raycasting (boxes are baked
+  // at identity, but cluster prism meshes carry a transform).
+  for (const hm of hullMeshes) hm.updateWorldMatrix(true, false)
+
+  const QUAD = 1.6, EPS = 0.08
+  const col = new THREE.Color(), zAxis = new THREE.Vector3(0, 0, 1)
+  const rc = new THREE.Raycaster()
+  const root = new THREE.Vector3(), rel = new THREE.Vector3(), radial = new THREE.Vector3()
+  const geos = []
+  for (const oh of overhangs) {
+    const ci = helixToCluster.get(oh.helix_id)
+    if (ci == null) continue
+    const fr = frames[ci]
+    if (!fr) continue
+
+    // Root = overhang nucleotide nearest the bundle axis (the junction); else
+    // the current helix midpoint.
+    let found = false
+    const nucs = ohNuc.get(oh.id)
+    if (nucs && nucs.length) {
+      let bestR2 = Infinity
+      for (const p of nucs) {
+        rel.set(p[0], p[1], p[2]).sub(fr.origin)
+        const r2 = rel.dot(fr.U) ** 2 + rel.dot(fr.V) ** 2
+        if (r2 < bestR2) { bestR2 = r2; root.set(p[0], p[1], p[2]); found = true }
+      }
+    } else {
+      const ax = helixAxes[oh.helix_id]
+      if (ax?.start && ax?.end) {
+        root.set((ax.start[0] + ax.end[0]) / 2, (ax.start[1] + ax.end[1]) / 2, (ax.start[2] + ax.end[2]) / 2)
+        found = true
+      }
+    }
+    if (!found) continue
+
+    // Radial outward (perpendicular to the bundle axis).
+    rel.copy(root).sub(fr.origin)
+    radial.copy(rel).addScaledVector(fr.dir, -rel.dot(fr.dir))
+    if (radial.lengthSq() < 1e-6) radial.copy(fr.U)
+    radial.normalize()
+
+    // Cast inward from outside the bundle, through the root, onto the hull —
+    // the first hit IS the rendered surface, so the marker lands flush on it.
+    rc.set(root.clone().addScaledVector(radial, 8), radial.clone().negate())
+    let best = Infinity, hit = null
+    for (const hm of hullMeshes) {
+      const hits = rc.intersectObject(hm, false)
+      if (hits.length && hits[0].distance < best) { best = hits[0].distance; hit = hits[0] }
+    }
+    if (!hit) continue
+
+    const normal = hit.face
+      ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize()
+      : radial.clone()
+    if (normal.dot(radial) < 0) normal.negate()   // ensure outward-facing
+    const center = hit.point.clone().addScaledVector(normal, EPS)
+
+    const geo = new THREE.PlaneGeometry(QUAD, QUAD)
+    geo.applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(
+      new THREE.Quaternion().setFromUnitVectors(zAxis, normal)))
+    geo.translate(center.x, center.y, center.z)
+
+    col.set(strandColor.get(oh.strand_id) || '#ff8800')
+    const nv = geo.attributes.position.count
+    const cArr = new Float32Array(nv * 3)
+    for (let i = 0; i < nv; i++) { cArr[i * 3] = col.r; cArr[i * 3 + 1] = col.g; cArr[i * 3 + 2] = col.b }
+    geo.setAttribute('color', new THREE.BufferAttribute(cArr, 3))
+    geos.push(geo)
+  }
+  if (!geos.length) return null
+  const merged = mergeGeometries(geos, false)
+  geos.forEach(g => g.dispose())
+  if (!merged) return null
+
+  const mesh = new THREE.Mesh(merged, new THREE.MeshBasicMaterial({
+    vertexColors: true, side: THREE.DoubleSide,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  }))
+  mesh.renderOrder = 105
+  const group = new THREE.Group()
+  group.add(mesh)
+  return group
+}
+
+// Solid neutral-grey material for the extrusion hull — opaque, lit, CAD-default
+// look (no transparency, writes depth so it reads as a solid object).
+function _extrusionMeshMat() {
+  return new THREE.MeshPhongMaterial({
+    color: 0x9a9a9a,
+    side: THREE.DoubleSide,
+    shininess: 16,
+    specular: new THREE.Color(0x2a2a2a),
+    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+  })
+}
+
+// Distinct, well-separated hues for the per-cluster hull debug overlay.
+const _HULL_DEBUG_PALETTE = [
+  0xff5252, 0x40c4ff, 0x69f0ae, 0xffd740, 0xb388ff,
+  0xff6e40, 0x18ffff, 0xeeff41, 0xff4081, 0x64ffda,
+]
+
+/**
+ * Per-helix dsDNA base-pair counts for a design's geometry.
+ * A base pair = a (helix, bp_index) position covered by ≥2 stranded,
+ * non-overhang nucleotides (i.e. genuinely double-stranded).
+ * Returns { helixBp: Map<helixId, bpCount>, totalBp }.
+ */
+function _dsBpByHelix(geometry) {
+  const dsCount = new Map()   // "hid:bp" → covered-strand count
+  for (const nuc of geometry ?? []) {
+    if (!nuc.strand_id || nuc.overhang_id) continue
+    const k = `${nuc.helix_id}:${nuc.bp_index}`
+    dsCount.set(k, (dsCount.get(k) ?? 0) + 1)
+  }
+  const helixBp = new Map()
+  for (const [k, c] of dsCount) {
+    if (c < 2) continue
+    const hid = k.slice(0, k.lastIndexOf(':'))
+    helixBp.set(hid, (helixBp.get(hid) ?? 0) + 1)
+  }
+  let totalBp = 0
+  for (const v of helixBp.values()) totalBp += v
+  return { helixBp, totalBp }
+}
+
+/** Canvas-textured sprite for a cluster debug label (name + size %). */
+function _makeClusterLabelSprite(text, colorHex) {
+  const pad = 8, fontPx = 36
+  const cv = document.createElement('canvas')
+  const ctx = cv.getContext('2d')
+  ctx.font = `bold ${fontPx}px sans-serif`
+  const w = Math.ceil(ctx.measureText(text).width) + pad * 2
+  const h = fontPx + pad * 2
+  cv.width = w; cv.height = h
+  ctx.font = `bold ${fontPx}px sans-serif`
+  ctx.fillStyle = 'rgba(13,17,23,0.82)'
+  ctx.fillRect(0, 0, w, h)
+  ctx.strokeStyle = `#${colorHex.toString(16).padStart(6, '0')}`
+  ctx.lineWidth = 4
+  ctx.strokeRect(2, 2, w - 4, h - 4)
+  ctx.fillStyle = '#fff'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, pad, h / 2)
+  const tex = new THREE.CanvasTexture(cv)
+  tex.minFilter = THREE.LinearFilter
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, transparent: true, depthTest: false, depthWrite: false,
+  }))
+  spr.renderOrder = 102
+  // Scale sprite to ~nm world size proportional to its aspect ratio.
+  const worldH = 4.0
+  spr.scale.set(worldH * (w / h), worldH, 1)
+  return spr
+}
+
+/** Median nearest-neighbour distance among helix axis start points (≈ the
+ *  lattice spacing). Used to size the per-helix occupancy boxes. */
+function _helixSpacing(helixAxes, helixIds, fallback = 2.5) {
+  const pts = []
+  for (const hid of helixIds) {
+    const ax = helixAxes[hid]
+    if (ax?.start) pts.push(new THREE.Vector3(...ax.start))
+  }
+  if (pts.length < 2) return fallback
+  const nn = []
+  for (let i = 0; i < pts.length; i++) {
+    let best = Infinity
+    for (let j = 0; j < pts.length; j++) {
+      if (i === j) continue
+      const d = pts[i].distanceTo(pts[j])
+      if (d < best) best = d
+    }
+    if (Number.isFinite(best)) nn.push(best)
+  }
+  if (!nn.length) return fallback
+  nn.sort((a, b) => a - b)
+  return nn[Math.floor(nn.length / 2)] || fallback
+}
+
+/**
+ * Per-helix occupancy boxes for one cluster, merged into a single mesh.
+ *
+ * Each dsDNA helix (helixBp>0; pure ss/overhang helices skipped) becomes an
+ * oriented box spanning its axis, cross-section = spacing*fill so inter-helix
+ * grooves survive (the "toothy" surface).  All boxes share the cluster's bundle
+ * (U, dir, V) frame so they stay co-aligned.  Helices of differing length yield
+ * boxes of differing extent → axial teeth fall out for free.  Returns a
+ * THREE.Group (merged mesh + edges) with userData.bundleMid / clusterName, or null.
+ */
+function _buildClusterBoxGroup(cluster, helixAxes, helixBp, spacing, boxFill) {
+  // Bundle frame from the average axis direction (same convention as _bundleGeometry).
+  const dir = new THREE.Vector3()
+  let nDir = 0
+  for (const hid of cluster.helix_ids) {
+    const ax = helixAxes[hid]
+    if (!ax?.start || !ax?.end) continue
+    dir.add(new THREE.Vector3(...ax.end).sub(new THREE.Vector3(...ax.start)))
+    nDir++
+  }
+  if (!nDir || dir.lengthSq() < 1e-12) return null
+  dir.normalize()
+  const U = new THREE.Vector3()
+  const cz = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0))
+  if (cz.lengthSq() > 1e-4) U.copy(cz).normalize()
+  else U.crossVectors(dir, new THREE.Vector3(0, 0, 1)).normalize()
+  const V = new THREE.Vector3().crossVectors(U, dir).normalize()
+  const quat = new THREE.Quaternion().setFromRotationMatrix(
+    new THREE.Matrix4().makeBasis(U, dir, V))   // local +Y → dir
+
+  const w = Math.max(0.5, spacing * boxFill)
+  const geos = []
+  const centroid = new THREE.Vector3()
+  let nMid = 0
+  for (const hid of cluster.helix_ids) {
+    if ((helixBp.get(hid) ?? 0) <= 0) continue   // skip pure ss / overhang helices
+    const ax = helixAxes[hid]
+    if (!ax?.start || !ax?.end) continue
+    const s = new THREE.Vector3(...ax.start), e = new THREE.Vector3(...ax.end)
+    const len = s.distanceTo(e)
+    if (len < 1e-6) continue
+    const mid = s.clone().add(e).multiplyScalar(0.5)
+    centroid.add(mid); nMid++
+    const geo = new THREE.BoxGeometry(w, len, w)   // length on local Y = bundle dir
+    geo.applyMatrix4(new THREE.Matrix4().compose(mid, quat, new THREE.Vector3(1, 1, 1)))
+    geos.push(geo)
+  }
+  if (!geos.length) return null
+  centroid.divideScalar(nMid || 1)
+
+  const merged = mergeGeometries(geos, false)
+  geos.forEach(g => g.dispose())
+  if (!merged) return null
+
+  const group = new THREE.Group()
+  group.userData.bundleMid   = centroid
+  group.userData.clusterName = cluster.name || 'Cluster'
+  const mesh = new THREE.Mesh(merged, _hullMeshPhong(0.9))
+  mesh.renderOrder = 100
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(merged, 1),
+    new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, depthWrite: false }),
+  )
+  edges.renderOrder = 101
+  group.add(mesh, edges)
+  return group
+}
+
+// Feature-log ops that create an extrusion with a lattice cross-section.
+const _EXTRUSION_OPS = new Set([
+  'bundle-create', 'extrude-segment', 'extrude-continuation', 'extrude-deformed-continuation',
+])
+
+// Plane → which world axis each lattice coordinate maps to.
+// col → cross-section axis A, row → cross-section axis B, extrusion runs along the third.
+const _PLANE_AXES = {
+  XY: { col: 0, row: 1, ext: 2 },
+  XZ: { col: 0, row: 2, ext: 1 },
+  YZ: { col: 1, row: 2, ext: 0 },
+}
+
+/**
+ * One rectangular box per feature-log extrusion, merged into a single mesh.
+ *
+ * Each bundle-create / extrude-* entry carries the lattice ``cells`` it spans,
+ * its ``length_bp``, the build ``plane``, and the axial ``offset_nm`` — enough
+ * to reconstruct a rectangular cross-section (bounding rect of the cells) over
+ * the extrusion's axial run.  Alternating cross-sections along the axis (e.g.
+ * teeth: full ↔ half) reproduce the toothy silhouette directly from the build
+ * history.  Coordinates are build-space (≈ world for as-built parts).
+ *
+ * Returns a THREE.Group (merged mesh + edges) or null when the design has no
+ * extrusion history (e.g. a cadnano import).
+ */
+function _buildExtrusionBoxes(design) {
+  const fl = design?.feature_log
+  if (!Array.isArray(fl) || !fl.length) return null
+  const isHC  = (design.lattice_type === 'HONEYCOMB')
+  const spCol = SQUARE_HELIX_SPACING
+  const spRow = isHC ? HONEYCOMB_ROW_PITCH : SQUARE_HELIX_SPACING
+
+  const geos = []
+  for (const e of fl) {
+    if (!_EXTRUSION_OPS.has(e.op_kind)) continue
+    const p = e.params || {}
+    const cells = p.cells
+    const lenBp = p.length_bp || 0
+    if (!Array.isArray(cells) || !cells.length || lenBp <= 0) continue
+
+    let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity
+    for (const cell of cells) {
+      const r = cell[0], c = cell[1]
+      if (r < minR) minR = r; if (r > maxR) maxR = r
+      if (c < minC) minC = c; if (c > maxC) maxC = c
+    }
+    const axialLen = lenBp * BDNA_RISE_PER_BP
+    const offset   = (typeof p.offset_nm === 'number') ? p.offset_nm : 0
+    const wCol = (maxC - minC + 1) * spCol
+    const wRow = (maxR - minR + 1) * spRow
+    const cCol = (minC + maxC) / 2 * spCol
+    const cRow = (minR + maxR) / 2 * spRow
+
+    const m = _PLANE_AXES[p.plane] || _PLANE_AXES.XY
+    const size = [0, 0, 0], pos = [0, 0, 0]
+    size[m.col] = wCol;  size[m.row] = wRow;  size[m.ext] = axialLen
+    pos[m.col]  = cCol;  pos[m.row]  = cRow;  pos[m.ext]  = offset + axialLen / 2
+    const geo = new THREE.BoxGeometry(size[0], size[1], size[2])
+    geo.translate(pos[0], pos[1], pos[2])
+    geos.push({ geo, vol: wCol * wRow * axialLen })
+  }
+  if (!geos.length) return null
+
+  const keptGeos = _filterSmallBlocks(geos, 0.05)   // drop blocks < 5% of total volume
+  const merged = mergeGeometries(keptGeos, false)
+  keptGeos.forEach(g => g.dispose())
+  if (!merged) return null
+
+  const group = new THREE.Group()
+  merged.computeBoundingBox()
+  const c = new THREE.Vector3(); merged.boundingBox.getCenter(c)
+  group.userData.bundleMid   = c
+  group.userData.clusterName = design.metadata?.name || 'Part'
+  const mesh = new THREE.Mesh(merged, _extrusionMeshMat())
+  mesh.renderOrder = 100
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(merged, 1),
+    new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.55, depthWrite: false }),
+  )
+  edges.renderOrder = 101
+  group.add(mesh, edges)
+  return group
+}
+
+/**
+ * Fallback extrusion reconstruction for designs with NO feature-log build
+ * history (cadnano / scadnano imports).
+ *
+ * Scans the bundle along its axis; helix start/end positions are rounded to the
+ * lattice crossover tick (7 HC / 8 SQ bp) so ragged per-helix ends don't spawn
+ * junk segments.  Each axial run with a constant occupied cross-section becomes
+ * one rectangular box (bounding rect of the present helices' cross-section
+ * positions, padded by one cell).  Helices with no dsDNA (pure ss / overhang)
+ * are excluded when geometry is available.  Returns a THREE.Group or null.
+ */
+function _scanExtrusionGroup(helixIds, helixAxes, helixBp, latticeType, name, tickBp) {
+  if (!helixIds?.length || !helixAxes) return null
+  const hasBp   = helixBp && helixBp.size > 0
+  const include = (hid) => hasBp ? (helixBp.get(hid) ?? 0) > 0 : true
+
+  const isHC = (latticeType === 'HONEYCOMB')
+  // Per-lattice default margin (user-chosen for cleanest segmentation): 8 bp
+  // for honeycomb, 7 bp for square. A slider value overrides via `tickBp`.
+  const tickAxial = (tickBp || (isHC ? 8 : 7)) * BDNA_RISE_PER_BP
+
+  // Bundle frame (avg axis dir → U, dir, V) + origin at the helix-midpoint centroid.
+  const dir = new THREE.Vector3()
+  const mids = [], ids = []
+  for (const hid of helixIds) {
+    const ax = helixAxes[hid]
+    if (!ax?.start || !ax?.end || !include(hid)) continue
+    const s = new THREE.Vector3(...ax.start), e = new THREE.Vector3(...ax.end)
+    dir.add(e.clone().sub(s))
+    mids.push({ s, e, mid: s.clone().add(e).multiplyScalar(0.5) })
+    ids.push(hid)
+  }
+  if (!mids.length) return null
+  if (dir.lengthSq() < 1e-12) dir.set(0, 0, 1)
+  dir.normalize()
+  const U = new THREE.Vector3()
+  const cz = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0))
+  if (cz.lengthSq() > 1e-4) U.copy(cz).normalize()
+  else U.crossVectors(dir, new THREE.Vector3(0, 0, 1)).normalize()
+  const V = new THREE.Vector3().crossVectors(U, dir).normalize()
+  const origin = new THREE.Vector3()
+  for (const m of mids) origin.add(m.mid)
+  origin.divideScalar(mids.length)
+
+  const spacing = _helixSpacing(helixAxes, ids)
+  const roundTick = (a) => Math.round(a / tickAxial) * tickAxial
+
+  // Per-helix axial span (rounded to ticks) + constant cross-section (u, v).
+  const segs = []
+  const bounds = new Set()
+  for (const m of mids) {
+    const a0 = m.s.clone().sub(origin).dot(dir)
+    const a1 = m.e.clone().sub(origin).dot(dir)
+    let lo = roundTick(Math.min(a0, a1)), hi = roundTick(Math.max(a0, a1))
+    if (hi <= lo) hi = lo + tickAxial
+    segs.push({
+      lo, hi,
+      u: m.mid.clone().sub(origin).dot(U),
+      v: m.mid.clone().sub(origin).dot(V),
+    })
+    bounds.add(lo); bounds.add(hi)
+  }
+  const bnd = [...bounds].sort((x, y) => x - y)
+  if (bnd.length < 2) return null
+
+  // Bounding rect of present helices over each tick interval.
+  const intervals = []
+  for (let i = 0; i < bnd.length - 1; i++) {
+    const b0 = bnd[i], b1 = bnd[i + 1], c = (b0 + b1) / 2
+    let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity, n = 0
+    for (const s of segs) {
+      if (s.lo <= c && s.hi >= c) {
+        if (s.u < uMin) uMin = s.u; if (s.u > uMax) uMax = s.u
+        if (s.v < vMin) vMin = s.v; if (s.v > vMax) vMax = s.v
+        n++
+      }
+    }
+    if (n) intervals.push({ b0, b1, uMin, uMax, vMin, vMax })
+  }
+  if (!intervals.length) return null
+
+  // Merge consecutive intervals sharing the same rect.
+  const merged = [], tol = 1e-3
+  for (const iv of intervals) {
+    const last = merged[merged.length - 1]
+    if (last && Math.abs(last.b1 - iv.b0) < tol &&
+        Math.abs(last.uMin - iv.uMin) < tol && Math.abs(last.uMax - iv.uMax) < tol &&
+        Math.abs(last.vMin - iv.vMin) < tol && Math.abs(last.vMax - iv.vMax) < tol) {
+      last.b1 = iv.b1
+    } else merged.push({ ...iv })
+  }
+
+  const quat = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(U, dir, V))
+  const geos = []
+  for (const m of merged) {
+    const len = m.b1 - m.b0
+    if (len < 1e-6) continue
+    const uExt = (m.uMax - m.uMin) + spacing
+    const vExt = (m.vMax - m.vMin) + spacing
+    const center = origin.clone()
+      .addScaledVector(dir, (m.b0 + m.b1) / 2)
+      .addScaledVector(U, (m.uMin + m.uMax) / 2)
+      .addScaledVector(V, (m.vMin + m.vMax) / 2)
+    const geo = new THREE.BoxGeometry(uExt, len, vExt)   // X=U, Y=dir, Z=V
+    geo.applyMatrix4(new THREE.Matrix4().compose(center, quat, new THREE.Vector3(1, 1, 1)))
+    geos.push({ geo, vol: uExt * vExt * len })
+  }
+  if (!geos.length) return null
+  const keptGeos = _filterSmallBlocks(geos, 0.05)   // drop blocks < 5% of total volume
+  const mergedGeo = mergeGeometries(keptGeos, false)
+  keptGeos.forEach(g => g.dispose())
+  if (!mergedGeo) return null
+
+  const group = new THREE.Group()
+  mergedGeo.computeBoundingBox()
+  const ctr = new THREE.Vector3(); mergedGeo.boundingBox.getCenter(ctr)
+  group.userData.bundleMid   = ctr
+  group.userData.clusterName = name || 'Cluster'
+  const mesh = new THREE.Mesh(mergedGeo, _extrusionMeshMat())
+  mesh.renderOrder = 100
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(mergedGeo, 1),
+    new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.55, depthWrite: false }),
+  )
+  edges.renderOrder = 101
+  group.add(mesh, edges)
+  return group
+}
+
+/**
+ * Return a copy of `helixAxes` with each helix's start/end trimmed to its dsDNA
+ * extent — the axial span actually covered by base-paired (≥2 stranded,
+ * non-overhang) nucleotides. Excludes ssDNA portions: scaffold without staples,
+ * staple without scaffold (overhangs), and unpaired tails. dsDNA nucleotide
+ * positions are projected onto each helix's axis line (length_bp is NOT a
+ * reliable physical extent, so we use actual positions). Helices with no dsDNA
+ * keep their original axis (they're dropped by the scan's helixBp include test).
+ */
+function _dsTrimmedAxes(geometry, helixAxes) {
+  if (!geometry?.length || !helixAxes) return helixAxes
+  const dsCount = new Map()
+  for (const nuc of geometry) {
+    if (!nuc.strand_id || nuc.overhang_id) continue
+    const k = nuc.helix_id + ':' + nuc.bp_index
+    dsCount.set(k, (dsCount.get(k) ?? 0) + 1)
+  }
+  const tRange = new Map()   // hid → [tLo, tHi] axis parameter of dsDNA nucleotides
+  for (const nuc of geometry) {
+    if (!nuc.strand_id || nuc.overhang_id || !nuc.backbone_position) continue
+    if ((dsCount.get(nuc.helix_id + ':' + nuc.bp_index) ?? 0) < 2) continue
+    const ax = helixAxes[nuc.helix_id]
+    if (!ax?.start || !ax?.end) continue
+    const s = ax.start, e = ax.end
+    const dx = e[0] - s[0], dy = e[1] - s[1], dz = e[2] - s[2]
+    const len2 = dx * dx + dy * dy + dz * dz
+    if (len2 < 1e-12) continue
+    const p = nuc.backbone_position
+    const t = ((p[0] - s[0]) * dx + (p[1] - s[1]) * dy + (p[2] - s[2]) * dz) / len2
+    const r = tRange.get(nuc.helix_id)
+    if (!r) tRange.set(nuc.helix_id, [t, t])
+    else { if (t < r[0]) r[0] = t; if (t > r[1]) r[1] = t }
+  }
+  const out = {}
+  for (const hid in helixAxes) {
+    const ax = helixAxes[hid]
+    const r = tRange.get(hid)
+    if (!ax?.start || !ax?.end || !r) { out[hid] = ax; continue }
+    const s = ax.start, e = ax.end
+    const tLo = Math.max(0, Math.min(1, r[0])), tHi = Math.max(0, Math.min(1, r[1]))
+    const lerp = (t) => [s[0] + (e[0] - s[0]) * t, s[1] + (e[1] - s[1]) * t, s[2] + (e[2] - s[2]) * t]
+    out[hid] = { ...ax, start: lerp(tLo), end: lerp(tHi) }
+  }
+  return out
+}
+
 // ── Spine-sections builder ────────────────────────────────────────────────────
 
 /**
@@ -1126,6 +1719,26 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
   // ── Hull representation (independent of define mode) ──────────────────────
   let _hullReprActive   = false
   const _hullReprMeshes = new Map()  // clusterId → THREE.Mesh
+  // Clusters whose dsDNA base-pair count is below this fraction of the whole
+  // origami are not drawn — small clusters clutter the hull view. Tunable.
+  let _hullMinSizeFraction = 0.10
+  // Debug overlay: distinct color + centroid label per cluster, and excluded
+  // clusters drawn faintly so the size threshold can be tuned visually.
+  let _hullClusterDebug    = false
+  // Hull geometry mode (toggle via window.nadocHull.mode()):
+  //   'extrusions' = one rectangular box per feature-log extrusion (default;
+  //                  reproduces teeth from the build history),
+  //   'boxes'      = per-helix occupancy boxes merged per cluster,
+  //   'prism'      = legacy per-cluster convex bundle prism.
+  let _hullMode            = 'extrusions'
+  // Box cross-section width as a fraction of inter-helix spacing. <1 leaves
+  // visible grooves between helices (the "toothy" surface).
+  let _occBoxFill          = 0.82
+  // Extrusion-scan margin (bp): helix ends are rounded to this tick before
+  // detecting cross-section boundaries. Larger = coarser (fewer, longer boxes);
+  // smaller = finer. null → per-lattice default (set in _scanExtrusionGroup);
+  // a number (from the slider) overrides it.
+  let _hullScanTickBp      = null
   let _bundleInfo       = null   // { bundleDir, axialMid, ringYs, vertsPerRing }
   let _surfaceDetail    = MIN_HC_FACES
   let _onExitCb         = null   // callback supplied by caller of enterDefineMode
@@ -1647,7 +2260,16 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
 
   // ── Hull representation (persistent solid hull per cluster) ──────────────────
 
-  function _buildHullForCluster(cluster, helixAxes) {
+  function _buildHullForCluster(cluster, helixAxes, ctx) {
+    // 'extrusions' mode (no feature log → per-cluster scan): one bundle frame
+    // per cluster, scanned along its own axis.
+    if (_hullMode === 'extrusions' && ctx) {
+      return _scanExtrusionGroup(cluster.helix_ids, ctx.scanAxes ?? helixAxes, ctx.helixBp, ctx.latticeType, cluster.name, ctx.scanTickBp)
+    }
+    // 'boxes' mode: per-helix occupancy boxes (grooves + axial teeth preserved).
+    if (_hullMode === 'boxes' && ctx) {
+      return _buildClusterBoxGroup(cluster, helixAxes, ctx.helixBp, ctx.spacing, _occBoxFill)
+    }
     const { currentGeometry, currentDesign } = store.getState()
     const bg = _bundleGeometry(cluster, helixAxes, currentGeometry, MIN_HC_FACES,
                                _crossPaddingVal, _axialPaddingVal,
@@ -1655,6 +2277,10 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     if (!bg) return null
 
     const group = new THREE.Group()
+    // Stash centroid + name so the debug overlay can place a label and so
+    // disposal/styling can reach the prism without re-deriving geometry.
+    group.userData.bundleMid   = bg.bundleMid.clone()
+    group.userData.clusterName = cluster.name || 'Cluster'
 
     // Detect curved cluster: any helix has samples with more than 2 points.
     const isCurved = cluster.helix_ids.some(hid => (helixAxes[hid]?.samples?.length ?? 0) > 2)
@@ -1713,21 +2339,166 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
 
   function _rebuildHullRepr(design, helixAxes) {
     for (const grp of _hullReprMeshes.values()) {
-      grp.traverse(o => { o.geometry?.dispose(); o.material?.dispose() })
+      grp.traverse(o => { o.material?.map?.dispose(); o.geometry?.dispose(); o.material?.dispose() })
       grp.parent?.remove(grp)
     }
     _hullReprMeshes.clear()
-    if (!_hullReprActive || !design?.cluster_transforms?.length || !helixAxes) return
-    for (const cluster of design.cluster_transforms) {
-      const grp = _buildHullForCluster(cluster, helixAxes)
-      if (grp) { scene.add(grp); _hullReprMeshes.set(cluster.id, grp) }
+    if (!_hullReprActive || !design) return
+
+    // Axes for both the scan and the markers: dsDNA-trimmed in extrusions mode
+    // (so ssDNA is excluded), full otherwise. Sharing them keeps the markers'
+    // bundle frame identical to the rendered boxes' frame.
+    const _scanAxes = (_hullMode === 'extrusions')
+      ? _dsTrimmedAxes(store.getState().currentGeometry, helixAxes) : helixAxes
+
+    // dsDNA base-pair counts per helix — drives ss exclusion (markers + hull
+    // must use the same helix set so marker faces match the rendered boxes).
+    const { helixBp, totalBp } = _dsBpByHelix(store.getState().currentGeometry)
+
+    // Cluster selection — drop "whole-part" clusters (is_default OR ≥90% of
+    // helices) that would enclose/duplicate the finer geometry clusters; fall
+    // back to all clusters when no finer ones exist.
+    const _totalHelices = (design.helices ?? []).length
+    const _isWholePart  = (c) => c.is_default ||
+      (_totalHelices > 0 && c.helix_ids.length >= 0.9 * _totalHelices)
+    const _finer        = (design.cluster_transforms ?? []).filter(c => !_isWholePart(c))
+    const _renderClusters = _finer.length ? _finer : (design.cluster_transforms ?? [])
+    const _spacing = _helixSpacing(_scanAxes, (design.helices ?? []).map(h => h.id))
+
+    // ── Build the hull ───────────────────────────────────────────────────────
+    // Extrusion mode: NADOC-built parts use the feature-log build history
+    // (global mesh). Imported parts (no build history) fall through to the
+    // per-cluster cross-section scan, so each cluster gets its own frame + scan.
+    let _hullDone = false
+    if (_hullMode === 'extrusions') {
+      const fl = _buildExtrusionBoxes(design)
+      if (fl) { scene.add(fl); _hullReprMeshes.set('__extrusions__', fl); _hullDone = true }
+      else if (!design.cluster_transforms?.length) {
+        const grp = _scanExtrusionGroup((design.helices ?? []).map(h => h.id),
+          _scanAxes, helixBp, design.lattice_type, design.metadata?.name, _hullScanTickBp)
+        if (grp) { scene.add(grp); _hullReprMeshes.set('__extrusions__', grp) }
+        _hullDone = true
+      }
+      // else: fall through to the per-cluster loop.
     }
+
+    if (!_hullDone && design.cluster_transforms?.length && helixAxes) {
+      // Per-cluster dsDNA base-pair fraction, used to drop clusters too small to
+      // be worth a prism (and to label them in debug mode).
+      const fractionOf = (cluster) => {
+        if (totalBp <= 0) return 1
+        let bp = 0
+        for (const hid of cluster.helix_ids) bp += (helixBp.get(hid) ?? 0)
+        return bp / totalBp
+      }
+      const ctx = { helixBp, spacing: _spacing, latticeType: design.lattice_type, scanTickBp: _hullScanTickBp, scanAxes: _scanAxes }
+
+      let colorIdx = 0
+      _renderClusters.forEach((cluster) => {
+        const frac     = fractionOf(cluster)
+        const excluded = frac < _hullMinSizeFraction
+        // Normal mode: skip small clusters. Debug mode: still build them, faint.
+        if (excluded && !_hullClusterDebug) return
+
+        const grp = _buildHullForCluster(cluster, helixAxes, ctx)
+        if (!grp) return
+        grp.userData.bpFraction = frac
+        grp.userData.excluded   = excluded
+
+        if (_hullClusterDebug) {
+          const color = _HULL_DEBUG_PALETTE[colorIdx++ % _HULL_DEBUG_PALETTE.length]
+          // Curved groups carry both a visible curved mesh and a hidden straight
+          // proxy — only restyle the visible one so the proxy stays hidden.
+          const meshes = grp.userData.curvedMesh
+            ? [grp.userData.curvedMesh]
+            : (() => { const m = []; grp.traverse(o => { if (o.isMesh) m.push(o) }); return m })()
+          for (const o of meshes) {
+            if (!o.material?.color) continue
+            o.material.color.setHex(color)
+            o.material.transparent = true   // grey extrusion mat is opaque by default
+            o.material.opacity = excluded ? 0.12 : 0.45
+            o.material.wireframe = excluded
+          }
+          const pct = Math.round(frac * 100)
+          const label = _makeClusterLabelSprite(
+            `${grp.userData.clusterName} — ${pct}%${excluded ? ' (excl)' : ''}`, color)
+          if (grp.userData.bundleMid) label.position.copy(grp.userData.bundleMid)
+          grp.add(label)
+        }
+
+        scene.add(grp)
+        _hullReprMeshes.set(cluster.id, grp)
+      })
+    }
+
+    // ── Overhang markers ──────────────────────────────────────────────────────
+    // Raycast each overhang against the BUILT hull surface so the quad lands
+    // exactly on the rendered face (robust to per-segment cross-section,
+    // dsDNA-trim, 5% filter, and cluster transforms).
+    const _hullMeshes = []
+    for (const [k, g] of _hullReprMeshes) {
+      if (k === '__ovhg_markers__') continue
+      g.traverse(o => { if (o.isMesh && o.geometry) _hullMeshes.push(o) })
+    }
+    const _markerClusters = _renderClusters.length
+      ? _renderClusters
+      : [{ helix_ids: (design.helices ?? []).map(h => h.id) }]
+    const markers = _buildOverhangMarkers(design, _scanAxes, _markerClusters,
+      store.getState().currentGeometry, helixBp, _hullMeshes)
+    if (markers) { scene.add(markers); _hullReprMeshes.set('__ovhg_markers__', markers) }
   }
 
   function setHullRepr(on) {
     _hullReprActive = !!on
     const { currentDesign, currentHelixAxes } = store.getState()
     _rebuildHullRepr(currentDesign, currentHelixAxes)
+  }
+
+  /** Toggle the per-cluster hull debug overlay (distinct colors + size-% labels,
+   *  excluded clusters shown faint). Rebuilds if hull repr is active. */
+  function setHullClusterDebug(on) {
+    _hullClusterDebug = !!on
+    if (_hullReprActive) {
+      const { currentDesign, currentHelixAxes } = store.getState()
+      _rebuildHullRepr(currentDesign, currentHelixAxes)
+    }
+    return _hullClusterDebug
+  }
+
+  /** Minimum cluster size (dsDNA bp fraction of the whole origami, 0..1) to draw
+   *  a hull prism. Clusters below this are excluded. Rebuilds if active. */
+  function setHullMinSizeFraction(frac) {
+    if (typeof frac === 'number' && frac >= 0 && frac <= 1) _hullMinSizeFraction = frac
+    if (_hullReprActive) {
+      const { currentDesign, currentHelixAxes } = store.getState()
+      _rebuildHullRepr(currentDesign, currentHelixAxes)
+    }
+    return _hullMinSizeFraction
+  }
+
+  /** Hull geometry mode: 'boxes' (per-helix occupancy, default) or 'prism'
+   *  (legacy convex bundle). Optionally set the box fill fraction (0..1).
+   *  Rebuilds if active. */
+  function setHullMode(mode, boxFill) {
+    if (mode === 'boxes' || mode === 'prism' || mode === 'extrusions') _hullMode = mode
+    if (typeof boxFill === 'number' && boxFill > 0 && boxFill <= 1) _occBoxFill = boxFill
+    if (_hullReprActive) {
+      const { currentDesign, currentHelixAxes } = store.getState()
+      _rebuildHullRepr(currentDesign, currentHelixAxes)
+    }
+    return { mode: _hullMode, boxFill: _occBoxFill }
+  }
+
+  /** Extrusion-scan margin in bp — helix ends are rounded to this tick before
+   *  cross-section boundaries are detected (extrusions mode, scan path).
+   *  Larger = coarser segmentation. Rebuilds if active. */
+  function setHullScanTick(bp) {
+    if (typeof bp === 'number' && bp >= 1 && bp <= 128) _hullScanTickBp = bp
+    if (_hullReprActive) {
+      const { currentDesign, currentHelixAxes } = store.getState()
+      _rebuildHullRepr(currentDesign, currentHelixAxes)
+    }
+    return _hullScanTickBp
   }
 
   /**
@@ -1890,7 +2661,7 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     _jointMeshes.clear()
     _jointGroup.parent?.remove(_jointGroup)
     for (const grp of _hullReprMeshes.values()) {
-      grp.traverse(o => { o.geometry?.dispose(); o.material?.dispose() })
+      grp.traverse(o => { o.material?.map?.dispose(); o.geometry?.dispose(); o.material?.dispose() })
       grp.parent?.remove(grp)
     }
     _hullReprMeshes.clear()
@@ -1948,7 +2719,7 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     return result
   }
 
-  return { enterDefineMode, exitDefineMode, setExteriorPanels, setHullSurface, setRegularPolygon, setShowFill, setDebugOverlay, setHullRepr, applyDeformLerp, rebuild, rebuildHulls, highlightJoint, clearHighlight, pickJoint, pickJointRing, pickJointAny, captureClusterBase, applyClusterTransform, setVisible, isVisible, dispose, getPanels }
+  return { enterDefineMode, exitDefineMode, setExteriorPanels, setHullSurface, setRegularPolygon, setShowFill, setDebugOverlay, setHullRepr, setHullClusterDebug, setHullMinSizeFraction, setHullMode, setHullScanTick, applyDeformLerp, rebuild, rebuildHulls, highlightJoint, clearHighlight, pickJoint, pickJointRing, pickJointAny, captureClusterBase, applyClusterTransform, setVisible, isVisible, dispose, getPanels }
 }
 
 // ── Shared geometry utilities — imported by assembly_joint_renderer.js ────────

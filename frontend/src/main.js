@@ -8101,6 +8101,19 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Joint renderer ────────────────────────────────────────────────────────────
   jointRenderer = initJointRenderer(scene, camera, canvas, store, api)
 
+  // Always-available console handle for tuning the hull-prism cluster view
+  // (works in the legacy design view, unlike __NADOC_DBG__ which is gated on
+  // the shared renderer flag).  e.g. nadocHull.minSize(0.05) ; nadocHull.debug(true)
+  window.nadocHull = {
+    debug:   (on = true)  => jointRenderer?.setHullClusterDebug(on),
+    minSize: (frac)       => jointRenderer?.setHullMinSizeFraction(frac),
+    // mode('boxes'|'prism', boxFill?) — boxes (default) keeps inter-helix
+    // grooves; boxFill (0..1) tunes groove width.
+    mode:    (m, fill)    => jointRenderer?.setHullMode(m, fill),
+    // scanTick(bp) — extrusion-scan margin (also on the X-section margin slider).
+    scanTick: (bp)        => jointRenderer?.setHullScanTick(bp),
+  }
+
   // Joint indicators are clickable at any time: clicking one activates the
   // move/rotate tool (if not already active) prepopulated with that joint's
   // cluster + axis, or switches an already-active tool to that joint.
@@ -10995,6 +11008,17 @@ Typical debugging workflow for "reverts to 3D" bug:
       'display', (repr === 'full' || repr === 'beads') ? '' : 'none')
     document.getElementById('repr-cyl-radius-row')?.style.setProperty(
       'display', repr === 'cylinders' ? '' : 'none')
+    document.getElementById('repr-hull-margin-row')?.style.setProperty(
+      'display', repr === 'hull-prism' ? '' : 'none')
+    if (repr === 'hull-prism') {
+      // Sync the slider to the per-lattice default (7 square / 8 honeycomb).
+      const lat = store.getState().currentDesign?.lattice_type
+      const tick = lat === 'HONEYCOMB' ? 8 : 7
+      const sl = document.getElementById('sl-hull-margin')
+      const sv = document.getElementById('sv-hull-margin')
+      if (sl) sl.value = String(tick)
+      if (sv) sv.textContent = String(tick)
+    }
     _setAtomisticSlidersVisible(repr === 'vdw' || repr === 'ballstick')
     _setSurfacePanelVisible(repr === 'surface')
   }
@@ -11032,6 +11056,11 @@ Typical debugging workflow for "reverts to 3D" bug:
       store.setState({ surfaceMode: 'on' })
     } else if (repr === 'hull-prism') {
       _setCGVisible(false)
+      // Per-lattice default scan margin: 7 bp square / 8 bp honeycomb. Set
+      // before activating the hull so the first build uses it (no rebuild yet —
+      // hull repr isn't active until setHullRepr below).
+      const lat = store.getState().currentDesign?.lattice_type
+      jointRenderer?.setHullScanTick(lat === 'HONEYCOMB' ? 8 : 7)
       jointRenderer?.setHullRepr(true)
     }
 
@@ -11101,6 +11130,15 @@ Typical debugging workflow for "reverts to 3D" bug:
     const r = parseFloat(_slCylRadius.value)
     if (_svCylRadius) _svCylRadius.textContent = r.toFixed(2)
     if (_lodMode === 'cylinders') designRenderer.setCylinderRadius(r)
+  })
+
+  // Hull-prism cross-section margin (bp) — granularity of the extrusion scan.
+  const _slHullMargin = document.getElementById('sl-hull-margin')
+  const _svHullMargin = document.getElementById('sv-hull-margin')
+  _slHullMargin?.addEventListener('input', () => {
+    const bp = parseInt(_slHullMargin.value, 10)
+    if (_svHullMargin) _svHullMargin.textContent = String(bp)
+    jointRenderer?.setHullScanTick(bp)
   })
 
   // ── Hide Staples toggle ────────────────────────────────────────────────────────
@@ -12136,6 +12174,21 @@ Typical debugging workflow for "reverts to 3D" bug:
     window.__NADOC_DBG__.toggleLodHud()
     const isOn = !!window.__NADOC_LOD_HUD__
     this.textContent = isOn ? 'Hide LOD HUD' : 'Show LOD HUD'
+  })
+
+  // ── Debug > Hull Cluster Debug ────────────────────────────────────────────────
+  // Colors each hull-prism cluster distinctly, labels it with its dsDNA bp
+  // size-% of the whole origami, and shows clusters below the size threshold
+  // faintly — so the exclusion threshold can be tuned visually. Only meaningful
+  // in the Hull Prism representation (View → Representation → Hull Prism).
+  let _hullClusterDebugOn = false
+  document.getElementById('menu-debug-hull-cluster')?.addEventListener('click', function () {
+    _hullClusterDebugOn = !!jointRenderer?.setHullClusterDebug(!_hullClusterDebugOn)
+    this.textContent = _hullClusterDebugOn ? 'Hide Hull Cluster Debug' : 'Show Hull Cluster Debug'
+    if (_hullClusterDebugOn) {
+      showToast('Hull Cluster Debug on — visible in the Hull Prism representation (View → Representation).',
+        { severity: 'info' })
+    }
   })
 
   // ── Debug > MrDNA Round-Trip Test ────────────────────────────────────────────

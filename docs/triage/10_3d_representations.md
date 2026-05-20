@@ -17,6 +17,16 @@ All 3D rendering modes that display designs in the viewport:
 | Glow / selection | `glow_layer.js` | `selectedObject` |
 | Sequence overlay | `sequence_overlay.js` | `showSequences` |
 | Physics overlay | `physics/displayState.js` | `physicsMode` |
+| Hull Prism (extrusion) | `joint_renderer.js` | (rep `hull-prism`) |
+
+**Hull Prism** is a coarse, distance-readable solid: per-cluster oriented boxes
+reconstructed from the build history (`feature_log` extrusions) or, for imports
+with no history, a cross-section-vs-bp scan at major-tick resolution. It excludes
+ssDNA (dsDNA-trimmed), drops blocks < 5% of total volume, renders solid CAD-grey,
+and carries flat color-coded quads at overhang exits (raycast onto the faces).
+Whole-part / `is_default` clusters and clusters < 10% bp are skipped. Tunables:
+`window.nadocHull` (`mode`/`scanTick`/`minSize`/`debug`) + the X-section margin
+slider; toggle `Help → Debug → Show Hull Cluster Debug`.
 
 **Critical new file**: `crossover_connections.js` — `buildCrossoverConnections(design, geometry)` returns a `THREE.LineSegments` mesh of white lines between crossover backbone positions. Must be added to the scene and rebuilt on every design/geometry change.
 
