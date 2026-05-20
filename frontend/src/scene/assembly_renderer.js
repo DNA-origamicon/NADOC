@@ -2115,7 +2115,7 @@ const _ASSEMBLY_RENDERER_METHODS = [
 const _SHARED_RENDERER_STUB_DEFAULTS = {
   setLiveTransform:               () => undefined,
   getLiveTransform:               () => null,
-  pickInstance:                   () => null,
+  // pickInstance implemented on the shared path (ray-AABB per instance).
   pickInstanceCluster:            () => null,
   pickPartJoint:                  () => null,
   captureInstanceClusterBase:     () => null,
@@ -4158,6 +4158,45 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return out
   }
 
+  // Ray-vs-per-instance-AABB picker.  The shared path can't reuse
+  // THREE.Raycaster.intersectObjects because instanceMatrix is collapsed
+  // to identity (per-instance transforms live in `xformData`, sampled by
+  // the shader).  Walk every visible instance, transform the source's
+  // local bbox by its per-instance world matrix, ray-vs-box test, return
+  // the PartInstance from currentAssembly matching the closest hit.
+  const _pickRaycaster = new THREE.Raycaster()
+  function pickInstance(ndc, camera) {
+    if (_sources.size === 0) return null
+    _pickRaycaster.setFromCamera(ndc, camera)
+    const ray = _pickRaycaster.ray
+    const tmpInst = new THREE.Matrix4()
+    const tmpBox  = new THREE.Box3()
+    const tmpHit  = new THREE.Vector3()
+    let bestDist = Infinity
+    let bestId = null
+    for (const srcEntry of _sources.values()) {
+      const baseBox = srcEntry.instBoundingBox
+      if (!baseBox || baseBox.isEmpty()) continue
+      for (let i = 0; i < srcEntry.instanceIds.length; i++) {
+        if (srcEntry.visibility[i] < 0.5) continue
+        const o = i * 16
+        const e = tmpInst.elements
+        for (let k = 0; k < 16; k++) e[k] = srcEntry.xformData[o + k]
+        tmpBox.copy(baseBox).applyMatrix4(tmpInst)
+        const hit = ray.intersectBox(tmpBox, tmpHit)
+        if (!hit) continue
+        const d = ray.origin.distanceToSquared(hit)
+        if (d < bestDist) {
+          bestDist = d
+          bestId = srcEntry.instanceIds[i]
+        }
+      }
+    }
+    if (!bestId) return null
+    const assembly = store.getState().currentAssembly
+    return assembly?.instances?.find(i => i.id === bestId) ?? null
+  }
+
   /**
    * Per-instance world centers + radii. Called every frame by nav_controller's
    * fly-mode threshold check; must NOT throw or the rAF loop spams the console.
@@ -4227,6 +4266,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     setActiveInstance,
     getBoundingBox,
     getInstanceCenters,
+    pickInstance,
     invalidateInstance,
     applyInlineGeometry,
     onRebuildComplete,

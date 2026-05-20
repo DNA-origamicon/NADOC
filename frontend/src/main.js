@@ -9480,6 +9480,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
     if (newId !== prevId) _assemblySelectedPartJoint = null
     store.setState({ activeInstanceId: newId })
+    // Selecting an instance by click immediately attaches the move/rotate
+    // gizmo so the user can manipulate it without an extra menu step.
+    // Skipped when the click cleared the selection (newId == null).
+    if (newId && newId !== prevId) {
+      await _activateTranslateRotateTool()
+    }
   }
 
   async function _onAssemblyContextMenu(e) {
