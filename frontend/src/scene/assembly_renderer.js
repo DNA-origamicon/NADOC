@@ -72,6 +72,241 @@ import {
   HULL_OPACITY, CROSS_MARGIN, AXIAL_MARGIN, MIN_HC_FACES,
 } from './joint_renderer.js'
 
+// Compute blunt-end + free-strand-terminus + overhang-crossover connectors
+// for ONE instance.  Pure given (design, helixAxes, world matrix); used by
+// both the legacy per-instance path and the shared-instancing path so the
+// "Define Mate" connector candidates are identical regardless of renderer.
+// Returns Array<{ instanceId, instanceName, label, worldPos, worldNorm,
+// localPos, localNorm, clusterId, clusterIds, isBluntEnd }>.
+function _computeInstanceBluntEnds(design, helixAxes, mat4, instId, instName) {
+  const TOL = 0.001
+  const results = []
+  const helices = design?.helices ?? []
+  if (!helices.length) return results
+  helixAxes = helixAxes ?? {}
+
+  const localEps = {}
+  for (const h of helices) {
+    const ax = helixAxes[h.id]
+    localEps[h.id] = {
+      start: ax
+        ? new THREE.Vector3(ax.start[0], ax.start[1], ax.start[2])
+        : new THREE.Vector3(h.axis_start.x, h.axis_start.y, h.axis_start.z),
+      end: ax
+        ? new THREE.Vector3(ax.end[0], ax.end[1], ax.end[2])
+        : new THREE.Vector3(h.axis_end.x, h.axis_end.y, h.axis_end.z),
+    }
+  }
+
+  function _isFree(hId, testPos) {
+    for (const h of helices) {
+      if (h.id === hId) continue
+      const ep = localEps[h.id]
+      if (ep.start.distanceTo(testPos) < TOL) return false
+      if (ep.end.distanceTo(testPos)   < TOL) return false
+    }
+    return true
+  }
+
+  const helixById = new Map(helices.map(h => [h.id, h]))
+  const clusterIdsForHelix = helixId => {
+    const clusters = design?.cluster_transforms ?? []
+    const jointClusterIds = new Set((design?.cluster_joints ?? []).map(j => j.cluster_id).filter(Boolean))
+    return clusters
+      .filter(c => c.helix_ids?.includes(helixId))
+      .sort((a, b) => {
+        const aj = jointClusterIds.has(a.id) ? 0 : 1
+        const bj = jointClusterIds.has(b.id) ? 0 : 1
+        if (aj !== bj) return aj - bj
+        const ad = a.is_default ? 1 : 0
+        const bd = b.is_default ? 1 : 0
+        if (ad !== bd) return ad - bd
+        return (a.helix_ids?.length ?? 0) - (b.helix_ids?.length ?? 0)
+      })
+      .map(c => c.id)
+  }
+
+  function _physLen(h) {
+    const ax = helixAxes[h.id]
+    let nm
+    if (ax) {
+      const dx = ax.end[0] - ax.start[0], dy = ax.end[1] - ax.start[1], dz = ax.end[2] - ax.start[2]
+      nm = Math.sqrt(dx * dx + dy * dy + dz * dz)
+    } else {
+      const dx = h.axis_end.x - h.axis_start.x, dy = h.axis_end.y - h.axis_start.y, dz = h.axis_end.z - h.axis_start.z
+      nm = Math.sqrt(dx * dx + dy * dy + dz * dz)
+    }
+    return Math.max(1, Math.round(nm / BDNA_RISE_PER_BP) + 1)
+  }
+
+  function _posAlongHelix(h, tFrac) {
+    const ax = helixAxes[h.id]
+    if (ax?.samples?.length >= 2) {
+      const n   = ax.samples.length - 1
+      const sf  = tFrac * n
+      const si  = Math.min(Math.floor(sf), n - 1)
+      const sfr = sf - si
+      const sA  = new THREE.Vector3(...ax.samples[si])
+      const sB  = new THREE.Vector3(...ax.samples[si + 1])
+      return { pos: sA.clone().lerp(sB, sfr), dir: sB.clone().sub(sA).normalize() }
+    }
+    const start3 = ax ? new THREE.Vector3(...ax.start) : new THREE.Vector3(h.axis_start.x, h.axis_start.y, h.axis_start.z)
+    const end3   = ax ? new THREE.Vector3(...ax.end)   : new THREE.Vector3(h.axis_end.x,   h.axis_end.y,   h.axis_end.z)
+    return { pos: start3.clone().lerp(end3, tFrac), dir: end3.clone().sub(start3).normalize() }
+  }
+
+  // Per-domain overhang axis lookup (rotated tip positions).
+  const ovhgBpToPos = new Map()
+  for (const [hid, ax] of Object.entries(helixAxes)) {
+    if (!ax?.ovhgAxes) continue
+    for (const ovhgAx of Object.values(ax.ovhgAxes)) {
+      const s3  = new THREE.Vector3(...ovhgAx.start)
+      const e3  = new THREE.Vector3(...ovhgAx.end)
+      const d   = e3.clone().sub(s3)
+      const dl  = d.length()
+      const dir = dl > 0.001 ? d.clone().divideScalar(dl) : new THREE.Vector3(0, 1, 0)
+      ovhgBpToPos.set(`${hid}:${ovhgAx.bp_min}`, { pos: s3, dir, isBpMin: true })
+      ovhgBpToPos.set(`${hid}:${ovhgAx.bp_max}`, { pos: e3, dir, isBpMin: false })
+    }
+  }
+  for (const h of helices) {
+    const ax = helixAxes[h.id]
+    if (!ax?.ovhgAxes) continue
+    const bpStart = h.bp_start ?? 0
+    const bpEnd   = bpStart + _physLen(h) - 1
+    const sOvhg = ovhgBpToPos.get(`${h.id}:${bpStart}`)
+    const eOvhg = ovhgBpToPos.get(`${h.id}:${bpEnd}`)
+    if (sOvhg) localEps[h.id].start = sOvhg.pos.clone()
+    if (eOvhg) localEps[h.id].end   = eOvhg.pos.clone()
+  }
+
+  // ── Free helix endpoints ──────────────────────────────────────────────
+  for (const h of helices) {
+    const ep = localEps[h.id]
+    for (const [localPos, isStart] of [[ep.start, true], [ep.end, false]]) {
+      if (!_isFree(h.id, localPos)) continue
+      const ax = helixAxes[h.id]
+      let localAxisDir
+      if (ax?.samples?.length >= 2) {
+        const n = ax.samples.length
+        const s0 = isStart ? ax.samples[0] : ax.samples[n - 2]
+        const s1 = isStart ? ax.samples[1] : ax.samples[n - 1]
+        localAxisDir = new THREE.Vector3(s1[0] - s0[0], s1[1] - s0[1], s1[2] - s0[2]).normalize()
+      } else {
+        localAxisDir = ep.end.clone().sub(ep.start).normalize()
+      }
+      const localNorm  = isStart ? localAxisDir.clone().negate() : localAxisDir.clone()
+      const worldPos   = localPos.clone().applyMatrix4(mat4)
+      const worldNorm  = localNorm.clone().transformDirection(mat4).normalize()
+      results.push({
+        instanceId: instId, instanceName: instName,
+        label: `blunt:${h.id}:${isStart ? 'start' : 'end'}`,
+        worldPos: [worldPos.x, worldPos.y, worldPos.z],
+        worldNorm: [worldNorm.x, worldNorm.y, worldNorm.z],
+        localPos: [localPos.x, localPos.y, localPos.z],
+        localNorm: [localNorm.x, localNorm.y, localNorm.z],
+        clusterId: clusterIdsForHelix(h.id)[0] ?? null,
+        clusterIds: clusterIdsForHelix(h.id),
+        isBluntEnd: true,
+      })
+    }
+  }
+
+  // ── Interior overhang strand termini ──────────────────────────────────
+  const strands = design?.strands ?? []
+  const seenInterior = new Set()
+  const _covMap = new Map()
+  for (const strand of strands) {
+    for (const d of strand.domains ?? []) {
+      let s = _covMap.get(d.helix_id)
+      if (!s) { s = new Set(); _covMap.set(d.helix_id, s) }
+      const lo = Math.min(d.start_bp, d.end_bp)
+      const hi = Math.max(d.start_bp, d.end_bp)
+      for (let b = lo; b <= hi; b++) s.add(b)
+    }
+  }
+  for (const strand of strands) {
+    const checks = [
+      { helixId: strand.domains?.[0]?.helix_id, bp: strand.domains?.[0]?.start_bp },
+      { helixId: strand.domains?.at(-1)?.helix_id, bp: strand.domains?.at(-1)?.end_bp },
+    ]
+    for (const { helixId, bp } of checks) {
+      if (helixId == null || bp == null) continue
+      const h = helixById.get(helixId)
+      if (!h) continue
+      const key = `${helixId}:${bp}`
+      if (seenInterior.has(key)) continue
+      const physLen = _physLen(h)
+      const localBp = bp - (h.bp_start ?? 0)
+      const tArc    = physLen > 1 ? localBp / (physLen - 1) : 0
+      if (tArc <= 0 || tArc >= 1) continue
+      seenInterior.add(key)
+      const _cov = _covMap.get(helixId)
+      if (_cov?.has(bp - 1) && _cov?.has(bp + 1)) continue
+      const _ovhgPos = ovhgBpToPos.get(`${helixId}:${bp}`)
+      const { pos: localPos, dir: localAxisDir } = _ovhgPos
+        ? { pos: _ovhgPos.pos.clone(), dir: _ovhgPos.dir.clone() }
+        : _posAlongHelix(h, tArc)
+      const localNorm = (_ovhgPos?.isBpMin) ? localAxisDir.clone().negate() : localAxisDir.clone()
+      const worldPos  = localPos.clone().applyMatrix4(mat4)
+      const worldNorm = localNorm.clone().transformDirection(mat4).normalize()
+      results.push({
+        instanceId: instId, instanceName: instName,
+        label: `blunt:${helixId}:bp${bp}`,
+        worldPos: [worldPos.x, worldPos.y, worldPos.z],
+        worldNorm: [worldNorm.x, worldNorm.y, worldNorm.z],
+        localPos: [localPos.x, localPos.y, localPos.z],
+        localNorm: [localNorm.x, localNorm.y, localNorm.z],
+        clusterId: clusterIdsForHelix(helixId)[0] ?? null,
+        clusterIds: clusterIdsForHelix(helixId),
+        isBluntEnd: true,
+      })
+    }
+  }
+
+  // ── Overhang crossover junctions on the main helix ────────────────────
+  const seenXover = new Set()
+  for (const strand of strands) {
+    const doms = strand.domains ?? []
+    for (let i = 0; i < doms.length - 1; i++) {
+      const d0 = doms[i], d1 = doms[i + 1]
+      if (d0.helix_id === d1.helix_id) continue
+      const d0IsOH = d0.overhang_id != null
+      const d1IsOH = d1.overhang_id != null
+      let mainHelixId = null, crossBp = null
+      if (!d0IsOH && d1IsOH) { mainHelixId = d0.helix_id; crossBp = d0.end_bp }
+      else if (d0IsOH && !d1IsOH) { mainHelixId = d1.helix_id; crossBp = d1.start_bp }
+      if (mainHelixId == null) continue
+      const key = `${mainHelixId}:${crossBp}`
+      if (seenXover.has(key) || seenInterior.has(key)) continue
+      const h = helixById.get(mainHelixId)
+      if (!h) continue
+      const physLen = _physLen(h)
+      const localBp = crossBp - (h.bp_start ?? 0)
+      const tX      = physLen > 1 ? localBp / (physLen - 1) : 0
+      if (tX < 0 || tX > 1) continue
+      seenXover.add(key)
+      const { pos: localPos, dir: localAxisDir } = _posAlongHelix(h, tX)
+      const localNorm = localAxisDir.clone()
+      const worldPos  = localPos.clone().applyMatrix4(mat4)
+      const worldNorm = localNorm.clone().transformDirection(mat4).normalize()
+      results.push({
+        instanceId: instId, instanceName: instName,
+        label: `blunt:${mainHelixId}:bp${crossBp}`,
+        worldPos: [worldPos.x, worldPos.y, worldPos.z],
+        worldNorm: [worldNorm.x, worldNorm.y, worldNorm.z],
+        localPos: [localPos.x, localPos.y, localPos.z],
+        localNorm: [localNorm.x, localNorm.y, localNorm.z],
+        clusterId: clusterIdsForHelix(mainHelixId)[0] ?? null,
+        clusterIds: clusterIdsForHelix(mainHelixId),
+        isBluntEnd: true,
+      })
+    }
+  }
+
+  return results
+}
+
 // Maps representation name → setDetailLevel argument (CG reprs only).
 const _CG_LOD = { full: 0, beads: 1, cylinders: 2 }
 
@@ -2123,9 +2358,8 @@ const _SHARED_RENDERER_STUB_DEFAULTS = {
   getInstanceRenderData:          () => null,
   getInstanceBackboneEntries:     () => ({ entries: [], matrixWorld: null }),
   getLabelTable:                  () => [],
-  getInstanceBluntEnds:           () => [],
-  getConnectorClusterId:          () => null,
-  getConnectorClusterIds:         () => [],
+  // getInstanceBluntEnds / getConnectorClusterId / getConnectorClusterIds
+  // implemented on the shared path (blunt-end connectors for Define Mate).
   auditInstanceBox:               () => undefined,
   rebuildLinkers:                 () => Promise.resolve(),
   setPhotoMode:                   () => undefined,
@@ -4328,6 +4562,48 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return mat
   }
 
+  // Blunt-end / free-strand-terminus connectors for every visible instance —
+  // the candidate mate points "Define Mate" shows.  Uses the shared
+  // `_computeInstanceBluntEnds` helper with each source's design + helixAxes
+  // and the per-instance world matrix read from xformData.  (Stubbed before;
+  // that's why Define Mate showed nothing on the shared path.)
+  function getInstanceBluntEnds() {
+    const assembly = store.getState().currentAssembly
+    if (!assembly) return []
+    const out = []
+    const mat = new THREE.Matrix4()
+    for (const srcEntry of _sources.values()) {
+      const design = srcEntry.design
+      const helixAxes = srcEntry.helixAxes ?? {}
+      if (!design?.helices?.length) continue
+      for (let i = 0; i < srcEntry.instanceIds.length; i++) {
+        if (srcEntry.visibility[i] < 0.5) continue
+        const instId = srcEntry.instanceIds[i]
+        const inst = assembly.instances?.find(x => x.id === instId)
+        if (!inst || inst.visible === false) continue
+        const off = i * 16
+        const e = mat.elements
+        for (let k = 0; k < 16; k++) e[k] = srcEntry.xformData[off + k]
+        const instName = inst.name ?? instId.slice(0, 6)
+        const ends = _computeInstanceBluntEnds(design, helixAxes, mat, instId, instName)
+        for (const be of ends) out.push(be)
+      }
+    }
+    return out
+  }
+
+  function getConnectorClusterId(instanceId, label) {
+    if (!instanceId || !label) return null
+    const c = getInstanceBluntEnds().find(x => x.instanceId === instanceId && x.label === label)
+    return c?.clusterId ?? null
+  }
+
+  function getConnectorClusterIds(instanceId, label) {
+    if (!instanceId || !label) return []
+    const c = getInstanceBluntEnds().find(x => x.instanceId === instanceId && x.label === label)
+    return c?.clusterIds?.length ? c.clusterIds : (c?.clusterId ? [c.clusterId] : [])
+  }
+
   // Ray-vs-per-instance-ORIENTED-box picker.  The shared path can't reuse
   // THREE.Raycaster.intersectObjects because instanceMatrix is collapsed
   // to identity (per-instance transforms live in `xformData`, sampled by
@@ -4448,6 +4724,9 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     pickInstance,
     setLiveTransform,
     getLiveTransform,
+    getInstanceBluntEnds,
+    getConnectorClusterId,
+    getConnectorClusterIds,
     invalidateInstance,
     applyInlineGeometry,
     onRebuildComplete,

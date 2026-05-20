@@ -7388,7 +7388,14 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   function _defineAssemblyMate() {
-    _syncAssemblyBluntEnds()
+    // Always feed blunt-end connectors in mate mode regardless of the
+    // ambient "blunt ends" tool-filter — they're the mate-point candidates
+    // the user needs to pick.  (_syncAssemblyBluntEnds gates on the filter,
+    // which is for normal-view display only.)
+    const bluntEnds = store.getState().assemblyActive
+      ? (assemblyRenderer.getInstanceBluntEnds?.() ?? [])
+      : []
+    assemblyJointRenderer.setExtraConnectors(bluntEnds)
     assemblyJointRenderer.enterMateDefineMode(
       () => {},
       (id, mat) => assemblyRenderer.setLiveTransform(id, mat),
@@ -8833,7 +8840,19 @@ Typical debugging workflow for "reverts to 3D" bug:
           // instead of disposing + re-fetching geometry — avoids the whole
           // assembly blinking out and re-rendering.  Joint indicators are
           // cheap, so we still rebuild those to track moved anchors.
+          //
+          // Push ONLY instances whose transform actually changed.  A
+          // connector-register / joint-add response carries unchanged
+          // transforms; pushing all of them would snap a live mate preview
+          // back to the stored pose (the "moves three times" jank) and
+          // re-pack every row for nothing.  Diffing prev→next keeps the moved
+          // part (and its FK children) live and leaves the rest untouched.
+          const _prevById = new Map(
+            (prevState.currentAssembly?.instances ?? []).map(i => [i.id, i]),
+          )
           for (const inst of newState.currentAssembly.instances) {
+            const prev = _prevById.get(inst.id)
+            if (prev && _sameInstanceTransform(prev, inst)) continue
             assemblyRenderer.setLiveTransform(inst.id, _matrixFromInstance(inst))
           }
           assemblyJointRenderer.rebuild(newState.currentAssembly)
@@ -8939,6 +8958,15 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   function _matrixFromInstance(inst) {
     return new THREE.Matrix4().fromArray(inst.transform.values).transpose()
+  }
+
+  // Element-wise compare of two instances' 4×4 transform value arrays.
+  // Missing / mismatched arrays → treated as changed (safe: forces a push).
+  function _sameInstanceTransform(a, b) {
+    const av = a?.transform?.values, bv = b?.transform?.values
+    if (!av || !bv || av.length !== bv.length) return false
+    for (let i = 0; i < av.length; i++) if (av[i] !== bv[i]) return false
+    return true
   }
 
   // True when prev → next differs ONLY in per-instance transforms (same
