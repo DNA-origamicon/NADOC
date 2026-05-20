@@ -613,8 +613,13 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
 
     const title = document.createElement('div')
     title.textContent = 'DEFINE MATE'
-    title.style.cssText = 'font-size:11px;font-weight:600;color:#c9d1d9;margin-bottom:10px;letter-spacing:.04em;'
+    title.style.cssText = 'font-size:11px;font-weight:600;color:#c9d1d9;margin-bottom:6px;letter-spacing:.04em;'
     panel.appendChild(title)
+
+    const hint = document.createElement('div')
+    hint.textContent = 'Pick the part to MOVE first (child), then the part it mates to (parent stays put).'
+    hint.style.cssText = 'font-size:var(--text-xs);color:#6e7681;margin-bottom:10px;line-height:1.4;'
+    panel.appendChild(hint)
 
     function makeSelect(includeWorld, selId) {
       const sel = document.createElement('select')
@@ -651,6 +656,12 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     const parentSel = makeSelect(true,  '_mate-parent-sel')
     panel.appendChild(labelledRow('Child Connector',  childSel))
     panel.appendChild(labelledRow('Parent Connector', parentSel))
+
+    // Live "which part moves" status — updated as connectors are picked.
+    const moveInfo = document.createElement('div')
+    moveInfo.id = '_mate-move-info'
+    moveInfo.style.cssText = 'font-size:var(--text-xs);margin:0 0 9px;line-height:1.4;min-height:14px;color:#6e7681;'
+    panel.appendChild(moveInfo)
 
     // Invert toggle
     const invertRow = document.createElement('div')
@@ -740,12 +751,14 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     childSel.addEventListener('change', () => {
       _mateFirst = _connectorDataMap.get(childSel.value) ?? null
       _resetConnectorColors()
+      _updateMateMoveInfo()
       _applyPreview()
     })
     parentSel.addEventListener('change', () => {
       const val = parentSel.value
       _mateSecond = val === '__world__' ? null : (_connectorDataMap.get(val) ?? undefined)
       _resetConnectorColors()
+      _updateMateMoveInfo()
       _applyPreview()
     })
     invertCb.addEventListener('change', () => _applyPreview())
@@ -861,6 +874,39 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       }
     }
     _previewInstanceId = null
+  }
+
+  // Describe which part moves vs stays, given the current child/parent picks +
+  // their `fixed` flags. The child moves to the parent; if the child is pinned
+  // the parent moves instead; if both are pinned, neither can. Mirrors the
+  // decision in `_computeAlignTransform`.
+  function _updateMateMoveInfo() {
+    const el = _mateSidebarEl?.querySelector('#_mate-move-info')
+    if (!el) return
+    const asm = store.getState().currentAssembly
+    const nameOf  = (id, fb) => asm?.instances?.find(i => i.id === id)?.name ?? fb ?? '?'
+    const fixedOf = (id)     => asm?.instances?.find(i => i.id === id)?.fixed ?? false
+    let text = 'Pick the connector on the part you want to MOVE.', color = '#6e7681'
+    if (_mateFirst) {
+      const childName = nameOf(_mateFirst.instanceId, _mateFirst.instanceLabel)
+      if (_mateSecond === undefined) {
+        text = `“${childName}” will move — now pick the connector it mates to.`; color = '#58a6ff'
+      } else if (_mateSecond === null) {
+        text = `“${childName}” will be anchored in place (mated to World).`; color = '#58a6ff'
+      } else {
+        const parentName = nameOf(_mateSecond.instanceId, _mateSecond.instanceLabel)
+        const cFixed = fixedOf(_mateFirst.instanceId), pFixed = fixedOf(_mateSecond.instanceId)
+        if (cFixed && pFixed) {
+          text = `⚠ Both “${childName}” and “${parentName}” are pinned — neither can move.`; color = '#d29922'
+        } else if (cFixed) {
+          text = `“${parentName}” will MOVE  ·  “${childName}” stays fixed (pinned).`; color = '#3fb950'
+        } else {
+          text = `“${childName}” will MOVE  ·  “${parentName}” stays fixed.`; color = '#3fb950'
+        }
+      }
+    }
+    el.textContent = text
+    el.style.color = color
   }
 
   function _applyPreview() {
@@ -1104,6 +1150,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     }
     _resetConnectorColors()
     _syncDropdownsToState()
+    _updateMateMoveInfo()
     _applyPreview()
   }
 
@@ -1146,6 +1193,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       if (toolFilter) toolFilter.after(_mateSidebarEl)
       else document.body.appendChild(_mateSidebarEl)
     }
+    _updateMateMoveInfo()   // seed the "pick a connector to move" prompt
 
     canvas.style.cursor = 'crosshair'
     canvas.addEventListener('pointerdown',  _onMatePointerDown)
