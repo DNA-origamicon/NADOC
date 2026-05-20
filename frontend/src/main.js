@@ -8753,6 +8753,11 @@ Typical debugging workflow for "reverts to 3D" bug:
               // frame when the PATCH response lands).
               _applyAssemblyLoadDefaults(newState.currentAssembly)
               _syncAssemblyReprMenu(newState.currentAssembly)
+              // Fit camera AFTER the renderer has built — the assembly
+              // bounding box is empty until then.  Earlier callers (the
+              // _openAssemblyFromServer path) ran _fitToView() before this
+              // subscriber's rebuild finished, so the camera stayed put.
+              _fitToView()
             })
           assemblyJointRenderer.rebuild(newState.currentAssembly)
         }
