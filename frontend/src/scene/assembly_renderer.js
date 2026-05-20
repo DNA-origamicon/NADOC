@@ -2113,9 +2113,8 @@ const _ASSEMBLY_RENDERER_METHODS = [
  * feature degrades gracefully: no linker meshes, no per-instance pick, etc.
  */
 const _SHARED_RENDERER_STUB_DEFAULTS = {
-  setLiveTransform:               () => undefined,
-  getLiveTransform:               () => null,
-  // pickInstance implemented on the shared path (ray-AABB per instance).
+  // setLiveTransform / getLiveTransform / pickInstance now implemented
+  // on the shared path; kept out of the stub list.
   pickInstanceCluster:            () => null,
   pickPartJoint:                  () => null,
   captureInstanceClusterBase:     () => null,
@@ -4158,6 +4157,44 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return out
   }
 
+  // Live-drag transform writer.  Gizmo drag callbacks push a new world
+  // matrix per affected instance via `setLiveTransform(id, mat)`; we write
+  // its column-major elements straight into `xformData` at the instance's
+  // row and mark the per-source xform texture dirty so the GPU sees it
+  // next frame.  No bbox / collision re-derivation here — the per-frame
+  // LOD sort picks the new positions up automatically.
+  function setLiveTransform(instanceId, matrix4) {
+    if (!instanceId || !matrix4) return
+    const srcKey = _instToSrc.get(instanceId)
+    if (!srcKey) return
+    const srcEntry = _sources.get(srcKey)
+    if (!srcEntry) return
+    const row = srcEntry.instanceIndex.get(instanceId)
+    if (row == null) return
+    _packMatrixIntoRow(matrix4, srcEntry.xformData, row * 16)
+    // Full texture re-upload.  The per-row texSubImage2D optimisation in
+    // `_installDirtyUploader` is gated on activeMeshes.length > 0 (the
+    // hook attaches to the first close-LOD mesh); for cylinders-rep
+    // sources activeMeshes is empty so the optimisation wouldn't fire.
+    // Full upload of a 4×N RGBA32F texture is tiny (~64 bytes/instance)
+    // and works uniformly across LODs.
+    srcEntry.xformTex.needsUpdate = true
+  }
+
+  function getLiveTransform(instanceId) {
+    if (!instanceId) return null
+    const srcKey = _instToSrc.get(instanceId)
+    if (!srcKey) return null
+    const srcEntry = _sources.get(srcKey)
+    if (!srcEntry) return null
+    const row = srcEntry.instanceIndex.get(instanceId)
+    if (row == null) return null
+    const mat = new THREE.Matrix4()
+    const off = row * 16
+    for (let k = 0; k < 16; k++) mat.elements[k] = srcEntry.xformData[off + k]
+    return mat
+  }
+
   // Ray-vs-per-instance-AABB picker.  The shared path can't reuse
   // THREE.Raycaster.intersectObjects because instanceMatrix is collapsed
   // to identity (per-instance transforms live in `xformData`, sampled by
@@ -4267,6 +4304,8 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     getBoundingBox,
     getInstanceCenters,
     pickInstance,
+    setLiveTransform,
+    getLiveTransform,
     invalidateInstance,
     applyInlineGeometry,
     onRebuildComplete,
