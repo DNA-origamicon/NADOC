@@ -3751,6 +3751,13 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     _instToSrc.clear()
     _prefetchedByPath.clear()
     _activeInstanceId = null
+    // Tear down the selection outline.
+    if (_activeBoxHelper) {
+      scene.remove(_activeBoxHelper)
+      _activeBoxHelper.geometry?.dispose()
+      _activeBoxHelper.material?.dispose()
+      _activeBoxHelper = null
+    }
   }
 
   // ── Texture upload — dirty rows only ──────────────────────────────────────
@@ -3930,6 +3937,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       srcEntry.uActiveIdxUniform.value = -1
     }
     _activeInstanceId = id ?? null
+    _refreshActiveBox()
     if (!id) return
     const srcKey = _instToSrc.get(id)
     if (!srcKey) return
@@ -3939,6 +3947,37 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     const idx = srcEntry.instanceIndex.get(id)
     if (idx == null) return
     srcEntry.uActiveIdxUniform.value = idx
+  }
+
+  // Selection outline — a white Box3Helper around the active instance's
+  // world-space bounding box.  Mirrors the legacy per-instance renderer's
+  // _attachBoxHelper.  Reuses a single helper + box object: Box3Helper
+  // reads `this.box` in updateMatrixWorld, so mutating the box's min/max
+  // makes the outline follow gizmo drags (we re-derive it in
+  // setLiveTransform).  Hidden when there's no active instance.
+  let _activeBoxHelper = null
+  const _activeBoxObj = new THREE.Box3()
+  const _activeBoxMat = new THREE.Matrix4()
+  function _refreshActiveBox() {
+    const srcKey   = _activeInstanceId ? _instToSrc.get(_activeInstanceId) : null
+    const srcEntry = srcKey ? _sources.get(srcKey) : null
+    const row      = srcEntry ? srcEntry.instanceIndex.get(_activeInstanceId) : null
+    const baseBox  = srcEntry?.instBoundingBox
+    if (row == null || !baseBox || baseBox.isEmpty()) {
+      if (_activeBoxHelper) _activeBoxHelper.visible = false
+      return
+    }
+    const off = row * 16
+    const e = _activeBoxMat.elements
+    for (let k = 0; k < 16; k++) e[k] = srcEntry.xformData[off + k]
+    _activeBoxObj.copy(baseBox).applyMatrix4(_activeBoxMat)
+    if (!_activeBoxHelper) {
+      _activeBoxHelper = new THREE.Box3Helper(_activeBoxObj, 0xffffff)
+      _activeBoxHelper.frustumCulled = false
+      scene.add(_activeBoxHelper)
+    }
+    _activeBoxHelper.visible = true
+    _activeBoxHelper.updateMatrixWorld(true)
   }
 
   // ── Public: updateStrandColor ─────────────────────────────────────────────
@@ -4179,6 +4218,8 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // Full upload of a 4×N RGBA32F texture is tiny (~64 bytes/instance)
     // and works uniformly across LODs.
     srcEntry.xformTex.needsUpdate = true
+    // Keep the selection outline glued to the part as it drags.
+    if (instanceId === _activeInstanceId) _refreshActiveBox()
   }
 
   function getLiveTransform(instanceId) {
