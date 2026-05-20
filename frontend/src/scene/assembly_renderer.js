@@ -3752,12 +3752,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     _prefetchedByPath.clear()
     _activeInstanceId = null
     // Tear down the selection outline.
-    if (_activeBoxHelper) {
-      scene.remove(_activeBoxHelper)
-      _activeBoxHelper.geometry?.dispose()
-      _activeBoxHelper.material?.dispose()
-      _activeBoxHelper = null
-    }
+    _disposeActiveBox()
   }
 
   // ── Texture upload — dirty rows only ──────────────────────────────────────
@@ -3949,15 +3944,27 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     srcEntry.uActiveIdxUniform.value = idx
   }
 
-  // Selection outline — a white Box3Helper around the active instance's
-  // world-space bounding box.  Mirrors the legacy per-instance renderer's
-  // _attachBoxHelper.  Reuses a single helper + box object: Box3Helper
-  // reads `this.box` in updateMatrixWorld, so mutating the box's min/max
-  // makes the outline follow gizmo drags (we re-derive it in
-  // setLiveTransform).  Hidden when there's no active instance.
+  // Selection outline — an ORIENTED white box hugging the active instance.
+  // We draw the source's LOCAL bounding box edges and apply the instance's
+  // world transform as the line object's matrix, so the outline rotates
+  // with the part instead of using an inflated world-space AABB (a rotated
+  // hinge's AABB can be ~50 % larger than its true footprint, which made
+  // the selection look like it wrapped neighbouring instances in densely-
+  // packed assemblies).  The edge geometry is rebuilt only when the active
+  // source changes; per-frame / per-drag updates just re-copy the matrix.
   let _activeBoxHelper = null
-  const _activeBoxObj = new THREE.Box3()
+  let _activeBoxSrcKey = null
   const _activeBoxMat = new THREE.Matrix4()
+
+  function _disposeActiveBox() {
+    if (!_activeBoxHelper) return
+    scene.remove(_activeBoxHelper)
+    _activeBoxHelper.geometry?.dispose()
+    _activeBoxHelper.material?.dispose()
+    _activeBoxHelper = null
+    _activeBoxSrcKey = null
+  }
+
   function _refreshActiveBox() {
     const srcKey   = _activeInstanceId ? _instToSrc.get(_activeInstanceId) : null
     const srcEntry = srcKey ? _sources.get(srcKey) : null
@@ -3967,17 +3974,35 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       if (_activeBoxHelper) _activeBoxHelper.visible = false
       return
     }
+    // Rebuild local-box edges when the active instance belongs to a new
+    // source (different part → different local bbox dimensions).
+    if (!_activeBoxHelper || _activeBoxSrcKey !== srcKey) {
+      _disposeActiveBox()
+      const size = new THREE.Vector3();   baseBox.getSize(size)
+      const center = new THREE.Vector3(); baseBox.getCenter(center)
+      const boxGeo = new THREE.BoxGeometry(
+        Math.max(size.x, 1e-3), Math.max(size.y, 1e-3), Math.max(size.z, 1e-3),
+      )
+      boxGeo.translate(center.x, center.y, center.z)
+      const edges = new THREE.EdgesGeometry(boxGeo)
+      boxGeo.dispose()
+      _activeBoxHelper = new THREE.LineSegments(
+        edges, new THREE.LineBasicMaterial({ color: 0xffffff }),
+      )
+      _activeBoxHelper.matrixAutoUpdate = false
+      _activeBoxHelper.frustumCulled = false
+      scene.add(_activeBoxHelper)
+      _activeBoxSrcKey = srcKey
+    }
+    // Orient the box to the instance's world transform (the same matrix the
+    // shader samples for this row).  matrixAutoUpdate=false so we set the
+    // matrix directly; flag matrixWorld for recompute next render.
     const off = row * 16
     const e = _activeBoxMat.elements
     for (let k = 0; k < 16; k++) e[k] = srcEntry.xformData[off + k]
-    _activeBoxObj.copy(baseBox).applyMatrix4(_activeBoxMat)
-    if (!_activeBoxHelper) {
-      _activeBoxHelper = new THREE.Box3Helper(_activeBoxObj, 0xffffff)
-      _activeBoxHelper.frustumCulled = false
-      scene.add(_activeBoxHelper)
-    }
+    _activeBoxHelper.matrix.copy(_activeBoxMat)
+    _activeBoxHelper.matrixWorldNeedsUpdate = true
     _activeBoxHelper.visible = true
-    _activeBoxHelper.updateMatrixWorld(true)
   }
 
   // ── Public: updateStrandColor ─────────────────────────────────────────────
