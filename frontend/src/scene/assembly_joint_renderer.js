@@ -1067,44 +1067,17 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     // full opacity / solid.
     _updateConnectorVisibility(hovered)
 
-    // ── Live ghost preview during the 2nd-connector pick ────────────────────
-    // After the user has clicked the first connector, hovering over a candidate
-    // second connector renders a transient preview of where instance_b will
-    // land. Settles on the actual pick when the user clicks. Gated by the
-    // existing Preview checkbox so users can disable the noise.
-    if (_mateFirst && _mateSecond === undefined) {
-      const previewOn = _mateSidebarEl?.querySelector('#_mate-preview-cb')?.checked ?? true
-      if (!previewOn) { if (_previewInstanceId) _clearPreview(); return }
-      // Don't preview when hovering the first connector itself.
-      const isHoverFirst = hovered &&
-        hovered.userData.instanceId === _mateFirst.instanceId &&
-        hovered.userData.label      === _mateFirst.label
-      if (!hovered || isHoverFirst) { if (_previewInstanceId) _clearPreview(); return }
-      const cand = _connectorDataMap.get(`${hovered.userData.instanceId}::${hovered.userData.label}`)
-      if (!cand) { if (_previewInstanceId) _clearPreview(); return }
-      // Use the live sidebar settings so invert / jointType / fixedAngleDeg
-      // feed into the preview math just like the post-pick path does.
-      const type          = _mateSidebarEl?.querySelector('#_mate-type-sel')?.value ?? 'rigid'
-      const invert        = _mateSidebarEl?.querySelector('#_mate-invert-cb')?.checked ?? false
-      const fixedAngleDeg = type === 'rigid'
-        ? (parseFloat(_mateSidebarEl?.querySelector('#_mate-fixed-angle')?.value ?? 0) || 0) : 0
-      const result = _computeAlignTransform(_mateFirst, cand, { invert, fixedAngleDeg, jointType: type })
-      if (!result || !_onLivePreview) { if (_previewInstanceId) _clearPreview(); return }
-      if (_previewInstanceId && _previewInstanceId !== result.instanceId) _clearPreview()
-      _previewInstanceId = result.instanceId
-      _onLivePreview(result.instanceId, result.matrix)
-    }
+    // No hover preview: the part only previews its mated pose AFTER the user
+    // commits the second connector (via click or the parent dropdown), handled
+    // by _onMateClick / parentSel → _applyPreview.  Merely hovering candidates
+    // must not move anything.
   }
 
   function _onMatePointerLeave() {
     // Cursor left the canvas — drop the Gaussian boost so the indicators
-    // settle back to their camera-distance base opacity, and clear any
-    // hover-driven ghost preview from the 2nd-connector pick phase.
+    // settle back to their camera-distance base opacity.
     _mateCursorPx = null
-    if (_mateMode) {
-      _updateConnectorVisibility(null)
-      if (_mateFirst && _mateSecond === undefined && _previewInstanceId) _clearPreview()
-    }
+    if (_mateMode) _updateConnectorVisibility(null)
   }
 
   function _onMateClick(e) {
