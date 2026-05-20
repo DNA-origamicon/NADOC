@@ -107,13 +107,18 @@ export function initNavController({
     const k = e.key.toLowerCase()
     if (k === 'shift') { _keys.add('shift'); return }
     if (['w', 'a', 's', 'd'].includes(k)) {
-      _keys.add(k)
-      // Prevent text-cursor / shortcut conflicts.  Modifiers (Ctrl/Meta)
-      // still fall through so Ctrl+S etc. work.
-      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault()
-        e.stopPropagation()
+      // With a modifier held this is a shortcut (e.g. Ctrl+S = Save), not a
+      // movement key.  Don't register it for panning — and drop any in-progress
+      // hold so the camera doesn't keep drifting if a modifier is pressed
+      // mid-pan — then let the event fall through to the shortcut handler
+      // (no preventDefault, so Ctrl+S still saves).
+      if (e.ctrlKey || e.metaKey || e.altKey) {
+        _keys.delete(k)
+        return
       }
+      _keys.add(k)
+      e.preventDefault()
+      e.stopPropagation()
     }
   }
 
