@@ -314,6 +314,51 @@ def test_polymerize_new_joints_preserve_type_and_connector_labels():
         assert jt["connector_b_label"] == "front"
 
 
+def test_polymerize_propagates_mate_relative_transform():
+    """Regression: polymerized rigid mates must inherit the seed's
+    ``mate_relative_transform``.
+
+    Without it the field defaults to None and ``resolve_assembly`` falls back
+    to a translation-only snap — the chain resolves POSITION but not
+    ORIENTATION (reported on ``20 hinge test.nass``). The hand-created seed
+    mate captures the full SE3 relative frame; every clone replicates the same
+    mate between identical parts, so it must carry the same transform.
+    """
+    design = _rod_design()
+    inst_a = _rod_instance("inst-A", "Rod A", design, _translation(0.0, 0.0, 0.0))
+    inst_b = _rod_instance("inst-B", "Rod B", design, _translation(0.0, 0.0, 10.0))
+    # A deliberately non-identity relative frame (90° about Z + offset), the
+    # kind create_mate captures from live connector frames.
+    mate_rel = [
+        0.0, -1.0, 0.0, 0.0,
+        1.0,  0.0, 0.0, 0.0,
+        0.0,  0.0, 1.0, 5.0,
+        0.0,  0.0, 0.0, 1.0,
+    ]
+    joint = AssemblyJoint(
+        id="joint-AB", name="AB", joint_type="rigid",
+        instance_a_id="inst-A", instance_b_id="inst-B",
+        axis_origin=[0.0, 0.0, 10.0], axis_direction=[0.0, 0.0, 1.0],
+        current_value=0.0,
+        connector_a_label="back", connector_b_label="front",
+        mate_relative_transform=mate_rel,
+    )
+    assembly_state.set_assembly(Assembly(instances=[inst_a, inst_b], joints=[joint]))
+    r = client.post("/api/assembly/polymerize", json={
+        "joint_id": "joint-AB", "count": 4, "direction": "forward",
+    })
+    assert r.status_code == 200
+    asm = assembly_state.get_or_404()
+    new_joints = [j for j in asm.joints if j.id != "joint-AB"]
+    assert len(new_joints) == 2
+    for j in new_joints:
+        assert j.mate_relative_transform is not None, (
+            "polymerized joint dropped mate_relative_transform → resolve would "
+            "snap position only, not orientation"
+        )
+        assert j.mate_relative_transform == mate_rel
+
+
 def test_polymerize_feature_log_entry():
     _, jid = _seed_two_rod_assembly()
     r = client.post("/api/assembly/polymerize", json={

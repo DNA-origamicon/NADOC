@@ -4319,6 +4319,10 @@ def polymerize_assembly(body: PolymerizeAssemblyRequest) -> dict:
             max_limit=joint.max_limit,
             connector_a_label=joint.connector_a_label,
             connector_b_label=joint.connector_b_label,
+            # Replicate the seed mate's full SE3 relative frame so resolve does
+            # an orientation-aware snap (not just translation). Without this,
+            # polymerized rigid mates resolved POSITION but not ORIENTATION.
+            mate_relative_transform=joint.mate_relative_transform,
         )
         new_instances.append(new_inst)
         new_joints.append(new_jt)
@@ -4385,6 +4389,10 @@ def polymerize_assembly(body: PolymerizeAssemblyRequest) -> dict:
             max_limit=joint.max_limit,
             connector_a_label=joint.connector_a_label,
             connector_b_label=joint.connector_b_label,
+            # Replicate the seed mate's full SE3 relative frame so resolve does
+            # an orientation-aware snap (not just translation). Without this,
+            # polymerized rigid mates resolved POSITION but not ORIENTATION.
+            mate_relative_transform=joint.mate_relative_transform,
         )
         new_instances.append(new_inst)
         new_joints.append(new_jt)
@@ -4485,6 +4493,10 @@ def polymerize_assembly(body: PolymerizeAssemblyRequest) -> dict:
                 max_limit=pm.max_limit,
                 connector_a_label=pm.connector_a_label,
                 connector_b_label=pm.connector_b_label,
+                # Replicate the intra-unit mate's full SE3 relative frame so
+                # resolve snaps orientation, not just position (see primary
+                # chain joints above).
+                mate_relative_transform=pm.mate_relative_transform,
             ))
         for step_idx in range(1, back_max + 1):
             new_a_id = _clone_id_backward(pm.instance_a_id, step_idx)
@@ -4507,6 +4519,10 @@ def polymerize_assembly(body: PolymerizeAssemblyRequest) -> dict:
                 max_limit=pm.max_limit,
                 connector_a_label=pm.connector_a_label,
                 connector_b_label=pm.connector_b_label,
+                # Replicate the intra-unit mate's full SE3 relative frame so
+                # resolve snaps orientation, not just position (see primary
+                # chain joints above).
+                mate_relative_transform=pm.mate_relative_transform,
             ))
 
     mutated = assembly.model_copy(update={
