@@ -4328,19 +4328,24 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return mat
   }
 
-  // Ray-vs-per-instance-AABB picker.  The shared path can't reuse
+  // Ray-vs-per-instance-ORIENTED-box picker.  The shared path can't reuse
   // THREE.Raycaster.intersectObjects because instanceMatrix is collapsed
   // to identity (per-instance transforms live in `xformData`, sampled by
-  // the shader).  Walk every visible instance, transform the source's
-  // local bbox by its per-instance world matrix, ray-vs-box test, return
-  // the PartInstance from currentAssembly matching the closest hit.
+  // the shader).  We test the source's LOCAL bbox in each instance's own
+  // frame: transform the camera ray by the inverse instance matrix, then
+  // ray-vs-(axis-aligned local box).  This is an oriented-box test in
+  // world space — far tighter than a world-space AABB, which for rotated
+  // hinges balloons ~50 % and makes adjacent instances' boxes overlap so
+  // a click on one selects its neighbour/duplicate.  Returns the closest
+  // hit (distance measured in world space).
   const _pickRaycaster = new THREE.Raycaster()
   function pickInstance(ndc, camera) {
     if (_sources.size === 0) return null
     _pickRaycaster.setFromCamera(ndc, camera)
-    const ray = _pickRaycaster.ray
+    const worldRay = _pickRaycaster.ray
     const tmpInst = new THREE.Matrix4()
-    const tmpBox  = new THREE.Box3()
+    const tmpInv  = new THREE.Matrix4()
+    const localRay = new THREE.Ray()
     const tmpHit  = new THREE.Vector3()
     let bestDist = Infinity
     let bestId = null
@@ -4352,10 +4357,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         const o = i * 16
         const e = tmpInst.elements
         for (let k = 0; k < 16; k++) e[k] = srcEntry.xformData[o + k]
-        tmpBox.copy(baseBox).applyMatrix4(tmpInst)
-        const hit = ray.intersectBox(tmpBox, tmpHit)
+        // Ray into instance-local space, then test the local AABB.
+        tmpInv.copy(tmpInst).invert()
+        localRay.copy(worldRay).applyMatrix4(tmpInv)
+        const hit = localRay.intersectBox(baseBox, tmpHit)
         if (!hit) continue
-        const d = ray.origin.distanceToSquared(hit)
+        // hit is local; bring it back to world for a comparable distance.
+        tmpHit.applyMatrix4(tmpInst)
+        const d = worldRay.origin.distanceToSquared(tmpHit)
         if (d < bestDist) {
           bestDist = d
           bestId = srcEntry.instanceIds[i]
