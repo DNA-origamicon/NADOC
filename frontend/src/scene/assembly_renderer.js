@@ -2625,6 +2625,36 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return out
   }
 
+  // Compute a source's LOCAL bounding box from the actually-rendered
+  // shared-LOD cylinder matrices (mid + overhang).  Each LOD's
+  // `segXformData` holds one column-major mat4 per segment at float offset
+  // i*16 (2D-tiling preserves byte order).  Transform the unit cylinder /
+  // half-cylinder geometry box by each segment matrix and union.  Bounds
+  // exactly what's drawn — unlike _computeSourceLocalBox which used the
+  // legacy (un-drawn) bp meshes.
+  function _computeLodLocalBox(midLod, overhangLod) {
+    const out = new THREE.Box3()
+    const tmpMat = new THREE.Matrix4()
+    const tmpBox = new THREE.Box3()
+    if (!_LOD_CYL_GEO.boundingBox) _LOD_CYL_GEO.computeBoundingBox()
+    if (!_LOD_HALF_CYL_GEO.boundingBox) _LOD_HALF_CYL_GEO.computeBoundingBox()
+    const addLod = (lod, geoBox) => {
+      if (!lod?.segXformData || !geoBox) return
+      const data = lod.segXformData
+      for (let i = 0; i < lod.numSegments; i++) {
+        const off = i * 16
+        const e = tmpMat.elements
+        for (let k = 0; k < 16; k++) e[k] = data[off + k]
+        if (e[15] < 0.5) continue
+        tmpBox.copy(geoBox).applyMatrix4(tmpMat)
+        out.union(tmpBox)
+      }
+    }
+    addLod(midLod, _LOD_CYL_GEO.boundingBox)
+    addLod(overhangLod, _LOD_HALF_CYL_GEO.boundingBox)
+    return out
+  }
+
   // ── Build one source entry ────────────────────────────────────────────────
   async function _buildSource(srcKey, srcDesignData, instancesForKey) {
     const { nucleotides, helix_axes, design } = srcDesignData
@@ -2793,7 +2823,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     if (legacyHelixCylMesh && (legacyHelixCylMesh.userData.sharedBase ?? 0) > 0) {
       const origCount = legacyHelixCylMesh.userData.sharedBase
       legacyHelixCylMesh.count = origCount
-      const midLod = _buildMidLodMesh(srcEntry, design, helix_axes, legacyHelixCylMesh, helixGroup)
+      const midLod = _buildMidLodMesh(srcEntry, design, legacyHelixCylMesh, helixGroup)
       legacyHelixCylMesh.count = 0
       if (midLod) {
         srcEntry.midLod = midLod
@@ -2817,6 +2847,19 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         console.warn('[shared_renderer]   _buildOverhangLodMesh returned null')
       }
     }
+    // Recompute the source's local bbox from the ACTUAL rendered shared-LOD
+    // cylinders (mid + overhang) rather than the legacy iHelixCylinders /
+    // iOverhangCylinders bp meshes.  The legacy meshes aren't drawn on the
+    // shared path and can span more than the visible cylinders (full helix
+    // extent incl. un-rendered end slots), which inflated the selection box
+    // with empty space for offset-from-origin parts like Ultimate Polymer
+    // Hinge.  Bounding the visible cylinder matrices makes the box hug what
+    // the user actually sees.
+    {
+      const visBox = _computeLodLocalBox(srcEntry.midLod, srcEntry.overhangLod)
+      if (!visBox.isEmpty()) srcEntry.instBoundingBox = visBox
+    }
+
     // Far LOD: billboard sized to the source's mean half-extent so it
     // approximates the actual silhouette.  Half-diagonal (the prior choice)
     // dramatically over-sizes elongated parts — e.g. a 200 × 5 × 5 hinge
@@ -3195,7 +3238,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // get zero cylinders here — their content shows via the overhang LOD
   // only.  Helices with a mid-axis overhang produce two body cylinders,
   // one each side of the gap.
-  function _buildMidLodMesh(srcEntry, design, helix_axes, legacyHelixCylMesh, sourceGroup) {
+  function _buildMidLodMesh(srcEntry, design, legacyHelixCylMesh, sourceGroup) {
     const helixIds = []
     for (const h of design?.helices ?? []) {
       if (typeof h.id === 'string' && h.id.startsWith('__lnk__')) continue
@@ -3241,9 +3284,19 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     const numSegments = intervals.length
     if (numSegments === 0) return null
 
-    // Build per-interval matrix array.  Each matrix sizes a unit cylinder
-    // (radius 1.125, height 1) to span the interval's portion of the
-    // helix axis.
+    // Build per-interval matrix array.  Each interval's body cylinder spans
+    // the EXTENT OF ITS LEGACY SEGMENTS, derived from
+    // legacyHelixCylMesh.instanceMatrix — NOT the API `helix_axes`.  The API
+    // helix_axes can be offset/shorter than the actual rendered bp segments
+    // (the "offset from origin" mismatch on Ultimate Polymer Hinge), which
+    // left the body cylinders ~30 nm short of the real helix and the
+    // selection box full of empty space.  Reading the legacy segment
+    // endpoints guarantees the body cylinder coincides with where the
+    // legacy renderer drew the helix.
+    //
+    // Each legacy cylinder geometry is unit height along Y; endpoints are
+    // matrix × (0, ±0.5, 0).  For an interval's (collinear) segments we
+    // take the two farthest-apart endpoints as the body cylinder's ends.
     const matrixArray = new Float32Array(numSegments * 16)
     const tmpM = new THREE.Matrix4()
     const tmpQ = new THREE.Quaternion()
@@ -3251,23 +3304,37 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     const tmpS = new THREE.Vector3()
     const yAxis = new THREE.Vector3(0, 1, 0)
     const dirV  = new THREE.Vector3()
+    const segMat = new THREE.Matrix4()
+    const pA = new THREE.Vector3()
+    const pB = new THREE.Vector3()
+    const legacyArr = legacyHelixCylMesh?.instanceMatrix?.array
     for (let i = 0; i < numSegments; i++) {
       const iv = intervals[i]
-      const ax = helix_axes?.[iv.helixId]
-      if (!ax?.start || !ax?.end) continue
-      const sxA = ax.start[0], syA = ax.start[1], szA = ax.start[2]
-      const exA = ax.end[0],   eyA = ax.end[1],   ezA = ax.end[2]
-      const dxA = exA - sxA, dyA = eyA - syA, dzA = ezA - szA
-      const sx = sxA + dxA * iv.t0
-      const sy = syA + dyA * iv.t0
-      const sz = szA + dzA * iv.t0
-      const ex = sxA + dxA * iv.t1
-      const ey = syA + dyA * iv.t1
-      const ez = szA + dzA * iv.t1
-      const dx = ex - sx, dy = ey - sy, dz = ez - sz
+      // Gather all endpoints of this interval's legacy segments.
+      const pts = []
+      if (legacyArr) {
+        for (const d of iv.domains) {
+          const off = d.cylIdx * 16
+          if (off + 16 > legacyArr.length) continue
+          const e = segMat.elements
+          for (let k = 0; k < 16; k++) e[k] = legacyArr[off + k]
+          pts.push(new THREE.Vector3(0, -0.5, 0).applyMatrix4(segMat))
+          pts.push(new THREE.Vector3(0,  0.5, 0).applyMatrix4(segMat))
+        }
+      }
+      if (pts.length < 2) continue
+      // Farthest-apart endpoint pair = the cylinder's two ends.
+      let best = -1
+      for (let a = 0; a < pts.length; a++) {
+        for (let b = a + 1; b < pts.length; b++) {
+          const d2 = pts[a].distanceToSquared(pts[b])
+          if (d2 > best) { best = d2; pA.copy(pts[a]); pB.copy(pts[b]) }
+        }
+      }
+      const dx = pB.x - pA.x, dy = pB.y - pA.y, dz = pB.z - pA.z
       const len = Math.sqrt(dx * dx + dy * dy + dz * dz)
       if (len < 1e-6) continue
-      tmpV.set((sx + ex) * 0.5, (sy + ey) * 0.5, (sz + ez) * 0.5)
+      tmpV.set((pA.x + pB.x) * 0.5, (pA.y + pB.y) * 0.5, (pA.z + pB.z) * 0.5)
       dirV.set(dx / len, dy / len, dz / len)
       tmpQ.setFromUnitVectors(yAxis, dirV)
       tmpS.set(1.0, len, 1.0)
