@@ -179,6 +179,15 @@ export function createPhotoRenderer(sceneCtx) {
 
   // ── Material swap ─────────────────────────────────────────────────────────
 
+  // Phase 7d: shared-instancing InstancedMeshes (path-to-thousands renderer)
+  // compose per-instance world transforms in a custom vertex patch. Swapping
+  // in a stock MeshPhysicalMaterial drops that patch → every instance collapses
+  // to the source origin. The shared renderer stashes a re-apply closure on the
+  // mesh (`userData.applySharedInstancing`); call it after every material swap.
+  function _reapplyShared(obj) {
+    obj.userData?.applySharedInstancing?.(obj.material)
+  }
+
   function _swapMaterials() {
     _savedMaterials.clear()
     scene.traverse(obj => {
@@ -187,6 +196,10 @@ export function createPhotoRenderer(sceneCtx) {
       if (obj.material.isLineBasicMaterial || obj.material.isLineDashedMaterial) return
       // Skip helpers and glow layers (additive blending sprites)
       if (obj.material.blending === THREE.AdditiveBlending) return
+      // Phase 7d: shared-renderer mid/far LOD impostors carry custom shaders
+      // that compose instance transforms — swapping them in would collapse
+      // them to the source origin. Leave them as-is (they don't need PBR).
+      if (obj.userData.sharedLodImpostor) return
 
       const vc = Boolean(obj.material.vertexColors)
       const op = obj.material.opacity ?? 1.0
@@ -194,12 +207,14 @@ export function createPhotoRenderer(sceneCtx) {
 
       if (obj.name === FLUORO_MESH_NAME && _settings.fluorophoreEmissive) {
         obj.material = makeFluorophoreEmissive(_settings.fluorophoreIntensity, vc)
+        _reapplyShared(obj)
         return
       }
       const repr = MESH_NAME_TO_REPR[obj.name] ?? _inferRepr(obj)
       const presetName = _settings[repr] ?? 'matte'
       obj.material = makeMaterial(repr, presetName, vc, op)
       _applyTranslucencyOverride(obj.material, repr)
+      _reapplyShared(obj)
     })
   }
 
@@ -665,6 +680,7 @@ export function createPhotoRenderer(sceneCtx) {
       obj.material = enabled
         ? makeFluorophoreEmissive(_settings.fluorophoreIntensity, vc)
         : makeMaterial('full', _settings.full, vc, op)
+      _reapplyShared(obj)
       nMesh++
     })
     if (enabled) _spawnFluoroLights()
@@ -754,6 +770,9 @@ export function createPhotoRenderer(sceneCtx) {
       if ((!obj.isMesh && !obj.isInstancedMesh) || !obj.material) return
       if (obj.material.isLineBasicMaterial || obj.material.isLineDashedMaterial) { ignored++; return }
       if (obj.material.blending === THREE.AdditiveBlending) { ignored++; return }
+      // Phase 7d: never swap the shared-renderer mid/far LOD impostors (custom
+      // instancing shaders — a PBR swap collapses them to the source origin).
+      if (obj.userData.sharedLodImpostor) { ignored++; return }
 
       const r = MESH_NAME_TO_REPR[obj.name] ?? _inferRepr(obj)
       if (r !== repr) { otherRepr++; return }
@@ -771,6 +790,7 @@ export function createPhotoRenderer(sceneCtx) {
         const op = obj.material.opacity ?? 1.0
         obj.material = makeMaterial(repr, presetName, vc, op)
         _applyTranslucencyOverride(obj.material, repr)
+        _reapplyShared(obj)
         postActivate++
         postActivateNames.push(obj.name || `<unnamed:${obj.type}>`)
         return
@@ -780,6 +800,7 @@ export function createPhotoRenderer(sceneCtx) {
       obj.material.dispose()
       obj.material = makeMaterial(repr, presetName, vc, op)
       _applyTranslucencyOverride(obj.material, repr)
+      _reapplyShared(obj)
       updated++
       updatedNames.push(obj.name || `<unnamed:${obj.type}>`)
     })

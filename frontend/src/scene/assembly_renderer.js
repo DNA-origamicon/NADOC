@@ -2365,7 +2365,9 @@ const _SHARED_RENDERER_STUB_DEFAULTS = {
   // implemented on the shared path (blunt-end connectors for Define Mate).
   auditInstanceBox:               () => undefined,
   rebuildLinkers:                 () => Promise.resolve(),
-  setPhotoMode:                   () => undefined,
+  // setPhotoMode implemented on the shared path (Phase 7d) — hides the
+  // selection outline; photo_renderer re-applies the instancing patch to the
+  // PBR materials it swaps in via userData.applySharedInstancing.
 }
 const _SHARED_RENDERER_STUB_METHODS = new Set(Object.keys(_SHARED_RENDERER_STUB_DEFAULTS))
 
@@ -2522,7 +2524,12 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // `u_bpXform` is PER-MESH (each InstancedMesh has its own bp count and
   // bp matrix set), supplied via `uBpTex` in the uniforms bundle.
   function _attachInstanceShader(material, uniformsBundle, numBpPerInstance) {
+    // Compose with any pre-existing onBeforeCompile (Phase 7d: photo mode's
+    // fluorophore-emissive preset patches the fragment) instead of clobbering
+    // it. For the normal build-time path the material has none → no-op.
+    const _priorOnBeforeCompile = material.onBeforeCompile
     material.onBeforeCompile = (shader) => {
+      _priorOnBeforeCompile?.(shader)
       shader.uniforms.u_instanceXform   = uniformsBundle.uXform
       shader.uniforms.u_numBpPerInstance = { value: numBpPerInstance }
       shader.uniforms.u_activeInstanceIdx = uniformsBundle.uActiveIdx
@@ -2815,6 +2822,17 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       const mats = Array.isArray(mat) ? mat : [mat]
       for (const m of mats) {
         _attachInstanceShader(m, meshUniforms, baseCount)
+      }
+
+      // Phase 7d: photo mode replaces every InstancedMesh material with a
+      // MeshPhysicalMaterial. Without the instancing vertex patch those
+      // instances collapse to the source origin. Stash a re-apply closure
+      // (captures THIS mesh's uniforms + bp count) so photo_renderer can
+      // re-inject the patch onto the swapped material; tag for skip-logic.
+      obj.userData.sharedInstanced = true
+      obj.userData.applySharedInstancing = (material) => {
+        const list = Array.isArray(material) ? material : [material]
+        for (const mm of list) _attachInstanceShader(mm, meshUniforms, baseCount)
       }
 
       // Stash bp-texture handles on the source's render-data list so
@@ -3118,6 +3136,17 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // per-instance look is preserved on the shared path.
     try { _applyColorsToSource(srcEntry, null) }
     catch (err) { console.warn('[shared_renderer] initial colour seed failed:', err) }
+
+    // Phase 7d: the mid/far LOD impostors carry their OWN custom shaders that
+    // compose instance transforms (per-helix cylinders, camera-facing
+    // billboards). Photo mode's _swapMaterials must SKIP them — swapping in a
+    // stock MeshPhysicalMaterial would drop those shaders and collapse the
+    // impostors to the source origin. They're distance impostors anyway, so
+    // they don't need the PBR look (only the close-LOD bp meshes do — those
+    // get PBR + the re-applied instancing patch via userData.applySharedInstancing).
+    for (const m of [srcEntry.midLod?.mesh, srcEntry.overhangLod?.mesh, srcEntry.farLod?.mesh]) {
+      if (m) m.userData.sharedLodImpostor = true
+    }
 
     return srcEntry
   }
@@ -4274,6 +4303,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   let _activeBoxHelper = null
   let _activeBoxSrcKey = null
   const _activeBoxMat = new THREE.Matrix4()
+  let _photoMode = false   // Phase 7d: hide the selection outline in photo mode
 
   function _disposeActiveBox() {
     if (!_activeBoxHelper) return
@@ -4321,7 +4351,24 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     for (let k = 0; k < 16; k++) e[k] = srcEntry.xformData[off + k]
     _activeBoxHelper.matrix.copy(_activeBoxMat)
     _activeBoxHelper.matrixWorldNeedsUpdate = true
-    _activeBoxHelper.visible = true
+    _activeBoxHelper.visible = !_photoMode   // Phase 7d: never in publication renders
+  }
+
+  // ── Public: setPhotoMode (Phase 7d) ───────────────────────────────────────
+  // The shared path has no per-instance annotation overlays to hide (axis
+  // arrows are pre-hidden at build; helix-id labels / overhang-name sprites
+  // are per-instance-only and don't exist here), so the only thing to suppress
+  // is the selection outline. The actual PBR material swap is photo_renderer's
+  // job — it re-applies our instancing vertex patch via the per-mesh
+  // `userData.applySharedInstancing` hook stashed in `_patchSharedMeshes`, so
+  // instances keep their world transforms under MeshPhysicalMaterial.
+  function setPhotoMode(on) {
+    _photoMode = !!on
+    if (on) {
+      if (_activeBoxHelper) _activeBoxHelper.visible = false
+    } else {
+      _refreshActiveBox()
+    }
   }
 
   // ── Public: updateStrandColor ─────────────────────────────────────────────
@@ -4949,6 +4996,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     pickInstanceCluster,
     captureInstanceClusterBase,
     applyInstanceClusterTransform,
+    setPhotoMode,
     invalidateInstance,
     applyInlineGeometry,
     onRebuildComplete,
