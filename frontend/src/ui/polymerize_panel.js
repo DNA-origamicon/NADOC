@@ -55,6 +55,10 @@ const PANEL_HTML = `
   <div id="poly-pattern-hint" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
     Optional. Tick any parts to clone alongside each new chain step. Mates between ticked parts and the seed mate's instances are replicated automatically.
   </div>
+  <div id="poly-pattern-actions" style="display:none;gap:12px;margin-bottom:4px">
+    <button id="poly-select-all" type="button" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:var(--text-xs);padding:0">Select all</button>
+    <button id="poly-select-none" type="button" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:var(--text-xs);padding:0">Select none</button>
+  </div>
   <div id="poly-additional-list" style="max-height:140px;overflow-y:auto;border:1px solid #30363d;border-radius:3px;background:#0d1117;padding:3px 4px;margin-bottom:10px;font-size:var(--text-xs)">
     <div style="color:#484f58">— Select a mate to see candidates —</div>
   </div>
@@ -83,7 +87,20 @@ export function initPolymerizePanel(store) {
   const statusEl      = panel.querySelector('#poly-status')
   const closeBtn      = panel.querySelector('#poly-close-btn')
   const additionalListEl = panel.querySelector('#poly-additional-list')
+  const patternActionsEl = panel.querySelector('#poly-pattern-actions')
+  const selectAllBtn     = panel.querySelector('#poly-select-all')
+  const selectNoneBtn    = panel.querySelector('#poly-select-none')
   const costPreviewEl    = panel.querySelector('#poly-cost-preview')
+
+  // Select all / none for the "to pattern" checklist. Toggle each checkbox and
+  // fire its change event so the per-row handler + cost preview stay in sync.
+  function _setAllAdditional(on) {
+    for (const cb of additionalListEl.querySelectorAll('input[type="checkbox"]')) {
+      if (cb.checked !== on) { cb.checked = on; cb.dispatchEvent(new Event('change', { bubbles: true })) }
+    }
+  }
+  selectAllBtn.addEventListener('click', () => _setAllAdditional(true))
+  selectNoneBtn.addEventListener('click', () => _setAllAdditional(false))
 
   // Drag-scrub on the chain-count input (standard CAD/DAW convention).
   attachDragScrub(countInput)
@@ -112,6 +129,7 @@ export function initPolymerizePanel(store) {
 
   function _rebuildAdditionalList(assembly, selectedJoint) {
     additionalListEl.innerHTML = ''
+    patternActionsEl.style.display = 'none'
     if (!selectedJoint) {
       const empty = document.createElement('div')
       empty.style.cssText = 'color:#484f58'
@@ -133,6 +151,7 @@ export function initPolymerizePanel(store) {
     for (const id of [..._additionalSelected]) {
       if (!liveIds.has(id)) _additionalSelected.delete(id)
     }
+    patternActionsEl.style.display = 'flex'
     for (const inst of candidates) {
       const row = document.createElement('label')
       row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer'
