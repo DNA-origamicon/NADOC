@@ -8827,18 +8827,35 @@ Typical debugging workflow for "reverts to 3D" bug:
         if (prevCount === 0 && newCount > 0) _hideWelcome()
 
         assemblyPanel.rebuild(newState)
-        assemblyRenderer.rebuild(newState.currentAssembly)
-          .then(() => {
-            assemblyRenderer.rebuildLinkers(newState.currentAssembly)
-            _syncAssemblyBluntEnds()
-            // If the active instance is anchored, rebuild locks with updated topology
-            if (newState.activeInstanceId) {
-              const depths = computeFixedDepths(newState.currentAssembly)
-              if (depths.has(newState.activeInstanceId)) _rebuildFixedLocks(newState.currentAssembly)
-            }
-            _syncAssemblyReprMenu(newState.currentAssembly)
-          })
-        assemblyJointRenderer.rebuild(newState.currentAssembly)
+        if (_assemblyTransformOnlyChange(prevState.currentAssembly, newState.currentAssembly)) {
+          // Transform-only change (e.g. a move/rotate commit via propagateFk):
+          // push each instance's new world matrix straight into the renderer
+          // instead of disposing + re-fetching geometry — avoids the whole
+          // assembly blinking out and re-rendering.  Joint indicators are
+          // cheap, so we still rebuild those to track moved anchors.
+          for (const inst of newState.currentAssembly.instances) {
+            assemblyRenderer.setLiveTransform(inst.id, _matrixFromInstance(inst))
+          }
+          assemblyJointRenderer.rebuild(newState.currentAssembly)
+          if (newState.activeInstanceId) {
+            assemblyRenderer.setActiveInstance(newState.activeInstanceId)
+            const depths = computeFixedDepths(newState.currentAssembly)
+            if (depths.has(newState.activeInstanceId)) _rebuildFixedLocks(newState.currentAssembly)
+          }
+        } else {
+          assemblyRenderer.rebuild(newState.currentAssembly)
+            .then(() => {
+              assemblyRenderer.rebuildLinkers(newState.currentAssembly)
+              _syncAssemblyBluntEnds()
+              // If the active instance is anchored, rebuild locks with updated topology
+              if (newState.activeInstanceId) {
+                const depths = computeFixedDepths(newState.currentAssembly)
+                if (depths.has(newState.activeInstanceId)) _rebuildFixedLocks(newState.currentAssembly)
+              }
+              _syncAssemblyReprMenu(newState.currentAssembly)
+            })
+          assemblyJointRenderer.rebuild(newState.currentAssembly)
+        }
       }
       if (activeChanged) {
         // Clear cluster glow and sidebar selection whenever the active instance changes
@@ -8922,6 +8939,31 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   function _matrixFromInstance(inst) {
     return new THREE.Matrix4().fromArray(inst.transform.values).transpose()
+  }
+
+  // True when prev → next differs ONLY in per-instance transforms (same
+  // instance set, same geometry-affecting fields).  Lets the assembly
+  // subscriber update transforms in place via setLiveTransform instead of
+  // a full dispose + re-fetch rebuild — which made the whole assembly
+  // blink out and re-render on every move/rotate commit.
+  function _assemblyTransformOnlyChange(prev, next) {
+    if (!prev || !next) return false
+    const pi = prev.instances ?? [], ni = next.instances ?? []
+    if (pi.length === 0 || pi.length !== ni.length) return false
+    const pById = new Map(pi.map(i => [i.id, i]))
+    for (const inst of ni) {
+      const p = pById.get(inst.id)
+      if (!p) return false
+      // Any geometry- or visibility-affecting field change forces a rebuild.
+      if (p.representation !== inst.representation) return false
+      if (p.mode          !== inst.mode)          return false
+      if (p.visible       !== inst.visible)       return false
+      if ((p.source?.type) !== (inst.source?.type)) return false
+      if ((p.source?.path) !== (inst.source?.path)) return false
+      if (JSON.stringify(p.cluster_transform_overrides ?? [])
+          !== JSON.stringify(inst.cluster_transform_overrides ?? [])) return false
+    }
+    return true
   }
 
   function _effectiveInstanceMatrix(inst) {
