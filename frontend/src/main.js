@@ -9216,6 +9216,10 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // ── Camera-plane free drag (non-revolute parts) ──────────────────────────────
   let _assemblyPtrDownAt = null
+  // Right-button-down position. OrbitControls pans on right-drag, but the
+  // browser still fires `contextmenu` on release — track this so the context
+  // menu / selection is suppressed when the right-click was actually a pan.
+  let _assemblyRightDownAt = null
   let _pendingFreeDrag   = null   // { instId, startNdc, startX, startY }
   let _freeDrag          = null   // { instId, groupStartTransforms, plane, startHit, currentDelta }
   let _partJointDrag     = null
@@ -9512,6 +9516,10 @@ Typical debugging workflow for "reverts to 3D" bug:
 
       // Priority 3: record for click-to-select
       _assemblyPtrDownAt = { x: e.clientX, y: e.clientY }
+    } else if (e.button === 2) {
+      // Right-button down — record so the contextmenu handler can tell a
+      // plain right-click apart from a right-drag pan.
+      _assemblyRightDownAt = { x: e.clientX, y: e.clientY }
     }
   }
 
@@ -9588,6 +9596,16 @@ Typical debugging workflow for "reverts to 3D" bug:
   async function _onAssemblyContextMenu(e) {
     e.preventDefault()
     e.stopPropagation()
+    // Right-drag pans the camera (OrbitControls); the browser still emits a
+    // contextmenu on release.  If the pointer moved since right-button-down it
+    // was a pan, not a click — suppress selection + menu (default is already
+    // prevented above, so no browser menu appears either).
+    const rightDown = _assemblyRightDownAt
+    _assemblyRightDownAt = null
+    if (rightDown) {
+      const rdx = e.clientX - rightDown.x, rdy = e.clientY - rightDown.y
+      if (rdx * rdx + rdy * rdy > 25) return   // pan-drag, not a right-click
+    }
     // If the right-click hit an overhang arrow, selection_manager's
     // contextmenu listener already routes it to the overhang length dialog.
     // Skip the part context menu so it doesn't appear on top.
