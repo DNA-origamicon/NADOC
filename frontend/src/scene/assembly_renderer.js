@@ -2350,14 +2350,17 @@ const _ASSEMBLY_RENDERER_METHODS = [
 const _SHARED_RENDERER_STUB_DEFAULTS = {
   // setLiveTransform / getLiveTransform / pickInstance now implemented
   // on the shared path; kept out of the stub list.
-  pickInstanceCluster:            () => null,
+  // pickInstanceCluster / captureInstanceClusterBase / applyInstanceClusterTransform
+  // implemented on the shared path (Phase 7c) — cluster articulation via a
+  // materialized active instance. pickPartJoint (the ring-grab affordance) is
+  // still stubbed: the cluster-panel-select → drag path (Priority 2b in
+  // main.js) articulates without it; part-joint ring indicators are deferred.
   pickPartJoint:                  () => null,
-  captureInstanceClusterBase:     () => null,
-  applyInstanceClusterTransform:  () => undefined,
-  getInstanceDesign:              () => null,
-  getInstanceRenderData:          () => null,
-  getInstanceBackboneEntries:     () => ({ entries: [], matrixWorld: null }),
-  getLabelTable:                  () => [],
+  // getInstanceDesign / getInstanceRenderData / getInstanceBackboneEntries
+  // implemented on the shared path (Phase 7a) — they read the source's shared
+  // Design + helixCtrl.backboneEntries (source-local) plus the per-instance
+  // world matrix from xformData. Callers apply the matrix themselves.
+  getLabelTable:                  () => [],   // debug-only console helper; left stubbed (no per-instance label sprites on shared path)
   // getInstanceBluntEnds / getConnectorClusterId / getConnectorClusterIds
   // implemented on the shared path (blunt-end connectors for Define Mate).
   auditInstanceBox:               () => undefined,
@@ -4054,6 +4057,17 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     _activeInstanceId = null
     // Tear down the selection outline.
     _disposeActiveBox()
+    // Phase 7c: tear down the materialized articulation instance (if any) +
+    // restore its batch slot. Called at the top of rebuild() too, so a
+    // cluster-drag commit (→ backend → rebuild) cleanly bakes the new pose
+    // into the source and drops the overlay.
+    _dematerializeInstance()
+    // Phase 7a: the per-instance overhang render-data group (owns no geometry
+    // of its own — overhang-locations disposes its arrow children).
+    if (_renderDataGroup) {
+      scene.remove(_renderDataGroup)
+      _renderDataGroup = null
+    }
   }
 
   // ── Texture upload — dirty rows only ──────────────────────────────────────
@@ -4227,6 +4241,10 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // the next frame's onBeforeRender (e.g. a still-image render after a
   // selection click), we also write the CURRENT row here.
   function setActiveInstance(id) {
+    // Phase 7c: switching away from a materialized (articulating) instance
+    // without committing rolls it back — drop the overlay + restore its batch
+    // slot at the original pose.
+    if (_matInst && _matInst.id !== id) _dematerializeInstance()
     // Clear previous highlight (every source) — the per-frame refresh will
     // re-light the matching source's uniform on the next draw.
     for (const srcEntry of _sources.values()) {
@@ -4604,6 +4622,204 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return c?.clusterIds?.length ? c.clusterIds : (c?.clusterId ? [c.clusterId] : [])
   }
 
+  // ── Phase 7a: per-instance introspection (shared path) ────────────────────
+  // On the shared path there is no per-instance helixCtrl — geometry is one
+  // shared helixCtrl per source, GPU-composed. But the source helixCtrl still
+  // carries `backboneEntries` in SOURCE-LOCAL coords, and the per-instance
+  // world matrix lives in `xformData`. Callers (cluster glow, overhang arrows)
+  // already apply that matrix to local positions themselves, so we just hand
+  // back the source-local data + the instance's world matrix.
+
+  // The Design dict for an instance's source. Used by cluster articulation +
+  // the cluster-panel glow to resolve cluster_transforms / cluster_joints.
+  function getInstanceDesign(instanceId) {
+    const srcKey = instanceId ? _instToSrc.get(instanceId) : null
+    return (srcKey ? _sources.get(srcKey)?.design : null) ?? null
+  }
+
+  // Source-local backbone beads + the instance's world matrix. Mirrors the
+  // per-instance path's shape ({ entries, matrixWorld }); the caller maps
+  // `entry.pos.applyMatrix4(matrixWorld)` to reach world space.
+  function getInstanceBackboneEntries(instanceId) {
+    const empty = { entries: [], matrixWorld: new THREE.Matrix4() }
+    const srcKey = instanceId ? _instToSrc.get(instanceId) : null
+    const srcEntry = srcKey ? _sources.get(srcKey) : null
+    if (!srcEntry) return empty
+    const mw = getLiveTransform(instanceId) ?? new THREE.Matrix4()
+    return { entries: srcEntry.helixCtrl?.backboneEntries ?? [], matrixWorld: mw }
+  }
+
+  // Render data for overhang-locations: the design + source-local nucleotides
+  // plus a scene group positioned at the instance's world transform, so the
+  // overhang arrows (built in design-local coords) land at the right place.
+  // overhang-locations only ever renders the ACTIVE instance, so a single
+  // reused parent group is enough (it re-clears its own children each rebuild).
+  let _renderDataGroup = null
+  function getInstanceRenderData(instanceId) {
+    const srcKey = instanceId ? _instToSrc.get(instanceId) : null
+    const srcEntry = srcKey ? _sources.get(srcKey) : null
+    if (!srcEntry) return null
+    const mw = getLiveTransform(instanceId)
+    if (!mw) return null
+    if (!_renderDataGroup) {
+      _renderDataGroup = new THREE.Group()
+      _renderDataGroup.name = 'shared_instance_render_data'
+      _renderDataGroup.matrixAutoUpdate = false
+      scene.add(_renderDataGroup)
+    }
+    _renderDataGroup.matrix.copy(mw)
+    _renderDataGroup.matrixWorldNeedsUpdate = true
+    return {
+      design:      srcEntry.design ?? null,
+      nucleotides: srcEntry.nucleotides ?? null,
+      group:       _renderDataGroup,
+    }
+  }
+
+  // ── Phase 7c: cluster articulation via a materialized active instance ─────
+  // The shared batch stores bp geometry in a per-SOURCE texture, so rotating
+  // ONE instance's cluster can't be done in the batch without moving every
+  // copy of that source.  When the user articulates a cluster we build a real
+  // single-instance helixCtrl in world space (the per-instance render path,
+  // unpatched), hide that instance's slot in the batch, and delegate
+  // captureClusterBase / applyClusterTransform to it.  rebuild()/dispose()
+  // tear it down and restore the batch slot.  Only ONE instance is ever
+  // materialized at a time (the one being articulated), so the cost is a
+  // single extra helixCtrl — negligible.
+  let _matInst = null   // { id, srcKey, group, helixCtrl }
+
+  // Toggle a batch slot's visibility (used to hide the materialized instance's
+  // duplicate in the shared batch). visData moves WITH the id through the
+  // per-frame LOD permutation, so writing the current row stays correct.
+  function _setBatchSlotVisible(srcEntry, id, visible) {
+    const row = srcEntry?.instanceIndex?.get(id)
+    if (row == null) return
+    srcEntry.visibility[row] = visible ? 1.0 : 0.0
+    srcEntry.visData[row * 16 + 0] = srcEntry.visibility[row]
+    srcEntry.dirtyVisRows.add(row)
+  }
+
+  function _materializeInstance(id) {
+    if (_matInst && _matInst.id === id) return _matInst
+    _dematerializeInstance()
+    const srcKey   = id ? _instToSrc.get(id) : null
+    const srcEntry = srcKey ? _sources.get(srcKey) : null
+    if (!srcEntry?.design || !srcEntry?.nucleotides) return null
+    const mw = getLiveTransform(id)
+    if (!mw) return null
+    const group = new THREE.Group()
+    group.userData.assemblyInstance     = id
+    group.userData.materializedInstance = true
+    group.matrixAutoUpdate = false
+    group.matrix.copy(mw)
+    group.matrixWorldNeedsUpdate = true
+    // Unpatched, single-instance helixCtrl — its geometry is mutable in place,
+    // which is exactly what captureClusterBase/applyClusterTransform need.
+    const helixCtrl = buildHelixObjects(
+      srcEntry.nucleotides, srcEntry.design, group,
+      srcEntry.customColors, [], srcEntry.helixAxes ?? null, srcEntry.rep,
+    )
+    helixCtrl.setAxisArrowsVisible?.(false)
+    // buildHelixObjects starts every LOD mesh with visible=false; setDetailLevel
+    // flips the right ones on (the bp-invisibility lesson — without this the
+    // overlay renders nothing and the user sees no articulation).
+    if (helixCtrl.root) helixCtrl.root.visible = true
+    helixCtrl.setDetailLevel?.(_CG_LOD[srcEntry.rep] ?? _CG_LOD.cylinders)
+    scene.add(group)
+    _setBatchSlotVisible(srcEntry, id, false)   // hide the batch copy
+    _matInst = { id, srcKey, group, helixCtrl }
+    return _matInst
+  }
+
+  function _dematerializeInstance() {
+    if (!_matInst) return
+    const { id, srcKey, group } = _matInst
+    // Restore the batch slot (respecting the instance's own visibility flag).
+    const srcEntry = _sources.get(srcKey)
+    if (srcEntry) {
+      const inst = store.getState().currentAssembly?.instances?.find(i => i.id === id)
+      _setBatchSlotVisible(srcEntry, id, inst?.visible !== false)
+    }
+    scene.remove(group)
+    group.traverse(o => {
+      if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose()
+      if (o.material) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material]
+        mats.forEach(m => { m.map?.dispose?.(); m.dispose?.() })
+      }
+    })
+    _matInst = null
+  }
+
+  function captureInstanceClusterBase(instanceId, cluster) {
+    if (!instanceId || !cluster) return
+    const mat = _materializeInstance(instanceId)
+    if (!mat) return
+    mat.helixCtrl?.captureClusterBase(
+      cluster.helix_ids,
+      cluster.domain_ids?.length ? cluster.domain_ids : null,
+    )
+  }
+
+  function applyInstanceClusterTransform(instanceId, cluster, centerVec, dummyPosVec, incrRotQuat) {
+    if (!instanceId || !cluster) return
+    const mat = (_matInst && _matInst.id === instanceId)
+      ? _matInst
+      : _materializeInstance(instanceId)
+    if (!mat) return
+    mat.helixCtrl?.applyClusterTransform(
+      cluster.helix_ids,
+      centerVec,
+      dummyPosVec,
+      incrRotQuat,
+      cluster.domain_ids?.length ? cluster.domain_ids : null,
+    )
+  }
+
+  // Pick the cluster whose member beads are nearest the click. Mirrors the
+  // per-instance nearest-bead fallback: project each source's SOURCE-LOCAL
+  // backboneEntries through the per-instance world matrix. Needs beads, so
+  // (like the per-instance path) it only resolves at a bead-bearing rep —
+  // the cluster-panel selection path works at any rep via the 7a getters.
+  function pickInstanceCluster(ndc, camera, { scopeInstId = null, threshold = 0.06 } = {}) {
+    const assembly = store.getState().currentAssembly
+    if (!assembly) return null
+    const _proj = new THREE.Vector3()
+    const mw = new THREE.Matrix4()
+    let bestDist = threshold
+    let bestResult = null
+    for (const srcEntry of _sources.values()) {
+      const beads  = srcEntry.helixCtrl?.backboneEntries ?? []
+      const joints = srcEntry.design?.cluster_joints ?? []
+      if (!beads.length || !joints.length) continue
+      const clusters = srcEntry.design?.cluster_transforms ?? []
+      for (let i = 0; i < srcEntry.instanceIds.length; i++) {
+        if (srcEntry.visibility[i] < 0.5) continue
+        const instId = srcEntry.instanceIds[i]
+        if (scopeInstId && instId !== scopeInstId) continue
+        const inst = assembly.instances?.find(x => x.id === instId)
+        if (!inst) continue
+        const off = i * 16
+        for (let k = 0; k < 16; k++) mw.elements[k] = srcEntry.xformData[off + k]
+        for (const joint of joints) {
+          const cluster = clusters.find(c => c.id === joint.cluster_id)
+          const filter  = _clusterMemberFilter(cluster, srcEntry.design)
+          if (!filter) continue
+          for (const bead of beads) {
+            if (!filter(bead.nuc)) continue
+            _proj.copy(bead.pos).applyMatrix4(mw).project(camera)
+            const d = Math.hypot(_proj.x - ndc.x, _proj.y - ndc.y)
+            if (d < bestDist) {
+              bestDist   = d
+              bestResult = { inst, design: srcEntry.design, cluster, joint, entry: bead }
+            }
+          }
+        }
+      }
+    }
+    return bestResult
+  }
+
   // Ray-vs-per-instance-ORIENTED-box picker.  The shared path can't reuse
   // THREE.Raycaster.intersectObjects because instanceMatrix is collapsed
   // to identity (per-instance transforms live in `xformData`, sampled by
@@ -4727,6 +4943,12 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     getInstanceBluntEnds,
     getConnectorClusterId,
     getConnectorClusterIds,
+    getInstanceDesign,
+    getInstanceBackboneEntries,
+    getInstanceRenderData,
+    pickInstanceCluster,
+    captureInstanceClusterBase,
+    applyInstanceClusterTransform,
     invalidateInstance,
     applyInlineGeometry,
     onRebuildComplete,
