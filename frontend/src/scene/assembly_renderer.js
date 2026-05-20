@@ -3189,38 +3189,82 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     }
   }
 
-  // Build per-helix matrices + per-helix average colours, then call the
-  // generic segment-LOD builder.  Output: one cylinder per helix axis
-  // (matching the user's mental model "non-overhang helix = one cylinder")
-  // rather than per-strand-domain segments.  Overhangs render separately
-  // via `_buildOverhangLodMesh` so they still poke out from the helix.
+  // Build per-helix body-region cylinders + colours, then call the generic
+  // segment-LOD builder.  One cylinder per *contiguous dsDNA region*
+  // (computed from domainCylData.t0/t1, merging overlapping/adjacent
+  // body domains).  Helices that are entirely overhang (no body domains)
+  // get zero cylinders here — their content shows via the overhang LOD
+  // only.  Helices with a mid-axis overhang produce two body cylinders,
+  // one each side of the gap.
   function _buildMidLodMesh(srcEntry, design, helix_axes, legacyHelixCylMesh, sourceGroup) {
     const helixIds = []
     for (const h of design?.helices ?? []) {
       if (typeof h.id === 'string' && h.id.startsWith('__lnk__')) continue
       helixIds.push(h.id)
     }
-    const numHelices = helixIds.length
-    if (numHelices === 0) return null
+    if (helixIds.length === 0) return null
 
-    // Pack per-helix matrices into a flat float array, 16 floats per
-    // helix, column-major (matches _makeBpXformTexture's expected layout).
-    const matrixArray = new Float32Array(numHelices * 16)
+    // Group body domains (from helixCtrl's `domainCylData`) by helixId.
+    // Each entry: { helixId, cylIdx, t0, t1, ... } in source-local fractions
+    // along the helix axis.
+    const domsByHelix = new Map()
+    const domainCylData = srcEntry.helixCtrl?.domainCylData ?? []
+    for (const dom of domainCylData) {
+      if (dom.t0 == null || dom.t1 == null) continue
+      let bucket = domsByHelix.get(dom.helixId)
+      if (!bucket) { bucket = []; domsByHelix.set(dom.helixId, bucket) }
+      bucket.push(dom)
+    }
+
+    // Per helix, sort by t0 and merge overlapping/adjacent runs into
+    // disjoint intervals.  Each surviving interval is one body cylinder.
+    // `intervals` is the flat list we'll turn into matrices.
+    const intervals = []  // { helixIdx, helixId, t0, t1, domains: [...] }
+    for (let i = 0; i < helixIds.length; i++) {
+      const helixId = helixIds[i]
+      const doms = domsByHelix.get(helixId)
+      if (!doms || doms.length === 0) continue
+      doms.sort((a, b) => a.t0 - b.t0)
+      let cur = { helixIdx: i, helixId, t0: doms[0].t0, t1: doms[0].t1, domains: [doms[0]] }
+      for (let j = 1; j < doms.length; j++) {
+        const d = doms[j]
+        if (d.t0 <= cur.t1 + 1e-9) {
+          if (d.t1 > cur.t1) cur.t1 = d.t1
+          cur.domains.push(d)
+        } else {
+          intervals.push(cur)
+          cur = { helixIdx: i, helixId, t0: d.t0, t1: d.t1, domains: [d] }
+        }
+      }
+      intervals.push(cur)
+    }
+
+    const numSegments = intervals.length
+    if (numSegments === 0) return null
+
+    // Build per-interval matrix array.  Each matrix sizes a unit cylinder
+    // (radius 1.125, height 1) to span the interval's portion of the
+    // helix axis.
+    const matrixArray = new Float32Array(numSegments * 16)
     const tmpM = new THREE.Matrix4()
     const tmpQ = new THREE.Quaternion()
     const tmpV = new THREE.Vector3()
     const tmpS = new THREE.Vector3()
     const yAxis = new THREE.Vector3(0, 1, 0)
     const dirV  = new THREE.Vector3()
-    for (let i = 0; i < numHelices; i++) {
-      const ax = helix_axes?.[helixIds[i]]
-      if (!ax?.start || !ax?.end) {
-        // Degenerate matrix (all zeros) → cylinder collapses to a point,
-        // renders nothing.  Keeps row alignment with helixIds.
-        continue
-      }
-      const sx = ax.start[0], sy = ax.start[1], sz = ax.start[2]
-      const ex = ax.end[0],   ey = ax.end[1],   ez = ax.end[2]
+    for (let i = 0; i < numSegments; i++) {
+      const iv = intervals[i]
+      const ax = helix_axes?.[iv.helixId]
+      if (!ax?.start || !ax?.end) continue
+      const sxA = ax.start[0], syA = ax.start[1], szA = ax.start[2]
+      const exA = ax.end[0],   eyA = ax.end[1],   ezA = ax.end[2]
+      const dxA = exA - sxA, dyA = eyA - syA, dzA = ezA - szA
+      const sx = sxA + dxA * iv.t0
+      const sy = syA + dyA * iv.t0
+      const sz = szA + dzA * iv.t0
+      const ex = sxA + dxA * iv.t1
+      const ey = syA + dyA * iv.t1
+      const ez = szA + dzA * iv.t1
       const dx = ex - sx, dy = ey - sy, dz = ez - sz
       const len = Math.sqrt(dx * dx + dy * dy + dz * dz)
       if (len < 1e-6) continue
@@ -3233,41 +3277,31 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       for (let k = 0; k < 16; k++) matrixArray[i * 16 + k] = e[k]
     }
 
-    // Per-helix colour: average over strand-domain segments touching that
-    // helix.  Pulled from legacyHelixCylMesh.instanceColor + helixCtrl
-    // domainCylData (cylIdx → helixId).
-    const colorArrayRGB = new Float32Array(numHelices * 3)
-    // Default to white so helices without colour data don't render black.
-    for (let i = 0; i < numHelices; i++) {
+    // Per-interval colour = average of the strand-domain colours that
+    // belong to this interval (taken from legacyHelixCylMesh.instanceColor
+    // via each domain's cylIdx).
+    const colorArrayRGB = new Float32Array(numSegments * 3)
+    for (let i = 0; i < numSegments; i++) {
       colorArrayRGB[i * 3 + 0] = 1
       colorArrayRGB[i * 3 + 1] = 1
       colorArrayRGB[i * 3 + 2] = 1
     }
     if (legacyHelixCylMesh?.instanceColor) {
-      const helixIdToIdx = new Map()
-      for (let i = 0; i < numHelices; i++) helixIdToIdx.set(helixIds[i], i)
       const cylColors = legacyHelixCylMesh.instanceColor.array
-      const sumR = new Float32Array(numHelices)
-      const sumG = new Float32Array(numHelices)
-      const sumB = new Float32Array(numHelices)
-      const counts = new Int32Array(numHelices)
-      // `domainCylData` is exposed on helixCtrl (helix_renderer.js); the
-      // factory call below threads `srcEntry.helixCtrl` if we want it.
-      const domainCylData = srcEntry.helixCtrl?.domainCylData ?? []
-      for (const dom of domainCylData) {
-        const hIdx = helixIdToIdx.get(dom.helixId)
-        if (hIdx == null) continue
-        const ci = dom.cylIdx * 3
-        sumR[hIdx] += cylColors[ci + 0]
-        sumG[hIdx] += cylColors[ci + 1]
-        sumB[hIdx] += cylColors[ci + 2]
-        counts[hIdx]++
-      }
-      for (let i = 0; i < numHelices; i++) {
-        if (counts[i] > 0) {
-          colorArrayRGB[i * 3 + 0] = sumR[i] / counts[i]
-          colorArrayRGB[i * 3 + 1] = sumG[i] / counts[i]
-          colorArrayRGB[i * 3 + 2] = sumB[i] / counts[i]
+      for (let i = 0; i < numSegments; i++) {
+        const iv = intervals[i]
+        let sumR = 0, sumG = 0, sumB = 0, count = 0
+        for (const d of iv.domains) {
+          const ci = d.cylIdx * 3
+          sumR += cylColors[ci + 0]
+          sumG += cylColors[ci + 1]
+          sumB += cylColors[ci + 2]
+          count++
+        }
+        if (count > 0) {
+          colorArrayRGB[i * 3 + 0] = sumR / count
+          colorArrayRGB[i * 3 + 1] = sumG / count
+          colorArrayRGB[i * 3 + 2] = sumB / count
         }
       }
     }
@@ -3276,14 +3310,15 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       srcEntry,
       matrixArray,
       colorArrayRGB,
-      numSegments: numHelices,
+      numSegments,
       geometry: _LOD_CYL_GEO,
       meshName: 'sharedLodMid',
       sourceGroup,
     })
     if (lod) {
-      // Stash so `_applyColorsToSource` can recompute on coloringMode change.
-      lod.helixIds = helixIds
+      // Stash interval list so `_applyColorsToSource` can re-average
+      // segment colours per interval on every coloringMode change.
+      lod.intervals = intervals
     }
     return lod
   }
@@ -4016,37 +4051,30 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     }
     _copySegmentColors(srcEntry.overhangLod, tmpOvhgCyl)
 
-    // Mid LOD: one cylinder per helix → average the legacy iHelixCylinders
-    // per-strand-domain colours by helixId.  Uses domainCylData (exposed
-    // by helix_renderer) to map cylIdx → helixId.
-    if (srcEntry.midLod?.segColorTex && srcEntry.midLod?.helixIds
+    // Mid LOD: one cylinder per *contiguous dsDNA region* (interval) →
+    // average the legacy iHelixCylinders per-domain colours within each
+    // interval.  Each interval carries its own `domains` list with
+    // cylIdx entries that index into tmpHelixCyl.instanceColor.
+    if (srcEntry.midLod?.segColorTex && srcEntry.midLod?.intervals
         && tmpHelixCyl?.instanceColor) {
       const midLod = srcEntry.midLod
-      const helixIds = midLod.helixIds
-      const numHelices = midLod.numSegments  // 1 cylinder per helix
-      const helixIdToIdx = new Map()
-      for (let i = 0; i < numHelices; i++) helixIdToIdx.set(helixIds[i], i)
-      const sumR = new Float32Array(numHelices)
-      const sumG = new Float32Array(numHelices)
-      const sumB = new Float32Array(numHelices)
-      const counts = new Int32Array(numHelices)
+      const intervals = midLod.intervals
       const cylColors = tmpHelixCyl.instanceColor.array
-      const domainCylData = tmpHelixCtrl.domainCylData ?? []
-      for (const dom of domainCylData) {
-        const hIdx = helixIdToIdx.get(dom.helixId)
-        if (hIdx == null) continue
-        const ci = dom.cylIdx * 3
-        sumR[hIdx] += cylColors[ci + 0]
-        sumG[hIdx] += cylColors[ci + 1]
-        sumB[hIdx] += cylColors[ci + 2]
-        counts[hIdx]++
-      }
       const dst = midLod.segColorData
-      for (let i = 0; i < numHelices; i++) {
-        if (counts[i] > 0) {
-          dst[i * 4 + 0] = sumR[i] / counts[i]
-          dst[i * 4 + 1] = sumG[i] / counts[i]
-          dst[i * 4 + 2] = sumB[i] / counts[i]
+      for (let i = 0; i < intervals.length; i++) {
+        const iv = intervals[i]
+        let sumR = 0, sumG = 0, sumB = 0, count = 0
+        for (const d of iv.domains) {
+          const ci = d.cylIdx * 3
+          sumR += cylColors[ci + 0]
+          sumG += cylColors[ci + 1]
+          sumB += cylColors[ci + 2]
+          count++
+        }
+        if (count > 0) {
+          dst[i * 4 + 0] = sumR / count
+          dst[i * 4 + 1] = sumG / count
+          dst[i * 4 + 2] = sumB / count
         } else {
           dst[i * 4 + 0] = 1
           dst[i * 4 + 1] = 1
