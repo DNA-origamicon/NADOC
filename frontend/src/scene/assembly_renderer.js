@@ -2785,18 +2785,20 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       `overhang=${legacyOvhgMesh ? (legacyOvhgMesh.userData.sharedBase ?? legacyOvhgMesh.count) : 'missing'}`,
     )
 
-    // Mid LOD: per-strand-domain helix cylinders — matches legacy detail
-    // (multiple short cylinders per helix, with gaps where overhangs/nicks
-    // fall), not the previous "one continuous cylinder per helix axis"
-    // simplification.
+    // Mid LOD: ONE cylinder per helix axis (built from `helix_axes`
+    // start/end), not per-strand-domain.  Matches the user's mental
+    // model "non-overhang helices = one cylinder"; overhangs render
+    // separately via the overhang LOD below so they still poke out.
+    // legacyHelixCylMesh is passed in only as a source of per-segment
+    // colour data (averaged into one colour per helix).
     if (legacyHelixCylMesh && (legacyHelixCylMesh.userData.sharedBase ?? 0) > 0) {
       const origCount = legacyHelixCylMesh.userData.sharedBase
       legacyHelixCylMesh.count = origCount
-      const midLod = _buildMidLodMesh(srcEntry, legacyHelixCylMesh, helixGroup)
+      const midLod = _buildMidLodMesh(srcEntry, design, helix_axes, legacyHelixCylMesh, helixGroup)
       legacyHelixCylMesh.count = 0
       if (midLod) {
         srcEntry.midLod = midLod
-        console.info(`[shared_renderer]   mid LOD built: numSegments=${midLod.numSegments}`)
+        console.info(`[shared_renderer]   mid LOD built: numHelices=${midLod.numSegments}`)
       } else {
         console.warn('[shared_renderer]   _buildMidLodMesh returned null')
       }
@@ -3026,36 +3028,40 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return merged
   })()
 
-  // Generic per-segment InstancedMesh builder.  Both helix and overhang
-  // mid-LOD meshes use the same pattern: copy per-segment matrices + colors
-  // from a legacy InstancedMesh built by buildHelixObjects (iHelixCylinders
-  // / iOverhangCylinders), pack into 2D-tiled DataTextures, and patch the
-  // material's shader to sample them per `gl_InstanceID`.
-  //
-  // The per-instance world transform comes from the shared per-source
-  // xform texture (already set up by `_buildSource`).  Total mesh count =
-  // numSegments × numInstances; the shader decomposes gl_InstanceID via
-  // `u_numSegments` to recover (instanceIdx, segmentIdx).
+  // Generic per-segment InstancedMesh builder.  Takes raw arrays of
+  // per-segment matrices (matrixArray, 16 floats/segment, source-local)
+  // and per-segment colors (colorArrayRGB, 3 floats/segment).  Both data
+  // sources currently used:
+  //   • iHelixCylinders / iOverhangCylinders: legacy InstancedMesh
+  //     instanceMatrix/instanceColor arrays (per-strand-domain or
+  //     per-overhang segments).
+  //   • helix_axes-derived: one mat4 per helix axis, one RGB per helix
+  //     averaged from strand colors (for "one cylinder per helix"
+  //     mid-LOD look).
+  // Packs the matrix data into a 2D-tiled DataTexture (BP_TILE_W wide
+  // for big counts, same layout as bp matrices) and the colour data
+  // into a 1×N RGBA texture.  Shader composes `world = instTransform ×
+  // segMat × position` per `gl_InstanceID`.
   function _buildSegmentLodMesh({
-    srcEntry, legacyMesh, geometry, meshName, sourceGroup, side = THREE.FrontSide,
+    srcEntry, matrixArray, colorArrayRGB, numSegments,
+    geometry, meshName, sourceGroup, side = THREE.FrontSide,
   }) {
-    const numSegments  = legacyMesh?.count ?? 0
     const numInstances = srcEntry.instanceIds.length
-    if (numSegments === 0 || numInstances === 0) return null
+    if (!numSegments || numSegments === 0 || numInstances === 0) return null
+    if (!matrixArray || matrixArray.length < numSegments * 16) return null
 
     const { tex: segXformTex, data: segXformData } = _makeBpXformTexture(
-      legacyMesh.instanceMatrix.array, numSegments,
+      matrixArray, numSegments,
     )
 
     const tileW = _BP_TEX_TILE_W
     const h = Math.max(1, Math.ceil(numSegments / tileW))
     const colorData = new Float32Array(tileW * h * 4)
-    const srcColor = legacyMesh.instanceColor?.array
-    if (srcColor) {
+    if (colorArrayRGB) {
       for (let i = 0; i < numSegments; i++) {
-        colorData[i * 4 + 0] = srcColor[i * 3 + 0]
-        colorData[i * 4 + 1] = srcColor[i * 3 + 1]
-        colorData[i * 4 + 2] = srcColor[i * 3 + 2]
+        colorData[i * 4 + 0] = colorArrayRGB[i * 3 + 0]
+        colorData[i * 4 + 1] = colorArrayRGB[i * 3 + 1]
+        colorData[i * 4 + 2] = colorArrayRGB[i * 3 + 2]
         colorData[i * 4 + 3] = 1.0
       }
     } else {
@@ -3183,19 +3189,103 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     }
   }
 
-  // Backwards-compat wrapper for the helix mid-LOD.  Takes the legacy
-  // iHelixCylinders mesh and builds a per-domain InstancedMesh — gives the
-  // legacy per-strand-domain look (multiple short cylinders per helix, with
-  // gaps where overhangs / nicks fall) instead of the previous "one cylinder
-  // spanning the whole helix" simplification.
-  function _buildMidLodMesh(srcEntry, legacyHelixCylMesh, sourceGroup) {
-    return _buildSegmentLodMesh({
+  // Build per-helix matrices + per-helix average colours, then call the
+  // generic segment-LOD builder.  Output: one cylinder per helix axis
+  // (matching the user's mental model "non-overhang helix = one cylinder")
+  // rather than per-strand-domain segments.  Overhangs render separately
+  // via `_buildOverhangLodMesh` so they still poke out from the helix.
+  function _buildMidLodMesh(srcEntry, design, helix_axes, legacyHelixCylMesh, sourceGroup) {
+    const helixIds = []
+    for (const h of design?.helices ?? []) {
+      if (typeof h.id === 'string' && h.id.startsWith('__lnk__')) continue
+      helixIds.push(h.id)
+    }
+    const numHelices = helixIds.length
+    if (numHelices === 0) return null
+
+    // Pack per-helix matrices into a flat float array, 16 floats per
+    // helix, column-major (matches _makeBpXformTexture's expected layout).
+    const matrixArray = new Float32Array(numHelices * 16)
+    const tmpM = new THREE.Matrix4()
+    const tmpQ = new THREE.Quaternion()
+    const tmpV = new THREE.Vector3()
+    const tmpS = new THREE.Vector3()
+    const yAxis = new THREE.Vector3(0, 1, 0)
+    const dirV  = new THREE.Vector3()
+    for (let i = 0; i < numHelices; i++) {
+      const ax = helix_axes?.[helixIds[i]]
+      if (!ax?.start || !ax?.end) {
+        // Degenerate matrix (all zeros) → cylinder collapses to a point,
+        // renders nothing.  Keeps row alignment with helixIds.
+        continue
+      }
+      const sx = ax.start[0], sy = ax.start[1], sz = ax.start[2]
+      const ex = ax.end[0],   ey = ax.end[1],   ez = ax.end[2]
+      const dx = ex - sx, dy = ey - sy, dz = ez - sz
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz)
+      if (len < 1e-6) continue
+      tmpV.set((sx + ex) * 0.5, (sy + ey) * 0.5, (sz + ez) * 0.5)
+      dirV.set(dx / len, dy / len, dz / len)
+      tmpQ.setFromUnitVectors(yAxis, dirV)
+      tmpS.set(1.0, len, 1.0)
+      tmpM.compose(tmpV, tmpQ, tmpS)
+      const e = tmpM.elements
+      for (let k = 0; k < 16; k++) matrixArray[i * 16 + k] = e[k]
+    }
+
+    // Per-helix colour: average over strand-domain segments touching that
+    // helix.  Pulled from legacyHelixCylMesh.instanceColor + helixCtrl
+    // domainCylData (cylIdx → helixId).
+    const colorArrayRGB = new Float32Array(numHelices * 3)
+    // Default to white so helices without colour data don't render black.
+    for (let i = 0; i < numHelices; i++) {
+      colorArrayRGB[i * 3 + 0] = 1
+      colorArrayRGB[i * 3 + 1] = 1
+      colorArrayRGB[i * 3 + 2] = 1
+    }
+    if (legacyHelixCylMesh?.instanceColor) {
+      const helixIdToIdx = new Map()
+      for (let i = 0; i < numHelices; i++) helixIdToIdx.set(helixIds[i], i)
+      const cylColors = legacyHelixCylMesh.instanceColor.array
+      const sumR = new Float32Array(numHelices)
+      const sumG = new Float32Array(numHelices)
+      const sumB = new Float32Array(numHelices)
+      const counts = new Int32Array(numHelices)
+      // `domainCylData` is exposed on helixCtrl (helix_renderer.js); the
+      // factory call below threads `srcEntry.helixCtrl` if we want it.
+      const domainCylData = srcEntry.helixCtrl?.domainCylData ?? []
+      for (const dom of domainCylData) {
+        const hIdx = helixIdToIdx.get(dom.helixId)
+        if (hIdx == null) continue
+        const ci = dom.cylIdx * 3
+        sumR[hIdx] += cylColors[ci + 0]
+        sumG[hIdx] += cylColors[ci + 1]
+        sumB[hIdx] += cylColors[ci + 2]
+        counts[hIdx]++
+      }
+      for (let i = 0; i < numHelices; i++) {
+        if (counts[i] > 0) {
+          colorArrayRGB[i * 3 + 0] = sumR[i] / counts[i]
+          colorArrayRGB[i * 3 + 1] = sumG[i] / counts[i]
+          colorArrayRGB[i * 3 + 2] = sumB[i] / counts[i]
+        }
+      }
+    }
+
+    const lod = _buildSegmentLodMesh({
       srcEntry,
-      legacyMesh: legacyHelixCylMesh,
+      matrixArray,
+      colorArrayRGB,
+      numSegments: numHelices,
       geometry: _LOD_CYL_GEO,
       meshName: 'sharedLodMid',
       sourceGroup,
     })
+    if (lod) {
+      // Stash so `_applyColorsToSource` can recompute on coloringMode change.
+      lod.helixIds = helixIds
+    }
+    return lod
   }
 
   // ── Overhang-LOD InstancedMesh + shader ──────────────────────────────────
@@ -3212,9 +3302,13 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // source-local space.  We copy them into our own DataTextures so the shared
   // shader can sample per-segment without needing the source iHelixCtrl alive.
   function _buildOverhangLodMesh(srcEntry, legacyOverhangMesh, sourceGroup) {
+    const numSegments = legacyOverhangMesh?.count ?? 0
+    if (numSegments === 0) return null
     return _buildSegmentLodMesh({
       srcEntry,
-      legacyMesh: legacyOverhangMesh,
+      matrixArray:   legacyOverhangMesh.instanceMatrix.array,
+      colorArrayRGB: legacyOverhangMesh.instanceColor?.array,
+      numSegments,
       geometry: _LOD_HALF_CYL_GEO,
       meshName: 'sharedLodOverhangs',
       sourceGroup,
@@ -3904,10 +3998,9 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       am.bpColorTex.needsUpdate = true
     }
 
-    // Per-segment colour updates for mid + overhang LODs.  Both share the
-    // same shape: copy the legacy mesh's instanceColor (3 floats per
-    // segment, populated by helixCtrl.applyColoring during the temp build)
-    // into our 2D-tiled per-segment colour texture (4 floats per segment).
+    // Direct per-segment colour copy (overhang LOD): the temp mesh's
+    // instanceColor already matches the LOD's numSegments 1:1, so we just
+    // copy 3 floats per segment into the LOD's 4-float texture rows.
     function _copySegmentColors(lod, tmpMesh) {
       if (!lod?.segColorTex || !tmpMesh?.instanceColor) return
       const src = tmpMesh.instanceColor.array
@@ -3921,8 +4014,48 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       }
       lod.segColorTex.needsUpdate = true
     }
-    _copySegmentColors(srcEntry.midLod, tmpHelixCyl)
     _copySegmentColors(srcEntry.overhangLod, tmpOvhgCyl)
+
+    // Mid LOD: one cylinder per helix → average the legacy iHelixCylinders
+    // per-strand-domain colours by helixId.  Uses domainCylData (exposed
+    // by helix_renderer) to map cylIdx → helixId.
+    if (srcEntry.midLod?.segColorTex && srcEntry.midLod?.helixIds
+        && tmpHelixCyl?.instanceColor) {
+      const midLod = srcEntry.midLod
+      const helixIds = midLod.helixIds
+      const numHelices = midLod.numSegments  // 1 cylinder per helix
+      const helixIdToIdx = new Map()
+      for (let i = 0; i < numHelices; i++) helixIdToIdx.set(helixIds[i], i)
+      const sumR = new Float32Array(numHelices)
+      const sumG = new Float32Array(numHelices)
+      const sumB = new Float32Array(numHelices)
+      const counts = new Int32Array(numHelices)
+      const cylColors = tmpHelixCyl.instanceColor.array
+      const domainCylData = tmpHelixCtrl.domainCylData ?? []
+      for (const dom of domainCylData) {
+        const hIdx = helixIdToIdx.get(dom.helixId)
+        if (hIdx == null) continue
+        const ci = dom.cylIdx * 3
+        sumR[hIdx] += cylColors[ci + 0]
+        sumG[hIdx] += cylColors[ci + 1]
+        sumB[hIdx] += cylColors[ci + 2]
+        counts[hIdx]++
+      }
+      const dst = midLod.segColorData
+      for (let i = 0; i < numHelices; i++) {
+        if (counts[i] > 0) {
+          dst[i * 4 + 0] = sumR[i] / counts[i]
+          dst[i * 4 + 1] = sumG[i] / counts[i]
+          dst[i * 4 + 2] = sumB[i] / counts[i]
+        } else {
+          dst[i * 4 + 0] = 1
+          dst[i * 4 + 1] = 1
+          dst[i * 4 + 2] = 1
+        }
+        dst[i * 4 + 3] = 1
+      }
+      midLod.segColorTex.needsUpdate = true
+    }
 
     // Far-LOD billboard tint: source-average of the mid-LOD per-segment
     // colours we just wrote, so the far rectangle still tracks coloringMode.
