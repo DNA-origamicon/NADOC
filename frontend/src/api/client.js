@@ -2095,6 +2095,17 @@ export async function addAssemblyJoint(body) {
   return _syncFromAssemblyResponse(json)
 }
 
+/**
+ * Atomic mate creation — registers blunt-end connectors, propagates FK to the
+ * aligned pose, and adds the joint in ONE round-trip.  Replaces the old
+ * addInstanceConnector ×2 → propagateFk → addAssemblyJoint sequence, which
+ * fired the store subscriber four times and snapped the live preview around.
+ */
+export async function createMate(body) {
+  const json = await _request('POST', '/assembly/joints/create-mate', body)
+  return _syncFromAssemblyResponse(json)
+}
+
 export async function patchAssemblyJoint(id, body) {
   const json = await _request('PATCH', `/assembly/joints/${id}`, body)
   return _syncFromAssemblyResponse(json)

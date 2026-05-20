@@ -886,28 +886,17 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     const { minAngleDeg, maxAngleDeg } = opts
     let axisOrigin = first.worldPos.slice()
     let axisDir    = first.worldNorm.slice()
+    let movedId    = null
+    let transform  = null
 
-    // Auto-register blunt-end connectors as InterfacePoints before creating the joint.
-    // 400 = label already exists (idempotent — safe to ignore).
-    const _registerBlunt = async (conn) => {
-      if (!conn?.isBluntEnd || !conn.localPos) return
-      try {
-        await api.addInstanceConnector(conn.instanceId, {
-          label:    conn.label,
-          position: conn.localPos,
-          normal:   conn.localNorm,
-          cluster_id: conn.clusterId ?? null,
-        })
-      } catch (_) {}
-    }
-    await _registerBlunt(first)
-    await _registerBlunt(second)
-
+    // Alignment math stays on the frontend (it reads live world-space connector
+    // frames already in the renderer).  The result drives the FK move; the
+    // backend does connector registration + FK + joint atomically.
     if (second) {
       const result = _computeAlignTransform(first, second, { ...opts, jointType })
       if (result) {
-        // Use propagateFk so FK is propagated to the aligned instance's kinematic children
-        await api.propagateFk(result.instanceId, result.matrix.clone().transpose().toArray())
+        movedId    = result.instanceId
+        transform  = { values: result.matrix.clone().transpose().toArray() }
         axisOrigin = result.axisOrigin
         axisDir    = result.axisDir
       } else {
@@ -916,18 +905,27 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     }
 
     const DEG = Math.PI / 180
-    await api.addAssemblyJoint({
-      instance_a_id:     second?.instanceId ?? null,
-      cluster_id_a:      second?.clusterId ?? null,
-      instance_b_id:     first.instanceId,
-      cluster_id_b:      first.clusterId ?? null,
+    const _connSpec = (c) => c ? {
+      instance_id:  c.instanceId,
+      label:        c.label,
+      position:     c.localPos  ?? [0, 0, 0],
+      normal:       c.localNorm ?? [0, 0, 1],
+      cluster_id:   c.clusterId ?? null,
+      is_blunt_end: !!(c.isBluntEnd && c.localPos),
+    } : null
+
+    // ONE round-trip: register blunt ends + propagate FK + add joint server-side.
+    await api.createMate({
+      child_connector:   _connSpec(first),
+      parent_connector:  _connSpec(second),
+      moved_instance_id: movedId,
+      transform,
+      name:              'Joint',
+      joint_type:        jointType,
       axis_origin:       axisOrigin,
       axis_direction:    axisDir,
-      joint_type:        jointType,
       min_limit:         minAngleDeg !== undefined ? minAngleDeg * DEG : null,
       max_limit:         maxAngleDeg !== undefined ? maxAngleDeg * DEG : null,
-      connector_a_label: second?.label ?? null,
-      connector_b_label: first.label,
     })
   }
 

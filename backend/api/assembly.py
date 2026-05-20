@@ -1075,6 +1075,35 @@ class AddJointRequest(BaseModel):
     connector_b_label: Optional[str] = None
 
 
+class MateConnectorSpec(BaseModel):
+    """One side of a mate. ``position``/``normal`` are instance-LOCAL and used
+    only to register a blunt-end connector as an InterfacePoint when
+    ``is_blunt_end`` is true (no-op if the label already exists)."""
+    instance_id: str
+    label: str
+    position: list[float] = [0.0, 0.0, 0.0]
+    normal: list[float] = [0.0, 0.0, 1.0]
+    cluster_id: Optional[str] = None
+    is_blunt_end: bool = False
+
+
+class CreateMateRequest(BaseModel):
+    """Atomic mate creation: register blunt-end connectors + propagate FK to the
+    aligned pose + add the joint, in ONE request.  Collapses the old
+    4-round-trip frontend sequence (addConnector ×2 → propagate_fk → add_joint)
+    into a single store update / undo step / feature-log entry."""
+    child_connector: MateConnectorSpec
+    parent_connector: Optional[MateConnectorSpec] = None   # None => World mate
+    moved_instance_id: Optional[str] = None                # which instance FK moves (None => no move)
+    transform: Optional[dict] = None                       # {"values": [16]} row-major, for moved instance
+    name: str = "Joint"
+    joint_type: str = "rigid"
+    axis_origin: list[float] = [0.0, 0.0, 0.0]
+    axis_direction: list[float] = [0.0, 0.0, 1.0]
+    min_limit: Optional[float] = None
+    max_limit: Optional[float] = None
+
+
 class PatchJointRequest(BaseModel):
     name: Optional[str] = None
     joint_type: Optional[str] = None  # changing type resets current_value to 0
@@ -1316,6 +1345,50 @@ class PropagateFKRequest(BaseModel):
     transform: dict   # {values: [16 floats], row-major}
 
 
+def _propagate_fk_inplace(
+    assembly: Assembly,
+    instance_id: str,
+    transform_values: list[float],
+    inst_by_id: dict[str, PartInstance],
+) -> None:
+    """Move ``instance_id`` to a new world transform and propagate FK to all
+    kinematic descendants — mutating ``assembly`` in place.
+
+    The root instance has its base_transform nulled (user directly placed it).
+    Descendants have their transforms + base_transforms updated by the same
+    delta, so joint values stay visually unchanged.  Joint axes along the path
+    are updated, then mated connectors are re-snapped to stay coincident.
+
+    Caller owns snapshot/persist.  Raises HTTP 404/400 for missing / fixed /
+    singular cases (validation is idempotent, safe to call after an early check).
+    """
+    inst = inst_by_id.get(instance_id)
+    if not inst:
+        raise HTTPException(404, detail=f"Instance {instance_id} not found")
+    if inst.fixed:
+        raise HTTPException(400, detail=f"Instance {instance_id} is fixed and cannot be moved")
+
+    old_T = inst.transform.to_array()
+    new_T = np.array(transform_values, dtype=float).reshape(4, 4)
+    try:
+        delta = new_T @ np.linalg.inv(old_T)
+    except np.linalg.LinAlgError:
+        raise HTTPException(400, detail="Instance transform is singular")
+
+    # Root: directly moved by user — null base_transform so next joint drive uses new position
+    inst.transform = Mat4x4(values=[float(v) for v in new_T.flatten()])
+    inst.base_transform = None
+
+    # Expand root's rigid group and propagate FK to all kinematic descendants
+    visited = {instance_id}
+    _fk_expand_rigid_group(assembly, instance_id, delta, visited, [], inst_by_id)
+    _fk_propagate(assembly, visited.copy(), delta, visited, inst_by_id)
+
+    # Re-snap any rigid/revolute joint children that moved without their parent,
+    # ensuring mated connectors remain coincident after the move.
+    _enforce_connector_coincidence(assembly, visited, inst_by_id)
+
+
 @router.post("/assembly/propagate_fk", status_code=200)
 def propagate_fk(body: PropagateFKRequest) -> dict:
     """Move one instance to a new world transform and propagate FK to all kinematic descendants.
@@ -1333,27 +1406,7 @@ def propagate_fk(body: PropagateFKRequest) -> dict:
     if inst.fixed:
         raise HTTPException(400, detail=f"Instance {body.instance_id} is fixed and cannot be moved")
     assembly_state.snapshot()
-
-    old_T = inst.transform.to_array()
-    new_T = np.array(body.transform["values"], dtype=float).reshape(4, 4)
-    try:
-        delta = new_T @ np.linalg.inv(old_T)
-    except np.linalg.LinAlgError:
-        raise HTTPException(400, detail="Instance transform is singular")
-
-    # Root: directly moved by user — null base_transform so next joint drive uses new position
-    inst.transform = Mat4x4(values=[float(v) for v in new_T.flatten()])
-    inst.base_transform = None
-
-    # Expand root's rigid group and propagate FK to all kinematic descendants
-    visited = {body.instance_id}
-    _fk_expand_rigid_group(assembly, body.instance_id, delta, visited, [], inst_by_id)
-    _fk_propagate(assembly, visited.copy(), delta, visited, inst_by_id)
-
-    # Re-snap any rigid/revolute joint children that moved without their parent,
-    # ensuring mated connectors remain coincident after the move.
-    _enforce_connector_coincidence(assembly, visited, inst_by_id)
-
+    _propagate_fk_inplace(assembly, body.instance_id, body.transform["values"], inst_by_id)
     assembly_state.set_assembly_silent(assembly)
     return _assembly_response(assembly)
 
@@ -3429,10 +3482,18 @@ def delete_instance(instance_id: str) -> dict:
 
 # ── Joint routes ──────────────────────────────────────────────────────────────
 
-@router.post("/assembly/joints", status_code=201)
-def add_joint(body: AddJointRequest) -> dict:
-    """Add an AssemblyJoint, snap instance_b to connector_a, and snapshot base_transform."""
-    assembly = assembly_state.get_or_404()
+def _compose_add_joint(
+    assembly: Assembly, body: AddJointRequest,
+) -> tuple[Assembly, AssemblyJoint, str, dict]:
+    """Build the assembly state for a new joint: derive axis_origin, snap
+    instance_b to connector_a, snapshot base_transform, capture
+    mate_relative_transform, and propagate the snap to non-rigid children.
+
+    Returns ``(new_assembly, joint, feature_log_label, feature_log_params)``.
+    Pure w.r.t. ``assembly_state`` — the caller persists via
+    ``_apply_assembly_mutation_with_feature_log``.  Shared by ``add_joint``
+    and the atomic ``create_mate`` endpoint.
+    """
     _find_instance(assembly, body.instance_b_id)
     if body.instance_a_id is not None:
         _find_instance(assembly, body.instance_a_id)
@@ -3552,25 +3613,114 @@ def add_joint(body: AddJointRequest) -> dict:
     inst_b_name = _find_instance(new_assembly, body.instance_b_id).name
     label_str = f"Add mate: {inst_a_name} ↔ {inst_b_name}"
 
+    params = {
+        "joint_id":          joint.id,
+        "name":              joint.name,
+        "joint_type":        joint.joint_type,
+        "instance_a_id":     joint.instance_a_id,
+        "instance_b_id":     joint.instance_b_id,
+        "cluster_id_a":      joint.cluster_id_a,
+        "cluster_id_b":      joint.cluster_id_b,
+        "axis_origin":       list(joint.axis_origin),
+        "axis_direction":    list(joint.axis_direction),
+        "min_limit":         joint.min_limit,
+        "max_limit":         joint.max_limit,
+        "connector_a_label": joint.connector_a_label,
+        "connector_b_label": joint.connector_b_label,
+        "mate_relative_transform": list(joint.mate_relative_transform) if joint.mate_relative_transform else None,
+    }
+    return new_assembly, joint, label_str, params
+
+
+@router.post("/assembly/joints", status_code=201)
+def add_joint(body: AddJointRequest) -> dict:
+    """Add an AssemblyJoint, snap instance_b to connector_a, and snapshot base_transform."""
+    assembly = assembly_state.get_or_404()
+    new_assembly, _joint, label_str, params = _compose_add_joint(assembly, body)
     _apply_assembly_mutation_with_feature_log(
         new_assembly,
         op_kind="assembly-add-joint",
         label=label_str,
+        params=params,
+    )
+    return _assembly_response(assembly_state.get_or_404())
+
+
+@router.post("/assembly/joints/create-mate", status_code=201)
+def create_mate(body: CreateMateRequest) -> dict:
+    """Create a mate in ONE request: register blunt-end connectors, propagate FK
+    to the aligned pose, and add the joint.
+
+    Replaces the old frontend sequence of four awaited round-trips
+    (addConnector × 2 → propagate_fk → add_joint), each of which replaced the
+    active assembly and fired the renderer's store subscriber.  Two of those
+    carried an unchanged transform and snapped any live mate preview back to
+    the stored pose, producing the visible "moves three times" jank.  Doing it
+    all server-side yields a single store update, a single undo step, and a
+    single feature-log entry.
+    """
+    live = assembly_state.get_or_404()
+    # Work on a deep copy so every sub-step mutates freely; the live state is
+    # untouched until the single feature-log apply at the end.
+    assembly = live.model_copy(deep=True)
+    inst_by_id = _build_inst_by_id(assembly)
+
+    # 1. Register blunt-end connectors as InterfacePoints (idempotent — skip if
+    #    the label already exists, e.g. a previously-defined interface point).
+    def _register(conn: 'MateConnectorSpec | None') -> None:
+        if conn is None or not conn.is_blunt_end:
+            return
+        inst = inst_by_id.get(conn.instance_id)
+        if inst is None or any(ip.label == conn.label for ip in inst.interface_points):
+            return
+        inst.interface_points.append(InterfacePoint(
+            label=conn.label,
+            position=Vec3(x=conn.position[0], y=conn.position[1], z=conn.position[2]),
+            normal=Vec3(x=conn.normal[0], y=conn.normal[1], z=conn.normal[2]),
+            connection_type=ConnectionType.COVALENT,
+            cluster_id=conn.cluster_id,
+        ))
+    _register(body.child_connector)
+    _register(body.parent_connector)
+
+    # 2. Propagate FK to the aligned pose.  Skipped for World mates / both-fixed
+    #    parts, where the frontend sends no transform.
+    if body.moved_instance_id and body.transform and "values" in body.transform:
+        _propagate_fk_inplace(assembly, body.moved_instance_id, body.transform["values"], inst_by_id)
+
+    # 3. Compose the joint on the connector-registered, FK-moved assembly.
+    joint_body = AddJointRequest(
+        name=body.name,
+        joint_type=body.joint_type,
+        instance_a_id=(body.parent_connector.instance_id if body.parent_connector else None),
+        cluster_id_a=(body.parent_connector.cluster_id if body.parent_connector else None),
+        instance_b_id=body.child_connector.instance_id,
+        cluster_id_b=body.child_connector.cluster_id,
+        axis_origin=body.axis_origin,
+        axis_direction=body.axis_direction,
+        min_limit=body.min_limit,
+        max_limit=body.max_limit,
+        connector_a_label=(body.parent_connector.label if body.parent_connector else None),
+        connector_b_label=body.child_connector.label,
+    )
+    new_assembly, joint, _label, _params = _compose_add_joint(assembly, joint_body)
+
+    # 4. Apply once: single undo step + single feature-log entry.
+    inst_a_name = (_find_instance(new_assembly, joint.instance_a_id).name
+                   if joint.instance_a_id else "world")
+    inst_b_name = _find_instance(new_assembly, joint.instance_b_id).name
+    _apply_assembly_mutation_with_feature_log(
+        new_assembly,
+        op_kind="assembly-create-mate",
+        label=f"Create mate: {inst_a_name} ↔ {inst_b_name}",
         params={
             "joint_id":          joint.id,
-            "name":              joint.name,
             "joint_type":        joint.joint_type,
             "instance_a_id":     joint.instance_a_id,
             "instance_b_id":     joint.instance_b_id,
-            "cluster_id_a":      joint.cluster_id_a,
-            "cluster_id_b":      joint.cluster_id_b,
-            "axis_origin":       list(joint.axis_origin),
-            "axis_direction":    list(joint.axis_direction),
-            "min_limit":         joint.min_limit,
-            "max_limit":         joint.max_limit,
+            "moved_instance_id": body.moved_instance_id,
             "connector_a_label": joint.connector_a_label,
             "connector_b_label": joint.connector_b_label,
-            "mate_relative_transform": list(joint.mate_relative_transform) if joint.mate_relative_transform else None,
         },
     )
     return _assembly_response(assembly_state.get_or_404())

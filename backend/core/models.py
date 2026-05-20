@@ -986,6 +986,7 @@ SnapshotOpKind = Literal[
     'assembly-delete-connector',
     'assembly-add-joint',
     'assembly-delete-joint',
+    'assembly-create-mate',
 ]
 
 
