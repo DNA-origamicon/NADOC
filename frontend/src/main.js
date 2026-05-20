@@ -8747,11 +8747,18 @@ Typical debugging workflow for "reverts to 3D" bug:
         assemblyPanel.show()
         assemblyPanel.rebuild(newState)
         if (newState.currentAssembly) {
+          // Default coloring to Overhang highlight on every fresh assembly
+          // mode entry — overhangs mark mate-point candidates, so foregrounding
+          // them is the most informative starting view.  If the user picks
+          // a different coloring it persists for the session (we only run
+          // this on the mode transition, not on every assembly mutation).
+          _setColoringMode('overhang-only')
           assemblyRenderer.rebuild(newState.currentAssembly)
             .then(() => {
               assemblyRenderer.rebuildLinkers(newState.currentAssembly)
               _syncAssemblyBluntEnds()
               _autoApplyLargeAssemblyDefaults(newState.currentAssembly)
+              _syncAssemblyReprMenu(newState.currentAssembly)
             })
           assemblyJointRenderer.rebuild(newState.currentAssembly)
         }
@@ -8766,6 +8773,8 @@ Typical debugging workflow for "reverts to 3D" bug:
         _rebuildFixedLocks(null)
         controls.removeEventListener('change', _updateFixedLockPositions)
         _setDesignGeometryVisible(true)
+        // Reset mixed-rep dot — only meaningful in assembly mode.
+        document.getElementById('menu-view-repr-mixed-dot')?.style.setProperty('display', 'none')
         assemblyPanel.hide()
         assemblyContextMenu.hide()
         instanceGizmo.detach()
@@ -8821,6 +8830,7 @@ Typical debugging workflow for "reverts to 3D" bug:
               const depths = computeFixedDepths(newState.currentAssembly)
               if (depths.has(newState.activeInstanceId)) _rebuildFixedLocks(newState.currentAssembly)
             }
+            _syncAssemblyReprMenu(newState.currentAssembly)
           })
         assemblyJointRenderer.rebuild(newState.currentAssembly)
       }
@@ -10786,6 +10796,37 @@ Typical debugging workflow for "reverts to 3D" bug:
       document.getElementById(id)?.classList.toggle('is-checked', repr === activeRepr)
     }
     _updateColoringMenuAvailability(activeRepr)
+  }
+
+  // Sync the View → Representation menu state with the current assembly's
+  // per-part representations.  Three states:
+  //   • All parts agree on a single representation → normal radio check
+  //     on that representation, no mixed-state dot.
+  //   • Parts disagree → no representation is checked AND the green dot
+  //     next to "Representation" lights up so the user knows the menu
+  //     selection is ambiguous.
+  //   • No assembly / no instances → hide the dot and leave the menu
+  //     state to design-mode handling.
+  function _syncAssemblyReprMenu(assembly) {
+    const dotEl = document.getElementById('menu-view-repr-mixed-dot')
+    const instances = assembly?.instances ?? []
+    if (instances.length === 0) {
+      if (dotEl) dotEl.style.display = 'none'
+      return
+    }
+    const reps = new Set()
+    for (const inst of instances) reps.add(inst.representation ?? 'full')
+    if (reps.size === 1) {
+      const only = [...reps][0]
+      _updateReprRadio(only)
+      if (dotEl) dotEl.style.display = 'none'
+    } else {
+      // Mixed: clear every is-checked so no representation looks selected.
+      for (const { id } of _ALL_REPRS) {
+        document.getElementById(id)?.classList.remove('is-checked')
+      }
+      if (dotEl) dotEl.style.display = ''
+    }
   }
 
   // Per-representation support matrix for the View → Coloring submenu.
