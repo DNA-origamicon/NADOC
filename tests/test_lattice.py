@@ -879,6 +879,72 @@ def test_autodetect_overhangs_idempotent():
     assert len(d2.overhangs) == len(d1.overhangs) == 1
 
 
+def _design_with_crossover_tail_overhang():
+    """A staple 5' free tail crosses over onto a SCAFFOLD-BEARING helix at a bp
+    range OUTSIDE that helix's scaffold coverage.
+
+    Mirrors the ``stap_36_331`` case in *Ultimate Polymer Hinge*: h0 carries
+    scaffold at bp 0-41, but the staple's 5' tail sits at bp 100-111 on h0; its
+    3' body is paired on h1. The old per-helix skip in autodetect_overhangs
+    treated this tail as "scaffold-covered" (h0 has scaffold somewhere) and
+    missed it.
+    """
+    from backend.core.models import (
+        Design, Helix, Strand, Domain, StrandType, Direction, Vec3, DesignMetadata,
+    )
+    h0 = Helix(
+        id="h0", axis_start=Vec3(x=0, y=0, z=0),
+        axis_end=Vec3(x=0, y=0, z=150 * BDNA_RISE_PER_BP),
+        length_bp=150, bp_start=0, phase_offset=0.0, twist_per_bp_rad=_math.radians(34.3),
+    )
+    h1 = Helix(
+        id="h1", axis_start=Vec3(x=2.5, y=0, z=0),
+        axis_end=Vec3(x=2.5, y=0, z=42 * BDNA_RISE_PER_BP),
+        length_bp=42, bp_start=0, phase_offset=0.0, twist_per_bp_rad=_math.radians(34.3),
+    )
+    scaffold = Strand(
+        id="scaf", strand_type=StrandType.SCAFFOLD,
+        domains=[
+            Domain(helix_id="h0", start_bp=0,  end_bp=41, direction=Direction.FORWARD),
+            Domain(helix_id="h1", start_bp=41, end_bp=0,  direction=Direction.REVERSE),
+        ],
+    )
+    # Staple: 5' tail on h0 at bp 100-111 (scaffold-free region of h0), 3' body on h1.
+    staple = Strand(
+        id="stap", strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h0", start_bp=111, end_bp=100, direction=Direction.REVERSE),
+            Domain(helix_id="h1", start_bp=0,   end_bp=15,  direction=Direction.FORWARD),
+        ],
+    )
+    return Design(helices=[h0, h1], strands=[scaffold, staple], metadata=DesignMetadata(name="xtail"))
+
+
+def test_autodetect_overhangs_tags_crossover_tail_outside_scaffold_range():
+    """A 5' tail entirely outside scaffold range on a scaffold-bearing helix is
+    tagged (regression: stap_36_331; old per-helix skip missed it)."""
+    design = _design_with_crossover_tail_overhang()
+    result = autodetect_overhangs(design)
+    staple = next(s for s in result.strands if s.id == "stap")
+    assert staple.domains[0].helix_id == "h0"
+    assert staple.domains[0].overhang_id == "ovhg_inline_stap_5p"
+    assert any(o.id == "ovhg_inline_stap_5p" for o in result.overhangs)
+    # 3' end is within h1 scaffold → genuine dsDNA, not an overhang.
+    assert staple.domains[-1].overhang_id is None
+
+
+def test_autodetect_all_overhangs_keeps_crossover_tail_through_pass2():
+    """The full pipeline must keep the cross-over tail tagged — Pass 2's merge
+    step must not strip a whole-domain overhang it can't re-split."""
+    from backend.core.lattice import autodetect_all_overhangs
+    design = _design_with_crossover_tail_overhang()
+    result = autodetect_all_overhangs(design)
+    staple = next(s for s in result.strands if s.id == "stap")
+    tail = next(d for d in staple.domains if d.helix_id == "h0")
+    assert tail.overhang_id == "ovhg_inline_stap_5p"
+    assert any(o.id == "ovhg_inline_stap_5p" for o in result.overhangs)
+
+
 def test_autodetect_overhangs_skips_isolated_staple():
     """A staple entirely on a scaffold-free helix (not anchored to the bundle) is not tagged."""
     from backend.core.models import (

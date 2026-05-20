@@ -2504,7 +2504,7 @@ def load_design(body: FilePathRequest) -> dict:
     coordinates are arbitrary. The user can manually trigger recentering via
     POST ``/design/center``.
     """
-    from backend.core.lattice import migrate_split_staple_domains, reconcile_all_inline_overhangs
+    from backend.core.lattice import migrate_split_staple_domains, autodetect_all_overhangs
     from backend.core.validator import validate_design
     path = os.path.abspath(body.path)
     if not os.path.isfile(path):
@@ -2516,7 +2516,11 @@ def load_design(body: FilePathRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load design: {exc}") from exc
     design = migrate_split_staple_domains(design)
-    design = reconcile_all_inline_overhangs(design)
+    # Full detection (Pass 1 autodetect + Pass 2 reconcile), not just reconcile:
+    # idempotent for already-tagged overhangs, but also catches overhangs the
+    # original import missed (e.g. cross-over tails entirely outside scaffold —
+    # the stap_36_331 case), so existing .nadoc files self-correct on load.
+    design = autodetect_all_overhangs(design)
     design = _fix_stale_ovhg_pivots(design)
     design = _backfill_sub_domains_if_empty(design)
     design_state.clear_history()   # fresh baseline — no undo into previous session
@@ -2536,14 +2540,18 @@ def import_design(body: DesignImportRequest) -> dict:
     Like ``/design/load``, native .nadoc content preserves absolute positions —
     recentering is only applied to non-native imports.
     """
-    from backend.core.lattice import migrate_split_staple_domains, reconcile_all_inline_overhangs
+    from backend.core.lattice import migrate_split_staple_domains, autodetect_all_overhangs
     from backend.core.validator import validate_design
     try:
         design = Design.from_json(body.content)
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to parse design: {exc}") from exc
     design = migrate_split_staple_domains(design)
-    design = reconcile_all_inline_overhangs(design)
+    # Full detection (Pass 1 autodetect + Pass 2 reconcile), not just reconcile:
+    # idempotent for already-tagged overhangs, but also catches overhangs the
+    # original import missed (e.g. cross-over tails entirely outside scaffold —
+    # the stap_36_331 case), so existing .nadoc files self-correct on load.
+    design = autodetect_all_overhangs(design)
     design = _fix_stale_ovhg_pivots(design)
     design = _backfill_sub_domains_if_empty(design)
     design_state.clear_history()

@@ -2715,10 +2715,21 @@ def _reconcile_inline_overhangs(
         term_idx = 0 if is_5p else len(domains) - 1
         term_dom = domains[term_idx]
 
-        # Scaffold-free helices: overhang tagging is owned exclusively by
-        # autodetect_overhangs.  Skip here to avoid clobbering that tagging.
-        if term_dom.helix_id not in scaf_cov:
+        # Whole-domain overhangs are owned exclusively by autodetect_overhangs;
+        # this pass only handles terminal domains that STRADDLE a scaffold
+        # boundary. Skip a terminal that lies entirely outside scaffold coverage
+        # — both the scaffold-free-helix case AND a cross-over tail on a
+        # scaffold-bearing helix at a bp range away from the scaffold (e.g.
+        # stap_36_331). Without this, the merge step below would strip the
+        # inline tag that autodetect_overhangs correctly assigned.
+        scaf_range = scaf_cov.get(term_dom.helix_id)
+        if scaf_range is None:
             continue
+        _scaf_lo, _scaf_hi = scaf_range
+        _dom_lo = min(term_dom.start_bp, term_dom.end_bp)
+        _dom_hi = max(term_dom.start_bp, term_dom.end_bp)
+        if _dom_hi < _scaf_lo or _dom_lo > _scaf_hi:
+            continue  # entirely outside scaffold → owned by autodetect_overhangs
 
         ovhg_id = f"{_INLINE}{strand_id}_{end}"
 
@@ -2878,16 +2889,24 @@ def _pivot_for_junction(helices_by_id: dict, helix_id: str, bp: int) -> list[flo
 
 
 def autodetect_overhangs(design: Design) -> Design:
-    """Detect and register terminal domains on scaffold-free helices as inline overhangs.
+    """Detect and register unscaffolded terminal domains as inline overhangs.
 
-    For each staple strand whose 5′ or 3′ terminal domain lies on a helix with
-    **no scaffold coverage at all**, and where at least one other domain is on a
+    For each staple strand whose 5′ or 3′ terminal domain occupies a bp range
+    with **no scaffold coverage**, and where at least one other domain is on a
     scaffold-covered helix (i.e. the strand is attached to the bundle), create an
     ``OverhangSpec`` and tag the domain with ``ovhg_inline_{strand_id}_{5p|3p}``.
 
-    Already-tagged domains (``overhang_id`` is set) are left unchanged.  This
-    complements ``_reconcile_inline_overhangs``, which handles the case where a
-    terminal domain extends *beyond* scaffold coverage on the *same* helix.
+    "No scaffold coverage" is tested per-bp, not per-helix: a terminal domain
+    counts when the helix carries no scaffold at all OR when the domain lies
+    entirely outside the helix's scaffold bp range — e.g. a staple free tail
+    that crosses over onto a scaffold-bearing helix at a bp range away from the
+    scaffold (the ``stap_36_331`` case in *Ultimate Polymer Hinge*, 5′ tail at
+    bp 320–331 on a helix whose scaffold is at bp 116–127).
+
+    Already-tagged domains (``overhang_id`` is set) are left unchanged.  Domains
+    that *partially* overlap (straddle) the scaffold boundary are skipped here
+    and handled by ``_reconcile_inline_overhangs``, which splits them into a
+    scaffold-covered part and an overhang part.
     """
     scaf_cov = _scaffold_coverage_by_helix(design)
     helices_by_id: dict[str, Helix] = {h.id: h for h in design.helices}
@@ -2909,8 +2928,19 @@ def autodetect_overhangs(design: Design) -> Design:
             term_dom = domains[term_idx]
             if term_dom.overhang_id is not None:
                 continue  # already tagged — preserve existing annotation
-            if term_dom.helix_id in scaf_cov:
-                continue  # scaffold-covered helix: handled by _reconcile_inline_overhangs
+            # Skip only if this terminal domain's bp range actually overlaps the
+            # helix's scaffold coverage. A domain entirely outside the scaffold
+            # range is a free ssDNA tail (overhang) even when the helix carries
+            # scaffold at some other bp range (a cross-over tail). Partial
+            # overlap (straddling the boundary) is left to
+            # _reconcile_inline_overhangs, which splits it.
+            scaf_range = scaf_cov.get(term_dom.helix_id)
+            if scaf_range is not None:
+                scaf_lo, scaf_hi = scaf_range
+                dom_lo = min(term_dom.start_bp, term_dom.end_bp)
+                dom_hi = max(term_dom.start_bp, term_dom.end_bp)
+                if dom_lo <= scaf_hi and dom_hi >= scaf_lo:
+                    continue  # overlaps scaffold (genuine ds, or straddling → Pass 2)
 
             # Pivot = helix axis position at the crossover junction on the adjacent
             # (main-bundle) domain.  For 3' end: junction is adjacent.end_bp.

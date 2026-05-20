@@ -471,7 +471,12 @@ class TestSnapshotCounts:
         assert c['total']         == 196, f"voltron total={c['total']}, expected 196"
         assert c['scaffold']      == 118, f"voltron scaffold={c['scaffold']}, expected 118"
         assert c['staple']        == 78,  f"voltron staple={c['staple']}, expected 78"
-        assert c['with_overhang'] == 72,  f"voltron with_overhang={c['with_overhang']}, expected 72"
+        # 78 (was 72): the per-bp overhang fix in autodetect_overhangs now tags
+        # 6 previously-missed staple tails that lie entirely outside the
+        # scaffold range on a scaffold-bearing helix (cross-over / past-boundary
+        # ssDNA tips). Domain-end totals are unchanged — whole-domain overhangs
+        # are tagged, not split.
+        assert c['with_overhang'] == 78,  f"voltron with_overhang={c['with_overhang']}, expected 78"
 
     def test_ohtest2(self):
         """OHtest2: 8 total, 3 scaffold, 5 staple, 4 with overhang."""
