@@ -8709,29 +8709,25 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ≥12 helices (rectangular origamis have 24, square 16, half-rect 12 — small
   // motifs/tiles fall below).  Fires once per mode entry; user can still pick
   // anything they want afterward via the View menu.
-  const _LARGE_ASSEMBLY_FULL_HELIX_MIN  = 12
-  const _LARGE_ASSEMBLY_FULL_PART_LIMIT = 2
-
-  function _autoApplyLargeAssemblyDefaults(assembly) {
+  // On every assembly load, force all parts to the Cylinders rep + the
+  // Overhang highlight coloring.  Cylinders give the clearest at-a-glance
+  // bundle silhouette, and overhang highlight makes mate-point candidates
+  // pop visually — the most informative default regardless of assembly
+  // size.  Skips the PATCH if every part is already cylinders (avoids
+  // spurious backend round-trips on a re-saved file).
+  function _applyAssemblyLoadDefaults(assembly) {
     const instances = assembly?.instances ?? []
-    if (instances.length <= _LARGE_ASSEMBLY_FULL_PART_LIMIT) return
-    let fullCount = 0
-    for (const inst of instances) {
-      const design = assemblyRenderer.getInstanceDesign?.(inst.id)
-      if ((design?.helices?.length ?? 0) >= _LARGE_ASSEMBLY_FULL_HELIX_MIN) fullCount++
-    }
-    if (fullCount <= _LARGE_ASSEMBLY_FULL_PART_LIMIT) return
+    if (instances.length === 0) return
 
     _setColoringMode('overhang-only')
     _updateReprRadio('cylinders')
-    api.batchPatchInstances(
-      instances.map(inst => ({ id: inst.id, representation: 'cylinders' })),
-    ).catch(err => console.error('[assembly] auto-default repr patch failed:', err))
 
-    showToast(
-      `Large assembly (${fullCount} full-size parts) — switched to Cylinders + Overhang highlight for clarity.`,
-      5000,
-    )
+    const needsPatch = instances.some(inst => inst.representation !== 'cylinders')
+    if (needsPatch) {
+      api.batchPatchInstances(
+        instances.map(inst => ({ id: inst.id, representation: 'cylinders' })),
+      ).catch(err => console.error('[assembly] default rep PATCH failed:', err))
+    }
   }
 
   // Drive assembly panel + assembly renderer from the assembly slice
@@ -8747,17 +8743,15 @@ Typical debugging workflow for "reverts to 3D" bug:
         assemblyPanel.show()
         assemblyPanel.rebuild(newState)
         if (newState.currentAssembly) {
-          // Default coloring to Overhang highlight on every fresh assembly
-          // mode entry — overhangs mark mate-point candidates, so foregrounding
-          // them is the most informative starting view.  If the user picks
-          // a different coloring it persists for the session (we only run
-          // this on the mode transition, not on every assembly mutation).
-          _setColoringMode('overhang-only')
           assemblyRenderer.rebuild(newState.currentAssembly)
             .then(() => {
               assemblyRenderer.rebuildLinkers(newState.currentAssembly)
               _syncAssemblyBluntEnds()
-              _autoApplyLargeAssemblyDefaults(newState.currentAssembly)
+              // Apply load defaults BEFORE the menu sync so the sync sees
+              // the freshly-patched cylinders state (otherwise the radio
+              // would briefly reflect the saved rep, then re-sync next
+              // frame when the PATCH response lands).
+              _applyAssemblyLoadDefaults(newState.currentAssembly)
               _syncAssemblyReprMenu(newState.currentAssembly)
             })
           assemblyJointRenderer.rebuild(newState.currentAssembly)
