@@ -173,17 +173,17 @@ async function main() {
   const designRenderer = initDesignRenderer(scene, store)
 
   // ── Assembly renderer (shows PartInstance geometry when assembly mode active) ─
-  // Phase 3a seam: default path returns the existing per-instance renderer.
-  // Three ways to opt into the shared-instancing path (Phase 3b/3c+):
-  //   • `?shared=1` in URL (survives reload, visible in address bar)
-  //   • `localStorage.NADOC_SHARED_RENDERER = 'true'` then reload (sticky)
-  //   • `window.NADOC_SHARED_RENDERER = true` (one-shot, lost on reload)
-  // Set `?shared=0` or `localStorage.removeItem(...)` to disable.
-  const useShared = (
-    window.NADOC_SHARED_RENDERER === true ||
-    new URLSearchParams(location.search).get('shared') === '1' ||
-    localStorage.getItem('NADOC_SHARED_RENDERER') === 'true'
-  ) && new URLSearchParams(location.search).get('shared') !== '0'
+  // Phase 7e (2026-05-20): the shared-instancing renderer is now the DEFAULT
+  // for every assembly (path-to-thousands flip). The old per-instance renderer
+  // stays as a fallback for one release; a later cleanup PR removes it.
+  // Opt OUT of shared (back to per-instance) via either:
+  //   • `?shared=0` in the URL (per-tab), or
+  //   • `localStorage.NADOC_SHARED_RENDERER = 'false'` then reload (sticky).
+  const _sharedParam = new URLSearchParams(location.search).get('shared')
+  const useShared =
+    _sharedParam !== '0' &&
+    localStorage.getItem('NADOC_SHARED_RENDERER') !== 'false' &&
+    window.NADOC_SHARED_RENDERER !== false
   const assemblyRenderer = createAssemblyRenderer({
     scene, store, api,
     useShared,
