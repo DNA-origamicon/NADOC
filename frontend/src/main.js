@@ -8577,6 +8577,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         _assemblyPendingTransforms.clear()
         _assemblyPendingPartJoints.clear()
         assemblyRenderer.dispose()
+        assemblyJointRenderer.setActiveJoint(null)
         assemblyJointRenderer.rebuild(null)   // clear all joint indicators
         canvas.removeEventListener('pointerdown',  _onAssemblyPointerDown)
         canvas.removeEventListener('click',        _onAssemblyClick)
@@ -9097,6 +9098,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         const anyJointId = assemblyJointRenderer.pickJointAny(e)
         if (anyJointId) {
           polymerizePanel.setSelectedJoint(anyJointId)
+          assemblyJointRenderer.setActiveJoint(anyJointId)
           e.stopPropagation()
           return
         }
@@ -9105,6 +9107,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       // Priority 1: joint ring drag
       const jointId = assemblyJointRenderer.pickJointRing(e)
       if (jointId) {
+        assemblyJointRenderer.setActiveJoint(jointId)
         assemblyJointRenderer.beginRingDrag(jointId, e)
         return
       }
@@ -9272,6 +9275,10 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
     }
     if (newId !== prevId) _assemblySelectedPartJoint = null
+    // Clicking an instance (or empty canvas) clears any previously-active joint
+    // highlight on the shared joint renderer. The setter is a safe no-op on the
+    // legacy per-instance path.
+    assemblyJointRenderer.setActiveJoint(null)
     store.setState({ activeInstanceId: newId })
   }
 
