@@ -307,13 +307,13 @@ async function main() {
           } else {
             const lines = [`LOD HUD  closePx=${snap.closePx}  farPx=${snap.farPx}`]
             for (const s of snap.sources) {
-              const c = s.counts ?? { close: '-', mid: '-', far: '-' }
+              const c = s.counts ?? { close: '-', mid: '-', far: '-', hull: '-' }
               const px = (s.minPxSize == null || s.maxPxSize == null)
                 ? '(no data)'
                 : `${s.minPxSize.toFixed(1)}…${s.maxPxSize.toFixed(1)} px`
               const key = s.srcKey.length > 28 ? s.srcKey.slice(-28) : s.srcKey
               lines.push(
-                `${key}\n  N=${s.numInstances}  close=${c.close} mid=${c.mid} far=${c.far}\n  pxSize=${px}  bboxDiag=${s.bboxDiag?.toFixed(0) ?? '?'}`,
+                `${key}\n  N=${s.numInstances}  close=${c.close} mid=${c.mid} far=${c.far} hull=${c.hull ?? '-'}\n  pxSize=${px}  bboxDiag=${s.bboxDiag?.toFixed(0) ?? '?'}`,
               )
             }
             hud.textContent = lines.join('\n')

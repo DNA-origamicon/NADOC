@@ -69,6 +69,7 @@ import { BDNA_RISE_PER_BP } from '../constants.js'
 import {
   buildBundleGeometry, buildPrismGeometry, buildPanelSurface,
   buildSpineSections, buildSweptHullGeometry, buildHullMeshPhong,
+  buildExtrusionBoxes, scanExtrusionGroup, dsTrimmedAxes, dsBpByHelix,
   HULL_OPACITY, CROSS_MARGIN, AXIAL_MARGIN, MIN_HC_FACES,
 } from './joint_renderer.js'
 
@@ -320,12 +321,15 @@ const _BP_TEX_TILE_W = 256
 // MINIMUM bucket an instance may occupy regardless of camera distance:
 //   0 — close (bp-detail) ok
 //   1 — mid (cylinders) min — cylinders rep never draws bp meshes
-//   2 — far (billboard) min — non-CG reprs (vdw/ballstick/surface/hull-prism)
+//   2 — far (billboard) min — remaining non-CG reprs (vdw/ballstick/surface)
 //       aren't yet supported on the shared path, demote to billboard so they
 //       stay rendered as a placeholder until that work lands.
+//   3 — hull (extrusion-box solid) — distance-independent; the dedicated hull
+//       InstancedMesh draws these instances at all zooms (bucket 4 = hidden).
 function _repToLodCap(repr) {
   if (repr === 'cylinders') return 1
   if (repr === 'full' || repr === 'beads') return 0
+  if (repr === 'hull-prism') return 3
   return 2
 }
 
@@ -695,6 +699,77 @@ function _buildHullGroupsForDesign(design, helixAxes, targetGroup) {
     groups.push(group)
   }
   return groups
+}
+
+// Source-local merged Hull Prism solid for the shared instancing path.
+// Mirrors joint_renderer._rebuildHullRepr's full decision tree so each part
+// renders the same hull in an assembly as in the single-design view:
+//   1. feature-log extrusion boxes (NADOC-built parts), else
+//   2. dsDNA-trimmed cross-section scan (cluster-less imports), else
+//   3. one convex prism per cluster (clustered parts w/o build history — e.g.
+//      hinges; this is what the design view falls through to).
+// Collects SOLID meshes only (no edge LineSegments — "solid bodies only"),
+// bakes each mesh's transform into its vertices, normalises attributes to
+// position+normal / non-indexed (so boxes, prisms and swept curved hulls all
+// merge cleanly even when mixed), and merges into ONE BufferGeometry.  Returns
+// the merged geometry (caller owns it; NOT tagged userData.shared) or null.
+function _hullGeoForSource(design, nucleotides, helixAxes) {
+  if (!design) return null
+
+  const disposables = []   // builder-created geom+mat we cloned from / don't keep
+  const solids = []        // { geometry, matrixWorld } to bake + merge
+
+  const collect = (root) => {
+    root.updateMatrixWorld(true)
+    root.traverse(o => {
+      if (o.isMesh && o.geometry) {
+        solids.push({ geometry: o.geometry, m: o.matrixWorld.clone() })
+      }
+      if (o.geometry) disposables.push(o.geometry)
+      if (o.material) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material]
+        for (const mm of mats) disposables.push(mm)
+      }
+    })
+  }
+
+  let grp = buildExtrusionBoxes(design)                       // 1. extrusion boxes
+  if (!grp && !design.cluster_transforms?.length) {           // 2. scan (no clusters)
+    const scanAxes = dsTrimmedAxes(nucleotides, helixAxes ?? null)
+    const { helixBp } = dsBpByHelix(nucleotides)
+    grp = scanExtrusionGroup(
+      (design.helices ?? []).map(h => h.id),
+      scanAxes, helixBp, design.lattice_type, design.metadata?.name, null,
+    )
+  }
+  if (grp) {
+    collect(grp)
+  } else if (design.cluster_transforms?.length && helixAxes) {  // 3. per-cluster prisms
+    const tmp = new THREE.Group()
+    _buildHullGroupsForDesign(design, helixAxes, tmp)
+    collect(tmp)
+  }
+
+  if (!solids.length) {
+    for (const d of disposables) d.dispose?.()
+    return null
+  }
+
+  const baked = []
+  for (const s of solids) {
+    let g = s.geometry.clone()
+    g.applyMatrix4(s.m)
+    g = g.toNonIndexed()
+    for (const name of Object.keys(g.attributes)) {
+      if (name !== 'position' && name !== 'normal') g.deleteAttribute(name)
+    }
+    if (!g.attributes.normal) g.computeVertexNormals()
+    baked.push(g)
+  }
+  const merged = mergeGeometries(baked, false)
+  baked.forEach(g => g.dispose())
+  for (const d of disposables) d.dispose?.()
+  return merged || null
 }
 
 function _clusterMemberFilter(cluster, design) {
@@ -3112,6 +3187,19 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     }
     const numInstances = instancesForKey.length
 
+    // ── Hull-prism source geometry ───────────────────────────────────────────
+    // Build the design-view Hull Prism solid ONCE per source in source-local
+    // coordinates (the InstancedMesh, built later after srcEntry exists, draws
+    // it at every hull-prism instance's transform).  _hullGeoForSource mirrors
+    // the FULL single-design decision tree (extrusion boxes → cross-section
+    // scan → per-cluster prisms), so each part looks the same here as it does
+    // in the design view.  Built here (early) because the per-instance LOD-cap
+    // fill below must know whether a hull exists, to demote hull-prism
+    // instances to cylinders rather than leave them invisible when none could
+    // be produced.
+    const hullGeo = _hullGeoForSource(design, nucleotides, helix_axes ?? null)
+    const hasHull = !!hullGeo
+
     // Build a single helixCtrl with the canonical bp matrices.
     const helixGroup = new THREE.Group()
     helixGroup.userData.sharedSource = srcKey
@@ -3178,9 +3266,9 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     const instanceIds  = instancesForKey.map(i => i.id)
     const instanceIndex = new Map(instanceIds.map((id, idx) => [id, idx]))
     const visibility = new Float32Array(numInstances)
-    // Per-instance LOD cap (Int8: 0 = close ok, 1 = no close, 2 = far only).
-    // Read at every _updateLodForSource frame to bias bucketing by the
-    // per-instance ``representation`` field.  ``buildRepCap`` floors the
+    // Per-instance LOD cap (Int8: 0 = close ok, 1 = no close, 2 = far only,
+    // 3 = hull).  Read at every _updateLodForSource frame to bias bucketing by
+    // the per-instance ``representation`` field.  ``buildRepCap`` floors the
     // cap when the source was built at 'cylinders' (close LOD meshes don't
     // exist) — without it, an instance with rep='full' would still bucket
     // close but find empty bp meshes.
@@ -3193,7 +3281,13 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       _packMatrixIntoRow(m, xformData, i * 16)
       visibility[i] = (inst.visible !== false) ? 1.0 : 0.0
       visData[i * 16 + 0] = visibility[i]
-      instanceLodCap[i] = Math.max(buildRepCap, _repToLodCap(inst.representation))
+      // Hull cap (3) needs the hull InstancedMesh to exist; if this source
+      // produced no hull geometry, demote hull-prism instances to cylinders
+      // (1) so they stay visible instead of bucketing to a non-existent mesh.
+      // Clamp BEFORE the Math.max so the demotion isn't undone.
+      let cap = _repToLodCap(inst.representation)
+      if (cap === 3 && !hasHull) cap = 1
+      instanceLodCap[i] = Math.max(buildRepCap, cap)
       // Other channels unused; leave zero.
       _instToSrc.set(inst.id, srcKey)
     }
@@ -3306,6 +3400,18 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     const farLod = _buildFarLodMesh(srcEntry, billboardRadius, billboardColor, helixGroup)
     if (farLod) srcEntry.farLod = farLod
 
+    // Hull LOD: one instanced grey extrusion-box solid per hull-prism instance
+    // (distance-independent — see _repToLodCap bucket 3).  Built from the
+    // source-local hull geometry assembled at the top of _buildSource.
+    if (hasHull && hullGeo) {
+      const hullLod = _buildHullLodMesh(srcEntry, hullGeo, helixGroup)
+      if (hullLod) {
+        srcEntry.hullLod = hullLod
+        const triCount = (hullGeo.attributes?.position?.count ?? 0) / 3
+        console.info(`[shared_renderer]   hull LOD built: ~${triCount | 0} tris`)
+      }
+    }
+
     // Seed per-helix colours from the current coloringMode.  Pre-per-helix
     // implementation tinted the mid-LOD by an averaged flat colour, which
     // dimmed cylinder rendering (scaffold's dark navy dominated the
@@ -3322,7 +3428,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // impostors to the source origin. They're distance impostors anyway, so
     // they don't need the PBR look (only the close-LOD bp meshes do — those
     // get PBR + the re-applied instancing patch via userData.applySharedInstancing).
-    for (const m of [srcEntry.midLod?.mesh, srcEntry.overhangLod?.mesh, srcEntry.farLod?.mesh]) {
+    for (const m of [srcEntry.midLod?.mesh, srcEntry.overhangLod?.mesh, srcEntry.farLod?.mesh, srcEntry.hullLod?.mesh]) {
       if (m) m.userData.sharedLodImpostor = true
     }
 
@@ -3965,6 +4071,100 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return { mesh, u_instanceOffset, u_billboardColor }
   }
 
+  // ── Hull-LOD InstancedMesh + shader ───────────────────────────────────────
+  // One copy of the source-local hull solid (`hullGeo`, merged extrusion boxes
+  // in source-local space) per hull-prism instance. Single-index instancing
+  // like _buildFarLodMesh — but instead of a camera-facing billboard, the
+  // vertex shader composes the full per-instance world matrix:
+  //   world = instTransform × position.
+  // The instance row is gl_InstanceID + u_instanceOffset (the hull bucket sorts
+  // after close/mid/far, so the offset is nClose+nMid+nFar — set per frame in
+  // _updateLodForSource).  Lit flat grey, double-sided.  NOTE: like the mid/
+  // overhang cylinder LODs, the shader does NOT rotate normals by instTransform,
+  // so lighting on rotated instances is approximate (acceptable for opaque grey
+  // boxes; matches shipped LOD precedent).
+  function _buildHullLodMesh(srcEntry, hullGeo, sourceGroup) {
+    const numInstances = srcEntry.instanceIds.length
+    if (numInstances === 0 || !hullGeo) return null
+
+    const mat = new THREE.MeshLambertMaterial({ color: 0x9a9a9a, side: THREE.DoubleSide })
+    // Per-material cache key so each source's program is independent (avoids
+    // the static-cache-key trap documented for _buildSegmentLodMesh).
+    const _hullCacheKey = 'sharedLodHull_' + mat.uuid
+    mat.customProgramCacheKey = () => _hullCacheKey
+    const u_instanceOffset = { value: 0 }
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.u_instanceXform  = srcEntry.uXformUniform
+      shader.uniforms.u_visibilityTex  = srcEntry.uVisUniform
+      shader.uniforms.u_instanceOffset = u_instanceOffset
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `
+          #include <common>
+          uniform sampler2D u_instanceXform;
+          uniform sampler2D u_visibilityTex;
+          uniform float u_instanceOffset;
+          varying float v_visible;
+          `,
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `
+          int instanceIdx = gl_InstanceID + int(u_instanceOffset);
+          v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
+          mat4 instTransform = mat4(
+            texelFetch(u_instanceXform, ivec2(0, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(1, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(2, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0)
+          );
+          vec3 transformed = (instTransform * vec4(position, 1.0)).xyz;
+          `,
+        )
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `
+          #include <common>
+          varying float v_visible;
+          `,
+        )
+        .replace(
+          '#include <dithering_fragment>',
+          `
+          if (v_visible < 0.5) discard;
+          #include <dithering_fragment>
+          `,
+        )
+    }
+
+    const mesh = new THREE.InstancedMesh(hullGeo, mat, Math.max(1, numInstances))
+    // Collapse instanceMatrix to a single identity row — real per-instance
+    // transforms ride the u_instanceXform texture, read in the shader.
+    const identityArr = new Float32Array(16)
+    identityArr[0] = 1; identityArr[5] = 1; identityArr[10] = 1; identityArr[15] = 1
+    const idAttr = new THREE.InstancedBufferAttribute(identityArr, 16, false, Math.max(1, numInstances))
+    idAttr.setUsage(THREE.StaticDrawUsage)
+    mesh.instanceMatrix = idAttr
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.instanceColor = null
+    mesh.count = 0
+    // MUST be false: positions live in the texture, not the mesh transform, so
+    // Three's geometry-bounding-sphere cull (at the group origin) would wrongly
+    // cull the whole batch. Same reason as the mid/far LODs.
+    mesh.frustumCulled = false
+    // Keep visible=true so onBeforeRender hooks fire even at count=0 (the
+    // stuck-LOD trap); drawElementsInstanced with count=0 is a no-op.
+    mesh.visible = true
+    mesh.name = 'sharedLodHull'
+    // Photo mode must skip this custom-shader mesh (else _swapMaterials drops
+    // the instancing shader and collapses every hull copy to the source origin).
+    mesh.userData.sharedLodImpostor = true
+    sourceGroup.add(mesh)
+    return { mesh, u_instanceOffset }
+  }
+
   // ── Per-frame LOD assignment + sort-to-front (Phase 3f stage 2) ──────────
   // Each frame, for every source:
   //   1. Compute squared distance from camera to each instance's translation
@@ -4031,7 +4231,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       scratch = srcEntry._lodScratch = {
         dist2: new Float64Array(N),
         perm:  new Int32Array(N),       // perm[newRow] = oldRow
-        bucket: new Int8Array(N),       // per-instance LOD bucket (0/1/2) or 3=hidden
+        bucket: new Int8Array(N),       // per-instance LOD bucket (0/1/2/3-hull) or 4=hidden
         tmpXform: new Float32Array(N * 16),
         tmpVis:   new Float32Array(N * 16),
         tmpVisibility: new Float32Array(N),
@@ -4047,7 +4247,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       perm[i] = i
       if (vis[i] < 0.5) {
         dist2[i] = Number.POSITIVE_INFINITY
-        bucket[i] = 3  // hidden — sinks to tail
+        bucket[i] = 4  // hidden — sinks to tail
         continue
       }
       // Translation column = column 3. xformData layout (per instance, 16
@@ -4065,7 +4265,11 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       // pxSq = (pxFactor / distance)² = pxFactor² / d2.  Compare pxSq to
       // threshold² to avoid the sqrt in the hot loop.
       const pxSq = (pxFactor > 0) ? (pxFactor * pxFactor) / Math.max(d2, 1) : 1e12
-      if      (cap === 0 && pxSq >= closePxSq) bucket[i] = 0
+      // Hull (cap 3) is distance-independent — always its own bucket so the
+      // dedicated hull mesh draws it at every zoom.  MUST precede the cap<=1
+      // branch (cap 3 is not <= 1, so without this it would fall to bucket 2).
+      if      (cap === 3)                      bucket[i] = 3
+      else if (cap === 0 && pxSq >= closePxSq) bucket[i] = 0
       else if (cap <= 1 && pxSq >= farPxSq)    bucket[i] = 1
       else                                     bucket[i] = 2
     }
@@ -4148,14 +4352,16 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     //      per-instance LOD cap (from ``representation``), so we just walk
     //      the now-sorted perm and tally.  Buckets are guaranteed
     //      contiguous: rows 0..nClose-1 are close, the next nMid are mid,
-    //      the next nFar are far, and hidden rows (bucket=3) fall after.
-    let nClose = 0, nMid = 0, nFar = 0
+    //      the next nFar are far, the next nHull are hull, and hidden rows
+    //      (bucket=4) fall after.
+    let nClose = 0, nMid = 0, nFar = 0, nHull = 0
     for (let i = 0; i < N; i++) {
       const b = bucket[permArr[i]]
-      if (b === 3) break                // hidden tail — done
+      if (b === 4) break                // hidden tail — done
       if      (b === 0) nClose++
       else if (b === 1) nMid++
-      else              nFar++
+      else if (b === 2) nFar++
+      else              nHull++
     }
 
     // ── 6. Apply counts. Multiplier per LOD:
@@ -4204,7 +4410,16 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         srcEntry.farLod.u_instanceOffset.value = nClose + nMid
       }
     }
-    srcEntry._lastLodCounts = { close: nClose, mid: nMid, far: nFar }
+    // Hull LOD draws the hull-prism instances (one merged box solid each),
+    // sorted after close+mid+far → offset = nClose + nMid + nFar.
+    if (srcEntry.hullLod) {
+      srcEntry.hullLod.mesh.count = nHull
+      srcEntry.hullLod.mesh.visible = true  // see comment above re: stuck-LOD trap
+      if (srcEntry.hullLod.u_instanceOffset) {
+        srcEntry.hullLod.u_instanceOffset.value = nClose + nMid + nFar
+      }
+    }
+    srcEntry._lastLodCounts = { close: nClose, mid: nMid, far: nFar, hull: nHull }
     // Debug: stash per-frame state so `probeLod()` + the HUD can read it
     // without re-doing the heavy bucket pass.  Compute min/max pixel size
     // over visible instances in a single cheap loop.
@@ -4245,6 +4460,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       srcEntry.activeMeshes[0]?.mesh
       ?? srcEntry.midLod?.mesh
       ?? srcEntry.farLod?.mesh
+      ?? srcEntry.hullLod?.mesh
     if (!hookHost) return
     const prevHook = hookHost.onBeforeRender
     hookHost.onBeforeRender = function (renderer, scn, camera, geom, mat, group) {
@@ -5417,6 +5633,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           activeMeshes: srcEntry.activeMeshes.length,
           midLodCount: srcEntry.midLod?.mesh.count ?? null,
           farLodCount: srcEntry.farLod?.mesh.count ?? null,
+          hullLodCount: srcEntry.hullLod?.mesh.count ?? null,
         })
       }
       return snap
