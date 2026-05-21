@@ -167,13 +167,25 @@ export async function open() {
   _isOpen = true
   _selA = _selB = null
   _selectedConnId = null
-  // Fully collapsed on open. Parts containing a selection (e.g. from a
-  // future preselect plumbing) still auto-expand via _isPartExpanded.
+  // Fully collapsed on open. Parts containing a selection (set just below from
+  // the 3D overhang selection) auto-expand via _isPartExpanded.
   _expandedA.clear()
   _expandedB.clear()
   _modal.style.display = 'flex'
 
   await _ensureDesignCache(_assembly())
+
+  // Prefill Side A / Side B from the ordered overhang selection made in the 3D
+  // view (clicking overhang name labels). Snapshot at open time only — no live
+  // updates while the popup is open. Keep only entries whose overhang still
+  // resolves in the cached design; first → A, second (if distinct) → B.
+  const presel = (_store?.getState()?.assemblyOverhangSelection ?? [])
+    .filter(s => s && _findOverhang(s.instanceId, s.overhangId))
+  if (presel[0]) _selA = { instanceId: presel[0].instanceId, overhangId: presel[0].overhangId }
+  if (presel[1] &&
+      !(presel[1].instanceId === presel[0]?.instanceId && presel[1].overhangId === presel[0]?.overhangId))
+    _selB = { instanceId: presel[1].instanceId, overhangId: presel[1].overhangId }
+
   _render()
 
   if (_unsub) _unsub()
@@ -618,6 +630,19 @@ function _renderTable(assembly) {
   tbody.querySelectorAll('.aohc-del-conn').forEach(btn => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); _onDeleteConnection(btn.dataset.id) })
   })
+  tbody.querySelectorAll('.aohc-relax-conn').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); _onRelaxConnection(btn) })
+    // Lazily gate on the backend's relax-status (which part is movable / both
+    // fixed / ss). Render enabled, then disable + retitle if unavailable.
+    api.getAssemblyOverhangConnectionRelaxStatus(btn.dataset.id).then((st) => {
+      if (st && st.available === false) {
+        btn.disabled = true
+        btn.style.opacity = '0.45'
+        btn.style.cursor = 'not-allowed'
+        if (st.reason) btn.title = st.reason
+      }
+    }).catch(() => {})
+  })
   tbody.querySelectorAll('.aohc-del-binding').forEach(btn => {
     btn.addEventListener('click', (e) => { e.stopPropagation(); _onDeleteBinding(btn.dataset.id) })
   })
@@ -650,7 +675,9 @@ function _connectionRowHtml(assembly, c) {
     <td>${_escape(pair)}</td>
     <td>${seq}</td>
     <td style="color:#6e7681">—</td>
-    <td style="text-align:right">
+    <td style="text-align:right;white-space:nowrap">
+      ${c.linker_type === 'ds' ? `<button class="aohc-relax-conn" data-id="${c.id}" title="Relax linker (rigid-place the free part into a coaxial native-length duplex)"
+              style="background:#152d1c;border:1px solid #3ca35a;color:#3ca35a;border-radius:3px;font-size:11px;cursor:pointer;padding:2px 7px;margin-right:4px">Relax</button>` : ''}
       <button class="aohc-del-conn" data-id="${c.id}" title="Delete linker"
               style="background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;cursor:pointer;padding:2px 7px">×</button>
     </td>
@@ -773,6 +800,19 @@ async function _onDeleteConnection(id) {
   if (!id) return
   await api.deleteAssemblyOverhangConnection(id)
   if (_selectedConnId === id) _selectedConnId = null
+}
+
+async function _onRelaxConnection(btn) {
+  const id = btn?.dataset?.id
+  if (!id) return
+  btn.disabled = true
+  try {
+    await api.relaxAssemblyOverhangConnection(id)
+    _setStatus('Relaxed linker — free part moved into a coaxial native-length duplex.')
+  } catch (err) {
+    _setStatus(`Relax failed: ${err?.message ?? err}`)
+    btn.disabled = false
+  }
 }
 
 async function _onDeleteBinding(id) {

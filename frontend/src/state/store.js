@@ -309,6 +309,15 @@ const _initialState = {
    * ID of the currently selected PartInstance in the assembly, or null.
    */
   activeInstanceId: null,
+
+  /**
+   * Ordered overhang selection in assembly mode — list of
+   * `{ instanceId, overhangId, label }`. Built by clicking overhang name
+   * labels in the 3D view (overhang selectable on). The Assembly Overhangs
+   * Manager reads the first two on open to prefill Side A / Side B. Cleared
+   * on exiting assembly mode.
+   */
+  assemblyOverhangSelection: [],
 }
 
 /**
@@ -350,7 +359,8 @@ const _SLICES = {
   ui:        new Set(['toolFilters', 'lastError']),
 
   /** Assembly layer: active assembly, mode flag, selected instance */
-  assembly:  new Set(['currentAssembly', 'assemblyActive', 'activeInstanceId']),
+  assembly:  new Set(['currentAssembly', 'assemblyActive', 'activeInstanceId',
+                      'assemblyOverhangSelection']),
 }
 
 function createStore(initial) {

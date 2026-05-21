@@ -100,6 +100,7 @@ import { initExpandedSpacing }     from './scene/expanded_spacing.js'
 import { registerShortcut, dispatchKeyEvent } from './input/shortcuts.js'
 import { attachAllDragScrub }                 from './input/drag_scrub.js'
 import { showConfirm }                         from './ui/primitives/confirm.js'
+import { createContextMenu }                   from './ui/primitives/context_menu.js'
 import { initSidebarResize }                   from './ui/sidebar_resize.js'
 import { initSceneInspector }                  from './scene/scene_inspector.js'
 import { createModal }                         from './ui/primitives/modal.js'
@@ -3941,6 +3942,24 @@ Typical debugging workflow for "reverts to 3D" bug:
   ]
   let _savedDesignPanelDisplay = {}
 
+  // Filter-view-strip controls that are design-only. Hidden in assembly mode so
+  // the strip keeps only overhang-relevant tools (overhang-locations tool,
+  // sequence/grid/overhang-name view toggles, expanded spacing). The whole
+  // Selectable section is hidden — assembly overhang selection is done by
+  // hovering/clicking overhangs in 3D, not via a selection filter.
+  const _DESIGN_STRIP_SELECTORS = [
+    '#select-filter',                            // entire Selectable section
+    '#view-tools > .sf-divider:first-child',     // now-leading divider before Tools:
+    '#view-tools [data-key="blunt"]',
+    '#view-tools [data-key="xloc"]',
+    '#view-tools [data-vt="lengthHeatmap"]',
+    '#view-tools [data-vt="undefinedBases"]',
+    '#view-tools [data-vt="deform"]',
+    '#view-tools [data-vt="unfold"]',
+    '#view-tools [data-vt="cadnano2d"]',
+  ]
+  let _hiddenStripEls = []
+
   function _enterAssemblyMode() {
     if (window.nadocDebug?.verbose)
       console.log('[restore] _enterAssemblyMode() — assemblyActive →', true)
@@ -3962,6 +3981,15 @@ Typical debugging workflow for "reverts to 3D" bug:
       const el = document.getElementById(id)
       if (el) {
         _savedDesignPanelDisplay[id] = el.style.display
+        el.style.display = 'none'
+      }
+    }
+
+    // Trim the filter-view strip down to the overhang-relevant controls.
+    _hiddenStripEls = []
+    for (const sel of _DESIGN_STRIP_SELECTORS) {
+      for (const el of document.querySelectorAll(sel)) {
+        _hiddenStripEls.push([el, el.style.display])
         el.style.display = 'none'
       }
     }
@@ -3989,6 +4017,13 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (el && _savedDesignPanelDisplay[id] !== undefined)
         el.style.display = _savedDesignPanelDisplay[id]
     }
+
+    // Restore the design-only filter-view-strip controls.
+    for (const [el, display] of _hiddenStripEls) el.style.display = display
+    _hiddenStripEls = []
+
+    // Clear the assembly-scoped overhang selection + hover.
+    store.setState({ assemblyOverhangSelection: [] })
 
     // Hide the assembly panel; it stays in the Scene tab and reappears next
     // time an assembly file is opened.
@@ -8791,6 +8826,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         controls.addEventListener('change', _updateFixedLockPositions)
         canvas.addEventListener('pointerdown',  _onAssemblyPointerDown)
         canvas.addEventListener('click',        _onAssemblyClick)
+        canvas.addEventListener('pointermove',  _onAssemblyHoverMove)
         canvas.addEventListener('contextmenu',  _onAssemblyContextMenu)
       } else {
         if (_hasAssemblyPending()) {
@@ -8810,7 +8846,10 @@ Typical debugging workflow for "reverts to 3D" bug:
         assemblyJointRenderer.rebuild(null)   // clear all joint indicators
         canvas.removeEventListener('pointerdown',  _onAssemblyPointerDown)
         canvas.removeEventListener('click',        _onAssemblyClick)
+        canvas.removeEventListener('pointermove',  _onAssemblyHoverMove)
         canvas.removeEventListener('contextmenu',  _onAssemblyContextMenu)
+        assemblyRenderer.setHoveredOverhang?.(null)
+        _ovhgHoverKey = null
         // Clean up any in-flight free drag
         if (_pendingFreeDrag || _freeDrag) {
           canvas.removeEventListener('pointermove', _onAssemblyDragMove)
@@ -8991,6 +9030,13 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!prev || !next) return false
     const pi = prev.instances ?? [], ni = next.instances ?? []
     if (pi.length === 0 || pi.length !== ni.length) return false
+    // Materialized cross-part linker topology changing is NOT transform-only:
+    // the light path skips rebuildLinkers, which would leave a stale bridge
+    // after a linker relax (it both moves a part AND regenerates the bridge).
+    // These arrays are tiny (a few per overhang-connection; empty when no
+    // linkers), so the stringify compare is cheap.
+    if (JSON.stringify(prev.assembly_helices ?? []) !== JSON.stringify(next.assembly_helices ?? [])) return false
+    if (JSON.stringify(prev.assembly_strands ?? []) !== JSON.stringify(next.assembly_strands ?? [])) return false
     const pById = new Map(pi.map(i => [i.id, i]))
     for (const inst of ni) {
       const p = pById.get(inst.id)
@@ -9536,6 +9582,65 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
+  // Push the overhang-selection highlight rings to the renderer on change.
+  store.subscribe((newState, prevState) => {
+    if (newState.assemblyOverhangSelection === prevState.assemblyOverhangSelection) return
+    assemblyRenderer.setOverhangSelectionHighlight?.(newState.assemblyOverhangSelection ?? [])
+  })
+
+  // Medium screen radius for hovering/clicking near an overhang's label anchor.
+  const _OVHG_PICK_RADIUS_PX = 36
+
+  // Nearest overhang anchor to a screen point, within `radiusPx` — or null.
+  // Selection/hover are proximity-based (no toggle, no exact-sprite raycast).
+  function _nearestOverhangAt(clientX, clientY, radiusPx = _OVHG_PICK_RADIUS_PX) {
+    const anchors = assemblyRenderer.getOverhangAnchors?.()
+    if (!anchors?.length || anchors.length > 1200) return null   // perf cap: rely on "show all"
+    const rect = canvas.getBoundingClientRect()
+    const v = new THREE.Vector3()
+    let best = null, bestD = radiusPx
+    for (const a of anchors) {
+      v.copy(a.world).project(camera)
+      if (v.z < -1 || v.z > 1) continue
+      const sx = rect.left + (v.x * 0.5 + 0.5) * rect.width
+      const sy = rect.top  + (-v.y * 0.5 + 0.5) * rect.height
+      const d = Math.hypot(sx - clientX, sy - clientY)
+      if (d < bestD) { bestD = d; best = a }
+    }
+    return best ? { instanceId: best.instanceId, overhangId: best.overhangId, label: best.label } : null
+  }
+
+  // Hover: reveal the nearest overhang's label transiently. Skipped while a
+  // button is held (orbit/drag). Deduped so we only notify the renderer on
+  // change.
+  let _ovhgHoverKey = null
+  function _onAssemblyHoverMove(e) {
+    if (e.buttons !== 0) return
+    const oh = _nearestOverhangAt(e.clientX, e.clientY)
+    const key = oh ? `${oh.instanceId}|${oh.overhangId}` : null
+    if (key === _ovhgHoverKey) return
+    _ovhgHoverKey = key
+    assemblyRenderer.setHoveredOverhang?.(oh)
+  }
+
+  // Toggle an overhang into/out of the ordered assembly overhang selection.
+  // First two entries become the Overhangs Manager's Side A / Side B on open.
+  function _toggleAssemblyOverhangSelection(oh) {
+    const cur = store.getState().assemblyOverhangSelection ?? []
+    const idx = cur.findIndex(s => s.instanceId === oh.instanceId && s.overhangId === oh.overhangId)
+    const name = oh.label ? `“${oh.label}” ` : ''
+    let next
+    if (idx >= 0) {
+      next = cur.filter((_, i) => i !== idx)
+      showToast(`Overhang ${name}deselected`)
+    } else {
+      next = [...cur, { instanceId: oh.instanceId, overhangId: oh.overhangId, label: oh.label }]
+      const side = next.length === 1 ? 'A' : next.length === 2 ? 'B' : `#${next.length}`
+      showToast(`Overhang ${name}→ Side ${side}`)
+    }
+    store.setState({ assemblyOverhangSelection: next })
+  }
+
   async function _onAssemblyClick(e) {
     if (e.button !== 0) return
     if (!_assemblyPtrDownAt) return
@@ -9543,6 +9648,20 @@ Typical debugging workflow for "reverts to 3D" bug:
     const dy = e.clientY - _assemblyPtrDownAt.y
     _assemblyPtrDownAt = null
     if (dx * dx + dy * dy > 25) return   // was a drag, not a click
+
+    // Overhang selection — a click within a medium radius of an overhang
+    // toggles it into the ordered selection (which prefills the Overhangs
+    // Manager's Side A / Side B on open) and shows a green ring + persistent
+    // label, rather than selecting/moving the part. Always active in assembly
+    // mode (no selectable toggle). A click that lands on anything that ISN'T an
+    // overhang (part body or empty space) clears the overhang selection, then
+    // falls through to normal part selection.
+    {
+      const oh = _nearestOverhangAt(e.clientX, e.clientY)
+      if (oh) { _toggleAssemblyOverhangSelection(oh); return }
+      if ((store.getState().assemblyOverhangSelection ?? []).length)
+        store.setState({ assemblyOverhangSelection: [] })
+    }
 
     // While the move/rotate gizmo is active, a click ON the selected
     // instance is left to the gizmo (it intercepts its own handle hits at
@@ -9606,6 +9725,37 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
+  // Right-click menu for an assembly cross-part linker. Mirrors the per-design
+  // linker menu's "Relax linker": the assembly relax rigid-places the free part
+  // into a coaxial native-length duplex. Relax availability is gated by the
+  // backend status (ds-only; needs a movable part).
+  async function _showAssemblyLinkerMenu(connId, x, y) {
+    const conn = store.getState().currentAssembly?.overhang_connections?.find(c => c.id === connId)
+    const name = conn?.name ?? 'linker'
+    let status = null
+    try { status = await api.getAssemblyOverhangConnectionRelaxStatus(connId) } catch { /* treat as available */ }
+    const available = status?.available !== false
+    createContextMenu({
+      x, y,
+      items: [
+        { type: 'header', label: `Linker · ${name}` },
+        {
+          label: 'Relax linker',
+          disabled: !available,
+          onClick: async () => {
+            try {
+              await api.relaxAssemblyOverhangConnection(connId)
+              showToast('Relaxed linker — free part moved into a coaxial native-length duplex.')
+            } catch (err) {
+              showToast(`Relax failed: ${err?.message ?? err}`, { severity: 'error' })
+            }
+          },
+        },
+        ...(available ? [] : [{ type: 'header', label: status?.reason ?? 'Relax unavailable' }]),
+      ],
+    })
+  }
+
   async function _onAssemblyContextMenu(e) {
     e.preventDefault()
     e.stopPropagation()
@@ -9627,6 +9777,11 @@ Typical debugging workflow for "reverts to 3D" bug:
       rc.setFromCamera(_canvasNdc(e), camera)
       if (overhangLocations.hitTest(rc)) return
     }
+    // Right-click on any part of a linker (complement/bridge beads or connector
+    // arc) → a Relax menu, mirroring the per-design linker right-click.
+    const linkerConnId = assemblyRenderer.pickLinker?.(_canvasNdc(e), camera)
+    if (linkerConnId) { _showAssemblyLinkerMenu(linkerConnId, e.clientX, e.clientY); return }
+
     const inst = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
     if (!inst) return
     if (inst.id !== store.getState().activeInstanceId && _hasAssemblyPending()) {
@@ -10904,25 +11059,41 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   // ── Unified representation radio ──────────────────────────────────────────────
-  // All six representations are mutually exclusive.  Exactly one is active at
+  // All seven representations are mutually exclusive.  Exactly one is active at
   // a time; switching to any one deactivates all others.
   //
-  //  'full'      — CG beads + slabs (LOD 0)
-  //  'beads'     — CG beads only    (LOD 1)
-  //  'cylinders' — domain cylinders (LOD 2)
-  //  'vdw'       — atomistic VDW space-fill
-  //  'ballstick' — atomistic ball-and-stick
-  //  'surface'   — molecular surface
+  // Ordered least → most compute-intensive.  This is also the order shown in the
+  // View → Representation menu and the order the F1…F7 hotkeys bind to (the
+  // F-key registration loop below iterates this array, so the two stay in sync).
+  //
+  //  'hull-prism' — per-part grey boxes, aggressive culling (F1, cheapest)
+  //  'cylinders'  — domain cylinders (LOD 2)            (F2)
+  //  'beads'      — CG beads only    (LOD 1)            (F3)
+  //  'full'       — CG beads + slabs (LOD 0)            (F4)
+  //  'surface'    — molecular surface mesh              (F5)
+  //  'vdw'        — atomistic VDW space-fill            (F6)
+  //  'ballstick'  — atomistic ball-and-stick            (F7, heaviest)
 
   const _ALL_REPRS = [
-    { id: 'menu-view-detail-full',        repr: 'full'      },
-    { id: 'menu-view-detail-beads',       repr: 'beads'     },
+    { id: 'menu-view-hull-prism',         repr: 'hull-prism' },
     { id: 'menu-view-detail-cylinders',   repr: 'cylinders' },
+    { id: 'menu-view-detail-beads',       repr: 'beads'     },
+    { id: 'menu-view-detail-full',        repr: 'full'      },
+    { id: 'menu-view-surface',            repr: 'surface'    },
     { id: 'menu-view-atomistic-vdw',      repr: 'vdw'       },
     { id: 'menu-view-atomistic-ballstick',repr: 'ballstick' },
-    { id: 'menu-view-surface',            repr: 'surface'    },
-    { id: 'menu-view-hull-prism',         repr: 'hull-prism' },
   ]
+
+  // Friendly labels for the F-key shortcut descriptions (command palette / help).
+  const _REPR_LABELS = {
+    'hull-prism': 'Hull Prism',
+    cylinders:    'Cylinders',
+    beads:        'Beads',
+    full:         'Full',
+    surface:      'Surface',
+    vdw:          'VDW / Space-fill',
+    ballstick:    'Ball & Stick',
+  }
 
   // Keep a forward-compat alias so any remaining call sites still work.
   function _updateAtomisticRadio() {}  // no-op — superseded by _updateReprRadio
@@ -10978,6 +11149,30 @@ Typical debugging workflow for "reverts to 3D" bug:
     'ballstick':  new Set(['strand', 'base', 'cluster', 'cpk']),
     'surface':    new Set(['strand', 'cluster']),
     'hull-prism': new Set(),
+  }
+
+  // Friendly labels for coloring modes — used for the toast shown when an
+  // F-key cycles coloring (the menu is closed, so the toast is the feedback).
+  const _COLORING_LABELS = {
+    strand:          'Strand color',
+    base:            'Base color',
+    cluster:         'Cluster color',
+    'overhang-only': 'Overhang highlight',
+    cpk:             'Atomic (CPK)',
+  }
+
+  // Cycle to the next coloring mode supported by `repr`, in the insertion order
+  // of _COLORING_SUPPORT.  Invoked when an F-key is pressed again while its
+  // representation is already active.  No-op for reprs with <2 options
+  // (Hull Prism has none).
+  function _cycleColoringForRepr(repr) {
+    const modes = [...(_COLORING_SUPPORT[repr] ?? [])]
+    if (modes.length < 2) return
+    const current = store.getState().coloringMode || 'strand'
+    const idx = modes.indexOf(current)
+    const next = modes[(idx + 1) % modes.length]
+    _setColoringMode(next)
+    showToast(`Coloring: ${_COLORING_LABELS[next] ?? next}`)
   }
 
   function _updateColoringMenuAvailability(activeRepr) {
@@ -11110,6 +11305,32 @@ Typical debugging workflow for "reverts to 3D" bug:
       await _setRepresentation(repr)
     })
   }
+
+  // ── Function-key bindings: F1…F7 → representations ────────────────────────────
+  // Bound in the same least→most compute-intensive order as _ALL_REPRS / the
+  // View → Representation menu.  First press switches to the representation;
+  // pressing the SAME key again (while that representation is already active)
+  // cycles through its available coloring modes (_COLORING_SUPPORT[repr]).
+  // The switch delegates to the menu button's click handler so the
+  // assembly-mode, confirm-dialog and disabled logic above is shared (same
+  // delegate-to-.click() pattern as the 1–6 routing hotkeys).
+  // preventDefault() suppresses the browser's default F-key actions (e.g. F1 help).
+  _ALL_REPRS.forEach(({ id, repr }, i) => {
+    registerShortcut({
+      key: `F${i + 1}`, ctrl: false, shift: false, alt: false,
+      description: `Representation: ${_REPR_LABELS[repr] ?? repr} (repeat-press cycles coloring)`,
+      blockedInInput: true, noRepeat: true,
+      handler(e) {
+        e.preventDefault()
+        const btn = document.getElementById(id)
+        if (!btn || btn.disabled) return
+        // is-checked means this representation is already the active one →
+        // repeat press cycles its coloring; otherwise switch to it.
+        if (btn.classList.contains('is-checked')) _cycleColoringForRepr(repr)
+        else                                      btn.click()
+      },
+    })
+  })
 
   // Initial availability (default repr = 'full' per HTML is-checked).
   _updateColoringMenuAvailability('full')

@@ -406,17 +406,19 @@ function _makeOverhangNameTexture(text) {
  * The group is attached to the instance's local Three.js group, so the
  * PartInstance placement transform applies automatically.
  */
-function _buildInstanceOverhangNameGroup(design, nucleotides, showOverhangNames) {
-  const group = new THREE.Group()
-  group.visible = !!showOverhangNames
-  group.name = 'overhangNameLabels'
-  if (!design?.overhangs?.length || !nucleotides?.length) return group
+// Local-frame label anchors for every overhang with a non-empty label:
+// [{overhangId, label, x, y, z}] at the overhang domain's midpoint nuc,
+// offset radially out from the backbone. Shared by the per-instance sprite
+// builder and the shared path's world-anchor computation.
+function _overhangLabelAnchorsLocal(design, nucleotides) {
+  const out = []
+  if (!design?.overhangs?.length || !nucleotides?.length) return out
 
   const labelMap = new Map()
   for (const ovhg of design.overhangs) {
     if (ovhg.label) labelMap.set(ovhg.id, ovhg.label)
   }
-  if (labelMap.size === 0) return group
+  if (labelMap.size === 0) return out
 
   const byOverhang = new Map()
   for (const nuc of nucleotides) {
@@ -443,8 +445,18 @@ function _buildInstanceOverhangNameGroup(design, nucleotides, showOverhangNames)
         oy = (ny / len) * _OVHG_RADIAL_OFFSET
       }
     }
+    out.push({ overhangId: ovhgId, label, x: x + ox, y: y + oy, z })
+  }
+  return out
+}
 
-    const tex    = _makeOverhangNameTexture(label)
+function _buildInstanceOverhangNameGroup(design, nucleotides, showOverhangNames) {
+  const group = new THREE.Group()
+  group.visible = !!showOverhangNames
+  group.name = 'overhangNameLabels'
+
+  for (const a of _overhangLabelAnchorsLocal(design, nucleotides)) {
+    const tex    = _makeOverhangNameTexture(a.label)
     const aspect = tex.image.width / tex.image.height
     const mat    = new THREE.SpriteMaterial({
       map:         tex,
@@ -453,10 +465,10 @@ function _buildInstanceOverhangNameGroup(design, nucleotides, showOverhangNames)
     })
     const sprite = new THREE.Sprite(mat)
     sprite.scale.set(_OVHG_SPRITE_HEIGHT_BASE * aspect, _OVHG_SPRITE_HEIGHT_BASE, 1)
-    sprite.position.set(x + ox, y + oy, z)
+    sprite.position.set(a.x, a.y, a.z)
     sprite.renderOrder = 12
-    sprite.userData.overhangId    = ovhgId
-    sprite.userData.overhangLabel = label
+    sprite.userData.overhangId    = a.overhangId
+    sprite.userData.overhangLabel = a.label
     sprite.userData.tag           = 'overhang-name'
     group.add(sprite)
   }
@@ -704,6 +716,144 @@ function _clusterMemberFilter(cluster, design) {
   return nuc => helixSet.has(nuc.helix_id)
 }
 
+// ── Cross-part ds linker connector arcs ───────────────────────────────────
+// Port of the per-design overhang_link_arcs.js connector arcs to the assembly
+// view: a white tube from each ds linker strand's complement-domain end to its
+// bridge-domain end (the cross-helix strand junction between the overhang
+// binding domain on a part and the native-length __lnk__ bridge duplex). This
+// closes the visible gap when parts aren't relaxed into a continuous duplex.
+// buildHelixObjects (used for the linker helices) does NOT draw cross-helix
+// junctions, so without this the gap is unbridged. Purely topological
+// (domain[i].end ↔ domain[i+1].start) — no bp/direction reasoning. ds side
+// strands only (`__lnk__<conn>__a` / `__b`); ss linkers render as their own
+// bead chain in the design view and are not ported here.
+const _LNK_ARC_RADIUS = 0.065   // nm — matches DS_ARC_RADIUS in overhang_link_arcs.js
+const _LNK_ARC_SEGS   = 32
+
+function _lnkCssToHex(css) {
+  return (typeof css === 'string' && /^#[0-9a-fA-F]{6}$/.test(css)) ? parseInt(css.slice(1), 16) : null
+}
+
+function _lnkConnectorArc(a, b, color) {
+  const chord = b.clone().sub(a)
+  const len = chord.length() || 1
+  let bow = chord.clone().cross(new THREE.Vector3(0, 0, 1))
+  if (bow.lengthSq() < 1e-6) bow = chord.clone().cross(new THREE.Vector3(1, 0, 0))
+  bow.normalize().multiplyScalar(len * 0.25)
+  const ctrl = a.clone().add(b).multiplyScalar(0.5).add(bow)
+  const mesh = new THREE.Mesh(
+    new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(a, ctrl, b), _LNK_ARC_SEGS, _LNK_ARC_RADIUS, 8, false),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 }),
+  )
+  mesh.name = 'assemblyDsConnectorArc'
+  return mesh
+}
+
+// One connector arc per ds linker side strand, at its complement↔bridge domain
+// junction. `nucs` are world-space (from /assembly/linker-geometry).
+function _buildAssemblyConnectorArcs(linkerStrands, nucs) {
+  const posByKey = new Map()
+  for (const n of nucs ?? []) {
+    if (!n.strand_id) continue
+    posByKey.set(`${n.strand_id}|${n.helix_id}|${n.bp_index}`, n.backbone_position ?? n.base_position)
+  }
+  const arcs = []
+  for (const strand of linkerStrands ?? []) {
+    const m = /^(__lnk__.+)__(a|b)$/.exec(strand.id ?? '')   // ds side strands only
+    if (!m) continue
+    const bridgeHelixId = m[1]
+    const connId = bridgeHelixId.replace(/^__lnk__/, '')   // for right-click → relax
+    const domains = strand.domains ?? []
+    const color = _lnkCssToHex(strand.color) ?? 0xffffff
+    for (let i = 0; i + 1 < domains.length; i++) {
+      const d0 = domains[i], d1 = domains[i + 1]
+      // Exactly one of the adjacent domains is the bridge → this is the
+      // complement↔bridge junction (the gap the arc fills).
+      if ((d0.helix_id === bridgeHelixId) === (d1.helix_id === bridgeHelixId)) continue
+      const p0 = posByKey.get(`${strand.id}|${d0.helix_id}|${d0.end_bp}`)
+      const p1 = posByKey.get(`${strand.id}|${d1.helix_id}|${d1.start_bp}`)
+      if (!p0 || !p1) continue
+      const a = new THREE.Vector3(p0[0], p0[1], p0[2])
+      const b = new THREE.Vector3(p1[0], p1[1], p1[2])
+      if (a.distanceTo(b) > 1e-3) {
+        const arc = _lnkConnectorArc(a, b, color)
+        arc.userData.connId = connId
+        arcs.push(arc)
+      }
+    }
+  }
+  return arcs
+}
+
+/**
+ * Build the cross-part linker helix meshes (complement beads + virtual __lnk__
+ * bridge) into `linkerGroup` from `GET /assembly/linker-geometry`. Module-level
+ * so BOTH the legacy and shared instancing renderers can reuse it — linkers are
+ * O(few) per overhang-connection (not per-bp instanced), so a plain dedicated
+ * group is the cheapest correct representation on either path.
+ *
+ * Clears the group first (disposing non-shared geometry/materials). Does NOT
+ * draw the `__vsc__` virtual-scaffold dashed lines — those need per-instance
+ * world-axis caches that only the legacy path populates; the legacy
+ * `rebuildLinkers` adds them after calling this.
+ */
+async function _rebuildLinkerHelices({ assembly, api, linkerGroup, axesToMap }) {
+  linkerGroup.traverse(obj => {
+    // Skip module-level template geometries shared across instances.
+    if (obj.geometry && !obj.geometry.userData?.shared) obj.geometry.dispose()
+    if (obj.material) {
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+      mats.forEach(m => m.dispose())
+    }
+  })
+  while (linkerGroup.children.length) linkerGroup.remove(linkerGroup.children[0])
+  linkerGroup.userData.linkerNucs = []   // world-space [{connId, pos}] for right-click → relax picking
+
+  if (!assembly) return
+
+  // Cross-part linker strands reference world-space alias helices keyed by
+  // '<instance_id>::<original_helix_id>'; the backend returns them in
+  // `aliased_helices` so the synthetic design used by buildHelixObjects can
+  // resolve those domain.helix_id lookups.
+  const linkerHelices = assembly.assembly_helices ?? []
+  const linkerStrands = assembly.assembly_strands ?? []
+  if (linkerHelices.length === 0 && linkerStrands.length === 0) return
+
+  let geoData = null
+  try { geoData = await api.getLinkerGeometry() } catch (_) {}
+  if (!geoData?.nucleotides?.length) return
+
+  const syntheticDesign = {
+    helices:    [...linkerHelices, ...(geoData.aliased_helices ?? [])],
+    strands:    linkerStrands,
+    crossovers: [],
+    lattice_type: 'honeycomb',
+  }
+  buildHelixObjects(
+    geoData.nucleotides, syntheticDesign, linkerGroup, {}, [],
+    axesToMap(geoData.helix_axes),
+  )
+
+  // Connector arcs: bridge the complement↔bridge domain junction of each ds
+  // linker strand (same visual as the per-design overhang_link_arcs.js).
+  for (const arc of _buildAssemblyConnectorArcs(linkerStrands, geoData.nucleotides)) {
+    linkerGroup.add(arc)
+  }
+
+  // Stash world-space linker nuc positions tagged by connection id so a
+  // right-click on any linker mesh (complement / bridge beads — which carry no
+  // per-conn userData) resolves to its connection via nearest-nuc.
+  const linkerNucs = []
+  for (const n of geoData.nucleotides ?? []) {
+    const sid = n.strand_id ?? ''
+    if (!/^__lnk__.+__(a|b|s)$/.test(sid)) continue
+    const p = n.backbone_position ?? n.base_position
+    if (!p) continue
+    linkerNucs.push({ connId: sid.replace(/^__lnk__/, '').replace(/__(a|b|s)$/, ''), pos: [p[0], p[1], p[2]] })
+  }
+  linkerGroup.userData.linkerNucs = linkerNucs
+}
+
 export function initAssemblyRenderer(scene, store, api) {
   // instId → { group, transformKey, sourceKey, reprKey, helixCtrl, atomisticRenderer,
   //            hullGroups, design, helixAxes }
@@ -734,6 +884,7 @@ export function initAssemblyRenderer(scene, store, api) {
 
   // Linker geometry group (linker helices + VSC dashed lines)
   const _linkerGroup = new THREE.Group()
+  _linkerGroup.name = 'assembly_linkers'
   scene.add(_linkerGroup)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -1569,42 +1720,11 @@ export function initAssemblyRenderer(scene, store, api) {
    * Called after rebuild() so that instance helix_axes caches are populated.
    */
   async function rebuildLinkers(assembly) {
-    // Clear previous linker objects
-    _linkerGroup.traverse(obj => {
-      // Skip module-level template geometries shared across instances.
-      if (obj.geometry && !obj.geometry.userData?.shared) obj.geometry.dispose()
-      if (obj.material) {
-        const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
-        mats.forEach(m => m.dispose())
-      }
+    // Linker helix meshes (shared module-level builder; also clears the group).
+    await _rebuildLinkerHelices({
+      assembly, api, linkerGroup: _linkerGroup, axesToMap: _axesArrayToMap,
     })
-    while (_linkerGroup.children.length) _linkerGroup.remove(_linkerGroup.children[0])
-
     if (!assembly) return
-
-    // ── Linker helices — full nucleotide geometry from backend ─────────────────
-    // Cross-part linker strands reference world-space alias helices keyed
-    // by '<instance_id>::<original_helix_id>'; the backend returns them in
-    // `aliased_helices` so the synthetic design used by buildHelixObjects
-    // can resolve those domain.helix_id lookups.
-    const linkerHelices = assembly.assembly_helices ?? []
-    const linkerStrands = assembly.assembly_strands ?? []
-    if (linkerHelices.length > 0 || linkerStrands.length > 0) {
-      let geoData = null
-      try { geoData = await api.getLinkerGeometry() } catch (_) {}
-      if (geoData?.nucleotides?.length) {
-        const syntheticDesign = {
-          helices:    [...linkerHelices, ...(geoData.aliased_helices ?? [])],
-          strands:    linkerStrands,
-          crossovers: [],
-          lattice_type: 'honeycomb',
-        }
-        buildHelixObjects(
-          geoData.nucleotides, syntheticDesign, _linkerGroup, {}, [],
-          _axesArrayToMap(geoData.helix_axes),
-        )
-      }
-    }
 
     // ── Virtual scaffold connections — dashed green lines ─────────────────────
     const vscStrands = (assembly.assembly_strands ?? []).filter(s => s.id?.startsWith('__vsc__'))
@@ -1877,6 +1997,27 @@ export function initAssemblyRenderer(scene, store, api) {
       obj = obj.parent
     }
     return null
+  }
+
+  // Raycast the linker group; return the overhang-connection id under the
+  // cursor, or null. Mirrors the shared path's pickLinker (right-click → Relax).
+  function pickLinker(ndc, camera) {
+    if (!_linkerGroup.children.length) return null
+    _rc.setFromCamera(ndc, camera)
+    const hits = _rc.intersectObject(_linkerGroup, true)
+    if (!hits.length) return null
+    for (let o = hits[0].object; o && o !== _linkerGroup; o = o.parent) {
+      if (o.userData?.connId) return o.userData.connId
+    }
+    const nucs = _linkerGroup.userData.linkerNucs ?? []
+    const hp = hits[0].point
+    let best = null, bestD = Infinity
+    for (const n of nucs) {
+      const dx = hp.x - n.pos[0], dy = hp.y - n.pos[1], dz = hp.z - n.pos[2]
+      const d = dx * dx + dy * dy + dz * dz
+      if (d < bestD) { bestD = d; best = n }
+    }
+    return best?.connId ?? null
   }
 
   /**
@@ -2277,6 +2418,7 @@ export function initAssemblyRenderer(scene, store, api) {
     applyInstanceClusterTransform,
     pickInstanceCluster,
     pickInstance,
+    pickLinker,
     dispose,
     getBoundingBox,
     getInstanceCenters,
@@ -2313,6 +2455,10 @@ const _ASSEMBLY_RENDERER_METHODS = [
   'applyInstanceClusterTransform',
   'pickInstanceCluster',
   'pickInstance',
+  'pickLinker',
+  'getOverhangAnchors',
+  'setHoveredOverhang',
+  'setOverhangSelectionHighlight',
   'dispose',
   'getBoundingBox',
   'getInstanceCenters',
@@ -2364,7 +2510,9 @@ const _SHARED_RENDERER_STUB_DEFAULTS = {
   // getInstanceBluntEnds / getConnectorClusterId / getConnectorClusterIds
   // implemented on the shared path (blunt-end connectors for Define Mate).
   auditInstanceBox:               () => undefined,
-  rebuildLinkers:                 () => Promise.resolve(),
+  // rebuildLinkers implemented on the shared path (Phase 7b) — cross-part
+  // linker helices into a dedicated group via the module-level
+  // `_rebuildLinkerHelices` (VSC dashed lines still deferred there).
   // setPhotoMode implemented on the shared path (Phase 7d) — hides the
   // selection outline; photo_renderer re-applies the instancing patch to the
   // PBR materials it swaps in via userData.applySharedInstancing.
@@ -2427,6 +2575,36 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
 
   // Rebuild-complete subscribers (parity with old path).
   const _onRebuildCompleteCbs = []
+
+  // Cross-part linker geometry lives in its own group (linkers are few, per
+  // overhang-connection, not per-bp instanced — no instancing needed). Shared
+  // with the legacy path via the module-level `_rebuildLinkerHelices`.
+  const _linkerGroup = new THREE.Group()
+  _linkerGroup.name = 'assembly_linkers'
+  scene.add(_linkerGroup)
+
+  // Local copy of the legacy `_axesArrayToMap` (pure; see initAssemblyRenderer).
+  function _axesArrayToMap(raw) {
+    if (!raw?.length) return null
+    const map = {}
+    for (const ax of raw) map[ax.helix_id] = { start: ax.start, end: ax.end, samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null }
+    return map
+  }
+
+  // ── Public: rebuildLinkers (Phase 7b) ──────────────────────────────────────
+  // Renders the cross-part linker helices. The legacy path additionally draws
+  // `__vsc__` virtual-scaffold dashed lines; those need per-instance world-axis
+  // caches the shared path doesn't keep, so they're deferred here (a separate
+  // feature, not part of cross-part linkers).
+  async function rebuildLinkers(assembly) {
+    // rebuild() calls dispose() at its top, which detaches _linkerGroup from the
+    // scene; main.js runs rebuild().then(rebuildLinkers), so re-attach here or
+    // the freshly-built linker meshes would live in an orphaned group (invisible).
+    if (!_linkerGroup.parent) scene.add(_linkerGroup)
+    await _rebuildLinkerHelices({
+      assembly, api, linkerGroup: _linkerGroup, axesToMap: _axesArrayToMap,
+    })
+  }
 
   // The active instance id — surfaced as a per-source uniform so the shader
   // can brighten the matching instance's slots.
@@ -4091,12 +4269,24 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // cluster-drag commit (→ backend → rebuild) cleanly bakes the new pose
     // into the source and drops the overlay.
     _dematerializeInstance()
+    // Overhang label overlay + selection-highlight rings + cached textures.
+    _disposeOverhangOverlays()
     // Phase 7a: the per-instance overhang render-data group (owns no geometry
     // of its own — overhang-locations disposes its arrow children).
     if (_renderDataGroup) {
       scene.remove(_renderDataGroup)
       _renderDataGroup = null
     }
+    // Phase 7b: cross-part linker group.
+    _linkerGroup.traverse(obj => {
+      if (obj.geometry && !obj.geometry.userData?.shared) obj.geometry.dispose()
+      if (obj.material) {
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+        mats.forEach(m => m.dispose())
+      }
+    })
+    while (_linkerGroup.children.length) _linkerGroup.remove(_linkerGroup.children[0])
+    scene.remove(_linkerGroup)
   }
 
   // ── Texture upload — dirty rows only ──────────────────────────────────────
@@ -4218,6 +4408,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       _installLodUpdater(entry)
     }
 
+    rebuildOverhangNames()   // rebuild label sprites if the toggle is on
     _fireRebuildComplete()
   }
 
@@ -4369,6 +4560,170 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     } else {
       _refreshActiveBox()
     }
+    rebuildOverhangNames()   // suppress labels in photo mode / restore on exit
+  }
+
+  // ── Overhang labels + hover/selection (shared path) ───────────────────────
+  // Labels render for: the "show all" toggle (showOverhangNames), the hovered
+  // overhang (transient), and selected overhangs (persistent, with a green
+  // ring). Hover + click selection are driven by PROXIMITY in main.js: it
+  // reads world-space anchors via getOverhangAnchors() and calls
+  // setHoveredOverhang() / setOverhangSelectionHighlight(). There is no
+  // selectable-toggle gate — this is always active in assembly mode.
+  const _ovhgLabelGroup = new THREE.Group()
+  _ovhgLabelGroup.name = 'sharedOverhangNames'
+  _ovhgLabelGroup.renderOrder = 12
+  scene.add(_ovhgLabelGroup)
+
+  const _ovhgSelGroup = new THREE.Group()
+  _ovhgSelGroup.name = 'overhangSelHighlight'
+  _ovhgSelGroup.renderOrder = 20
+  scene.add(_ovhgSelGroup)
+
+  let _ovhgAnchors = []          // [{instanceId, overhangId, label, world: Vector3}]
+  let _ovhgSelList = []          // selected [{instanceId, overhangId}]
+  let _ovhgHover   = null        // hovered {instanceId, overhangId} | null
+  let _ovhgRingTex = null
+  const _ovhgLabelTexCache = new Map()   // label text -> { tex, aspect }
+
+  const _ovhgKey = (o) => `${o.instanceId}|${o.overhangId}`
+
+  function _overhangLabelTex(label) {
+    let e = _ovhgLabelTexCache.get(label)
+    if (!e) {
+      const tex = _makeOverhangNameTexture(label)
+      e = { tex, aspect: tex.image.width / tex.image.height }
+      _ovhgLabelTexCache.set(label, e)
+    }
+    return e
+  }
+
+  function _overhangRingTexture() {
+    if (_ovhgRingTex) return _ovhgRingTex
+    const c = document.createElement('canvas')
+    c.width = c.height = 64
+    const g = c.getContext('2d')
+    g.strokeStyle = '#3cff8e'
+    g.lineWidth = 7
+    g.beginPath()
+    g.arc(32, 32, 25, 0, Math.PI * 2)
+    g.stroke()
+    _ovhgRingTex = new THREE.CanvasTexture(c)
+    return _ovhgRingTex
+  }
+
+  function _clearSpriteGroup(group) {
+    for (const ch of [...group.children]) {
+      group.remove(ch)
+      ch.material?.dispose?.()   // textures are cached/shared — don't dispose here
+    }
+  }
+
+  // World-space anchor (label position) for every labeled overhang on every
+  // visible instance. Cheap data only; recomputed on geometry rebuild.
+  function _computeOverhangAnchors() {
+    _ovhgAnchors = []
+    const assembly = store.getState().currentAssembly
+    if (!assembly) return
+    const mat = new THREE.Matrix4()
+    for (const srcEntry of _sources.values()) {
+      const locals = _overhangLabelAnchorsLocal(srcEntry.design, srcEntry.nucleotides)
+      if (!locals.length) continue
+      for (let i = 0; i < srcEntry.instanceIds.length; i++) {
+        if (srcEntry.visibility[i] < 0.5) continue
+        const inst = assembly.instances?.find(x => x.id === srcEntry.instanceIds[i])
+        if (!inst || inst.visible === false) continue
+        const off = i * 16
+        for (let k = 0; k < 16; k++) mat.elements[k] = srcEntry.xformData[off + k]
+        for (const a of locals) {
+          const world = new THREE.Vector3(a.x, a.y, a.z).applyMatrix4(mat)
+          _ovhgAnchors.push({ instanceId: srcEntry.instanceIds[i], overhangId: a.overhangId, label: a.label, world })
+        }
+      }
+    }
+  }
+
+  function _addOverhangLabelSprite(a) {
+    const { tex, aspect } = _overhangLabelTex(a.label)
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }))
+    sprite.scale.set(_OVHG_SPRITE_HEIGHT_BASE * aspect, _OVHG_SPRITE_HEIGHT_BASE, 1)
+    sprite.position.copy(a.world)
+    sprite.renderOrder = 12
+    sprite.userData = { tag: 'overhang-name', overhangId: a.overhangId, overhangLabel: a.label, instanceId: a.instanceId }
+    _ovhgLabelGroup.add(sprite)
+  }
+
+  // Visible label set = (showAll ? all) ∪ selected ∪ hovered.
+  function rebuildOverhangLabels() {
+    _clearSpriteGroup(_ovhgLabelGroup)
+    if (_photoMode) return
+    const showAll  = !!store.getState().showOverhangNames
+    const selKeys  = new Set(_ovhgSelList.map(_ovhgKey))
+    const hoverKey = _ovhgHover ? _ovhgKey(_ovhgHover) : null
+    for (const a of _ovhgAnchors) {
+      const k = _ovhgKey(a)
+      if (showAll || selKeys.has(k) || k === hoverKey) _addOverhangLabelSprite(a)
+    }
+  }
+
+  function _rebuildOverhangSelHighlight() {
+    _clearSpriteGroup(_ovhgSelGroup)
+    if (_photoMode || !_ovhgSelList.length) return
+    const byKey = new Map(_ovhgAnchors.map(a => [_ovhgKey(a), a]))
+    for (const sel of _ovhgSelList) {
+      const a = byKey.get(_ovhgKey(sel))
+      if (!a) continue
+      const ring = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: _overhangRingTexture(), depthTest: false, transparent: true,
+      }))
+      ring.position.copy(a.world)
+      ring.scale.setScalar(2.4)
+      ring.renderOrder = 20
+      _ovhgSelGroup.add(ring)
+    }
+  }
+
+  // Full overhang-overlay refresh after a geometry rebuild / photo toggle.
+  function rebuildOverhangNames() {
+    _computeOverhangAnchors()
+    rebuildOverhangLabels()
+    _rebuildOverhangSelHighlight()
+  }
+
+  // Toggle "show all overhang labels" → relabel (anchors unchanged).
+  store.subscribe((newState, prevState) => {
+    if (newState.showOverhangNames !== prevState.showOverhangNames) rebuildOverhangLabels()
+  })
+
+  /** Public: selected overhangs (list of {instanceId, overhangId}) → rings + persistent labels. */
+  function setOverhangSelectionHighlight(list) {
+    _ovhgSelList = Array.isArray(list) ? list : []
+    rebuildOverhangLabels()
+    _rebuildOverhangSelHighlight()
+  }
+
+  /** Public: hovered overhang ({instanceId, overhangId} | null) → transient label. */
+  function setHoveredOverhang(h) {
+    const next = h ? _ovhgKey(h) : null
+    const cur  = _ovhgHover ? _ovhgKey(_ovhgHover) : null
+    if (next === cur) return
+    _ovhgHover = h ? { instanceId: h.instanceId, overhangId: h.overhangId } : null
+    if (store.getState().showOverhangNames) return   // everything already shown
+    rebuildOverhangLabels()
+  }
+
+  /** Public: world-space anchors for proximity hit-testing (hover + click) in main.js. */
+  function getOverhangAnchors() {
+    return _ovhgAnchors.map(a => ({ instanceId: a.instanceId, overhangId: a.overhangId, label: a.label, world: a.world }))
+  }
+
+  function _disposeOverhangOverlays() {
+    _clearSpriteGroup(_ovhgLabelGroup)
+    _clearSpriteGroup(_ovhgSelGroup)
+    for (const { tex } of _ovhgLabelTexCache.values()) tex.dispose?.()
+    _ovhgLabelTexCache.clear()
+    _ovhgRingTex?.dispose?.(); _ovhgRingTex = null
+    _ovhgAnchors = []; _ovhgSelList = []; _ovhgHover = null
   }
 
   // ── Public: updateStrandColor ─────────────────────────────────────────────
@@ -4915,6 +5270,29 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return assembly?.instances?.find(i => i.id === bestId) ?? null
   }
 
+  // Raycast the linker group; return the overhang-connection id under the
+  // cursor (any linker mesh — complement / bridge beads or connector arc), or
+  // null. Connector arcs carry userData.connId; bead hits fall back to the
+  // nearest tagged linker nuc. Used by the right-click → Relax menu.
+  function pickLinker(ndc, camera) {
+    if (!_linkerGroup.children.length) return null
+    _pickRaycaster.setFromCamera(ndc, camera)
+    const hits = _pickRaycaster.intersectObject(_linkerGroup, true)
+    if (!hits.length) return null
+    for (let o = hits[0].object; o && o !== _linkerGroup; o = o.parent) {
+      if (o.userData?.connId) return o.userData.connId
+    }
+    const nucs = _linkerGroup.userData.linkerNucs ?? []
+    const hp = hits[0].point
+    let best = null, bestD = Infinity
+    for (const n of nucs) {
+      const dx = hp.x - n.pos[0], dy = hp.y - n.pos[1], dz = hp.z - n.pos[2]
+      const d = dx * dx + dy * dy + dz * dz
+      if (d < bestD) { bestD = d; best = n }
+    }
+    return best?.connId ?? null
+  }
+
   /**
    * Per-instance world centers + radii. Called every frame by nav_controller's
    * fly-mode threshold check; must NOT throw or the rAF loop spams the console.
@@ -4985,6 +5363,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     getBoundingBox,
     getInstanceCenters,
     pickInstance,
+    pickLinker,
     setLiveTransform,
     getLiveTransform,
     getInstanceBluntEnds,
@@ -4996,7 +5375,11 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     pickInstanceCluster,
     captureInstanceClusterBase,
     applyInstanceClusterTransform,
+    getOverhangAnchors,
+    setHoveredOverhang,
+    setOverhangSelectionHighlight,
     setPhotoMode,
+    rebuildLinkers,
     invalidateInstance,
     applyInlineGeometry,
     onRebuildComplete,

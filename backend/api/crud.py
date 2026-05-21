@@ -342,6 +342,7 @@ def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
 def _geometry_for_helices(
     design: Design,
     helix_ids: frozenset[str] | None = None,
+    include_linker_helices: bool = False,
 ) -> list[dict]:
     """Compute nucleotide geometry for *design*.
 
@@ -352,6 +353,13 @@ def _geometry_for_helices(
     Extensions are only appended in full mode (helix_ids is None) — they depend
     on positions from arbitrary helices and must be returned together with the
     full geometry.
+
+    *include_linker_helices*: per-design rendering skips ``__lnk__`` virtual
+    bridge helices and emits their bridge nucs via ``_emit_bridge_nucs`` (which
+    reads ``design.overhang_connections``). The cross-part assembly path has the
+    bridge baked into a real world-space ``__lnk__`` helix but no
+    ``overhang_connections`` on its synthetic design, so it sets this True to
+    render the bridge helix directly through the normal per-helix pipeline.
     """
     from types import SimpleNamespace
     full_mode = helix_ids is None
@@ -428,8 +436,9 @@ def _geometry_for_helices(
     for helix in design.helices:
         if helix_ids is not None and helix.id not in helix_ids:
             continue
-        if helix.id.startswith("__lnk__"):
-            continue   # virtual linker helices have no real geometry
+        if helix.id.startswith("__lnk__") and not include_linker_helices:
+            continue   # virtual linker helices have no real geometry (per-design:
+                       # bridge nucs come from _emit_bridge_nucs below instead)
         arrs = deformed_nucleotide_arrays(helix, design)
         arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
         _emit_arrs(arrs, arrs['helix_id'])
@@ -601,8 +610,8 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
                 })
 
 
-def _geometry_for_design(design: Design) -> list[dict]:
-    return _geometry_for_helices(design)
+def _geometry_for_design(design: Design, include_linker_helices: bool = False) -> list[dict]:
+    return _geometry_for_helices(design, include_linker_helices=include_linker_helices)
 
 
 def _ensure_default_cluster(design: Design) -> Design:

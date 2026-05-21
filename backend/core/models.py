@@ -978,6 +978,7 @@ SnapshotOpKind = Literal[
     'assembly-overhang-connection-add',
     'assembly-overhang-connection-patch',
     'assembly-overhang-connection-delete',
+    'assembly-overhang-connection-relax',
     'assembly-polymerize',
     'assembly-add-instance',
     'assembly-delete-instance',

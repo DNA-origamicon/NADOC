@@ -162,6 +162,16 @@
       display: inline;
     }
 
+    /* F-key hint shown on the right of Representation menu items (F1…F7) */
+    .repr-fkey-hint {
+      float: right;
+      color: #6e7681;
+      font-family: var(--font-data);
+      font-size: 11px;
+      margin-left: 12px;
+    }
+    .dropdown-item:disabled .repr-fkey-hint { color: #484f58; }
+
     .menu-title {
       font-size: 12px;
       font-weight: 700;
@@ -3045,15 +3055,16 @@
             <span id="menu-view-repr-mixed-dot" style="display:none;color:#3fb950;font-size:9px;margin-left:6px" title="Parts have a mix of representations">●</span>
             <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu">
-              <button class="dropdown-item is-checked" id="menu-view-detail-full">Full<span class="routing-check-mark">●</span></button>
-              <button class="dropdown-item" id="menu-view-detail-beads">Beads<span class="routing-check-mark">●</span></button>
-              <button class="dropdown-item" id="menu-view-detail-cylinders">Cylinders<span class="routing-check-mark">●</span></button>
+              <!-- Ordered least → most compute-intensive; F1…F7 bind in this same order. -->
+              <button class="dropdown-item" id="menu-view-hull-prism">Hull Prism<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F1</span></button>
+              <button class="dropdown-item" id="menu-view-detail-cylinders">Cylinders<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F2</span></button>
+              <button class="dropdown-item" id="menu-view-detail-beads">Beads<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F3</span></button>
+              <button class="dropdown-item is-checked" id="menu-view-detail-full">Full<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F4</span></button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-              <button class="dropdown-item" id="menu-view-atomistic-vdw">VDW / Space-fill<span class="routing-check-mark">●</span></button>
-              <button class="dropdown-item" id="menu-view-atomistic-ballstick">Ball &amp; Stick<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-surface">Surface<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F5</span></button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-              <button class="dropdown-item" id="menu-view-surface">Surface<span class="routing-check-mark">●</span></button>
-              <button class="dropdown-item" id="menu-view-hull-prism">Hull Prism<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-atomistic-vdw">VDW / Space-fill<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F6</span></button>
+              <button class="dropdown-item" id="menu-view-atomistic-ballstick">Ball &amp; Stick<span class="routing-check-mark">●</span><span class="repr-fkey-hint">F7</span></button>
             </div>
           </div>
           <div class="submenu-item">Coloring <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>

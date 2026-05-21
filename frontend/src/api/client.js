@@ -2040,6 +2040,20 @@ export async function deleteAssemblyOverhangConnection(id) {
   return json
 }
 
+// Read-only gate for the per-row Relax button: { available, reason,
+// movable_instance_id, fixed_instance_id, linker_type }. Does NOT mutate state.
+export async function getAssemblyOverhangConnectionRelaxStatus(id) {
+  return _request('GET', `/assembly/overhang-connections/${encodeURIComponent(id)}/relax-status`)
+}
+
+// Rigid-place the free part so the ds linker becomes a coaxial native-length
+// duplex. Returns the assembly response (+ relax_info) and syncs the store.
+export async function relaxAssemblyOverhangConnection(id) {
+  const json = await _request('POST', `/assembly/overhang-connections/${encodeURIComponent(id)}/relax`)
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
 export async function seekAssemblyFeatures(position) {
   const json = await _request('POST', '/assembly/features/seek', { position })
   _syncFromAssemblyResponse(json)

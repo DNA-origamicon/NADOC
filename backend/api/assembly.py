@@ -2527,6 +2527,12 @@ class PatchAssemblyOverhangConnectionRequest(BaseModel):
     bridge_sequence:   Optional[str]   = None
 
 
+class RelaxAssemblyLinkerRequest(BaseModel):
+    """Body for the cross-part linker relax. Empty today (the placement is
+    deterministic); kept for forward-compat (e.g. an explicit movable side)."""
+    pass
+
+
 def _validate_overhang_in_instance(design, overhang_id: str, side: str) -> None:
     if not any(o.id == overhang_id for o in (design.overhangs or [])):
         raise HTTPException(404, detail=f"Side {side}: overhang {overhang_id!r} not found.")
@@ -2768,6 +2774,125 @@ def delete_assembly_overhang_connection(connection_id: str) -> dict:
         params={"connection_id": connection_id, "name": target.name},
     )
     return _assembly_response(updated)
+
+
+def _find_assembly_connection(assembly: Assembly, connection_id: str):
+    conn = next((c for c in assembly.overhang_connections if c.id == connection_id), None)
+    if conn is None:
+        raise HTTPException(404, detail=f"AssemblyOverhangConnection {connection_id!r} not found.")
+    return conn
+
+
+@router.get("/assembly/overhang-connections/{connection_id}/relax-status", status_code=200)
+def assembly_overhang_connection_relax_status(connection_id: str) -> dict:
+    """Whether a cross-part linker can be rigid-place relaxed (gates the UI button)."""
+    from backend.core.assembly_linker_relax import assembly_relax_status
+
+    assembly = assembly_state.get_or_404()
+    conn     = _find_assembly_connection(assembly, connection_id)
+    inst_a   = _find_instance(assembly, conn.instance_a_id)
+    inst_b   = _find_instance(assembly, conn.instance_b_id)
+    return assembly_relax_status(assembly, conn, inst_a, inst_b)
+
+
+@router.post("/assembly/overhang-connections/{connection_id}/relax", status_code=200)
+def relax_assembly_overhang_connection(
+    connection_id: str,
+    body: Optional[RelaxAssemblyLinkerRequest] = None,
+) -> dict:
+    """Rigidly move the free part so the ds linker becomes a coaxial native-length duplex.
+
+    Holds one part fixed (per ``assembly_relax_status``) and rigid-places the
+    other; then re-materializes the now-stale bridge from the moved world
+    anchors. Single undoable feature-log entry.
+    """
+    from backend.core.assembly_linker_relax import (
+        assembly_relax_status,
+        relax_assembly_linker,
+    )
+    from backend.core.assembly_linker import (
+        generate_assembly_linker_topology,
+        remove_assembly_linker_topology,
+    )
+
+    assembly = assembly_state.get_or_404()
+    conn     = _find_assembly_connection(assembly, connection_id)
+    inst_a   = _find_instance(assembly, conn.instance_a_id)
+    inst_b   = _find_instance(assembly, conn.instance_b_id)
+    design_a = _load_design_from_source(inst_a.source, _assembly_source_path(assembly))
+    design_b = _load_design_from_source(inst_b.source, _assembly_source_path(assembly))
+
+    status = assembly_relax_status(assembly, conn, inst_a, inst_b)
+    if not status["available"]:
+        raise HTTPException(400, detail=status["reason"])
+
+    bridge_helix_id = f"__lnk__{conn.id}"
+
+    # Generate a fresh bridge from the CURRENT anchors and EMIT it (same pipeline
+    # the renderer uses), so the relax minimizes the actual 3D backbone-bead
+    # coordinates the user sees — not a re-derived approximation.
+    base_h, base_s = remove_assembly_linker_topology(
+        list(assembly.assembly_helices), list(assembly.assembly_strands), connection_id,
+    )
+    add_h, add_s = generate_assembly_linker_topology(conn, inst_a, inst_b, design_a, design_b)
+    fresh = assembly.model_copy(update={
+        "assembly_helices": base_h + add_h,
+        "assembly_strands": base_s + add_s,
+    })
+    nucs = _linker_geometry_for_assembly(fresh).get("nucleotides", [])
+
+    moved_id   = status["movable_instance_id"]
+    inst_moved = inst_a if moved_id == inst_a.id else inst_b
+
+    # Two-translation, rotation-free relax on the emitted beads. Returns the
+    # moved part's pure translation + the bridge-helix translation (T1).
+    try:
+        new_T, t1, info = relax_assembly_linker(
+            conn, nucs, fresh.assembly_strands, inst_moved,
+            movable_instance_id=moved_id,
+            fixed_instance_id=status["fixed_instance_id"],
+        )
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+
+    # Work on a deep copy so the live assembly stays as the feature-log pre-state.
+    working = assembly.model_copy(deep=True)
+    inst_by_id = _build_inst_by_id(working)
+    _propagate_fk_inplace(working, moved_id, new_T, inst_by_id)
+
+    # Commit the fresh bridge with its __lnk__ helix slid onto the fixed overhang
+    # (T1). Do NOT regenerate from the moved pose — that would re-center the
+    # bridge and undo T1. The complement strands reference the parts' helices, so
+    # they follow the (now-moved) parts on their own.
+    t1v = np.asarray(t1, dtype=float)
+    bridge_helices = []
+    for h in add_h:
+        if h.id == bridge_helix_id:
+            ws = h.axis_start.to_array() + t1v
+            we = h.axis_end.to_array() + t1v
+            bridge_helices.append(h.model_copy(update={
+                "axis_start": Vec3.from_array(ws),
+                "axis_end":   Vec3.from_array(we),
+            }))
+        else:
+            bridge_helices.append(h)
+    helices, strands = remove_assembly_linker_topology(
+        list(working.assembly_helices), list(working.assembly_strands), connection_id,
+    )
+    mutated = working.model_copy(update={
+        "assembly_helices": helices + bridge_helices,
+        "assembly_strands": strands + add_s,
+    })
+
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-overhang-connection-relax",
+        label=f"{conn.name}: relax linker",
+        params={"connection_id": connection_id, **info},
+    )
+    payload = _assembly_response(updated)
+    payload["relax_info"] = info
+    return payload
 
 
 def _materialize_post_state(full_log: list, target_idx: int, current: Assembly) -> Optional[Assembly]:
@@ -4942,27 +5067,24 @@ def delete_linker_strand(strand_id: str) -> dict:
 
 # ── Linker geometry ───────────────────────────────────────────────────────────
 
-@router.get("/assembly/linker-geometry", status_code=200)
-def get_linker_geometry() -> dict:
-    """
-    Compute nucleotide geometry for the assembly's linker helices and strands.
+def _linker_geometry_for_assembly(assembly) -> dict:
+    """Compute nucleotide geometry for *assembly*'s linker helices and strands.
 
-    Builds a synthetic Design from assembly_helices + assembly_strands plus
-    *world-space alias helices* for every cross-part complement domain
-    (helix ids of the form ``<inst_id>::<orig_helix_id>``), and runs the
-    same geometry pipeline as the main design endpoint.  Returns
-    ``{nucleotides, helix_axes, aliased_helices}`` — ``aliased_helices``
-    carries the synthesised cross-part helices so the frontend renderer
-    can resolve them.
+    Pure (takes the assembly explicitly) so the relax solver + connector-arc
+    checker can emit the SAME world-space beads the renderer shows, not a
+    re-derived approximation. Builds a synthetic Design from assembly_helices +
+    assembly_strands plus *world-space alias helices* for every cross-part
+    complement domain (``<inst_id>::<orig_helix_id>``) and runs the main
+    geometry pipeline. Returns ``{nucleotides, helix_axes, aliased_helices}``.
 
-    Returns empty arrays when there are no linker helices.
+    Returns empty arrays when there are no linker helices/strands.
     """
     from backend.api.crud import _geometry_for_design
     from backend.core.assembly_linker import parse_namespaced_helix_id, _world_axes_for_helix
     from backend.core.deformation import deformed_helix_axes
+    from backend.core.geometry import _frame_from_helix_axis
     from backend.core.models import Design
 
-    assembly = assembly_state.get_or_404()
     if not assembly.assembly_helices and not assembly.assembly_strands:
         return {"nucleotides": [], "helix_axes": {}, "aliased_helices": []}
 
@@ -4991,10 +5113,29 @@ def get_linker_geometry() -> dict:
             continue
         T = inst.transform.to_array()
         ws, we = _world_axes_for_helix(helix, T)
+        # Phase correction. The geometry pipeline derives a helix's radial frame
+        # from a FIXED world reference (`_frame_from_helix_axis`), which is NOT
+        # rotation-equivariant: frame(R·axis) ≠ R·frame(axis) once the part is
+        # tilted off world-Z. The overhang itself is built in the part's local
+        # frame and then placed by the instance transform T, so its phase is
+        # R·(local frame); but this aliased helix is in world space, so the
+        # pipeline would roll the complement (the overhang's binding domain) to
+        # frame(R·axis) instead — visibly wrong phase for any tilted part. Bake
+        # the roll difference δ between the world-pipeline frame and R·(local
+        # frame) into phase_offset so the world pass reproduces R·(local geometry).
+        R          = T[:3, :3]
+        local_axis = helix.axis_end.to_array() - helix.axis_start.to_array()
+        world_axis = we - ws
+        wx         = _frame_from_helix_axis(world_axis)[:, 0]
+        correct_x  = R @ _frame_from_helix_axis(local_axis)[:, 0]
+        z_hat      = world_axis / (float(np.linalg.norm(world_axis)) or 1.0)
+        delta      = math.atan2(float(np.dot(np.cross(wx, correct_x), z_hat)),
+                                float(np.dot(wx, correct_x)))
         aliased.append(helix.model_copy(update={
             "id":          namespaced_id,
             "axis_start":  Vec3.from_array(ws),
             "axis_end":    Vec3.from_array(we),
+            "phase_offset": helix.phase_offset + delta,
             # Loop/skip records reference original-helix bp indices, which
             # don't apply to the cross-part complement (it's not part of
             # the OH's helix geometry pass). Drop them to keep the
@@ -5005,14 +5146,51 @@ def get_linker_geometry() -> dict:
     synthetic = Design(
         helices=list(assembly.assembly_helices) + aliased,
         strands=list(assembly.assembly_strands),
-        lattice_type="honeycomb",
+        lattice_type="HONEYCOMB",   # LatticeType enum value (lowercase 500s the endpoint)
         metadata=DesignMetadata(name="__linkers__"),
     )
     return {
-        "nucleotides":     _geometry_for_design(synthetic),
+        # include_linker_helices=True: render the world-space __lnk__ bridge
+        # helix directly (the assembly synthetic design has no
+        # overhang_connections, so _emit_bridge_nucs can't emit the bridge).
+        "nucleotides":     _geometry_for_design(synthetic, include_linker_helices=True),
         "helix_axes":      deformed_helix_axes(synthetic),
         "aliased_helices": [h.model_dump(mode="json") for h in aliased],
     }
+
+
+@router.get("/assembly/linker-geometry", status_code=200)
+def get_linker_geometry() -> dict:
+    """Linker nucleotide geometry for the live assembly (see
+    :func:`_linker_geometry_for_assembly`)."""
+    return _linker_geometry_for_assembly(assembly_state.get_or_404())
+
+
+def assembly_connector_arc_lengths(assembly) -> dict[str, dict[str, float]]:
+    """Checker: the ACTUAL 3D connector-arc lengths per ds connection, measured
+    between the EMITTED complement-junction backbone bead and the EMITTED bridge-
+    boundary backbone bead — the exact quantity the relax drives to zero (mirrors
+    the per-design ``_anchor_pos_and_normal`` / arc-residual checks).
+
+    Returns ``{conn_id: {'a': length_nm, 'b': length_nm}}`` for each ds linker.
+    """
+    from backend.core.assembly_linker_relax import _connector_arc_endpoints
+
+    geo  = _linker_geometry_for_assembly(assembly)
+    nucs = geo.get("nucleotides", [])
+    out: dict[str, dict[str, float]] = {}
+    for conn in assembly.overhang_connections:
+        if getattr(conn, "linker_type", "ds") != "ds":
+            continue
+        ep = _connector_arc_endpoints(nucs, assembly.assembly_strands, conn)
+        sides: dict[str, float] = {}
+        for side in ("a", "b"):
+            seg = ep.get(side)
+            if seg is not None:
+                anchor, bead = seg
+                sides[side] = float(np.linalg.norm(bead - anchor))
+        out[conn.id] = sides
+    return out
 
 
 # ── Undo / Redo ───────────────────────────────────────────────────────────────
