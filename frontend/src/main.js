@@ -10355,16 +10355,27 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   /** Run `fn` (the actual export render) with every instance temporarily set to
    *  the assembly's export representation, restoring the originals afterward.
-   *  No-op when not in assembly mode, no instances, 'working', or already matching. */
+   *  ALSO suppresses the distance LOD demotion for the whole export so every
+   *  part renders at its rep's detail bucket (no far-away hull) → uniform
+   *  high-detail figures regardless of zoom.  The rep upgrade is a no-op when
+   *  not in assembly mode, no instances, 'working', or already matching; the
+   *  LOD suppression still applies whenever we're in an assembly. */
   async function _withExportRepresentation(fn) {
     const st  = store.getState()
     const asm = st.currentAssembly
     const exportRep = asm?.export_representation ?? 'full'
     const insts = asm?.instances ?? []
-    if (!st.assemblyActive || !insts.length || exportRep === 'working'
-        || insts.every(i => i.representation === exportRep)) {
-      return fn()
+    const inAssembly = !!st.assemblyActive && insts.length > 0
+    if (inAssembly) assemblyRenderer.setSuppressLodDemotion?.(true)
+
+    const needUpgrade = inAssembly && exportRep !== 'working'
+      && !insts.every(i => i.representation === exportRep)
+    if (!needUpgrade) {
+      try { await fn() }
+      finally { if (inAssembly) assemblyRenderer.setSuppressLodDemotion?.(false) }
+      return
     }
+
     const snapshot = insts.map(i => ({ id: i.id, representation: i.representation }))
     _exportRepActive = true
     try {
@@ -10378,6 +10389,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       } catch (err) {
         console.error('[export-rep] restore failed:', err)
       }
+      assemblyRenderer.setSuppressLodDemotion?.(false)
       _exportRepActive = false
     }
   }

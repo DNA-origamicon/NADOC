@@ -2739,6 +2739,7 @@ export {
   _scanExtrusionGroup     as scanExtrusionGroup,
   _dsTrimmedAxes          as dsTrimmedAxes,
   _dsBpByHelix            as dsBpByHelix,
+  _buildOverhangMarkers   as buildOverhangMarkers,
   HULL_OPACITY,
   SURFACE_COLOUR, SURFACE_OPACITY,
   CROSS_MARGIN, AXIAL_MARGIN,

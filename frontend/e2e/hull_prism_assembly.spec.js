@@ -3,8 +3,7 @@
  *
  * Loads a small NADOC-built assembly, switches representation to hull-prism,
  * and asserts the shared path builds + draws a `sharedLodHull` InstancedMesh
- * (one merged extrusion-box solid per hull-prism instance) instead of demoting
- * to a far billboard.
+ * (one merged extrusion-box solid per hull-prism instance).
  *
  * Run: cd frontend && npx playwright test e2e/hull_prism_assembly.spec.js --reporter=list
  * Override fixture via NADOC_HULL_FIXTURE=/path/to.nass
@@ -112,7 +111,7 @@ test('hull-prism renders as instanced grey boxes in an assembly (shared path)', 
   console.log('\n=== after hull-prism ===\n', JSON.stringify(after, null, 2))
   await page.screenshot({ path: 'e2e/screenshots/hull_prism_assembly.png' })
 
-  // The far billboard must NOT be drawing the same instances as the hull.
+  // The retired billboard tier must not exist on the scene at all.
   const far = after.allInstanced.find(m => m.name === 'sharedLodFar')
-  if (far) expect(far.count, 'far billboard not drawing the hull instances').toBe(0)
+  expect(far, 'billboard tier retired — no sharedLodFar mesh').toBeUndefined()
 })

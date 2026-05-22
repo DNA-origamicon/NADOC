@@ -70,6 +70,7 @@ import {
   buildBundleGeometry, buildPrismGeometry, buildPanelSurface,
   buildSpineSections, buildSweptHullGeometry, buildHullMeshPhong,
   buildExtrusionBoxes, scanExtrusionGroup, dsTrimmedAxes, dsBpByHelix,
+  buildOverhangMarkers,
   HULL_OPACITY, CROSS_MARGIN, AXIAL_MARGIN, MIN_HC_FACES,
 } from './joint_renderer.js'
 
@@ -321,16 +322,17 @@ const _BP_TEX_TILE_W = 256
 // MINIMUM bucket an instance may occupy regardless of camera distance:
 //   0 — close (bp-detail) ok
 //   1 — mid (cylinders) min — cylinders rep never draws bp meshes
-//   2 — far (billboard) min — remaining non-CG reprs (vdw/ballstick/surface)
-//       aren't yet supported on the shared path, demote to billboard so they
-//       stay rendered as a placeholder until that work lands.
 //   3 — hull (extrusion-box solid) — distance-independent; the dedicated hull
 //       InstancedMesh draws these instances at all zooms (bucket 4 = hidden).
+//       Also the floor for reprs not yet supported on the shared path
+//       (vdw/ballstick/surface) — they render as a hull placeholder.
+// (There is no billboard tier: a static camera-facing sprite misrepresents a
+//  structure under a moving camera, so far-away cylinders/bp collapse to the
+//  hull solid instead.)
 function _repToLodCap(repr) {
   if (repr === 'cylinders') return 1
   if (repr === 'full' || repr === 'beads') return 0
-  if (repr === 'hull-prism') return 3
-  return 2
+  return 3
 }
 
 // Arc vertex count — matches unfold_view.js for visual consistency.
@@ -705,6 +707,49 @@ function _buildHullGroupsForDesign(design, helixAxes, targetGroup) {
 // per-cluster hull — matches joint_renderer's _hullMinSizeFraction default.
 const HULL_MIN_SIZE_FRACTION = 0.10
 
+// Coarse axis-aligned bounding-box solid (source-local) over a part's
+// nucleotide backbone positions.  This is the FALLBACK hull for parts that
+// produce no extrusion/scan/cluster geometry (e.g. a bare imported strand set),
+// so every source still has a far-LOD solid to demote into — without it, the
+// distance ladder would have no hull bucket and such parts would simply vanish
+// when zoomed far out.  Prefers dsDNA nucleotides (matching the hull's
+// dsDNA-only convention) and falls back to all positioned nucleotides.
+// Returns a non-indexed position+normal BoxGeometry, or null.
+function _bboxSolidFromNucs(nucleotides) {
+  if (!nucleotides?.length) return null
+  const box = new THREE.Box3()
+  const v = new THREE.Vector3()
+  let n = 0
+  const dsCount = new Map()
+  for (const nuc of nucleotides) {
+    if (!nuc.strand_id || nuc.overhang_id) continue
+    const k = nuc.helix_id + ':' + nuc.bp_index
+    dsCount.set(k, (dsCount.get(k) ?? 0) + 1)
+  }
+  for (const nuc of nucleotides) {
+    const p = nuc.backbone_position
+    if (!p || !nuc.strand_id || nuc.overhang_id) continue
+    if ((dsCount.get(nuc.helix_id + ':' + nuc.bp_index) ?? 0) < 2) continue
+    box.expandByPoint(v.set(p[0], p[1], p[2])); n++
+  }
+  if (n === 0) {                              // no dsDNA — bound all positioned nucs
+    for (const nuc of nucleotides) {
+      const p = nuc.backbone_position
+      if (!p) continue
+      box.expandByPoint(v.set(p[0], p[1], p[2])); n++
+    }
+  }
+  if (n === 0 || box.isEmpty()) return null
+  box.expandByScalar(1.0)                     // ~1 nm pad for the backbone tube radius
+  const size = box.getSize(new THREE.Vector3())
+  const c = box.getCenter(new THREE.Vector3())
+  const geo = new THREE.BoxGeometry(
+    Math.max(size.x, 0.5), Math.max(size.y, 0.5), Math.max(size.z, 0.5),
+  )
+  geo.translate(c.x, c.y, c.z)
+  return geo.toNonIndexed()
+}
+
 // Source-local merged Hull Prism solid for the shared instancing path.
 // Mirrors joint_renderer._rebuildHullRepr's full decision tree so each part
 // renders the same hull in an assembly as in the single-design view:
@@ -715,22 +760,42 @@ const HULL_MIN_SIZE_FRACTION = 0.10
 //      view uses (drop the whole-part cluster + sub-threshold clusters, scan
 //      each remaining cluster's own axis), NOT convex prisms — so the assembly
 //      hull SHAPE matches the single-design view.
-// Collects SOLID meshes only (no edge LineSegments — "solid bodies only"),
-// bakes each mesh's transform into its vertices, normalises attributes to
-// position+normal / non-indexed (so boxes, prisms and swept curved hulls all
-// merge cleanly even when mixed), and merges into ONE BufferGeometry.  Returns
-// the merged geometry (caller owns it; NOT tagged userData.shared) or null.
+// Bakes each solid mesh's transform into its vertices, normalises attributes to
+// position+normal / non-indexed, and merges into ONE BufferGeometry.  ALSO builds
+// the overhang FACE MARKERS (vertex-coloured quads, same radial raycast as the
+// design view) in SOURCE-LOCAL space so they instance alongside the hull.
+// Returns { solid, markers } — each a BufferGeometry the caller owns, or null
+// (no edge LineSegments: the boxes themselves stay "solid bodies only").
 function _hullGeoForSource(design, nucleotides, helixAxes) {
   if (!design) return null
 
-  const disposables = []   // builder-created geom+mat we cloned from / don't keep
-  const solids = []        // { geometry, matrixWorld } to bake + merge
+  // Shared inputs for every hull branch AND the markers (mirror _rebuildHullRepr):
+  // dsDNA-trimmed axes, per-helix dsDNA bp, and the render-cluster set with the
+  // whole-part cluster (is_default OR >=90% of helices) dropped.
+  const scanAxes = dsTrimmedAxes(nucleotides, helixAxes ?? null)
+  const { helixBp, totalBp } = dsBpByHelix(nucleotides)
+  const totalHelices = (design.helices ?? []).length
+  const isWholePart = c => c.is_default
+    || (totalHelices > 0 && (c.helix_ids?.length ?? 0) >= 0.9 * totalHelices)
+  const allClusters = design.cluster_transforms ?? []
+  const finer = allClusters.filter(c => !isWholePart(c))
+  const renderClusters = finer.length ? finer : allClusters
+  const fractionOf = (c) => {
+    if (totalBp <= 0) return 1
+    let bp = 0
+    for (const hid of (c.helix_ids ?? [])) bp += (helixBp.get(hid) ?? 0)
+    return bp / totalBp
+  }
 
+  const disposables = []   // builder geom+mat to dispose after baking
+  const solids = []        // { geometry, m } to bake + merge
+  const hullMeshObjs = []  // live Mesh objects, for the overhang-marker raycast
   const collect = (root) => {
     root.updateMatrixWorld(true)
     root.traverse(o => {
       if (o.isMesh && o.geometry) {
         solids.push({ geometry: o.geometry, m: o.matrixWorld.clone() })
+        hullMeshObjs.push(o)
       }
       if (o.geometry) disposables.push(o.geometry)
       if (o.material) {
@@ -741,9 +806,7 @@ function _hullGeoForSource(design, nucleotides, helixAxes) {
   }
 
   let grp = buildExtrusionBoxes(design)                       // 1. extrusion boxes
-  if (!grp && !design.cluster_transforms?.length) {           // 2. scan (no clusters)
-    const scanAxes = dsTrimmedAxes(nucleotides, helixAxes ?? null)
-    const { helixBp } = dsBpByHelix(nucleotides)
+  if (!grp && !allClusters.length) {                          // 2. scan (no clusters)
     grp = scanExtrusionGroup(
       (design.helices ?? []).map(h => h.id),
       scanAxes, helixBp, design.lattice_type, design.metadata?.name, null,
@@ -751,27 +814,10 @@ function _hullGeoForSource(design, nucleotides, helixAxes) {
   }
   if (grp) {
     collect(grp)
-  } else if (design.cluster_transforms?.length && helixAxes) {
-    // 3. Per-cluster dsDNA cross-section scan — mirror joint_renderer
-    //    _rebuildHullRepr's per-cluster branch EXACTLY (was: convex prisms over
-    //    every cluster via _buildHullGroupsForDesign, which also rendered the
-    //    whole-part "Scaffold Cluster" enclosing prism). Drop whole-part
-    //    clusters (is_default OR >=90% of helices), fall back to all when none
-    //    are finer; drop clusters under HULL_MIN_SIZE_FRACTION of dsDNA bp; scan
-    //    each remaining cluster on its own axis.
-    const scanAxes = dsTrimmedAxes(nucleotides, helixAxes)
-    const { helixBp, totalBp } = dsBpByHelix(nucleotides)
-    const totalHelices = (design.helices ?? []).length
-    const isWholePart = c => c.is_default
-      || (totalHelices > 0 && (c.helix_ids?.length ?? 0) >= 0.9 * totalHelices)
-    const finer = design.cluster_transforms.filter(c => !isWholePart(c))
-    const renderClusters = finer.length ? finer : design.cluster_transforms
-    const fractionOf = (c) => {
-      if (totalBp <= 0) return 1
-      let bp = 0
-      for (const hid of (c.helix_ids ?? [])) bp += (helixBp.get(hid) ?? 0)
-      return bp / totalBp
-    }
+  } else if (allClusters.length && helixAxes) {
+    // 3. Per-cluster dsDNA cross-section scan — mirror _rebuildHullRepr (NOT
+    //    convex prisms): drop clusters under HULL_MIN_SIZE_FRACTION of dsDNA bp,
+    //    scan each remaining cluster on its own axis.
     const tmp = new THREE.Group()
     for (const cluster of renderClusters) {
       if (fractionOf(cluster) < HULL_MIN_SIZE_FRACTION) continue
@@ -784,10 +830,22 @@ function _hullGeoForSource(design, nucleotides, helixAxes) {
   }
 
   if (!solids.length) {
-    for (const d of disposables) d.dispose?.()
-    return null
+    // No extrusion / scan / cluster hull — fall back to a single AABB over the
+    // nucleotides so the part still has a coarse solid for the far-LOD bucket.
+    // Push it through the SAME bake + marker path (raycast onto this box) below.
+    const bboxGeo = _bboxSolidFromNucs(nucleotides)
+    if (!bboxGeo) {
+      for (const d of disposables) d.dispose?.()
+      return null
+    }
+    const bboxMesh = new THREE.Mesh(bboxGeo, new THREE.MeshBasicMaterial())
+    bboxMesh.updateMatrixWorld(true)
+    solids.push({ geometry: bboxGeo, m: bboxMesh.matrixWorld.clone() })
+    hullMeshObjs.push(bboxMesh)
+    disposables.push(bboxGeo, bboxMesh.material)
   }
 
+  // ── Solid hull geometry (baked + merged) ──
   const baked = []
   for (const s of solids) {
     let g = s.geometry.clone()
@@ -799,10 +857,47 @@ function _hullGeoForSource(design, nucleotides, helixAxes) {
     if (!g.attributes.normal) g.computeVertexNormals()
     baked.push(g)
   }
-  const merged = mergeGeometries(baked, false)
+  const solid = mergeGeometries(baked, false)
   baked.forEach(g => g.dispose())
+
+  // ── Overhang face markers (source-local; instanced like the hull solid) ──
+  // Same builder + radial raycast as the design view, cast onto the still-alive
+  // SOURCE-LOCAL hull meshes — so the merged vertex-coloured quad geometry is
+  // source-local and _buildMarkerLodMesh can instance it across every copy.
+  let markers = null
+  if (hullMeshObjs.length && design.overhangs?.length) {
+    const markerClusters = renderClusters.length
+      ? renderClusters
+      : [{ helix_ids: (design.helices ?? []).map(h => h.id) }]
+    const mGroup = buildOverhangMarkers(design, scanAxes, markerClusters, nucleotides, helixBp, hullMeshObjs)
+    if (mGroup) {
+      mGroup.updateMatrixWorld(true)
+      const mGeos = []
+      mGroup.traverse(o => {
+        if (o.isMesh && o.geometry) {
+          let g = o.geometry.clone()
+          g.applyMatrix4(o.matrixWorld)
+          g = g.toNonIndexed()
+          for (const name of Object.keys(g.attributes)) {
+            if (name !== 'position' && name !== 'color') g.deleteAttribute(name)
+          }
+          mGeos.push(g)
+        }
+        o.geometry?.dispose()
+        if (o.material) {
+          const mm = Array.isArray(o.material) ? o.material : [o.material]
+          for (const x of mm) x.dispose?.()
+        }
+      })
+      if (mGeos.length) {
+        markers = mergeGeometries(mGeos, false)
+        mGeos.forEach(g => g.dispose())
+      }
+    }
+  }
+
   for (const d of disposables) d.dispose?.()
-  return merged || null
+  return { solid: solid || null, markers: markers || null }
 }
 
 function _clusterMemberFilter(cluster, design) {
@@ -3281,13 +3376,13 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // coordinates (the InstancedMesh, built later after srcEntry exists, draws
     // it at every hull-prism instance's transform).  _hullGeoForSource mirrors
     // the FULL single-design decision tree (extrusion boxes → cross-section
-    // scan → per-cluster prisms), so each part looks the same here as it does
-    // in the design view.  Built here (early) because the per-instance LOD-cap
-    // fill below must know whether a hull exists, to demote hull-prism
-    // instances to cylinders rather than leave them invisible when none could
-    // be produced.
-    const hullGeo = _hullGeoForSource(design, nucleotides, helix_axes ?? null)
-    const hasHull = !!hullGeo
+    // scan → per-cluster cross-section scan) AND builds the overhang face
+    // markers, so each part looks the same here as in the design view.  Built
+    // here (early) because the per-instance LOD-cap fill below must know whether
+    // a hull exists, to demote hull-prism instances to cylinders rather than
+    // leave them invisible when none could be produced.
+    const hull = _hullGeoForSource(design, nucleotides, helix_axes ?? null)
+    const hasHull = !!hull?.solid
 
     // Build a single helixCtrl with the canonical bp matrices.
     const helixGroup = new THREE.Group()
@@ -3478,28 +3573,21 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       if (!visBox.isEmpty()) srcEntry.instBoundingBox = visBox
     }
 
-    // Far LOD: billboard sized to the source's mean half-extent so it
-    // approximates the actual silhouette.  Half-diagonal (the prior choice)
-    // dramatically over-sizes elongated parts — e.g. a 200 × 5 × 5 hinge
-    // has diagonal ≈ 200 but visible cross-section ≈ ~10.  Mean half-side
-    // tracks the silhouette better than max-side AND than diagonal.
-    const bboxSize = new THREE.Vector3()
-    instBoundingBox.getSize(bboxSize)
-    const meanHalfSide = (bboxSize.x + bboxSize.y + bboxSize.z) / 6
-    const billboardRadius = Math.max(0.5, meanHalfSide)
-    const billboardColor = _averageStrandColorRGB(design)
-    const farLod = _buildFarLodMesh(srcEntry, billboardRadius, billboardColor, helixGroup)
-    if (farLod) srcEntry.farLod = farLod
-
     // Hull LOD: one instanced grey extrusion-box solid per hull-prism instance
     // (distance-independent — see _repToLodCap bucket 3).  Built from the
     // source-local hull geometry assembled at the top of _buildSource.
-    if (hasHull && hullGeo) {
-      const hullLod = _buildHullLodMesh(srcEntry, hullGeo, helixGroup)
+    if (hasHull && hull.solid) {
+      const hullLod = _buildHullLodMesh(srcEntry, hull.solid, helixGroup)
       if (hullLod) {
         srcEntry.hullLod = hullLod
-        const triCount = (hullGeo.attributes?.position?.count ?? 0) / 3
+        const triCount = (hull.solid.attributes?.position?.count ?? 0) / 3
         console.info(`[shared_renderer]   hull LOD built: ~${triCount | 0} tris`)
+      }
+      // Overhang face markers — vertex-coloured quads instanced alongside the
+      // hull (rides the same LOD bucket; see _updateLodForSource).
+      if (hull.markers) {
+        const markerLod = _buildMarkerLodMesh(srcEntry, hull.markers, helixGroup)
+        if (markerLod) srcEntry.hullMarkerLod = markerLod
       }
     }
 
@@ -3512,14 +3600,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     try { _applyColorsToSource(srcEntry, null) }
     catch (err) { console.warn('[shared_renderer] initial colour seed failed:', err) }
 
-    // Phase 7d: the mid/far LOD impostors carry their OWN custom shaders that
-    // compose instance transforms (per-helix cylinders, camera-facing
-    // billboards). Photo mode's _swapMaterials must SKIP them — swapping in a
-    // stock MeshPhysicalMaterial would drop those shaders and collapse the
-    // impostors to the source origin. They're distance impostors anyway, so
-    // they don't need the PBR look (only the close-LOD bp meshes do — those
-    // get PBR + the re-applied instancing patch via userData.applySharedInstancing).
-    for (const m of [srcEntry.midLod?.mesh, srcEntry.overhangLod?.mesh, srcEntry.farLod?.mesh, srcEntry.hullLod?.mesh]) {
+    // Phase 7d: the mid/hull LOD impostors carry their OWN custom shaders that
+    // compose instance transforms (per-helix cylinders, instanced hull solids).
+    // Photo mode's _swapMaterials must SKIP them — swapping in a stock
+    // MeshPhysicalMaterial would drop those shaders and collapse the impostors
+    // to the source origin. They're distance impostors anyway, so they don't
+    // need the PBR look (only the close-LOD bp meshes do — those get PBR + the
+    // re-applied instancing patch via userData.applySharedInstancing).
+    for (const m of [srcEntry.midLod?.mesh, srcEntry.overhangLod?.mesh, srcEntry.hullLod?.mesh, srcEntry.hullMarkerLod?.mesh]) {
       if (m) m.userData.sharedLodImpostor = true
     }
 
@@ -3568,11 +3656,11 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // ║                   instanceIdx = gl_InstanceID / numHelices              ║
   // ║                   helixIdx    = gl_InstanceID % numHelices              ║
   // ║                                                                          ║
-  // ║    • Far LOD — one quad InstancedMesh.                                   ║
-  // ║                 count = numInstances. Vertex shader reads the instance   ║
-  // ║                 transform's translation column from u_instanceXform and  ║
-  // ║                 expands the quad as a camera-facing billboard sized to   ║
-  // ║                 the source bbox radius.                                  ║
+  // ║    • Hull LOD — one instanced grey extrusion-box solid.                  ║
+  // ║                 count = numInstances. Distance-independent: far-away     ║
+  // ║                 close/mid instances collapse to this coarse solid        ║
+  // ║                 instead of a billboard (which would misrepresent the     ║
+  // ║                 structure under a moving camera).                        ║
   // ║                                                                          ║
   // ║  Each frame, `_updateLod(camera)` runs ONCE per source (hooked via       ║
   // ║  `onBeforeRender` on one mesh per source) and:                           ║
@@ -3614,7 +3702,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // thresholds:
   //   instance pixel size >= _lodClosePx → close (bp detail)
   //   instance pixel size >= _lodFarPx   → mid (cylinder)
-  //   instance pixel size <  _lodFarPx   → far (billboard)
+  //   instance pixel size <  _lodFarPx   → hull solid (no billboard tier)
   let _lodClosePx = 60.0
   let _lodFarPx   = 8.0
 
@@ -3622,6 +3710,13 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     if (typeof opts?.closePx === 'number') _lodClosePx = opts.closePx
     if (typeof opts?.farPx   === 'number') _lodFarPx   = opts.farPx
   }
+
+  // When true, _updateLodForSource skips the distance demotion and renders every
+  // instance at its rep's detail bucket (full→close, cylinders→mid).  Set around
+  // a photo-mode export render so large figures stay uniformly high-detail
+  // instead of showing hulls for the distant parts.
+  let _suppressLodDemotion = false
+  function setSuppressLodDemotion(on) { _suppressLodDemotion = !!on }
 
   // ── Mid-LOD: per-helix transform texture ─────────────────────────────────
   // Same column-major layout as the per-source xformTex: width = 4 texels,
@@ -3670,21 +3765,6 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     tex.generateMipmaps = false
     tex.needsUpdate = true
     return { tex, data }
-  }
-
-  // Average per-strand color → vec3 for billboard tint. Falls back to grey.
-  function _averageStrandColorRGB(design) {
-    let r = 0, g = 0, b = 0, n = 0
-    for (const s of design?.strands ?? []) {
-      if (!s.color) continue
-      const v = parseInt(s.color.replace(/^#/, ''), 16)
-      r += ((v >> 16) & 0xff) / 255
-      g += ((v >>  8) & 0xff) / 255
-      b += ( v        & 0xff) / 255
-      n++
-    }
-    if (n === 0) return [0.6, 0.6, 0.6]
-    return [r / n, g / n, b / n]
   }
 
   // ── Mid-LOD InstancedMesh + shader ───────────────────────────────────────
@@ -4059,117 +4139,14 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   }
 
   // ── Far-LOD InstancedMesh + shader ───────────────────────────────────────
-  // A camera-facing quad per instance. Quad geometry: 2 triangles in the XY
-  // plane, size [-0.5, 0.5]. The vertex shader rebuilds the world position
-  // from the instance transform's translation column and offsets by a
-  // camera-aligned right/up basis scaled to `u_billboardRadius`.
-  //
-  // Shared geometry across sources — tagged shared so dispose-walk skips it.
-  const _LOD_QUAD_GEO = new THREE.PlaneGeometry(1.0, 1.0)
-  _LOD_QUAD_GEO.userData.shared = true
-
-  function _buildFarLodMesh(srcEntry, billboardRadius, billboardColor, sourceGroup) {
-    const numInstances = srcEntry.instanceIds.length
-    if (numInstances === 0) return null
-
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff })
-    // Phase 3f stage 2 follow-up: per-material cache key + u_instanceOffset
-    // so this far-LOD mesh reads texture rows starting after close+mid range.
-    const _farCacheKey = 'sharedLodFar_' + mat.uuid
-    mat.customProgramCacheKey = () => _farCacheKey
-    const u_instanceOffset = { value: 0 }
-    // u_billboardColor: out-of-closure so coloringMode changes can update
-    // the per-source tint in lockstep with the mid-LOD u_sourceColor.
-    const u_billboardColor = { value: new THREE.Vector3(...billboardColor) }
-    mat.onBeforeCompile = (shader) => {
-      shader.uniforms.u_instanceXform   = srcEntry.uXformUniform
-      shader.uniforms.u_visibilityTex   = srcEntry.uVisUniform
-      shader.uniforms.u_billboardRadius = { value: billboardRadius }
-      shader.uniforms.u_billboardColor  = u_billboardColor
-      shader.uniforms.u_instanceOffset  = u_instanceOffset
-      shader.vertexShader = shader.vertexShader
-        .replace(
-          '#include <common>',
-          `
-          #include <common>
-          uniform sampler2D u_instanceXform;
-          uniform sampler2D u_visibilityTex;
-          uniform float u_billboardRadius;
-          uniform float u_instanceOffset;
-          varying float v_visible;
-          `,
-        )
-        .replace(
-          '#include <begin_vertex>',
-          `
-          int instanceIdx = gl_InstanceID + int(u_instanceOffset);
-          v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
-          // Translation column of the instance transform (column 3).
-          vec4 col3 = texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0);
-          vec3 worldPos = col3.xyz;
-          // Camera-aligned billboard basis from the inverse view matrix.
-          // viewMatrix is world → view; its inverse columns 0/1 are world-
-          // space camera right/up.
-          mat4 invView = inverse(viewMatrix);
-          vec3 camRight = vec3(invView[0][0], invView[0][1], invView[0][2]);
-          vec3 camUp    = vec3(invView[1][0], invView[1][1], invView[1][2]);
-          // Quad geometry is unit-PlaneGeometry (position.xy ∈ [-0.5, 0.5]),
-          // so total span = u_billboardRadius after this multiply.  Earlier
-          // the shader used "* 2.0" — combined with the diagonal-based
-          // u_billboardRadius this drew billboards ~4× the actual source
-          // silhouette ("oversized greenish rectangles").
-          vec3 transformed = worldPos
-            + camRight * position.x * u_billboardRadius
-            + camUp    * position.y * u_billboardRadius;
-          `,
-        )
-      shader.fragmentShader = shader.fragmentShader
-        .replace(
-          '#include <common>',
-          `
-          #include <common>
-          uniform vec3 u_billboardColor;
-          varying float v_visible;
-          `,
-        )
-        .replace(
-          '#include <dithering_fragment>',
-          `
-          if (v_visible < 0.5) discard;
-          gl_FragColor.rgb = u_billboardColor;
-          #include <dithering_fragment>
-          `,
-        )
-    }
-
-    const mesh = new THREE.InstancedMesh(_LOD_QUAD_GEO, mat, Math.max(1, numInstances))
-    // Collapse instanceMatrix to a single identity row.
-    const identityArr = new Float32Array(16)
-    identityArr[0] = 1; identityArr[5] = 1; identityArr[10] = 1; identityArr[15] = 1
-    const idAttr = new THREE.InstancedBufferAttribute(identityArr, 16, false, Math.max(1, numInstances))
-    idAttr.setUsage(THREE.StaticDrawUsage)
-    mesh.instanceMatrix = idAttr
-    mesh.instanceMatrix.needsUpdate = true
-    mesh.instanceColor = null
-    mesh.count = 0
-    mesh.frustumCulled = false
-    // Same lesson as sharedLodMid: keep visible=true so onBeforeRender
-    // hooks fire even before _updateLod's first run.  drawElementsInstanced
-    // with count=0 is a zero-cost no-op.
-    mesh.visible = true
-    mesh.name = 'sharedLodFar'
-    sourceGroup.add(mesh)
-    return { mesh, u_instanceOffset, u_billboardColor }
-  }
-
   // ── Hull-LOD InstancedMesh + shader ───────────────────────────────────────
   // One copy of the source-local hull solid (`hullGeo`, merged extrusion boxes
   // in source-local space) per hull-prism instance. Single-index instancing
-  // like _buildFarLodMesh — but instead of a camera-facing billboard, the
-  // vertex shader composes the full per-instance world matrix:
+  // (gl_InstanceID + u_instanceOffset) — the vertex shader composes the full
+  // per-instance world matrix:
   //   world = instTransform × position.
   // The instance row is gl_InstanceID + u_instanceOffset (the hull bucket sorts
-  // after close/mid/far, so the offset is nClose+nMid+nFar — set per frame in
+  // after close/mid, so the offset is nClose+nMid — set per frame in
   // _updateLodForSource).  Lit flat grey, double-sided.  NOTE: like the mid/
   // overhang cylinder LODs, the shader does NOT rotate normals by instTransform,
   // so lighting on rotated instances is approximate (acceptable for opaque grey
@@ -4251,6 +4228,88 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     mesh.name = 'sharedLodHull'
     // Photo mode must skip this custom-shader mesh (else _swapMaterials drops
     // the instancing shader and collapses every hull copy to the source origin).
+    mesh.userData.sharedLodImpostor = true
+    sourceGroup.add(mesh)
+    return { mesh, u_instanceOffset }
+  }
+
+  // ── Overhang-marker-LOD InstancedMesh ──────────────────────────────────────
+  // The source-local overhang face quads (vertex-coloured), instanced exactly
+  // like _buildHullLodMesh's hull solid (world = instTransform × position via the
+  // per-instance xform texture). Rides the SAME hull LOD bucket: _updateLodForSource
+  // sets its count + offset to match srcEntry.hullLod. Unlit MeshBasic +
+  // vertexColors so each overhang keeps its strand colour; polygonOffset keeps
+  // it proud of the hull face (EPS offset already baked in by buildOverhangMarkers).
+  function _buildMarkerLodMesh(srcEntry, markerGeo, sourceGroup) {
+    const numInstances = srcEntry.instanceIds.length
+    if (numInstances === 0 || !markerGeo) return null
+
+    const mat = new THREE.MeshBasicMaterial({
+      vertexColors: true, side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    })
+    const _markerCacheKey = 'sharedLodHullMarker_' + mat.uuid
+    mat.customProgramCacheKey = () => _markerCacheKey
+    const u_instanceOffset = { value: 0 }
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.u_instanceXform  = srcEntry.uXformUniform
+      shader.uniforms.u_visibilityTex  = srcEntry.uVisUniform
+      shader.uniforms.u_instanceOffset = u_instanceOffset
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `
+          #include <common>
+          uniform sampler2D u_instanceXform;
+          uniform sampler2D u_visibilityTex;
+          uniform float u_instanceOffset;
+          varying float v_visible;
+          `,
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `
+          int instanceIdx = gl_InstanceID + int(u_instanceOffset);
+          v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
+          mat4 instTransform = mat4(
+            texelFetch(u_instanceXform, ivec2(0, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(1, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(2, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0)
+          );
+          vec3 transformed = (instTransform * vec4(position, 1.0)).xyz;
+          `,
+        )
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `
+          #include <common>
+          varying float v_visible;
+          `,
+        )
+        .replace(
+          '#include <dithering_fragment>',
+          `
+          if (v_visible < 0.5) discard;
+          #include <dithering_fragment>
+          `,
+        )
+    }
+
+    const mesh = new THREE.InstancedMesh(markerGeo, mat, Math.max(1, numInstances))
+    const identityArr = new Float32Array(16)
+    identityArr[0] = 1; identityArr[5] = 1; identityArr[10] = 1; identityArr[15] = 1
+    const idAttr = new THREE.InstancedBufferAttribute(identityArr, 16, false, Math.max(1, numInstances))
+    idAttr.setUsage(THREE.StaticDrawUsage)
+    mesh.instanceMatrix = idAttr
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.instanceColor = null
+    mesh.count = 0
+    mesh.frustumCulled = false
+    mesh.visible = true
+    mesh.name = 'sharedLodHullMarkers'
+    mesh.renderOrder = 105
     mesh.userData.sharedLodImpostor = true
     sourceGroup.add(mesh)
     return { mesh, u_instanceOffset }
@@ -4355,20 +4414,20 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       // pxSq = (pxFactor / distance)² = pxFactor² / d2.  Compare pxSq to
       // threshold² to avoid the sqrt in the hot loop.
       const pxSq = (pxFactor > 0) ? (pxFactor * pxFactor) / Math.max(d2, 1) : 1e12
-      // Hull (cap 3) is distance-independent — always its own bucket so the
-      // dedicated hull mesh draws it at every zoom.  MUST precede the cap<=1
-      // branch (cap 3 is not <= 1, so without this it would fall to bucket 2).
-      //
-      // cap 0 (full / beads) is an AUTHORITATIVE detail rep: the user picked it
-      // to see bp detail, so it renders the close bucket at every normal zoom
-      // and only collapses to a far billboard when the part is too small to
-      // read (< farPx).  It never silently flips to the mid cylinder bucket —
-      // that flip is what made "beads" look like "cylinders".  cap 1
-      // (cylinders) keeps the mid bucket; cap 2 (unsupported reprs) is far.
-      if      (cap === 3)                   bucket[i] = 3
-      else if (cap === 0)                   bucket[i] = (pxSq >= farPxSq) ? 0 : 2
-      else if (cap <= 1 && pxSq >= farPxSq) bucket[i] = 1
-      else                                  bucket[i] = 2
+      // Simplified ladder (no billboard tier): each rep shows its detail bucket
+      // when big enough on screen, else collapses to the HULL — real 3-D geometry
+      // that reads correctly under a moving camera (a flat camera-facing billboard
+      // couldn't).  cap 0 (full/beads): bp close near, hull far.  cap 1
+      // (cylinders): mid near, hull far.  cap 3 (hull-prism rep) AND unsupported
+      // reps (vdw/ballstick/surface): always hull.  Every source has a hull
+      // (real or bbox fallback), so nothing vanishes far away.
+      // Photo export sets `_suppressLodDemotion` → every part renders at its rep's
+      // detail bucket regardless of distance (uniform high-detail figures).
+      if (_suppressLodDemotion)         bucket[i] = (cap === 0) ? 0 : (cap === 1) ? 1 : 3
+      else if (cap === 3)               bucket[i] = 3
+      else if (cap === 0)               bucket[i] = (pxSq >= farPxSq) ? 0 : 3
+      else if (cap === 1)               bucket[i] = (pxSq >= farPxSq) ? 1 : 3
+      else                              bucket[i] = 3
     }
 
     // ── 2. Sort perm by (bucket, dist²) ascending.  Bucket comes first so
@@ -4449,22 +4508,21 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     //      per-instance LOD cap (from ``representation``), so we just walk
     //      the now-sorted perm and tally.  Buckets are guaranteed
     //      contiguous: rows 0..nClose-1 are close, the next nMid are mid,
-    //      the next nFar are far, the next nHull are hull, and hidden rows
-    //      (bucket=4) fall after.
-    let nClose = 0, nMid = 0, nFar = 0, nHull = 0
+    //      the next nHull are hull, and hidden rows (bucket=4) fall after.
+    //      (Bucket 2 / billboard tier is retired — nothing emits it.)
+    let nClose = 0, nMid = 0, nHull = 0
     for (let i = 0; i < N; i++) {
       const b = bucket[permArr[i]]
       if (b === 4) break                // hidden tail — done
       if      (b === 0) nClose++
       else if (b === 1) nMid++
-      else if (b === 2) nFar++
       else              nHull++
     }
 
     // ── 6. Apply counts. Multiplier per LOD:
     //        close: baseCount per close-LOD InstancedMesh
     //        mid:   numHelices
-    //        far:   1
+    //        hull:  1
     for (const am of srcEntry.activeMeshes) {
       const c = nClose * am.baseCount
       am.mesh.count = c
@@ -4477,8 +4535,8 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       am.mesh.visible = true
     }
     // Phase 3f stage 2 follow-up: with rows sorted by distance, mid-LOD
-    // reads texture rows starting at nClose, far-LOD starting at nClose+nMid.
-    // Without these offsets, the shaders would read rows 0..nMid-1 / 0..nFar-1
+    // reads texture rows starting at nClose, hull starting at nClose+nMid.
+    // Without these offsets, the shaders would read rows 0..nMid-1 / 0..nHull-1
     // — i.e. the SAME nearest instances close-LOD already drew (triple-render
     // bug from stage 1, surfaced by the stage-1 evaluator FAIL at 8f185bb).
     if (srcEntry.midLod) {
@@ -4499,24 +4557,24 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         srcEntry.overhangLod.u_instanceOffset.value = nClose
       }
     }
-    if (srcEntry.farLod) {
-      const c = nFar
-      srcEntry.farLod.mesh.count = c
-      srcEntry.farLod.mesh.visible = true  // see comment above re: stuck-LOD trap
-      if (srcEntry.farLod.u_instanceOffset) {
-        srcEntry.farLod.u_instanceOffset.value = nClose + nMid
-      }
-    }
-    // Hull LOD draws the hull-prism instances (one merged box solid each),
-    // sorted after close+mid+far → offset = nClose + nMid + nFar.
+    // Hull LOD draws every demoted-far / hull-prism instance (one merged box
+    // solid each), sorted after close+mid → offset = nClose + nMid.
     if (srcEntry.hullLod) {
       srcEntry.hullLod.mesh.count = nHull
       srcEntry.hullLod.mesh.visible = true  // see comment above re: stuck-LOD trap
       if (srcEntry.hullLod.u_instanceOffset) {
-        srcEntry.hullLod.u_instanceOffset.value = nClose + nMid + nFar
+        srcEntry.hullLod.u_instanceOffset.value = nClose + nMid
       }
     }
-    srcEntry._lastLodCounts = { close: nClose, mid: nMid, far: nFar, hull: nHull }
+    // Overhang markers ride the hull bucket — same count + offset as the hull.
+    if (srcEntry.hullMarkerLod) {
+      srcEntry.hullMarkerLod.mesh.count = nHull
+      srcEntry.hullMarkerLod.mesh.visible = true
+      if (srcEntry.hullMarkerLod.u_instanceOffset) {
+        srcEntry.hullMarkerLod.u_instanceOffset.value = nClose + nMid
+      }
+    }
+    srcEntry._lastLodCounts = { close: nClose, mid: nMid, hull: nHull }
     // Debug: stash per-frame state so `probeLod()` + the HUD can read it
     // without re-doing the heavy bucket pass.  Compute min/max pixel size
     // over visible instances in a single cheap loop.
@@ -4550,13 +4608,12 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // Find ANY mesh that's reliably scene-resident every frame so the
     // onBeforeRender hook actually fires.  Cylinders-rep builds leave
     // activeMeshes empty (only bp meshes go in there, and bp meshes have
-    // baseCount==0 at that rep), so we fall back to sharedLodMid / sharedLodFar.
+    // baseCount==0 at that rep), so we fall back to sharedLodMid / hull.
     // Without this fallback _updateLodForSource never runs → sharedLodMid.count
     // stays 0 → only helix axes draw (regression from 26f9df1).
     const hookHost =
       srcEntry.activeMeshes[0]?.mesh
       ?? srcEntry.midLod?.mesh
-      ?? srcEntry.farLod?.mesh
       ?? srcEntry.hullLod?.mesh
     if (!hookHost) return
     const prevHook = hookHost.onBeforeRender
@@ -5182,21 +5239,8 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       midLod.segColorTex.needsUpdate = true
     }
 
-    // Far-LOD billboard tint: source-average of the mid-LOD per-segment
-    // colours we just wrote, so the far rectangle still tracks coloringMode.
-    if (srcEntry.midLod?.segColorData && srcEntry.farLod?.u_billboardColor) {
-      const data = srcEntry.midLod.segColorData
-      const numSegments = srcEntry.midLod.numSegments
-      let r = 0, g = 0, b = 0
-      for (let i = 0; i < numSegments; i++) {
-        r += data[i * 4 + 0]
-        g += data[i * 4 + 1]
-        b += data[i * 4 + 2]
-      }
-      if (numSegments > 0) {
-        srcEntry.farLod.u_billboardColor.value.set(r / numSegments, g / numSegments, b / numSegments)
-      }
-    }
+    // (No far/billboard tint to update — the far tier was retired; distant
+    // instances render as the flat-grey hull solid, not a coloured rectangle.)
 
     // Dispose: skip module-level shared template geometries (still in use
     // by the live helixCtrl); dispose the fresh-per-call materials.
@@ -5698,8 +5742,12 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     onRebuildComplete,
     updateStrandColor,
     updateColoringMode,
-    // Phase 3f — three-tier LOD ladder
+    // Phase 3f — LOD ladder (close / mid / hull; no billboard tier)
     setLodThresholds,
+    // Photo export: force every instance to its rep's detail bucket regardless
+    // of camera distance (suppresses the far→hull demotion) so large figures
+    // render uniformly high-detail.  main.js toggles this around an export.
+    setSuppressLodDemotion,
     // Phase 3f test/instrumentation hook: drive the per-source LOD bucketing
     // from a test environment without a real render loop. Iterates every
     // active source and applies the same bucketing the onBeforeRender hook
@@ -5729,7 +5777,6 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           maxPxSize: dbg?.maxPxSize ?? null,
           activeMeshes: srcEntry.activeMeshes.length,
           midLodCount: srcEntry.midLod?.mesh.count ?? null,
-          farLodCount: srcEntry.farLod?.mesh.count ?? null,
           hullLodCount: srcEntry.hullLod?.mesh.count ?? null,
         })
       }

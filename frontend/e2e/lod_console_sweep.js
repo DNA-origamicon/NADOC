@@ -20,7 +20,9 @@
  *                      from zoomed-in (0.25× fit) to far-out (6× fit); shows the
  *                      natural close/mid/far bucket split + FPS at each.
  *   • mid    — every instance as one-cylinder-per-helix (rep=cylinders)
- *   • far    — every instance as a billboard impostor
+ *   • far    — cylinders rep zoomed far out → instances collapse to the hull
+ *              solid (the billboard tier was retired; this row exercises the
+ *              cylinders→hull demotion path)
  *   • hull   — every instance as a grey hull-prism solid
  * Each row records avgFps, p5Fps (worst-case stutter), draw calls, triangles,
  * and the LOD bucket counts.
@@ -133,10 +135,12 @@
       rows.push({ n, tier: 'ang' + m, ...(await sampleFps(SAMPLE_MS)), ...probe() })
     }
 
-    // PART A cont. — mid / far (cylinders rep) then hull
+    // PART A cont. — mid (cylinders) then far (cylinders zoomed out → hull) then hull
     await setRep('cylinders')
     setThr(1e9, 0); setDist(fit); await sleep(500)
     rows.push({ n, tier: 'mid', ...(await sampleFps(SAMPLE_MS)), ...probe() })
+    // farPx=1e9 forces every cylinders instance below threshold → hull demotion
+    // (no billboard tier). The probe's `hull` count picks these up; `far` is 0.
     setThr(1e9, 1e9); setDist(fit); await sleep(500)
     rows.push({ n, tier: 'far', ...(await sampleFps(SAMPLE_MS)), ...probe() })
 

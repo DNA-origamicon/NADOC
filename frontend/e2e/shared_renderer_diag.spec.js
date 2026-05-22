@@ -10,8 +10,8 @@
  *      instead of the legacy `_inPlaceHelixLodRebuild` swap.
  *   B. Store change `coloringMode: 'part'` doesn't propagate to material
  *      colours on the shared path (subscriber wiring missing).
- *   C. Far-LOD billboards: visually-confirmed greenish over-sized
- *      rectangles vs the expected silhouette impostors.
+ *   C. Far LOD: distant instances collapse to the grey hull solid
+ *      (the billboard tier was retired — see assembly_renderer.js).
  *
  * This is a DIAGNOSTIC, not a regression assertion.  Asserts are limited
  * to "assembly loaded + something rendered" so the spec doesn't fail while
@@ -194,7 +194,7 @@ test('shared renderer: load fixture + probe state', async ({ page }) => {
   console.log(JSON.stringify(pColor, null, 2))
   await snap(page, '03_color_part')
 
-  // ── Bug C — zoom out to exercise the far-LOD billboards ────────────────────
+  // ── Zoom out to exercise the far LOD (hull solids — billboard tier retired) ─
   await page.evaluate(() => {
     const cam = window.__NADOC_DBG__.camera
     cam.position.set(0, 0, 8000)
