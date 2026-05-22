@@ -391,12 +391,27 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
     }
     newBtn.disabled = true
     if (!_collapsed) _rebuildAssembly()
-    // Fetch each instance design asynchronously
+    // Fetch each unique SOURCE's design once and share it across every instance
+    // of that source — same-source instances have an identical cluster list, so
+    // the panel only needs one fetch per part. Fetching per-instance fired O(N)
+    // `GET /assembly/instances/{id}/design` requests (~480ms each), which on the
+    // single-worker backend WAS the assembly-load O(N) cold-open at scale
+    // (~43 s for 500 instances). See path_to_thousands LOD benchmark.
+    const _srcKey = inst =>
+      inst.source?.type === 'file'
+        ? `file:${inst.source.path ?? ''}`
+        : `inline:${inst.source?.design?.id ?? ''}`
+    const _bySource = new Map()   // srcKey → instanceId[]
     for (const inst of instances) {
-      api.getInstanceDesign(inst.id).then(result => {
+      const k = _srcKey(inst)
+      if (!_bySource.has(k)) _bySource.set(k, [])
+      _bySource.get(k).push(inst.id)
+    }
+    for (const ids of _bySource.values()) {
+      api.getInstanceDesign(ids[0]).then(result => {
         if (!_assemblyMode) return
         if (result?.design) {
-          _instanceDesigns.set(inst.id, result.design)
+          for (const id of ids) _instanceDesigns.set(id, result.design)
           if (!_collapsed) _rebuildAssembly()
         }
       }).catch(() => {})
