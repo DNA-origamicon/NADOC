@@ -242,6 +242,12 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
 
   const _jointGroup      = new THREE.Group()
   const _jointMeshes     = new Map()   // jointId → THREE.Group (legacy path only)
+  /** jointId → [instance_a_id, instance_b_id] — drives selection-gated visibility. */
+  const _jointEndpoints  = new Map()
+  /** Selected part instance. Per-instance joint + connector indicators draw ONLY
+   *  for it (null → none). Keeps the indicator overlay from issuing ~15 draw
+   *  calls per part at assembly scale — see path_to_thousands LOD benchmark. */
+  let _activeInstanceId  = null
 
   // ── Phase 3e: shared InstancedMesh state ─────────────────────────────────
   // Only populated when _useSharedJoints is true. Three InstancedMesh objects
@@ -1224,7 +1230,10 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     _syncBluntConnIndicators()  // clears blunt indicators now that _mateMode is false
     _removeMateOverlays()
     _resetConnectorColors()
-    _connectorGroup.visible = false
+    // Back to normal view: keep the connector group itself visible but re-gate
+    // its children to the selected instance (was: hide the whole group).
+    _connectorGroup.visible = true
+    _applyActiveVisibility()
     canvas.removeEventListener('pointerdown',  _onMatePointerDown)
     canvas.removeEventListener('pointermove',  _onMatePointerMove)
     canvas.removeEventListener('pointerleave', _onMatePointerLeave)
@@ -1406,6 +1415,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       })
     }
     _jointMeshes.clear()
+    _jointEndpoints.clear()
 
     const joints   = assembly?.joints   ?? []
     const instances = assembly?.instances ?? []
@@ -1419,6 +1429,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
         grp.traverse(o => { if (o.userData.isJointRing) o.userData.jointId = joint.id })
         _jointGroup.add(grp)
         _jointMeshes.set(joint.id, grp)
+        _jointEndpoints.set(joint.id, [joint.instance_a_id ?? null, joint.instance_b_id ?? null])
       }
     }
 
@@ -1480,6 +1491,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     // rebuild (so subsequent rebuilds within the same assembly state render
     // correctly on the first frame).
     _refreshConnectorFrames(assembly)
+    _applyActiveVisibility()
   }
 
   // ── Cluster-aware connector position cache ────────────────────────────
@@ -1545,6 +1557,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       }
     }
     if (_mateMode) { _syncBluntConnIndicators(); _resetConnectorColors() }
+    _applyActiveVisibility()
   }
 
   // ── Public: pick ring ────────────────────────────────────────────────────
@@ -1561,6 +1574,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     if (!_jointMeshes.size) return null
     const rings = []
     for (const grp of _jointMeshes.values()) {
+      if (!grp.visible) continue   // hidden (non-selected) joints aren't pickable
       grp.traverse(o => { if (o.userData.isJointRing) rings.push(o) })
     }
     if (!rings.length) return null
@@ -1587,6 +1601,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     if (!_jointMeshes.size) return null
     const targets = []
     for (const grp of _jointMeshes.values()) {
+      if (!grp.visible) continue   // hidden (non-selected) joints aren't pickable
       grp.traverse(o => { if (o.isMesh) targets.push(o) })
     }
     if (!targets.length) return null
@@ -1862,10 +1877,45 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     }
   }
 
+  /**
+   * Show per-instance joint + connector indicators ONLY for the selected
+   * instance; hide all others (none if nothing is selected). A joint shows
+   * when the active instance is one of its endpoints. This is the scale fix:
+   * the indicator overlay is ~15 non-instanced draw calls PER part, so always
+   * drawing every part's indicators dominates the frame at N≥50 (LOD bench).
+   *
+   * Exemptions: mate-define mode manages connector visibility itself (it shows
+   * + distance-fades ALL connectors for cross-part picking), so we skip
+   * connectors while `_mateMode`. The shared-InstancedMesh joint path
+   * (`_useSharedJoints`, ~3 draws total) isn't gated — it isn't the bottleneck.
+   */
+  function _applyActiveVisibility() {
+    const active = _activeInstanceId
+    if (!_useSharedJoints) {
+      for (const [jointId, grp] of _jointMeshes) {
+        const ep = _jointEndpoints.get(jointId)
+        grp.visible = !!active && !!ep && (ep[0] === active || ep[1] === active)
+      }
+    }
+    if (!_mateMode) {
+      for (const mesh of _connectorMeshes) {
+        const grp = mesh.parent
+        if (grp) grp.visible = !!active && mesh.userData?.instanceId === active
+      }
+    }
+  }
+
+  /** Set the selected part instance and re-apply indicator visibility. */
+  function setActiveInstance(instanceId) {
+    _activeInstanceId = instanceId ?? null
+    _applyActiveVisibility()
+  }
+
   function setVisible(on) {
     _jointGroup.visible     = on
-    _connectorGroup.visible = on && _mateMode
+    _connectorGroup.visible = on
     _bluntConnGroup.visible = on && _mateMode
+    if (on) _applyActiveVisibility()
   }
 
   function dispose() {
@@ -2109,6 +2159,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     beginPrismaticDragForJoint,
     setLiveJointTransform,
     setVisible,
+    setActiveInstance,
     dispose,
     showMateConnectorHighlights,
     clearMateConnectorHighlights,
