@@ -904,15 +904,22 @@ async function _rebuildLinkerHelices({ assembly, api, linkerGroup, axesToMap }) 
     crossovers: [],
     lattice_type: 'honeycomb',
   }
-  // Linkers are cross-part, so follow the representation the parts are using
-  // (the global menu sets every instance to one repr). Non-CG reprs
-  // (hull-prism / atomistic) fall back to cylinders — linkers are tiny, a
-  // cylinder reads cleanly. buildHelixObjects must be built at this LOD and
-  // then told to show it (its meshes start hidden until setDetailLevel).
+  // Linkers are cross-part, so follow the DEEPEST representation any part uses
+  // (full=0 > beads=1 > cylinders=2 — lower _CG_LOD = more detail). This stops
+  // a cylinders part from pinning every linker to a cylinder that then bleeds
+  // over a part the user set to Full (covering its bead/slab model at the
+  // junction). Was: the FIRST instance's rep, which lost to whatever came first
+  // in the array. Non-CG reprs (hull-prism / atomistic) are ignored; if no part
+  // is a CG rep, fall back to cylinders — linkers are tiny, a cylinder reads
+  // cleanly. buildHelixObjects must be built at this LOD and then told to show
+  // it (its meshes start hidden until setDetailLevel).
   let _linkerLod = 2
+  let _sawCgRep = false
   for (const inst of assembly.instances ?? []) {
     const l = _CG_LOD[inst.representation]
-    if (l !== undefined) { _linkerLod = l; break }
+    if (l === undefined) continue
+    _linkerLod = _sawCgRep ? Math.min(_linkerLod, l) : l
+    _sawCgRep = true
   }
   const _linkerRepr = _linkerLod === 1 ? 'beads' : _linkerLod === 0 ? 'full' : 'cylinders'
   const linkerHelixCtrl = buildHelixObjects(
@@ -2972,10 +2979,32 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     'curvedOverhangCylindersProxy',
   ])
 
-  function _patchSharedMeshes(helixCtrl, numInstances, uniformsBundle, activeMeshes, source) {
+  // Linker binding/bridge cylinders are cylinder-LOD meshes, but UNLIKE the
+  // per-helix cylinders above they have NO sharedLodMid equivalent — they ARE
+  // the linker's only cylinder representation. They're populated at every rep
+  // by buildHelixObjects, so they need rep-aware handling (see _patchSharedMeshes):
+  //   • full / beads build → hide (the linker's complement + bridge nucs draw
+  //     as real bp beads, so a cylinder on top is the bug the user reported);
+  //   • cylinders build → patch + force-visible, but DON'T add to activeMeshes
+  //     (the close bucket, which the LOD updater zeroes at cylinders rep) — they
+  //     draw alongside sharedLodMid as the linker's cylinder rep.
+  const _LINKER_CYL_NAMES = new Set([
+    'linkerBindingCylinders',
+    'linkerBridgeCylinders',
+  ])
+
+  function _patchSharedMeshes(helixCtrl, numInstances, uniformsBundle, activeMeshes, source, rep) {
     if (!helixCtrl?.root) return
     helixCtrl.root.traverse(obj => {
       if (!(obj instanceof THREE.InstancedMesh)) return
+      const isLinkerCyl = _LINKER_CYL_NAMES.has(obj.name)
+      // Linker cylinders only represent the linker at the cylinders rep; at
+      // full/beads the linker draws as bp beads, so hide them there.
+      if (isLinkerCyl && rep !== 'cylinders') {
+        obj.visible = false
+        obj.count = 0
+        return
+      }
       if (_SKIP_MESH_NAMES.has(obj.name)) {
         // Hide outright so the un-patched cylinder mesh doesn't render at
         // its baseCount with stock material at the source origin.
@@ -3112,7 +3141,13 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       // `updateStrandColor` can rewrite them after a UI color change.
       // bpColorData is the backing Float32Array (baseCount × 4 RGBA floats).
       const bpColorData = bpColorTex ? bpColorTex.image.data : null
-      activeMeshes.push({ mesh: obj, baseCount, bpTex, bpData, bpColorTex, bpColorData })
+      // Linker cylinders are NOT close-bucket meshes — keep them out of
+      // activeMeshes so the per-frame LOD updater (which zeroes the close
+      // bucket at cylinders rep) doesn't hide them. They stay force-visible
+      // (set above) as the linker's cylinder rep alongside sharedLodMid.
+      if (!isLinkerCyl) {
+        activeMeshes.push({ mesh: obj, baseCount, bpTex, bpData, bpColorTex, bpColorData })
+      }
     })
   }
 
@@ -3259,7 +3294,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // patch helper can register textures for disposal.
     const activeMeshes = []
     const sourceCollector = { bpTextures: [] }
-    _patchSharedMeshes(helixCtrl, numInstances, uniformsBundle, activeMeshes, sourceCollector)
+    _patchSharedMeshes(helixCtrl, numInstances, uniformsBundle, activeMeshes, sourceCollector, rep)
 
     // ── Memory-savings probe (debug visibility into the per-source budget) ──
     // Compute the byte count of the per-bp DataTextures (NEW) + the
