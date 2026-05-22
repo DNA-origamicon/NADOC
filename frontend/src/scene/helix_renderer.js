@@ -143,6 +143,12 @@ const _slabQuatL      = new THREE.Quaternion()
 const _slabBasis      = new THREE.Matrix4()
 const _straightHeadQ  = new THREE.Quaternion()  // scratch for arrowhead lerp
 const _cylQ           = new THREE.Quaternion()  // scratch for helix cylinder LOD
+// 180° roll about the cylinder axis (Y).  GEO_HALF_CYL covers the +X half;
+// rolling a copy of an overhang's orientation by π puts the linker's binding
+// (complement) half on the −X half so the two together read as one full,
+// two-toned duplex cylinder.
+const _QUAT_ROLL_PI   = new THREE.Quaternion().setFromAxisAngle(Y_HAT, Math.PI)
+const _cylQRolled     = new THREE.Quaternion()  // scratch for the rolled binding-half orientation
 
 // ── Instance update helpers ───────────────────────────────────────────────────
 
@@ -773,19 +779,39 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const _arrowByHelixId = new Map(axisArrows.map(a => [a.helixId, a]))
 
   // Count per-category.  Scaffold domains skipped to avoid z-fighting.
+  //
+  // Linker strands get special handling so their two pieces read correctly in
+  // cylinder rep (see the build pass below):
+  //   - binding (complement) domains — on a real overhang helix — become a
+  //     half-cylinder opposite the overhang half (iLinkerBindingCylinders).
+  //   - the ds bridge — on a virtual `__lnk__` helix — becomes ONE simple full
+  //     cylinder per bridge helix (iLinkerBridgeCylinders), built from the
+  //     emitted bridge nucs (the `__lnk__` helix has no axis arrow).
+  // ss bridges are left to overhang_link_arcs.js (FJC bead chain), so only ds
+  // bridge helices (`__a` / `__b` side strands) are counted here.
   let _domainCylCount        = 0
   let _curvedDomainCylCount  = 0
   let _overhangCylCount      = 0
   let _curvedOvhgCylCount    = 0
+  let _bindingCylCount       = 0
+  const _dsBridgeHelixIds    = new Set()
   for (const strand of design.strands) {
     if (strand.strand_type === 'scaffold') continue
+    const isLinker = strand.strand_type === 'linker'
     for (const dom of strand.domains) {
+      const onBridge = dom.helix_id?.startsWith('__lnk__')
+      if (isLinker && onBridge) {
+        if (/__(a|b)$/.test(strand.id)) _dsBridgeHelixIds.add(dom.helix_id)
+        continue   // bridge: ds → one cyl per helix (counted below); ss → no cyl
+      }
+      if (isLinker && !onBridge) { _bindingCylCount++; continue }   // binding half-cyl
       const arrowC = _arrowByHelixId.get(dom.helix_id)
       const curved = arrowC?.isCurved ?? false
       if (dom.overhang_id != null) { if (curved) _curvedOvhgCylCount++;  else _overhangCylCount++ }
       else                         { if (curved) _curvedDomainCylCount++; else _domainCylCount++ }
     }
   }
+  const _bridgeCylCount = _dsBridgeHelixIds.size
 
   // ── Phantom-instance guard ────────────────────────────────────────────────
   // Each of the four cylinder InstancedMeshes below uses `Math.max(1, count)`
@@ -864,6 +890,35 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   _curvedOvhgGroup.visible = false
   root.add(_curvedOvhgGroup)
 
+  // Linker binding (complement) half-cylinders — the half opposite the overhang
+  // half, in the linker strand's colour, so the duplexed overhang reads as one
+  // two-toned full cylinder.  Built once in the deferred pass below; not woven
+  // into the per-frame recompute passes (they track a full rebuild instead).
+  const iLinkerBindingCylinders = new THREE.InstancedMesh(
+    GEO_HALF_CYL,
+    new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide }),
+    Math.max(1, _bindingCylCount),
+  )
+  iLinkerBindingCylinders.count = _bindingCylCount
+  iLinkerBindingCylinders.frustumCulled = false
+  iLinkerBindingCylinders.visible = false
+  iLinkerBindingCylinders.name = 'linkerBindingCylinders'
+  root.add(iLinkerBindingCylinders)
+
+  // Linker ds bridge — one simple full cylinder per `__lnk__` bridge helix,
+  // spanning the emitted bridge nucs' axis (the `__lnk__` helix is skipped in
+  // the axis-arrow loop, so it never gets a normal domain cylinder).
+  const iLinkerBridgeCylinders = new THREE.InstancedMesh(
+    GEO_UNIT_CYL,
+    new THREE.MeshLambertMaterial({ color: 0xffffff }),
+    Math.max(1, _bridgeCylCount),
+  )
+  iLinkerBridgeCylinders.count = _bridgeCylCount
+  iLinkerBridgeCylinders.frustumCulled = false
+  iLinkerBridgeCylinders.visible = false
+  iLinkerBridgeCylinders.name = 'linkerBridgeCylinders'
+  root.add(iLinkerBridgeCylinders)
+
   // Per-domain metadata used by applyUnfoldOffsets / revertToGeometry / setStrandColor.
   // _domainCylData: straight-helix domains.  _curvedDomainCylData: curved-helix domains.
   // Each entry: { helixId, strandId, t0, t1, cylIdx, arrow, defaultColor [, mesh] }
@@ -871,6 +926,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const _curvedDomainCylData  = []
   const _overhangCylData      = []
   const _curvedOvhgCylData    = []
+  // Linker cylinder bookkeeping (populated in the cylinder build pass).
+  const _deferredBindings     = []   // {helixId, lo, hi, color, arrow} — emitted opposite their overhang
+  const _ovhgBuildXform       = new Map()  // `${helixId}|${lo}|${hi}` → {pos, quat, lenY} of the overhang half
 
   let _detailLevel    = 0    // 0=full, 1=beads-only, 2=cylinders
   let _beadScale      = 1.0  // global scale factor applied to all backbone beads
@@ -918,6 +976,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     for (const strand of design.strands) {
       // Scaffold domains skipped to avoid z-fighting.
       if (strand.strand_type === 'scaffold') continue
+      const isLinker = strand.strand_type === 'linker'
 
       const strandColor = loopSet.has(strand.id) ? C.highlight_red
         : (customColors[strand.id] ?? stapleColorMap.get(strand.id) ?? C.unassigned)
@@ -927,10 +986,19 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const isOvhg = dom.overhang_id != null
         const helix  = helixMap.get(dom.helix_id)
         const arrow  = _arrowByHelixId.get(dom.helix_id)
+        // Bridge domains live on `__lnk__` helices, which have no axis arrow
+        // (skipped above) — the deferred pass draws their cylinder from nucs.
         if (!helix || !arrow) continue
 
         const lo = Math.min(dom.start_bp, dom.end_bp)
         const hi = Math.max(dom.start_bp, dom.end_bp)
+
+        // Linker binding (complement) domain: defer — drawn as a half-cylinder
+        // opposite its overhang half, in the linker colour, after this loop.
+        if (isLinker) {
+          _deferredBindings.push({ helixId: dom.helix_id, lo, hi, color: strandColor, arrow })
+          continue
+        }
 
         if (arrow.isCurved) {
           // ── Curved helix: TubeGeometry + straight proxy ─────────────────────
@@ -1018,6 +1086,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
               else _cylQ.identity()
               _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, cl2, _cylRadiusScale))
             }
+            // Record this overhang half's final orientation so a linker binding
+            // domain on the same helix + bp range can be placed on the opposite
+            // half (same pose, rolled π about the axis).
+            _ovhgBuildXform.set(`${dom.helix_id}|${lo}|${hi}`, {
+              pos: _tPos.clone(), quat: _cylQ.clone(), lenY: _tScale.y,
+            })
             iOverhangCylinders.setMatrixAt(ovhgIdx, _tMatrix)
             iOverhangCylinders.setColorAt(ovhgIdx, _tColor.setHex(strandColor))
             _overhangCylData.push({ helixId: dom.helix_id, strandId: strand.id, domainIndex: domIdx, overhangId: dom.overhang_id, bp_lo: lo, bp_hi: hi, t0, t1, cylIdx: ovhgIdx, arrow, defaultColor: strandColor, wsStart, wsEnd })
@@ -1031,6 +1105,76 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         }
       }
     }
+
+    // ── Deferred pass: linker binding halves + ds bridge cylinders ───────────
+    // Binding (complement) half-cylinders: same pose as their overhang half,
+    // rolled π so they sit on the opposite face → one two-toned full duplex.
+    let bindIdx = 0
+    for (const b of _deferredBindings) {
+      const xf = _ovhgBuildXform.get(`${b.helixId}|${b.lo}|${b.hi}`)
+      if (xf) {
+        _cylQRolled.copy(xf.quat).multiply(_QUAT_ROLL_PI)
+        _tMatrix.compose(xf.pos, _cylQRolled, _tScale.set(_cylRadiusScale, xf.lenY, _cylRadiusScale))
+      } else {
+        // Fallback (no overhang half in this build — e.g. assembly linker group,
+        // or a curved overhang helix): place from the binding domain's own axis.
+        const s = b.arrow.aStart, e = b.arrow.aEnd
+        const axLen = s.distanceTo(e)
+        if (axLen < 0.001) continue
+        const helix = helixMap.get(b.helixId)
+        const tRaw0 = (b.lo - (helix?.bp_start ?? 0)) * BDNA_RISE_PER_BP / axLen
+        const tRaw1 = (b.hi - (helix?.bp_start ?? 0)) * BDNA_RISE_PER_BP / axLen
+        const hBp   = 0.5 * BDNA_RISE_PER_BP / axLen
+        const t0 = Math.max(0, tRaw0 - hBp), t1 = Math.min(1, tRaw1 + hBp)
+        const d0x = s.x + (e.x - s.x) * t0, d0y = s.y + (e.y - s.y) * t0, d0z = s.z + (e.z - s.z) * t0
+        const d1x = s.x + (e.x - s.x) * t1, d1y = s.y + (e.y - s.y) * t1, d1z = s.z + (e.z - s.z) * t1
+        _tPos.set((d0x + d1x) * 0.5, (d0y + d1y) * 0.5, (d0z + d1z) * 0.5)
+        _physDir.set(d1x - d0x, d1y - d0y, d1z - d0z)
+        const cl = _physDir.length()
+        if (cl > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(cl)); else _cylQ.identity()
+        _cylQRolled.copy(_cylQ).multiply(_QUAT_ROLL_PI)
+        _tMatrix.compose(_tPos, _cylQRolled, _tScale.set(_cylRadiusScale, cl, _cylRadiusScale))
+      }
+      iLinkerBindingCylinders.setMatrixAt(bindIdx, _tMatrix)
+      iLinkerBindingCylinders.setColorAt(bindIdx, _tColor.setHex(b.color))
+      bindIdx++
+    }
+    iLinkerBindingCylinders.count = bindIdx
+
+    // ds bridge: one full cylinder per `__lnk__` helix, spanning the bridge
+    // duplex axis recovered by averaging the paired beads at each end bp.
+    let bridgeIdx = 0
+    for (const bridgeHelixId of _dsBridgeHelixIds) {
+      const bnucs = geometry.filter(n => n.helix_id === bridgeHelixId)
+      if (bnucs.length < 2) continue
+      let loBp = Infinity, hiBp = -Infinity
+      for (const n of bnucs) { if (n.bp_index < loBp) loBp = n.bp_index; if (n.bp_index > hiBp) hiBp = n.bp_index }
+      const axisAtBp = (bp) => {
+        const pts = bnucs.filter(n => n.bp_index === bp)
+        if (!pts.length) return null
+        const v = new THREE.Vector3()
+        for (const n of pts) { const p = n.base_position ?? n.backbone_position; v.x += p[0]; v.y += p[1]; v.z += p[2] }
+        return v.multiplyScalar(1 / pts.length)
+      }
+      const a = axisAtBp(loBp), z = axisAtBp(hiBp)
+      if (!a || !z) continue
+      const _linkColor = (sid) => loopSet.has(sid) ? C.highlight_red
+        : (customColors[sid] ?? stapleColorMap.get(sid) ?? C.unassigned)
+      const color = _linkColor(`${bridgeHelixId}__a`)
+      _tPos.copy(a).add(z).multiplyScalar(0.5)
+      _physDir.copy(z).sub(a)
+      const len = _physDir.length()
+      if (len > 0.001) _cylQ.setFromUnitVectors(Y_HAT, _physDir.divideScalar(len)); else _cylQ.identity()
+      _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, Math.max(len, 0.001), _cylRadiusScale))
+      iLinkerBridgeCylinders.setMatrixAt(bridgeIdx, _tMatrix)
+      iLinkerBridgeCylinders.setColorAt(bridgeIdx, _tColor.setHex(color))
+      bridgeIdx++
+    }
+    iLinkerBridgeCylinders.count = bridgeIdx
+    iLinkerBindingCylinders.instanceMatrix.needsUpdate = true
+    if (iLinkerBindingCylinders.instanceColor) iLinkerBindingCylinders.instanceColor.needsUpdate = true
+    iLinkerBridgeCylinders.instanceMatrix.needsUpdate = true
+    if (iLinkerBridgeCylinders.instanceColor) iLinkerBridgeCylinders.instanceColor.needsUpdate = true
   }
 
   iHelixCylinders.instanceMatrix.needsUpdate        = true
@@ -2609,6 +2753,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _curvedCylGroup.visible          = coarse
       iCurvedOverhangCylinders.visible = coarse
       _curvedOvhgGroup.visible         = coarse
+      iLinkerBindingCylinders.visible  = coarse
+      iLinkerBridgeCylinders.visible   = coarse
       const showArrows = !coarse && _axisArrowsVisible
       if (!showArrows) {
         for (const arrow of axisArrows) {

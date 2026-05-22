@@ -195,7 +195,7 @@ async function main() {
   // once shared renderer is stable.
   if (useShared) {
     window.__NADOC_DBG__ = {
-      scene, camera, renderer, assemblyRenderer, store, THREE,
+      scene, camera, renderer, assemblyRenderer, store, THREE, controls, animateCameraTo,
 
       /**
        * Track-B diagnostic. Pre-conditions:

@@ -904,10 +904,23 @@ async function _rebuildLinkerHelices({ assembly, api, linkerGroup, axesToMap }) 
     crossovers: [],
     lattice_type: 'honeycomb',
   }
-  buildHelixObjects(
+  // Linkers are cross-part, so follow the representation the parts are using
+  // (the global menu sets every instance to one repr). Non-CG reprs
+  // (hull-prism / atomistic) fall back to cylinders — linkers are tiny, a
+  // cylinder reads cleanly. buildHelixObjects must be built at this LOD and
+  // then told to show it (its meshes start hidden until setDetailLevel).
+  let _linkerLod = 2
+  for (const inst of assembly.instances ?? []) {
+    const l = _CG_LOD[inst.representation]
+    if (l !== undefined) { _linkerLod = l; break }
+  }
+  const _linkerRepr = _linkerLod === 1 ? 'beads' : _linkerLod === 0 ? 'full' : 'cylinders'
+  const linkerHelixCtrl = buildHelixObjects(
     geoData.nucleotides, syntheticDesign, linkerGroup, {}, [],
-    axesToMap(geoData.helix_axes),
+    axesToMap(geoData.helix_axes), _linkerRepr,
   )
+  linkerHelixCtrl?.setDetailLevel?.(_linkerLod)
+  linkerGroup.userData.helixCtrl = linkerHelixCtrl
 
   // Connector arcs: bridge the complement↔bridge domain junction of each ds
   // linker strand (same visual as the per-design overhang_link_arcs.js).
@@ -3180,10 +3193,18 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     //   cost.  If the source's bp count exceeds GPU texture limits, cap the
     //   build at 'cylinders' regardless of per-instance rep — those instances
     //   will fall to the mid bucket via the LOD cap below.
+    // Deepest LOD any instance needs: 'full' (beads + slabs) > 'beads' (beads +
+    // cones, NO slabs) > 'cylinders'. Building 'beads' instead of 'full' makes
+    // buildHelixObjects skip the slab InstancedMesh entirely, so the shared
+    // path's force-visible loop has no slab mesh to show — fixing slabs leaking
+    // into the beads-only representation. (Mixed full+beads on ONE source still
+    // shows slabs on the beads instances since they share the slab mesh; the
+    // global rep menu sets all instances the same, which is the common case.)
     let rep = 'cylinders'
     for (const inst of instancesForKey) {
       const r = inst.representation
-      if (r === 'full' || r === 'beads') { rep = 'full'; break }
+      if (r === 'full') { rep = 'full'; break }   // deepest — stop scanning
+      if (r === 'beads') rep = 'beads'            // keep scanning in case a 'full' follows
     }
     const numInstances = instancesForKey.length
 
@@ -3269,10 +3290,12 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // Per-instance LOD cap (Int8: 0 = close ok, 1 = no close, 2 = far only,
     // 3 = hull).  Read at every _updateLodForSource frame to bias bucketing by
     // the per-instance ``representation`` field.  ``buildRepCap`` floors the
-    // cap when the source was built at 'cylinders' (close LOD meshes don't
-    // exist) — without it, an instance with rep='full' would still bucket
-    // close but find empty bp meshes.
-    const buildRepCap = (rep === 'full') ? 0 : 1
+    // cap when the source was built without close-bucket bp meshes (i.e.
+    // 'cylinders') — without it, an instance with rep='full'/'beads' would
+    // bucket close but find empty bp meshes.  Both 'full' AND 'beads' builds
+    // DO allocate bead/cone bp meshes (beads just skips slabs), so both floor
+    // to 0; only 'cylinders' floors to 1.
+    const buildRepCap = (rep === 'full' || rep === 'beads') ? 0 : 1
     const instanceLodCap = new Int8Array(numInstances)
     // Fill xform + visibility texture data.
     for (let i = 0; i < numInstances; i++) {
@@ -4216,7 +4239,6 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         pxFactor = bboxDiag * focalPx
       }
     }
-    const closePxSq = _lodClosePx * _lodClosePx
     const farPxSq   = _lodFarPx   * _lodFarPx
 
     const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z
@@ -4268,10 +4290,17 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       // Hull (cap 3) is distance-independent — always its own bucket so the
       // dedicated hull mesh draws it at every zoom.  MUST precede the cap<=1
       // branch (cap 3 is not <= 1, so without this it would fall to bucket 2).
-      if      (cap === 3)                      bucket[i] = 3
-      else if (cap === 0 && pxSq >= closePxSq) bucket[i] = 0
-      else if (cap <= 1 && pxSq >= farPxSq)    bucket[i] = 1
-      else                                     bucket[i] = 2
+      //
+      // cap 0 (full / beads) is an AUTHORITATIVE detail rep: the user picked it
+      // to see bp detail, so it renders the close bucket at every normal zoom
+      // and only collapses to a far billboard when the part is too small to
+      // read (< farPx).  It never silently flips to the mid cylinder bucket —
+      // that flip is what made "beads" look like "cylinders".  cap 1
+      // (cylinders) keeps the mid bucket; cap 2 (unsupported reprs) is far.
+      if      (cap === 3)                   bucket[i] = 3
+      else if (cap === 0)                   bucket[i] = (pxSq >= farPxSq) ? 0 : 2
+      else if (cap <= 1 && pxSq >= farPxSq) bucket[i] = 1
+      else                                  bucket[i] = 2
     }
 
     // ── 2. Sort perm by (bucket, dist²) ascending.  Bucket comes first so
