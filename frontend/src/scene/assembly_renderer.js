@@ -701,13 +701,20 @@ function _buildHullGroupsForDesign(design, helixAxes, targetGroup) {
   return groups
 }
 
+// Clusters under this fraction of the part's dsDNA bp are dropped from the
+// per-cluster hull — matches joint_renderer's _hullMinSizeFraction default.
+const HULL_MIN_SIZE_FRACTION = 0.10
+
 // Source-local merged Hull Prism solid for the shared instancing path.
 // Mirrors joint_renderer._rebuildHullRepr's full decision tree so each part
 // renders the same hull in an assembly as in the single-design view:
 //   1. feature-log extrusion boxes (NADOC-built parts), else
 //   2. dsDNA-trimmed cross-section scan (cluster-less imports), else
-//   3. one convex prism per cluster (clustered parts w/o build history — e.g.
-//      hinges; this is what the design view falls through to).
+//   3. per-cluster dsDNA cross-section SCAN (clustered parts w/o build history
+//      — e.g. hinges): the SAME per-cluster scan + cluster selection the design
+//      view uses (drop the whole-part cluster + sub-threshold clusters, scan
+//      each remaining cluster's own axis), NOT convex prisms — so the assembly
+//      hull SHAPE matches the single-design view.
 // Collects SOLID meshes only (no edge LineSegments — "solid bodies only"),
 // bakes each mesh's transform into its vertices, normalises attributes to
 // position+normal / non-indexed (so boxes, prisms and swept curved hulls all
@@ -744,9 +751,35 @@ function _hullGeoForSource(design, nucleotides, helixAxes) {
   }
   if (grp) {
     collect(grp)
-  } else if (design.cluster_transforms?.length && helixAxes) {  // 3. per-cluster prisms
+  } else if (design.cluster_transforms?.length && helixAxes) {
+    // 3. Per-cluster dsDNA cross-section scan — mirror joint_renderer
+    //    _rebuildHullRepr's per-cluster branch EXACTLY (was: convex prisms over
+    //    every cluster via _buildHullGroupsForDesign, which also rendered the
+    //    whole-part "Scaffold Cluster" enclosing prism). Drop whole-part
+    //    clusters (is_default OR >=90% of helices), fall back to all when none
+    //    are finer; drop clusters under HULL_MIN_SIZE_FRACTION of dsDNA bp; scan
+    //    each remaining cluster on its own axis.
+    const scanAxes = dsTrimmedAxes(nucleotides, helixAxes)
+    const { helixBp, totalBp } = dsBpByHelix(nucleotides)
+    const totalHelices = (design.helices ?? []).length
+    const isWholePart = c => c.is_default
+      || (totalHelices > 0 && (c.helix_ids?.length ?? 0) >= 0.9 * totalHelices)
+    const finer = design.cluster_transforms.filter(c => !isWholePart(c))
+    const renderClusters = finer.length ? finer : design.cluster_transforms
+    const fractionOf = (c) => {
+      if (totalBp <= 0) return 1
+      let bp = 0
+      for (const hid of (c.helix_ids ?? [])) bp += (helixBp.get(hid) ?? 0)
+      return bp / totalBp
+    }
     const tmp = new THREE.Group()
-    _buildHullGroupsForDesign(design, helixAxes, tmp)
+    for (const cluster of renderClusters) {
+      if (fractionOf(cluster) < HULL_MIN_SIZE_FRACTION) continue
+      const cg = scanExtrusionGroup(
+        cluster.helix_ids, scanAxes, helixBp, design.lattice_type, cluster.name, null,
+      )
+      if (cg) tmp.add(cg)
+    }
     collect(tmp)
   }
 
