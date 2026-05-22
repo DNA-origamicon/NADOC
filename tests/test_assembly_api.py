@@ -1032,6 +1032,34 @@ def test_batch_patch_rejects_invalid_representation():
     assert r.status_code == 400
 
 
+def test_export_representation_default_and_roundtrip():
+    """Assembly.export_representation defaults to 'full', survives a v2 .nass
+    round-trip, and an old payload missing the field defaults to 'full'."""
+    from backend.core.models import Assembly
+
+    a = Assembly()
+    assert a.export_representation == "full"
+    a.export_representation = "cylinders"
+    restored = Assembly.from_json(a.to_json())
+    assert restored.export_representation == "cylinders"
+    # Legacy payload without the field → default 'full' (model_validate, no warning).
+    assert Assembly.from_dict({"instances": []}).export_representation == "full"
+
+
+def test_set_export_representation_route():
+    client.post("/api/assembly")
+    r = client.post("/api/assembly/export-representation", json={"representation": "cylinders"})
+    assert r.status_code == 200, r.text
+    assert r.json()["assembly"]["export_representation"] == "cylinders"
+    # 'working' (export current reps as-is) is accepted.
+    r = client.post("/api/assembly/export-representation", json={"representation": "working"})
+    assert r.status_code == 200, r.text
+    assert r.json()["assembly"]["export_representation"] == "working"
+    # Invalid value rejected.
+    r = client.post("/api/assembly/export-representation", json={"representation": "bogus"})
+    assert r.status_code == 400
+
+
 def test_resolve_follows_cluster_change_for_blunt_label():
     """When a cluster transform changes AFTER a mate is created (e.g. the
     user drags a hinge to a new relaxed angle via the feature-log slider),

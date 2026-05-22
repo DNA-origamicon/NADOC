@@ -225,6 +225,19 @@ export function createPhotoRenderer(sceneCtx) {
     _savedMaterials.clear()
   }
 
+  // Re-apply the PBR material swap after the scene's meshes were rebuilt while
+  // photo mode is active (e.g. the export-representation upgrade replaces every
+  // assembly mesh). `_swapMaterials()` clears the now-stale `_savedMaterials`
+  // (the old meshes were disposed) and re-keys the fresh meshes by name → PBR
+  // preset + re-applies the shared-instancing patch. Fluorophore lights point
+  // at the disposed InstancedMesh, so re-spawn them from the new one. The HDRI
+  // env texture + lighting rig (`_photoGroup`) survive a rebuild — no re-bake.
+  function resyncMaterials() {
+    if (!_active) return
+    _swapMaterials()
+    if (_settings.fluorophoreEmissive) _spawnFluoroLights()
+  }
+
   // ── Environment (HDRI) ────────────────────────────────────────────────────
 
   // Bake an equirectangular HDR or RoomEnvironment to a PMREM texture using the
@@ -1205,6 +1218,7 @@ export function createPhotoRenderer(sceneCtx) {
     isPathTracingEnabled,
     isActive,
     getSettings,
+    resyncMaterials,
     renderToBlob,
     beginFrameSession,
     handleResize,

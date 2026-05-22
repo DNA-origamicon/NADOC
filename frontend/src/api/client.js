@@ -1949,6 +1949,15 @@ export async function batchPatchInstances(patches) {
   return _syncFromAssemblyResponse(json)
 }
 
+/** Set the per-assembly representation used ONLY for photo-mode export
+ *  ('working' = export current reps as-is). Stored on the assembly (saved to
+ *  .nass); the working view is unchanged. The response carries
+ *  `export_representation` through `_expandV2Assembly` into the store. */
+export async function setAssemblyExportRepresentation(representation) {
+  const json = await _request('POST', '/assembly/export-representation', { representation })
+  return _syncFromAssemblyResponse(json)
+}
+
 export async function propagateFk(instanceId, transformValues) {
   const json = await _request('POST', '/assembly/propagate_fk', {
     instance_id: instanceId,

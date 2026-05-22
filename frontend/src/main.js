@@ -450,6 +450,54 @@ async function main() {
     addFrameCallback,
   })
 
+  // ── Adaptive camera clipping for large assemblies ─────────────────────────
+  // The camera's far plane is a fixed 2000 nm (sized for a single design — see
+  // scene.js). A large assembly spans far more, so instances past 2000 nm from
+  // the camera were hard-clipped — the "cutoff beyond which far parts stop
+  // rendering". In assembly mode we bracket near/far around the assembly's
+  // bounding sphere every frame so even distant parts draw, while keeping the
+  // depth range tight enough for z-precision. The O(N) bounds recompute is
+  // throttled (every 15 frames); the per-frame cost is a single distance calc.
+  // Outside assembly mode we restore the 0.1 / 2000 default.
+  {
+    const _clipCtr  = new THREE.Vector3()
+    const _clipSize = new THREE.Vector3()
+    let _clipRadius = 0
+    let _clipTick   = 0
+    addFrameCallback(() => {
+      if (!store.getState().assemblyActive) {
+        if (camera.near !== 0.1 || camera.far !== 2000) {
+          camera.near = 0.1; camera.far = 2000; camera.updateProjectionMatrix()
+        }
+        return
+      }
+      if ((_clipTick++ % 15) === 0) {
+        const box = assemblyRenderer.getBoundingBox?.()
+        if (box && !box.isEmpty()) {
+          box.getCenter(_clipCtr)
+          _clipRadius = box.getSize(_clipSize).length() * 0.5
+        } else {
+          _clipRadius = 0
+        }
+      }
+      if (_clipRadius <= 1e-3) return
+      const d = camera.position.distanceTo(_clipCtr)
+      const margin = _clipRadius * 0.1 + 1
+      const far  = d + _clipRadius + margin
+      // Tightest near that still covers the content, floored both absolutely
+      // (0.1 nm) and relative to far (cap the depth-buffer ratio so distant
+      // billboards don't z-fight the near parts into mush).
+      let near = Math.max(d - _clipRadius - margin, far / 1e5, 0.1)
+      if (near >= far) near = far * 1e-4
+      if (Math.abs(camera.far - far) > far * 1e-3 ||
+          Math.abs(camera.near - near) > Math.max(near, 0.01) * 1e-2) {
+        camera.far  = far
+        camera.near = near
+        camera.updateProjectionMatrix()
+      }
+    })
+  }
+
   // ── Cross-tab sync ──────────────────────────────────────────────────────────
   // Reuses the existing nadocBroadcast channel + the established
   // "part-design-updated" message type (already emitted from part-edit Save
@@ -3627,9 +3675,10 @@ Typical debugging workflow for "reverts to 3D" bug:
     const { currentDesign, assemblyActive } = store.getState()
 
     if (assemblyActive) {
-      // Auto-save to workspace before clearing
+      // Auto-save to workspace before clearing (skip while an export-rep upgrade
+      // is in flight so the temporary high-detail reps aren't persisted).
       const hasInstances = (store.getState().currentAssembly?.instances?.length ?? 0) > 0
-      if (hasInstances) {
+      if (hasInstances && !_exportRepActive) {
         try { await (_assemblyWorkspacePath ? api.saveAssemblyAs(_assemblyWorkspacePath) : api.saveAssemblyToWorkspace()) } catch { /* best-effort */ }
       }
       _exitAssemblyMode()
@@ -4377,6 +4426,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-file-save-assembly')?.addEventListener('click', async () => {
     const { currentAssembly } = store.getState()
     if (!currentAssembly) { showToast('No assembly to save.', { severity: 'error' }); return }
+    if (_exportRepActive) { showToast('Export in progress — try saving again in a moment.', { severity: 'warning' }); return }
     if (_assemblyWorkspacePath) {
       const r = await api.saveAssemblyAs(_assemblyWorkspacePath)
       if (r?.path) _setAssemblyWorkspacePath(r.path)
@@ -4391,6 +4441,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-file-save-assembly-as')?.addEventListener('click', async () => {
     const { currentAssembly } = store.getState()
     if (!currentAssembly) { showToast('No assembly to save.', { severity: 'error' }); return }
+    if (_exportRepActive) { showToast('Export in progress — try saving again in a moment.', { severity: 'warning' }); return }
     await _saveAssemblyAs()
   })
 
@@ -10275,6 +10326,62 @@ Typical debugging workflow for "reverts to 3D" bug:
   const photoRenderer = createPhotoRenderer(sceneCtx)
   let _photoPanelCtrl = null
 
+  // ── Export representation (final-render LOD) ───────────────────────────────
+  // The assembly's `export_representation` is applied to ALL instances only for
+  // the duration of a photo-mode PNG/video render, then the working reps are
+  // restored. Lets the user edit/preview at a fast LOD but export at high
+  // detail. `_exportRepActive` guards saves so the temporary upgrade never hits
+  // disk (restore in `finally` + the load-time auto-downgrade are the net).
+  let _exportRepActive = false
+
+  /** Batch-patch all instances and resolve when the renderer finishes the
+   *  rebuild the store subscriber kicks off. `onRebuildComplete` only appends
+   *  (no off-API), so guard a one-shot; a timeout surfaces a stuck rebuild. */
+  function _applyRepAndAwaitRebuild(patches) {
+    return new Promise((resolve, reject) => {
+      let done = false
+      const timer = setTimeout(() => {
+        if (!done) { done = true; reject(new Error('export rebuild timed out')) }
+      }, 120_000)
+      assemblyRenderer.onRebuildComplete(() => {
+        if (done) return
+        done = true; clearTimeout(timer); resolve()
+      })
+      api.batchPatchInstances(patches).catch(err => {
+        if (!done) { done = true; clearTimeout(timer); reject(err) }
+      })
+    })
+  }
+
+  /** Run `fn` (the actual export render) with every instance temporarily set to
+   *  the assembly's export representation, restoring the originals afterward.
+   *  No-op when not in assembly mode, no instances, 'working', or already matching. */
+  async function _withExportRepresentation(fn) {
+    const st  = store.getState()
+    const asm = st.currentAssembly
+    const exportRep = asm?.export_representation ?? 'full'
+    const insts = asm?.instances ?? []
+    if (!st.assemblyActive || !insts.length || exportRep === 'working'
+        || insts.every(i => i.representation === exportRep)) {
+      return fn()
+    }
+    const snapshot = insts.map(i => ({ id: i.id, representation: i.representation }))
+    _exportRepActive = true
+    try {
+      await _applyRepAndAwaitRebuild(insts.map(i => ({ id: i.id, representation: exportRep })))
+      photoRenderer.resyncMaterials()
+      await fn()
+    } finally {
+      try {
+        await _applyRepAndAwaitRebuild(snapshot)
+        photoRenderer.resyncMaterials()
+      } catch (err) {
+        console.error('[export-rep] restore failed:', err)
+      }
+      _exportRepActive = false
+    }
+  }
+
   function _photoModeEnter() {
     const leftPanel = document.getElementById('left-panel')
 
@@ -10299,6 +10406,8 @@ Typical debugging workflow for "reverts to 3D" bug:
         store,
         player: animPlayer,
         exportPhotoVideo,
+        withExportRepresentation: _withExportRepresentation,
+        setExportRepresentation: (rep) => api.setAssemblyExportRepresentation(rep),
       })
     }
     photoRenderer.activate({})

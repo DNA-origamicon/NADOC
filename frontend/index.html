@@ -3684,6 +3684,17 @@
             <button id="photo-export-btn" style="flex:1;padding:4px 0;background:#1f6feb;border:none;border-radius:3px;color:#fff;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui);font-weight:600">↓ Export PNG</button>
           </div>
 
+          <!-- Export detail: representation applied ONLY to the exported PNG/video (per-assembly, saved to .nass). The live preview keeps the working representation. -->
+          <div style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid #21262d;font-size:var(--text-xs);color:#8b949e">
+            <span style="min-width:78px" title="Representation used only for the exported PNG/video. The live preview keeps your working representation. Saved with the assembly.">Export detail</span>
+            <select id="photo-export-rep" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+              <option value="working">Working (as-is)</option>
+              <option value="full" selected>Full (beads + slabs)</option>
+              <option value="beads">Beads</option>
+              <option value="cylinders">Cylinders</option>
+            </select>
+          </div>
+
           <!-- Profile bar — saved photo-mode settings sets, auto-updated as user changes controls -->
           <div style="padding:8px 14px;border-bottom:1px solid #21262d;display:flex;flex-direction:column;gap:4px">
             <div style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e">

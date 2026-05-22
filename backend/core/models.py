@@ -2016,6 +2016,13 @@ class Assembly(BaseModel):
     feature_log_cursor: int = -1
     overhang_bindings: List[AssemblyOverhangBinding] = Field(default_factory=list)
     overhang_connections: List[AssemblyOverhangConnection] = Field(default_factory=list)
+    # Representation applied to ALL instances ONLY when exporting a photo-mode
+    # render (PNG/video).  The live working view keeps each instance's own
+    # ``representation``; ``'working'`` means export the current reps unchanged.
+    # Lets the user edit at a fast LOD (e.g. cylinders) but export at high detail.
+    export_representation: Literal[
+        "working", "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism"
+    ] = "full"
 
     def to_dict(self) -> dict:
         """Serialise to a plain Python dict (JSON-safe)."""

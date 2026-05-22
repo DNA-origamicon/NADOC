@@ -71,10 +71,14 @@ function _fmt(n) { return n ? n.toLocaleString() : '—' }
 import { attachAllDragScrub } from '../input/drag_scrub.js'
 import { showConfirm } from './primitives/confirm.js'
 
-export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store, player, exportPhotoVideo }) {
+export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store, player, exportPhotoVideo, withExportRepresentation, setExportRepresentation }) {
+  // Run the export render `fn` with the assembly's chosen export representation
+  // temporarily applied (no-op wrapper if main.js didn't inject one).
+  const _withExportRep = withExportRepresentation ?? (async (fn) => fn())
   // ── Element refs ────────────────────────────────────────────────────────────
   const exitBtn      = _el('photo-exit-btn')
   const exportBtn    = _el('photo-export-btn')
+  const exportRepSel = _el('photo-export-rep')
   const profileSel    = _el('photo-profile-select')
   const profileNew    = _el('photo-profile-new')
   const profileRename = _el('photo-profile-rename')
@@ -376,18 +380,27 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   // Export
   exportBtn.addEventListener('click', async () => {
     exportBtn.disabled = true
-    exportBtn.textContent = 'Rendering…'
     try {
       const { w, h } = _getTargetSize()
-      const blob      = await photoRenderer.renderToBlob(w, h)
-      const ts        = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-      _download(blob, `nadoc-${ts}.png`)
+      // Temporarily upgrade to the chosen export rep (rebuild before/after);
+      // the working preview is unchanged except a flicker during the render.
+      await _withExportRep(async () => {
+        exportBtn.textContent = 'Rendering…'
+        const blob = await photoRenderer.renderToBlob(w, h)
+        const ts   = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+        _download(blob, `nadoc-${ts}.png`)
+      })
     } catch (err) {
       console.error('[photo] Export failed:', err)
     } finally {
       exportBtn.disabled = false
       exportBtn.textContent = '↓ Export PNG'
     }
+  })
+
+  // Export representation: persist on change (per-assembly, saved to .nass).
+  exportRepSel?.addEventListener('change', () => {
+    setExportRepresentation?.(exportRepSel.value)
   })
 
   // Lighting
@@ -596,6 +609,8 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     if (matSurface)   matSurface.value   = s.surface
     if (matCylinders) matCylinders.value = s.cylinders
     if (matAtomistic) matAtomistic.value = s.atomistic
+    // Export rep is a per-assembly setting (not a photo profile setting).
+    if (exportRepSel) exportRepSel.value = store?.getState?.()?.currentAssembly?.export_representation ?? 'full'
     if (lightYaw)        lightYaw.value        = s.lightingYaw
     if (lightPitch)      lightPitch.value      = s.lightingPitch
     if (lightYawLabel)   lightYawLabel.textContent   = `${s.lightingYaw}°`
@@ -756,18 +771,23 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     _exportAbort = new AbortController()
 
     try {
-      await exportPhotoVideo({
-        animation: anim,
-        player,
-        photoRenderer,
-        width: w, height: h,
-        options: { format, fps },
-        signal: _exportAbort.signal,
-        onProgress: (frac, info) => {
-          if (animProgBar) animProgBar.style.width = `${Math.round(frac * 100)}%`
-          if (animProgLbl) animProgLbl.textContent =
-            `Frame ${info?.frame ?? 0} / ${info?.frames ?? '?'}  (${Math.round(frac * 100)}%)`
-        },
+      // One upgrade to the export rep before the frame session, one restore
+      // after (the session renders the live scene per frame). Working view unchanged.
+      await _withExportRep(async () => {
+        if (animProgLbl) animProgLbl.textContent = 'Building high-detail…'
+        await exportPhotoVideo({
+          animation: anim,
+          player,
+          photoRenderer,
+          width: w, height: h,
+          options: { format, fps },
+          signal: _exportAbort.signal,
+          onProgress: (frac, info) => {
+            if (animProgBar) animProgBar.style.width = `${Math.round(frac * 100)}%`
+            if (animProgLbl) animProgLbl.textContent =
+              `Frame ${info?.frame ?? 0} / ${info?.frames ?? '?'}  (${Math.round(frac * 100)}%)`
+          },
+        })
       })
       if (animProgLbl) animProgLbl.textContent = 'Done.'
     } catch (err) {

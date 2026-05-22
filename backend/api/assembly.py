@@ -1723,6 +1723,31 @@ def batch_patch_instances(body: BatchPatchRequest) -> dict:
     return _assembly_response(assembly)
 
 
+_VALID_EXPORT_REPRESENTATIONS = ("working",) + _VALID_REPRESENTATIONS
+
+
+class ExportRepresentationRequest(BaseModel):
+    representation: str
+
+
+@router.post("/assembly/export-representation", status_code=200)
+def set_export_representation(body: ExportRepresentationRequest) -> dict:
+    """Set the per-assembly representation used ONLY for photo-mode PNG/video
+    export.  The live working view is unchanged; ``'working'`` exports the
+    current per-instance reps as-is.  Stored on the Assembly (saved to .nass);
+    silent (no undo entry) since it's a render preference, not a topology op.
+    """
+    if body.representation not in _VALID_EXPORT_REPRESENTATIONS:
+        raise HTTPException(
+            400,
+            detail=f"representation must be one of {_VALID_EXPORT_REPRESENTATIONS}",
+        )
+    assembly = assembly_state.get_or_404()
+    assembly.export_representation = body.representation
+    assembly_state.set_assembly_silent(assembly)
+    return _assembly_response(assembly)
+
+
 class TransformPatchBody(BaseModel):
     """Body for ``PATCH /assembly/instances/transforms``.
 
