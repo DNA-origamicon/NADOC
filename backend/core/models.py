@@ -988,6 +988,10 @@ SnapshotOpKind = Literal[
     'assembly-add-joint',
     'assembly-delete-joint',
     'assembly-create-mate',
+    'protein-import',
+    'protein-attach',
+    'protein-attach-patch',
+    'protein-attach-delete',
 ]
 
 
@@ -1080,6 +1084,7 @@ MinorOpSubtype = Literal[
     'forced-ligation-create', 'forced-ligation-delete',
     'forced-ligation-delete-batch', 'forced-ligation-extra-bases',
     'helix-add', 'helix-add-at-cell', 'helix-update', 'helix-extend', 'helix-delete',
+    'helix-reorder',
     'strand-add', 'strand-update', 'strand-delete', 'strand-delete-batch',
     'domain-add', 'domain-delete', 'domain-shift',
     'loop-skip-insert', 'loop-skip-twist', 'loop-skip-bend',
@@ -1411,6 +1416,104 @@ class DesignLoadout(BaseModel):
     snapshot_size_bytes: int = 0
 
 
+# ── Protein attachment models (display-only; never part of the strand graph) ──
+#
+# A protein is conjugated to a ssDNA "handle" that hybridizes to an overhang.
+# In this CAD layer the handle is an AUXILIARY ANCHOR, not a strand: it only
+# supplies the protein's anchor frame.  ProteinAsset/ProteinAttachment are pure
+# display data — nothing in geometry, validation, or auto-routing reads them, so
+# they never mutate the topological layer (Three-Layer Law).
+
+
+class ProteinAtom(BaseModel):
+    """One atom of an imported protein, in the asset's own local frame (nm)."""
+    serial: int
+    name: str
+    element: str
+    res_name: str
+    chain_id: str
+    res_seq: int
+    x: float
+    y: float
+    z: float
+
+
+class ProteinAsset(BaseModel):
+    """A protein structure imported from a PDB, reusable across attachments.
+
+    Atoms are stored once here; attachments reference the asset by ``id`` and
+    carry only a placement transform.  Treated as a single rigid unit (a
+    multi-chain complex rides together).
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "Protein"
+    source_filename: str = ""
+    atoms: List[ProteinAtom] = Field(default_factory=list)
+    bonds: List[Tuple[int, int]] = Field(default_factory=list)  # 0-based atom-index pairs
+    default_conjugation_atom_serial: Optional[int] = None
+    center_of_mass: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ProteinTargetDesign(BaseModel):
+    """Anchor a protein to an overhang in a single design."""
+    kind: Literal["overhang"] = "overhang"
+    overhang_id: str
+    attach_end: Literal["free_end", "root"] = "free_end"
+
+
+class ProteinTargetAssembly(BaseModel):
+    """Anchor a protein to a part instance in an assembly.
+
+    Either an InterfacePoint (by label) or an overhang inside the instance's
+    design supplies the anchor; the result is transformed by the instance's
+    placement transform.
+    """
+    kind: Literal["assembly"] = "assembly"
+    instance_id: str
+    interface_label: Optional[str] = None
+    overhang_id: Optional[str] = None
+    attach_end: Literal["free_end", "root"] = "free_end"
+
+
+class ProteinTargetFree(BaseModel):
+    """A free-standing protein not anchored to any DNA feature.
+
+    Its world placement is the attachment's ``pose`` alone (applied to the
+    asset's PDB coordinates); ``pose`` defaults to identity, so a freshly
+    imported protein sits at its imported coordinates until moved.
+    """
+    kind: Literal["free"] = "free"
+
+
+ProteinTarget = Annotated[
+    Union[ProteinTargetFree, ProteinTargetDesign, ProteinTargetAssembly],
+    Field(discriminator="kind"),
+]
+
+
+class ProteinAttachment(BaseModel):
+    """One placed instance of a ProteinAsset.
+
+    The world transform is ``pose · base``, where ``base`` is identity for a
+    free protein (atoms at PDB coords) or the overhang-anchor placement
+    (conjugation atom at the free tip, body pointing outward) for an anchored
+    protein.  ``pose`` is a world-space rigid delta the user edits with the
+    transform gizmo (default identity); composing it on the left means a move
+    is the same operation for free and anchored proteins, and an anchored
+    protein keeps following its overhang as the DNA is edited.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    asset_id: str
+    target: ProteinTarget
+    conjugation_atom_serial: Optional[int] = None
+    pose: Mat4x4 = Field(default_factory=Mat4x4)
+    handle_complement_bp: int = 0     # display-only handle duplex length
+    handle_spacer_nt: int = 0
+    handle_sequence: Optional[str] = None   # cached reverse-complement of overhang seq (display only)
+    visible: bool = True
+
+
 class Design(BaseModel):
     """
     Top-level design object.  This is the ground truth for a DNA origami
@@ -1427,6 +1530,8 @@ class Design(BaseModel):
     overhangs: List[OverhangSpec] = Field(default_factory=list)
     overhang_connections: List[OverhangConnection] = Field(default_factory=list)
     overhang_bindings: List[OverhangBinding] = Field(default_factory=list)
+    protein_assets: List[ProteinAsset] = Field(default_factory=list)
+    protein_attachments: List[ProteinAttachment] = Field(default_factory=list)
     tm_settings: TmSettings = Field(default_factory=TmSettings)
     extensions: List[StrandExtension] = Field(default_factory=list)
     photoproduct_junctions: List[PhotoproductJunction] = Field(default_factory=list)
@@ -1808,7 +1913,7 @@ class PartInstance(BaseModel):
     base_transform: Optional[Mat4x4] = None
     mode: Literal["rigid", "flexible"] = "flexible"
     visible: bool = True
-    representation: Literal['full', 'beads', 'cylinders', 'vdw', 'ballstick', 'hull-prism'] = 'full'
+    representation: Literal['full', 'beads', 'cylinders', 'vdw', 'ballstick', 'hull-prism', 'surface'] = 'full'
     fixed: bool = False   # anchored in assembly; not moved by joint constraint solving
     allow_part_joints: bool = False  # enable interactive internal ClusterJoints in assembly mode
     joint_states: dict = Field(default_factory=dict)  # ClusterJoint.id → float (rad|nm)
@@ -2016,12 +2121,14 @@ class Assembly(BaseModel):
     feature_log_cursor: int = -1
     overhang_bindings: List[AssemblyOverhangBinding] = Field(default_factory=list)
     overhang_connections: List[AssemblyOverhangConnection] = Field(default_factory=list)
+    protein_assets: List[ProteinAsset] = Field(default_factory=list)
+    protein_attachments: List[ProteinAttachment] = Field(default_factory=list)
     # Representation applied to ALL instances ONLY when exporting a photo-mode
     # render (PNG/video).  The live working view keeps each instance's own
     # ``representation``; ``'working'`` means export the current reps unchanged.
     # Lets the user edit at a fast LOD (e.g. cylinders) but export at high detail.
     export_representation: Literal[
-        "working", "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism"
+        "working", "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism", "surface"
     ] = "full"
 
     def to_dict(self) -> dict:

@@ -13,7 +13,20 @@ export const ELEMENTS = {
   C: { vdw: 0.170, color: 0x505050 },   // dark grey
   N: { vdw: 0.155, color: 0x3050F8 },   // blue
   O: { vdw: 0.140, color: 0xFF0D0D },   // red
+  // Additional elements common in proteins / cofactors.
+  S:  { vdw: 0.180, color: 0xFFFF30 },  // yellow
+  H:  { vdw: 0.120, color: 0xFFFFFF },  // white
+  Se: { vdw: 0.190, color: 0xFFA100 },
+  Fe: { vdw: 0.160, color: 0xE06633 },
+  Zn: { vdw: 0.139, color: 0x7D80B0 },
+  Mg: { vdw: 0.173, color: 0x8AFF00 },
+  Mn: { vdw: 0.161, color: 0x9C7AC7 },
+  Ca: { vdw: 0.231, color: 0x3DFF00 },
 }
+
+// Fallback for any element not catalogued above (grey, mid radius). Keeps the
+// renderer from silently dropping exotic atoms in imported protein PDBs.
+export const DEFAULT_ELEMENT = { vdw: 0.160, color: 0x808080 }
 
 // ── Highlight colours ─────────────────────────────────────────────────────────
 

@@ -2893,6 +2893,420 @@ def import_pdb_design(body: PdbImportRequest) -> dict:
     return resp
 
 
+def _download_rcsb_pdb(pdb_id: str) -> str:
+    """Download a structure from the RCSB Protein Data Bank by 4-char ID.
+
+    Fetches the legacy ``.pdb`` format server-side (avoids browser CORS).  Some
+    very large/modern entries are deposited only as mmCIF and 404 here.
+    """
+    import re
+    import urllib.error
+    import urllib.request
+
+    pid = pdb_id.strip().upper()
+    if not re.fullmatch(r"[0-9A-Z]{4}", pid):
+        raise HTTPException(400, detail="PDB ID must be 4 alphanumeric characters (e.g. 1BNA).")
+    url = f"https://files.rcsb.org/download/{pid}.pdb"
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310 (fixed host)
+            return resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise HTTPException(
+                404,
+                detail=f"PDB {pid} not found in RCSB as .pdb (it may be mmCIF-only).",
+            ) from exc
+        raise HTTPException(502, detail=f"RCSB download failed ({exc.code}).") from exc
+    except Exception as exc:
+        raise HTTPException(502, detail=f"RCSB download failed: {exc}") from exc
+
+
+class PdbAutoImportRequest(BaseModel):
+    content: Optional[str] = None   # raw PDB text (file import)
+    pdb_id: Optional[str] = None    # 4-char RCSB id (download)
+    name: str = ""
+    # None = undecided (ask the user when the structure has both protein + DNA);
+    # True/False = remove (or keep) DNA in the imported protein object.
+    remove_dna_from_protein: Optional[bool] = None
+
+
+@router.post("/design/import/pdb-auto", status_code=200)
+def import_pdb_auto(body: PdbAutoImportRequest) -> dict:
+    """Unified PDB import: download by RCSB id or accept file content, then
+    route by residue content.
+
+    * Protein present → imported as a free-standing, movable protein object
+      (embedded in the design, logged in the feature log).  If DNA is ALSO
+      present and ``remove_dna_from_protein`` is undecided, returns
+      ``needs_dna_decision`` (with the resolved ``content``) instead of
+      importing, so the UI can ask whether to strip the DNA.
+    * DNA only → imported as a design (the classic PDB-as-design path).
+    """
+    from backend.core.pdb_to_design import import_pdb, merge_pdb_into_design
+    from backend.core.protein import classify_pdb_content, parse_protein_pdb
+    from backend.core.validator import validate_design
+
+    if body.pdb_id:
+        content = _download_rcsb_pdb(body.pdb_id)
+        name = body.name or body.pdb_id.strip().upper()
+        source = f"rcsb:{body.pdb_id.strip().upper()}"
+    elif body.content:
+        content = body.content
+        name = body.name or "structure"
+        source = "file"
+    else:
+        raise HTTPException(400, detail="Provide either pdb_id or content.")
+
+    has_dna, has_protein = classify_pdb_content(content)
+    if not has_dna and not has_protein:
+        raise HTTPException(400, detail="No DNA or protein residues found in the PDB.")
+
+    resp: dict = {"imported": {"dna": False, "protein": False}, "source": source, "name": name}
+
+    if has_protein:
+        # Ask before stripping DNA from a protein-DNA complex.
+        if has_dna and body.remove_dna_from_protein is None:
+            return {**resp, "needs_dna_decision": True, "has_dna": True,
+                    "has_protein": True, "content": content}
+        exclude_dna = bool(body.remove_dna_from_protein)
+        try:
+            asset = parse_protein_pdb(content, name=name, source_filename=name,
+                                      exclude_dna=exclude_dna)
+        except Exception as exc:
+            raise HTTPException(400, detail=f"Protein PDB import failed: {exc}") from exc
+        if not asset.atoms:
+            raise HTTPException(400, detail="No protein atoms found after parsing.")
+        updated, report, meta = _import_protein_free(asset)
+        resp.update(_design_response(updated, report))
+        resp["protein"] = meta
+        resp["imported"]["protein"] = True
+        return resp
+
+    # DNA only → design import.
+    existing = design_state.get_design()
+    try:
+        if existing and existing.helices:
+            design, pdb_atomistic, w = merge_pdb_into_design(existing, content)
+        else:
+            design, pdb_atomistic, w = import_pdb(content)
+    except Exception as exc:
+        raise HTTPException(400, detail=f"DNA PDB import failed: {exc}") from exc
+    design_state.clear_history()
+    design_state.set_design(design)
+    design_state.set_pdb_atomistic(pdb_atomistic)
+    report = validate_design(design)
+    resp.update(_design_response(design, report))
+    resp["imported"]["dna"] = True
+    if w:
+        resp["import_warnings"] = w
+    return resp
+
+
+def _import_protein_free(asset):
+    """Embed a protein asset + add a free-standing placement, logged.
+
+    Also registers the asset in the session library (so the attach-to-overhang
+    picker can list it).  Creates an empty design if none is active, so the
+    import has a feature log to record into.
+    """
+    from backend.core.models import Design, ProteinAttachment, ProteinTargetFree
+
+    design_state.add_protein_asset(asset)
+    if design_state.get_design() is None:
+        design_state.set_design(Design())
+
+    attachment = ProteinAttachment(
+        asset_id=asset.id,
+        target=ProteinTargetFree(),
+        conjugation_atom_serial=asset.default_conjugation_atom_serial,
+    )
+
+    def _fn(d: Design) -> None:
+        if not any(a.id == asset.id for a in d.protein_assets):
+            d.protein_assets = [*d.protein_assets, asset]
+        d.protein_attachments = [*d.protein_attachments, attachment]
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        "protein-import", f"Import protein {asset.name}",
+        {"asset_id": asset.id, "name": asset.name}, _fn,
+    )
+    return updated, report, _protein_asset_meta(asset)
+
+
+# ── Protein import + library (display-only; see backend/core/protein.py) ───────
+
+
+class ProteinImportRequest(BaseModel):
+    content: str             # raw PDB file text sent by the browser
+    name: str = ""           # display name (defaults to filename)
+    source_filename: str = ""
+
+
+def _protein_asset_meta(asset) -> dict:
+    """Lightweight library metadata for an asset (no atom list)."""
+    return {
+        "id": asset.id,
+        "name": asset.name,
+        "source_filename": asset.source_filename,
+        "atom_count": len(asset.atoms),
+        "residue_count": asset.metadata.get("residue_count", 0),
+        "chain_ids": asset.metadata.get("chain_ids", []),
+        "default_conjugation_atom_serial": asset.default_conjugation_atom_serial,
+    }
+
+
+@router.post("/design/protein/import", status_code=201)
+def import_protein(body: ProteinImportRequest) -> dict:
+    """Import a protein from PDB into the session library.
+
+    Keeps protein/HETATM atoms (drops only water + ions).  The asset is stored
+    in the session-level library, decoupled from any one design, so it can be
+    attached across designs.  Returns library metadata only (not the full atom
+    list — fetch atoms via ``GET /design/protein/atomistic``).
+    """
+    from backend.core.protein import parse_protein_pdb
+
+    try:
+        asset = parse_protein_pdb(
+            body.content, name=body.name, source_filename=body.source_filename,
+        )
+    except Exception as exc:
+        raise HTTPException(400, detail=f"Protein PDB import failed: {exc}") from exc
+    if not asset.atoms:
+        raise HTTPException(400, detail="No protein atoms found in PDB (only water/ions/DNA?).")
+    design_state.add_protein_asset(asset)
+    return _protein_asset_meta(asset)
+
+
+@router.get("/design/protein/library")
+def list_protein_library() -> dict:
+    """List all protein assets in the session library (metadata only)."""
+    return {"assets": [_protein_asset_meta(a) for a in design_state.list_protein_assets()]}
+
+
+@router.delete("/design/protein/{asset_id}")
+def delete_protein_asset(asset_id: str) -> dict:
+    """Remove a protein asset from the session library."""
+    if not design_state.remove_protein_asset(asset_id):
+        raise HTTPException(404, detail=f"Protein asset {asset_id} not found.")
+    return {"removed": asset_id}
+
+
+@router.get("/design/protein/atomistic")
+def get_protein_atomistic(asset_id: str | None = Query(None)) -> dict:
+    """Return all-atom protein geometry for the renderer.
+
+    * ``?asset_id=`` — render that single asset at its imported PDB coordinates
+      (library preview).
+    * no arg — render every visible design ``ProteinAttachment`` placed at its
+      overhang anchor, plus any imported asset not yet referenced by an
+      attachment at its PDB coordinates.
+
+    Response shape matches ``GET /design/atomistic`` ({ atoms, bonds, element_meta }).
+    """
+    from backend.core.atomistic import atomistic_to_json, merge_models
+    from backend.core.protein import (
+        compose_protein_world_transform,
+        protein_asset_to_atomistic,
+        resolve_overhang_anchor,
+    )
+
+    if asset_id is not None:
+        asset = _resolve_protein_asset(asset_id)
+        if asset is None:
+            raise HTTPException(404, detail=f"Protein asset {asset_id} not found.")
+        return atomistic_to_json(protein_asset_to_atomistic(asset))
+
+    design = design_state.get_design()
+    if design is None:
+        return atomistic_to_json(merge_models())
+
+    # The scene shows EXACTLY the design's attachments (the single source of
+    # truth) — never the session library directly.  This keeps move / delete /
+    # undo / redo correct: whatever the design holds is what renders, and an
+    # undone import (no attachment) renders nothing.  Assets are resolved from
+    # the design's embedded copies, with the session library as a fallback.
+    assets_by_id = {a.id: a for a in design.protein_assets}
+    for a in design_state.list_protein_assets():
+        assets_by_id.setdefault(a.id, a)
+
+    models = []
+    nucs = None   # geometry lazily computed only if an overhang target needs it
+    for att in design.protein_attachments:
+        kind = getattr(att.target, "kind", None)
+        if kind not in ("free", "overhang") or not att.visible:
+            continue   # assembly-scope (Phase 3) / hidden
+        asset = assets_by_id.get(att.asset_id)
+        if asset is None:
+            continue
+        tip = outward = None
+        if kind == "overhang":
+            if nucs is None:
+                nucs = _geometry_for_helices(design)
+            tip, outward = resolve_overhang_anchor(nucs, att.target.overhang_id, att.target.attach_end)
+            if tip is None:
+                continue   # overhang has no geometry yet
+        m = compose_protein_world_transform(asset, att, tip, outward)
+        models.append(protein_asset_to_atomistic(asset, pose_matrix=m, sentinel_id=att.id))
+
+    merged = merge_models(*models) if models else merge_models()
+    return atomistic_to_json(merged)
+
+
+# ── Protein attachments (anchor a protein to an overhang; display-only) ────────
+
+
+def _resolve_protein_asset(asset_id: str):
+    """Find a protein asset in the session library, then the active design."""
+    asset = design_state.get_protein_asset(asset_id)
+    if asset is not None:
+        return asset
+    design = design_state.get_design()
+    if design is not None:
+        return next((a for a in design.protein_assets if a.id == asset_id), None)
+    return None
+
+
+class ProteinAttachRequest(BaseModel):
+    asset_id: str
+    overhang_id: str
+    attach_end: Literal["free_end", "root"] = "free_end"
+    conjugation_atom_serial: Optional[int] = None
+    handle_complement_bp: int = 0
+    handle_spacer_nt: int = 0
+
+
+@router.post("/design/protein/attachments", status_code=201)
+def create_protein_attachment(body: ProteinAttachRequest) -> dict:
+    """Anchor a protein to an overhang in the active design.
+
+    Embeds the referenced asset into the design (so the file is self-contained)
+    and records a display-only ``ProteinAttachment``.  Does NOT touch the strand
+    graph.
+    """
+    from backend.core.models import ProteinAttachment, ProteinTargetDesign
+    from backend.core.protein import reverse_complement
+
+    design = design_state.get_or_404()
+    asset = _resolve_protein_asset(body.asset_id)
+    if asset is None:
+        raise HTTPException(404, detail=f"Protein asset {body.asset_id} not found.")
+    spec = _find_ovhg_or_404(design, body.overhang_id)
+
+    conj = body.conjugation_atom_serial
+    if conj is None:
+        conj = asset.default_conjugation_atom_serial
+    handle_seq = reverse_complement(spec.sequence) if spec.sequence else None
+
+    attachment = ProteinAttachment(
+        asset_id=asset.id,
+        target=ProteinTargetDesign(overhang_id=body.overhang_id, attach_end=body.attach_end),
+        conjugation_atom_serial=conj,
+        handle_complement_bp=body.handle_complement_bp,
+        handle_spacer_nt=body.handle_spacer_nt,
+        handle_sequence=handle_seq,
+    )
+
+    def _fn(d: Design) -> None:
+        if not any(a.id == asset.id for a in d.protein_assets):
+            d.protein_assets = [*d.protein_assets, asset]
+        d.protein_attachments = [*d.protein_attachments, attachment]
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        "protein-attach",
+        f"Attach protein {asset.name} to {spec.label or body.overhang_id}",
+        {"asset_id": asset.id, "overhang_id": body.overhang_id},
+        _fn,
+    )
+    resp = _design_response(updated, report)
+    resp["attachment_id"] = attachment.id
+    return resp
+
+
+class ProteinGizmoMove(BaseModel):
+    """A world-space gizmo delta (cluster-gizmo convention)."""
+    pivot: List[float]          # rotation centre (world nm)
+    translation: List[float]    # additional world offset
+    rotation: List[float]       # quaternion [x, y, z, w] about pivot
+
+
+class ProteinAttachPatchRequest(BaseModel):
+    pose: Optional[List[float]] = None        # 16-float row-major 4×4 (absolute)
+    gizmo_move: Optional[ProteinGizmoMove] = None   # incremental world-space move
+    conjugation_atom_serial: Optional[int] = None
+    handle_complement_bp: Optional[int] = None
+    handle_spacer_nt: Optional[int] = None
+    visible: Optional[bool] = None
+
+
+@router.patch("/design/protein/attachments/{attachment_id}")
+def patch_protein_attachment(attachment_id: str, body: ProteinAttachPatchRequest) -> dict:
+    """Update a protein attachment's pose / conjugation atom / handle / visibility.
+
+    A move is expressed either as an absolute ``pose`` (16-float row-major 4×4)
+    or as an incremental ``gizmo_move`` (left-multiplied into the current pose).
+    Logged as ``protein-attach-patch`` for undo/redo.
+    """
+    from backend.core.models import Mat4x4
+    from backend.core.protein import gizmo_move_to_pose
+
+    design = design_state.get_or_404()
+    if not any(a.id == attachment_id for a in design.protein_attachments):
+        raise HTTPException(404, detail=f"Protein attachment {attachment_id} not found.")
+    if body.pose is not None and len(body.pose) != 16:
+        raise HTTPException(400, detail="pose must be 16 floats (row-major 4×4).")
+
+    def _fn(d: Design) -> None:
+        out = []
+        for att in d.protein_attachments:
+            if att.id != attachment_id:
+                out.append(att)
+                continue
+            upd = {}
+            if body.pose is not None:
+                upd["pose"] = Mat4x4(values=body.pose)
+            if body.gizmo_move is not None:
+                new_pose = gizmo_move_to_pose(
+                    att.pose.to_array(), body.gizmo_move.pivot,
+                    body.gizmo_move.translation, body.gizmo_move.rotation,
+                )
+                upd["pose"] = Mat4x4.from_array(new_pose)
+            if body.conjugation_atom_serial is not None:
+                upd["conjugation_atom_serial"] = body.conjugation_atom_serial
+            if body.handle_complement_bp is not None:
+                upd["handle_complement_bp"] = body.handle_complement_bp
+            if body.handle_spacer_nt is not None:
+                upd["handle_spacer_nt"] = body.handle_spacer_nt
+            if body.visible is not None:
+                upd["visible"] = body.visible
+            out.append(att.model_copy(update=upd))
+        d.protein_attachments = out
+
+    label = "Move protein" if (body.pose is not None or body.gizmo_move is not None) else "Edit protein attachment"
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        "protein-attach-patch", label,
+        {"attachment_id": attachment_id}, _fn,
+    )
+    return _design_response(updated, report)
+
+
+@router.delete("/design/protein/attachments/{attachment_id}")
+def delete_protein_attachment(attachment_id: str) -> dict:
+    """Remove a protein attachment (leaves the asset embedded in the design)."""
+    design = design_state.get_or_404()
+    if not any(a.id == attachment_id for a in design.protein_attachments):
+        raise HTTPException(404, detail=f"Protein attachment {attachment_id} not found.")
+
+    def _fn(d: Design) -> None:
+        d.protein_attachments = [a for a in d.protein_attachments if a.id != attachment_id]
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        "protein-attach-delete", "Detach protein",
+        {"attachment_id": attachment_id}, _fn,
+    )
+    return _design_response(updated, report)
+
+
 @router.get("/design/export/cadnano")
 def export_cadnano_design() -> Response:
     """Export the active design as a caDNAno v2 JSON file download.
@@ -3075,6 +3489,51 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
             for n in nucleotide_positions(new_helix)
         ],
     }
+
+
+class ReorderHelicesBody(BaseModel):
+    ordered_ids: List[str]
+
+
+# NOTE: this static-path route MUST be declared before the dynamic
+# `/design/helices/{helix_id}` routes below — otherwise FastAPI matches
+# "reorder" as a helix_id and routes here never fire.
+@router.put("/design/helices/reorder")
+def reorder_helices(body: ReorderHelicesBody) -> dict:
+    """Permute the vertical order of helices in the pathview.
+
+    Vertical order in the 2D editor *is* the order of ``design.helices`` — there
+    is no separate ordering field — so reordering is a pure display concern.  It
+    touches array order ONLY: helix UUIDs, ``grid_pos``, strands, and crossovers
+    are all untouched, so topology and geometry are invariant.  The new order
+    persists because ``Design.to_json()`` serialises ``helices`` in array order.
+
+    Validation is strict: the supplied id list must contain every existing helix
+    id exactly once (a missing/duplicated id would be silent data loss, since a
+    helix dropped from the array would vanish from the editor).
+    """
+    design = design_state.get_or_404()
+    helix_map = {h.id: h for h in design.helices}
+    ids = body.ordered_ids
+    if len(ids) != len(set(ids)):
+        raise HTTPException(400, detail="Duplicate helix IDs in reorder list.")
+    if set(ids) != set(helix_map):
+        raise HTTPException(
+            400,
+            detail="Reorder list must contain every helix ID exactly once.",
+        )
+
+    def _apply(d: Design) -> None:
+        m = {h.id: h for h in d.helices}
+        d.helices = [m[i] for i in ids]
+
+    design, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='helix-reorder',
+        label='Reorder helices',
+        params={'ordered_ids': ids},
+        fn=_apply,
+    )
+    return _design_response(design, report)
 
 
 @router.get("/design/helices/{helix_id}")

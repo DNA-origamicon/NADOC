@@ -559,19 +559,11 @@ export function initDesignRenderer(scene, storeRef) {
     },
 
     /**
-     * Apply FEM equilibrium-shape positions as a scene overlay.
+     * Apply mrDNA-relaxed backbone positions as a scene overlay.
      * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
      */
     applyFemPositions(updates, amp = 1.0) {
       _helixCtrl?.applyFemPositions(updates, amp)
-    },
-
-    /**
-     * Colour beads and slabs by RMSF value (stiff=blue, flexible=red).
-     * @param {Object} rmsfMap  "{helix_id}:{bp}:{dir}" → float 0-1
-     */
-    applyFemRmsf(rmsfMap) {
-      _helixCtrl?.applyFemRmsf(rmsfMap)
     },
 
     setDetailLevel(level) {
@@ -634,7 +626,7 @@ export function initDesignRenderer(scene, storeRef) {
     },
 
     /**
-     * Remove FEM overlay: revert geometry positions and restore strand colours.
+     * Remove the mrDNA relaxed-position overlay: revert beads to design geometry.
      * Skip revertToGeometry when cadnano or unfold modes own bead positions —
      * those modes will restore positions themselves on deactivation.
      */
@@ -643,7 +635,6 @@ export function initDesignRenderer(scene, storeRef) {
       if (!cadnanoActive && !unfoldActive) {
         _helixCtrl?.revertToGeometry()
       }
-      _helixCtrl?.clearFemColors()
     },
 
     /**

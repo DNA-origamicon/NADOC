@@ -14,7 +14,7 @@ import { addRecentFile, getRecentFiles, closeSession as apiCloseSession,
          mkdirLibrary, renameLibrary, moveLibrary, deleteLibraryItem } from '../api/client.js'
 import { openFileBrowser } from '../ui/file_browser.js'
 import {
-  fetchDesign, addHelixAtCell, deleteHelix, extendHelixBounds,
+  fetchDesign, addHelixAtCell, deleteHelix, reorderHelices, extendHelixBounds,
   autoScaffold, scaffoldDomainPaint,
   paintStapleDomain, deleteStrand, deleteStrandsBatch, deleteDomain, nickStrand, ligateStrand, forcedLigation,
   deleteForcedLigation, batchDeleteForcedLigations,
@@ -1719,6 +1719,8 @@ const pathview = initPathview(pathCanvas, pathContainer, {
   onResizeEnds: (entries) => resizeStrandEnds(entries),
 
   onShiftDomains: (entries) => shiftDomains(entries),
+
+  onReorderHelices: (orderedIds) => reorderHelices(orderedIds),
 
   onPaintStrands: async (strandIds) => {
     await patchStrandsColor(strandIds, _getActivePaintColor())

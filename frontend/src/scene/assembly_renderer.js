@@ -63,6 +63,15 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
+import {
+  IMPOSTOR_QUAD,
+  IMPOSTOR_VERT_UNIFORMS,
+  IMPOSTOR_FRAG_UNIFORMS,
+  IMPOSTOR_FRAG_SPHERE_BODY,
+  IMPOSTOR_FRAG_NORMAL,
+} from './impostor_material.js'
+import { ELEMENTS, DEFAULT_ELEMENT, BALL_RADIUS } from './atomistic_renderer/atom_palette.js'
+import { C, STAPLE_PALETTE, buildClusterLookup } from './helix_renderer/palette.js'
 import { buildCrossoverConnections, arcControlPoint, updateExtraBaseInstances } from './crossover_connections.js'
 import { initAtomisticRenderer } from './atomistic_renderer.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
@@ -2929,8 +2938,15 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // fluorophore-emissive preset patches the fragment) instead of clobbering
     // it. For the normal build-time path the material has none → no-op.
     const _priorOnBeforeCompile = material.onBeforeCompile
+    // Impostor bead/atom meshes (Phase B): their material carries the impostor
+    // patch, but its `<project_vertex>` billboards around `instanceMatrix` —
+    // which the shared path collapses to identity (the center lives in the
+    // instance×bp textures). So we DON'T run the material's own patch; instead
+    // we compose the bead center from the textures and billboard it ourselves,
+    // reusing the shared impostor GLSL snippets for the fragment sphere paint.
+    const _isImpostor = !!material.userData?.isImpostor
     material.onBeforeCompile = (shader) => {
-      _priorOnBeforeCompile?.(shader)
+      if (!_isImpostor) _priorOnBeforeCompile?.(shader)
       shader.uniforms.u_instanceXform   = uniformsBundle.uXform
       shader.uniforms.u_numBpPerInstance = { value: numBpPerInstance }
       shader.uniforms.u_activeInstanceIdx = uniformsBundle.uActiveIdx
@@ -2938,6 +2954,9 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       shader.uniforms.u_bpXform         = uniformsBundle.uBpTex
       if (uniformsBundle.hasBpColor) {
         shader.uniforms.u_bpColor = uniformsBundle.uBpColorTex
+      }
+      if (_isImpostor) {
+        shader.uniforms.u_impostorRadius = { value: material.userData.impostorRadius ?? 0.1 }
       }
       // Diagnostic: confirm both vertex-shader replaces actually matched. If
       // `<begin_vertex>` is absent (e.g. material uses a custom shader instead
@@ -2974,6 +2993,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           flat varying int v_instanceIdx;
           varying float v_visible;
           ${uniformsBundle.hasBpColor ? 'uniform sampler2D u_bpColor;\n          varying vec3 v_bpColor;' : ''}
+          ${_isImpostor ? IMPOSTOR_VERT_UNIFORMS : ''}
           `,
         )
         .replace(
@@ -3006,10 +3026,30 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
             texelFetch(u_bpXform, ivec2(bpCol * 4 + 2, bpRow), 0),
             texelFetch(u_bpXform, ivec2(bpCol * 4 + 3, bpRow), 0)
           );
-          vec3 transformed = (instTransform * bpMat * vec4(position, 1.0)).xyz;
+          // Non-impostor: transform the actual vertex. Impostor: transform only
+          // the bead CENTER (origin); the quad corner is billboarded in <project_vertex>.
+          vec3 transformed = ${_isImpostor
+            ? '(instTransform * bpMat * vec4(0.0, 0.0, 0.0, 1.0)).xyz'
+            : '(instTransform * bpMat * vec4(position, 1.0)).xyz'};
           ${uniformsBundle.hasBpColor ? 'v_bpColor = texelFetch(u_bpColor, ivec2(bpCol, bpRow), 0).rgb;' : ''}
           `,
         )
+
+      // Impostor billboard: center → view space, offset the quad corner
+      // camera-facing by the radius, and set the impostor fragment varyings.
+      if (_isImpostor) {
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <project_vertex>',
+          `
+          vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
+          v_centerView = mvPosition.xyz;
+          v_impR = u_impostorRadius;
+          mvPosition.xy += position.xy * u_impostorRadius;
+          gl_Position = projectionMatrix * mvPosition;
+          v_corner = position.xy;
+          `,
+        )
+      }
 
       // Fragment: discard if instance is hidden; brighten if active.
       shader.fragmentShader = shader.fragmentShader
@@ -3021,6 +3061,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           flat varying int v_instanceIdx;
           varying float v_visible;
           ${uniformsBundle.hasBpColor ? 'varying vec3 v_bpColor;' : ''}
+          ${_isImpostor ? IMPOSTOR_FRAG_UNIFORMS : ''}
           `,
         )
         .replace(
@@ -3034,6 +3075,15 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
           #include <dithering_fragment>
           `,
         )
+
+      // Impostor sphere paint + corrected depth (reused from impostor_material.js).
+      // Different chunks than the common/dithering replaces above, so separate.
+      if (_isImpostor) {
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <clipping_planes_fragment>',
+            `#include <clipping_planes_fragment>\n${IMPOSTOR_FRAG_SPHERE_BODY}`)
+          .replace('#include <normal_fragment_begin>', IMPOSTOR_FRAG_NORMAL)
+      }
     }
     // Each material gets a UNIQUE cache key so Three.js's program cache
     // doesn't make 13 materials share the first material's compiled program.
@@ -3078,6 +3128,418 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     tex.generateMipmaps = false
     tex.needsUpdate = true
     return { tex, data }
+  }
+
+  // ── Phase C: atomistic atom-impostor batch ──────────────────────────────────
+  // Atomistic reps (vdw/ballstick) on the shared path render each atom as a 2-tri
+  // impostor quad (like the CG beads), composed through the SAME per-source
+  // instance-transform + visibility textures. The per-atom "local transform" is
+  // just a source-local POSITION (vec3) — atoms are points, no rotation — so
+  // instead of a per-bp 4×4 texture we store a vec3-per-atom texture and the
+  // shader does `world = instTransform[instanceIdx] × atomPos[atomIdx]`.
+
+  // 2D-tiled RGBA-float texture of source-local atom positions (xyz in RGB).
+  // atomIdx → ivec2(atomIdx % W, atomIdx / W); .xyz = local position.
+  function _makeAtomPosTexture(posFlat, numAtoms) {
+    const tileW = _BP_TEX_TILE_W
+    const h = Math.max(1, Math.ceil(numAtoms / tileW))
+    const data = new Float32Array(tileW * h * 4)
+    for (let i = 0; i < numAtoms; i++) {
+      data[i * 4 + 0] = posFlat[i * 3 + 0]
+      data[i * 4 + 1] = posFlat[i * 3 + 1]
+      data[i * 4 + 2] = posFlat[i * 3 + 2]
+      data[i * 4 + 3] = 1.0
+    }
+    const tex = new THREE.DataTexture(data, tileW, h, THREE.RGBAFormat, THREE.FloatType)
+    tex.minFilter = THREE.NearestFilter
+    tex.magFilter = THREE.NearestFilter
+    tex.generateMipmaps = false
+    tex.needsUpdate = true
+    return { tex, data }
+  }
+
+  // Per-atom RGB color texture (same 2D tiling as the position texture).
+  function _makeAtomColorTexture(rgbFlat, numAtoms) {
+    const tileW = _BP_TEX_TILE_W
+    const h = Math.max(1, Math.ceil(numAtoms / tileW))
+    const data = new Float32Array(tileW * h * 4)
+    for (let i = 0; i < numAtoms; i++) {
+      data[i * 4 + 0] = rgbFlat[i * 3 + 0]
+      data[i * 4 + 1] = rgbFlat[i * 3 + 1]
+      data[i * 4 + 2] = rgbFlat[i * 3 + 2]
+      data[i * 4 + 3] = 1.0
+    }
+    const tex = new THREE.DataTexture(data, tileW, h, THREE.RGBAFormat, THREE.FloatType)
+    tex.minFilter = THREE.NearestFilter
+    tex.magFilter = THREE.NearestFilter
+    tex.generateMipmaps = false
+    tex.needsUpdate = true
+    return { tex, data }
+  }
+
+  // ── Atomistic coloring ──────────────────────────────────────────────────────
+  // Modes supported for atomistic on the shared path. Anything else → 'cpk'.
+  const _ATOM_COLOR_MODES = new Set(['cpk', 'strand', 'cluster', 'source'])
+  const _atomColorMode = (m) => (_ATOM_COLOR_MODES.has(m) ? m : 'cpk')
+
+  // Deterministic per-source tint (order-independent) for 'source' coloring.
+  function _srcColorHex(srcKey) {
+    let h = 0
+    for (let i = 0; i < (srcKey || '').length; i++) h = (h * 31 + srcKey.charCodeAt(i)) | 0
+    return STAPLE_PALETTE[Math.abs(h) % STAPLE_PALETTE.length]
+  }
+
+  // One atom's color (hex int) for a mode — mirrors helix_renderer.applyColoring
+  // so atoms match the CG bead/cylinder colors.  ctx: { stapleColorMap, customColors,
+  // clusterFn, strandType: Map<strand_id,type>, sourceColor }.
+  function _atomColorHex(atom, mode, ctx) {
+    if (mode === 'source') return ctx.sourceColor
+    if (mode === 'cpk')    return ELEMENTS[atom.element]?.color ?? DEFAULT_ELEMENT.color
+    const sid = atom.strand_id
+    const strandHex = () => {
+      if (!sid) return C.unassigned
+      if (ctx.strandType.get(sid) === 'scaffold') return C.scaffold_backbone
+      if (ctx.customColors[sid] != null) return ctx.customColors[sid]
+      return ctx.stapleColorMap.get(sid) ?? C.unassigned
+    }
+    if (mode === 'cluster') {
+      const ci = ctx.clusterFn({ helix_id: atom.helix_id, strand_id: sid })
+      return ci != null ? STAPLE_PALETTE[ci % STAPLE_PALETTE.length] : strandHex()
+    }
+    return strandHex()   // 'strand'
+  }
+
+  function _computeAtomColorRGB(atomList, mode, ctx) {
+    const out = new Float32Array(atomList.length * 3)
+    for (let i = 0; i < atomList.length; i++) {
+      const hex = _atomColorHex(atomList[i], mode, ctx)
+      out[i * 3 + 0] = ((hex >> 16) & 255) / 255
+      out[i * 3 + 1] = ((hex >> 8) & 255) / 255
+      out[i * 3 + 2] = (hex & 255) / 255
+    }
+    return out
+  }
+
+  // Recompute + re-upload an atomistic source's per-atom color textures in place.
+  function _recolorAtomBatch(srcEntry, mode) {
+    if (!srcEntry?.atomBatch || !srcEntry._atomCtx) return
+    const m = _atomColorMode(mode)
+    for (const b of srcEntry.atomBatch) {
+      const rgb = _computeAtomColorRGB(b.atomList, m, srcEntry._atomCtx)
+      const data = b.colorTex.image.data
+      for (let i = 0; i < b.atomList.length; i++) {
+        data[i * 4 + 0] = rgb[i * 3 + 0]
+        data[i * 4 + 1] = rgb[i * 3 + 1]
+        data[i * 4 + 2] = rgb[i * 3 + 2]
+      }
+      b.colorTex.needsUpdate = true
+    }
+  }
+
+  // ── Surface coloring (assembly) ─────────────────────────────────────────────
+  // Surface vertices carry only a strand_id (vertex_strand_index → table); we
+  // recolor client-side (no re-fetch) by mapping each vertex's strand to a hex.
+  const _SURFACE_COLOR_MODES = new Set(['strand', 'cluster', 'source'])
+  const _surfaceColorMode = (m) => (_SURFACE_COLOR_MODES.has(m) ? m : 'strand')
+
+  // strand_id → hex for a surface coloring mode (mirrors _atomColorHex's strand
+  // path; cluster uses the strand's cluster, source the per-source tint).
+  function _surfaceStrandHex(sid, mode, ctx) {
+    if (mode === 'source') return ctx.sourceColor
+    if (mode === 'cluster') {
+      const ci = ctx.strandCluster.get(sid)
+      if (ci != null) return STAPLE_PALETTE[ci % STAPLE_PALETTE.length]
+      // else fall through to strand color
+    }
+    if (!sid) return C.unassigned
+    if (ctx.strandType.get(sid) === 'scaffold') return C.scaffold_backbone
+    if (ctx.customColors[sid] != null) return ctx.customColors[sid]
+    return ctx.stapleColorMap.get(sid) ?? C.unassigned
+  }
+
+  // Recompute the surface mesh's per-vertex `color` attribute in place.
+  function _recolorSurface(srcEntry, mode) {
+    const sm = srcEntry.surfaceMesh
+    const ctx = srcEntry._surfaceCtx
+    if (!sm?.geo || !ctx || !sm.vertexStrandIdx) return
+    const m = _surfaceColorMode(mode)
+    // Per-table hex (small) → expand to per-vertex.
+    const tblHex = sm.strandTable.map(sid => _surfaceStrandHex(sid, m, ctx))
+    const idx = sm.vertexStrandIdx
+    const colors = new Float32Array(idx.length * 3)
+    for (let v = 0; v < idx.length; v++) {
+      const hex = tblHex[idx[v]] ?? C.unassigned
+      colors[v * 3 + 0] = ((hex >> 16) & 255) / 255
+      colors[v * 3 + 1] = ((hex >> 8) & 255) / 255
+      colors[v * 3 + 2] = (hex & 255) / 255
+    }
+    sm.geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    sm.geo.attributes.color.needsUpdate = true
+    if (!sm.mat.vertexColors) { sm.mat.vertexColors = true; sm.mat.color.setHex(0xffffff); sm.mat.needsUpdate = true }
+  }
+
+  // Patch a per-element MeshPhongMaterial into an atom impostor: vertex composes
+  // the atom's world center from the instance-transform texture + the atom-pos
+  // texture, then billboards the quad; fragment reuses the shared impostor
+  // sphere-paint + the per-instance visibility/active-highlight logic.
+  function _attachAtomImpostorShader(material, bundle) {
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.u_instanceXform       = bundle.uXform
+      shader.uniforms.u_visibilityTex       = bundle.uVis
+      shader.uniforms.u_activeInstanceIdx   = bundle.uActiveIdx
+      shader.uniforms.u_atomPos             = bundle.uAtomPos
+      shader.uniforms.u_atomColor           = bundle.uAtomColor
+      shader.uniforms.u_numAtomsPerInstance = { value: bundle.numAtoms }
+      shader.uniforms.u_impostorRadius      = { value: bundle.radius }
+
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `
+          #include <common>
+          #define ATOM_TILE_W ${_BP_TEX_TILE_W}
+          uniform sampler2D u_instanceXform;
+          uniform sampler2D u_visibilityTex;
+          uniform sampler2D u_atomPos;
+          uniform sampler2D u_atomColor;
+          uniform float u_numAtomsPerInstance;
+          uniform float u_activeInstanceIdx;
+          flat varying int v_instanceIdx;
+          varying float v_visible;
+          varying vec3 v_atomColor;
+          ${IMPOSTOR_VERT_UNIFORMS}
+        `)
+        .replace('#include <begin_vertex>', `
+          int instanceIdx = int(floor(float(gl_InstanceID) / max(u_numAtomsPerInstance, 1.0)));
+          int atomIdx = gl_InstanceID - instanceIdx * int(u_numAtomsPerInstance);
+          v_instanceIdx = instanceIdx;
+          v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
+          v_atomColor = texelFetch(u_atomColor, ivec2(atomIdx % ATOM_TILE_W, atomIdx / ATOM_TILE_W), 0).rgb;
+          mat4 instTransform = mat4(
+            texelFetch(u_instanceXform, ivec2(0, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(1, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(2, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0)
+          );
+          vec3 atomLocal = texelFetch(u_atomPos, ivec2(atomIdx % ATOM_TILE_W, atomIdx / ATOM_TILE_W), 0).xyz;
+          vec3 transformed = (instTransform * vec4(atomLocal, 1.0)).xyz;
+        `)
+        .replace('#include <project_vertex>', `
+          vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
+          v_centerView = mvPosition.xyz;
+          v_impR = u_impostorRadius;
+          mvPosition.xy += position.xy * u_impostorRadius;
+          gl_Position = projectionMatrix * mvPosition;
+          v_corner = position.xy;
+        `)
+
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `
+          #include <common>
+          uniform float u_activeInstanceIdx;
+          flat varying int v_instanceIdx;
+          varying float v_visible;
+          varying vec3 v_atomColor;
+          ${IMPOSTOR_FRAG_UNIFORMS}
+        `)
+        .replace('#include <clipping_planes_fragment>',
+          `#include <clipping_planes_fragment>\n${IMPOSTOR_FRAG_SPHERE_BODY}`)
+        .replace('#include <normal_fragment_begin>', IMPOSTOR_FRAG_NORMAL)
+        .replace('#include <dithering_fragment>', `
+          if (v_visible < 0.5) discard;
+          gl_FragColor.rgb *= v_atomColor;
+          if (u_activeInstanceIdx >= 0.0 && abs(float(v_instanceIdx) - u_activeInstanceIdx) < 0.5) {
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 1.0, 1.0), 0.35);
+          }
+          #include <dithering_fragment>
+        `)
+      material.userData.shader = shader
+    }
+    material.customProgramCacheKey = () => 'atomImpostor_' + material.uuid
+    material.userData.isImpostor = true
+    material.userData.isAtomImpostor = true
+  }
+
+  // Build the per-source atom-impostor batch (one InstancedMesh per element).
+  // Reuses the source's instance-transform + visibility textures. Marks the
+  // source `isAtomistic` (→ skipped by the LOD updater; renders all atoms at
+  // detail) and hides the source's CG / mid / hull geometry.
+  async function _buildAtomImpostorBatch(srcEntry, instId, uniformsBundle, numInstances, helixGroup, atomRep = 'vdw', vdwScale = 1.0) {
+    // Hide the source's CG / cylinder / hull LODs and flag the source atomistic
+    // UP FRONT — before the (slow, ~15 s) atomistic fetch — so its cylinders
+    // never flash on screen while atoms are loading. Restore on failure.
+    const _setCgVisible = (v) => {
+      if (srcEntry.helixCtrl?.root)     srcEntry.helixCtrl.root.visible = v
+      if (srcEntry.midLod?.mesh)        srcEntry.midLod.mesh.visible = v
+      if (srcEntry.overhangLod?.mesh)   srcEntry.overhangLod.mesh.visible = v
+      if (srcEntry.hullLod?.mesh)       srcEntry.hullLod.mesh.visible = v
+      if (srcEntry.hullMarkerLod?.mesh) srcEntry.hullMarkerLod.mesh.visible = v
+    }
+    srcEntry.isAtomistic = true
+    _setCgVisible(false)
+
+    let atomData
+    try {
+      atomData = await api.getInstanceAtomisticGeometry(instId)
+    } catch (err) {
+      console.warn('[shared_renderer] atomistic geometry fetch failed:', err)
+      srcEntry.isAtomistic = false
+      _setCgVisible(true)
+      return false
+    }
+    const atoms = atomData?.atoms ?? []
+    if (!atoms.length) { srcEntry.isAtomistic = false; _setCgVisible(true); return false }
+
+    const byEl = new Map()
+    for (const a of atoms) {
+      const el = a.element || 'C'
+      if (!byEl.has(el)) byEl.set(el, [])
+      byEl.get(el).push(a)
+    }
+
+    // Coloring context (reused by _recolorAtomBatch on mode change) — resolves
+    // the same colors the CG path uses so atoms match beads/cylinders.
+    const design = srcEntry.design
+    const strandType = new Map((design?.strands ?? []).map(s => [s.id, s.strand_type]))
+    const ctx = {
+      stapleColorMap: buildStapleColorMap(srcEntry.nucleotides, design),
+      customColors:   srcEntry.customColors,
+      clusterFn:      buildClusterLookup(design),
+      strandType,
+      sourceColor:    _srcColorHex(srcEntry.group.userData.sharedSource),
+    }
+    srcEntry._atomCtx = ctx
+    const mode = _atomColorMode(store.getState().coloringMode)
+
+    const batch = []
+    for (const [el, list] of byEl) {
+      const numAtoms = list.length
+      const posFlat = new Float32Array(numAtoms * 3)
+      for (let i = 0; i < numAtoms; i++) {
+        posFlat[i * 3 + 0] = list[i].x
+        posFlat[i * 3 + 1] = list[i].y
+        posFlat[i * 3 + 2] = list[i].z
+      }
+      const { tex: atomPosTex } = _makeAtomPosTexture(posFlat, numAtoms)
+      const { tex: atomColorTex } = _makeAtomColorTexture(_computeAtomColorRGB(list, mode, ctx), numAtoms)
+      const elDef = ELEMENTS[el] || DEFAULT_ELEMENT
+      // VDW = per-element van-der-Waals radius (space-fill); ball-and-stick = a
+      // fixed small ball radius (matches the design-view atomistic renderer).
+      const radius = (atomRep === 'ballstick' ? BALL_RADIUS : elDef.vdw) * vdwScale
+      // White base — per-atom color rides the u_atomColor texture (multiplied in).
+      const mat = new THREE.MeshPhongMaterial({ color: 0xffffff, side: THREE.DoubleSide })
+      _attachAtomImpostorShader(mat, {
+        uXform: uniformsBundle.uXform,
+        uVis: uniformsBundle.uVis,
+        uActiveIdx: uniformsBundle.uActiveIdx,
+        uAtomPos: { value: atomPosTex },
+        uAtomColor: { value: atomColorTex },
+        numAtoms,
+        radius,
+      })
+      const mesh = new THREE.InstancedMesh(IMPOSTOR_QUAD, mat, numInstances * numAtoms)
+      // Collapse instanceMatrix to a single identity row (the shader ignores it;
+      // this avoids a count×64-byte allocation). meshPerAttribute = count.
+      const identityArr = new Float32Array(16)
+      identityArr[0] = identityArr[5] = identityArr[10] = identityArr[15] = 1
+      const idAttr = new THREE.InstancedBufferAttribute(identityArr, 16, false, mesh.count)
+      idAttr.setUsage(THREE.StaticDrawUsage)
+      mesh.instanceMatrix = idAttr
+      mesh.instanceMatrix.needsUpdate = true
+      mesh.frustumCulled = false
+      mesh.name = `atomImpostor_${el}`
+      // Carries a custom instancing shader — photo mode's _swapMaterials must
+      // skip it (a stock material swap would drop the shader → atoms collapse).
+      mesh.userData.sharedLodImpostor = true
+      helixGroup.add(mesh)
+      batch.push({ mesh, posTex: atomPosTex, colorTex: atomColorTex, atomList: list })
+    }
+
+    srcEntry.atomBatch = batch
+    // CG/cylinder/hull LODs were hidden + isAtomistic flagged up front.
+    return true
+  }
+
+  // ── Surface representation (assembly) ───────────────────────────────────────
+  // One molecular-surface mesh per source (source-local), instanced at each
+  // placement transform. Unlike beads/atoms there's no per-vertex texture: the
+  // surface is a single BufferGeometry drawn N times via a plain InstancedMesh
+  // whose instanceMatrix holds each instance's world transform.
+  const _SURFACE_PROBE_RADIUS = 0.28   // nm — SES smoothness (matches design view)
+
+  async function _buildSurfaceBatch(srcEntry, instId, numInstances, helixGroup, instancesForKey) {
+    // Hide CG + flag isSurface UP FRONT so cylinders don't flash during the
+    // (slow) surface compute. Restore on failure.
+    const _setCgVisible = (v) => {
+      if (srcEntry.helixCtrl?.root)     srcEntry.helixCtrl.root.visible = v
+      if (srcEntry.midLod?.mesh)        srcEntry.midLod.mesh.visible = v
+      if (srcEntry.overhangLod?.mesh)   srcEntry.overhangLod.mesh.visible = v
+      if (srcEntry.hullLod?.mesh)       srcEntry.hullLod.mesh.visible = v
+      if (srcEntry.hullMarkerLod?.mesh) srcEntry.hullMarkerLod.mesh.visible = v
+    }
+    srcEntry.isSurface = true
+    _setCgVisible(false)
+
+    const colorMode = (store.getState().coloringMode === 'uniform') ? 'uniform' : 'strand'
+    let data
+    try {
+      data = await api.getInstanceSurfaceGeometry(instId, colorMode, _SURFACE_PROBE_RADIUS)
+    } catch (err) {
+      console.warn('[shared_renderer] surface fetch failed:', err)
+      srcEntry.isSurface = false; _setCgVisible(true); return false
+    }
+    if (!data?.vertices?.length || !data?.faces?.length) {
+      srcEntry.isSurface = false; _setCgVisible(true); return false
+    }
+
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(data.vertices), 3))
+    geo.setIndex(new THREE.BufferAttribute(new Uint32Array(data.faces), 1))
+    geo.computeVertexNormals()
+
+    // Per-vertex strand-id table → recolor client-side (no re-fetch on mode change).
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors: true, color: 0xffffff, roughness: 0.65, metalness: 0.0, side: THREE.DoubleSide,
+    })
+    const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, numInstances))
+    mesh.count = numInstances
+    const _m = new THREE.Matrix4()
+    for (let i = 0; i < numInstances; i++) {
+      const inst = instancesForKey[i]
+      // Hidden instances → degenerate scale so they don't draw.
+      if (inst.visible === false) { mesh.setMatrixAt(i, _m.makeScale(0, 0, 0)); continue }
+      mesh.setMatrixAt(i, _instMat4(inst.transform?.values))
+    }
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.frustumCulled = false
+    mesh.name = 'assemblySurface'
+    mesh.userData.sharedLodImpostor = true   // skip photo material swap
+    helixGroup.add(mesh)
+
+    // Coloring context (reused by _recolorSurface on mode change). strand color
+    // mirrors the CG path; cluster maps each strand to its (first domain's)
+    // cluster; source is a per-source tint.
+    const design = srcEntry.design
+    const clusterFn = buildClusterLookup(design)
+    const strandCluster = new Map()
+    for (const s of design?.strands ?? []) {
+      const d0 = (s.domains ?? [])[0]
+      if (!d0) continue
+      const ci = clusterFn({ helix_id: d0.helix_id, strand_id: s.id, domain_index: 0 })
+      if (ci != null) strandCluster.set(s.id, ci)
+    }
+    srcEntry._surfaceCtx = {
+      stapleColorMap: buildStapleColorMap(srcEntry.nucleotides, design),
+      customColors:   srcEntry.customColors,
+      strandType:     new Map((design?.strands ?? []).map(s => [s.id, s.strand_type])),
+      strandCluster,
+      sourceColor:    _srcColorHex(srcEntry.group.userData.sharedSource),
+    }
+    srcEntry.surfaceMesh = {
+      mesh, geo, mat,
+      strandTable:     data.vertex_strand_index_table ?? [],
+      vertexStrandIdx: data.vertex_strand_index ?? null,
+    }
+    _recolorSurface(srcEntry, store.getState().coloringMode)
+    return true
   }
 
   // Walk a helixCtrl.root and patch every InstancedMesh's material with the
@@ -3611,6 +4073,23 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       if (m) m.userData.sharedLodImpostor = true
     }
 
+    // ── Phase C: atomistic sources → per-source atom-impostor batch ───────────
+    // When every instance of this source is vdw/ballstick (the common case — the
+    // rep menu sets all instances the same), render the atoms as impostors and
+    // hide the CG/hull geometry. Mixed-rep sources fall back to the per-instance
+    // LOD cap (vdw/ballstick → hull) as before.
+    const _allAtomistic = numInstances > 0 && instancesForKey.every(
+      i => i.representation === 'vdw' || i.representation === 'ballstick')
+    const _allSurface = numInstances > 0 && instancesForKey.every(
+      i => i.representation === 'surface')
+    if (_allSurface) {
+      // Molecular surface — one mesh per source, instanced at each placement.
+      await _buildSurfaceBatch(srcEntry, instancesForKey[0].id, numInstances, helixGroup, instancesForKey)
+    } else if (_allAtomistic) {
+      const atomRep = instancesForKey[0].representation   // 'vdw' | 'ballstick'
+      await _buildAtomImpostorBatch(srcEntry, instancesForKey[0].id, uniformsBundle, numInstances, helixGroup, atomRep)
+    }
+
     return srcEntry
   }
 
@@ -3633,6 +4112,9 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // Phase 3f — release per-source LOD textures (mid-LOD per-segment
     // matrix + colour textures, plus the same pair for overhang LOD; far-
     // LOD has no extra texture beyond xformTex which is released above).
+    if (srcEntry.atomBatch) {
+      for (const b of srcEntry.atomBatch) { b.posTex?.dispose(); b.colorTex?.dispose() }
+    }
     srcEntry.midLod?.segXformTex?.dispose()
     srcEntry.midLod?.segColorTex?.dispose()
     srcEntry.overhangLod?.segXformTex?.dispose()
@@ -4343,6 +4825,10 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
 
   function _updateLodForSource(srcEntry, camera, renderer) {
     if (!srcEntry || !camera) return
+    // Atomistic sources render their atom-impostor batch at full detail and do
+    // NOT participate in the close/mid/hull bucketing or instance-texture
+    // permutation (the atom batch indexes the unpermuted instance texture).
+    if (srcEntry.isAtomistic || srcEntry.isSurface) return
     const N = srcEntry.instanceIds.length
     if (N === 0) return
 
@@ -5264,7 +5750,9 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   function updateColoringMode(mode) {
     if (mode == null) return
     for (const srcEntry of _sources.values()) {
-      _applyColorsToSource(srcEntry, mode)
+      if (srcEntry.isAtomistic)    _recolorAtomBatch(srcEntry, mode)
+      else if (srcEntry.isSurface) _recolorSurface(srcEntry, mode)
+      else _applyColorsToSource(srcEntry, mode)
     }
   }
 

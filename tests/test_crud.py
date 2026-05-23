@@ -344,6 +344,61 @@ def test_delete_helix_success():
     assert len(r.json()["design"]["helices"]) == 1
 
 
+def _add_second_helix() -> str:
+    """Add a strandless helix to the demo design; return its id."""
+    r = client.post("/api/design/helices", json={
+        "axis_start": {"x": 2.6, "y": 0.0, "z": 0.0},
+        "axis_end":   {"x": 2.6, "y": 0.0, "z": 14.028},
+        "length_bp": 42,
+    })
+    assert r.status_code == 201
+    return r.json()["helix"]["id"]
+
+
+def test_reorder_helices_permutes_array():
+    new_id = _add_second_helix()
+    before = [h["id"] for h in client.get("/api/design").json()["design"]["helices"]]
+    assert before == ["demo_helix", new_id]
+
+    r = client.put("/api/design/helices/reorder",
+                   json={"ordered_ids": list(reversed(before))})
+    assert r.status_code == 200
+    after = [h["id"] for h in r.json()["design"]["helices"]]
+    assert after == [new_id, "demo_helix"]
+
+
+def test_reorder_helices_rejects_missing_id():
+    # Demo has one helix; an empty list omits it → 400.
+    r = client.put("/api/design/helices/reorder", json={"ordered_ids": []})
+    assert r.status_code == 400
+
+
+def test_reorder_helices_rejects_unknown_id():
+    r = client.put("/api/design/helices/reorder",
+                   json={"ordered_ids": ["demo_helix", "ghost"]})
+    assert r.status_code == 400
+
+
+def test_reorder_helices_rejects_duplicate_id():
+    r = client.put("/api/design/helices/reorder",
+                   json={"ordered_ids": ["demo_helix", "demo_helix"]})
+    assert r.status_code == 400
+
+
+def test_reorder_helices_preserves_topology():
+    """Reordering touches array order only — strands/crossovers are unchanged."""
+    _add_second_helix()
+    before = client.get("/api/design").json()["design"]
+    ids = [h["id"] for h in before["helices"]]
+
+    r = client.put("/api/design/helices/reorder",
+                   json={"ordered_ids": list(reversed(ids))})
+    assert r.status_code == 200
+    after = r.json()["design"]
+    assert after["strands"] == before["strands"]
+    assert after["crossovers"] == before["crossovers"]
+
+
 # ── Strand endpoints ──────────────────────────────────────────────────────────
 
 def test_add_strand():

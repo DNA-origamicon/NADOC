@@ -13,6 +13,7 @@
 
 import {
   ELEMENTS,
+  DEFAULT_ELEMENT,
   C_HIGHLIGHT,
   C_DIM_FACTOR,
   _dimColor,
@@ -31,7 +32,7 @@ import {
  */
 export function colorForAtom(ctx, atom, sel, multiIds) {
   const el      = atom.element
-  const cpk     = ELEMENTS[el]?.color ?? 0x505050
+  const cpk     = ELEMENTS[el]?.color ?? DEFAULT_ELEMENT.color
   const dimCpk  = _dimColor(cpk, C_DIM_FACTOR)
 
   // Multi-lasso selection overrides everything
@@ -71,6 +72,11 @@ export function colorForAtom(ctx, atom, sel, multiIds) {
     return atom.strand_id === data.strand_id ? C_HIGHLIGHT : dimCpk
   }
 
+  if (type === 'protein') {
+    // Selected protein keeps full element colour; other proteins dim.
+    return atom.helix_id === `__protein__${sel.id}` ? cpk : dimCpk
+  }
+
   // base colour by mode; extra-base atoms always use their strand colour
   if (ctx.colorMode === 'strand' || atom.aux_helix_id) {
     return ctx.strandColors.get(atom.strand_id) ?? cpk
@@ -85,7 +91,7 @@ export function colorForAtom(ctx, atom, sel, multiIds) {
 /** Resolve the final colour for one atom under the current mode + selection. */
 export function resolveAtomColor(ctx, atom, sel, multiIds, hasSelection) {
   const el  = atom.element
-  const cpk = ELEMENTS[el]?.color ?? 0x505050
+  const cpk = ELEMENTS[el]?.color ?? DEFAULT_ELEMENT.color
   if (hasSelection) return colorForAtom(ctx, atom, sel, multiIds)
   const isXb = !!atom.aux_helix_id  // extra-base: always strand-coloured
   if (ctx.colorMode === 'strand' || isXb) {

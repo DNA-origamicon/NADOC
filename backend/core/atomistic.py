@@ -78,6 +78,15 @@ VDW_RADIUS: dict[str, float] = {
     "C": 0.170,
     "N": 0.155,
     "O": 0.140,
+    # Additional elements common in proteins / cofactors (for protein rendering).
+    "S": 0.180,
+    "H": 0.120,
+    "Se": 0.190,
+    "Fe": 0.160,
+    "Zn": 0.139,
+    "Mg": 0.173,
+    "Mn": 0.161,
+    "Ca": 0.231,
 }
 
 # ── CPK colours (hex int) ─────────────────────────────────────────────────────
@@ -87,7 +96,19 @@ CPK_COLOR: dict[str, int] = {
     "C": 0x505050,   # dark grey
     "N": 0x3050F8,   # blue
     "O": 0xFF0D0D,   # red
+    "S": 0xFFFF30,   # yellow
+    "H": 0xFFFFFF,   # white
+    "Se": 0xFFA100,
+    "Fe": 0xE06633,
+    "Zn": 0x7D80B0,
+    "Mg": 0x8AFF00,
+    "Mn": 0x9C7AC7,
+    "Ca": 0x3DFF00,
 }
+
+# Fallback for any element not listed above (rendered grey at a mid radius).
+DEFAULT_VDW_RADIUS: float = 0.160
+DEFAULT_CPK_COLOR: int = 0x808080
 
 # ── Template type alias ───────────────────────────────────────────────────────
 # Each entry: (atom_name, element, n_nm, y_nm, z_nm)
@@ -1493,10 +1514,24 @@ def atomistic_to_json(model: AtomisticModel) -> dict:
             for a in model.atoms
         ],
         "bonds": [[i, j] for i, j in model.bonds],
-        "element_meta": {
-            el: {"vdw_radius": r, "cpk_color": CPK_COLOR[el]}
-            for el, r in VDW_RADIUS.items()
-        },
+        "element_meta": _element_meta(model),
+    }
+
+
+def _element_meta(model: AtomisticModel) -> dict:
+    """Per-element vdw radius + CPK colour for every element present in *model*.
+
+    Always includes the four DNA elements (P/C/N/O) so existing consumers keep
+    their keys; adds entries for any other element actually present (e.g. S in
+    proteins), falling back to grey/mid-radius for unknowns.
+    """
+    elements = set(VDW_RADIUS) | {a.element for a in model.atoms}
+    return {
+        el: {
+            "vdw_radius": VDW_RADIUS.get(el, DEFAULT_VDW_RADIUS),
+            "cpk_color": CPK_COLOR.get(el, DEFAULT_CPK_COLOR),
+        }
+        for el in elements
     }
 
 

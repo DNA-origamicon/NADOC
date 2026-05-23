@@ -2984,6 +2984,7 @@
           <button class="dropdown-item" id="menu-file-import-cadnano">Import caDNAno…</button>
           <button class="dropdown-item" id="menu-file-import-scadnano">Import scadnano…</button>
           <button class="dropdown-item" id="menu-file-import-pdb">Import PDB…</button>
+          <button class="dropdown-item" id="menu-file-attach-protein">Attach Protein to Overhang…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-export-seq-csv">Export Sequences (CSV)</button>
           <button class="dropdown-item" id="menu-file-export-cadnano">Export caDNAno (.json)</button>
@@ -3074,6 +3075,7 @@
               <button class="dropdown-item" id="menu-view-coloring-cluster">Cluster color<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item" id="menu-view-coloring-overhang-only">Overhang highlight<span class="routing-check-mark">●</span></button>
               <button class="dropdown-item" id="menu-view-coloring-cpk">Atomic (CPK)<span class="routing-check-mark">●</span></button>
+              <button class="dropdown-item" id="menu-view-coloring-source">By part / source<span class="routing-check-mark">●</span></button>
             </div>
           </div>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
@@ -3692,6 +3694,9 @@
               <option value="full" selected>Full (beads + slabs)</option>
               <option value="beads">Beads</option>
               <option value="cylinders">Cylinders</option>
+              <option value="vdw">VDW / Space-fill</option>
+              <option value="ballstick">Ball &amp; Stick</option>
+              <option value="surface">Surface (molecular)</option>
             </select>
           </div>
 

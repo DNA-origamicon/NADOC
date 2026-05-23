@@ -113,7 +113,7 @@ If any of these come up, I'll stop and explain rather than charge ahead:
 - **Every frontend code change must be exercised in the running app before claiming done.** If `just frontend` isn't running or no representative design has been loaded, your "done" message must lead with `NOT VERIFIED IN APP` and explain why. Type-checking and tests do not validate UI correctness.
 - Geometry/topology changes: load a representative `.nadoc` design (e.g. `Examples/teeth.nadoc`) and visually confirm.
 - Don't claim "tests pass" without running them.
-- Run frontend Playwright tests after two iteration failures.
+- **Playwright/E2E is NOT part of the routine dev cycle — it's too slow for tight iteration.** Default frontend verification is exercising the running app directly. Reach for Playwright only to (a) reproduce or troubleshoot a specific error/bug, or (b) clarify behavior when you're unsure what the user is describing. Do not write or run E2E specs as a default "done" step. See [REFERENCE_PLAYWRIGHT](memory/REFERENCE_PLAYWRIGHT.md).
 - Verification of specific features often needs user-generated designs. Ask which design should be used for testing.
 
 ### Done checklist (acknowledge each before claiming a task done)

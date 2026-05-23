@@ -1322,7 +1322,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldRightClick?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer } = opts
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -2219,6 +2219,27 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     const beadDist = beadHit0?.distance ?? Infinity
     const coneDist = coneHit0?.distance ?? Infinity
+
+    // ── Protein hit ──────────────────────────────────────────────────────────
+    // Click-to-select a free-standing or attached protein. Takes precedence
+    // only when it is the CLOSEST hit (respects depth vs DNA). The atom's
+    // helix_id carries the sentinel "__protein__{attachmentId}".
+    const protRenderer = getProteinRenderer?.()
+    if (protRenderer) {
+      const protHit = protRenderer.raycastPick(raycaster)
+      if (protHit && protHit.distance <= Math.min(beadDist, coneDist)) {
+        const hid = protHit.atom?.helix_id || ''
+        const attachmentId = hid.startsWith('__protein__') ? hid.slice('__protein__'.length) : null
+        if (attachmentId) {
+          _restoreStrand()
+          _clearCylinderSelection()
+          _mode = 'none'
+          _strandId = null
+          store.setState({ selectedObject: { type: 'protein', id: attachmentId, data: { attachment_id: attachmentId } } })
+          return
+        }
+      }
+    }
 
     // ── Cylinder LOD hit (only active when iHelixCylinders is visible) ───────
     if (beadDist === Infinity && coneDist === Infinity && selectableTypes.strands) {

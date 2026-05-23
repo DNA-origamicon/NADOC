@@ -27,7 +27,7 @@
 
 import * as THREE from 'three'
 
-import { ELEMENTS, BALL_RADIUS, BOND_RADIUS } from './atomistic_renderer/atom_palette.js'
+import { ELEMENTS, DEFAULT_ELEMENT, BALL_RADIUS, BOND_RADIUS } from './atomistic_renderer/atom_palette.js'
 import {
   SPHERE_GEO, CYLINDER_GEO, createGeometryState,
   atomOffset, sphereMatrix, bondMatrix,
@@ -93,16 +93,19 @@ export function initAtomisticRenderer(scene) {
     const bonds = data.bonds ?? []
     const isVdw = _state.mode === 'vdw'
 
-    // Bucket atoms by element, preserving order for instance mapping
+    // Bucket atoms by element, preserving order for instance mapping. A bucket
+    // is created lazily for any element present (including protein elements like
+    // S not in the base DNA catalogue); unknown elements fall back to a grey
+    // default rather than being silently dropped.
     const buckets = {}
-    for (const el of Object.keys(ELEMENTS)) buckets[el] = []
     for (const atom of atoms) {
-      if (buckets[atom.element]) buckets[atom.element].push(atom)
+      (buckets[atom.element] ??= []).push(atom)
     }
 
     for (const [el, group] of Object.entries(buckets)) {
       if (!group.length) continue
-      const radius = (isVdw ? ELEMENTS[el].vdw : BALL_RADIUS) * _vdwScale
+      const meta = ELEMENTS[el] ?? DEFAULT_ELEMENT
+      const radius = (isVdw ? meta.vdw : BALL_RADIUS) * _vdwScale
       const mesh   = new THREE.InstancedMesh(SPHERE_GEO, makeSphereMaterial(), group.length)
       mesh.frustumCulled = false
       // Enable per-instance colour (initialised to white; _applyColors sets them)
@@ -196,6 +199,74 @@ export function initAtomisticRenderer(scene) {
       _state.lastData = data
       _rebuild(data)
     },
+
+    /**
+     * Raycast the rendered atoms. Returns the closest hit's atom (+ distance)
+     * or null. Used for click-to-select; the atom's `helix_id` carries the
+     * protein sentinel `__protein__{attachmentId}`.
+     */
+    raycastPick(raycaster) {
+      const meshes = Object.values(_state.elementMeshes)
+      if (!meshes.length) return null
+      const hits = raycaster.intersectObjects(meshes, false)
+      if (!hits.length) return null
+      const hit = hits[0]
+      // Find which element bucket this mesh is, then map instanceId → atom.
+      for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
+        if (mesh === hit.object) {
+          const atom = _state.elementAtoms[el]?.[hit.instanceId]
+          return atom ? { atom, distance: hit.distance } : null
+        }
+      }
+      return null
+    },
+
+    /** Centroid of all currently-rendered atoms (world nm), or null. */
+    centroidOf(predicate = null) {
+      let n = 0; let x = 0; let y = 0; let z = 0
+      for (const [, group] of Object.entries(_state.elementAtoms)) {
+        for (const a of group) {
+          if (predicate && !predicate(a)) continue
+          x += a.x; y += a.y; z += a.z; n++
+        }
+      }
+      return n ? { x: x / n, y: y / n, z: z / n } : null
+    },
+
+    /**
+     * Snapshot the instances matching `predicate` so a live rigid transform can
+     * be previewed without a server round-trip (used by the gizmo during drag).
+     */
+    beginLiveTransform(predicate) {
+      const items = []
+      for (const [el, group] of Object.entries(_state.elementAtoms)) {
+        for (let i = 0; i < group.length; i++) {
+          if (predicate(group[i])) {
+            const a = group[i]
+            items.push({ el, idx: i, x: a.x, y: a.y, z: a.z })
+          }
+        }
+      }
+      _state.live = items
+    },
+
+    /** Apply a THREE.Matrix4 to the snapshotted instances (preview, per frame). */
+    applyLiveTransform(mat4) {
+      if (!_state.live?.length) return
+      const v = new THREE.Vector3()
+      const touched = new Set()
+      for (const it of _state.live) {
+        const mesh = _state.elementMeshes[it.el]
+        if (!mesh) continue
+        v.set(it.x, it.y, it.z).applyMatrix4(mat4)
+        mesh.setMatrixAt(it.idx, sphereMatrix(_state.geom, v.x, v.y, v.z, _state.elementRadius[it.el]))
+        touched.add(mesh)
+      }
+      for (const mesh of touched) mesh.instanceMatrix.needsUpdate = true
+    },
+
+    /** End the live-transform preview (next update() rebuilds authoritatively). */
+    endLiveTransform() { _state.live = null },
 
     /**
      * Switch display mode: 'off' | 'vdw' | 'ballstick'.

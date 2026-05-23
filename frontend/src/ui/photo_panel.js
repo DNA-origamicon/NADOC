@@ -25,6 +25,8 @@ const RESOLUTION_PRESETS = {
 
 const PROFILES_KEY        = 'nadoc.photoProfiles.v1'
 const ACTIVE_PROFILE_KEY  = 'nadoc.photoActiveProfile.v1'
+// One-time flag: the photo-mode default environment changed 'off' → 'room'.
+const ENV_ROOM_MIGRATION_KEY = 'nadoc.photoEnvRoomDefault.v1'
 
 function _loadProfiles() {
   try { return JSON.parse(localStorage.getItem(PROFILES_KEY) || '{}') }
@@ -32,6 +34,22 @@ function _loadProfiles() {
 }
 function _saveProfiles(p) {
   try { localStorage.setItem(PROFILES_KEY, JSON.stringify(p)) } catch {}
+}
+
+// The default photo environment is now a neutral 'room' studio so metallic/glossy
+// materials reflect and look correct.  Existing saved profiles pinned to the OLD
+// 'off' default would otherwise override that and keep metals flat — bump them to
+// 'room' exactly once.  Runs before any deliberate 'off' choice can be made, so a
+// user who later picks 'off' on purpose keeps it (the flag stops re-migration).
+function _migrateEnvDefaultToRoom() {
+  if (localStorage.getItem(ENV_ROOM_MIGRATION_KEY)) return
+  const profiles = _loadProfiles()
+  let changed = false
+  for (const s of Object.values(profiles)) {
+    if (s && s.environment === 'off') { s.environment = 'room'; changed = true }
+  }
+  if (changed) _saveProfiles(profiles)
+  try { localStorage.setItem(ENV_ROOM_MIGRATION_KEY, '1') } catch {}
 }
 function _getActiveProfileName() {
   return localStorage.getItem(ACTIVE_PROFILE_KEY) || ''
@@ -238,6 +256,7 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   // The actual application of the active profile is deferred to applyActiveProfile()
   // which the caller (main.js _photoModeEnter) invokes AFTER photoRenderer.activate(),
   // so material setters take effect properly instead of queueing with toast warnings.
+  _migrateEnvDefaultToRoom()
   _ensureDefaultProfile()
   _populateProfileDropdown()
 

@@ -17,7 +17,7 @@ import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
-import { FLUORO_EMISSION_COLORS, buildNucLetterMap, buildStapleColorMap } from './scene/helix_renderer.js'
+import { FLUORO_EMISSION_COLORS, buildNucLetterMap, buildStapleColorMap, BEAD_RADIUS } from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
@@ -51,6 +51,9 @@ import { initAssemblyOverhangsManagerPopup,
          open as openAssemblyOverhangsManager,
        } from './ui/assembly_overhangs_manager_popup.js'
 import { initPolymerizePanel }     from './ui/polymerize_panel.js'
+import { openProteinAttachModal }  from './ui/protein_attach_modal.js'
+import { openImportPdbModal }      from './ui/import_pdb_modal.js'
+import { initProteinGizmo }        from './scene/protein_gizmo.js'
 import { initUnfoldView }          from './scene/unfold_view.js'
 import { initCadnanoView }         from './scene/cadnano_view.js'
 import { initDeformView }          from './scene/deform_view.js'
@@ -66,6 +69,9 @@ import { initViewCube }            from './scene/view_cube.js'
 import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
 import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
+// Shared low-poly interactive geometries — used by reference to find atom/bond
+// InstancedMeshes for the export-only high-detail swap (see _withHighDetailGeometry).
+import { SPHERE_GEO as ATOM_SPHERE_GEO, CYLINDER_GEO as BOND_CYL_GEO } from './scene/atomistic_renderer/geometry_builder.js'
 import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initSpreadsheet }         from './ui/spreadsheet.js'
 import { initAssemblyPanel }        from './ui/assembly_panel.js'
@@ -587,6 +593,7 @@ async function main() {
 
   // ── Selection manager ───────────────────────────────────────────────────────
   const selectionManager = initSelectionManager(canvas, camera, designRenderer, {
+    getProteinRenderer: () => proteinRenderer,
     onNick: async ({ helixId, bpIndex, direction }) => {
       _clearStapleChecks()
       const result = await api.addNick({ helixId, bpIndex, direction })
@@ -1131,7 +1138,7 @@ async function main() {
       }
       statusEl.textContent = result.message
       if (result.positions?.length) {
-        // Overlay relaxed positions via the shared FEM-style overlay path.
+        // Overlay relaxed positions via the shared mrDNA relaxed-position path.
         designRenderer.applyFemPositions(result.positions)
       }
     })
@@ -1785,6 +1792,86 @@ async function main() {
 
   // ── Atomistic renderer (Phase AA) ───────────────────────────────────────────
   const atomisticRenderer = initAtomisticRenderer(scene)
+
+  // ── Protein renderer (imported proteins; independent of the DNA atomistic
+  // mode so proteins coexist with cylinders/beads/atomistic DNA). ─────────────
+  const proteinRenderer = initAtomisticRenderer(scene)
+  const _proteinCentroid = (id) =>
+    proteinRenderer.centroidOf(a => a.helix_id === `__protein__${id}`)
+
+  // Transform gizmo for the selected protein. Live preview during drag; on
+  // drag-end it commits a gizmo_move (which syncs the design → the currentDesign
+  // subscription below re-renders + re-anchors the gizmo). No onCommitted needed.
+  const proteinGizmo = initProteinGizmo(store, controls, {
+    onLiveStart: (id) => proteinRenderer.beginLiveTransform(a => a.helix_id === `__protein__${id}`),
+    onLive:      (m)  => proteinRenderer.applyLiveTransform(m),
+    onLiveEnd:   ()   => proteinRenderer.endLiveTransform(),
+  })
+
+  // Re-apply the selection visual: highlight + (re)anchor the gizmo at the
+  // selected protein's current centroid, or detach when nothing/none-existent
+  // is selected. Called after every render so the gizmo follows moves and
+  // drops away when the protein is deleted/undone.
+  function _syncProteinSelectionVisual() {
+    const sel = store.getState().selectedObject
+    const protId = sel?.type === 'protein' ? sel.id : null
+    const c = protId ? _proteinCentroid(protId) : null
+    if (protId && c) {
+      proteinRenderer.highlight(sel)
+      proteinGizmo.attach(protId, scene, camera, canvas, c)
+    } else {
+      if (proteinGizmo.isAttached()) proteinGizmo.detach()
+      proteinRenderer.highlight(null)
+    }
+  }
+
+  // Re-render proteins from the server — the design's attachments are the single
+  // source of truth. Coalesced so overlapping triggers don't double-fetch.
+  let _protRefreshInFlight = false
+  let _protRefreshPending = false
+  async function _refreshProteins() {
+    if (_protRefreshInFlight) { _protRefreshPending = true; return }
+    _protRefreshInFlight = true
+    try {
+      const resp = await fetch('/api/design/protein/atomistic')
+      if (!resp.ok) return
+      const data = await resp.json()
+      if (data?.atoms?.length) {
+        proteinRenderer.setMode('vdw')
+        proteinRenderer.update(data)
+      } else {
+        proteinRenderer.setMode('off')
+        proteinRenderer.update({ atoms: [] })   // clear any existing meshes
+      }
+      _syncProteinSelectionVisual()
+    } catch (e) {
+      console.error('Protein atomistic fetch error:', e)
+    } finally {
+      _protRefreshInFlight = false
+      if (_protRefreshPending) { _protRefreshPending = false; _refreshProteins() }
+    }
+  }
+
+  // Single source of truth: any change to the design (import, move, delete,
+  // undo, redo, attach/detach) re-renders proteins from its attachments.
+  store.subscribe((newState, prevState) => {
+    if (newState.currentDesign === prevState.currentDesign) return
+    const hasProteins = (newState.currentDesign?.protein_attachments?.length ?? 0) > 0
+    // Refresh when proteins exist now, or when the renderer is showing some
+    // (so a removal — undo/delete — clears them).
+    if (hasProteins || proteinRenderer.getMode() !== 'off') _refreshProteins()
+  })
+
+  // Selection change → update the gizmo/highlight (without a server round-trip).
+  store.subscribe((newState, prevState) => {
+    if (newState.selectedObject !== prevState.selectedObject) _syncProteinSelectionVisual()
+  })
+
+  if (window.__NADOC_DBG__) {
+    window.__NADOC_DBG__.proteinRenderer = proteinRenderer
+    window.__NADOC_DBG__.proteinGizmo = proteinGizmo
+    window.__NADOC_DBG__.refreshProteins = _refreshProteins
+  }
 
   // ── MD overlay + panel ───────────────────────────────────────────────────────
   const mdOverlay         = initMdOverlay(scene)
@@ -2894,6 +2981,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!currentDesign?.helices?.length) return
     if (isDeformActive()) return
 
+    // Atomistic representation has no 2D-unfold layout — block entering and explain.
+    if (!unfoldView.isActive() && store.getState().atomisticMode !== 'off') {
+      showToast('Unfold view is not available in atomistic representation — exit atomistic first')
+      return
+    }
+
     // U key while cadnano is active: exit cadnano but stay in unfold view,
     // rather than toggling unfold off (which would break cadnano's internal state).
     if (cadnanoView.isActive()) {
@@ -2954,6 +3047,13 @@ Typical debugging workflow for "reverts to 3D" bug:
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) return
     if (isDeformActive()) return
+
+    // Atomistic representation has no 2D-cadnano layout — block entering and explain.
+    if (!cadnanoView.isActive() && store.getState().atomisticMode !== 'off') {
+      showToast('Cadnano view is not available in atomistic representation — exit atomistic first')
+      return
+    }
+
     // Same deformation guard as unfold view.
     if (!cadnanoView.isActive()) {
       const hasDeformations       = !!(currentDesign?.deformations?.length)
@@ -3893,6 +3993,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       clusterGizmo?.detach()
       _removeToolPickListeners?.()
     }
+    proteinGizmo?.detach()
     // Deformed view stays ON after reset (it is always on by default).
     // If currently in straight view, reactivate before clearing state.
     if (!deformView.isActive()) deformView.activate()
@@ -5275,6 +5376,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     document.getElementById('menu-view-coloring-cluster')?.classList.toggle('is-checked', mode === 'cluster')
     document.getElementById('menu-view-coloring-overhang-only')?.classList.toggle('is-checked', mode === 'overhang-only')
     document.getElementById('menu-view-coloring-cpk')    ?.classList.toggle('is-checked', mode === 'cpk')
+    document.getElementById('menu-view-coloring-source') ?.classList.toggle('is-checked', mode === 'source')
     // Side-panel atom-color buttons mirror the (atomistic-relevant) modes.
     const cpkBtn    = document.getElementById('atom-color-cpk')
     const strandBtn = document.getElementById('atom-color-strand')
@@ -5286,6 +5388,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-view-coloring-cluster')?.addEventListener('click', () => _setColoringMode('cluster'))
   document.getElementById('menu-view-coloring-overhang-only')?.addEventListener('click', () => _setColoringMode('overhang-only'))
   document.getElementById('menu-view-coloring-cpk')    ?.addEventListener('click', () => _setColoringMode('cpk'))
+  document.getElementById('menu-view-coloring-source') ?.addEventListener('click', () => _setColoringMode('source'))
 
   document.getElementById('menu-view-reset')?.addEventListener('click', () => {
     const { currentGeometry } = store.getState()
@@ -8467,8 +8570,39 @@ Typical debugging workflow for "reverts to 3D" bug:
       _flAppendLog(`File fetched — ${Math.round(result.content.length / 1024)} KB`)
       _flSetProgress(25, 'Importing assembly…')
       _flAppendLog('Parsing and validating assembly…')
+
+      // The geometry build is owned by the assembly subscriber (mode-enter for a
+      // fresh open, the assemblyChanged branch for a reload while already in
+      // assembly mode).  Stash a one-shot progress callback + completion promise
+      // BEFORE importing so whichever branch fires drives THIS dialog and the
+      // build happens exactly once — at cylinders, never the saved representation.
+      // (Previously we ALSO built explicitly here, then the subscriber rebuilt
+      // again: a full throwaway build at the saved rep — ~24 s for surface.)
+      let _resolveBuilt, _rejectBuilt
+      const built = new Promise((res, rej) => { _resolveBuilt = res; _rejectBuilt = rej })
+      _assemblyLoadOnProgress = ({ stage, done, total, name, error }) => {
+        if (stage === 'fetched') {
+          _flAppendLog('Geometry received from server')
+          _flSetProgress(55, 'Building parts…')
+        } else if (stage === 'fetch_error') {
+          _flAppendLog('Geometry fetch failed — trying per-part fallback…', 'warn')
+        } else if (stage === 'instance_built') {
+          const pct = 55 + Math.round((done / total) * 45)
+          _flSetProgress(pct, `Part ${done} / ${total}`)
+          _flAppendLog(`  ✓ ${name ?? `Part ${done}`}`, 'success')
+        } else if (stage === 'instance_error') {
+          const pct = 55 + Math.round((done / total) * 45)
+          _flSetProgress(pct, `Part ${done} / ${total}`)
+          _flAppendLog(`  ✗ ${name ?? `Part ${done}`}: ${error}`, 'error')
+          _hasInstanceErrors = true
+        }
+      }
+      _assemblyLoadSettle = { resolve: _resolveBuilt, reject: _rejectBuilt }
+
       const ok = await api.importAssembly(result.content)
       if (!ok) {
+        _assemblyLoadOnProgress = null
+        _assemblyLoadSettle = null
         const err = store.getState().lastError
         _flAppendLog(`Import failed: ${err?.message ?? 'unknown error'}`, 'error')
         _flShowError('Failed to import assembly.')
@@ -8481,45 +8615,43 @@ Typical debugging workflow for "reverts to 3D" bug:
       _flAppendLog(`Assembly parsed — ${visible.length} part${visible.length !== 1 ? 's' : ''}`, 'success')
       _flSetProgress(40, `Loading ${visible.length} part${visible.length !== 1 ? 's' : ''}…`)
 
-      if (visible.length > 0) {
-        _flAppendLog('Fetching part geometry…')
-        await assemblyRenderer.rebuild(assembly, {
-          onProgress: ({ stage, done, total, name, error }) => {
-            if (stage === 'fetched') {
-              _flAppendLog('Geometry received from server')
-              _flSetProgress(55, `Building parts…`)
-            } else if (stage === 'fetch_error') {
-              _flAppendLog('Geometry fetch failed — trying per-part fallback…', 'warn')
-            } else if (stage === 'instance_built') {
-              const pct = 55 + Math.round((done / total) * 45)
-              _flSetProgress(pct, `Part ${done} / ${total}`)
-              _flAppendLog(`  ✓ ${name ?? `Part ${done}`}`, 'success')
-            } else if (stage === 'instance_error') {
-              const pct = 55 + Math.round((done / total) * 45)
-              _flSetProgress(pct, `Part ${done} / ${total}`)
-              _flAppendLog(`  ✗ ${name ?? `Part ${done}`}: ${error}`, 'error')
-              _hasInstanceErrors = true
-            }
-          },
-        })
-      }
-
       _assemblyName = path.replace(/\.nass$/i, '')
       _assemblyFileHandle = null
       _setAssemblyWorkspacePath(path)
 
+      if (visible.length > 0) {
+        _flAppendLog('Fetching part geometry…')
+      } else {
+        // Nothing to build — release the stash so the subscriber's empty rebuild
+        // doesn't leave us awaiting a promise nothing settles.
+        _assemblyLoadOnProgress = null
+        _assemblyLoadSettle = null
+        _resolveBuilt()
+      }
+
+      // Enter assembly mode.  Fresh open: this flips assemblyActive → the
+      // mode-enter branch builds (consuming the stash + framing the camera).
+      // Reload while already in assembly mode: the build already fired from the
+      // import above; this is a no-op for the build.
+      _enterAssemblyMode()
+
+      try {
+        await built
+      } catch (e) {
+        _hasInstanceErrors = true
+        _flAppendLog(`Build failed: ${e?.message ?? String(e)}`, 'error')
+      }
+
       if (_hasInstanceErrors) {
         _flAppendLog('Assembly loaded with errors.', 'warn')
-        _enterAssemblyMode()
-        _fitToView()
         _flShowError('Some parts failed to load.')
       } else {
         _flAppendLog('All parts loaded successfully.', 'success')
-        _enterAssemblyMode()
-        _fitToView()
         await _flShowSuccess('Assembly loaded successfully')
       }
     } catch (e) {
+      _assemblyLoadOnProgress = null
+      _assemblyLoadSettle = null
       _flAppendLog(`Exception: ${e?.message ?? String(e)}`, 'error')
       _flShowError('Could not load assembly.')
     }
@@ -8943,6 +9075,10 @@ Typical debugging workflow for "reverts to 3D" bug:
   // pop visually — the most informative default regardless of assembly
   // size.  Skips the PATCH if every part is already cylinders (avoids
   // spurious backend round-trips on a re-saved file).
+  // Called BEFORE the first renderer build on load, so the assembly builds
+  // straight to cylinders — the saved per-instance representation is NOT built
+  // first (it was always replaced by cylinders anyway, so that initial build was
+  // pure wasted load time).
   function _applyAssemblyLoadDefaults(assembly) {
     const instances = assembly?.instances ?? []
     if (instances.length === 0) return
@@ -8952,10 +9088,53 @@ Typical debugging workflow for "reverts to 3D" bug:
 
     const needsPatch = instances.some(inst => inst.representation !== 'cylinders')
     if (needsPatch) {
+      // Force cylinders in-memory so the upcoming build renders cylinders
+      // directly (no saved-rep build), then persist to the backend WITHOUT
+      // re-syncing the response — re-syncing would trigger a second rebuild.
+      for (const inst of instances) inst.representation = 'cylinders'
       api.batchPatchInstances(
         instances.map(inst => ({ id: inst.id, representation: 'cylinders' })),
+        { skipSync: true },
       ).catch(err => console.error('[assembly] default rep PATCH failed:', err))
     }
+  }
+
+  // One-shot disk-load stash, set by _openAssemblyFromServer and consumed by
+  // whichever subscriber branch performs the build (mode-enter for a fresh open,
+  // assemblyChanged for a reload while already in assembly mode).  `onProgress`
+  // drives the file-load dialog; `settle` resolves the caller's await once the
+  // build finishes.  Both are nulled the instant they're consumed so ordinary
+  // edits never pick them up.
+  let _assemblyLoadOnProgress = null
+  let _assemblyLoadSettle     = null
+
+  // Shared rebuild wiring for the assembly subscriber.  Routing both build
+  // branches through here keeps the heavy geometry build in exactly ONE place.
+  // `fitOnDone` frames the camera only for a fresh load (mode-enter / reload) —
+  // ordinary edits must not yank it.  The camera fit lives in the .then() because
+  // the assembly bounding box is empty until the build completes.
+  function _runAssemblyRebuild(assembly, { fitOnDone = false, activeInstanceId = null } = {}) {
+    const onProgress = _assemblyLoadOnProgress
+    const settle     = _assemblyLoadSettle
+    _assemblyLoadOnProgress = null
+    _assemblyLoadSettle     = null
+    assemblyRenderer.rebuild(assembly, onProgress ? { onProgress } : undefined)
+      .then(() => {
+        assemblyRenderer.rebuildLinkers(assembly)
+        _syncAssemblyBluntEnds()
+        if (activeInstanceId) {
+          const depths = computeFixedDepths(assembly)
+          if (depths.has(activeInstanceId)) _rebuildFixedLocks(assembly)
+        }
+        _syncAssemblyReprMenu(assembly)
+        if (fitOnDone) _fitToView()
+        settle?.resolve()
+      })
+      .catch(err => {
+        console.error('[assembly] rebuild failed:', err)
+        settle?.reject(err)
+      })
+    assemblyJointRenderer.rebuild(assembly)
   }
 
   // Drive assembly panel + assembly renderer from the assembly slice
@@ -8969,25 +9148,20 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (newState.assemblyActive) {
         _setDesignGeometryVisible(false)
         assemblyPanel.show()
+        // Force the cylinders load-default + coloring BEFORE the panel rebuild AND
+        // the geometry build: the renderer builds cylinders directly — never the
+        // saved representation (a surface-saved assembly would otherwise pay a
+        // ~24 s surface build here that's immediately discarded) — and the panel's
+        // per-part Repr dropdown shows the rep that's actually on screen.
+        if (newState.currentAssembly) _applyAssemblyLoadDefaults(newState.currentAssembly)
         assemblyPanel.rebuild(newState)
         if (newState.currentAssembly) {
-          assemblyRenderer.rebuild(newState.currentAssembly)
-            .then(() => {
-              assemblyRenderer.rebuildLinkers(newState.currentAssembly)
-              _syncAssemblyBluntEnds()
-              // Apply load defaults BEFORE the menu sync so the sync sees
-              // the freshly-patched cylinders state (otherwise the radio
-              // would briefly reflect the saved rep, then re-sync next
-              // frame when the PATCH response lands).
-              _applyAssemblyLoadDefaults(newState.currentAssembly)
-              _syncAssemblyReprMenu(newState.currentAssembly)
-              // Fit camera AFTER the renderer has built — the assembly
-              // bounding box is empty until then.  Earlier callers (the
-              // _openAssemblyFromServer path) ran _fitToView() before this
-              // subscriber's rebuild finished, so the camera stayed put.
-              _fitToView()
-            })
-          assemblyJointRenderer.rebuild(newState.currentAssembly)
+          // _runAssemblyRebuild owns the build so the disk-load path doesn't ALSO
+          // build separately.
+          _runAssemblyRebuild(newState.currentAssembly, {
+            fitOnDone: true,
+            activeInstanceId: newState.activeInstanceId,
+          })
         }
         controls.addEventListener('change', _updateFixedLockPositions)
         canvas.addEventListener('pointerdown',  _onAssemblyPointerDown)
@@ -9052,7 +9226,12 @@ Typical debugging workflow for "reverts to 3D" bug:
         if (prevCount === 0 && newCount > 0) _hideWelcome()
 
         assemblyPanel.rebuild(newState)
-        if (_assemblyTransformOnlyChange(prevState.currentAssembly, newState.currentAssembly)) {
+        // A disk-load reload (already in assembly mode) must never take the
+        // transform-only fast path: that skips the rebuild AND would leave
+        // _openAssemblyFromServer's load promise unsettled (hang).  Force the
+        // full rebuild whenever a load is in flight.
+        const isLoad = !!_assemblyLoadSettle
+        if (!isLoad && _assemblyTransformOnlyChange(prevState.currentAssembly, newState.currentAssembly)) {
           // Transform-only change (e.g. a move/rotate commit via propagateFk):
           // push each instance's new world matrix straight into the renderer
           // instead of disposing + re-fetching geometry — avoids the whole
@@ -9080,18 +9259,14 @@ Typical debugging workflow for "reverts to 3D" bug:
             if (depths.has(newState.activeInstanceId)) _rebuildFixedLocks(newState.currentAssembly)
           }
         } else {
-          assemblyRenderer.rebuild(newState.currentAssembly)
-            .then(() => {
-              assemblyRenderer.rebuildLinkers(newState.currentAssembly)
-              _syncAssemblyBluntEnds()
-              // If the active instance is anchored, rebuild locks with updated topology
-              if (newState.activeInstanceId) {
-                const depths = computeFixedDepths(newState.currentAssembly)
-                if (depths.has(newState.activeInstanceId)) _rebuildFixedLocks(newState.currentAssembly)
-              }
-              _syncAssemblyReprMenu(newState.currentAssembly)
-            })
-          assemblyJointRenderer.rebuild(newState.currentAssembly)
+          // Reload while already in assembly mode: apply the cylinders default +
+          // frame the camera, same as a fresh mode-enter.  Ordinary edits
+          // (isLoad false) keep their representation and camera untouched.
+          if (isLoad) _applyAssemblyLoadDefaults(newState.currentAssembly)
+          _runAssemblyRebuild(newState.currentAssembly, {
+            fitOnDone: isLoad,
+            activeInstanceId: newState.activeInstanceId,
+          })
         }
       }
       if (activeChanged) {
@@ -10360,7 +10535,51 @@ Typical debugging workflow for "reverts to 3D" bug:
    *  high-detail figures regardless of zoom.  The rep upgrade is a no-op when
    *  not in assembly mode, no instances, 'working', or already matching; the
    *  LOD suppression still applies whenever we're in an assembly. */
+  // High-segment geometry built once on first export, reused thereafter.  The
+  // interactive scene keeps its fast low-poly meshes; only the export render uses
+  // these.  Atoms/bonds are unit-sized (scaled per-instance); beads/fluorophores
+  // bake their radius (instances only translate), so the radius must match the
+  // low-poly source (GEO_SPHERE = BEAD_RADIUS, GEO_FLUORO_SPHERE = 0.25).
+  let _hdGeoCache = null
+  function _highDetailGeometries() {
+    if (_hdGeoCache) return _hdGeoCache
+    const W = 32, H = 24, RADIAL = 24   // sphere width/height segs; cylinder radial segs
+    _hdGeoCache = {
+      atom:   new THREE.SphereGeometry(1, W, H),
+      bond:   new THREE.CylinderGeometry(1, 1, 1, RADIAL, 1),
+      bead:   new THREE.SphereGeometry(BEAD_RADIUS, W, H),
+      fluoro: new THREE.SphereGeometry(0.25, W, H),
+    }
+    return _hdGeoCache
+  }
+
+  // Export-only: swap the low-poly interactive sphere/cylinder geometry on
+  // atom/bond/bead/fluorophore InstancedMeshes for smooth high-segment versions,
+  // run the export, then restore.  Atoms/bonds are matched by shared-geometry
+  // reference; CG beads/fluorophores by mesh name (and only when they're still
+  // real spheres — skip the opt-in impostor quads).  Swapping `mesh.geometry`
+  // leaves instanceMatrix/instanceColor untouched, so positions + colors hold.
+  async function _withHighDetailGeometry(fn) {
+    const hd = _highDetailGeometries()
+    const restore = []   // [mesh, originalGeometry]
+    scene.traverse(obj => {
+      if (!obj.isInstancedMesh) return
+      let hi = null
+      if      (obj.geometry === ATOM_SPHERE_GEO) hi = hd.atom
+      else if (obj.geometry === BOND_CYL_GEO)    hi = hd.bond
+      else if (obj.name === 'backboneSpheres'       && obj.geometry?.type === 'SphereGeometry') hi = hd.bead
+      else if (obj.name === 'extensionFluorophores' && obj.geometry?.type === 'SphereGeometry') hi = hd.fluoro
+      if (hi && obj.geometry !== hi) { restore.push([obj, obj.geometry]); obj.geometry = hi }
+    })
+    try { await fn() }
+    finally { for (const [mesh, geo] of restore) mesh.geometry = geo }
+  }
+
   async function _withExportRepresentation(fn) {
+    // Always export at full geometric detail (smooth atoms/beads/bonds), restored
+    // after.  Wraps the actual render so both the rep-upgrade and no-upgrade paths
+    // get it; harmless when no atom/bead meshes are present.
+    const run = () => _withHighDetailGeometry(fn)
     const st  = store.getState()
     const asm = st.currentAssembly
     const exportRep = asm?.export_representation ?? 'full'
@@ -10371,7 +10590,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     const needUpgrade = inAssembly && exportRep !== 'working'
       && !insts.every(i => i.representation === exportRep)
     if (!needUpgrade) {
-      try { await fn() }
+      try { await run() }
       finally { if (inAssembly) assemblyRenderer.setSuppressLodDemotion?.(false) }
       return
     }
@@ -10381,7 +10600,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     try {
       await _applyRepAndAwaitRebuild(insts.map(i => ({ id: i.id, representation: exportRep })))
       photoRenderer.resyncMaterials()
-      await fn()
+      await run()
     } finally {
       try {
         await _applyRepAndAwaitRebuild(snapshot)
@@ -11083,30 +11302,43 @@ Typical debugging workflow for "reverts to 3D" bug:
     input.click()
   })
 
-  // ── Import PDB ──────────────────────────────────────────────���─────────────────
-  document.getElementById('menu-file-import-pdb')?.addEventListener('click', () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.pdb'
-    input.onchange = async () => {
-      const file = input.files?.[0]
-      if (!file) return
-      const content = await file.text()
-      const merge = !!store.getState().currentDesign
+  // ── Import PDB (DNA design and/or protein, by RCSB id or file) ──────────────────
+  async function _runPdbImport(args) {
+    const json = await api.importPdbAuto(args)
+    if (!json) {
+      showToast('PDB import failed: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
+      return null
+    }
+    if (json.needs_dna_decision) return json   // modal prompts, then re-calls with the choice
+    const parts = []
+    if (json.imported?.dna) {
       _resetForNewDesign()
-      const result = await api.importPdbDesign(content, merge)
-      if (!result) {
-        showToast('Failed to import PDB file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
-        _showWelcome()
-        return
-      }
+      api.syncDesignResponse(json)
       _hideWelcome()
       workspace.hide()
-      if (result.import_warnings?.length) {
-        showToast(result.import_warnings.join(' | '), 5000)
-      }
+      parts.push('DNA design')
+      if (json.import_warnings?.length) showToast(json.import_warnings.join(' | '), 5000)
     }
-    input.click()
+    if (json.imported?.protein) {
+      // Sync the design (the import added a free attachment, server-side); the
+      // currentDesign subscription then re-renders the protein. Hide the welcome
+      // screen so the freshly-placed protein is visible.
+      api.syncDesignResponse(json)
+      _hideWelcome()
+      workspace.hide()
+      parts.push(`protein ${json.protein.name} (${json.protein.atom_count} atoms)`)
+    }
+    if (parts.length) showToast('Imported ' + parts.join(' + '), 4000)
+    return json
+  }
+
+  document.getElementById('menu-file-import-pdb')?.addEventListener('click', () => {
+    openImportPdbModal({ onResult: _runPdbImport })
+  })
+
+  // ── Attach Protein to Overhang ─────────────────────────────────────────────────
+  document.getElementById('menu-file-attach-protein')?.addEventListener('click', () => {
+    openProteinAttachModal({ store, api, onChanged: _refreshProteins })
   })
 
   // ── Export Sequences (CSV) ─────────────────────────────────────────────────────
@@ -11397,6 +11629,19 @@ Typical debugging workflow for "reverts to 3D" bug:
     cluster:         'Cluster color',
     'overhang-only': 'Overhang highlight',
     cpk:             'Atomic (CPK)',
+    source:          'By part / source',
+  }
+
+  // Coloring modes available for a representation, accounting for the assembly
+  // atomistic path (per-atom cpk/strand/cluster + per-source tint; no 'base').
+  // Shared by the menu-availability and the F-key cycle so they stay in sync.
+  function _supportedColoringSet(repr) {
+    const isAtom = repr === 'vdw' || repr === 'ballstick'
+    if (store.getState().assemblyActive) {
+      if (isAtom)             return new Set(['cpk', 'strand', 'cluster', 'source'])
+      if (repr === 'surface') return new Set(['strand', 'cluster', 'source'])
+    }
+    return _COLORING_SUPPORT[repr] ?? new Set(['strand', 'base', 'cluster'])
   }
 
   // Cycle to the next coloring mode supported by `repr`, in the insertion order
@@ -11404,7 +11649,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   // representation is already active.  No-op for reprs with <2 options
   // (Hull Prism has none).
   function _cycleColoringForRepr(repr) {
-    const modes = [...(_COLORING_SUPPORT[repr] ?? [])]
+    const modes = [...(_supportedColoringSet(repr))]
     if (modes.length < 2) return
     const current = store.getState().coloringMode || 'strand'
     const idx = modes.indexOf(current)
@@ -11414,25 +11659,28 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   function _updateColoringMenuAvailability(activeRepr) {
-    const supported = _COLORING_SUPPORT[activeRepr] ?? new Set(['strand', 'base', 'cluster'])
+    const isAtom = activeRepr === 'vdw' || activeRepr === 'ballstick'
+    const supported = _supportedColoringSet(activeRepr)
     const map = {
       strand:         'menu-view-coloring-strand',
       base:           'menu-view-coloring-base',
       cluster:        'menu-view-coloring-cluster',
       'overhang-only':'menu-view-coloring-overhang-only',
       cpk:            'menu-view-coloring-cpk',
+      source:         'menu-view-coloring-source',
     }
     for (const [mode, id] of Object.entries(map)) {
       const el = document.getElementById(id)
       if (!el) continue
       el.disabled = !supported.has(mode)
     }
-    // If the active mode is no longer supported, fall back to strand so the
-    // menu's checkmark always reflects an enabled item.  Hull Prism supports
-    // nothing — leave the mode untouched there.
+    // If the active mode is no longer supported, fall back to an enabled one so
+    // the menu's checkmark always reflects an available item. Atomistic prefers
+    // CPK; otherwise strand. Hull Prism supports nothing — leave it untouched.
     const current = store.getState().coloringMode || 'strand'
-    if (!supported.has(current) && supported.has('strand')) {
-      _setColoringMode('strand')
+    if (!supported.has(current)) {
+      if (isAtom && supported.has('cpk')) _setColoringMode('cpk')
+      else if (supported.has('strand'))  _setColoringMode('strand')
     }
   }
 
@@ -11510,20 +11758,20 @@ Typical debugging workflow for "reverts to 3D" bug:
         const instances = currentAssembly?.instances ?? []
         if (!instances.length) return
 
-        if (repr === 'surface') {
-          showToast('Surface representation is not supported for assembly parts.', { severity: 'error' })
-          return
-        }
-        if (repr === 'vdw' || repr === 'ballstick') {
+        if (repr === 'vdw' || repr === 'ballstick' || repr === 'surface') {
           const ok = await showConfirm({
-            title: 'Apply atomistic to assembly',
-            message: 'Atomistic rendering will be computed for every part in the assembly and can be slow for large designs.\n\nApply anyway?',
+            title: repr === 'surface' ? 'Apply surface to assembly' : 'Apply atomistic to assembly',
+            message: (repr === 'surface'
+              ? 'A molecular surface will be computed for every part'
+              : 'Atomistic rendering will be computed for every part')
+              + ' in the assembly and can be slow for large designs.\n\nApply anyway?',
             confirmLabel: 'Apply',
           })
           if (!ok) return
         }
 
         _updateReprRadio(repr)
+        _updateColoringMenuAvailability(repr)   // atomistic-in-assembly → cpk/strand/cluster/source
         // Batch into a single PATCH so the renderer rebuilds once instead
         // of once per instance. With 20 heavy origamis at 'cylinders' →
         // 'full', the previous Promise.all-of-individual-PATCHes path took

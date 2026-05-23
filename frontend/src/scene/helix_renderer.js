@@ -21,6 +21,12 @@
 
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import {
+  impostorsEnabled,
+  IMPOSTOR_QUAD,
+  makeImpostorPhongMaterial,
+  installSphereImpostorRaycast,
+} from './impostor_material.js'
 
 import {
   C,
@@ -113,7 +119,7 @@ const _tColor  = new THREE.Color()
 const _tMatrix = new THREE.Matrix4()
 const _tScale  = new THREE.Vector3()
 const _tPos    = new THREE.Vector3()
-const _physDir  = new THREE.Vector3()   // physics position update scratch vector
+const _physDir  = new THREE.Vector3()   // shared direction scratch (cylinder/cone/segment orientation)
 const _physDir2 = new THREE.Vector3()   // second scratch for applyPositionLerp
 const _saDir   = new THREE.Vector3()   // straight-axis direction scratch (applyUnfoldOffsets)
 // Axis-segment per-bp-range scratch (reused inside applyPositionLerp's
@@ -197,7 +203,7 @@ function slabCenter(bbPos, bnDir, distance) {
  *   'cylinders' rep would still allocate ~250 MB of hidden bead/cone/slab
  *   instance buffers per copy — devastating for polymerized assemblies.
  *
- *   The downstream control surface (setDetailLevel, applyFemRmsf, etc.)
+ *   The downstream control surface (setDetailLevel, applyFemPositions, etc.)
  *   iterates the per-entry arrays returned by this function. When the
  *   corresponding mesh was skipped those arrays are empty, so the loops
  *   are no-ops — no special-casing needed at the call sites.
@@ -601,8 +607,18 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // count so zero-instance meshes render nothing.
   const _sphereCount = _skipBeads ? 1 : Math.max(1, sphereNucs.length)
   const _cubeCount   = _skipBeads ? 1 : Math.max(1, cubeNucs.length)
+  // Sphere impostors (flag-gated): backbone beads become 2-tri camera-facing
+  // quads that ray-paint a lit sphere — ~70x fewer triangles at full rep. The
+  // center still rides the instance matrix, so setMatrixAt-based moves (mrDNA
+  // relax / deform / unfold / fade) and setColorAt are unchanged. 5' cubes stay real
+  // geometry (oriented markers, not spheres). See project_sphere_impostors.md.
+  const _useImpostors = impostorsEnabled()
   const iSpheres = new THREE.InstancedMesh(
-    GEO_SPHERE, new THREE.MeshPhongMaterial({ color: 0xffffff }), _sphereCount)
+    _useImpostors ? IMPOSTOR_QUAD : GEO_SPHERE,
+    _useImpostors ? makeImpostorPhongMaterial({ radius: BEAD_RADIUS })
+                  : new THREE.MeshPhongMaterial({ color: 0xffffff }),
+    _sphereCount)
+  if (_useImpostors) installSphereImpostorRaycast(iSpheres, BEAD_RADIUS)
   const iCubes   = new THREE.InstancedMesh(
     GEO_CUBE_5P, new THREE.MeshPhongMaterial({ color: 0xffffff }), _cubeCount)
   iSpheres.count = _skipBeads ? 0 : sphereNucs.length
@@ -646,10 +662,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   const _fluoroCount = _skipFluoros ? 1 : Math.max(1, fluoroGeometry.length)
   const iFluoros = new THREE.InstancedMesh(
-    GEO_FLUORO_SPHERE,
-    new THREE.MeshPhongMaterial({ color: 0xffffff }),
+    _useImpostors ? IMPOSTOR_QUAD : GEO_FLUORO_SPHERE,
+    _useImpostors ? makeImpostorPhongMaterial({ radius: 0.25 })  // matches GEO_FLUORO_SPHERE
+                  : new THREE.MeshPhongMaterial({ color: 0xffffff }),
     _fluoroCount,
   )
+  if (_useImpostors) installSphereImpostorRaycast(iFluoros, 0.25)
   iFluoros.count = _skipFluoros ? 0 : fluoroGeometry.length
   iFluoros.frustumCulled = false
   iFluoros.name = 'extensionFluorophores'
@@ -1384,7 +1402,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
   }
 
-  // ── Physics position update (moves the actual instanced meshes) ───────────
+  // ── Live position-update support (lookup maps + per-frame mesh updaters) ──
 
   // Fast lookup: nuc object → backboneEntry, and key string → backboneEntry.
   const _nucToEntry = new Map()
@@ -2542,7 +2560,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     },
 
     /**
-     * Apply FEM-style equilibrium-shape displacements.
+     * Apply mrDNA-relaxed backbone positions as a scene overlay (moves the
+     * instanced beads/cones/slabs in place; pass null to revert to geometry).
      * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
      */
     applyFemPositions(updates, amp = 1.0) {
@@ -2654,60 +2673,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iSlabs.setMatrixAt(slab.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
-    },
-
-    /**
-     * Colour backbone beads and slabs by RMSF value.
-     * @param {Object} rmsfMap  key → float 0-1 (stiff→flexible)
-     */
-    applyFemRmsf(rmsfMap) {
-      // Blue(stiff) → green → yellow → red(flexible)
-      function _rmsfColor(v) {
-        const t = Math.max(0, Math.min(1, v))
-        if (t < 0.333) {
-          // blue → green
-          const s = t / 0.333
-          const r = Math.round((1 - s) * 0x29)
-          const g = Math.round(s * 0xe6)
-          const b = Math.round((1 - s) * 0xff)
-          return (r << 16) | (g << 8) | b
-        } else if (t < 0.667) {
-          // green → yellow
-          const s = (t - 0.333) / 0.334
-          const r = Math.round(s * 0xff)
-          const g = 0xe6
-          const b = 0
-          return (r << 16) | (g << 8) | b
-        } else {
-          // yellow → red
-          const s = (t - 0.667) / 0.333
-          const r = 0xff
-          const g = Math.round((1 - s) * 0xe6)
-          return (r << 16) | (g << 8) | 0
-        }
-      }
-      for (const entry of backboneEntries) {
-        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
-        const val = rmsfMap[key]
-        if (val !== undefined) _setInstColor(entry, _rmsfColor(val))
-      }
-      if (iSpheres.instanceColor) iSpheres.instanceColor.needsUpdate = true
-      if (iCubes.instanceColor)   iCubes.instanceColor.needsUpdate   = true
-      for (const entry of slabEntries) {
-        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
-        const val = rmsfMap[key]
-        if (val !== undefined) _setInstColor(entry, _rmsfColor(val))
-      }
-      if (iSlabs.instanceColor) iSlabs.instanceColor.needsUpdate = true
-    },
-
-    /** Restore all colours to their pre-FEM defaults. */
-    clearFemColors() {
-      for (const entry of backboneEntries) _setInstColor(entry, entry.defaultColor)
-      if (iSpheres.instanceColor) iSpheres.instanceColor.needsUpdate = true
-      if (iCubes.instanceColor)   iCubes.instanceColor.needsUpdate   = true
-      for (const entry of slabEntries) _setInstColor(entry, entry.defaultColor)
-      if (iSlabs.instanceColor) iSlabs.instanceColor.needsUpdate = true
     },
 
     /**
@@ -3946,7 +3911,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      * reference into currentGeometry items, so mutating it propagates).
      *
      * Without this sync, downstream consumers that read currentGeometry
-     * (oxDNA / FEM / atomistic / surface mesh / save-to-disk / undo
+     * (mrDNA relax / atomistic / surface mesh / save-to-disk / undo
      * round-trip) would see stale pre-cluster-transform positions even
      * though the on-screen visuals are correct.
      *

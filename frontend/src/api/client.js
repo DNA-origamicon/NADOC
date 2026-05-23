@@ -1227,6 +1227,68 @@ export async function importPdbDesign(content, merge = false) {
   return _syncFromDesignResponse(json)
 }
 
+/**
+ * Unified PDB import. Provide `pdbId` (RCSB download) or `content` (file text).
+ * Routing is server-side: DNA → design, protein → library. Returns the raw
+ * response ({ imported:{dna,protein}, design?, protein?, import_warnings? })
+ * WITHOUT syncing — the caller decides reset/sync order via syncDesignResponse.
+ */
+export async function importPdbAuto({ content = null, pdbId = null, name = '', removeDnaFromProtein = null } = {}) {
+  return _request('POST', '/design/import/pdb-auto', {
+    content, pdb_id: pdbId, name, remove_dna_from_protein: removeDnaFromProtein,
+  })
+}
+
+/** Apply a design-response payload to the store (renderer rebuild). */
+export function syncDesignResponse(json) {
+  return _syncFromDesignResponse(json)
+}
+
+// ── Protein library (display-only proteins attached to overhangs) ──────────────
+
+/** Import a protein from PDB text into the session library. Returns metadata. */
+export async function importProtein(content, name = '', sourceFilename = '') {
+  return _request('POST', '/design/protein/import', {
+    content, name, source_filename: sourceFilename,
+  })
+}
+
+/** List protein assets in the session library (metadata only). */
+export async function listProteinLibrary() {
+  return _request('GET', '/design/protein/library')
+}
+
+/** Remove a protein asset from the session library. */
+export async function deleteProteinAsset(assetId) {
+  return _request('DELETE', `/design/protein/${assetId}`)
+}
+
+/** Anchor a protein to an overhang in the active design. Syncs the design. */
+export async function createProteinAttachment(assetId, overhangId, opts = {}) {
+  const json = await _request('POST', '/design/protein/attachments', {
+    asset_id: assetId,
+    overhang_id: overhangId,
+    attach_end: opts.attachEnd ?? 'free_end',
+    conjugation_atom_serial: opts.conjugationAtomSerial ?? null,
+    handle_complement_bp: opts.handleComplementBp ?? 0,
+    handle_spacer_nt: opts.handleSpacerNt ?? 0,
+  })
+  if (json) _syncFromDesignResponse(json)
+  return json   // carries attachment_id
+}
+
+/** Update a protein attachment (pose / conjugation / handle / visibility). */
+export async function patchProteinAttachment(attachmentId, patch) {
+  const json = await _request('PATCH', `/design/protein/attachments/${attachmentId}`, patch)
+  return _syncFromDesignResponse(json)
+}
+
+/** Detach a protein. */
+export async function deleteProteinAttachment(attachmentId) {
+  const json = await _request('DELETE', `/design/protein/attachments/${attachmentId}`)
+  return _syncFromDesignResponse(json)
+}
+
 export async function saveDesign(path) {
   return _request('POST', '/design/save', { path })
 }
@@ -1944,8 +2006,11 @@ export async function patchInstance(id, body) {
   return _syncFromAssemblyResponse(json)
 }
 
-export async function batchPatchInstances(patches) {
+export async function batchPatchInstances(patches, { skipSync = false } = {}) {
   const json = await _request('PATCH', '/assembly/instances/batch', { patches })
+  // skipSync: persist server-side without re-syncing the store (used when the
+  // caller has already updated the store, to avoid a redundant renderer rebuild).
+  if (skipSync) return json
   return _syncFromAssemblyResponse(json)
 }
 
@@ -2264,6 +2329,11 @@ export async function getInstanceGeometry(id) {
     json.nucleotides = _expandCompactNucleotides(json.nucleotides_compact)
   }
   return json
+}
+
+export async function getInstanceSurfaceGeometry(id, colorMode = 'strand', probeRadius = 0.28, gridSpacing = 0.20) {
+  const q = `color_mode=${encodeURIComponent(colorMode)}&probe_radius=${probeRadius}&grid_spacing=${gridSpacing}`
+  return _request('GET', `/assembly/instances/${id}/surface-geometry?${q}`)
 }
 
 export async function getInstanceAtomisticGeometry(id) {

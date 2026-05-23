@@ -45,6 +45,7 @@ from backend.core.models import (
     Design,
     MinorMutationLogEntry,
     MinorOpSubtype,
+    ProteinAsset,
     RoutingClusterLogEntry,
     SnapshotLogEntry,
     SnapshotOpKind,
@@ -68,6 +69,11 @@ _redo:    deque[Design] = deque(maxlen=MAX_UNDO_STEPS)
 # Optional pre-built atomistic model from PDB import.
 # When set, GET /design/atomistic returns this instead of computing from templates.
 _pdb_atomistic: object | None = None
+
+# Session-level protein library, keyed by asset id.  Decoupled from any one
+# design so an imported PDB can be attached across designs in a session.
+# Persisted copies live on the Design/Assembly that reference them.
+_protein_library: dict[str, ProteinAsset] = {}
 
 
 def get_design() -> Design | None:
@@ -476,6 +482,7 @@ def close_session() -> None:
         _history.clear()
         _redo.clear()
         _pdb_atomistic = None
+        _protein_library.clear()
 
 
 def snapshot() -> None:
@@ -502,6 +509,30 @@ def set_pdb_atomistic(model: object | None) -> None:
     global _pdb_atomistic
     with _lock:
         _pdb_atomistic = model
+
+
+def add_protein_asset(asset: ProteinAsset) -> None:
+    """Add (or replace) a protein asset in the session library."""
+    with _lock:
+        _protein_library[asset.id] = asset
+
+
+def get_protein_asset(asset_id: str) -> ProteinAsset | None:
+    """Return a library protein asset by id, or None."""
+    with _lock:
+        return _protein_library.get(asset_id)
+
+
+def list_protein_assets() -> list[ProteinAsset]:
+    """Return all protein assets in the session library."""
+    with _lock:
+        return list(_protein_library.values())
+
+
+def remove_protein_asset(asset_id: str) -> bool:
+    """Remove a protein asset from the library.  Returns True if it existed."""
+    with _lock:
+        return _protein_library.pop(asset_id, None) is not None
 
 
 def set_design_silent(d: Design) -> None:

@@ -117,7 +117,38 @@ const STYLE = `
     background: rgba(160, 200, 255, 0.90);
     border-color: rgba(200, 230, 255, 0.95);
   }
+  /* Roll buttons — sit just above the cube, rotate the view ±90° in-plane */
+  #vc-roll {
+    position: absolute;
+    right: 12px;
+    bottom: ${12 + SIZE + 24 + 6}px;
+    width: ${SIZE + 24}px;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    z-index: 15;
+    user-select: none;
+  }
+  .vc-roll-btn {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px;
+    border: 1px solid rgba(80, 130, 220, 0.40);
+    background: rgba(16, 28, 52, 0.68);
+    color: #7aa8e0;
+    cursor: pointer;
+    transition: background 0.10s, color 0.10s, border-color 0.10s;
+  }
+  .vc-roll-btn:hover {
+    background: rgba(40, 80, 180, 0.85);
+    color: #ddeeff;
+    border-color: rgba(140, 190, 255, 0.70);
+  }
 `
+
+// ── Roll-button icons (Lucide rotate-ccw / rotate-cw circular arrows) ──────────
+const ICON_CCW = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`
+const ICON_CW  = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>`
 
 // ── Public init ───────────────────────────────────────────────────────────────
 
@@ -166,23 +197,32 @@ export function initViewCube(container, camera, controls, getRoot) {
 
   container.appendChild(wrap)
 
-  // ── Snap / flip animation ───────────────────────────────────────────────────
+  // ── Roll buttons (90° in-plane view rotation) ────────────────────────────────
+  const roll = document.createElement('div')
+  roll.id = 'vc-roll'
+  for (const [icon, dir, title] of [
+    [ICON_CCW, +1, 'Rotate view 90° counter-clockwise'],
+    [ICON_CW,  -1, 'Rotate view 90° clockwise'],
+  ]) {
+    const btn = document.createElement('div')
+    btn.className = 'vc-roll-btn'
+    btn.title = title
+    btn.innerHTML = icon
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      _startRoll(dir * Math.PI / 2)
+    })
+    roll.appendChild(btn)
+  }
+  container.appendChild(roll)
+
+  // ── Snap animation ──────────────────────────────────────────────────────────
   let _animRaf = null
   const _tmpBox  = new THREE.Box3()
   const _tmpSize = new THREE.Vector3()
-  const _qFlip   = new THREE.Quaternion()
 
-  // If the camera is already looking from `normal` (dot > 0.92 ≈ 22°), spin
-  // camera.up 180° around the view axis instead of re-snapping.  This fixes
-  // cadnano imports that appear upside-down: click the face you're already on.
   function _snapToNormal(normal, up) {
     if (_animRaf) { cancelAnimationFrame(_animRaf); _animRaf = null }
-
-    const fromDir = camera.position.clone().sub(controls.target).normalize()
-    if (fromDir.dot(normal) > 0.92) {
-      _startFlip(fromDir)
-      return
-    }
 
     // Compute bounding box of the current design (fallback: origin)
     let center = new THREE.Vector3()
@@ -218,24 +258,22 @@ export function initViewCube(container, camera, controls, getRoot) {
     _animRaf = requestAnimationFrame(frame)
   }
 
-  // Rotate camera.up 180° around the current view direction via quaternion arc
-  // (cannot lerp antipodal vectors — they pass through zero at t=0.5).
-  function _startFlip(viewDir) {
-    const startUp = camera.up.clone()
-    // Rotation axis ⊥ both up and viewDir; gives a smooth arc through ±90°
-    let axis = startUp.clone().cross(viewDir)
-    if (axis.lengthSq() < 1e-6) {
-      // up ∥ viewDir (degenerate) — pick any perpendicular
-      axis.set(Math.abs(viewDir.x) < 0.9 ? 1 : 0, Math.abs(viewDir.x) < 0.9 ? 0 : 1, 0)
-    }
-    axis.normalize()
+  // Roll the camera in the screen plane by `angle` radians: rotate camera.up
+  // around the view direction (camera→target).  +angle is counter-clockwise,
+  // −angle clockwise, as the scene appears to the viewer.  up stays ⊥ forward,
+  // so there's no degenerate case.
+  const _qRoll = new THREE.Quaternion()
+  function _startRoll(angle) {
+    if (_animRaf) { cancelAnimationFrame(_animRaf); _animRaf = null }
+    const fwd       = controls.target.clone().sub(camera.position).normalize()
+    const startUp   = camera.up.clone()
     const startTime = performance.now()
 
     function frame(now) {
       const raw = Math.min((now - startTime) / ANIM_MS, 1)
       const t   = raw < 0.5 ? 2 * raw * raw : -1 + (4 - 2 * raw) * raw
-      _qFlip.setFromAxisAngle(axis, Math.PI * t)
-      camera.up.copy(startUp).applyQuaternion(_qFlip).normalize()
+      _qRoll.setFromAxisAngle(fwd, angle * t)
+      camera.up.copy(startUp).applyQuaternion(_qRoll).normalize()
       controls.update()
       _animRaf = raw < 1 ? requestAnimationFrame(frame) : null
     }
@@ -268,8 +306,8 @@ export function initViewCube(container, camera, controls, getRoot) {
 
   // ── Public API ──────────────────────────────────────────────────────────────
   return {
-    show()               { wrap.style.display = '' },
-    hide()               { wrap.style.display = 'none' },
+    show()               { wrap.style.display = ''; roll.style.display = '' },
+    hide()               { wrap.style.display = 'none'; roll.style.display = 'none' },
     snapToNormal(n, up)  { _snapToNormal(n, up) },
   }
 }

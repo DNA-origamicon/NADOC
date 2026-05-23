@@ -81,6 +81,15 @@ export async function deleteHelix(helixId) {
 }
 
 /**
+ * Reorder the vertical arrangement of helices in the pathview.
+ * `orderedIds` must be every existing helix id exactly once, top-to-bottom.
+ * Pure display change — touches design.helices array order only.
+ */
+export async function reorderHelices(orderedIds) {
+  return mutate(req => req('PUT', '/design/helices/reorder', { ordered_ids: orderedIds }))
+}
+
+/**
  * Extend a helix's bp range to cover [loBp, hiBp].  Never shrinks.
  * Adjusts axis geometry and phase so existing nucleotides stay in place.
  */

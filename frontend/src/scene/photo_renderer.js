@@ -107,8 +107,11 @@ export function createPhotoRenderer(sceneCtx) {
     pathTracing: false,
     fluorophoreEmissive:  false,
     fluorophoreIntensity: 5.0,
-    environment:           'off',   // 'off' | 'room' | 'file'
-    environmentName:       '',      // human-readable identifier
+    environment:           'room',  // 'off' | 'room' | 'file' — default to a neutral
+                                     // studio so metallic/glossy PBR presets actually
+                                     // reflect (metalness=1 with no env renders dark).
+                                     // Reflections only; background follows bgType.
+    environmentName:       'Room Studio',  // human-readable identifier
     environmentBackground: false,
     translucency:          0.0,     // 0..1, applied to full + cylinders reps
     envEffect:             'none',  // 'none' | 'mist'
@@ -122,7 +125,7 @@ export function createPhotoRenderer(sceneCtx) {
 
   // Environment state — kept separately so we can restore on deactivate and
   // re-bake against the offscreen renderer during export.
-  let _envSourceType   = 'off'      // 'off' | 'room' | 'file'
+  let _envSourceType   = 'room'     // 'off' | 'room' | 'file' (default: studio reflections)
   let _envSourceHDR    = null       // DataTexture loaded by RGBELoader (raster source)
   let _envTexture      = null       // PMREM-baked texture currently in scene.environment
   let _savedSceneEnv   = undefined  // pre-photo-mode scene.environment

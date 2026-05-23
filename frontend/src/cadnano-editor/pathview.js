@@ -245,6 +245,7 @@ export function initPathview(canvasEl, containerEl, {
   onForcedLigation,
   onResizeEnds,
   onShiftDomains,
+  onReorderHelices,
   onMoveCrossover,
   onBatchMoveCrossovers,
   onInsertLoopSkip,
@@ -315,6 +316,12 @@ export function initPathview(canvasEl, containerEl, {
   //   end:{helix_id}_{bp}_{direction}          — individual 5′ or 3′ end cap
   //   xo:{helix_id}_{index}_{strand}           — crossover arc (keyed on half_a)
   let _selectedElements = new Set()
+
+  // ── Helix (gutter-circle) selection ──────────────────────────────────────────
+  // Independent of _selectedElements (which tracks strand-level elements). These
+  // are helix IDs selected by clicking / lasso-ing the numbered gutter circles,
+  // used only by the drag-to-reorder interaction. Does NOT emit onSelectionChange.
+  let _selectedHelices = new Set()
 
   function _domainLineKey(dom) {
     const lo = Math.min(dom.start_bp, dom.end_bp)
@@ -506,6 +513,21 @@ export function initPathview(canvasEl, containerEl, {
   let _xoverDragGroup     = []
   const XOVER_SNAP_DIST   = 7      // snap threshold in bp units
 
+  // ── Gutter lasso (screen-space vertical rubber-band over the helix circles) ──
+  let _gutterLassoStarted = false
+  let _gutterLassoActive  = false
+  let _gutterLassoCtrl    = false   // ctrl/meta held at start (additive)
+  let _gutterLassoSY0     = 0       // screen-Y at start
+  let _gutterLassoSY1     = 0       // current screen-Y
+
+  // ── Helix drag-to-reorder (drag selected gutter circles to a new position) ───
+  let _helixDragArmed     = false   // pointerdown on a selected circle, below threshold
+  let _helixDragActive    = false   // past DRAG_THRESHOLD — drawing ghost + arrow
+  let _helixDragStartSX   = 0
+  let _helixDragStartSY   = 0
+  let _helixDragCursorSY  = 0       // current cursor screen-Y (ghost follows)
+  let _helixDragInsertIdx = 0       // gap index in display order (0.._helices.length)
+
   let _dbgLastEvent = '—'
   let _dbgDetail    = []   // extra lines appended to the debug overlay after each nick
   let _dbgShowSprites = false   // toggle with 'D' key — draws sprite hit-radius circles
@@ -539,6 +561,49 @@ export function initPathview(canvasEl, containerEl, {
   function _bpToX(bp)      { return GUTTER + bp * BP_W }
   function _bpCenterX(bp)  { return GUTTER + (bp + 0.5) * BP_W }
   function _xToBp(worldX)  { return Math.floor((worldX - GUTTER) / BP_W) }
+
+  // ── Gutter-circle helpers (screen-space — the gutter is the frozen x<GUTTER strip)
+
+  /** Screen-Y of a helix's gutter circle centre (matches _drawGutter). */
+  function _gutterCircleSY(info) {
+    return ((info.fwdY + info.revY) / 2) * _zoom + _panY
+  }
+
+  /** Helix ID whose gutter circle contains screen point (sx, sy), or null. */
+  function _helixAtGutter(sx, sy) {
+    if (sx > GUTTER || sy < RULER_H) return null
+    for (const [hid, info] of _rowMap) {
+      if (Math.hypot(sx - GUTTER / 2, sy - _gutterCircleSY(info)) <= LABEL_R) return hid
+    }
+    return null
+  }
+
+  /** Insertion gap index for a cursor screen-Y, in DISPLAY order (0.._helices.length).
+   *  = the number of helix rows whose circle centre sits above the cursor. */
+  function _gapIndexFromScreenY(sy) {
+    let idx = 0
+    for (const [, info] of _rowMap) {
+      if (sy > _gutterCircleSY(info)) idx++
+    }
+    return idx
+  }
+
+  /** Compute the new helix-id order (in DESIGN-array order) after dropping the
+   *  selected gutter circles as one contiguous block at display gap `gapIdx`.
+   *  Returns null for a no-op (empty selection or dropped onto itself). */
+  function _computeReorderedHelixIds(gapIdx) {
+    const display = [..._rowMap.keys()]                      // display (post-reverse) order
+    const sel  = display.filter(id => _selectedHelices.has(id))
+    if (sel.length === 0) return null
+    const rest = display.filter(id => !_selectedHelices.has(id))
+    // Translate the display gap into an index within `rest` (count unselected rows above).
+    let insertAt = 0
+    for (let i = 0; i < gapIdx; i++) if (!_selectedHelices.has(display[i])) insertAt++
+    const newDisplay = [...rest.slice(0, insertAt), ...sel, ...rest.slice(insertAt)]
+    if (newDisplay.every((id, i) => id === display[i])) return null   // dropped onto itself
+    // _rowMap/display is post-reverse; design.helices is native (pre-reverse) order.
+    return _nativeOrientation ? newDisplay : [...newDisplay].reverse()
+  }
 
   // ── Slice position helper ─────────────────────────────────────────────────────
   function _updateSliceBp(bp) {
@@ -2862,7 +2927,7 @@ export function initPathview(canvasEl, containerEl, {
     ctx.save()
     // Clip circles below the frozen ruler band so they don't bleed into it.
     ctx.beginPath(); ctx.rect(0, RULER_H, GUTTER, H - RULER_H); ctx.clip()
-    for (const [, info] of _rowMap) {
+    for (const [hid, info] of _rowMap) {
       const cy      = (info.fwdY + info.revY) / 2
       const screenY = cy * _zoom + _panY
       if (screenY + LABEL_R < RULER_H || screenY - LABEL_R > H) continue
@@ -2870,8 +2935,14 @@ export function initPathview(canvasEl, containerEl, {
       ctx.beginPath(); ctx.arc(cx, screenY, LABEL_R, 0, 2 * Math.PI)
       ctx.fillStyle   = info.scaffoldFwd ? CLR_LABEL_FWD_FILL   : CLR_LABEL_REV_FILL
       ctx.fill()
-      ctx.strokeStyle = info.scaffoldFwd ? CLR_LABEL_FWD_STROKE : CLR_LABEL_REV_STROKE
-      ctx.lineWidth = 1.5; ctx.stroke()
+      if (_selectedHelices.has(hid)) {
+        // Selected for reordering — bright blue ring on top of the base stroke.
+        ctx.strokeStyle = '#388bfd'; ctx.lineWidth = 3
+      } else {
+        ctx.strokeStyle = info.scaffoldFwd ? CLR_LABEL_FWD_STROKE : CLR_LABEL_REV_STROKE
+        ctx.lineWidth = 1.5
+      }
+      ctx.stroke()
       // Circle radius is LABEL_R screen pixels (fixed, doesn't scale with zoom).
       ctx.font = `bold ${LABEL_R * 1.15}px sans-serif`
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
@@ -2879,6 +2950,61 @@ export function initPathview(canvasEl, containerEl, {
       ctx.fillText(info.label ?? info.idx, cx, screenY)
     }
     ctx.textBaseline = 'alphabetic'
+    ctx.restore()
+  }
+
+  // ── Draw: gutter lasso (screen-space vertical rubber-band) ───────────────────
+  function _drawGutterLasso() {
+    if (!_gutterLassoActive) return
+    const y0 = Math.min(_gutterLassoSY0, _gutterLassoSY1)
+    const y1 = Math.max(_gutterLassoSY0, _gutterLassoSY1)
+    ctx.save()
+    ctx.setLineDash([4, 4])
+    ctx.strokeStyle = '#388bfd'; ctx.lineWidth = 1.5
+    ctx.strokeRect(1, y0, GUTTER - 2, y1 - y0)
+    ctx.fillStyle = 'rgba(56, 139, 253, 0.10)'
+    ctx.fillRect(1, y0, GUTTER - 2, y1 - y0)
+    ctx.restore()
+  }
+
+  // ── Draw: helix drag-to-reorder ghost (screen-space) ─────────────────────────
+  // Blue outline rectangle enclosing the dragged circles (follows the cursor) +
+  // a red insertion arrow at the gap the cursor is nearest.
+  function _drawHelixDragGhost() {
+    if (!_helixDragActive) return
+    const rows = [..._rowMap.values()]
+    const n    = rows.length
+    if (n === 0) return
+
+    // ── Red insertion arrow at the current gap ────────────────────────────────
+    const k  = Math.max(0, Math.min(n, _helixDragInsertIdx))
+    const sy = rows.map(_gutterCircleSY)
+    const span = ROW_H * _zoom / 2
+    const arrowY = k === 0 ? sy[0] - span
+                 : k >= n  ? sy[n - 1] + span
+                 : (sy[k - 1] + sy[k]) / 2
+    ctx.save()
+    ctx.strokeStyle = '#e53935'; ctx.lineWidth = 2.5
+    ctx.beginPath(); ctx.moveTo(2, arrowY); ctx.lineTo(GUTTER + 54, arrowY); ctx.stroke()
+    ctx.fillStyle = '#e53935'
+    ctx.beginPath()
+    ctx.moveTo(GUTTER + 62, arrowY)
+    ctx.lineTo(GUTTER + 50, arrowY - 7)
+    ctx.lineTo(GUTTER + 50, arrowY + 7)
+    ctx.closePath(); ctx.fill()
+
+    // ── Blue outline around the selected circles, following the cursor ────────
+    const selSY = []
+    for (const [hid, info] of _rowMap) if (_selectedHelices.has(hid)) selSY.push(_gutterCircleSY(info))
+    if (selSY.length > 0) {
+      const blkH = (Math.max(...selSY) - Math.min(...selSY)) + 2 * LABEL_R + 6
+      const top  = _helixDragCursorSY - blkH / 2
+      ctx.setLineDash([])
+      ctx.strokeStyle = '#388bfd'; ctx.lineWidth = 2
+      ctx.strokeRect(2, top, GUTTER - 4, blkH)
+      ctx.fillStyle = 'rgba(56, 139, 253, 0.12)'
+      ctx.fillRect(2, top, GUTTER - 4, blkH)
+    }
     ctx.restore()
   }
 
@@ -3048,6 +3174,8 @@ export function initPathview(canvasEl, containerEl, {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     _drawGutter()          // frozen left panel
     _drawRuler()           // frozen top ruler (painted after gutter to cover corner)
+    _drawGutterLasso()     // gutter-circle rubber-band (over the frozen gutter)
+    _drawHelixDragGhost()  // drag-to-reorder blue block + red insertion arrow
     _drawHeatmapLegend()   // heat map legend (right-centre)
     _drawDebug()
   }
@@ -3110,6 +3238,37 @@ export function initPathview(canvasEl, containerEl, {
     // ── Slice bar drag ──────────────────────────────────────────────────────────
     if (_isNearSliceBar(e.offsetX)) {
       _sliceDragging = true
+      canvasEl.setPointerCapture(e.pointerId); e.preventDefault(); return
+    }
+
+    // ── Gutter circles: select / lasso / arm reorder-drag ────────────────────────
+    // The gutter is the frozen left strip (x < GUTTER); content lives at x ≥ GUTTER,
+    // so this is handled before any content hit-test with no conflict.
+    if (_activeTool === 'select' && e.offsetX < GUTTER && e.offsetY >= RULER_H) {
+      const hid = _helixAtGutter(e.offsetX, e.offsetY)
+      if (hid) {
+        if (e.ctrlKey || e.metaKey) {
+          if (_selectedHelices.has(hid)) _selectedHelices.delete(hid)
+          else _selectedHelices.add(hid)
+        } else if (!_selectedHelices.has(hid)) {
+          _selectedHelices = new Set([hid])
+        }
+        // Arm a reorder drag (commits in pointerup only if it crosses the threshold).
+        if (_selectedHelices.has(hid)) {
+          _helixDragArmed   = true
+          _helixDragActive  = false
+          _helixDragStartSX = e.offsetX
+          _helixDragStartSY = e.offsetY
+          canvasEl.setPointerCapture(e.pointerId)
+        }
+        _draw(); e.preventDefault(); return
+      }
+      // Empty gutter → start a vertical lasso over the circles.
+      _gutterLassoStarted = true
+      _gutterLassoActive  = false
+      _gutterLassoCtrl    = e.ctrlKey || e.metaKey
+      _gutterLassoSY0     = e.offsetY
+      _gutterLassoSY1     = e.offsetY
       canvasEl.setPointerCapture(e.pointerId); e.preventDefault(); return
     }
 
@@ -3568,6 +3727,23 @@ export function initPathview(canvasEl, containerEl, {
       }
       _draw(); return
     }
+    if (_helixDragArmed || _helixDragActive) {
+      const dx = e.offsetX - _helixDragStartSX, dy = e.offsetY - _helixDragStartSY
+      if (!_helixDragActive && dx * dx + dy * dy > DRAG_THRESHOLD * DRAG_THRESHOLD) _helixDragActive = true
+      if (_helixDragActive) {
+        _helixDragCursorSY  = e.offsetY
+        _helixDragInsertIdx = _gapIndexFromScreenY(e.offsetY)
+        canvasEl.style.cursor = 'grabbing'
+        _draw()
+      }
+      return
+    }
+    if (_gutterLassoStarted) {
+      _gutterLassoSY1 = e.offsetY
+      if (Math.abs(e.offsetY - _gutterLassoSY0) > DRAG_THRESHOLD) _gutterLassoActive = true
+      if (_gutterLassoActive) _draw()
+      return
+    }
     if (_panActive) {
       _panX = _panStartPanX + (e.clientX - _panStartCX)
       _panY = _panStartPanY + (e.clientY - _panStartCY)
@@ -3601,7 +3777,9 @@ export function initPathview(canvasEl, containerEl, {
       if (_shiftHeld && _hoverHelixId !== prev) _draw()
     }
     // Cursor + hover
-    if (_isNearSliceBar(e.offsetX)) {
+    if (_activeTool === 'select' && _helixAtGutter(e.offsetX, e.offsetY)) {
+      canvasEl.style.cursor = 'grab'
+    } else if (_isNearSliceBar(e.offsetX)) {
       canvasEl.style.cursor = 'col-resize'
     } else if (_selectFilter.xover && _hitTestCrossoverSprite(e.offsetX, e.offsetY)) {
       canvasEl.style.cursor = 'pointer'
@@ -3654,6 +3832,36 @@ export function initPathview(canvasEl, containerEl, {
   })
 
   canvasEl.addEventListener('pointerup', (e) => {
+    if ((_helixDragArmed || _helixDragActive) && e.button === 0) {
+      const wasActive = _helixDragActive
+      _helixDragArmed  = false
+      _helixDragActive = false
+      canvasEl.style.cursor = 'default'
+      if (!wasActive) { _draw(); return }   // pure click — selection set in pointerdown
+      const orderedIds = _computeReorderedHelixIds(_helixDragInsertIdx)
+      _draw()
+      if (orderedIds) onReorderHelices?.(orderedIds)
+      return
+    }
+    if (_gutterLassoStarted && e.button === 0) {
+      _gutterLassoStarted = false
+      if (_gutterLassoActive) {
+        _gutterLassoActive = false
+        const y0 = Math.min(_gutterLassoSY0, _gutterLassoSY1)
+        const y1 = Math.max(_gutterLassoSY0, _gutterLassoSY1)
+        const hits = new Set()
+        for (const [hid, info] of _rowMap) {
+          const sy = _gutterCircleSY(info)
+          if (sy >= y0 && sy <= y1) hits.add(hid)
+        }
+        if (_gutterLassoCtrl) { for (const h of hits) _selectedHelices.add(h) }
+        else                  { _selectedHelices = hits }
+      } else if (!_gutterLassoCtrl) {
+        // Empty-gutter click (no drag, no ctrl) → clear helix selection.
+        _selectedHelices = new Set()
+      }
+      _draw(); return
+    }
     if (_xoverDragActive && e.button === 0) {
       _xoverDragActive = false
       const snapBp = _xoverDragSnapBp
@@ -3843,6 +4051,8 @@ export function initPathview(canvasEl, containerEl, {
     if (_xoverDragActive)              { _xoverDragActive = false; _xoverDragSnapBp = null; _xoverDragCursorBp = null; _xoverDragGroup = []; _hideDragTooltip(); needDraw = true }
     if (_forcedLigActive)              { _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null; needDraw = true }
     if (_lassoStarted || _lassoActive) { _lassoStarted = false; _lassoActive = false; needDraw = true }
+    if (_helixDragArmed || _helixDragActive)      { _helixDragArmed = false; _helixDragActive = false; canvasEl.style.cursor = 'default'; needDraw = true }
+    if (_gutterLassoStarted || _gutterLassoActive){ _gutterLassoStarted = false; _gutterLassoActive = false; needDraw = true }
     if (_painting)                     { _painting = false; _paintH = null; needDraw = true }
     if (_nickHover !== null)           { _nickHover = null; _dbgDetail = []; needDraw = true }
     if (_hoverHelixId !== null)       { _hoverHelixId = null; needDraw = true }
@@ -3854,6 +4064,8 @@ export function initPathview(canvasEl, containerEl, {
     if (_domDragActive)   { _domDragActive = false; _domDragDeltaBp = 0; _hideDragTooltip(); _draw() }
     if (_xoverDragActive) { _xoverDragActive = false; _xoverDragSnapBp = null; _xoverDragCursorBp = null; _xoverDragGroup = []; _hideDragTooltip(); _draw() }
     if (_forcedLigActive) { _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null; _draw() }
+    if (_helixDragArmed || _helixDragActive)      { _helixDragArmed = false; _helixDragActive = false; canvasEl.style.cursor = 'default'; _draw() }
+    if (_gutterLassoStarted || _gutterLassoActive){ _gutterLassoStarted = false; _gutterLassoActive = false; _draw() }
     if (_panActive)       { _panActive = false; _draw() }
     if (_sliceDragging)   { _sliceDragging = false; _draw() }
   })
@@ -3967,6 +4179,9 @@ export function initPathview(canvasEl, containerEl, {
     setTool(tool) {
       _activeTool = tool
       _lassoStarted = false; _lassoActive = false
+      _helixDragArmed = false; _helixDragActive = false
+      _gutterLassoStarted = false; _gutterLassoActive = false
+      if (tool !== 'select') _selectedHelices = new Set()
       if (_forcedLigActive) { _forcedLigActive = false; _forcedLigStrand = null; _forcedLigDom = null; _forcedLigHoverTarget = null }
       if (_painting)        { _painting = false; _paintH = null }
       if (_endDragActive)   { _endDragActive = false; _endDragDeltaBp = 0; _hideDragTooltip() }
@@ -4061,6 +4276,7 @@ export function initPathview(canvasEl, containerEl, {
       }
       _design = design
       _selectedElements = new Set()   // clear selection on design change
+      _selectedHelices  = new Set()   // clear gutter-circle selection too
       _rebuildLayout()
       _resize()
       if (!_fitDone && _helices.length > 0) {

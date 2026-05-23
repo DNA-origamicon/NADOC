@@ -42,7 +42,7 @@ const PANEL_HTML = `
   <div id="poly-eligibility" style="font-size:var(--text-xs);margin-bottom:8px;min-height:16px"></div>
   <div class="def-row" style="margin-bottom:6px">
     <label style="width:96px">Chain length</label>
-    <input type="number" id="poly-count" min="2" max="64" value="3" style="width:60px">
+    <input type="number" id="poly-count" min="2" value="3" style="width:60px">
     <span class="unit" style="font-size:var(--text-xs);color:#8b949e;margin-left:4px">total</span>
   </div>
   <div style="font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin:6px 0 2px">Direction</div>
@@ -263,7 +263,7 @@ export function initPolymerizePanel(store) {
   // committing. Replaces the previous blocking confirm() at moderate counts.
   function _updateCostPreview() {
     if (!_selectedJointId || goBtn.disabled) { costPreviewEl.textContent = ''; return }
-    const count     = Math.max(2, Math.min(64, parseInt(countInput.value, 10) || 2))
+    const count     = Math.max(2, parseInt(countInput.value, 10) || 2)
     const direction = panel.querySelector('input[name="poly-dir"]:checked')?.value || 'forward'
     const n_add     = _additionalSelected.size
     const projected = _estimatedNewInstanceCount(count, direction, n_add)
@@ -307,7 +307,7 @@ export function initPolymerizePanel(store) {
   // ── Polymerize button ──────────────────────────────────────────────────────
   goBtn.addEventListener('click', async () => {
     if (!_selectedJointId) return
-    const count     = Math.max(2, Math.min(64, parseInt(countInput.value, 10) || 2))
+    const count     = Math.max(2, parseInt(countInput.value, 10) || 2)
     const direction = panel.querySelector('input[name="poly-dir"]:checked')?.value || 'forward'
     const additional_instance_ids = [..._additionalSelected]
     const projected = _estimatedNewInstanceCount(count, direction, additional_instance_ids.length)
