@@ -1029,6 +1029,37 @@ export function initPathview(canvasEl, containerEl, {
   }
 
   /**
+   * Clamp a clicked cell `col` to a valid nick bp within `dom`.
+   *
+   * Normally a nick can't land on the domain's own 3′ terminus (it'd leave a
+   * 0-bp fragment). BUT when the strand CONTINUES collinearly past that terminus
+   * — an inline overhang/duplex split: the next domain is the same helix &
+   * direction, bp-adjacent, i.e. NOT a crossover (a crossover changes helix) —
+   * nicking there splits the continuous strand into two real strands, so the
+   * terminus is a legal nick point. (REVERSE already reaches its 3′ edge `lo`
+   * via the lower clamp, so only the FORWARD upper clamp needs widening.)
+   */
+  function _nickBpForDomain(dom, col) {
+    const lo = Math.min(dom.start_bp, dom.end_bp)
+    const hi = Math.max(dom.start_bp, dom.end_bp)
+    let hiClamp = hi - 1
+    if (dom.direction === 'FORWARD') {
+      const strand = (_design?.strands ?? []).find(s => s.domains.some(d =>
+        d.helix_id === dom.helix_id && d.direction === dom.direction &&
+        Math.min(d.start_bp, d.end_bp) === lo && Math.max(d.start_bp, d.end_bp) === hi))
+      const di = strand ? strand.domains.findIndex(d =>
+        d.helix_id === dom.helix_id && d.direction === dom.direction &&
+        Math.min(d.start_bp, d.end_bp) === lo && Math.max(d.start_bp, d.end_bp) === hi) : -1
+      const nxt = di >= 0 ? strand.domains[di + 1] : null
+      if (nxt && nxt.helix_id === dom.helix_id && nxt.direction === 'FORWARD' &&
+          Math.min(nxt.start_bp, nxt.end_bp) === hi + 1) {
+        hiClamp = hi
+      }
+    }
+    return Math.max(lo, Math.min(hiClamp, col))
+  }
+
+  /**
    * Returns true if a ligatable nick exists at nickBp on the given helix/direction.
    * A nick exists when one strand has its 3′ end (end_bp) at nickBp and a different
    * strand has its 5′ end (start_bp) at the adjacent bp.
@@ -2337,7 +2368,8 @@ export function initPathview(canvasEl, containerEl, {
     const entries = []
     for (const key of _selectedElements) {
       if (!key.startsWith('end:')) continue
-      const m = key.match(/^end:(.+)_(\d+)_(FORWARD|REVERSE)$/)
+      // bp may be negative (domains can start before 0), so allow a leading '-'.
+      const m = key.match(/^end:(.+)_(-?\d+)_(FORWARD|REVERSE)$/)
       if (!m) continue
       const [, helix_id, bpStr, direction] = m
       const bp = parseInt(bpStr)
@@ -2400,6 +2432,29 @@ export function initPathview(canvasEl, containerEl, {
       return pts
     }
 
+    // Helper: extent of the contiguous collinear run the terminal domain belongs
+    // to — adjacent domains of the SAME strand on the same helix+direction with
+    // no bp gap. That pattern is an inline overhang/duplex split, never a
+    // crossover (a crossover changes helix), so the run's far edge IS the nearest
+    // crossover / strand boundary. Treating the run as one lets a terminal resize
+    // move THROUGH the split; the backend re-classifies the overhang afterward.
+    const collinearRun = (strandId, helixId, direction, domLo, domHi) => {
+      const strand = (_design?.strands ?? []).find(s => s.id === strandId)
+      if (!strand) return { runLo: domLo, runHi: domHi }
+      const doms = strand.domains
+      const idx = doms.findIndex(d =>
+        d.helix_id === helixId && d.direction === direction &&
+        Math.min(d.start_bp, d.end_bp) === domLo && Math.max(d.start_bp, d.end_bp) === domHi)
+      if (idx < 0) return { runLo: domLo, runHi: domHi }
+      const adj = (a, b) => a.helix_id === b.helix_id && a.direction === b.direction &&
+        (direction === 'FORWARD' ? a.end_bp + 1 === b.start_bp : a.end_bp - 1 === b.start_bp)
+      let runLo = domLo, runHi = domHi
+      const grow = (d) => { runLo = Math.min(runLo, d.start_bp, d.end_bp); runHi = Math.max(runHi, d.start_bp, d.end_bp) }
+      for (let i = idx; i > 0 && adj(doms[i - 1], doms[i]); i--) grow(doms[i - 1])
+      for (let i = idx; i < doms.length - 1 && adj(doms[i], doms[i + 1]); i++) grow(doms[i + 1])
+      return { runLo, runHi }
+    }
+
     for (const entry of entries) {
       const { helixId, direction, end, origBp, domLo, domHi } = entry
       const isFwd = direction === 'FORWARD'
@@ -2413,8 +2468,12 @@ export function initPathview(canvasEl, containerEl, {
         continue
       }
 
-      // Positions of crossovers strictly inside the domain [domLo, domHi]
-      const innerXovers = [...xoPos].filter(p => p > domLo && p < domHi)
+      // Span the contiguous collinear run for the SHRINK limit so the end can
+      // retract through an inline overhang/duplex split down to the run's far
+      // edge (the nearest real crossover / strand boundary).
+      const { runLo, runHi } = collinearRun(entry.strandId, helixId, direction, domLo, domHi)
+      // Positions of crossovers strictly inside the run
+      const innerXovers = [...xoPos].filter(p => p > runLo && p < runHi)
 
       if (end === '5p') {
         if (isFwd) {
@@ -2422,7 +2481,7 @@ export function initPathview(canvasEl, containerEl, {
           // Shrink limit: first inner crossover, or hi (keep ≥ 1 bp)
           const shrinkBlock = innerXovers.length
             ? Math.min(...innerXovers) - domLo
-            : domHi - domLo
+            : runHi - runLo
           maxDelta = Math.min(maxDelta, shrinkBlock)
           // Extend limit: nearest other endpoint to the left (helix grows if none)
           const leftBlocks = others.filter(p => p < domLo)
@@ -2434,7 +2493,7 @@ export function initPathview(canvasEl, containerEl, {
           // 5′ REVERSE is at domHi — moving right extends, left shrinks
           const shrinkBlock = innerXovers.length
             ? domHi - Math.max(...innerXovers)
-            : domHi - domLo
+            : runHi - runLo
           minDelta = Math.max(minDelta, -shrinkBlock)
           const rightBlocks = others.filter(p => p > domHi)
           const extendBlock = rightBlocks.length
@@ -2448,7 +2507,7 @@ export function initPathview(canvasEl, containerEl, {
           // 3′ FORWARD is at domHi — moving right extends, left shrinks
           const shrinkBlock = innerXovers.length
             ? domHi - Math.max(...innerXovers)
-            : domHi - domLo
+            : runHi - runLo
           minDelta = Math.max(minDelta, -shrinkBlock)
           const rightBlocks = others.filter(p => p > domHi)
           const extendBlock = rightBlocks.length
@@ -2459,7 +2518,7 @@ export function initPathview(canvasEl, containerEl, {
           // 3′ REVERSE is at domLo — moving left extends, right shrinks
           const shrinkBlock = innerXovers.length
             ? Math.min(...innerXovers) - domLo
-            : domHi - domLo
+            : runHi - runLo
           maxDelta = Math.min(maxDelta, shrinkBlock)
           const leftBlocks = others.filter(p => p < domLo)
           const extendBlock = leftBlocks.length
@@ -2499,7 +2558,8 @@ export function initPathview(canvasEl, containerEl, {
     const entries = []
     for (const key of _selectedElements) {
       if (!key.startsWith('line:')) continue
-      const m = key.match(/^line:(.+)_(\d+)_(\d+)_(FORWARD|REVERSE)$/)
+      // lo/hi may be negative (domains can span before bp 0), so allow '-'.
+      const m = key.match(/^line:(.+)_(-?\d+)_(-?\d+)_(FORWARD|REVERSE)$/)
       if (!m) continue
       const [, helix_id, loStr, hiStr, direction] = m
       const lo = parseInt(loStr), hi = parseInt(hiStr)
@@ -3523,9 +3583,7 @@ export function initPathview(canvasEl, containerEl, {
         //   new 3' = N,   new 5' = N+1
         // REVERSE at bp=N → gap at left boundary of cell N (between N-1 and N):
         //   new 3' = N,   new 5' = N-1
-        const lo = Math.min(dom.start_bp, dom.end_bp)
-        const hi = Math.max(dom.start_bp, dom.end_bp)
-        const nickBp     = Math.max(lo, Math.min(hi - 1, col))
+        const nickBp     = _nickBpForDomain(dom, col)
         const threeEndBp = nickBp
         const fiveEndBp  = dom.direction === 'FORWARD' ? nickBp + 1 : nickBp - 1
         const nickGapBoundary = dom.direction === 'FORWARD' ? nickBp + 1 : nickBp
@@ -3830,9 +3888,7 @@ export function initPathview(canvasEl, containerEl, {
         if (!info) { _nickHover = null; _draw(); return }
         const { wx }  = _c2w(e.offsetX, e.offsetY)
         const col     = _xToBp(wx)
-        const lo      = Math.min(dom.start_bp, dom.end_bp)
-        const hi      = Math.max(dom.start_bp, dom.end_bp)
-        const nickBp     = Math.max(lo, Math.min(hi - 1, col))
+        const nickBp     = _nickBpForDomain(dom, col)
         const threeEndBp = nickBp
         const fiveEndBp  = dom.direction === 'FORWARD' ? nickBp + 1 : nickBp - 1
         const y = dom.direction === 'FORWARD' ? info.fwdY : info.revY

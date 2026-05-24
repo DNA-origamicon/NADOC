@@ -13681,7 +13681,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
     if (type === 'doc-presence') {
       _otherTabDocs.set(source, { designId, docName, docAssembly })
-      _maybeWarnDocClobber(designId, docName, docAssembly)
+      // Only a real clobber risk when the other tab shares THIS tab's backend
+      // document. Under multi-document (Phase 2) every tab — including each part
+      // editor — owns its own doc, so different-design tabs are NOT contending.
+      // (Pre-Phase-2 this warned on any different design; that's now a false
+      // positive that fired e.g. when opening a second part editor.)
+      if (nadocBroadcast.isSameDoc(data)) _maybeWarnDocClobber(designId, docName, docAssembly)
     }
     if (type === 'design-changed') {
       // Doc-scoped: only react to mutations in OUR document. A different tab
