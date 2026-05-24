@@ -46,8 +46,9 @@ const _initialState = {
    */
   selectFilter: { strand: true, scaf: true, stap: true, ends: true, xover: true, line: true, loop: false, skip: false },
 
-  /** View-tool toggles — visual overlays that don't affect selection. */
-  viewTools: { lengthHeatmap: false, sequences: false, undefinedBases: false, overhangNames: false, grid: true },
+  /** View-tool toggles — visual overlays that don't affect selection.
+   *  referenceGeometry=true → show reference strands (translucent); false → hide. */
+  viewTools: { lengthHeatmap: false, sequences: false, undefinedBases: false, overhangNames: false, grid: true, referenceGeometry: true },
 
   /** True while an API request is in flight. */
   loading: false,

@@ -13,49 +13,57 @@ import { store } from '../state/store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
 import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
+import { notifyRequestFailure, notifyRequestSuccess } from '../shared/connection_monitor.js'
+import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
 
 const BASE = '/api'
 
-const LS_DESIGN_KEY = 'nadoc:design'
+// localStorage keys are scoped per document (docKey) so independent tabs don't
+// overwrite each other's recovery cache.  The default doc keeps the bare legacy
+// key, preserving Phase-1 single-document recovery unchanged.
+const LS_DESIGN_KEY   = () => docKey('nadoc:design')
+const LS_ASSEMBLY_KEY = () => docKey('nadoc:assembly')
+const LS_MODE_KEY     = 'nadoc:mode'  // 'assembly' | 'part-edit:{id}' | null (sessionStorage, tab-isolated)
 
 /** Persist the current design topology to localStorage for session recovery. */
 export function persistDesign() {
   const design = store.getState().currentDesign
   if (!design) return
-  try { localStorage.setItem(LS_DESIGN_KEY, JSON.stringify(design)) } catch { /* quota exceeded — ignore */ }
+  try { localStorage.setItem(LS_DESIGN_KEY(), JSON.stringify(design)) } catch { /* quota exceeded — ignore */ }
 }
 
 /** Read the persisted design from localStorage (parsed JSON or null). */
 export function getPersistedDesign() {
   try {
-    const raw = localStorage.getItem(LS_DESIGN_KEY)
+    const raw = localStorage.getItem(LS_DESIGN_KEY())
     return raw ? JSON.parse(raw) : null
   } catch { return null }
 }
 
 /** Remove the persisted design (e.g. when returning to the welcome screen). */
 export function clearPersistedDesign() {
-  try { localStorage.removeItem(LS_DESIGN_KEY) } catch { /* ignore */ }
+  try { localStorage.removeItem(LS_DESIGN_KEY()) } catch { /* ignore */ }
 }
-
-const LS_ASSEMBLY_KEY = 'nadoc:assembly'
-const LS_MODE_KEY     = 'nadoc:mode'  // 'assembly' | 'part-edit:{id}' | null
 
 export function persistAssembly() {
   const assembly = store.getState().currentAssembly
   if (!assembly) return
-  try { localStorage.setItem(LS_ASSEMBLY_KEY, JSON.stringify(assembly)) } catch { /* quota exceeded — ignore */ }
+  try { localStorage.setItem(LS_ASSEMBLY_KEY(), JSON.stringify(assembly)) } catch { /* quota exceeded — ignore */ }
 }
 
-export function getPersistedAssembly() {
+// docId reads ANOTHER doc's cache (e.g. a part-editor tab restoring the assembly
+// from the assembly tab's recovery cache after a server restart); omitted → this
+// tab's own cache.
+export function getPersistedAssembly(docId) {
   try {
-    const raw = localStorage.getItem(LS_ASSEMBLY_KEY)
+    const key = docId !== undefined ? docKeyFor('nadoc:assembly', docId) : LS_ASSEMBLY_KEY()
+    const raw = localStorage.getItem(key)
     return raw ? JSON.parse(raw) : null
   } catch { return null }
 }
 
 export function clearPersistedAssembly() {
-  try { localStorage.removeItem(LS_ASSEMBLY_KEY) } catch { /* ignore */ }
+  try { localStorage.removeItem(LS_ASSEMBLY_KEY()) } catch { /* ignore */ }
 }
 
 export function setPersistedMode(mode) {
@@ -136,10 +144,16 @@ function _busyHeaderForPath(method, path) {
   return 'Working…'
 }
 
-export async function _request(method, path, body, { signal, suppressBusy = false } = {}) {
+export async function _request(method, path, body, { signal, suppressBusy = false, docId } = {}) {
   const opts = {
     method,
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
+    headers: {
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      // X-NADOC-Doc: route to this tab's backend document, OR to an explicitly
+      // named doc (docId) for one-off cross-document calls (e.g. a part editor
+      // reaching into the assembly's doc). `undefined` keeps the legacy default.
+      ...(docId !== undefined ? docHeadersFor(docId) : docHeaders()),
+    },
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal,
   }
@@ -159,7 +173,11 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
   try {
     r = await fetch(`${BASE}${path}`, opts)
     tNetwork = performance.now() - t0
+    notifyRequestSuccess()   // any HTTP response means the backend is reachable
     json = await r.json().catch(() => null)
+  } catch (err) {
+    notifyRequestFailure()   // network-level failure → flag the connection as down
+    throw err
   } finally {
     clearTimeout(_busyTimer)
     if (_busyShown) {
@@ -1497,6 +1515,17 @@ export async function patchStrandsColor(strandIds, color) {
   return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
+/** Mark/clear strands as inactive reference geometry, atomically in one request.
+ *  Reference strands are ignored by all auto-features and excluded from exports.
+ *  NOTE: NOT skipGeometry — toggling reference changes the bend/twist freeze, so
+ *  nucleotide positions move and the response carries fresh geometry.
+ */
+export async function patchStrandsReference(strandIds, isReference) {
+  const json = await _request('PATCH', '/design/strands/reference',
+    { strand_ids: strandIds, is_reference: isReference })
+  return _syncFromDesignResponse(json)
+}
+
 /**
  * Add a terminal extension to a staple strand's 5′ or 3′ end.
  * @param {string} strandId
@@ -1953,8 +1982,8 @@ export async function getAssemblyContent() {
   return r.text()
 }
 
-export async function importAssembly(content) {
-  const json = await _request('POST', '/assembly/import', { content })
+export async function importAssembly(content, { docId } = {}) {
+  const json = await _request('POST', '/assembly/import', { content }, { docId })
   return _syncFromAssemblyResponse(json)
 }
 
@@ -2036,8 +2065,10 @@ export async function patchInstanceClusterTransform(id, body) {
   return _syncFromAssemblyResponse(json)
 }
 
-export async function patchInstanceDesign(id, content) {
-  const json = await _request('PATCH', `/assembly/instances/${id}/design`, { content })
+export async function patchInstanceDesign(id, content, { docId } = {}) {
+  // docId lets a part-editor tab (which lives on its OWN isolated doc) write the
+  // edit back into the ASSEMBLY's doc, where the assembly actually lives.
+  const json = await _request('PATCH', `/assembly/instances/${id}/design`, { content }, { docId })
   return _syncFromAssemblyResponse(json)
 }
 

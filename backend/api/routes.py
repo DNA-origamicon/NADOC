@@ -108,7 +108,34 @@ def _strand_nucleotide_info(design: Design) -> dict:
 
 @router.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    """Liveness probe + identity beacon for the frontend connection monitor.
+
+    ``server_instance_id`` changes on every process restart, letting a tab
+    distinguish "backend restarted" (re-sync, work was server-side recovered)
+    from a mere document change.  The design/assembly identity lets a tab notice
+    the live document was swapped out from under it.
+    """
+    from backend.api import assembly_state, server_info
+    from backend.api import state as design_state
+
+    design = design_state.get_design()
+    assembly = assembly_state.get_assembly()
+
+    def _name(doc) -> str | None:
+        meta = getattr(doc, "metadata", None)
+        return (getattr(meta, "name", None) if meta is not None
+                else getattr(doc, "name", None))
+
+    return {
+        "status": "ok",
+        "server_instance_id": server_info.SERVER_INSTANCE_ID,
+        "started_at": server_info.STARTED_AT,
+        "design_loaded": design is not None,
+        "design_id": getattr(design, "id", None),
+        "design_name": _name(design) if design is not None else None,
+        "assembly_loaded": assembly is not None,
+        "assembly_id": getattr(assembly, "id", None),
+    }
 
 
 @router.get("/design/demo")

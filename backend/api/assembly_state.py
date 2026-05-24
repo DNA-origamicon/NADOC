@@ -36,9 +36,11 @@ import base64
 import gzip
 import threading
 from collections import deque
+from dataclasses import dataclass, field
 
 from fastapi import HTTPException
 
+from backend.api.doc_context import get_current_doc
 from backend.core.models import Assembly
 
 # Baseline undo depth for small assemblies.  Effective cap is computed per
@@ -48,13 +50,87 @@ from backend.core.models import Assembly
 # memory/project_path_to_thousands.md (Phase 1d) for context.
 MAX_UNDO_STEPS = 50
 
+
+@dataclass
+class _AssemblySession:
+    """Per-document assembly state: active assembly + undo/redo + display state."""
+    assembly: Assembly | None = None
+    # maxlen is the baseline; ``_trim_to`` enforces the adaptive cap on every
+    # push so the deque never holds more than the instance-count-aware limit.
+    history: deque = field(default_factory=lambda: deque(maxlen=MAX_UNDO_STEPS))
+    redo: deque = field(default_factory=lambda: deque(maxlen=MAX_UNDO_STEPS))
+    # Per-instance display preferences kept OUTSIDE the assembly object so they
+    # survive feature-log scrubbing (representation / visible).  Keyed by
+    # PartInstance.id → {representation?, visible?}.
+    display_state: dict = field(default_factory=dict)
+    # Monotonic change-counter; read by the session-cache flush thread to skip
+    # serializing an unchanged assembly.
+    revision: int = 0
+
+
 _lock = threading.Lock()
-_active_assembly: Assembly | None = None
-# maxlen is set to the baseline; ``_trim_to`` enforces the adaptive cap
-# on every push so the deque never holds more than the current
-# instance-count-aware limit.
-_history: deque[Assembly] = deque(maxlen=MAX_UNDO_STEPS)
-_redo:    deque[Assembly] = deque(maxlen=MAX_UNDO_STEPS)
+_sessions: dict[str, _AssemblySession] = {}
+
+
+def _session() -> _AssemblySession:
+    """Return the current request's document assembly session (lazily created).
+
+    MUST be called while holding ``_lock``.
+    """
+    doc = get_current_doc()
+    s = _sessions.get(doc)
+    if s is None:
+        s = _AssemblySession()
+        _sessions[doc] = s
+    return s
+
+
+# ── Document registry helpers (multi-document) ───────────────────────────────
+
+def list_doc_ids() -> list[str]:
+    """Doc ids that currently hold an assembly."""
+    with _lock:
+        return [doc for doc, s in _sessions.items() if s.assembly is not None]
+
+
+def peek_assembly(doc_id: str) -> Assembly | None:
+    """The assembly for a specific doc id without touching the ContextVar."""
+    with _lock:
+        s = _sessions.get(doc_id)
+        return s.assembly if s else None
+
+
+def drop_doc(doc_id: str) -> bool:
+    """Forget a document's assembly session entirely. Returns True if it existed."""
+    with _lock:
+        return _sessions.pop(doc_id, None) is not None
+
+
+def restore_doc_assembly(doc_id: str, assembly: Assembly) -> None:
+    """Load an assembly into a specific doc's session (startup recovery)."""
+    with _lock:
+        s = _sessions.get(doc_id)
+        if s is None:
+            s = _AssemblySession()
+            _sessions[doc_id] = s
+        s.assembly = assembly
+        s.revision += 1
+
+
+def revision_map() -> dict[str, int]:
+    """``{doc_id: revision}`` for every assembly session (cheap; for the cache)."""
+    with _lock:
+        return {doc: s.revision for doc, s in _sessions.items()}
+
+
+def copy_doc_for_persist(doc_id: str) -> tuple[Assembly | None, int]:
+    """``(deep_copy_of_doc_assembly_or_None, revision)`` for one doc, under lock."""
+    with _lock:
+        s = _sessions.get(doc_id)
+        if s is None:
+            return None, 0
+        snap = s.assembly.model_copy(deep=True) if s.assembly is not None else None
+        return snap, s.revision
 
 
 def _undo_cap_for(assembly: Assembly | None) -> int:
@@ -79,43 +155,52 @@ def _trim_to(dq: deque[Assembly], cap: int) -> None:
     while len(dq) > cap:
         dq.popleft()
 
-# Per-instance display preferences kept OUTSIDE the assembly object so they
-# survive feature-log scrubbing. `representation` and `visible` are pure
-# display state — when the user switches a heavy part to a cheap renderer
-# for performance, that preference must not be undone every time they move
-# the slider.  Keyed by PartInstance.id → {representation?, visible?}.
-_display_state: dict[str, dict] = {}
-
-
 def get_assembly() -> Assembly | None:
     with _lock:
-        return _active_assembly
+        return _session().assembly
+
+
+def revision() -> int:
+    """Current document's assembly change-counter."""
+    with _lock:
+        return _session().revision
+
+
+def copy_for_persist() -> tuple[Assembly | None, int]:
+    """``(deep copy of current doc's assembly or None, revision)`` under the lock."""
+    with _lock:
+        s = _session()
+        snap = s.assembly.model_copy(deep=True) if s.assembly is not None else None
+        return snap, s.revision
 
 
 def set_assembly(a: Assembly) -> None:
-    global _active_assembly
     with _lock:
-        if _active_assembly is not None:
-            _history.append(_active_assembly.model_copy(deep=True))
-            _trim_to(_history, _undo_cap_for(_active_assembly))
-        _redo.clear()
-        _active_assembly = a
+        s = _session()
+        if s.assembly is not None:
+            s.history.append(s.assembly.model_copy(deep=True))
+            _trim_to(s.history, _undo_cap_for(s.assembly))
+        s.redo.clear()
+        s.assembly = a
+        s.revision += 1
 
 
 def get_or_404() -> Assembly:
     with _lock:
-        if _active_assembly is None:
+        s = _session()
+        if s.assembly is None:
             raise HTTPException(status_code=404, detail="No active assembly.")
-        return _active_assembly
+        return s.assembly
 
 
 def get_or_create() -> Assembly:
     """Return the active assembly, creating a new empty one if none exists."""
-    global _active_assembly
     with _lock:
-        if _active_assembly is None:
-            _active_assembly = Assembly()
-        return _active_assembly
+        s = _session()
+        if s.assembly is None:
+            s.assembly = Assembly()
+            s.revision += 1
+        return s.assembly
 
 
 def undo() -> Assembly:
@@ -123,14 +208,15 @@ def undo() -> Assembly:
 
     Returns the restored assembly.  Raises HTTP 404 if nothing to undo.
     """
-    global _active_assembly
     with _lock:
-        if not _history:
+        s = _session()
+        if not s.history:
             raise HTTPException(status_code=404, detail="Nothing to undo.")
-        _redo.append(_active_assembly.model_copy(deep=True))
-        _trim_to(_redo, _undo_cap_for(_active_assembly))
-        _active_assembly = _history.pop()
-    return _active_assembly
+        s.redo.append(s.assembly.model_copy(deep=True))
+        _trim_to(s.redo, _undo_cap_for(s.assembly))
+        s.assembly = s.history.pop()
+        s.revision += 1
+        return s.assembly
 
 
 def redo() -> Assembly:
@@ -138,31 +224,35 @@ def redo() -> Assembly:
 
     Returns the restored assembly.  Raises HTTP 404 if nothing to redo.
     """
-    global _active_assembly
     with _lock:
-        if not _redo:
+        s = _session()
+        if not s.redo:
             raise HTTPException(status_code=404, detail="Nothing to redo.")
-        _history.append(_active_assembly.model_copy(deep=True))
-        _trim_to(_history, _undo_cap_for(_active_assembly))
-        _active_assembly = _redo.pop()
-    return _active_assembly
+        s.history.append(s.assembly.model_copy(deep=True))
+        _trim_to(s.history, _undo_cap_for(s.assembly))
+        s.assembly = s.redo.pop()
+        s.revision += 1
+        return s.assembly
 
 
 def clear_history() -> None:
-    """Discard both undo and redo history (e.g. after loading a new assembly from disk)."""
+    """Discard both undo and redo history for the current doc (e.g. after loading
+    a new assembly from disk)."""
     with _lock:
-        _history.clear()
-        _redo.clear()
+        s = _session()
+        s.history.clear()
+        s.redo.clear()
 
 
 def close_session() -> None:
-    """Erase the active assembly and all history."""
-    global _active_assembly
+    """Erase the current document's assembly and all history."""
     with _lock:
-        _active_assembly = None
-        _history.clear()
-        _redo.clear()
-        _display_state.clear()
+        s = _session()
+        s.assembly = None
+        s.history.clear()
+        s.redo.clear()
+        s.display_state.clear()
+        s.revision += 1
 
 
 def remember_instance_display(instance_id: str, *,
@@ -177,24 +267,25 @@ def remember_instance_display(instance_id: str, *,
     rendering preference on top of the restored geometry.
     """
     with _lock:
-        entry = _display_state.get(instance_id, {})
+        ds = _session().display_state
+        entry = ds.get(instance_id, {})
         if representation is not None:
             entry["representation"] = representation
         if visible is not None:
             entry["visible"] = visible
-        _display_state[instance_id] = entry
+        ds[instance_id] = entry
 
 
 def get_display_overrides() -> dict[str, dict]:
     """Snapshot of the current per-instance display overrides."""
     with _lock:
-        return {k: dict(v) for k, v in _display_state.items()}
+        return {k: dict(v) for k, v in _session().display_state.items()}
 
 
 def forget_instance_display(instance_id: str) -> None:
     """Drop overrides for an instance (e.g. when the instance is deleted)."""
     with _lock:
-        _display_state.pop(instance_id, None)
+        _session().display_state.pop(instance_id, None)
 
 
 def snapshot() -> None:
@@ -203,12 +294,12 @@ def snapshot() -> None:
     Use before starting a multi-step operation so the entire operation is
     undoable as a single Ctrl-Z.
     """
-    global _active_assembly
     with _lock:
-        if _active_assembly is not None:
-            _history.append(_active_assembly.model_copy(deep=True))
-            _trim_to(_history, _undo_cap_for(_active_assembly))
-        _redo.clear()
+        s = _session()
+        if s.assembly is not None:
+            s.history.append(s.assembly.model_copy(deep=True))
+            _trim_to(s.history, _undo_cap_for(s.assembly))
+        s.redo.clear()
 
 
 def set_assembly_silent(a: Assembly) -> None:
@@ -217,21 +308,22 @@ def set_assembly_silent(a: Assembly) -> None:
     Use for intermediate steps in a multi-step operation where snapshot()
     was already called before the first step.
     """
-    global _active_assembly
     with _lock:
-        _active_assembly = a
+        s = _session()
+        s.assembly = a
+        s.revision += 1
 
 
 def undo_depth() -> int:
     """Return the current undo stack depth."""
     with _lock:
-        return len(_history)
+        return len(_session().history)
 
 
 def redo_depth() -> int:
     """Return the current redo stack depth."""
     with _lock:
-        return len(_redo)
+        return len(_session().redo)
 
 
 # ── Assembly snapshot encoder / decoder ──────────────────────────────────────

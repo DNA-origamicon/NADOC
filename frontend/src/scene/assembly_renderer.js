@@ -5424,8 +5424,11 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // overhang (transient), and selected overhangs (persistent, with a green
   // ring). Hover + click selection are driven by PROXIMITY in main.js: it
   // reads world-space anchors via getOverhangAnchors() and calls
-  // setHoveredOverhang() / setOverhangSelectionHighlight(). There is no
-  // selectable-toggle gate — this is always active in assembly mode.
+  // setHoveredOverhang() / setOverhangSelectionHighlight(). Hover + click
+  // selection are gated on the overhang tool (toolFilters.overhangLocations,
+  // the "ovhg" button); when it's off, overhangs ignore the pointer so a part
+  // buried under them stays selectable. The "show all" labels toggle
+  // (showOverhangNames) and persisted selection rings are independent.
   const _ovhgLabelGroup = new THREE.Group()
   _ovhgLabelGroup.name = 'sharedOverhangNames'
   _ovhgLabelGroup.renderOrder = 12

@@ -238,6 +238,12 @@ export function initDesignRenderer(scene, storeRef) {
     if (staplesHidden) _helixCtrl.setStapleVisibility(false)
     if (isolatedStrandId) _helixCtrl.setIsolatedStrand(isolatedStrandId)
     if (_hiddenNucKeys.size) _helixCtrl.setHiddenNucs(_hiddenNucKeys)
+    // Reference geometry: translucent, hidden when the View toggle is off.
+    const _refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
+    if (_refIds.size) {
+      _helixCtrl.setReferenceStrands(_refIds)
+      _helixCtrl.setReferenceHidden(storeRef.getState().showReferenceGeometry === false)
+    }
     _applyXoverVisibility()
 
     // Apply opacity for preview or tool-dim modes
@@ -466,6 +472,11 @@ export function initDesignRenderer(scene, storeRef) {
     // Isolate a single staple strand (dim all others).
     if (newState.isolatedStrandId !== prevState.isolatedStrandId) {
       _helixCtrl?.setIsolatedStrand(newState.isolatedStrandId)
+    }
+
+    // Hide/show reference geometry (View menu toggle).
+    if (newState.showReferenceGeometry !== prevState.showReferenceGeometry) {
+      _helixCtrl?.setReferenceHidden(newState.showReferenceGeometry === false)
     }
 
     // Extra-base beads+slabs now track arc positions during all transitions

@@ -2966,13 +2966,14 @@
         <button>File</button>
         <div class="dropdown">
           <button class="dropdown-item" id="menu-file-new">New Part</button>
-          <button class="dropdown-item" id="menu-file-open">Open from Server… <span style="color:#484f58;font-size:var(--text-xs)">[Ctrl+O]</span></button>
+          <button class="dropdown-item" id="menu-file-new-assembly">New Assembly…</button>
+          <button class="dropdown-item" id="menu-file-open">Open File… <span style="color:#484f58;font-size:var(--text-xs)">[Ctrl+O]</span></button>
           <div class="submenu-item">Recent <span class="icon icon--xs" style="color:var(--color-text-muted);margin-left:auto" data-icon="chevron-right"></span>
             <div class="submenu" id="recent-files-submenu">
               <button class="dropdown-item" style="color:#484f58;cursor:default" disabled>No recent files</button>
             </div>
           </div>
-          <button class="dropdown-item" id="menu-file-save">Save <span style="color:#484f58;font-size:var(--text-xs)">[Ctrl+S]</span></button>
+          <button class="dropdown-item" id="menu-file-save">Save File <span style="color:#484f58;font-size:var(--text-xs)">[Ctrl+S]</span></button>
           <button class="dropdown-item" id="menu-file-save-as">Save As…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-close-session" style="color:#f85149">Close Session</button>
@@ -2993,11 +2994,6 @@
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-export-namd-complete">Export NAMD Package (.zip)</button>
           <button class="dropdown-item" id="menu-file-export-gromacs-complete">Export GROMACS Package (.zip)</button>
-          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
-          <button class="dropdown-item" id="menu-file-new-assembly">New Assembly…</button>
-          <button class="dropdown-item" id="menu-file-open-assembly">Open Assembly from Server…</button>
-          <button class="dropdown-item" id="menu-file-save-assembly">Save Assembly <span style="color:#484f58;font-size:var(--text-xs)">[Ctrl+S]</span></button>
-          <button class="dropdown-item" id="menu-file-save-assembly-as">Save Assembly As…</button>
         </div>
       </div>
 
@@ -3097,6 +3093,7 @@
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-sequences">Sequences<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-hide-staples">Hide Staples<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-reference" title="Show inactive reference geometry (translucent backdrop strands you design against)">Reference Geometry<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-names">Overhang Names<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-undefined-bases">Highlight Undefined Bases<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-joints">Joint Indicators<span class="menu-toggle-pill"></span></button>

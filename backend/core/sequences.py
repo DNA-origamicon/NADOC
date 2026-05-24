@@ -140,11 +140,23 @@ def _strand_nt_with_skips(strand: Strand, ls_map: dict[tuple[str, int], int]) ->
 # ── Scaffold sequence assignment ───────────────────────────────────────────────
 
 
+def _active_scaffold(design: Design) -> Strand | None:
+    """First non-reference scaffold strand, or None.
+
+    Reference geometry is excluded from sequence assignment, so the scaffold
+    that seeds staple complements must skip reference scaffolds.
+    """
+    for s in design.scaffolds():
+        if not s.is_reference:
+            return s
+    return None
+
+
 def _resolve_scaffold_strand(design: Design, strand_id: str | None) -> Strand:
     """Return the scaffold strand to assign a sequence to.
 
     If *strand_id* is given, find that strand and verify it is a scaffold.
-    Otherwise fall back to the first scaffold strand in the design.
+    Otherwise fall back to the first non-reference scaffold strand.
     """
     if strand_id is not None:
         strand = design.find_strand(strand_id)
@@ -155,8 +167,13 @@ def _resolve_scaffold_strand(design: Design, strand_id: str | None) -> Strand:
                 f"Strand {strand_id!r} is not a scaffold strand "
                 f"(strand_type={strand.strand_type!r})."
             )
+        if strand.is_reference:
+            raise ValueError(
+                f"Strand {strand_id!r} is reference geometry and cannot be "
+                f"assigned a sequence automatically."
+            )
         return strand
-    scaffold = design.scaffold()
+    scaffold = _active_scaffold(design)
     if scaffold is None:
         raise ValueError("No scaffold strand found in the design.")
     return scaffold
@@ -295,7 +312,7 @@ def build_scaffold_base_map(design: Design) -> dict[tuple[str, int, str], list[s
       - Normal (delta=0): one-element list.
       - Loop (delta=+1): two-element list.
     """
-    scaffold = design.scaffold()
+    scaffold = _active_scaffold(design)
     if scaffold is None or scaffold.sequence is None:
         return {}
 
@@ -324,7 +341,7 @@ def build_scaffold_index_map(design: Design) -> list[tuple[str, int, str]]:
     (accounting for loop copies) and is ordered 0..N-1 matching the scaffold
     strand.sequence indexing used elsewhere.
     """
-    scaffold = design.scaffold()
+    scaffold = _active_scaffold(design)
     if scaffold is None or scaffold.sequence is None:
         return []
 
@@ -369,7 +386,7 @@ def assign_staple_sequences(design: Design) -> Design:
     ValueError
         If no scaffold strand is found or it has no sequence.
     """
-    scaffold = design.scaffold()
+    scaffold = _active_scaffold(design)
     if scaffold is None:
         raise ValueError("No scaffold strand found in the design.")
     if scaffold.sequence is None:
@@ -386,6 +403,10 @@ def assign_staple_sequences(design: Design) -> Design:
     new_strands: list[Strand] = []
     for strand in design.strands:
         if strand.is_scaffold:
+            new_strands.append(strand)
+            continue
+        if strand.is_reference:
+            # Reference geometry: leave its (manually-assigned) sequence verbatim.
             new_strands.append(strand)
             continue
 

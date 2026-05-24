@@ -367,6 +367,37 @@ def test_reorder_helices_permutes_array():
     assert after == [new_id, "demo_helix"]
 
 
+def test_reorder_helices_freezes_labels_to_identity():
+    """A helix keeps its displayed number after moving — the label is frozen to
+    the pre-reorder array position and follows the helix, not the new row."""
+    new_id = _add_second_helix()  # design: [demo_helix(idx0), new_id(idx1)]
+
+    r = client.put("/api/design/helices/reorder",
+                   json={"ordered_ids": [new_id, "demo_helix"]})
+    assert r.status_code == 200
+    helices = r.json()["design"]["helices"]
+    by_id = {h["id"]: h for h in helices}
+    # demo_helix was at index 0 → frozen label "0"; new_id was at index 1 → "1".
+    assert by_id["demo_helix"]["label"] == "0"
+    assert by_id[new_id]["label"] == "1"
+    # And the labels travelled with the helices: top row (index 0) is now new_id,
+    # which still reads "1" rather than re-numbering to "0".
+    assert helices[0]["id"] == new_id and helices[0]["label"] == "1"
+
+
+def test_reorder_helices_preserves_existing_label():
+    """A helix that already carries a label (e.g. scadnano index) keeps it."""
+    new_id = _add_second_helix()
+    # No API assigns an arbitrary label, so set one on the live design directly.
+    design_state.get_or_404().helices[1].label = "scaf-A"
+    r = client.put("/api/design/helices/reorder",
+                   json={"ordered_ids": [new_id, "demo_helix"]})
+    assert r.status_code == 200
+    by_id = {h["id"]: h for h in r.json()["design"]["helices"]}
+    assert by_id[new_id]["label"] == "scaf-A"   # untouched
+    assert by_id["demo_helix"]["label"] == "0"  # label-less → frozen to old index 0
+
+
 def test_reorder_helices_rejects_missing_id():
     # Demo has one helix; an empty list omits it → 400.
     r = client.put("/api/design/helices/reorder", json={"ordered_ids": []})

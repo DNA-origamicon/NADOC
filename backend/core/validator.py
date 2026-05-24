@@ -99,8 +99,8 @@ def validate_design(design: Design) -> ValidationReport:
     # ── Domain helix references ───────────────────────────────────────────
     bad_refs: List[str] = []
     for strand in design.strands:
-        if strand.strand_type == StrandType.LINKER:
-            continue   # linker strands live on virtual __lnk__ helices; skip
+        if strand.strand_type == StrandType.LINKER or strand.is_reference:
+            continue   # linker strands live on virtual __lnk__ helices; reference geometry is excluded
         for domain in strand.domains:
             if domain.helix_id not in helix_ids:
                 bad_refs.append(
@@ -114,7 +114,7 @@ def validate_design(design: Design) -> ValidationReport:
     # ── Scaffold count ────────────────────────────────────────────────────
     # Multiple scaffold strands are valid for MagicDNA-style multi-scaffold
     # designs and clockwork multi-component assemblies (DTP-0c decision).
-    scaffold_count = sum(1 for s in design.strands if s.is_scaffold)
+    scaffold_count = sum(1 for s in design.strands if s.is_scaffold and not s.is_reference)
     if scaffold_count == 0:
         report.results.append(ValidationResult(False, "No scaffold strand defined."))
     elif scaffold_count == 1:
@@ -135,8 +135,8 @@ def validate_design(design: Design) -> ValidationReport:
     for strand in design.strands:
         if strand.sequence is None:
             continue
-        if strand.strand_type == StrandType.LINKER:
-            continue   # linker strand sequences are auto-generated, not user-validated
+        if strand.strand_type == StrandType.LINKER or strand.is_reference:
+            continue   # linker sequences auto-generated; reference geometry is excluded
         expected_len = sum(
             abs(d.end_bp - d.start_bp) + 1
             - sum(1 for bp in helix_skips.get(d.helix_id, set())
@@ -159,6 +159,7 @@ def validate_design(design: Design) -> ValidationReport:
     loop_ids: List[str] = [
         s.id for s in design.strands
         if s.strand_type not in (StrandType.SCAFFOLD, StrandType.LINKER)
+           and not s.is_reference
            and _is_loop_strand(s)
     ]
     if loop_ids:

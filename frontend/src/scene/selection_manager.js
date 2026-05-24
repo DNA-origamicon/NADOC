@@ -683,6 +683,24 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
     menu.appendChild(_menuSep())
   }
 
+  // Make Reference / Make Active — applies to any strand (incl. scaffold).
+  {
+    const refEffIds = multiStrandIds.length > 0
+      ? [...new Set([...multiStrandIds, ...singleEffectiveIds])]
+      : singleEffectiveIds
+    const allRef = refEffIds.length > 0 &&
+      refEffIds.every(id => design?.strands?.find(s => s.id === id)?.is_reference)
+    menu.appendChild(_menuItem(
+      allRef ? 'Make Active' : 'Make Reference',
+      () => { api.patchStrandsReference(refEffIds, !allRef) },
+      { title: 'Reference geometry is an inactive backdrop: ignored by all automatic '
+             + 'features (bend/twist, sequence assignment, scaffold routing, autostaple, '
+             + 'crossovers) and excluded from exports/validation, but still visible '
+             + '(translucent) and manually editable. Use it to build off an existing part.' },
+    ))
+    menu.appendChild(_menuSep())
+  }
+
   const header = document.createElement('div')
   header.textContent = 'Color'
   header.style.cssText = `
@@ -929,6 +947,23 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
   hdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
                       'border-bottom:1px solid #3a4a5a;margin-bottom:4px'
   menu.appendChild(hdr)
+
+  // Make Reference / Make Active for the whole selection.
+  {
+    const design = store.getState().currentDesign
+    const allRef = strandIds.length > 0 &&
+      strandIds.every(id => design?.strands?.find(s => s.id === id)?.is_reference)
+    const ids = strandIds.slice()
+    menu.appendChild(_menuItem(
+      allRef ? 'Make Active' : 'Make Reference',
+      () => { api.patchStrandsReference(ids, !allRef) },
+      { title: 'Reference geometry is an inactive backdrop: ignored by all automatic '
+             + 'features (bend/twist, sequence assignment, scaffold routing, autostaple, '
+             + 'crossovers) and excluded from exports/validation, but still visible '
+             + '(translucent) and manually editable.' },
+    ))
+    menu.appendChild(_menuSep())
+  }
 
   // Color all header
   const colorHdr = document.createElement('div')

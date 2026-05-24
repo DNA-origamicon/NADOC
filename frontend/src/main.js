@@ -112,6 +112,8 @@ import { initSceneInspector }                  from './scene/scene_inspector.js'
 import { createModal }                         from './ui/primitives/modal.js'
 import { createButton }                        from './ui/primitives/button.js'
 import { nadocBroadcast } from './shared/broadcast.js'
+import * as connectionMonitor from './shared/connection_monitor.js'
+import { getDocId, mintDocId, docHeaders, docHeadersFor, docKey } from './shared/doc_id.js'
 import { initMdOverlay }             from './scene/md_overlay.js'
 import { initMdSegmentationOverlay, computeSegments as _computeMdSegments } from './scene/md_segmentation_overlay.js'
 import { initPeriodicMdOverlay }    from './scene/periodic_md_overlay.js'
@@ -1833,7 +1835,7 @@ async function main() {
     if (_protRefreshInFlight) { _protRefreshPending = true; return }
     _protRefreshInFlight = true
     try {
-      const resp = await fetch('/api/design/protein/atomistic')
+      const resp = await fetch('/api/design/protein/atomistic', { headers: docHeaders() })
       if (!resp.ok) return
       const data = await resp.json()
       if (data?.atoms?.length) {
@@ -3834,7 +3836,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   let _assemblyFileHandle = null
   let _assemblyName       = null
   let _partEditContext    = null  // { instanceId, name } when editing a part
-  const _FNAME_KEY = 'nadoc:design-filename'
+  // Doc-scoped so each tab's filename/path metadata is independent (and the
+  // cadnano editor opened with the same ?doc= reads the matching values).
+  const _FNAME_KEY = docKey('nadoc:design-filename')
   function _setFileName(name) {
     _fileName = name
     if (name) localStorage.setItem(_FNAME_KEY, name)
@@ -3843,8 +3847,8 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // Workspace paths — set when a file is opened from or saved to the workspace.
   // Auto-save subscribers use these to know which file to overwrite.
-  const _WS_PATH_KEY  = 'nadoc:workspace-path'
-  const _ASM_PATH_KEY = 'nadoc:assembly-workspace-path'
+  const _WS_PATH_KEY  = docKey('nadoc:workspace-path')
+  const _ASM_PATH_KEY = docKey('nadoc:assembly-workspace-path')
   let _workspacePath         = localStorage.getItem(_WS_PATH_KEY)  || null
   let _assemblyWorkspacePath = localStorage.getItem(_ASM_PATH_KEY) || null
   function _setWorkspacePath(path) {
@@ -3871,6 +3875,24 @@ Typical debugging workflow for "reverts to 3D" bug:
   _assemblyWorkspacePath = null
   _fileName              = null
   let _needsWelcomeOnBoot = true
+
+  // ── Boot action — a tab opened by New/Open carries ?new=… or ?open=… and runs
+  // that action against its own ?doc=<id> once init completes (dispatched at the
+  // end of main()).  Suppress the welcome screen so it doesn't flash first.
+  const _bootDocAction = (() => {
+    const p = new URLSearchParams(window.location.search)
+    const newKind = p.get('new')      // 'part' | 'assembly'
+    const openPath = p.get('open')    // workspace-relative path
+    if (newKind || openPath) {
+      _needsWelcomeOnBoot = false
+      // The welcome screen is visible by default in the DOM until a file loads.
+      // Hide it NOW (direct DOM — `_welcomeScreen`/`_hideWelcome` aren't ready yet)
+      // so this New/Open-spawned tab never flashes it before the action runs.
+      document.getElementById('welcome-screen')?.classList.add('hidden')
+      return { newKind, openPath, openType: p.get('open-type'), openName: p.get('open-name') }
+    }
+    return null
+  })()
 
   // ── File-load overlay DOM refs + event wiring (used by part-edit init below) ─
   const _flProgress   = document.getElementById('file-load-progress')
@@ -3899,15 +3921,21 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Part-edit init — ?part-instance=<id> opens this tab as a part editor ────
   {
     const _partInstanceParam = new URLSearchParams(window.location.search).get('part-instance')
+    // The assembly lives in ITS OWN doc (the assembly tab's). This part-editor
+    // tab runs on its own isolated doc (so multiple open parts never clobber one
+    // another's design slot) but must reach into the assembly's doc to fetch its
+    // source design and to save edits back. That doc id rides in `?assembly-doc=`,
+    // NOT `?doc=` — see onEditPart / assembly_panel.
+    const _assemblyDocParam = new URLSearchParams(window.location.search).get('assembly-doc')
     if (_partInstanceParam) {
       _showFileLoad('Opening Part')
       let partDesign = null
 
-      // Normal path: assembly is live on server
+      // Normal path: assembly is live on server (in the assembly's doc)
       try {
         _flSetProgress(0, 'Fetching part from assembly…')
         _flAppendLog(`Instance: ${_partInstanceParam}`)
-        const resp = await fetch(`/api/assembly/instances/${_partInstanceParam}/design`)
+        const resp = await fetch(`/api/assembly/instances/${_partInstanceParam}/design`, { headers: docHeadersFor(_assemblyDocParam) })
         if (resp.ok) {
           const body = await resp.json()
           partDesign = body.design
@@ -3919,15 +3947,16 @@ Typical debugging workflow for "reverts to 3D" bug:
         _flAppendLog(`Network error: ${e?.message ?? String(e)} — trying local cache…`, 'warn')
       }
 
-      // Server-restart fallback: restore assembly from localStorage, then retry
+      // Server-restart fallback: restore the assembly INTO ITS OWN doc from the
+      // assembly tab's recovery cache (keyed by the assembly doc), then retry.
       if (!partDesign) {
-        const cached = api.getPersistedAssembly()
+        const cached = api.getPersistedAssembly(_assemblyDocParam)
         if (cached) {
           try {
             _flAppendLog('Restoring assembly from local cache…')
-            const restoreResult = await api.importAssembly(JSON.stringify(cached))
+            const restoreResult = await api.importAssembly(JSON.stringify(cached), { docId: _assemblyDocParam })
             if (restoreResult) {
-              const resp2 = await fetch(`/api/assembly/instances/${_partInstanceParam}/design`)
+              const resp2 = await fetch(`/api/assembly/instances/${_partInstanceParam}/design`, { headers: docHeadersFor(_assemblyDocParam) })
               if (resp2.ok) {
                 const body2 = await resp2.json()
                 partDesign = body2.design
@@ -3941,11 +3970,10 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (partDesign) {
         _flSetProgress(50, 'Importing design…')
         _flAppendLog('Parsing and validating design…')
+        // Import into THIS tab's own (isolated) doc — the editable working copy.
         await api.importDesign(JSON.stringify(partDesign))
         const partName = partDesign?.metadata?.name ?? 'Part'
-        _partEditContext = { instanceId: _partInstanceParam, name: partName }
-        // Populate currentAssembly in store so beforeunload can persist it
-        await api.getAssembly()
+        _partEditContext = { instanceId: _partInstanceParam, name: partName, assemblyDoc: _assemblyDocParam }
         api.setPersistedMode('part-edit:' + _partInstanceParam)
         _setFileName(partName)
         _needsWelcomeOnBoot = false
@@ -3966,7 +3994,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   // Save state to localStorage on page close as a safety net.
   window.addEventListener('beforeunload', () => {
     api.persistDesign()
-    api.persistAssembly()   // no-op if no assembly is loaded
+    // A part-editor tab has no assembly in its own doc (the assembly lives in the
+    // assembly tab's doc); skip so we don't write an empty/foreign assembly cache.
+    if (!_partEditContext) api.persistAssembly()   // no-op if no assembly is loaded
   })
 
   // ── File open / save ─────────────────────────────────────────────────────────
@@ -4076,7 +4106,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   /** Fetch the active design's .nadoc JSON from the server. */
   async function _getDesignContent() {
-    const r = await fetch('/api/design/export')
+    const r = await fetch('/api/design/export', { headers: docHeaders() })
     if (!r.ok) return null
     return r.text()
   }
@@ -4089,7 +4119,8 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (!silent) showToast('Failed to read design.', { severity: 'error' })
       return null
     }
-    const result = await api.patchInstanceDesign(_partEditContext.instanceId, content)
+    // Save-back targets the ASSEMBLY's doc (this tab edits on its own isolated doc).
+    const result = await api.patchInstanceDesign(_partEditContext.instanceId, content, { docId: _partEditContext.assemblyDoc })
     if (result) {
       _syncLog('info', 'BC-TX', `part-design-updated id=${_partEditContext.instanceId}`)
       _setSyncStatus('green', silent ? 'auto-saved to assembly' : 'saved to assembly')
@@ -4430,7 +4461,37 @@ Typical debugging workflow for "reverts to 3D" bug:
     setTimeout(() => nameInput?.focus(), 50)
   }
 
-  document.getElementById('menu-file-new')?.addEventListener('click', _openNewDesignModal)
+  // ── Multi-document: New / Open spawn a new tab unless this space is empty ────
+  // The backend keys state by document, and each tab owns a ?doc=<id>. Selecting
+  // New Part / New Assembly / Open File when this tab already holds content opens
+  // the new space in its OWN tab so the current work isn't replaced. A "completely
+  // empty" space (no helices/strands/instances and no feature-log entries) is
+  // reused in place.
+  function _spaceHasContent() {
+    const s = store.getState()
+    const d = s.currentDesign, a = s.currentAssembly
+    const dHas = !!d && (((d.helices?.length ?? 0) > 0) ||
+                         ((d.strands?.length ?? 0) > 0) ||
+                         ((d.feature_log?.length ?? 0) > 0))
+    const aHas = !!a && (((a.instances?.length ?? 0) > 0) ||
+                         ((a.feature_log?.length ?? 0) > 0))
+    return dHas || aHas
+  }
+
+  // If this tab has content, mint a doc id and open the requested action in a new
+  // tab; return true so the caller skips the in-place action. Empty → false.
+  async function _spawnDocTabIfBusy(actionQuery) {
+    if (!_spaceHasContent()) return false
+    const id = await mintDocId()
+    if (!id) return false
+    window.open(`/?doc=${encodeURIComponent(id)}&${actionQuery}`, 'nadoc-doc-' + id)
+    return true
+  }
+
+  document.getElementById('menu-file-new')?.addEventListener('click', async () => {
+    if (await _spawnDocTabIfBusy('new=part')) return
+    _openNewDesignModal()
+  })
 
   async function _onCreateClicked() {
     const nameInput = _newDesignBody.querySelector('#new-design-name')
@@ -4462,19 +4523,35 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
+  // Unified "Open File" — one picker shows both parts (.nadoc) and assemblies
+  // (.nass); route to the right loader by extension.  Pick in this tab, but open
+  // into a NEW tab when this space already holds content (multi-document).
   document.getElementById('menu-file-open')?.addEventListener('click', async () => {
-    const result = await openFileBrowser({ title: 'Open Part from Server', mode: 'open', fileType: 'part', api })
-    if (result) await _openPartFromServer(result.path, result.name)
+    const result = await openFileBrowser({ title: 'Open File', mode: 'open', fileType: 'all', api })
+    if (!result) return
+    const isAssembly = /\.nass$/i.test(result.path || result.name || '')
+    if (_spaceHasContent()) {
+      const id = await mintDocId()
+      if (id) {
+        const q = new URLSearchParams({
+          doc: id, open: result.path,
+          'open-type': isAssembly ? 'assembly' : 'part',
+          ...(result.name ? { 'open-name': result.name } : {}),
+        })
+        window.open(`/?${q.toString()}`, 'nadoc-doc-' + id)
+        return
+      }
+    }
+    if (isAssembly) await _openAssemblyFromServer(result.path)
+    else            await _openPartFromServer(result.path, result.name)
   })
 
-  // Save / Save As dispatch by mode.  In assembly mode "Save" / "Save As"
-  // had been showing "No design to save" because the handlers only checked
-  // currentDesign.  Now they route through the assembly save helpers when
-  // assemblyActive — matching the menu-file-save-assembly path so users
-  // can use one Save shortcut regardless of mode.
+  // "Save File" / "Save As" dispatch by mode: route to the assembly save
+  // helpers (_saveAssembly / _saveAssemblyAsGuarded) when assemblyActive, else
+  // the design save path. One Save File / Save As item serves both modes.
   async function _saveDispatch() {
     if (store.getState().assemblyActive) {
-      document.getElementById('menu-file-save-assembly')?.click()
+      await _saveAssembly()
       return
     }
     const { currentDesign } = store.getState()
@@ -4496,7 +4573,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
   async function _saveAsDispatch() {
     if (store.getState().assemblyActive) {
-      document.getElementById('menu-file-save-assembly-as')?.click()
+      await _saveAssemblyAsGuarded()
       return
     }
     await _saveAs()
@@ -4505,6 +4582,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-file-save-as')?.addEventListener('click', _saveAsDispatch)
 
   document.getElementById('menu-file-new-assembly')?.addEventListener('click', async () => {
+    if (await _spawnDocTabIfBusy('new=assembly')) return
     const name = window.prompt('Assembly name:', 'Untitled')
     if (name === null) return   // user cancelled
     const trimmed = name.trim() || 'Untitled'
@@ -4519,12 +4597,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   })
 
-  document.getElementById('menu-file-open-assembly')?.addEventListener('click', async () => {
-    const result = await openFileBrowser({ title: 'Open Assembly from Server', mode: 'open', fileType: 'assembly', api })
-    if (result) await _openAssemblyFromServer(result.path)
-  })
-
-  document.getElementById('menu-file-save-assembly')?.addEventListener('click', async () => {
+  // Assembly save helpers — invoked by the mode-aware Save File / Save As
+  // dispatchers and the Ctrl+Shift+S shortcut. The dedicated "Save Assembly" /
+  // "Save Assembly As…" / "Open Assembly" menu items were collapsed into the
+  // unified Save File / Save As / Open File entries.
+  async function _saveAssembly() {
     const { currentAssembly } = store.getState()
     if (!currentAssembly) { showToast('No assembly to save.', { severity: 'error' }); return }
     if (_exportRepActive) { showToast('Export in progress — try saving again in a moment.', { severity: 'warning' }); return }
@@ -4537,14 +4614,14 @@ Typical debugging workflow for "reverts to 3D" bug:
     } else {
       await _saveAssemblyAs()
     }
-  })
+  }
 
-  document.getElementById('menu-file-save-assembly-as')?.addEventListener('click', async () => {
+  async function _saveAssemblyAsGuarded() {
     const { currentAssembly } = store.getState()
     if (!currentAssembly) { showToast('No assembly to save.', { severity: 'error' }); return }
     if (_exportRepActive) { showToast('Export in progress — try saving again in a moment.', { severity: 'warning' }); return }
     await _saveAssemblyAs()
-  })
+  }
 
   document.getElementById('menu-file-upload')?.addEventListener('click', () => {
     const input = document.createElement('input')
@@ -5571,7 +5648,11 @@ Typical debugging workflow for "reverts to 3D" bug:
   document.getElementById('menu-view-cadnano')?.addEventListener('click', _toggleCadnano)
 
   document.getElementById('btn-open-editor')?.addEventListener('click', () => {
-    window.open('/cadnano-editor.html', 'nadoc-editor')
+    // Editor must edit the SAME backend document as this 3D tab → carry our doc id.
+    // In a part-editor tab this is the part's OWN isolated doc, so each open part
+    // gets a distinct editor window (name `nadoc-editor-<doc>`) — no collision.
+    const qs = getDocId() ? `?doc=${encodeURIComponent(getDocId())}` : ''
+    window.open(`/cadnano-editor.html${qs}`, 'nadoc-editor' + (getDocId() ? '-' + getDocId() : ''))
   })
 
   document.getElementById('menu-view-deform')?.addEventListener('click', _toggleDeformView)
@@ -5795,6 +5876,9 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (tf.overhangLocations !== prev.overhangLocations) {
       overhangLocations.setVisible(tf.overhangLocations)
       if (tf.overhangLocations) _rebuildOverhangLocations()
+      // Turning the overhang tool off in assembly mode drops any transient
+      // hover label (hover-reveal is gated on this tool — see _onAssemblyHoverMove).
+      else if (newState.assemblyActive) { _ovhgHoverKey = null; assemblyRenderer.setHoveredOverhang?.(null) }
     }
     if (tf.extensionLocations !== prev.extensionLocations) {
       designRenderer.setExtensionsVisible(tf.extensionLocations)
@@ -6179,7 +6263,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       e.preventDefault()
       // Ctrl+Shift+S dispatches by mode same as the menu Save As item.
       if (store.getState().assemblyActive) {
-        document.getElementById('menu-file-save-assembly-as')?.click()
+        _saveAssemblyAsGuarded()
       } else {
         document.getElementById('menu-file-save-as')?.click()
       }
@@ -7667,7 +7751,20 @@ Typical debugging workflow for "reverts to 3D" bug:
       await api.patchInstance(inst.id, { visible: !inst.visible })
     },
     onEditPart: (inst) => {
-      window.open(`/?part-instance=${inst.id}`, `nadoc-part-${inst.id}`)
+      // The part editor reads its source design from (and saves back to) the
+      // assembly's doc, but EDITS on its OWN isolated doc so multiple open parts
+      // don't clobber one another.
+      //
+      // We must pass that doc EXPLICITLY — we cannot let the new tab synthesize
+      // one: window.open() copies the opener's sessionStorage into the child, so
+      // the assembly tab's sticky `nadoc:tab-doc` would leak in and every part
+      // editor would resolve to the SAME doc (re-creating the clobber). An
+      // explicit `?doc=` wins in _resolveDocId and is deterministic per instance
+      // (uuid), so reopening the same part reuses its window + doc without reload.
+      const asmDoc  = getDocId()
+      const partDoc = `pe-${asmDoc ?? 'default'}-${inst.id}`
+      const asm     = asmDoc ? `&assembly-doc=${encodeURIComponent(asmDoc)}` : ''
+      window.open(`/?part-instance=${inst.id}&doc=${encodeURIComponent(partDoc)}${asm}`, `nadoc-part-${inst.id}`)
     },
     onDuplicate: async (inst) => {
       const offset = _computeAssemblyDuplicateOffset(inst.id)
@@ -8812,6 +8909,67 @@ Typical debugging workflow for "reverts to 3D" bug:
     show() { _syncDebugPanel?.classList.add('visible') },
     hide() { _syncDebugPanel?.classList.remove('visible') },
   }
+
+  // ── Backend connection monitor: status badge + silent restart recovery ───────
+  // Polls /api/health. On disconnect, the badge goes red; on a server restart
+  // (new server_instance_id) the backend's session-cache has already restored
+  // the live document — we just re-pull it. If the backend came back empty but
+  // this tab still holds the design in localStorage, offer to restore from here.
+  let _restartHandling = false
+
+  async function _recoverAfterRestart(health) {
+    const assemblyMode = store.getState().assemblyActive
+    if (assemblyMode) {
+      // Assemblies are recovered server-side (session-cache). Re-pull + rebuild.
+      await api.getAssembly()
+      const asm = store.getState().currentAssembly
+      if (asm) {
+        ;(asm.instances ?? []).forEach(i => assemblyRenderer.invalidateInstance(i.id))
+        await assemblyRenderer.rebuild(asm)
+        await assemblyRenderer.rebuildLinkers(asm)
+      }
+      return
+    }
+    if (health?.design_loaded) {
+      // Server-side recovery worked — passively re-pull design + geometry.
+      _reloadingFromSSE = true
+      try { await api.getDesign(); await api.getGeometry() }
+      finally { _reloadingFromSSE = false }
+      return
+    }
+    // Backend came back with no design. Offer to restore from this tab's cache.
+    const cached = api.getPersistedDesign()
+    if (cached && window.confirm(
+        'The backend restarted and no longer has your design loaded.\n\n' +
+        'Restore your work from this browser tab?')) {
+      await api.importDesign(JSON.stringify(cached))
+      await api.getGeometry()
+    }
+  }
+
+  connectionMonitor.start({ onChange: async (evt) => {
+    if (evt.type === 'disconnected') {
+      _setSyncStatus('red', 'reconnecting…')
+      _syncLog('warn', 'CONN', 'backend unreachable — reconnecting')
+    } else if (evt.type === 'reconnected') {
+      _setSyncStatus('green', 'reconnected')
+      _syncLog('info', 'CONN', 'backend reachable again')
+    } else if (evt.type === 'restarted') {
+      _syncLog('warn', 'CONN', 'backend restarted (new instance) — re-syncing')
+      _setSyncStatus('yellow', 'backend restarted — re-syncing…')
+      if (_restartHandling) return
+      _restartHandling = true
+      try {
+        await _recoverAfterRestart(evt.health)
+        _setSyncStatus('green', 'synced')
+      } catch (err) {
+        _setSyncStatus('red', 'recovery error')
+        _syncLog('err', 'CONN', `recovery failed: ${err?.message ?? err}`)
+      } finally {
+        _restartHandling = false
+      }
+    }
+  } })
 
   registerShortcut({
     key: 'd', ctrl: true, shift: true,
@@ -9959,6 +10117,14 @@ Typical debugging workflow for "reverts to 3D" bug:
   let _ovhgHoverKey = null
   function _onAssemblyHoverMove(e) {
     if (e.buttons !== 0) return
+    // Overhang hover-reveal is gated on the overhang tool (the "ovhg" button
+    // in the assembly tool strip → toolFilters.overhangLocations). When the
+    // tool is off, a part buried under overhangs stays freely hoverable so it
+    // can be selected; overhangs only respond once the tool is armed.
+    if (!store.getState().toolFilters?.overhangLocations) {
+      if (_ovhgHoverKey !== null) { _ovhgHoverKey = null; assemblyRenderer.setHoveredOverhang?.(null) }
+      return
+    }
     const oh = _nearestOverhangAt(e.clientX, e.clientY)
     const key = oh ? `${oh.instanceId}|${oh.overhangId}` : null
     if (key === _ovhgHoverKey) return
@@ -9995,11 +10161,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     // Overhang selection — a click within a medium radius of an overhang
     // toggles it into the ordered selection (which prefills the Overhangs
     // Manager's Side A / Side B on open) and shows a green ring + persistent
-    // label, rather than selecting/moving the part. Always active in assembly
-    // mode (no selectable toggle). A click that lands on anything that ISN'T an
-    // overhang (part body or empty space) clears the overhang selection, then
-    // falls through to normal part selection.
-    {
+    // label, rather than selecting/moving the part. Gated on the overhang tool
+    // (the "ovhg" button → toolFilters.overhangLocations): when the tool is
+    // off, clicks ignore overhangs entirely and fall through to part selection.
+    // When on, a click that lands on anything that ISN'T an overhang (part body
+    // or empty space) clears the overhang selection, then falls through.
+    if (store.getState().toolFilters?.overhangLocations) {
       const oh = _nearestOverhangAt(e.clientX, e.clientY)
       if (oh) { _toggleAssemblyOverhangSelection(oh); return }
       if ((store.getState().assemblyOverhangSelection ?? []).length)
@@ -11391,7 +11558,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     // Fetch and display the AI assistant prompt in a popup.
     let promptText = null
     try {
-      const r = await fetch('/api/design/export/namd-prompt')
+      const r = await fetch('/api/design/export/namd-prompt', { headers: docHeaders() })
       if (r.ok) promptText = await r.text()
     } catch (_) { /* non-fatal */ }
     if (!promptText) return
@@ -11859,6 +12026,19 @@ Typical debugging workflow for "reverts to 3D" bug:
   store.subscribe((newState, prevState) => {
     if (newState.staplesHidden !== prevState.staplesHidden) {
       _setMenuToggle('menu-view-hide-staples', newState.staplesHidden)
+    }
+  })
+
+  // ── Reference geometry show/hide (translucent backdrop strands) ───────────────
+  // The cadnano-editor window has its own independent toggle (separate store).
+  document.getElementById('menu-view-reference')?.addEventListener('click', () => {
+    const show = store.getState().showReferenceGeometry !== false  // default shown
+    store.setState({ showReferenceGeometry: !show })
+    _setMenuToggle('menu-view-reference', !show)  // pill ON when reference is shown
+  })
+  store.subscribe((newState, prevState) => {
+    if (newState.showReferenceGeometry !== prevState.showReferenceGeometry) {
+      _setMenuToggle('menu-view-reference', newState.showReferenceGeometry !== false)
     }
   })
 
@@ -12909,7 +13089,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     btn.disabled = true
 
     try {
-      const r = await fetch('/api/design/debug/mrdna-roundtrip')
+      const r = await fetch('/api/design/debug/mrdna-roundtrip', { headers: docHeaders() })
       if (!r.ok) {
         const msg = await r.text()
         showToast(`Round-trip test failed:\n${msg}`, { severity: 'error' })
@@ -13494,8 +13674,19 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (ids.length) nadocBroadcast.emit('selection-changed', { strandIds: ids })
   })
 
-  nadocBroadcast.onMessage(async ({ type, strandIds, source, windowName, designName, instanceId }) => {
+  nadocBroadcast.onMessage(async (data) => {
+    const { type, strandIds, source, windowName, designName, instanceId, designId, docName, docAssembly } = data
+    if (type === 'doc-presence-request') {
+      _announceDocPresence()
+    }
+    if (type === 'doc-presence') {
+      _otherTabDocs.set(source, { designId, docName, docAssembly })
+      _maybeWarnDocClobber(designId, docName, docAssembly)
+    }
     if (type === 'design-changed') {
+      // Doc-scoped: only react to mutations in OUR document. A different tab
+      // editing a different document must not make us refetch (multi-document).
+      if (!nadocBroadcast.isSameDoc(data)) return
       // Assembly windows ignore design-changed: their currentDesign is unused
       // while assemblyActive=true, and pulling it in can re-enter the auto-save /
       // overlay-rebuild chain with stale data. Part-edit / cadnano tabs still
@@ -13516,6 +13707,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       }
     }
     if (type === 'selection-changed') {
+      if (!nadocBroadcast.isSameDoc(data)) return   // doc-scoped
       _syncingFromBroadcast = true
       selectionManager.setMultiHighlight(strandIds ?? [])
       _syncingFromBroadcast = false
@@ -13537,7 +13729,10 @@ Typical debugging workflow for "reverts to 3D" bug:
       // emits 'design-changed', which refreshes any open cadnano editor.
       if (_partEditContext?.instanceId === instanceId) {
         try {
-          const r = await fetch(`/api/assembly/instances/${instanceId}/design`)
+          // Re-fetch the updated source FROM the assembly's doc; re-import into
+          // THIS tab's own doc (the importDesign emits a doc-scoped design-changed
+          // that refreshes only this part's cadnano editor).
+          const r = await fetch(`/api/assembly/instances/${instanceId}/design`, { headers: docHeadersFor(_partEditContext.assemblyDoc) })
           if (r.ok) {
             const body = await r.json()
             if (body?.design) await api.importDesign(JSON.stringify(body.design))
@@ -13593,8 +13788,9 @@ Typical debugging workflow for "reverts to 3D" bug:
     newBtn.className = 'dropdown-item'
     newBtn.textContent = 'Open New Editor ↗'
     newBtn.addEventListener('click', () => {
-      // Open with a unique target so this one gets a fresh tab
-      window.open('/cadnano-editor.html', 'nadoc-editor-' + Date.now())
+      // Open with a unique target so this one gets a fresh tab; carry our doc id.
+      const qs = getDocId() ? `?doc=${encodeURIComponent(getDocId())}` : ''
+      window.open(`/cadnano-editor.html${qs}`, 'nadoc-editor-' + Date.now())
     })
     dropdown.appendChild(newBtn)
 
@@ -13603,6 +13799,71 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // Request roll-call so any already-open editors re-announce themselves.
   nadocBroadcast.emit('editor-list-request')
+
+  // ── Interim multi-document guard (Phase 1; removed when Phase 2 lands) ────────
+  // The backend holds ONE document. If two plain design tabs edit DIFFERENT
+  // designs against it, their edits clobber each other. Announce this tab's
+  // document identity; warn once if another tab reports a different one.
+  const _otherTabDocs = new Map()   // source tabId → { designId, docName, docAssembly }
+  let _lastAnnouncedDesignId = null
+  let _docClobberWarned = false
+
+  function _announceDocPresence() {
+    const s = store.getState()
+    const id = s.currentDesign?.id ?? null
+    if (!id) return
+    nadocBroadcast.emit('doc-presence', {
+      designId:    id,
+      docName:     s.currentDesign?.metadata?.name ?? null,
+      docAssembly: !!s.assemblyActive,
+    })
+  }
+
+  function _maybeWarnDocClobber(otherId, otherName, otherAssembly) {
+    if (_docClobberWarned) return
+    const s = store.getState()
+    const myId = s.currentDesign?.id ?? null
+    // Assemblies use a separate backend slot (/api/assembly) — no contention.
+    if (s.assemblyActive || otherAssembly) return
+    if (!myId || !otherId || myId === otherId) return
+    _docClobberWarned = true
+    showToast(
+      `Another tab is editing "${otherName ?? 'a different design'}". This backend holds ` +
+      `one document at a time — edits from the two tabs may overwrite each other.`,
+      9000,
+    )
+  }
+
+  // Announce our document whenever its identity changes (a new design loaded).
+  store.subscribe((ns) => {
+    const id = ns.currentDesign?.id ?? null
+    if (id === _lastAnnouncedDesignId) return
+    _lastAnnouncedDesignId = id
+    _docClobberWarned = false   // new document → allow a fresh warning
+    _announceDocPresence()
+  })
+
+  // Ask any already-open tabs to announce their document, and announce ours.
+  nadocBroadcast.emit('doc-presence-request')
+  _announceDocPresence()
+
+  // ── Run the boot action for a New/Open-spawned tab (?new / ?open) ────────────
+  // This tab owns a fresh ?doc=<id>, so the action targets its own document.
+  // Strip the action params afterward (keep ?doc=) so a reload doesn't re-run it.
+  if (_bootDocAction) {
+    const { newKind, openPath, openType, openName } = _bootDocAction
+    const docId = getDocId()
+    if (docId) history.replaceState({}, '', `/?doc=${encodeURIComponent(docId)}`)
+    else        history.replaceState({}, '', '/')
+    if (newKind === 'part') {
+      _openNewDesignModal()
+    } else if (newKind === 'assembly') {
+      document.getElementById('menu-file-new-assembly')?.click()
+    } else if (openPath) {
+      if (openType === 'assembly') await _openAssemblyFromServer(openPath)
+      else                         await _openPartFromServer(openPath, openName || undefined)
+    }
+  }
 
 }
 

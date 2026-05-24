@@ -273,6 +273,7 @@
     .vt-btn.active[data-vt="undefinedBases"] { color: #fbbf24; border-color: #d97706; background: rgba(251,191,36,0.10); }
     .vt-btn.active[data-vt="overhangNames"]  { color: #fb923c; border-color: #ea580c; background: rgba(251,146,60,0.10); }
     .vt-btn.active[data-vt="grid"]           { color: #94a3b8; border-color: #475569; background: rgba(148,163,184,0.10); }
+    .vt-btn.active[data-vt="referenceGeometry"] { color: #7dd3fc; border-color: #0284c7; background: rgba(125,211,252,0.10); }
 
     /* ── Tool sidebar (right of pathview) ─────────────────────────── */
     #tool-sidebar {
@@ -1343,6 +1344,12 @@
               <line x1="13" y1="7" x2="15" y2="5" stroke="currentColor" stroke-width="1.2"/>
             </svg>
             <span class="sf-label-text">ovhg</span>
+          </button>
+          <button class="sf-btn vt-btn" data-vt="referenceGeometry" title="Show reference geometry — inactive backdrop strands (translucent) that auto-features ignore">
+            <svg width="16" height="10" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1" y="2" width="14" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.5"/>
+            </svg>
+            <span class="sf-label-text">ref</span>
           </button>
         </div>
         </div>

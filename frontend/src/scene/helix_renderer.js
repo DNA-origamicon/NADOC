@@ -182,6 +182,54 @@ function _setConeXZScale(entry, r) {
   entry.instMesh.instanceMatrix.needsUpdate = true
 }
 
+// ── Reference-geometry transparency ────────────────────────────────────────────
+//
+// Reference strands render translucent (true per-instance alpha) and the View
+// toggle hides them. Per-instance alpha needs an InstancedBufferAttribute, which
+// must live on a (cloned) per-mesh geometry — the GEO_* templates are shared.
+// Only installed for designs that actually contain reference strands, so normal
+// designs keep their opaque, non-transparent bead materials (zero regression).
+const REF_ALPHA = 0.4   // reference geometry opacity in the 3D scene
+
+function _setEntryAlpha(entry, a) {
+  const attr = entry.instMesh._instanceAlpha
+  if (!attr) return
+  attr.setX(entry.id, a)
+  attr.needsUpdate = true
+}
+
+/**
+ * Give *mesh* a per-instance `instanceAlpha` (default 1.0) and patch its material
+ * to multiply fragment alpha by it, discarding near-zero alpha (the hide toggle).
+ * Clones the shared geometry first. Only touches diffuseColor.a — no stock shader
+ * chunk variable is redefined (see LESSONS D5). No-op on impostor meshes.
+ */
+function _installInstanceAlpha(mesh) {
+  if (mesh._instanceAlpha) return
+  const capacity = mesh.instanceMatrix.count
+  mesh.geometry = mesh.geometry.clone()   // detach from the shared template
+  const attr = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(1), 1)
+  attr.setUsage(THREE.DynamicDrawUsage)
+  mesh.geometry.setAttribute('instanceAlpha', attr)
+  mesh._instanceAlpha = attr
+  const mat = mesh.material
+  mat.transparent = true
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader =
+      'attribute float instanceAlpha;\nvarying float vInstanceAlpha;\n' + shader.vertexShader
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      '#include <begin_vertex>\n  vInstanceAlpha = instanceAlpha;',
+    )
+    shader.fragmentShader = 'varying float vInstanceAlpha;\n' + shader.fragmentShader
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <color_fragment>',
+      '#include <color_fragment>\n  diffuseColor.a *= vInstanceAlpha;\n  if ( diffuseColor.a < 0.02 ) discard;',
+    )
+  }
+  mat.needsUpdate = true
+}
+
 // ── Slab helpers ──────────────────────────────────────────────────────────────
 
 function slabQuaternion(bnDir, tanDir) {
@@ -1926,6 +1974,32 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   let _cbFluoEntries  = new Map()   // `helix_id:bp_index` → THREE.Vector3 for fluorophore beads
   let _cbOvhgCyls     = new Map()   // _overhangCylData entry → {wsStart, wsEnd}
   let _cbSegments     = new Map()   // arrow.segments entry → {wsStart, wsEnd}
+
+  // ── Reference geometry: per-instance alpha + hide ──────────────────────────
+  // Installed only when the design has reference strands, so plain designs keep
+  // their opaque bead materials. setReferenceStrands / setReferenceHidden are
+  // (re)applied by design_renderer after each rebuild and on the View toggle.
+  let _refIdSet  = new Set()
+  let _refHidden = false
+  const _hasReference = (design?.strands ?? []).some(s => s.is_reference)
+  if (_hasReference) {
+    if (!_useImpostors) _installInstanceAlpha(iSpheres)
+    _installInstanceAlpha(iCubes)
+    if (!_useImpostors) _installInstanceAlpha(iFluoros)
+    _installInstanceAlpha(iCones)
+    _installInstanceAlpha(iSlabs)
+  }
+  function _refAlphaFor(strandId) {
+    if (!_refIdSet.has(strandId)) return 1.0
+    return _refHidden ? 0.0 : REF_ALPHA
+  }
+  function _applyReferenceAlpha() {
+    if (!_hasReference) return
+    for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
+    for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
+    for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
+    for (const e of coneEntries)     _setEntryAlpha(e, _refAlphaFor(e.strandId))
+  }
   // ── Public interface ───────────────────────────────────────────────────────
 
   return {
@@ -1945,6 +2019,17 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     setEntryColor:  _setInstColor,
     setBeadScale:   _setBeadScale,
     setConeXZScale: _setConeXZScale,
+
+    /** Mark which strand IDs are reference geometry (rendered translucent). */
+    setReferenceStrands(idSet) {
+      _refIdSet = idSet instanceof Set ? idSet : new Set(idSet)
+      _applyReferenceAlpha()
+    },
+    /** Hide (alpha→0, fragment-discarded) or show reference geometry. */
+    setReferenceHidden(hidden) {
+      _refHidden = !!hidden
+      _applyReferenceAlpha()
+    },
 
     /** Three-state axis line visibility:
      *    'deformed' — curved shaft visible (TubeGeometry at deformed samples);

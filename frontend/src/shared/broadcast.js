@@ -22,13 +22,15 @@
  *   })
  */
 
+import { getDocId } from './doc_id.js'
+
 const _id = crypto.randomUUID()
 const _channel = new BroadcastChannel('nadoc-design')
 
 export const nadocBroadcast = {
-  /** Emit a message to all OTHER tabs. */
+  /** Emit a message to all OTHER tabs. Auto-stamps the sender's document id. */
   emit(type, extra = {}) {
-    _channel.postMessage({ type, source: _id, ...extra })
+    _channel.postMessage({ type, source: _id, docId: getDocId(), ...extra })
   },
 
   /**
@@ -43,6 +45,11 @@ export const nadocBroadcast = {
     _channel.addEventListener('message', _listener)
     return () => _channel.removeEventListener('message', _listener)
   },
+
+  /** True if a received message came from a tab editing THIS tab's document.
+   * Use to scope same-document events (design-changed, selection-changed) so a
+   * mutation in one document doesn't make another document's tab refetch. */
+  isSameDoc(data) { return (data?.docId ?? null) === getDocId() },
 
   /** This tab's unique ID (for debugging). */
   get tabId() { return _id },

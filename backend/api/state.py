@@ -1,28 +1,24 @@
 """
-API layer — active design state singleton.
+API layer — active design state, keyed by document (multi-document, Phase 2).
 
-Holds a single in-memory Design instance shared across all request handlers.
-All mutations are protected by a threading.Lock.
+Holds a registry of in-memory Design "sessions", one per ``doc_id``.  The active
+document for a request is resolved from :mod:`backend.api.doc_context` (set by
+the DocContextMiddleware from the ``X-NADOC-Doc`` header / ``?doc=`` query).
+Requests that name no document resolve to ``DEFAULT_DOC_ID`` — so single-document
+clients, internal callers, and the entire test suite behave exactly as before.
 
-Also maintains undo/redo history stacks (up to MAX_UNDO_STEPS deep each).
-Every call to set_design() or mutate_and_validate() pushes the previous state
-onto the undo stack and clears the redo stack.  undo() pops from the undo stack
-and pushes the displaced state onto the redo stack.  redo() reverses that.
+Each session has its own Design, undo/redo stacks (up to MAX_UNDO_STEPS deep),
+optional PDB atomistic model, and a monotonic revision counter.  The protein
+library is intentionally PROCESS-GLOBAL (shared across documents) so an imported
+PDB can be attached across designs.  All access is protected by a single lock.
 
 Usage
 -----
     from backend.api import state
 
-    # Read
     design = state.get_or_404()
-
-    # Mutate + validate atomically
     design, report = state.mutate_and_validate(lambda d: d.helices.append(h))
-
-    # Undo last mutation (returns (design, report) or raises 404 if nothing to undo)
     design, report = state.undo()
-
-    # Redo last undone mutation (returns (design, report) or raises 404 if nothing to redo)
     design, report = state.redo()
 """
 
@@ -33,10 +29,12 @@ import datetime as _dt
 import gzip
 import threading
 from collections import deque
+from dataclasses import dataclass, field
 from typing import Callable
 
 from fastapi import HTTPException
 
+from backend.api.doc_context import get_current_doc
 from backend.core.cluster_reconcile import (
     MutationReport,
     reconcile_cluster_membership,
@@ -61,40 +59,150 @@ MAX_UNDO_STEPS = 50
 # Entries themselves remain in the log so historical labels stay visible.
 MAX_SNAPSHOT_BUDGET_BYTES = 5_000_000
 
+
+@dataclass
+class _DesignSession:
+    """Per-document design state: the active design + its undo/redo + extras."""
+    design: Design | None = None
+    history: deque = field(default_factory=lambda: deque(maxlen=MAX_UNDO_STEPS))
+    redo: deque = field(default_factory=lambda: deque(maxlen=MAX_UNDO_STEPS))
+    # Optional pre-built atomistic model from PDB import (per document).
+    pdb_atomistic: object | None = None
+    # Monotonic counter bumped on every reassignment of this doc's design. The
+    # session-cache flush thread reads it to skip serializing unchanged docs.
+    revision: int = 0
+
+
 _lock = threading.Lock()
-_active_design: Design | None = None
-_history: deque[Design] = deque(maxlen=MAX_UNDO_STEPS)
-_redo:    deque[Design] = deque(maxlen=MAX_UNDO_STEPS)
+_sessions: dict[str, _DesignSession] = {}
 
-# Optional pre-built atomistic model from PDB import.
-# When set, GET /design/atomistic returns this instead of computing from templates.
-_pdb_atomistic: object | None = None
-
-# Session-level protein library, keyed by asset id.  Decoupled from any one
-# design so an imported PDB can be attached across designs in a session.
-# Persisted copies live on the Design/Assembly that reference them.
+# Session-level protein library, keyed by asset id.  PROCESS-GLOBAL (shared
+# across documents) — an imported PDB can be attached across designs.  Persisted
+# copies live on the Design/Assembly that reference them.
 _protein_library: dict[str, ProteinAsset] = {}
 
 
+def _session() -> _DesignSession:
+    """Return the current request's document session, creating it lazily.
+
+    MUST be called while holding ``_lock``.
+    """
+    doc = get_current_doc()
+    s = _sessions.get(doc)
+    if s is None:
+        s = _DesignSession()
+        _sessions[doc] = s
+    return s
+
+
+# ── Document registry helpers (multi-document) ───────────────────────────────
+
+def list_doc_ids() -> list[str]:
+    """Doc ids that currently hold a design."""
+    with _lock:
+        return [doc for doc, s in _sessions.items() if s.design is not None]
+
+
+def peek_design(doc_id: str) -> Design | None:
+    """The design for a specific doc id without touching the ContextVar."""
+    with _lock:
+        s = _sessions.get(doc_id)
+        return s.design if s else None
+
+
+def drop_doc(doc_id: str) -> bool:
+    """Forget a document's design session entirely. Returns True if it existed.
+
+    Does NOT touch the shared protein library (other open docs may use it).
+    """
+    with _lock:
+        return _sessions.pop(doc_id, None) is not None
+
+
+def restore_doc_design(doc_id: str, design: Design) -> None:
+    """Load a design into a specific doc's session (startup recovery).
+
+    No undo history is created — the cached design was already a live, fully
+    post-processed design.
+    """
+    with _lock:
+        s = _sessions.get(doc_id)
+        if s is None:
+            s = _DesignSession()
+            _sessions[doc_id] = s
+        s.design = design
+        s.revision += 1
+
+
+def revision_map() -> dict[str, int]:
+    """``{doc_id: revision}`` for every design session (cheap; for the cache)."""
+    with _lock:
+        return {doc: s.revision for doc, s in _sessions.items()}
+
+
+def copy_doc_for_persist(doc_id: str) -> tuple[Design | None, int]:
+    """``(deep_copy_of_doc_design_or_None, revision)`` for one doc, under lock.
+
+    Lets the session-cache flush thread serialize a stable snapshot OUTSIDE the
+    lock without racing an in-place mutation.
+    """
+    with _lock:
+        s = _sessions.get(doc_id)
+        if s is None:
+            return None, 0
+        snap = s.design.model_copy(deep=True) if s.design is not None else None
+        return snap, s.revision
+
+
+# ── Current-document accessors ───────────────────────────────────────────────
+
 def get_design() -> Design | None:
     with _lock:
-        return _active_design
+        return _session().design
+
+
+def revision() -> int:
+    """Current document's change-counter."""
+    with _lock:
+        return _session().revision
+
+
+def copy_for_persist() -> tuple[Design | None, int]:
+    """``(deep copy of current doc's design or None, revision)`` under the lock."""
+    with _lock:
+        s = _session()
+        snap = s.design.model_copy(deep=True) if s.design is not None else None
+        return snap, s.revision
 
 
 def set_design(d: Design) -> None:
-    global _active_design
     with _lock:
-        if _active_design is not None:
-            _history.append(_active_design.model_copy(deep=True))
-        _redo.clear()
-        _active_design = d
+        s = _session()
+        if s.design is not None:
+            s.history.append(s.design.model_copy(deep=True))
+        s.redo.clear()
+        s.design = d
+        s.revision += 1
 
 
 def get_or_404() -> Design:
     with _lock:
-        if _active_design is None:
+        s = _session()
+        if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
-        return _active_design
+        return s.design
+
+
+def undo_depth() -> int:
+    """Current document's undo stack depth."""
+    with _lock:
+        return len(_session().history)
+
+
+def redo_depth() -> int:
+    """Current document's redo stack depth."""
+    with _lock:
+        return len(_session().redo)
 
 
 def mutate_and_validate(
@@ -105,15 +213,16 @@ def mutate_and_validate(
     Pushes the pre-mutation snapshot onto the undo stack and clears redo.
     Returns (design, report).  Raises HTTP 404 if no active design.
     """
-    global _active_design
     with _lock:
-        if _active_design is None:
+        s = _session()
+        if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
-        _history.append(_active_design.model_copy(deep=True))
-        _redo.clear()
-        fn(_active_design)
-        report = validate_design(_active_design)
-    return _active_design, report
+        s.history.append(s.design.model_copy(deep=True))
+        s.redo.clear()
+        fn(s.design)
+        report = validate_design(s.design)
+        s.revision += 1
+        return s.design, report
 
 
 def mutate_with_reconcile(
@@ -137,18 +246,19 @@ def mutate_with_reconcile(
     (cluster CRUD, feature-log replay, ``relax_overhang_connection``,
     importers).  Those keep :func:`mutate_and_validate`.
     """
-    global _active_design
     with _lock:
-        if _active_design is None:
+        s = _session()
+        if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
-        before = _active_design.model_copy(deep=True)
-        _history.append(before)
-        _redo.clear()
-        report = fn(_active_design)
-        reconciled = reconcile_cluster_membership(before, _active_design, report)
-        _active_design = _retry_pending_ligations(before, reconciled)
-        validation = validate_design(_active_design)
-    return _active_design, validation
+        before = s.design.model_copy(deep=True)
+        s.history.append(before)
+        s.redo.clear()
+        report = fn(s.design)
+        reconciled = reconcile_cluster_membership(before, s.design, report)
+        s.design = _retry_pending_ligations(before, reconciled)
+        validation = validate_design(s.design)
+        s.revision += 1
+        return s.design, validation
 
 
 def replace_with_reconcile(
@@ -163,17 +273,18 @@ def replace_with_reconcile(
 
     Same cluster-reconciler semantics as :func:`mutate_with_reconcile`.
     """
-    global _active_design
     with _lock:
-        if _active_design is None:
+        s = _session()
+        if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
-        before = _active_design.model_copy(deep=True)
-        _history.append(before)
-        _redo.clear()
+        before = s.design.model_copy(deep=True)
+        s.history.append(before)
+        s.redo.clear()
         reconciled = reconcile_cluster_membership(before, new_design, report)
-        _active_design = _retry_pending_ligations(before, reconciled)
-        validation = validate_design(_active_design)
-    return _active_design, validation
+        s.design = _retry_pending_ligations(before, reconciled)
+        validation = validate_design(s.design)
+        s.revision += 1
+        return s.design, validation
 
 
 def encode_design_snapshot(design: Design) -> tuple[str, int]:
@@ -289,37 +400,37 @@ def mutate_with_feature_log(
     auto-break, auto-merge, auto-crossover, create-near/far-ends) and bulk
     overhang manager operations.
     """
-    global _active_design
     with _lock:
-        if _active_design is None:
+        s = _session()
+        if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
-        before = _active_design.model_copy(deep=True)
-        _history.append(before)
-        _redo.clear()
+        before = s.design.model_copy(deep=True)
+        s.history.append(before)
+        s.redo.clear()
 
         payload_b64, uncompressed_size = encode_design_snapshot(before)
 
-        result = fn(_active_design)
+        result = fn(s.design)
         # Three return shapes supported:
         #   - Design                      : pure-functional, no custom report.
         #   - (Design, MutationReport)    : pure-functional + custom reconcile hint.
         #   - MutationReport / None       : in-place mutation; report optional.
         if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], Design):
-            _active_design = result[0]
+            s.design = result[0]
             report = result[1] if isinstance(result[1], MutationReport) else None
         elif isinstance(result, Design):
-            _active_design = result
+            s.design = result
             report: MutationReport | None = None
         else:
             report = result if isinstance(result, MutationReport) else None
 
-        reconciled = reconcile_cluster_membership(before, _active_design, report)
-        _active_design = _retry_pending_ligations(before, reconciled)
+        reconciled = reconcile_cluster_membership(before, s.design, report)
+        s.design = _retry_pending_ligations(before, reconciled)
 
         # Capture POST-state AFTER reconcile + retry so back-and-forth seeking
         # can restore the live topology even after the slider has been scrubbed
         # back through this entry.
-        post_b64, post_size = encode_design_snapshot(_active_design)
+        post_b64, post_size = encode_design_snapshot(s.design)
 
         snap_entry = SnapshotLogEntry(
             op_kind=op_kind,
@@ -331,11 +442,12 @@ def mutate_with_feature_log(
             post_state_gz_b64=post_b64,
             post_state_size_bytes=post_size,
         )
-        _active_design.feature_log.append(snap_entry)
-        _evict_oldest_payloads_if_over_budget(_active_design)
+        s.design.feature_log.append(snap_entry)
+        _evict_oldest_payloads_if_over_budget(s.design)
 
-        validation = validate_design(_active_design)
-    return _active_design, validation, snap_entry
+        validation = validate_design(s.design)
+        s.revision += 1
+        return s.design, validation, snap_entry
 
 
 def mutate_with_minor_log(
@@ -367,16 +479,16 @@ def mutate_with_minor_log(
 
     Returns ``(design, validation_report, minor_entry)``.
     """
-    global _active_design
     with _lock:
-        if _active_design is None:
+        s = _session()
+        if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
-        before = _active_design.model_copy(deep=True)
-        _history.append(before)
-        _redo.clear()
+        before = s.design.model_copy(deep=True)
+        s.history.append(before)
+        s.redo.clear()
 
         # Detect open cluster: last entry must be a non-evicted RoutingClusterLogEntry.
-        last_entry = _active_design.feature_log[-1] if _active_design.feature_log else None
+        last_entry = s.design.feature_log[-1] if s.design.feature_log else None
         is_append = (
             isinstance(last_entry, RoutingClusterLogEntry)
             and not last_entry.evicted
@@ -389,20 +501,20 @@ def mutate_with_minor_log(
             pre_b64, pre_size = encode_design_snapshot(before)
 
         # Run the user's mutation.
-        result = fn(_active_design)
+        result = fn(s.design)
         if isinstance(result, Design):
-            _active_design = result
+            s.design = result
             report: MutationReport | None = None
         else:
             report = result if isinstance(result, MutationReport) else None
 
-        reconciled = reconcile_cluster_membership(before, _active_design, report)
-        _active_design = _retry_pending_ligations(before, reconciled)
+        reconciled = reconcile_cluster_membership(before, s.design, report)
+        s.design = _retry_pending_ligations(before, reconciled)
 
         # Re-encode post-state after reconcile + retry so back-and-forth
         # seeking restores the live topology even after the slider has been
         # scrubbed back through the cluster.
-        post_b64, post_size = encode_design_snapshot(_active_design)
+        post_b64, post_size = encode_design_snapshot(s.design)
 
         now_iso = _dt.datetime.now(_dt.timezone.utc).isoformat()
         minor_entry = MinorMutationLogEntry(
@@ -413,7 +525,7 @@ def mutate_with_minor_log(
         )
 
         if is_append:
-            cluster = _active_design.feature_log[-1]
+            cluster = s.design.feature_log[-1]
             cluster.children.append(minor_entry)
             cluster.post_state_gz_b64 = post_b64
             cluster.post_state_size_bytes = post_size
@@ -427,12 +539,13 @@ def mutate_with_minor_log(
                 post_state_gz_b64=post_b64,
                 post_state_size_bytes=post_size,
             )
-            _active_design.feature_log.append(cluster)
+            s.design.feature_log.append(cluster)
 
-        _evict_oldest_payloads_if_over_budget(_active_design)
+        _evict_oldest_payloads_if_over_budget(s.design)
 
-        validation = validate_design(_active_design)
-    return _active_design, validation, minor_entry
+        validation = validate_design(s.design)
+        s.revision += 1
+        return s.design, validation, minor_entry
 
 
 def undo() -> tuple[Design, ValidationReport]:
@@ -440,14 +553,15 @@ def undo() -> tuple[Design, ValidationReport]:
 
     Returns (design, report).  Raises HTTP 404 if nothing to undo.
     """
-    global _active_design
     with _lock:
-        if not _history:
+        s = _session()
+        if not s.history:
             raise HTTPException(status_code=404, detail="Nothing to undo.")
-        _redo.append(_active_design.model_copy(deep=True))
-        _active_design = _history.pop()
-        report = validate_design(_active_design)
-    return _active_design, report
+        s.redo.append(s.design.model_copy(deep=True))
+        s.design = s.history.pop()
+        report = validate_design(s.design)
+        s.revision += 1
+        return s.design, report
 
 
 def redo() -> tuple[Design, ValidationReport]:
@@ -455,33 +569,42 @@ def redo() -> tuple[Design, ValidationReport]:
 
     Returns (design, report).  Raises HTTP 404 if nothing to redo.
     """
-    global _active_design
     with _lock:
-        if not _redo:
+        s = _session()
+        if not s.redo:
             raise HTTPException(status_code=404, detail="Nothing to redo.")
-        _history.append(_active_design.model_copy(deep=True))
-        _active_design = _redo.pop()
-        report = validate_design(_active_design)
-    return _active_design, report
+        s.history.append(s.design.model_copy(deep=True))
+        s.design = s.redo.pop()
+        report = validate_design(s.design)
+        s.revision += 1
+        return s.design, report
 
 
 def clear_history() -> None:
-    """Discard both undo and redo history (e.g. after loading a new design from disk)."""
-    global _pdb_atomistic
+    """Discard both undo and redo history for the current doc (e.g. after loading
+    a new design from disk)."""
     with _lock:
-        _history.clear()
-        _redo.clear()
-        _pdb_atomistic = None
+        s = _session()
+        s.history.clear()
+        s.redo.clear()
+        s.pdb_atomistic = None
 
 
 def close_session() -> None:
-    """Erase the active design and all history (used when the user closes the session)."""
-    global _active_design, _pdb_atomistic
+    """Erase the current document's design and history.
+
+    Also clears the shared protein library (preserves the historical
+    single-document "Close Session" semantics).  The multi-document close path
+    (:func:`drop_doc`, used by ``DELETE /documents/{id}``) leaves the library
+    intact so other open documents keep their assets.
+    """
     with _lock:
-        _active_design = None
-        _history.clear()
-        _redo.clear()
-        _pdb_atomistic = None
+        s = _session()
+        s.design = None
+        s.history.clear()
+        s.redo.clear()
+        s.pdb_atomistic = None
+        s.revision += 1
         _protein_library.clear()
 
 
@@ -491,28 +614,27 @@ def snapshot() -> None:
     Use this before starting a multi-step operation (e.g., step-by-step autostaple)
     so the entire operation is undoable as a single Ctrl-Z.
     """
-    global _active_design
     with _lock:
-        if _active_design is not None:
-            _history.append(_active_design.model_copy(deep=True))
-        _redo.clear()
+        s = _session()
+        if s.design is not None:
+            s.history.append(s.design.model_copy(deep=True))
+        s.redo.clear()
 
 
 def get_pdb_atomistic() -> object | None:
-    """Return the stored PDB atomistic model, or None."""
+    """Return the stored PDB atomistic model for the current doc, or None."""
     with _lock:
-        return _pdb_atomistic
+        return _session().pdb_atomistic
 
 
 def set_pdb_atomistic(model: object | None) -> None:
-    """Store a pre-built atomistic model from PDB import."""
-    global _pdb_atomistic
+    """Store a pre-built atomistic model from PDB import for the current doc."""
     with _lock:
-        _pdb_atomistic = model
+        _session().pdb_atomistic = model
 
 
 def add_protein_asset(asset: ProteinAsset) -> None:
-    """Add (or replace) a protein asset in the session library."""
+    """Add (or replace) a protein asset in the shared session library."""
     with _lock:
         _protein_library[asset.id] = asset
 
@@ -524,7 +646,7 @@ def get_protein_asset(asset_id: str) -> ProteinAsset | None:
 
 
 def list_protein_assets() -> list[ProteinAsset]:
-    """Return all protein assets in the session library."""
+    """Return all protein assets in the shared session library."""
     with _lock:
         return list(_protein_library.values())
 
@@ -541,9 +663,10 @@ def set_design_silent(d: Design) -> None:
     Use for intermediate steps in a multi-step operation where snapshot()
     was already called before the first step.
     """
-    global _active_design
     with _lock:
-        _active_design = d
+        s = _session()
+        s.design = d
+        s.revision += 1
 
 
 def set_design_silent_reconciled(
@@ -558,9 +681,10 @@ def set_design_silent_reconciled(
     ``add_nick_batch``).  Caller is responsible for capturing ``before`` from
     :func:`get_or_404` *before* :func:`snapshot` and passing it here.
     """
-    global _active_design
     with _lock:
+        s = _session()
         reconciled = reconcile_cluster_membership(before, new_design, report)
-        _active_design = reconciled
-        validation = validate_design(_active_design)
-    return _active_design, validation
+        s.design = reconciled
+        validation = validate_design(s.design)
+        s.revision += 1
+        return s.design, validation

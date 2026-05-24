@@ -1464,6 +1464,7 @@ export function initPathview(canvasEl, containerEl, {
     xoverAt5 = false, xoverAt3 = false,
     glowStrand = false,
     thickMul = 1.0,
+    dashed = false,
   ) {
     const isFwd   = dom.direction === 'FORWARD'
     const y       = isFwd ? info.fwdY : info.revY
@@ -1478,6 +1479,35 @@ export function initPathview(canvasEl, containerEl, {
     if (glowStrand) {
       ctx.shadowColor = CLR_STRAND_GLOW
       ctx.shadowBlur  = 10 / _zoom
+    }
+
+    // Reference geometry draws as dashed hollow outlines instead of solid fills,
+    // so it reads as an inactive backdrop at a glance. _DASH is in screen px
+    // (÷_zoom under the scaled world transform).
+    const _DASH  = dashed ? [5 / _zoom, 3.5 / _zoom] : null
+    const _capLW = 1.6 / _zoom
+    function _capRect(rx, ry, rw, rh, col) {
+      if (dashed) {
+        ctx.strokeStyle = col; ctx.lineWidth = _capLW
+        ctx.setLineDash(_DASH); ctx.strokeRect(rx, ry, rw, rh); ctx.setLineDash([])
+      } else { ctx.fillStyle = col; ctx.fillRect(rx, ry, rw, rh) }
+    }
+    function _bodyFill(bx0, bx1, by, thick, col) {
+      if (bx1 <= bx0) return
+      if (dashed) {
+        ctx.strokeStyle = col; ctx.lineWidth = thick; ctx.lineCap = 'butt'
+        ctx.setLineDash(_DASH)
+        ctx.beginPath(); ctx.moveTo(bx0, by); ctx.lineTo(bx1, by); ctx.stroke()
+        ctx.setLineDash([]); ctx.lineCap = 'round'
+      } else { ctx.fillStyle = col; ctx.fillRect(bx0, by - thick / 2, bx1 - bx0, thick) }
+    }
+    function _capTri(pts, col) {
+      ctx.beginPath()
+      ctx.moveTo(pts[0][0], pts[0][1]); ctx.lineTo(pts[1][0], pts[1][1]); ctx.lineTo(pts[2][0], pts[2][1])
+      ctx.closePath()
+      if (dashed) {
+        ctx.strokeStyle = col; ctx.lineWidth = _capLW; ctx.setLineDash(_DASH); ctx.stroke(); ctx.setLineDash([])
+      } else { ctx.fillStyle = col; ctx.fill() }
     }
 
     // Per-element selection — each element highlighted independently.
@@ -1518,21 +1548,12 @@ export function initPathview(canvasEl, containerEl, {
                       :                  x2 - BP_W
 
       if (!suppress5prime) {
-        ctx.fillStyle = cap5Color
-        ctx.fillRect(x1, y - sqSz / 2, sqSz, sqSz)   // 5′ square
+        _capRect(x1, y - sqSz / 2, sqSz, sqSz, cap5Color)   // 5′ square
       }
-      ctx.fillStyle = color
-      if (bodyEnd > bodyStart) {
-        ctx.fillRect(bodyStart, y - sThick / 2, bodyEnd - bodyStart, sThick)
-      }
+      _bodyFill(bodyStart, bodyEnd, y, sThick, color)
       if (!suppress3prime) {
-        ctx.fillStyle = cap3Color
         const triStart = x2 - BP_W
-        ctx.beginPath()
-        ctx.moveTo(triStart, y - half)
-        ctx.lineTo(x2,       y)
-        ctx.lineTo(triStart, y + half)
-        ctx.closePath(); ctx.fill()
+        _capTri([[triStart, y - half], [x2, y], [triStart, y + half]], cap3Color)
       }
     } else {
       // REVERSE — 5′ at RIGHT (hi), 3′ at LEFT (lo)
@@ -1544,21 +1565,12 @@ export function initPathview(canvasEl, containerEl, {
                       :                  x1 + BP_W
 
       if (!suppress5prime) {
-        ctx.fillStyle = cap5Color
-        ctx.fillRect(x2 - sqSz, y - sqSz / 2, sqSz, sqSz)   // 5′ square
+        _capRect(x2 - sqSz, y - sqSz / 2, sqSz, sqSz, cap5Color)   // 5′ square
       }
-      ctx.fillStyle = color
-      if (bodyEnd > bodyStart) {
-        ctx.fillRect(bodyStart, y - sThick / 2, bodyEnd - bodyStart, sThick)
-      }
+      _bodyFill(bodyStart, bodyEnd, y, sThick, color)
       if (!suppress3prime) {
-        ctx.fillStyle = cap3Color
         const triEnd = x1 + BP_W
-        ctx.beginPath()
-        ctx.moveTo(triEnd, y - half)
-        ctx.lineTo(x1,     y)
-        ctx.lineTo(triEnd, y + half)
-        ctx.closePath(); ctx.fill()
+        _capTri([[triEnd, y - half], [x1, y], [triEnd, y + half]], cap3Color)
       }
     }
     if (glowStrand) { ctx.shadowBlur = 0 }
@@ -1571,6 +1583,9 @@ export function initPathview(canvasEl, containerEl, {
     const extEndSet = new Set((_design.extensions ?? []).map(e => `${e.strand_id}:${e.end}`))
     for (let si = 0; si < _design.strands.length; si++) {
       const strand   = _design.strands[si]
+      const isRef    = !!strand.is_reference
+      // Reference geometry: hide when the view toggle is off, else draw dashed.
+      if (isRef && _viewTools.referenceGeometry === false) continue
       const isGlow   = _strandSelectedIds.has(strand.id)
       const hm       = _heatmapCache.get(si)
       const color    = isGlow ? CLR_STRAND_GLOW : (hm ? hm.color : _components.colorOf(si))
@@ -1618,7 +1633,7 @@ export function initPathview(canvasEl, containerEl, {
         const suppress5 = xoverAt5 || sameHelixAt5 || extAt5
         const suppress3 = xoverAt3 || sameHelixAt3 || extAt3
 
-        _drawDomain(dom, info, color, suppress5, suppress3, xoverAt5 || extAt5, xoverAt3 || extAt3, isGlow, thickMul)
+        _drawDomain(dom, info, color, suppress5, suppress3, xoverAt5 || extAt5, xoverAt3 || extAt3, isGlow, thickMul, isRef)
       }
     }
   }
@@ -1640,6 +1655,9 @@ export function initPathview(canvasEl, containerEl, {
       const entry = strandMap.get(ext.strand_id)
       if (!entry) continue
       const { strand, idx } = entry
+      const isRef = !!strand.is_reference
+      if (isRef && _viewTools.referenceGeometry === false) continue
+      const _extDash = isRef ? [5 / _zoom, 3.5 / _zoom] : null
 
       const dom = ext.end === 'five_prime'
         ? strand.domains[0]
@@ -1689,14 +1707,16 @@ export function initPathview(canvasEl, containerEl, {
       ctx.strokeStyle = color
       ctx.lineWidth   = lineW
       ctx.shadowBlur  = 0
+      if (_extDash) ctx.setLineDash(_extDash)
       ctx.beginPath()
       ctx.moveTo(ax, ay)
       ctx.lineTo(fx, fy)
       ctx.stroke()
+      if (_extDash) ctx.setLineDash([])
 
       // ── End cap or modification dot at free end ─────────────────────────────
       if (ext.modification) {
-        // Modification: coloured dot (replaces the end cap)
+        // Modification: coloured dot (replaces the end cap) — always solid.
         const dotColor = EXT_MOD_COLORS[ext.modification] ?? '#ffffff'
         ctx.fillStyle   = dotColor
         ctx.strokeStyle = '#000000'
@@ -1706,18 +1726,27 @@ export function initPathview(canvasEl, containerEl, {
         ctx.fill()
         ctx.stroke()
       } else if (ext.end === 'five_prime') {
-        // 5′ square at arm tip
-        ctx.fillStyle = color
-        ctx.fillRect(fx - sqSz / 2, fy - sqSz / 2, sqSz, sqSz)
+        // 5′ square at arm tip (hollow dashed for reference geometry)
+        if (isRef) {
+          ctx.strokeStyle = color; ctx.lineWidth = 1.6 / _zoom; ctx.setLineDash(_extDash)
+          ctx.strokeRect(fx - sqSz / 2, fy - sqSz / 2, sqSz, sqSz); ctx.setLineDash([])
+        } else {
+          ctx.fillStyle = color
+          ctx.fillRect(fx - sqSz / 2, fy - sqSz / 2, sqSz, sqSz)
+        }
       } else {
         // 3′ triangle at arm tip, pointing along the arm direction
-        ctx.fillStyle = color
         ctx.beginPath()
         ctx.moveTo(fx - ux * BP_W + pvx * half, fy - uy * BP_W + pvy * half)
         ctx.lineTo(fx, fy)
         ctx.lineTo(fx - ux * BP_W - pvx * half, fy - uy * BP_W - pvy * half)
         ctx.closePath()
-        ctx.fill()
+        if (isRef) {
+          ctx.strokeStyle = color; ctx.lineWidth = 1.6 / _zoom; ctx.setLineDash(_extDash)
+          ctx.stroke(); ctx.setLineDash([])
+        } else {
+          ctx.fillStyle = color; ctx.fill()
+        }
       }
 
       // ── Sequence — interpolated along arm, gated on sequence view tool ──────
@@ -1773,11 +1802,16 @@ export function initPathview(canvasEl, containerEl, {
     ctx.shadowBlur = 0
     for (let si = 0; si < _design.strands.length; si++) {
       const strand = _design.strands[si]
+      const isRef  = !!strand.is_reference
+      if (isRef && _viewTools.referenceGeometry === false) continue
       const strandGlow = _strandSelectedIds.has(strand.id)
       const hm = _heatmapCache.get(si)
       const color  = strandGlow ? CLR_STRAND_GLOW : (hm ? hm.color : _components.colorOf(si))
       ctx.strokeStyle = color
       ctx.lineWidth = baseThick * (hm ? hm.thickMul : 1.0)
+      // butt caps for reference dashes — round caps fill the gaps at working zoom.
+      ctx.setLineDash(isRef ? [6 / _zoom, 5 / _zoom] : [])
+      ctx.lineCap = isRef ? 'butt' : 'round'
       if (strandGlow) { ctx.shadowColor = CLR_STRAND_GLOW; ctx.shadowBlur = 10 / _zoom }
       else            { ctx.shadowBlur = 0 }
       for (let di = 0; di < strand.domains.length - 1; di++) {
@@ -1851,6 +1885,10 @@ export function initPathview(canvasEl, containerEl, {
       if (!infoA || !infoB) continue
       const sA      = _findStrandIdxAt(xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand)
       const sB      = _findStrandIdxAt(xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand)
+      // A crossover is reference geometry when both halves sit on reference strands.
+      const isRefXo = sA >= 0 && sB >= 0 &&
+                      _design.strands[sA].is_reference && _design.strands[sB].is_reference
+      if (isRefXo && _viewTools.referenceGeometry === false) continue
       const strandGlow = (sA >= 0 && _strandSelectedIds.has(_design.strands[sA].id)) ||
                          (sB >= 0 && _strandSelectedIds.has(_design.strands[sB].id))
       const arcSel  = _selectedElements.has(_xoverKey(xo))
@@ -1877,10 +1915,12 @@ export function initPathview(canvasEl, containerEl, {
       const bowDir = _xoverBowDir(xo.half_a.index, isScafXo)
       const bowAmt = Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
       const midY   = (y0 + y1) / 2
+      if (isRefXo) { ctx.setLineDash([6 / _zoom, 5 / _zoom]); ctx.lineCap = 'butt' }
       ctx.beginPath()
       ctx.moveTo(x, y0)
       ctx.quadraticCurveTo(x + bowDir * bowAmt, midY, x, y1)
       ctx.stroke()
+      if (isRefXo) { ctx.setLineDash([]); ctx.lineCap = 'round' }
 
       // ⚠ marker for unligated (would-circularize) crossovers — drawn at the
       // arc's bow apex (peak of the quadratic Bézier, t=0.5) so it sits at
@@ -1935,6 +1975,11 @@ export function initPathview(canvasEl, containerEl, {
       const infoB = _rowMap.get(fl.five_prime_helix_id)
       if (!infoA || !infoB) continue
       const sIdx     = _findStrandIdxAt(fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction)
+      const s5Idx    = _findStrandIdxAt(fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction)
+      // A forced ligation is reference geometry when both ligated strands are reference.
+      const isRefFL  = sIdx >= 0 && s5Idx >= 0 &&
+                       _design.strands[sIdx].is_reference && _design.strands[s5Idx].is_reference
+      if (isRefFL && _viewTools.referenceGeometry === false) continue
       const strandGlow = sIdx >= 0 && _strandSelectedIds.has(_design.strands[sIdx].id)
       const arcSel   = _selectedElements.has(_forcedLigKey(fl))
       const hmFL = sIdx >= 0 ? _heatmapCache.get(sIdx) : null
@@ -1962,10 +2007,12 @@ export function initPathview(canvasEl, containerEl, {
       const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
       const ctrlX = midX + bowAmt
       const ctrlY = midY
+      if (isRefFL) { ctx.setLineDash([6 / _zoom, 5 / _zoom]); ctx.lineCap = 'butt' }
       ctx.beginPath()
       ctx.moveTo(xA, yA)
       ctx.quadraticCurveTo(ctrlX, ctrlY, xB, yB)
       ctx.stroke()
+      if (isRefFL) { ctx.setLineDash([]); ctx.lineCap = 'round' }
 
       // Extra-base tick marks — one bar per extra base, sampled evenly along the arc,
       // each extending perpendicularly toward the bow interior.
@@ -3065,36 +3112,6 @@ export function initPathview(canvasEl, containerEl, {
     ctx.restore()
   }
 
-  // ── Draw: debug overlay ───────────────────────────────────────────────────────
-
-  function _drawDebug() {
-    const dragState = _endDragActive
-      ? `ACTIVE  δ=${_endDragDeltaBp}  [${_endDragMinDelta === -Infinity ? '-∞' : _endDragMinDelta}, ${_endDragMaxDelta === Infinity ? '+∞' : _endDragMaxDelta}]`
-      : `idle  entries=${_endDragEntries.length}`
-    const lines = [
-      `zoom: ${_zoom.toFixed(3)}  pan: ${_panX.toFixed(0)},${_panY.toFixed(0)}`,
-      `helices: ${_helices.length}  totalBp: ${_totalBp}`,
-      `slice: bp=${_sliceBp}`,
-      `tool: ${_activeTool}  sel: ${_selectedElements.size ? `${_selectedElements.size} elements` : '—'}`,
-      `drag: ${dragState}`,
-      `sprites: ${_xoverSprites.length}  hitR=${((XOVER_R + 4) / _zoom).toFixed(1)}px  [D]=toggle`,
-      `last: ${_dbgLastEvent}`,
-      ..._dbgDetail,
-    ]
-    const pad = 4, lh = 14
-    const bw  = 340, bh = lines.length * lh + pad * 2
-    const bx  = canvasEl.width - bw - 4, by = 22
-    ctx.save()
-    ctx.globalAlpha = 0.9; ctx.fillStyle = '#111827'
-    ctx.fillRect(bx, by, bw, bh)
-    ctx.strokeStyle = '#388bfd'; ctx.lineWidth = 1; ctx.strokeRect(bx, by, bw, bh)
-    ctx.globalAlpha = 1; ctx.font = '10px Courier New, monospace'
-    ctx.textAlign = 'left'; ctx.fillStyle = '#60a5fa'
-    for (let i = 0; i < lines.length; i++)
-      ctx.fillText(lines[i], bx + pad, by + pad + lh * (i + 1) - 2)
-    ctx.restore()
-  }
-
   // Draw crossover sprite positions + hit-radius circles (toggled with D key).
   function _drawSpriteDebug() {
     if (!_dbgShowSprites || !_xoverSprites.length) return
@@ -3156,7 +3173,7 @@ export function initPathview(canvasEl, containerEl, {
       ctx.fillStyle = '#556677'; ctx.font = '12px Courier New, monospace'
       ctx.textAlign = 'left'
       ctx.fillText('No helices — click lattice cells in the Slice View to add helices.', 16, 40)
-      _drawDebug(); return
+      return
     }
     // ── World-space content ────────────────────────────────────────────────────
     ctx.setTransform(_zoom, 0, 0, _zoom, _panX, _panY)
@@ -3177,7 +3194,6 @@ export function initPathview(canvasEl, containerEl, {
     _drawGutterLasso()     // gutter-circle rubber-band (over the frozen gutter)
     _drawHelixDragGhost()  // drag-to-reorder blue block + red insertion arrow
     _drawHeatmapLegend()   // heat map legend (right-centre)
-    _drawDebug()
   }
 
   // Render the world content to a different canvas at a different

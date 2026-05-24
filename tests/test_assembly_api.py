@@ -1610,13 +1610,13 @@ def test_assembly_mutations_do_not_affect_design_state():
 
     design_state.close_session()
     design_state.set_design(Design())
-    pre_depth = len(design_state._history)
+    pre_depth = design_state.undo_depth()
 
     client.post("/api/assembly")
     for _ in range(5):
         client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
 
-    assert len(design_state._history) == pre_depth
+    assert design_state.undo_depth() == pre_depth
     design_state.close_session()
 
 

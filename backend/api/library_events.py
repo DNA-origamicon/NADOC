@@ -67,6 +67,11 @@ class _WorkspaceHandler(FileSystemEventHandler):
             rel = str(p.relative_to(self._workspace))
         except ValueError:
             return
+        # The session-cache autosave (.session/active_design.nadoc etc.) writes
+        # .nadoc/.nass files inside the workspace; those are recovery artifacts,
+        # not library files — never surface them as file-changed events.
+        if ".session" in p.parts:
+            return
         _push({
             "type":      event_type,
             "path":      rel,

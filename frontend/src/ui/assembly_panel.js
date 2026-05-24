@@ -17,6 +17,7 @@
 import { openFileBrowser } from './file_browser.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { showConfirm } from './primitives/confirm.js'
+import { getDocId } from '../shared/doc_id.js'
 
 const _REPR_OPTIONS = [
   { value: 'full',       label: 'Full (CG)' },
@@ -321,7 +322,15 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     editBtn.addEventListener('pointerleave', () => { editBtn.style.color = '#6e7681' })
     editBtn.addEventListener('click', (e) => {
       e.stopPropagation()
-      window.open(`/?part-instance=${inst.id}`, `nadoc-part-${inst.id}`)
+      // Pass an EXPLICIT per-part doc (NOT inherited): window.open copies the
+      // opener's sessionStorage, so without an explicit `?doc=` the part editor
+      // would resolve to the assembly tab's sticky doc and clobber sibling parts.
+      // `&assembly-doc=` names where the assembly lives (source-read + save-back).
+      // Mirrors onEditPart in main.js.
+      const asmDoc  = getDocId()
+      const partDoc = `pe-${asmDoc ?? 'default'}-${inst.id}`
+      const asm     = asmDoc ? `&assembly-doc=${encodeURIComponent(asmDoc)}` : ''
+      window.open(`/?part-instance=${inst.id}&doc=${encodeURIComponent(partDoc)}${asm}`, `nadoc-part-${inst.id}`)
     })
 
     const dupBtn = document.createElement('button')

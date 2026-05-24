@@ -544,6 +544,13 @@ class Strand(BaseModel):
     sequence: Optional[str] = None
     color: Optional[str] = None   # "#RRGGBB" hex; None → use STAPLE_PALETTE
     notes: Optional[str] = None   # user-defined notes (shown in spreadsheet panel)
+    # Reference geometry: when True this strand is an inactive "backdrop" — a
+    # frozen part the user is designing against.  ALL generative features
+    # (bend/twist, sequence assignment, scaffold routing, autostaple/break/merge,
+    # auto-crossover) skip it, and it is excluded from every export/validation
+    # path.  It stays visible (rendered translucent) and manually editable.
+    # New field, default False → old .nadoc files load unchanged (no migration).
+    is_reference: bool = False
 
     @model_validator(mode='before')
     @classmethod
@@ -1088,7 +1095,7 @@ MinorOpSubtype = Literal[
     'strand-add', 'strand-update', 'strand-delete', 'strand-delete-batch',
     'domain-add', 'domain-delete', 'domain-shift',
     'loop-skip-insert', 'loop-skip-twist', 'loop-skip-bend',
-    'strand-patch', 'strands-color-bulk',
+    'strand-patch', 'strands-color-bulk', 'strands-reference',
     'joint-place', 'joint-update', 'joint-delete',
 ]
 
@@ -1740,6 +1747,18 @@ class Design(BaseModel):
 
     def staples(self) -> List[Strand]:
         return [s for s in self.strands if s.strand_type == StrandType.STAPLE]
+
+    def active_strands(self) -> List[Strand]:
+        """Strands that participate in generative + passive features.
+
+        Excludes reference geometry.  Generative loops that REBUILD the strand
+        list must still preserve reference strands (append-and-continue);
+        rendering / manual-edit code uses the raw ``.strands`` list.
+        """
+        return [s for s in self.strands if not s.is_reference]
+
+    def reference_strands(self) -> List[Strand]:
+        return [s for s in self.strands if s.is_reference]
 
     def find_helix(self, helix_id: str) -> Optional[Helix]:
         for h in self.helices:

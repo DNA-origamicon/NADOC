@@ -17,10 +17,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, ORJSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.api import library_events
+from backend.api import library_events, session_cache
 from backend.api.assembly import _WORKSPACE_DIR
 from backend.api.assembly import router as assembly_router
 from backend.api.crud import router as crud_router
+from backend.api.doc_context import DocContextMiddleware
+from backend.api.documents import router as documents_router
 from backend.api.routes import router
 from backend.api.routes_camera_poses import router as camera_poses_router
 from backend.api.routes_loop_skip import router as loop_skip_router
@@ -32,7 +34,10 @@ async def lifespan(app: FastAPI):
     """Server startup/shutdown hook."""
     _WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
     library_events.start(_WORKSPACE_DIR)
+    # Restore any cached in-progress document, then start the autosave thread.
+    session_cache.start(_WORKSPACE_DIR)
     yield
+    session_cache.stop()
     library_events.stop()
 
 
@@ -48,6 +53,11 @@ app = FastAPI(
     default_response_class=ORJSONResponse,
 )
 
+# Bind each request's document (X-NADOC-Doc header / ?doc=) to a ContextVar so
+# state.py / assembly_state.py resolve the right per-document session.  Pure-ASGI
+# middleware (not BaseHTTPMiddleware) so the value propagates to the endpoint.
+app.add_middleware(DocContextMiddleware)
+
 # Allow Vite dev server (port 5173) to call the API in development.
 app.add_middleware(
     CORSMiddleware,
@@ -57,6 +67,7 @@ app.add_middleware(
 )
 
 app.include_router(router,             prefix="/api")
+app.include_router(documents_router,   prefix="/api")
 app.include_router(crud_router,        prefix="/api")
 app.include_router(loop_skip_router,   prefix="/api")
 app.include_router(camera_poses_router, prefix="/api")

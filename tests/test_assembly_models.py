@@ -350,13 +350,13 @@ def test_design_state_unaffected_by_assembly():
     design_state.close_session()
     d = Design()
     design_state.set_design(d)
-    pre_depth = len(design_state._history)
+    pre_depth = design_state.undo_depth()
 
     # Many assembly mutations
     for _ in range(5):
         assembly_state.set_assembly(Assembly())
 
-    assert len(design_state._history) == pre_depth
+    assert design_state.undo_depth() == pre_depth
     design_state.close_session()
 
 

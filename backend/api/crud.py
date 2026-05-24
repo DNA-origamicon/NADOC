@@ -198,6 +198,7 @@ def _strand_nucleotide_info(design: Design, helix_ids: frozenset[str] | None = N
                     "is_three_prime": key == three_prime_key,
                     "domain_index":   di,
                     "overhang_id":    domain.overhang_id,
+                    "is_reference":   strand.is_reference,
                 }
     return info
 
@@ -612,6 +613,22 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
 
 def _geometry_for_design(design: Design, include_linker_helices: bool = False) -> list[dict]:
     return _geometry_for_helices(design, include_linker_helices=include_linker_helices)
+
+
+def _design_for_export() -> Design:
+    """Active design with reference geometry stripped, for export/analysis paths.
+
+    Reference strands are excluded from every export (oxDNA / PDB / PSF / NAMD /
+    GROMACS / caDNAno / sequence CSV) and from the atomistic model.  Exporters
+    are strand-driven — they look up positions from per-helix geometry by slot —
+    so removing reference strands cleanly omits their nucleotides without leaving
+    dangling records.  Helices/crossovers/overhangs are untouched (a reference
+    strand may share a helix with active geometry).
+    """
+    d = design_state.get_or_404()
+    if not any(s.is_reference for s in d.strands):
+        return d
+    return d.model_copy(update={"strands": d.active_strands()})
 
 
 def _ensure_default_cluster(design: Design) -> Design:
@@ -3318,7 +3335,7 @@ def export_cadnano_design() -> Response:
     import json as _json
     from backend.core.cadnano import export_cadnano, check_cadnano_compatibility
 
-    design = design_state.get_or_404()
+    design = _design_for_export()
     warnings = check_cadnano_compatibility(design)
     errors = [w for w in warnings if w.startswith("ERROR")]
     if errors:
@@ -3524,6 +3541,15 @@ def reorder_helices(body: ReorderHelicesBody) -> dict:
         )
 
     def _apply(d: Design) -> None:
+        # Freeze each helix's CURRENT number onto it as a persistent label
+        # BEFORE permuting, so the gutter / sliceview label follows the helix
+        # identity rather than its (about-to-change) array position. Both views
+        # render `helix.label ?? array_index`, so a label-less helix would
+        # otherwise re-number to its new row. Helices that already carry a label
+        # (e.g. a scadnano import index) keep it. Persists via Design.to_json().
+        for i, h in enumerate(d.helices):
+            if h.label is None:
+                h.label = str(i)
         m = {h.id: h for h in d.helices}
         d.helices = [m[i] for i in ids]
 
@@ -4809,8 +4835,13 @@ def auto_crossover() -> dict:
         ):
             continue
 
-        # Rebuild strand coverage from current (mutates with each nick)
-        sr = build_strand_ranges(current)
+        # Rebuild strand coverage from current (mutates with each nick).
+        # Reference strands are excluded so auto-crossover never nicks them and
+        # never bridges an active strand to reference geometry (the slot reads
+        # as uncovered → the coverage checks below skip the site).
+        sr = build_strand_ranges(
+            current.model_copy(update={"strands": current.active_strands()})
+        )
 
         # Helix bp ranges — used to skip out-of-range checks at helix boundaries.
         # At bp=0 (bow-right), lower_bp=-1 which is before the helix start; the
@@ -6870,6 +6901,43 @@ def patch_strands_color(body: BulkColorRequest) -> dict:
         fn=lambda _d: updated,
     )
     return _design_response(updated, report)
+
+
+class BulkReferenceRequest(BaseModel):
+    strand_ids: list[str]
+    is_reference: bool
+
+
+@router.patch("/design/strands/reference", status_code=200)
+def patch_strands_reference(body: BulkReferenceRequest) -> dict:
+    """Mark/clear strands as inactive reference geometry, atomically in one undo step.
+
+    Reference strands are ignored by all generative features (bend/twist, sequence
+    assignment, scaffold routing, autostaple/break/merge, auto-crossover) and excluded
+    from exports/validation, while staying visible (rendered translucent) and manually
+    editable.  Returns geometry because toggling reference changes the bend/twist freeze,
+    so nucleotide positions move.
+    """
+    design = design_state.get_or_404()
+    id_set = set(body.strand_ids)
+    missing = id_set - {s.id for s in design.strands}
+    if missing:
+        raise HTTPException(404, detail=f"Strand(s) not found: {sorted(missing)}")
+    new_strands = [
+        s.model_copy(update={"is_reference": body.is_reference}) if s.id in id_set else s
+        for s in design.strands
+    ]
+    updated = design.model_copy(update={"strands": new_strands})
+    n = len(id_set)
+    verb = "Mark" if body.is_reference else "Clear"
+    label = f"{verb} reference · {n} strand{'s' if n != 1 else ''}"
+    updated, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype='strands-reference',
+        label=label,
+        params=body.model_dump(mode='json'),
+        fn=lambda _d: updated,
+    )
+    return _design_response_with_geometry(updated, report)
 
 
 # ── Autostaple: autobreak + auto-merge ────────────────────────────────────────
@@ -10047,7 +10115,7 @@ def export_sequence_csv() -> Response:
     import csv
     import io
 
-    design = design_state.get_or_404()
+    design = _design_for_export()
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -12737,7 +12805,7 @@ def export_oxdna() -> Response:
         write_oxdna_input,
     )
 
-    design = design_state.get_or_404()
+    design = _design_for_export()
     geometry = _geometry_for_design(design)
 
     buf = io.BytesIO()
@@ -12951,7 +13019,7 @@ def export_pdb_file() -> Response:
     """Export the active design as an all-atom PDB file (heavy atoms, CHARMM36 names)."""
     from backend.core.pdb_export import export_pdb
 
-    design   = design_state.get_or_404()
+    design   = _design_for_export()
     pdb_text = export_pdb(design)
     name     = (design.metadata.name or "design").replace(" ", "_")
     return Response(
@@ -13164,7 +13232,7 @@ def export_psf_file() -> Response:
     """Export the active design as a NAMD-compatible PSF topology file."""
     from backend.core.pdb_export import export_psf
 
-    design   = design_state.get_or_404()
+    design   = _design_for_export()
     psf_text = export_psf(design)
     name     = (design.metadata.name or "design").replace(" ", "_")
     return Response(
@@ -13288,7 +13356,7 @@ def export_namd_complete() -> Response:
     """Complete NAMD simulation package — ready to run on a fresh Ubuntu machine."""
     from backend.core.namd_package import build_namd_package
 
-    design    = design_state.get_or_404()
+    design    = _design_for_export()
     name      = (design.metadata.name or "design").replace(" ", "_")
     zip_bytes = build_namd_package(design)
     return Response(
@@ -13321,7 +13389,7 @@ def export_gromacs_complete() -> Response:
     """
     from backend.core.gromacs_package import build_gromacs_package
 
-    design    = design_state.get_or_404()
+    design    = _design_for_export()
     name      = (design.metadata.name or "design").replace(" ", "_")
     try:
         zip_bytes = build_gromacs_package(design)
@@ -13544,7 +13612,7 @@ def export_namd_bundle_file() -> Response:
     from backend.core.atomistic import build_atomistic_model
     from backend.core.pdb_export import _box_dimensions, export_pdb, export_psf
 
-    design = design_state.get_or_404()
+    design = _design_for_export()
     name   = (design.metadata.name or "design").replace(" ", "_")
 
     model              = build_atomistic_model(design)

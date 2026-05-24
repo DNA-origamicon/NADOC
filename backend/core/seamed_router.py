@@ -32,6 +32,7 @@ from backend.core.models import (
     Domain,
     HalfCrossover,
     LatticeType,
+    Strand,
     StrandType,
     Vec3,
 )
@@ -43,11 +44,16 @@ _SQ_SCAF_BOW_RIGHT: frozenset[int] = frozenset({0, 3, 5, 8, 11, 13, 16, 19, 21, 
 
 # ── Low-level helpers ─────────────────────────────────────────────────────────
 
+def _active_scaffolds(design: Design) -> list[Strand]:
+    """Non-reference scaffold strands. Reference geometry is excluded from routing."""
+    return [s for s in design.scaffolds() if not s.is_reference]
+
+
 def _scaffold_coverage(design: Design) -> dict[str, list[dict]]:
     """Build per-helix scaffold coverage: helix_id → sorted merged [{lo, hi}]."""
     raw: dict[str, list[tuple[int, int]]] = {}
     for s in design.strands:
-        if s.strand_type != StrandType.SCAFFOLD:
+        if s.strand_type != StrandType.SCAFFOLD or s.is_reference:
             continue
         for dom in s.domains:
             lo = min(dom.start_bp, dom.end_bp)
@@ -74,7 +80,7 @@ def _forced_scaffold_strand_ids(design: Design) -> set[str]:
     protected: set[str] = set()
     for fl in design.forced_ligations:
         for strand in design.strands:
-            if strand.strand_type != StrandType.SCAFFOLD:
+            if strand.strand_type != StrandType.SCAFFOLD or strand.is_reference:
                 continue
             for i in range(len(strand.domains) - 1):
                 a = strand.domains[i]
@@ -101,7 +107,8 @@ def _scaffold_coverage_excluding(
 
     raw: dict[str, list[tuple[int, int]]] = {}
     for s in design.strands:
-        if s.strand_type != StrandType.SCAFFOLD or s.id in excluded_strand_ids:
+        if (s.strand_type != StrandType.SCAFFOLD or s.is_reference
+                or s.id in excluded_strand_ids):
             continue
         for dom in s.domains:
             lo = min(dom.start_bp, dom.end_bp)
@@ -330,7 +337,7 @@ def _extend_scaf_domain_lo(
 ) -> Design:
     """Extend the scaffold domain on hid whose lo terminus is face_bp to new_lo."""
     for si, strand in enumerate(design.strands):
-        if strand.strand_type != StrandType.SCAFFOLD:
+        if strand.strand_type != StrandType.SCAFFOLD or strand.is_reference:
             continue
         for di, dom in enumerate(strand.domains):
             if dom.helix_id != hid or min(dom.start_bp, dom.end_bp) != face_bp:
@@ -354,7 +361,7 @@ def _extend_scaf_domain_hi(
 ) -> Design:
     """Extend the scaffold domain on hid whose hi terminus is face_bp to new_hi."""
     for si, strand in enumerate(design.strands):
-        if strand.strand_type != StrandType.SCAFFOLD:
+        if strand.strand_type != StrandType.SCAFFOLD or strand.is_reference:
             continue
         for di, dom in enumerate(strand.domains):
             if dom.helix_id != hid or max(dom.start_bp, dom.end_bp) != face_bp:
@@ -770,7 +777,7 @@ def _advanced_bridge_edge(
 
 def _advanced_bridge_graph(design: Design) -> dict[str, list[dict]]:
     helix_by_id = {h.id: h for h in design.helices}
-    scaffolds = design.scaffolds()
+    scaffolds = _active_scaffolds(design)
     graph: dict[str, list[dict]] = {s.id: [] for s in scaffolds}
     for strand_from in scaffolds:
         for strand_to in scaffolds:
@@ -785,7 +792,7 @@ def _advanced_bridge_graph(design: Design) -> dict[str, list[dict]]:
 
 
 def _advanced_hamiltonian_path(design: Design, graph: dict[str, list[dict]]) -> list[str] | None:
-    scaffolds = design.scaffolds()
+    scaffolds = _active_scaffolds(design)
     strand_by_id = {s.id: s for s in scaffolds}
     n = len(scaffolds)
     if n <= 1:
@@ -834,7 +841,7 @@ def _advanced_hamiltonian_path(design: Design, graph: dict[str, list[dict]]) -> 
 
 def _find_scaffold_strand(design: Design, strand_id: str):
     for strand in design.strands:
-        if strand.id == strand_id and strand.is_scaffold:
+        if strand.id == strand_id and strand.is_scaffold and not strand.is_reference:
             return strand
     return None
 
@@ -937,7 +944,7 @@ def _advanced_connect_scaffold_blocks(
 
 
 def _advanced_scaffold_strands(design: Design) -> list:
-    return design.scaffolds()
+    return _active_scaffolds(design)
 
 
 def _advanced_seam_candidates(
@@ -1144,6 +1151,9 @@ def _clear_auto_scaffold_route_for_seamed(design: Design, result: SeamedResult) 
     new_strands = []
     split_count = 0
     for strand in design.strands:
+        if strand.is_reference:
+            new_strands.append(strand)  # reference geometry is never re-seeded
+            continue
         if strand.strand_type != StrandType.SCAFFOLD:
             new_strands.append(strand)
             continue
@@ -1190,7 +1200,7 @@ def auto_scaffold_advanced_seamed(design: Design) -> tuple[Design, SeamedResult]
     result.near_end_xovers += seamed_result.near_end_xovers
     result.far_end_xovers += seamed_result.far_end_xovers
 
-    scaffolds = current.scaffolds()
+    scaffolds = _active_scaffolds(current)
     if len(scaffolds) != 1:
         result.warnings.append(
             "Advanced seam routing incomplete: fixed/manual route constraints or "

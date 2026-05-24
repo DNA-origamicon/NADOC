@@ -64,15 +64,15 @@ def demo_design_loaded():
     design_state.set_design(_demo_design())
     yield design_state.get_design()
     # Best-effort restore: clear so other tests with autouse reset_state still work.
-    design_state._active_design = None  # type: ignore[attr-defined]
+    design_state.close_session()
 
 
 @pytest.fixture
 def no_design_loaded():
     """Force design_state to None (the 'no design loaded' precondition)."""
-    design_state._active_design = None  # type: ignore[attr-defined]
+    design_state.close_session()
     yield
-    design_state._active_design = None  # type: ignore[attr-defined]
+    design_state.close_session()
 
 
 @pytest.fixture

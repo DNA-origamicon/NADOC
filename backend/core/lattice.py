@@ -1809,7 +1809,8 @@ def ligate_crossover_chains(design: Design, *, max_length: int | None = None) ->
     strand_map: dict[str, Strand] = {}
 
     for s in design.strands:
-        if s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER) or not s.domains:
+        if (s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
+                or s.is_reference or not s.domains):
             continue
         strand_map[s.id] = s
         fd = s.domains[0]
@@ -2074,7 +2075,8 @@ def _pre_nick_for_crossover_ligation(
     five_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
     three_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
     for s in result.strands:
-        if s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER) or not s.domains:
+        if (s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
+                or s.is_reference or not s.domains):
             continue
         fd = s.domains[0]
         five_prime[(fd.helix_id, fd.start_bp, fd.direction)] = s
@@ -2161,7 +2163,7 @@ def make_autobreak(design: Design) -> Design:
 
     result = design
     for strand in design.strands:
-        if strand.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER):
+        if strand.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER) or strand.is_reference:
             continue
         positions = _strand_nucleotide_positions(strand)
         total = len(positions)
@@ -2246,14 +2248,16 @@ def make_merge_short_staples(
     while True:
         five_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
         for s in result.strands:
-            if s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER) or not s.domains:
+            if (s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
+                or s.is_reference or not s.domains):
                 continue
             f = s.domains[0]
             five_prime[(f.helix_id, f.start_bp, f.direction)] = s
 
         candidates: list[tuple[int, str, str]] = []
         for s1 in result.strands:
-            if s1.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER) or not s1.domains:
+            if (s1.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
+                    or s1.is_reference or not s1.domains):
                 continue
             last = s1.domains[-1]
             if last.direction == Direction.FORWARD:
@@ -2657,7 +2661,7 @@ def _scaffold_coverage_by_helix(design: Design) -> dict[str, tuple[int, int]]:
     """
     coverage: dict[str, tuple[int, int]] = {}
     for strand in design.strands:
-        if strand.strand_type != StrandType.STAPLE:
+        if strand.strand_type != StrandType.STAPLE and not strand.is_reference:
             for dom in strand.domains:
                 lo = min(dom.start_bp, dom.end_bp)
                 hi = max(dom.start_bp, dom.end_bp)
@@ -2917,6 +2921,8 @@ def autodetect_overhangs(design: Design) -> Design:
     for strand in design.strands:
         if strand.strand_type != StrandType.STAPLE or len(strand.domains) < 2:
             continue
+        if strand.is_reference:
+            continue  # reference geometry is frozen — never auto-tag overhangs
         # Must be anchored to the bundle (≥1 domain on a scaffold-covered helix)
         if not any(d.helix_id in scaf_cov for d in strand.domains):
             continue
@@ -3014,6 +3020,9 @@ def migrate_split_staple_domains(design: Design) -> Design:
     changed = False
 
     for strand in design.strands:
+        if strand.is_reference:
+            new_strands.append(strand)  # reference geometry is frozen
+            continue
         if strand.strand_type != StrandType.STAPLE or len(strand.domains) < 2:
             new_strands.append(strand)
             continue

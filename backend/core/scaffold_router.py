@@ -294,6 +294,8 @@ def extract_router_domains(
     for strand in design.strands:
         if strand.strand_type != StrandType.SCAFFOLD:
             continue
+        if strand.is_reference:
+            continue  # reference geometry is excluded from routing
         for dom in strand.domains:
             if dom.overhang_id is not None:
                 continue
@@ -488,12 +490,12 @@ def _existing_scaffold_xover_set(design: Design) -> set[tuple[str, str, int]]:
     preserve them.
     """
     scaffold_strand_ids: set[str] = {
-        s.id for s in design.strands if s.is_scaffold
+        s.id for s in design.strands if s.is_scaffold and not s.is_reference
     }
     # Map (helix_id, index, direction) → strand_id for scaffold half-crossovers
     slot_to_strand: dict[tuple[str, int, str], str] = {}
     for strand in design.strands:
-        if strand.strand_type != StrandType.SCAFFOLD:
+        if strand.strand_type != StrandType.SCAFFOLD or strand.is_reference:
             continue
         for dom in strand.domains:
             # Register both endpoints as potential crossover slots
@@ -1142,7 +1144,9 @@ def apply_routing_to_design(
     # Keep staple strands and scaffold strands on unrouted helices
     kept_strands: list[Strand] = []
     for s in design.strands:
-        if s.strand_type == StrandType.STAPLE:
+        if s.is_reference:
+            kept_strands.append(s)  # reference geometry is never re-routed
+        elif s.strand_type == StrandType.STAPLE:
             kept_strands.append(s)
         elif s.is_scaffold:
             # Keep only if this scaffold strand is entirely on unrouted helices
@@ -1265,6 +1269,9 @@ def _preserve_unrouted_scaffold_fragments(
     """Keep original scaffold coverage outside intervals replaced by routing."""
     preserved: list[Strand] = []
     for strand in design.strands:
+        if strand.is_reference:
+            preserved.append(strand)  # reference geometry is never fragmented
+            continue
         if strand.strand_type != StrandType.SCAFFOLD:
             preserved.append(strand)
             continue
@@ -1319,7 +1326,7 @@ def _preserve_unrouted_scaffold_fragments(
 def _scaffold_slots(design: Design) -> set[tuple[str, int, Direction]]:
     slots: set[tuple[str, int, Direction]] = set()
     for strand in design.strands:
-        if strand.strand_type != StrandType.SCAFFOLD:
+        if strand.strand_type != StrandType.SCAFFOLD or strand.is_reference:
             continue
         for dom in strand.domains:
             slots.add((dom.helix_id, dom.start_bp, dom.direction))

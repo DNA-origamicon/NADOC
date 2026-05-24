@@ -7,6 +7,8 @@
 
 import { editorStore } from './store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
+import { notifyRequestFailure, notifyRequestSuccess } from '../shared/connection_monitor.js'
+import { docHeaders } from '../shared/doc_id.js'
 
 const BASE = '/api'
 
@@ -14,11 +16,15 @@ async function _request(method, path, body) {
   editorStore.setState({ loading: true })
   const opts = {
     method,
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
+    headers: {
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...docHeaders(),   // edit the same backend document as the 3D view that opened us
+    },
     body:    body !== undefined ? JSON.stringify(body) : undefined,
   }
   try {
     const r    = await fetch(`${BASE}${path}`, opts)
+    notifyRequestSuccess()   // any HTTP response means the backend is reachable
     const json = await r.json().catch(() => null)
     if (!r.ok) {
       editorStore.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText }, loading: false })
@@ -27,6 +33,7 @@ async function _request(method, path, body) {
     editorStore.setState({ lastError: null, loading: false })
     return json
   } catch (err) {
+    notifyRequestFailure()   // network-level failure → flag the connection as down
     editorStore.setState({ lastError: { status: 0, message: err.message }, loading: false })
     return null
   }
@@ -322,6 +329,16 @@ export async function generateOverhangRandomSequence(overhangId) {
 export async function patchStrandsColor(strandIds, color) {
   return mutate(req =>
     req('PATCH', '/design/strands/colors', { strand_ids: strandIds, color })
+  )
+}
+
+/**
+ * Mark/clear strands as inactive reference geometry (ignored by auto-features,
+ * excluded from exports; still visible + editable). Atomic, one undo step.
+ */
+export async function patchStrandsReference(strandIds, isReference) {
+  return mutate(req =>
+    req('PATCH', '/design/strands/reference', { strand_ids: strandIds, is_reference: isReference })
   )
 }
 

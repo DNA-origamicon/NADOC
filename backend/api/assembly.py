@@ -259,6 +259,22 @@ def _design_with_instance_overrides(inst: PartInstance, assembly_path: str | Non
     return design.copy_with(cluster_transforms=merged)
 
 
+def _display_design(design):
+    """Drop reference strands for assembly DISPLAY geometry.
+
+    Reference strands (``is_reference=True``) are a single-design-editor
+    backdrop construct; the assembly view excludes them entirely (reference
+    geometry was out of scope for v1, see [[reference-geometry]]). Mirrors
+    ``crud._design_for_export`` — strands only, never helices, so no helix
+    references dangle. Returns the design unchanged when it has no reference
+    strands (zero allocation for the common case). DISPLAY ONLY: never feed
+    the result back into persisted assembly state — that would delete topology.
+    """
+    if any(s.is_reference for s in design.strands):
+        return design.model_copy(update={"strands": design.active_strands()})
+    return design
+
+
 def _assembly_source_path(assembly: Assembly) -> str | None:
     return getattr(assembly.metadata, "source_path", None)
 
@@ -2363,10 +2379,13 @@ def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) 
     # ~3 s killer for 60 k-bp designs). Populate _GEO_CACHE so the
     # filesystem-watchdog SSE echo, which may still trigger a refetch in
     # other tabs, hits cache instead of recomputing.
-    nucleotides = _geometry_for_design(updated_design)
-    axes = deformed_helix_axes(updated_design)
-    _apply_ovhg_rotations_to_axes(updated_design, axes, nucleotides)
-    design_dict = updated_design.to_dict()
+    # DISPLAY geometry strips reference strands (see _display_design); the
+    # persisted updated_design above keeps them so topology isn't lost.
+    display_design = _display_design(updated_design)
+    nucleotides = _geometry_for_design(display_design)
+    axes = deformed_helix_axes(display_design)
+    _apply_ovhg_rotations_to_axes(display_design, axes, nucleotides)
+    design_dict = display_design.to_dict()
     key = _geo_cache_key(new_inst)
     if key:
         _geo_cache_set(key, {"nucleotides": nucleotides, "helix_axes": axes,
@@ -5593,7 +5612,7 @@ def get_instance_geometry(instance_id: str) -> dict:
             "design":              cached.get("design"),
         }
 
-    design      = _design_with_instance_overrides(inst)
+    design      = _display_design(_design_with_instance_overrides(inst))
     nucleotides = _geometry_for_design(design)
     axes        = deformed_helix_axes(design)
     _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
@@ -5623,7 +5642,7 @@ def get_instance_atomistic_geometry(instance_id: str) -> dict:
     from backend.core.atomistic import build_atomistic_model, atomistic_to_json
     assembly = assembly_state.get_or_404()
     inst     = _find_instance(assembly, instance_id)
-    design   = _load_design_from_source(inst.source)
+    design   = _display_design(_load_design_from_source(inst.source))
     return atomistic_to_json(build_atomistic_model(design))
 
 
@@ -5649,7 +5668,7 @@ def get_instance_surface_geometry(
     from backend.core.surface import compute_surface, surface_to_json
     assembly = assembly_state.get_or_404()
     inst     = _find_instance(assembly, instance_id)
-    design   = _load_design_from_source(inst.source)
+    design   = _display_design(_load_design_from_source(inst.source))
     model    = build_atomistic_model(design)
     t0   = time.perf_counter()
     mesh = compute_surface(model.atoms, grid_spacing=grid_spacing, probe_radius=probe_radius)
@@ -5711,7 +5730,7 @@ def get_assembly_geometry() -> dict:
                 }
                 continue
 
-            design      = _design_with_instance_overrides(inst)
+            design      = _display_design(_design_with_instance_overrides(inst))
             nucleotides = _geometry_for_design(design)
             axes        = deformed_helix_axes(design)
             _apply_ovhg_rotations_to_axes(design, axes, nucleotides)

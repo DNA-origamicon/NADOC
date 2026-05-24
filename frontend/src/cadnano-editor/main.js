@@ -8,6 +8,8 @@
 
 import { editorStore }   from './store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
+import * as connectionMonitor from '../shared/connection_monitor.js'
+import { docHeaders, docKey } from '../shared/doc_id.js'
 import { addRecentFile, getRecentFiles, closeSession as apiCloseSession,
          listLibraryFiles, getLibraryFileContent, uploadLibraryFile,
          saveDesignAs, saveDesignToWorkspace,
@@ -18,7 +20,7 @@ import {
   autoScaffold, scaffoldDomainPaint,
   paintStapleDomain, deleteStrand, deleteStrandsBatch, deleteDomain, nickStrand, ligateStrand, forcedLigation,
   deleteForcedLigation, batchDeleteForcedLigations,
-  patchStrandsColor, patchOverhang, undoDesign, redoDesign, placeCrossover, moveCrossover, batchMoveCrossovers,
+  patchStrandsColor, patchStrandsReference, patchOverhang, undoDesign, redoDesign, placeCrossover, moveCrossover, batchMoveCrossovers,
   deleteCrossover, batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases, patchForcedLigationExtraBases,
   upsertStrandExtensionsBatch, deleteStrandExtensionsBatch,
   resizeStrandEnds, shiftDomains, insertLoopSkip, clearAllLoopSkips, generateAllOverhangSequences,
@@ -67,9 +69,11 @@ const pathContainer   = document.getElementById('pathview-container')
 // ── File handle (File System Access API) ─────────────────────────────────────
 let _fileHandle = null
 
-// Server workspace path — shared with the 3D view via localStorage so Ctrl+S in
-// either tab always saves to the same server file.
-const _WS_PATH_KEY = 'nadoc:workspace-path'
+// Server workspace path — shared with the 3D view of THIS SAME document
+// (doc-scoped key) via localStorage so Ctrl+S in either tab saves to the same
+// file. Scoping by doc id keeps two different parts' editors from clobbering
+// each other's save target.
+const _WS_PATH_KEY = docKey('nadoc:workspace-path')
 let _workspacePath = localStorage.getItem(_WS_PATH_KEY) || null
 function _setWorkspacePath(path) {
   _workspacePath = path
@@ -78,9 +82,10 @@ function _setWorkspacePath(path) {
 }
 
 // The 3D view is the authoritative source of the design filename.
-// It writes to this localStorage key whenever the user creates or opens a file.
-// The cadnano editor reads from it so the tab/title always reflect the correct name.
-const _FNAME_KEY = 'nadoc:design-filename'
+// It writes to this (doc-scoped) localStorage key whenever the user creates or
+// opens a file. The cadnano editor reads from it so the tab/title always reflect
+// the correct name for THIS document.
+const _FNAME_KEY = docKey('nadoc:design-filename')
 
 // ── Progress / toast helpers ─────────────────────────────────────────────────
 function _showProgress(msg) { statusRightEl.textContent = msg }
@@ -117,7 +122,7 @@ function _updateLabel() {
 
 // ── File helpers ──────────────────────────────────────────────────────────────
 async function _getDesignContent() {
-  const r = await fetch('/api/design/export')
+  const r = await fetch('/api/design/export', { headers: docHeaders() })
   if (!r.ok) return null
   return r.text()
 }
@@ -170,6 +175,49 @@ function _syncLog(level, tag, msg) {
   while (body.children.length > 150) body.removeChild(body.lastChild)
 }
 
+// ── Backend connection monitor: status badge + restart recovery ────────────────
+// On disconnect the badge goes red. On a server restart the backend session-cache
+// has normally restored the design — we just re-pull it. If the backend came back
+// empty but this editor still holds the design in memory, offer to push it back.
+let _restartHandling = false
+connectionMonitor.start({ onChange: async (evt) => {
+  if (evt.type === 'disconnected') {
+    _setSyncStatus('red', 'reconnecting…')
+    _syncLog('warn', 'CONN', 'backend unreachable — reconnecting')
+  } else if (evt.type === 'reconnected') {
+    _setSyncStatus('green', 'reconnected')
+    _syncLog('info', 'CONN', 'backend reachable again')
+  } else if (evt.type === 'restarted') {
+    if (_restartHandling) return
+    _restartHandling = true
+    _setSyncStatus('yellow', 'backend restarted — re-syncing…')
+    _syncLog('warn', 'CONN', 'backend restarted — re-syncing')
+    try {
+      const json = await fetchDesign()
+      if (!json?.design) {
+        const mem = editorStore.getState().design
+        if (mem && window.confirm(
+            'The backend restarted and no longer has the design loaded.\n\n' +
+            'Restore it from this editor tab?')) {
+          await fetch('/api/design/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...docHeaders() },
+            body: JSON.stringify({ content: JSON.stringify(mem) }),
+          })
+          await fetchDesign()
+          nadocBroadcast.emit('design-changed')
+        }
+      }
+      _setSyncStatus('green', 'synced')
+    } catch (e) {
+      _setSyncStatus('red', 'recovery error')
+      _syncLog('err', 'CONN', `recovery failed: ${e?.message ?? e}`)
+    } finally {
+      _restartHandling = false
+    }
+  }
+} })
+
 window.__nadocSyncDebug = {
   status() {
     return {
@@ -181,7 +229,10 @@ window.__nadocSyncDebug = {
   forceResync() {
     _syncLog('warn', 'FORCE', 'Manual force re-fetch triggered')
     _setSyncStatus('yellow', 'fetching…')
-    fetchDesign().then(() => { _setSyncStatus('green', 'synced') })
+    _suppressUnsavedBadge = true   // pulling backend state is not a local edit
+    fetchDesign()
+      .finally(() => { _suppressUnsavedBadge = false })
+      .then(() => { _setSyncStatus('green', 'synced') })
   },
   show() { _syncDebugPanel?.classList.add('visible') },
   hide() { _syncDebugPanel?.classList.remove('visible') },
@@ -194,17 +245,74 @@ document.addEventListener('keydown', (e) => {
   }
 })
 
-// Track design changes to show "unsaved" state
+// Track design changes to drive the unsaved badge + autosave.
 let _lastSavedDesign   = null
 let _suppressUnsavedBadge = false   // true while fetching an externally-driven design update
+
+// ── Autosave ──────────────────────────────────────────────────────────────
+// Persist to the current save target after every edit so changes are never lost
+// between manual saves. Edits made in THIS tab schedule a debounced write; the
+// debounce coalesces drag bursts and batch ops into a single save. Externally
+// driven updates (a BroadcastChannel re-fetch) are suppressed, so only the tab
+// that originated a change writes it — no two-tab write race.
+//
+// If the design was never saved (no workspace path or file handle yet) there is
+// no target to write to: we leave the badge on "unsaved" and wait for the user's
+// first manual Save to establish a target, after which autosave takes over.
+const _AUTOSAVE_DEBOUNCE_MS = 600
+let _autosaveTimer    = null
+let _autosaveInFlight = false
+let _autosavePending  = false
+
+function _hasSaveTarget() {
+  return !!(localStorage.getItem(_WS_PATH_KEY) || _fileHandle)
+}
+
+async function _runAutosave() {
+  if (_autosaveInFlight) { _autosavePending = true; return }
+  if (!_hasSaveTarget()) return
+  const designAtSave = editorStore.getState().design
+  if (!designAtSave || designAtSave === _lastSavedDesign) return   // nothing new
+  _autosaveInFlight = true
+  const wsPath = localStorage.getItem(_WS_PATH_KEY)
+  try {
+    if (wsPath) {
+      _setSyncStatus('yellow', 'saving…')
+      const ok = !!(await saveDesignToWorkspace(wsPath))
+      if (ok) {
+        _lastSavedDesign = designAtSave
+        _setSyncStatus('green', 'saved')
+        _syncLog('info', 'AUTOSAVE', `→ ${wsPath}`)
+      } else {
+        _setSyncStatus('red', 'save error')
+        _syncLog('err', 'AUTOSAVE', `workspace save failed: ${wsPath}`)
+      }
+    } else if (_fileHandle) {
+      const ok = await _saveToHandle(_fileHandle)   // sets its own badge + log
+      if (ok) _lastSavedDesign = designAtSave
+    }
+  } catch (e) {
+    _setSyncStatus('red', 'save error')
+    _syncLog('err', 'AUTOSAVE', `failed: ${e.message}`)
+  } finally {
+    _autosaveInFlight = false
+    if (_autosavePending) { _autosavePending = false; _scheduleAutosave() }
+  }
+}
+
+function _scheduleAutosave() {
+  if (_autosaveTimer) clearTimeout(_autosaveTimer)
+  _autosaveTimer = setTimeout(() => { _autosaveTimer = null; _runAutosave() }, _AUTOSAVE_DEBOUNCE_MS)
+}
+
 editorStore.subscribe((next, prev) => {
   if (next.design === prev.design) return
   if (next.design === _lastSavedDesign) return
   if (_suppressUnsavedBadge) return
-  if (next.design !== null) {
-    _setSyncStatus('yellow', 'unsaved')
-    _syncLog('info', 'MUT', `design changed — ${next.design.metadata?.name ?? '?'}`)
-  }
+  if (next.design === null) return
+  _setSyncStatus('yellow', 'unsaved')
+  _syncLog('info', 'MUT', `design changed — ${next.design.metadata?.name ?? '?'}`)
+  if (_hasSaveTarget()) _scheduleAutosave()   // debounced; flips badge to saved
 })
 
 async function _saveAs() {
@@ -1321,6 +1429,67 @@ const _ovhgNameDialog = (() => {
   return { open }
 })()
 
+// ── Strand right-click context menu (cadnano editor) ──────────────────────────
+
+// Latest strand selection emitted by pathview (for multi-select "Make Reference").
+let _lastSelectedStrandIds = []
+let _strandCtxMenuEl = null
+
+function _hideStrandCtxMenu() {
+  if (_strandCtxMenuEl) { _strandCtxMenuEl.remove(); _strandCtxMenuEl = null }
+}
+
+function _showStrandCtxMenu(strand, clientX, clientY) {
+  _hideStrandCtxMenu()
+  const design = editorStore.getState().design
+  // Apply to the whole selection if the right-clicked strand is part of it; else just this one.
+  const sel = _lastSelectedStrandIds.includes(strand.id)
+    ? _lastSelectedStrandIds.slice()
+    : [strand.id]
+  const allRef = sel.length > 0 &&
+    sel.every(id => design?.strands?.find(s => s.id === id)?.is_reference)
+
+  const menu = document.createElement('div')
+  menu.id = 'strand-context-menu'
+  menu.style.cssText =
+    'position:fixed;z-index:1000;background:#161b22;border:1px solid #30363d;' +
+    'border-radius:6px;padding:4px 0;min-width:160px;box-shadow:var(--shadow-md);font-size:12px'
+
+  const mkItem = (label, title, fn) => {
+    const b = document.createElement('button')
+    b.className = 'xover-menu-item'
+    b.textContent = label
+    if (title) b.title = title
+    b.addEventListener('click', () => { _hideStrandCtxMenu(); fn() })
+    menu.appendChild(b)
+  }
+
+  mkItem(
+    allRef ? 'Make Active' : 'Make Reference',
+    'Reference geometry is an inactive backdrop: ignored by all automatic features '
+      + '(bend/twist, sequence assignment, scaffold routing, autostaple, crossovers) and '
+      + 'excluded from exports/validation, but still visible (translucent) and manually editable.',
+    () => patchStrandsReference(sel, !allRef),
+  )
+  const sep = document.createElement('div')
+  sep.className = 'xover-menu-separator'
+  menu.appendChild(sep)
+  mkItem('Edit extensions…', '', () => _openStrandExtDialog(strand, clientX, clientY))
+
+  document.body.appendChild(menu)
+  _strandCtxMenuEl = menu
+  const mw = menu.offsetWidth, mh = menu.offsetHeight
+  menu.style.left = `${Math.min(clientX, window.innerWidth  - mw - 4)}px`
+  menu.style.top  = `${Math.min(clientY, window.innerHeight - mh - 4)}px`
+}
+
+document.addEventListener('mousedown', (e) => {
+  if (_strandCtxMenuEl && !_strandCtxMenuEl.contains(e.target)) _hideStrandCtxMenu()
+})
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && _strandCtxMenuEl) _hideStrandCtxMenu()
+})
+
 // ── Strand extension dialog (cadnano editor) ──────────────────────────────────
 
 const _MODIFICATION_NAMES = {
@@ -1727,6 +1896,7 @@ const pathview = initPathview(pathCanvas, pathContainer, {
   },
 
   onSelectionChange: (strandIds) => {
+    _lastSelectedStrandIds = strandIds ?? []
     _spreadsheet?.setSelectedStrands(strandIds)
     if (_syncingFromBroadcast) return
     if (!strandIds?.length) return
@@ -1750,7 +1920,7 @@ const pathview = initPathview(pathCanvas, pathContainer, {
   },
 
   onStrandContextMenu: ({ strand, clientX, clientY }) => {
-    _openStrandExtDialog(strand, clientX, clientY)
+    _showStrandCtxMenu(strand, clientX, clientY)
   },
 
   onDeleteElements: async (elementKeys) => {
@@ -2017,8 +2187,10 @@ editorStore.subscribe((state, prev) => {
 })
 
 // ── BroadcastChannel ────────────────────────────────────────────────────────
-nadocBroadcast.onMessage(async ({ type, strandIds, source, windowName, designName }) => {
+nadocBroadcast.onMessage(async (data) => {
+  const { type, strandIds, source } = data
   if (type === 'design-changed') {
+    if (!nadocBroadcast.isSameDoc(data)) return   // doc-scoped: only our document
     _syncLog('info', 'BC-RX', `design-changed from ${source?.slice(0, 8) ?? '?'}`)
     _setSyncStatus('yellow', 'syncing…')
     _suppressUnsavedBadge = true
@@ -2031,6 +2203,7 @@ nadocBroadcast.onMessage(async ({ type, strandIds, source, windowName, designNam
     _updateLabel()
   }
   if (type === 'selection-changed') {
+    if (!nadocBroadcast.isSameDoc(data)) return   // doc-scoped
     // Only positive selections sync cross-window; each window manages its own deselection.
     if (!strandIds?.length) return
     _syncingFromBroadcast = true
@@ -2154,7 +2327,10 @@ initLigationDebug()
       return null
     }
     editorStore.setState({ lastError: null })
-    if (json?.design) editorStore.setState({ design: json.design })
+    if (json?.design) {
+      editorStore.setState({ design: json.design })
+      nadocBroadcast.emit('design-changed')   // feature-log ops must reach 3D + sibling tabs (and autosave)
+    }
     return json
   }
 
@@ -2190,7 +2366,16 @@ initLigationDebug()
 // ── Initial load ─────────────────────────────────────────────────────────────
 ;(async () => {
   loadingOverlay.classList.remove('hidden')
-  await fetchDesign()
+  // Loading the current design is not an edit — suppress the unsaved/autosave
+  // path and mark the freshly-loaded design as already persisted.
+  _suppressUnsavedBadge = true
+  try {
+    await fetchDesign()
+  } finally {
+    _suppressUnsavedBadge = false
+  }
+  _lastSavedDesign = editorStore.getState().design
+  _setSyncStatus('green', 'synced')
   loadingOverlay.classList.add('hidden')
   // Announce after the design is loaded so the name is correct.
   _announceself('editor-announce')
