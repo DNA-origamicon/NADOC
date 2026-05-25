@@ -630,6 +630,10 @@ class ForcedLigation(BaseModel):
     five_prime_bp: int
     five_prime_direction: Direction
     extra_bases: Optional[str] = None  # e.g. "TT" — single-stranded bases at the junction
+    # True when this ligation closes an end-to-end polymerization seam — set when
+    # the user makes it across the 2D editor's periodic-boundary mirror. Display
+    # hint only (the 3D view draws these as glowing yellow arrows); no topology role.
+    is_periodic_seam: bool = False
 
 
 # ── Terminal extension models ─────────────────────────────────────────────────
@@ -1113,6 +1117,16 @@ class MinorMutationLogEntry(BaseModel):
     timestamp: str = ""
     params: dict = Field(default_factory=dict)
 
+    # Per-child topology diff (before→after this child, post-reconcile), captured
+    # at edit time by state.mutate_with_minor_log. Lets per-sub-step revert/delete
+    # reconstruct mid-cluster state WITHOUT replaying the op (works for any op
+    # type — see backend.core.design_diff). All three empty = legacy entry with
+    # no diff → callers fall back to _replay_minor_op.
+    diff_added_b64: str = ""       # gzip(JSON {field: [full POST objects added]})
+    diff_removed_b64: str = ""     # gzip(JSON {field: [{id, idx} removed]})
+    diff_modified_b64: str = ""    # gzip(JSON {field: {pre:[...], post:[...]}})
+    diff_size_bytes: int = 0       # uncompressed total, for the eviction budget
+
 
 class RoutingClusterLogEntry(BaseModel):
     """A 'Fine Routing' cluster grouping consecutive minor mutations.
@@ -1146,6 +1160,10 @@ class RoutingClusterLogEntry(BaseModel):
     post_state_gz_b64: str = ""
     post_state_size_bytes: int = 0
     evicted: bool = False
+    # ``diffs_evicted=True`` means the per-child diff payloads were dropped to
+    # free space (evicted together with pre/post). Children + labels remain for
+    # history, but per-sub-step revert/delete falls back to replay / is disabled.
+    diffs_evicted: bool = False
 
 
 FeatureLogEntry = Annotated[
@@ -1759,6 +1777,22 @@ class Design(BaseModel):
 
     def reference_strands(self) -> List[Strand]:
         return [s for s in self.strands if s.is_reference]
+
+    def reference_helix_ids(self) -> set[str]:
+        """Helix IDs carrying ONLY reference strands (≥1 reference domain, 0 active).
+
+        These helices are excluded from clusters and cluster/deformation
+        calculations so reference geometry stays a fixed backdrop.  A helix
+        shared by active and reference strands is NOT reference-only — the
+        active part still needs it (mixed-helix caveat).
+        """
+        ref: set[str] = set()
+        active: set[str] = set()
+        for s in self.strands:
+            target = ref if s.is_reference else active
+            for d in s.domains:
+                target.add(d.helix_id)
+        return ref - active
 
     def find_helix(self, helix_id: str) -> Optional[Helix]:
         for h in self.helices:

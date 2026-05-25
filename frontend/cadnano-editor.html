@@ -274,6 +274,7 @@
     .vt-btn.active[data-vt="overhangNames"]  { color: #fb923c; border-color: #ea580c; background: rgba(251,146,60,0.10); }
     .vt-btn.active[data-vt="grid"]           { color: #94a3b8; border-color: #475569; background: rgba(148,163,184,0.10); }
     .vt-btn.active[data-vt="referenceGeometry"] { color: #7dd3fc; border-color: #0284c7; background: rgba(125,211,252,0.10); }
+    .vt-btn.active[data-vt="periodicBoundary"]  { color: #f87171; border-color: #dc2626; background: rgba(248,113,113,0.10); }
 
     /* ── Tool sidebar (right of pathview) ─────────────────────────── */
     #tool-sidebar {
@@ -1128,6 +1129,8 @@
       <div class="menu-item" id="menu-item-view">
         <button>View</button>
         <div class="dropdown">
+          <button class="dropdown-item" id="menu-view-periodic-boundary" title="Mirror one end of the structure beside the other to close an end-to-end polymerization seam (2D editor only)">Periodic Boundary View <span class="routing-check-mark">✓</span></button>
+          <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <div class="submenu-item">Background… <span style="color:#8b949e;font-size:var(--text-xs)">▶</span>
             <div class="submenu">
               <button class="dropdown-item" id="menu-view-background">Background Settings…</button>
@@ -1350,6 +1353,14 @@
               <rect x="1" y="2" width="14" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 1.5"/>
             </svg>
             <span class="sf-label-text">ref</span>
+          </button>
+          <button class="sf-btn vt-btn" data-vt="periodicBoundary" title="Periodic boundary view — mirror one end beside the other to close an end-to-end polymerization seam">
+            <svg width="16" height="10" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <line x1="3" y1="1" x2="3" y2="9" stroke="currentColor" stroke-width="1.2"/>
+              <line x1="13" y1="1" x2="13" y2="9" stroke="currentColor" stroke-width="1.2"/>
+              <rect x="5" y="3.5" width="6" height="3" rx="0.5" fill="currentColor" opacity="0.5"/>
+            </svg>
+            <span class="sf-label-text">pbc</span>
           </button>
         </div>
         </div>
@@ -1585,6 +1596,8 @@
         <div class="hk-section">
           <div class="hk-section-title">Tools</div>
           <div class="hk-row"><span class="hk-desc">Cycle tool (Select / Pencil / Nick / Paint)</span><span class="hk-key">E</span></div>
+          <div class="hk-row"><span class="hk-desc">Nick tool</span><span class="hk-key">N</span></div>
+          <div class="hk-row"><span class="hk-desc">Paint tool (press again to nudge colour +1)</span><span class="hk-key">P</span></div>
           <div class="hk-row"><span class="hk-desc">Cycle selectable filter</span><span class="hk-key">Tab</span></div>
         </div>
         <div class="hk-section">

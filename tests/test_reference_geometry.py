@@ -182,6 +182,55 @@ def test_patch_strands_reference_route_404_on_unknown_id():
 # ── Export filtering ─────────────────────────────────────────────────────────────
 
 
+# ── Clusters exclude reference geometry ──────────────────────────────────────────
+
+
+def test_reference_helix_ids_only_when_all_strands_reference():
+    sA = Strand(domains=[Domain(helix_id="h1", start_bp=0, end_bp=9, direction=Direction.FORWARD)],
+                is_reference=True)
+    sB = Strand(domains=[Domain(helix_id="h2", start_bp=0, end_bp=9, direction=Direction.FORWARD)])
+    sC = Strand(domains=[Domain(helix_id="h2", start_bp=0, end_bp=9, direction=Direction.REVERSE)],
+                is_reference=True)
+    d = Design(strands=[sA, sB, sC])
+    # h1: only reference → reference-only. h2: has active sB → NOT reference-only.
+    assert d.reference_helix_ids() == {"h1"}
+
+
+def _with_full_cluster(d):
+    from backend.core.models import ClusterRigidTransform
+    return d.copy_with(cluster_transforms=[
+        ClusterRigidTransform(name="C1", is_default=True, helix_ids=[h.id for h in d.helices])
+    ])
+
+
+def test_marking_all_strands_reference_prunes_clusters():
+    d = _with_full_cluster(_bundle())
+    design_state.set_design(d)
+    ids = [s.id for s in d.strands]
+    r = client.patch("/api/design/strands/reference", json={"strand_ids": ids, "is_reference": True})
+    assert r.status_code == 200, r.text
+    for c in r.json()["design"]["cluster_transforms"]:
+        assert c["helix_ids"] == [], "every helix became reference-only → pruned from clusters"
+
+
+def test_partial_reference_keeps_shared_helices_in_clusters():
+    d = _with_full_cluster(_bundle())
+    design_state.set_design(d)
+    staple = next(s for s in d.strands if s.strand_type == StrandType.STAPLE)
+    r = client.patch("/api/design/strands/reference", json={"strand_ids": [staple.id], "is_reference": True})
+    assert r.status_code == 200, r.text
+    # The scaffold still covers those helices → none is reference-only → cluster intact.
+    assert r.json()["design"]["cluster_transforms"][0]["helix_ids"]
+
+
+def test_reconcile_drops_reference_only_helices():
+    from backend.core.cluster_reconcile import reconcile_cluster_membership
+    before = _with_full_cluster(_bundle())
+    after = before.copy_with(strands=[s.model_copy(update={"is_reference": True}) for s in before.strands])
+    out = reconcile_cluster_membership(before, after, None)
+    assert out.cluster_transforms[0].helix_ids == []
+
+
 def test_sequence_csv_export_omits_reference_strand():
     d = _bundle()
     d, *_ = assign_scaffold_sequence(d, "M13mp18")

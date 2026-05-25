@@ -61,6 +61,14 @@ import {
   CLR_SLICE_FILL,
   CLR_SLICE_EDGE,
   CLR_SLICE_NUM,
+  CLR_PB_BAR,
+  CLR_PB_BAR_FLASH,
+  CLR_PB_HANDLE,
+  CLR_PB_HANDLE_TXT,
+  CLR_PB_BAND,
+  CLR_PB_RULER,
+  CLR_PB_GAP_OK,
+  CLR_PB_GAP_BAD,
   CLR_SEL_RING,
   CLR_SEL_END,
   CLR_XOVER_FILL,
@@ -74,6 +82,8 @@ import {
   CLR_CELL_BG,
   CLR_CELL_GRID,
   STAPLE_PALETTE,
+  ensureStapleColors,
+  stapleColorOf,
 } from './pathview/palette.js'
 
 // Crossover indicator geometry
@@ -214,11 +224,11 @@ function sortedHelices(design) {
 function strandNtCount(strand) {
   return strand.domains.reduce((sum, d) => sum + Math.abs(d.end_bp - d.start_bp) + 1, 0)
 }
-function strandColor(strand, idx) {
-  if (strand.strand_type === 'scaffold') return CLR_SCAFFOLD
-  if (strand.color) return strand.color
-  return STAPLE_PALETTE[idx % STAPLE_PALETTE.length]
-}
+// Strand colour comes from the shared, stable resolver in palette.js (keyed on
+// strand.id, not array index) so nick/ligation can't recolour untouched strands
+// and the canvas always agrees with the strands spreadsheet. ensureStapleColors()
+// is called once per frame in _buildComponents() before any colour is read.
+const strandColor = stapleColorOf
 function strandPassesScafStapFilter(strand, filter) {
   if (!filter) return true
   if (strand.strand_type === 'scaffold') return !!filter.scaf
@@ -444,10 +454,30 @@ export function initPathview(canvasEl, containerEl, {
   let _panActive    = false
   let _panStartCX   = 0, _panStartCY   = 0
   let _panStartPanX = 0, _panStartPanY = 0
+  // True once a right/middle-button pan moves past DRAG_THRESHOLD. Right-button
+  // pans end with a native `contextmenu` event; this flag lets that handler tell
+  // a real right-click (show menu) from the tail of a pan drag (swallow it).
+  let _rightDragMoved = false
 
   // ── Slice bar ─────────────────────────────────────────────────────────────────
   let _sliceBp       = 0
   let _sliceDragging = false
+
+  // ── Periodic boundary (polymerization seam view) ───────────────────────────────
+  // Mirrors the active design beyond two sliders so the far end can be viewed/edited
+  // beside the near end. Pure 2D-editor view state — see project_periodic_boundary.
+  let _pbActive       = false   // mirrors viewTools.periodicBoundary; cached for hot paths
+  let _pbNearBp       = 0       // near slider bp (reads red P)
+  let _pbFarBp        = 0       // far slider bp  (reads red 0)
+  let _pbNearDragging = false
+  let _pbFarDragging  = false
+  let _pbInit         = false   // false until slider defaults are set for the current design
+  let _pbLastExt      = null    // last-seen active-strand extent {lo,hi}; auto-shift fires only
+                                // when an EDIT grows it past a slider, so a manually-placed slider
+                                // inside the structure (puzzle-fit seam) doesn't reset on refresh
+  let _pbFlashUntil   = 0       // performance.now() until which an auto-shifted bar pulses
+  let _ghostPass      = 0       // 0 = real pass | +1 = right mirror (+P) | -1 = left mirror (-P)
+  let _ghostShiftBp   = 0       // bp shift captured at pointerdown so a drag stays consistent across the seam
 
   // ── Paint state (pencil tool �� scaffold + staple) ───────────────���─────────────
   let _painting       = false
@@ -467,6 +497,7 @@ export function initPathview(canvasEl, containerEl, {
   let _forcedLigStartY  = 0         // world-space Y of the 3' end anchor
   let _forcedLigCursorX = 0         // world-space X of current cursor position
   let _forcedLigCursorY = 0         // world-space Y of current cursor position
+  let _forcedLigStartShift = 0      // periodic-boundary mirror shift at the 3' click (seam detection)
 
   let _activeTool     = 'select'
   let _selectFilter   = { strand: true, scaf: true, stap: true, ends: true, xover: true, line: true }
@@ -561,6 +592,100 @@ export function initPathview(canvasEl, containerEl, {
   function _bpToX(bp)      { return GUTTER + bp * BP_W }
   function _bpCenterX(bp)  { return GUTTER + (bp + 0.5) * BP_W }
   function _xToBp(worldX)  { return Math.floor((worldX - GUTTER) / BP_W) }
+
+  // ── Periodic-boundary helpers ──────────────────────────────────────────────────
+  /** Period (bp) between the two sliders. Always derived live, never stored. */
+  function _pbPeriod() { return _pbFarBp - _pbNearBp }
+  /** Whether the mirror should render/respond (active + valid period + has helices). */
+  function _pbOn() { return _pbActive && _pbPeriod() >= 1 && _helices.length > 0 }
+
+  /** {lo,hi} bp extent over ACTIVE (non-reference) strand domains, or null.
+   *  Used for slider defaults + auto-shift. Excludes is_reference ALWAYS — distinct
+   *  from _totalBp/_minBp which are helix-based and include reference strands. */
+  function _activeStrandExtent() {
+    let lo = Infinity, hi = -Infinity
+    for (const s of (_design?.strands ?? [])) {
+      if (s.is_reference) continue
+      for (const d of s.domains) {
+        const a = Math.min(d.start_bp, d.end_bp)
+        const b = Math.max(d.start_bp, d.end_bp)
+        if (a < lo) lo = a
+        if (b > hi) hi = b
+      }
+    }
+    return isFinite(lo) ? { lo, hi } : null
+  }
+
+  /** Set of helix IDs carrying ONLY reference strands (≥1 reference domain, 0
+   *  active). Mirrors backend Design.reference_helix_ids(). Used to treat a
+   *  helix's loop/skip markers as reference geometry (a mixed helix is NOT
+   *  reference — its loop/skips affect the active strand too). */
+  function _referenceOnlyHelixIds() {
+    const ref = new Set(), active = new Set()
+    for (const s of (_design?.strands ?? [])) {
+      const target = s.is_reference ? ref : active
+      for (const d of s.domains) target.add(d.helix_id)
+    }
+    for (const hid of active) ref.delete(hid)
+    return ref
+  }
+
+  /** bp shift to add to a mirrored display position to reach the REAL bp:
+   *  real_bp = display_bp - shift. +P in the right zone (shows near end),
+   *  -P in the left zone (shows far end), 0 in the body / when off. */
+  function _ghostShiftForWorldX(wx) {
+    if (!_pbOn()) return 0
+    const bp = _xToBp(wx)
+    if (bp >= _pbFarBp)  return  _pbPeriod()
+    if (bp <  _pbNearBp) return -_pbPeriod()
+    return 0
+  }
+
+  /** Screen → REAL world coords for hit-testing/commit resolution. Folds the mirror
+   *  shift so a cursor in a ghost zone resolves to the real strand. `shift` is
+   *  returned so drag previews can render back at the mirror (display) location. */
+  function _screenToRealWorld(cx, cy) {
+    const { wx, wy } = _c2w(cx, cy)
+    const shift = _ghostShiftForWorldX(wx)
+    return { wx: wx - shift * BP_W, wy, shift }
+  }
+
+  /** Place the sliders at the active-strand extent and frame the seam so both
+   *  sliders + a margin of each mirror are reachable. Idempotent via _pbInit. */
+  function _pbInitDefaults() {
+    if (_pbInit) return
+    const ext = _activeStrandExtent()
+    if (!ext) return            // no active strands → leave _pbInit false; _pbOn() stays false
+    // Domains occupy cells [lo..hi] inclusive (right edge = _bpToX(hi+1)); the far
+    // slider sits at the boundary just past the last cell so P = cell count.
+    _pbNearBp = ext.lo
+    _pbFarBp  = ext.hi + 1
+    _pbLastExt = ext            // baseline for auto-shift's "extent grew" check
+    _pbInit   = true
+    _pbFrameSeam()
+  }
+
+  /** Zoom/pan so the span [near - margin, far + margin] fits, giving the user a
+   *  margin of each mirror zone on screen (mirrors extend a full period beyond). */
+  function _pbFrameSeam() {
+    if (!_pbOn()) return
+    const W = canvasEl.width, H = canvasEl.height
+    if (!W || !H) return
+    const P = _pbPeriod()
+    const margin = Math.max(8, Math.round(P * 0.35))   // show ~⅓ of each mirror
+    const loBp = _pbNearBp - margin
+    const hiBp = _pbFarBp  + margin
+    const cW = (hiBp - loBp + 1) * BP_W + GUTTER
+    const lastInfo = _rowMap.get(_helices[_helices.length - 1].id)
+    const cH = (lastInfo ? lastInfo.revY + CELL_H / 2 : RULER_H + TOP_PAD) + 20
+    _zoom = Math.max(MIN_ZOOM, Math.min(1, W / cW, H / cH))
+    // Left-align the framed span start (world x = GUTTER + loBp*BP_W) to the gutter edge.
+    _panX = GUTTER - (GUTTER + loBp * BP_W) * _zoom
+    _panY = Math.max(0, (H - cH * _zoom) / 2)
+  }
+
+  /** Pulse the sliders briefly (e.g. after an auto-shift) so the jump isn't jarring. */
+  function _pbFlash() { _pbFlashUntil = performance.now() + 700 }
 
   // ── Gutter-circle helpers (screen-space — the gutter is the frozen x<GUTTER strip)
 
@@ -706,7 +831,9 @@ export function initPathview(canvasEl, containerEl, {
    */
   function _hitTest(cx, cy, filter = null) {
     if (!_design?.strands) return null
-    const { wx, wy } = _c2w(cx, cy)
+    // _screenToRealWorld folds the periodic-boundary mirror shift so a cursor in a
+    // mirror zone resolves to the REAL strand (no-op when the boundary is off).
+    const { wx, wy } = _screenToRealWorld(cx, cy)
     const HIT = PAIR_Y / 2
     for (const [hid, info] of _rowMap) {
       const dF = Math.abs(wy - info.fwdY)
@@ -995,6 +1122,20 @@ export function initPathview(canvasEl, containerEl, {
     return screenX >= sxLeft && screenX <= sxRight
   }
 
+  /** Which periodic-boundary slider is near screen-x, or null. Grab tolerance is
+   *  wider than the slice bar (the two are visually adjacent at the seam). */
+  function _isNearPbSlider(screenX) {
+    if (!_pbOn()) return null
+    const TOL = 6
+    const nearSX = _bpToX(_pbNearBp) * _zoom + _panX
+    const farSX  = _bpToX(_pbFarBp)  * _zoom + _panX
+    // Prefer whichever is closer when both are within tolerance.
+    const dN = Math.abs(screenX - nearSX), dF = Math.abs(screenX - farSX)
+    if (dN <= TOL && dN <= dF) return 'near'
+    if (dF <= TOL) return 'far'
+    return null
+  }
+
   /**
    * Returns true if a nick is needed at nickBp on the given helix/direction strand.
    * A nick is needed when a domain of that direction covers nickBp but its 3' end
@@ -1203,6 +1344,7 @@ export function initPathview(canvasEl, containerEl, {
   // crossover ligation is done server-side, so each strand IS the complete oligo.
   function _buildComponents() {
     const strands = _design?.strands ?? []
+    ensureStapleColors(_design)   // pin each staple's colour by id so edits don't reshuffle the palette
     const linkerMembers = new Map()
     for (const conn of (_design?.overhang_connections ?? [])) {
       if (conn.linker_type !== 'ss') continue
@@ -1219,7 +1361,7 @@ export function initPathview(canvasEl, containerEl, {
     }
 
     return {
-      colorOf:     (si) => strandColor(strands[si], si),
+      colorOf:     (si) => strandColor(strands[si]),
       // ss overhang linkers are stored as two complement strands plus one
       // connection record. Expand either side to both sides so clicking one
       // linker domain highlights the whole logical linker in cadnano and 3D.
@@ -1229,7 +1371,7 @@ export function initPathview(canvasEl, containerEl, {
   }
 
   // Frame-cached result of _buildComponents() — rebuilt at the top of _draw().
-  let _components = { colorOf: (si) => strandColor((_design?.strands ?? [])[si], si), membersOf: () => new Set(), isXoverSlot: () => false }
+  let _components = { colorOf: (si) => strandColor((_design?.strands ?? [])[si]), membersOf: () => new Set(), isXoverSlot: () => false }
 
   // ── View tools state ──────────────────────────────────────────────────────
   let _viewTools = { lengthHeatmap: false, overhangNames: false, grid: true }
@@ -1616,7 +1758,7 @@ export function initPathview(canvasEl, containerEl, {
       const strand   = _design.strands[si]
       const isRef    = !!strand.is_reference
       // Reference geometry: hide when the view toggle is off, else draw dashed.
-      if (isRef && _viewTools.referenceGeometry === false) continue
+      if (isRef && (_ghostPass !== 0 || _viewTools.referenceGeometry === false)) continue
       const isGlow   = _strandSelectedIds.has(strand.id)
       const hm       = _heatmapCache.get(si)
       const color    = isGlow ? CLR_STRAND_GLOW : (hm ? hm.color : _components.colorOf(si))
@@ -1687,7 +1829,7 @@ export function initPathview(canvasEl, containerEl, {
       if (!entry) continue
       const { strand, idx } = entry
       const isRef = !!strand.is_reference
-      if (isRef && _viewTools.referenceGeometry === false) continue
+      if (isRef && (_ghostPass !== 0 || _viewTools.referenceGeometry === false)) continue
       const _extDash = isRef ? [5 / _zoom, 3.5 / _zoom] : null
 
       const dom = ext.end === 'five_prime'
@@ -1834,7 +1976,7 @@ export function initPathview(canvasEl, containerEl, {
     for (let si = 0; si < _design.strands.length; si++) {
       const strand = _design.strands[si]
       const isRef  = !!strand.is_reference
-      if (isRef && _viewTools.referenceGeometry === false) continue
+      if (isRef && (_ghostPass !== 0 || _viewTools.referenceGeometry === false)) continue
       const strandGlow = _strandSelectedIds.has(strand.id)
       const hm = _heatmapCache.get(si)
       const color  = strandGlow ? CLR_STRAND_GLOW : (hm ? hm.color : _components.colorOf(si))
@@ -1919,7 +2061,7 @@ export function initPathview(canvasEl, containerEl, {
       // A crossover is reference geometry when both halves sit on reference strands.
       const isRefXo = sA >= 0 && sB >= 0 &&
                       _design.strands[sA].is_reference && _design.strands[sB].is_reference
-      if (isRefXo && _viewTools.referenceGeometry === false) continue
+      if (isRefXo && (_ghostPass !== 0 || _viewTools.referenceGeometry === false)) continue
       const strandGlow = (sA >= 0 && _strandSelectedIds.has(_design.strands[sA].id)) ||
                          (sB >= 0 && _strandSelectedIds.has(_design.strands[sB].id))
       const arcSel  = _selectedElements.has(_xoverKey(xo))
@@ -2010,7 +2152,7 @@ export function initPathview(canvasEl, containerEl, {
       // A forced ligation is reference geometry when both ligated strands are reference.
       const isRefFL  = sIdx >= 0 && s5Idx >= 0 &&
                        _design.strands[sIdx].is_reference && _design.strands[s5Idx].is_reference
-      if (isRefFL && _viewTools.referenceGeometry === false) continue
+      if (isRefFL && (_ghostPass !== 0 || _viewTools.referenceGeometry === false)) continue
       const strandGlow = sIdx >= 0 && _strandSelectedIds.has(_design.strands[sIdx].id)
       const arcSel   = _selectedElements.has(_forcedLigKey(fl))
       const hmFL = sIdx >= 0 ? _heatmapCache.get(sIdx) : null
@@ -2095,8 +2237,15 @@ export function initPathview(canvasEl, containerEl, {
     ctx.lineCap  = 'round'
     ctx.lineJoin = 'round'
 
+    // Loop/skips on a reference-only helix are reference geometry: hide them
+    // when the reference toggle is off AND in periodic-boundary mirror passes
+    // (matches the 5 per-strand reference-skip sites above).
+    const refHelixIds = _referenceOnlyHelixIds()
+
     for (const helix of _design.helices) {
       if (!helix.loop_skips?.length) continue
+      if (refHelixIds.has(helix.id) &&
+          (_ghostPass !== 0 || _viewTools.referenceGeometry === false)) continue
       const info = _rowMap.get(helix.id)
       if (!info) continue
 
@@ -2187,6 +2336,10 @@ export function initPathview(canvasEl, containerEl, {
   //   reverse cell (scaffold on bottom/REVERSE) → indicator above, in gap over fwdY
 
   function _drawCrossoverIndicators() {
+    // No clickable crossover sprites in mirror zones — forced ligation (not lattice
+    // crossover) is the seam tool. Return before touching _xoverSprites so the real
+    // pass (drawn last) owns the hit areas.
+    if (_ghostPass !== 0) return
     _xoverSprites = []   // rebuild hit areas each frame
     if (!_design?.helices?.length) return
     if (_zoom < 0.55) return              // too far out — hide entirely
@@ -2211,16 +2364,32 @@ export function initPathview(canvasEl, containerEl, {
     // Pre-build strand coverage: "helix_id_DIRECTION" → [[lo, hi], ...]
     // Used to gate indicators — only show where both strand slots are occupied.
     const strandRanges = new Map()
+    // Reference-strand coverage only. A crossover must never involve reference
+    // geometry, so a sprite is suppressed when EITHER half's slot is covered by a
+    // reference strand — both the half ON a reference strand and the half that
+    // would form a crossover WITH one. Mechanical is_reference filter, mirroring
+    // the per-site reference skip used by every other generative feature.
+    const refRanges = new Map()
     for (const strand of (_design.strands ?? [])) {
       for (const dom of strand.domains) {
-        const key = `${dom.helix_id}_${dom.direction}`
+        const key   = `${dom.helix_id}_${dom.direction}`
+        const range = [Math.min(dom.start_bp, dom.end_bp), Math.max(dom.start_bp, dom.end_bp)]
         let list = strandRanges.get(key)
         if (!list) { list = []; strandRanges.set(key, list) }
-        list.push([Math.min(dom.start_bp, dom.end_bp), Math.max(dom.start_bp, dom.end_bp)])
+        list.push(range)
+        if (strand.is_reference) {
+          let rlist = refRanges.get(key)
+          if (!rlist) { rlist = []; refRanges.set(key, rlist) }
+          rlist.push(range)
+        }
       }
     }
     const _slotOccupied = (helixId, bp, direction) => {
       const ranges = strandRanges.get(`${helixId}_${direction}`) ?? []
+      return ranges.some(([lo, hi]) => lo <= bp && bp <= hi)
+    }
+    const _slotIsReference = (helixId, bp, direction) => {
+      const ranges = refRanges.get(`${helixId}_${direction}`) ?? []
       return ranges.some(([lo, hi]) => lo <= bp && bp <= hi)
     }
 
@@ -2317,9 +2486,13 @@ export function initPathview(canvasEl, containerEl, {
             const stapB = scaffoldFwd ? 'FORWARD' : 'REVERSE'
             if (!occupied.has(`${hid}_${bp}_${stapA}`) &&
                 _slotOccupied(hid, bp, stapA) &&
-                _slotOccupied(target.hid, bp, stapB)) {
+                _slotOccupied(target.hid, bp, stapB) &&
+                !_slotIsReference(hid, bp, stapA) &&
+                !_slotIsReference(target.hid, bp, stapB)) {
               _xoverSprites.push({ hid, bp, targetHid: target.hid, cx, indY: stapIndY, halfAStrand: stapA, halfBStrand: stapB, isScaffold: false })
-              _drawSprite(cx, stapIndY, target.info.idx, false)
+              // Show the destination helix's identity number (label), matching the
+              // gutter; falls back to array index only when no label is frozen.
+              _drawSprite(cx, stapIndY, target.info.label ?? target.info.idx, false)
             }
           }
         }
@@ -2337,9 +2510,11 @@ export function initPathview(canvasEl, containerEl, {
               const scafB = scaffoldFwd ? 'REVERSE' : 'FORWARD'
               if (!occupied.has(`${hid}_${bp}_${scafA}`) &&
                   _slotOccupied(hid, bp, scafA) &&
-                  _slotOccupied(target.hid, bp, scafB)) {
+                  _slotOccupied(target.hid, bp, scafB) &&
+                  !_slotIsReference(hid, bp, scafA) &&
+                  !_slotIsReference(target.hid, bp, scafB)) {
                 _xoverSprites.push({ hid, bp, targetHid: target.hid, cx, indY: scafIndY, halfAStrand: scafA, halfBStrand: scafB, isScaffold: true })
-                _drawSprite(cx, scafIndY, target.info.idx, true)
+                _drawSprite(cx, scafIndY, target.info.label ?? target.info.idx, true)
               }
             }
           }
@@ -2546,7 +2721,8 @@ export function initPathview(canvasEl, containerEl, {
       const y     = isFwd ? info.fwdY : info.revY
       const half  = CELL_H / 2
       const newBp = origBp + _endDragDeltaBp
-      ctx.fillRect(_bpToX(newBp), y - half, BP_W, CELL_H)
+      // Render back at the mirror (display) location when editing through a mirror.
+      ctx.fillRect(_bpToX(newBp + _ghostShiftBp), y - half, BP_W, CELL_H)
     }
     ctx.restore()
   }
@@ -2689,7 +2865,7 @@ export function initPathview(canvasEl, containerEl, {
       const half  = CELL_H / 2
       const newLo = domLo + _domDragDeltaBp
       const newHi = domHi + _domDragDeltaBp
-      ctx.fillRect(_bpToX(newLo), y - half, BP_W * (newHi - newLo + 1), CELL_H)
+      ctx.fillRect(_bpToX(newLo + _ghostShiftBp), y - half, BP_W * (newHi - newLo + 1), CELL_H)
     }
     ctx.restore()
   }
@@ -2837,6 +3013,9 @@ export function initPathview(canvasEl, containerEl, {
     const half        = CELL_H / 2
 
     ctx.save()
+    // Render the drag preview back at the mirror (display) location when the
+    // crossover is being dragged on the mirror side of a periodic boundary.
+    if (_ghostShiftBp) ctx.translate(_ghostShiftBp * BP_W, 0)
     ctx.globalAlpha = alpha
 
     for (const g of _xoverDragGroup) {
@@ -2941,8 +3120,10 @@ export function initPathview(canvasEl, containerEl, {
         const lo = Math.min(hoverHit.dom.start_bp, hoverHit.dom.end_bp)
         const hi = Math.max(hoverHit.dom.start_bp, hoverHit.dom.end_bp)
         const fivePrimeBp = isFwd ? lo : hi
+        // Render back at the mirror location the cursor is hovering, if any.
+        const s = _ghostShiftForWorldX(_forcedLigCursorX)
         ctx.fillStyle = 'rgba(30, 160, 60, 0.40)'
-        ctx.fillRect(_bpToX(fivePrimeBp), cy - CELL_H / 2, BP_W, CELL_H)
+        ctx.fillRect(_bpToX(fivePrimeBp + s), cy - CELL_H / 2, BP_W, CELL_H)
       }
     }
     ctx.restore()
@@ -2959,8 +3140,10 @@ export function initPathview(canvasEl, containerEl, {
       ? (info.scaffoldFwd ? info.fwdY : info.revY)
       : (_paintDirection === 'FORWARD' ? info.fwdY : info.revY)
     const ghostThick = CELL_H * 0.20
+    // _paintLo/_paintHi are REAL bp; render the preview back at the mirror location.
+    const s = _ghostShiftBp
     ctx.fillStyle = _paintIsScaffold ? CLR_GHOST_SCAF : CLR_GHOST_STPL
-    ctx.fillRect(_bpToX(_paintLo), y - ghostThick / 2, _bpToX(_paintHi + 1) - _bpToX(_paintLo), ghostThick)
+    ctx.fillRect(_bpToX(_paintLo + s), y - ghostThick / 2, _bpToX(_paintHi + 1) - _bpToX(_paintLo), ghostThick)
   }
 
   // ── Draw: nick hover ghost ────────────────────────────────────────────────────
@@ -2970,18 +3153,19 @@ export function initPathview(canvasEl, containerEl, {
   function _drawNickHover() {
     if (!_nickHover) return
     const { threeEndBp, fiveEndBp, y, ligation } = _nickHover
+    const s = _nickHover.shift ?? 0   // render back at the mirror (display) location
     const half = CELL_H / 2
     if (_shiftHeld && ligation) {
       // Ligation mode — blue highlight on both boundary cells of the nick
       ctx.fillStyle = 'rgba(50, 130, 255, 0.65)'
-      ctx.fillRect(_bpToX(ligation.threeEndBp), y - half, BP_W, CELL_H)
-      ctx.fillRect(_bpToX(ligation.fiveEndBp),  y - half, BP_W, CELL_H)
+      ctx.fillRect(_bpToX(ligation.threeEndBp + s), y - half, BP_W, CELL_H)
+      ctx.fillRect(_bpToX(ligation.fiveEndBp + s),  y - half, BP_W, CELL_H)
     } else {
       // Normal nick mode — red 3' end, green 5' end
       ctx.fillStyle = 'rgba(220, 40, 40, 0.55)'
-      ctx.fillRect(_bpToX(threeEndBp), y - half, BP_W, CELL_H)
+      ctx.fillRect(_bpToX(threeEndBp + s), y - half, BP_W, CELL_H)
       ctx.fillStyle = 'rgba(30, 160, 60, 0.55)'
-      ctx.fillRect(_bpToX(fiveEndBp),  y - half, BP_W, CELL_H)
+      ctx.fillRect(_bpToX(fiveEndBp + s),  y - half, BP_W, CELL_H)
     }
   }
 
@@ -3000,6 +3184,101 @@ export function initPathview(canvasEl, containerEl, {
     ctx.lineWidth   = 1 / _zoom
     _line(x0, topY, x0, botY)
     _line(x1, topY, x1, botY)
+  }
+
+  // ── Draw: periodic-boundary mirror passes (world space) ──────────────────────
+  // Re-renders the active design shifted ±P beyond each slider, clips real content
+  // to the body, and tints the mirror zones. Replaces the single _drawWorldContent
+  // call when _pbOn(). Reference geometry is force-skipped during mirror passes via
+  // the _ghostPass flag (see the isRef checks in the draw helpers).
+  function _drawPbContentPasses() {
+    const P    = _pbPeriod()
+    const dx   = P * BP_W
+    const topY = (-_panY) / _zoom
+    const botY = (canvasEl.height - _panY) / _zoom
+    const wLeft  = (-_panX) / _zoom
+    const wRight = (canvasEl.width - _panX) / _zoom
+    const nearX  = _bpToX(_pbNearBp)
+    const farX   = _bpToX(_pbFarBp)
+
+    // Primary (real) strands: drawn FULL and unclipped at full opacity, so they stay
+    // visible everywhere — including under a slider dragged into the body. The mirror
+    // passes below draw translucent ON TOP, overlaying periodic onto primary (lets the
+    // user slide a slider inward to superimpose far-vs-near and check the seam).
+    _drawWorldContent()
+
+    // Faint tint over each mirror zone (behind the mirror strands, over the primary)
+    // so the periodic region still reads as distinct.
+    ctx.fillStyle = CLR_PB_BAND
+    if (nearX > wLeft)  ctx.fillRect(wLeft, topY, nearX - wLeft, botY - topY)
+    if (farX  < wRight) ctx.fillRect(farX, topY, wRight - farX, botY - topY)
+
+    // Left mirror: far-end content shifted -P, clipped to x ≤ nearX, translucent on top.
+    if (nearX > wLeft) {
+      ctx.save()
+      ctx.beginPath(); ctx.rect(wLeft, topY, nearX - wLeft, botY - topY); ctx.clip()
+      ctx.translate(-dx, 0)
+      ctx.globalAlpha = 0.55
+      _ghostPass = -1; _drawWorldContent(); _ghostPass = 0
+      ctx.restore()
+    }
+    // Right mirror: near-end content shifted +P, clipped to x ≥ farX, translucent on top.
+    if (farX < wRight) {
+      ctx.save()
+      ctx.beginPath(); ctx.rect(farX, topY, wRight - farX, botY - topY); ctx.clip()
+      ctx.translate(dx, 0)
+      ctx.globalAlpha = 0.55
+      _ghostPass = 1; _drawWorldContent(); _ghostPass = 0
+      ctx.restore()
+    }
+  }
+
+  // ── Draw: periodic-boundary chrome (screen space) ────────────────────────────
+  // Two red slider bars, grab handles in the ruler band, and the seam-gap readout.
+  // Screen space so bars/handles are fixed-width and sit correctly under any zoom.
+  function _drawPbChrome() {
+    if (!_pbOn()) return
+    const H = canvasEl.height, W = canvasEl.width
+    const P = _pbPeriod()
+    const now = performance.now()
+    const flashing = now < _pbFlashUntil
+    const bars = [
+      { bp: _pbNearBp, role: 'near', red: _pbNearBp + P, dragging: _pbNearDragging },
+      { bp: _pbFarBp,  role: 'far',  red: _pbFarBp  - P, dragging: _pbFarDragging  },
+    ]
+    ctx.save()
+    ctx.textBaseline = 'alphabetic'
+    for (const b of bars) {
+      const sx = _bpToX(b.bp) * _zoom + _panX
+      if (sx < GUTTER || sx > W) continue
+      // Vertical bar from the ruler down.
+      ctx.strokeStyle = flashing && b.dragging === false ? CLR_PB_BAR_FLASH : CLR_PB_BAR
+      ctx.lineWidth = b.dragging ? 3 : 2
+      ctx.beginPath(); ctx.moveTo(sx, RULER_H); ctx.lineTo(sx, H); ctx.stroke()
+      // Grab handle + label inside the ruler band.
+      const hw = 30, hh = RULER_H - 4
+      const hx = b.role === 'near' ? sx : sx - hw   // near handle to the right, far handle to the left
+      ctx.fillStyle = CLR_PB_HANDLE
+      ctx.fillRect(hx, 2, hw, hh)
+      ctx.fillStyle = CLR_PB_HANDLE_TXT
+      ctx.font = 'bold 9px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText(`${b.role} ${b.red}`, hx + hw / 2, 2 + hh / 2 + 3)
+    }
+    // Seam-gap readout: period − active-strand cell span. 0 = copies tile flush.
+    const ext = _activeStrandExtent()
+    if (ext) {
+      const span = (ext.hi + 1) - ext.lo
+      const gap  = P - span
+      ctx.font = 'bold 11px sans-serif'
+      ctx.textAlign = 'left'
+      ctx.fillStyle = gap === 0 ? CLR_PB_GAP_OK : CLR_PB_GAP_BAD
+      const txt = gap === 0 ? 'seam: flush ✓'
+                : gap > 0   ? `seam: +${gap} bp gap`
+                :             `seam: ${gap} bp overlap`
+      ctx.fillText(txt, GUTTER + 8, RULER_H + 16)
+    }
+    ctx.restore()
   }
 
   // ── Draw: lasso rect ─────────────────────────────────────────────────────────
@@ -3155,10 +3434,27 @@ export function initPathview(canvasEl, containerEl, {
     while (stepPx * kPow < minPxStep) kPow *= 2
     const major = baseMajor * kPow
 
-    // Labels centred inside cell N (not at the boundary tick).
+    // Labels centred inside cell N (not at the boundary tick). When the periodic
+    // boundary is on, black labels show only between the sliders; the mirror zones
+    // get RED labels reading the real bp of the mirrored content (display ∓ P).
+    const pbOn = _pbOn()
+    const P    = _pbPeriod()
     for (let bp = Math.ceil(bpL / major) * major; bp <= bpR; bp += major) {
+      if (pbOn && (bp <= _pbNearBp || bp >= _pbFarBp)) continue
       const sx = _bpCenterX(bp) * _zoom + _panX
       ctx.fillText(bp, sx, RULER_H / 2)
+    }
+    if (pbOn) {
+      ctx.fillStyle = CLR_PB_RULER
+      for (let bp = Math.ceil(bpL / major) * major; bp <= bpR; bp += major) {
+        let red
+        if (bp >= _pbFarBp)       red = bp - P   // right mirror: near-end content
+        else if (bp <= _pbNearBp) red = bp + P   // left mirror: far-end content
+        else continue
+        const sx = _bpCenterX(bp) * _zoom + _panX
+        ctx.fillText(red, sx, RULER_H / 2)
+      }
+      ctx.fillStyle = CLR_RULER_TEXT
     }
     if (_helices.length) {
       const sx = _bpCenterX(_sliceBp) * _zoom + _panX
@@ -3237,7 +3533,8 @@ export function initPathview(canvasEl, containerEl, {
     }
     // ── World-space content ────────────────────────────────────────────────────
     ctx.setTransform(_zoom, 0, 0, _zoom, _panX, _panY)
-    _drawWorldContent()
+    if (_pbOn()) _drawPbContentPasses()   // mirror passes + body clip + tint bands
+    else         _drawWorldContent()
     _drawEndDragGhost()
     _drawDomainDragGhost()
     _drawXoverDragGhost()
@@ -3251,9 +3548,11 @@ export function initPathview(canvasEl, containerEl, {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     _drawGutter()          // frozen left panel
     _drawRuler()           // frozen top ruler (painted after gutter to cover corner)
+    _drawPbChrome()        // periodic-boundary sliders + handles + seam-gap readout
     _drawGutterLasso()     // gutter-circle rubber-band (over the frozen gutter)
     _drawHelixDragGhost()  // drag-to-reorder blue block + red insertion arrow
     _drawHeatmapLegend()   // heat map legend (right-centre)
+    if (performance.now() < _pbFlashUntil) requestAnimationFrame(_draw)  // pulse the auto-shifted bar
   }
 
   // Render the world content to a different canvas at a different
@@ -3303,13 +3602,21 @@ export function initPathview(canvasEl, containerEl, {
 
     // ── Pan (right / middle) ────────────────────────────────────────────────────
     if (e.button === 1 || e.button === 2) {
-      _panActive    = true
+      _panActive      = true
+      _rightDragMoved = false   // fresh press: not yet a drag (reset stale flag from a prior pan)
       _panStartCX   = e.clientX; _panStartCY   = e.clientY
       _panStartPanX = _panX;    _panStartPanY = _panY
       canvasEl.setPointerCapture(e.pointerId); e.preventDefault(); _draw(); return
     }
 
     if (e.button !== 0) return
+
+    // ── Periodic-boundary slider drag (priority over the adjacent slice bar) ─────
+    const pbHit = _isNearPbSlider(e.offsetX)
+    if (pbHit) {
+      if (pbHit === 'near') _pbNearDragging = true; else _pbFarDragging = true
+      canvasEl.setPointerCapture(e.pointerId); e.preventDefault(); _draw(); return
+    }
 
     // ── Slice bar drag ──────────────────────────────────────────────────────────
     if (_isNearSliceBar(e.offsetX)) {
@@ -3349,6 +3656,10 @@ export function initPathview(canvasEl, containerEl, {
     }
 
     const { wx, wy } = _c2w(e.offsetX, e.offsetY)
+    // Mirror shift for this interaction: captured once so a drag stays consistent
+    // even if the cursor crosses the seam mid-drag. Hit-tests resolve the REAL
+    // strand (via _screenToRealWorld inside _hitTest); previews render back by +shift.
+    _ghostShiftBp = _ghostShiftForWorldX(wx)
 
     // ── Select tool: end-cap drag (must precede xover sprite check) ─────────────
     // Crossover sprites sit near bp 0 / bp (maxBp) — the same positions as
@@ -3446,7 +3757,9 @@ export function initPathview(canvasEl, containerEl, {
 
     // ── Select tool: crossover arc drag (move existing crossover) ─────────────
     if (_activeTool === 'select') {
-      const arcHit = _hitTestArc(wx, wy)
+      // Resolve through the periodic-boundary mirror: a crossover arc shown in a
+      // mirror zone maps to the real crossover (_ghostShiftBp captured above).
+      const arcHit = _hitTestArc(wx - _ghostShiftBp * BP_W, wy)
       if (arcHit?.xo) {
         const xo = arcHit.xo
         const infoA = _rowMap.get(xo.half_a.helix_id)
@@ -3646,18 +3959,24 @@ export function initPathview(canvasEl, containerEl, {
       const hit = _hitTest(e.offsetX, e.offsetY)
       if (hit && hit.endWhich === '5p' && hit.strand.id !== _forcedLigStrand.id) {
         const sourceStrand = _forcedLigStrand
+        // Seam crossing: the two ends were clicked in different periodic-boundary
+        // zones (one body, one mirror — or opposite mirrors). Mechanical, no geometry.
+        const endShift   = _ghostShiftForWorldX(_c2w(e.offsetX, e.offsetY).wx)
+        const crossesSeam = _pbOn() && _forcedLigStartShift !== endShift
         _forcedLigActive      = false
         _forcedLigStrand      = null
         _forcedLigDom         = null
         _forcedLigHoverTarget = null
-        _dbgLastEvent = `pencil: forced-lig 3'=${sourceStrand.id.slice(0,8)} → 5'=${hit.strand.id.slice(0,8)}`
+        _forcedLigStartShift  = 0
+        _dbgLastEvent = `pencil: forced-lig 3'=${sourceStrand.id.slice(0,8)} → 5'=${hit.strand.id.slice(0,8)}${crossesSeam ? ' [seam]' : ''}`
         if (DBG) console.log('[FORCED LIG] complete', {
           from_3prime: sourceStrand.id.slice(0, 12),
           to_5prime:   hit.strand.id.slice(0, 12),
+          periodic_seam: crossesSeam,
         })
         _draw()
         ;(async () => {
-          await onForcedLigation?.(sourceStrand.id, hit.strand.id)
+          await onForcedLigation?.(sourceStrand.id, hit.strand.id, crossesSeam)
         })()
       } else {
         // Clicked somewhere other than a valid 5' end — cancel
@@ -3686,10 +4005,12 @@ export function initPathview(canvasEl, containerEl, {
           _forcedLigActive   = true
           _forcedLigStrand   = hit.strand
           _forcedLigDom      = hit.dom
-          _forcedLigStartX   = _bpCenterX(hit.dom.end_bp)
+          // Anchor at the mirror (display) location so the arc starts under the cursor.
+          _forcedLigStartX   = _bpCenterX(hit.dom.end_bp + _ghostShiftBp)
           _forcedLigStartY   = trackY
           _forcedLigCursorX  = wx
           _forcedLigCursorY  = wy
+          _forcedLigStartShift = _ghostShiftBp   // which seam zone the 3' end was clicked in
           _forcedLigHoverTarget = null
           _dbgLastEvent = `pencil: forced-lig start 3'=${hit.strand.id.slice(0,8)}`
           if (DBG) console.log('[FORCED LIG] start from 3\' end', {
@@ -3712,7 +4033,7 @@ export function initPathview(canvasEl, containerEl, {
         const isFwdTrack = dF <= dR
         const direction  = isFwdTrack ? 'FORWARD' : 'REVERSE'
         const isScaffold = isFwdTrack === info.scaffoldFwd
-        const bp = _xToBp(wx)
+        const bp = _xToBp(wx) - _ghostShiftBp   // REAL bp when painting through a mirror
         _painting        = true
         _paintAnchor     = bp
         _paintLo         = bp
@@ -3781,7 +4102,9 @@ export function initPathview(canvasEl, containerEl, {
     }
     if (_xoverDragActive) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
-      const curBpFrac = (wx - GUTTER) / BP_W   // fractional for accurate snap distance
+      // Subtract the captured mirror shift so the bp is in REAL space when dragging
+      // a crossover shown on the mirror side (no-op in the body / boundary off).
+      const curBpFrac = (wx - GUTTER) / BP_W - _ghostShiftBp   // fractional for accurate snap distance
       // Always track cursor position (clamped to integer bp within helix bounds)
       _xoverDragCursorBp = Math.round(curBpFrac)
       // Find nearest valid delta within snap distance (delta-based for multi-xover)
@@ -3821,6 +4144,14 @@ export function initPathview(canvasEl, containerEl, {
     if (_panActive) {
       _panX = _panStartPanX + (e.clientX - _panStartCX)
       _panY = _panStartPanY + (e.clientY - _panStartCY)
+      if (Math.hypot(e.clientX - _panStartCX, e.clientY - _panStartCY) > DRAG_THRESHOLD) _rightDragMoved = true
+      _draw(); return
+    }
+    if (_pbNearDragging || _pbFarDragging) {
+      const { wx } = _c2w(e.offsetX, e.offsetY)
+      const bp = _xToBp(wx)
+      if (_pbNearDragging) _pbNearBp = Math.min(_pbFarBp - 1, bp)   // keep near ≤ far-1 (P ≥ 1)
+      else                 _pbFarBp  = Math.max(_pbNearBp + 1, bp)  // keep far ≥ near+1
       _draw(); return
     }
     if (_sliceDragging) {
@@ -3830,7 +4161,7 @@ export function initPathview(canvasEl, containerEl, {
     }
     if (_painting) {
       const { wx } = _c2w(e.offsetX, e.offsetY)
-      const bp = _xToBp(wx)
+      const bp = _xToBp(wx) - _ghostShiftBp   // resolve to REAL bp when painting in a mirror zone
       _paintLo = Math.min(_paintAnchor, bp)
       _paintHi = Math.max(_paintAnchor, bp)
       _draw(); return
@@ -3853,6 +4184,8 @@ export function initPathview(canvasEl, containerEl, {
     // Cursor + hover
     if (_activeTool === 'select' && _helixAtGutter(e.offsetX, e.offsetY)) {
       canvasEl.style.cursor = 'grab'
+    } else if (_isNearPbSlider(e.offsetX)) {
+      canvasEl.style.cursor = 'col-resize'
     } else if (_isNearSliceBar(e.offsetX)) {
       canvasEl.style.cursor = 'col-resize'
     } else if (_selectFilter.xover && _hitTestCrossoverSprite(e.offsetX, e.offsetY)) {
@@ -3866,8 +4199,9 @@ export function initPathview(canvasEl, containerEl, {
     } else if (_activeTool === 'paint') {
       canvasEl.style.cursor = 'crosshair'
     } else if (_activeTool === 'select' && _selectFilter.xover) {
-      // Grab cursor when hovering over an existing crossover arc (draggable)
-      const { wx: hx, wy: hy } = _c2w(e.offsetX, e.offsetY)
+      // Grab cursor when hovering over an existing crossover arc (draggable),
+      // including arcs shown on the mirror side (_screenToRealWorld folds the shift).
+      const { wx: hx, wy: hy } = _screenToRealWorld(e.offsetX, e.offsetY)
       const arcH = _hitTestArc(hx, hy)
       canvasEl.style.cursor = arcH?.xo ? 'grab' : 'default'
     } else {
@@ -3887,12 +4221,14 @@ export function initPathview(canvasEl, containerEl, {
         const info    = _rowMap.get(dom.helix_id)
         if (!info) { _nickHover = null; _draw(); return }
         const { wx }  = _c2w(e.offsetX, e.offsetY)
-        const col     = _xToBp(wx)
+        const shift   = _ghostShiftForWorldX(wx)   // live shift (hover, not a captured drag)
+        const col     = _xToBp(wx) - shift          // REAL bp under cursor
         const nickBp     = _nickBpForDomain(dom, col)
         const threeEndBp = nickBp
         const fiveEndBp  = dom.direction === 'FORWARD' ? nickBp + 1 : nickBp - 1
         const y = dom.direction === 'FORWARD' ? info.fwdY : info.revY
-        _nickHover = { threeEndBp, fiveEndBp, y, ligation: _findLigation(dom, col) }
+        // shift stored so the hover ghost renders back at the mirror (display) location.
+        _nickHover = { threeEndBp, fiveEndBp, y, shift, ligation: _findLigation(dom, col) }
         _dbgDetail = [`  hover: new 3' at bp=${threeEndBp}  new 5' at bp=${fiveEndBp}`]
       } else {
         const hadHover = _nickHover !== null
@@ -3904,6 +4240,10 @@ export function initPathview(canvasEl, containerEl, {
   })
 
   canvasEl.addEventListener('pointerup', (e) => {
+    if ((_pbNearDragging || _pbFarDragging) && e.button === 0) {
+      _pbNearDragging = false; _pbFarDragging = false
+      _draw(); return
+    }
     if ((_helixDragArmed || _helixDragActive) && e.button === 0) {
       const wasActive = _helixDragActive
       _helixDragArmed  = false
@@ -4060,9 +4400,11 @@ export function initPathview(canvasEl, containerEl, {
         // Click was already handled in pointerdown; nothing to do here
         _draw(); return
       }
-      // Select click — test domains first, then crossover arcs, then loop/skip
+      // Select click — test domains first, then crossover arcs, then loop/skip.
+      // _screenToRealWorld folds the mirror shift so arcs/markers shown on the
+      // mirror side select the real crossover/loop-skip.
       const hit    = _hitTest(e.offsetX, e.offsetY, _selectFilter)
-      const { wx: cwx, wy: cwy } = _c2w(e.offsetX, e.offsetY)
+      const { wx: cwx, wy: cwy } = _screenToRealWorld(e.offsetX, e.offsetY)
       const arcHit = !hit && _selectFilter.xover ? _hitTestArc(cwx, cwy) : null
       const lsHit  = !hit && !arcHit ? _hitTestLoopSkip(cwx, cwy) : null
 
@@ -4126,8 +4468,10 @@ export function initPathview(canvasEl, containerEl, {
     if (_helixDragArmed || _helixDragActive)      { _helixDragArmed = false; _helixDragActive = false; canvasEl.style.cursor = 'default'; needDraw = true }
     if (_gutterLassoStarted || _gutterLassoActive){ _gutterLassoStarted = false; _gutterLassoActive = false; needDraw = true }
     if (_painting)                     { _painting = false; _paintH = null; needDraw = true }
+    if (_pbNearDragging || _pbFarDragging) { _pbNearDragging = false; _pbFarDragging = false; needDraw = true }
     if (_nickHover !== null)           { _nickHover = null; _dbgDetail = []; needDraw = true }
     if (_hoverHelixId !== null)       { _hoverHelixId = null; needDraw = true }
+    _ghostShiftBp = 0
     if (needDraw) _draw()
   })
 
@@ -4140,11 +4484,20 @@ export function initPathview(canvasEl, containerEl, {
     if (_gutterLassoStarted || _gutterLassoActive){ _gutterLassoStarted = false; _gutterLassoActive = false; _draw() }
     if (_panActive)       { _panActive = false; _draw() }
     if (_sliceDragging)   { _sliceDragging = false; _draw() }
+    if (_pbNearDragging || _pbFarDragging) { _pbNearDragging = false; _pbFarDragging = false; _draw() }
+    _ghostShiftBp = 0
   })
 
   canvasEl.addEventListener('contextmenu', (e) => {
     e.preventDefault()
-    const { wx, wy } = _c2w(e.offsetX, e.offsetY)
+    // Right-button drag pans the view; this contextmenu is fired on release. If
+    // the press actually dragged, swallow it so no menu pops where the drag ended
+    // (even if that's on a crossover / overhang / strand). A stationary right-click
+    // leaves the flag false and still opens the menu.
+    if (_rightDragMoved) { _rightDragMoved = false; return }
+    // Resolve through the mirror so right-clicking a crossover arc on the mirror
+    // side targets the real crossover.
+    const { wx, wy } = _screenToRealWorld(e.offsetX, e.offsetY)
     const arcHit = _hitTestArc(wx, wy)
     if (arcHit) {
       onCrossoverContextMenu?.({
@@ -4272,6 +4625,14 @@ export function initPathview(canvasEl, containerEl, {
 
     setViewTools(vt) {
       _viewTools = vt
+      const next = !!vt.periodicBoundary
+      if (next !== _pbActive) {
+        _pbActive = next
+        // Recompute slider defaults from the current design each time it's enabled;
+        // clear when disabled so a fresh enable re-frames the seam.
+        _pbInit = false
+        if (next) _pbInitDefaults()
+      }
       _draw()
     },
 
@@ -4350,6 +4711,36 @@ export function initPathview(canvasEl, containerEl, {
       _selectedElements = new Set()   // clear selection on design change
       _selectedHelices  = new Set()   // clear gutter-circle selection too
       _rebuildLayout()
+      // Periodic boundary: keep sliders in step with the active-strand extent.
+      if (_pbActive) {
+        if (!_pbInit) {
+          _pbInitDefaults()
+        } else {
+          const ext = _activeStrandExtent()
+          if (ext) {
+            // Auto-shift fires ONLY when an EDIT grows the extent OUTWARD past a slider
+            // (compared to the last-seen extent) — then TRANSLATE the whole window by that
+            // delta so the exceeded slider lands on the new extent while the PERIOD P stays
+            // constant (the rest of the design / mirror copy doesn't jump). Gating on
+            // "extent grew" — NOT merely "the slider sits inside the structure" — lets the
+            // user park a slider at an interior jagged point for a puzzle-fit seam without
+            // it snapping back out on the next refresh. User rule: a mirrored resize driving
+            // the near end to bp -10 moves the seam in by 10; both sliders shift -10, P fixed.
+            const prev = _pbLastExt ?? ext
+            const grewNear = ext.lo < prev.lo && ext.lo < _pbNearBp
+            const grewFar  = ext.hi > prev.hi && ext.hi + 1 > _pbFarBp
+            if (grewNear && grewFar) {
+              // Both ends grew past at once — P can't be preserved; grow to enclose.
+              _pbNearBp = ext.lo; _pbFarBp = ext.hi + 1; _pbFlash()
+            } else if (grewNear) {
+              const d = ext.lo - _pbNearBp; _pbNearBp += d; _pbFarBp += d; _pbFlash()
+            } else if (grewFar) {
+              const d = (ext.hi + 1) - _pbFarBp; _pbNearBp += d; _pbFarBp += d; _pbFlash()
+            }
+            _pbLastExt = ext
+          }
+        }
+      }
       _resize()
       if (!_fitDone && _helices.length > 0) {
         _fitDone = true

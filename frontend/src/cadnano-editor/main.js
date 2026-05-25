@@ -674,6 +674,9 @@ function _syncViewToolButtons(viewTools) {
   vtBtns.forEach(btn => {
     btn.classList.toggle('active', !!viewTools[btn.dataset.vt])
   })
+  // Reflect the toggle's state as a ✓ on its View-menu item.
+  document.getElementById('menu-view-periodic-boundary')
+    ?.classList.toggle('is-checked', !!viewTools.periodicBoundary)
 }
 
 // Native-orientation toggle — default ON (cadnano2 convention).
@@ -1203,6 +1206,11 @@ document.getElementById('menu-view-background')?.addEventListener('click', () =>
   if (_backgroundModal) _backgroundModal.style.display = 'flex'
 })
 
+document.getElementById('menu-view-periodic-boundary')?.addEventListener('click', () => {
+  const cur = editorStore.getState().viewTools
+  editorStore.setState({ viewTools: { ...cur, periodicBoundary: !cur.periodicBoundary } })
+})
+
 document.getElementById('background-modal-close')?.addEventListener('click', () => {
   if (_backgroundModal) _backgroundModal.style.display = 'none'
 })
@@ -1296,6 +1304,30 @@ window.addEventListener('keydown', (e) => {
     const next = _tCycle[(idx + 1) % _tCycle.length]
     editorStore.setState({ selectedTool: next })
     showCursorToast(_toolDisplayNames[next] ?? next, _lastMouseX, _lastMouseY)
+  }
+
+  // "N" — Nick tool
+  if (e.key === 'n' || e.key === 'N') {
+    editorStore.setState({ selectedTool: 'nick' })
+    showCursorToast(_toolDisplayNames.nick ?? 'Nick', _lastMouseX, _lastMouseY)
+    return
+  }
+
+  // "P" — Paint tool. Pressing P again while already on Paint nudges the paint
+  // colour up by one hex unit (#RRGGBB + 1, wrapping at #ffffff), so each press
+  // yields a distinct colour — handy for grouping strands by colour afterwards.
+  if (e.key === 'p' || e.key === 'P') {
+    if (editorStore.getState().selectedTool === 'paint') {
+      const cur  = _getActivePaintColor()
+      const n    = (parseInt(cur.slice(1), 16) + 1) & 0xffffff
+      const next = '#' + n.toString(16).padStart(6, '0')
+      editorStore.setState({ paintCustomColor: next })
+      showCursorToast(next, _lastMouseX, _lastMouseY)
+    } else {
+      editorStore.setState({ selectedTool: 'paint' })
+      showCursorToast(_toolDisplayNames.paint ?? 'Paint', _lastMouseX, _lastMouseY)
+    }
+    return
   }
 
   // Tab — cycle through selectable filter items (strand, line, ends, xover only)
@@ -1880,8 +1912,8 @@ const pathview = initPathview(pathCanvas, pathContainer, {
   onBatchMoveCrossovers: (moves) =>
     batchMoveCrossovers(moves),
 
-  onForcedLigation: (threePrimeStrandId, fivePrimeStrandId) =>
-    forcedLigation(threePrimeStrandId, fivePrimeStrandId),
+  onForcedLigation: (threePrimeStrandId, fivePrimeStrandId, isPeriodicSeam = false) =>
+    forcedLigation(threePrimeStrandId, fivePrimeStrandId, isPeriodicSeam),
 
   onInsertLoopSkip: (helixId, bpIndex, delta) => insertLoopSkip(helixId, bpIndex, delta),
 

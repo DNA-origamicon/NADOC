@@ -241,24 +241,27 @@ def make_bundle_design(
     cells:
         List of (row, col) integer pairs selecting helix positions.
     length_bp:
-        Number of base pairs per helix.  May be negative: negative values
-        extrude in the -axis direction (axis_end < axis_start along the normal).
-        Strand directions are always determined by honeycomb parity regardless
-        of sign.
+        Number of base pairs per helix.  May be negative: a negative value
+        ("minus" direction) places the helix in [offset−|L|, offset] — below the
+        plane — as a canonical +axis helix (axis_start at the lower coordinate),
+        NOT an axis_end<axis_start helix.  Strand directions are always determined
+        by honeycomb parity regardless of sign.
     name:
         Design name for metadata.
     plane:
         Lattice plane — one of ``"XY"``, ``"XZ"``, or ``"YZ"``.
-        Helices run along the axis perpendicular to this plane:
+        Helices run along the axis perpendicular to this plane.  The helix always
+        spans [seg_lo, seg_hi] = [offset+min(0,L), offset+max(0,L)] with axis_start
+        at seg_lo and axis_end at seg_hi:
 
-        - ``"XY"`` → helices along Z  (axis_start=(lx,ly,offset),  axis_end=(lx,ly,offset+L))
-        - ``"XZ"`` → helices along Y  (axis_start=(lx,offset,ly),  axis_end=(lx,offset+L,ly))
-        - ``"YZ"`` → helices along X  (axis_start=(offset,lx,ly),  axis_end=(offset+L,lx,ly))
+        - ``"XY"`` → helices along Z  (axis_start.z=seg_lo,  axis_end.z=seg_hi)
+        - ``"XZ"`` → helices along Y  (axis_start.y=seg_lo,  axis_end.y=seg_hi)
+        - ``"YZ"`` → helices along X  (axis_start.x=seg_lo,  axis_end.x=seg_hi)
 
         where ``lx, ly = honeycomb_position(row, col)`` and ``L = length_bp × rise`` (signed).
     offset_nm:
-        Starting position along the helix axis in nm.  The helix axis_start
-        is placed at this offset.  Defaults to 0.
+        The plane position along the helix axis in nm.  For +L the helix starts
+        here; for −L it ends here.  Defaults to 0.
     id_suffix:
         String appended to generated helix/strand IDs to ensure uniqueness
         when adding segments to an existing design.
@@ -294,15 +297,22 @@ def make_bundle_design(
         scaf_id  = f"scaf_{plane}_{row}_{col}{id_suffix}"
         stpl_id  = f"stpl_{plane}_{row}_{col}{id_suffix}"
 
+        # Canonical axis: axis_start is always the lower coordinate, axis_end the
+        # higher, regardless of extrude sign.  A negative length_bp ("minus"
+        # direction) therefore places the helix in [offset−|L|, offset] — below the
+        # plane — as an ordinary +axis lattice helix, instead of an axis_end<axis_start
+        # helix whose nucleotides the geometry normalizer would re-derive on the +side.
+        seg_lo = offset_nm + min(0.0, helix_length_nm)
+        seg_hi = offset_nm + max(0.0, helix_length_nm)
         if plane == "XY":
-            axis_start = Vec3(x=lx, y=ly, z=offset_nm)
-            axis_end   = Vec3(x=lx, y=ly, z=offset_nm + helix_length_nm)
+            axis_start = Vec3(x=lx, y=ly, z=seg_lo)
+            axis_end   = Vec3(x=lx, y=ly, z=seg_hi)
         elif plane == "XZ":
-            axis_start = Vec3(x=lx, y=offset_nm,               z=ly)
-            axis_end   = Vec3(x=lx, y=offset_nm + helix_length_nm, z=ly)
+            axis_start = Vec3(x=lx, y=seg_lo, z=ly)
+            axis_end   = Vec3(x=lx, y=seg_hi, z=ly)
         else:  # YZ
-            axis_start = Vec3(x=offset_nm,               y=lx, z=ly)
-            axis_end   = Vec3(x=offset_nm + helix_length_nm, y=lx, z=ly)
+            axis_start = Vec3(x=seg_lo, y=lx, z=ly)
+            axis_end   = Vec3(x=seg_hi, y=lx, z=ly)
 
         direction    = _lattice_direction(row, col, lattice_type)
         phase_offset = _lattice_phase_offset(direction, lattice_type)
@@ -449,15 +459,19 @@ def make_bundle_segment(
         scaf_id  = _unique_id(base_sid, all_strand_ids)
         stpl_id  = _unique_id(base_tid, all_strand_ids | {scaf_id})
 
+        # Canonical axis (axis_start = lower coordinate); a negative length places
+        # the segment in [offset−|L|, offset] below the plane. See make_bundle_design.
+        seg_lo = offset_nm + min(0.0, helix_length_nm)
+        seg_hi = offset_nm + max(0.0, helix_length_nm)
         if plane == "XY":
-            axis_start = Vec3(x=lx, y=ly, z=offset_nm)
-            axis_end   = Vec3(x=lx, y=ly, z=offset_nm + helix_length_nm)
+            axis_start = Vec3(x=lx, y=ly, z=seg_lo)
+            axis_end   = Vec3(x=lx, y=ly, z=seg_hi)
         elif plane == "XZ":
-            axis_start = Vec3(x=lx, y=offset_nm,                    z=ly)
-            axis_end   = Vec3(x=lx, y=offset_nm + helix_length_nm,  z=ly)
+            axis_start = Vec3(x=lx, y=seg_lo, z=ly)
+            axis_end   = Vec3(x=lx, y=seg_hi, z=ly)
         else:  # YZ
-            axis_start = Vec3(x=offset_nm,                    y=lx, z=ly)
-            axis_end   = Vec3(x=offset_nm + helix_length_nm,  y=lx, z=ly)
+            axis_start = Vec3(x=seg_lo, y=lx, z=ly)
+            axis_end   = Vec3(x=seg_hi, y=lx, z=ly)
 
         direction    = _lattice_direction(row, col, lt)
         phase_offset = _lattice_phase_offset(direction, lt)
@@ -733,6 +747,11 @@ def make_bundle_continuation(
             # Add domains covering the new backward global bps.
             include_scaffold = strand_filter in ("both", "scaffold")
             include_staples  = strand_filter in ("both", "staples")
+            # Only the strand(s) at the NEAR terminus (covering cont_helix.bp_start)
+            # get the new backward bps.  On a gapped helix (multiple coverage
+            # intervals) the other intervals do NOT touch bp_start and must be left
+            # alone — otherwise the new near bps spuriously bridge to far intervals.
+            near_bp = cont_helix.bp_start
             seen_strand_ids: set = set()
             for strand in existing_design.strands:
                 if strand.id in seen_strand_ids:
@@ -742,7 +761,8 @@ def make_bundle_continuation(
                 if strand.strand_type == StrandType.STAPLE and not include_staples:
                     continue
                 for domain in strand.domains:
-                    if domain.helix_id == cont_helix.id:
+                    if (domain.helix_id == cont_helix.id
+                            and min(domain.start_bp, domain.end_bp) <= near_bp <= max(domain.start_bp, domain.end_bp)):
                         d = domain.direction
                         if d == Direction.FORWARD:
                             # FORWARD: 5′=new_bp_start, 3′=cont_helix.bp_start-1
@@ -804,6 +824,9 @@ def make_bundle_continuation(
 
             include_scaffold = strand_filter in ("both", "scaffold")
             include_staples  = strand_filter in ("both", "staples")
+            # Only the strand(s) at the FAR terminus (covering the last existing bp)
+            # get the new forward bps — gapped intervals below the far end stay put.
+            far_bp = cont_helix.bp_start + old_length - 1
             seen_strand_ids: set = set()
             for strand in existing_design.strands:
                 if strand.id in seen_strand_ids:
@@ -813,7 +836,8 @@ def make_bundle_continuation(
                 if strand.strand_type == StrandType.STAPLE and not include_staples:
                     continue
                 for domain in strand.domains:
-                    if domain.helix_id == cont_helix.id:
+                    if (domain.helix_id == cont_helix.id
+                            and min(domain.start_bp, domain.end_bp) <= far_bp <= max(domain.start_bp, domain.end_bp)):
                         d = domain.direction
                         if d == Direction.FORWARD:
                             # New far bps: global [new_global_start .. new_global_start+ext-1]
@@ -923,15 +947,20 @@ def make_bundle_continuation(
             # ── Forward continuation OR fresh cell: create a new helix ──
             helix_id = _unique_id(base_hid, all_helix_ids)
 
+            # Canonical axis (axis_start = lower coordinate); for +dir this is
+            # [offset, offset+|L|] unchanged, for −dir it is [offset−|L|, offset]
+            # below the plane. See make_bundle_design.
+            seg_lo = offset_nm + min(0.0, helix_dir_nm)
+            seg_hi = offset_nm + max(0.0, helix_dir_nm)
             if plane == "XY":
-                axis_start = Vec3(x=lx, y=ly, z=offset_nm)
-                axis_end   = Vec3(x=lx, y=ly, z=offset_nm + helix_dir_nm)
+                axis_start = Vec3(x=lx, y=ly, z=seg_lo)
+                axis_end   = Vec3(x=lx, y=ly, z=seg_hi)
             elif plane == "XZ":
-                axis_start = Vec3(x=lx, y=offset_nm,               z=ly)
-                axis_end   = Vec3(x=lx, y=offset_nm + helix_dir_nm, z=ly)
+                axis_start = Vec3(x=lx, y=seg_lo, z=ly)
+                axis_end   = Vec3(x=lx, y=seg_hi, z=ly)
             else:  # YZ
-                axis_start = Vec3(x=offset_nm,               y=lx, z=ly)
-                axis_end   = Vec3(x=offset_nm + helix_dir_nm, y=lx, z=ly)
+                axis_start = Vec3(x=seg_lo, y=lx, z=ly)
+                axis_end   = Vec3(x=seg_hi, y=lx, z=ly)
 
             bp_start_val = _helix_global_bp_start(axis_start, axis_end)
             helix = Helix(
@@ -948,10 +977,15 @@ def make_bundle_continuation(
             new_helices.append(helix)
 
             if cont_helix is not None:
-                # Forward continuation: extend each matching strand with global bp domain.
+                # Forward continuation: extend the strand at the terminus we're
+                # continuing from with a global-bp domain.  Only the strand whose
+                # cont_helix domain covers that terminus is extended; on a gapped
+                # helix the other coverage intervals must be left untouched.
                 continuation_map[helix_id] = cont_helix.id
                 include_scaffold = strand_filter in ("both", "scaffold")
                 include_staples  = strand_filter in ("both", "staples")
+                terminus_bp = (cont_helix.bp_start + cont_helix.length_bp - 1
+                               if is_end_at_offset else cont_helix.bp_start)
                 seen_strand_ids: set = set()
                 for strand in existing_design.strands:
                     if strand.id in seen_strand_ids:
@@ -961,7 +995,8 @@ def make_bundle_continuation(
                     if strand.strand_type == StrandType.STAPLE and not include_staples:
                         continue
                     for domain in strand.domains:
-                        if domain.helix_id == cont_helix.id:
+                        if (domain.helix_id == cont_helix.id
+                                and min(domain.start_bp, domain.end_bp) <= terminus_bp <= max(domain.start_bp, domain.end_bp)):
                             d = domain.direction
                             if d == Direction.FORWARD:
                                 new_dom = Domain(
@@ -1530,13 +1565,23 @@ def _merge_adjacent_domains(domains: list) -> list:
     return merged
 
 
-def _ligate_and_merge(design: Design, s1: "Strand", s2: "Strand") -> Design:  # type: ignore[name-defined]
+def _ligate_and_merge(design: Design, s1: "Strand", s2: "Strand", keep: "Strand | None" = None) -> Design:  # type: ignore[name-defined]
     """Like _ligate but also merges the two touching domains at the junction.
 
+    s1 is the 5'-most strand (its domains come first); s2's domains follow.
     s1's last domain and s2's first domain are adjacent on the same helix with
     the same direction — they are collapsed into a single domain spanning both
     ranges.  This prevents the pathview from rendering an apparent nick at the
     join point.
+
+    ``keep`` selects which strand's IDENTITY survives the merge — its id, color,
+    and position in ``design.strands`` (default: ``s1``).  The other strand is
+    absorbed: its junction-side extension becomes internal and is dropped, while
+    its far-side extension and any OverhangSpecs remap to the keeper.
+
+    ``ligate_new_strands`` passes ``keep=<the pre-existing strand>`` so a continued
+    strand adopts the existing strand's id/color (and palette slot, which is keyed
+    on position in ``design.strands``) instead of the freshly-created strand's.
 
     Overhang handling:
     - Same overhang_id on both: preserved on merged domain.
@@ -1564,27 +1609,36 @@ def _ligate_and_merge(design: Design, s1: "Strand", s2: "Strand") -> Design:  # 
     else:
         merged_domains = list(s1.domains) + list(s2.domains)
 
-    new_strand = s1.model_copy(update={"domains": merged_domains, "sequence": None})
+    # Whose id/color/position survives, and which strand is absorbed.
+    keeper   = keep if keep is not None else s1
+    absorbed = s2 if keeper.id == s1.id else s1
+    # The absorbed strand's junction-side end becomes internal: 5' if it is the
+    # 3'-part (s2), 3' if it is the 5'-part (s1).
+    absorbed_junction_end = "five_prime" if absorbed.id == s2.id else "three_prime"
+
+    new_strand  = keeper.model_copy(update={"domains": merged_domains, "sequence": None})
     new_strands = [
-        new_strand if s.id == s1.id else s
+        new_strand if s.id == keeper.id else s
         for s in design.strands
-        if s.id != s2.id
+        if s.id != absorbed.id
     ]
+    # Drop the absorbed strand's now-internal junction extension; remap its
+    # surviving far-side extension to the keeper.  Keeper's extensions are unchanged.
     new_extensions = [
-        ext.model_copy(update={"strand_id": s1.id})
-        if ext.strand_id == s2.id and ext.end == "three_prime"
+        ext.model_copy(update={"strand_id": keeper.id})
+        if ext.strand_id == absorbed.id and ext.end != absorbed_junction_end
         else ext
         for ext in design.extensions
-        if not (ext.strand_id == s2.id and ext.end == "five_prime")
+        if not (ext.strand_id == absorbed.id and ext.end == absorbed_junction_end)
     ]
-    # Remap surviving OverhangSpecs from s2 → s1; remove orphaned spec from
-    # cross-type merge.
+    # Remap surviving OverhangSpecs from the absorbed strand → keeper; remove
+    # orphaned spec from a cross-type merge.
     new_overhangs = []
     for o in design.overhangs:
         if orphaned_ovhg_id is not None and o.id == orphaned_ovhg_id:
             continue  # drop orphaned spec
-        if o.strand_id == s2.id:
-            new_overhangs.append(o.model_copy(update={"strand_id": s1.id}))
+        if o.strand_id == absorbed.id:
+            new_overhangs.append(o.model_copy(update={"strand_id": keeper.id}))
         else:
             new_overhangs.append(o)
     return design.model_copy(update={
@@ -1623,16 +1677,16 @@ def ligate_new_strands(design: Design, new_strand_ids: set) -> Design:
     extrude — which creates a new helix ID — can still ligate with existing
     strands on the original helix.
 
-    Process order: 3' first (new strand is s1, keeps its ID), then 5' (new
-    strand is s2, absorbed into the adjacent strand).
+    Each merge keeps the EXISTING (adjacent) strand's identity — id, color, and
+    position in design.strands — so the continued strand adopts the existing
+    strand's colour (palette slot is keyed on position) instead of the freshly
+    created strand's.  ``cur_id`` tracks the surviving id across the 3' merge so
+    the 5' step still finds the (possibly-renamed) strand.
     """
     for nid in list(new_strand_ids):
-        # Re-lookup: strand may have been absorbed by a prior iteration
-        strand = None
-        for s in design.strands:
-            if s.id == nid:
-                strand = s
-                break
+        # Re-lookup: strand may have been absorbed by a prior iteration.
+        cur_id = nid
+        strand = next((s for s in design.strands if s.id == cur_id), None)
         if strand is None or not strand.domains:
             continue
 
@@ -1649,14 +1703,12 @@ def ligate_new_strands(design: Design, new_strand_ids: set) -> Design:
             else:
                 candidate = None
         if candidate is not None:
-            design = _ligate_and_merge(design, strand, candidate)
+            # keep=candidate: adopt the EXISTING strand's id/color/palette slot.
+            design = _ligate_and_merge(design, strand, candidate, keep=candidate)
+            cur_id = candidate.id   # merged strand now lives under the existing id
 
-        # Re-lookup strand after possible merge (it kept its ID as s1)
-        strand = None
-        for s in design.strands:
-            if s.id == nid:
-                strand = s
-                break
+        # Re-lookup the (possibly-merged) strand by its current id.
+        strand = next((s for s in design.strands if s.id == cur_id), None)
         if strand is None or not strand.domains:
             continue
 
@@ -1673,7 +1725,8 @@ def ligate_new_strands(design: Design, new_strand_ids: set) -> Design:
             else:
                 candidate = None
         if candidate is not None:
-            design = _ligate_and_merge(design, candidate, strand)
+            # keep=candidate again: the existing 5' neighbour's identity wins.
+            design = _ligate_and_merge(design, candidate, strand, keep=candidate)
 
     return design
 

@@ -363,22 +363,23 @@ def test_bundle_with_offset_xz_plane():
 
 
 def test_bundle_negative_length_xy():
-    """Negative length_bp: axis_end.z < axis_start.z; helix.length_bp is the magnitude."""
+    """Negative length_bp: canonical helix below the plane — spans [-L, 0] with
+    axis_start.z < axis_end.z (axis_end at the plane offset). length_bp is the magnitude."""
     design = make_bundle_design([(0, 0)], length_bp=-42, plane="XY")
     h = design.helices[0]
     assert h.length_bp == 42
-    assert h.axis_start.z == pytest.approx(0.0)
-    assert h.axis_end.z   == pytest.approx(-42 * BDNA_RISE_PER_BP)
+    assert h.axis_start.z == pytest.approx(-42 * BDNA_RISE_PER_BP)
+    assert h.axis_end.z   == pytest.approx(0.0)
 
 
 def test_bundle_negative_length_offset():
-    """Negative length with offset: axis runs from offset backwards."""
+    """Negative length with offset: helix spans [offset-L, offset] below the plane (canonical)."""
     offset = 10.0
     design = make_bundle_design([(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
     h = design.helices[0]
     assert h.length_bp == 21
-    assert h.axis_start.z == pytest.approx(offset)
-    assert h.axis_end.z   == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
+    assert h.axis_start.z == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
+    assert h.axis_end.z   == pytest.approx(offset)
 
 
 def test_bundle_negative_length_zero_raises():
@@ -388,13 +389,15 @@ def test_bundle_negative_length_zero_raises():
 
 
 def test_bundle_strand_bp_uses_actual_length():
-    """start_bp / end_bp use abs(length_bp), not the raw signed value."""
+    """Domain spans abs(length_bp) bp.  A minus extrude at offset 0 makes a canonical
+    helix in [-L, 0], so the global bp range runs [-L, -1] (still 42 bp wide)."""
     design = make_bundle_design([(0, 0)], length_bp=-42, plane="XY")
     scaf = next(s for s in design.strands if s.strand_type == StrandType.SCAFFOLD)
     dom  = scaf.domains[0]
-    # Cell (0,0) is FORWARD: start_bp=0, end_bp=41
-    assert dom.start_bp == 0
-    assert dom.end_bp   == 41
+    # Cell (0,0) is FORWARD; helix sits below the plane → bp_start=-42.
+    assert dom.start_bp == -42
+    assert dom.end_bp   == -1
+    assert dom.end_bp - dom.start_bp + 1 == 42
 
 
 # ── make_bundle_segment ────────────────────────────────────────────────────────
@@ -448,14 +451,15 @@ def test_bundle_segment_preserves_existing_helices():
 
 
 def test_bundle_segment_negative_length():
-    """Negative length_bp: new helix extends in -axis direction (axis_end.z < axis_start.z)."""
+    """Negative length_bp: new segment sits below the plane as a canonical helix
+    (spans [offset-L, offset], axis_start.z < axis_end.z=offset)."""
     base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
     offset = 0.0
     result = make_bundle_segment(base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
     new_helix = next(h for h in result.helices if h.id != base.helices[0].id)
     assert new_helix.length_bp == 21
-    assert new_helix.axis_start.z == pytest.approx(offset)
-    assert new_helix.axis_end.z   == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
+    assert new_helix.axis_start.z == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
+    assert new_helix.axis_end.z   == pytest.approx(offset)
 
 
 # ── make_bundle_continuation ───────────────────────────────────────────────────
@@ -529,25 +533,143 @@ def test_continuation_mixed_fresh_and_continuation():
 
 
 def test_continuation_negative_length_fresh_cell():
-    """Negative length_bp on a fresh cell: new helix extends in -axis direction."""
+    """Negative length_bp on a fresh cell: new helix sits below the plane (canonical,
+    spans [offset-L, offset])."""
     base   = make_bundle_design([(0, 1)], length_bp=42, plane="XY")   # different cell
     offset = 0.0
     result = make_bundle_continuation(base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
     new_helix = next(h for h in result.helices if h.id not in {h2.id for h2 in base.helices})
     assert new_helix.length_bp == 21
-    assert new_helix.axis_start.z == pytest.approx(offset)
-    assert new_helix.axis_end.z   == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
+    assert new_helix.axis_start.z == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
+    assert new_helix.axis_end.z   == pytest.approx(offset)
 
 
 def test_continuation_negative_length_forward():
-    """Negative length_bp when existing helix ends at offset: new helix extends in -axis direction."""
+    """Negative length_bp at a forward continuation point: new helix is canonical and
+    sits below the offset plane (spans [offset-L, offset])."""
     base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
     offset = 42 * BDNA_RISE_PER_BP   # axis_end.z of base helix (forward continuation point)
     result = make_bundle_continuation(base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
     new_helix = next(h for h in result.helices if h.id not in {h2.id for h2 in base.helices})
     assert new_helix.length_bp == 21
-    assert new_helix.axis_start.z == pytest.approx(offset)
-    assert new_helix.axis_end.z   == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
+    assert new_helix.axis_start.z == pytest.approx(offset - 21 * BDNA_RISE_PER_BP)
+    assert new_helix.axis_end.z   == pytest.approx(offset)
+
+
+def test_continuation_near_end_anchored_at_axis_start_extends_backward():
+    """Near-end blunt continuation: when offset = the helix's axis_start (the bp-i
+    face), the backend backward-continues IN PLACE and ligates — the existing strand
+    gains a domain [bp_start-L, bp_start-1] and NO new helix is created.
+
+    This is what the frontend fix sends (anchor on axis_start, not axis_start-rise).
+    """
+    base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")  # bp_start=0, axis_start.z=0
+    offset = 0.0                                                       # = base helix axis_start.z
+    result = make_bundle_continuation(base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
+    # Backward in-place growth — same helix id, no extra helix.
+    assert len(result.helices) == 1
+    h = result.helices[0]
+    assert h.bp_start == -21
+    assert h.length_bp == 63
+    assert h.axis_start.z == pytest.approx(-21 * BDNA_RISE_PER_BP)
+    assert h.axis_end.z   == pytest.approx(42 * BDNA_RISE_PER_BP)
+    # The new bps [-21, -1] merge into the existing FORWARD scaffold domain [0, 41],
+    # giving one contiguous, ligated domain [-21, 41] (no gap, no overlap, no off-by-one).
+    scaf = next(s for s in result.strands if s.strand_type == StrandType.SCAFFOLD)
+    bps  = [(d.start_bp, d.end_bp) for d in scaf.domains]
+    assert (-21, 41) in bps
+
+
+def test_continuation_near_end_off_by_one_offset_does_not_continue():
+    """Regression guard: feeding offset = axis_start - rise (the OLD frontend diskBp
+    position for a near end) does NOT reach the backward branch — it spawns a separate
+    helix instead of ligating. Documents exactly the bug the frontend anchor fix avoids;
+    if this ever yields 1 helix, the off-by-one has been reintroduced upstream."""
+    base   = make_bundle_design([(0, 0)], length_bp=42, plane="XY")
+    offset = -1 * BDNA_RISE_PER_BP   # one rise below axis_start (the buggy near disk position)
+    result = make_bundle_continuation(base, [(0, 0)], length_bp=-21, plane="XY", offset_nm=offset)
+    assert len(result.helices) == 2   # separate (shifted/overlapping) helix — NOT a clean continuation
+
+
+def test_ligate_new_strand_adopts_existing_strand_color_and_id():
+    """A ligated continuation adopts the EXISTING strand's id + color, even when the
+    new strand is the 5'-part (3' ligation). Guards the 'continued strands keep the
+    colour of the strand they connect to' behaviour."""
+    from backend.core.lattice import _ligate_and_merge
+    from backend.core.models import Strand, Domain
+
+    base = make_bundle_design([(0, 0)], length_bp=42, plane="XY")  # valid helix h_XY_0_0 [0,41]
+    h    = base.helices[0].id
+    # new = 5'-part [0,20]; existing = 3'-part [21,41] with an explicit colour, placed FIRST.
+    new = Strand(id="stpl_new", strand_type=StrandType.STAPLE,
+                 domains=[Domain(helix_id=h, start_bp=0, end_bp=20, direction=Direction.FORWARD)])
+    existing = Strand(id="stpl_existing", strand_type=StrandType.STAPLE, color="#abcdef",
+                      domains=[Domain(helix_id=h, start_bp=21, end_bp=41, direction=Direction.FORWARD)])
+    design = base.model_copy(update={"strands": [existing, new]})
+
+    # 3' ligation: new (s1, 5') + existing (s2, 3'); keep the existing identity.
+    out = _ligate_and_merge(design, new, existing, keep=existing)
+    ids = [s.id for s in out.strands]
+    assert ids == ["stpl_existing"]                 # existing id survives at its position; new absorbed
+    merged = out.strands[0]
+    assert merged.color == "#abcdef"                # existing colour preserved
+    assert merged.domains[0].start_bp == 0          # domain order is new→existing, merged to [0,41]
+    assert merged.domains[-1].end_bp  == 41
+
+    # Without keep, the default keeps s1 (the NEW strand) — documents the old behaviour.
+    out_default = _ligate_and_merge(design, new, existing)
+    assert [s.id for s in out_default.strands] == ["stpl_new"]
+
+
+def _gapped_helix_design():
+    """A single helix [0,209] covered by three scaffold+staple intervals
+    [0,41], [84,125], [168,209] (the teeth tooth pattern)."""
+    from backend.core.models import Strand, Domain
+    base = make_bundle_design([(0, 0)], length_bp=210, plane="XY")
+    h = base.helices[0].id
+    strands = []
+    for i, (lo, hi) in enumerate([(0, 41), (84, 125), (168, 209)]):
+        suf = "" if i == 0 else f"_{i-1}"
+        strands.append(Strand(id=f"scaf_XY_0_0{suf}", strand_type=StrandType.SCAFFOLD,
+                              domains=[Domain(helix_id=h, start_bp=lo, end_bp=hi, direction=Direction.FORWARD)]))
+        strands.append(Strand(id=f"stpl_XY_0_0{suf}", strand_type=StrandType.STAPLE,
+                              domains=[Domain(helix_id=h, start_bp=hi, end_bp=lo, direction=Direction.REVERSE)]))
+    return base.model_copy(update={"strands": strands})
+
+
+def _scaf_intervals(design):
+    """{strand_id: sorted list of (min_bp, max_bp) per domain} for scaffolds."""
+    out = {}
+    for s in design.strands:
+        if s.strand_type == StrandType.SCAFFOLD:
+            out[s.id] = sorted((min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp)) for d in s.domains)
+    return out
+
+
+def test_continuation_gapped_helix_near_extends_only_bp0_interval():
+    """A near-end (offset 0, -L) continuation on a gapped helix extends ONLY the
+    interval touching bp 0; the [84,125] and [168,209] intervals must stay put
+    (regression for the spurious near↔far strands seen in teeth.nadoc)."""
+    out = make_bundle_continuation(_gapped_helix_design(), [(0, 0)], length_bp=-42, plane="XY", offset_nm=0.0)
+    iv = _scaf_intervals(out)
+    assert iv["scaf_XY_0_0"]   == [(-42, 41)]      # bp-0 interval grew backward
+    assert iv["scaf_XY_0_0_0"] == [(84, 125)]      # untouched
+    assert iv["scaf_XY_0_0_1"] == [(168, 209)]     # untouched
+    # No scaffold may bridge the new near bps to a far interval.
+    for ranges in iv.values():
+        has_near = any(lo < 0 for lo, hi in ranges)
+        has_far  = any(hi >= 84 for lo, hi in ranges)
+        assert not (has_near and has_far), f"near↔far bridge: {ranges}"
+
+
+def test_continuation_gapped_helix_far_extends_only_far_interval():
+    """A far-end (+L) continuation on a gapped helix extends ONLY the far interval."""
+    out = make_bundle_continuation(_gapped_helix_design(), [(0, 0)], length_bp=42, plane="XY",
+                                   offset_nm=210 * BDNA_RISE_PER_BP)
+    iv = _scaf_intervals(out)
+    assert iv["scaf_XY_0_0"]   == [(0, 41)]        # untouched
+    assert iv["scaf_XY_0_0_0"] == [(84, 125)]      # untouched
+    assert iv["scaf_XY_0_0_1"] == [(168, 209), (210, 251)]   # far interval grew forward
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -2930,6 +2930,11 @@
         <input type="checkbox" id="slice-ligate-adjacent" checked style="cursor:pointer"> Ligate adjacent
       </label>
     </div>
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;font-size:11px;color:#c9d1d9">
+      <label style="display:flex;align-items:center;gap:3px;cursor:pointer" title="Show a translucent preview of the helices this extrude will create">
+        <input type="checkbox" id="slice-preview-toggle" checked style="cursor:pointer"> Show preview
+      </label>
+    </div>
     <div class="ctx-btns">
       <button id="slice-extrude-btn" class="primary">Extrude</button>
       <button id="slice-cancel-btn">Cancel</button>
@@ -2941,7 +2946,7 @@
   <div id="scaffold-split-ctx-menu" class="ctx-menu" style="min-width:180px">
     <div class="ctx-header">Scaffold strand</div>
     <div class="ctx-btns" style="flex-direction:column;gap:6px">
-      <button id="scaffold-split-btn">Split here</button>
+      <button id="scaffold-split-btn">Nick</button>
       <button id="scaffold-assign-seq-btn">Assign sequence…</button>
       <button id="scaffold-delete-btn" style="background:#2d1515;border-color:#c93c3c;color:#ff6b6b;font-weight:600">Delete strand</button>
     </div>
@@ -3097,6 +3102,7 @@
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-names">Overhang Names<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-undefined-bases">Highlight Undefined Bases<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-joints">Joint Indicators<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-seam-arrows" title="Glowing yellow arrows marking forced ligations that close a periodic-boundary polymerization seam">Seam Ligations<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-fluorescence">Fluorescence<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-fret">FRET Checker<span class="menu-toggle-pill"></span></button>
           <div class="dropdown-item" style="display:flex;align-items:center;gap:6px;padding:4px 12px">
@@ -4431,15 +4437,15 @@
         <!-- Overhang sequences panel (shown when overhangs exist) -->
         <div class="panel-section" id="overhang-panel">
           <h2 id="overhang-panel-heading" style="cursor:pointer;user-select:none">
-            Overhangs <span id="overhang-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+            Overhangs <span id="overhang-panel-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
-          <div id="overhang-label-size-row" style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;color:#8b949e">
+          <div id="overhang-label-size-row" style="display:none;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;color:#8b949e">
             <span style="white-space:nowrap">Label size</span>
             <input id="overhang-label-size" type="range" min="0.3" max="5" step="0.1" value="1.5"
                    style="flex:1;accent-color:#f5a623">
             <span id="overhang-label-size-val" style="width:2.5em;text-align:right">1.5</span>
           </div>
-          <div id="overhang-list">
+          <div id="overhang-list" style="display:none">
             <!-- Populated dynamically by main.js -->
           </div>
         </div>

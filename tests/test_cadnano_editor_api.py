@@ -205,6 +205,62 @@ class TestHelixAtCell:
         assert all(n['direction'] == 'FORWARD' for n in scaf_nucs)
         assert all(n['direction'] == 'REVERSE' for n in stpl_nucs)
 
+    def test_adjacent_helix_no_offset_matches_lattice(self, client):
+        """On a fresh (un-shifted) design, a second helix added next to the first
+        still lands at the raw lattice position — adjacency logic is a no-op when
+        the existing helices already sit at _lattice_position. And it's empty."""
+        _make_hc_design(client)
+        client.post('/api/design/helix-at-cell', json={'row': 0, 'col': 0})
+        r = client.post('/api/design/helix-at-cell', json={'row': 1, 'col': 0})
+        assert r.status_code == 201
+        design = r.json()['design']
+        new = design['helices'][-1]
+        x_exp, y_exp = honeycomb_position(1, 0)
+        assert abs(new['axis_start']['x'] - x_exp) < 1e-6
+        assert abs(new['axis_start']['y'] - y_exp) < 1e-6
+        assert abs(new['axis_start']['z']) < 1e-6
+        assert new['length_bp'] == 42
+        assert new['bp_start'] == 0
+        assert design['strands'] == []           # empty — no auto scaffold/staple
+
+    def test_adjacent_to_offset_neighbor(self, client):
+        """A cell-click on a re-centered/imported design (helices NOT at the raw
+        lattice position, nonzero bp_start, custom length) places the new helix
+        adjacent to its nearest neighbour: XY offset from that neighbour's real
+        axis, and co-extensive in Z + bp_start + length so the tracks line up."""
+        from backend.core.models import Vec3
+        _make_hc_design(client)
+        r0 = client.post('/api/design/helix-at-cell', json={'row': 0, 'col': 0})
+        ref_id = r0.json()['design']['helices'][0]['id']
+
+        # Simulate an imported / re-centered design: shift the reference helix off
+        # the lattice formula, with a nonzero bp_start and a non-default length.
+        DX, DY, Z0, RISE = 5.0, 7.0, 3.0, BDNA_RISE_PER_BP
+        d = design_state.get_or_404()
+        ref = d.find_helix(ref_id)
+        ref.axis_start = Vec3(x=ref.axis_start.x + DX, y=ref.axis_start.y + DY, z=Z0)
+        ref.axis_end   = Vec3(x=ref.axis_end.x   + DX, y=ref.axis_end.y   + DY, z=Z0 + 29 * RISE)
+        ref.bp_start   = 16
+        ref.length_bp  = 30
+        rx0, ry0 = ref.axis_start.x, ref.axis_start.y   # capture before the call
+
+        r = client.post('/api/design/helix-at-cell', json={'row': 1, 'col': 0})
+        assert r.status_code == 201
+        design = r.json()['design']
+        new = design['helices'][-1]
+
+        fx0, fy0 = honeycomb_position(0, 0)
+        fx1, fy1 = honeycomb_position(1, 0)
+        # XY offset measured from the reference's REAL axis, not the raw formula.
+        assert abs(new['axis_start']['x'] - (rx0 + (fx1 - fx0))) < 1e-6
+        assert abs(new['axis_start']['y'] - (ry0 + (fy1 - fy0))) < 1e-6
+        # Co-extensive in Z, and inherits bp window + length.
+        assert abs(new['axis_start']['z'] - Z0) < 1e-6
+        assert abs(new['axis_end']['z'] - (Z0 + 29 * RISE)) < 1e-6
+        assert new['bp_start'] == 16
+        assert new['length_bp'] == 30
+        assert design['strands'] == []
+
 
 # ── POST /design/scaffold-domain-paint ───────────────────────────────────────
 
@@ -323,3 +379,55 @@ class TestScaffoldDomainPaint:
         assert dom['direction'] == 'FORWARD'
         assert dom['start_bp'] == 0
         assert dom['end_bp']   == 31
+
+
+# ── X-NADOC-Skip-Geometry header ────────────────────────────────────────────
+# The 2D editor draws from topology and never reads embedded 3D geometry, so it
+# sends X-NADOC-Skip-Geometry to drop the full-design geometry recompute + the
+# multi-MB nucleotide payload it would discard. Routes that build responses via
+# _design_response_with_geometry must omit geometry when the header is present,
+# and ship it (as before) when it's absent.
+
+class TestSkipGeometryHeader:
+
+    _GEOM_KEYS = ('nucleotides', 'nucleotides_compact', 'helix_axes',
+                  'partial_geometry', 'changed_helix_ids')
+
+    def _setup_nickable_helix(self, client):
+        _make_hc_design(client)
+        # populate_strands so the helix carries a full-length scaffold to nick.
+        r = client.post('/api/design/helix-at-cell',
+                        json={'row': 0, 'col': 0, 'populate_strands': True})
+        assert r.status_code == 201
+        return r.json()['design']['helices'][-1]['id']
+
+    def test_no_header_ships_geometry(self, client):
+        """A mutation through _design_response_with_geometry embeds geometry by default."""
+        hid = self._setup_nickable_helix(client)
+        r = client.post('/api/design/nick',
+                        json={'helix_id': hid, 'bp_index': 20, 'direction': 'FORWARD'})
+        assert r.status_code == 201
+        js = r.json()
+        assert any(k in js for k in self._GEOM_KEYS), js.keys()
+
+    def test_header_omits_geometry_but_keeps_design(self, client):
+        """With X-NADOC-Skip-Geometry the same mutation returns the design + validation
+        only — no embedded geometry payload."""
+        hid = self._setup_nickable_helix(client)
+        r = client.post('/api/design/nick',
+                        json={'helix_id': hid, 'bp_index': 20, 'direction': 'FORWARD'},
+                        headers={'X-NADOC-Skip-Geometry': '1'})
+        assert r.status_code == 201
+        js = r.json()
+        assert not any(k in js for k in self._GEOM_KEYS), js.keys()
+        assert js.get('design') and js['design']['helices']    # topology preserved
+        assert 'validation' in js
+
+    def test_falsey_header_value_still_ships_geometry(self, client):
+        """A '0' / 'false' header value is treated as not-set (geometry shipped)."""
+        hid = self._setup_nickable_helix(client)
+        r = client.post('/api/design/nick',
+                        json={'helix_id': hid, 'bp_index': 20, 'direction': 'FORWARD'},
+                        headers={'X-NADOC-Skip-Geometry': '0'})
+        assert r.status_code == 201
+        assert any(k in r.json() for k in self._GEOM_KEYS)

@@ -14,6 +14,7 @@
 import * as THREE from 'three'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
 import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances } from './crossover_connections.js'
+import { buildSeamArrows } from './seam_arrows.js'
 import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 
 /**
@@ -35,6 +36,7 @@ export function initDesignRenderer(scene, storeRef) {
   let _xoverSlabsMesh   = null   // InstancedMesh for extra-base slabs
   let _xoverArcDataMap  = null   // Map<xoId, arcDataEntry> for O(1) lookup during animation
   let _xoverGlowLive    = []     // {pos: THREE.Vector3, arcData, localIdx} — live positions for selection glow
+  let _seamArrowsGroup  = null   // glowing yellow arrows for periodic-seam forced ligations
   let _currentMode      = 'normal'
   const _glowLayer         = createGlowLayer(scene)
   // Undefined-bases highlight: red, ~2× the selection glow size
@@ -232,6 +234,14 @@ export function initDesignRenderer(scene, storeRef) {
       // build emitted strand colors, applyColoring covers helix meshes, this
       // covers the xover extras.
       if (coloringMode && coloringMode !== 'strand') _applyXoverColoring(coloringMode)
+    }
+
+    // Periodic-boundary seam arrows (glowing yellow) for forced ligations flagged
+    // is_periodic_seam. Child of root → inherits design visibility/transform.
+    _seamArrowsGroup = buildSeamArrows(design, geometry)
+    if (_seamArrowsGroup) {
+      _seamArrowsGroup.visible = storeRef.getState().showSeamArrows !== false
+      _helixCtrl.root.add(_seamArrowsGroup)
     }
 
     // Re-apply post-rebuild visibility state
@@ -899,6 +909,11 @@ export function initDesignRenderer(scene, storeRef) {
 
     setAxisArrowsVisible(visible) {
       _helixCtrl?.setAxisArrowsVisible(visible)
+    },
+
+    /** Show/hide the periodic-seam glowing yellow arrows without a rebuild. */
+    setSeamArrowsVisible(visible) {
+      if (_seamArrowsGroup) _seamArrowsGroup.visible = visible
     },
 
     getDistLabelInfo() {

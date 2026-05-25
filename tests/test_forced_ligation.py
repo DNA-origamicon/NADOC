@@ -257,6 +257,90 @@ class TestForcedLigation:
         assert fl["five_prime_helix_id"] == hb
 
 
+class TestForcedLigationPeriodicSeam:
+    """Sequence assignment across a seam-closing forced ligation + the
+    is_periodic_seam display flag (set when the ligation is made across the 2D
+    editor's periodic-boundary mirror)."""
+
+    def _assign_scaffold(self):
+        r = client.post("/api/design/assign-scaffold-sequence",
+                        json={"scaffold_name": "M13mp18"})
+        assert r.status_code == 200
+        return r.json()["design"]
+
+    def _assign_staples(self):
+        r = client.post("/api/design/assign-staple-sequences")
+        assert r.status_code == 200
+        return r.json()["design"]
+
+    def test_sequence_continuous_across_seam_ligation(self):
+        """A staple ligated across the seam (far 3' → near 5') is sequenced as a
+        single continuous strand: the merged sequence equals the concatenation of
+        the two original staples' sequences (no off-by-one at the junction)."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha = _hid_at(design, 0, 0)
+        hb = _hid_at(design, 0, 1)
+
+        # Sequence the design first, then capture the two staples we'll ligate.
+        self._assign_scaffold()
+        design = self._assign_staples()
+        staple_a = _find_strand_with_3prime(design, ha, 0, "REVERSE")   # 3' donor
+        staple_b = _find_strand_with_5prime(design, hb, 0, "FORWARD")   # 5' acceptor
+        assert staple_a and staple_b and staple_a["id"] != staple_b["id"]
+        a_seq, b_seq = staple_a["sequence"], staple_b["sequence"]
+        assert a_seq and b_seq, "staples must have sequences before the test"
+
+        # Close the seam (this is what the periodic-boundary view does).
+        r = client.post("/api/design/forced-ligation", json={
+            "three_prime_strand_id": staple_a["id"],
+            "five_prime_strand_id": staple_b["id"],
+            "is_periodic_seam": True,
+        })
+        assert r.status_code == 201
+
+        # Re-assign staple sequences and check the merged strand traversal.
+        result = self._assign_staples()
+        merged = next(
+            (s for s in result["strands"]
+             if {d["helix_id"] for d in s["domains"]} >= {ha, hb}),
+            None,
+        )
+        assert merged is not None, "merged seam strand not found"
+        # 5'→3' traversal = staple_a's domains then staple_b's domains, so the
+        # assigned sequence must be exactly the two originals concatenated.
+        assert merged["sequence"] == a_seq + b_seq
+        assert len(merged["sequence"]) == len(a_seq) + len(b_seq)
+
+    def test_periodic_seam_flag_round_trips(self):
+        """is_periodic_seam stores True when requested, defaults False otherwise."""
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+
+        def _scaf_on(d, hid):
+            return next((s for s in d["strands"]
+                         if s["strand_type"] == "scaffold"
+                         and any(dom["helix_id"] == hid for dom in s["domains"])), None)
+
+        # Default: flag absent → False.
+        r = client.post("/api/design/forced-ligation", json={
+            "three_prime_strand_id": _scaf_on(design, ha)["id"],
+            "five_prime_strand_id":  _scaf_on(design, hb)["id"],
+        })
+        assert r.status_code == 201
+        assert r.json()["design"]["forced_ligations"][0]["is_periodic_seam"] is False
+
+        # Reset + request the flag explicitly.
+        design = _make_bundle([[0, 0], [0, 1]])
+        ha, hb = _hid_at(design, 0, 0), _hid_at(design, 0, 1)
+        r = client.post("/api/design/forced-ligation", json={
+            "three_prime_strand_id": _scaf_on(design, ha)["id"],
+            "five_prime_strand_id":  _scaf_on(design, hb)["id"],
+            "is_periodic_seam": True,
+        })
+        assert r.status_code == 201
+        assert r.json()["design"]["forced_ligations"][0]["is_periodic_seam"] is True
+
+
 class TestDeleteForcedLigation:
     """Tests for DELETE /design/forced-ligations/{fl_id} and batch-delete."""
 

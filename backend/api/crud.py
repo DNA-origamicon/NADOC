@@ -96,6 +96,7 @@ class _TimingTrace:
         return response
 
 from backend.api import state as design_state
+from backend.api.doc_context import should_skip_geometry
 from backend.core.geometry import (
     nucleotide_positions,
     nucleotide_positions_arrays_extended,
@@ -637,10 +638,12 @@ def _ensure_default_cluster(design: Design) -> Design:
     if design.cluster_transforms or not design.helices:
         return design
     from backend.core.models import ClusterRigidTransform
+    # Reference geometry is excluded from clusters — keep it a fixed backdrop.
+    ref_ids = design.reference_helix_ids()
     default_ct = ClusterRigidTransform(
         name="Cluster 1",
         is_default=True,
-        helix_ids=[h.id for h in design.helices],
+        helix_ids=[h.id for h in design.helices if h.id not in ref_ids],
     )
     updated = design.copy_with(cluster_transforms=[default_ct])
     design_state.set_design_silent(updated)
@@ -1377,7 +1380,15 @@ def _design_response_with_geometry(
     The auto default eliminates the frontend's ``getStraightGeometry()``
     round-trip after every topology-changing mutation when deformations
     exist, while costing nothing for clean designs.
+
+    When the request set ``X-NADOC-Skip-Geometry`` (the 2D cadnano editor, which
+    draws from topology and never reads embedded geometry), return the
+    geometry-free ``_design_response`` instead — sparing the backend a
+    full-design geometry recompute (hundreds of ms on large designs) and the
+    editor a multi-MB JSON.parse of a payload it would discard.
     """
+    if should_skip_geometry():
+        return _design_response(design, report)
     if changed_helix_ids is not None:
         # Partial path — compute only the real helices that actually changed.
         real_ids = frozenset(hid for hid in changed_helix_ids if not hid.startswith('__'))
@@ -3421,51 +3432,90 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
     Computes axis position, phase offset, and twist from the design's lattice
     type so the 2D editor does not need to know lattice constants.  Returns the
     same response shape as POST /design/helices plus the full design response.
+
+    The new helix is placed ADJACENT to its neighbours in 3D: it is positioned
+    relative to the nearest existing lattice helix (using that helix's *actual*
+    axis, not the raw lattice formula) and inherits its axis Z-span, bp_start and
+    length.  This keeps cell-clicks correct for imported / re-centered designs
+    (whose helices don't sit at _lattice_position) and makes the new track
+    co-extensive with its neighbours in both the path view and the 3D view, so a
+    strand later penned onto it lands beside the neighbour it sits next to.
     """
     from backend.core.constants import BDNA_RISE_PER_BP as _RISE
     from backend.core.lattice import (
+        _LINKER_HELIX_PREFIX,
         _lattice_direction,
         _lattice_phase_offset,
         _lattice_position,
         _lattice_twist,
+        _overhang_neighbor_xy,
     )
 
     design = design_state.get_or_404()
     lt = design.lattice_type
 
-    lx, ly = _lattice_position(body.row, body.col, lt)
-    direction    = _lattice_direction(body.row, body.col, lt)
-    phase_offset = _lattice_phase_offset(direction, lt)
-    twist        = _lattice_twist(lt)
-    length_nm    = body.length_bp * _RISE
+    direction  = _lattice_direction(body.row, body.col, lt)
+    phase_base = _lattice_phase_offset(direction, lt)   # angle at global bp 0
+    twist      = _lattice_twist(lt)
 
-    axis_start = Vec3(x=lx, y=ly, z=0.0)
-    axis_end   = Vec3(x=lx, y=ly, z=length_nm)
+    # Reference = nearest existing lattice helix (Manhattan distance in grid
+    # cells).  Linker helices are synthetic and parked far off-lattice, so they
+    # are excluded as references.
+    candidates = [
+        h for h in design.helices
+        if h.grid_pos is not None and not h.id.startswith(_LINKER_HELIX_PREFIX)
+    ]
+    ref = (
+        min(candidates,
+            key=lambda h: abs(h.grid_pos[0] - body.row) + abs(h.grid_pos[1] - body.col))
+        if candidates else None
+    )
+
+    if ref is not None:
+        # Adjacent placement: XY offset from the reference's real axis, Z-span +
+        # bp_start + length copied so the new track lines up with its neighbours.
+        nx, ny       = _overhang_neighbor_xy(ref, body.row, body.col, design)
+        bp_start     = ref.bp_start
+        length_bp    = ref.length_bp
+        axis_start   = Vec3(x=nx, y=ny, z=ref.axis_start.z)
+        axis_end     = Vec3(x=nx, y=ny, z=ref.axis_end.z)
+        phase_offset = phase_base + bp_start * twist
+    else:
+        # Empty design (first helix): raw lattice position, requested default length.
+        lx, ly       = _lattice_position(body.row, body.col, lt)
+        bp_start     = 0
+        length_bp    = body.length_bp
+        axis_start   = Vec3(x=lx, y=ly, z=0.0)
+        axis_end     = Vec3(x=lx, y=ly, z=length_bp * _RISE)
+        phase_offset = phase_base
 
     new_helix = Helix(
         axis_start=axis_start,
         axis_end=axis_end,
-        length_bp=body.length_bp,
+        length_bp=length_bp,
         phase_offset=phase_offset,
         twist_per_bp_rad=twist,
-        bp_start=0,
+        bp_start=bp_start,
         grid_pos=(body.row, body.col),
     )
 
     # When populate_strands is set, also add a full-length scaffold + staple
     # strand to the new helix (same convention as make_bundle_design: scaffold
     # runs in the lattice direction, staple runs opposite; start_bp is the 5′ end).
+    # Legacy path — the 2D editor now creates empty helices.  Domains use GLOBAL
+    # bp indices so they remain correct when bp_start was inherited from a neighbour.
     if body.populate_strands:
-        N = body.length_bp
+        lo = bp_start
+        hi = bp_start + length_bp - 1
         if direction == Direction.FORWARD:
-            scaf_start, scaf_end = 0, N - 1
+            scaf_start, scaf_end = lo, hi
         else:
-            scaf_start, scaf_end = N - 1, 0
+            scaf_start, scaf_end = hi, lo
         staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
         if staple_dir == Direction.FORWARD:
-            stpl_start, stpl_end = 0, N - 1
+            stpl_start, stpl_end = lo, hi
         else:
-            stpl_start, stpl_end = N - 1, 0
+            stpl_start, stpl_end = hi, lo
 
         scaffold = Strand(
             domains=[Domain(helix_id=new_helix.id, start_bp=scaf_start, end_bp=scaf_end, direction=direction)],
@@ -3484,7 +3534,7 @@ def add_helix_at_cell(body: HelixAtCellRequest) -> dict:
         def _apply(d):
             d.helices.append(new_helix)
 
-    label = f"Add helix at ({body.row}, {body.col}) · {body.length_bp} bp"
+    label = f"Add helix at ({body.row}, {body.col}) · {length_bp} bp"
     design, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='helix-add-at-cell',
         label=label,
@@ -5769,6 +5819,7 @@ class ForcedLigationRequest(BaseModel):
     """
     three_prime_strand_id: str   # strand whose 3' end we connect FROM
     five_prime_strand_id: str    # strand whose 5' end we connect TO
+    is_periodic_seam: bool = False  # True if made across the 2D periodic-boundary mirror
 
 
 @router.post("/design/forced-ligation", status_code=201)
@@ -5811,6 +5862,7 @@ def forced_ligation(body: ForcedLigationRequest) -> dict:
         five_prime_helix_id=five_dom.helix_id,
         five_prime_bp=five_dom.start_bp,
         five_prime_direction=five_dom.direction,
+        is_periodic_seam=body.is_periodic_seam,
     )
 
     current = _ligate(design, strand_a, strand_b)
@@ -6928,6 +6980,23 @@ def patch_strands_reference(body: BulkReferenceRequest) -> dict:
         for s in design.strands
     ]
     updated = design.model_copy(update={"strands": new_strands})
+
+    # Reference geometry is excluded from clusters: prune reference-only helices
+    # and reference strands' domain refs from every cluster so it's a fixed backdrop
+    # (immune to cluster joints/drags and not counted in cluster calculations).
+    ref_strand_ids = {s.id for s in new_strands if s.is_reference}
+    ref_helix_ids  = updated.reference_helix_ids()
+    if ref_helix_ids or ref_strand_ids:
+        pruned = []
+        for c in updated.cluster_transforms:
+            new_hids = [h for h in c.helix_ids if h not in ref_helix_ids]
+            new_drs  = [dr for dr in c.domain_ids if dr.strand_id not in ref_strand_ids]
+            if len(new_hids) != len(c.helix_ids) or len(new_drs) != len(c.domain_ids):
+                pruned.append(c.model_copy(update={"helix_ids": new_hids, "domain_ids": new_drs}))
+            else:
+                pruned.append(c)
+        updated = updated.model_copy(update={"cluster_transforms": pruned})
+
     n = len(id_set)
     verb = "Mark" if body.is_reference else "Clear"
     label = f"{verb} reference · {n} strand{'s' if n != 1 else ''}"
@@ -10181,9 +10250,211 @@ def rollback_last_feature() -> dict:
     return _design_response(updated, report)
 
 
+def _reconcile_cluster_joints_between(
+    design: "Design", from_design: "Design", to_design: "Design"
+) -> "Design":
+    """Migrate ``design.cluster_joints`` from reflecting ``from_design``'s joints
+    to reflecting ``to_design``'s joints, and return the updated design.
+
+    ``_seek_feature_log`` does NOT replay cluster_joints (joints are mutated only
+    by minor ops nested inside routing-clusters), so whenever a routing-cluster's
+    children change we have to fix up the live joints by hand. The live joints
+    currently equal ``from_design``'s set; we want ``to_design``'s set:
+      - joints in ``from`` but not ``to`` were removed → drop them
+      - joints in ``to`` but not ``from`` were (re)added → append them
+      - joints present in both but differing → take ``to``'s value
+    Returns ``design`` unchanged when there is no joint delta.
+    """
+    frm = {j.id: j for j in from_design.cluster_joints}
+    to = {j.id: j for j in to_design.cluster_joints}
+    drop = frm.keys() - to.keys()
+    add = to.keys() - frm.keys()
+    changed = {jid for jid in frm.keys() & to.keys() if frm[jid] != to[jid]}
+    if not (drop or add or changed):
+        return design
+    new_joints = []
+    seen: set = set()
+    for j in design.cluster_joints:
+        if j.id in drop:
+            continue
+        new_joints.append(to[j.id] if j.id in changed else j)
+        seen.add(j.id)
+    for jid in add:
+        if jid not in seen:
+            new_joints.append(to[jid])
+            seen.add(jid)
+    return design.copy_with(cluster_joints=new_joints)
+
+
+def _state_at_child_boundary(entry, k: int) -> "Design":
+    """Return the design state AFTER ``entry.children[0..k-1]`` of a Fine Routing
+    cluster (``k == 0`` → the cluster's pre-state).
+
+    Decodes ``pre_state`` then, for each of the first ``k`` children, applies its
+    recorded topology diff forward (works for ANY op type) — or falls back to
+    ``_replay_minor_op`` for legacy children with no diff. Raises HTTP 410 if the
+    pre-state is evicted/missing, HTTP 422 if a legacy child's op can't be
+    replayed.
+
+    Non-defensive: the prefix 0..k-1 is internally consistent. NEVER
+    re-reconciles — diffs already include reconcile + ligation-retry effects
+    (captured post-reconcile in ``mutate_with_minor_log``).
+    """
+    from backend.core.design_diff import apply_child_diff_forward, is_diff_child
+
+    if entry.evicted or not entry.pre_state_gz_b64:
+        raise HTTPException(
+            410,
+            detail="Fine Routing cluster snapshot was evicted to save space and can no "
+                   "longer be edited per sub-step.",
+        )
+    try:
+        state = design_state.decode_design_snapshot(entry.pre_state_gz_b64)
+    except Exception as e:  # pragma: no cover - defensive
+        raise HTTPException(500, detail=f"Failed to decode Fine Routing pre-state: {e}")
+
+    for child in entry.children[:k]:
+        if is_diff_child(child):
+            state, _w = apply_child_diff_forward(
+                state, child.diff_added_b64, child.diff_removed_b64, child.diff_modified_b64,
+            )
+        else:
+            try:
+                state = _replay_minor_op(state, child.op_subtype, child.params)
+            except NotImplementedError:
+                raise HTTPException(
+                    422,
+                    detail="Cannot reconstruct this sub-step: an earlier sub-step predates "
+                           "per-step history and uses an operation that can't be replayed. "
+                           "Revert or delete the whole Fine Routing cluster instead.",
+                )
+    return state
+
+
+def _n_failures(report) -> int:
+    """Count failed validation results in a ValidationReport."""
+    return sum(1 for r in report.results if not r.ok)
+
+
+def _delete_routing_child(design: "Design", log: list, index: int, entry, child_index: int) -> dict:
+    """Surgically remove ``entry.children[child_index]`` from the Fine Routing
+    cluster at log ``index``, keeping every other sub-step and all later log
+    entries. Deleting the only remaining sub-step removes the whole cluster and
+    restores the pre-cluster topology. Pushes to the undo stack.
+
+    Diff-based: reconstruct the boundary just before the deleted child, then
+    forward-apply the surviving tail (children j+1..) DEFENSIVELY — the deleted
+    step's dependents may dangle. Best-effort: if the tail can't be cleanly
+    reapplied OR validation regresses, a warning rides back on the response
+    (``placement_warnings``); the user can Ctrl-Z.
+
+    Caller guarantees ``entry`` is a routing-cluster and ``child_index`` is in
+    range.
+    """
+    from backend.core.design_diff import apply_child_diff_forward, is_diff_child
+    from backend.core.validator import validate_design
+
+    if entry.evicted or not entry.pre_state_gz_b64:
+        raise HTTPException(
+            410,
+            detail=f"Fine Routing cluster {index} was evicted to save space; its "
+                   "sub-steps can no longer be edited individually.",
+        )
+
+    # State just before the deleted child (children 0..j-1 applied).
+    rebuilt = _state_at_child_boundary(entry, child_index)
+
+    # Forward-apply the surviving tail (children j+1..n-1) defensively onto it.
+    warnings: list[str] = []
+    for child in entry.children[child_index + 1:]:
+        if is_diff_child(child):
+            rebuilt, w = apply_child_diff_forward(
+                rebuilt, child.diff_added_b64, child.diff_removed_b64, child.diff_modified_b64,
+                defensive=True,
+            )
+            warnings += w
+        else:
+            try:
+                rebuilt = _replay_minor_op(rebuilt, child.op_subtype, child.params)
+            except NotImplementedError:
+                raise HTTPException(
+                    422,
+                    detail="Cannot delete this sub-step: a later sub-step predates per-step "
+                           "history and uses an operation that can't be replayed. Delete the "
+                           "whole Fine Routing cluster instead.",
+                )
+
+    new_children = list(entry.children[:child_index]) + list(entry.children[child_index + 1:])
+
+    if new_children:
+        # Cluster survives: re-encode its post-state and leave it in the log so
+        # _seek_feature_log uses it as the topology anchor. Top-level count
+        # unchanged → top-level cursor unchanged. Surviving children keep their
+        # stored diffs (a future boundary rebuild re-runs the same logic).
+        new_post_b64, new_post_size = design_state.encode_design_snapshot(rebuilt)
+        new_cluster = entry.model_copy(update={
+            'children': new_children,
+            'post_state_gz_b64': new_post_b64,
+            'post_state_size_bytes': new_post_size,
+        })
+        new_log = [new_cluster if e.id == entry.id else e for e in log]
+        new_cursor = design.feature_log_cursor
+        temp = design.copy_with(feature_log=new_log)
+    else:
+        # Last sub-step removed → drop the whole cluster. With the cluster (its
+        # topology anchor) gone, _seek_snapshot_base has nothing to roll back
+        # to, so substitute the pre-cluster topology onto the live design before
+        # seeking later deltas/snapshots on top.
+        new_log = [e for e in log if e.id != entry.id]
+        cursor = design.feature_log_cursor
+        if cursor == -2 or cursor < index:
+            new_cursor = cursor
+        elif cursor == -1:
+            new_cursor = -1
+        elif cursor == 0:
+            new_cursor = -2
+        else:
+            new_cursor = cursor - 1
+        temp = design.copy_with(feature_log=new_log)
+        temp = _topology_substitute(temp, rebuilt)
+
+    # Diffs already carry the joint delta; keep the legacy joint migration as an
+    # idempotent safety net (a no-op when joints already match `rebuilt`).
+    if entry.post_state_gz_b64:
+        try:
+            old_post = design_state.decode_design_snapshot(entry.post_state_gz_b64)
+        except Exception:
+            old_post = None
+        if old_post is not None:
+            temp = _reconcile_cluster_joints_between(temp, old_post, rebuilt)
+
+    before_failures = _n_failures(validate_design(design))
+    updated = _seek_feature_log(temp, new_cursor)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+
+    # Best-effort warning: defensive-apply anomalies and/or a validation
+    # regression vs. the pre-delete design (later steps depended on this one).
+    new_failures = _n_failures(report)
+    if new_failures > before_failures:
+        warnings.append(
+            f"Deleting this sub-step introduced {new_failures - before_failures} new validation "
+            "issue(s) — later steps may have depended on it. Ctrl-Z to undo."
+        )
+    resp = _design_replace_response(design, updated, report)
+    if warnings:
+        resp['placement_warnings'] = list(resp.get('placement_warnings') or []) + warnings
+    return resp
+
+
 @router.delete("/design/features/{index}", status_code=200)
-def delete_feature(index: int) -> dict:
+def delete_feature(index: int, sub_index: int | None = None) -> dict:
     """Remove the feature at the given log index (0-based) and reconstruct state.
+
+    ``sub_index`` (optional, query param) targets a single sub-step inside a
+    Fine Routing cluster: the named child is removed surgically and the rest of
+    the cluster + later entries are replayed. Deleting the only remaining child
+    falls through to removing the whole cluster.
 
     The cursor is adjusted so the active window stays consistent:
     - If the cursor was pointing at or past the deleted entry, it shifts left.
@@ -10202,6 +10473,15 @@ def delete_feature(index: int) -> dict:
     entry = log[index]
     if entry.feature_type == "checkpoint":
         raise HTTPException(400, detail="Cannot delete checkpoint entries.")
+
+    # Per-sub-step delete inside a Fine Routing cluster.
+    if sub_index is not None:
+        if entry.feature_type != 'routing-cluster':
+            raise HTTPException(400, detail="sub_index is only valid for Fine Routing cluster entries.")
+        n_children = len(entry.children)
+        if sub_index < 0 or sub_index >= n_children:
+            raise HTTPException(400, detail=f"sub_index {sub_index} out of range (cluster has {n_children} sub-steps).")
+        return _delete_routing_child(design, log, index, entry, sub_index)
 
     new_log = [e for e in log if e.id != entry.id]
 
@@ -10249,29 +10529,9 @@ def delete_feature(index: int) -> dict:
             pre_design = None
             post_design = None
         if pre_design is not None and post_design is not None:
-            pre_joints  = {j.id: j for j in pre_design.cluster_joints}
-            post_joints = {j.id: j for j in post_design.cluster_joints}
-            created_ids = post_joints.keys() - pre_joints.keys()
-            deleted_ids = pre_joints.keys() - post_joints.keys()
-            updated_ids = {
-                jid for jid in pre_joints.keys() & post_joints.keys()
-                if pre_joints[jid] != post_joints[jid]
-            }
-            if created_ids or deleted_ids or updated_ids:
-                new_joints = []
-                seen = set()
-                for j in temp.cluster_joints:
-                    if j.id in created_ids:
-                        continue
-                    if j.id in updated_ids:
-                        new_joints.append(pre_joints[j.id])
-                    else:
-                        new_joints.append(j)
-                    seen.add(j.id)
-                for jid in deleted_ids:
-                    if jid not in seen:
-                        new_joints.append(pre_joints[jid])
-                temp = temp.copy_with(cluster_joints=new_joints)
+            # Live joints reflect the cluster's POST-state; deleting it should
+            # invert back to the PRE-state set (from=post, to=pre).
+            temp = _reconcile_cluster_joints_between(temp, post_design, pre_design)
 
     updated = _seek_feature_log(temp, new_cursor)
     design_state.set_design(updated)
@@ -10719,13 +10979,19 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
 
 
 @router.post("/design/features/{index}/revert", status_code=200)
-def revert_to_before_feature(index: int) -> dict:
+def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
     """Restore the pre-state snapshot of feature_log[index] and TRUNCATE
     feature_log to [0..index-1].
 
     Valid for both ``SnapshotLogEntry`` (auto-op snapshots) and
     ``RoutingClusterLogEntry`` (Fine Routing clusters). Returns 410 GONE if
     the entry's snapshot bytes were evicted to free space.
+
+    ``sub_index`` (optional, query param) reverts to just BEFORE a single
+    sub-step inside a Fine Routing cluster: children[0..sub_index-1] are kept,
+    and that sub-step plus everything after it (later children + later log
+    entries) is dropped. ``sub_index == 0`` is equivalent to reverting the whole
+    cluster.
 
     The pre-revert design is pushed onto the undo stack so the revert itself
     can be undone via ``POST /design/undo``.
@@ -10748,6 +11014,12 @@ def revert_to_before_feature(index: int) -> dict:
         raise HTTPException(400, detail=f"Feature index {index} out of range (log has {len(log)} entries).")
 
     entry = log[index]
+
+    # Per-sub-step revert inside a Fine Routing cluster.
+    if sub_index is not None:
+        if not isinstance(entry, _RoutingClusterLogEntry):
+            raise HTTPException(400, detail="sub_index is only valid for Fine Routing cluster entries.")
+        return _revert_before_routing_child(design, log, index, entry, sub_index)
 
     # Pull pre-state bytes from whichever payload type this is.
     if isinstance(entry, _SnapshotLogEntry):
@@ -10779,6 +11051,55 @@ def revert_to_before_feature(index: int) -> dict:
     truncated_log = log[:index]
     restored = restored.copy_with(feature_log=truncated_log, feature_log_cursor=-1)
 
+    design_state.set_design(restored)
+    report = validate_design(restored)
+    return _design_response_with_geometry(restored, report)
+
+
+def _revert_before_routing_child(design: "Design", log: list, index: int, entry, child_index: int) -> dict:
+    """Revert the design to the state just BEFORE ``entry.children[child_index]``
+    of the Fine Routing cluster at log ``index``.
+
+    Truncates the log to [0..index-1] plus the cluster holding only
+    children[0..child_index-1] (post-state re-encoded). ``child_index == 0``
+    drops the whole cluster (identical to a full-cluster revert). The pre-revert
+    design is pushed to the undo stack.
+
+    Caller guarantees ``entry`` is a routing-cluster.
+    """
+    from backend.core.validator import validate_design
+
+    if entry.evicted or not entry.pre_state_gz_b64:
+        raise HTTPException(
+            410,
+            detail=f"Fine Routing cluster {index} was evicted to save space and is no longer revertable.",
+        )
+    n_children = len(entry.children)
+    if child_index < 0 or child_index >= n_children:
+        raise HTTPException(400, detail=f"sub_index {child_index} out of range (cluster has {n_children} sub-steps).")
+
+    # Reconstruct the state just before child `child_index` by applying the
+    # recorded diffs of children[0..child_index-1] forward (any op type; legacy
+    # children fall back to replay). 410/422 raised inside on eviction/legacy.
+    restored = _state_at_child_boundary(entry, child_index)
+
+    if child_index == 0:
+        # Reverting before the first child drops the entire cluster.
+        truncated_log = log[:index]
+    else:
+        # Keep the cluster holding children[0..child_index-1] (their diffs intact)
+        # and re-encode its post-state to the reconstructed boundary.
+        post_b64, post_size = design_state.encode_design_snapshot(restored)
+        kept_cluster = entry.model_copy(update={
+            'children': list(entry.children[:child_index]),
+            'post_state_gz_b64': post_b64,
+            'post_state_size_bytes': post_size,
+        })
+        truncated_log = log[:index] + [kept_cluster]
+
+    restored = restored.copy_with(
+        feature_log=truncated_log, feature_log_cursor=-1, feature_log_sub_cursor=None,
+    )
     design_state.set_design(restored)
     report = validate_design(restored)
     return _design_response_with_geometry(restored, report)
@@ -10993,15 +11314,23 @@ def _seek_snapshot_base(design: Design, position: int, sub_position: int | None 
         # 0..M-1 = first sub_position+1 children active
         n_children = len(payload_entry.children)
         if 0 <= sub_position < n_children:
+            from backend.core.design_diff import apply_child_diff_forward, is_diff_child
             try:
                 snap_design = design_state.decode_design_snapshot(payload_entry.pre_state_gz_b64)
                 for child in payload_entry.children[: sub_position + 1]:
-                    snap_design = _replay_minor_op(snap_design, child.op_subtype, child.params)
+                    if is_diff_child(child):
+                        # Diff-based: works for any op type, no replay needed.
+                        snap_design, _w = apply_child_diff_forward(
+                            snap_design, child.diff_added_b64,
+                            child.diff_removed_b64, child.diff_modified_b64,
+                        )
+                    else:
+                        snap_design = _replay_minor_op(snap_design, child.op_subtype, child.params)
                 return _topology_substitute(design, snap_design)
             except NotImplementedError:
-                # v1 limitation: some op_subtypes don't have replay builders yet.
-                # Gracefully fall back to cluster's post-state (treat the whole
-                # cluster as active — same as sub_position=None).
+                # Legacy child with a non-replayable op AND no diff. Gracefully
+                # fall back to the cluster's post-state (whole cluster active —
+                # same as sub_position=None).
                 pass
         # sub_position == -1 or out-of-range → fall through to post-state.
 

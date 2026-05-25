@@ -632,6 +632,9 @@ async function _syncClusterOnlyDiff(json) {
   if (json.design)     updates.currentDesign     = json.design
   if (json.validation) updates.validationReport  = json.validation
   store.setState(updates)
+  if (Array.isArray(json.placement_warnings) && json.placement_warnings.length) {
+    showToast(json.placement_warnings.join('  •  '), 6000)
+  }
   if (json.design) {
     nadocBroadcast.emit('design-changed')
     persistDesign()
@@ -724,6 +727,9 @@ async function _syncPositionsOnlyDiff(json) {
   if (json.design)     updates.currentDesign     = json.design
   if (json.validation) updates.validationReport  = json.validation
   store.setState(updates)
+  if (Array.isArray(json.placement_warnings) && json.placement_warnings.length) {
+    showToast(json.placement_warnings.join('  •  '), 6000)
+  }
   if (json.design) {
     nadocBroadcast.emit('design-changed')
     persistDesign()
@@ -974,15 +980,6 @@ export async function jointedScaffold(opts = {}) {
     mode,
     nick_offset: nickOffset,
     min_end_margin: minEndMargin,
-  })
-  return _syncFromDesignResponse(json)
-}
-
-export async function scaffoldSplit(strandId, helixId, bpPosition) {
-  const json = await _request('POST', '/design/scaffold-split', {
-    strand_id: strandId,
-    helix_id: helixId,
-    bp_position: bpPosition,
   })
   return _syncFromDesignResponse(json)
 }
@@ -1726,8 +1723,13 @@ export async function rollbackLastFeature() {
   return _syncFromDesignResponse(json)
 }
 
-export async function deleteFeature(index) {
-  const json = await _request('DELETE', `/design/features/${index}`)
+export async function deleteFeature(index, subIndex = null) {
+  // subIndex targets a single sub-step inside a Fine Routing cluster; omit it
+  // (or pass null) to delete the whole top-level entry.
+  const path = subIndex == null
+    ? `/design/features/${index}`
+    : `/design/features/${index}?sub_index=${subIndex}`
+  const json = await _request('DELETE', path)
   // Backend now picks between the fast-path responses (cluster_only /
   // positions_only) and the embedded full-geometry response so a cluster_op
   // deletion lands in the lean path. Caller is expected to invoke
@@ -1765,9 +1767,16 @@ export async function deleteLoadout(loadoutId) {
  *
  * Returns 410 if the entry's snapshot was evicted to free space.
  * Returns 400 if the entry is not a snapshot type.
+ *
+ * ``subIndex`` (optional) reverts to just BEFORE a single sub-step inside a
+ * Fine Routing cluster: children[0..subIndex-1] are kept, that sub-step and
+ * everything after it is dropped.
  */
-export async function revertToBeforeFeature(index) {
-  const json = await _request('POST', `/design/features/${index}/revert`)
+export async function revertToBeforeFeature(index, subIndex = null) {
+  const path = subIndex == null
+    ? `/design/features/${index}/revert`
+    : `/design/features/${index}/revert?sub_index=${subIndex}`
+  const json = await _request('POST', path)
   const result = await _syncFromDesignResponse(json)
   _clearStaleSelections()
   return result

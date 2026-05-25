@@ -131,3 +131,42 @@ def test_save_back_reaches_assembly_doc_without_touching_editor_docs(tmp_path, m
     # The save-back to doc A left both editor docs alone.
     assert design_state.peek_design(DOC_PA).metadata.name == "PartA"
     assert design_state.peek_design(DOC_PB).metadata.name == "PartB"
+
+
+def test_undo_redo_are_document_scoped():
+    """Undo/redo must act on the document named by ``X-NADOC-Doc``, not the
+    default slot.  Regression for the cadnano editor's undo being silently
+    broken in multi-document mode: its undo/redo fetches omitted the doc header,
+    so they popped the default doc's stack while the edit lived on the editor's
+    own doc — undo appeared to do nothing.
+    """
+    # Two editor docs, each with its own design + an edit to undo.
+    for doc, cells in ((DOC_PA, [(0, 0), (0, 1)]), (DOC_PB, [(0, 0), (0, 1), (1, 0)])):
+        d = _part(f"part-{doc}", cells)
+        assert client.post("/api/design/import", json={"content": d.to_json()}, headers=_h(doc)).status_code == 200
+
+    def n_strands(doc):
+        return len(client.get("/api/design", headers=_h(doc)).json()["design"]["strands"])
+
+    # Edit ONLY doc PA: nick its first helix's scaffold so strand count rises.
+    pa = client.get("/api/design", headers=_h(DOC_PA)).json()["design"]
+    base_pa, base_pb = n_strands(DOC_PA), n_strands(DOC_PB)
+    hid = pa["helices"][0]["id"]
+    assert client.post("/api/design/nick",
+                       json={"helix_id": hid, "bp_index": 20, "direction": "FORWARD"},
+                       headers=_h(DOC_PA)).status_code == 201
+    assert n_strands(DOC_PA) == base_pa + 1
+
+    # Undo WITHOUT a doc header → hits the default doc, must NOT touch PA.
+    client.post("/api/design/undo")
+    assert n_strands(DOC_PA) == base_pa + 1, "undo leaked across documents"
+
+    # Undo WITH PA's header → reverts PA only; PB is never disturbed.
+    assert client.post("/api/design/undo", headers=_h(DOC_PA)).status_code == 200
+    assert n_strands(DOC_PA) == base_pa
+    assert n_strands(DOC_PB) == base_pb
+
+    # Redo WITH PA's header → re-applies the nick on PA only.
+    assert client.post("/api/design/redo", headers=_h(DOC_PA)).status_code == 200
+    assert n_strands(DOC_PA) == base_pa + 1
+    assert n_strands(DOC_PB) == base_pb

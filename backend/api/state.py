@@ -161,6 +161,18 @@ def get_design() -> Design | None:
         return _session().design
 
 
+def has_design_unlocked() -> bool:
+    """Whether the current doc holds a design, WITHOUT taking ``_lock``.
+
+    For the liveness probe (``GET /health``) only: it must never block behind a
+    long mutation holding ``_lock``, nor lazily create a session. Reads are
+    GIL-atomic, so a benign race (seeing the pre/post-swap state) is acceptable
+    for a status beacon.
+    """
+    s = _sessions.get(get_current_doc())
+    return s is not None and s.design is not None
+
+
 def revision() -> int:
     """Current document's change-counter."""
     with _lock:
@@ -317,22 +329,34 @@ def decode_design_snapshot(payload_b64: str) -> Design:
 
 
 def _payload_total_bytes(entry: SnapshotLogEntry | RoutingClusterLogEntry) -> int:
-    """Combined compressed payload size (pre + post) for a payload-bearing entry."""
+    """Combined compressed payload size (pre + post, plus per-child diffs for a
+    cluster) for a payload-bearing entry."""
     if isinstance(entry, SnapshotLogEntry):
         return len(entry.design_snapshot_gz_b64) + len(entry.post_state_gz_b64)
-    # RoutingClusterLogEntry
-    return len(entry.pre_state_gz_b64) + len(entry.post_state_gz_b64)
+    # RoutingClusterLogEntry — pre/post plus the per-child diff payloads.
+    total = len(entry.pre_state_gz_b64) + len(entry.post_state_gz_b64)
+    if not entry.diffs_evicted:
+        for c in entry.children:
+            total += len(c.diff_added_b64) + len(c.diff_removed_b64) + len(c.diff_modified_b64)
+    return total
 
 
 def _clear_payload(entry: SnapshotLogEntry | RoutingClusterLogEntry) -> None:
     """Drop both pre+post bytes from a snapshot OR cluster entry; flip evicted=True.
-    Entry + (cluster) children remain visible historically."""
+    For a cluster, also drop the per-child diff payloads (diffs_evicted=True) —
+    once pre/post are gone the cluster is non-revertable anyway, so its diffs
+    are useless. Entry + (cluster) children remain visible historically."""
     if isinstance(entry, SnapshotLogEntry):
         entry.design_snapshot_gz_b64 = ""
         entry.post_state_gz_b64 = ""
     else:
         entry.pre_state_gz_b64 = ""
         entry.post_state_gz_b64 = ""
+        for c in entry.children:
+            c.diff_added_b64 = ""
+            c.diff_removed_b64 = ""
+            c.diff_modified_b64 = ""
+        entry.diffs_evicted = True
     entry.evicted = True
 
 
@@ -516,12 +540,25 @@ def mutate_with_minor_log(
         # scrubbed back through the cluster.
         post_b64, post_size = encode_design_snapshot(s.design)
 
+        # Per-child topology diff (pre-child boundary → post-reconcile state).
+        # `before` is ALWAYS the pre-child boundary: for a new cluster it equals
+        # the cluster pre_state; for an append it equals the previous child's
+        # resulting state (the live design before this fn ran). Captured AFTER
+        # reconcile + ligation retry, so the diff already includes those effects
+        # and reconstruction never re-reconciles. See backend.core.design_diff.
+        from backend.core.design_diff import encode_child_diff
+        d_added, d_removed, d_modified, d_size = encode_child_diff(before, s.design)
+
         now_iso = _dt.datetime.now(_dt.timezone.utc).isoformat()
         minor_entry = MinorMutationLogEntry(
             op_subtype=op_subtype,
             label=label,
             timestamp=now_iso,
             params=params,
+            diff_added_b64=d_added,
+            diff_removed_b64=d_removed,
+            diff_modified_b64=d_modified,
+            diff_size_bytes=d_size,
         )
 
         if is_append:

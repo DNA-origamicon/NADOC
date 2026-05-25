@@ -23,6 +23,7 @@ import {
   SQUARE_TWIST_PER_BP_RAD,
 } from '../constants.js'
 import { store } from '../state/store.js'
+import { showToast } from '../ui/toast.js'
 import {
   _mod,
   isValidHoneycombCell,
@@ -129,7 +130,7 @@ const C_HOVER       = new THREE.Color(0xffffff)  // white  — hover
  * @param {import('three').OrbitControls} controls
  * @param {{ onExtrude: Function, getDesign: Function }} opts
  */
-export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange } = {}) {
+export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange, onPreviewToggle } = {}) {
   // Mutable camera ref — replaced by setCamera() when an ortho camera takes over (cadnano mode).
   let _camera = camera
 
@@ -177,6 +178,28 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   _root.add(_latGroup)
   const _circleGeo = new THREE.CircleGeometry(HELIX_RADIUS, 32)
   const _ringGeo   = new THREE.RingGeometry(HELIX_RADIUS * 0.82, HELIX_RADIUS, 32)
+
+  // Extrude preview: translucent ghost cylinders showing the helices the current
+  // selection + length + direction would create.  One unit-height cylinder per
+  // selected cell (reused across updates; scale.y carries the length in nm).
+  const _previewGroup = new THREE.Group()
+  _previewGroup.name = 'slice-extrude-preview'
+  _previewGroup.frustumCulled = false
+  _root.add(_previewGroup)
+  // Unit cylinder: radius = HELIX_RADIUS, height 1 (along +Y), open-ended.
+  const _previewCylGeo = new THREE.CylinderGeometry(HELIX_RADIUS, HELIX_RADIUS, 1, 16, 1, true)
+  const _previewMat = new THREE.MeshBasicMaterial({
+    color: 0x58a6ff, transparent: true, opacity: 0.28,
+    depthWrite: false, side: THREE.DoubleSide,
+  })
+  // Red variant: the extrude at this cell would overlap existing DNA (conflict).
+  const _previewConflictMat = new THREE.MeshBasicMaterial({
+    color: 0xf85149, transparent: true, opacity: 0.4,
+    depthWrite: false, side: THREE.DoubleSide,
+  })
+  const _PREVIEW_UP = new THREE.Vector3(0, 1, 0)
+  const _previewQuat = new THREE.Quaternion()
+  let _previewHasConflict = false   // set by _updatePreview; read by _doExtrude to block
 
   // ── Cell label sprite helpers ─────────────────────────────────────────────
 
@@ -385,6 +408,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _selectionOrder   = []       // 'row,col' keys in click/lasso order — determines provisional helix numbers
   let _hoverCell        = null
   let _visible          = false
+  let _previewEnabled   = false      // ghost-cylinder extrude preview on/off (driven by sidebar toggle)
+  let _previewMeshes    = []         // reusable THREE.Mesh ghost cylinders (parallel to selected cells)
   let _cursorPx         = null     // { x, y } canvas-local pixels for proximity opacity
   let _canvasRect       = null     // cached getBoundingClientRect() — updated once per pointermove
   let _dynBounds        = null     // dynamic grid bounds — grows as cursor nears edges
@@ -668,6 +693,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         ring.position.copy(pos)
         if (i < _labelEntries.length) _labelEntries[i].spr.position.copy(pos).add(nudge)
       }
+      _updatePreview()   // cells moved (e.g. handle drag) → follow with the ghost
     }
 
     if (_readOnly && _visible) {
@@ -1020,9 +1046,11 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     }
 
     _latGroup.visible = true
+    _updatePreview()
   }
 
   function _clearLattice() {
+    _hidePreview()
     for (const { fill, ring } of _circleMeshes) {
       fill.material.dispose()
       ring.material.dispose()
@@ -1078,6 +1106,128 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         ring.material.color.copy(baseColor)
         ring.material.opacity = RING_MIN_FREE + prox * (RING_MAX_FREE - RING_MIN_FREE)
       }
+    }
+  }
+
+  // ── Extrude preview (ghost cylinders) ────────────────────────────────────────
+
+  /** Absolute bp length from the context-menu inputs (defaults to 1 if blank). */
+  function _previewLengthBp() {
+    const rawVal = parseFloat(_sliceLengthInput?.value ?? '')
+    if (isNaN(rawVal)) return 0
+    const unit = _sliceUnitSelect?.value ?? 'bp'
+    return unit === 'bp'
+      ? Math.abs(Math.trunc(rawVal)) || 1
+      : Math.max(1, Math.round(Math.abs(rawVal) / RISE))
+  }
+
+  /** Hide all ghost meshes without disposing them (kept for reuse). */
+  function _hidePreview() {
+    for (const m of _previewMeshes) m.visible = false
+  }
+
+  /** Grow the ghost-mesh pool to at least n meshes. */
+  function _ensurePreviewCount(n) {
+    while (_previewMeshes.length < n) {
+      const m = new THREE.Mesh(_previewCylGeo, _previewMat)
+      m.frustumCulled = false
+      m.renderOrder = 4
+      _previewGroup.add(m)
+      _previewMeshes.push(m)
+    }
+  }
+
+  /**
+   * World extrude direction for one selected cell: plane normal (or deformed axis)
+   * × the ±dir sign.  Blunt-end continuations default the sign to "away from the
+   * body" (set by showAtEnd/showDeformed: −1 near, +1 far), so the default ghost
+   * grows outward.  Flipping the sign points it the other way; if that runs into an
+   * existing helix, _cellExtrudeConflict flags it red and _doExtrude blocks it.
+   * (This matches the backend: away-direction continuations hit the backward/forward
+   * branch and ligate; into-body extrudes are prevented before reaching the backend.)
+   */
+  function _extrudeDirForCell(_cm) {
+    const base = _deformedFrame
+      ? new THREE.Vector3(..._deformedFrame.axis_dir)
+      : PLANE_CFG[_plane].normal.clone()
+    return base.multiplyScalar(_sliceDirSign).normalize()
+  }
+
+  /**
+   * Would extruding `lengthNm` from (row,col) along `dir` overlap existing DNA in
+   * that lattice cell?  Compares the new segment's axis interval against every
+   * existing helix interval at the cell, with a ~0.4-bp strip at each end so a
+   * boundary touch at the ligation point is NOT a conflict.  Deformed mode: skipped (v1).
+   */
+  function _cellExtrudeConflict(row, col, dir, lengthNm) {
+    if (_deformedFrame) return false
+    const comp   = _plane === 'XY' ? 'z' : _plane === 'XZ' ? 'y' : 'x'
+    const dComp  = dir.dot(PLANE_CFG[_plane].normal)   // ±1
+    const c0 = _offset, c1 = _offset + dComp * lengthNm
+    const eps = RISE * 0.4
+    const gLo = Math.min(c0, c1) + eps
+    const gHi = Math.max(c0, c1) - eps
+    if (gHi <= gLo) return false
+    for (const h of (getDesign?.()?.helices ?? [])) {
+      let hRow, hCol
+      if (h.grid_pos) { [hRow, hCol] = h.grid_pos }
+      else {
+        const m = /^h_(?:XY|XZ|YZ)_(-?\d+)_(-?\d+)/.exec(h.id)
+        if (!m) continue
+        hRow = parseInt(m[1], 10); hCol = parseInt(m[2], 10)
+      }
+      if (hRow !== row || hCol !== col) continue
+      const hLo = Math.min(h.axis_start[comp], h.axis_end[comp])
+      const hHi = Math.max(h.axis_start[comp], h.axis_end[comp])
+      if (gLo < hHi && gHi > hLo) return true   // interiors overlap → would clash
+    }
+    return false
+  }
+
+  /** True if any selected cell's extrude would overlap existing DNA (used to block apply). */
+  function _anySelectedConflict() {
+    if (_deformedFrame) return false
+    const absBp = _previewLengthBp()
+    if (!absBp) return false
+    const lengthNm = absBp * RISE
+    for (const cm of _circleMeshes) {
+      if (!_selected.has(`${cm.row},${cm.col}`)) continue
+      if (_cellExtrudeConflict(cm.row, cm.col, _extrudeDirForCell(cm), lengthNm)) return true
+    }
+    return false
+  }
+
+  /**
+   * Rebuild/reposition the ghost cylinders for the current selection.  Each
+   * selected cell gets a unit cylinder at the cell's world position, scaled to
+   * length_bp × RISE.  Direction per cell matches what the extrude will create
+   * (see _extrudeDirForCell).  Cells whose extrude would overlap existing DNA are
+   * drawn RED (and _previewHasConflict is set so _doExtrude can block).
+   * No-op (cleared) when disabled, the lattice is hidden, or nothing is selected.
+   */
+  function _updatePreview() {
+    _previewHasConflict = false
+    if (!_previewEnabled || !_latticeMode || _readOnly) { _hidePreview(); return }
+    const selected = _circleMeshes.filter(c => _selected.has(`${c.row},${c.col}`))
+    const absBp = _previewLengthBp()
+    if (!selected.length || !absBp) { _hidePreview(); return }
+
+    const lengthNm = absBp * RISE
+    _ensurePreviewCount(selected.length)
+    for (let i = 0; i < _previewMeshes.length; i++) {
+      const m = _previewMeshes[i]
+      if (i >= selected.length) { m.visible = false; continue }
+      const cell = selected[i]
+      const dir  = _extrudeDirForCell(cell)
+      const conflict = _cellExtrudeConflict(cell.row, cell.col, dir, lengthNm)
+      if (conflict) _previewHasConflict = true
+      _previewQuat.setFromUnitVectors(_PREVIEW_UP, dir)
+      m.visible  = true
+      m.material = conflict ? _previewConflictMat : _previewMat
+      m.scale.set(1, lengthNm, 1)
+      m.quaternion.copy(_previewQuat)
+      // Cylinder is centred on its axis → offset by half-length so it starts at the cell.
+      m.position.copy(cell.fill.position).addScaledVector(dir, lengthNm / 2)
     }
   }
 
@@ -1176,6 +1326,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         if (!_selected.has(key)) {
           _selectCell(key)
           _updateLabels()
+          _updatePreview()
         }
       }
 
@@ -1201,6 +1352,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       // Lasso drag ended — selection already accumulated during pointermove, nothing more to do
       _updateCircleColors()
       _updateLabels()
+      _updatePreview()
       return
     }
 
@@ -1220,6 +1372,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         _toggleCell(key)
         _updateCircleColors()
         _updateLabels()
+        _updatePreview()
       }
       // Clicks on empty plane surface are no-ops — lattice stays open,
       // selection is preserved.  Lattice only closes via hide() or Escape.
@@ -1242,6 +1395,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _selectCell(key)
       _updateCircleColors()
       _updateLabels()
+      _updatePreview()
     }
     if (_selected.size === 0) return
     _showContextMenu(e.clientX, e.clientY)
@@ -1257,20 +1411,30 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   const _sliceUnitSelect  = _ctxEl?.querySelector('#slice-unit')
   const _sliceDirFwd      = _ctxEl?.querySelector('#slice-dir-fwd')
   const _sliceDirBwd      = _ctxEl?.querySelector('#slice-dir-bwd')
+  const _slicePreviewToggle = _ctxEl?.querySelector('#slice-preview-toggle')
   let _sliceDirSign = 1   // default +axis
 
-  if (_sliceDirFwd) _sliceDirFwd.addEventListener('click', () => {
-    _sliceDirSign = 1
-    _sliceDirFwd.classList.add('ctx-dir-active')
-    _sliceDirBwd?.classList.remove('ctx-dir-active')
-    _updateSliceTotalBp()
+  // "Show preview" checkbox lives in the extrude popup; it mirrors _previewEnabled
+  // and notifies main.js (which persists the choice + syncs the overhang ghost).
+  if (_slicePreviewToggle) _slicePreviewToggle.addEventListener('change', () => {
+    _previewEnabled = _slicePreviewToggle.checked
+    _updatePreview()
+    onPreviewToggle?.(_previewEnabled)
   })
-  if (_sliceDirBwd) _sliceDirBwd.addEventListener('click', () => {
-    _sliceDirSign = -1
-    _sliceDirBwd.classList.add('ctx-dir-active')
-    _sliceDirFwd?.classList.remove('ctx-dir-active')
+
+  // Set the extrude direction (+1 = +axis, -1 = -axis), sync the ctx-menu buttons,
+  // and refresh the bp readout + ghost preview.  Used by the buttons and by
+  // showAtEnd/showDeformed to default a blunt-end continuation to "away from the body".
+  function _setDirSign(sign) {
+    _sliceDirSign = sign < 0 ? -1 : 1
+    _sliceDirFwd?.classList.toggle('ctx-dir-active', _sliceDirSign === 1)
+    _sliceDirBwd?.classList.toggle('ctx-dir-active', _sliceDirSign === -1)
     _updateSliceTotalBp()
-  })
+    _updatePreview()
+  }
+
+  if (_sliceDirFwd) _sliceDirFwd.addEventListener('click', () => _setDirSign(1))
+  if (_sliceDirBwd) _sliceDirBwd.addEventListener('click', () => _setDirSign(-1))
 
   // Scaffold targets: M13mp18 and p8064
   const _SCAFFOLD_TARGETS = [{ name: 'M13', nt: 7249 }, { name: 'p8064', nt: 8064 }]
@@ -1314,8 +1478,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     }
   }
 
-  if (_sliceLengthInput) _sliceLengthInput.addEventListener('input', _updateSliceTotalBp)
-  if (_sliceUnitSelect)  _sliceUnitSelect.addEventListener('change', _updateSliceTotalBp)
+  if (_sliceLengthInput) _sliceLengthInput.addEventListener('input', () => { _updateSliceTotalBp(); _updatePreview() })
+  if (_sliceUnitSelect)  _sliceUnitSelect.addEventListener('change', () => { _updateSliceTotalBp(); _updatePreview() })
   if (_sliceScaffoldRec) _sliceScaffoldRec.addEventListener('click', e => {
     const btn = e.target.closest('.rec-chip')
     if (!btn || !_sliceLengthInput) return
@@ -1323,12 +1487,14 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     _sliceUnitSelect && (_sliceUnitSelect.value = 'bp')
     _sliceLengthInput.value = btn.dataset.bp
     _updateSliceTotalBp()
+    _updatePreview()
   })
 
   function _showContextMenu(x, y) {
     if (!_ctxEl) return
     _ctxEl.querySelector('.ctx-count').textContent =
       `${_selected.size} helix${_selected.size > 1 ? 'es' : ''}`
+    if (_slicePreviewToggle) _slicePreviewToggle.checked = _previewEnabled
     _updateSliceTotalBp()
     _ctxEl.style.left    = `${x}px`
     _ctxEl.style.top     = `${y}px`
@@ -1348,6 +1514,13 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         ? Math.abs(Math.trunc(rawVal)) || 1
         : Math.max(1, Math.round(absVal / RISE))
       const lengthBp = _sliceDirSign * absLengthBp
+
+      // Block the extrude if any selected cell would overlap existing DNA. Leave the
+      // menu + red preview up so the user can change length/direction or deselect.
+      if (_anySelectedConflict()) {
+        showToast('Extrude would overlap existing DNA — change length/direction or deselect the conflicting helix.', { severity: 'error' })
+        return
+      }
 
       const cells = _selectionOrder.map(k => k.split(',').map(Number))
       const filterEl = _ctxEl.querySelector('input[name="slice-strand-filter"]:checked')
@@ -1372,6 +1545,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       if (_latticeMode) _buildLattice()
       _selected.clear()
       _selectionOrder = []
+      _updatePreview()
     }
 
     _ctxEl.querySelector('#slice-extrude-btn').addEventListener('click', _doExtrude)
@@ -1435,14 +1609,19 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _updatePosition()
       if (!readOnly) {
         _buildLattice()
+        _setDirSign(1)   // new bundle / segment defaults to +axis
+      } else {
+        _hidePreview()
       }
     },
 
     /**
      * Show the slice plane positioned at a domain-end disk.
      * Derives plane orientation from helixId prefix and offset from axis position at diskBp.
+     * opts.defaultDirSign sets the initial ±dir (blunt-end continuations default to
+     * "away from the body": -1 for a near end, +1 for a far end).
      */
-    showAtEnd(helixId, diskBp, continuation = false) {
+    showAtEnd(helixId, diskBp, continuation = false, { defaultDirSign = 1 } = {}) {
       const plane = helixId.match(/^h_(XY|XZ|YZ)_/)?.[1] ?? 'XY'
       const h     = getDesign?.()?.helices?.find(x => x.id === helixId)
       const axDef = getHelixAxes?.()?.[helixId]
@@ -1459,6 +1638,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         else offsetNm = px
       }
       this.show(plane, offsetNm, continuation)
+      _setDirSign(defaultDirSign)
     },
 
     hide() {
@@ -1490,6 +1670,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _borderMesh.geometry.dispose()
       _borderMesh.geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(40, 40, RISE))
       _clearLattice()
+      _hidePreview()
       _hideContextMenu()
       _isDragging       = false
       _isDragSelecting  = false
@@ -1499,6 +1680,13 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
     isVisible() { return _visible },
     isContinuation() { return _visible && _continuationMode },
+
+    /** Enable/disable the ghost-cylinder extrude preview (driven by the sidebar toggle). */
+    setPreviewEnabled(v) {
+      _previewEnabled = !!v
+      _updatePreview()
+    },
+    isPreviewEnabled() { return _previewEnabled },
 
     /**
      * Called by unfold_view each animation frame (and at t=0/1 on activate/deactivate).
@@ -1525,7 +1713,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * @param {object} frame  - { grid_origin, axis_dir, frame_right, frame_up }
      * @param {object} [opts] - { plane, continuation }
      */
-    showDeformed(frame, { plane = 'XY', continuation = false, refHelixId = null } = {}) {
+    showDeformed(frame, { plane = 'XY', continuation = false, refHelixId = null, defaultDirSign = 1 } = {}) {
       _dynBounds        = null
       _baseBounds       = null
       _deformedFrame    = frame
@@ -1538,6 +1726,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       controls.enableRotate = false
       _updatePosition()
       _buildLattice()
+      _setDirSign(defaultDirSign)
     },
 
     /** Replace the camera used for raycasting (called by cadnano_view when switching to ortho). */

@@ -20,6 +20,16 @@ import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_sta
 import { showConfirm } from './primitives/confirm.js'
 import { editFeature, isEditable as _isOpEditable } from './edit_feature_popover.js'
 
+// Fine Routing sub-steps with no captured diff (legacy clusters) can still be
+// individually reverted/deleted IF their op type is replayable on the backend.
+// Keep in sync with backend.api.crud._replay_minor_op.
+const REPLAYABLE_SUBTYPES = new Set([
+  'nick', 'nick-batch', 'crossover-place', 'crossover-place-batch',
+  'strand-end-resize', 'domain-shift', 'strand-delete', 'strand-delete-batch',
+  'domain-delete', 'helix-delete', 'crossover-delete',
+  'joint-place', 'joint-update', 'joint-delete',
+])
+
 export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfiguration, onOpenOverhangsManager }) {
   const panelBody = document.getElementById('feature-log-panel-body')
   const heading   = document.getElementById('feature-log-panel-heading')
@@ -155,7 +165,9 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   // List column
   const list = document.createElement('div')
   list.id = 'fl-list'
-  list.style.cssText = 'flex:1;min-width:0'
+  // position:relative so the Fine-Routing collapse spine (an absolutely
+  // positioned connector between the top + bottom triangles) anchors to it.
+  list.style.cssText = 'flex:1;min-width:0;position:relative'
 
   wrap.append(rail, list)
   panelBody.innerHTML = ''
@@ -998,7 +1010,88 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         // earlier-to-later state: sub-rows are intermediate states; the
         // header is the cluster's POST-state (= all children applied).
         if (isExpanded) {
-          (entry.children ?? []).forEach((child, j) => {
+          // Per-sub-step revert/delete go through the active-design endpoints,
+          // which don't apply to embedded part designs — gate the buttons to
+          // the main context (the cluster header keeps its own controls there).
+          const inPartContext =
+            (_isAssemblyPartMode() && api.patchInstanceDesign) || (_partInstanceId && _partPatchFn)
+
+          // Top-of-block collapse handle. The real cluster header (with its
+          // chevron) sits at the BOTTOM of the expanded section, so a cluster
+          // with hundreds of sub-steps forces a scroll-to-bottom just to
+          // collapse. This mirrored handle collapses from the top instead.
+          const collapseTop = document.createElement('div')
+          collapseTop.title = 'Collapse Fine Routing'
+          // Left padding 6px matches the header row so the top ▲ lines up
+          // vertically with the bottom chevron — the spine connects them.
+          collapseTop.style.cssText = [
+            'display:flex;align-items:center;gap:6px',
+            'padding:2px 6px;font-size:11px;border-radius:3px',
+            'color:#8b949e;cursor:pointer;background:transparent;transition:background 80ms',
+          ].join(';')
+          const ctChevron = document.createElement('span')
+          ctChevron.textContent = '▲'
+          ctChevron.style.cssText = 'flex-shrink:0;color:#a371f7;font-size:9px;width:10px;text-align:center'
+          const ctLabel = document.createElement('span')
+          ctLabel.textContent = `Collapse ${entry.label} (${childCount})`
+          ctLabel.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+          collapseTop.append(ctChevron, ctLabel)
+          collapseTop.addEventListener('mouseenter', () => { collapseTop.style.background = 'rgba(163,113,247,0.15)' })
+          collapseTop.addEventListener('mouseleave', () => { collapseTop.style.background = 'transparent' })
+          collapseTop.addEventListener('click', e => {
+            e.stopPropagation()
+            _clusterExpanded.set(entry.id, false)
+            _rebuild(_latestDesign)
+            requestAnimationFrame(_positionRail)
+          })
+          list.appendChild(collapseTop)
+
+          // Vertical spine connecting the top ▲ and the bottom chevron ▲, drawn
+          // down the left gutter of the sub-rows. Clicking it (or hovering, then
+          // clicking) collapses the whole bracketed set — so the user can fold
+          // the group from anywhere along its height, not just the two ends.
+          // Absolutely positioned inside `list`; spans from the bottom of the
+          // top handle to the top of the header (measured after layout). The
+          // 10px hit area sits in the sub-rows' left padding, so it never
+          // steals clicks from the sub-step labels/buttons.
+          const spine = document.createElement('div')
+          const _headerRow = row   // the cluster header built above; appended below.
+          spine.title = 'Collapse Fine Routing'
+          spine.style.cssText = [
+            'position:absolute;left:10px;width:10px;display:none',
+            'border-left:2px solid rgba(163,113,247,0.45)',
+            'cursor:pointer;z-index:2;background:transparent',
+            'transition:border-color 80ms,background 80ms',
+          ].join(';')
+          spine.addEventListener('mouseenter', () => {
+            spine.style.borderLeftColor = 'rgba(163,113,247,0.95)'
+            spine.style.background = 'rgba(163,113,247,0.10)'
+          })
+          spine.addEventListener('mouseleave', () => {
+            spine.style.borderLeftColor = 'rgba(163,113,247,0.45)'
+            spine.style.background = 'transparent'
+          })
+          spine.addEventListener('click', e => {
+            e.stopPropagation()
+            _clusterExpanded.set(entry.id, false)
+            _rebuild(_latestDesign)
+            requestAnimationFrame(_positionRail)
+          })
+          list.appendChild(spine)
+          // Size + place the spine once the rows are laid out. offsetTop is
+          // relative to `list` (position:relative) and scrolls with content.
+          requestAnimationFrame(() => {
+            if (!collapseTop.isConnected || !_headerRow.isConnected) return
+            const top = collapseTop.offsetTop + collapseTop.offsetHeight
+            const bottom = _headerRow.offsetTop
+            if (bottom > top) {
+              spine.style.top = `${top}px`
+              spine.style.height = `${bottom - top}px`
+              spine.style.display = ''
+            }
+          })
+
+          ;(entry.children ?? []).forEach((child, j) => {
             const subRow = document.createElement('div')
             // data-fl-row uses dotted notation for sub-positions; the rail
             // measurement loop picks them up automatically.
@@ -1016,6 +1109,87 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
             subLbl.textContent = `F${i + 1}-${j + 1}: ${child.label}`
             subRow.title = subLbl.textContent
             subRow.append(subDot, subLbl)
+
+            if (!inPartContext) {
+              // A sub-step is individually actionable when its content diff was
+              // captured (works for ANY op type) or its op is replayable, and the
+              // cluster's diffs aren't evicted. Clusters created before per-step
+              // history (e.g. older saved files) have no diffs → disabled; the
+              // header's whole-cluster revert/delete still works.
+              const childHasDiff = !!(child.diff_added_b64 || child.diff_modified_b64 || child.diff_removed_b64)
+              const childReplayable = REPLAYABLE_SUBTYPES.has(child.op_subtype)
+              const subActionable = !isEvicted && !entry.diffs_evicted && (childHasDiff || childReplayable)
+              const disabledReason = isEvicted
+                ? 'Cluster snapshot evicted — cannot edit sub-steps'
+                : "This sub-step can't be individually reverted in this design (no per-step history) — use the whole Fine Routing cluster revert/delete instead."
+
+              // ↶ Revert to before this sub-step: drops it + everything after.
+              const subRevertBtn = document.createElement('button')
+              subRevertBtn.textContent = '↶'
+              subRevertBtn.title = subActionable ? `Revert to before sub-step ${j + 1}` : disabledReason
+              subRevertBtn.disabled = !subActionable
+              subRevertBtn.style.cssText = [
+                subActionable
+                  ? 'background:#2d2410;border:1px solid #d29922;color:#d29922;cursor:pointer'
+                  : 'background:#1c1c1c;border:1px solid #444;color:#666;cursor:not-allowed',
+                'border-radius:3px;font-size:10px;line-height:1.3',
+                'padding:1px 4px;flex-shrink:0',
+              ].join(';')
+              if (subActionable) {
+                subRevertBtn.addEventListener('click', async e => {
+                  e.stopPropagation()
+                  const ok = await showConfirm({
+                    title: 'Revert to before this sub-step',
+                    message:
+                      `Rolls the design back to just before sub-step ${j + 1} of ${childCount}. ` +
+                      `Drops it and everything after it (later sub-steps + features).\n\n(Ctrl-Z restores.)`,
+                    danger: true,
+                    confirmLabel: 'Revert',
+                  })
+                  if (!ok) return
+                  const resp = await api.revertToBeforeFeature(i, j)
+                  if (resp == null) {
+                    const err = store.getState().lastError
+                    window.alert(`Revert failed: ${err?.message || 'unknown error'}`)
+                  }
+                })
+              }
+
+              // × Delete just this sub-step; later sub-steps are reapplied + kept.
+              const subDelBtn = document.createElement('button')
+              subDelBtn.textContent = '×'
+              subDelBtn.title = subActionable ? `Delete sub-step ${j + 1}` : disabledReason
+              subDelBtn.disabled = !subActionable
+              subDelBtn.style.cssText = [
+                subActionable
+                  ? 'background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;cursor:pointer'
+                  : 'background:#1c1c1c;border:1px solid #444;color:#666;cursor:not-allowed',
+                'border-radius:3px;font-size:10px;line-height:1.3',
+                'padding:1px 4px;flex-shrink:0',
+              ].join(';')
+              if (subActionable) {
+                subDelBtn.addEventListener('click', async e => {
+                  e.stopPropagation()
+                  const ok = await showConfirm({
+                    title: 'Delete this sub-step',
+                    message:
+                      `Removes sub-step ${j + 1} ("${child.label}") from this Fine Routing cluster. ` +
+                      `The remaining sub-steps are replayed and kept.\n\n(Ctrl-Z restores.)`,
+                    danger: true,
+                    confirmLabel: 'Delete',
+                  })
+                  if (!ok) return
+                  const resp = await api.deleteFeature(i, j)
+                  if (resp == null) {
+                    const err = store.getState().lastError
+                    window.alert(`Delete failed: ${err?.message || 'unknown error'}`)
+                  }
+                })
+              }
+
+              subRow.append(subRevertBtn, subDelBtn)
+            }
+
             list.appendChild(subRow)
           })
         }

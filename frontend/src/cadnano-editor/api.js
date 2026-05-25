@@ -19,6 +19,12 @@ async function _request(method, path, body) {
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...docHeaders(),   // edit the same backend document as the 3D view that opened us
+      // The 2D editor renders from topology and never reads embedded 3D
+      // geometry, so tell the backend to omit it. This skips a full-design
+      // geometry recompute (hundreds of ms on large designs) and a multi-MB
+      // JSON.parse of a payload we'd discard. The 3D view re-fetches its own
+      // geometry on the design-changed broadcast, so it's unaffected.
+      'X-NADOC-Skip-Geometry': '1',
     },
     body:    body !== undefined ? JSON.stringify(body) : undefined,
   }
@@ -74,12 +80,14 @@ export async function mutate(mutationFn) {
 }
 
 /**
- * Add a helix at a lattice cell (row, col).
- * The backend computes axis position, phase, and twist from the lattice type.
- * The new helix is auto-populated with a full-length scaffold + staple strand.
+ * Add an EMPTY helix at a lattice cell (row, col) — no strands.
+ * The backend computes axis position, phase, and twist from the lattice type and
+ * places the helix adjacent to its nearest neighbour (matching that neighbour's
+ * bp extent + 3D Z-span), so a strand later penned onto it lands beside it in 3D.
+ * The user pens scaffold/staple strands onto the bare track themselves.
  */
 export async function addHelixAtCell(row, col, length_bp = 42) {
-  return mutate(req => req('POST', '/design/helix-at-cell', { row, col, length_bp, populate_strands: true }))
+  return mutate(req => req('POST', '/design/helix-at-cell', { row, col, length_bp, populate_strands: false }))
 }
 
 /** Delete a helix by ID. */
@@ -275,11 +283,12 @@ export async function ligateStrand(helixId, bpIndex, direction) {
  * lookup tables.  Manual pencil-tool feature only; must NOT be used by
  * autocrossover or any automated pipeline.
  */
-export async function forcedLigation(threePrimeStrandId, fivePrimeStrandId) {
+export async function forcedLigation(threePrimeStrandId, fivePrimeStrandId, isPeriodicSeam = false) {
   return mutate(req =>
     req('POST', '/design/forced-ligation', {
       three_prime_strand_id: threePrimeStrandId,
       five_prime_strand_id:  fivePrimeStrandId,
+      is_periodic_seam:      isPeriodicSeam,
     })
   )
 }
@@ -444,7 +453,7 @@ export async function importPdbDesign(content, merge = false) {
 
 /** Download the current design as a .nadoc file. */
 export async function exportDesign() {
-  const r = await fetch('/api/design/export')
+  const r = await fetch('/api/design/export', { headers: docHeaders() })
   if (!r.ok) return false
   const cd   = r.headers.get('Content-Disposition') ?? ''
   const m    = cd.match(/filename="([^"]+)"/)
@@ -458,7 +467,7 @@ export async function exportDesign() {
 
 /** Download the current design as a caDNAno JSON file. */
 export async function exportCadnano() {
-  const r = await fetch('/api/design/export/cadnano')
+  const r = await fetch('/api/design/export/cadnano', { headers: docHeaders() })
   if (!r.ok) return false
   const cd   = r.headers.get('Content-Disposition') ?? ''
   const m    = cd.match(/filename="([^"]+)"/)
@@ -472,7 +481,7 @@ export async function exportCadnano() {
 
 /** Download the staple/scaffold sequences as a CSV file. */
 export async function exportSequenceCsv() {
-  const r = await fetch('/api/design/export/sequence-csv')
+  const r = await fetch('/api/design/export/sequence-csv', { headers: docHeaders() })
   if (!r.ok) return false
   const cd   = r.headers.get('Content-Disposition') ?? ''
   const m    = cd.match(/filename="?([^"]+)"?/)
@@ -572,7 +581,9 @@ export async function applyAllDeformations() {
 export async function undoDesign() {
   editorStore.setState({ loading: true })
   try {
-    const r = await fetch(`${BASE}/design/undo`, { method: 'POST' })
+    // docHeaders() targets THIS editor's document — without it undo/redo hit the
+    // default doc and silently revert the wrong stack (broken undo in multi-doc).
+    const r = await fetch(`${BASE}/design/undo`, { method: 'POST', headers: { ...docHeaders(), 'X-NADOC-Skip-Geometry': '1' } })
     editorStore.setState({ loading: false })
     if (r.status === 404) return null          // stack empty — silent
     const json = await r.json().catch(() => null)
@@ -595,7 +606,7 @@ export async function undoDesign() {
 export async function redoDesign() {
   editorStore.setState({ loading: true })
   try {
-    const r = await fetch(`${BASE}/design/redo`, { method: 'POST' })
+    const r = await fetch(`${BASE}/design/redo`, { method: 'POST', headers: { ...docHeaders(), 'X-NADOC-Skip-Geometry': '1' } })
     editorStore.setState({ loading: false })
     if (r.status === 404) return null          // stack empty — silent
     const json = await r.json().catch(() => null)

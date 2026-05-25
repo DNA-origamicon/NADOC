@@ -121,6 +121,7 @@ function _makeArrow(origin, dir) {
 
 export function initOverhangLocations(scene) {
   const _group = new THREE.Group()
+  _group.name = 'overhang-locations'
   _group.renderOrder = 11
   scene.add(_group)
 

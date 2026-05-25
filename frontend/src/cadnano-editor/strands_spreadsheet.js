@@ -10,6 +10,7 @@
 
 import { patchStrand, patchOverhang, generateOverhangRandomSequence } from './api.js'
 import { showToast } from '../ui/toast.js'
+import { ensureStapleColors, stapleColorOf } from './pathview/palette.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
@@ -32,17 +33,6 @@ const LS_OPEN_KEY    = 'editor_spreadsheet_open'
 const MIN_HEIGHT = 28   // tab only
 const TAB_HEIGHT = 28
 const MAX_HEIGHT_OFFSET = 60  // px above viewport bottom (leaves room for status bar)
-
-// Staple palette (mirrors pathview.js / helix_renderer.js)
-const STAPLE_PALETTE = [
-  '#ff6b6b', '#ffd93d', '#6bcb77', '#f9844a',
-  '#a29bfe', '#ff9ff3', '#00cec9', '#e17055',
-  '#74b9ff', '#55efc4', '#fdcb6e', '#d63031',
-]
-
-function paletteColor(strandIndex) {
-  return STAPLE_PALETTE[strandIndex % STAPLE_PALETTE.length]
-}
 
 /** Format a strand endpoint as "label[bp]" using the 5' or 3' terminal domain. */
 function strandEndpoint(strand, end, helixIndex) {
@@ -78,10 +68,12 @@ function terminalOverhang(strand, design, which) {
   return (design.overhangs ?? []).find(o => o.id === domain.overhang_id) ?? null
 }
 
-function effectiveColor(strand, strandIndex) {
-  if (strand.strand_type === 'scaffold') return '#29b6f6'
-  if (strand.color) return strand.color
-  return paletteColor(strandIndex)
+function effectiveColor(strand) {
+  if (strand.strand_type === 'scaffold') return '#29b6f6'   // spreadsheet's lighter scaffold swatch tint
+  // Shared, stable per-strand-id palette — agrees with the pathview canvas and
+  // doesn't reshuffle when a nick/ligation changes the strand list. Caller must
+  // have run ensureStapleColors(design) first (done in sortedStrands + render).
+  return stapleColorOf(strand)
 }
 
 function _strandDisplaySequence(strand, design) {
@@ -171,12 +163,13 @@ function _strandDisplaySequence(strand, design) {
 }
 
 function sortedStrands(design) {
+  ensureStapleColors(design)   // pin per-id colours before sorting by colour
   const strands  = design?.strands ?? []
   const scaffold = strands.filter(s => s.strand_type === 'scaffold')
   const staples  = strands.filter(s => s.strand_type !== 'scaffold')
-  const withMeta = staples.map((s, idx) => ({
+  const withMeta = staples.map((s) => ({
     strand: s,
-    color:  effectiveColor(s, idx),
+    color:  effectiveColor(s),
     length: strandLength(s, design),
   }))
   withMeta.sort((a, b) => {
@@ -343,9 +336,9 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange } = {
     const strands = sortedStrands(design)
     const helixIndex = Object.fromEntries((design.helices ?? []).map((h, i) => [h.id, i]))
 
-    strands.forEach((strand, idx) => {
+    strands.forEach((strand) => {
       const isScaffold = strand.strand_type === 'scaffold'
-      const color      = effectiveColor(strand, idx)
+      const color      = effectiveColor(strand)
       const ovhg5p     = terminalOverhang(strand, design, '5p')
       const ovhg3p     = terminalOverhang(strand, design, '3p')
 

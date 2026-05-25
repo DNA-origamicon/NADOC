@@ -81,6 +81,7 @@ import { openFileBrowser }          from './ui/file_browser.js'
 import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
 import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
+import { initAssemblySeamArrows } from './scene/assembly_seam_arrows.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { makeRefVec, ringPlaneHit, angleInRing }     from './scene/assembly_revolute_math.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
@@ -100,7 +101,7 @@ import { initInstanceGizmo }       from './scene/instance_gizmo.js'
 import { initOverhangGizmo } from './scene/overhang_gizmo.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
 import { showOpProgress, hideOpProgress }                from './ui/op_progress.js'
-import { BDNA_RISE_PER_BP }        from './constants.js'
+import { BDNA_RISE_PER_BP, HELIX_RADIUS } from './constants.js'
 import { initZoomScope }           from './scene/zoom_scope.js'
 import { initExpandedSpacing }     from './scene/expanded_spacing.js'
 import { registerShortcut, dispatchKeyEvent } from './input/shortcuts.js'
@@ -593,6 +594,65 @@ async function main() {
   // Placeholder filled by the overhang dialog IIFE below.
   let _showOverhangLengthDialog = () => {}
 
+  // ── Extrude preview (ghost cylinders) ──────────────────────────────────────
+  // A "Show preview" toggle in each extrude popup (slice-plane ctx-menu, handled
+  // inside slice_plane.js; and the overhang-extrude dialog, handled here) shows a
+  // translucent preview of the DNA the extrude will add. Default ON, persisted.
+  let _extrudePreviewEnabled = localStorage.getItem('NADOC_EXTRUDE_PREVIEW') !== 'false'  // default ON
+  let _ovhgGhost = null              // THREE.Mesh — overhang preview cylinder, or null
+  let _refreshOverhangGhost = () => {}  // set by the overhang dialog while it is open
+
+  function _clearOverhangGhost() {
+    if (!_ovhgGhost) return
+    scene.remove(_ovhgGhost)
+    _ovhgGhost.geometry.dispose()
+    _ovhgGhost.material.dispose()
+    _ovhgGhost = null
+  }
+
+  /**
+   * Build/refresh the overhang-extrude ghost cylinder for the pending arrow.
+   * Mirrors backend make_overhang_extrude geometry: a new helix at the neighbour
+   * cell, bp 0 at the nick Z, extending length_bp × rise along the axis in the
+   * overhang_z_dir direction (derived from the nick end-type + strand direction
+   * + the parent helix's Z-sign).  Design-mode only (skips assembly instances).
+   */
+  function _showOverhangGhost(entry, lengthBp) {
+    _clearOverhangGhost()
+    if (!_extrudePreviewEnabled || !entry || entry.instanceId) return
+    if (!Number.isFinite(lengthBp) || lengthBp < 1) return
+    if (!entry.pos3D || !entry.dir) return
+    const design = store.getState().currentDesign
+    const h = design?.helices?.find(x => x.id === entry.helixId)
+    if (!h) return
+
+    const zSign        = (h.axis_end.z - h.axis_start.z) >= 0 ? 1 : -1
+    const strandZDir   = entry.direction === 'FORWARD' ? zSign : -zSign
+    const overhangZDir = entry.isFivePrime ? strandZDir : -strandZDir
+
+    // World axial direction: +Z (× sign), rotated by the helix's cluster pose if any.
+    const axial = new THREE.Vector3(0, 0, overhangZDir)
+    const ct = (design.cluster_transforms ?? []).find(t => t.helix_ids?.includes(entry.helixId))
+    if (ct) axial.applyQuaternion(new THREE.Quaternion(ct.rotation[0], ct.rotation[1], ct.rotation[2], ct.rotation[3]))
+    axial.normalize()
+
+    const HC_SPACING = 2.25  // nm — helix centre-to-centre (matches overhang_locations)
+    const start = entry.pos3D.clone().addScaledVector(entry.dir.clone().normalize(), HC_SPACING)
+    const lengthNm = lengthBp * BDNA_RISE_PER_BP
+
+    const geo = new THREE.CylinderGeometry(HELIX_RADIUS, HELIX_RADIUS, lengthNm, 16, 1, true)
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x00e5ff, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide,
+    })
+    const mesh = new THREE.Mesh(geo, mat)
+    mesh.name = 'overhang-extrude-preview'
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axial)
+    mesh.position.copy(start).addScaledVector(axial, lengthNm / 2)
+    mesh.renderOrder = 4
+    scene.add(mesh)
+    _ovhgGhost = mesh
+  }
+
   // ── Selection manager ───────────────────────────────────────────────────────
   const selectionManager = initSelectionManager(canvas, camera, designRenderer, {
     getProteinRenderer: () => proteinRenderer,
@@ -813,6 +873,11 @@ async function main() {
         <div id="ovhg-seq-len" style="margin-top:3px;font-size:var(--text-xs);color:#484f58;">0 bp</div>
       </div>
 
+      <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:11px;color:#c9d1d9;cursor:pointer"
+             title="Show a translucent preview of the overhang this will add">
+        <input id="ovhg-preview-toggle" type="checkbox" checked style="cursor:pointer"> Show preview
+      </label>
+
       <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
         <button id="overhang-cancel-btn"
           style="padding:3px 10px;background:#21262d;border:1px solid #30363d;border-radius:4px;
@@ -836,6 +901,22 @@ async function main() {
     const okBtn      = overlay.querySelector('#overhang-ok-btn')
     const lenInput   = overlay.querySelector('#overhang-length-input')
     const nameInput  = overlay.querySelector('#ovhg-name-input')
+    const previewToggle = overlay.querySelector('#ovhg-preview-toggle')
+
+    // bp length for the active tab — drives the live ghost preview.
+    function _currentOverhangLen() {
+      if (_activeTab === 'length') return parseInt(lenInput.value, 10)
+      return seqInput.value.replace(/\s/g, '').length
+    }
+    function _refreshGhost() { _showOverhangGhost(_pendingEntry, _currentOverhangLen()) }
+
+    // "Show preview" lives in this popup; mirror the shared flag + persist + sync slice plane.
+    previewToggle.addEventListener('change', () => {
+      _extrudePreviewEnabled = previewToggle.checked
+      localStorage.setItem('NADOC_EXTRUDE_PREVIEW', String(_extrudePreviewEnabled))
+      slicePlane.setPreviewEnabled(_extrudePreviewEnabled)
+      _refreshGhost()   // shows or clears based on the flag
+    })
 
     function _switchTab(tab) {
       _activeTab = tab
@@ -846,15 +927,18 @@ async function main() {
       panelSeq.style.display   = isLen ? 'none' : ''
       okBtn.textContent        = isLen ? 'Extrude' : 'Extrude + Assign'
       setTimeout(() => (isLen ? lenInput : seqInput).focus(), 0)
+      _refreshGhost()
     }
 
     tabLength.addEventListener('click', () => _switchTab('length'))
     tabSeq.addEventListener('click',    () => _switchTab('seq'))
 
+    lenInput.addEventListener('input', _refreshGhost)
     seqInput.addEventListener('input', () => {
       const n = seqInput.value.replace(/\s/g, '').length
       seqLenEl.textContent = `${n} bp`
       seqLenEl.style.color = n > 0 ? '#8b949e' : '#484f58'
+      _refreshGhost()
     })
 
     function _hide() {
@@ -864,6 +948,8 @@ async function main() {
       nameInput.value = ''
       seqLenEl.textContent = '0 bp'
       seqLenEl.style.color = '#484f58'
+      _clearOverhangGhost()
+      _refreshOverhangGhost = () => {}
     }
 
     _showOverhangLengthDialog = function(entry, clientX, clientY) {
@@ -874,7 +960,10 @@ async function main() {
       _switchTab('length')
       lenInput.value  = '10'
       nameInput.value = ''
+      previewToggle.checked = _extrudePreviewEnabled
       nameInput.focus()
+      _refreshOverhangGhost = _refreshGhost
+      _refreshGhost()
     }
 
     async function _doExtrude() {
@@ -2275,6 +2364,7 @@ async function main() {
     const list       = document.getElementById('overhang-list')
     const heading    = document.getElementById('overhang-panel-heading')
     const arrow      = document.getElementById('overhang-panel-arrow')
+    const sizeRow    = document.getElementById('overhang-label-size-row')
     const sizeSlider = document.getElementById('overhang-label-size')
     const sizeVal    = document.getElementById('overhang-label-size-val')
     if (!panel || !list) return
@@ -2287,13 +2377,21 @@ async function main() {
       })
     }
 
-    let _collapsed = false
+    // Default to collapsed on load. The label-size slider lives inside the
+    // collapse along with the overhang list.
+    let _collapsed = true
+
+    function _applyCollapse() {
+      list.style.display = _collapsed ? 'none' : ''
+      if (sizeRow) sizeRow.style.display = _collapsed ? 'none' : ''
+      arrow.classList.toggle('is-collapsed', _collapsed)
+    }
+    _applyCollapse()
 
     if (heading) {
       heading.addEventListener('click', () => {
         _collapsed = !_collapsed
-        list.style.display  = _collapsed ? 'none' : ''
-        arrow.classList.toggle('is-collapsed', _collapsed)
+        _applyCollapse()
         if (!_collapsed) _rebuildPanel(store.getState().currentDesign)
       })
     }
@@ -3180,10 +3278,19 @@ Typical debugging workflow for "reverts to 3D" bug:
       crossSectionMinimap.update(offsetNm, effectivePlane, designRenderer.getBackboneEntries())
       _updateSliceHighlights(offsetNm, effectivePlane)
     },
+    onPreviewToggle: (enabled) => {
+      // "Show preview" checkbox in the slice extrude popup → persist + sync overhang ghost.
+      _extrudePreviewEnabled = enabled
+      localStorage.setItem('NADOC_EXTRUDE_PREVIEW', String(enabled))
+      _refreshOverhangGhost()
+    },
   })
 
   // Link slicePlane to unfoldView so the plane dimensions lerp during unfold animation.
   unfoldView.setSlicePlane(slicePlane)
+
+  // Seed the slice-plane preview from the persisted toggle state (default ON).
+  slicePlane.setPreviewEnabled(_extrudePreviewEnabled)
 
   // Auto-hide the slice plane when deformations are activated so the cross-section
   // always reflects the undeformed helix geometry.
@@ -3339,11 +3446,11 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   // ── Scaffold strand right-click context menu ────────────────────────────────
   const _scafSplitCtx  = document.getElementById('scaffold-split-ctx-menu')
-  let _scafSplitTarget = null  // { strandId, helixId, bpPosition }
+  let _scafSplitTarget = null  // { strandId, helixId, bpPosition, direction }
 
   function _showScaffoldSplitCtx(x, y, coneEntry) {
-    const { helix_id, bp_index } = coneEntry.fromNuc
-    _scafSplitTarget = { strandId: coneEntry.strandId, helixId: helix_id, bpPosition: bp_index }
+    const { helix_id, bp_index, direction } = coneEntry.fromNuc
+    _scafSplitTarget = { strandId: coneEntry.strandId, helixId: helix_id, bpPosition: bp_index, direction }
     if (_scafSplitCtx) {
       _scafSplitCtx.style.left    = `${x}px`
       _scafSplitCtx.style.top     = `${y}px`
@@ -3362,8 +3469,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     const target = _scafSplitTarget
     _hideScaffoldSplitCtx()
     if (!target) return
-    const ok = await api.scaffoldSplit(target.strandId, target.helixId, target.bpPosition)
-    if (!ok) showToast('Scaffold split failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
+    _clearScaffoldChecks()
+    // Nicking the scaffold here splits it into two scaffold strands at the 3′
+    // side of the clicked nucleotide (same make_nick path as the staple nick menu).
+    const ok = await api.addNick({ helixId: target.helixId, bpIndex: target.bpPosition, direction: target.direction })
+    if (!ok) showToast('Nick failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
   })
 
   document.getElementById('scaffold-assign-seq-btn')?.addEventListener('click', () => {
@@ -3484,20 +3594,26 @@ Typical debugging workflow for "reverts to 3D" bug:
     const info = _domainEndInfo   // capture before _hideBluntPanel nulls it
     _hideBluntPanel()
     if (!info) return
-    const { plane, helixId, diskBp, hasDeformations } = info
+    const { plane, helixId, hasDeformations } = info
+    // Anchor the continuation on the helix's axis endpoint, not the between-index
+    // disk slot.  axis_end sits one rise PAST the last bp (so far end: diskBp=bp+1),
+    // but axis_start sits AT the first bp (so near end must use bp, not bp-1).
+    //   near (openSide -1) → bp        far (openSide +1) → bp+1 (= diskBp)
+    // Default the ±dir to "away from the body" (openSide): minus for near, plus for far.
+    const continuationBp = info.bp + Math.max(0, info.openSide)
     store.setState({ currentPlane: plane })
     expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
     const { deformVisuActive } = store.getState()
     if (hasDeformations && deformVisuActive) {
-      const frame = await api.getDeformedFrame(diskBp, helixId)
+      const frame = await api.getDeformedFrame(continuationBp, helixId)
       if (frame) {
-        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId })
+        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId, defaultDirSign: info.openSide })
         document.getElementById('mode-indicator').textContent =
           'DEFORMED CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
         return
       }
     }
-    slicePlane.showAtEnd(helixId, diskBp, true)
+    slicePlane.showAtEnd(helixId, continuationBp, true, { defaultDirSign: info.openSide })
     document.getElementById('mode-indicator').textContent =
       'CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
   }
@@ -3535,20 +3651,23 @@ Typical debugging workflow for "reverts to 3D" bug:
     const info = _domainEndCtxInfo
     _hideBluntCtx()
     if (!info) return
-    const { plane, helixId, diskBp, hasDeformations } = info
+    const { plane, helixId, hasDeformations } = info
+    // See _bluntExtrude: anchor on the axis endpoint (near→bp, far→bp+1) and default
+    // the ±dir to "away from the body" (openSide).
+    const continuationBp = info.bp + Math.max(0, info.openSide)
     store.setState({ currentPlane: plane })
     expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
     const { deformVisuActive } = store.getState()
     if (hasDeformations && deformVisuActive) {
-      const frame = await api.getDeformedFrame(diskBp, helixId)
+      const frame = await api.getDeformedFrame(continuationBp, helixId)
       if (frame) {
-        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId })
+        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId, defaultDirSign: info.openSide })
         document.getElementById('mode-indicator').textContent =
           'DEFORMED CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
         return
       }
     }
-    slicePlane.showAtEnd(helixId, diskBp, true)
+    slicePlane.showAtEnd(helixId, continuationBp, true, { defaultDirSign: info.openSide })
     document.getElementById('mode-indicator').textContent =
       'CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
   })
@@ -5756,6 +5875,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     _setMenuToggle('menu-view-sequences', !showSequences)
   })
 
+  document.getElementById('menu-view-seam-arrows')?.addEventListener('click', () => {
+    const on = store.getState().showSeamArrows !== false
+    store.setState({ showSeamArrows: !on })
+    _setMenuToggle('menu-view-seam-arrows', !on)
+  })
+
   document.getElementById('unfold-spacing-input')?.addEventListener('change', e => {
     const val = parseFloat(e.target.value)
     if (!isNaN(val) && val > 0) unfoldView.setSpacing(val)
@@ -5804,6 +5929,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (newState.showHelixLabels  !== prevState.showHelixLabels)  _setMenuToggle('menu-view-helix-labels', newState.showHelixLabels)
     if (newState.showSequences    !== prevState.showSequences)    _setMenuToggle('menu-view-sequences',    newState.showSequences)
     if (newState.staplesHidden    !== prevState.staplesHidden)    _setMenuToggle('menu-view-hide-staples', newState.staplesHidden)
+    if (newState.showSeamArrows   !== prevState.showSeamArrows)   {
+      const on = newState.showSeamArrows !== false
+      _setMenuToggle('menu-view-seam-arrows', on)
+      designRenderer.setSeamArrowsVisible(on)
+      assemblySeamArrows.setVisible(on)
+    }
     // When unfold auto-deactivates on cadnano exit, update the mode indicator
     // once the unfold animation finishes (cadnanoActive is already false by then).
     if (newState.unfoldActive !== prevState.unfoldActive && !newState.unfoldActive && !newState.cadnanoActive) {
@@ -7634,6 +7765,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   const instanceGizmo = initInstanceGizmo(store, controls)
   const assemblyJointRenderer = initAssemblyJointRenderer(scene, camera, canvas, store, api, controls)
+  const assemblySeamArrows = initAssemblySeamArrows(scene, store, api)
 
   // Sync blunt-end connectors into the assembly joint renderer when:
   //   • assembly mode is active AND toolFilters.bluntEnds is ON → pass blunt ends
@@ -8455,6 +8587,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         await assemblyRenderer.rebuild(assembly)
         assemblyRenderer.rebuildLinkers(assembly)
         assemblyJointRenderer.rebuild(assembly)
+        assemblySeamArrows.rebuild(assembly)
         _syncAssemblyBluntEnds()
       }
       document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
@@ -9112,6 +9245,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     assemblyRenderer.rebuildLinkers(assembly)
     _syncAssemblyBluntEnds()
     assemblyJointRenderer.rebuild(assembly)
+    assemblySeamArrows.rebuild(assembly)
     try {
       const r = await api.getInstanceDesign(instanceId)
       if (r?.design) clusterPanel?.syncInstanceDesign(instanceId, r.design)
@@ -9293,6 +9427,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         settle?.reject(err)
       })
     assemblyJointRenderer.rebuild(assembly)
+    assemblySeamArrows.rebuild(assembly)
   }
 
   // Drive assembly panel + assembly renderer from the assembly slice
@@ -9342,6 +9477,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         _assemblyPendingPartJoints.clear()
         assemblyRenderer.dispose()
         assemblyJointRenderer.rebuild(null)   // clear all joint indicators
+        assemblySeamArrows.rebuild(null)      // clear seam arrows too
         canvas.removeEventListener('pointerdown',  _onAssemblyPointerDown)
         canvas.removeEventListener('click',        _onAssemblyClick)
         canvas.removeEventListener('pointermove',  _onAssemblyHoverMove)
@@ -9411,6 +9547,7 @@ Typical debugging workflow for "reverts to 3D" bug:
             assemblyRenderer.setLiveTransform(inst.id, _matrixFromInstance(inst))
           }
           assemblyJointRenderer.rebuild(newState.currentAssembly)
+          assemblySeamArrows.rebuild(newState.currentAssembly)
           if (newState.activeInstanceId) {
             assemblyRenderer.setActiveInstance(newState.activeInstanceId)
             const depths = computeFixedDepths(newState.currentAssembly)

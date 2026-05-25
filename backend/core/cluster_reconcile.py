@@ -213,6 +213,9 @@ def _compute_helix_membership(
     """
     after_helix_ids = {h.id for h in design_after.helices}
     before_helix_ids = {h.id for h in design_before.helices}
+    # Reference geometry is never a cluster member — drop reference-only helices
+    # from membership and never assign new ones to a cluster.
+    ref_helix_ids = design_after.reference_helix_ids()
 
     helix_membership_before: dict[str, set[str]] = {}
     for cluster in design_before.cluster_transforms:
@@ -235,9 +238,10 @@ def _compute_helix_membership(
 
     result: dict[str, list[str]] = {}
     for cluster in design_before.cluster_transforms:
-        kept = [hid for hid in cluster.helix_ids if hid in after_helix_ids]
+        kept = [hid for hid in cluster.helix_ids
+                if hid in after_helix_ids and hid not in ref_helix_ids]
         for new_hid, target_cids in new_helix_targets.items():
-            if cluster.id in target_cids and new_hid not in kept:
+            if cluster.id in target_cids and new_hid not in kept and new_hid not in ref_helix_ids:
                 kept.append(new_hid)
         result[cluster.id] = kept
 

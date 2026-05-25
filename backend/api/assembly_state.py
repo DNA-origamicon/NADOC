@@ -100,6 +100,16 @@ def peek_assembly(doc_id: str) -> Assembly | None:
         return s.assembly if s else None
 
 
+def has_assembly_unlocked() -> bool:
+    """Whether the current doc holds an assembly, WITHOUT taking ``_lock``.
+
+    For the liveness probe (``GET /health``) only — see the matching note on
+    ``state.has_design_unlocked``. Never blocks, never creates a session.
+    """
+    s = _sessions.get(get_current_doc())
+    return s is not None and s.assembly is not None
+
+
 def drop_doc(doc_id: str) -> bool:
     """Forget a document's assembly session entirely. Returns True if it existed."""
     with _lock:

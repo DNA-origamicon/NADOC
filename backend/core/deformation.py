@@ -215,7 +215,9 @@ def _arm_helices_for(design: "Design", ref_helix_id: str) -> list["Helix"]:
     the nick Z) which shifts the bundle centroid and displaces overhang nucleotide
     positions when deformations are applied.
     """
-    overhang_helix_ids = {o.helix_id for o in design.overhangs}
+    # Exclude overhang helices (centroid skew) AND reference-only helices —
+    # reference geometry must not enter cluster/deformation calculations.
+    overhang_helix_ids = {o.helix_id for o in design.overhangs} | design.reference_helix_ids()
     ref = design.find_helix(ref_helix_id)
     if ref is None:
         return [h for h in design.helices if h.id not in overhang_helix_ids]

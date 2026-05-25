@@ -112,29 +112,23 @@ def health() -> dict:
 
     ``server_instance_id`` changes on every process restart, letting a tab
     distinguish "backend restarted" (re-sync, work was server-side recovered)
-    from a mere document change.  The design/assembly identity lets a tab notice
-    the live document was swapped out from under it.
+    from a mere document change.  ``design_loaded`` lets a restarted tab decide
+    whether server-side recovery already restored its work.
+
+    LOCK-FREE: a liveness probe must never block behind a long mutation that
+    holds the design lock (else the frontend's probe times out and flashes a
+    false "disconnected"). Uses ``has_design_unlocked`` / ``has_assembly_unlocked``
+    instead of the lock-taking ``get_design`` / ``get_assembly``.
     """
     from backend.api import assembly_state, server_info
     from backend.api import state as design_state
-
-    design = design_state.get_design()
-    assembly = assembly_state.get_assembly()
-
-    def _name(doc) -> str | None:
-        meta = getattr(doc, "metadata", None)
-        return (getattr(meta, "name", None) if meta is not None
-                else getattr(doc, "name", None))
 
     return {
         "status": "ok",
         "server_instance_id": server_info.SERVER_INSTANCE_ID,
         "started_at": server_info.STARTED_AT,
-        "design_loaded": design is not None,
-        "design_id": getattr(design, "id", None),
-        "design_name": _name(design) if design is not None else None,
-        "assembly_loaded": assembly is not None,
-        "assembly_id": getattr(assembly, "id", None),
+        "design_loaded": design_state.has_design_unlocked(),
+        "assembly_loaded": assembly_state.has_assembly_unlocked(),
     }
 
 

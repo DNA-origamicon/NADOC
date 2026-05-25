@@ -32,14 +32,34 @@ _current_doc: contextvars.ContextVar[str] = contextvars.ContextVar(
     "nadoc_current_doc", default=DEFAULT_DOC_ID,
 )
 
+# The 2D cadnano editor draws from topology and never reads embedded 3D
+# geometry, so it asks responses to omit it (saving the backend a full-design
+# geometry recompute and itself a multi-MB JSON.parse of a payload it discards).
+# Requests that don't send the header — the 3D view, internal callers, tests —
+# resolve to False and get full geometry, so all legacy behavior is unchanged.
+_skip_geometry: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "nadoc_skip_geometry", default=False,
+)
+
 # Header / query names the frontend uses to name its document.
 DOC_HEADER = "x-nadoc-doc"
 DOC_QUERY = "doc"
+# Header the cadnano editor sets to opt out of embedded geometry in responses.
+SKIP_GEOMETRY_HEADER = "x-nadoc-skip-geometry"
 
 
 def get_current_doc() -> str:
     """The document id bound to the current request (or DEFAULT_DOC_ID)."""
     return _current_doc.get()
+
+
+def should_skip_geometry() -> bool:
+    """True when the current request asked responses to omit embedded geometry.
+
+    Honored at the single ``_design_response_with_geometry`` choke point in
+    crud.py, which falls back to the geometry-free ``_design_response``.
+    """
+    return _skip_geometry.get()
 
 
 def set_current_doc(doc_id: str | None):
@@ -66,18 +86,29 @@ def _extract_doc_id(scope) -> str:
     return DEFAULT_DOC_ID
 
 
+def _extract_skip_geometry(scope) -> bool:
+    """True iff the request carries a truthy ``X-NADOC-Skip-Geometry`` header."""
+    for k, v in scope.get("headers", []):
+        if k == SKIP_GEOMETRY_HEADER.encode("latin-1"):
+            return v.decode("latin-1").strip().lower() not in ("", "0", "false")
+    return False
+
+
 class DocContextMiddleware:
-    """Pure-ASGI middleware binding each request's doc id to the ContextVar."""
+    """Pure-ASGI middleware binding each request's doc id (and the
+    skip-geometry flag) to ContextVars for the lifetime of the request."""
 
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
         if scope["type"] in ("http", "websocket"):
-            token = _current_doc.set(_extract_doc_id(scope))
+            doc_token = _current_doc.set(_extract_doc_id(scope))
+            geo_token = _skip_geometry.set(_extract_skip_geometry(scope))
             try:
                 await self.app(scope, receive, send)
             finally:
-                _current_doc.reset(token)
+                _skip_geometry.reset(geo_token)
+                _current_doc.reset(doc_token)
         else:
             await self.app(scope, receive, send)
