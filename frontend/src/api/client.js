@@ -25,6 +25,35 @@ const LS_DESIGN_KEY   = () => docKey('nadoc:design')
 const LS_ASSEMBLY_KEY = () => docKey('nadoc:assembly')
 const LS_MODE_KEY     = 'nadoc:mode'  // 'assembly' | 'part-edit:{id}' | null (sessionStorage, tab-isolated)
 
+// ── Stale-response guard (rapid-edit race) ───────────────────────────────────
+// Rapid fine-routing edits fire concurrent mutations. The backend serializes
+// them and stamps each design response with a monotonic `revision`. Network/parse
+// jitter can make an EARLIER response arrive after a later one; without this
+// guard it would clobber the newer state (freshly-added nicks "disappearing" a
+// moment later) and desync the panel's feature-log from the backend (the
+// "index N out of range" revert error). We track the newest revision applied and
+// drop any design response older than it. Monotonic per tab/document; a page
+// reload resets it and the first response re-seeds it.
+let _lastAppliedRevision = -1
+
+/** True if this design response is older than the newest already applied (so the
+ *  caller should DROP it). Updates the watermark when the response is accepted.
+ *  Only consults responses that actually carry a design + numeric revision. */
+function _isStaleDesignResponse(json) {
+  const rev = json?.revision
+  if (typeof rev !== 'number' || !json?.design) return false
+  if (rev < _lastAppliedRevision) return true
+  _lastAppliedRevision = rev
+  return false
+}
+
+/** Reset the stale-response watermark. MUST be called when the backend restarts
+ *  (its per-session revision resets low, so post-restart responses would
+ *  otherwise be dropped as "stale"). Called from the restart-recovery handler. */
+export function resetRevisionWatermark() {
+  _lastAppliedRevision = -1
+}
+
 /** Persist the current design topology to localStorage for session recovery. */
 export function persistDesign() {
   const design = store.getState().currentDesign
@@ -228,6 +257,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
  */
 export async function _syncFromDesignResponse(json, { skipGeometry = false } = {}) {
   if (!json) return null
+  if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
   const updates = {}
   if (json.design)     updates.currentDesign     = json.design
   if (json.validation) {
@@ -602,6 +632,16 @@ export async function redo() {
   return _syncFromDesignResponse(json)
 }
 
+/**
+ * Replace the design's 96-well plate / tube layout (IDT ordering convenience).
+ * Display-only metadata persisted in the .nadoc file; does not change geometry.
+ * `layout` = { orientation, plate_count, wells:[{strand_id,plate,row,col}], tubes:[{strand_id,reason}] }
+ */
+export async function savePlateLayout(layout) {
+  const json = await _request('PUT', '/design/plate-layout', layout)
+  return _syncFromDesignResponse(json)
+}
+
 /** Optional handler invoked after store sync for cluster_only / positions_only
  * responses. Set by main.js at init to push the diff through the renderer
  * (helixCtrl + bluntEnds + joint/overhang renderers). Centralising this here
@@ -628,6 +668,7 @@ export function skipNextResponseDelta() {
  * renderer's bead/slab/cone/axis matrices catch up with the new cluster
  * state in-place. */
 async function _syncClusterOnlyDiff(json) {
+  if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
   const updates = {}
   if (json.design)     updates.currentDesign     = json.design
   if (json.validation) updates.validationReport  = json.validation
@@ -654,6 +695,7 @@ async function _syncClusterOnlyDiff(json) {
  *  to call helix_renderer.applyPositionsUpdate(positions_by_helix, helix_axes)
  *  to push the new positions into the rendered meshes. */
 async function _syncPositionsOnlyDiff(json) {
+  if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
   const state = store.getState()
   const positionsByHelix = json.positions_by_helix
   const helixAxesArr     = json.helix_axes
@@ -2036,6 +2078,14 @@ export async function duplicateInstance(instanceId, { offset, name } = {}) {
 
 export async function polymerizeAssembly(body) {
   const json = await _request('POST', '/assembly/polymerize', body)
+  return _syncFromAssemblyResponse(json)
+}
+
+/** Polymerize a periodic part from a single instance (no hand-defined mate).
+ *  body: { instance_id, count, direction }. The repeat transform is derived
+ *  server-side from the part's is_periodic_seam forced ligations. */
+export async function polymerizePeriodicAssembly(body) {
+  const json = await _request('POST', '/assembly/polymerize-periodic', body)
   return _syncFromAssemblyResponse(json)
 }
 

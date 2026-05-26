@@ -8,12 +8,79 @@
 import { editorStore } from './store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
 import { notifyRequestFailure, notifyRequestSuccess } from '../shared/connection_monitor.js'
-import { docHeaders } from '../shared/doc_id.js'
+import { docHeaders, getDocId } from '../shared/doc_id.js'
 
 const BASE = '/api'
 
+// ── Stale-response guard + sync diagnostics ──────────────────────────────────
+// The 2D editor shares the backend document with the 3D view. Rapid edits (e.g.
+// resizing ends then nicking quickly) fire CONCURRENT mutations whose responses
+// can arrive OUT OF ORDER. The backend stamps every design response with a
+// monotonic `revision`; we drop any response older than the newest already
+// applied, so a late/stale response can't clobber newer topology (the "nick
+// appears then reverts a second later" bug). Mirrors the guard in the 3D client
+// (src/api/client.js). Reset on backend restart (revision resets low) via
+// resetRevisionWatermark().
+let _lastAppliedRev = -1
+let _inFlight = 0
+let _droppedCount = 0
+const _syncLog = []            // ring buffer of recent sync decisions (debug)
+const _SYNC_LOG_MAX = 200
+const _syncListeners = new Set()
+
+function _pushSyncLog(entry) {
+  entry.t = Date.now()
+  _syncLog.push(entry)
+  if (_syncLog.length > _SYNC_LOG_MAX) _syncLog.shift()
+  for (const fn of _syncListeners) { try { fn(entry) } catch { /* ignore */ } }
+}
+
+/** Apply a design response to the editor store, dropping it if a newer response
+ *  has already been applied (out-of-order/stale → would clobber). Returns json. */
+function _applyDesignResponse(json, { emit = false, source = '' } = {}) {
+  if (!json?.design) return json
+  const rev = (typeof json.revision === 'number') ? json.revision : null
+  if (rev !== null && rev < _lastAppliedRev) {
+    _droppedCount++
+    _pushSyncLog({ decision: 'DROP', source, rev, lastRev: _lastAppliedRev,
+                   strands: json.design.strands?.length, flog: json.design.feature_log?.length })
+    return json   // superseded by a newer response — skip so we don't clobber it
+  }
+  if (rev !== null) _lastAppliedRev = rev
+  editorStore.setState({ design: json.design })
+  if (emit) nadocBroadcast.emit('design-changed')
+  _pushSyncLog({ decision: 'APPLY', source, rev, lastRev: _lastAppliedRev,
+                 strands: json.design.strands?.length, flog: json.design.feature_log?.length })
+  return json
+}
+
+/** Reset the stale-response watermark. MUST be called when the backend restarts
+ *  (its per-session revision resets low, so post-restart responses would
+ *  otherwise be dropped as "stale" and freeze the editor on old data). */
+export function resetRevisionWatermark() {
+  _lastAppliedRev = -1
+  _pushSyncLog({ decision: 'RESET', source: 'restart', rev: null, lastRev: -1 })
+}
+
+/** Snapshot of sync state for the debug tools (window.__nadocSyncDebug.sync). */
+export function getSyncDebugState() {
+  return {
+    docId:          getDocId(),
+    lastAppliedRev: _lastAppliedRev,
+    inFlight:       _inFlight,
+    dropped:        _droppedCount,
+    storeStrands:   editorStore.getState().design?.strands?.length ?? null,
+    storeFlog:      editorStore.getState().design?.feature_log?.length ?? null,
+    log:            _syncLog.slice(-40),
+  }
+}
+
+/** Subscribe to every sync decision (APPLY/DROP/RESET) — for a live overlay. */
+export function onSyncEvent(fn) { _syncListeners.add(fn); return () => _syncListeners.delete(fn) }
+
 async function _request(method, path, body) {
   editorStore.setState({ loading: true })
+  _inFlight++
   const opts = {
     method,
     headers: {
@@ -42,6 +109,8 @@ async function _request(method, path, body) {
     notifyRequestFailure()   // network-level failure → flag the connection as down
     editorStore.setState({ lastError: { status: 0, message: err.message }, loading: false })
     return null
+  } finally {
+    _inFlight = Math.max(0, _inFlight - 1)
   }
 }
 
@@ -60,7 +129,7 @@ function _absorbAuxFields(json) {
 /** Fetch the current design and update the editor store. */
 export async function fetchDesign() {
   const json = await _request('GET', '/design')
-  if (json?.design) editorStore.setState({ design: json.design })
+  _applyDesignResponse(json, { source: 'fetchDesign' })
   _absorbAuxFields(json)
   return json
 }
@@ -71,12 +140,17 @@ export async function fetchDesign() {
  */
 export async function mutate(mutationFn) {
   const json = await mutationFn(_request)
-  if (json?.design) {
-    editorStore.setState({ design: json.design })
-    nadocBroadcast.emit('design-changed')
-  }
+  _applyDesignResponse(json, { emit: true, source: 'mutate' })
   _absorbAuxFields(json)
   return json
+}
+
+/**
+ * Replace the design's 96-well plate / tube layout (IDT ordering convenience).
+ * Display-only metadata persisted in the .nadoc file; no geometry change.
+ */
+export async function savePlateLayout(layout) {
+  return mutate(req => req('PUT', '/design/plate-layout', layout))
 }
 
 /**
@@ -557,10 +631,7 @@ export async function assignScaffoldSequence(scaffoldName = 'M13mp18', opts = {}
 
 /** Apply scaffold sequence to design store after assignScaffoldSequence call. */
 export async function syncScaffoldSequenceResponse(json) {
-  if (json?.design) {
-    editorStore.setState({ design: json.design })
-    nadocBroadcast.emit('design-changed')
-  }
+  _applyDesignResponse(json, { emit: true, source: 'scaffoldSeq' })
   return json
 }
 
@@ -572,6 +643,36 @@ export async function assignStapleSequences() {
 /** Apply all DeformationOps as loop/skip topology modifications. */
 export async function applyAllDeformations() {
   return mutate(req => req('POST', '/design/loop-skip/apply-deformations'))
+}
+
+// ── Feature-log operations (used by the shared feature_log_panel) ────────────
+// These MUST go through `mutate` (→ _request) so they carry docHeaders() — i.e.
+// target THIS editor's document, not the default doc. (The old inline shim in
+// main.js used a bare fetch with no doc header, so revert/delete/seek hit the
+// wrong document and threw "Feature index N out of range (log has 1 entries)".)
+// They also forward subIndex for per-sub-step revert/delete and ride the
+// stale-response guard via `mutate`.
+
+export async function seekFeatures(position, subPosition = null) {
+  return mutate(req => req('POST', '/design/features/seek', { position, sub_position: subPosition }))
+}
+
+export async function deleteFeature(index, subIndex = null) {
+  const path = subIndex == null
+    ? `/design/features/${index}`
+    : `/design/features/${index}?sub_index=${subIndex}`
+  return mutate(req => req('DELETE', path))
+}
+
+export async function revertToBeforeFeature(index, subIndex = null) {
+  const path = subIndex == null
+    ? `/design/features/${index}/revert`
+    : `/design/features/${index}/revert?sub_index=${subIndex}`
+  return mutate(req => req('POST', path))
+}
+
+export async function editFeature(index, params) {
+  return mutate(req => req('POST', `/design/features/${index}/edit`, { params }))
 }
 
 /**
@@ -588,10 +689,7 @@ export async function undoDesign() {
     if (r.status === 404) return null          // stack empty — silent
     const json = await r.json().catch(() => null)
     if (!r.ok) return null
-    if (json?.design) {
-      editorStore.setState({ design: json.design })
-      nadocBroadcast.emit('design-changed')
-    }
+    _applyDesignResponse(json, { emit: true, source: 'undo' })
     return json
   } catch (err) {
     editorStore.setState({ loading: false })
@@ -611,10 +709,7 @@ export async function redoDesign() {
     if (r.status === 404) return null          // stack empty — silent
     const json = await r.json().catch(() => null)
     if (!r.ok) return null
-    if (json?.design) {
-      editorStore.setState({ design: json.design })
-      nadocBroadcast.emit('design-changed')
-    }
+    _applyDesignResponse(json, { emit: true, source: 'redo' })
     return json
   } catch (err) {
     editorStore.setState({ loading: false })

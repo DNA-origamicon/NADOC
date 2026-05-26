@@ -3086,6 +3086,7 @@ def seek_assembly_features(body: SeekAssemblyFeaturesRequest) -> dict:
 # params.  Subset of replayable.
 _EDITABLE_OP_KINDS: set[str] = {
     "assembly-polymerize",
+    "assembly-polymerize-periodic",
     "assembly-overhang-connection-add",
     "assembly-overhang-connection-patch",
 }
@@ -3151,6 +3152,31 @@ def _replay_assembly_op(assembly: Assembly, op_kind: str, params: dict) -> Assem
                 additional_instance_ids=list(params.get("additional_instance_ids") or []),
             )
             polymerize_assembly(body)
+            result = assembly_state.get_or_404()
+            result = result.model_copy(update={
+                "feature_log":        result.feature_log[:len(assembly.feature_log)],
+                "feature_log_cursor": -1,
+            })
+        finally:
+            assembly_state.set_assembly_silent(previous)
+        return result
+
+    if op_kind == "assembly-polymerize-periodic":
+        # Delegate to the route (single source of truth for the chain math),
+        # then strip the entry it appends so the caller can append a fresh one.
+        instance_id = params.get("instance_id")
+        count       = int(params.get("count", 0))
+        direction   = params.get("direction", "forward")
+        if not instance_id or count < 2 or direction not in ("forward", "backward", "both"):
+            raise HTTPException(400, detail="polymerize-periodic params malformed.")
+
+        previous = assembly_state.get_or_404()
+        assembly_state.set_assembly_silent(assembly)
+        try:
+            body = PolymerizePeriodicRequest(
+                instance_id=instance_id, count=count, direction=direction,
+            )
+            polymerize_periodic_assembly(body)
             result = assembly_state.get_or_404()
             result = result.model_copy(update={
                 "feature_log":        result.feature_log[:len(assembly.feature_log)],
@@ -4713,6 +4739,189 @@ def polymerize_assembly(body: PolymerizeAssemblyRequest) -> dict:
             "additional_instance_ids": [a.id for a in additional_instances],
             "new_instance_ids":        new_instance_ids,
             "new_joint_ids":           new_joint_ids,
+        },
+    )
+    return _assembly_response(updated)
+
+
+class PolymerizePeriodicRequest(BaseModel):
+    instance_id: str
+    count:       int                                          # total chain length, ≥ 2
+    direction:   Literal["forward", "backward", "both"] = "forward"
+
+
+@router.post("/assembly/polymerize-periodic", status_code=200)
+def polymerize_periodic_assembly(body: PolymerizePeriodicRequest) -> dict:
+    """Grow a polymer from a SINGLE periodic part — no hand-defined mate.
+
+    The part's repeat transform is derived from its ``is_periodic_seam`` forced
+    ligations (the end-to-end seam the user marked in the cadnano editor's
+    periodic-boundary view) via :func:`derive_periodic_delta`.  Copy k is placed
+    at ``T_seed @ delta**k`` (delta is part-local, so it left-multiplies the
+    seed's world transform).  Consecutive copies are tied by synthesized rigid
+    seam joints carrying a single replicated ``mate_relative_transform`` so the
+    chain re-resolves on part edits and is feature-logged / undoable — mirroring
+    :func:`polymerize_assembly`, but anchored on one instance instead of a pair.
+    """
+    from backend.core.assembly_polymer import _matrix_power
+    from backend.core.periodic_polymer import (
+        PeriodicSeamError, derive_periodic_delta, principal_seam_connectors,
+    )
+
+    if body.count < 2:
+        raise HTTPException(400, detail="count must be at least 2.")
+
+    assembly = assembly_state.get_or_404()
+    seed = _find_instance(assembly, body.instance_id)
+
+    # Resolve the seed's design with its cluster overrides.  NOT _display_design
+    # — the seams reference real strands/helices, which display-only stripping
+    # would not affect but we want the authoritative topology regardless.
+    design = _design_with_instance_overrides(seed, _assembly_source_path(assembly))
+
+    if not any(getattr(fl, "is_periodic_seam", False) for fl in design.forced_ligations):
+        raise HTTPException(
+            422,
+            detail="Part has no periodic seam. Mark the end-to-end seam across "
+                   "the cadnano editor's periodic-boundary mirror first.",
+        )
+    try:
+        delta = derive_periodic_delta(design)                # 4×4 part-local SE3
+        delta_inv = np.linalg.inv(delta)
+    except PeriodicSeamError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+    except np.linalg.LinAlgError as exc:
+        raise HTTPException(422, detail=f"Could not derive periodic repeat transform: {exc}") from exc
+
+    specs = principal_seam_connectors(design)
+    if specs is None:
+        raise HTTPException(422, detail="Periodic seam did not resolve to helix geometry.")
+    (p5, n5), (p3, n3) = specs
+
+    # ── Chain split: count-1 NEW copies beyond the single seed ────────────────
+    new_total = body.count - 1
+    if body.direction == "forward":
+        n_forward, n_backward = new_total, 0
+    elif body.direction == "backward":
+        n_forward, n_backward = 0, new_total
+    else:  # both — extra on forward when odd
+        n_forward = (new_total + 1) // 2
+        n_backward = new_total - n_forward
+
+    T_seed = seed.transform.to_array()
+    forward_T  = [T_seed @ _matrix_power(delta, k)     for k in range(1, n_forward + 1)]
+    backward_T = [T_seed @ _matrix_power(delta_inv, k) for k in range(1, n_backward + 1)]
+
+    # ── Seam connectors (part-local; identical on seed + every clone) ─────────
+    seam_ips = [
+        InterfacePoint(label="seam0:5p",
+                       position=Vec3(x=p5[0], y=p5[1], z=p5[2]),
+                       normal=Vec3(x=n5[0], y=n5[1], z=n5[2]),
+                       connection_type=ConnectionType.COVALENT),
+        InterfacePoint(label="seam0:3p",
+                       position=Vec3(x=p3[0], y=p3[1], z=p3[2]),
+                       normal=Vec3(x=n3[0], y=n3[1], z=n3[2]),
+                       connection_type=ConnectionType.COVALENT),
+    ]
+    # Fresh seam IPs win over any stale ones from a prior polymerize.
+    base_ips  = [ip.model_copy(deep=True) for ip in seed.interface_points
+                 if not ip.label.startswith("seam0:")]
+    union_ips = base_ips + seam_ips
+
+    seed_updated = seed.model_copy(update={"interface_points": list(union_ips)})
+    existing_instances = [seed_updated if i.id == seed.id else i for i in assembly.instances]
+
+    def _clone(new_id: str, name: str, T_arr: np.ndarray) -> PartInstance:
+        T_mat = Mat4x4.from_array(T_arr)
+        return PartInstance.model_construct(
+            id=new_id,
+            name=name,
+            source=seed.source,                 # shared by reference (read-only downstream)
+            transform=T_mat,
+            base_transform=T_mat,
+            mode=seed.mode,
+            visible=seed.visible,
+            representation="cylinders",
+            fixed=seed.fixed,
+            allow_part_joints=seed.allow_part_joints,
+            joint_states=dict(seed.joint_states),
+            cluster_transform_overrides=list(seed.cluster_transform_overrides),
+            interface_points=list(union_ips),
+        )
+
+    new_instances: list[PartInstance] = []
+    forward_ids:  list[str] = []
+    backward_ids: list[str] = []
+    for k, T_arr in enumerate(forward_T, start=1):
+        nid = str(_uuid.uuid4())
+        new_instances.append(_clone(nid, f"{seed.name} +{k}", T_arr))
+        forward_ids.append(nid)
+    for k, T_arr in enumerate(backward_T, start=1):
+        nid = str(_uuid.uuid4())
+        new_instances.append(_clone(nid, f"{seed.name} -{k}", T_arr))
+        backward_ids.append(nid)
+
+    inst_lookup = {i.id: i for i in [seed_updated] + new_instances}
+
+    # ── mate_relative_transform: capture ONCE from the first consecutive pair ──
+    # The chain is uniform, so one M = inv(F_a^3p_world) @ F_b^5p_world applies to
+    # every junction (exactly as polymerize_assembly replicates one mate frame).
+    if n_forward >= 1:
+        low_inst, high_inst = seed_updated, inst_lookup[forward_ids[0]]
+    else:
+        low_inst, high_inst = inst_lookup[backward_ids[0]], seed_updated
+    F_a = _get_connector_world_frame(low_inst, "seam0:3p", None)
+    F_b = _get_connector_world_frame(high_inst, "seam0:5p", None)
+    mate_M: 'list | None' = None
+    if F_a is not None and F_b is not None:
+        try:
+            mate_M = (np.linalg.inv(F_a) @ F_b).flatten().tolist()
+        except np.linalg.LinAlgError:
+            mate_M = None
+
+    def _seam_joint(name: str, a_id: str, b_id: str) -> AssemblyJoint:
+        Fa = _get_connector_world_frame(inst_lookup[a_id], "seam0:3p", None)
+        axis_o = Fa[:3, 3].tolist() if Fa is not None else [0.0, 0.0, 0.0]
+        axis_d = Fa[:3, 2].tolist() if Fa is not None else [0.0, 0.0, 1.0]
+        return AssemblyJoint(
+            name=name,
+            joint_type="rigid",
+            instance_a_id=a_id,
+            instance_b_id=b_id,
+            axis_origin=axis_o,
+            axis_direction=axis_d,
+            current_value=0.0,
+            connector_a_label="seam0:3p",
+            connector_b_label="seam0:5p",
+            mate_relative_transform=mate_M,
+        )
+
+    new_joints: list[AssemblyJoint] = []
+    # Forward: seed(3p) → f1(5p), f1(3p) → f2(5p), …
+    prev_id = seed_updated.id
+    for k, nid in enumerate(forward_ids, start=1):
+        new_joints.append(_seam_joint(f"Seam +{k}", prev_id, nid))
+        prev_id = nid
+    # Backward: b1(3p) → seed(5p), b2(3p) → b1(5p), …
+    prev_id = seed_updated.id
+    for k, nid in enumerate(backward_ids, start=1):
+        new_joints.append(_seam_joint(f"Seam -{k}", nid, prev_id))
+        prev_id = nid
+
+    mutated = assembly.model_copy(update={
+        "instances": existing_instances + new_instances,
+        "joints":    list(assembly.joints) + new_joints,
+    })
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-polymerize-periodic",
+        label=f"Polymerize (periodic) {seed.name}: chain length {body.count} ({body.direction})",
+        params={
+            "instance_id":      body.instance_id,
+            "count":            body.count,
+            "direction":        body.direction,
+            "new_instance_ids": [i.id for i in new_instances],
+            "new_joint_ids":    [j.id for j in new_joints],
         },
     )
     return _assembly_response(updated)

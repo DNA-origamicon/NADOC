@@ -1203,11 +1203,15 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
    * length_bp × RISE.  Direction per cell matches what the extrude will create
    * (see _extrudeDirForCell).  Cells whose extrude would overlap existing DNA are
    * drawn RED (and _previewHasConflict is set so _doExtrude can block).
-   * No-op (cleared) when disabled, the lattice is hidden, or nothing is selected.
+   * No-op (cleared) when disabled, the lattice is hidden, nothing is selected, or
+   * the extrude popup (ctx-menu) is not open — the preview only appears once the
+   * user right-clicks, so selecting cells beforehand isn't obscured by ghosts.
    */
   function _updatePreview() {
     _previewHasConflict = false
-    if (!_previewEnabled || !_latticeMode || _readOnly) { _hidePreview(); return }
+    if (!_previewEnabled || !_latticeMode || _readOnly || _ctxEl?.style.display !== 'block') {
+      _hidePreview(); return
+    }
     const selected = _circleMeshes.filter(c => _selected.has(`${c.row},${c.col}`))
     const absBp = _previewLengthBp()
     if (!selected.length || !absBp) { _hidePreview(); return }
@@ -1499,10 +1503,12 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     _ctxEl.style.left    = `${x}px`
     _ctxEl.style.top     = `${y}px`
     _ctxEl.style.display = 'block'
+    _updatePreview()   // popup is now open → show ghosts for the selected cells
   }
 
   function _hideContextMenu() {
     if (_ctxEl) _ctxEl.style.display = 'none'
+    _hidePreview()     // popup closed → no preview while (re)selecting cells
   }
 
   if (_ctxEl) {

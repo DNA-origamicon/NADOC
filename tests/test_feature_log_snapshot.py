@@ -125,6 +125,39 @@ def test_delete_snapshot_entry_allowed_does_not_change_design():
     assert _strands_signature(after_delete) == post_autobreak
 
 
+# ── Test 4b: deleting the root bundle-create entry CLEARS the geometry ────────
+
+
+def test_delete_bundle_create_entry_clears_geometry():
+    """Deleting the 'initial extrusion' (bundle-create) removes what it created.
+
+    Unlike modify-ops (auto-break etc.) where delete keeps the resulting
+    geometry, bundle-create is the root op whose pre-state is the empty
+    workspace; deleting it must roll the design back to empty, otherwise the
+    helices are orphaned (no creating op in the log) and persist on save/reload.
+    """
+    # Start from a clean empty workspace, then create a bundle via the endpoint
+    # so feature_log[0] is a real 'bundle-create' snapshot.
+    design_state.close_session()
+    r = client.post(
+        "/api/design/bundle",
+        json={"cells": [[0, 0]], "length_bp": 42, "name": "root", "plane": "XY",
+              "lattice_type": "HONEYCOMB"},
+    )
+    assert r.status_code == 201, r.text
+    created = design_state.get_or_404()
+    assert len(created.helices) == 1 and len(created.strands) >= 1
+    assert created.feature_log[0].op_kind == "bundle-create"
+
+    r = client.delete("/api/design/features/0")
+    assert r.status_code == 200, r.text
+    after = design_state.get_or_404()
+
+    assert after.feature_log == []
+    assert after.helices == []
+    assert after.strands == []
+
+
 # ── Test 5: revert truncates the log; undo restores both design and log ──────
 
 

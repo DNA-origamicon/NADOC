@@ -131,9 +131,12 @@ from backend.core.models import (
     OverhangConnection,
     OverhangBinding,
     OverhangSpec,
+    PlateLayout,
     Strand,
     StrandExtension,
     StrandType,
+    TubeAssignment,
+    WellAssignment,
     TwistParams,
     VALID_MODIFICATIONS,
     Vec3,
@@ -1209,6 +1212,30 @@ def _autodetect_clusters(design: Design) -> Design:
     return design.copy_with(cluster_transforms=scaffold_clusters + geometry_clusters)
 
 
+def _strip_feature_log_payloads(design_dict: dict) -> None:
+    """Drop heavy feature_log payload blobs from a response dict IN PLACE, keeping
+    the gating signals the feature-log panel actually reads.
+
+    The 2D editor (skip-geometry) renders from topology and never decodes these
+    blobs; it only checks ``evicted`` / ``diffs_evicted`` and per-child diff
+    PRESENCE. So:
+      - snapshot pre/post blobs → "" (panel gates revert on ``evicted``, not the
+        blob; size fields like ``snapshot_size_bytes`` are kept for the tooltip)
+      - per-child diff blobs → "1" when non-empty (preserve truthiness for the
+        per-sub-step button gating), "" when empty.
+    The backend's own design keeps the real blobs — this only edits the response
+    copy — so revert/seek/save (which run server-side) are unaffected.
+    """
+    for e in design_dict.get("feature_log", []):
+        for k in ("design_snapshot_gz_b64", "pre_state_gz_b64", "post_state_gz_b64"):
+            if e.get(k):
+                e[k] = ""
+        for c in e.get("children", []):
+            for k in ("diff_added_b64", "diff_removed_b64", "diff_modified_b64"):
+                if c.get(k):
+                    c[k] = "1"
+
+
 def _design_response(design: Design, report: ValidationReport) -> dict:
     design = _ensure_default_cluster(design)
     design_dict = design.to_dict()
@@ -1225,6 +1252,21 @@ def _design_response(design: Design, report: ValidationReport) -> dict:
         for l in design.loadouts
     ]
     _inject_joint_world_axes(design_dict)
+    # Editor (skip-geometry) responses: drop the heavy feature_log payload blobs.
+    # The 2D editor renders from topology and never decodes snapshot/diff blobs;
+    # they were ~1.2 MB of every VoltronCore response (1.1 MB pre/post snapshots +
+    # 0.1 MB per-step diffs). The backend keeps the real blobs (for revert/seek/
+    # save), so this only shrinks the wire payload + the editor's JSON.parse.
+    if should_skip_geometry():
+        _strip_feature_log_payloads(design_dict)
+    # Monotonic per-document revision, captured ATOMICALLY at mutation time for a
+    # mutating request (falls back to the current value for read-only GETs). The
+    # client drops any design response whose revision is older than the newest
+    # already applied, so out-of-order/stale responses from rapid edits can't
+    # clobber newer state (see _isStaleDesignResponse in client.js).
+    rev = design_state.current_request_revision()
+    if rev is None:
+        rev = design_state.revision()
     return {
         "design":     design_dict,
         "validation": _validation_dict(report, design),
@@ -1234,6 +1276,7 @@ def _design_response(design: Design, report: ValidationReport) -> dict:
         # on every response, so the marker auto-clears when the user nicks
         # the strand to break the cycle.
         "unligated_crossover_ids": unligated_crossover_ids(design),
+        "revision": rev,
     }
 
 
@@ -1526,6 +1569,25 @@ class StrandExtensionBatchRequest(BaseModel):
 
 class StrandExtensionBatchDeleteRequest(BaseModel):
     ext_ids: List[str]
+
+
+class PlateWellItem(BaseModel):
+    strand_id: str
+    plate: int
+    row: int
+    col: int
+
+
+class PlateTubeItem(BaseModel):
+    strand_id: str
+    reason: Literal["modification", "long", "both"]
+
+
+class PlateLayoutSaveRequest(BaseModel):
+    orientation: Literal["8x12", "12x8"]
+    plate_count: int
+    wells: List[PlateWellItem]
+    tubes: List[PlateTubeItem]
 
 
 class StrandBatchDeleteRequest(BaseModel):
@@ -10498,6 +10560,29 @@ def delete_feature(index: int, sub_index: int | None = None) -> dict:
 
     temp = design.copy_with(feature_log=new_log)
 
+    # Delete vs. revert: by design, deleting a snapshot entry forgets the log
+    # row but KEEPS the current geometry (revert is what rolls topology back) —
+    # e.g. deleting an auto-break entry keeps the nicks. The one exception is
+    # `bundle-create`, the ROOT "initial extrusion": its pre-state is the empty
+    # workspace and nothing precedes it, so keeping the geometry leaves orphaned
+    # helices with no creating op in the log (they then persist on save/reload).
+    # Deleting it must clear what it created. Substitute its PRE-state (empty)
+    # topology here; _seek_feature_log's snapshot-seek can't, since the entry
+    # carrying that topology is the one being removed.
+    from backend.core.models import SnapshotLogEntry as _SnapEntry
+    if (
+        isinstance(entry, _SnapEntry)
+        and entry.op_kind == 'bundle-create'
+        and not entry.evicted
+        and entry.design_snapshot_gz_b64
+    ):
+        try:
+            _pre_design = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
+        except Exception:
+            _pre_design = None
+        if _pre_design is not None:
+            temp = _topology_substitute(temp, _pre_design)
+
     # If the deleted entry was a cluster_op and the cluster has no remaining ops
     # in new_log, _seek_feature_log won't know to reset it (the cluster won't appear
     # in clusters_with_ops).  Pre-reset the transform here so the seek sees identity.
@@ -13004,6 +13089,47 @@ def delete_strand_extensions_batch(body: StrandExtensionBatchDeleteRequest) -> d
         d.extensions = [e for e in d.extensions if e.id not in id_set]
 
     design, report = design_state.mutate_with_reconcile(_apply)
+    return _design_response(design, report)
+
+
+@router.put("/design/plate-layout", status_code=200)
+def save_plate_layout(body: PlateLayoutSaveRequest) -> dict:
+    """Replace the design's plate/tube layout (IDT ordering convenience).
+
+    Display-only metadata: this touches no topology or geometry, so it uses the
+    plain mutate_and_validate path and returns a design response without geometry.
+    All referenced strand IDs must exist in the design (404 otherwise).
+    """
+    design = design_state.get_or_404()
+    valid_ids = {s.id for s in design.strands}
+    for w in body.wells:
+        if w.strand_id not in valid_ids:
+            raise HTTPException(404, detail=f"Strand {w.strand_id!r} not found.")
+    for t in body.tubes:
+        if t.strand_id not in valid_ids:
+            raise HTTPException(404, detail=f"Strand {t.strand_id!r} not found.")
+
+    def _apply(d: Design) -> None:
+        d.plate_layout = PlateLayout(
+            orientation=body.orientation,
+            plate_count=body.plate_count,
+            wells=[WellAssignment(**w.model_dump()) for w in body.wells],
+            tubes=[TubeAssignment(**t.model_dump()) for t in body.tubes],
+        )
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response(design, report)
+
+
+@router.delete("/design/plate-layout", status_code=200)
+def clear_plate_layout() -> dict:
+    """Clear any saved plate/tube layout."""
+    design = design_state.get_or_404()
+
+    def _apply(d: Design) -> None:
+        d.plate_layout = None
+
+    design, report = design_state.mutate_and_validate(_apply)
     return _design_response(design, report)
 
 

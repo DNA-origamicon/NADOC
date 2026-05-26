@@ -34,7 +34,11 @@ from typing import Callable
 
 from fastapi import HTTPException
 
-from backend.api.doc_context import get_current_doc
+from backend.api.doc_context import (
+    current_request_revision,
+    get_current_doc,
+    set_request_revision,
+)
 from backend.core.cluster_reconcile import (
     MutationReport,
     reconcile_cluster_membership,
@@ -75,6 +79,20 @@ class _DesignSession:
 
 _lock = threading.Lock()
 _sessions: dict[str, _DesignSession] = {}
+
+def _bump_revision(s: "_DesignSession") -> None:
+    """Increment a session's revision and record it for the current request.
+
+    The per-request value (read by ``_design_response`` via
+    ``current_request_revision``) is captured ATOMICALLY here under the lock, so
+    a concurrent mutation moving ``s.revision`` on can't make the response stamp
+    the wrong revision. The contextvar lives in :mod:`doc_context` and is reset
+    to None per request by its middleware, so a read-only request never inherits
+    a prior mutation's value. Lets the client drop out-of-order/stale design
+    responses (rapid edits where freshly-added nicks "disappear" a moment later).
+    """
+    s.revision += 1
+    set_request_revision(s.revision)
 
 # Session-level protein library, keyed by asset id.  PROCESS-GLOBAL (shared
 # across documents) — an imported PDB can be attached across designs.  Persisted
@@ -131,7 +149,7 @@ def restore_doc_design(doc_id: str, design: Design) -> None:
             s = _DesignSession()
             _sessions[doc_id] = s
         s.design = design
-        s.revision += 1
+        _bump_revision(s)
 
 
 def revision_map() -> dict[str, int]:
@@ -194,7 +212,7 @@ def set_design(d: Design) -> None:
             s.history.append(s.design.model_copy(deep=True))
         s.redo.clear()
         s.design = d
-        s.revision += 1
+        _bump_revision(s)
 
 
 def get_or_404() -> Design:
@@ -233,7 +251,7 @@ def mutate_and_validate(
         s.redo.clear()
         fn(s.design)
         report = validate_design(s.design)
-        s.revision += 1
+        _bump_revision(s)
         return s.design, report
 
 
@@ -269,7 +287,7 @@ def mutate_with_reconcile(
         reconciled = reconcile_cluster_membership(before, s.design, report)
         s.design = _retry_pending_ligations(before, reconciled)
         validation = validate_design(s.design)
-        s.revision += 1
+        _bump_revision(s)
         return s.design, validation
 
 
@@ -295,7 +313,7 @@ def replace_with_reconcile(
         reconciled = reconcile_cluster_membership(before, new_design, report)
         s.design = _retry_pending_ligations(before, reconciled)
         validation = validate_design(s.design)
-        s.revision += 1
+        _bump_revision(s)
         return s.design, validation
 
 
@@ -470,7 +488,7 @@ def mutate_with_feature_log(
         _evict_oldest_payloads_if_over_budget(s.design)
 
         validation = validate_design(s.design)
-        s.revision += 1
+        _bump_revision(s)
         return s.design, validation, snap_entry
 
 
@@ -581,7 +599,7 @@ def mutate_with_minor_log(
         _evict_oldest_payloads_if_over_budget(s.design)
 
         validation = validate_design(s.design)
-        s.revision += 1
+        _bump_revision(s)
         return s.design, validation, minor_entry
 
 
@@ -597,7 +615,7 @@ def undo() -> tuple[Design, ValidationReport]:
         s.redo.append(s.design.model_copy(deep=True))
         s.design = s.history.pop()
         report = validate_design(s.design)
-        s.revision += 1
+        _bump_revision(s)
         return s.design, report
 
 
@@ -613,7 +631,7 @@ def redo() -> tuple[Design, ValidationReport]:
         s.history.append(s.design.model_copy(deep=True))
         s.design = s.redo.pop()
         report = validate_design(s.design)
-        s.revision += 1
+        _bump_revision(s)
         return s.design, report
 
 
@@ -641,7 +659,7 @@ def close_session() -> None:
         s.history.clear()
         s.redo.clear()
         s.pdb_atomistic = None
-        s.revision += 1
+        _bump_revision(s)
         _protein_library.clear()
 
 
@@ -703,7 +721,7 @@ def set_design_silent(d: Design) -> None:
     with _lock:
         s = _session()
         s.design = d
-        s.revision += 1
+        _bump_revision(s)
 
 
 def set_design_silent_reconciled(
@@ -723,5 +741,5 @@ def set_design_silent_reconciled(
         reconciled = reconcile_cluster_membership(before, new_design, report)
         s.design = reconciled
         validation = validate_design(s.design)
-        s.revision += 1
+        _bump_revision(s)
         return s.design, validation

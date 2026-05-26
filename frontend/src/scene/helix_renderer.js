@@ -1982,6 +1982,17 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   let _refIdSet  = new Set()
   let _refHidden = false
   const _hasReference = (design?.strands ?? []).some(s => s.is_reference)
+  // Helices carrying ONLY reference strands — their helical-axis arrows hide with
+  // the rest of the reference geometry (a mixed helix keeps its axis for the active part).
+  const _refOnlyHelixIds = (() => {
+    const ref = new Set(), active = new Set()
+    for (const s of (design?.strands ?? [])) {
+      const t = s.is_reference ? ref : active
+      for (const d of (s.domains ?? [])) t.add(d.helix_id)
+    }
+    for (const h of active) ref.delete(h)
+    return ref
+  })()
   if (_hasReference) {
     if (!_useImpostors) _installInstanceAlpha(iSpheres)
     _installInstanceAlpha(iCubes)
@@ -1999,6 +2010,19 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
     for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
     for (const e of coneEntries)     _setEntryAlpha(e, _refAlphaFor(e.strandId))
+    // Helical axis arrows of reference-only helices: hard-hide when reference is
+    // hidden; restore via the normal shaft-mode logic when shown (respecting the
+    // cadnano global axis gate).
+    if (_refHidden && _refOnlyHelixIds.size) {
+      for (const arrow of axisArrows) {
+        if (!_refOnlyHelixIds.has(arrow.helixId)) continue
+        if (arrow.shaft)         arrow.shaft.visible         = false
+        if (arrow.straightShaft) arrow.straightShaft.visible = false
+        for (const seg of arrow.segments ?? []) if (seg.mesh) seg.mesh.visible = false
+      }
+    } else if (_axisArrowsVisible) {
+      _applyShaftModeVisibility(_currentShaftMode)
+    }
   }
   // ── Public interface ───────────────────────────────────────────────────────
 

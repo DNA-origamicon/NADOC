@@ -303,6 +303,55 @@ export function initPathview(canvasEl, containerEl, {
 
   function _hideDragTooltip() { _dragTooltip.style.display = 'none' }
 
+  // ── Hover readout (upper-right HUD) ─────────────────────────────────────────
+  // Shows "[helix label]:[bp index]" for the cell under the cursor, plus a
+  // "Length: [nt]" second line while hovering over a strand. Anchored to the
+  // (position:relative) path-view container so it stays put under pan/zoom.
+  const _hoverReadout = document.createElement('div')
+  _hoverReadout.id = 'pathview-hover-readout'
+  Object.assign(_hoverReadout.style, {
+    position:      'absolute',
+    top:           '6px',
+    right:         '8px',
+    display:       'none',
+    padding:       '4px 8px',
+    background:    'rgba(13,17,23,0.78)',
+    border:        '1px solid #30363d',
+    borderRadius:  '4px',
+    color:         '#c9d1d9',
+    fontFamily:    'monospace',
+    fontSize:      '12px',
+    lineHeight:    '1.35',
+    textAlign:     'right',
+    whiteSpace:    'pre',
+    pointerEvents: 'none',
+    userSelect:    'none',
+    zIndex:        '20',
+  })
+  containerEl.appendChild(_hoverReadout)
+
+  function _updateHoverReadout(e) {
+    const hid = _hoverHelixId
+    if (hid == null) { _hoverReadout.style.display = 'none'; return }
+    const info  = _rowMap.get(hid)
+    const helix = _helixById.get(hid)
+    if (!info || !helix) { _hoverReadout.style.display = 'none'; return }
+    // REAL bp under cursor (folds the periodic-boundary mirror shift; no-op when off).
+    const { wx } = _screenToRealWorld(e.offsetX, e.offsetY)
+    const bp = _xToBp(wx)
+    if (bp < helix.bp_start || bp >= helix.bp_start + helix.length_bp) {
+      _hoverReadout.style.display = 'none'; return
+    }
+    let text = `${info.label ?? info.idx}[${bp}]`
+    // Strand-length line — unfiltered hit so it shows over any strand type.
+    const hit = _hitTest(e.offsetX, e.offsetY)
+    if (hit) text += `\nLength: ${strandNtCount(hit.strand)}`
+    _hoverReadout.textContent = text
+    _hoverReadout.style.display = ''
+  }
+
+  function _hideHoverReadout() { _hoverReadout.style.display = 'none' }
+
   // ── Design state ─────────────────────────────────────────────────────────────
   let _design  = null
   let _helices = []
@@ -312,6 +361,8 @@ export function initPathview(canvasEl, containerEl, {
   // (backend recomputes per-response).
   let _unligatedCrossoverIds = new Set()
   let _rowMap  = new Map()   // helix.id → { fwdY, revY, scaffoldFwd, cell, idx }
+  let _helixById = new Map() // helix.id → helix; rebuilt in _rebuildLayout. O(1) lookups
+                             // in the hot crossover-draw loops (was O(helices) _helices.find).
   let _totalBp = 0   // max bp end across all helices
   let _minBp   = 0   // min bp_start across all helices (may be negative)
   let _fitDone = false
@@ -599,6 +650,27 @@ export function initPathview(canvasEl, containerEl, {
   /** Whether the mirror should render/respond (active + valid period + has helices). */
   function _pbOn() { return _pbActive && _pbPeriod() >= 1 && _helices.length > 0 }
 
+  /** True when forced ligation `fl` should route THROUGH the periodic boundary: PB on,
+   *  flagged is_periodic_seam, and the wrapped routing is shorter (endpoints more than
+   *  half a period apart). DRAW (_drawCrossoverArcs) and HIT-TEST (_hitTestArc) both gate
+   *  on this + _pbSeamFLArcs so the dashed arcs are clickable where they're drawn. */
+  function _pbSeamFLThroughBoundary(fl) {
+    return _pbOn() && !!fl.is_periodic_seam &&
+           Math.abs(fl.three_prime_bp - fl.five_prime_bp) > _pbPeriod() / 2
+  }
+
+  /** The two seam-crossing arc segments for a through-boundary forced ligation: 3'→(5'
+   *  image one period nearer) across one seam, and 5'→(3' image one period nearer) across
+   *  the other. Each {x0,y0,cx,cy,x1,y1} is a bowed quadratic in world coords. */
+  function _pbSeamFLArcs(fl, xA, yA, xB, yB) {
+    const dx = (Math.sign(fl.five_prime_bp - fl.three_prime_bp) || 1) * _pbPeriod() * BP_W
+    const seg = (x0, y0, x1, y1) => {
+      const bAmt = Math.max(BP_W * 0.27, Math.abs(y1 - y0) * 0.07)
+      return { x0, y0, x1, y1, cx: (x0 + x1) / 2 + bAmt, cy: (y0 + y1) / 2 }
+    }
+    return [seg(xA, yA, xB - dx, yB), seg(xB, yB, xA + dx, yA)]
+  }
+
   /** {lo,hi} bp extent over ACTIVE (non-reference) strand domains, or null.
    *  Used for slider defaults + auto-shift. Excludes is_reference ALWAYS — distinct
    *  from _totalBp/_minBp which are helix-based and include reference strands. */
@@ -650,8 +722,10 @@ export function initPathview(canvasEl, containerEl, {
     return { wx: wx - shift * BP_W, wy, shift }
   }
 
-  /** Place the sliders at the active-strand extent and frame the seam so both
-   *  sliders + a margin of each mirror are reachable. Idempotent via _pbInit. */
+  /** Place the sliders at the active-strand extent. Does NOT move the camera: toggling
+   *  the periodic boundary on/off preserves the user's current pan/zoom, so a zoomed-in
+   *  area of interest stays put (the mirror simply appears beyond the sliders — pan to it
+   *  if it's off-screen). Idempotent via _pbInit. */
   function _pbInitDefaults() {
     if (_pbInit) return
     const ext = _activeStrandExtent()
@@ -662,26 +736,6 @@ export function initPathview(canvasEl, containerEl, {
     _pbFarBp  = ext.hi + 1
     _pbLastExt = ext            // baseline for auto-shift's "extent grew" check
     _pbInit   = true
-    _pbFrameSeam()
-  }
-
-  /** Zoom/pan so the span [near - margin, far + margin] fits, giving the user a
-   *  margin of each mirror zone on screen (mirrors extend a full period beyond). */
-  function _pbFrameSeam() {
-    if (!_pbOn()) return
-    const W = canvasEl.width, H = canvasEl.height
-    if (!W || !H) return
-    const P = _pbPeriod()
-    const margin = Math.max(8, Math.round(P * 0.35))   // show ~⅓ of each mirror
-    const loBp = _pbNearBp - margin
-    const hiBp = _pbFarBp  + margin
-    const cW = (hiBp - loBp + 1) * BP_W + GUTTER
-    const lastInfo = _rowMap.get(_helices[_helices.length - 1].id)
-    const cH = (lastInfo ? lastInfo.revY + CELL_H / 2 : RULER_H + TOP_PAD) + 20
-    _zoom = Math.max(MIN_ZOOM, Math.min(1, W / cW, H / cH))
-    // Left-align the framed span start (world x = GUTTER + loBp*BP_W) to the gutter edge.
-    _panX = GUTTER - (GUTTER + loBp * BP_W) * _zoom
-    _panY = Math.max(0, (H - cH * _zoom) / 2)
   }
 
   /** Pulse the sliders briefly (e.g. after an auto-shift) so the jump isn't jarring. */
@@ -747,6 +801,7 @@ export function initPathview(canvasEl, containerEl, {
     // so that the pathview matches the slice view's Y-up arrangement.
     if (!_nativeOrientation) _helices.reverse()
     _rowMap  = new Map()
+    _helixById = new Map(_helices.map(h => [h.id, h]))   // O(1) id→helix for hot draw loops
     const isHC = _design?.lattice_type === 'HONEYCOMB'
 
     // Compute cells for each helix
@@ -952,13 +1007,19 @@ export function initPathview(canvasEl, containerEl, {
         const xB   = _bpCenterX(fl.five_prime_bp)
         const yA   = fl.three_prime_direction === 'FORWARD' ? infoA.fwdY : infoA.revY
         const yB   = fl.five_prime_direction  === 'FORWARD' ? infoB.fwdY : infoB.revY
-        const midX = (xA + xB) / 2
-        const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
-        const axMin = Math.min(xA, xB, midX + bowAmt) - BP_W * 0.5
-        const axMax = Math.max(xA, xB, midX + bowAmt) + BP_W * 0.5
-        const ayMin = Math.min(yA, yB), ayMax = Math.max(yA, yB)
-        if (axMax <= lx0 || axMin >= lx1 || ayMax <= ly0 || ayMin >= ly1) continue
-        result.add(_forcedLigKey(fl))
+        // Match the renderer for seam FLs routed through the boundary (two short arcs).
+        const segs = _pbSeamFLThroughBoundary(fl)
+          ? _pbSeamFLArcs(fl, xA, yA, xB, yB)
+          : [{ x0: xA, y0: yA, x1: xB, y1: yB,
+               cx: (xA + xB) / 2 + Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07), cy: (yA + yB) / 2 }]
+        let flHit = false
+        for (const a of segs) {
+          const axMin = Math.min(a.x0, a.x1, a.cx) - BP_W * 0.5
+          const axMax = Math.max(a.x0, a.x1, a.cx) + BP_W * 0.5
+          const ayMin = Math.min(a.y0, a.y1), ayMax = Math.max(a.y0, a.y1)
+          if (!(axMax <= lx0 || axMin >= lx1 || ayMax <= ly0 || ayMin >= ly1)) { flHit = true; break }
+        }
+        if (flHit) result.add(_forcedLigKey(fl))
       }
     }
 
@@ -1099,17 +1160,21 @@ export function initPathview(canvasEl, containerEl, {
       const xB   = _bpCenterX(fl.five_prime_bp)
       const yA   = fl.three_prime_direction === 'FORWARD' ? infoA.fwdY : infoA.revY
       const yB   = fl.five_prime_direction  === 'FORWARD' ? infoB.fwdY : infoB.revY
-      const midX = (xA + xB) / 2
-      const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
-      const cx = midX + bowAmt
-      const cy = (yA + yB) / 2
-      const xMin = Math.min(xA, xB, cx) - tol
-      const xMax = Math.max(xA, xB, cx) + tol
-      const yMin = Math.min(yA, yB) - tol
-      const yMax = Math.max(yA, yB) + tol
-      if (wx < xMin || wx > xMax || wy < yMin || wy > yMax) continue
-      const dSq = _quadBezierMinDistSq(wx, wy, xA, yA, cx, cy, xB, yB)
-      if (dSq < bestDistSq) { bestDistSq = dSq; best = { fl } }
+      // Match the renderer: a seam FL routed through the boundary is two short arcs to
+      // each endpoint's mirror image, so hit-test against those (not the long straight arc).
+      const segs = _pbSeamFLThroughBoundary(fl)
+        ? _pbSeamFLArcs(fl, xA, yA, xB, yB)
+        : (() => { const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
+                   return [{ x0: xA, y0: yA, x1: xB, y1: yB, cx: (xA + xB) / 2 + bowAmt, cy: (yA + yB) / 2 }] })()
+      for (const a of segs) {
+        const xMin = Math.min(a.x0, a.x1, a.cx) - tol
+        const xMax = Math.max(a.x0, a.x1, a.cx) + tol
+        const yMin = Math.min(a.y0, a.y1) - tol
+        const yMax = Math.max(a.y0, a.y1) + tol
+        if (wx < xMin || wx > xMax || wy < yMin || wy > yMax) continue
+        const dSq = _quadBezierMinDistSq(wx, wy, a.x0, a.y0, a.cx, a.cy, a.x1, a.y1)
+        if (dSq < bestDistSq) { bestDistSq = dSq; best = { fl } }
+      }
     }
 
     return best
@@ -1326,15 +1391,41 @@ export function initPathview(canvasEl, containerEl, {
   // colorOf returns the per-strand color directly; isXoverSlot suppresses end
   // caps at crossover boundaries.
 
-  function _findStrandIdxAt(helixId, bp, direction) {
-    if (!_design?.strands) return -1
-    for (let si = 0; si < _design.strands.length; si++) {
-      for (const dom of _design.strands[si].domains) {
-        if (dom.helix_id !== helixId || dom.direction !== direction) continue
+  // Design-keyed index for _findStrandIdxAt. Without it, that fn is
+  // O(strands × domains) and is called ~2× per crossover per frame — ~1M
+  // iterations/frame on a large design (1252 crossovers), the dominant cost of
+  // a post-mutation re-render. The index buckets domains by `${helix}_${dir}`
+  // so a lookup scans only the handful of domains on that track. Rebuilt only
+  // when `_design` changes (reference identity), so pan/zoom redraws reuse it.
+  let _strandIndexMap = null      // Map: `${helixId}_${direction}` → [{lo, hi, si}]
+  let _strandIndexDesign = null   // the _design the index was built for
+
+  function _ensureStrandIndex() {
+    if (_strandIndexDesign === _design && _strandIndexMap) return
+    const m = new Map()
+    const strands = _design?.strands ?? []
+    for (let si = 0; si < strands.length; si++) {
+      for (const dom of strands[si].domains) {
+        const key = `${dom.helix_id}_${dom.direction}`
+        let arr = m.get(key)
+        if (!arr) m.set(key, arr = [])
         const lo = Math.min(dom.start_bp, dom.end_bp)
         const hi = Math.max(dom.start_bp, dom.end_bp)
-        if (lo <= bp && bp <= hi) return si
+        arr.push({ lo, hi, si })   // si ascending → first match == lowest si (matches old scan)
       }
+    }
+    _strandIndexMap = m
+    _strandIndexDesign = _design
+  }
+
+  function _findStrandIdxAt(helixId, bp, direction) {
+    if (!_design?.strands) return -1
+    _ensureStrandIndex()
+    const arr = _strandIndexMap.get(`${helixId}_${direction}`)
+    if (!arr) return -1
+    for (let i = 0; i < arr.length; i++) {
+      const e = arr[i]
+      if (e.lo <= bp && bp <= e.hi) return e.si
     }
     return -1
   }
@@ -1370,8 +1461,20 @@ export function initPathview(canvasEl, containerEl, {
     }
   }
 
-  // Frame-cached result of _buildComponents() — rebuilt at the top of _draw().
+  // Result of _buildComponents(). It depends ONLY on _design, so cache it keyed
+  // on design identity and rebuild only when _design changes — pan/zoom redraws
+  // (and the double-draw on a design change) reuse it instead of rebuilding the
+  // 2504-entry crossover-slot set + re-pinning staple colours every frame.
   let _components = { colorOf: (si) => strandColor((_design?.strands ?? [])[si]), membersOf: () => new Set(), isXoverSlot: () => false }
+  let _componentsDesign = null
+
+  function _ensureComponents() {
+    if (_componentsDesign !== _design) {
+      _components = _buildComponents()
+      _componentsDesign = _design
+    }
+    return _components
+  }
 
   // ── View tools state ──────────────────────────────────────────────────────
   let _viewTools = { lengthHeatmap: false, overhangNames: false, grid: true }
@@ -1517,6 +1620,10 @@ export function initPathview(canvasEl, containerEl, {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillStyle = CLR_SEQ_TEXT
+    // In a mirror pass the canvas is translated ±P·BP_W, so the manual on-screen cull
+    // below must add that shift — otherwise the mirrored sequence letters get culled.
+    // (The chars still draw at `cx`; the ctx translate places them on the mirror side.)
+    const ghostShiftX = _ghostPass * _pbPeriod() * BP_W
     for (const strand of _design.strands) {
       const hasSeq = !!strand.sequence
       const hasOvh = !hasSeq && strand.domains.some(d => d.overhang_id && ovhMap.has(d.overhang_id))
@@ -1535,7 +1642,7 @@ export function initPathview(canvasEl, containerEl, {
           if (!ch || !VALID_BASES.has(ch)) continue
           const bp = isFwd ? lo + i : hi - i
           const cx = _bpCenterX(bp)
-          const sx = cx * _zoom + _panX
+          const sx = (cx + ghostShiftX) * _zoom + _panX
           if (sx < -BP_W * _zoom || sx > canvasEl.width + BP_W * _zoom) continue
           ctx.fillText(ch, cx, y)
         }
@@ -1551,6 +1658,7 @@ export function initPathview(canvasEl, containerEl, {
     ctx.fillStyle = CLR_UNDEF_FILL
     ctx.strokeStyle = CLR_UNDEF_BORDER
     ctx.lineWidth = 1 / _zoom
+    const ghostShiftX = _ghostPass * _pbPeriod() * BP_W   // mirror-pass translate (see _drawSequences)
     for (const strand of _design.strands) {
       let seqIdx = 0
       for (const dom of strand.domains) {
@@ -1567,7 +1675,7 @@ export function initPathview(canvasEl, containerEl, {
           if (ch && VALID_BASES.has(ch)) continue
           const bp = isFwd ? lo + i : hi - i
           const x = _bpToX(bp)
-          const sx = x * _zoom + _panX
+          const sx = (x + ghostShiftX) * _zoom + _panX
           if (sx + BP_W * _zoom < 0 || sx > canvasEl.width) continue
           ctx.fillRect(x, y - half, BP_W, CELL_H)
           ctx.strokeRect(x, y - half, BP_W, CELL_H)
@@ -2175,6 +2283,28 @@ export function initPathview(canvasEl, containerEl, {
       const xB   = _bpCenterX(fl.five_prime_bp)
       const yA   = fl.three_prime_direction === 'FORWARD' ? infoA.fwdY : infoA.revY
       const yB   = fl.five_prime_direction  === 'FORWARD' ? infoB.fwdY : infoB.revY
+
+      // Periodic-seam forced ligation: when the boundary is on and the connection is
+      // shorter wrapped (endpoints > ½ period apart), route it the short way — a dashed
+      // arc through EACH seam to the other endpoint's mirror image — instead of one long
+      // straight arc across the structure. Drawn once (real pass); the straight arc is
+      // skipped in every pass. Gated on is_periodic_seam (user choice). MUST stay in sync
+      // with the matching block in _hitTestArc so the dashed arcs are clickable.
+      if (_pbSeamFLThroughBoundary(fl)) {
+        if (_ghostPass === 0) {
+          ctx.save()
+          ctx.setLineDash([6 / _zoom, 4 / _zoom]); ctx.lineCap = 'butt'
+          for (const a of _pbSeamFLArcs(fl, xA, yA, xB, yB)) {
+            ctx.beginPath()
+            ctx.moveTo(a.x0, a.y0)
+            ctx.quadraticCurveTo(a.cx, a.cy, a.x1, a.y1)
+            ctx.stroke()
+          }
+          ctx.restore()
+        }
+        continue   // skip the long straight arc (and its ticks) in every pass
+      }
+
       const midX = (xA + xB) / 2
       const midY = (yA + yB) / 2
       const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
@@ -2442,7 +2572,7 @@ export function initPathview(canvasEl, containerEl, {
     const _scafNeighborHids = new Set()
     if (_shiftHeld && _hoverHelixId != null) {
       const hInfo = _rowMap.get(_hoverHelixId)
-      const hHelix = hInfo && _helices.find(h => h.id === _hoverHelixId)
+      const hHelix = hInfo && _helixById.get(_hoverHelixId)
       if (hInfo && hHelix) {
         const hMinBp = minDomainBpByHelix.get(_hoverHelixId) ?? hHelix.bp_start
         const hBpStart = Math.max(bpL, hMinBp)
@@ -2464,7 +2594,7 @@ export function initPathview(canvasEl, containerEl, {
 
     for (const [hid, info] of _rowMap) {
       const { cell, scaffoldFwd, fwdY, revY } = info
-      const helix = _helices.find(h => h.id === hid)
+      const helix = _helixById.get(hid)
       if (!helix) continue
 
       const helixMinBp = minDomainBpByHelix.get(hid) ?? helix.bp_start
@@ -2921,8 +3051,8 @@ export function initPathview(canvasEl, containerEl, {
     if (!infoA || !infoB) return []
 
     // Clamp to helix bp bounds so we never iterate an unbounded range
-    const hA = _helices.find(h => h.id === xover.half_a.helix_id)
-    const hB = _helices.find(h => h.id === xover.half_b.helix_id)
+    const hA = _helixById.get(xover.half_a.helix_id)
+    const hB = _helixById.get(xover.half_b.helix_id)
     if (!hA || !hB) return []
     // Allow dragging well beyond current helix bounds — the backend will grow
     // helices as needed.  Pad by several lattice periods so the user can reach
@@ -3519,7 +3649,7 @@ export function initPathview(canvasEl, containerEl, {
   }
 
   function _draw() {
-    _components = _buildComponents()   // rebuild once per frame
+    _ensureComponents()                // build once per design change (cached)
     _rebuildStrandSelection()          // rebuild strand glow set
     _rebuildHeatmapCache()             // rebuild heat map colours
     const W = canvasEl.width, H = canvasEl.height
@@ -3574,7 +3704,7 @@ export function initPathview(canvasEl, containerEl, {
     const savedPanX = _panX
     const savedPanY = _panY
     try {
-      _components = _buildComponents()
+      _ensureComponents()
       _rebuildStrandSelection()
       _rebuildHeatmapCache()
       ctx   = targetCanvas.getContext('2d')
@@ -4213,6 +4343,7 @@ export function initPathview(canvasEl, containerEl, {
       strandType: hit.strand.strand_type,
       ntCount:    strandNtCount(hit.strand),
     } : null)
+    _updateHoverReadout(e)
 
     // Nick tool hover ghost — compute potential 3'/5' end cells and redraw
     if (_activeTool === 'nick') {
@@ -4459,6 +4590,7 @@ export function initPathview(canvasEl, containerEl, {
 
   canvasEl.addEventListener('pointerleave', () => {
     onStrandHover(null)
+    _hideHoverReadout()
     let needDraw = false
     if (_endDragActive)                { _endDragActive = false; _endDragDeltaBp = 0; needDraw = true }
     if (_domDragActive)                { _domDragActive = false; _domDragDeltaBp = 0; _hideDragTooltip(); needDraw = true }
@@ -4629,7 +4761,8 @@ export function initPathview(canvasEl, containerEl, {
       if (next !== _pbActive) {
         _pbActive = next
         // Recompute slider defaults from the current design each time it's enabled;
-        // clear when disabled so a fresh enable re-frames the seam.
+        // clear when disabled. Camera (pan/zoom) is intentionally left untouched so the
+        // toggle preserves the user's current view.
         _pbInit = false
         if (next) _pbInitDefaults()
       }

@@ -229,14 +229,6 @@ const _initialState = {
   showOverhangNames: false,
 
   /**
-   * When true, forced ligations that close a periodic-boundary polymerization
-   * seam (ForcedLigation.is_periodic_seam) are drawn as glowing yellow arrows.
-   * Shown in both the single-design and assembly views. Toggled via
-   * View > Seam Ligations. Default on.
-   */
-  showSeamArrows: true,
-
-  /**
    * True when the debug overlay (View > Debug / backtick) is active.
    * Mirrored here so other modules can subscribe to it.
    */

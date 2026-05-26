@@ -284,6 +284,21 @@ def test_eviction_clears_child_diffs(monkeypatch):
     assert all(not is_diff_child(c) for c in cluster0.children)
 
 
+def test_design_responses_carry_monotonic_revision():
+    """Every design response stamps a monotonic `revision` (the client drops
+    out-of-order/stale responses by it — the rapid-edit race fix)."""
+    d = design_state.get_or_404()
+    h0 = d.helices[0].id
+    r1 = _nick(h0, 7).json()
+    r2 = _nick(h0, 21).json()
+    assert isinstance(r1.get('revision'), int)
+    assert isinstance(r2.get('revision'), int)
+    assert r2['revision'] > r1['revision'], "revision must increase across mutations"
+    # A read-only GET also carries the current revision (fallback path).
+    g = client.get('/api/design').json()
+    assert g.get('revision') == design_state.revision()
+
+
 def test_diffs_survive_nadoc_round_trip():
     d = design_state.get_or_404()
     h0 = d.helices[0].id

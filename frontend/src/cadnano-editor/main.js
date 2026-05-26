@@ -22,7 +22,7 @@ import {
   deleteForcedLigation, batchDeleteForcedLigations,
   patchStrandsColor, patchStrandsReference, patchOverhang, undoDesign, redoDesign, placeCrossover, moveCrossover, batchMoveCrossovers,
   deleteCrossover, batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases, patchForcedLigationExtraBases,
-  upsertStrandExtensionsBatch, deleteStrandExtensionsBatch,
+  upsertStrandExtensionsBatch, deleteStrandExtensionsBatch, savePlateLayout,
   resizeStrandEnds, shiftDomains, insertLoopSkip, clearAllLoopSkips, generateAllOverhangSequences,
   // menu bar operations
   createDesign, importDesign,
@@ -32,6 +32,8 @@ import {
   autoScaffoldAdvancedSeamed, autoScaffoldSeamless, autoScaffoldAdvancedSeamless,
   assignScaffoldSequence, syncScaffoldSequenceResponse, assignStapleSequences,
   applyAllDeformations,
+  seekFeatures, deleteFeature, revertToBeforeFeature, editFeature,
+  resetRevisionWatermark, getSyncDebugState, onSyncEvent,
 } from './api.js'
 import { showToast, showCursorToast } from '../ui/toast.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
@@ -41,6 +43,8 @@ import { initZoomScope }  from './zoom_scope.js'
 import { initLigationDebug } from './ligation_debug.js'
 import { initStrandsSpreadsheet } from './strands_spreadsheet.js'
 import { initFeatureLogPanel } from '../ui/feature_log_panel.js'
+import { initPlateView } from '../ui/plate_view.js'
+import { ensureStapleColors, stapleColorOf, EXT_MOD_NAMES } from './pathview/palette.js'
 
 // ── Tab identity ─────────────────────────────────────────────────────────────
 // Each editor tab gets a unique, stable window.name so the 3D view (and other
@@ -192,20 +196,39 @@ connectionMonitor.start({ onChange: async (evt) => {
     _restartHandling = true
     _setSyncStatus('yellow', 'backend restarted — re-syncing…')
     _syncLog('warn', 'CONN', 'backend restarted — re-syncing')
+    // The backend's per-session revision resets low after a restart; clear the
+    // stale-response watermark so post-restart responses aren't dropped as
+    // "older" (which would freeze the editor on pre-restart data).
+    resetRevisionWatermark()
     try {
       const json = await fetchDesign()
       if (!json?.design) {
-        const mem = editorStore.getState().design
-        if (mem && window.confirm(
-            'The backend restarted and no longer has the design loaded.\n\n' +
-            'Restore it from this editor tab?')) {
-          await fetch('/api/design/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...docHeaders() },
-            body: JSON.stringify({ content: JSON.stringify(mem) }),
-          })
-          await fetchDesign()
-          nadocBroadcast.emit('design-changed')
+        // Backend came back empty. Prefer reloading the autosaved workspace file:
+        // it holds the COMPLETE design, whereas the editor's in-memory copy has
+        // STRIPPED feature-log payload blobs (the backend omits them from
+        // skip-geometry responses) — re-importing that would permanently lose the
+        // fine-routing revert history. Fall back to the in-memory import only for
+        // a never-saved design (no workspace file).
+        const wsPath = localStorage.getItem(_WS_PATH_KEY)
+        if (wsPath) {
+          const res = await getLibraryFileContent(wsPath)
+          if (res?.content) {
+            await importDesign(res.content)
+            nadocBroadcast.emit('design-changed')
+          }
+        } else {
+          const mem = editorStore.getState().design
+          if (mem && window.confirm(
+              'The backend restarted and no longer has the design loaded.\n\n' +
+              'Restore it from this editor tab? (Unsaved fine-routing history may be lost.)')) {
+            await fetch('/api/design/import', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...docHeaders() },
+              body: JSON.stringify({ content: JSON.stringify(mem) }),
+            })
+            await fetchDesign()
+            nadocBroadcast.emit('design-changed')
+          }
         }
       }
       _setSyncStatus('green', 'synced')
@@ -218,6 +241,19 @@ connectionMonitor.start({ onChange: async (evt) => {
   }
 } })
 
+// Surface every sync decision (APPLY / DROP-stale / RESET) in the debug panel,
+// so a dropped out-of-order response is visible while reproducing the bug.
+onSyncEvent((e) => {
+  if (e.decision === 'DROP') {
+    _syncLog('warn', 'SYNC',
+      `DROP stale ${e.source} rev=${e.rev} < applied=${e.lastRev} (kept newer state)`)
+  } else if (e.decision === 'RESET') {
+    _syncLog('info', 'SYNC', 'revision watermark reset (backend restart)')
+  } else if (e.decision === 'APPLY' && e.rev != null) {
+    _syncLog('log', 'SYNC', `apply ${e.source} rev=${e.rev} strands=${e.strands} flog=${e.flog}`)
+  }
+})
+
 window.__nadocSyncDebug = {
   status() {
     return {
@@ -226,10 +262,51 @@ window.__nadocSyncDebug = {
       workspacePath: _workspacePath ?? null,
     }
   },
+  /** Stale-response guard state: docId, last-applied revision, in-flight count,
+   *  dropped count, and the recent sync-decision log. */
+  sync() {
+    const s = getSyncDebugState()
+    console.group('[nadocSyncDebug] sync state')
+    console.log('docId          :', s.docId)
+    console.log('lastAppliedRev :', s.lastAppliedRev)
+    console.log('inFlight       :', s.inFlight)
+    console.log('dropped (stale):', s.dropped)
+    console.log('store strands  :', s.storeStrands, ' feature_log:', s.storeFlog)
+    console.table(s.log)
+    console.groupEnd()
+    return s
+  },
+  /** Compare this editor's store to the BACKEND document it targets — the fastest
+   *  way to spot a desync (different revision / feature_log length / doc). */
+  async backend() {
+    const h = { ...docHeaders() }
+    const [design, health] = await Promise.all([
+      fetch('/api/design', { headers: h }).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/health').then(r => r.json()).catch(() => null),
+    ])
+    const store = editorStore.getState().design
+    const out = {
+      docId:            getSyncDebugState().docId,
+      server_instance:  health?.server_instance_id ?? null,
+      backend_revision: design?.revision ?? null,
+      backend_flog:     design?.design?.feature_log?.length ?? null,
+      backend_strands:  design?.design?.strands?.length ?? null,
+      store_flog:       store?.feature_log?.length ?? null,
+      store_strands:    store?.strands?.length ?? null,
+      lastAppliedRev:   getSyncDebugState().lastAppliedRev,
+      IN_SYNC:          (design?.design?.feature_log?.length ?? -1) === (store?.feature_log?.length ?? -2),
+    }
+    console.group('[nadocSyncDebug] backend vs store')
+    Object.entries(out).forEach(([k, v]) => console.log(k.padEnd(17) + ':', v))
+    if (!out.IN_SYNC) console.warn('DESYNC: panel and backend feature_log differ — re-open the file or forceResync().')
+    console.groupEnd()
+    return out
+  },
   forceResync() {
     _syncLog('warn', 'FORCE', 'Manual force re-fetch triggered')
     _setSyncStatus('yellow', 'fetching…')
     _suppressUnsavedBadge = true   // pulling backend state is not a local edit
+    resetRevisionWatermark()       // accept whatever the backend currently has
     fetchDesign()
       .finally(() => { _suppressUnsavedBadge = false })
       .then(() => { _setSyncStatus('green', 'synced') })
@@ -278,6 +355,12 @@ async function _runAutosave() {
   try {
     if (wsPath) {
       _setSyncStatus('yellow', 'saving…')
+      // Tell sibling tabs (3D view) BEFORE the write that this file change is
+      // OURS, so they skip the SSE file-changed reload. Without this, the 3D
+      // tab reloads our autosave back into the shared backend doc — a stale
+      // snapshot — clobbering in-progress edits (nicks "reverting a second
+      // later"). The 5s self-saved window on the receiver covers SSE latency.
+      nadocBroadcast.emit('file-saved', { path: wsPath })
       const ok = !!(await saveDesignToWorkspace(wsPath))
       if (ok) {
         _lastSavedDesign = designAtSave
@@ -2345,36 +2428,61 @@ initLigationDebug()
     },
   }
 
-  // Minimal API shim — only the methods feature_log_panel actually calls.
-  // After mutation, refresh editorStore.design so subscribers (including the
-  // panel itself) re-render with the latest feature_log.
-  async function _flMutate(method, path, body) {
-    const init = body !== undefined
-      ? { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-      : { method }
-    const r = await fetch(`/api${path}`, init)
-    const json = await r.json().catch(() => null)
-    if (!r.ok) {
-      editorStore.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
-      return null
-    }
-    editorStore.setState({ lastError: null })
-    if (json?.design) {
-      editorStore.setState({ design: json.design })
-      nadocBroadcast.emit('design-changed')   // feature-log ops must reach 3D + sibling tabs (and autosave)
-    }
-    return json
-  }
-
+  // Feature-log ops use the editor's api functions (NOT a bare fetch): they
+  // carry docHeaders() so they hit THIS editor's document — the previous inline
+  // shim omitted the doc header and hit the default doc, producing "Feature
+  // index N out of range (log has 1 entries)". They also forward subIndex for
+  // per-sub-step revert/delete and ride the stale-response guard.
   const _flApi = {
-    seekFeatures:         (position, subPosition = null) =>
-      _flMutate('POST', '/design/features/seek', { position, sub_position: subPosition }),
-    deleteFeature:        (i) => _flMutate('DELETE', `/design/features/${i}`),
-    revertToBeforeFeature:(i) => _flMutate('POST',   `/design/features/${i}/revert`),
-    editFeature:          (i, params) => _flMutate('POST', `/design/features/${i}/edit`, { params }),
+    seekFeatures,
+    deleteFeature,          // (index, subIndex)
+    revertToBeforeFeature,  // (index, subIndex)
+    editFeature,            // (index, params)
   }
 
   const flPanel = initFeatureLogPanel(_flStore, { api: _flApi })
+
+  // ── Plates and tubes panel (96-well plate layout + IDT tube list) ───────────
+  const platesPanelEl = document.getElementById('cadnano-plates-panel')
+  let _platesView = null
+  function _refreshPlates() {
+    if (!_platesView) return
+    const design = editorStore.getState().design
+    if (!design) { _platesView.setData([], null); return }
+    ensureStapleColors(design)
+    const helixById = Object.fromEntries((design.helices ?? []).map(h => [h.id, h]))
+    const modOf = new Map()
+    for (const e of design.extensions ?? []) {
+      if (e.modification && !modOf.has(e.strand_id)) modOf.set(e.strand_id, e.modification)
+    }
+    const records = []
+    let idx = 0
+    for (const s of design.strands ?? []) {
+      if (s.strand_type !== 'staple' || s.is_reference) continue
+      idx += 1
+      const lengthNt = (s.domains ?? []).reduce((sum, d) => {
+        const h = helixById[d.helix_id]
+        const lo = Math.min(d.start_bp, d.end_bp), hi = Math.max(d.start_bp, d.end_bp)
+        const skip = (h?.loop_skips ?? [])
+          .filter(ls => ls.bp_index >= lo && ls.bp_index <= hi)
+          .reduce((a, ls) => a + ls.delta, 0)
+        return sum + (Math.abs(d.end_bp - d.start_bp) + 1) + skip
+      }, 0)
+      const mod = modOf.get(s.id) || null
+      records.push({
+        strandId: s.id,
+        color: stapleColorOf(s),
+        lengthNt,
+        groupId: null,            // cadnano editor has no strand groups
+        groupOrder: Infinity,
+        hasMod: !!mod,
+        modName: mod ? (EXT_MOD_NAMES[mod] || mod) : null,
+        sequence: s.sequence || '',
+        name: `S${idx}`,
+      })
+    }
+    _platesView.setData(records, design.plate_layout ?? null)
+  }
 
   // Tab strip click → swap which left-side panel is visible.
   const tabStrip   = document.getElementById('cadnano-tab-strip')
@@ -2382,14 +2490,49 @@ initLigationDebug()
   const flPanelEl    = document.getElementById('cadnano-feature-log-container')
   if (tabStrip && slicePanelEl && flPanelEl) {
     const tabBtns = tabStrip.querySelectorAll('.cn-tab-btn')
+    if (platesPanelEl) {
+      _platesView = initPlateView(document.getElementById('cn-plate-canvas'), {
+        wrapEl: document.getElementById('cn-plate-canvas-wrap'),
+        toolbarEl: document.getElementById('cn-plate-toolbar'),
+        getTubesContainer: () => document.getElementById('cn-plate-tubes'),
+        enableGroupMode: false,                 // no group system in the cadnano editor
+        onSaveLayout: (layout) => { savePlateLayout(layout) },
+        onStrandClick: (sid) => {
+          // Highlight the strand in the pathview + the spreadsheet (which
+          // autoscrolls to the row). Empty well clears the selection.
+          const ids = sid ? [sid] : []
+          pathview.setSelection(ids)
+          _spreadsheet?.setSelectedStrands(ids)
+        },
+      })
+    }
     function _setActiveTab(tabId) {
       for (const b of tabBtns) b.classList.toggle('active', b.dataset.tab === tabId)
       slicePanelEl.style.display = tabId === 'slice'       ? '' : 'none'
       flPanelEl.classList.toggle('is-active', tabId === 'feature-log')
+      if (platesPanelEl) platesPanelEl.classList.toggle('is-active', tabId === 'plates')
+      if (tabId === 'plates') { _refreshPlates(); _platesView?.resetView() }
     }
     for (const b of tabBtns) {
       b.addEventListener('click', () => _setActiveTab(b.dataset.tab))
     }
+    // Refresh the plate while it's visible when the design's staples/extensions
+    // change — but NOT on our own plate_layout saves (they'd reset the view).
+    let _platesSig = null
+    const _sig = (d) => d ? JSON.stringify([
+      d.id,
+      (d.strands ?? []).filter(s => s.strand_type === 'staple' && !s.is_reference)
+        .map(s => `${s.id}:${s.color || ''}:${s.domains?.length ?? 0}`),
+      (d.extensions ?? []).map(e => `${e.strand_id}:${e.modification || ''}`),
+    ]) : 'null'
+    editorStore.subscribe((state, prev) => {
+      if (state.design === prev.design) return
+      if (!platesPanelEl?.classList.contains('is-active')) return
+      const sig = _sig(state.design)
+      if (sig === _platesSig) return
+      _platesSig = sig
+      _refreshPlates()
+    })
   }
   // Suppress unused-var warning in non-strict modes.
   void flPanel

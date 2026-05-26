@@ -14,7 +14,6 @@
 import * as THREE from 'three'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
 import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances } from './crossover_connections.js'
-import { buildSeamArrows } from './seam_arrows.js'
 import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 
 /**
@@ -36,7 +35,6 @@ export function initDesignRenderer(scene, storeRef) {
   let _xoverSlabsMesh   = null   // InstancedMesh for extra-base slabs
   let _xoverArcDataMap  = null   // Map<xoId, arcDataEntry> for O(1) lookup during animation
   let _xoverGlowLive    = []     // {pos: THREE.Vector3, arcData, localIdx} — live positions for selection glow
-  let _seamArrowsGroup  = null   // glowing yellow arrows for periodic-seam forced ligations
   let _currentMode      = 'normal'
   const _glowLayer         = createGlowLayer(scene)
   // Undefined-bases highlight: red, ~2× the selection glow size
@@ -154,6 +152,51 @@ export function initDesignRenderer(scene, storeRef) {
     }
   }
 
+  /** Hide (zero-scale) or restore (reposition) extra-base beads/slabs for
+   *  crossovers whose BOTH endpoints are reference strands — so reference
+   *  crossover geometry tracks the reference View toggle. */
+  function _applyReferenceXoverVisibility() {
+    if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
+    const design = storeRef.getState().currentDesign
+    const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
+    if (!refIds.size) return
+    const hidden = storeRef.getState().showReferenceGeometry === false
+    const m4 = new THREE.Matrix4()
+    const pos = new THREE.Vector3()
+    const qid = new THREE.Quaternion()
+    const zero = new THREE.Vector3(0, 0, 0)
+    let dirty = false
+    for (const ad of _xoverArcData) {
+      if (!(refIds.has(ad.nucA?.strand_id) && refIds.has(ad.nucB?.strand_id))) continue
+      if (_hiddenCrossoverIds.has(ad.xoId)) continue   // already hidden by a cluster toggle
+      if (hidden) {
+        for (let i = 0; i < ad.beadCount; i++) {
+          const bi = ad.beadStartIdx + i
+          _xoverBeadsMesh.getMatrixAt(bi, m4); pos.setFromMatrixPosition(m4)
+          _xoverBeadsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
+          _xoverSlabsMesh.getMatrixAt(bi, m4); pos.setFromMatrixPosition(m4)
+          _xoverSlabsMesh.setMatrixAt(bi, m4.compose(pos, qid, zero))
+        }
+        dirty = true
+      } else {
+        const posA = _liveXoverPos(ad.nucA, _clusterXoverPosA)
+        const posB = _liveXoverPos(ad.nucB, _clusterXoverPosB)
+        if (!posA || !posB) continue
+        arcControlPoint(posA, posB, ad.nucA, ad.nucB, _clusterXoverCtrl)
+        updateExtraBaseInstances(
+          _xoverBeadsMesh, _xoverSlabsMesh,
+          ad.beadStartIdx, ad.beadCount,
+          posA, _clusterXoverCtrl, posB, ad.avgAx, ad.zOffset,
+        )
+        dirty = true
+      }
+    }
+    if (dirty) {
+      _xoverBeadsMesh.instanceMatrix.needsUpdate = true
+      _xoverSlabsMesh.instanceMatrix.needsUpdate = true
+    }
+  }
+
   const _clusterXoverPosA = new THREE.Vector3()
   const _clusterXoverPosB = new THREE.Vector3()
   const _clusterXoverCtrl = new THREE.Vector3()
@@ -236,13 +279,6 @@ export function initDesignRenderer(scene, storeRef) {
       if (coloringMode && coloringMode !== 'strand') _applyXoverColoring(coloringMode)
     }
 
-    // Periodic-boundary seam arrows (glowing yellow) for forced ligations flagged
-    // is_periodic_seam. Child of root → inherits design visibility/transform.
-    _seamArrowsGroup = buildSeamArrows(design, geometry)
-    if (_seamArrowsGroup) {
-      _seamArrowsGroup.visible = storeRef.getState().showSeamArrows !== false
-      _helixCtrl.root.add(_seamArrowsGroup)
-    }
 
     // Re-apply post-rebuild visibility state
     if (staplesHidden) _helixCtrl.setStapleVisibility(false)
@@ -255,6 +291,7 @@ export function initDesignRenderer(scene, storeRef) {
       _helixCtrl.setReferenceHidden(storeRef.getState().showReferenceGeometry === false)
     }
     _applyXoverVisibility()
+    _applyReferenceXoverVisibility()   // hide reference crossover extra-bases when ref toggle off
 
     // Apply opacity for preview or tool-dim modes
     if (_previewOpacity !== null) {
@@ -393,6 +430,15 @@ export function initDesignRenderer(scene, storeRef) {
       _applyXoverColoring(newState.coloringMode || 'strand')
     }
 
+    // Reference-geometry View toggle: pure visibility change, no rebuild. Must run
+    // BEFORE the no-geo-change early-return below. Hides strand beads/cones/slabs/
+    // fluoros/extensions + helical axis (helix_renderer) and crossover extra-bases.
+    // Arc lines live in unfold_view and react to the same store key there.
+    if (newState.showReferenceGeometry !== prevState.showReferenceGeometry && _helixCtrl) {
+      _helixCtrl.setReferenceHidden(newState.showReferenceGeometry === false)
+      _applyReferenceXoverVisibility()
+    }
+
     if (!geoChanged && !designChanged && !loopChanged) return
 
     // Skip rebuild when only visual-only design fields changed (cluster_transforms,
@@ -482,11 +528,6 @@ export function initDesignRenderer(scene, storeRef) {
     // Isolate a single staple strand (dim all others).
     if (newState.isolatedStrandId !== prevState.isolatedStrandId) {
       _helixCtrl?.setIsolatedStrand(newState.isolatedStrandId)
-    }
-
-    // Hide/show reference geometry (View menu toggle).
-    if (newState.showReferenceGeometry !== prevState.showReferenceGeometry) {
-      _helixCtrl?.setReferenceHidden(newState.showReferenceGeometry === false)
     }
 
     // Extra-base beads+slabs now track arc positions during all transitions
@@ -909,11 +950,6 @@ export function initDesignRenderer(scene, storeRef) {
 
     setAxisArrowsVisible(visible) {
       _helixCtrl?.setAxisArrowsVisible(visible)
-    },
-
-    /** Show/hide the periodic-seam glowing yellow arrows without a rebuild. */
-    setSeamArrowsVisible(visible) {
-      if (_seamArrowsGroup) _seamArrowsGroup.visible = visible
     },
 
     getDistLabelInfo() {

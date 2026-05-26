@@ -44,6 +44,11 @@ function inp(placeholder, value = '', style = '') {
   ].filter(Boolean).join(';')
   i.addEventListener('focus', () => { i.style.borderColor = S.accent })
   i.addEventListener('blur',  () => { i.style.borderColor = S.border })
+  // While typing a name (filename / new-folder / rename), keep keystrokes from
+  // reaching the global keydown dispatcher — otherwise single-key shortcuts like
+  // 'p' (toggle photo mode) fire mid-typing. Same-element Enter/Escape handlers
+  // attached by callers still run; stopPropagation only blocks bubbling to document.
+  i.addEventListener('keydown', (e) => e.stopPropagation())
   return i
 }
 

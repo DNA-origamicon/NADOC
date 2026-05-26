@@ -9,7 +9,7 @@
  *     onToggleVisible,    // (inst) => void
  *     onEditPart,         // (inst) => void  (opens part in new tab)
  *     onDuplicate,        // (inst) => Promise<void>
- *     onPolymerize,       // () => void      (opens polymerize panel)
+ *     onPolymerize,       // (inst) => void  (opens polymerize panel)
  *     onDelete,           // (inst) => Promise<void>
  *   })
  *   ctx.show(inst, clientX, clientY)

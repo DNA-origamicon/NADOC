@@ -631,8 +631,10 @@ class ForcedLigation(BaseModel):
     five_prime_direction: Direction
     extra_bases: Optional[str] = None  # e.g. "TT" — single-stranded bases at the junction
     # True when this ligation closes an end-to-end polymerization seam — set when
-    # the user makes it across the 2D editor's periodic-boundary mirror. Display
-    # hint only (the 3D view draws these as glowing yellow arrows); no topology role.
+    # the user makes it across the 2D editor's periodic-boundary mirror. Marks the
+    # part as periodic so it can be polymerized without a hand-defined mate (see
+    # backend/core/periodic_polymer.py + POST /assembly/polymerize-periodic); no
+    # topology role.
     is_periodic_seam: bool = False
 
 
@@ -677,6 +679,33 @@ class StrandExtension(BaseModel):
         if self.sequence is None and self.modification is None:
             raise ValueError("At least one of sequence or modification must be provided.")
         return self
+
+
+# ── Plate / tube layout (IDT ordering — display-only annotation) ──────────────
+
+
+class WellAssignment(BaseModel):
+    """One staple strand placed in a 96-well plate well. Display-only metadata
+    persisted in the .nadoc file; never affects topology or geometry."""
+    strand_id: str
+    plate: int   # 0-based plate index (overflow → 1, 2, …)
+    row: int     # 0-based physical row (0..7, labelled A–H)
+    col: int     # 0-based physical column (0..11, labelled 1–12)
+
+
+class TubeAssignment(BaseModel):
+    """A staple segregated out of the plate into an individual tube, because it
+    carries a modification, exceeds 60 nt, or both."""
+    strand_id: str
+    reason: Literal["modification", "long", "both"]
+
+
+class PlateLayout(BaseModel):
+    """Persisted plate/tube layout for a design (IDT ordering convenience)."""
+    orientation: Literal["8x12", "12x8"] = "8x12"
+    plate_count: int = 1
+    wells: List[WellAssignment] = Field(default_factory=list)
+    tubes: List[TubeAssignment] = Field(default_factory=list)
 
 
 # ── Deformation models (geometric layer, Phase 6) ─────────────────────────────
@@ -991,6 +1020,7 @@ SnapshotOpKind = Literal[
     'assembly-overhang-connection-delete',
     'assembly-overhang-connection-relax',
     'assembly-polymerize',
+    'assembly-polymerize-periodic',
     'assembly-add-instance',
     'assembly-delete-instance',
     'assembly-duplicate-instance',
@@ -1559,6 +1589,7 @@ class Design(BaseModel):
     protein_attachments: List[ProteinAttachment] = Field(default_factory=list)
     tm_settings: TmSettings = Field(default_factory=TmSettings)
     extensions: List[StrandExtension] = Field(default_factory=list)
+    plate_layout: Optional[PlateLayout] = None  # IDT plate/tube ordering (display-only)
     photoproduct_junctions: List[PhotoproductJunction] = Field(default_factory=list)
     crossovers: List[Crossover] = Field(default_factory=list)
     forced_ligations: List[ForcedLigation] = Field(default_factory=list)

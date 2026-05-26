@@ -253,10 +253,18 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     if (_stapleMerged) _stapleMerged.line.visible = !store.getState().staplesHidden
   }
 
-  /** Re-evaluate e.hidden for all arcs based on current _hiddenNucKeys. */
+  /** Re-evaluate e.hidden for all arcs based on _hiddenNucKeys AND the reference
+   *  toggle (a crossover with BOTH endpoints on reference strands hides when the
+   *  reference View toggle is off — matching the strand/extra-base hide). */
   function _reapplyArcHidden() {
+    const hideRef = store.getState().showReferenceGeometry === false
+    const refIds = hideRef
+      ? new Set((store.getState().currentDesign?.strands ?? [])
+          .filter(s => s.is_reference).map(s => s.id))
+      : null
     for (const e of _arcMeta) {
-      e.hidden = _isNucHidden(e.fromNuc) || _isNucHidden(e.toNuc)
+      e.hidden = _isNucHidden(e.fromNuc) || _isNucHidden(e.toNuc) ||
+                 (hideRef && refIds.has(e.fromNuc?.strand_id) && refIds.has(e.toNuc?.strand_id))
     }
   }
 
@@ -890,6 +898,16 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
   store.subscribe((newState, prevState) => {
     if (newState.staplesHidden !== prevState.staplesHidden) _applyStapleArcVisibility()
+  })
+
+  // Reference View toggle: hide/show arc lines of reference-only crossovers.
+  store.subscribe((newState, prevState) => {
+    if (newState.showReferenceGeometry === prevState.showReferenceGeometry) return
+    if (!_arcMeta.length) return
+    _reapplyArcHidden()
+    const offsets = _buildOffsets(store.getState().unfoldSpacing)
+    _updateArcPositions(_currentT, offsets, _active ? _straightPosMap : null)
+    _refreshArcGlow()
   })
 
   // Update arc colors when strand colors change (e.g. via color picker).

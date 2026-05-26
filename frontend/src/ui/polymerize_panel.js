@@ -34,7 +34,7 @@ const PANEL_HTML = `
   </h2>
   <div style="font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Mate</div>
   <select id="poly-mate-select" style="width:100%;background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:3px;padding:4px;font-size:var(--text-xs);margin-bottom:6px">
-    <option value="">— Select a mate —</option>
+    <option value="">— Select a mate or periodic part —</option>
   </select>
   <div id="poly-selection" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">
     Or click an orange joint indicator in the viewport.
@@ -51,23 +51,25 @@ const PANEL_HTML = `
     <label><input type="radio" name="poly-dir" value="backward"> Backward</label>
     <label><input type="radio" name="poly-dir" value="both"> Both</label>
   </div>
-  <div style="font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin:6px 0 2px">To pattern</div>
-  <div id="poly-pattern-hint" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
-    Optional. Tick any parts to clone alongside each new chain step. Mates between ticked parts and the seed mate's instances are replicated automatically.
-  </div>
-  <div id="poly-pattern-actions" style="display:none;gap:12px;margin-bottom:4px">
-    <button id="poly-select-all" type="button" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:var(--text-xs);padding:0">Select all</button>
-    <button id="poly-select-none" type="button" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:var(--text-xs);padding:0">Select none</button>
-  </div>
-  <div id="poly-additional-list" style="max-height:140px;overflow-y:auto;border:1px solid #30363d;border-radius:3px;background:#0d1117;padding:3px 4px;margin-bottom:10px;font-size:var(--text-xs)">
-    <div style="color:#484f58">— Select a mate to see candidates —</div>
+  <div id="poly-pattern-section">
+    <div style="font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin:6px 0 2px">To pattern</div>
+    <div id="poly-pattern-hint" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
+      Optional. Tick any parts to clone alongside each new chain step. Mates between ticked parts and the seed mate's instances are replicated automatically.
+    </div>
+    <div id="poly-pattern-actions" style="display:none;gap:12px;margin-bottom:4px">
+      <button id="poly-select-all" type="button" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:var(--text-xs);padding:0">Select all</button>
+      <button id="poly-select-none" type="button" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:var(--text-xs);padding:0">Select none</button>
+    </div>
+    <div id="poly-additional-list" style="max-height:140px;overflow-y:auto;border:1px solid #30363d;border-radius:3px;background:#0d1117;padding:3px 4px;margin-bottom:10px;font-size:var(--text-xs)">
+      <div style="color:#484f58">— Select a mate to see candidates —</div>
+    </div>
   </div>
   <div id="poly-cost-preview" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px;min-height:14px"></div>
   <button id="poly-go-btn" class="panel-action-btn" disabled style="width:100%">Polymerize</button>
   <div id="poly-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:16px"></div>
 `
 
-export function initPolymerizePanel(store) {
+export function initPolymerizePanel(store, { isInstancePeriodic } = {}) {
   // ── Build panel DOM and mount below #properties-section ────────────────────
   const panel = document.createElement('div')
   panel.id = 'polymerize-panel'
@@ -87,6 +89,7 @@ export function initPolymerizePanel(store) {
   const statusEl      = panel.querySelector('#poly-status')
   const closeBtn      = panel.querySelector('#poly-close-btn')
   const additionalListEl = panel.querySelector('#poly-additional-list')
+  const patternSectionEl = panel.querySelector('#poly-pattern-section')
   const patternActionsEl = panel.querySelector('#poly-pattern-actions')
   const selectAllBtn     = panel.querySelector('#poly-select-all')
   const selectNoneBtn    = panel.querySelector('#poly-select-none')
@@ -107,8 +110,24 @@ export function initPolymerizePanel(store) {
 
   let _open                = false
   let _selectedJointId     = null
+  // When set, the dropdown's "via periodic boundary" option is selected: chain
+  // grows from this single instance via POST /assembly/polymerize-periodic
+  // (no mate). Mutually exclusive with _selectedJointId.
+  let _periodicInstanceId  = null
   // Set of instance ids the user wants to clone alongside the seed pair.
   let _additionalSelected  = new Set()
+
+  // A part is periodic when its design carries an is_periodic_seam forced
+  // ligation. Inline sources embed the design (read it directly); file-backed
+  // sources resolve through the injected renderer-cache check.
+  function _instanceIsPeriodic(inst) {
+    const embedded = inst?.source?.design?.forced_ligations
+    if (embedded) return embedded.some(fl => fl.is_periodic_seam)
+    return isInstancePeriodic ? !!isInstancePeriodic(inst.id) : false
+  }
+  function _periodicInstances(assembly) {
+    return (assembly?.instances ?? []).filter(_instanceIsPeriodic)
+  }
 
   // ── Eligibility check ──────────────────────────────────────────────────────
   function _sourcesIdenticalish(instA, instB) {
@@ -173,18 +192,20 @@ export function initPolymerizePanel(store) {
 
   function _rebuildMateDropdown(assembly) {
     // Preserve the currently selected option across rebuilds.
-    const prev = _selectedJointId
+    const prev = _periodicInstanceId ? `periodic:${_periodicInstanceId}` : (_selectedJointId || '')
     mateSelect.innerHTML = ''
     const placeholder = document.createElement('option')
     placeholder.value = ''
-    placeholder.textContent = '— Select a mate —'
+    placeholder.textContent = '— Select a mate or periodic part —'
     mateSelect.appendChild(placeholder)
 
     const joints    = assembly?.joints    ?? []
     const instances = assembly?.instances ?? []
     const instById = Object.fromEntries(instances.map(i => [i.id, i]))
-    if (!joints.length) {
-      placeholder.textContent = '— No mates in this assembly —'
+    const periodic = _periodicInstances(assembly)
+
+    if (!joints.length && !periodic.length) {
+      placeholder.textContent = '— No mates or periodic parts —'
       mateSelect.disabled = true
       return
     }
@@ -197,7 +218,18 @@ export function initPolymerizePanel(store) {
       opt.textContent = `${j.name}: ${a} ↔ ${b}`
       mateSelect.appendChild(opt)
     }
-    mateSelect.value = prev && joints.some(j => j.id === prev) ? prev : ''
+    // Periodic parts: one synthetic entry each — polymerize with no mate.
+    for (const inst of periodic) {
+      const opt = document.createElement('option')
+      opt.value = `periodic:${inst.id}`
+      opt.textContent = `${inst.name} — via periodic boundary`
+      mateSelect.appendChild(opt)
+    }
+    const valid = prev && (
+      joints.some(j => j.id === prev) ||
+      (prev.startsWith('periodic:') && periodic.some(i => `periodic:${i.id}` === prev))
+    )
+    mateSelect.value = valid ? prev : ''
   }
 
   function _renderStateFromStore() {
@@ -205,6 +237,28 @@ export function initPolymerizePanel(store) {
     const state    = store.getState()
     const assembly = state.currentAssembly
     _rebuildMateDropdown(assembly)
+
+    // ── Periodic-part mode (no mate) ─────────────────────────────────────────
+    if (_periodicInstanceId) {
+      patternSectionEl.style.display = 'none'   // periodic has no "to pattern" support
+      const inst = _findInstance(assembly, _periodicInstanceId)
+      if (!inst) {
+        selectionEl.style.color = '#f85149'
+        selectionEl.textContent = 'Periodic part no longer exists. Pick another.'
+        eligibilityEl.textContent = ''
+        goBtn.disabled = true
+        return
+      }
+      selectionEl.style.color = '#8b949e'
+      selectionEl.textContent = `Periodic: ${inst.name} (via periodic boundary)`
+      eligibilityEl.style.color = '#3fb950'
+      eligibilityEl.textContent = '✓ Periodic part — chain grows from this single copy (no mate needed).'
+      goBtn.disabled = false
+      _updateCostPreview()
+      return
+    }
+    patternSectionEl.style.display = ''
+
     const joint = _selectedJointId ? _findJoint(assembly, _selectedJointId) : null
     _rebuildAdditionalList(assembly, joint)
     if (!_selectedJointId) {
@@ -249,7 +303,14 @@ export function initPolymerizePanel(store) {
   }
 
   mateSelect.addEventListener('change', () => {
-    _selectedJointId = mateSelect.value || null
+    const v = mateSelect.value || ''
+    if (v.startsWith('periodic:')) {
+      _periodicInstanceId = v.slice('periodic:'.length)
+      _selectedJointId = null
+    } else {
+      _selectedJointId = v || null
+      _periodicInstanceId = null
+    }
     // Selecting a different mate clears the pattern checklist — the
     // candidate set changes when the seed pair changes.
     _additionalSelected = new Set()
@@ -262,11 +323,13 @@ export function initPolymerizePanel(store) {
   // threshold. Re-runs on any input change so the user can adjust before
   // committing. Replaces the previous blocking confirm() at moderate counts.
   function _updateCostPreview() {
-    if (!_selectedJointId || goBtn.disabled) { costPreviewEl.textContent = ''; return }
+    if (goBtn.disabled || (!_selectedJointId && !_periodicInstanceId)) { costPreviewEl.textContent = ''; return }
     const count     = Math.max(2, parseInt(countInput.value, 10) || 2)
     const direction = panel.querySelector('input[name="poly-dir"]:checked')?.value || 'forward'
-    const n_add     = _additionalSelected.size
-    const projected = _estimatedNewInstanceCount(count, direction, n_add)
+    const n_add     = _periodicInstanceId ? 0 : _additionalSelected.size
+    // Periodic: single seed → count-1 new copies (no pattern parts).
+    const projected = _periodicInstanceId ? (count - 1)
+                    : _estimatedNewInstanceCount(count, direction, n_add)
     const color = projected >= 20 ? '#f85149'
               : projected >= _COST_WARN_THRESHOLD ? '#d29922'
               : 'var(--color-text-muted)'
@@ -306,9 +369,40 @@ export function initPolymerizePanel(store) {
 
   // ── Polymerize button ──────────────────────────────────────────────────────
   goBtn.addEventListener('click', async () => {
-    if (!_selectedJointId) return
     const count     = Math.max(2, parseInt(countInput.value, 10) || 2)
     const direction = panel.querySelector('input[name="poly-dir"]:checked')?.value || 'forward'
+
+    // ── Periodic path: single seed, no mate ──────────────────────────────────
+    if (_periodicInstanceId) {
+      const projected = count - 1
+      if (projected >= 20) {
+        const ok = await showConfirm({
+          title: 'Large polymerize',
+          message: `This will add ${projected} new part instances (chain ${count}). ` +
+                   `New clones default to the cheap 'cylinders' renderer.`,
+          confirmLabel: 'Polymerize',
+        })
+        if (!ok) return
+      }
+      goBtn.disabled = true
+      statusEl.style.color = '#8b949e'
+      statusEl.textContent = `Polymerizing… (${count} total, ${direction}, via periodic boundary)`
+      const res = await api.polymerizePeriodicAssembly({
+        instance_id: _periodicInstanceId, count, direction,
+      })
+      if (!res) {
+        const err = store.getState().lastError
+        statusEl.style.color = '#f85149'
+        statusEl.textContent = err?.message || 'Polymerize failed.'
+      } else {
+        statusEl.style.color = '#3fb950'
+        statusEl.textContent = `Chain extended to ${count} (${direction}, via periodic boundary).`
+      }
+      _renderStateFromStore()
+      return
+    }
+
+    if (!_selectedJointId) return
     const additional_instance_ids = [..._additionalSelected]
     const projected = _estimatedNewInstanceCount(count, direction, additional_instance_ids.length)
     // Mid-range counts (10–19) are surfaced via the inline cost preview's
@@ -345,10 +439,12 @@ export function initPolymerizePanel(store) {
   })
 
   // ── Open / close ───────────────────────────────────────────────────────────
-  function open() {
-    if (_open) return
+  // `opts.periodicInstanceId` pre-selects that part's "via periodic boundary"
+  // dropdown entry (used when opening from a right-click on a periodic part).
+  function open(opts = {}) {
     _open = true
     _selectedJointId = null
+    _periodicInstanceId = opts?.periodicInstanceId || null
     statusEl.textContent = ''
     panel.style.display = ''
     _renderStateFromStore()
@@ -359,6 +455,7 @@ export function initPolymerizePanel(store) {
     if (!_open) return
     _open = false
     _selectedJointId = null
+    _periodicInstanceId = null
     panel.style.display = 'none'
     document.removeEventListener('keydown', _onKey)
   }
@@ -372,6 +469,7 @@ export function initPolymerizePanel(store) {
   function setSelectedJoint(jointId) {
     if (!_open) return
     _selectedJointId = jointId
+    _periodicInstanceId = null
     statusEl.textContent = ''
     _renderStateFromStore()
   }

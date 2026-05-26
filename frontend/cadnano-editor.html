@@ -119,6 +119,20 @@
     #cadnano-feature-log-container.is-active {
       display: flex;
     }
+    /* Plates and tubes panel — shares width with sliceview/feature-log. */
+    #cadnano-plates-panel {
+      width: var(--cadnano-left-w);
+      min-width: 80px;
+      max-width: 600px;
+      flex-shrink: 0;
+      background: #0d1117;
+      display: none;
+      flex-direction: column;
+    }
+    #cadnano-plates-panel.is-active { display: flex; }
+    #cn-plate-canvas-wrap { flex: 1 1 auto; min-height: 160px; position: relative; overflow: hidden; }
+    #cn-plate-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+    #cn-plate-tubes { flex: 0 0 auto; max-height: 42%; overflow: auto; border-top: 1px solid #21262d; color: #c9d1d9; }
     #cadnano-feature-log-container #feature-log-panel-body {
       padding: 0 8px 8px;
     }
@@ -1203,6 +1217,7 @@
       <div id="cadnano-tab-strip">
         <button class="cn-tab-btn active" data-tab="slice"       title="Slice view">Slice View</button>
         <button class="cn-tab-btn"        data-tab="feature-log" title="Feature Log (synced with main editor)">Feature Log</button>
+        <button class="cn-tab-btn"        data-tab="plates"      title="Plates and tubes — 96-well plate layout + IDT tube list">Plates &amp; tubes</button>
       </div>
 
       <!-- Sliceview -->
@@ -1227,6 +1242,15 @@
           </h2>
           <div id="feature-log-panel-body" style="margin-top:8px"></div>
         </div>
+      </div>
+
+      <!-- Plates and tubes — 96-well plate layout + IDT tube list -->
+      <div id="cadnano-plates-panel">
+        <div id="cn-plate-toolbar" style="border-bottom:1px solid #21262d;flex:0 0 auto"></div>
+        <div id="cn-plate-canvas-wrap">
+          <canvas id="cn-plate-canvas"></canvas>
+        </div>
+        <div id="cn-plate-tubes"></div>
       </div>
 
       <!-- Resize handle -->

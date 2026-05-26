@@ -486,6 +486,7 @@
     }
     #left-tab-toggle:disabled { opacity: 0.3; cursor: default; }
     #left-panel .tab-content[hidden] { display: none; }
+    #left-panel #tab-content-plates:not([hidden]) { display: flex; flex-direction: column; height: 100%; min-height: 0; }
     /* Feature log timeline — playhead and suppressed entries */
     .fl-playhead {
       display: flex; align-items: center; gap: 6px;
@@ -2895,6 +2896,13 @@
     </div>
   </div>
 
+  <!-- Context menu for right-click on empty 3D space (start a new bundle) -->
+  <div id="empty-space-ctx-menu" class="ctx-menu">
+    <div class="ctx-btns" style="flex-direction:column;gap:6px">
+      <button id="empty-extrude-btn" class="primary">Extrude</button>
+    </div>
+  </div>
+
   <!-- Context menu for slice-plane extrude (negative length = -axis direction) -->
   <div id="slice-ctx-menu" class="ctx-menu">
     <div class="ctx-header">Extrude <span class="ctx-count">0 helices</span></div>
@@ -3102,7 +3110,6 @@
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-names">Overhang Names<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-undefined-bases">Highlight Undefined Bases<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-joints">Joint Indicators<span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-seam-arrows" title="Glowing yellow arrows marking forced ligations that close a periodic-boundary polymerization seam">Seam Ligations<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-fluorescence">Fluorescence<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-fret">FRET Checker<span class="menu-toggle-pill"></span></button>
           <div class="dropdown-item" style="display:flex;align-items:center;gap:6px;padding:4px 12px">
@@ -4036,6 +4043,15 @@
 
         </div><!-- /#tab-content-photo -->
 
+        <!-- Plates and tubes — 96-well plate layout + IDT tube list -->
+        <div id="tab-content-plates" class="tab-content" hidden>
+          <div id="plate-toolbar" style="border-bottom:1px solid #21262d;flex:0 0 auto"></div>
+          <div id="plate-canvas-wrap" style="flex:1 1 auto;min-height:160px;position:relative;overflow:hidden">
+            <canvas id="plate-canvas" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+          </div>
+          <div id="plate-tubes" style="flex:0 0 auto;max-height:42%;overflow:auto;border-top:1px solid #21262d;background:#0d1117;color:#c9d1d9"></div>
+        </div><!-- /#tab-content-plates -->
+
       </div><!-- /#left-panel -->
 
       <!-- Vertical tab strip — always visible, even when #left-panel is collapsed.
@@ -4048,6 +4064,7 @@
         <button class="left-tab-btn"        data-tab="dynamics"     title="Dynamics">Dynamics</button>
         <button class="left-tab-btn"        data-tab="scene"        title="Animations — camera poses + animation playback">Animations</button>
         <button class="left-tab-btn"        data-tab="photo"        title="Photo mode — high-resolution export" id="photo-tab-btn" data-test="photo-tab-btn">Photo</button>
+        <button class="left-tab-btn"        data-tab="plates"       title="Plates and tubes — 96-well plate layout + IDT tube list">Plates &amp; tubes</button>
       </div>
 
       <!-- 3D viewport -->

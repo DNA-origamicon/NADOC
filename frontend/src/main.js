@@ -81,10 +81,11 @@ import { openFileBrowser }          from './ui/file_browser.js'
 import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
 import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
-import { initAssemblySeamArrows } from './scene/assembly_seam_arrows.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { makeRefVec, ringPlaneHit, angleInRing }     from './scene/assembly_revolute_math.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
+import { initPlateView }                           from './ui/plate_view.js'
+import { STAPLE_PALETTE as PLATE_STAPLE_PALETTE } from './scene/helix_renderer/palette.js'
 import { initJointsPanel }                          from './ui/joints_panel.js'
 import { initJointRenderer }                       from './scene/joint_renderer.js'
 import { initCameraPanel }                        from './ui/camera_panel.js'
@@ -712,6 +713,14 @@ async function main() {
       const { currentDesign } = store.getState()
       if (!currentDesign?.helices?.length) return
       openOverhangsManager(ovhgIds)
+    },
+    onEmptyContextMenu: (clientX, clientY) => {
+      // Right-click on empty 3D space → minimal "Extrude" menu. Suppressed
+      // while the workspace plane-picker / slice plane is already up (it owns
+      // its own interaction) and in assembly mode (separate context menu).
+      if (store.getState().assemblyActive) return
+      if (slicePlane.isVisible() || workspace.isVisible()) return
+      _showEmptySpaceMenu(clientX, clientY)
     },
     // Lazy getters — defined later in this init sequence.
     getUnfoldView:          () => unfoldView,
@@ -3739,6 +3748,72 @@ Typical debugging workflow for "reverts to 3D" bug:
   controls.target.set(6, 3, 0)
   controls.update()
 
+  // After (re)opening a saved part, decide what the user sees: a part that was
+  // created but never extruded (no helices), then saved + closed, reopens
+  // straight into the new-bundle plane-picker so the user can resume extruding —
+  // same UX as a brand-new part. A populated part just hides the workspace grid.
+  function _revealWorkspaceForEmptyPart() {
+    const d = store.getState().currentDesign
+    if (d && !store.getState().assemblyActive && (d.helices?.length ?? 0) === 0) {
+      workspace.show(d.lattice_type ?? 'HONEYCOMB')
+    } else {
+      workspace.hide()
+    }
+  }
+
+  // ── Empty-space context menu (start a new bundle / extrude) ─────────────────
+  // Right-clicking empty 3D space (no strand/bead/arc/overhang under the cursor)
+  // pops a minimal menu whose only item, "Extrude", launches the workspace
+  // plane-picker — the same flow as File > New Part.
+  const _emptyCtxMenu = document.getElementById('empty-space-ctx-menu')
+
+  function _hideEmptySpaceMenu() {
+    if (_emptyCtxMenu) _emptyCtxMenu.style.display = 'none'
+  }
+
+  function _showEmptySpaceMenu(x, y) {
+    if (!_emptyCtxMenu) return
+    _emptyCtxMenu.style.left    = `${x}px`
+    _emptyCtxMenu.style.top     = `${y}px`
+    _emptyCtxMenu.style.display = 'block'
+    const onOutside = (ev) => {
+      if (_emptyCtxMenu.contains(ev.target)) return
+      _teardown()
+    }
+    const onKey = (ev) => { if (ev.key === 'Escape') _teardown() }
+    function _teardown() {
+      _hideEmptySpaceMenu()
+      document.removeEventListener('pointerdown', onOutside, true)
+      document.removeEventListener('keydown', onKey, true)
+    }
+    document.addEventListener('pointerdown', onOutside, true)
+    document.addEventListener('keydown', onKey, true)
+  }
+
+  async function _startEmptySpaceExtrude() {
+    const { currentDesign, assemblyActive } = store.getState()
+    if (assemblyActive) return
+    const lattice = currentDesign?.lattice_type ?? 'HONEYCOMB'
+    // The new-bundle flow (POST /design/bundle) resets to an empty workspace
+    // before building, so completing it discards the current design. Guard
+    // against silently wiping a populated part.
+    if ((currentDesign?.helices?.length ?? 0) > 0) {
+      const ok = await showConfirm({
+        title: 'Start a new bundle?',
+        message: 'Extruding from empty space starts a fresh bundle and replaces the current part. Continue?',
+        confirmLabel: 'New bundle',
+        danger: true,
+      })
+      if (!ok) return
+    }
+    workspace.show(lattice)
+  }
+
+  document.getElementById('empty-extrude-btn')?.addEventListener('click', () => {
+    _hideEmptySpaceMenu()
+    _startEmptySpaceExtrude()
+  })
+
   // ── Welcome screen ────────────────────────────────────────────────────────────
   const _welcomeScreen = document.getElementById('welcome-screen')
 
@@ -3869,7 +3944,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         }
         _hideWelcome()
         _fileHandle = null
-        workspace.hide()
+        _revealWorkspaceForEmptyPart()
         api.addRecentFile(entry.name, entry.content, type)
         _renderRecentMenu()
         // Register in workspace so auto-save has a target
@@ -5875,11 +5950,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     _setMenuToggle('menu-view-sequences', !showSequences)
   })
 
-  document.getElementById('menu-view-seam-arrows')?.addEventListener('click', () => {
-    const on = store.getState().showSeamArrows !== false
-    store.setState({ showSeamArrows: !on })
-    _setMenuToggle('menu-view-seam-arrows', !on)
-  })
 
   document.getElementById('unfold-spacing-input')?.addEventListener('change', e => {
     const val = parseFloat(e.target.value)
@@ -5929,12 +5999,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (newState.showHelixLabels  !== prevState.showHelixLabels)  _setMenuToggle('menu-view-helix-labels', newState.showHelixLabels)
     if (newState.showSequences    !== prevState.showSequences)    _setMenuToggle('menu-view-sequences',    newState.showSequences)
     if (newState.staplesHidden    !== prevState.staplesHidden)    _setMenuToggle('menu-view-hide-staples', newState.staplesHidden)
-    if (newState.showSeamArrows   !== prevState.showSeamArrows)   {
-      const on = newState.showSeamArrows !== false
-      _setMenuToggle('menu-view-seam-arrows', on)
-      designRenderer.setSeamArrowsVisible(on)
-      assemblySeamArrows.setVisible(on)
-    }
     // When unfold auto-deactivates on cadnano exit, update the mode indicator
     // once the unfold animation finishes (cadnanoActive is already false by then).
     if (newState.unfoldActive !== prevState.unfoldActive && !newState.unfoldActive && !newState.cadnanoActive) {
@@ -6267,6 +6331,15 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!isDeformActive()) controls.enabled = true
   })
 
+  // Track whether the current pointer gesture STARTED on the 3D canvas, so the
+  // orbit relay below only fires for real canvas drags — not for clicks in side
+  // panels (e.g. the Plates & tubes well grid), which must not reach the 3D
+  // canvas's pointerup deselect (it would clear a selection the panel just made).
+  let _gestureStartedOnCanvas = false
+  document.addEventListener('pointerdown', e => {
+    _gestureStartedOnCanvas = canvas.contains(e.target)
+  }, { capture: true })
+
   // Orbit relay: when the left button is released OUTSIDE the canvas and the deform
   // tool is NOT active, forward a synthetic pointerup to the canvas so OrbitControls
   // can clean up its drag state. We skip this relay when deform is active because
@@ -6276,6 +6349,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (e.button !== 0) return
     if (isDeformActive()) return          // deform tool manages its own state
     if (canvas.contains(e.target)) return // already on canvas — no relay needed
+    if (!_gestureStartedOnCanvas) return  // gesture began off-canvas (a side panel) — don't relay
     canvas.dispatchEvent(new PointerEvent('pointerup', {
       pointerId:  e.pointerId,
       button:     0,
@@ -6903,8 +6977,22 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   // ── UI panels ───────────────────────────────────────────────────────────────
+  // True when a part is periodic (its design has an is_periodic_seam forced
+  // ligation). Inline sources embed the design on the instance; file-backed
+  // sources resolve through the renderer's cached source design.
+  function _instancePeriodic(inst) {
+    const embedded = inst?.source?.design?.forced_ligations
+    if (embedded) return embedded.some(fl => fl.is_periodic_seam)
+    return !!assemblyRenderer.getInstanceDesign?.(inst?.id)?.forced_ligations?.some(fl => fl.is_periodic_seam)
+  }
+
   initPropertiesPanel()
-  const polymerizePanel = initPolymerizePanel(store)
+  // Periodic parts surface inside the Polymerize Origami panel's Mate dropdown
+  // as "<part> — via periodic boundary" (unified with regular polymerize).
+  const polymerizePanel = initPolymerizePanel(store, {
+    isInstancePeriodic: (id) =>
+      !!assemblyRenderer.getInstanceDesign?.(id)?.forced_ligations?.some(fl => fl.is_periodic_seam),
+  })
   const spreadsheet = initSpreadsheet(store, {
     designRenderer,
     selectionManager,
@@ -7765,7 +7853,6 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   const instanceGizmo = initInstanceGizmo(store, controls)
   const assemblyJointRenderer = initAssemblyJointRenderer(scene, camera, canvas, store, api, controls)
-  const assemblySeamArrows = initAssemblySeamArrows(scene, store, api)
 
   // Sync blunt-end connectors into the assembly joint renderer when:
   //   • assembly mode is active AND toolFilters.bluntEnds is ON → pass blunt ends
@@ -7906,7 +7993,9 @@ Typical debugging workflow for "reverts to 3D" bug:
         showToast(`Duplicate failed: ${err?.message || 'unknown error'}`, { severity: 'error' })
       }
     },
-    onPolymerize: () => polymerizePanel.open(),
+    onPolymerize: (inst) => polymerizePanel.open(
+      _instancePeriodic(inst) ? { periodicInstanceId: inst.id } : {},
+    ),
     onDelete: async (inst) => {
       if (inst.id === store.getState().activeInstanceId) {
         store.setState({ activeInstanceId: null })
@@ -8587,7 +8676,6 @@ Typical debugging workflow for "reverts to 3D" bug:
         await assemblyRenderer.rebuild(assembly)
         assemblyRenderer.rebuildLinkers(assembly)
         assemblyJointRenderer.rebuild(assembly)
-        assemblySeamArrows.rebuild(assembly)
         _syncAssemblyBluntEnds()
       }
       document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
@@ -8770,7 +8858,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         _setFileName(name ?? path)
         _setWorkspacePath(path)
         _hideWelcome()
-        workspace.hide()
+        _revealWorkspaceForEmptyPart()
         _fitToView()
         await _flShowSuccess('Part loaded successfully')
       } else {
@@ -9051,6 +9139,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   let _restartHandling = false
 
   async function _recoverAfterRestart(health) {
+    // The backend's per-session revision resets low after a restart; clear the
+    // stale-response watermark so the re-pulled design isn't dropped as "older".
+    api.resetRevisionWatermark?.()
     const assemblyMode = store.getState().assemblyActive
     if (assemblyMode) {
       // Assemblies are recovered server-side (session-cache). Re-pull + rebuild.
@@ -9123,6 +9214,17 @@ Typical debugging workflow for "reverts to 3D" bug:
   let _savingAssembly   = false
   let _reloadingFromSSE = false
   const _selfSavedPaths = new Set()
+  // Timestamp of the last same-document activity (a sibling tab — e.g. the
+  // cadnano editor — broadcasting design-changed for OUR doc). While a sibling
+  // is live-editing this doc, an incoming file-changed for our open design is a
+  // self/sibling autosave echo, NOT an external edit — so we must NOT reload it
+  // into the backend (that reloads a STALE autosave snapshot and clobbers the
+  // in-progress edits, bumping the revision so the stale guard can't catch it).
+  // design-changed reliably precedes the autosave's SSE (both serialize on the
+  // editor's main thread, broadcast first), so this window is robust even when
+  // a heavy 2D re-render delays the file-saved broadcast.
+  let _lastSameDocActivityMs = 0
+  const _RELOAD_SUPPRESS_MS = 10000
   let _designSaveTimer  = null
   let _assemblySaveTimer = null
   let _partSaveTimer = null
@@ -9146,6 +9248,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (!path) return
       _syncLog('info', 'SAVE', `design → ${path}`)
       _selfSavedPaths.add(path)
+      nadocBroadcast.emit('file-saved', { path })   // tell sibling tabs to skip the SSE reload echo
       try {
         await api.saveDesignToWorkspace(path)
         _setSyncStatus('green', 'saved')
@@ -9220,7 +9323,16 @@ Typical debugging workflow for "reverts to 3D" bug:
           })
       }
     } else if (file_type === 'part' && !store.getState().assemblyActive && _workspacePath === path) {
-      // Design tab: reload if this is the file we have open
+      // Design tab: this is the file we have open. If a sibling tab is live-editing
+      // the SAME backend document (recent design-changed), this file-changed is a
+      // self/sibling autosave echo — reloading it would push a STALE snapshot into
+      // the backend and clobber the in-progress edits. Same-doc sync already
+      // happens via the design-changed broadcast, so skip the reload.
+      if (Date.now() - _lastSameDocActivityMs < _RELOAD_SUPPRESS_MS) {
+        _syncLog('info', 'SSE', `skipped reload of ${path} (live same-doc editing)`)
+        return
+      }
+      // Otherwise treat as a genuine external edit and reload.
       _syncLog('info', 'SSE', `reloading design from ${path}`)
       _setSyncStatus('yellow', 'syncing…')
       _reloadingFromSSE = true
@@ -9245,7 +9357,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     assemblyRenderer.rebuildLinkers(assembly)
     _syncAssemblyBluntEnds()
     assemblyJointRenderer.rebuild(assembly)
-    assemblySeamArrows.rebuild(assembly)
     try {
       const r = await api.getInstanceDesign(instanceId)
       if (r?.design) clusterPanel?.syncInstanceDesign(instanceId, r.design)
@@ -9427,7 +9538,6 @@ Typical debugging workflow for "reverts to 3D" bug:
         settle?.reject(err)
       })
     assemblyJointRenderer.rebuild(assembly)
-    assemblySeamArrows.rebuild(assembly)
   }
 
   // Drive assembly panel + assembly renderer from the assembly slice
@@ -9477,7 +9587,6 @@ Typical debugging workflow for "reverts to 3D" bug:
         _assemblyPendingPartJoints.clear()
         assemblyRenderer.dispose()
         assemblyJointRenderer.rebuild(null)   // clear all joint indicators
-        assemblySeamArrows.rebuild(null)      // clear seam arrows too
         canvas.removeEventListener('pointerdown',  _onAssemblyPointerDown)
         canvas.removeEventListener('click',        _onAssemblyClick)
         canvas.removeEventListener('pointermove',  _onAssemblyHoverMove)
@@ -9547,7 +9656,6 @@ Typical debugging workflow for "reverts to 3D" bug:
             assemblyRenderer.setLiveTransform(inst.id, _matrixFromInstance(inst))
           }
           assemblyJointRenderer.rebuild(newState.currentAssembly)
-          assemblySeamArrows.rebuild(newState.currentAssembly)
           if (newState.activeInstanceId) {
             assemblyRenderer.setActiveInstance(newState.activeInstanceId)
             const depths = computeFixedDepths(newState.currentAssembly)
@@ -10645,7 +10753,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   // sidebar restores its prior state across reloads.
   let _leftSidebar = null
   {
-    const TABS = ['feature-log', 'dynamics', 'scene', 'photo']
+    const TABS = ['feature-log', 'dynamics', 'scene', 'photo', 'plates']
     const STORAGE_KEY = 'nadoc.leftSidebar.v1'
     const leftPanel = document.getElementById('left-panel')
     const tabStrip  = document.getElementById('left-tab-strip')
@@ -10762,6 +10870,155 @@ Typical debugging workflow for "reverts to 3D" bug:
         refresh: _render,
       }
       window.__leftSidebar = _leftSidebar
+    }
+  }
+
+  // ── Plates and tubes tab (96-well plate layout + IDT tube list) ──────────────
+  {
+    const canvasEl  = document.getElementById('plate-canvas')
+    const wrapEl    = document.getElementById('plate-canvas-wrap')
+    const toolbarEl = document.getElementById('plate-toolbar')
+    const tubesEl   = document.getElementById('plate-tubes')
+    const paneEl    = document.getElementById('tab-content-plates')
+    if (canvasEl && wrapEl && paneEl) {
+      const MOD_NAMES = {
+        cy3: 'Cy3', cy5: 'Cy5', fam: 'FAM', tamra: 'TAMRA', bhq1: 'BHQ-1',
+        bhq2: 'BHQ-2', atto488: 'ATTO488', atto550: 'ATTO550', biotin: 'Biotin',
+      }
+      const _hexFromInt = n => '#' + ((n >>> 0) & 0xffffff).toString(16).padStart(6, '0')
+
+      // Strand length in nt (domain bp + loop/skip deltas) — mirrors the cadnano
+      // spreadsheet's strandLength().
+      function _strandLen(strand, helixById) {
+        return (strand.domains ?? []).reduce((sum, d) => {
+          const h = helixById[d.helix_id]
+          const lo = Math.min(d.start_bp, d.end_bp), hi = Math.max(d.start_bp, d.end_bp)
+          const skip = (h?.loop_skips ?? [])
+            .filter(ls => ls.bp_index >= lo && ls.bp_index <= hi)
+            .reduce((s, ls) => s + ls.delta, 0)
+          return sum + (Math.abs(d.end_bp - d.start_bp) + 1) + skip
+        }, 0)
+      }
+
+      const plateView = initPlateView(canvasEl, {
+        wrapEl,
+        toolbarEl,
+        getTubesContainer: () => tubesEl,
+        enableGroupMode: true,
+        onSaveLayout: (layout) => { api.savePlateLayout(layout) },
+        onStrandClick: (sid) => {
+          // Select the strand: glows it in the 3D scene AND sets selectedObject,
+          // which the spreadsheet highlights + autoscrolls to. Empty well clears.
+          if (sid) selectionManager.selectStrand(sid)
+          else store.setState({ selectedObject: null })
+        },
+      })
+
+      // Build the normalized staple list from the current design + store colors.
+      function _buildRecords() {
+        const { currentDesign, currentGeometry, strandColors, strandGroups } = store.getState()
+        const design = currentDesign
+        if (!design) return { records: [], saved: null }
+        const helixById = Object.fromEntries((design.helices ?? []).map(h => [h.id, h]))
+
+        // Effective per-strand colors (hex ints): strandColors + group overrides.
+        const eff = { ...(strandColors ?? {}) }
+        for (const g of strandGroups ?? []) {
+          if (g.color) {
+            const hex = parseInt(g.color.replace('#', ''), 16)
+            for (const sid of g.strandIds) eff[sid] = hex
+          }
+        }
+        // Palette map = the SAME per-strand palette the 3D scene paints (staples
+        // with no explicit colour). Compute it directly from geometry so it never
+        // depends on the renderer being in a built state; fall back to the live
+        // controller map, then to the index-based palette (matches the scene's
+        // STAPLE_PALETTE[strand_index] formula).
+        const strandIdxOf = new Map((design.strands ?? []).map((s, i) => [s.id, i]))
+        const paletteMap = (currentGeometry && currentGeometry.length)
+          ? buildStapleColorMap(currentGeometry, design)
+          : (designRenderer.getHelixCtrl()?.getPaletteColors() ?? new Map())
+
+        // group order (array index = display order) + group id
+        const groupOf = new Map()
+        ;(strandGroups ?? []).forEach((g, i) => {
+          for (const sid of g.strandIds) if (!groupOf.has(sid)) groupOf.set(sid, { order: i, id: g.id })
+        })
+
+        // first modification per strand
+        const modOf = new Map()
+        for (const e of design.extensions ?? []) {
+          if (e.modification && !modOf.has(e.strand_id)) modOf.set(e.strand_id, e.modification)
+        }
+
+        const records = []
+        let stapleIdx = 0
+        for (const s of design.strands ?? []) {
+          if (s.strand_type !== 'staple' || s.is_reference) continue
+          stapleIdx += 1
+          // Resolve exactly as the scene's nucColor: override (strandColors +
+          // groups) wins, else the palette slot. Never falls back to a flat grey
+          // — every staple gets its scene colour.
+          let color
+          if (s.id in eff) {
+            color = _hexFromInt(eff[s.id])
+          } else {
+            const pm = paletteMap.get(s.id)
+            color = (pm != null)
+              ? _hexFromInt(pm)
+              : _hexFromInt(PLATE_STAPLE_PALETTE[(strandIdxOf.get(s.id) ?? 0) % PLATE_STAPLE_PALETTE.length])
+          }
+          const grp = groupOf.get(s.id)
+          const mod = modOf.get(s.id) || null
+          records.push({
+            strandId:   s.id,
+            color,
+            lengthNt:   _strandLen(s, helixById),
+            groupId:    grp?.id ?? null,
+            groupOrder: grp ? grp.order : Infinity,
+            hasMod:     !!mod,
+            modName:    mod ? (MOD_NAMES[mod] || mod) : null,
+            sequence:   s.sequence || '',
+            name:       `S${stapleIdx}`,
+          })
+        }
+        return { records, saved: design.plate_layout ?? null }
+      }
+
+      // Refresh only when the inputs that affect the plate change — NOT when only
+      // plate_layout changes (our own saves), which would reset the view.
+      let _lastSig = null
+      function _inputsSig(design, strandColors, strandGroups) {
+        if (!design) return 'null'
+        const strands = (design.strands ?? [])
+          .filter(s => s.strand_type === 'staple' && !s.is_reference)
+          .map(s => `${s.id}:${s.color || ''}:${s.domains?.length ?? 0}`)
+        const exts = (design.extensions ?? []).map(e => `${e.strand_id}:${e.modification || ''}`)
+        return JSON.stringify([design.id, strands, exts,
+          strandGroups, Object.entries(strandColors ?? {})])
+      }
+      function _refresh() {
+        const { records, saved } = _buildRecords()
+        plateView.setData(records, saved)
+      }
+
+      // Refresh + re-fit the plates whenever the tab becomes visible.
+      const _vis = new MutationObserver(() => {
+        if (paneEl.hasAttribute('hidden')) return
+        _lastSig = _inputsSig(...(() => { const s = store.getState(); return [s.currentDesign, s.strandColors, s.strandGroups] })())
+        _refresh()
+        plateView.resetView()
+      })
+      _vis.observe(paneEl, { attributes: true, attributeFilter: ['hidden'] })
+
+      // Refresh on relevant design/color/group changes while the pane is visible.
+      store.subscribe((s) => {
+        if (paneEl.hasAttribute('hidden')) return
+        const sig = _inputsSig(s.currentDesign, s.strandColors, s.strandGroups)
+        if (sig === _lastSig) return
+        _lastSig = sig
+        _refresh()
+      })
     }
   }
 
@@ -13813,6 +14070,16 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   nadocBroadcast.onMessage(async (data) => {
     const { type, strandIds, source, windowName, designName, instanceId, designId, docName, docAssembly } = data
+    if (type === 'file-saved' && data.path) {
+      // A sibling tab (e.g. the cadnano editor) just autosaved this file. Treat
+      // it like our own save so the SSE file-changed echo is skipped — otherwise
+      // we'd reload the sibling's autosave (a stale snapshot) back into the
+      // shared backend doc and clobber in-progress edits. 5s window covers SSE
+      // latency; matches the self-save expiry.
+      _selfSavedPaths.add(data.path)
+      setTimeout(() => _selfSavedPaths.delete(data.path), 5000)
+      return
+    }
     if (type === 'doc-presence-request') {
       _announceDocPresence()
     }
@@ -13829,6 +14096,9 @@ Typical debugging workflow for "reverts to 3D" bug:
       // Doc-scoped: only react to mutations in OUR document. A different tab
       // editing a different document must not make us refetch (multi-document).
       if (!nadocBroadcast.isSameDoc(data)) return
+      // Mark live same-doc editing so a following file-changed SSE (a sibling's
+      // autosave echo) doesn't reload a stale file over the live edits.
+      _lastSameDocActivityMs = Date.now()
       // Assembly windows ignore design-changed: their currentDesign is unused
       // while assemblyActive=true, and pulling it in can re-enter the auto-save /
       // overlay-rebuild chain with stale data. Part-edit / cadnano tabs still

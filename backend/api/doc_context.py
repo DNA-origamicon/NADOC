@@ -41,6 +41,27 @@ _skip_geometry: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "nadoc_skip_geometry", default=False,
 )
 
+# Revision assigned to the mutation handled by the CURRENT request, set under the
+# state lock by state._bump_revision. _design_response stamps it on the response
+# so the client can drop out-of-order/stale design responses (rapid-edit race).
+# Reset to None per request by the middleware (below) so a read-only request never
+# inherits a prior request's revision — must live HERE (not in state.py) so the
+# middleware can reset it in the same context chain as the doc id.
+_request_revision: contextvars.ContextVar = contextvars.ContextVar(
+    "nadoc_request_revision", default=None,
+)
+
+
+def current_request_revision():
+    """Revision assigned to the mutation in the current request, or None for a
+    read-only request (no mutation happened)."""
+    return _request_revision.get()
+
+
+def set_request_revision(value: int) -> None:
+    """Record the revision assigned to the current request's mutation."""
+    _request_revision.set(value)
+
 # Header / query names the frontend uses to name its document.
 DOC_HEADER = "x-nadoc-doc"
 DOC_QUERY = "doc"
@@ -105,9 +126,13 @@ class DocContextMiddleware:
         if scope["type"] in ("http", "websocket"):
             doc_token = _current_doc.set(_extract_doc_id(scope))
             geo_token = _skip_geometry.set(_extract_skip_geometry(scope))
+            # Start each request with no recorded revision so a read-only request
+            # never inherits a prior (mutating) request's value.
+            rev_token = _request_revision.set(None)
             try:
                 await self.app(scope, receive, send)
             finally:
+                _request_revision.reset(rev_token)
                 _skip_geometry.reset(geo_token)
                 _current_doc.reset(doc_token)
         else:
