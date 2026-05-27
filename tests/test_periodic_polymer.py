@@ -246,6 +246,49 @@ def test_periodic_feature_log_and_undo():
     assert len(v1_instances(u)) == 1   # chain removed
 
 
+def test_patch_instance_design_auto_resolves_periodic_chain():
+    """The part-editor save path (PATCH /assembly/instances/{id}/design) must
+    auto-resolve so a polymerized chain re-docks to the edited part — without the
+    user clicking Resolve. Regression for `workspace/Spiral.nass`: editing teeth
+    via the part editor left the 4 copies frozen at the pre-edit pose.
+    """
+    from backend.api.assembly import _WORKSPACE_DIR
+    from backend.core.models import (
+        Assembly, BendParams, DeformationOp, Mat4x4, PartInstance, PartSourceFile,
+    )
+
+    _WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+    part_path = _WORKSPACE_DIR / "_test_periodic_patch.nadoc"
+    try:
+        d = _periodic_bundle_design(42)
+        part_path.write_text(d.to_json(), encoding="utf-8")
+        client.post("/api/assembly")
+        seed = PartInstance(id="seed", name="Ring",
+                            source=PartSourceFile(path=part_path.name), transform=Mat4x4())
+        assembly_state.set_assembly(Assembly(instances=[seed], joints=[]))
+        client.post("/api/assembly/polymerize-periodic", json={
+            "instance_id": "seed", "count": 4, "direction": "forward"})
+        asm0 = assembly_state.get_or_404()
+        base_T = {i.id: np.array(i.transform.to_array()) for i in asm0.instances}
+
+        # Edit the part (add a bend) and save via the part-editor path. The bend
+        # moves the seam cross-sections, so the chain must re-dock.
+        bent = d.model_copy(update={"deformations": [
+            DeformationOp(type="bend", plane_a_bp=0, plane_b_bp=41,
+                          affected_helix_ids=[],
+                          params=BendParams(angle_deg=45.0, direction_deg=0.0))]}, deep=True)
+        r = client.patch("/api/assembly/instances/seed/design", json={"content": bent.to_json()})
+        assert r.status_code == 200, r.text
+
+        done = assembly_state.get_or_404()
+        new_T = {i.id: np.array(i.transform.to_array()) for i in done.instances}
+        moved = max(float(np.linalg.norm(new_T[k] - base_T[k])) for k in new_T)
+        assert moved > 1.0, f"chain did not re-dock after part-design patch (max move {moved:.3f} nm)"
+    finally:
+        if part_path.exists():
+            part_path.unlink()
+
+
 def test_periodic_resolve_is_stable_noop():
     """resolve after polymerize keeps the chain (snap is a no-op by construction)."""
     _seed_periodic_assembly()
@@ -255,3 +298,56 @@ def test_periodic_resolve_is_stable_noop():
     r = client.post("/api/assembly/resolve")
     assert r.status_code == 200, r.text
     assert len(v1_instances(r)) == 4
+
+
+def test_periodic_chain_re_docks_after_part_geometry_change():
+    """A feature change to the periodic part (here: a bend) moves its seam
+    cross-sections, and resolve must RE-DOCK the whole chain to the new geometry.
+
+    Regression for the frozen-chain bug: the synthesized ``seam0:*`` connectors
+    used to resolve from a STATIC position baked at polymerize time, so geometry
+    edits never reached the chain. They now resolve live (like ``blunt:`` ends).
+    """
+    from backend.core.models import BendParams, DeformationOp, PartSourceInline
+
+    _seed_periodic_assembly(L=42)
+    client.post("/api/assembly/polymerize-periodic", json={
+        "instance_id": "seed", "count": 4, "direction": "forward",
+    })
+    client.post("/api/assembly/resolve")
+    asm0 = assembly_state.get_or_404()
+    base_T = {i.id: np.array(i.transform.to_array()) for i in asm0.instances}
+
+    # Add a bend to the shared part design on every instance (mimics editing the
+    # part's feature log), then re-resolve.
+    base_design = next(i.source.design for i in asm0.instances)
+    max_bp = max(h.bp_start + h.length_bp for h in base_design.helices) - 1
+    bent = base_design.model_copy(update={
+        "deformations": list(base_design.deformations) + [
+            DeformationOp(type="bend", plane_a_bp=0, plane_b_bp=max_bp,
+                          affected_helix_ids=[],
+                          params=BendParams(angle_deg=45.0, direction_deg=0.0))],
+    }, deep=True)
+    new_src = PartSourceInline(design=bent)
+    asm1 = asm0.model_copy(update={
+        "instances": [i.model_copy(update={"source": new_src}) for i in asm0.instances]})
+    assembly_state.set_assembly(asm1)
+
+    r = client.post("/api/assembly/resolve")
+    assert r.status_code == 200, r.text
+    asm_done = assembly_state.get_or_404()
+    new_T = {i.id: np.array(i.transform.to_array()) for i in asm_done.instances}
+
+    # 1) The chain re-docked — clones moved to follow the new seam geometry.
+    moved = max(float(np.linalg.norm(new_T[k] - base_T[k])) for k in new_T)
+    assert moved > 1.0, f"chain did not re-dock after geometry change (max move {moved:.3f} nm)"
+
+    # 2) Consecutive seam connectors still coincide — under the NEW live geometry.
+    from backend.api.assembly import _get_connector_world
+    insts = {i.id: i for i in asm_done.instances}
+    rigid = [j for j in asm_done.joints if j.joint_type == "rigid"]
+    assert rigid
+    for j in rigid:
+        a3 = _get_connector_world(insts[j.instance_a_id], "seam0:3p", bent)
+        b5 = _get_connector_world(insts[j.instance_b_id], "seam0:5p", bent)
+        np.testing.assert_allclose(a3, b5, atol=0.1)

@@ -1205,6 +1205,41 @@ def test_cluster_transforms_signature_detects_changes():
     assert _cluster_transforms_signature(empty) == ()
 
 
+def test_part_geometry_signature_detects_deformation_changes():
+    """The seek auto-resolve gate must fire on deformation edits, not just
+    cluster moves — a bend/twist moves connectors (incl. periodic seams), so the
+    assembly has to re-resolve. Regression: the old gate watched only
+    cluster_transforms and skipped deformation-only changes.
+    """
+    from backend.api.assembly import _part_geometry_signature
+    from backend.core.models import BendParams, DeformationOp, TwistParams
+
+    base = Design()
+    twisted = base.model_copy(update={"deformations": [
+        DeformationOp(type="twist", plane_a_bp=0, plane_b_bp=40,
+                      affected_helix_ids=[], params=TwistParams(total_degrees=45.0))]})
+    # A deformation appearing changes the signature (old gate would miss this).
+    assert _part_geometry_signature(base) != _part_geometry_signature(twisted)
+
+    # Editing the deformation's value changes it again.
+    edited = base.model_copy(update={"deformations": [
+        DeformationOp(type="twist", plane_a_bp=0, plane_b_bp=40,
+                      affected_helix_ids=[], params=TwistParams(total_degrees=90.0))]})
+    assert _part_geometry_signature(twisted) != _part_geometry_signature(edited)
+
+    # A different op type also differs.
+    bent = base.model_copy(update={"deformations": [
+        DeformationOp(type="bend", plane_a_bp=0, plane_b_bp=40,
+                      affected_helix_ids=[], params=BendParams(angle_deg=30.0, direction_deg=0.0))]})
+    assert _part_geometry_signature(bent) != _part_geometry_signature(twisted)
+
+    # Identical designs hash equal (no spurious resolves).
+    assert _part_geometry_signature(twisted) == _part_geometry_signature(
+        base.model_copy(update={"deformations": [
+            DeformationOp(id=twisted.deformations[0].id, type="twist", plane_a_bp=0, plane_b_bp=40,
+                          affected_helix_ids=[], params=TwistParams(total_degrees=45.0))]}))
+
+
 def test_seek_instance_features_no_cluster_change_skips_auto_resolve():
     """Seeking to a position whose feature-log replay leaves
     ``cluster_transforms`` unchanged must NOT fire auto-resolve. Keeps

@@ -168,7 +168,8 @@ export function initBendTwistPopup(callbacks) {
  * @param {string[] | null} [initialClusterIds] - cluster scope to preselect.
  *        When null, uses the editor's default (active cluster, single cluster, or none).
  */
-export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClusterIds = null) {
+export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClusterIds = null,
+                          skipInitialPreview = false) {
   if (!_popup) return
   _toolType = toolType
 
@@ -224,7 +225,10 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
 
   _previewChk.checked = true
   _popup.style.display = 'block'
-  _firePreview()
+  // In edit mode the op is already applied to the design, so an initial preview
+  // would just re-compute identical geometry (a wasted round-trip). Preview fires
+  // on the first slider change instead.
+  if (!skipInitialPreview) _firePreview()
 }
 
 /**

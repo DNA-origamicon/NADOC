@@ -3108,6 +3108,7 @@
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-hide-staples">Hide Staples<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-reference" title="Show inactive reference geometry (translucent backdrop strands you design against)">Reference Geometry<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-overhang-names">Overhang Names<span class="menu-toggle-pill"></span></button>
+          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-periodic-seam-arcs" title="Show the long crossover arcs that connect strands end-to-end across a periodic boundary (hidden by default)">End-to-End Crossovers<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-undefined-bases">Highlight Undefined Bases<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-joints">Joint Indicators<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-fluorescence">Fluorescence<span class="menu-toggle-pill"></span></button>
@@ -3156,6 +3157,11 @@
               <button class="dropdown-item" id="menu-debug-mrdna-roundtrip">MrDNA Round-Trip Test…</button>
               <button class="dropdown-item" id="menu-debug-lod-hud">Show LOD HUD</button>
               <button class="dropdown-item" id="menu-debug-hull-cluster">Show Hull Cluster Debug</button>
+              <button class="dropdown-item dropdown-item--toggleable" id="menu-debug-wireframe">Wireframe<span class="menu-toggle-pill"></span></button>
+              <button class="dropdown-item dropdown-item--toggleable" id="menu-debug-doubleside">Force Double-Side<span class="menu-toggle-pill"></span></button>
+              <button class="dropdown-item dropdown-item--toggleable" id="menu-debug-opaque">Force Opaque<span class="menu-toggle-pill"></span></button>
+              <button class="dropdown-item dropdown-item--toggleable" id="menu-debug-inspect">Inspect Mesh (click)<span class="menu-toggle-pill"></span></button>
+              <button class="dropdown-item" id="menu-debug-copy-camera">Copy Camera</button>
             </div>
           </div>
         </div>
@@ -4490,6 +4496,11 @@
               <label>X-section margin (bp)</label>
               <span class="val" id="sv-hull-margin">8</span>
               <input type="range" id="sl-hull-margin" min="1" max="48" step="1" value="8">
+            </div>
+            <div class="slider-row" id="repr-hull-curve-row" style="display:none">
+              <label>Curve detail (nm)</label>
+              <span class="val" id="sv-hull-curve">1.0</span>
+              <input type="range" id="sl-hull-curve" min="0.25" max="5" step="0.25" value="1.0">
             </div>
             <div class="slider-row" id="repr-atom-radius-row" style="display:none">
               <label>Atom radius scale</label>

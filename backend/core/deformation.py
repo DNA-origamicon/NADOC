@@ -275,6 +275,136 @@ def _resolve_twist_rad(params: TwistParams, p1: int, p2: int) -> float:
     return 0.0
 
 
+# ── Sub-interval screw integration (bend + twist composition) ───────────────────
+#
+# The frame (spine, R, tangent) is propagated over MAXIMAL sub-intervals of the bp
+# axis on which the SET of active ops is constant. On each such sub-interval the
+# combined angular velocity ω (world frame, rad/bp) is constant:
+#
+#     ω = Σ (twist rate)·tangent  +  Σ (bend rate)·binormal
+#
+# so the motion is a steady screw: R(s) = exp(skew(ω)·s)·R_start and the spine
+# integrates the rotating tangent. This composes OVERLAPPING bend+twist ops into a
+# superhelix (the bend direction precesses with the twist) instead of the old
+# single-cursor walk, which silently dropped all but one op when ranges overlapped.
+# For a sub-interval with a single op it reduces EXACTLY to the legacy constant-
+# curvature arc (bend) or pure axial spin (twist), so single-op geometry is
+# unchanged. The per-op axis derivation below mirrors the legacy code verbatim, so
+# direction_deg / degenerate-direction handling is identical.
+
+
+def _subinterval_walk(relevant_ops, arm_bp_start: int, upper: int):
+    """Yield (b0, b1, active) over maximal constant-active-set sub-intervals.
+
+    Spans [start_bp, upper] where start_bp = min(0, smallest local plane_a), so an
+    op whose window begins before the arm's first bp is still integrated from its
+    true plane_a (matches the legacy precompute back-step semantics). Each ``active``
+    entry is (op, seg_len_bp). An op is active on [b0, b1) iff its arm-local span
+    [a, b] covers it (a ≤ b0 and b1 ≤ b)."""
+    locals_ = []
+    for op in relevant_ops:
+        a = op.plane_a_bp - arm_bp_start
+        b = op.plane_b_bp - arm_bp_start
+        if b - a <= 0:
+            continue
+        locals_.append((op, a, b, b - a))
+    if not locals_:
+        yield 0, upper, []
+        return
+    start_bp = min(0, min(a for _, a, _, _ in locals_))
+    edges = {start_bp, upper}
+    for _, a, b, _ in locals_:
+        if start_bp <= a <= upper:
+            edges.add(a)
+        if start_bp <= b <= upper:
+            edges.add(b)
+    pts = sorted(edges)
+    for b0, b1 in zip(pts, pts[1:]):
+        if b1 <= b0:
+            continue
+        active = [(op, seg) for (op, a, b, seg) in locals_ if a <= b0 and b1 <= b]
+        yield b0, b1, active
+
+
+def _omega_world_for(active, R: np.ndarray, tangent: np.ndarray) -> np.ndarray:
+    """Combined world-frame angular velocity (rad/bp) of the active ops at frame
+    (R, tangent). Twist rotates about the current tangent; bend about the binormal
+    of its (R-rotated, ⊥tangent) world direction — identical to the legacy per-op
+    axis math, so the bend co-rotates with any accumulated twist."""
+    omega = np.zeros(3)
+    for op, seg_len in active:
+        if isinstance(op.params, TwistParams):
+            total_rad = _resolve_twist_rad(op.params, op.plane_a_bp, op.plane_b_bp)
+            omega = omega + (total_rad / seg_len) * tangent
+        elif isinstance(op.params, BendParams):
+            angle_rad = math.radians(op.params.angle_deg)
+            if abs(angle_rad) < 1e-9:
+                continue
+            phi = math.radians(op.params.direction_deg)
+            local_dir = np.array([math.cos(phi), math.sin(phi), 0.0])
+            world_dir = R @ local_dir
+            world_dir = world_dir - np.dot(world_dir, tangent) * tangent
+            wd = np.linalg.norm(world_dir)
+            if wd < 1e-9:
+                continue
+            world_dir /= wd
+            binormal = np.cross(tangent, world_dir)
+            bn = np.linalg.norm(binormal)
+            if bn < 1e-9:
+                continue
+            binormal /= bn
+            omega = omega + (angle_rad / seg_len) * binormal
+    return omega
+
+
+def _advance_frame(spine, R, tangent, omega, s):
+    """Advance (spine, R, tangent) by ``s`` bp under constant world angular
+    velocity ``omega`` (rad/bp). Returns (spine_new, R_new, tangent_new)."""
+    w = float(np.linalg.norm(omega))
+    if w < 1e-12 or s == 0:
+        return spine + tangent * (s * BDNA_RISE_PER_BP), R, tangent
+    ang = w * s
+    Rrot = _rot_around_axis(omega / w, ang)
+    R_new = Rrot @ R
+    tangent_new = Rrot @ tangent
+    tn = np.linalg.norm(tangent_new)
+    if tn > 1e-12:
+        tangent_new = tangent_new / tn
+    # Spine = spine + RISE · ∫₀ˢ exp(skew(ω)u)·tangent du  (closed form via Rodrigues).
+    wxt = np.cross(omega, tangent)
+    wxwxt = np.cross(omega, wxt)
+    c1 = (1.0 - math.cos(ang)) / (w * w)
+    c2 = (s - math.sin(ang) / w) / (w * w)
+    dspine = s * tangent + c1 * wxt + c2 * wxwxt
+    return spine + BDNA_RISE_PER_BP * dspine, R_new, tangent_new
+
+
+def _fill_subinterval(spines_out, Rs_out, tans_out, idxs, steps,
+                      spine, R, tangent, omega) -> None:
+    """Vectorised fill of array indices ``idxs`` (each at distance ``steps`` bp from
+    the sub-interval start frame) under constant world angular velocity ``omega``."""
+    w = float(np.linalg.norm(omega))
+    if w < 1e-12:
+        spines_out[idxs] = spine + tangent * steps[:, None] * BDNA_RISE_PER_BP
+        Rs_out[idxs] = R
+        tans_out[idxs] = tangent
+        return
+    angs = w * steps
+    Rrots = _rot_around_axis_batched(omega / w, angs)   # (K, 3, 3)
+    Rs_out[idxs] = Rrots @ R
+    t_rot = Rrots @ tangent                             # (K, 3)
+    norms = np.linalg.norm(t_rot, axis=1, keepdims=True)
+    tans_out[idxs] = t_rot / np.where(norms > 1e-12, norms, 1.0)
+    wxt = np.cross(omega, tangent)
+    wxwxt = np.cross(omega, wxt)
+    c1 = (1.0 - np.cos(angs)) / (w * w)
+    c2 = (steps - np.sin(angs) / w) / (w * w)
+    dspine = (steps[:, None] * tangent
+              + c1[:, None] * wxt
+              + c2[:, None] * wxwxt)
+    spines_out[idxs] = spine + BDNA_RISE_PER_BP * dspine
+
+
 # ── Core frame propagation ────────────────────────────────────────────────────
 
 
@@ -318,90 +448,21 @@ def _frame_at_bp(
         if not op.affected_helix_ids or bool(arm_ids & set(op.affected_helix_ids))
     ]
 
-    spine   = centroid_0.copy()
     tangent = tangent_0.copy()
     R       = np.eye(3)
-    current_bp = 0
 
-    ops = sorted(relevant_ops, key=lambda op: op.plane_a_bp)
+    # Walk maximal constant-active-set sub-intervals up to target_bp, integrating
+    # the combined screw motion on each. Overlapping bend+twist compose into a
+    # superhelix; single-op intervals reduce exactly to the legacy arc / axial spin.
+    walk = list(_subinterval_walk(relevant_ops, arm_bp_start, target_bp))
+    start_bp = walk[0][0] if walk else 0
+    # centroid_0 anchors the spine at arm-local 0; back-extrapolate (straight) when
+    # an op begins before the arm's first bp (start_bp < 0).
+    spine = centroid_0 + tangent * (start_bp * BDNA_RISE_PER_BP)
 
-    for op in ops:
-        # Convert stored global plane indices to arm-local.
-        local_a = op.plane_a_bp - arm_bp_start
-        local_b = op.plane_b_bp - arm_bp_start
-
-        if target_bp <= local_a:
-            break
-
-        # Advance straight to local_a
-        if current_bp < local_a:
-            spine = spine + tangent * (local_a - current_bp) * BDNA_RISE_PER_BP
-            current_bp = local_a
-
-        seg_len = local_b - local_a   # equals op.plane_b_bp − op.plane_a_bp
-        if seg_len <= 0:
-            continue
-
-        arc_bp = min(target_bp, local_b) - local_a
-
-        if isinstance(op.params, TwistParams):
-            total_rad = _resolve_twist_rad(op.params, op.plane_a_bp, op.plane_b_bp)
-            spine = spine + tangent * arc_bp * BDNA_RISE_PER_BP
-            alpha = total_rad * arc_bp / seg_len
-            if abs(alpha) > 1e-12:
-                R_twist = _rot_around_axis(tangent, alpha)
-                R       = R_twist @ R
-                # tangent direction unchanged by twist
-
-        elif isinstance(op.params, BendParams):
-            angle_rad = math.radians(op.params.angle_deg)
-            phi       = math.radians(op.params.direction_deg)
-
-            # Zero angle → straight advance (no bending)
-            if abs(angle_rad) < 1e-9:
-                spine      = spine + tangent * arc_bp * BDNA_RISE_PER_BP
-                current_bp = min(target_bp, local_b)
-                if target_bp <= local_b:
-                    break
-                continue
-
-            # radius derived from total arc angle and segment length
-            radius = seg_len * BDNA_RISE_PER_BP / angle_rad
-
-            # Bend direction in world space (perpendicular to current tangent)
-            local_dir = np.array([math.cos(phi), math.sin(phi), 0.0])
-            world_dir = R @ local_dir
-            world_dir = world_dir - np.dot(world_dir, tangent) * tangent
-            wd_norm   = np.linalg.norm(world_dir)
-            if wd_norm < 1e-9:
-                spine = spine + tangent * arc_bp * BDNA_RISE_PER_BP
-            else:
-                world_dir /= wd_norm
-                # theta scales proportionally with arc length
-                theta = arc_bp * angle_rad / seg_len
-
-                # Arc position: spine_p1 + R_b*(1-cosθ)*world_dir + R_b*sinθ*tangent
-                spine = (spine
-                         + radius * (1.0 - math.cos(theta)) * world_dir
-                         + radius * math.sin(theta) * tangent)
-
-                # Rotate frame around binormal = cross(tangent, world_dir)
-                binormal = np.cross(tangent, world_dir)
-                bn_norm  = np.linalg.norm(binormal)
-                if bn_norm > 1e-9:
-                    binormal /= bn_norm
-                    R_bend  = _rot_around_axis(binormal, theta)
-                    R       = R_bend @ R
-                    tangent = R_bend @ tangent
-                    tangent /= np.linalg.norm(tangent)
-
-        current_bp = min(target_bp, local_b)
-        if target_bp <= local_b:
-            break
-
-    # Advance straight to target_bp
-    if current_bp < target_bp:
-        spine = spine + tangent * (target_bp - current_bp) * BDNA_RISE_PER_BP
+    for b0, b1, active in walk:
+        omega = _omega_world_for(active, R, tangent)
+        spine, R, tangent = _advance_frame(spine, R, tangent, omega, b1 - b0)
 
     return spine, R, tangent
 
@@ -1139,12 +1200,13 @@ def _precompute_arm_frames(
     """
     Compute deformation frames for all arm-local bp indices 0 … max_local_bp.
 
-    Runs the same sequential deformation propagation as _frame_at_bp but stores
-    the frame (spine, R, tangent) at every bp in one pass — O(D + M) instead of
-    the O(D × M) that results from calling _frame_at_bp once per nucleotide.
+    Runs the same sub-interval screw integration as _frame_at_bp but stores the
+    frame (spine, R, tangent) at every bp in one pass — O(D + M) instead of the
+    O(D × M) that results from calling _frame_at_bp once per nucleotide.
 
-    Within each op segment the arc/twist math is evaluated for all bps in that
-    segment simultaneously using vectorised numpy ops.
+    Within each constant-active-set sub-interval the combined twist+bend motion is
+    evaluated for all bps simultaneously using vectorised numpy ops, so overlapping
+    ops compose into a superhelix.
 
     Returns
     -------
@@ -1165,151 +1227,27 @@ def _precompute_arm_frames(
         op for op in design.deformations
         if not op.affected_helix_ids or bool(arm_ids & set(op.affected_helix_ids))
     ]
-    ops = sorted(relevant_ops, key=lambda op: op.plane_a_bp)
+    # Running frame state — represents the frame at the start of the current
+    # sub-interval. centroid_0 anchors the spine at arm-local 0; back-extrapolate
+    # (straight) when an op begins before the arm's first bp (start_bp < 0).
+    tangent = tangent_0.copy()
+    R       = np.eye(3, dtype=float)
 
-    # Running frame state — always represents the frame at local bp `filled_up_to`.
-    spine        = centroid_0.copy()
-    tangent      = tangent_0.copy()
-    R            = np.eye(3, dtype=float)
-    filled_up_to = 0  # next array index that still needs to be written
+    walk     = list(_subinterval_walk(relevant_ops, arm_min_bp, M))
+    start_bp = walk[0][0] if walk else 0
+    spine    = centroid_0 + tangent * (start_bp * BDNA_RISE_PER_BP)
 
-    for op in ops:
-        local_a = op.plane_a_bp - arm_min_bp
-        local_b = op.plane_b_bp - arm_min_bp
-        seg_len = local_b - local_a
-        if seg_len <= 0:
-            continue
-        if local_a >= M:
-            break  # op starts beyond our range
-
-        # ── Straight segment before this op: [filled_up_to, min(local_a, M)) ──
-        seg_end = min(local_a, M)
-        if filled_up_to < seg_end:
-            idxs  = np.arange(filled_up_to, seg_end)
-            steps = (idxs - filled_up_to).astype(float)
-            spines_out[filled_up_to:seg_end] = spine + tangent * steps[:, None] * BDNA_RISE_PER_BP
-            Rs_out[filled_up_to:seg_end]     = R
-            tans_out[filled_up_to:seg_end]   = tangent
-
-        # Advance spine to local_a (may be a backward step if local_a < filled_up_to,
-        # which can happen when an op starts before the arm's bp_start; handled correctly
-        # because adv can be negative and the op's steps = bps - local_a compensate).
-        spine        = spine + tangent * (local_a - filled_up_to) * BDNA_RISE_PER_BP
-        filled_up_to = local_a
-
-        # ── Op segment: [max(local_a, 0), min(local_b, M)) ──
-        op_start = max(local_a, 0)
-        op_end   = min(local_b, M)
-
-        if isinstance(op.params, TwistParams):
-            total_rad = _resolve_twist_rad(op.params, op.plane_a_bp, op.plane_b_bp)
-
-            if op_start < op_end:
-                bps    = np.arange(op_start, op_end)
-                steps  = (bps - local_a).astype(float)
-                spines_out[op_start:op_end] = spine + tangent * steps[:, None] * BDNA_RISE_PER_BP
-                tans_out[op_start:op_end]   = tangent  # twist does not rotate tangent
-                alphas    = total_rad * steps / seg_len
-                R_twists  = _rot_around_axis_batched(tangent, alphas)  # (K, 3, 3)
-                Rs_out[op_start:op_end] = R_twists @ R  # (K, 3, 3)
-
-            # Advance state: spine moves straight, R rotates by the angle at op_end.
-            spine        = spine + tangent * (op_end - local_a) * BDNA_RISE_PER_BP
-            filled_up_to = op_end
-            partial_steps = op_end - local_a
-            alpha_at_end  = total_rad * partial_steps / seg_len
-            if abs(alpha_at_end) > 1e-12:
-                R = _rot_around_axis(tangent, alpha_at_end) @ R
-
-        elif isinstance(op.params, BendParams):
-            angle_rad = math.radians(op.params.angle_deg)
-            phi       = math.radians(op.params.direction_deg)
-
-            if abs(angle_rad) < 1e-9:
-                # Zero bend: straight advance through op range.
-                if op_start < op_end:
-                    idxs  = np.arange(op_start, op_end)
-                    steps = (idxs - local_a).astype(float)
-                    spines_out[op_start:op_end] = spine + tangent * steps[:, None] * BDNA_RISE_PER_BP
-                    Rs_out[op_start:op_end]     = R
-                    tans_out[op_start:op_end]   = tangent
-                spine        = spine + tangent * (op_end - local_a) * BDNA_RISE_PER_BP
-                filled_up_to = op_end
-                continue
-
-            radius = seg_len * BDNA_RISE_PER_BP / angle_rad
-
-            local_dir = np.array([math.cos(phi), math.sin(phi), 0.0])
-            world_dir = R @ local_dir
-            world_dir = world_dir - np.dot(world_dir, tangent) * tangent
-            wd_norm   = np.linalg.norm(world_dir)
-
-            if wd_norm < 1e-9:
-                # Degenerate direction: straight advance.
-                if op_start < op_end:
-                    idxs  = np.arange(op_start, op_end)
-                    steps = (idxs - local_a).astype(float)
-                    spines_out[op_start:op_end] = spine + tangent * steps[:, None] * BDNA_RISE_PER_BP
-                    Rs_out[op_start:op_end]     = R
-                    tans_out[op_start:op_end]   = tangent
-                spine        = spine + tangent * seg_len * BDNA_RISE_PER_BP
-                filled_up_to = op_end
-                continue
-
-            world_dir /= wd_norm
-            binormal = np.cross(tangent, world_dir)
-            bn_norm  = np.linalg.norm(binormal)
-            if bn_norm > 1e-9:
-                binormal /= bn_norm
-
-            if op_start < op_end:
-                bps    = np.arange(op_start, op_end)
-                steps  = (bps - local_a).astype(float)
-                thetas = steps * angle_rad / seg_len
-                cos_t  = np.cos(thetas)
-                sin_t  = np.sin(thetas)
-
-                spines_out[op_start:op_end] = (
-                    spine
-                    + radius * (1.0 - cos_t)[:, None] * world_dir
-                    + radius * sin_t[:, None] * tangent
-                )
-                if bn_norm > 1e-9:
-                    R_bends   = _rot_around_axis_batched(binormal, thetas)  # (K, 3, 3)
-                    Rs_out[op_start:op_end] = R_bends @ R               # (K, 3, 3)
-                    t_rot = R_bends @ tangent                            # (K, 3)
-                    norms = np.linalg.norm(t_rot, axis=1, keepdims=True)
-                    tans_out[op_start:op_end] = t_rot / np.where(norms > 1e-12, norms, 1.0)
-                else:
-                    Rs_out[op_start:op_end]   = R
-                    tans_out[op_start:op_end] = tangent
-
-            # Advance state to op_end.
-            partial_steps = op_end - local_a
-            theta_end     = partial_steps * angle_rad / seg_len
-            cos_e, sin_e  = math.cos(theta_end), math.sin(theta_end)
-            spine = (spine
-                     + radius * (1.0 - cos_e) * world_dir
-                     + radius * sin_e * tangent)
-            filled_up_to = op_end
-            if bn_norm > 1e-9:
-                R_end   = _rot_around_axis(binormal, theta_end)
-                R       = R_end @ R
-                tangent = R_end @ tangent
-                tn = np.linalg.norm(tangent)
-                if tn > 1e-12:
-                    tangent /= tn
-
-        if filled_up_to >= M:
-            break
-
-    # ── Remaining straight segment after all ops ──
-    if filled_up_to < M:
-        idxs  = np.arange(filled_up_to, M)
-        steps = (idxs - filled_up_to).astype(float)
-        spines_out[filled_up_to:M] = spine + tangent * steps[:, None] * BDNA_RISE_PER_BP
-        Rs_out[filled_up_to:M]     = R
-        tans_out[filled_up_to:M]   = tangent
+    for b0, b1, active in walk:
+        omega = _omega_world_for(active, R, tangent)
+        # Fill array indices within [0, M) for this sub-interval (steps measured
+        # from the sub-interval start frame).
+        fill_start = max(b0, 0)
+        if fill_start < b1:
+            idxs  = np.arange(fill_start, b1)
+            steps = (idxs - b0).astype(float)
+            _fill_subinterval(spines_out, Rs_out, tans_out, idxs, steps,
+                              spine, R, tangent, omega)
+        spine, R, tangent = _advance_frame(spine, R, tangent, omega, b1 - b0)
 
     return spines_out, Rs_out, tans_out
 
@@ -2378,13 +2316,23 @@ def deformed_frame_at_bp(
 
 
 def helices_crossing_planes(design: "Design", plane_a_bp: int, plane_b_bp: int) -> list[str]:
-    """Return IDs of helices whose GLOBAL bp range covers both plane_a_bp and plane_b_bp.
+    """Return IDs of helices whose GLOBAL bp range OVERLAPS the bend window [lo, hi].
 
     plane_a_bp / plane_b_bp are GLOBAL bp indices (invariant under helix extension).
     A helix covers global range [h.bp_start, h.bp_start + h.length_bp − 1].
+
+    A helix is affected if its span overlaps the window at all — NOT only when it
+    covers both planes.  A short helix (e.g. a "tooth" that ends mid-window, or one
+    that starts mid-window) then bends along the same constant-curvature arc as the
+    full-length helices over the bp range it actually occupies, and simply
+    terminates partway along the arc.  The bend math is bp-parameterized
+    (``arc_bp = min(target_bp, local_b) − local_a`` in ``_frame_at_bp``), so a
+    partially-spanning helix is handled correctly once it is included here.  The
+    old "must cover both planes" test silently dropped such helices, leaving them
+    straight while the rest of the bundle bent.
     """
     lo, hi = min(plane_a_bp, plane_b_bp), max(plane_a_bp, plane_b_bp)
     return [
         h.id for h in design.helices
-        if h.bp_start <= lo and h.bp_start + h.length_bp - 1 >= hi
+        if h.bp_start <= hi and h.bp_start + h.length_bp - 1 >= lo
     ]

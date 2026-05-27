@@ -554,6 +554,67 @@ def test_edit_refused_when_later_snapshots_exist():
     assert 'later snapshot' in r.text.lower()
 
 
+def test_edit_deformation_after_seek_back_saves_and_keeps_later_ops():
+    """Editing a twist whose op was seeked OUT of the live design still saves.
+
+    Regression: the frontend seeks the design back to the op's pre-state to drive
+    the edit preview, which removes the target op (and any LATER deformation) from
+    ``design.deformations`` and adds a transient preview op. The edit must rebuild
+    the deformation set from the log (source of truth): update the twist, keep the
+    later bend, drop the preview op, and restore the cursor to latest (-1).
+    """
+    # Create via the endpoint so the log has a bundle-create SNAPSHOT before the
+    # deformations — only then does seek to (twist_idx - 1) actually roll back
+    # (position -1 means "seek to end", so the twist must not be at log index 0).
+    client.post("/api/design/bundle", json={
+        "cells": [[0, 0], [0, 1]], "length_bp": 84, "name": "B"})
+    d = design_state.get_or_404()
+    max_bp = max(h.bp_start + h.length_bp for h in d.helices) - 1
+
+    # Twist then bend over the same span (the teeth.nadoc combined case).
+    r = client.post("/api/design/deformation", json={
+        "type": "twist", "plane_a_bp": 0, "plane_b_bp": max_bp,
+        "params": {"kind": "twist", "total_degrees": 45.0}})
+    assert r.status_code == 200, r.text
+    r = client.post("/api/design/deformation", json={
+        "type": "bend", "plane_a_bp": 0, "plane_b_bp": max_bp,
+        "params": {"kind": "bend", "angle_deg": 90.0, "direction_deg": 0.0}})
+    assert r.status_code == 200, r.text
+
+    log = design_state.get_or_404().feature_log
+    twist_idx = next(i for i, e in enumerate(log)
+                     if isinstance(e, DeformationLogEntry)
+                     and e.op_snapshot and e.op_snapshot.type == 'twist')
+    twist_id = log[twist_idx].deformation_id
+
+    # Frontend pre-edit seek: roll the design back to before the twist. This
+    # removes BOTH deformations from the live design and (in the real flow) adds
+    # a transient preview op. Simulate the preview op too.
+    client.post("/api/design/features/seek", json={"position": twist_idx - 1})
+    client.post("/api/design/deformation", json={
+        "type": "twist", "plane_a_bp": 0, "plane_b_bp": max_bp,
+        "params": {"kind": "twist", "total_degrees": 60.0}, "preview": True})
+    assert len(design_state.get_or_404().deformations) == 1  # only the preview op
+
+    # Apply the edit: change the twist to 90°.
+    r = client.post(f"/api/design/features/{twist_idx}/edit", json={"params": {
+        "type": "twist", "plane_a_bp": 0, "plane_b_bp": max_bp,
+        "params": {"kind": "twist", "total_degrees": 90.0}}})
+    assert r.status_code == 200, r.text
+
+    after = design_state.get_or_404()
+    # The edited twist + the later bend survive; the preview op is gone.
+    by_type = {op.type: op for op in after.deformations}
+    assert set(by_type) == {"twist", "bend"}, [op.type for op in after.deformations]
+    assert by_type["twist"].id == twist_id  # same op, edited in place
+    assert by_type["twist"].params.total_degrees == 90.0
+    assert by_type["bend"].params.angle_deg == 90.0
+    # The log entry's snapshot reflects the new value (so seek replays match).
+    assert after.feature_log[twist_idx].op_snapshot.params.total_degrees == 90.0
+    # Cursor restored to latest.
+    assert after.feature_log_cursor == -1
+
+
 def test_edit_refused_for_non_snapshot_entry():
     """Edit endpoint returns 400 if asked to edit a delta entry (deformation/cluster/overhang)."""
     client.post("/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"})

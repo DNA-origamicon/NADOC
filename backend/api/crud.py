@@ -10906,10 +10906,20 @@ def _edit_deformation_feature(
 
     ``body.params`` accepts the same fields as the ``AddDeformationBody``
     request: ``type``, ``plane_a_bp``, ``plane_b_bp``, ``params``, optional
-    ``affected_helix_ids``, optional ``cluster_ids``. Updates the existing
-    DeformationOp in design.deformations and refreshes the entry's
-    op_snapshot — does NOT append a new log entry. Pushes the prior state
-    to the undo stack.
+    ``affected_helix_ids``, optional ``cluster_ids``. Updates the target
+    DeformationOp's stored op_snapshot in the log and rebuilds
+    ``design.deformations`` from the log — does NOT append a new log entry.
+    Pushes the prior state to the undo stack.
+
+    The deformations list is rebuilt from the LOG (the source of truth) rather
+    than mutated in the live ``design.deformations``. This is what makes the edit
+    robust: the frontend seeks the design back to the op's pre-state to drive the
+    edit preview, which rolls the target op (and any later deformations) OUT of
+    the live ``design.deformations`` and adds a transient ``preview=true`` op.
+    Rebuilding from the log restores the full deformation set (with the edited
+    params), drops the preview op, and is correct regardless of the current
+    cursor. Deformations are geometric-only (no topology change), so the live
+    topology is unaffected.
     """
     p = body.params or {}
     op_type = p.get('type', entry.op_snapshot.type if entry.op_snapshot else None)
@@ -10919,6 +10929,14 @@ def _edit_deformation_feature(
         raise HTTPException(400, detail="deformation edit requires plane_a_bp and plane_b_bp.")
     if 'params' not in p:
         raise HTTPException(400, detail="deformation edit requires nested params.")
+    if entry.op_snapshot is None:
+        raise HTTPException(
+            409,
+            detail=(
+                f"Deformation entry {index} has no stored op snapshot (evicted/broken); "
+                "revert to this point and re-apply instead of editing."
+            ),
+        )
 
     new_params = _parse_params(op_type, p['params'])
 
@@ -10929,12 +10947,8 @@ def _edit_deformation_feature(
     helix_ids = resolved["helix_ids"]
     cluster_ids = resolved["cluster_ids"]
 
-    # Locate the existing DeformationOp by deformation_id; replace its fields.
-    ops = list(design.deformations)
-    op_idx = next((i for i, op in enumerate(ops) if op.id == entry.deformation_id), None)
-    if op_idx is None:
-        raise HTTPException(404, detail=f"Deformation op {entry.deformation_id!r} not found in design.")
-    new_op = ops[op_idx].model_copy(update={
+    # Build the edited op from the entry's stored snapshot (preserves the op id).
+    new_op = entry.op_snapshot.model_copy(update={
         'type':               op_type,
         'plane_a_bp':         p['plane_a_bp'],
         'plane_b_bp':         p['plane_b_bp'],
@@ -10942,14 +10956,22 @@ def _edit_deformation_feature(
         'cluster_ids':        cluster_ids,
         'params':             new_params,
     })
-    ops[op_idx] = new_op
 
     # Refresh the entry's op_snapshot so seek replays match the new params.
     new_log = list(log)
     new_log[index] = entry.model_copy(update={'op_snapshot': new_op})
 
+    # Rebuild the full deformation set from the log (source of truth). Drops any
+    # transient preview op and restores ops the edit-preview seek rolled out.
+    rebuilt_ops = [
+        e.op_snapshot for e in new_log
+        if getattr(e, 'feature_type', None) == 'deformation' and e.op_snapshot is not None
+    ]
+
     from backend.core.validator import validate_design as _validate_design
-    updated = design.copy_with(deformations=ops, feature_log=new_log)
+    updated = design.copy_with(
+        deformations=rebuilt_ops, feature_log=new_log, feature_log_cursor=-1,
+    )
     design_state.set_design(updated)
     report = _validate_design(updated)
     return _design_replace_response(design, updated, report)

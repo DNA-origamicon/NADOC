@@ -258,12 +258,16 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    *  reference View toggle is off — matching the strand/extra-base hide). */
   function _reapplyArcHidden() {
     const hideRef = store.getState().showReferenceGeometry === false
+    // Long end-to-end (periodic-boundary) connectors are hidden unless the
+    // View toggle is on — they otherwise span the whole part. Default off.
+    const hidePeriodic = store.getState().showPeriodicSeamArcs !== true
     const refIds = hideRef
       ? new Set((store.getState().currentDesign?.strands ?? [])
           .filter(s => s.is_reference).map(s => s.id))
       : null
     for (const e of _arcMeta) {
       e.hidden = _isNucHidden(e.fromNuc) || _isNucHidden(e.toNuc) ||
+                 (hidePeriodic && e.isPeriodicSeam) ||
                  (hideRef && refIds.has(e.fromNuc?.strand_id) && refIds.has(e.toNuc?.strand_id))
     }
   }
@@ -354,6 +358,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
           fromNuc:      conn.fromNuc,
           toNuc:        conn.toNuc,
           crossover_id: xoForArc?.id ?? null,
+          isPeriodicSeam: conn.isPeriodicSeam ?? false,
           merged:       (conn.fromNuc?.strand_type === 'scaffold') ? 'scaffold' : 'staple',
           vertIdx:      0,   // filled in by _buildMerged
           hidden:       false,
@@ -903,6 +908,17 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   // Reference View toggle: hide/show arc lines of reference-only crossovers.
   store.subscribe((newState, prevState) => {
     if (newState.showReferenceGeometry === prevState.showReferenceGeometry) return
+    if (!_arcMeta.length) return
+    _reapplyArcHidden()
+    const offsets = _buildOffsets(store.getState().unfoldSpacing)
+    _updateArcPositions(_currentT, offsets, _active ? _straightPosMap : null)
+    _refreshArcGlow()
+  })
+
+  // Periodic-seam ("end-to-end crossover") View toggle: hide/show the long
+  // far↔near connectors of is_periodic_seam forced ligations. Default hidden.
+  store.subscribe((newState, prevState) => {
+    if (newState.showPeriodicSeamArcs === prevState.showPeriodicSeamArcs) return
     if (!_arcMeta.length) return
     _reapplyArcHidden()
     const offsets = _buildOffsets(store.getState().unfoldSpacing)

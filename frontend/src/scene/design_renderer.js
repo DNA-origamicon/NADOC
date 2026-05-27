@@ -35,6 +35,7 @@ export function initDesignRenderer(scene, storeRef) {
   let _xoverSlabsMesh   = null   // InstancedMesh for extra-base slabs
   let _xoverArcDataMap  = null   // Map<xoId, arcDataEntry> for O(1) lookup during animation
   let _xoverGlowLive    = []     // {pos: THREE.Vector3, arcData, localIdx} — live positions for selection glow
+  let _detailLevel      = 0      // current LOD (0=full,1=beads,2=cylinders); re-applied to xover extras after _rebuild
   let _currentMode      = 'normal'
   const _glowLayer         = createGlowLayer(scene)
   // Undefined-bases highlight: red, ~2× the selection glow size
@@ -121,6 +122,17 @@ export function initDesignRenderer(scene, storeRef) {
     }
     if (_xoverBeadsMesh.instanceColor) _xoverBeadsMesh.instanceColor.needsUpdate = true
     if (_xoverSlabsMesh.instanceColor) _xoverSlabsMesh.instanceColor.needsUpdate = true
+  }
+
+  /** Crossover extra-base beads/slabs are children of root, NOT part of the helix
+   *  LOD meshes, so _helixCtrl.setDetailLevel() doesn't touch them — they'd stay
+   *  visible in the coarse cylinders/sticks rep and poke through empty domain gaps.
+   *  Hide the whole InstancedMeshes at LOD >= 2 (independent of the per-instance
+   *  hide done by _applyXoverVisibility). */
+  function _applyXoverExtrasLod() {
+    const show = _detailLevel < 2
+    if (_xoverBeadsMesh) _xoverBeadsMesh.visible = show
+    if (_xoverSlabsMesh) _xoverSlabsMesh.visible = show
   }
 
   /** Zero the InstancedMesh scale for every extra-base bead/slab whose crossover
@@ -292,6 +304,7 @@ export function initDesignRenderer(scene, storeRef) {
     }
     _applyXoverVisibility()
     _applyReferenceXoverVisibility()   // hide reference crossover extra-bases when ref toggle off
+    _applyXoverExtrasLod()             // hide extra-base beads/slabs in coarse rep (survives rebuild)
 
     // Apply opacity for preview or tool-dim modes
     if (_previewOpacity !== null) {
@@ -629,7 +642,9 @@ export function initDesignRenderer(scene, storeRef) {
     },
 
     setDetailLevel(level) {
+      _detailLevel = level
       _helixCtrl?.setDetailLevel(level)
+      _applyXoverExtrasLod()
     },
 
     setBeadRadius(r)     { _helixCtrl?.setBeadRadius(r) },

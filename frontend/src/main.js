@@ -37,6 +37,7 @@ import { initDeformationEditor, startTool, startToolAtBp, startToolForEdit as st
          handleEscape as deformEscape,
          exitTool as deformExitTool,
          confirmDeformation, cancelDeformation, previewDeformation,
+         markEditCommitted as markDeformEditCommitted,
          getState as getDeformState, getToolType as getDeformToolType,
          getPlanes as getDeformPlanes, repositionPlane as repositionDeformPlane,
          STATES as DEFORM_STATES,
@@ -1251,13 +1252,12 @@ async function main() {
 
   initDeformationEditor(scene, camera, canvas, controls, designRenderer,
     () => {
-      // onExit: restore mode indicator; if editing, seek back to prior state
+      // onExit: restore mode indicator. No seek here anymore — the edit flow no
+      // longer rolls the design to a pre-state, so cancel/Esc leave the cursor
+      // where it was (the editor silently reverts the live op), and confirm
+      // handles its own cursor restore below.
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
-      if (_editContext) {
-        const ctx = _editContext
-        _editContext = null
-        _seekFeaturesWithDelta(ctx.priorCursor)
-      }
+      _editContext = null
     },
     () => {
       // onPlaneDragEnd: sync popup inputs with dragged plane positions
@@ -1271,25 +1271,28 @@ async function main() {
     onConfirm: async (params) => {
       const ctx = _editContext
       if (ctx?.featureIndex != null && ctx.editingFeatureType === 'deformation') {
-        // Edit-in-place: update the existing DeformationOp + log entry rather
-        // than appending a new feature_log entry.
-        _editContext = null
+        // Edit-in-place: the live op was already PATCHed to `params` during
+        // preview; editFeature finalizes it (updates the log op_snapshot + pushes
+        // undo) by rebuilding the deformation set from the log on the backend.
         const planes = getDeformPlanes()
         const bpA = planes.a?.bp ?? 0
         const bpB = planes.b?.bp ?? 0
-        const lo = Math.min(bpA, bpB)
-        const hi = Math.max(bpA, bpB)
         const editBody = {
           type:       getDeformToolType() ?? 'twist',
-          plane_a_bp: lo,
-          plane_b_bp: hi,
+          plane_a_bp: Math.min(bpA, bpB),
+          plane_b_bp: Math.max(bpA, bpB),
           params,
           cluster_ids: ctx.clusterIds ?? [],
         }
-        await api.editFeature(ctx.featureIndex, editBody)
-        // The client-side _responseDeltaHandler (registered with
-        // registerResponseDeltaHandler at init) takes care of applying the
-        // cluster_only / positions_only diff to the renderer.
+        markDeformEditCommitted()   // so the exit below does NOT revert the op
+        const resp = await api.editFeature(ctx.featureIndex, editBody)
+        if (resp == null) {
+          showToast(`Edit failed: ${store.getState().lastError?.message ?? 'unknown error'}`, 4000)
+        } else if (ctx.priorCursor != null && ctx.priorCursor !== -1) {
+          // editFeature leaves the cursor at latest; if the user was mid-scrub
+          // when they hit edit, return the slider to where they were.
+          await _seekFeaturesWithDelta(ctx.priorCursor)
+        }
         deformExitTool()
         _watchDeformState()
         return
@@ -1320,11 +1323,17 @@ async function main() {
       const { a, b } = getDeformPlanes()
       const editParams = _editContext?.pendingParams ?? null
       const editClusterIds = _editContext ? (_editContext.clusterIds ?? []) : null
+      // In edit mode the op is ALREADY applied to the design, so opening the
+      // popup must NOT auto-fire a preview (that re-applied geometry for nothing,
+      // one of the redundant GETs that made edit-open slow). Preview fires only
+      // when the user actually changes a slider.
+      const skipInitialPreview = !!_editContext
       openDeformPopup(
         getDeformToolType() ?? 'twist',
         a?.bp ?? 0, b?.bp ?? 0,
         editParams,
         editClusterIds,
+        skipInitialPreview,
       )
       if (_editContext) delete _editContext.pendingParams
     } else {
@@ -1374,15 +1383,12 @@ async function main() {
     const design = store.getState().currentDesign
     const priorCursor = design?.feature_log_cursor ?? -1
 
-    // Seek to state just before this feature (FN → seek FN-1; F1 → seek -2 = empty)
-    const seekPos = featureIndex === 0 ? -2 : featureIndex - 1
-    await _seekFeaturesWithDelta(seekPos)
-
-    // Edit-in-place mode: confirm calls editFeature(index, …) instead of
-    // appending a new deformation entry. featureIndex + clusterId are
-    // captured at edit-start so the confirm handler can issue the right
-    // request without re-discovering them from the live log (which has
-    // been seeked back).
+    // Edit IN PLACE on the current state — NO seek. The backend edit rebuilds
+    // the deformation set from the log, so we don't need to roll the design back
+    // to a pre-state. Skipping the seek avoids the slow pre-state geometry
+    // recompute + the preview-op add, and lets the popup open immediately
+    // (previously the popup waited for a 3D-canvas click to fire _watchDeformState).
+    // confirm calls editFeature(index, …); cancel/Esc silently reverts the op.
     _editContext = {
       priorCursor,
       pendingParams:    op.params,
@@ -1391,11 +1397,15 @@ async function main() {
       clusterIds:       op.cluster_ids ?? [],
     }
 
-    // Open editor with pre-placed planes; _watchDeformState opens popup with params
-    startDeformToolForEdit(op.type, op.plane_a_bp, op.plane_b_bp)
+    // Open editor with pre-placed planes; the op id + original params let the
+    // editor preview by PATCHing the live op (and revert it on cancel).
+    startDeformToolForEdit(op.type, op.plane_a_bp, op.plane_b_bp, op.id, op.params)
 
     document.getElementById('mode-indicator').textContent =
-      `EDIT ${op.type.toUpperCase()} F${featureIndex + 1} — adjust planes/params · Apply to save · Esc to cancel`
+      `EDIT ${op.type.toUpperCase()} F${featureIndex + 1} — adjust params · Apply to save · Esc to cancel`
+
+    // Open the popup now rather than waiting for a canvas pointerdown to fire it.
+    _watchDeformState()
   }
 
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
@@ -2308,7 +2318,11 @@ async function main() {
   function _setCGVisible(visible) {
     const root = designRenderer.getHelixCtrl()?.root
     if (root) root.visible = visible   // extra-base beads/slabs are children of root
-    unfoldView?.setArcsVisible(visible)
+    // Arc lines gate on LOD too: hidden in the coarse cylinders/sticks rep, where
+    // they'd otherwise show through empty domain gaps (e.g. teeth) now that the
+    // cylinders no longer occlude them. Without the `_lastDetailLevel < 2` guard,
+    // ANY path that re-shows CG geometry while in cylinder rep re-shows the arcs.
+    unfoldView?.setArcsVisible(visible && _lastDetailLevel < 2)
     overhangLinkArcs?.setVisible?.(visible)
   }
 
@@ -9269,9 +9283,14 @@ Typical debugging workflow for "reverts to 3D" bug:
     _assemblySaveTimer = setTimeout(async () => {
       if (!_assemblyWorkspacePath || _savingAssembly) return
       _savingAssembly = true
+      // Mark the assembly file self-saved so its own watchdog `file-changed` echo
+      // (which fires after every part-edit-driven re-resolve) is skipped in
+      // `_handleLibraryEvent` instead of triggering a library refresh.
+      const _savedPaths = new Set([_assemblyWorkspacePath])
+      _selfSavedPaths.add(_assemblyWorkspacePath)
       try {
         const r = await api.saveAssemblyAs(_assemblyWorkspacePath)
-        if (r?.path) _setAssemblyWorkspacePath(r.path)
+        if (r?.path) { _setAssemblyWorkspacePath(r.path); _selfSavedPaths.add(r.path); _savedPaths.add(r.path) }
         _syncLog('info', 'SAVE', `assembly → ${r?.path}`)
         _setSyncStatus('green', 'saved')
       } catch (err) {
@@ -9279,48 +9298,49 @@ Typical debugging workflow for "reverts to 3D" bug:
         _syncLog('err', 'SAVE', `assembly failed: ${err?.message ?? err}`)
       } finally {
         _savingAssembly = false
+        setTimeout(() => { for (const p of _savedPaths) _selfSavedPaths.delete(p) }, 5000)
       }
     }, 1500)
   })
 
   // ── Library SSE — live file-change events ────────────────────────────────────
+  let _libRefreshTimer = null
+  function _scheduleLibraryRefresh() {
+    clearTimeout(_libRefreshTimer)
+    _libRefreshTimer = setTimeout(() => libraryPanel.refresh(), 400)
+  }
+
 	  function _handleLibraryEvent({ type, path, file_type }) {
     if (type !== 'file-changed' && type !== 'file-deleted') return
-    libraryPanel.refresh()
-
     _syncLog('info', 'SSE', `${type} ${file_type}:${path}`)
 
-    // Skip reacting to files we just saved ourselves (SSE echo)
+    // Skip reacting to files we just saved ourselves (SSE echo). Do this BEFORE
+    // the library refresh: a self-save doesn't change the file LIST, and a part
+    // edit fires several self-save echoes (part file ×2 + the assembly autosave),
+    // each of which used to run a fresh GET /library/files — a flood that piled
+    // up to multi-second responses.
     if (type === 'file-changed' && _selfSavedPaths.has(path)) {
       _syncLog('info', 'SSE', `skipped (self-saved echo)`)
       return
     }
+    // A genuine external change → refresh the file list, debounced so a burst of
+    // distinct events collapses to one GET /library/files.
+    _scheduleLibraryRefresh()
 
     if (file_type === 'part' && store.getState().assemblyActive) {
-      // Assembly tab: invalidate and rebuild instances using this file
+      // Assembly tab: a part file changed (external edit, or — if the broadcast
+      // didn't beat the SSE — our own part-editor save). Route through the
+      // COALESCED refresh so this + the `part-design-updated` broadcast + any
+      // burst of saves collapse into ONE getAssembly + rebuild + getInstanceDesign
+      // instead of a per-instance, per-event flood. _refreshAssemblyPartInstance
+      // invalidates every instance sharing this source and fetches the design once.
       const assembly = store.getState().currentAssembly
       const affected = (assembly?.instances ?? []).filter(
         i => i.source?.type === 'file' && i.source.path === path,
       )
-      _syncLog('info', 'SSE', `${affected.length} instance(s) affected, invalidating`)
-      affected.forEach(i => {
-        assemblyRenderer.invalidateInstance(i.id)
-        _syncLog('info', 'SSE', `  invalidated ${i.id} (${i.name})`)
-      })
       if (affected.length) {
-        _setSyncStatus('yellow', 'syncing…')
-        assemblyRenderer.rebuild(assembly)
-          .then(() => assemblyRenderer.rebuildLinkers(assembly))
-          .then(() => {
-            _setSyncStatus('green', 'synced')
-            _syncLog('info', 'SSE', 'rebuild done')
-            // Refresh cluster panel entries for affected instances
-            for (const inst of affected) {
-              api.getInstanceDesign(inst.id)
-                .then(r => { if (r?.design) clusterPanel?.syncInstanceDesign(inst.id, r.design) })
-                .catch(() => {})
-            }
-          })
+        _syncLog('info', 'SSE', `${affected.length} instance(s) affected → coalesced refresh`)
+        _scheduleAssemblyPartRefresh(affected[0].id, 'sse')
       }
     } else if (file_type === 'part' && !store.getState().assemblyActive && _workspacePath === path) {
       // Design tab: this is the file we have open. If a sibling tab is live-editing
@@ -9345,21 +9365,101 @@ Typical debugging workflow for "reverts to 3D" bug:
 	  }
 	  api.subscribeLibraryEvents(_handleLibraryEvent)
 
+  // ── Coalesced assembly part-refresh ──────────────────────────────────────────
+  // A single part edit fires BOTH a `part-design-updated` broadcast AND a watchdog
+  // `file-changed` SSE; a slider drag in the part editor fires a whole BURST of
+  // them. Each used to run a full `_refreshAssemblyPartInstance` (getAssembly +
+  // rebuild-all-instances + getInstanceDesign) — so N rapid edits → N concurrent
+  // heavy rebuilds that saturated the backend (20-30 s responses) AND raced into
+  // the hull+cylinder LOD overlay. Funnel every trigger through this debounced,
+  // drop-while-in-flight scheduler so a burst collapses to ONE refresh.
+  let _asmRefreshTimer    = null
+  let _asmRefreshInFlight = false
+  let _asmRefreshPending  = false
+  let _asmRefreshId       = null
+  let _asmRefreshReason   = 'part update'
+
+  function _scheduleAssemblyPartRefresh(instanceId, reason = 'part update') {
+    if (!instanceId || !store.getState().assemblyActive) return
+    _asmRefreshId = instanceId
+    _asmRefreshReason = reason
+    if (_asmRefreshInFlight) { _asmRefreshPending = true; return }
+    clearTimeout(_asmRefreshTimer)
+    _asmRefreshTimer = setTimeout(_runCoalescedAssemblyRefresh, 250)
+  }
+
+  async function _runCoalescedAssemblyRefresh() {
+    if (_asmRefreshInFlight) { _asmRefreshPending = true; return }
+    _asmRefreshInFlight = true
+    _asmRefreshPending  = false
+    try {
+      await _refreshAssemblyPartInstance(_asmRefreshId, _asmRefreshReason)
+    } catch (err) {
+      console.warn('[sync] assembly part refresh failed:', err?.message ?? err)
+    } finally {
+      _asmRefreshInFlight = false
+      // A trigger arrived while we were refreshing — run exactly once more.
+      if (_asmRefreshPending) {
+        _asmRefreshPending = false
+        clearTimeout(_asmRefreshTimer)
+        _asmRefreshTimer = setTimeout(_runCoalescedAssemblyRefresh, 250)
+      }
+    }
+  }
+
   async function _refreshAssemblyPartInstance(instanceId, reason = 'part update') {
     if (!instanceId || !store.getState().assemblyActive) return
     _syncLog('info', 'ASM', `${reason}: refreshing ${instanceId}`)
     _setSyncStatus('yellow', 'syncing part…')
-    assemblyRenderer.invalidateInstance(instanceId)
-    const result = await api.getAssembly()
-    const assembly = result?.assembly ?? store.getState().currentAssembly
-    if (!assembly) return
+
+    // The edited part is usually shared by several instances (a polymerized
+    // chain). Do NOT invalidate per-instance: on the shared renderer
+    // `invalidateInstance` IGNORES the id and triggers a FULL rebuild, so a
+    // per-instance loop fired one rebuild PER copy (40 instances → 40
+    // getAssemblyGeometry calls → backend saturation + the rebuild-race overlay).
+    // A single `rebuild()` below disposes every source and refetches the batch
+    // geometry once, so all copies pick up the new shape from one rebuild.
+    const cur     = store.getState().currentAssembly
+    const srcInst = cur?.instances?.find(i => i.id === instanceId)
+    const srcPath = srcInst?.source?.type === 'file' ? srcInst.source.path : null
+    const affected = srcPath
+      ? (cur?.instances ?? []).filter(i => i.source?.type === 'file' && i.source.path === srcPath)
+      : (srcInst ? [srcInst] : [])
+
+    // The part-editor save also writes the .nadoc file, which fires a watchdog
+    // SSE `file-changed`. Mark the path self-saved so `_handleLibraryEvent`
+    // doesn't schedule a second (coalesced-but-still-extra) refresh for it.
+    if (srcPath) {
+      _selfSavedPaths.add(srcPath)
+      setTimeout(() => _selfSavedPaths.delete(srcPath), 5000)
+    }
+
+    // getAssembly pulls the re-docked transforms the backend produced when the
+    // part edit auto-resolved (PATCH /assembly/instances/{id}/design). rebuild()
+    // then disposes all sources and refetches fresh geometry once (the part-edit
+    // cleared the backend geo cache), so every instance updates.
+    //
+    // CRITICAL: use the EXPANDED store assembly, NOT result.assembly. getAssembly()
+    // returns the RAW backend JSON, whose `assembly` is the v2 wire format —
+    // parts live under `instances_v2` and the v1 `instances` field is dropped
+    // (_assembly_response does `full.pop("instances")`). So result.assembly.instances
+    // is undefined → rebuild() sees zero instances and DISPOSES every source,
+    // blanking the assembly (visible only after a rep-change forced a fresh
+    // rebuild from the store). _syncFromAssemblyResponse already expanded v2 → v1
+    // into store.currentAssembly (`.instances` populated), so read that.
+    await api.getAssembly()
+    const assembly = store.getState().currentAssembly
+    if (!assembly?.instances?.length) return
     await assemblyRenderer.rebuild(assembly)
     assemblyRenderer.rebuildLinkers(assembly)
     _syncAssemblyBluntEnds()
     assemblyJointRenderer.rebuild(assembly)
     try {
+      // All affected instances share one source design — fetch it ONCE.
       const r = await api.getInstanceDesign(instanceId)
-      if (r?.design) clusterPanel?.syncInstanceDesign(instanceId, r.design)
+      if (r?.design) {
+        for (const i of affected) clusterPanel?.syncInstanceDesign(i.id, r.design)
+      }
     } catch { /* sidebar cache refresh is best-effort */ }
     _setSyncStatus('green', 'part synced')
   }
@@ -9389,7 +9489,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     bluntEnds.setVisible(visible)
     endExtrudeArrows.setVisible(visible)
     jointRenderer.setVisible(visible)
-    unfoldView.setArcsVisible(visible)       // arc line segments (_arcGroup 'xoverArcLines')
+    unfoldView.setArcsVisible(visible && _lastDetailLevel < 2)  // arc lines (_arcGroup); gated on LOD too (hidden in cylinders/sticks)
     overhangLinkArcs?.setVisible?.(visible)
   }
 
@@ -12252,6 +12352,8 @@ Typical debugging workflow for "reverts to 3D" bug:
       'display', repr === 'cylinders' ? '' : 'none')
     document.getElementById('repr-hull-margin-row')?.style.setProperty(
       'display', repr === 'hull-prism' ? '' : 'none')
+    document.getElementById('repr-hull-curve-row')?.style.setProperty(
+      'display', repr === 'hull-prism' ? '' : 'none')
     if (repr === 'hull-prism') {
       // Sync the slider to the per-lattice default (7 square / 8 honeycomb).
       const lat = store.getState().currentDesign?.lattice_type
@@ -12409,6 +12511,15 @@ Typical debugging workflow for "reverts to 3D" bug:
     jointRenderer?.setHullScanTick(bp)
   })
 
+  // Curved-hull facet detail (nm deviation tolerance): lower = smoother/more facets.
+  const _slHullCurve = document.getElementById('sl-hull-curve')
+  const _svHullCurve = document.getElementById('sv-hull-curve')
+  _slHullCurve?.addEventListener('input', () => {
+    const nm = parseFloat(_slHullCurve.value)
+    if (_svHullCurve) _svHullCurve.textContent = nm.toFixed(2)
+    jointRenderer?.setHullCurveDetail(nm)
+  })
+
   // ── Hide Staples toggle ────────────────────────────────────────────────────────
   document.getElementById('menu-view-hide-staples')?.addEventListener('click', () => {
     const { staplesHidden } = store.getState()
@@ -12440,6 +12551,19 @@ Typical debugging workflow for "reverts to 3D" bug:
     const { showOverhangNames } = store.getState()
     store.setState({ showOverhangNames: !showOverhangNames })
     _setMenuToggle('menu-view-overhang-names', !showOverhangNames)
+  })
+
+  // End-to-End Crossovers: show/hide the long periodic-boundary seam connectors
+  // (default hidden). The unfold_view + assembly_renderer subscribe directly.
+  document.getElementById('menu-view-periodic-seam-arcs')?.addEventListener('click', () => {
+    const show = store.getState().showPeriodicSeamArcs === true
+    store.setState({ showPeriodicSeamArcs: !show })
+    _setMenuToggle('menu-view-periodic-seam-arcs', !show)
+  })
+  store.subscribe((newState, prevState) => {
+    if (newState.showPeriodicSeamArcs !== prevState.showPeriodicSeamArcs) {
+      _setMenuToggle('menu-view-periodic-seam-arcs', newState.showPeriodicSeamArcs === true)
+    }
   })
 
   // ── Highlight Undefined Bases toggle ─────────────────────────────────────────
@@ -13472,6 +13596,77 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   })
 
+  // ── Debug > Render diagnostics (wireframe / double-side / opaque / inspect / camera) ──
+  // Classifiers for "weird mesh" artifacts, applied to every material under the
+  // design root (originals saved in material.userData._dbgOrig, restored when the
+  // flag clears). Re-toggle after a full geometry rebuild (rep switch keeps meshes).
+  //   Wireframe   → reveals geometry (open ends, stray caps, degenerate faces).
+  //   Double-Side → if missing parts reappear, it was back-face culling.
+  //   Opaque      → if it snaps right, it was transparent depth-sort (transparent@opacity1).
+  let _dbgWire = false, _dbgDouble = false, _dbgOpaque = false
+  function _applyRenderDebug() {
+    const root = designRenderer.getHelixCtrl()?.root
+    if (!root) { showToast('No design geometry to debug.', { severity: 'error' }); return }
+    root.traverse(o => {
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []
+      for (const m of mats) {
+        if (m.userData._dbgOrig === undefined)
+          m.userData._dbgOrig = { wireframe: m.wireframe, side: m.side, transparent: m.transparent }
+        const orig = m.userData._dbgOrig
+        m.wireframe   = _dbgWire   ? true             : orig.wireframe
+        m.side        = _dbgDouble ? THREE.DoubleSide : orig.side
+        m.transparent = _dbgOpaque ? false            : orig.transparent
+        m.needsUpdate = true
+      }
+    })
+  }
+  document.getElementById('menu-debug-wireframe')?.addEventListener('click', () => {
+    _dbgWire = !_dbgWire; _setMenuToggle('menu-debug-wireframe', _dbgWire); _applyRenderDebug()
+  })
+  document.getElementById('menu-debug-doubleside')?.addEventListener('click', () => {
+    _dbgDouble = !_dbgDouble; _setMenuToggle('menu-debug-doubleside', _dbgDouble); _applyRenderDebug()
+  })
+  document.getElementById('menu-debug-opaque')?.addEventListener('click', () => {
+    _dbgOpaque = !_dbgOpaque; _setMenuToggle('menu-debug-opaque', _dbgOpaque); _applyRenderDebug()
+  })
+  document.getElementById('menu-debug-copy-camera')?.addEventListener('click', () => {
+    const p = camera.position, t = controls.target
+    const txt = `${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)},${t.x.toFixed(3)},${t.y.toFixed(3)},${t.z.toFixed(3)}`
+    navigator.clipboard?.writeText(txt).catch(() => {})
+    showToast('Camera copied (pos.xyz,target.xyz): ' + txt, { duration: 7000 })
+  })
+
+  // Inspect Mesh: when on, a canvas click reports the hit mesh's material/geometry
+  // props (toast + console.table) — removes ambiguity about what's being rendered.
+  let _dbgInspect = false
+  const _dbgRay = new THREE.Raycaster()
+  const _dbgNdc = new THREE.Vector2()
+  const _DBG_SIDE = { 0: 'FrontSide', 1: 'BackSide', 2: 'DoubleSide' }
+  document.getElementById('menu-debug-inspect')?.addEventListener('click', () => {
+    _dbgInspect = !_dbgInspect; _setMenuToggle('menu-debug-inspect', _dbgInspect)
+    showToast(_dbgInspect ? 'Inspect Mesh ON — click a mesh to report it (console.table for full props).' : 'Inspect Mesh off')
+  })
+  canvas.addEventListener('click', (e) => {
+    if (!_dbgInspect) return
+    const root = designRenderer.getHelixCtrl()?.root
+    if (!root) return
+    const r = canvas.getBoundingClientRect()
+    _dbgNdc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
+    _dbgRay.setFromCamera(_dbgNdc, camera)
+    const hit = _dbgRay.intersectObject(root, true).find(h => h.object.visible)
+    if (!hit) { showToast('Inspect: nothing under cursor'); return }
+    const o = hit.object, m = Array.isArray(o.material) ? o.material[0] : o.material
+    const info = {
+      name: o.name || '(unnamed)', objType: o.type,
+      instanced: !!o.isInstancedMesh, count: o.isInstancedMesh ? o.count : undefined,
+      geometry: o.geometry?.type, indexed: !!o.geometry?.index, vertices: o.geometry?.attributes?.position?.count,
+      material: m?.type, side: _DBG_SIDE[m?.side], transparent: m?.transparent, opacity: m?.opacity,
+      depthWrite: m?.depthWrite, wireframe: m?.wireframe, frustumCulled: o.frustumCulled,
+    }
+    console.table(info)
+    showToast(`${info.name} · ${info.geometry} · ${info.material} · ${info.side} · transp=${info.transparent} op=${info.opacity} · fc=${info.frustumCulled}`, { duration: 9000 })
+  })
+
   // ── Debug > MrDNA Round-Trip Test ────────────────────────────────────────────
   document.getElementById('menu-debug-mrdna-roundtrip')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
@@ -14134,7 +14329,9 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
     if (type === 'part-design-updated') {
       _syncLog('info', 'BC-RX', `part-design-updated id=${instanceId}`)
-      await _refreshAssemblyPartInstance(instanceId, 'broadcast')
+      // Coalesced: a burst of edits (slider drag) emits a burst of these; collapse
+      // them into one refresh instead of one heavy rebuild per broadcast.
+      _scheduleAssemblyPartRefresh(instanceId, 'broadcast')
       // Part-edit tabs (?part-instance=<id>) show this instance's design as
       // their active design. Re-import from the backend so the topology in
       // this tab reflects the assembly window's mutation. Re-import also

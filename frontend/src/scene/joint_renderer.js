@@ -1230,6 +1230,10 @@ const _EXTRUSION_OPS = new Set([
   'bundle-create', 'extrude-segment', 'extrude-continuation', 'extrude-deformed-continuation',
 ])
 
+// bp per deformed-axis sample — MUST match backend deformation._AXIS_SAMPLE_STEP (7).
+// Used to map an extrusion box's global bp range onto its helices' sample indices.
+const _AXIS_SAMPLE_STEP = 7
+
 // Plane → which world axis each lattice coordinate maps to.
 // col → cross-section axis A, row → cross-section axis B, extrusion runs along the third.
 const _PLANE_AXES = {
@@ -1251,12 +1255,23 @@ const _PLANE_AXES = {
  * Returns a THREE.Group (merged mesh + edges) or null when the design has no
  * extrusion history (e.g. a cadnano import).
  */
-function _buildExtrusionBoxes(design) {
+function _buildExtrusionBoxes(design, helixAxes = null, curveTolNm = 0) {
   const fl = design?.feature_log
   if (!Array.isArray(fl) || !fl.length) return null
   const isHC  = (design.lattice_type === 'HONEYCOMB')
   const spCol = SQUARE_HELIX_SPACING
   const spRow = isHC ? HONEYCOMB_ROW_PITCH : SQUARE_HELIX_SPACING
+
+  // Deformed designs: sweep each box along its helices' deformed spine so the
+  // bent comb is preserved (per-extrusion fidelity). Build a cell→helix lookup once.
+  const deformed = !!helixAxes && Object.values(helixAxes).some(a => (a?.samples?.length ?? 0) > 2)
+  let cellToHelix = null
+  if (deformed) {
+    cellToHelix = new Map()
+    for (const h of (design.helices ?? [])) {
+      if (h.grid_pos) cellToHelix.set(`${h.grid_pos[0]},${h.grid_pos[1]}`, h.id)
+    }
+  }
 
   const geos = []
   for (const e of fl) {
@@ -1276,16 +1291,31 @@ function _buildExtrusionBoxes(design) {
     const offset   = (typeof p.offset_nm === 'number') ? p.offset_nm : 0
     const wCol = (maxC - minC + 1) * spCol
     const wRow = (maxR - minR + 1) * spRow
+    const vol  = wCol * wRow * axialLen
+
+    // Curved path: sweep the box's rectangle along its helices' deformed spine.
+    // Falls through to a straight box when the box isn't in the deformed arm.
+    if (deformed) {
+      const boxHelixIds = cells.map(([r, c]) => cellToHelix.get(`${r},${c}`)).filter(Boolean)
+      const bpLo = Math.round(offset / BDNA_RISE_PER_BP)
+      let sections = _boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpLo + lenBp, wCol, wRow)
+      if (sections) {
+        sections = _decimateSections(sections, curveTolNm)
+        geos.push({ geo: _buildSweptHullGeometry(sections), vol })
+        continue
+      }
+    }
+
     const cCol = (minC + maxC) / 2 * spCol
     const cRow = (minR + maxR) / 2 * spRow
-
     const m = _PLANE_AXES[p.plane] || _PLANE_AXES.XY
     const size = [0, 0, 0], pos = [0, 0, 0]
     size[m.col] = wCol;  size[m.row] = wRow;  size[m.ext] = axialLen
     pos[m.col]  = cCol;  pos[m.row]  = cRow;  pos[m.ext]  = offset + axialLen / 2
     const geo = new THREE.BoxGeometry(size[0], size[1], size[2])
     geo.translate(pos[0], pos[1], pos[2])
-    geos.push({ geo, vol: wCol * wRow * axialLen })
+    geo.deleteAttribute('uv')   // keep attrs uniform with swept geos for mergeGeometries
+    geos.push({ geo, vol })
   }
   if (!geos.length) return null
 
@@ -1302,7 +1332,9 @@ function _buildExtrusionBoxes(design) {
   const mesh = new THREE.Mesh(merged, _extrusionMeshMat())
   mesh.renderOrder = 100
   const edges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(merged, 1),
+    // 15° when curved → only facet boundaries + corner/cap edges (not every triangle);
+    // 1° straight → crisp box edges.
+    new THREE.EdgesGeometry(merged, deformed ? 15 : 1),
     new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.55, depthWrite: false }),
   )
   edges.renderOrder = 101
@@ -1702,6 +1734,86 @@ function _buildSweptHullGeometry(sections) {
   return geo
 }
 
+/**
+ * Curvature-adaptive section thinning (Douglas–Peucker on the spine centers).
+ * Keeps the two endpoints and any section whose center deviates more than
+ * `tolNm` (perpendicular distance, nm) from the chord of its kept neighbours.
+ * Straight runs collapse to 2 sections (1 facet); tight bends keep more —
+ * the single intuitive "how polygon-y" knob.
+ */
+function _decimateSections(sections, tolNm) {
+  const S = sections.length
+  if (S <= 2 || !(tolNm > 0)) return sections
+  const pts  = sections.map(s => s.center)
+  const keep = new Array(S).fill(false)
+  keep[0] = keep[S - 1] = true
+  const stack = [[0, S - 1]]
+  const ab = new THREE.Vector3(), ap = new THREE.Vector3(), cr = new THREE.Vector3()
+  while (stack.length) {
+    const [a, b] = stack.pop()
+    if (b - a < 2) continue
+    ab.subVectors(pts[b], pts[a]); const abLen = ab.length()
+    let maxD = -1, maxI = -1
+    for (let i = a + 1; i < b; i++) {
+      ap.subVectors(pts[i], pts[a])
+      const d = abLen < 1e-9 ? ap.length() : cr.crossVectors(ap, ab).length() / abLen
+      if (d > maxD) { maxD = d; maxI = i }
+    }
+    if (maxD > tolNm && maxI > 0) { keep[maxI] = true; stack.push([a, maxI], [maxI, b]) }
+  }
+  return sections.filter((_, i) => keep[i])
+}
+
+/**
+ * Build rectangular swept cross-sections for ONE extrusion box along the deformed
+ * spine of its helices, over the box's global bp range [bpLo, bpHi].  Mirrors
+ * _computeSpineSections but uses a fixed wCol×wRow rectangle (so the bent boxes
+ * match the straight comb) and restricts to the box's sample-index sub-range.
+ * Returns sections[] (>=2) or null (no sampled helices / range too short).
+ */
+function _boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpHi, wCol, wRow) {
+  const sampled = boxHelixIds.filter(hid => (helixAxes[hid]?.samples?.length ?? 0) > 2)
+  if (!sampled.length) return null
+  const repHelix = design.helices.find(h => h.id === sampled[0])
+  const bs = repHelix?.bp_start ?? 0
+  let nMin = Infinity
+  for (const hid of sampled) nMin = Math.min(nMin, helixAxes[hid].samples.length)
+  if (nMin < 2) return null
+  const idxLo = Math.max(0, Math.min(nMin - 1, Math.round((bpLo - bs) / _AXIS_SAMPLE_STEP)))
+  const idxHi = Math.max(0, Math.min(nMin - 1, Math.round((bpHi - bs) / _AXIS_SAMPLE_STEP)))
+  if (idxHi - idxLo < 1) return null
+
+  const Yv = new THREE.Vector3(0, 1, 0)
+  const Zv = new THREE.Vector3(0, 0, 1)
+  // Rectangle in the cross-section (U,V) plane — corner.x → U, corner.z → V.
+  const corners = [
+    { x:  wCol / 2, z:  wRow / 2 }, { x: -wCol / 2, z:  wRow / 2 },
+    { x: -wCol / 2, z: -wRow / 2 }, { x:  wCol / 2, z: -wRow / 2 },
+  ]
+  const centers = []
+  for (let i = idxLo; i <= idxHi; i++) {
+    const c = new THREE.Vector3()
+    for (const hid of sampled) { const s = helixAxes[hid].samples[i]; c.x += s[0]; c.y += s[1]; c.z += s[2] }
+    centers.push(c.divideScalar(sampled.length))
+  }
+  const M = centers.length
+  const sections = []
+  for (let k = 0; k < M; k++) {
+    let tangent
+    if (k === 0)          tangent = new THREE.Vector3().subVectors(centers[1], centers[0])
+    else if (k === M - 1) tangent = new THREE.Vector3().subVectors(centers[k], centers[k - 1])
+    else                  tangent = new THREE.Vector3().subVectors(centers[k + 1], centers[k - 1])
+    if (tangent.lengthSq() < 1e-12) continue
+    tangent.normalize()
+    let U = new THREE.Vector3().crossVectors(tangent, Yv)
+    if (U.lengthSq() < 1e-4) U = new THREE.Vector3().crossVectors(tangent, Zv)
+    U.normalize()
+    const V = new THREE.Vector3().crossVectors(U, tangent).normalize()
+    sections.push({ center: centers[k], U, V, tangent, corners })
+  }
+  return sections.length >= 2 ? sections : null
+}
+
 // ── Public init ────────────────────────────────────────────────────────────────
 
 export function initJointRenderer(scene, camera, canvas, store, api) {
@@ -1739,6 +1851,9 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
   // smaller = finer. null → per-lattice default (set in _scanExtrusionGroup);
   // a number (from the slider) overrides it.
   let _hullScanTickBp      = null
+  // Curved-hull facet tolerance (nm): max deviation of a flat facet from the true
+  // deformed spine before it's subdivided. Larger = blockier/cheaper. Slider-driven.
+  let _hullCurveTolNm      = 1.0
   let _bundleInfo       = null   // { bundleDir, axialMid, ringYs, vertsPerRing }
   let _surfaceDetail    = MIN_HC_FACES
   let _onExitCb         = null   // callback supplied by caller of enterDefineMode
@@ -2371,7 +2486,9 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     // per-cluster cross-section scan, so each cluster gets its own frame + scan.
     let _hullDone = false
     if (_hullMode === 'extrusions') {
-      const fl = _buildExtrusionBoxes(design)
+      // Pass RAW helixAxes (with .samples) — not _scanAxes (dsDNA-trimmed) — so a
+      // deformed design sweeps each box along its spine. curveTol drives faceting.
+      const fl = _buildExtrusionBoxes(design, helixAxes, _hullCurveTolNm)
       if (fl) { scene.add(fl); _hullReprMeshes.set('__extrusions__', fl); _hullDone = true }
       else if (!design.cluster_transforms?.length) {
         const grp = _scanExtrusionGroup((design.helices ?? []).map(h => h.id),
@@ -2499,6 +2616,17 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
       _rebuildHullRepr(currentDesign, currentHelixAxes)
     }
     return _hullScanTickBp
+  }
+
+  // Curved-hull facet detail: max facet deviation from the true spine, in nm.
+  // Larger = blockier/cheaper. Rebuilds the hull if active. Returns the value.
+  function setHullCurveDetail(nm) {
+    if (typeof nm === 'number' && nm >= 0 && nm <= 20) _hullCurveTolNm = nm
+    if (_hullReprActive) {
+      const { currentDesign, currentHelixAxes } = store.getState()
+      _rebuildHullRepr(currentDesign, currentHelixAxes)
+    }
+    return _hullCurveTolNm
   }
 
   /**
@@ -2719,7 +2847,7 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     return result
   }
 
-  return { enterDefineMode, exitDefineMode, setExteriorPanels, setHullSurface, setRegularPolygon, setShowFill, setDebugOverlay, setHullRepr, setHullClusterDebug, setHullMinSizeFraction, setHullMode, setHullScanTick, applyDeformLerp, rebuild, rebuildHulls, highlightJoint, clearHighlight, pickJoint, pickJointRing, pickJointAny, captureClusterBase, applyClusterTransform, setVisible, isVisible, dispose, getPanels }
+  return { enterDefineMode, exitDefineMode, setExteriorPanels, setHullSurface, setRegularPolygon, setShowFill, setDebugOverlay, setHullRepr, setHullClusterDebug, setHullMinSizeFraction, setHullMode, setHullScanTick, setHullCurveDetail, applyDeformLerp, rebuild, rebuildHulls, highlightJoint, clearHighlight, pickJoint, pickJointRing, pickJointAny, captureClusterBase, applyClusterTransform, setVisible, isVisible, dispose, getPanels }
 }
 
 // ── Shared geometry utilities — imported by assembly_joint_renderer.js ────────

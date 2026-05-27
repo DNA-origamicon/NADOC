@@ -40,8 +40,24 @@ let _planeB   = null      // { bp }
 let _previewOpId       = null
 let _previewPending    = false  // true while an addDeformation network call is in-flight
 let _lastPreviewParams = null   // params from the most recent previewDeformation call
+// Coalesce live-preview PATCHes: a slider drag fires ~40 input events, each of
+// which used to fire its own updateDeformation PATCH + a /design/geometry refetch
+// (40 concurrent ~30s calls → backend saturation). With these, only one PATCH is
+// in flight at a time; intermediate slider positions are dropped and the latest
+// is flushed when the in-flight one finishes (render keeps up at backend speed).
+let _updateInFlight     = false
+let _pendingUpdateParams = null
 let _previewOriginalAxes = null // currentHelixAxes snapshot before preview was applied
 let _editMode          = false  // true when opened via startToolForEdit; Esc exits directly
+// Edit-in-place state. When editing an existing op we do NOT seek to a pre-state
+// and do NOT add a preview op — we PATCH the live op directly. Much faster (no
+// pre-state recompute, no add-preview round-trip) and shows the correct combined
+// geometry. _editOrigParams is restored (silent) on cancel/Esc; _editCommitted is
+// set by main.js right before it commits via editFeature so exit skips the revert.
+let _editOpId          = null   // id of the op being edited in place (null = new-deformation flow)
+let _editOrigParams    = null   // op's params at edit-start, for cancel revert
+let _editDirty         = false  // a live preview PATCH has been applied
+let _editCommitted     = false  // edit was confirmed (don't revert on exit)
 
 // Three.js plumbing
 let _scene          = null
@@ -87,8 +103,16 @@ export function initDeformationEditor(scene, camera, canvas, controls, designRen
 
 export function startTool(toolType) {
   if (!_scene) return
+  _editOpId = null; _editOrigParams = null; _editDirty = false; _editCommitted = false
   _toolType = toolType
   _setState(STATE.AWAITING_A)
+}
+
+/** Tell the editor an in-place edit is being committed, so the subsequent exit
+ *  does NOT silently revert the live preview op (main.js calls this right
+ *  before POST /design/features/{i}/edit). */
+export function markEditCommitted() {
+  _editCommitted = true
 }
 
 /**
@@ -130,9 +154,13 @@ export function startToolAtBp(toolType, helixId, bp, openSide) {
  * @param {number} globalBpA  - plane A global bp index
  * @param {number} globalBpB  - plane B global bp index
  */
-export function startToolForEdit(toolType, globalBpA, globalBpB) {
+export function startToolForEdit(toolType, globalBpA, globalBpB, opId = null, origParams = null) {
   if (!_scene) return
   _editMode = true
+  _editOpId = opId
+  _editOrigParams = origParams
+  _editDirty = false
+  _editCommitted = false
   _toolType = toolType
   _setState(STATE.AWAITING_A)
   // Place A manually (mirrors startToolAtBp's second branch)
@@ -340,11 +368,33 @@ export async function previewDeformation(params) {
   _lastPreviewParams = params
   const a = Math.min(_planeA.bp, _planeB.bp)
   const b = Math.max(_planeA.bp, _planeB.bp)
-  if (_previewOpId) {
+  // Update path (edit-in-place OR an existing preview op): PATCH the live op.
+  // Edit-in-place patches the real op (planes apply on confirm via editFeature);
+  // the preview-op path patches the ?preview op. Both COALESCE: if a PATCH is
+  // already in flight, stash the latest params and bail — the in-flight handler
+  // flushes the newest when it finishes, so a fast drag doesn't pile up dozens of
+  // PATCH + /design/geometry round-trips.
+  const updOpId = _editOpId ?? _previewOpId
+  if (updOpId) {
+    if (_editOpId) _editDirty = true
+    if (_updateInFlight) { _pendingUpdateParams = params; return }
+    _updateInFlight = true
     showPersistentToast('Generating preview…')
-    await api.updateDeformation(_previewOpId, params)
-    dismissToast()
-  } else if (_previewPending) {
+    try {
+      await api.updateDeformation(updOpId, params)
+      // Flush the newest params that arrived while we were patching (latest wins).
+      while (_pendingUpdateParams != null && _state === STATE.BOTH) {
+        const next = _pendingUpdateParams
+        _pendingUpdateParams = null
+        await api.updateDeformation(updOpId, next)
+      }
+    } finally {
+      _updateInFlight = false
+      dismissToast()
+    }
+    return
+  }
+  if (_previewPending) {
     // An addDeformation is already in-flight. Latest params are stored in
     // _lastPreviewParams and will be flushed as an update once it resolves.
     return
@@ -412,13 +462,18 @@ function _placeB(bp) {
   _setState(STATE.BOTH)
 }
 
-/** Farthest bp from bpA where all helices that cover bpA are still present. */
+/** Far end of the LONGEST helix past bpA, so the default window spans the whole part. */
 function _defaultBpForPlaneB(bpA) {  // bpA is GLOBAL
   const helices = _getHelixAxisData()
   if (!helices.length) return bpA + 1
   const active = helices.filter(h => h.bpStart + h.lengthBp > bpA)
   if (!active.length) return bpA + 1
-  const maxGlobalBp = Math.min(...active.map(h => h.bpStart + h.lengthBp)) - 1
+  // Was Math.min (the SHORTEST helix's end) — that stopped the default window
+  // short of the real structure end whenever the bundle had unequal helix
+  // lengths (e.g. teeth: backbone to bp 251, teeth to bp 209 → defaulted to 209).
+  // Use the longest helix's end so the bend covers the full span by default;
+  // shorter helices bend over the portion they occupy (see helices_crossing_planes).
+  const maxGlobalBp = Math.max(...active.map(h => h.bpStart + h.lengthBp)) - 1
   return maxGlobalBp > bpA ? maxGlobalBp : bpA + 1
 }
 
@@ -440,10 +495,22 @@ function _cancelPreview() {
 function _clearPreviewSession() {
   _cancelPreview()
   _previewOriginalAxes = null
+  _pendingUpdateParams = null   // drop any coalesced-but-unflushed preview params
 }
 
 function _exitTool() {
   _editMode = false
+  // Edit-in-place: if the user changed the live op but did NOT confirm (Cancel /
+  // Esc / other exit), silently restore its original params. editFeature was
+  // never called, so the log still holds the original; reverting design.deformations
+  // keeps the two consistent. Matches the new-flow's fire-and-forget cleanup.
+  if (_editOpId && _editDirty && !_editCommitted && _editOrigParams) {
+    api.updateDeformation(_editOpId, _editOrigParams).catch(() => {})
+  }
+  _editOpId = null
+  _editOrigParams = null
+  _editDirty = false
+  _editCommitted = false
   _clearPreviewSession()
   _lastPreviewParams = null
   _planeA = null
@@ -625,19 +692,27 @@ function _pickBpFull(event) {
 }
 
 /**
- * Pick the nearest bp to a world-space point by finding the closest point along
- * each helix axis (sample-aware for deformed helices) and returning the average bp.
+ * Pick the global bp to snap a dragged plane to, from a world-space point.
+ *
+ * Returns the bp of the helix axis CLOSEST to the point (sample-aware for
+ * deformed helices) — NOT the average across all helices.  The old averaging
+ * version clamped each helix to its own [0, lengthBp−1] before averaging, so a
+ * bundle with unequal helix lengths (e.g. teeth: backbone to bp 251, teeth to
+ * bp 209) capped the plane at the mean of the clamps (≈230) — the user could
+ * never drag the plane to the true structure end.  Nearest-helix snapping lets
+ * the plane reach the far end of whichever helix the cursor is over: past the
+ * short helices' end, the only nearby axis is a long one, so its bp (up to 251)
+ * is returned.
  */
 function _pickBpFromPoint(worldPoint) {
   const helices = _getHelixAxisData()
   if (!helices.length) return null
 
-  let sumBp = 0, count = 0
+  let bestBp = null, bestDist = Infinity
 
   for (const h of helices) {
     if (h.samples && h.samples.length > 2) {
       // Deformed axis: iterate sample segments and find the nearest point
-      let bestBp = 0, bestDist = Infinity
       for (let si = 0; si < h.samples.length - 1; si++) {
         const segStart = new THREE.Vector3(...h.samples[si])
         const segEnd   = new THREE.Vector3(...h.samples[si + 1])
@@ -654,28 +729,29 @@ function _pickBpFromPoint(worldPoint) {
           // Actual bp span of this segment — last segment may be < _SAMPLE_STEP
           const loBp = si * _SAMPLE_STEP
           const hiBp = si + 1 < h.samples.length - 1 ? (si + 1) * _SAMPLE_STEP : h.lengthBp - 1
-          bestBp = Math.round(loBp + (tClamp / segLen) * (hiBp - loBp))  // local
+          const localBp = Math.round(loBp + (tClamp / segLen) * (hiBp - loBp))
+          bestBp = Math.max(0, Math.min(h.lengthBp - 1, localBp)) + h.bpStart  // global
         }
       }
-      const localClamped = Math.max(0, Math.min(h.lengthBp - 1, bestBp))
-      sumBp += localClamped + h.bpStart  // convert to global
-      count++
     } else {
       // Straight axis
       const axisVec = h.end.clone().sub(h.start)
       const axisLen = axisVec.length()
       if (axisLen < 1e-9) continue
-      const axisDir  = axisVec.divideScalar(axisLen)
-      const t        = worldPoint.clone().sub(h.start).dot(axisDir)
-      const tClamped = Math.max(0, Math.min(axisLen, t))
-      const localBp  = Math.round(tClamped / BDNA_RISE_PER_BP)
-      sumBp += Math.max(h.bpStart, Math.min(h.bpStart + h.lengthBp - 1, localBp + h.bpStart))
-      count++
+      const axisDir  = axisVec.clone().divideScalar(axisLen)
+      const tRaw     = worldPoint.clone().sub(h.start).dot(axisDir)
+      const tClamped = Math.max(0, Math.min(axisLen, tRaw))
+      const closest  = h.start.clone().addScaledVector(axisDir, tClamped)
+      const dist     = worldPoint.distanceTo(closest)
+      if (dist < bestDist) {
+        bestDist = dist
+        const localBp = Math.round(tClamped / BDNA_RISE_PER_BP)
+        bestBp = Math.max(0, Math.min(h.lengthBp - 1, localBp)) + h.bpStart  // global
+      }
     }
   }
 
-  if (!count) return null
-  return Math.round(sumBp / count)
+  return bestBp
 }
 
 // ── Hover bead ─────────────────────────────────────────────────────────────────

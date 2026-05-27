@@ -260,6 +260,24 @@ function slabCenter(bbPos, bnDir, distance) {
  *   setDetailLevel(...) returns `{ needsRebuild: true }` so the assembly
  *   renderer can invalidate and rebuild.
  */
+
+/**
+ * Set a cross-fade material's opacity and the depthWrite/transparent flags that
+ * MUST track it.  An opacity-0 transparent mesh that still has depthWrite=true is
+ * an INVISIBLE OCCLUDER: it writes the depth buffer and punches voids into
+ * whatever is behind it — e.g. the faded straight-proxy cylinders (opacity 0 in
+ * the deformed view) were occluding the bent tubes behind them at certain camera
+ * angles. And a transparent mesh at full opacity causes depth-sort artifacts
+ * among the 100s of overlapping curved tubes.  So: write depth only when
+ * (near-)opaque, be transparent only while actually blending.
+ */
+function _fadeMat(mat, opacity) {
+  mat.opacity = opacity
+  const opaque = opacity >= 0.996
+  mat.transparent = !opaque
+  mat.depthWrite  = opaque
+}
+
 export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full') {
   const loopSet = new Set(loopStrandIds)
 
@@ -315,6 +333,29 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       if (di !== 0) return di
       return a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
     })
+  }
+
+  // ── Periodic-seam connectors ───────────────────────────────────────────────
+  // A forced ligation with is_periodic_seam merges a far 3' end into a near 5'
+  // end, so the merged strand has those two termini as CONSECUTIVE nucleotides —
+  // on the SAME helix but ~a-whole-part apart. That renders as one giant
+  // full-radius cone spanning the structure (getCrossHelixConnections skips it
+  // since it isn't cross-helix). We treat such a pair AS cross-helix so the fat
+  // cone is suppressed (radius 0 at every site that keys off isCrossHelix) and
+  // the connector flows into the arc pipeline tagged isPeriodicSeam, where the
+  // View-menu toggle hides it by default. Empty map ⇒ zero behaviour change for
+  // designs without periodic seams.
+  const _periodicSeamSiteToFl = new Map()
+  for (const fl of (design?.forced_ligations ?? [])) {
+    if (!fl.is_periodic_seam) continue
+    _periodicSeamSiteToFl.set(`${fl.three_prime_helix_id}:${fl.three_prime_bp}:${fl.three_prime_direction}`, fl.id)
+    _periodicSeamSiteToFl.set(`${fl.five_prime_helix_id}:${fl.five_prime_bp}:${fl.five_prime_direction}`, fl.id)
+  }
+  const _isPeriodicSeamPair = (a, b) => {
+    if (!_periodicSeamSiteToFl.size) return false
+    const ia = _periodicSeamSiteToFl.get(`${a.helix_id}:${a.bp_index}:${a.direction}`)
+    const ib = _periodicSeamSiteToFl.get(`${b.helix_id}:${b.bp_index}:${b.direction}`)
+    return ia != null && ia === ib
   }
 
   // ── Root group ─────────────────────────────────────────────────────────────
@@ -768,8 +809,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const midPos = from.clone().addScaledVector(dir.clone().normalize(), dist / 2)
         const quat   = new THREE.Quaternion().setFromUnitVectors(Y_HAT, dir.clone().normalize())
 
-        // Cross-helix connections are rendered as arcs; hide the cone.
-        const isCrossHelix = nucs[i].helix_id !== nucs[i + 1].helix_id
+        // Cross-helix connections — and periodic-seam far↔near connectors — are
+        // rendered as arcs; hide the cone. (Treating the periodic seam as
+        // cross-helix suppresses the giant cone via the existing radius logic.)
+        const isPeriodicSeam = _isPeriodicSeamPair(nucs[i], nucs[i + 1])
+        const isCrossHelix = (nucs[i].helix_id !== nucs[i + 1].helix_id) || isPeriodicSeam
         const r = isCrossHelix ? 0 : CONE_RADIUS
         _tMatrix.compose(midPos, quat, _tScale.set(r, coneHeight, r))
         iCones.setMatrixAt(coneId, _tMatrix)
@@ -782,6 +826,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           midPos, quat, coneHeight,
           coneRadius: isCrossHelix ? 0 : CONE_RADIUS,
           isCrossHelix,
+          isPeriodicSeam,
           defaultColor: color,
         })
         coneId++
@@ -910,7 +955,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // Opacity 1 at t=0 (straight), 0 at t=1 (fully deformed, curved tubes take over).
   const iCurvedHelixCylinders = new THREE.InstancedMesh(
     GEO_UNIT_CYL,
-    new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0 }),
+    // depthWrite:false at opacity 0 so the faded-out proxy is not an invisible
+    // occluder of the bent tubes behind it (see _fadeMat). The lerp re-enables it
+    // when the proxy fades in (straight view).
+    new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }),
     Math.max(1, _curvedDomainCylCount),
   )
   iCurvedHelixCylinders.count = _curvedDomainCylCount
@@ -941,7 +989,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // Curved-helix straight-proxy for overhang half-cylinders.
   const iCurvedOverhangCylinders = new THREE.InstancedMesh(
     GEO_HALF_CYL,
-    new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0 }),
+    new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0, depthWrite: false }),
     Math.max(1, _curvedOvhgCylCount),
   )
   iCurvedOverhangCylinders.count = _curvedOvhgCylCount
@@ -1025,8 +1073,28 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     for (let i = 0; i <= nPts; i++) pts.push(fullCurve.getPoint(t0c + (i / nPts) * (t1c - t0c)))
     const segCurve = new THREE.CatmullRomCurve3(pts)
     const segs     = Math.max(2, nPts)
-    const radialSeg = openAngle < 2 * Math.PI ? 4 : 8
-    const geo = new THREE.TubeGeometry(segCurve, segs, tubRadius, radialSeg, false)
+    const fullTube  = openAngle >= 2 * Math.PI - 1e-6
+    const radialSeg = fullTube ? 8 : 4
+    const tube = new THREE.TubeGeometry(segCurve, segs, tubRadius, radialSeg, false)
+    // TubeGeometry is OPEN at both ends. Uncapped, the open ends read as dark
+    // see-through holes at helix tips and FrontSide back-face culls into them —
+    // "portions of the cylinder disappear at certain angles". Cap full tubes with
+    // two oriented discs so they look solid like the capped straight GEO_UNIT_CYL
+    // cylinders. (Half-tube overhangs, openAngle<2π, stay uncapped + DoubleSide.)
+    if (!fullTube) return { geo: tube, t0Curve: t0c, t1Curve: t1c }
+    const _Z = new THREE.Vector3(0, 0, 1)
+    const _one = new THREE.Vector3(1, 1, 1)
+    const _q = new THREE.Quaternion()
+    const mkCap = (point, outwardNormal) => {
+      const cap = new THREE.CircleGeometry(tubRadius, radialSeg)  // XY plane, +Z normal
+      cap.applyMatrix4(new THREE.Matrix4().compose(point, _q.setFromUnitVectors(_Z, outwardNormal), _one))
+      return cap
+    }
+    const tStart = segCurve.getTangent(0).normalize()
+    const tEnd   = segCurve.getTangent(1).normalize()
+    const capA   = mkCap(pts[0],                tStart.clone().negate())  // start cap faces away from tube
+    const capB   = mkCap(pts[pts.length - 1],   tEnd)                     // end cap faces forward
+    const geo = mergeGeometries([tube, capA, capB], false) ?? tube
     return { geo, t0Curve: t0c, t1Curve: t1c }
   }
 
@@ -1074,7 +1142,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             const tubeMesh = new THREE.Mesh(
               built.geo,
               new THREE.MeshLambertMaterial({
-                color: strandColor, transparent: true, opacity: 1,
+                // Resting (deformed) state is opacity 1 → opaque + depthWrite so it
+                // sorts correctly and does not sit in the transparent queue (see
+                // _fadeMat). The lerp flips these when fading toward the straight proxy.
+                color: strandColor, transparent: false, opacity: 1, depthWrite: true,
                 side: isOvhg ? THREE.DoubleSide : THREE.FrontSide,
               }),
             )
@@ -1690,8 +1761,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
     iCurvedHelixCylinders.instanceMatrix.needsUpdate = true
     const _cvProxyOp = useStraight ? 1 : 0
-    iCurvedHelixCylinders.material.opacity = _cvProxyOp
-    for (const mesh of _curvedCylGroup.children)   mesh.material.opacity = 1 - _cvProxyOp
+    _fadeMat(iCurvedHelixCylinders.material, _cvProxyOp)
+    for (const mesh of _curvedCylGroup.children)   _fadeMat(mesh.material, 1 - _cvProxyOp)
     for (const dom of _curvedOvhgCylData) {
       const sa = useStraight ? straightAxesMap?.get(dom.helixId) : null
       const s  = sa ? sa.start : dom.arrow.aStart
@@ -1707,8 +1778,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iCurvedOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
     }
     iCurvedOverhangCylinders.instanceMatrix.needsUpdate = true
-    iCurvedOverhangCylinders.material.opacity = _cvProxyOp
-    for (const mesh of _curvedOvhgGroup.children) mesh.material.opacity = 1 - _cvProxyOp
+    _fadeMat(iCurvedOverhangCylinders.material, _cvProxyOp)
+    for (const mesh of _curvedOvhgGroup.children) _fadeMat(mesh.material, 1 - _cvProxyOp)
 
     // 6. Fluorophore beads — always revert to backbone_position (no straight map).
     for (const entry of fluoroEntries) {
@@ -3067,8 +3138,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iCurvedHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
       }
       iCurvedHelixCylinders.instanceMatrix.needsUpdate = true
-      iCurvedHelixCylinders.material.opacity = 1 - t
-      for (const mesh of _curvedCylGroup.children)   mesh.material.opacity = t
+      _fadeMat(iCurvedHelixCylinders.material, 1 - t)
+      for (const mesh of _curvedCylGroup.children)   _fadeMat(mesh.material, t)
       for (const dom of _curvedOvhgCylData) {
         const sa  = straightAxesMap?.get(dom.helixId)
         const lx0 = sa ? sa.start.x + (dom.arrow.aStart.x - sa.start.x) * t : dom.arrow.aStart.x
@@ -3088,8 +3159,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iCurvedOverhangCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
       }
       iCurvedOverhangCylinders.instanceMatrix.needsUpdate = true
-      iCurvedOverhangCylinders.material.opacity = 1 - t
-      for (const mesh of _curvedOvhgGroup.children)  mesh.material.opacity = t
+      _fadeMat(iCurvedOverhangCylinders.material, 1 - t)
+      for (const mesh of _curvedOvhgGroup.children)  _fadeMat(mesh.material, t)
     },
 
     /**
@@ -3605,6 +3676,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           strandId:    cone.strandId,
           fromNuc:     fn,
           toNuc:       tn,
+          isPeriodicSeam: !!cone.isPeriodicSeam,
         })
         const fk = `${fn.helix_id}:${fn.bp_index}:${fn.direction}`
         const tk = `${tn.helix_id}:${tn.bp_index}:${tn.direction}`

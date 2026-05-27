@@ -229,6 +229,13 @@ const _initialState = {
   showOverhangNames: false,
 
   /**
+   * When true, the long end-to-end ("periodic boundary") crossover connectors
+   * of is_periodic_seam forced ligations are shown in 3D. Default false — these
+   * span the whole part and clutter the view. Toggled via View > End-to-End Crossovers.
+   */
+  showPeriodicSeamArcs: false,
+
+  /**
    * True when the debug overlay (View > Debug / backtick) is active.
    * Mirrored here so other modules can subscribe to it.
    */
@@ -338,7 +345,8 @@ const _SLICES = {
                       'deformVisuActive', 'straightGeometry', 'straightHelixAxes',
                       'showHelixLabels', 'atomisticMode', 'surfaceMode',
                       'surfaceColorMode', 'surfaceOpacity', 'coloringMode',
-                      'staplesHidden', 'isolatedStrandId', 'showSequences']),
+                      'staplesHidden', 'isolatedStrandId', 'showSequences',
+                      'showPeriodicSeamArcs']),
 
   /** Selection, multi-select, active tools, crossover placement */
   selection: new Set(['selectedObject', 'multiSelectedStrandIds', 'multiSelectedDomainIds',

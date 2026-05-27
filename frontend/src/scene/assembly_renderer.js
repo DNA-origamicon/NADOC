@@ -537,11 +537,15 @@ function _buildInstanceLabelGroup(design, helixAxes, showLabels) {
  * @param {Array<{from, to, color, fromNuc}>} connections
  * @returns {THREE.Group|null}
  */
-function _buildInstanceCrossoverArcs(connections) {
+function _buildInstanceCrossoverArcs(connections, showPeriodic = false) {
   if (!connections?.length) return null
 
-  const scaffoldConns = connections.filter(c => c.fromNuc?.strand_type === 'scaffold')
-  const stapleConns   = connections.filter(c => c.fromNuc?.strand_type !== 'scaffold')
+  // End-to-end (periodic-seam) connectors are segregated into their own line so
+  // the View toggle hides them by default without affecting the real crossovers.
+  const periodicConns = connections.filter(c => c.isPeriodicSeam)
+  const normalConns   = connections.filter(c => !c.isPeriodicSeam)
+  const scaffoldConns = normalConns.filter(c => c.fromNuc?.strand_type === 'scaffold')
+  const stapleConns   = normalConns.filter(c => c.fromNuc?.strand_type !== 'scaffold')
 
   function _buildMerged(conns, arcType) {
     if (!conns.length) return null
@@ -586,8 +590,14 @@ function _buildInstanceCrossoverArcs(connections) {
   const group        = new THREE.Group()
   const scaffoldLine = _buildMerged(scaffoldConns, 'scaffold')
   const stapleLine   = _buildMerged(stapleConns, 'staple')
+  const periodicLine = _buildMerged(periodicConns, 'periodic')
   if (scaffoldLine) group.add(scaffoldLine)
   if (stapleLine)   group.add(stapleLine)
+  if (periodicLine) {
+    periodicLine.userData.isPeriodicSeam = true
+    periodicLine.visible = showPeriodic        // default hidden (toggle in View menu)
+    group.add(periodicLine)
+  }
   if (!group.children.length) return null
   group.userData.arcLines = group.children.slice()
   return group
@@ -716,6 +726,12 @@ function _buildHullGroupsForDesign(design, helixAxes, targetGroup) {
 // per-cluster hull — matches joint_renderer's _hullMinSizeFraction default.
 const HULL_MIN_SIZE_FRACTION = 0.10
 
+// Curved-hull facet tolerance (nm) for deformed parts in the assembly — matches
+// joint_renderer's _hullCurveTolNm default. The design-view slider doesn't reach
+// the assembly path (separate renderer); this fixed default keeps the assembly
+// hull's faceting in step with the design view's out-of-the-box look.
+const HULL_CURVE_TOL_NM = 1.0
+
 // Coarse axis-aligned bounding-box solid (source-local) over a part's
 // nucleotide backbone positions.  This is the FALLBACK hull for parts that
 // produce no extrusion/scan/cluster geometry (e.g. a bare imported strand set),
@@ -814,7 +830,10 @@ function _hullGeoForSource(design, nucleotides, helixAxes) {
     })
   }
 
-  let grp = buildExtrusionBoxes(design)                       // 1. extrusion boxes
+  // Pass the source's deformed helixAxes (carries .samples) + curve tol so a bent
+  // part's extrusion boxes sweep along its spine here too (parity with the design
+  // view). Non-deformed sources (no samples) build straight boxes as before.
+  let grp = buildExtrusionBoxes(design, helixAxes ?? null, HULL_CURVE_TOL_NM)  // 1. extrusion boxes
   if (!grp && !allClusters.length) {                          // 2. scan (no clusters)
     grp = scanExtrusionGroup(
       (design.helices ?? []).map(h => h.id),
@@ -1863,7 +1882,9 @@ export function initAssemblyRenderer(scene, store, api) {
 
       // Crossover arc lines — straight colored lines in instance-local space.
       // Added to helixCtrl.root so they hide/show with the CG representation.
-      const arcGroup = _buildInstanceCrossoverArcs(helixCtrl.getCrossHelixConnections())
+      const arcGroup = _buildInstanceCrossoverArcs(
+        helixCtrl.getCrossHelixConnections(), store.getState().showPeriodicSeamArcs === true,
+      )
       if (arcGroup) helixCtrl.root.add(arcGroup)
 
       // Extra-base bead/slab meshes for crossovers with extra bases.
@@ -2565,6 +2586,14 @@ export function initAssemblyRenderer(scene, store, api) {
       // force=true so switching back to 'strand' re-skins instances that
       // were previously painted by a non-strand mode.
       for (const entry of _cache.values()) _applyColoringToEntry(entry, { force: true })
+    }
+    if (newState.showPeriodicSeamArcs !== prevState.showPeriodicSeamArcs) {
+      const show = newState.showPeriodicSeamArcs === true
+      for (const entry of _cache.values()) {
+        for (const line of (entry.arcGroup?.userData?.arcLines ?? entry.arcGroup?.children ?? [])) {
+          if (line.userData?.isPeriodicSeam) line.visible = show
+        }
+      }
     }
   })
 
@@ -3372,6 +3401,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       if (srcEntry.overhangLod?.mesh)   srcEntry.overhangLod.mesh.visible = v
       if (srcEntry.hullLod?.mesh)       srcEntry.hullLod.mesh.visible = v
       if (srcEntry.hullMarkerLod?.mesh) srcEntry.hullMarkerLod.mesh.visible = v
+      if (srcEntry.curvedCylLod?.mesh)  srcEntry.curvedCylLod.mesh.visible = v
     }
     srcEntry.isAtomistic = true
     _setCgVisible(false)
@@ -3474,6 +3504,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       if (srcEntry.overhangLod?.mesh)   srcEntry.overhangLod.mesh.visible = v
       if (srcEntry.hullLod?.mesh)       srcEntry.hullLod.mesh.visible = v
       if (srcEntry.hullMarkerLod?.mesh) srcEntry.hullMarkerLod.mesh.visible = v
+      if (srcEntry.curvedCylLod?.mesh)  srcEntry.curvedCylLod.mesh.visible = v
     }
     srcEntry.isSurface = true
     _setCgVisible(false)
@@ -4053,6 +4084,21 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       }
     }
 
+    // Curved-cylinder LOD — only for deformed sources (bake returns null for a
+    // straight part). Lets bent parts show capped, strand-coloured cylinders at
+    // every instance in the cylinder rep (mid bucket); see _updateLodForSource.
+    {
+      const curvedCylGeo = _curvedCylGeoForSource(helixCtrl)
+      if (curvedCylGeo) {
+        const ccl = _buildCurvedCylLodMesh(srcEntry, curvedCylGeo, helixGroup)
+        if (ccl) {
+          srcEntry.curvedCylLod = ccl
+          const tris = (curvedCylGeo.attributes?.position?.count ?? 0) / 3
+          console.info(`[shared_renderer]   curved-cyl LOD built: ~${tris | 0} tris`)
+        }
+      }
+    }
+
     // Seed per-helix colours from the current coloringMode.  Pre-per-helix
     // implementation tinted the mid-LOD by an averaged flat colour, which
     // dimmed cylinder rendering (scaffold's dark navy dominated the
@@ -4069,7 +4115,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // to the source origin. They're distance impostors anyway, so they don't
     // need the PBR look (only the close-LOD bp meshes do — those get PBR + the
     // re-applied instancing patch via userData.applySharedInstancing).
-    for (const m of [srcEntry.midLod?.mesh, srcEntry.overhangLod?.mesh, srcEntry.hullLod?.mesh, srcEntry.hullMarkerLod?.mesh]) {
+    for (const m of [srcEntry.midLod?.mesh, srcEntry.overhangLod?.mesh, srcEntry.hullLod?.mesh, srcEntry.hullMarkerLod?.mesh, srcEntry.curvedCylLod?.mesh]) {
       if (m) m.userData.sharedLodImpostor = true
     }
 
@@ -4715,6 +4761,107 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return { mesh, u_instanceOffset }
   }
 
+  // ── Curved-cylinder LOD (deformed sources) ─────────────────────────────────
+  // The per-domain sharedLodMid is built from the STRAIGHT iHelixCylinders, which
+  // is empty for curved (bent-deformation) helices — so bent parts rendered no
+  // cylinders in the shared path.  Instead we bake the source's bent TUBE meshes
+  // (the same curved cylinders + end caps helix_renderer draws in the design view)
+  // into ONE source-local geometry with per-vertex strand colours, then instance
+  // it per copy exactly like the hull solid.  Returns position+normal+color, or
+  // null for a straight part (no curved tubes) — so the straight path is untouched.
+  function _curvedCylGeoForSource(helixCtrl) {
+    const root = helixCtrl?.root
+    if (!root) return null
+    root.updateMatrixWorld(true)
+    const baked = []
+    const col = new THREE.Color()
+    root.traverse(o => {
+      const pn = o.parent?.name
+      if (!o.isMesh || !o.geometry) return
+      if (pn !== 'curvedCylGroup' && pn !== 'curvedOvhgGroup') return
+      let g = o.geometry.clone()
+      g.applyMatrix4(o.matrixWorld)
+      g = g.toNonIndexed()
+      for (const name of Object.keys(g.attributes)) {
+        if (name !== 'position' && name !== 'normal') g.deleteAttribute(name)
+      }
+      if (!g.attributes.normal) g.computeVertexNormals()
+      const m = Array.isArray(o.material) ? o.material[0] : o.material
+      if (m?.color) col.copy(m.color); else col.setRGB(0.6, 0.6, 0.6)
+      const n = g.attributes.position.count
+      const colors = new Float32Array(n * 3)
+      for (let i = 0; i < n; i++) { colors[i * 3] = col.r; colors[i * 3 + 1] = col.g; colors[i * 3 + 2] = col.b }
+      g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+      baked.push(g)
+    })
+    if (!baked.length) return null
+    const merged = mergeGeometries(baked, false)
+    baked.forEach(g => g.dispose())
+    return merged
+  }
+
+  // One baked bent-tube solid per instance, instanced via the per-instance xform
+  // texture exactly like _buildHullLodMesh — but lit + vertex-coloured so strand
+  // colours survive.  Rides the MID (cylinder) bucket.  (Normals aren't rotated by
+  // instTransform — approximate lighting on rotated instances, matching the hull/
+  // mid LOD precedent.)
+  function _buildCurvedCylLodMesh(srcEntry, geo, sourceGroup) {
+    const numInstances = srcEntry.instanceIds.length
+    if (numInstances === 0 || !geo) return null
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })
+    const _ck = 'sharedLodCurvedCyl_' + mat.uuid
+    mat.customProgramCacheKey = () => _ck
+    const u_instanceOffset = { value: 0 }
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.u_instanceXform  = srcEntry.uXformUniform
+      shader.uniforms.u_visibilityTex  = srcEntry.uVisUniform
+      shader.uniforms.u_instanceOffset = u_instanceOffset
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `
+          #include <common>
+          uniform sampler2D u_instanceXform;
+          uniform sampler2D u_visibilityTex;
+          uniform float u_instanceOffset;
+          varying float v_visible;
+          `)
+        .replace('#include <begin_vertex>', `
+          int instanceIdx = gl_InstanceID + int(u_instanceOffset);
+          v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
+          mat4 instTransform = mat4(
+            texelFetch(u_instanceXform, ivec2(0, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(1, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(2, instanceIdx), 0),
+            texelFetch(u_instanceXform, ivec2(3, instanceIdx), 0)
+          );
+          vec3 transformed = (instTransform * vec4(position, 1.0)).xyz;
+          `)
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `
+          #include <common>
+          varying float v_visible;
+          `)
+        .replace('#include <dithering_fragment>', `
+          if (v_visible < 0.5) discard;
+          #include <dithering_fragment>
+          `)
+    }
+    const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, numInstances))
+    const identityArr = new Float32Array(16)
+    identityArr[0] = 1; identityArr[5] = 1; identityArr[10] = 1; identityArr[15] = 1
+    const idAttr = new THREE.InstancedBufferAttribute(identityArr, 16, false, Math.max(1, numInstances))
+    idAttr.setUsage(THREE.StaticDrawUsage)
+    mesh.instanceMatrix = idAttr
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.instanceColor = null
+    mesh.count = 0
+    mesh.frustumCulled = false
+    mesh.visible = true
+    mesh.name = 'sharedLodCurvedCyl'
+    mesh.userData.sharedLodImpostor = true
+    sourceGroup.add(mesh)
+    return { mesh, u_instanceOffset }
+  }
+
   // ── Overhang-marker-LOD InstancedMesh ──────────────────────────────────────
   // The source-local overhang face quads (vertex-coloured), instanced exactly
   // like _buildHullLodMesh's hull solid (world = instTransform × position via the
@@ -5033,6 +5180,16 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         srcEntry.midLod.u_instanceOffset.value = nClose
       }
     }
+    // Curved-cylinder LOD (deformed sources) rides the mid bucket — ONE baked
+    // bent-tube solid per mid-bucket instance (hull-style: count = nMid, offset =
+    // nClose). Coexists with sharedLodMid (which is empty for fully-curved parts).
+    if (srcEntry.curvedCylLod) {
+      srcEntry.curvedCylLod.mesh.count = nMid
+      srcEntry.curvedCylLod.mesh.visible = true
+      if (srcEntry.curvedCylLod.u_instanceOffset) {
+        srcEntry.curvedCylLod.u_instanceOffset.value = nClose
+      }
+    }
     // Overhang LOD draws alongside mid LOD — same instance offset (after
     // close bucket).  Skipping when no overhangs exist avoids spurious draws.
     if (srcEntry.overhangLod) {
@@ -5217,16 +5374,19 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     // user invalidated). For simplicity (and per spec for invalidateInstance),
     // we tear down all current sources and rebuild. Future optimization: only
     // rebuild sources whose membership / source_key set changed.
-    dispose()  // wipes everything; we'll rebuild from scratch each time.
-
+    // Fetch BEFORE disposing so the CURRENT geometry stays on screen during the
+    // (slow, seconds-long) batch fetch. Disposing first blanked the whole scene
+    // for the entire fetch — the user saw an empty viewport and assumed the app
+    // had hung. Now the old chain stays visible until the new data is in hand.
     let batchGeo = null
     try {
       batchGeo = await api.getAssemblyGeometry()
     } catch (err) {
       console.warn('[shared_renderer] batch geometry fetch failed:', err)
       _fireRebuildComplete()
-      return
+      return   // keep the old scene visible on error rather than blanking it
     }
+    dispose()  // now wipe — we rebuild from scratch with the fetched data below.
     const perInst = batchGeo?.instances ?? {}
 
     for (const [srcKey, instList] of groups) {

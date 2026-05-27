@@ -752,6 +752,57 @@ def _resolve_blunt_label_local(
     return None
 
 
+def _resolve_seam_label_local(
+    design: 'Design',
+    label: str,
+) -> 'tuple[np.ndarray, np.ndarray] | None':
+    """For a synthesized periodic-seam connector label (``seam0:5p`` /
+    ``seam0:3p``), return the seam cross-section anchor's CURRENT position +
+    axis-tangent normal in instance-local coordinates, recomputed live from the
+    part's geometry.
+
+    Periodic polymerization (``polymerize_periodic_assembly``) bakes these
+    connectors as static ``ip.position`` snapshots taken at polymerize time. If
+    the part's geometry later changes (e.g. a new / edited deformation moves the
+    seam cross-section), the baked positions go stale and the chain stays frozen
+    at the polymerize-time pose. Resolving them live — exactly as
+    :func:`_resolve_blunt_label_local` does for ``blunt:`` ends — lets the rigid
+    seam joints re-dock the chain to the updated geometry on the next resolve.
+
+    Only the principal seam (``seam0``) is synthesized today; other indices
+    return None so the caller falls back to the stored ``ip.position``.
+    """
+    if not label or not label.startswith("seam0:"):
+        return None
+    side = label.split(":", 1)[1]
+    if side not in ("5p", "3p"):
+        return None
+    try:
+        from backend.core.periodic_polymer import principal_seam_connectors
+        specs = principal_seam_connectors(design)
+    except Exception:
+        return None
+    if specs is None:
+        return None
+    (p5, n5), (p3, n3) = specs
+    pos, normal = (p5, n5) if side == "5p" else (p3, n3)
+    return np.array(pos, dtype=float), np.array(normal, dtype=float)
+
+
+def _resolve_live_connector_local(
+    design: 'Design',
+    label: str,
+) -> 'tuple[np.ndarray, np.ndarray] | None':
+    """Live (geometry-derived) local anchor + normal for connector labels that
+    must track the part's current geometry: ``blunt:helix:bp`` ends and
+    synthesized periodic ``seam0:*`` connectors. Returns ``(pos, normal)`` or
+    ``None`` (caller falls back to the stored ``ip.position``)."""
+    live = _resolve_blunt_label_local(design, label)
+    if live is not None:
+        return live
+    return _resolve_seam_label_local(design, label)
+
+
 def _get_connector_world_frame(
     instance: 'PartInstance',
     label: str,
@@ -773,7 +824,7 @@ def _get_connector_world_frame(
     p_local: 'np.ndarray | None' = None
     n_local: 'np.ndarray | None' = None
     if design is not None:
-        live = _resolve_blunt_label_local(design, label)
+        live = _resolve_live_connector_local(design, label)
         if live is not None:
             p_local, n_local = live
     if p_local is None:
@@ -806,7 +857,7 @@ def _get_connector_world(
     """
     p_local: 'np.ndarray | None' = None
     if design is not None:
-        live = _resolve_blunt_label_local(design, label)
+        live = _resolve_live_connector_local(design, label)
         if live is not None:
             p_local = live[0]
     if p_local is None:
@@ -840,7 +891,7 @@ def _local_frame_for_label(
     p_local: 'np.ndarray | None' = None
     n_local: 'np.ndarray | None' = None
     if design is not None:
-        live = _resolve_blunt_label_local(design, label)
+        live = _resolve_live_connector_local(design, label)
         if live is not None:
             p_local, n_local = live
     if p_local is None:
@@ -2020,8 +2071,27 @@ def patch_instance_design(instance_id: str, body: PatchInstanceDesignRequest) ->
     except Exception as exc:
         raise HTTPException(400, detail=f"Invalid design JSON: {exc}") from exc
 
-    _replace_instance_design(assembly, inst, design)
-    return _assembly_response(assembly_state.get_or_404())
+    # Connector-geometry signature BEFORE the replace, so we can tell whether the
+    # edit actually moved any mate connectors.
+    try:
+        old_design  = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+        pre_geo_sig = _part_geometry_signature(old_design)
+    except Exception:
+        pre_geo_sig = None
+    post_geo_sig = _part_geometry_signature(design)
+
+    updated_assembly, _new_inst = _replace_instance_design(assembly, inst, design)
+
+    # Auto-resolve mates when the part's connector geometry changed (cluster
+    # transforms / deformations / loop-skips), so a polymerized chain — or any
+    # mate — re-docks to the new part shape. Without this the chain stayed frozen
+    # at the pre-edit pose (the part editor's save path skipped resolve entirely).
+    # Mirrors seek_instance_features; manual Resolve always works regardless.
+    if pre_geo_sig != post_geo_sig and updated_assembly.joints:
+        resolve_assembly()
+        updated_assembly = assembly_state.get_or_404()
+
+    return _assembly_response(updated_assembly)
 
 
 def _apply_part_mutation_with_feature_log(
@@ -2333,6 +2403,31 @@ def _cluster_transforms_signature(design) -> tuple:
     )
 
 
+def _part_geometry_signature(design) -> tuple:
+    """Hashable summary of everything that moves a part's CONNECTOR geometry:
+    cluster transforms, bend/twist deformations, and per-helix loop/skips.
+
+    Used to gate the auto-resolve in :func:`seek_instance_features`. The earlier
+    gate only watched cluster_transforms, on the (wrong) assumption that
+    "deformations don't move mate connectors" — but connector frames are pulled
+    live from ``deformed_helix_axes`` / ``deformed_nucleotide_positions`` (and,
+    for periodic chains, ``principal_seam_connectors``), all of which reflect
+    deformations and loop/skips. So a twist/bend edit on a part DOES move its
+    connectors and must re-resolve the assembly (e.g. a periodic-polymerized
+    chain re-docking to the new seam geometry)."""
+    clusters = _cluster_transforms_signature(design)
+    deforms = tuple(
+        (op.id, op.type, op.plane_a_bp, op.plane_b_bp,
+         tuple(sorted(op.params.model_dump().items())))
+        for op in (design.deformations or [])
+    )
+    loopskips = tuple(
+        (h.id, tuple(tuple(sorted(ls.model_dump().items())) for ls in (h.loop_skips or [])))
+        for h in (design.helices or [])
+    )
+    return (clusters, deforms, loopskips)
+
+
 @router.post("/assembly/instances/{instance_id}/features/seek", status_code=200)
 def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) -> dict:
     """Replay one part instance's feature log and persist the resulting part design.
@@ -2344,12 +2439,13 @@ def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) 
     follow-up refetch (e.g. the watchdog SSE echo) is a cache hit instead
     of a 2-3 s re-computation.
 
-    When the seek changes the design's cluster_transforms (e.g. a Relax Bond
-    cycle in the seeked region tilts a hinge), the function auto-runs
-    ``resolve_assembly`` so mates stay snapped to the new connector
-    positions. Seeks that only change deformations / topology / overhang
-    rotation (no cluster move) skip the resolve — those changes don't move
-    mate connectors so resolve would be a no-op anyway.
+    When the seek changes the part's connector geometry — cluster transforms
+    (e.g. a Relax Bond cycle tilts a hinge), bend/twist deformations, or
+    loop/skips — the function auto-runs ``resolve_assembly`` so mates stay
+    snapped to the new connector positions. This includes periodic-polymerized
+    chains: a deformation edit moves the seam cross-sections, and the live
+    ``seam0:*`` connectors let the chain re-dock to the new geometry. Seeks that
+    leave connector geometry unchanged skip the resolve (it would be a no-op).
     """
     from backend.api import crud as crud_api
     from backend.api.crud import _geometry_for_design, _compact_geometry_from_nucleotides
@@ -2358,18 +2454,18 @@ def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) 
     assembly = assembly_state.get_or_404()
     inst = _find_instance(assembly, instance_id)
     design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
-    pre_ct_sig = _cluster_transforms_signature(design)
+    pre_geo_sig = _part_geometry_signature(design)
 
     updated_design = crud_api._seek_feature_log(design, body.position, body.sub_position)
-    post_ct_sig = _cluster_transforms_signature(updated_design)
+    post_geo_sig = _part_geometry_signature(updated_design)
     updated_assembly, new_inst = _replace_instance_design(assembly, inst, updated_design)
 
-    # Auto-resolve mates if a cluster transform on this part changed.
-    # resolve_assembly reads from assembly_state and writes the snapped
-    # state back; we capture solve_status for the response so the
-    # frontend's "Mates" panel reflects which joints actually moved.
+    # Auto-resolve mates if the part's connector geometry changed (cluster
+    # transforms, deformations, or loop/skips). resolve_assembly reads from
+    # assembly_state and writes the snapped state back; we capture solve_status
+    # for the response so the frontend's "Mates" panel reflects which joints moved.
     solve_status: dict | None = None
-    if pre_ct_sig != post_ct_sig and updated_assembly.joints:
+    if pre_geo_sig != post_geo_sig and updated_assembly.joints:
         resolve_resp = resolve_assembly()
         solve_status = resolve_resp.get("solve_status")
         updated_assembly = assembly_state.get_or_404()
