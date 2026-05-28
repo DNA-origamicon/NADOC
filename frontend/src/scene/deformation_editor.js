@@ -28,6 +28,9 @@ import { showPersistentToast, dismissToast } from '../ui/toast.js'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PLANE_SIZE = 8.0   // nm — half-extent of each plane quad (full size = 2×)
+// Opacity for the live deformed-result preview ("ghost of where it will be").
+// The committed design renders solid (1.0) underneath as the reference.
+const PREVIEW_GHOST_OPACITY = 0.38
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -279,8 +282,6 @@ function _refreshPreview() {
     const staleOpId = _previewOpId
     const params    = _lastPreviewParams
     _previewOpId = null
-    // Do NOT call clearGhost() here — keep the pre-deform ghost intact so the
-    // scene stays stable while the delete resolves.
     showPersistentToast('Generating preview…')
     api.deleteDeformation(staleOpId, /*preview=*/true)
       .then(() => previewDeformation(params))
@@ -342,7 +343,6 @@ export async function confirmDeformation(params) {
   _lastPreviewParams   = null
   _previewOriginalAxes = null
   dismissToast()
-  _renderer?.clearGhost?.()
   if (_previewOpId) {
     await api.deleteDeformation(_previewOpId, /*preview=*/true)
     _previewOpId = null
@@ -368,6 +368,17 @@ export async function previewDeformation(params) {
   _lastPreviewParams = params
   const a = Math.min(_planeA.bp, _planeB.bp)
   const b = Math.max(_planeA.bp, _planeB.bp)
+  // Once per preview session, BEFORE the first op changes currentGeometry:
+  //   • snapshot the pre-preview axes (keeps plane interaction anchored across
+  //     the drag auto-refresh's delete→rebuild cycle), and
+  //   • freeze the committed design as the SOLID reference so the live deformed
+  //     result renders as a translucent ghost of where it will be.
+  // Runs for BOTH the edit-in-place and new-op paths (the edit path returns
+  // below before the new-op branch, so this must be above the updOpId check).
+  if (!_previewOriginalAxes) {
+    _previewOriginalAxes = store.getState().currentHelixAxes
+    _renderer?.beginDeformPreview?.(PREVIEW_GHOST_OPACITY)
+  }
   // Update path (edit-in-place OR an existing preview op): PATCH the live op.
   // Edit-in-place patches the real op (planes apply on confirm via editFeature);
   // the preview-op path patches the ?preview op. Both COALESCE: if a PATCH is
@@ -399,14 +410,6 @@ export async function previewDeformation(params) {
     // _lastPreviewParams and will be flushed as an update once it resolves.
     return
   } else {
-    // Snapshot axes and capture ghost only once per preview session.
-    // The drag auto-refresh calls this again with _previewOriginalAxes already
-    // set — don't re-capture or the delete→rebuild cycle will replace the
-    // pre-deform ghost with the intermediate straight geometry.
-    if (!_previewOriginalAxes) {
-      _previewOriginalAxes = store.getState().currentHelixAxes
-      _renderer?.captureGhost?.(0.5, 0.3)
-    }
     _previewPending = true
     showPersistentToast('Generating preview…')
     await api.addDeformation(_toolType, a, b, params, [], /*preview=*/true, _effectiveClusterIds())
@@ -477,13 +480,13 @@ function _defaultBpForPlaneB(bpA) {  // bpA is GLOBAL
   return maxGlobalBp > bpA ? maxGlobalBp : bpA + 1
 }
 
-// Cancel the active preview op and ghost, but intentionally keep
-// _previewOriginalAxes — the drag auto-refresh path calls this then
-// immediately re-previews, and the snapshot is still valid across that cycle.
+// Cancel the active preview op, but intentionally keep _previewOriginalAxes —
+// the drag auto-refresh path calls this then immediately re-previews, and the
+// snapshot is still valid across that cycle.
 function _cancelPreview() {
   _previewPending = false
   dismissToast()
-  _renderer?.clearGhost?.()
+  _renderer?.endDeformPreview?.()   // dispose the solid reference + drop ghost opacity
   if (_previewOpId) {
     api.deleteDeformation(_previewOpId, /*preview=*/true).catch(() => {})
     _previewOpId = null

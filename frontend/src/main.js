@@ -4215,6 +4215,11 @@ Typical debugging workflow for "reverts to 3D" bug:
   //  _FNAME_KEY, and _setFileName are declared above the session-restore block.)
   let _lastDetailLevel  = 0      // LOD level last applied to designRenderer (0=full, 1=beads, 2=cylinders)
   let _lodMode          = 'full' // 'full' | 'beads' | 'cylinders'
+  // The active design-view representation (full|beads|cylinders|vdw|ballstick|surface|
+  // hull-prism). Tracked so e.g. the deform tool can drop the hull-prism solid for
+  // an edit (its coarse envelope can't show the live preview and would persist
+  // under the full-rep preview). Set by _setRepresentation.
+  let _currentRepr      = 'full'
 
   /** Clear per-file state (slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
@@ -6100,6 +6105,12 @@ Typical debugging workflow for "reverts to 3D" bug:
   store.subscribe((newState, prevState) => {
     if (newState.deformToolActive === prevState.deformToolActive) return
     if (newState.deformToolActive) {
+      // Deform editing previews the full/CG geometry. The hull-prism solid is a
+      // coarse envelope that can't reflect the live preview AND would persist
+      // underneath it (both reps visible at once). Drop to full for the edit so
+      // only the deforming geometry shows. (No auto-restore — full is the clearest
+      // view of the result; the user re-picks Hull Prism afterward if wanted.)
+      if (_currentRepr === 'hull-prism') _setRepresentation('full')
       // Deform just activated — save user's selection filter and disable all
       _savedSelectableTypes = { ...newState.selectableTypes }
       store.setState({
@@ -8285,6 +8296,8 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (cd && cg) {
         overhangLinkArcs?.rebuild?.(cd, cg)
         if (overhangLocations?.isVisible?.()) overhangLocations.rebuild(cd, cg)
+        // rebuild(geometry, design) — arg order is reversed vs the others.
+        if (overhangNameOverlay?.isVisible?.()) overhangNameOverlay.rebuild(cg, cd)
         if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
         if (linkerAnchorDebug?.isVisible?.()) linkerAnchorDebug.rebuild()
         if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
@@ -8323,6 +8336,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (cd && cg) {
       overhangLinkArcs?.rebuild?.(cd, cg)
       if (overhangLocations?.isVisible?.()) overhangLocations.rebuild(cd, cg)
+      // rebuild(geometry, design) — arg order is reversed vs the others.
+      if (overhangNameOverlay?.isVisible?.()) overhangNameOverlay.rebuild(cg, cd)
       if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
       if (linkerAnchorDebug?.isVisible?.()) linkerAnchorDebug.rebuild()
       if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
@@ -8558,6 +8573,8 @@ Typical debugging workflow for "reverts to 3D" bug:
               if (cd && cg) {
                 overhangLinkArcs?.rebuild?.(cd, cg)
                 if (overhangLocations?.isVisible?.()) overhangLocations.rebuild(cd, cg)
+                // rebuild(geometry, design) — arg order is reversed vs the others.
+                if (overhangNameOverlay?.isVisible?.()) overhangNameOverlay.rebuild(cg, cd)
                 if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
                 if (linkerAnchorDebug?.isVisible?.()) linkerAnchorDebug.rebuild()
                 if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
@@ -8651,6 +8668,8 @@ Typical debugging workflow for "reverts to 3D" bug:
               if (cd && cg) {
                 overhangLinkArcs?.rebuild?.(cd, cg)
                 if (overhangLocations?.isVisible?.()) overhangLocations.rebuild(cd, cg)
+                // rebuild(geometry, design) — arg order is reversed vs the others.
+                if (overhangNameOverlay?.isVisible?.()) overhangNameOverlay.rebuild(cg, cd)
                 if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
                 if (linkerAnchorDebug?.isVisible?.()) linkerAnchorDebug.rebuild()
                 if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
@@ -9244,6 +9263,13 @@ Typical debugging workflow for "reverts to 3D" bug:
   let _partSaveTimer = null
 
   store.subscribeSlice('design', (newState, prevState) => {
+    // Skip TRANSIENT deform mutations — a bend/twist live preview, param PATCH, or
+    // cancel-revert. They must NOT auto-save (→ file → SSE) or push the part to the
+    // assembly (→ part-design-updated): the assembly updates ONLY when the user
+    // commits via Apply (a non-preview add / editFeature), and does nothing if the
+    // edit was cancelled or unchanged. Read synchronously here (the flag is set
+    // during this very setState by _syncFromDesignResponse).
+    if (newState.currentDesign !== prevState.currentDesign && api.wasLastDesignSyncTransient()) return
     if (_partEditContext) {
       if (newState.currentDesign === prevState.currentDesign) return
       _setSyncStatus('yellow', 'auto-saving…')
@@ -12368,6 +12394,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   async function _setRepresentation(repr) {
+    _currentRepr = repr
     // ── Deactivate any currently active exclusive mode ────────────────────────
     if (repr !== 'vdw' && repr !== 'ballstick' && atomisticRenderer.getMode() !== 'off') {
       atomisticRenderer.setMode('off')

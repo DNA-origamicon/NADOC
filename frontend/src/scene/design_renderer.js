@@ -43,19 +43,20 @@ export function initDesignRenderer(scene, storeRef) {
   // Fluorescence-mode: per-fluorophore emission color glow
   const _fluoroGlowLayer = createMultiColorGlowLayer(scene)
 
-  // ── Preview ghost state ───────────────────────────────────────────────────
-  // When a bend/twist preview is active:
-  //   _ghostRoot  — the original (pre-bend) geometry group kept in the scene
-  //   _previewOpacity — opacity applied to each newly rebuilt preview geometry
-  // Both are null when not in preview mode.
-
-  let _ghostRoot       = null   // saved pre-preview root (not disposed)
-  let _previewOpacity  = null   // opacity for the bent preview geometry
   let _hiddenNucKeys      = new Set()  // persists across rebuilds; set by cluster visibility toggle
   let _hiddenCrossoverIds = new Set()  // extra-base bead/slab instances to suppress
-  // Flag: on the NEXT _rebuild, save the old root as ghost instead of disposing
-  let _captureNextAsGhost    = null   // ghost opacity value, or null
-  let _captureNextPreviewOp  = null   // preview opacity value
+
+  // ── Deform preview overlay ────────────────────────────────────────────────
+  // While the bend/twist tool previews a deformation we show BOTH:
+  //   _frozenRoot   — the committed design (before this op), kept SOLID in the
+  //                   scene as the "where the design is now" reference.
+  //   live preview  — the deformed RESULT (the live _helixCtrl.root), rendered at
+  //                   `_ghostOpacity` as a translucent "ghost of where it will be".
+  // Both null/false when not previewing. (Opacity is flipped vs the old before-
+  // ghost: the reference is now solid and the result is the ghost.)
+  let _frozenRoot          = null   // committed design kept solid during a preview
+  let _ghostOpacity        = null   // opacity for the live (result) preview, or null
+  let _captureNextAsFrozen = false  // on the NEXT rebuild, freeze the old root
 
   function _disposeRoot(root) {
     root.traverse(obj => {
@@ -223,23 +224,24 @@ export function initDesignRenderer(scene, storeRef) {
   // ── Geometric scene rebuild ───────────────────────────────────────────────
 
   function _rebuild(geometry, design, helixAxes) {
-    // Dispose or save previous scene objects.
+    // Dispose previous scene objects (or freeze the committed design as the
+    // solid deform-preview reference).  Extra-base beads+slabs are children of
+    // root — disposed with it automatically.
     if (_helixCtrl?.root) {
       const oldRoot = _helixCtrl.root
       scene.remove(oldRoot)
-
-      if (_captureNextAsGhost !== null) {
-        // Save old geometry as ghost — do NOT dispose
-        if (_ghostRoot) { _disposeRoot(_ghostRoot); scene.remove(_ghostRoot) }
-        _ghostRoot = oldRoot
-        _traverseSetOpacity(_ghostRoot, _captureNextAsGhost)
-        scene.add(_ghostRoot)
-        _previewOpacity = _captureNextPreviewOp
-        _captureNextAsGhost   = null
-        _captureNextPreviewOp = null
-      } else if (oldRoot !== _ghostRoot) {
-        // Normal disposal (ghost is managed separately).
-        // Extra-base beads+slabs are children of root — disposed here automatically.
+      if (_captureNextAsFrozen) {
+        // First preview rebuild: keep the committed design as the "where the
+        // design is now" reference; the new (deformed) root below renders as the
+        // translucent ghost.  Do NOT dispose it.  Force FULL opacity — the old
+        // root was dimmed to 0.15 by the tool-active branch while placing planes,
+        // and the solid reference must read at full strength.
+        if (_frozenRoot) { _disposeRoot(_frozenRoot); scene.remove(_frozenRoot) }
+        _frozenRoot = oldRoot
+        _traverseSetOpacity(_frozenRoot, 1.0)
+        scene.add(_frozenRoot)
+        _captureNextAsFrozen = false
+      } else if (oldRoot !== _frozenRoot) {
         _disposeRoot(oldRoot)
       }
     }
@@ -306,9 +308,11 @@ export function initDesignRenderer(scene, storeRef) {
     _applyReferenceXoverVisibility()   // hide reference crossover extra-bases when ref toggle off
     _applyXoverExtrasLod()             // hide extra-base beads/slabs in coarse rep (survives rebuild)
 
-    // Apply opacity for preview or tool-dim modes
-    if (_previewOpacity !== null) {
-      _traverseSetOpacity(_helixCtrl.root, _previewOpacity)
+    // Deform preview: the live (result) geometry is the translucent ghost over
+    // the solid frozen reference.  Otherwise dim the whole scene while placing
+    // the bend/twist planes.
+    if (_ghostOpacity !== null) {
+      _traverseSetOpacity(_helixCtrl.root, _ghostOpacity)
     } else if (storeRef.getState().deformToolActive) {
       _traverseSetOpacity(_helixCtrl.root, 0.15)
     }
@@ -362,7 +366,7 @@ export function initDesignRenderer(scene, storeRef) {
   }
 
   function _tryPatchInPlace(changedHelixIds, newGeo, prevGeo, newState) {
-    if (!_helixCtrl || _ghostRoot !== null) return false
+    if (!_helixCtrl || _ghostOpacity !== null) return false   // never patch during a deform preview
     const realIds = changedHelixIds.filter(id => !id.startsWith('__'))
     if (realIds.length === 0) return false   // only synthetic purges — nothing to patch
 
@@ -973,39 +977,43 @@ export function initDesignRenderer(scene, storeRef) {
 
     /**
      * Fade all geometry to `opacity` (0–1).  Used by the deformation editor
-     * to dim the scene when the bend/twist tool is active.
-     * Skipped when preview ghost mode is active (opacity managed by _previewOpacity).
+     * to dim the scene when the bend/twist tool is active.  Skipped during a
+     * deform preview (the begin/endDeformPreview pair owns opacity then).
      */
     setToolOpacity(opacity) {
-      if (_previewOpacity !== null) return   // preview mode manages its own opacity
+      if (_ghostOpacity !== null) return
       if (!_helixCtrl?.root) return
       _traverseSetOpacity(_helixCtrl.root, opacity)
     },
 
     /**
-     * Save the current geometry as a ghost overlay at `ghostOpacity`, and mark
-     * that the next rebuilt geometry (the bent preview) should appear at
-     * `previewOpacity`.  Call before triggering the API deformation.
+     * Begin a deform preview overlay: freeze the committed design as the SOLID
+     * reference and render every subsequent (deformed) rebuild at `ghostOpacity`
+     * as a translucent "ghost of where it will be".  Call once per preview
+     * session, BEFORE the first preview op changes the geometry.
      */
-    captureGhost(ghostOpacity, previewOpacity) {
+    beginDeformPreview(ghostOpacity) {
       if (!_helixCtrl?.root) return
-      _captureNextAsGhost   = ghostOpacity
-      _captureNextPreviewOp = previewOpacity
+      _captureNextAsFrozen = true
+      _ghostOpacity = ghostOpacity
     },
 
     /**
-     * Remove the ghost overlay and exit preview opacity mode.
-     * The next rebuild will use the normal tool dim (0.15) if the tool is active.
+     * End the deform preview overlay: dispose the frozen reference and restore
+     * the live geometry to the right opacity (solid, or the 0.15 tool dim if the
+     * bend/twist tool is still active placing planes).  Idempotent.
      */
-    clearGhost() {
-      if (_ghostRoot) { _disposeRoot(_ghostRoot); scene.remove(_ghostRoot); _ghostRoot = null }
-      _previewOpacity       = null
-      _captureNextAsGhost   = null
-      _captureNextPreviewOp = null
+    endDeformPreview() {
+      if (_frozenRoot) { _disposeRoot(_frozenRoot); scene.remove(_frozenRoot); _frozenRoot = null }
+      _ghostOpacity = null
+      _captureNextAsFrozen = false
+      if (_helixCtrl?.root) {
+        _traverseSetOpacity(_helixCtrl.root, storeRef.getState().deformToolActive ? 0.15 : 1.0)
+      }
     },
 
     dispose() {
-      if (_ghostRoot) { scene.remove(_ghostRoot); _ghostRoot = null }
+      if (_frozenRoot) { scene.remove(_frozenRoot); _frozenRoot = null }
       if (_helixCtrl?.root) scene.remove(_helixCtrl.root)
       _helixCtrl = null
     },

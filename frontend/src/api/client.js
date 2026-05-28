@@ -255,9 +255,20 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
  * Caller is responsible for invoking helixCtrl.commitClusterPositions() to
  * keep currentGeometry consistent with what's rendered.
  */
-export async function _syncFromDesignResponse(json, { skipGeometry = false } = {}) {
+// True only while applying a TRANSIENT design mutation — a bend/twist preview,
+// live param PATCH, or cancel-revert (the `?preview=true` / PATCH endpoints).
+// The design auto-save subscriber reads this synchronously during setState and
+// skips: transient changes must NOT propagate to disk (→ SSE) or to the assembly
+// (→ part-design-updated). Committed changes (Apply) leave it false → they save.
+// Always reset to false by the end of the call, so non-transient paths (undo /
+// diff syncs that don't route through here) read the residual false and save.
+let _designSyncTransient = false
+export function wasLastDesignSyncTransient() { return _designSyncTransient }
+
+export async function _syncFromDesignResponse(json, { skipGeometry = false, transient = false } = {}) {
   if (!json) return null
   if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
+  _designSyncTransient = transient
   const updates = {}
   if (json.design)     updates.currentDesign     = json.design
   if (json.validation) {
@@ -313,6 +324,7 @@ export async function _syncFromDesignResponse(json, { skipGeometry = false } = {
     store.setState(minimalUpdates)
     if (json.design) nadocBroadcast.emit('design-changed')
     if (json.design) persistDesign()
+    _designSyncTransient = false
     return json
   }
   // Backend may ship deformed geometry in COMPACT per-helix-per-direction
@@ -451,6 +463,7 @@ export async function _syncFromDesignResponse(json, { skipGeometry = false } = {
   // Persist design to localStorage for session recovery on refresh/restart.
   if (json.design) persistDesign()
   if (json.design) _clearStaleSelections()
+  _designSyncTransient = false
   return json
 }
 
@@ -1084,18 +1097,24 @@ export async function addDeformation(type, planeA, planeB, params, helixIds = []
     preview,
   }
   const json = await _request('POST', '/design/deformation', body)
-  return _syncFromDesignResponse(json)
+  // A preview op is transient (no undo, no commit) → must not auto-save/propagate
+  // to the assembly. The non-preview add IS the commit → save normally.
+  return _syncFromDesignResponse(json, { transient: preview })
 }
 
 export async function updateDeformation(opId, params) {
+  // PATCH is always transient: live preview param tweaks AND the cancel-revert
+  // both use it; the real edit commit goes through editFeature, not this.
   const json = await _request('PATCH', `/design/deformation/${opId}`, { params })
-  return _syncFromDesignResponse(json)
+  return _syncFromDesignResponse(json, { transient: true })
 }
 
 export async function deleteDeformation(opId, preview = false) {
   const url = preview ? `/design/deformation/${opId}?preview=true` : `/design/deformation/${opId}`
   const json = await _request('DELETE', url)
-  return _syncFromDesignResponse(json)
+  // Preview-op delete (cancel / drag auto-refresh) is transient; a non-preview
+  // delete is a committed removal → save normally.
+  return _syncFromDesignResponse(json, { transient: preview })
 }
 
 

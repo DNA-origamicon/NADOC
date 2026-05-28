@@ -4,6 +4,32 @@ A research-grade DNA origami design tool built for precision, extensibility, and
 scientific rigour.  Every design decision is grounded in peer-reviewed literature
 and validated through a systematic experiment pipeline.
 
+## Getting Started
+
+**Never used a terminal before?** Read [INSTALL.md](INSTALL.md) — a click-by-click
+guide for Windows (WSL2), macOS, and Linux that needs no prior experience.
+
+**Already comfortable on the command line?** Three steps:
+
+```bash
+git clone https://github.com/DNA-origamicon/NADOC.git
+cd NADOC
+./setup.sh        # installs uv, Node.js, just + all deps (run once)
+./start.sh        # starts backend + frontend together
+```
+
+Then open **http://localhost:5173** in your browser. Press **Ctrl-C** to stop.
+
+`setup.sh` is a full bootstrap: it installs everything NADOC needs (you do **not**
+need to install Python or Node yourself — `uv` even fetches Python 3.12 for you),
+creates a private virtual environment, and installs all backend + frontend
+dependencies. It's safe to re-run. Works on Linux, macOS, and Windows via WSL2.
+
+To try it, click **File → Open File…** and load a design from `Examples/`
+(e.g. `Examples/6hb_test.nadoc`).
+
+See [START.md](START.md) for the day-to-day run commands and the WSL2 networking note.
+
 ## Architecture
 
 NADOC enforces a strict three-layer separation:
@@ -20,31 +46,32 @@ NADOC enforces a strict three-layer separation:
 - **Frontend**: Three.js (Vite), vanilla ES modules
 - **2D Editor**: Canvas 2D (pathview) + SVG (sliceview), BroadcastChannel sync
 
-## Feature Status
+## Why NADOC — beyond caDNAno2
 
-| Phase | Feature | Status |
-|-------|---------|--------|
-| 0–4 | Foundation, geometry, bundle creator, slice-plane editor, staple crossover editor | ✅ |
-| 5 | Physics layer (XPBD real-time + oxDNA batch) | ✅ |
-| 6 | Geometric bend/twist (deformation layer, cluster system, animation) | ✅ |
-| 7 | Topological loop/skip (Dietz mechanism, limits, experiments) | ✅ |
-| S | Sequences, M13mp18 scaffold, CSV export | ✅ |
-| SQ | Square lattice support (33.75°/bp, 4 neighbors) | ✅ |
-| CN/SC | caDNAno v2 + scadnano import/export | ✅ |
-| AA | Atomistic 3D view, PDB/PSF export, NAMD package, GROMACS export | ✅ |
-| FEM | Euler-Bernoulli FEM, RMSF heatmap, WebSocket streaming | ✅ |
-| UX | Selection filter, draggable ends, overhang 3D, lasso, surface representations | ✅ |
-| Editor | Interactive 2D cadnano editor (overhauled with spreadsheet, drag-to-resize, drag-to-shift domains) | ✅ |
-| 8 | Parts library + assembly CAD (12-phase overhaul shipped) | ✅ |
-| Routing | CSP scaffold router + seamless router | ✅ |
-| Linkers | ss + ds linkers, bridge nucs, relax algorithm | ✅ |
-| Cluster joints | Local-frame storage, hull prisms, kinematic joints, Plan B fast paths | ✅ |
-| Feature log | Snapshot-bearing log with revert + edit, broken-delta UI, tabbed sidebar | ✅ |
-| Animation | Camera poses, keyframes, configurations, pre-baked frames + per-bp scale fade | ✅ |
-| Photo | Photo mode: PBR materials, HDRI env, SSS, fluorophore point lights, path-traced export | ✅ |
-| 9 | Checker integrations (oxDNA, CanDo, SNUPI) | 🔵 Planned |
+caDNAno2 (Douglas et al., *Nature* 2009) defined the lattice idiom for scaffolded
+DNA origami and is still the field's workhorse, but it is a 2D schematic editor on
+an aging PyQt stack: you route the scaffold and break staples by hand on a flat
+path view, with no 3D feedback, no physical model, and no concept of structure
+beyond a single straight bundle. NADOC keeps the honeycomb/square lattice idiom
+designers already know and rebuilds around it as a modern, browser-based
+three-layer engine — **topology → geometry → physics** — that closes those gaps:
 
-**Backend test suite**: large and growing — run `just test` to see current state.
+| Limitation in caDNAno2 | What NADOC does instead |
+|---|---|
+| **2D path/slice schematic only** — you fold blind to the 3D result | Real-time 3D view derived from B-DNA geometry, with coarse-grained, all-atom, and molecular-surface representations |
+| **Idealized straight bundles** — global twist/bend only via hand-computed insertions/deletions | Geometric bend/twist deformation layer **and** topological loop/skip (Dietz, Douglas & Shih, *Science* 2009) with enforced physical limits (6–15 bp/turn, minimum bend radius), updated live in 3D |
+| **No physical model** — shape is guesswork until an external solver | Built-in XPBD real-time relaxation, oxDNA batch relaxation, and Euler–Bernoulli FEM with an RMSF heatmap |
+| **Manual scaffold routing & staple breaking** | CSP scaffold router + seamless router and auto-staple, plus drag-to-resize / drag-to-shift / spreadsheet editing in an overhauled 2D editor |
+| **M13 threading only — no functional-sequence design** | Orthogonal overhang sequence generation (Johnson et al. 5-mer rare-sequence algorithm) with GC, secondary-structure, and corpus-diversity filtering |
+| **A single monolithic object** — no hierarchy or assembly | Parts library + assembly CAD: mate connectors, kinematic cluster joints, cross-part overhang binding, and 1D polymerization of repeating units |
+| **Poly-T loops only — no first-class overhangs, linkers, or conjugates** | Overhang subdomain model with ssDNA/dsDNA linkers (freely-jointed-chain / duplex geometry + relaxation), protein attachment from PDB, and fluorophore/FRET modeling |
+| **No design history or conformational animation** | Snapshot-bearing feature log with revert/edit, plus camera poses, keyframes, and pre-baked 60 fps animation |
+| **Schematic cartoons for publication figures** | Photo mode — PBR materials, HDRI lighting, subsurface scattering, fluorophores as real light sources, progressive path tracing, and 300/600 DPI tiled export (see below) |
+| **A separate converter for every downstream tool** | One-click atomistic (PDB/PSF), NAMD package, and GROMACS export; native import of caDNAno v2 **and** scadnano designs |
+| **Aging desktop install (PyQt4)** | A web app — one `./setup.sh`, open a browser; runs on Linux, macOS, and Windows (WSL2) |
+
+Every behavior is grounded in peer-reviewed literature (`Literature/`) and
+validated by a large backend test suite — run `just test` to see current state.
 
 ## 2D Cadnano Editor
 
@@ -73,12 +100,12 @@ Multiple 2D editor tabs stay in sync automatically — backend is ground truth.
 
 ## Additional Features
 
-### Cluster system & animation (Phase 6)
+### Cluster system & animation
 Helices grouped into named clusters; per-cluster deformation ops; feature log
 timeline with draggable playhead; pre-baked animation at 60 fps (one geometry
 batch fetch, then pure client-side lerp).
 
-### Loop/skip topological deformation (Phase 7)
+### Loop/skip topological deformation
 Implements the Dietz, Douglas & Shih (Science 2009) mechanism for bending and
 twisting bundles by inserting/deleting base pairs. Enforces physical limits
 (6–15 bp/turn twist density, min bend radius).

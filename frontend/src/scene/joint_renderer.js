@@ -1790,14 +1790,36 @@ function _boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpHi, wCol, wRo
     { x:  wCol / 2, z:  wRow / 2 }, { x: -wCol / 2, z:  wRow / 2 },
     { x: -wCol / 2, z: -wRow / 2 }, { x:  wCol / 2, z: -wRow / 2 },
   ]
+  // Build the centroid spine for the FULL range [0, idxHi] — NOT just the box's
+  // [idxLo, idxHi].  The parallel-transport frame below must be anchored at the
+  // bundle START (idx 0, tangent ≈ +Z, well-conditioned), so EVERY extrusion box
+  // shares ONE consistent frame.  Seeding each box independently from its own
+  // first section put the LAST box's seed right at the −Y pole (90° bend) →
+  // degenerate → the whole final block was mis-rolled (the residual flip seen
+  // even after the per-box smoothing fix).  We propagate from 0 but EMIT sections
+  // only for idxLo..idxHi below.
   const centers = []
-  for (let i = idxLo; i <= idxHi; i++) {
+  for (let i = 0; i <= idxHi; i++) {
     const c = new THREE.Vector3()
     for (const hid of sampled) { const s = helixAxes[hid].samples[i]; c.x += s[0]; c.y += s[1]; c.z += s[2] }
     centers.push(c.divideScalar(sampled.length))
   }
   const M = centers.length
+  // Rotation-minimizing (parallel-transport) cross-section frame.  The original
+  // code rebuilt the box axes from `tangent × worldY` at EVERY section, which is
+  // SINGULAR when the spine tangent nears the vertical axis: a bend that drives
+  // the bundle toward world-up (teeth.nadoc: 90° bend at direction 270° → final
+  // tangent ≈ −Y, verified) made the U axis collapse and flip ~90° on the last
+  // box — the "sudden twist, wrong degree + direction" on the final segment.
+  // Instead, seed U once at the bundle start, then carry it forward by the
+  // minimal rotation between consecutive tangents.  No world-up reference → no
+  // pole → no flip; for a planar bend U stays constant straight through the
+  // formerly-singular end.  NOTE: this is a smooth swept envelope — it does NOT
+  // roll by the bundle's material twist (the axis `samples` carry only spine
+  // centers, no per-bp orientation); the visible coil comes from the spine path.
   const sections = []
+  let prevT = null
+  let U = null
   for (let k = 0; k < M; k++) {
     let tangent
     if (k === 0)          tangent = new THREE.Vector3().subVectors(centers[1], centers[0])
@@ -1805,11 +1827,27 @@ function _boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpHi, wCol, wRo
     else                  tangent = new THREE.Vector3().subVectors(centers[k + 1], centers[k - 1])
     if (tangent.lengthSq() < 1e-12) continue
     tangent.normalize()
-    let U = new THREE.Vector3().crossVectors(tangent, Yv)
-    if (U.lengthSq() < 1e-4) U = new THREE.Vector3().crossVectors(tangent, Zv)
-    U.normalize()
+    if (!U) {
+      // Seed: any unit vector ⟂ tangent.  world-Y, falling back to world-Z when
+      // the start tangent is itself near the Y pole.
+      U = new THREE.Vector3().crossVectors(tangent, Yv)
+      if (U.lengthSq() < 1e-4) U = new THREE.Vector3().crossVectors(tangent, Zv)
+      U.normalize()
+    } else {
+      // Parallel-transport U across the tangent change: rotate about
+      // (prevT × tangent) by the angle between the tangents, then re-orthogonalize.
+      const axis = new THREE.Vector3().crossVectors(prevT, tangent)
+      const sin  = axis.length()
+      if (sin > 1e-9) {
+        U.applyAxisAngle(axis.divideScalar(sin), Math.atan2(sin, prevT.dot(tangent)))
+      }
+      U.addScaledVector(tangent, -U.dot(tangent)).normalize()   // re-project ⟂ tangent
+    }
+    prevT = tangent
+    // Propagate the frame through [0, idxLo) but only EMIT the box's own sections.
+    if (k < idxLo) continue
     const V = new THREE.Vector3().crossVectors(U, tangent).normalize()
-    sections.push({ center: centers[k], U, V, tangent, corners })
+    sections.push({ center: centers[k], U: U.clone(), V, tangent, corners })
   }
   return sections.length >= 2 ? sections : null
 }

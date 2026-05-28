@@ -1,6 +1,14 @@
 # NADOC dev task runner
 # Usage: just <target>
 
+# One-time full setup: install tools + all deps (see setup.sh)
+setup:
+    ./setup.sh
+
+# Start backend + frontend together (Ctrl-C to stop). Run `just setup` first.
+start:
+    ./start.sh
+
 # Start FastAPI backend with hot reload
 dev:
     uv run uvicorn backend.api.main:app --reload --host 0.0.0.0 --port 8000
