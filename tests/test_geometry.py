@@ -417,12 +417,13 @@ def _make_6hb_420():
 def _add_bend(design, plane_a, plane_b, angle_deg=180.0):
     from backend.core.models import BendParams, DeformationOp
     from backend.core.deformation import helices_crossing_planes
+    span = max(1, plane_b - plane_a)
     op = DeformationOp(
         type="bend",
         plane_a_bp=plane_a,
         plane_b_bp=plane_b,
         affected_helix_ids=helices_crossing_planes(design, plane_a, plane_b),
-        params=BendParams(angle_deg=angle_deg, direction_deg=0.0),
+        params=BendParams(curvature_deg_per_bp=angle_deg / span, direction_deg=0.0),
     )
     return design.model_copy(update={"deformations": [op]}, deep=True)
 
@@ -479,7 +480,7 @@ def test_short_helix_bends_when_window_extends_past_its_end():
     op = DeformationOp(
         type="bend", plane_a_bp=0, plane_b_bp=150,
         affected_helix_ids=helices_crossing_planes(design, 0, 150),
-        params=BendParams(angle_deg=90.0, direction_deg=0.0),
+        params=BendParams(curvature_deg_per_bp=90.0 / 150, direction_deg=0.0),
     )
     design = design.model_copy(update={"deformations": [op]}, deep=True)
     short = next(h for h in design.helices if h.id == "h_short")
@@ -533,10 +534,11 @@ def test_overlapping_helix_level_cluster_transforms_compose_for_nucleotides_and_
 
 def _bend_op(plane_a, plane_b, angle_deg, direction_deg=0.0):
     from backend.core.models import BendParams, DeformationOp
+    span = max(1, plane_b - plane_a)
     return DeformationOp(
         type="bend", plane_a_bp=plane_a, plane_b_bp=plane_b,
         affected_helix_ids=[],  # empty = all crossing helices
-        params=BendParams(angle_deg=angle_deg, direction_deg=direction_deg),
+        params=BendParams(curvature_deg_per_bp=angle_deg / span, direction_deg=direction_deg),
     )
 
 

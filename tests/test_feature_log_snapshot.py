@@ -578,7 +578,7 @@ def test_edit_deformation_after_seek_back_saves_and_keeps_later_ops():
     assert r.status_code == 200, r.text
     r = client.post("/api/design/deformation", json={
         "type": "bend", "plane_a_bp": 0, "plane_b_bp": max_bp,
-        "params": {"kind": "bend", "angle_deg": 90.0, "direction_deg": 0.0}})
+        "params": {"kind": "bend", "curvature_deg_per_bp": 90.0 / max_bp, "direction_deg": 0.0}})
     assert r.status_code == 200, r.text
 
     log = design_state.get_or_404().feature_log
@@ -608,7 +608,7 @@ def test_edit_deformation_after_seek_back_saves_and_keeps_later_ops():
     assert set(by_type) == {"twist", "bend"}, [op.type for op in after.deformations]
     assert by_type["twist"].id == twist_id  # same op, edited in place
     assert by_type["twist"].params.total_degrees == 90.0
-    assert by_type["bend"].params.angle_deg == 90.0
+    assert by_type["bend"].params.curvature_deg_per_bp == pytest.approx(90.0 / max_bp)
     # The log entry's snapshot reflects the new value (so seek replays match).
     assert after.feature_log[twist_idx].op_snapshot.params.total_degrees == 90.0
     # Cursor restored to latest.

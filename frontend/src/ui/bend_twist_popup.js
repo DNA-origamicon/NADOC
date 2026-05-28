@@ -45,6 +45,7 @@ let _clusterList    = null  // <div id="def-cluster-list"> — contains checkbox
 let _clusterEmpty   = null  // <div id="def-cluster-empty-msg">
 let _clusterAllBtn  = null
 let _clusterNoneBtn = null
+let _bendHint       = null  // <div id="def-bend-hint"> — κ + closure hint
 
 let _callbacks   = null  // { onPreview, onConfirm, onCancel, onPlaneChanged }
 let _toolType    = null  // 'twist' | 'bend'
@@ -92,6 +93,7 @@ export function initBendTwistPopup(callbacks) {
   _clusterEmpty   = document.getElementById('def-cluster-empty-msg')
   _clusterAllBtn  = document.getElementById('def-cluster-all-btn')
   _clusterNoneBtn = document.getElementById('def-cluster-none-btn')
+  _bendHint       = document.getElementById('def-bend-hint')
 
   if (!_popup) return   // DOM not ready
 
@@ -125,7 +127,10 @@ export function initBendTwistPopup(callbacks) {
     _updateCompassFromInput()
     _firePreview()
   })
-  _bendAngle.addEventListener('input', _firePreview)
+  _bendAngle.addEventListener('input', () => {
+    _updateBendHint()
+    _firePreview()
+  })
 
   // Plane position inputs — reposition the plane and re-preview
   _planeABp?.addEventListener('change', () => {
@@ -204,9 +209,13 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
         _twistUnit.textContent  = '°/nm'
       }
     } else if (toolType === 'bend' && params.kind === 'bend') {
-      _bendAngle.value = params.angle_deg ?? 0
+      // Display θ = κ × (plane_b − plane_a) — the angle between the typed planes.
+      const span  = _typedBendSpanBp()
+      const kappa = params.curvature_deg_per_bp ?? 0
+      _bendAngle.value = (kappa * span).toFixed(2)
       _bendDir.value   = params.direction_deg ?? 0
       _updateCompassFromInput()
+      _updateBendHint()
     }
   } else {
     // Reset to sensible defaults
@@ -220,6 +229,7 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
       _bendDir.value   = '0'
       _bendAngle.value = '0'
       _updateCompassFromInput()
+      _updateBendHint()
     }
   }
 
@@ -242,6 +252,9 @@ export function setPlanePositions(bpA, bpB) {
   if (_planeBBp) _planeBBp.value = bpB
   if (_planeANm) _planeANm.textContent = (bpA * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
   if (_planeBNm) _planeBNm.textContent = (bpB * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
+  // Effective span (auto-extended for stagger) depends on plane positions —
+  // refresh the hint so κ display stays consistent with the visual bend.
+  if (_toolType === 'bend') _updateBendHint()
 }
 
 export function closePopup() {
@@ -265,12 +278,38 @@ function _readParams() {
       return { kind: 'twist', degrees_per_nm: val }
     }
   } else {
+    // User types the visual bend angle θ between plane A and plane B.
+    // Canonical storage is per-bp curvature κ = θ / (plane_b − plane_a).
+    // The rendered angle between the planes equals exactly θ; helices that
+    // don't fully span [plane_a, plane_b] pick up proportionally less rotation
+    // (the user moves the planes to bracket all stagger when uniformity matters).
+    const span = _typedBendSpanBp()
+    const theta = ((parseFloat(_bendAngle.value) || 0) % 360 + 360) % 360
     return {
-      kind:          'bend',
-      angle_deg: ((parseFloat(_bendAngle.value) || 0) % 360 + 360) % 360,
+      kind:                  'bend',
+      curvature_deg_per_bp:  span > 0 ? theta / span : 0,
       direction_deg: ((parseFloat(_bendDir.value) || 0) % 360 + 360) % 360,
     }
   }
+}
+
+/** Typed bend window width in bp (planeB − planeA, clamped ≥ 1). */
+function _typedBendSpanBp() {
+  const planeA = parseFloat(_planeABp?.value) || 0
+  const planeB = parseFloat(_planeBBp?.value) || 0
+  return Math.max(1, Math.abs(planeB - planeA))
+}
+
+/**
+ * Update the "κ = X°/bp · spans Y bp" hint below the angle input.
+ * Polymer-closure feedback lives in the polymerize panel.
+ */
+function _updateBendHint() {
+  if (!_bendHint) return
+  const theta = parseFloat(_bendAngle.value) || 0
+  const span = _typedBendSpanBp()
+  const kappa = span > 0 ? theta / span : 0
+  _bendHint.textContent = `κ = ${kappa.toFixed(4)}°/bp · spans ${span} bp between planes`
 }
 
 function _firePreview() {

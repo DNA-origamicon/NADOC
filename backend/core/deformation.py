@@ -293,18 +293,51 @@ def _resolve_twist_rad(params: TwistParams, p1: int, p2: int) -> float:
 # direction_deg / degenerate-direction handling is identical.
 
 
-def _subinterval_walk(relevant_ops, arm_bp_start: int, upper: int):
+def _effective_bend_window(op, arm_helices: list["Helix"]) -> tuple[int, int]:
+    """Return the bend's effective window.
+
+    Honest semantics: the window IS the typed ``[plane_a_bp, plane_b_bp]`` —
+    no auto-extension. The visual bend between plane A and plane B equals
+    exactly the user's typed angle (κ × (plane_b − plane_a)). Helices whose
+    bp range doesn't fully span the window accumulate proportionally less
+    rotation; to spread the bend uniformly, the user moves the planes to
+    bracket the bundle's bp extrema.
+
+    ``arm_helices`` is accepted for symmetry with the previous signature but
+    is no longer used to extend the window. The argument is kept so future
+    helpers can introspect the per-helix stagger zones for UI hints.
+    """
+    del arm_helices  # intentionally unused — see docstring
+    return op.plane_a_bp, op.plane_b_bp
+
+
+def _subinterval_walk(relevant_ops, arm_bp_start: int, upper: int,
+                      arm_helices: list["Helix"] | None = None):
     """Yield (b0, b1, active) over maximal constant-active-set sub-intervals.
 
     Spans [start_bp, upper] where start_bp = min(0, smallest local plane_a), so an
     op whose window begins before the arm's first bp is still integrated from its
     true plane_a (matches the legacy precompute back-step semantics). Each ``active``
     entry is (op, seg_len_bp). An op is active on [b0, b1) iff its arm-local span
-    [a, b] covers it (a ≤ b0 and b1 ≤ b)."""
+    [a, b] covers it (a ≤ b0 and b1 ≤ b).
+
+    When ``arm_helices`` is supplied, each bend op's window is auto-extended via
+    ``_effective_bend_window`` so that per-helix rotation is stagger-invariant.
+    The op's own seg_len in ``active`` reflects the EXTENDED width — the bend's
+    κ is multiplied by that seg_len during integration, but in the new κ-direct
+    formulation ``_omega_world_for`` reads κ without dividing by seg_len, so the
+    value passed here only matters for twist ops (whose total_degrees is
+    distributed across their unmodified window). Twist seg_len stays at the
+    op's stored span; bend seg_len reports the extended width for display.
+    """
     locals_ = []
     for op in relevant_ops:
-        a = op.plane_a_bp - arm_bp_start
-        b = op.plane_b_bp - arm_bp_start
+        plane_a, plane_b = (
+            _effective_bend_window(op, arm_helices) if arm_helices is not None
+            else (op.plane_a_bp, op.plane_b_bp)
+        )
+        a = plane_a - arm_bp_start
+        b = plane_b - arm_bp_start
         if b - a <= 0:
             continue
         locals_.append((op, a, b, b - a))
@@ -329,16 +362,20 @@ def _subinterval_walk(relevant_ops, arm_bp_start: int, upper: int):
 def _omega_world_for(active, R: np.ndarray, tangent: np.ndarray) -> np.ndarray:
     """Combined world-frame angular velocity (rad/bp) of the active ops at frame
     (R, tangent). Twist rotates about the current tangent; bend about the binormal
-    of its (R-rotated, ⊥tangent) world direction — identical to the legacy per-op
-    axis math, so the bend co-rotates with any accumulated twist."""
+    of its (R-rotated, ⊥tangent) world direction.
+
+    Bend rate comes from ``BendParams.curvature_deg_per_bp`` directly (κ) — no
+    division by seg_len. This is what makes per-helix rotation stagger-invariant
+    once the bend's effective window covers each helix's near→far_next interval.
+    """
     omega = np.zeros(3)
     for op, seg_len in active:
         if isinstance(op.params, TwistParams):
             total_rad = _resolve_twist_rad(op.params, op.plane_a_bp, op.plane_b_bp)
             omega = omega + (total_rad / seg_len) * tangent
         elif isinstance(op.params, BendParams):
-            angle_rad = math.radians(op.params.angle_deg)
-            if abs(angle_rad) < 1e-9:
+            kappa_rad_per_bp = math.radians(op.params.curvature_deg_per_bp)
+            if abs(kappa_rad_per_bp) < 1e-9:
                 continue
             phi = math.radians(op.params.direction_deg)
             local_dir = np.array([math.cos(phi), math.sin(phi), 0.0])
@@ -353,7 +390,7 @@ def _omega_world_for(active, R: np.ndarray, tangent: np.ndarray) -> np.ndarray:
             if bn < 1e-9:
                 continue
             binormal /= bn
-            omega = omega + (angle_rad / seg_len) * binormal
+            omega = omega + kappa_rad_per_bp * binormal
     return omega
 
 
@@ -454,7 +491,7 @@ def _frame_at_bp(
     # Walk maximal constant-active-set sub-intervals up to target_bp, integrating
     # the combined screw motion on each. Overlapping bend+twist compose into a
     # superhelix; single-op intervals reduce exactly to the legacy arc / axial spin.
-    walk = list(_subinterval_walk(relevant_ops, arm_bp_start, target_bp))
+    walk = list(_subinterval_walk(relevant_ops, arm_bp_start, target_bp, helices))
     start_bp = walk[0][0] if walk else 0
     # centroid_0 anchors the spine at arm-local 0; back-extrapolate (straight) when
     # an op begins before the arm's first bp (start_bp < 0).
@@ -1233,7 +1270,7 @@ def _precompute_arm_frames(
     tangent = tangent_0.copy()
     R       = np.eye(3, dtype=float)
 
-    walk     = list(_subinterval_walk(relevant_ops, arm_min_bp, M))
+    walk     = list(_subinterval_walk(relevant_ops, arm_min_bp, M, arm_helices))
     start_bp = walk[0][0] if walk else 0
     spine    = centroid_0 + tangent * (start_bp * BDNA_RISE_PER_BP)
 
@@ -2313,6 +2350,85 @@ def deformed_frame_at_bp(
         "frame_right":  frame_right.tolist(),
         "frame_up":     frame_up.tolist(),
     }
+
+
+def compute_bend_centers(design: "Design") -> list[dict]:
+    """Return one connector record per bend op, located at its center of curvature.
+
+    Each entry is design-local frame and shaped like a blunt-end connector:
+      {label, position [x,y,z], normal [x,y,z], cluster_id, bend_index, radius_nm}
+
+    The normal is the bend axis (the axis of curvature — perpendicular to the
+    bend plane), matching the binormal sign used by ``_omega_world_for`` so the
+    axis is consistent with the on-screen bend orientation.
+
+    Used by the assembly editor's Define-Mate flow to expose bend centers as
+    pickable connectors, mirroring CAD "mate two arcs by their circle centers".
+    """
+    results: list[dict] = []
+    for bend_index, op in enumerate(design.deformations):
+        if not isinstance(op.params, BendParams):
+            continue
+        kappa_rad_per_bp = math.radians(op.params.curvature_deg_per_bp)
+        if abs(kappa_rad_per_bp) < 1e-9:
+            continue  # degenerate — infinite radius, no well-defined center
+
+        ref_helix_id = (
+            op.affected_helix_ids[0]
+            if op.affected_helix_ids
+            else (design.helices[0].id if design.helices else None)
+        )
+        if ref_helix_id is None:
+            continue
+        arm = _arm_helices_for(design, ref_helix_id)
+        if not arm:
+            continue
+        arm_bp_start = min(h.bp_start for h in arm)
+
+        # Anchor the bend center at the effective start of the curvature (the
+        # auto-extended plane_a*), not the user's typed plane_a — the center is
+        # geometrically defined by where curvature begins.
+        eff_plane_a, _eff_plane_b = _effective_bend_window(op, arm)
+        target_bp = eff_plane_a - arm_bp_start
+        spine_p1, R_p1, tangent_p1 = _frame_at_bp(design, target_bp, arm)
+
+        # Radius of curvature R_b = 1 / κ (in nm), signed by κ's sign.
+        R_b = BDNA_RISE_PER_BP / kappa_rad_per_bp
+
+        phi = math.radians(op.params.direction_deg)
+        local_dir = np.array([math.cos(phi), math.sin(phi), 0.0])
+        world_dir = R_p1 @ local_dir
+        world_dir = world_dir - np.dot(world_dir, tangent_p1) * tangent_p1
+        wd = np.linalg.norm(world_dir)
+        if wd < 1e-9:
+            continue
+        world_dir /= wd
+
+        binormal = np.cross(tangent_p1, world_dir)
+        bn = np.linalg.norm(binormal)
+        if bn < 1e-9:
+            continue
+        binormal /= bn
+
+        center = spine_p1 + R_b * world_dir
+
+        cluster = _cluster_for_helix(design, ref_helix_id)
+        if cluster is not None:
+            R_c   = _rot_from_quaternion(*cluster.rotation)
+            piv_c = np.array(cluster.pivot,       dtype=float)
+            tr_c  = np.array(cluster.translation, dtype=float)
+            center   = R_c @ (center - piv_c) + piv_c + tr_c
+            binormal = R_c @ binormal
+
+        results.append({
+            "label":      f"bend_{bend_index}_center",
+            "position":   center.tolist(),
+            "normal":     binormal.tolist(),
+            "cluster_id": cluster.id if cluster is not None else None,
+            "bend_index": bend_index,
+            "radius_nm":  abs(R_b),
+        })
+    return results
 
 
 def helices_crossing_planes(design: "Design", plane_a_bp: int, plane_b_bp: int) -> list[str]:

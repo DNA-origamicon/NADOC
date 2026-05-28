@@ -82,6 +82,7 @@ import { openFileBrowser }          from './ui/file_browser.js'
 import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
 import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
+import { initKinematicsTicker }      from './scene/kinematics_ticker.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { makeRefVec, ringPlaneHit, angleInRing }     from './scene/assembly_revolute_math.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
@@ -1252,12 +1253,24 @@ async function main() {
 
   initDeformationEditor(scene, camera, canvas, controls, designRenderer,
     () => {
-      // onExit: restore mode indicator. No seek here anymore — the edit flow no
-      // longer rolls the design to a pre-state, so cancel/Esc leave the cursor
-      // where it was (the editor silently reverts the live op), and confirm
-      // handles its own cursor restore below.
+      // onExit: restore mode indicator + (for an unconfirmed edit) restore
+      // the original op that _onEditFeature peeled off the design.
+      //
+      // The deformation editor's preview-op DELETE already happened inside
+      // _exitTool → _clearPreviewSession. But the ORIGINAL op was peeled off
+      // separately by _onEditFeature, so design.deformations is missing it
+      // until we replay the log. A seek to priorCursor handles that — the
+      // backend re-runs the log and the original op pops back with its
+      // original params. Triggered when _editContext is still set on exit
+      // (Cancel / Escape paths). onConfirm clears _editContext BEFORE
+      // exiting, so the seek-restore is skipped on the confirm path
+      // (editFeature already updated the log and rebuilt design.deformations).
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      const ctx = _editContext
       _editContext = null
+      if (ctx?.editingFeatureType === 'deformation' && ctx.origOpId) {
+        _seekFeaturesWithDelta(ctx.priorCursor ?? -1).catch(() => {})
+      }
     },
     () => {
       // onPlaneDragEnd: sync popup inputs with dragged plane positions
@@ -1271,9 +1284,13 @@ async function main() {
     onConfirm: async (params) => {
       const ctx = _editContext
       if (ctx?.featureIndex != null && ctx.editingFeatureType === 'deformation') {
-        // Edit-in-place: the live op was already PATCHed to `params` during
-        // preview; editFeature finalizes it (updates the log op_snapshot + pushes
-        // undo) by rebuilding the deformation set from the log on the backend.
+        // Edit-confirm: the bent GHOST is currently held by a preview op
+        // (added by previewDeformation while the original op was peeled off
+        // in _onEditFeature). editFeature updates the log entry's snapshot
+        // and rebuilds design.deformations from the log — the backend
+        // explicitly drops any preview op as part of that rebuild
+        // (see backend _edit_deformation_feature). So a single editFeature
+        // call commits the new params and cleans the overlay in one shot.
         const planes = getDeformPlanes()
         const bpA = planes.a?.bp ?? 0
         const bpB = planes.b?.bp ?? 0
@@ -1293,6 +1310,7 @@ async function main() {
           // when they hit edit, return the slider to where they were.
           await _seekFeaturesWithDelta(ctx.priorCursor)
         }
+        _editContext = null
         deformExitTool()
         _watchDeformState()
         return
@@ -1302,11 +1320,10 @@ async function main() {
       _watchDeformState()
     },
     onCancel: () => {
-      // Always fully exit the tool on Cancel — both in edit and in new-op
-      // mode. Previously a fresh-op Cancel dropped back to A_PLACED so the
-      // user could re-pick plane B, but that left the tool active in a
-      // confusing intermediate state. Escape still works for users who want
-      // to walk back one step at a time.
+      // For an edit-cancel, leave _editContext set so onExit (called below
+      // via deformExitTool → _exitTool) sees it and restores the original
+      // op via seek. Escape goes through the same _exitTool path with the
+      // same restore. New-op cancels (no _editContext) just exit cleanly.
       deformExitTool()
       _watchDeformState()
     },
@@ -1323,11 +1340,12 @@ async function main() {
       const { a, b } = getDeformPlanes()
       const editParams = _editContext?.pendingParams ?? null
       const editClusterIds = _editContext ? (_editContext.clusterIds ?? []) : null
-      // In edit mode the op is ALREADY applied to the design, so opening the
-      // popup must NOT auto-fire a preview (that re-applied geometry for nothing,
-      // one of the redundant GETs that made edit-open slow). Preview fires only
-      // when the user actually changes a slider.
-      const skipInitialPreview = !!_editContext
+      // Edit mode now uses the preview-op flow (the original op was peeled off
+      // in _onEditFeature). Let the initial preview fire so the popup's first
+      // previewDeformation call lands beginDeformPreview (SOLID = un-deformed)
+      // and adds the bent overlay (GHOST = deformed). The new-deformation
+      // path obviously also wants the initial preview.
+      const skipInitialPreview = false
       openDeformPopup(
         getDeformToolType() ?? 'twist',
         a?.bp ?? 0, b?.bp ?? 0,
@@ -1383,23 +1401,43 @@ async function main() {
     const design = store.getState().currentDesign
     const priorCursor = design?.feature_log_cursor ?? -1
 
-    // Edit IN PLACE on the current state — NO seek. The backend edit rebuilds
-    // the deformation set from the log, so we don't need to roll the design back
-    // to a pre-state. Skipping the seek avoids the slow pre-state geometry
-    // recompute + the preview-op add, and lets the popup open immediately
-    // (previously the popup waited for a 3D-canvas click to fire _watchDeformState).
-    // confirm calls editFeature(index, …); cancel/Esc silently reverts the op.
+    // Edit flow: peel the original op off the design (silent DELETE preview=true)
+    // so the live geometry becomes the pre-op (un-deformed) state. The popup's
+    // first previewDeformation then freezes THAT as the SOLID reference and
+    // re-adds the op as a preview overlay (the bent GHOST), restoring the
+    // "before/after" visual comparison that's most useful when tuning bends.
+    // The original log entry is untouched; Apply commits the new params via
+    // editFeature(featureIndex, …) and the design rebuilds from the log;
+    // Cancel deletes the preview overlay and seeks to priorCursor, replaying
+    // the log to restore the original op with its original params.
     _editContext = {
       priorCursor,
       pendingParams:    op.params,
       featureIndex,
       editingFeatureType: entry.feature_type,
       clusterIds:       op.cluster_ids ?? [],
+      // Original op id captured so cancel can no-op-restore it via the log
+      // replay; the deformation editor's preview-op flow takes ownership of
+      // the design from here.
+      origOpId: op.id,
     }
 
-    // Open editor with pre-placed planes; the op id + original params let the
-    // editor preview by PATCHing the live op (and revert it on cancel).
-    startDeformToolForEdit(op.type, op.plane_a_bp, op.plane_b_bp, op.id, op.params)
+    // Transient DELETE — exposes the un-deformed design under the bent overlay.
+    let peeled = false
+    try {
+      const resp = await api.deleteDeformation(op.id, /*preview=*/true)
+      peeled = resp != null
+    } catch {
+      // Non-fatal: if the delete fails the user falls back to the old in-place
+      // edit (bent solid, no ghost). Without `peeled` the seek-restore below
+      // is also skipped so the editor doesn't replay the log unnecessarily.
+    }
+    if (!peeled) _editContext.origOpId = null
+
+    // Open editor in NEW-OP (preview) flow — _editOpId stays null so the
+    // popup's first previewDeformation goes through addDeformation(preview=true),
+    // producing a fresh preview op that owns the bent GHOST layer.
+    startDeformToolForEdit(op.type, op.plane_a_bp, op.plane_b_bp, /*opId=*/null, op.params)
 
     document.getElementById('mode-indicator').textContent =
       `EDIT ${op.type.toUpperCase()} F${featureIndex + 1} — adjust params · Apply to save · Esc to cancel`
@@ -2160,10 +2198,10 @@ async function main() {
         for (const sid of g.strandIds) effective[sid] = hex
       }
     }
-    // scaffold gets sky-blue
+    // scaffold gets cadnano blue
     for (const s of currentDesign?.strands ?? []) {
       if (s.strand_type === 'scaffold' && !(s.id in effective)) {
-        effective[s.id] = 0x29b6f6
+        effective[s.id] = 0x0070bb
       }
     }
     // Fill in palette-assigned colours for every staple strand so atomistic
@@ -7879,6 +7917,26 @@ Typical debugging workflow for "reverts to 3D" bug:
   const instanceGizmo = initInstanceGizmo(store, controls)
   const assemblyJointRenderer = initAssemblyJointRenderer(scene, camera, canvas, store, api, controls)
 
+  // ── Kinematics ticker: continuous-spin for revolute joints (Phase 1) ───────
+  // Integrates AssemblyJoint.angular_velocity_rpm per frame, drives the
+  // instance transform via setLiveTransform, and flushes silent backend
+  // patches at ~5 Hz for save/load consistency. Three-Layer Law: only
+  // mutates AssemblyJoint.current_value and the derived PartInstance.transform.
+  const kinematicsTicker = initKinematicsTicker({
+    store,
+    api,
+    getAssemblyRenderer:      () => assemblyRenderer,
+    getAssemblyJointRenderer: () => assemblyJointRenderer,
+  })
+  // Pause spin while the tab is hidden — RAF freezes anyway, but explicit
+  // pause flushes the latest shadow values back to the backend so a save
+  // mid-spin doesn't drift more than ~0.2s.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) kinematicsTicker.flushNow()
+  })
+  // Expose for keyboard shortcuts / future global pause UI; also handy in dev console.
+  window.__NADOC_KINEMATICS__ = kinematicsTicker
+
   // Sync blunt-end connectors into the assembly joint renderer when:
   //   • assembly mode is active AND toolFilters.bluntEnds is ON → pass blunt ends
   //   • otherwise → clear them
@@ -8034,15 +8092,26 @@ Typical debugging workflow for "reverts to 3D" bug:
     assemblyJointRenderer.enterConnectorDefineMode(instanceId, () => {})
   }
 
-  function _defineAssemblyMate() {
+  async function _defineAssemblyMate() {
     // Always feed blunt-end connectors in mate mode regardless of the
     // ambient "blunt ends" tool-filter — they're the mate-point candidates
     // the user needs to pick.  (_syncAssemblyBluntEnds gates on the filter,
     // which is for normal-view display only.)
-    const bluntEnds = store.getState().assemblyActive
+    const inAssembly = store.getState().assemblyActive
+    const bluntEnds = inAssembly
       ? (assemblyRenderer.getInstanceBluntEnds?.() ?? [])
       : []
-    assemblyJointRenderer.setExtraConnectors(bluntEnds)
+    // Bend center-of-curvature connectors — CAD-style "mate by circle
+    // centers". Async because each visible instance's centers come from
+    // the backend (the math reuses _frame_at_bp's upstream-op composition).
+    // Cached per instance on first fetch, so re-entering Define-Mate is
+    // instant once a part has been visited.
+    let bendCenters = []
+    if (inAssembly) {
+      try { bendCenters = (await assemblyRenderer.getInstanceBendCenters?.()) ?? [] }
+      catch (e) { console.warn('[mate] bend-center fetch failed:', e); bendCenters = [] }
+    }
+    assemblyJointRenderer.setExtraConnectors([...bluntEnds, ...bendCenters])
     assemblyJointRenderer.enterMateDefineMode(
       () => {},
       (id, mat) => assemblyRenderer.setLiveTransform(id, mat),
@@ -8833,6 +8902,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   const assemblyPanel = initAssemblyPanel(store, {
     api,
+    getKinematicsTicker: () => kinematicsTicker,
     onInstanceSelect: (id) => store.setState({ activeInstanceId: id }),
     beforePatchDesign: (instanceId) => assemblyRenderer.invalidateInstance(instanceId),
     // Duplicate spawns the new instance JUST OUTSIDE the source's world-
@@ -13788,7 +13858,17 @@ Typical debugging workflow for "reverts to 3D" bug:
     el.style.top  = `${(-v.y * 0.5 + 0.5) * container.clientHeight - 10}px`
   }
 
+  let _lastTickPerf = performance.now()
   ;(function tick() {
+    const _nowPerf = performance.now()
+    const _dt      = (_nowPerf - _lastTickPerf) / 1000
+    _lastTickPerf  = _nowPerf
+
+    // Per-frame integrator for continuous-spin revolute joints.
+    if (store.getState().assemblyActive) {
+      kinematicsTicker.tick(_dt)
+    }
+
     updateDistLabel()
     sequenceOverlay.orientToCamera(camera)
 

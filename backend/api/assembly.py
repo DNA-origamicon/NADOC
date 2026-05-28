@@ -1144,14 +1144,20 @@ class AddJointRequest(BaseModel):
 
 class MateConnectorSpec(BaseModel):
     """One side of a mate. ``position``/``normal`` are instance-LOCAL and used
-    only to register a blunt-end connector as an InterfacePoint when
-    ``is_blunt_end`` is true (no-op if the label already exists)."""
+    only to auto-register the connector as an InterfacePoint when one of the
+    ``is_*`` flags is true (no-op if the label already exists).
+
+    ``is_blunt_end``  — free helix endpoint (label ``end:<helix>:<bp>``).
+    ``is_bend_center`` — derived center-of-curvature of a bend op (label
+    ``bend_<i>_center``). Auto-registered the same way as blunt ends.
+    """
     instance_id: str
     label: str
     position: list[float] = [0.0, 0.0, 0.0]
     normal: list[float] = [0.0, 0.0, 1.0]
     cluster_id: Optional[str] = None
     is_blunt_end: bool = False
+    is_bend_center: bool = False
 
 
 class CreateMateRequest(BaseModel):
@@ -1179,6 +1185,8 @@ class PatchJointRequest(BaseModel):
     axis_direction: Optional[list[float]] = None
     min_limit: Optional[float] = None
     max_limit: Optional[float] = None
+    angular_velocity_rpm: Optional[float] = None   # revolute only; 0 = static
+    spin_paused: Optional[bool] = None             # per-joint freeze
     silent: Optional[bool] = None  # True during animation playback (suppress undo push)
 
 
@@ -3959,7 +3967,7 @@ def create_mate(body: CreateMateRequest) -> dict:
     # 1. Register blunt-end connectors as InterfacePoints (idempotent — skip if
     #    the label already exists, e.g. a previously-defined interface point).
     def _register(conn: 'MateConnectorSpec | None') -> None:
-        if conn is None or not conn.is_blunt_end:
+        if conn is None or not (conn.is_blunt_end or conn.is_bend_center):
             return
         inst = inst_by_id.get(conn.instance_id)
         if inst is None or any(ip.label == conn.label for ip in inst.interface_points):
@@ -4042,6 +4050,10 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
         joint_updates["min_limit"] = body.min_limit
     if body.max_limit is not None:
         joint_updates["max_limit"] = body.max_limit
+    if body.angular_velocity_rpm is not None:
+        joint_updates["angular_velocity_rpm"] = float(body.angular_velocity_rpm)
+    if body.spin_paused is not None:
+        joint_updates["spin_paused"] = bool(body.spin_paused)
 
     value_changed = body.current_value is not None and body.current_value != joint.current_value
     if body.current_value is not None:
@@ -4846,6 +4858,40 @@ class PolymerizePeriodicRequest(BaseModel):
     direction:   Literal["forward", "backward", "both"] = "forward"
 
 
+@router.get("/assembly/instances/{instance_id}/periodic-closure", status_code=200)
+def get_instance_periodic_closure(instance_id: str, count: int = 4) -> dict:
+    """Return the polymer's ring-closure residual after ``count`` copies.
+
+    Used by the polymerize-periodic panel to warn the user before they
+    commit a chain that won't close. ``angle_deg`` is the rotational drift
+    of δ**count from identity; ``translation_nm`` is the positional drift.
+    Both should be near zero for a closed ring.
+
+    Also returns ``suggested_curvature_deg_per_bp`` — the κ that *would* close
+    the chain — when the design has exactly one bend op. The frontend's
+    "snap to closing κ" button writes this back to the bend op.
+    """
+    from backend.core.periodic_polymer import (
+        PeriodicSeamError, closure_residual, solve_closing_curvature,
+    )
+    assembly = assembly_state.get_or_404()
+    seed = _find_instance(assembly, instance_id)
+    design = _design_with_instance_overrides(seed, _assembly_source_path(assembly))
+    if not any(getattr(fl, "is_periodic_seam", False) for fl in design.forced_ligations):
+        raise HTTPException(422, detail="Part has no periodic seam.")
+    try:
+        angle_deg, trans_nm = closure_residual(design, count)
+        suggested = solve_closing_curvature(design, count)
+    except PeriodicSeamError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+    return {
+        "count":                              int(count),
+        "rotation_residual_deg":              float(angle_deg),
+        "translation_residual_nm":            float(trans_nm),
+        "suggested_curvature_deg_per_bp":     None if suggested is None else float(suggested),
+    }
+
+
 @router.post("/assembly/polymerize-periodic", status_code=200)
 def polymerize_periodic_assembly(body: PolymerizePeriodicRequest) -> dict:
     """Grow a polymer from a SINGLE periodic part — no hand-defined mate.
@@ -5149,6 +5195,8 @@ def _capture_assembly_configuration(assembly: Assembly, name: str) -> AssemblyCo
                 current_value=j.current_value,
                 axis_origin=list(j.axis_origin),
                 axis_direction=list(j.axis_direction),
+                angular_velocity_rpm=j.angular_velocity_rpm,
+                spin_paused=j.spin_paused,
             )
             for j in assembly.joints
         ],
@@ -5209,6 +5257,8 @@ def restore_assembly_configuration(config_id: str) -> dict:
             "current_value": state.current_value,
             "axis_origin": list(state.axis_origin),
             "axis_direction": list(state.axis_direction),
+            "angular_velocity_rpm": state.angular_velocity_rpm,
+            "spin_paused": state.spin_paused,
         }, deep=True))
 
     updated = assembly.model_copy(update={
@@ -5930,6 +5980,27 @@ def get_instance_geometry(instance_id: str) -> dict:
         "helix_axes":          axes,
         "design":              design_dict,
     }
+
+
+@router.get("/assembly/instances/{instance_id}/bend-centers", status_code=200)
+def get_instance_bend_centers(instance_id: str) -> dict:
+    """
+    Return one connector per bend op for this part instance, at the bend's
+    center of curvature with its normal along the bend axis.
+
+    Used by the assembly editor's Define-Mate flow to expose bend centers as
+    pickable connectors (CAD-style "mate two arcs by their circle centers").
+
+    Geometry is in the instance's local frame — frontend applies the instance
+    placement transform exactly like for blunt-end connectors.
+
+    Response: ``{ bend_centers: [{label, position, normal, cluster_id, bend_index, radius_nm}] }``
+    """
+    from backend.core.deformation import compute_bend_centers
+    assembly = assembly_state.get_or_404()
+    inst     = _find_instance(assembly, instance_id)
+    design   = _display_design(_design_with_instance_overrides(inst, _assembly_source_path(assembly)))
+    return {"bend_centers": compute_bend_centers(design)}
 
 
 @router.get("/assembly/instances/{instance_id}/atomistic-geometry", status_code=200)

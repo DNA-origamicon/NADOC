@@ -35,7 +35,9 @@ from backend.core.models import (
 )
 from backend.core.periodic_polymer import (
     PeriodicSeamError,
+    closure_residual,
     derive_periodic_delta,
+    solve_closing_curvature,
     _iter_seam_frames,
 )
 
@@ -134,6 +136,130 @@ def test_non_periodic_design_raises():
     d = _periodic_bundle_design(42, periodic=False)
     with pytest.raises(PeriodicSeamError):
         derive_periodic_delta(d)
+
+
+# ── κ-direct semantics: ring closure via solve_closing_curvature ────────────
+#
+# With ``BendParams.curvature_deg_per_bp`` as canonical storage, the visual
+# bend between the user's typed planes equals exactly ``κ × (plane_b − plane_a)``
+# regardless of bp-stagger — honest UX, no auto-extension. The trade-off:
+# helices that don't fully span the window pick up partial rotation, so the
+# Kabsch per-tile rotation depends on per-helix overlap. Ring closure is
+# achieved via ``solve_closing_curvature`` which probes the design and inverts
+# the linear δ_rot(κ) relationship — the polymerize panel's "Snap κ to close"
+# button uses this regardless of stagger.
+
+
+def _periodic_bundle_with_stagger_and_bend(
+    L: int, stagger: int, kappa_deg_per_bp: float,
+):
+    """Periodic 2-helix bundle with staggered bp_starts and a bend covering it.
+
+    Helix 0 starts at bp 0; helix 1 starts at bp ``stagger`` (positive shift).
+    Both have ``length_bp == L``. The bend's typed planes match the bundle's
+    extrema [0, L + stagger] — i.e. at the stagger zones on both sides, so
+    ``_effective_bend_window`` auto-extends across stagger and per-helix
+    rotation becomes uniform.
+
+    bp_start shift requires moving axis_start by stagger × rise along the
+    helix tangent so the geometry stays consistent with the bp indexing.
+    """
+    from backend.core.models import BendParams, DeformationOp, Vec3
+
+    d = make_bundle_design([(0, 0), (0, 1)], L,
+                           lattice_type=LatticeType.HONEYCOMB, strand_filter="both")
+    h1 = d.helices[1]
+    tan = (h1.axis_end.to_array() - h1.axis_start.to_array())
+    n = float(np.linalg.norm(tan))
+    tan_hat = tan / n if n > 0 else np.array([0.0, 0.0, 1.0])
+    shift_vec = tan_hat * stagger * BDNA_RISE_PER_BP
+    shifted = h1.model_copy(update={
+        "bp_start": h1.bp_start + stagger,
+        "axis_start": Vec3.from_array(h1.axis_start.to_array() + shift_vec),
+        "axis_end":   Vec3.from_array(h1.axis_end.to_array() + shift_vec),
+    })
+    d = d.model_copy(update={"helices": [d.helices[0], shifted]}, deep=True)
+
+    def _staggered_seam(h):
+        if h.direction == Direction.FORWARD:
+            return ForcedLigation(
+                three_prime_helix_id=h.id, three_prime_bp=h.bp_start + h.length_bp - 1,
+                three_prime_direction=Direction.FORWARD,
+                five_prime_helix_id=h.id, five_prime_bp=h.bp_start,
+                five_prime_direction=Direction.FORWARD,
+                is_periodic_seam=True,
+            )
+        return ForcedLigation(
+            three_prime_helix_id=h.id, three_prime_bp=h.bp_start,
+            three_prime_direction=Direction.REVERSE,
+            five_prime_helix_id=h.id, five_prime_bp=h.bp_start + h.length_bp - 1,
+            five_prime_direction=Direction.REVERSE,
+            is_periodic_seam=True,
+        )
+    d.forced_ligations = [_staggered_seam(h) for h in d.helices]
+
+    plane_a = min(h.bp_start for h in d.helices)
+    plane_b = max(h.bp_start + h.length_bp for h in d.helices)
+    bend = DeformationOp(
+        type="bend", plane_a_bp=plane_a, plane_b_bp=plane_b,
+        affected_helix_ids=[h.id for h in d.helices],
+        params=BendParams(curvature_deg_per_bp=kappa_deg_per_bp, direction_deg=0.0),
+    )
+    return d.model_copy(update={"deformations": [bend]}, deep=True)
+
+
+def _delta_rotation_deg(d) -> float:
+    R = derive_periodic_delta(d)[:3, :3]
+    return float(np.degrees(np.arccos(
+        max(-1.0, min(1.0, (float(np.trace(R)) - 1) / 2)))))
+
+
+def test_solve_closing_curvature_closes_chain_regardless_of_stagger():
+    """``solve_closing_curvature`` produces a κ that closes the ring no matter
+    how staggered the helices are. The popup doesn't compensate for stagger
+    (visual bend = κ × typed_span, honest); the polymerize "Snap κ" button
+    handles closure separately. This test mirrors that behaviour."""
+    L = 60
+    for stagger in (0, 3, 5, 7):
+        d_probe = _periodic_bundle_with_stagger_and_bend(L, stagger, kappa_deg_per_bp=1.0)
+        kappa = solve_closing_curvature(d_probe, count=4)
+        assert kappa is not None
+        d = _periodic_bundle_with_stagger_and_bend(L, stagger, kappa_deg_per_bp=kappa)
+        angle_deg, trans_nm = closure_residual(d, count=4)
+        assert angle_deg < 0.5, (
+            f"stagger={stagger}: ring did not close angularly ({angle_deg:.4f}°)")
+        # Without auto-extension the bend center isn't perfectly fixed under
+        # the polymer δ (stagger introduces a small drift of δ's rotation axis
+        # from the bend center). The angular closure still works because
+        # solve_closing_curvature is inverting Kabsch's δ_rot directly, but a
+        # small translational residual remains. Allow ~1 nm; for short bent
+        # parts that's well below the seam ligation slack.
+        assert trans_nm < 1.5, (
+            f"stagger={stagger}: ring did not close translationally ({trans_nm:.4f} nm)")
+
+
+@pytest.mark.parametrize("count,L", [(3, 60), (4, 50), (6, 40)])
+def test_ring_closure_when_kappa_matches_count(count, L):
+    """Choosing κ so that δ_rot × count == 360° closes the ring to ~0 residual."""
+    # Use κ ≈ 360 / (count × (L-1)) — exact closure depends on the model's
+    # straight-ligation +1 step; iterate once to nail the closing κ.
+    d_probe = _periodic_bundle_with_stagger_and_bend(L, stagger=3, kappa_deg_per_bp=1.0)
+    rot_per_unit_kappa = _delta_rotation_deg(d_probe)  # δ_rot when κ = 1°/bp
+    kappa_close = (360.0 / count) / rot_per_unit_kappa
+    d = _periodic_bundle_with_stagger_and_bend(L, stagger=3, kappa_deg_per_bp=kappa_close)
+    angle_deg, trans_nm = closure_residual(d, count)
+    assert angle_deg < 0.5, f"ring of {count} did not close angularly: {angle_deg:.4f}°"
+    assert trans_nm < 0.5, f"ring of {count} did not close translationally: {trans_nm:.4f} nm"
+
+
+def test_closure_residual_nonzero_when_kappa_doesnt_divide_360():
+    """A bend whose κ doesn't produce the closing rotation leaves a residual."""
+    L = 50
+    # Pick κ that won't close in 4 copies.
+    kappa = 90.0 / L * 0.6
+    d = _periodic_bundle_with_stagger_and_bend(L, stagger=3, kappa_deg_per_bp=kappa)
+    angle_deg, _trans_nm = closure_residual(d, count=4)
+    assert angle_deg > 5.0, f"expected non-trivial angular residual, got {angle_deg:.4f}°"
 
 
 # ── Route ──────────────────────────────────────────────────────────────────
@@ -276,7 +402,7 @@ def test_patch_instance_design_auto_resolves_periodic_chain():
         bent = d.model_copy(update={"deformations": [
             DeformationOp(type="bend", plane_a_bp=0, plane_b_bp=41,
                           affected_helix_ids=[],
-                          params=BendParams(angle_deg=45.0, direction_deg=0.0))]}, deep=True)
+                          params=BendParams(curvature_deg_per_bp=45.0 / 41, direction_deg=0.0))]}, deep=True)
         r = client.patch("/api/assembly/instances/seed/design", json={"content": bent.to_json()})
         assert r.status_code == 200, r.text
 
@@ -326,7 +452,7 @@ def test_periodic_chain_re_docks_after_part_geometry_change():
         "deformations": list(base_design.deformations) + [
             DeformationOp(type="bend", plane_a_bp=0, plane_b_bp=max_bp,
                           affected_helix_ids=[],
-                          params=BendParams(angle_deg=45.0, direction_deg=0.0))],
+                          params=BendParams(curvature_deg_per_bp=45.0 / max(1, max_bp), direction_deg=0.0))],
     }, deep=True)
     new_src = PartSourceInline(design=bent)
     asm1 = asm0.model_copy(update={

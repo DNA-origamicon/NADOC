@@ -719,10 +719,23 @@ class TwistParams(BaseModel):
 
 
 class BendParams(BaseModel):
-    """Parameters for a bend deformation segment."""
+    """Parameters for a bend deformation segment.
+
+    Canonical storage is **per-bp curvature** ``curvature_deg_per_bp`` (κ).
+    The popup exposes two derived knobs cross-linked through κ:
+      θ_window = κ × (plane_b − plane_a)   — angle across the typed window
+      θ_period = κ × length_bp             — angle per polymer period
+    Polymer ring closure in N copies ⇔ θ_period = 360°/N.
+
+    Storing κ instead of a window-spanning angle makes the per-helix rotation
+    between near and far_next equal to κ × L for every helix in a uniform-length
+    bundle, regardless of bp-stagger. Combined with auto-extension of the bend
+    region (see ``_effective_bend_window``), this eliminates Kabsch averaging
+    artifacts in periodic polymerization.
+    """
     kind: Literal['bend'] = 'bend'
-    angle_deg: float = 0.0          # total arc angle between plane A and plane B; 0 = straight
-    direction_deg: float = 0.0      # 0 = +X in the bundle cross-section plane
+    curvature_deg_per_bp: float = 0.0   # per-bp curvature; positive = bend toward +direction
+    direction_deg: float = 0.0          # 0 = +X in the bundle cross-section plane
 
 
 class DeformationOp(BaseModel):
@@ -858,6 +871,8 @@ class AssemblyJointConfigState(BaseModel):
     current_value: float = 0.0
     axis_origin: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
     axis_direction: List[float] = Field(default_factory=lambda: [0.0, 0.0, 1.0])
+    angular_velocity_rpm: float = 0.0
+    spin_paused: bool = False
 
 
 class AssemblyConfigurationSnapshot(BaseModel):
@@ -2159,6 +2174,13 @@ class AssemblyJoint(BaseModel):
     # only snap. Use POST /assembly/joints/{id}/refresh-mate to capture from
     # the current state.
     mate_relative_transform: Optional[List[float]] = None
+    # Revolute-only: continuous-spin angular velocity (rotations per minute).
+    # 0 = static. Sign follows the right-hand rule around axis_direction.
+    # Integrated by the frontend kinematics ticker; persists in save files.
+    # No-op at runtime when joint_type != "revolute".
+    angular_velocity_rpm: float = 0.0
+    # Per-joint freeze switch independent of any global pause toggle.
+    spin_paused: bool = False
 
 
 class PartLibraryEntry(BaseModel):

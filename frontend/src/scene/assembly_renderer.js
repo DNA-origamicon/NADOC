@@ -318,6 +318,33 @@ function _computeInstanceBluntEnds(design, helixAxes, mat4, instId, instName) {
   return results
 }
 
+// Convert one backend bend_centers record (instance-LOCAL frame) to a world-frame
+// mate connector record shaped exactly like _computeInstanceBluntEnds() output.
+// Used by Define-Mate to expose bend center-of-curvature points as pickable
+// connectors (CAD-style "mate two arcs by their circle centers").
+function _bendCenterRecordToWorld(bc, mat4, instId, instName) {
+  const localPos  = new THREE.Vector3(bc.position[0], bc.position[1], bc.position[2])
+  const localNorm = new THREE.Vector3(bc.normal[0],   bc.normal[1],   bc.normal[2]).normalize()
+  const worldPos  = localPos.clone().applyMatrix4(mat4)
+  const worldNorm = localNorm.clone().transformDirection(mat4).normalize()
+  return {
+    instanceId:    instId,
+    instanceName:  instName,
+    instanceLabel: instName,  // dropdown reads .instanceLabel (parity with InterfacePoint records)
+    label:         bc.label,
+    worldPos:      [worldPos.x,  worldPos.y,  worldPos.z],
+    worldNorm:     [worldNorm.x, worldNorm.y, worldNorm.z],
+    localPos:      [localPos.x,  localPos.y,  localPos.z],
+    localNorm:     [localNorm.x, localNorm.y, localNorm.z],
+    clusterId:     bc.cluster_id ?? null,
+    clusterIds:    bc.cluster_id ? [bc.cluster_id] : [],
+    isBluntEnd:    false,
+    isBendCenter:  true,
+    bendIndex:     bc.bend_index,
+    radiusNm:      bc.radius_nm,
+  }
+}
+
 // Maps representation name → setDetailLevel argument (CG reprs only).
 const _CG_LOD = { full: 0, beads: 1, cylinders: 2 }
 
@@ -1132,6 +1159,10 @@ export function initAssemblyRenderer(scene, store, api) {
   // Per-instance helix_axes cache (local frame) for VSC endpoint lookups
   const _helixAxesCache    = new Map()  // instId → { [helixId]: { start, end } }
   const _instTransformCache = new Map() // instId → values[] (16-element row-major)
+  // Backend-computed bend center-of-curvature connectors per instance, in
+  // instance-LOCAL frame. Populated lazily by getInstanceBendCenters() on
+  // Define-Mate; evicted when the instance is invalidated.
+  const _bendCentersLocalCache = new Map() // instId → Array<{label, position, normal, ...}>
 
   // Linker geometry group (linker helices + VSC dashed lines)
   const _linkerGroup = new THREE.Group()
@@ -2049,6 +2080,7 @@ export function initAssemblyRenderer(scene, store, api) {
     _allSceneGroups.clear()
     _helixAxesCache.clear()
     _instTransformCache.clear()
+    _bendCentersLocalCache.clear()
     // Clear linker group
     _linkerGroup.traverse(obj => {
       // Skip module-level template geometries shared across instances.
@@ -2190,6 +2222,7 @@ export function initAssemblyRenderer(scene, store, api) {
     _cache.delete(id)
     _helixAxesCache.delete(id)
     _instTransformCache.delete(id)
+    _bendCentersLocalCache.delete(id)
   }
 
   // Pre-fetched geometry stash, consumed by the next rebuild() call.
@@ -2541,6 +2574,39 @@ export function initAssemblyRenderer(scene, store, api) {
     return results
   }
 
+  // Bend center-of-curvature connectors per visible instance for Define-Mate.
+  // Fetched lazily from the backend (the math wants ``_frame_at_bp``'s
+  // upstream-op composition; reimplementing in JS would be a maintenance
+  // trap). Cached per instance; entries are evicted when the instance is
+  // invalidated. Returns Array<{... same shape as getInstanceBluntEnds ...,
+  // isBendCenter: true, bendIndex, radiusNm}>.
+  async function getInstanceBendCenters() {
+    const assembly = store.getState().currentAssembly
+    if (!assembly) return []
+    const instances = (assembly.instances ?? []).filter(i => i.visible !== false)
+    const out = []
+    await Promise.all(instances.map(async inst => {
+      let local = _bendCentersLocalCache.get(inst.id)
+      if (!local) {
+        try {
+          const resp = await api.getInstanceBendCenters(inst.id)
+          local = resp?.bend_centers ?? []
+          _bendCentersLocalCache.set(inst.id, local)
+        } catch { local = [] }
+      }
+      if (!local.length) return
+      const tv = _instTransformCache.get(inst.id)
+      const mat4 = (tv?.length === 16)
+        ? new THREE.Matrix4().fromArray(tv).transpose()
+        : new THREE.Matrix4()
+      const instName = inst.name ?? inst.id.slice(0, 6)
+      for (const bc of local) {
+        out.push(_bendCenterRecordToWorld(bc, mat4, inst.id, instName))
+      }
+    }))
+    return out
+  }
+
   function getConnectorClusterId(instanceId, label) {
     if (!instanceId || !label) return null
     const connector = getInstanceBluntEnds().find(c =>
@@ -2688,6 +2754,7 @@ export function initAssemblyRenderer(scene, store, api) {
     applyInlineGeometry,
     pickPartJoint,
     getInstanceBluntEnds,
+    getInstanceBendCenters,
     getConnectorClusterId,
     getConnectorClusterIds,
     getLabelTable,
@@ -2728,6 +2795,7 @@ const _ASSEMBLY_RENDERER_METHODS = [
   'applyInlineGeometry',
   'pickPartJoint',
   'getInstanceBluntEnds',
+  'getInstanceBendCenters',
   'getConnectorClusterId',
   'getConnectorClusterIds',
   'getLabelTable',
@@ -2830,6 +2898,11 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
 
   // id → source_key (lookup for setActiveInstance / applyInlineGeometry)
   const _instToSrc = new Map()
+
+  // Backend-computed bend center-of-curvature connectors per instance, in
+  // instance-LOCAL frame. Populated lazily by getInstanceBendCenters() on
+  // Define-Mate; cleared on rebuild (shared path rebuilds on invalidate).
+  const _bendCentersLocalCache = new Map() // instId → Array<{...}>
 
   // Stash for applyInlineGeometry (mirrors the old path)
   const _prefetchedByPath = new Map()
@@ -5457,7 +5530,8 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   }
 
   // ── Public: invalidateInstance ────────────────────────────────────────────
-  function invalidateInstance(/* instanceId */) {
+  function invalidateInstance(instanceId) {
+    _bendCentersLocalCache.delete(instanceId)
     // Per the spec: a full rebuild is acceptable for representation changes.
     const assembly = store?.getState?.()?.currentAssembly
     if (assembly) {
@@ -6032,6 +6106,46 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return c?.clusterIds?.length ? c.clusterIds : (c?.clusterId ? [c.clusterId] : [])
   }
 
+  // Bend center-of-curvature connectors per visible instance for Define-Mate.
+  // Fetched lazily from the backend (per-instance, since cluster overrides can
+  // vary), cached per instance. World-frame records use the instance's live
+  // xformData matrix the same way getInstanceBluntEnds does.
+  async function getInstanceBendCenters() {
+    const assembly = store.getState().currentAssembly
+    if (!assembly) return []
+    const out = []
+    const tmp = new THREE.Matrix4()
+    const tasks = []
+    for (const srcEntry of _sources.values()) {
+      for (let i = 0; i < srcEntry.instanceIds.length; i++) {
+        if (srcEntry.visibility[i] < 0.5) continue
+        const instId = srcEntry.instanceIds[i]
+        const inst = assembly.instances?.find(x => x.id === instId)
+        if (!inst || inst.visible === false) continue
+        tasks.push({ instId, inst, srcEntry, row: i })
+      }
+    }
+    await Promise.all(tasks.map(async t => {
+      let local = _bendCentersLocalCache.get(t.instId)
+      if (!local) {
+        try {
+          const resp = await api.getInstanceBendCenters(t.instId)
+          local = resp?.bend_centers ?? []
+          _bendCentersLocalCache.set(t.instId, local)
+        } catch { local = [] }
+      }
+      if (!local.length) return
+      const off = t.row * 16
+      const mat = tmp.clone()
+      for (let k = 0; k < 16; k++) mat.elements[k] = t.srcEntry.xformData[off + k]
+      const instName = t.inst.name ?? t.instId.slice(0, 6)
+      for (const bc of local) {
+        out.push(_bendCenterRecordToWorld(bc, mat, t.instId, instName))
+      }
+    }))
+    return out
+  }
+
   // ── Phase 7a: per-instance introspection (shared path) ────────────────────
   // On the shared path there is no per-instance helixCtrl — geometry is one
   // shared helixCtrl per source, GPU-composed. But the source helixCtrl still
@@ -6375,6 +6489,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     setLiveTransform,
     getLiveTransform,
     getInstanceBluntEnds,
+    getInstanceBendCenters,
     getConnectorClusterId,
     getConnectorClusterIds,
     getInstanceDesign,

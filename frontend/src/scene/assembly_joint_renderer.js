@@ -90,10 +90,17 @@ const CONN_HALF_LEN = 0.7
 const CONN_TIP_R    = 0.18
 const CONN_TIP_H    = 0.40
 const CONN_SPHERE_R = 0.38
-const CONN_COLOUR     = 0xf0a500   // amber/gold
+const CONN_COLOUR     = 0xf0a500   // amber/gold (blunt-end + InterfacePoint)
 const CONN_SEL_COL    = 0x58a6ff   // blue (selected child/first connector)
 const CONN_PARENT_COL = 0x3fb950   // green (selected parent/second connector)
 const CONN_HOV_COL    = 0xffffff   // white (hovered)
+// Distinct color for bend center-of-curvature picks during Define-Mate.
+// Cyan-blue — already the project's "geometric-aux" color (active-cluster
+// glow). No clash with gold blunt-ends or orange joint rings.
+const CONN_BEND_CENTER_COL = 0x39d6f0
+// Bend-center picks render as an octahedron instead of a sphere so the user
+// can distinguish them at a glance from gold blunt-end spheres.
+const CONN_BEND_CENTER_GEO_R = CONN_SPHERE_R * 1.15
 
 // Distance-based connector-indicator visibility (mate-define mode only).
 // Hides connectors that aren't near the camera so designs with many
@@ -195,7 +202,7 @@ function _jointInstanceMatrix(origin, direction, out) {
  * Build a connector indicator: sphere (click target) + directional arrow.
  * Returns { group: THREE.Group, hitMesh: THREE.Mesh }.
  */
-function _buildConnectorIndicator(worldPos, worldNorm, color = CONN_COLOUR) {
+function _buildConnectorIndicator(worldPos, worldNorm, color = CONN_COLOUR, markerKind = 'sphere') {
   const dir = new THREE.Vector3(worldNorm[0], worldNorm[1], worldNorm[2]).normalize()
   const { q } = _orientQ([dir.x, dir.y, dir.z])
   const grp = new THREE.Group()
@@ -205,8 +212,13 @@ function _buildConnectorIndicator(worldPos, worldNorm, color = CONN_COLOUR) {
     color, depthTest: false, depthWrite: false, transparent: true,
   })
 
-  // Sphere at connector origin — primary click/pick target
-  const hitMesh = new THREE.Mesh(new THREE.SphereGeometry(CONN_SPHERE_R, 8, 6), mat())
+  // Hit marker at connector origin — primary click/pick target. Bend centers
+  // render as an octahedron so the user can distinguish them from gold
+  // blunt-end spheres at a glance.
+  const hitGeo = markerKind === 'bend_center'
+    ? new THREE.OctahedronGeometry(CONN_BEND_CENTER_GEO_R, 0)
+    : new THREE.SphereGeometry(CONN_SPHERE_R, 8, 6)
+  const hitMesh = new THREE.Mesh(hitGeo, mat())
   hitMesh.renderOrder = 9999
   grp.add(hitMesh)
 
@@ -569,7 +581,9 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       const isSecond = _mateSecond &&
         mesh.userData.instanceId === _mateSecond.instanceId &&
         mesh.userData.label      === _mateSecond.label
-      mesh.material.color.set(isFirst ? CONN_SEL_COL : isSecond ? CONN_PARENT_COL : CONN_COLOUR)
+      const isBendCenter = mesh.userData.isBendCenter === true
+      const baseCol = isBendCenter ? CONN_BEND_CENTER_COL : CONN_COLOUR
+      mesh.material.color.set(isFirst ? CONN_SEL_COL : isSecond ? CONN_PARENT_COL : baseCol)
     }
   }
 
@@ -602,8 +616,17 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       if (_connectorDataMap.has(key)) continue  // already a real interface_point
       _connectorDataMap.set(key, be)
       _bluntConnKeys.add(key)
-      const { group, hitMesh } = _buildConnectorIndicator(be.worldPos, be.worldNorm)
-      hitMesh.userData = { instanceId: be.instanceId, label: be.label, worldPos: be.worldPos, worldNorm: be.worldNorm, clusterId: be.clusterId ?? null }
+      const isBendCenter = be.isBendCenter === true
+      const color = isBendCenter ? CONN_BEND_CENTER_COL : CONN_COLOUR
+      const markerKind = isBendCenter ? 'bend_center' : 'sphere'
+      const { group, hitMesh } = _buildConnectorIndicator(be.worldPos, be.worldNorm, color, markerKind)
+      hitMesh.userData = {
+        instanceId: be.instanceId, label: be.label,
+        worldPos: be.worldPos, worldNorm: be.worldNorm,
+        clusterId: be.clusterId ?? null,
+        isBluntEnd:   be.isBluntEnd   === true,
+        isBendCenter: isBendCenter,
+      }
       _bluntConnGroup.add(group)
       _bluntConnMeshes.push(hitMesh)
       _connectorMeshes.push(hitMesh)
@@ -958,12 +981,13 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
 
     const DEG = Math.PI / 180
     const _connSpec = (c) => c ? {
-      instance_id:  c.instanceId,
-      label:        c.label,
-      position:     c.localPos  ?? [0, 0, 0],
-      normal:       c.localNorm ?? [0, 0, 1],
-      cluster_id:   c.clusterId ?? null,
-      is_blunt_end: !!(c.isBluntEnd && c.localPos),
+      instance_id:    c.instanceId,
+      label:          c.label,
+      position:       c.localPos  ?? [0, 0, 0],
+      normal:         c.localNorm ?? [0, 0, 1],
+      cluster_id:     c.clusterId ?? null,
+      is_blunt_end:   !!(c.isBluntEnd   && c.localPos),
+      is_bend_center: !!(c.isBendCenter && c.localPos),
     } : null
 
     // ONE round-trip: register blunt ends + propagate FK + add joint server-side.
@@ -1112,7 +1136,9 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       const isSecond = _mateSecond &&
         mesh.userData.instanceId === _mateSecond.instanceId &&
         mesh.userData.label      === _mateSecond.label
-      const baseCol = isFirst ? CONN_SEL_COL : isSecond ? CONN_PARENT_COL : CONN_COLOUR
+      const isBendCenter = mesh.userData.isBendCenter === true
+      const restCol = isBendCenter ? CONN_BEND_CENTER_COL : CONN_COLOUR
+      const baseCol = isFirst ? CONN_SEL_COL : isSecond ? CONN_PARENT_COL : restCol
       mesh.material.color.set(mesh === hovered ? CONN_HOV_COL : baseCol)
     }
     // Second pass with the hover target so the hovered indicator bumps to

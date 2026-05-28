@@ -1230,7 +1230,7 @@ def test_part_geometry_signature_detects_deformation_changes():
     # A different op type also differs.
     bent = base.model_copy(update={"deformations": [
         DeformationOp(type="bend", plane_a_bp=0, plane_b_bp=40,
-                      affected_helix_ids=[], params=BendParams(angle_deg=30.0, direction_deg=0.0))]})
+                      affected_helix_ids=[], params=BendParams(curvature_deg_per_bp=30.0 / 40, direction_deg=0.0))]})
     assert _part_geometry_signature(bent) != _part_geometry_signature(twisted)
 
     # Identical designs hash equal (no spurious resolves).

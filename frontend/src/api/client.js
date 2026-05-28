@@ -2501,6 +2501,27 @@ export async function getInstanceAtomisticGeometry(id) {
 }
 
 /**
+ * Per-instance bend-center connectors for "Define Mate" picking.
+ *
+ * Returns ``{ bend_centers: [{label, position, normal, cluster_id,
+ * bend_index, radius_nm}] }`` in instance-LOCAL coordinates. Frontend
+ * transforms with the instance's world matrix the same way blunt ends
+ * are handled.
+ */
+export async function getInstanceBendCenters(id) {
+  return _request('GET', `/assembly/instances/${id}/bend-centers`)
+}
+
+/**
+ * Ring-closure residual for a periodic-polymer chain of `count` copies of
+ * this instance. Returns the rotational and translational drift of δ^count
+ * away from identity, plus a suggested κ that would close the chain.
+ */
+export async function getInstancePeriodicClosure(id, count = 4) {
+  return _request('GET', `/assembly/instances/${id}/periodic-closure?count=${count}`)
+}
+
+/**
  * Batch-fetch geometry for every visible instance in the active assembly.
  *
  * Server returns the deduplicated shape ``{ sources, instances, errors }``

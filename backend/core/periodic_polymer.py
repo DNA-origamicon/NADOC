@@ -256,6 +256,14 @@ def _iter_seam_frames(design: "Design") -> List[Tuple[np.ndarray, np.ndarray]]:
             continue
         f_near, _ = rn
         f_far, twist_far = rf
+        # The +1 backbone step is a body-frame screw — twist around local-z +
+        # rise along local-z. The bend's curvature contribution to this 1 bp
+        # step is not added here: in the κ-direct model, the auto-extended
+        # window already covers each helix's near→far_next interval, so the
+        # frames at near and far already carry the per-helix rotation
+        # κ × (effective_far − effective_near). The +1 step is the ligation
+        # gap and stays straight — Kabsch sees the bend rotation from f_far,
+        # not from this step.
         f_far_next = f_far @ _bp_step_screw(twist_far, BDNA_RISE_PER_BP)
         out.append((f_near, f_far_next))
     return out
@@ -287,6 +295,73 @@ def derive_periodic_delta(design: "Design", lever_nm: float = 1.0) -> np.ndarray
 def derive_periodic_delta_mat4(design: "Design") -> Mat4x4:
     """Thin wrapper returning the repeat transform as a :class:`Mat4x4`."""
     return Mat4x4.from_array(derive_periodic_delta(design))
+
+
+def solve_closing_curvature(design: "Design", count: int) -> "float | None":
+    """Return ``curvature_deg_per_bp`` that closes the chain in ``count`` copies.
+
+    Solves ``count × δ_rotation(κ) == 360°`` numerically: probes the design at
+    a small reference κ to read off the linear relationship ``δ_rot = α · κ``
+    (true to floating-point precision since the bend math is linear in κ once
+    the window is fixed), then sets ``κ_close = (360° / count) / α``.
+
+    Returns ``None`` when the design has exactly one bend op (so there's a
+    single κ to set); the caller is expected to assign κ to that op. When the
+    design has no bend op, no curvature is needed (chain is already straight)
+    — returns ``0.0``. When more than one bend op, returns ``None`` because the
+    target κ is ambiguous (multiple knobs).
+
+    Raises :class:`PeriodicSeamError` when no periodic seam resolves.
+    """
+    import math as _math
+    bend_ops = [op for op in design.deformations
+                if getattr(op.params, "kind", None) == "bend"]
+    if not bend_ops:
+        return 0.0
+    if len(bend_ops) != 1:
+        return None
+    op = bend_ops[0]
+
+    # Probe with κ_probe = 1.0 — the bend math is linear in κ on a fixed
+    # window, so this single sample is enough to invert.
+    original_kappa = op.params.curvature_deg_per_bp
+    op.params.curvature_deg_per_bp = 1.0
+    try:
+        delta = derive_periodic_delta(design)
+    finally:
+        op.params.curvature_deg_per_bp = original_kappa
+    R = delta[:3, :3]
+    cos_t = max(-1.0, min(1.0, (float(np.trace(R)) - 1.0) / 2.0))
+    rot_per_unit_kappa = float(_math.degrees(_math.acos(cos_t)))
+    if rot_per_unit_kappa < 1e-9:
+        return None
+    return (360.0 / float(count)) / rot_per_unit_kappa
+
+
+def closure_residual(design: "Design", count: int) -> "Tuple[float, float]":
+    """Predict how far a chain of ``count`` copies misses closing the ring.
+
+    Returns ``(rotation_residual_deg, translation_residual_nm)`` — the rotation
+    and translation magnitudes of ``δ**count`` away from identity. Both ≈ 0 ⇔
+    chain closes exactly. Used by the polymerize-periodic UI to warn the user
+    when their bend's per-period angle doesn't divide 360° evenly (i.e. won't
+    form a closed ring). A value of 0/0 for count=4 means the 4-tile ring is
+    geometrically closed; non-zero means the user should adjust κ.
+
+    Raises :class:`PeriodicSeamError` when the design has no periodic seam.
+    """
+    if count < 1:
+        return 0.0, 0.0
+    delta = derive_periodic_delta(design)
+    out = np.eye(4)
+    for _ in range(int(count)):
+        out = out @ delta
+    R = out[:3, :3]
+    t = out[:3, 3]
+    cos_t = max(-1.0, min(1.0, (float(np.trace(R)) - 1.0) / 2.0))
+    angle_deg = float(np.degrees(np.arccos(cos_t)))
+    trans_nm = float(np.linalg.norm(t))
+    return angle_deg, trans_nm
 
 
 def principal_seam_connectors(design: "Design") -> "Tuple[Tuple[list, list], Tuple[list, list]] | None":

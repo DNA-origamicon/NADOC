@@ -65,6 +65,10 @@ const PANEL_HTML = `
     </div>
   </div>
   <div id="poly-cost-preview" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px;min-height:14px"></div>
+  <div id="poly-closure" style="font-size:var(--text-xs);margin-bottom:6px;min-height:14px;display:none">
+    <span id="poly-closure-text"></span>
+    <button id="poly-closure-snap" type="button" style="margin-left:6px;background:none;border:none;color:#58a6ff;cursor:pointer;font-size:var(--text-xs);padding:0;display:none">Snap κ to close</button>
+  </div>
   <button id="poly-go-btn" class="panel-action-btn" disabled style="width:100%">Polymerize</button>
   <div id="poly-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:16px"></div>
 `
@@ -94,6 +98,9 @@ export function initPolymerizePanel(store, { isInstancePeriodic } = {}) {
   const selectAllBtn     = panel.querySelector('#poly-select-all')
   const selectNoneBtn    = panel.querySelector('#poly-select-none')
   const costPreviewEl    = panel.querySelector('#poly-cost-preview')
+  const closureEl        = panel.querySelector('#poly-closure')
+  const closureTextEl    = panel.querySelector('#poly-closure-text')
+  const closureSnapBtn   = panel.querySelector('#poly-closure-snap')
 
   // Select all / none for the "to pattern" checklist. Toggle each checkbox and
   // fire its change event so the per-row handler + cost preview stay in sync.
@@ -338,7 +345,61 @@ export function initPolymerizePanel(store, { isInstancePeriodic } = {}) {
     costPreviewEl.textContent = projected === 0
       ? `No new instances (chain already ${count}).`
       : `Projected: ${projected} new instance${projected === 1 ? '' : 's'} (cylinders)${patSuffix}.`
+    _updateClosurePreview(count)
   }
+
+  // Last-fetched closure suggestion for the snap button. Refreshed by
+  // _updateClosurePreview; null when the part isn't periodic or the user
+  // isn't on the periodic path.
+  let _lastClosureSuggestion = null
+
+  async function _updateClosurePreview(count) {
+    if (!_periodicInstanceId) { closureEl.style.display = 'none'; _lastClosureSuggestion = null; return }
+    closureEl.style.display = ''
+    closureTextEl.textContent = 'Computing closure…'
+    closureTextEl.style.color = '#8b949e'
+    closureSnapBtn.style.display = 'none'
+    try {
+      const res = await api.getInstancePeriodicClosure(_periodicInstanceId, count)
+      if (!res) { closureTextEl.textContent = ''; return }
+      const angle = res.rotation_residual_deg ?? 0
+      const trans = res.translation_residual_nm ?? 0
+      _lastClosureSuggestion = res.suggested_curvature_deg_per_bp ?? null
+      const closed = angle < 0.5 && trans < 0.5
+      closureTextEl.style.color = closed ? '#3fb950' : '#d29922'
+      closureTextEl.textContent = closed
+        ? `Chain closes: residual ${angle.toFixed(2)}° / ${trans.toFixed(2)} nm.`
+        : `Chain does NOT close: residual ${angle.toFixed(2)}° / ${trans.toFixed(2)} nm.`
+      closureSnapBtn.style.display = (!closed && _lastClosureSuggestion != null) ? '' : 'none'
+    } catch {
+      closureTextEl.textContent = ''
+      _lastClosureSuggestion = null
+    }
+  }
+
+  closureSnapBtn.addEventListener('click', async () => {
+    if (_lastClosureSuggestion == null || !_periodicInstanceId) return
+    // Apply the suggested κ to the part's single bend op, then refresh.
+    const design = await api.getInstanceDesign?.(_periodicInstanceId)
+    const bendOps = (design?.design?.deformations ?? []).filter(op => op?.params?.kind === 'bend')
+    if (bendOps.length !== 1) {
+      closureTextEl.textContent = 'Snap not available (need exactly one bend op).'
+      return
+    }
+    const op = bendOps[0]
+    closureSnapBtn.disabled = true
+    try {
+      await api.updateDeformation?.(op.id, {
+        kind: 'bend',
+        curvature_deg_per_bp: _lastClosureSuggestion,
+        direction_deg: op.params.direction_deg ?? 0,
+      })
+      _updateClosurePreview(Math.max(2, parseInt(countInput.value, 10) || 2))
+    } finally {
+      closureSnapBtn.disabled = false
+    }
+  })
+
   countInput.addEventListener('input', _updateCostPreview)
   panel.querySelectorAll('input[name="poly-dir"]').forEach(r =>
     r.addEventListener('change', _updateCostPreview),

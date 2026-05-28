@@ -26,12 +26,13 @@ def _add_bend(design, plane_a: int, plane_b: int, angle_deg: float = 90.0):
     from backend.core.deformation import helices_crossing_planes
     from backend.core.models import BendParams, DeformationLogEntry, DeformationOp
 
+    span = max(1, plane_b - plane_a)
     op = DeformationOp(
         type="bend",
         plane_a_bp=plane_a,
         plane_b_bp=plane_b,
         affected_helix_ids=helices_crossing_planes(design, plane_a, plane_b),
-        params=BendParams(angle_deg=angle_deg, direction_deg=0.0),
+        params=BendParams(curvature_deg_per_bp=angle_deg / span, direction_deg=0.0),
     )
     entry = DeformationLogEntry(deformation_id=op.id, op_snapshot=op)
     new_log = list(design.feature_log) + [entry]

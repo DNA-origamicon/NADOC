@@ -124,7 +124,8 @@ def test_reference_nucleotides_frozen_under_bend():
     # Wide bend so the staple's nucleotides fall in the bent region.
     r = client.post("/api/design/deformation", json={
         "type": "bend", "plane_a_bp": 10, "plane_b_bp": 410,
-        "params": {"angle_deg": 45.0, "direction_deg": 0.0}, "cluster_ids": [],
+        "params": {"curvature_deg_per_bp": 45.0 / 400, "direction_deg": 0.0},
+        "cluster_ids": [],
     })
     assert r.status_code == 200, r.text
     d = design_state.get_or_404()
