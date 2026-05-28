@@ -205,6 +205,36 @@ def test_geometry_batch_helix_axes_present():
             assert len(ax["end"]) == 3
 
 
+def test_surface_batch_includes_vertex_colors_in_strand_mode():
+    """Surface batch must ship per-vertex strand colours so animation playback
+    can restore the surface's vertex colouring after a topology rebuild
+    (otherwise the surface drops to uniform grey mid-animation in photo mode
+    and during video export)."""
+    r = client.post(
+        "/api/design/features/surface-batch",
+        json={"positions": [-1], "color_mode": "strand"},
+    )
+    assert r.status_code == 200
+    entry = r.json()["-1"]
+    assert "vertices" in entry and len(entry["vertices"]) > 0
+    assert "faces" in entry and len(entry["faces"]) > 0
+    assert "vertex_colors" in entry, "strand color_mode must include vertex_colors"
+    assert len(entry["vertex_colors"]) == len(entry["vertices"])
+
+
+def test_surface_batch_omits_vertex_colors_in_uniform_mode():
+    """uniform mode should NOT carry vertex_colors (the live mesh paints a
+    flat colour; sending the array would just waste payload)."""
+    r = client.post(
+        "/api/design/features/surface-batch",
+        json={"positions": [-1], "color_mode": "uniform"},
+    )
+    assert r.status_code == 200
+    entry = r.json()["-1"]
+    assert "vertices" in entry and "faces" in entry
+    assert "vertex_colors" not in entry
+
+
 def test_geometry_batch_duplicates_deduplicated():
     """Duplicate positions are returned once each."""
     r = client.post(

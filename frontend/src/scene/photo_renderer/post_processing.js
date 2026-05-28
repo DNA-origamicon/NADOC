@@ -62,31 +62,31 @@ export function createComposer(renderer, scene, camera, opts = {}) {
   composer.addPass(inscatterPass)
 
   // ── SSAO ─────────────────────────────────────────────────────────────────────
-  let ssaoPass = null
-  if (ssao) {
-    ssaoPass = new SSAOPass(scene, camera, w, h)
-    // Tuned for nm-scale DNA structures:
-    // kernelRadius ≈ 0.3 nm — close-range occlusion between helices
-    // minDistance  — avoid self-occlusion on flat surfaces
-    // maxDistance  — don't darken wide open space
-    ssaoPass.kernelRadius  = 0.3
-    ssaoPass.minDistance   = 0.002
-    ssaoPass.maxDistance   = 0.12
-    ssaoPass.kernelSize    = 32
-    ssaoPass.output        = SSAOPass.OUTPUT.Default  // SSAO blended with scene
-    composer.addPass(ssaoPass)
-  }
+  // Always constructed and present in the chain; `enabled` is toggled by the
+  // setSSAO controller. Reconstructing the composer post-activate would put
+  // the new UnrealBloomPass behind the renderer's already-mutated PMREM state
+  // (see the env-bake note above) and re-trigger the bloom-writes-garbage bug.
+  const ssaoPass = new SSAOPass(scene, camera, w, h)
+  // Tuned for nm-scale DNA structures:
+  // kernelRadius ≈ 0.3 nm — close-range occlusion between helices
+  // minDistance  — avoid self-occlusion on flat surfaces
+  // maxDistance  — don't darken wide open space
+  ssaoPass.kernelRadius  = 0.3
+  ssaoPass.minDistance   = 0.002
+  ssaoPass.maxDistance   = 0.12
+  ssaoPass.kernelSize    = 32
+  ssaoPass.output        = SSAOPass.OUTPUT.Default
+  ssaoPass.enabled       = !!ssao
+  composer.addPass(ssaoPass)
 
   // ── SMAA anti-aliasing ───────────────────────────────────────────────────────
   const smaaPass = new SMAAPass(w, h)
   composer.addPass(smaaPass)
 
-  // ── Bloom (optional) ─────────────────────────────────────────────────────────
-  let bloomPass = null
-  if (bloom) {
-    bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), bloomStrength, bloomRadius, bloomThreshold)
-    composer.addPass(bloomPass)
-  }
+  // ── Bloom — always allocated, toggled via .enabled (see SSAO note above) ────
+  const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), bloomStrength, bloomRadius, bloomThreshold)
+  bloomPass.enabled = !!bloom
+  composer.addPass(bloomPass)
 
   // ── Output (tone-mapping + colour-space correction) ───────────────────────────
   const outputPass = new OutputPass()
@@ -102,7 +102,7 @@ export function createComposer(renderer, scene, camera, opts = {}) {
 
   function dispose() {
     inscatterPass.dispose()
-    bloomPass?.dispose?.()
+    bloomPass.dispose?.()
     composer.dispose()
   }
 

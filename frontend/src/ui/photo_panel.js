@@ -114,6 +114,15 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   const lightYawLabel  = _el('photo-light-yaw-label')
   const lightPitch     = _el('photo-light-pitch')
   const lightPitchLabel= _el('photo-light-pitch-label')
+  const sunEnable      = _el('photo-sun-enable')
+  const sunCtrlsRow    = _el('photo-sun-controls')
+  const sunAzimuth     = _el('photo-sun-azimuth')
+  const sunAzimuthLbl  = _el('photo-sun-azimuth-label')
+  const sunElevation   = _el('photo-sun-elevation')
+  const sunElevationLbl= _el('photo-sun-elevation-label')
+  const sunStrength    = _el('photo-sun-strength')
+  const sunStrengthLbl = _el('photo-sun-strength-label')
+  const sunColor       = _el('photo-sun-color')
   const fluoroChk      = _el('photo-fluoro-emissive')
   const fluoroRow      = _el('photo-fluoro-intensity-row')
   const fluoroInt      = _el('photo-fluoro-intensity')
@@ -137,6 +146,25 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   const mistWispSpdLbl = _el('photo-mist-wisp-speed-label')
   const translucIn     = _el('photo-translucency')
   const translucLbl    = _el('photo-translucency-label')
+  const floorAxis      = _el('photo-floor-axis')
+  const floorCtrlsRow  = _el('photo-floor-controls')
+  const floorMatSel    = _el('photo-floor-material')
+  const floorColorIn   = _el('photo-floor-color')
+  const floorOpacityIn = _el('photo-floor-opacity')
+  const floorOpacityLbl= _el('photo-floor-opacity-label')
+  const floorSizeIn    = _el('photo-floor-size')
+  const floorSizeLbl   = _el('photo-floor-size-label')
+  const floorOffsetIn  = _el('photo-floor-offset')
+  const floorOffsetLbl = _el('photo-floor-offset-label')
+  const floorShadowsIn = _el('photo-floor-shadows')
+  const floorGridIn       = _el('photo-floor-grid')
+  const floorGridStyleRow = _el('photo-floor-grid-style-row')
+  const floorGridNeonChk  = _el('photo-floor-grid-neon')
+  const floorGridNeonRow  = _el('photo-floor-grid-neon-row')
+  const floorGridNeonHint = _el('photo-floor-grid-neon-hint')
+  const floorGridColor    = _el('photo-floor-grid-color')
+  const floorGridGlow     = _el('photo-floor-grid-glow')
+  const floorGridGlowLbl  = _el('photo-floor-grid-glow-label')
   const ssaoChk      = _el('photo-ssao')
   const bloomChk     = _el('photo-bloom')
   const bloomRow     = _el('photo-bloom-strength-row')
@@ -190,6 +218,25 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
       photoRenderer.setFluorophoreEmissive(s.fluorophoreEmissive, s.fluorophoreIntensity ?? 5)
     }
     if (s.translucency !== undefined) photoRenderer.setTranslucency(s.translucency)
+    // Sun — apply scalars before toggle so the on-build has the right pose.
+    if (s.sunAzimuth   !== undefined) photoRenderer.setSunAzimuth(s.sunAzimuth)
+    if (s.sunElevation !== undefined) photoRenderer.setSunElevation(s.sunElevation)
+    if (s.sunStrength  !== undefined) photoRenderer.setSunStrength(s.sunStrength)
+    if (s.sunColor     !== undefined) photoRenderer.setSunColor(s.sunColor)
+    if (s.sun          !== undefined) photoRenderer.setSun(s.sun)
+    // Floor — apply in stable order so setFloor() (which triggers a rebuild)
+    // sees the rest of the settings already in place.
+    if (s.floorMaterial !== undefined) photoRenderer.setFloorMaterial(s.floorMaterial)
+    if (s.floorColor    !== undefined) photoRenderer.setFloorColor(s.floorColor)
+    if (s.floorOpacity  !== undefined) photoRenderer.setFloorOpacity(s.floorOpacity)
+    if (s.floorSize     !== undefined) photoRenderer.setFloorSize(s.floorSize)
+    if (s.floorOffset   !== undefined) photoRenderer.setFloorOffset(s.floorOffset)
+    if (s.floorShadows  !== undefined) photoRenderer.setFloorShadows(s.floorShadows)
+    if (s.floorGridColor !== undefined) photoRenderer.setFloorGridColor(s.floorGridColor)
+    if (s.floorGridGlow  !== undefined) photoRenderer.setFloorGridGlow(s.floorGridGlow)
+    if (s.floorGridNeon  !== undefined) photoRenderer.setFloorGridNeon(s.floorGridNeon)
+    if (s.floorGrid     !== undefined) photoRenderer.setFloorGrid(s.floorGrid)
+    if (s.floor         !== undefined) photoRenderer.setFloor(s.floor)
     // Environment: 'file' can't be restored without the blob — downgrade to 'off'.
     if (s.environment === 'off' || s.environment === 'room') {
       photoRenderer.setEnvironment(s.environment)
@@ -435,6 +482,33 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     photoRenderer.setLightingDirection(null, parseFloat(lightPitch.value))
   })
 
+  // Sun controls
+  function _syncSunRowVisibility() {
+    if (sunCtrlsRow) sunCtrlsRow.style.display = sunEnable?.checked ? 'flex' : 'none'
+  }
+  sunEnable?.addEventListener('change', () => {
+    _syncSunRowVisibility()
+    photoRenderer.setSun(sunEnable.checked)
+  })
+  sunAzimuth?.addEventListener('input', () => {
+    const v = parseFloat(sunAzimuth.value)
+    if (sunAzimuthLbl) sunAzimuthLbl.textContent = `${Math.round(v)}°`
+    photoRenderer.setSunAzimuth(v)
+  })
+  sunElevation?.addEventListener('input', () => {
+    const v = parseFloat(sunElevation.value)
+    if (sunElevationLbl) sunElevationLbl.textContent = `${Math.round(v)}°`
+    photoRenderer.setSunElevation(v)
+  })
+  sunStrength?.addEventListener('input', () => {
+    const v = parseFloat(sunStrength.value)
+    if (sunStrengthLbl) sunStrengthLbl.textContent = `${v.toFixed(1)}×`
+    photoRenderer.setSunStrength(v)
+  })
+  sunColor?.addEventListener('input', () => {
+    photoRenderer.setSunColor(sunColor.value)
+  })
+
   // Fluorophore emissive override
   fluoroChk?.addEventListener('change', () => {
     if (fluoroRow) fluoroRow.style.display = fluoroChk.checked ? '' : 'none'
@@ -515,6 +589,60 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     const v = parseFloat(translucIn.value)
     if (translucLbl) translucLbl.textContent = `${Math.round(v * 100)}%`
     photoRenderer.setTranslucency(v)
+  })
+
+  // Floor (resting surface)
+  function _syncFloorRowVisibility() {
+    if (floorCtrlsRow) floorCtrlsRow.style.display = (floorAxis?.value && floorAxis.value !== 'off') ? 'flex' : 'none'
+  }
+  floorAxis?.addEventListener('change', () => {
+    _syncFloorRowVisibility()
+    photoRenderer.setFloor(floorAxis.value)
+  })
+  floorMatSel?.addEventListener('change', () => {
+    photoRenderer.setFloorMaterial(floorMatSel.value)
+  })
+  floorColorIn?.addEventListener('input', () => {
+    photoRenderer.setFloorColor(floorColorIn.value)
+  })
+  floorOpacityIn?.addEventListener('input', () => {
+    const v = parseFloat(floorOpacityIn.value)
+    if (floorOpacityLbl) floorOpacityLbl.textContent = `${Math.round(v * 100)}%`
+    photoRenderer.setFloorOpacity(v)
+  })
+  floorSizeIn?.addEventListener('input', () => {
+    const v = parseFloat(floorSizeIn.value)
+    if (floorSizeLbl) floorSizeLbl.textContent = `${v.toFixed(1)}×`
+    photoRenderer.setFloorSize(v)
+  })
+  floorOffsetIn?.addEventListener('input', () => {
+    const v = parseFloat(floorOffsetIn.value)
+    if (floorOffsetLbl) floorOffsetLbl.textContent = `${v.toFixed(1)} nm`
+    photoRenderer.setFloorOffset(v)
+  })
+  floorShadowsIn?.addEventListener('change', () => {
+    photoRenderer.setFloorShadows(floorShadowsIn.checked)
+  })
+  function _syncFloorGridSubRows() {
+    if (floorGridStyleRow) floorGridStyleRow.style.display = floorGridIn?.checked ? 'flex' : 'none'
+    if (floorGridNeonRow)  floorGridNeonRow.style.display  = floorGridNeonChk?.checked ? 'flex' : 'none'
+    if (floorGridNeonHint) floorGridNeonHint.style.display = floorGridNeonChk?.checked ? 'block' : 'none'
+  }
+  floorGridIn?.addEventListener('change', () => {
+    _syncFloorGridSubRows()
+    photoRenderer.setFloorGrid(floorGridIn.checked)
+  })
+  floorGridNeonChk?.addEventListener('change', () => {
+    _syncFloorGridSubRows()
+    photoRenderer.setFloorGridNeon(floorGridNeonChk.checked)
+  })
+  floorGridColor?.addEventListener('input', () => {
+    photoRenderer.setFloorGridColor(floorGridColor.value)
+  })
+  floorGridGlow?.addEventListener('input', () => {
+    const v = parseFloat(floorGridGlow.value)
+    if (floorGridGlowLbl) floorGridGlowLbl.textContent = `${v.toFixed(1)}×`
+    photoRenderer.setFloorGridGlow(v)
   })
 
   // Background
@@ -656,6 +784,34 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     if (mistWispSpdLbl)  mistWispSpdLbl.textContent = (s.mistNoiseSpeed ?? 0).toFixed(2)
     if (translucIn)      translucIn.value      = s.translucency ?? 0
     if (translucLbl)     translucLbl.textContent = `${Math.round((s.translucency ?? 0) * 100)}%`
+    // Sun
+    if (sunEnable)       sunEnable.checked      = !!s.sun
+    if (sunAzimuth)      sunAzimuth.value       = s.sunAzimuth ?? 135
+    if (sunAzimuthLbl)   sunAzimuthLbl.textContent  = `${Math.round(s.sunAzimuth ?? 135)}°`
+    if (sunElevation)    sunElevation.value     = s.sunElevation ?? 35
+    if (sunElevationLbl) sunElevationLbl.textContent = `${Math.round(s.sunElevation ?? 35)}°`
+    if (sunStrength)     sunStrength.value      = s.sunStrength ?? 1.5
+    if (sunStrengthLbl)  sunStrengthLbl.textContent = `${(s.sunStrength ?? 1.5).toFixed(1)}×`
+    if (sunColor)        sunColor.value         = s.sunColor ?? '#ffffff'
+    _syncSunRowVisibility()
+    // Floor
+    if (floorAxis)       floorAxis.value       = s.floor ?? 'off'
+    if (floorMatSel)     floorMatSel.value     = s.floorMaterial ?? 'matte'
+    if (floorColorIn)    floorColorIn.value    = s.floorColor ?? '#888888'
+    if (floorOpacityIn)  floorOpacityIn.value  = s.floorOpacity ?? 1
+    if (floorOpacityLbl) floorOpacityLbl.textContent = `${Math.round((s.floorOpacity ?? 1) * 100)}%`
+    if (floorSizeIn)     floorSizeIn.value     = s.floorSize ?? 2
+    if (floorSizeLbl)    floorSizeLbl.textContent = `${(s.floorSize ?? 2).toFixed(1)}×`
+    if (floorOffsetIn)   floorOffsetIn.value   = s.floorOffset ?? 0
+    if (floorOffsetLbl)  floorOffsetLbl.textContent = `${(s.floorOffset ?? 0).toFixed(1)} nm`
+    if (floorShadowsIn)  floorShadowsIn.checked = s.floorShadows ?? true
+    if (floorGridIn)     floorGridIn.checked   = !!s.floorGrid
+    if (floorGridNeonChk) floorGridNeonChk.checked = !!s.floorGridNeon
+    if (floorGridColor)  floorGridColor.value  = s.floorGridColor ?? '#ff00ff'
+    if (floorGridGlow)   floorGridGlow.value   = s.floorGridGlow ?? 3.0
+    if (floorGridGlowLbl) floorGridGlowLbl.textContent = `${(s.floorGridGlow ?? 3.0).toFixed(1)}×`
+    _syncFloorGridSubRows()
+    _syncFloorRowVisibility()
     if (ssaoChk) ssaoChk.checked  = s.ssao
     if (bloomChk) bloomChk.checked = s.bloom
     if (bloomRow) bloomRow.style.display = s.bloom ? '' : 'none'

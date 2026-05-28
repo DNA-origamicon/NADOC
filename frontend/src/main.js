@@ -74,7 +74,7 @@ import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
 // InstancedMeshes for the export-only high-detail swap (see _withHighDetailGeometry).
 import { SPHERE_GEO as ATOM_SPHERE_GEO, CYLINDER_GEO as BOND_CYL_GEO } from './scene/atomistic_renderer/geometry_builder.js'
 import { initSurfaceRenderer }     from './scene/surface_renderer.js'
-import { initSpreadsheet }         from './ui/spreadsheet.js'
+import { initSpreadsheet, getStapleColorOrder } from './ui/spreadsheet.js'
 import { initAssemblyPanel }        from './ui/assembly_panel.js'
 import { initAssemblyContextMenu }  from './ui/assembly_context_menu.js'
 import { initLibraryPanel }         from './ui/library_panel.js'
@@ -12033,6 +12033,15 @@ Typical debugging workflow for "reverts to 3D" bug:
     const { currentDesign } = store.getState()
     if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
     const ok = await api.exportSequenceCsv()
+    if (!ok) showToast('Export failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
+  })
+
+  // ── Export Sequences (Excel, overhang bold) ────────────────────────────────────
+  document.getElementById('menu-file-export-seq-xlsx')?.addEventListener('click', async () => {
+    const state = store.getState()
+    if (!state.currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
+    const { strandColors, strandOrder } = getStapleColorOrder(state)
+    const ok = await api.exportSequenceXlsx(strandColors, strandOrder)
     if (!ok) showToast('Export failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
   })
 

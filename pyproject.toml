@@ -26,6 +26,7 @@ dependencies = [
     "networkx>=3.6.1",
     "pandas>=3.0.2",
     "appdirs>=1.4.4",
+    "openpyxl>=3.1",
 ]
 
 # Phase 9 checker: openmm>=8.0 is a conda-only dependency and cannot be installed via pip.
@@ -39,4 +40,10 @@ pythonpath = ["."]
 markers = [
     "slow: marks tests as slow (run GROMACS EM; deselect with -m 'not slow')",
     "integration: marks tests requiring external files at /tmp",
+]
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.14",
 ]

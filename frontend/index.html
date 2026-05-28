@@ -604,6 +604,30 @@
       align-items: center;
       flex-wrap: nowrap;
     }
+    .sheet-sort-wrap {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: nowrap;
+      padding-right: 8px;
+      border-right: 1px solid #30363d;
+      margin-right: 4px;
+    }
+    .sheet-sort-label {
+      color: #8b949e;
+      font-size: var(--text-xs);
+      letter-spacing: 0.04em;
+    }
+    .sheet-sort-select {
+      background: #0d1117;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      border-radius: 3px;
+      font-size: var(--text-xs);
+      padding: 1px 2px;
+      cursor: pointer;
+    }
+    .sheet-sort-select:hover { border-color: #58a6ff; }
     .sheet-col-toggle {
       display: flex;
       align-items: center;
@@ -743,15 +767,30 @@
       padding: 1px 3px;
       cursor: text;
     }
+    #spreadsheet-table td.sheet-col-color {
+      padding: 2px 4px;
+      min-width: 28px;
+    }
     .sheet-color-input {
-      width: 22px;
-      height: 14px;
-      border: 1px solid #30363d;
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 16px;
+      border: none;
       border-radius: 2px;
       padding: 0;
       cursor: pointer;
-      background: none;
-      vertical-align: middle;
+    }
+    .sheet-color-input::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+    .sheet-color-input::-webkit-color-swatch {
+      border: none;
+      border-radius: 2px;
+    }
+    .sheet-color-input::-moz-color-swatch {
+      border: none;
+      border-radius: 2px;
     }
 
     /* ── Shared panel section ──────────────────────────────────────── */
@@ -3001,6 +3040,7 @@
           <button class="dropdown-item" id="menu-file-attach-protein">Attach Protein to Overhang…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-file-export-seq-csv">Export Sequences (CSV)</button>
+          <button class="dropdown-item" id="menu-file-export-seq-xlsx">Export Sequences (Excel, overhang bold)</button>
           <button class="dropdown-item" id="menu-file-export-cadnano">Export caDNAno (.json)</button>
           <button class="dropdown-item" id="menu-file-export-pdb">Export PDB for NAMD (.pdb)</button>
           <button class="dropdown-item" id="menu-file-export-psf">Export NAMD Topology (.psf)</button>
@@ -3805,6 +3845,45 @@
                 <span id="photo-light-pitch-label" style="color:#c9d1d9;min-width:34px;text-align:right">0°</span>
               </div>
             </div>
+
+            <!-- Sun (independent steerable key light) -->
+            <div style="margin-top:8px;border-top:1px solid #21262d;padding-top:6px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:var(--text-xs);color:#c9d1d9">
+                <input id="photo-sun-enable" type="checkbox"> Sun (steerable key light + shadow)
+              </label>
+              <div id="photo-sun-controls" style="display:none;flex-direction:column;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:60px" title="Rotation around the floor normal. 0° = +X projected onto floor.">Azimuth</span>
+                  <input id="photo-sun-azimuth" type="range" min="-180" max="180" step="1" value="135"
+                         style="flex:1;accent-color:#f0b429">
+                  <span id="photo-sun-azimuth-label" style="color:#c9d1d9;min-width:38px;text-align:right">135°</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:60px" title="Height above the floor plane. 0° = on the horizon, 90° = straight overhead.">Elevation</span>
+                  <input id="photo-sun-elevation" type="range" min="0" max="90" step="1" value="35"
+                         style="flex:1;accent-color:#f0b429">
+                  <span id="photo-sun-elevation-label" style="color:#c9d1d9;min-width:38px;text-align:right">35°</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:60px">Strength</span>
+                  <input id="photo-sun-strength" type="range" min="0" max="5" step="0.1" value="1.5"
+                         style="flex:1;accent-color:#f0b429">
+                  <span id="photo-sun-strength-label" style="color:#c9d1d9;min-width:38px;text-align:right">1.5×</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:60px">Colour</span>
+                  <input id="photo-sun-color" type="color" value="#ffffff"
+                         style="background:transparent;border:1px solid #30363d;border-radius:3px;width:36px;height:18px;padding:0;cursor:pointer">
+                </div>
+                <div style="color:#6a737d;font-size:11px;line-height:1.3">
+                  Polar coordinates relative to the chosen floor's normal (world +Y if no floor).
+                  Increase elevation for a tighter shadow under the part; sweep azimuth to rotate
+                  the shadow around the floor. <b>When Sun is on it is the only shadow caster;</b>
+                  the preset's directional lights stay on as fill but stop casting (no double shadow).
+                  When Sun is off, the preset's first directional light becomes the key shadow.
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Environment (HDRI) -->
@@ -3956,6 +4035,91 @@
                 <input id="photo-fluoro-intensity" type="range" min="0.5" max="100" step="0.5" value="5"
                        style="flex:1;accent-color:#58a6ff">
                 <span id="photo-fluoro-intensity-label" style="color:#c9d1d9;min-width:30px;text-align:right">5.0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Floor (resting surface) -->
+          <div class="panel-section">
+            <h2>Floor (resting surface)</h2>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:#c9d1d9">
+              <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                <span style="min-width:60px" title="Which side of the scene the floor sits on. -Y = below.">Side</span>
+                <select id="photo-floor-axis" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
+                  <option value="off" selected>Off</option>
+                  <option value="-y">−Y (below)</option>
+                  <option value="+y">+Y (above)</option>
+                  <option value="-x">−X (left)</option>
+                  <option value="+x">+X (right)</option>
+                  <option value="-z">−Z (front)</option>
+                  <option value="+z">+Z (back)</option>
+                </select>
+              </div>
+              <div id="photo-floor-controls" style="display:none;flex-direction:column;gap:6px">
+                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                  <span style="min-width:60px">Material</span>
+                  <select id="photo-floor-material" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
+                    <option value="matte" selected>Matte</option>
+                    <option value="glossy">Glossy</option>
+                    <option value="metallic">Metallic</option>
+                    <option value="mirror">Mirror (reflective)</option>
+                    <option value="shadow-catcher">Shadow catcher (transparent)</option>
+                  </select>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                  <span style="min-width:60px">Colour</span>
+                  <input id="photo-floor-color" type="color" value="#888888"
+                         style="background:transparent;border:1px solid #30363d;border-radius:3px;width:36px;height:18px;padding:0;cursor:pointer">
+                  <span style="color:#6a737d;font-size:11px">ignored for shadow catcher</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                  <span style="min-width:60px" title="0 = invisible, 1 = fully opaque">Opacity</span>
+                  <input id="photo-floor-opacity" type="range" min="0" max="1" step="0.05" value="1"
+                         style="flex:1;accent-color:#58a6ff">
+                  <span id="photo-floor-opacity-label" style="color:#c9d1d9;min-width:34px;text-align:right">100%</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                  <span style="min-width:60px" title="Plane size as a multiple of the scene bounding-box diagonal">Size</span>
+                  <input id="photo-floor-size" type="range" min="1" max="8" step="0.1" value="2"
+                         style="flex:1;accent-color:#58a6ff">
+                  <span id="photo-floor-size-label" style="color:#c9d1d9;min-width:34px;text-align:right">2.0×</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                  <span style="min-width:60px" title="Distance (nm) the floor is pushed outward from the scene's bounding-box face">Offset</span>
+                  <input id="photo-floor-offset" type="range" min="-20" max="20" step="0.1" value="0"
+                         style="flex:1;accent-color:#58a6ff">
+                  <span id="photo-floor-offset-label" style="color:#c9d1d9;min-width:42px;text-align:right">0.0 nm</span>
+                </div>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                  <input id="photo-floor-shadows" type="checkbox" checked> Receive shadows
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                  <input id="photo-floor-grid" type="checkbox"> Grid overlay
+                </label>
+                <div id="photo-floor-grid-style-row" style="display:none;flex-direction:column;gap:4px;margin-left:20px">
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input id="photo-floor-grid-neon" type="checkbox"> Neon glow (80's vaporwave)
+                  </label>
+                  <div id="photo-floor-grid-neon-row" style="display:none;align-items:center;gap:6px;color:#8b949e">
+                    <span style="min-width:48px">Colour</span>
+                    <input id="photo-floor-grid-color" type="color" value="#ff00ff"
+                           style="background:transparent;border:1px solid #30363d;border-radius:3px;width:36px;height:18px;padding:0;cursor:pointer">
+                    <span style="min-width:48px;margin-left:8px" title="HDR multiplier — higher values bloom more strongly when Bloom is on.">Boost</span>
+                    <input id="photo-floor-grid-glow" type="range" min="1" max="8" step="0.1" value="3"
+                           style="flex:1;accent-color:#ff00ff">
+                    <span id="photo-floor-grid-glow-label" style="color:#c9d1d9;min-width:32px;text-align:right">3.0×</span>
+                  </div>
+                  <div id="photo-floor-grid-neon-hint" style="display:none;color:#6a737d;font-size:11px;line-height:1.3">
+                    For the full glow effect, enable Bloom in Post-processing. The grid colour is
+                    HDR-boosted past Bloom's threshold so it spills light around itself.
+                  </div>
+                </div>
+                <div style="color:#6a737d;font-size:11px;line-height:1.3">
+                  Auto-positioned at the scene's bounding-box edge on the chosen axis.
+                  Mirror uses a real per-frame reflection (Reflector); shadow catcher
+                  shows only the projected shadow (ideal for compositing).
+                  Path-traced mode renders the floor but ignores Mirror reflections.
+                </div>
               </div>
             </div>
           </div>

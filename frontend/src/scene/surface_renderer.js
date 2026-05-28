@@ -263,8 +263,16 @@ export function initSurfaceRenderer(scene) {
 
   /**
    * Replace the live geometry buffer with new vertex + face data.
-   * Preserves the existing material, but disables vertex colours (baked states
-   * do not carry strand colour data).  Normals are recomputed immediately.
+   * Preserves the existing material AND its strand colouring when the baked
+   * data carries `vertex_colors` (surface-batch in `color_mode='strand'`
+   * mode does). Falls back to uniform grey only when colour data is absent.
+   * Normals are recomputed immediately.
+   *
+   * This is what keeps surface coloring through topology changes during
+   * animation preview / video export — both in normal mode and photo mode.
+   * Photo mode is identical here because the swapped MeshPhysicalMaterial
+   * honours `vertexColors` and the per-vertex `color` attribute the same
+   * way MeshPhongMaterial does.
    */
   function _rebuildTopology(data) {
     if (!_mesh) return
@@ -275,8 +283,18 @@ export function initSurfaceRenderer(scene) {
     newGeo.setAttribute('position', new THREE.BufferAttribute(vertsArr, 3))
     newGeo.setIndex(new THREE.BufferAttribute(new Uint32Array(data.faces), 1))
     newGeo.computeVertexNormals()
-    // Baked states carry no strand colours — switch to uniform to avoid missing attribute.
-    if (_mesh.material.vertexColors) {
+
+    if (_colorMode === 'strand' && data.vertex_colors) {
+      newGeo.setAttribute('color',
+        new THREE.BufferAttribute(new Float32Array(data.vertex_colors), 3))
+      if (!_mesh.material.vertexColors) {
+        _mesh.material.vertexColors = true
+        _mesh.material.color.setHex(0xFFFFFF)
+        _mesh.material.needsUpdate = true
+      }
+    } else if (_mesh.material.vertexColors) {
+      // No strand colours in this baked state — fall back to uniform so the
+      // shader doesn't read a missing attribute.
       _mesh.material.vertexColors = false
       _mesh.material.color.setHex(UNIFORM_COLOR)
       _mesh.material.needsUpdate = true

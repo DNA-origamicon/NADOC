@@ -24,6 +24,33 @@ import { showOpProgress, hideOpProgress, setOpProgressLabel, setOpProgressFracti
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { attachDragScrub } from '../input/drag_scrub.js'
 
+// Build a one-line label for a feature-log entry as shown in the keyframe
+// State dropdown. Mirrors the wording the user sees in the Feature Log tab.
+function _featureLogTickLabel(e, idx) {
+  let lbl = `F${idx + 1}`
+  if (e.feature_type === 'deformation' && e.op_snapshot) {
+    const op = e.op_snapshot
+    const kind = op.type ? (op.type.charAt(0).toUpperCase() + op.type.slice(1)) : 'Deform'
+    lbl += `: ${kind} bp ${op.plane_a_bp}–${op.plane_b_bp}`
+  } else if (e.feature_type === 'cluster_op') {
+    lbl += ': Cluster transform'
+  } else if (e.feature_type === 'overhang_rotation') {
+    const ids = e.overhang_ids ?? []
+    const lbls = e.labels ?? []
+    const detail = ids.length === 1 ? (lbls[0] ? `"${lbls[0]}"` : ids[0]) : `${ids.length} overhangs`
+    lbl += `: Orient ${detail}`
+  } else if (e.feature_type === 'snapshot') {
+    lbl += `: ${e.label || e.op_kind || 'Snapshot'}`
+    if (e.evicted) lbl += ' (evicted)'
+  } else if (e.feature_type === 'routing-cluster') {
+    const n = e.children?.length ?? 0
+    lbl += `: Fine routing (${n} step${n === 1 ? '' : 's'})`
+  } else if (e.label) {
+    lbl += `: ${e.label}`
+  }
+  return lbl
+}
+
 export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature }) {
   const panelEl    = document.getElementById('animation-panel')
   const heading    = document.getElementById('animation-panel-heading')
@@ -609,32 +636,11 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       })
       cfgRow.appendChild(cfgSelect)
     } else {
-      // Compute the pinned label, if any.
-      const idx = kf.feature_log_index ?? null
-      let pinnedLabel = '— not pinned —'
-      if (idx === -2)      pinnedLabel = 'F0 — initial'
-      else if (idx === -1) pinnedLabel = 'All features'
-      else if (typeof idx === 'number' && idx >= 0 && featureLog[idx]) {
-        const e = featureLog[idx]
-        let lbl = `F${idx + 1}`
-        if (e.feature_type === 'deformation' && e.op_snapshot) {
-          const op = e.op_snapshot
-          const kind = op.type ? (op.type.charAt(0).toUpperCase() + op.type.slice(1)) : 'Deform'
-          lbl += `: ${kind} bp ${op.plane_a_bp}–${op.plane_b_bp}`
-        } else if (e.feature_type === 'cluster_op') {
-          lbl += ': Cluster transform'
-        } else if (e.feature_type === 'overhang_rotation') {
-          const ids = e.overhang_ids ?? []
-          const lbls = e.labels ?? []
-          const detail = ids.length === 1 ? (lbls[0] ? `"${lbls[0]}"` : ids[0]) : `${ids.length} overhangs`
-          lbl += `: Orient ${detail}`
-        } else if (e.feature_type === 'snapshot') {
-          lbl += `: ${e.label || e.op_kind}`
-          if (e.evicted) lbl += ' (evicted)'
-        }
-        pinnedLabel = lbl
-      }
-
+      // Plain <select> over the top-level feature-log entries. Replaces the
+      // earlier "pick from the Feature Log tab" flow — picking inline avoids
+      // a tab switch and is easier to test. Children of routing-cluster
+      // entries are intentionally NOT listed (those are minor sub-ops); the
+      // dropdown shows only top-level "ticks".
       async function _persistPin(newIdx) {
         if (_partMode) {
           await _partPatchFn(d => {
@@ -648,38 +654,39 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         }
       }
 
-      const pinBtn = document.createElement('button')
-      pinBtn.type = 'button'
-      pinBtn.textContent = pinnedLabel
-      pinBtn.title = idx == null ? 'Pin this keyframe to a feature' : 'Change pinned feature'
-      pinBtn.style.cssText = [
-        'flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',
+      const cfgSelect = document.createElement('select')
+      cfgSelect.style.cssText = [
+        'flex:1;min-width:0;box-sizing:border-box',
         'background:#0d1117;border:1px solid #30363d;border-radius:3px',
-        idx == null ? 'color:#6e7681' : 'color:#c9d1d9',
-        'padding:3px 6px;font-size:var(--text-xs);cursor:pointer',
+        'color:#c9d1d9;padding:3px 3px;font-size:var(--text-xs)',
       ].join(';')
-      pinBtn.addEventListener('click', async () => {
-        if (typeof pinToFeature !== 'function') return
-        const picked = await pinToFeature()
-        if (picked == null) return  // cancelled
-        await _persistPin(picked)
-      })
-      cfgRow.appendChild(pinBtn)
+      cfgSelect.title = 'Pin this keyframe to a feature-log entry'
+      cfgSelect.addEventListener('keydown', e => e.stopPropagation())
 
-      // Unpin × — shown only when something is pinned.
-      if (idx != null) {
-        const unpinBtn = document.createElement('button')
-        unpinBtn.type = 'button'
-        unpinBtn.textContent = '×'
-        unpinBtn.title = 'Unpin (no state change at this keyframe)'
-        unpinBtn.style.cssText = [
-          'flex-shrink:0;width:20px;height:20px;line-height:1',
-          'background:#0d1117;border:1px solid #30363d;border-radius:3px',
-          'color:#8b949e;font-size:14px;cursor:pointer',
-        ].join(';')
-        unpinBtn.addEventListener('click', async () => { await _persistPin(null) })
-        cfgRow.appendChild(unpinBtn)
+      const _addOpt = (val, label) => {
+        const opt = document.createElement('option')
+        opt.value = String(val); opt.textContent = label
+        cfgSelect.appendChild(opt)
       }
+      _addOpt('',   '— not pinned —')
+      _addOpt('-2', 'F0 — initial')
+      _addOpt('-1', 'All features (sequential)')
+      for (let i = 0; i < featureLog.length; i++) {
+        _addOpt(i, _featureLogTickLabel(featureLog[i], i))
+      }
+
+      const cur = kf.feature_log_index
+      cfgSelect.value = (cur === null || cur === undefined) ? '' : String(cur)
+      // If the saved index points past the current log (entry deleted/reverted),
+      // leave the <select> on "— not pinned —" visually but don't auto-persist —
+      // the user can pick a fresh target without losing the old pin silently.
+
+      cfgSelect.addEventListener('change', async () => {
+        const raw = cfgSelect.value
+        const newIdx = raw === '' ? null : parseInt(raw, 10)
+        await _persistPin(newIdx)
+      })
+      cfgRow.appendChild(cfgSelect)
     }
 
     // ── Timing row: transition + hold ─────────────────────────────────────────

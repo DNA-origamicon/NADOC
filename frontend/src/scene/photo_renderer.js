@@ -32,6 +32,7 @@ import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 import { PRESETS, makeMaterial, makeFluorophoreEmissive } from './photo_renderer/material_presets.js'
 import { LIGHTING_PRESETS, applyLighting } from './photo_renderer/lighting_presets.js'
 import { createComposer }                  from './photo_renderer/post_processing.js'
+import { createFloor }                     from './photo_renderer/floor.js'
 import { showToast }                       from '../ui/toast.js'
 import { RoomEnvironment }                 from 'three/addons/environments/RoomEnvironment.js'
 import { RGBELoader }                      from 'three/addons/loaders/RGBELoader.js'
@@ -121,6 +122,28 @@ export function createPhotoRenderer(sceneCtx) {
     mistNoiseContrast:     0.0,     // 0 = uniform mist; 1 = density swings 0..2× the base
     mistNoiseScale:        0.05,    // noise frequency in 1/nm; lower = bigger wisps (~20 nm at 0.05)
     mistNoiseSpeed:        0.0,     // drift speed; 0 = static noise
+
+    // Sun — independent directional light steered by polar coords relative to
+    // the chosen floor's normal (or world +Y if no floor). Lets the user place
+    // a shadow exactly where they want; preset rig keeps providing fill/rim.
+    sun:           false,           // sun enabled (off by default to preserve existing profiles)
+    sunAzimuth:    135,             // deg, around the floor normal (0 = world +X projected onto floor)
+    sunElevation:  35,              // deg, above the floor plane (0 = grazing; 90 = straight down toward floor)
+    sunStrength:   1.5,
+    sunColor:      '#ffffff',
+
+    // Floor (resting surface) — off by default. See photo_renderer/floor.js.
+    floor:           'off',         // 'off' | '-y' | '+y' | '-x' | '+x' | '-z' | '+z'
+    floorMaterial:   'matte',       // 'matte' | 'glossy' | 'metallic' | 'mirror' | 'shadow-catcher'
+    floorColor:      '#888888',
+    floorOpacity:    1.0,
+    floorSize:       2.0,           // multiplier of scene bounding-box diameter
+    floorOffset:     0.0,           // additional offset along outward normal (nm)
+    floorShadows:    true,          // cast rig shadows onto the floor
+    floorGrid:       false,         // overlay a GridHelper on the floor
+    floorGridNeon:   false,         // 80s-vaporwave neon style for the grid
+    floorGridColor:  '#ff00ff',     // neon colour (magenta default)
+    floorGridGlow:   3.0,           // HDR multiplier on neon grid colour (drives Bloom)
   }
 
   // Environment state — kept separately so we can restore on deactivate and
@@ -129,6 +152,19 @@ export function createPhotoRenderer(sceneCtx) {
   let _envSourceHDR    = null       // DataTexture loaded by RGBELoader (raster source)
   let _envTexture      = null       // PMREM-baked texture currently in scene.environment
   let _savedSceneEnv   = undefined  // pre-photo-mode scene.environment
+
+  // ── Sun light (independent of preset rig) ────────────────────────────────
+  let _sunGroup = null   // THREE.Group at scene root; holds the sun DirectionalLight
+  let _sunLight = null
+
+  // ── Floor (resting surface) ───────────────────────────────────────────────
+  const _floor = createFloor({ scene })
+  // Saved pre-photo-mode renderer/mesh shadow state so deactivate() restores
+  // exactly. We don't touch anything until the user enables a floor + shadows.
+  let _savedShadowMapEnabled = false
+  let _savedShadowMapType    = null
+  const _savedCastShadow     = new Map()   // mesh → original castShadow
+  let _shadowRigApplied      = false       // tracks whether rig changes are live
 
   // ── Path tracing state ────────────────────────────────────────────────────
   let _ptRenderer    = null
@@ -203,6 +239,9 @@ export function createPhotoRenderer(sceneCtx) {
       // that compose instance transforms — swapping them in would collapse
       // them to the source origin. Leave them as-is (they don't need PBR).
       if (obj.userData.sharedLodImpostor) return
+      // The resting-surface floor owns its own material (PBR / Reflector /
+      // ShadowMaterial); don't let the rep-driven swap stomp on it.
+      if (obj.userData.photoFloor) return
 
       const vc = Boolean(obj.material.vertexColors)
       const op = obj.material.opacity ?? 1.0
@@ -239,6 +278,10 @@ export function createPhotoRenderer(sceneCtx) {
     if (!_active) return
     _swapMaterials()
     if (_settings.fluorophoreEmissive) _spawnFluoroLights()
+    // A mid-photo-mode rebuild produced fresh meshes with castShadow=false.
+    // Rebuild the floor (recomputes bbox + refits shadow cameras to the new
+    // geometry) and re-flag every mesh if shadows are live.
+    if (_settings.floor !== 'off') _rebuildFloor()
   }
 
   // ── Environment (HDRI) ────────────────────────────────────────────────────
@@ -349,6 +392,7 @@ export function createPhotoRenderer(sceneCtx) {
     scene.traverse(obj => {
       if ((!obj.isMesh && !obj.isInstancedMesh) || !obj.material) return
       if (obj.name === FLUORO_MESH_NAME && _settings.fluorophoreEmissive) return
+      if (obj.userData.photoFloor) return
       const repr = MESH_NAME_TO_REPR[obj.name] ?? _inferRepr(obj)
       _applyTranslucencyOverride(obj.material, repr)
     })
@@ -368,22 +412,22 @@ export function createPhotoRenderer(sceneCtx) {
   function _gatherLightsForInscatter() {
     _scratchPoints.length = 0
     _scratchAmbientColor.setRGB(0, 0, 0)
-    if (_photoGroup) {
-      _photoGroup.traverse(obj => {
-        if (!obj.isLight) return
-        if (obj.isAmbientLight || obj.isHemisphereLight) {
-          _scratchAmbientColor.r += obj.color.r * obj.intensity
-          _scratchAmbientColor.g += obj.color.g * obj.intensity
-          _scratchAmbientColor.b += obj.color.b * obj.intensity
-        } else if (obj.isDirectionalLight) {
-          // Anisotropic in reality; approximate as a half-weight constant term.
-          const w = obj.intensity * 0.5
-          _scratchAmbientColor.r += obj.color.r * w
-          _scratchAmbientColor.g += obj.color.g * w
-          _scratchAmbientColor.b += obj.color.b * w
-        }
-      })
+    const visit = obj => {
+      if (!obj.isLight) return
+      if (obj.isAmbientLight || obj.isHemisphereLight) {
+        _scratchAmbientColor.r += obj.color.r * obj.intensity
+        _scratchAmbientColor.g += obj.color.g * obj.intensity
+        _scratchAmbientColor.b += obj.color.b * obj.intensity
+      } else if (obj.isDirectionalLight) {
+        // Anisotropic in reality; approximate as a half-weight constant term.
+        const w = obj.intensity * 0.5
+        _scratchAmbientColor.r += obj.color.r * w
+        _scratchAmbientColor.g += obj.color.g * w
+        _scratchAmbientColor.b += obj.color.b * w
+      }
     }
+    _photoGroup?.traverse(visit)
+    _sunGroup?.traverse(visit)
     for (const l of _fluoroLights) {
       _scratchPoints.push({
         position:    l.position,                                          // world (fluoroLightGroup has no transform)
@@ -483,6 +527,233 @@ export function createPhotoRenderer(sceneCtx) {
       _fluoroLights[i].position.copy(pos)
     }
   }
+
+  // ── Floor + shadow rig ────────────────────────────────────────────────────
+
+  // Walk the photo light group and enable cast-shadow on every DirectionalLight,
+  // fitting each shadow camera's ortho frustum to `bbox`. Also adds each light's
+  // target to the scene (Three.js does not do this automatically) and aims it at
+  // the bbox centre.
+  function _fitDirLightShadow(light, bbox) {
+    const size   = bbox.getSize(new THREE.Vector3())
+    const center = bbox.getCenter(new THREE.Vector3())
+    const radius = Math.max(size.length() * 0.6, 1.0)
+    const cam = light.shadow.camera
+    cam.left = -radius; cam.right  =  radius
+    cam.top  =  radius; cam.bottom = -radius
+    cam.near = 0.1;     cam.far    =  radius * 8
+    cam.updateProjectionMatrix()
+    light.shadow.mapSize.set(2048, 2048)
+    light.shadow.bias       = -0.0005
+    light.shadow.normalBias = 0.02
+    if (!light.target.parent) scene.add(light.target)
+    light.target.position.copy(center)
+    light.target.updateMatrixWorld(true)
+  }
+
+  // One-key-light rule: exactly one directional light in the preset rig casts
+  // a shadow — the first DirectionalLight encountered (treated as the "key").
+  // All other preset directionals stay as fill. When the Sun light is enabled,
+  // the Sun becomes the sole shadow caster and the preset's key is suppressed
+  // too (see `_enableRigShadows`).
+  function _enableRigShadows() {
+    if (!_photoGroup) return
+    const bbox = _floor.getLastBBox()
+    if (!bbox) return
+    const sunOwnsShadow = !!(_settings.sun && _sunLight)
+    let keyAssigned = false
+    _photoGroup.traverse(obj => {
+      if (!obj.isDirectionalLight) return
+      const shouldCast = !sunOwnsShadow && !keyAssigned
+      obj.castShadow = shouldCast
+      if (shouldCast) {
+        _fitDirLightShadow(obj, bbox)
+        keyAssigned = true
+      }
+    })
+  }
+
+  function _disableRigShadows() {
+    if (!_photoGroup) return
+    _photoGroup.traverse(obj => {
+      if (obj.isDirectionalLight) obj.castShadow = false
+    })
+  }
+
+  // ── Sun light ────────────────────────────────────────────────────────────
+
+  // Which world-space axis is "up" for the sun's polar frame. Floor normal when
+  // a floor is configured; falls back to world +Y. The visible face of a '-y'
+  // floor is +Y (so up = +Y); for '+y' the visible face is -Y, etc.
+  function _sunUpAxis() {
+    const m = {
+      '-y': new THREE.Vector3( 0,  1,  0),
+      '+y': new THREE.Vector3( 0, -1,  0),
+      '-x': new THREE.Vector3( 1,  0,  0),
+      '+x': new THREE.Vector3(-1,  0,  0),
+      '-z': new THREE.Vector3( 0,  0,  1),
+      '+z': new THREE.Vector3( 0,  0, -1),
+    }
+    return m[_settings.floor] ?? new THREE.Vector3(0, 1, 0)
+  }
+
+  // Convert (azimuth, elevation) around `up` into a world-space direction that
+  // points FROM the target TO the sun (so light.position = target + dir * d).
+  // Azimuth=0 references world +X projected onto the floor plane (or +Z if up
+  // is nearly parallel to +X). Elevation 0 = on the horizon; 90 = directly above.
+  function _sunDirFromPolar(up, azDeg, elDeg) {
+    const ref = (Math.abs(up.x) < 0.99)
+      ? new THREE.Vector3(1, 0, 0)
+      : new THREE.Vector3(0, 0, 1)
+    const tangent = ref.clone().sub(up.clone().multiplyScalar(up.dot(ref))).normalize()
+    const bitangent = new THREE.Vector3().crossVectors(up, tangent).normalize()
+    const az = THREE.MathUtils.degToRad(azDeg)
+    const el = THREE.MathUtils.degToRad(elDeg)
+    const horiz = tangent.clone().multiplyScalar(Math.cos(az)).addScaledVector(bitangent, Math.sin(az))
+    return horiz.multiplyScalar(Math.cos(el)).addScaledVector(up, Math.sin(el)).normalize()
+  }
+
+  function _ensureSunGroup() {
+    if (_sunGroup) return
+    _sunGroup = new THREE.Group()
+    _sunGroup.name = 'photoSunLight'
+    scene.add(_sunGroup)
+  }
+
+  function _disposeSunGroup() {
+    if (_sunLight) {
+      if (_sunLight.target?.parent) _sunLight.target.parent.remove(_sunLight.target)
+      _sunLight.parent?.remove(_sunLight)
+      _sunLight.dispose?.()
+      _sunLight = null
+    }
+    if (_sunGroup) {
+      scene.remove(_sunGroup)
+      _sunGroup = null
+    }
+  }
+
+  // (Re)position the sun light from current settings. Uses the floor's bbox
+  // when available (for shadow camera fit + target); falls back to scene
+  // origin / unit distance if there's no floor or no scene yet.
+  function _applySun() {
+    if (!_active) return
+    if (!_settings.sun) {
+      _disposeSunGroup()
+      // Sun is off → preset rig reclaims the single-key shadow.
+      if (_shadowRigApplied) _enableRigShadows()
+      return
+    }
+
+    _ensureSunGroup()
+    if (!_sunLight) {
+      _sunLight = new THREE.DirectionalLight(0xffffff, 1)
+      _sunGroup.add(_sunLight)
+    }
+    _sunLight.color.set(_settings.sunColor)
+    _sunLight.intensity = _settings.sunStrength
+
+    const bbox   = _floor.getLastBBox()
+    const center = bbox ? bbox.getCenter(new THREE.Vector3()) : new THREE.Vector3()
+    const size   = bbox ? bbox.getSize(new THREE.Vector3())   : new THREE.Vector3(10, 10, 10)
+    const radius = Math.max(size.length(), 1.0)
+    const dist   = radius * 2.0
+
+    const up  = _sunUpAxis()
+    const dir = _sunDirFromPolar(up, _settings.sunAzimuth, _settings.sunElevation)
+    _sunLight.position.copy(center).addScaledVector(dir, dist)
+    if (!_sunLight.target.parent) scene.add(_sunLight.target)
+    _sunLight.target.position.copy(center)
+    _sunLight.target.updateMatrixWorld(true)
+
+    // If the shadow rig is currently active, fit the sun's shadow camera too.
+    if (_shadowRigApplied && bbox) {
+      _sunLight.castShadow = true
+      _fitDirLightShadow(_sunLight, bbox)
+    } else {
+      _sunLight.castShadow = false
+    }
+    // Sun is now the (only) shadow caster; demote the preset rig's key light
+    // back to fill so we don't get a double shadow.
+    if (_shadowRigApplied) _enableRigShadows()
+  }
+
+  function setSun(on)             { _settings.sun          = !!on; _applySun(); if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 } }
+  function setSunAzimuth(deg)     { _settings.sunAzimuth   = deg;  _applySun(); if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 } }
+  function setSunElevation(deg)   { _settings.sunElevation = deg;  _applySun(); if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 } }
+  function setSunStrength(v)      { _settings.sunStrength  = v;    _applySun(); if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 } }
+  function setSunColor(hex)       { _settings.sunColor     = hex;  _applySun(); if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 } }
+
+  // Flip castShadow=true on every scene mesh that can safely participate in
+  // depth-only shadow rendering. Skips: helper lines, additive sprites, shared-
+  // renderer LOD impostors (custom instance shaders → wrong depth), sphere
+  // impostors (depth-only shader doesn't run the impostor math), and the floor
+  // itself.
+  function _enableMeshShadows() {
+    _savedCastShadow.clear()
+    scene.traverse(obj => {
+      if ((!obj.isMesh && !obj.isInstancedMesh) || !obj.material) return
+      if (obj.material.isLineBasicMaterial || obj.material.isLineDashedMaterial) return
+      if (obj.material.blending === THREE.AdditiveBlending) return
+      if (obj.userData.sharedLodImpostor) return
+      if (obj.userData.photoFloor) return
+      if (obj.material.userData?.impostorRadius != null) return
+      _savedCastShadow.set(obj, obj.castShadow)
+      obj.castShadow = true
+    })
+  }
+
+  function _restoreMeshShadows() {
+    for (const [obj, val] of _savedCastShadow) obj.castShadow = val
+    _savedCastShadow.clear()
+  }
+
+  // Apply / remove shadow plumbing on the renderer + rig + scene meshes. Idempotent.
+  function _applyShadowRig(enabled) {
+    if (enabled && !_shadowRigApplied) {
+      _savedShadowMapEnabled = renderer.shadowMap.enabled
+      _savedShadowMapType    = renderer.shadowMap.type
+      renderer.shadowMap.enabled = true
+      renderer.shadowMap.type    = THREE.PCFSoftShadowMap
+      _enableRigShadows()
+      _enableMeshShadows()
+      _shadowRigApplied = true
+    } else if (!enabled && _shadowRigApplied) {
+      _disableRigShadows()
+      _restoreMeshShadows()
+      renderer.shadowMap.enabled = _savedShadowMapEnabled
+      if (_savedShadowMapType != null) renderer.shadowMap.type = _savedShadowMapType
+      _shadowRigApplied = false
+    }
+  }
+
+  function _rebuildFloor() {
+    if (!_active) return
+    _floor.build(_settings)
+    const wantShadows = (_settings.floor !== 'off') && !!_settings.floorShadows
+    _applyShadowRig(wantShadows)
+    // Re-fit shadow cameras whenever the floor (and therefore bbox) was rebuilt.
+    if (_shadowRigApplied) _enableRigShadows()
+    // Sun's "up" axis is the floor normal and its target is the bbox centre —
+    // both change with the floor, so re-place it whenever the floor rebuilds.
+    _applySun()
+    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+  }
+
+  function setFloor(axis) {
+    _settings.floor = axis ?? 'off'
+    _rebuildFloor()
+  }
+  function setFloorMaterial(name) { _settings.floorMaterial = name; _rebuildFloor() }
+  function setFloorColor(hex)     { _settings.floorColor    = hex;  _rebuildFloor() }
+  function setFloorOpacity(v)     { _settings.floorOpacity  = v;    _rebuildFloor() }
+  function setFloorSize(v)        { _settings.floorSize     = v;    _rebuildFloor() }
+  function setFloorOffset(v)      { _settings.floorOffset   = v;    _rebuildFloor() }
+  function setFloorShadows(on)    { _settings.floorShadows  = !!on; _rebuildFloor() }
+  function setFloorGrid(on)       { _settings.floorGrid     = !!on; _rebuildFloor() }
+  function setFloorGridNeon(on)   { _settings.floorGridNeon = !!on; _rebuildFloor() }
+  function setFloorGridColor(hex) { _settings.floorGridColor = hex; _rebuildFloor() }
+  function setFloorGridGlow(v)    { _settings.floorGridGlow  = v;   _rebuildFloor() }
 
   // ── Path tracer ───────────────────────────────────────────────────────────
 
@@ -612,6 +883,13 @@ export function createPhotoRenderer(sceneCtx) {
     // Apply env effect once the composer (and its inscatter pass) exists.
     _applyEnvEffect()
 
+    // Build the resting-surface floor (if the active profile has one configured).
+    _rebuildFloor()
+
+    // Sun light is independent of the preset rig; build it after the floor so
+    // it can use the floor's bbox/normal. No-op when `sun` is false.
+    _applySun()
+
     // Override render loop — sync fluoro lights and (when mist is on) push light
     // uniforms to the inscatter pass each frame so halos track design moves.
     _installComposerRenderFn()
@@ -636,6 +914,12 @@ export function createPhotoRenderer(sceneCtx) {
     // Remove fluorophore PointLights
     _clearFluoroLights()
     if (_fluoroLightGroup) { scene.remove(_fluoroLightGroup); _fluoroLightGroup = null }
+
+    // Tear down floor + restore shadow rig BEFORE removing photo lights so the
+    // restore walk still sees the directional lights it has to un-flag.
+    _floor.dispose()
+    _disposeSunGroup()
+    _applyShadowRig(false)
 
     // Remove photo lights, restore originals
     if (_photoGroup) { scene.remove(_photoGroup); _photoGroup = null }
@@ -669,6 +953,9 @@ export function createPhotoRenderer(sceneCtx) {
     if (!_active || !_photoGroup) return
     applyLighting(presetName, _photoGroup)
     _applyLightingRotation()
+    // applyLighting() recreates the directional lights with castShadow=false,
+    // so re-apply the shadow rig if a floor with shadows is live.
+    if (_shadowRigApplied) _enableRigShadows()
     if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
   }
 
@@ -789,6 +1076,7 @@ export function createPhotoRenderer(sceneCtx) {
       // Phase 7d: never swap the shared-renderer mid/far LOD impostors (custom
       // instancing shaders — a PBR swap collapses them to the source origin).
       if (obj.userData.sharedLodImpostor) { ignored++; return }
+      if (obj.userData.photoFloor)        { ignored++; return }
 
       const r = MESH_NAME_TO_REPR[obj.name] ?? _inferRepr(obj)
       if (r !== repr) { otherRepr++; return }
@@ -854,24 +1142,38 @@ export function createPhotoRenderer(sceneCtx) {
         _gatherLightsForInscatter()
         _pushLightsTo(_inscatterPass())
       }
+      // Flush WebGLState's texture-unit binding cache before the composer
+      // touches the scene. Without this, the bloom pass's heavy texture-unit
+      // churn (5-level mip chain + high-pass + composite) can desync the
+      // cache vs. actual GL bindings; on the next frame, MeshPhysicalMaterial
+      // with metalness=1 + scene.environment can sample whatever texture
+      // bloom last left on the env's unit → a uniformly black scene whenever
+      // (bloom + HDRI + metallic) are all active. Disabling any of the three
+      // happens to keep the relevant binding stable enough to avoid the bug.
+      renderer.resetState?.()
       _composerHandle.composer.render()
     })
   }
 
+  // SSAO + Bloom are always allocated in the composer (see post_processing.js);
+  // toggling these controllers just flips `pass.enabled`. EffectComposer skips
+  // disabled passes entirely, so the runtime cost when off is just an idle
+  // mip-chain allocation.
+  //
+  // We deliberately do NOT rebuild the composer post-activate. The activate-
+  // time fix for "bake AFTER composer" works because PMREM has never run on
+  // the renderer yet; reconstructing later happens AFTER the activate-time
+  // bake mutated renderer state, so the new UnrealBloomPass would inherit
+  // that state and paint garbage when an HDRI env is active. The previous
+  // "rebuild + re-bake" attempt didn't help because the construction step
+  // happens BEFORE the re-bake within the rebuild — the construction sees
+  // stale state. Avoiding reconstruction altogether is the right answer.
   function setSSAO(enabled) {
     _settings.ssao = enabled
     if (!_active) return
-    // Rebuild composer with new SSAO state
-    _composerHandle?.dispose()
-    _composerHandle = createComposer(renderer, scene, camera, {
-      ssao:          enabled,
-      bloom:         _settings.bloom,
-      bloomStrength: _settings.bloomStrength,
-      bloomRadius:   _settings.bloomRadius,
-      bloomThreshold: _settings.bloomThreshold,
-    })
-    _applyEnvEffect()
-    if (!_ptEnabled) _installComposerRenderFn()
+    const p = _composerHandle?.ssaoPass
+    if (p) p.enabled = !!enabled
+    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
   }
 
   function setBloom(enabled, strength, radius, threshold) {
@@ -881,27 +1183,12 @@ export function createPhotoRenderer(sceneCtx) {
     if (threshold  !== undefined) _settings.bloomThreshold = threshold
     if (!_active) return
     const bp = _composerHandle?.bloomPass
-    const currentlyHasBloom = !!bp
-    // Slider tweak only — bloom is already on, just push new uniforms. Avoids
-    // the rebuild flicker on every drag of the slider.
-    if (enabled && currentlyHasBloom) {
-      bp.strength  = _settings.bloomStrength
-      bp.radius    = _settings.bloomRadius
-      bp.threshold = _settings.bloomThreshold
-      return
-    }
-    // Toggling on/off — rebuild composer so the bloom pass is added or removed
-    // from the chain. createComposer's conditional allocation only puts the
-    // pass in the chain when bloom=true.
-    _composerHandle?.dispose()
-    _composerHandle = createComposer(renderer, scene, camera, {
-      ssao: _settings.ssao, bloom: enabled,
-      bloomStrength: _settings.bloomStrength,
-      bloomRadius: _settings.bloomRadius,
-      bloomThreshold: _settings.bloomThreshold,
-    })
-    _applyEnvEffect()
-    if (!_ptEnabled) _installComposerRenderFn()
+    if (!bp) return
+    bp.enabled   = !!enabled
+    bp.strength  = _settings.bloomStrength
+    bp.radius    = _settings.bloomRadius
+    bp.threshold = _settings.bloomThreshold
+    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
   }
 
   function setFOV(fov) {
@@ -980,21 +1267,14 @@ export function createPhotoRenderer(sceneCtx) {
     })
     offRenderer.setPixelRatio(1)
     offRenderer.setSize(tileW, tileH, false)
-    offRenderer.shadowMap.enabled = false
+    offRenderer.shadowMap.enabled = _shadowRigApplied
+    if (_shadowRigApplied) offRenderer.shadowMap.type = THREE.PCFSoftShadowMap
     const { color, alpha } = _bgClearParams()
     offRenderer.setClearColor(color, alpha)
 
-    // Bake env into the offscreen GL context once. Swap into scene now and
-    // restore on dispose. The on-screen renderer is not rendering during the
-    // session (animation export pauses the player), so this swap is safe.
     const savedSceneEnv = scene.environment
     const savedSceneBg  = scene.background
     let exportEnvTex = null
-    if (_envSourceType !== 'off') {
-      exportEnvTex = _bakeEnvFor(offRenderer)
-      scene.environment = exportEnvTex
-      if (_settings.environmentBackground && exportEnvTex) scene.background = exportEnvTex
-    }
 
     const composerOpts = {
       ssao:           _settings.ssao,
@@ -1006,7 +1286,18 @@ export function createPhotoRenderer(sceneCtx) {
     // ONE composer for the entire session. The composer's render targets
     // are sized to (tileW × tileH); we drive different tiles by changing
     // camera.setViewOffset() per render.
+    //
+    // IMPORTANT: build the composer BEFORE baking the env into this renderer's
+    // context. PMREMGenerator mutates renderer state as a side effect; if the
+    // bake happens first, the freshly-constructed UnrealBloomPass inherits
+    // that state and produces an angle-dependent colour tint over the scene
+    // (matches the activate() order).
     const sessionComposer = createComposer(offRenderer, scene, camera, composerOpts)
+    if (_envSourceType !== 'off') {
+      exportEnvTex = _bakeEnvFor(offRenderer)
+      scene.environment = exportEnvTex
+      if (_settings.environmentBackground && exportEnvTex) scene.background = exportEnvTex
+    }
     if (_settings.envEffect === 'mist') {
       sessionComposer.inscatterPass.enabled = true
       _pushInscatterParamsTo(sessionComposer.inscatterPass)
@@ -1034,6 +1325,11 @@ export function createPhotoRenderer(sceneCtx) {
               _pushLightsTo(sessionComposer.inscatterPass)
             }
             _syncFluoroLights()
+            // Same per-frame state-cache flush we do on the live renderer
+            // (see _installComposerRenderFn). Without this, exports of a
+            // bloom + HDRI + metallic scene can come out fully black even
+            // when the live preview renders correctly.
+            offRenderer.resetState?.()
             sessionComposer.composer.render()
             finalCtx.drawImage(offCanvas, xOff, yOff)
           }
@@ -1110,7 +1406,8 @@ export function createPhotoRenderer(sceneCtx) {
     })
     offRenderer.setPixelRatio(1)
     offRenderer.setSize(tileW, tileH, false)
-    offRenderer.shadowMap.enabled = false
+    offRenderer.shadowMap.enabled = _shadowRigApplied
+    if (_shadowRigApplied) offRenderer.shadowMap.type = THREE.PCFSoftShadowMap
 
     if (offCanvas.width !== tileW || offCanvas.height !== tileH) {
       console.warn(
@@ -1132,6 +1429,15 @@ export function createPhotoRenderer(sceneCtx) {
 
     // Re-bake the environment for the offscreen renderer's GL context — the
     // main renderer's PMREM texture is unusable in another context.
+    //
+    // IMPORTANT: composer first, env bake second (matches activate's order).
+    // PMREM mutates renderer state; if the bake happens first the freshly-built
+    // UnrealBloomPass inherits that state and paints garbage.
+    //
+    // ONE composer reused across every tile — only camera.setViewOffset changes.
+    // (Old code re-built the composer per tile, which compounded the PMREM-after
+    // bug on every tile.)
+    const exportComposer   = createComposer(offRenderer, scene, camera, composerOpts)
     const savedSceneEnv    = scene.environment
     const savedSceneBg     = scene.background
     let   exportEnvTex     = null
@@ -1141,6 +1447,12 @@ export function createPhotoRenderer(sceneCtx) {
       if (_settings.environmentBackground && exportEnvTex) {
         scene.background = exportEnvTex
       }
+    }
+    if (_settings.envEffect === 'mist') {
+      exportComposer.inscatterPass.enabled = true
+      _pushInscatterParamsTo(exportComposer.inscatterPass)
+      _gatherLightsForInscatter()
+      _pushLightsTo(exportComposer.inscatterPass)
     }
 
     const origAspect = camera.aspect
@@ -1155,17 +1467,16 @@ export function createPhotoRenderer(sceneCtx) {
           camera.setViewOffset(width, height, xOff, yOff, tileW, tileH)
           camera.updateProjectionMatrix()
 
-          const exportComposer = createComposer(offRenderer, scene, camera, composerOpts)
-          // Inscatter pass exists per-composer; enable + push uniforms when mist is on.
           if (_settings.envEffect === 'mist') {
-            exportComposer.inscatterPass.enabled = true
             _pushInscatterParamsTo(exportComposer.inscatterPass)
             _gatherLightsForInscatter()
             _pushLightsTo(exportComposer.inscatterPass)
           }
           _syncFluoroLights()
+          // Match the live render loop's per-frame state-cache flush, otherwise
+          // bloom + HDRI + metallic exports can come out fully black.
+          offRenderer.resetState?.()
           exportComposer.composer.render()
-          exportComposer.dispose()
 
           finalCtx.drawImage(offCanvas, xOff, yOff)
         }
@@ -1181,6 +1492,7 @@ export function createPhotoRenderer(sceneCtx) {
         scene.background  = savedSceneBg
         exportEnvTex.dispose()
       }
+      try { exportComposer.dispose() } catch { /* ignore */ }
       offRenderer.dispose()
     }
   }
@@ -1210,6 +1522,22 @@ export function createPhotoRenderer(sceneCtx) {
     setMistNoise,
     setMistDebug,
     setTranslucency,
+    setSun,
+    setSunAzimuth,
+    setSunElevation,
+    setSunStrength,
+    setSunColor,
+    setFloor,
+    setFloorMaterial,
+    setFloorColor,
+    setFloorOpacity,
+    setFloorSize,
+    setFloorOffset,
+    setFloorShadows,
+    setFloorGrid,
+    setFloorGridNeon,
+    setFloorGridColor,
+    setFloorGridGlow,
     setBackground,
     setSSAO,
     setBloom,

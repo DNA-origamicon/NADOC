@@ -35,6 +35,12 @@ const COLUMNS = [
 const LS_HEIGHT_KEY  = 'spreadsheet_height'
 const LS_COLS_KEY    = 'spreadsheet_cols'
 const LS_OPEN_KEY    = 'spreadsheet_open'
+const LS_SORT_KEY    = 'spreadsheet_sort_order'
+
+// Strand sort: three priority slots, each picks one of these keys.
+const SORT_KEYS = ['group', 'color', 'length']
+const SORT_LABELS = { group: 'Group', color: 'Color', length: 'Length' }
+const DEFAULT_SORT_ORDER = ['group', 'color', 'length']
 
 const MIN_HEIGHT = 28   // tab only
 const TAB_HEIGHT = 28
@@ -205,22 +211,63 @@ function _strandDisplaySequence(strand, design) {
   return result || null
 }
 
-function sortedStrands(design, strandColors, strandGroups) {
+function sortedStrands(design, strandColors, strandGroups, sortOrder = DEFAULT_SORT_ORDER) {
   const strands  = design?.strands ?? []
   const scaffold = strands.filter(s => s.strand_type === 'scaffold')
   const staples  = strands.filter(s => s.strand_type !== 'scaffold')
-  // Pre-compute color and length using the original array index (stable palette assignment).
+  // Map strand id → its group's order (lower sorts first; ungrouped goes last).
+  // `g.order` isn't set anywhere today, so fall back to the group's array index
+  // so the spreadsheet matches the order groups appear in the groups panel.
+  const groupOrderById = new Map()
+  ;(strandGroups ?? []).forEach((g, i) => {
+    const ord = g.order ?? i
+    for (const sid of (g.strandIds ?? [])) {
+      groupOrderById.set(sid, ord)
+    }
+  })
+  // Pre-compute meta using the original array index (stable palette assignment).
   const withMeta = staples.map((s, idx) => ({
-    strand: s,
-    color:  effectiveColor(s, idx, strandColors ?? {}, strandGroups ?? []),
-    length: strandLength(s, design),
+    strand:     s,
+    color:      effectiveColor(s, idx, strandColors ?? {}, strandGroups ?? []),
+    length:     strandLength(s, design),
+    groupOrder: groupOrderById.has(s.id) ? groupOrderById.get(s.id) : Infinity,
   }))
   withMeta.sort((a, b) => {
-    if (a.color < b.color) return -1
-    if (a.color > b.color) return 1
-    return a.length - b.length
+    for (const key of sortOrder) {
+      let cmp = 0
+      if (key === 'group')       cmp = a.groupOrder - b.groupOrder
+      else if (key === 'color')  cmp = a.color < b.color ? -1 : a.color > b.color ? 1 : 0
+      else if (key === 'length') cmp = a.length - b.length
+      if (cmp !== 0) return cmp
+    }
+    return 0
   })
   return [...scaffold, ...withMeta.map(m => m.strand)]
+}
+
+/**
+ * Compute the {strandColors, strandOrder} payload used by `exportSequenceXlsx`
+ * so the exported sheet matches the spreadsheet panel's row order + colors.
+ *
+ * Returns `{ strandColors: {sid: "#RRGGBB", …}, strandOrder: [sid, …] }`
+ * containing staple strands only (scaffold is excluded from the export).
+ */
+export function getStapleColorOrder(state) {
+  const design       = state?.currentDesign
+  const strandColors = state?.strandColors ?? {}
+  const strandGroups = state?.strandGroups ?? []
+  const stored       = (() => { try { return JSON.parse(localStorage.getItem(LS_SORT_KEY) ?? 'null') } catch { return null } })()
+  const sortOrder    = Array.isArray(stored) && stored.length ? stored : DEFAULT_SORT_ORDER
+  const ordered      = sortedStrands(design, strandColors, strandGroups, sortOrder)
+  const staples      = ordered.filter(s => s.strand_type !== 'scaffold')
+
+  const allStrands = design?.strands ?? []
+  const indexOf    = new Map(allStrands.map((s, i) => [s.id, i]))
+  const colors = {}
+  for (const s of staples) {
+    colors[s.id] = effectiveColor(s, indexOf.get(s.id) ?? 0, strandColors, strandGroups)
+  }
+  return { strandColors: colors, strandOrder: staples.map(s => s.id) }
 }
 
 // ── Context menu ──────────────────────────────────────────────────────────
@@ -298,6 +345,50 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
   const sheetToggle = document.getElementById('sheet-toggle')
 
   if (!panel || !body) return
+
+  // ── Persistent sort priorities ────────────────────────────────────
+  // Three slots; each picks one of SORT_KEYS. Duplicates allowed
+  // (a later slot with the same key is just a tie-break no-op).
+  let sortOrder = [...DEFAULT_SORT_ORDER]
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_SORT_KEY) ?? 'null')
+    if (Array.isArray(saved) && saved.length === 3 && saved.every(k => SORT_KEYS.includes(k))) {
+      sortOrder = saved
+    }
+  } catch (_) { /* ignore */ }
+
+  function saveSortOrder() {
+    localStorage.setItem(LS_SORT_KEY, JSON.stringify(sortOrder))
+  }
+
+  // Sort-priority dropdowns: rendered before the column-toggle checkboxes.
+  const sortWrap = document.createElement('div')
+  sortWrap.className = 'sheet-sort-wrap'
+  const sortLabel = document.createElement('span')
+  sortLabel.className   = 'sheet-sort-label'
+  sortLabel.textContent = 'Sort:'
+  sortWrap.appendChild(sortLabel)
+  const sortSelects = []
+  for (let i = 0; i < 3; i++) {
+    const sel = document.createElement('select')
+    sel.className = 'sheet-sort-select'
+    sel.title     = `Sort priority ${i + 1}`
+    for (const key of SORT_KEYS) {
+      const opt = document.createElement('option')
+      opt.value       = key
+      opt.textContent = SORT_LABELS[key]
+      sel.appendChild(opt)
+    }
+    sel.value = sortOrder[i]
+    sel.addEventListener('change', () => {
+      sortOrder[i] = sel.value
+      saveSortOrder()
+      _rebuildTable(store.getState())
+    })
+    sortSelects.push(sel)
+    sortWrap.appendChild(sel)
+  }
+  toggleBar.parentNode.insertBefore(sortWrap, toggleBar)
 
   // ── Shared datalist for group comboboxes ──────────────────────────
   const datalist = document.createElement('datalist')
@@ -452,7 +543,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       return
     }
 
-    const strands = sortedStrands(design, strandColors, strandGroups)
+    const strands = sortedStrands(design, strandColors, strandGroups, sortOrder)
     // Map helix_id → display index (matches cadnano pathview gutter labels)
     const helixIndex = Object.fromEntries((design.helices ?? []).map((h, i) => [h.id, i]))
 
@@ -557,6 +648,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             break
           }
           case 'color': {
+            td.className = 'sheet-col-color'
             td.appendChild(_makeColorCell(strand, color, strandGroups))
             break
           }
@@ -771,11 +863,26 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
   }
 
   // ── Color picker cell ─────────────────────────────────────────────
+  // The <input type="color"> value setter silently falls back to #000000 for
+  // anything that isn't a 7-char lowercase #rrggbb, so normalise first.
+  function _normaliseHex(c) {
+    if (!c) return '#000000'
+    let s = String(c).trim().toLowerCase()
+    if (!s.startsWith('#')) s = '#' + s
+    if (/^#[0-9a-f]{3}$/.test(s)) return '#' + s[1]+s[1] + s[2]+s[2] + s[3]+s[3]
+    if (/^#[0-9a-f]{6}$/.test(s)) return s
+    return '#000000'
+  }
+
   function _makeColorCell(strand, currentColor, strandGroups) {
     const input = document.createElement('input')
     input.type      = 'color'
     input.className = 'sheet-color-input'
-    input.value     = currentColor
+    const startHex  = _normaliseHex(currentColor)
+    input.value     = startHex
+    // Paint the input itself so the cell shows the strand color even when the
+    // native swatch chrome doesn't fill the input (browser-dependent).
+    input.style.backgroundColor = startHex
     input.title     = 'Click to change strand color'
 
     input.addEventListener('click', e => e.stopPropagation())
@@ -783,6 +890,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     input.addEventListener('change', async () => {
       const hex    = input.value                          // "#rrggbb"
       const hexInt = parseInt(hex.replace('#', ''), 16)  // number for store/3D
+      input.style.backgroundColor = hex
 
       const group = (strandGroups ?? []).find(g => g.strandIds.includes(strand.id))
 
@@ -955,7 +1063,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const design = store.getState().currentDesign
     if (!design) return
     const state = store.getState()
-    const strands = sortedStrands(design, state.strandColors ?? {}, state.strandGroups)
+    const strands = sortedStrands(design, state.strandColors ?? {}, state.strandGroups, sortOrder)
     let scrolled = false
     for (let i = 0; i < strands.length; i++) {
       const row = tbody.children[i]

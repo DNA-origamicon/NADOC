@@ -10291,6 +10291,115 @@ def export_sequence_csv() -> Response:
     )
 
 
+class _SequenceXlsxRequest(BaseModel):
+    strand_colors: dict[str, str] = Field(default_factory=dict)
+    strand_order:  list[str]      = Field(default_factory=list)
+
+
+@router.post("/design/export/sequence-xlsx")
+def export_sequence_xlsx(req: _SequenceXlsxRequest | None = Body(default=None)) -> Response:
+    """Export staple sequences as XLSX with overhang regions bolded.
+
+    Each Sequence cell is rich-text: 5′/3′ overhang bases are bold, the body
+    is plain.  All three segments share the effective strand color (provided
+    via ``strand_colors`` to match the on-screen Sequence panel; falls back
+    to ``strand.color`` or the staple palette).  Strand order can be supplied
+    via ``strand_order`` to match the panel sort.
+    """
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.cell.rich_text import CellRichText, TextBlock
+    from openpyxl.cell.text import InlineFont
+    from openpyxl.styles import Font, Alignment
+
+    design = _design_for_export()
+    color_overrides = (req.strand_colors if req else {}) or {}
+    order           = (req.strand_order  if req else []) or []
+
+    _PALETTE = [
+        "#e06c75", "#98c379", "#d19a66", "#61afef",
+        "#c678dd", "#56b6c2", "#e5c07b", "#abb2bf",
+        "#be5046", "#7dab6e", "#b07e45", "#4e8cc4",
+    ]
+
+    def _hex_to_argb(hexstr: str) -> str:
+        h = (hexstr or "").lstrip("#")
+        if len(h) != 6:
+            return "FF000000"
+        return "FF" + h.upper()
+
+    helix_label_by_id: dict[str, str] = {}
+    for idx, h in enumerate(design.helices):
+        helix_label_by_id[h.id] = h.label if h.label else str(idx)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Staples"
+    headers = ["#", "Sequence", "Length", "Color", "Start", "End", "Notes"]
+    ws.append(headers)
+    hf = Font(bold=True)
+    for col in range(1, len(headers) + 1):
+        ws.cell(row=1, column=col).font = hf
+
+    staples = [s for s in design.strands if s.strand_type != StrandType.SCAFFOLD]
+    if order:
+        pos = {sid: i for i, sid in enumerate(order)}
+        staples.sort(key=lambda s: pos.get(s.id, len(order)))
+
+    for row_idx, strand in enumerate(staples, start=1):
+        if not strand.domains:
+            continue
+        d0, dn = strand.domains[0], strand.domains[-1]
+        ovhg5_len = (abs(d0.end_bp - d0.start_bp) + 1) if d0.overhang_id else 0
+        ovhg3_len = (abs(dn.end_bp - dn.start_bp) + 1) if dn.overhang_id else 0
+        total_len = sum(abs(d.end_bp - d.start_bp) + 1 for d in strand.domains)
+
+        color_hex = color_overrides.get(strand.id) \
+                    or strand.color \
+                    or _PALETTE[(row_idx - 1) % len(_PALETTE)]
+        argb = _hex_to_argb(color_hex)
+
+        ws.cell(row=row_idx + 1, column=1, value=row_idx)
+
+        seq = strand.sequence or ""
+        if seq:
+            ov5 = seq[:ovhg5_len] if ovhg5_len else ""
+            ov3 = seq[len(seq) - ovhg3_len:] if ovhg3_len else ""
+            body_seq = seq[ovhg5_len: len(seq) - ovhg3_len] if (ovhg5_len + ovhg3_len) < len(seq) else ""
+            bold_font  = InlineFont(rFont="Courier New", b=True, color=argb)
+            plain_font = InlineFont(rFont="Courier New",          color=argb)
+            blocks: list[TextBlock] = []
+            if ov5: blocks.append(TextBlock(bold_font,  ov5))
+            if body_seq: blocks.append(TextBlock(plain_font, body_seq))
+            if ov3: blocks.append(TextBlock(bold_font,  ov3))
+            ws.cell(row=row_idx + 1, column=2, value=CellRichText(blocks) if blocks else "")
+        else:
+            # No sequence assigned — show N×length unbolded so the column isn't empty
+            ws.cell(row=row_idx + 1, column=2, value=f"N×{total_len}")
+
+        ws.cell(row=row_idx + 1, column=3, value=total_len)
+        ws.cell(row=row_idx + 1, column=4, value=color_hex)
+        ws.cell(row=row_idx + 1, column=5, value=f"{helix_label_by_id.get(d0.helix_id, d0.helix_id)}[{d0.start_bp}]")
+        ws.cell(row=row_idx + 1, column=6, value=f"{helix_label_by_id.get(dn.helix_id, dn.helix_id)}[{dn.end_bp}]")
+        ws.cell(row=row_idx + 1, column=7, value=strand.notes or "")
+
+    for col_letter, w in (("A", 6), ("B", 80), ("C", 8), ("D", 10), ("E", 12), ("F", 12), ("G", 30)):
+        ws.column_dimensions[col_letter].width = w
+    ws.freeze_panes = "A2"
+    ws.cell(row=1, column=2).alignment = Alignment(horizontal="left")
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    design_name = design.metadata.name or "design"
+    filename = f"{design_name}_sequences.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ── Feature log endpoints ─────────────────────────────────────────────────────
 
 
@@ -11757,13 +11866,18 @@ def surface_batch(body: SurfaceBatchBody) -> dict:
     Stateless — does NOT change the active design cursor or push to the undo stack.
     Used by the animation player to pre-bake surface states before playback.
 
-    Returns { "<position>": { vertices: [x,y,z, ...], faces: [i,j,k, ...] }, ... }.
+    Returns { "<position>": { vertices, faces, vertex_colors? }, ... }.
     Both vertices and faces are included because different feature-log positions can
     produce different marching-cubes topologies (different vertex counts), so the
     frontend needs to rebuild the geometry buffer when topology changes mid-animation.
+
+    When color_mode='strand', per-vertex RGB triples are included so the surface
+    mesh keeps its strand-coloured look through topology rebuilds during animation
+    playback — without this, _rebuildTopology has nothing to attach as a color
+    attribute and would fall back to uniform grey.
     """
     from backend.core.atomistic import build_atomistic_model
-    from backend.core.surface import compute_surface, smooth_mesh
+    from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
 
     design = design_state.get_or_404()
     result: dict[str, dict] = {}
@@ -11777,10 +11891,15 @@ def surface_batch(body: SurfaceBatchBody) -> dict:
         mesh  = smooth_mesh(mesh, iterations=body.smooth)
         verts = [round(float(v), 5) for v in mesh.vertices.ravel()]
         faces = [int(f) for f in mesh.faces.ravel()]
-        result[str(position)] = {
-            "vertices": verts,
-            "faces":    faces,
-        }
+        entry: dict = {"vertices": verts, "faces": faces}
+        if body.color_mode == "strand":
+            full = surface_to_json(mesh, d, color_mode="strand")
+            vc   = full.get("vertex_colors")
+            if vc:
+                # 4 decimals is more than enough for 8-bit display precision and
+                # keeps the bake payload compact for many-keyframe animations.
+                entry["vertex_colors"] = [round(float(c), 4) for c in vc]
+        result[str(position)] = entry
     return result
 
 

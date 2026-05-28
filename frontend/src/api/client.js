@@ -1066,6 +1066,36 @@ export async function exportSequenceCsv() {
   return true
 }
 
+/**
+ * Export staple sequences as an XLSX file with overhang regions bolded.
+ *
+ * `strandColors` is a map of strandId → "#RRGGBB" matching the on-screen
+ * Sequence panel.  `strandOrder` is an array of strand IDs (staples only)
+ * in the order they should appear in the sheet.  Both are optional; the
+ * backend falls back to strand.color / palette and id-sorted order.
+ */
+export async function exportSequenceXlsx(strandColors = {}, strandOrder = []) {
+  const r = await fetch(`${BASE}/design/export/sequence-xlsx`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...docHeaders() },
+    body: JSON.stringify({ strand_colors: strandColors, strand_order: strandOrder }),
+  })
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    return false
+  }
+  const blob = await r.blob()
+  const cd = r.headers.get('Content-Disposition') || ''
+  const match = cd.match(/filename="?([^"]+)"?/)
+  const filename = match ? match[1] : 'sequences.xlsx'
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+  return true
+}
+
 export async function exportCadnano() {
   const r = await fetch(`${BASE}/design/export/cadnano`, { headers: docHeaders() })
   if (!r.ok) {
