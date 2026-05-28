@@ -46,17 +46,18 @@ NADOC enforces a strict three-layer separation:
 - **Frontend**: Three.js (Vite), vanilla ES modules
 - **2D Editor**: Canvas 2D (pathview) + SVG (sliceview), BroadcastChannel sync
 
-## Why NADOC — beyond caDNAno2
+## Why NADOC
 
-caDNAno2 (Douglas et al., *Nature* 2009) defined the lattice idiom for scaffolded
-DNA origami and is still the field's workhorse, but it is a 2D schematic editor on
-an aging PyQt stack: you route the scaffold and break staples by hand on a flat
-path view, with no 3D feedback, no physical model, and no concept of structure
-beyond a single straight bundle. NADOC keeps the honeycomb/square lattice idiom
-designers already know and rebuilds around it as a modern, browser-based
-three-layer engine — **topology → geometry → physics** — that closes those gaps:
+caDNAno (Douglas et al., *Nature* 2009) established the lattice-based idiom for
+scaffolded DNA origami that the whole field still builds on. Traditional design
+tools in that lineage, however, remain 2D schematic editors: you route the
+scaffold and break staples by hand on a flat path view, with no 3D feedback, no
+physical model, and no concept of structure beyond a single straight bundle.
+NADOC keeps the honeycomb/square lattice idiom designers already know and
+rebuilds around it as a modern, browser-based three-layer engine —
+**topology → geometry → physics** — that closes those gaps:
 
-| Limitation in caDNAno2 | What NADOC does instead |
+| Limitation of traditional tools | What NADOC does instead |
 |---|---|
 | **2D path/slice schematic only** — you fold blind to the 3D result | Real-time 3D view derived from B-DNA geometry, with coarse-grained, all-atom, and molecular-surface representations |
 | **Idealized straight bundles** — global twist/bend only via hand-computed insertions/deletions | Geometric bend/twist deformation layer **and** topological loop/skip (Dietz, Douglas & Shih, *Science* 2009) with enforced physical limits (6–15 bp/turn, minimum bend radius), updated live in 3D |
@@ -68,7 +69,7 @@ three-layer engine — **topology → geometry → physics** — that closes tho
 | **No design history or conformational animation** | Snapshot-bearing feature log with revert/edit, plus camera poses, keyframes, and pre-baked 60 fps animation |
 | **Schematic cartoons for publication figures** | Photo mode — PBR materials, HDRI lighting, subsurface scattering, fluorophores as real light sources, progressive path tracing, and 300/600 DPI tiled export (see below) |
 | **A separate converter for every downstream tool** | One-click atomistic (PDB/PSF), NAMD package, and GROMACS export; native import of caDNAno v2 **and** scadnano designs |
-| **Aging desktop install (PyQt4)** | A web app — one `./setup.sh`, open a browser; runs on Linux, macOS, and Windows (WSL2) |
+| **Desktop install on a heavyweight GUI toolchain** | A web app — one `./setup.sh`, open a browser; runs on Linux, macOS, and Windows (WSL2) |
 
 Every behavior is grounded in peer-reviewed literature (`Literature/`) and
 validated by a large backend test suite — run `just test` to see current state.
