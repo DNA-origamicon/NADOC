@@ -11742,10 +11742,12 @@ def atomistic_batch(body: GeometryBatchBody) -> dict:
 
 
 class SurfaceBatchBody(BaseModel):
-    positions:    list[int]
-    color_mode:   str   = "strand"
-    probe_radius: float = 0.28
-    grid_spacing: float = 0.20
+    positions:      list[int]
+    color_mode:     str   = "strand"
+    probe_radius:   float = 0.28
+    grid_spacing:   float = 0.20
+    radius_inflate: float = 1.30
+    smooth:         int   = 15
 
 
 @router.post("/design/features/surface-batch", status_code=200)
@@ -11761,7 +11763,7 @@ def surface_batch(body: SurfaceBatchBody) -> dict:
     frontend needs to rebuild the geometry buffer when topology changes mid-animation.
     """
     from backend.core.atomistic import build_atomistic_model
-    from backend.core.surface import compute_surface
+    from backend.core.surface import compute_surface, smooth_mesh
 
     design = design_state.get_or_404()
     result: dict[str, dict] = {}
@@ -11770,7 +11772,9 @@ def surface_batch(body: SurfaceBatchBody) -> dict:
         model = build_atomistic_model(d)
         mesh  = compute_surface(model.atoms,
                                 grid_spacing=body.grid_spacing,
-                                probe_radius=body.probe_radius)
+                                probe_radius=body.probe_radius,
+                                radius_scale=1.2 * body.radius_inflate)
+        mesh  = smooth_mesh(mesh, iterations=body.smooth)
         verts = [round(float(v), 5) for v in mesh.vertices.ravel()]
         faces = [int(f) for f in mesh.faces.ravel()]
         result[str(position)] = {
@@ -13456,19 +13460,25 @@ def get_surface(
     color_mode:     str   = "strand",
     grid_spacing:   float = 0.20,
     probe_radius:   float = 0.28,
+    radius_inflate: float = 1.30,
+    smooth:         int   = 15,
 ) -> dict:
     """
     Compute and return a triangulated molecular surface mesh.
 
-    The surface is computed from the all-atom model with atom radii scaled ×1.2,
-    followed by a morphological closing of radius probe_radius.  probe_radius=0
-    gives a tight surface; larger values produce a smoother envelope with small
-    grooves filled in.
+    The surface is the all-atom model rasterised onto a voxel grid with atom
+    radii scaled by ``1.2 × radius_inflate``, followed by a morphological
+    closing of radius ``probe_radius`` and Taubin smoothing (``smooth`` iters).
+    Defaults match the 3D-print STL export so the on-screen surface is
+    visibly de-faceted and feature-fattened by default.  Pass
+    ``radius_inflate=1.0&smooth=0`` to recover the raw molecular surface.
 
     Query params:
-      color_mode    — "strand" (per-vertex strand colours) or "uniform" (no colours).
-      grid_spacing  — voxel size in nm (default 0.20).
-      probe_radius  — controls smoothness; 0 = tight, 0.28 = smooth (default).
+      color_mode      — "strand" (per-vertex strand colours) or "uniform".
+      grid_spacing    — voxel size in nm (default 0.20; lower = finer).
+      probe_radius    — groove-fill radius in nm (default 0.28).
+      radius_inflate  — extra atom-radius fattening (default 1.30; 1.0 = bare).
+      smooth          — Taubin smoothing iterations (default 15; 0 = off).
 
     Response: {
       vertices: [x,y,z, ...],      flat float array, nm coords
@@ -13479,16 +13489,73 @@ def get_surface(
     """
     import time
     from backend.core.atomistic import build_atomistic_model
-    from backend.core.surface import compute_surface, surface_to_json
+    from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
 
     design = design_state.get_or_404()
     model = build_atomistic_model(design)
 
     t0 = time.perf_counter()
-    mesh = compute_surface(model.atoms, grid_spacing=grid_spacing, probe_radius=probe_radius)
+    mesh = compute_surface(
+        model.atoms,
+        grid_spacing=grid_spacing,
+        probe_radius=probe_radius,
+        radius_scale=1.2 * radius_inflate,
+    )
+    mesh = smooth_mesh(mesh, iterations=smooth)
     t_ms = (time.perf_counter() - t0) * 1000.0
 
     return surface_to_json(mesh, design, color_mode=color_mode, t_ms=t_ms)
+
+
+@router.get("/design/export/stl")
+def export_surface_stl(
+    grid_spacing:    float = 0.20,
+    probe_radius:    float = 0.28,
+    target_mm:       float = 200.0,
+    radius_inflate:  float = 1.30,
+    smooth:          int   = 15,
+) -> Response:
+    """Export the molecular surface as a binary STL for 3D printing.
+
+    Builds the same marching-cubes surface as the 'surface' representation,
+    inflates it (atoms ×radius_inflate over the displayed surface) so thin
+    features survive printing, applies Taubin smoothing to relax the voxel
+    staircase, then auto-scales it (nm → mm) so the longest bounding-box
+    dimension equals target_mm (default 200 mm — a typical consumer printer
+    bed).  STL is unitless; slicers interpret the coordinates as millimetres.
+
+    Query params:
+      grid_spacing    — surface voxel size in nm (default 0.20; lower = finer).
+      probe_radius    — surface smoothness in nm (default 0.28).
+      target_mm       — longest printed dimension in mm (default 200).
+      radius_inflate  — fattening over the displayed surface (default 1.30 =
+                        +30%; the printed envelope uses atoms at 1.2 × this).
+      smooth          — Taubin smoothing iterations (default 15; 0 = off).
+    """
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.stl_export import auto_scale, export_stl
+    from backend.core.surface import compute_surface, smooth_mesh
+
+    design = _design_for_export()
+    model  = build_atomistic_model(design)
+    mesh   = compute_surface(
+        model.atoms,
+        grid_spacing=grid_spacing,
+        probe_radius=probe_radius,
+        radius_scale=1.2 * radius_inflate,
+    )
+    if mesh.faces.shape[0] == 0:
+        raise HTTPException(422, detail="Surface mesh is empty; nothing to export.")
+
+    mesh = smooth_mesh(mesh, iterations=smooth)
+
+    name = (design.metadata.name or "design").replace(" ", "_")
+    stl  = export_stl(mesh, scale=auto_scale(mesh, target_mm=target_mm), name=name)
+    return Response(
+        content     = stl,
+        media_type  = "model/stl",
+        headers     = {"Content-Disposition": f'attachment; filename="{name}.stl"'},
+    )
 
 
 @router.get("/design/export/pdb")

@@ -166,9 +166,16 @@ export function initSurfaceRenderer(scene) {
    */
   function setOpacity(val) {
     _opacity = val
-    if (_mesh) {
-      _mesh.material.opacity = val
-      _mesh.material.transparent = val < 1.0
+    if (!_mesh) return
+    const m = _mesh.material
+    m.opacity     = val
+    m.transparent = val < 1.0
+    // Photo-mode MeshPhysicalMaterial carries a `transmission` channel that is
+    // independent of opacity; if we don't drive it here, sliders never produce
+    // a fully-opaque surface in photo mode (the gummy preset bakes in
+    // transmission=0.45).  Zero it at opacity=1, restore the preset target below.
+    if (m.isMeshPhysicalMaterial) {
+      m.transmission = (val >= 1.0) ? 0 : (m.userData?.presetTransmission ?? 0)
     }
   }
 

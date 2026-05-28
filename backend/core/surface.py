@@ -33,6 +33,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy.ndimage import binary_dilation, binary_erosion
+from scipy.sparse import csr_matrix
 from scipy.spatial import cKDTree
 from skimage.measure import marching_cubes
 
@@ -160,12 +161,15 @@ def compute_surface(
     atoms: list[Atom],
     grid_spacing: float = 0.20,
     probe_radius: float = 0.28,
+    radius_scale: float = 1.2,
 ) -> SurfaceMesh:
     """
     Unified molecular surface via morphological closing on scaled VdW spheres.
 
-    Atom radii are expanded by 1.2× before rasterisation; the probe radius
-    then controls the degree of groove-filling:
+    Atom radii are expanded by ``radius_scale`` (default 1.2×) before
+    rasterisation; the probe radius then controls the degree of groove-filling.
+    Increasing ``radius_scale`` inflates the whole envelope outward — useful for
+    3D printing, where a fatter surface fuses thin features into robust solids.
 
       probe_radius = 0   → tight surface hugging the expanded VdW spheres
       probe_radius = 0.28 (default) → smooth envelope with grooves ≤ 0.56 nm
@@ -185,8 +189,13 @@ def compute_surface(
     probe_radius :
         Controls smoothness.  0 = tight VdW-like; larger = smoother envelope.
         Default 0.28 nm.
+    radius_scale :
+        Multiplier applied to each atom's VdW radius before rasterisation.
+        Default 1.2× matches ChimeraX/VMD molecular surfaces.  For 3D-print
+        export, pass a larger value (e.g. 1.56 ≈ 1.2 × 1.3) to inflate the
+        envelope by ~30% so thin features print robustly.
     """
-    scaled_radii = {elem: r * 1.2 for elem, r in VDW_RADIUS.items()}
+    scaled_radii = {elem: r * radius_scale for elem, r in VDW_RADIUS.items()}
     grid, bbox_min = _build_occupancy_grid(atoms, scaled_radii, grid_spacing, padding=0.5 + probe_radius)
 
     if probe_radius > 0:
@@ -196,6 +205,54 @@ def compute_surface(
         grid = binary_erosion(dilated, structure=struct)
 
     return _marching_cubes_safe(grid, 0.5, grid_spacing, bbox_min, atoms)
+
+
+# ── Mesh smoothing ────────────────────────────────────────────────────────────
+
+def smooth_mesh(
+    mesh: SurfaceMesh,
+    iterations: int = 15,
+    lamb: float = 0.5,
+    mu: float = -0.53,
+) -> SurfaceMesh:
+    """
+    Taubin (λ|μ) smoothing — relaxes marching-cubes voxel-staircase faceting
+    without the volumetric shrinkage of a plain Laplacian filter.
+
+    Each iteration applies a positive Laplacian step (``+λ·L``) followed by a
+    negative one (``+μ·L`` with ``μ<-λ``), which acts as a low-pass band that
+    removes high-frequency facets while preserving overall shape.  Topology
+    (faces) is unchanged, so a closed input mesh stays closed/watertight.
+
+    Defaults are the canonical Taubin values: ``λ=0.5``, ``μ=-0.53``, 15
+    iterations — visibly de-faceted with negligible feature loss.
+    """
+    n = mesh.vertices.shape[0]
+    if iterations <= 0 or n == 0:
+        return mesh
+
+    V = mesh.vertices.astype(np.float64)
+    F = mesh.faces
+
+    # Symmetric edge list from triangles → row-normalised binary adjacency W.
+    e = np.vstack([F[:, [0, 1]], F[:, [1, 2]], F[:, [2, 0]]])
+    e = np.vstack([e, e[:, ::-1]])
+    A = csr_matrix((np.ones(len(e)), (e[:, 0], e[:, 1])), shape=(n, n))
+    A.data[:] = 1.0                                       # binarise (dedupe duplicate edges)
+    deg = np.asarray(A.sum(axis=1)).ravel()
+    deg[deg == 0] = 1.0
+    Dinv = csr_matrix((1.0 / deg, (np.arange(n), np.arange(n))), shape=(n, n))
+    W = Dinv @ A                                          # neighbour-averaging operator
+
+    for _ in range(iterations):
+        V += lamb * (W @ V - V)
+        V += mu   * (W @ V - V)
+
+    return SurfaceMesh(
+        vertices=V.astype(np.float32),
+        faces=F,
+        vertex_strand_ids=mesh.vertex_strand_ids,
+    )
 
 
 # ── JSON serialisation ────────────────────────────────────────────────────────

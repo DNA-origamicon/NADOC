@@ -5953,30 +5953,40 @@ def get_instance_atomistic_geometry(instance_id: str) -> dict:
 
 @router.get("/assembly/instances/{instance_id}/surface-geometry", status_code=200)
 def get_instance_surface_geometry(
-    instance_id:  str,
-    color_mode:   str   = "strand",
-    grid_spacing: float = 0.20,
-    probe_radius: float = 0.28,
+    instance_id:    str,
+    color_mode:     str   = "strand",
+    grid_spacing:   float = 0.20,
+    probe_radius:   float = 0.28,
+    radius_inflate: float = 1.30,
+    smooth:         int   = 15,
 ) -> dict:
     """
     Compute and return a triangulated molecular surface for a PartInstance's design.
 
     Geometry is returned in the instance's local frame — same convention as
     /assembly/instances/{id}/atomistic-geometry; the frontend instances the mesh
-    at each placement transform.
+    at each placement transform.  Defaults match GET /api/design/surface
+    (radius_inflate=1.30, smooth=15) so the visual matches the design view and
+    the STL export.
 
     Response: { vertices, faces, vertex_colors, stats } — same schema as
     GET /api/design/surface.
     """
     import time
     from backend.core.atomistic import build_atomistic_model
-    from backend.core.surface import compute_surface, surface_to_json
+    from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
     assembly = assembly_state.get_or_404()
     inst     = _find_instance(assembly, instance_id)
     design   = _display_design(_load_design_from_source(inst.source))
     model    = build_atomistic_model(design)
     t0   = time.perf_counter()
-    mesh = compute_surface(model.atoms, grid_spacing=grid_spacing, probe_radius=probe_radius)
+    mesh = compute_surface(
+        model.atoms,
+        grid_spacing=grid_spacing,
+        probe_radius=probe_radius,
+        radius_scale=1.2 * radius_inflate,
+    )
+    mesh = smooth_mesh(mesh, iterations=smooth)
     t_ms = (time.perf_counter() - t0) * 1000.0
     return surface_to_json(mesh, design, color_mode=color_mode, t_ms=t_ms)
 

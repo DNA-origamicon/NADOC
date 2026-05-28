@@ -2037,7 +2037,7 @@ async function main() {
       try {
         const { surfaceColorMode } = store.getState()
         const url = `/api/design/surface?color_mode=${surfaceColorMode}&probe_radius=${_surfaceProbeRadius}`
-        const resp = await fetch(url)
+        const resp = await fetch(url, { headers: docHeaders() })
         if (!resp.ok) {
           dismissToast()
           console.error('Surface fetch failed:', resp.status)
@@ -2133,7 +2133,7 @@ async function main() {
   async function _refetchAtomistic() {
     if (atomisticRenderer.getMode() === 'off') return
     try {
-      const resp = await fetch(_atomisticUrl())
+      const resp = await fetch(_atomisticUrl(), { headers: docHeaders() })
       if (!resp.ok) { console.error('Atomistic refetch failed:', resp.status); return }
       _atomDataCache = await resp.json()
       atomisticRenderer.update(_atomDataCache)
@@ -2338,7 +2338,7 @@ async function main() {
     if (mode !== 'off' && !_atomDataCache) {
       showPersistentToast('Loading atomistic model…')
       try {
-        const resp = await fetch(_atomisticUrl())
+        const resp = await fetch(_atomisticUrl(), { headers: docHeaders() })
         if (!resp.ok) {
           dismissToast()
           console.error('Atomistic fetch failed:', resp.status)
@@ -12062,6 +12062,16 @@ Typical debugging workflow for "reverts to 3D" bug:
     a.href = '/api/design/export/psf'
     a.download = ''
     a.click()
+  })
+
+  // ── Export Surface STL (3D print) ──────────────────────────────────────────────
+  document.getElementById('menu-file-export-stl')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
+    showToast('Building surface STL…', { severity: 'info' })
+    const ok = await api.exportSurfaceStl()
+    if (ok) showToast('Surface STL exported (auto-scaled to 200 mm).', { severity: 'success' })
+    else showToast('STL export failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
   })
 
   // ── Export NAMD complete package ──────────────────────────────────────────────

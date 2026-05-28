@@ -101,7 +101,22 @@ export function makeMaterial(repr, presetName, vertexColors = false, opacity = 1
     vertexColors,
     ...params,
   })
-  if (opacity < 1.0) {
+  // The molecular-surface mesh is a marching-cubes envelope with a few non-
+  // manifold junction edges; it must render both sides or those triangles cull.
+  // (The normal-mode MeshPhongMaterial also uses DoubleSide for the same reason.)
+  if (repr === 'surface') mat.side = THREE.DoubleSide
+
+  // Stash the preset's transmission target so the opacity slider can restore it
+  // when sliding back below 1.0 after we've zeroed it for full-opacity.
+  mat.userData.presetTransmission = params.transmission ?? 0
+
+  if (opacity >= 1.0) {
+    // opacity=1 must mean fully opaque even on SSS/transmissive presets — the
+    // slider is authoritative.  Zero transmission and disable blending.
+    mat.transmission = 0
+    mat.transparent  = false
+    mat.opacity      = 1
+  } else {
     mat.transparent = true
     if (!params.transmission) mat.opacity = opacity
   }

@@ -1049,7 +1049,7 @@ export async function assignStapleSequences() {
 }
 
 export async function exportSequenceCsv() {
-  const r = await fetch(`${BASE}/design/export/sequence-csv`)
+  const r = await fetch(`${BASE}/design/export/sequence-csv`, { headers: docHeaders() })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
     store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
@@ -1067,7 +1067,7 @@ export async function exportSequenceCsv() {
 }
 
 export async function exportCadnano() {
-  const r = await fetch(`${BASE}/design/export/cadnano`)
+  const r = await fetch(`${BASE}/design/export/cadnano`, { headers: docHeaders() })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
     store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
@@ -1077,6 +1077,27 @@ export async function exportCadnano() {
   const cd = r.headers.get('Content-Disposition') || ''
   const match = cd.match(/filename="?([^"]+)"?/)
   const filename = match ? match[1] : 'design.json'
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+  return true
+}
+
+export async function exportSurfaceStl({ targetMm = 200, gridSpacing, probeRadius } = {}) {
+  const params = new URLSearchParams({ target_mm: String(targetMm) })
+  if (gridSpacing != null) params.set('grid_spacing', String(gridSpacing))
+  if (probeRadius != null) params.set('probe_radius', String(probeRadius))
+  const r = await fetch(`${BASE}/design/export/stl?${params}`, { headers: docHeaders() })
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    return false
+  }
+  const blob = await r.blob()
+  const cd = r.headers.get('Content-Disposition') || ''
+  const match = cd.match(/filename="?([^"]+)"?/)
+  const filename = match ? match[1] : 'surface.stl'
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url; a.download = filename; a.click()
