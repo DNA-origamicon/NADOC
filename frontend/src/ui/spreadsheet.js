@@ -98,7 +98,7 @@ function effectiveColor(strand, strandIndex, strandColors, strandGroups) {
   }
   const sc = strandColors?.[strand.id]
   if (sc != null) return '#' + sc.toString(16).padStart(6, '0')
-  if (strand.strand_type === 'scaffold') return '#29b6f6'
+  if (strand.strand_type === 'scaffold') return '#0070bb'
   if (strand.color) return strand.color
   return paletteColor(strandIndex)
 }

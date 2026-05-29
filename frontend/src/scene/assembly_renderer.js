@@ -1139,6 +1139,11 @@ export function initAssemblyRenderer(scene, store, api) {
   let _boxHelper      = null
   let _boxHelperGroup = null   // which group the box helper currently tracks
   let _activeInstanceId = null
+  // PartGroup visibility overlay — instance ids that should render as hidden
+  // because their owning PartGroup has `visible=false`. Per-instance
+  // `inst.visible` is left untouched (the overlay is read-only on instance
+  // state); restoring the group reveals each member at its prior visibility.
+  let _groupHiddenInstanceIds = new Set()
   // Photo mode: suppress annotation overlays (per-instance helix axis arrows,
   // helix-id labels, overhang-name sprites, active-instance BoxHelper). The
   // mate-mode blunt-end disks + orange joint indicators are toggled separately
@@ -1762,6 +1767,22 @@ export function initAssemblyRenderer(scene, store, api) {
     _rebuildPartJointIndicators()
   }
 
+  // ── PartGroup visibility overlay ──────────────────────────────────────────
+  // Hide every cached instance group whose id is in `hiddenInstanceIds`,
+  // restore the others to their per-instance `visible` flag. Cheap O(N)
+  // walk over the cache — call after each group visibility toggle.
+  function applyGroupVisibilityOverlay(hiddenInstanceIds) {
+    const next = new Set(hiddenInstanceIds || [])
+    _groupHiddenInstanceIds = next
+    const instances = store.getState().currentAssembly?.instances ?? []
+    const instById = new Map(instances.map(i => [i.id, i]))
+    for (const [id, entry] of _cache) {
+      const inst = instById.get(id)
+      const baseVisible = inst ? inst.visible !== false : true
+      entry.group.visible = baseVisible && !next.has(id)
+    }
+  }
+
   function pickPartJoint(ndc, camera) {
     if (!_partJointMeshes.size) return null
     _rc.setFromCamera(ndc, camera)
@@ -1819,13 +1840,14 @@ export function initAssemblyRenderer(scene, store, api) {
             existing.reprKey = reprKey
             _applyRepresentation(existing, inst.id, reprKey)
           }
-          existing.group.visible = inst.visible !== false
+          existing.group.visible = (inst.visible !== false) && !_groupHiddenInstanceIds.has(inst.id)
           continue
         }
       }
 
-      // Invisible instances that don't exist yet can be deferred
-      if (!inst.visible && !existing) continue
+      // Invisible instances that don't exist yet can be deferred — same
+      // applies when a PartGroup overlay has hidden the instance.
+      if ((!inst.visible || _groupHiddenInstanceIds.has(inst.id)) && !existing) continue
 
       needsGeometry.push(inst)
     }
@@ -1931,7 +1953,7 @@ export function initAssemblyRenderer(scene, store, api) {
       )
       instanceGroup.add(overhangNameGroup)
 
-      instanceGroup.visible = inst.visible !== false
+      instanceGroup.visible = (inst.visible !== false) && !_groupHiddenInstanceIds.has(inst.id)
 
       // Remove any orphan group for this instance left by a concurrent rebuild race.
       for (const grp of _allSceneGroups) {
@@ -2737,6 +2759,7 @@ export function initAssemblyRenderer(scene, store, api) {
     rebuild,
     rebuildLinkers,
     setActiveInstance,
+    applyGroupVisibilityOverlay,
     setLiveTransform,
     getLiveTransform,
     getInstanceDesign,

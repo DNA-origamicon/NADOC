@@ -84,7 +84,7 @@ import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
 import { initKinematicsTicker }      from './scene/kinematics_ticker.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
-import { makeRefVec, ringPlaneHit, angleInRing }     from './scene/assembly_revolute_math.js'
+import { makeRefVec, ringPlaneHit, angleInRing, computeRevoluteTransform } from './scene/assembly_revolute_math.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
 import { initPlateView }                           from './ui/plate_view.js'
 import { STAPLE_PALETTE as PLATE_STAPLE_PALETTE } from './scene/helix_renderer/palette.js'
@@ -7917,25 +7917,50 @@ Typical debugging workflow for "reverts to 3D" bug:
   const instanceGizmo = initInstanceGizmo(store, controls)
   const assemblyJointRenderer = initAssemblyJointRenderer(scene, camera, canvas, store, api, controls)
 
-  // ── Kinematics ticker: continuous-spin for revolute joints (Phase 1) ───────
-  // Integrates AssemblyJoint.angular_velocity_rpm per frame, drives the
-  // instance transform via setLiveTransform, and flushes silent backend
-  // patches at ~5 Hz for save/load consistency. Three-Layer Law: only
-  // mutates AssemblyJoint.current_value and the derived PartInstance.transform.
+  // ── Kinematics ticker: continuous-spin for revolute joints ────────────────
+  // Integrates AssemblyJoint.angular_velocity_rpm per frame and rotates each
+  // joint's child instance_b together with its entire rigid-body group via
+  // setLiveTransform (parts attached by rigid joints, stopping at `fixed`
+  // instances). Silent backend patches at ~5 Hz keep save/load consistent;
+  // deeper kinematic chains are handled by backend FK on each silent patch.
+  // Three-Layer Law: only mutates AssemblyJoint.current_value and the derived
+  // PartInstance.transform.
   const kinematicsTicker = initKinematicsTicker({
     store,
     api,
     getAssemblyRenderer:      () => assemblyRenderer,
     getAssemblyJointRenderer: () => assemblyJointRenderer,
   })
-  // Pause spin while the tab is hidden — RAF freezes anyway, but explicit
-  // pause flushes the latest shadow values back to the backend so a save
-  // mid-spin doesn't drift more than ~0.2s.
+  // Tab hidden → RAF freezes anyway, but explicitly flush the latest shadow
+  // values so a save right after tab-switch doesn't drift more than ~0.2 s.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) kinematicsTicker.flushNow()
   })
-  // Expose for keyboard shortcuts / future global pause UI; also handy in dev console.
   window.__NADOC_KINEMATICS__ = kinematicsTicker
+  // Diagnostic helper for gear mates. From the browser console:
+  //   nadocGearDebug()
+  // prints + returns the current gear-relation state, the ticker's gear
+  // graph, shadow values, and per-revolute joint summary. Use this to
+  // confirm a gear was created, see what ratio it has, and verify the
+  // ticker's shadow agrees with the backend's `current_value`.
+  window.nadocGearDebug = () => {
+    const a = store.getState().currentAssembly
+    const out = {
+      assembly_id: a?.id,
+      joints: (a?.joints ?? []).map(j => ({
+        id: j.id, name: j.name, type: j.joint_type,
+        current_value: j.current_value,
+        angular_velocity_rpm: j.angular_velocity_rpm,
+        instance_a_id: j.instance_a_id,
+        instance_b_id: j.instance_b_id,
+      })),
+      gear_relations: a?.gear_relations ?? [],
+      ticker: kinematicsTicker.debugState?.() ?? null,
+    }
+    // eslint-disable-next-line no-console
+    console.log('[nadocGearDebug]', out)
+    return out
+  }
 
   // Sync blunt-end connectors into the assembly joint renderer when:
   //   • assembly mode is active AND toolFilters.bluntEnds is ON → pass blunt ends
@@ -8084,6 +8109,38 @@ Typical debugging workflow for "reverts to 3D" bug:
         store.setState({ activeInstanceId: null })
       }
       await api.deleteInstance(inst.id)
+    },
+    // Group / Ungroup — surface only when there's a multi-select OR the
+    // right-clicked part already belongs to a group.
+    onGroup: async (instanceIds) => {
+      try {
+        const res = await api.createGroup({ instanceIds })
+        // Move the newly created group into single-select.
+        const newGid = res?.assembly?.groups?.[res.assembly.groups.length - 1]?.id
+        if (newGid) {
+          store.setState({
+            activeGroupId: newGid,
+            activeInstanceId: null,
+            multiSelectedInstanceIds: [],
+          })
+        }
+      } catch (err) {
+        showToast(`Group failed: ${err?.message || 'unknown error'}`, { severity: 'error' })
+      }
+    },
+    onUngroup: async (groupId) => {
+      if (groupId === store.getState().activeGroupId) {
+        store.setState({ activeGroupId: null })
+      }
+      await api.ungroup(groupId)
+    },
+    getMultiSelectedInstanceIds: () => store.getState().multiSelectedInstanceIds ?? [],
+    getOwningGroupId: (instanceId) => {
+      const groups = store.getState().currentAssembly?.groups ?? []
+      for (const g of groups) {
+        if ((g.instance_ids ?? []).includes(instanceId)) return g.id
+      }
+      return null
     },
   })
 
@@ -8902,7 +8959,6 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   const assemblyPanel = initAssemblyPanel(store, {
     api,
-    getKinematicsTicker: () => kinematicsTicker,
     onInstanceSelect: (id) => store.setState({ activeInstanceId: id }),
     beforePatchDesign: (instanceId) => assemblyRenderer.invalidateInstance(instanceId),
     // Duplicate spawns the new instance JUST OUTSIDE the source's world-
@@ -9712,6 +9768,30 @@ Typical debugging workflow for "reverts to 3D" bug:
   // `fitOnDone` frames the camera only for a fresh load (mode-enter / reload) —
   // ordinary edits must not yank it.  The camera fit lives in the .then() because
   // the assembly bounding box is empty until the build completes.
+  // Transitive collection of every instance id inside a PartGroup whose
+  // `visible` overlay is false (recursively walks subgroups). Used to drive
+  // the renderer's group-visibility overlay AFTER each rebuild so per-instance
+  // `visible` flags stay untouched (overlay-only semantics).
+  function _computeGroupHiddenInstanceIds(assembly) {
+    const out = new Set()
+    const groups = assembly?.groups ?? []
+    if (!groups.length) return out
+    const byId = new Map(groups.map(g => [g.id, g]))
+    for (const g of groups) {
+      if (g.visible === false) {
+        const stack = [g.id]
+        while (stack.length) {
+          const gid = stack.pop()
+          const cur = byId.get(gid)
+          if (!cur) continue
+          for (const iid of (cur.instance_ids ?? [])) out.add(iid)
+          for (const sgid of (cur.subgroup_ids ?? [])) stack.push(sgid)
+        }
+      }
+    }
+    return out
+  }
+
   function _runAssemblyRebuild(assembly, { fitOnDone = false, activeInstanceId = null } = {}) {
     const onProgress = _assemblyLoadOnProgress
     const settle     = _assemblyLoadSettle
@@ -9726,6 +9806,7 @@ Typical debugging workflow for "reverts to 3D" bug:
           if (depths.has(activeInstanceId)) _rebuildFixedLocks(assembly)
         }
         _syncAssemblyReprMenu(assembly)
+        assemblyRenderer.applyGroupVisibilityOverlay?.(_computeGroupHiddenInstanceIds(assembly))
         if (fitOnDone) _fitToView()
         settle?.resolve()
       })
@@ -9797,6 +9878,29 @@ Typical debugging workflow for "reverts to 3D" bug:
           _freeDrag        = null
           controls.enabled = true
         }
+        // Clean up any in-flight lasso
+        if (_assemblyLasso) {
+          _assemblyLasso.overlayEl?.remove()
+          canvas.removeEventListener('pointermove', _onAssemblyLassoMove)
+          canvas.removeEventListener('pointerup',   _onAssemblyLassoUp)
+          _assemblyLasso = null
+          controls.enabled = true
+        }
+        // Dispose the multi-select union box; setState below also fires the
+        // subscriber which will re-dispose it, but doing it inline keeps the
+        // scene clean even if the recursive setState path is short-circuited.
+        if (_assemblyMultiBox) {
+          scene.remove(_assemblyMultiBox)
+          _assemblyMultiBox.geometry?.dispose?.()
+          _assemblyMultiBox.material?.dispose?.()
+          _assemblyMultiBox = null
+        }
+        _setMotionChip(null)
+        // Mode exit should also drop any orphaned multi-selection so the
+        // panel/contextmenu don't surface stale group-able candidates.
+        if ((newState.multiSelectedInstanceIds ?? []).length || newState.activeGroupId) {
+          store.setState({ multiSelectedInstanceIds: [], activeGroupId: null, groupDiveStack: [] })
+        }
         // Gizmo exit: detach if the tool was active during mode switch
         if (_translateRotateActive) {
           _translateRotateActive = false
@@ -9852,6 +9956,10 @@ Typical debugging workflow for "reverts to 3D" bug:
             assemblyRenderer.setLiveTransform(inst.id, _matrixFromInstance(inst))
           }
           assemblyJointRenderer.rebuild(newState.currentAssembly)
+          // Re-apply the group visibility overlay — a transform-only patch
+          // could have changed a group's `visible` flag without touching any
+          // instance's `visible`. Cheap O(N) walk; no-op when no group is hidden.
+          assemblyRenderer.applyGroupVisibilityOverlay?.(_computeGroupHiddenInstanceIds(newState.currentAssembly))
           if (newState.activeInstanceId) {
             assemblyRenderer.setActiveInstance(newState.activeInstanceId)
             const depths = computeFixedDepths(newState.currentAssembly)
@@ -9868,6 +9976,55 @@ Typical debugging workflow for "reverts to 3D" bug:
           })
         }
       }
+      // Multi-select union box: refresh whenever the multi-select set, the
+      // active group, OR the assembly changed (move/rotate of a member shifts
+      // the union extent). Run inside RAF so the renderer's per-instance
+      // Three.js groups have their fresh matrixWorld + bounding boxes.
+      if (
+        assemblyChanged ||
+        newState.multiSelectedInstanceIds !== prevState.multiSelectedInstanceIds ||
+        newState.activeGroupId !== prevState.activeGroupId
+      ) {
+        requestAnimationFrame(_updateAssemblyMultiBox)
+      }
+
+      // PartGroup gizmo lifecycle. Attach on group-select; re-attach when
+      // the assembly mutates while a group is still selected (centroid +
+      // member start transforms need recapture). Detach when group is
+      // cleared AND no single instance is selected.
+      const groupChanged = newState.activeGroupId !== prevState.activeGroupId
+      if (groupChanged) {
+        if (newState.activeGroupId) {
+          _attachGroupGizmoForGroup(newState.activeGroupId)
+        } else if (!newState.activeInstanceId) {
+          instanceGizmo.detach()
+          _setMotionChip(null)
+        }
+      } else if (assemblyChanged && newState.activeGroupId) {
+        // Group still selected, members may have moved — re-anchor.
+        _attachGroupGizmoForGroup(newState.activeGroupId)
+      }
+
+      // Single-instance gizmo re-evaluation when the assembly changes around
+      // an already-selected part. Without this, editing a mate (joint type,
+      // axis, or even `fixed` on a partner) leaves the gizmo locked to the
+      // DOF the analyzer computed at original attach time. Guard against
+      // mid-drag (skip during a live drag — TransformControls state would be
+      // torn down) and against pending uncommitted moves (re-attach would
+      // snap the gizmo back to the last committed pose, hiding the user's
+      // in-flight edit). The group path above already does the same.
+      if (
+        assemblyChanged &&
+        !groupChanged &&
+        newState.activeInstanceId &&
+        !newState.activeGroupId &&
+        !instanceGizmo.isDragging() &&
+        !_hasAssemblyPending() &&
+        _constraintRelevantChanged(prevState.currentAssembly, newState.currentAssembly, newState.activeInstanceId)
+      ) {
+        _attachGroupGizmo(newState.activeInstanceId)
+      }
+
       if (activeChanged) {
         // Clear cluster glow and sidebar selection whenever the active instance changes
         _selectedAssemblyCluster = null
@@ -9882,8 +10039,12 @@ Typical debugging workflow for "reverts to 3D" bug:
         const newInst = newState.currentAssembly?.instances?.find(i => i.id === newState.activeInstanceId)
         if (newState.activeInstanceId && !newInst?.fixed) {
           _attachGroupGizmo(newState.activeInstanceId)
-        } else {
+        } else if (!newState.activeGroupId) {
+          // Guard: don't detach the group gizmo just because activeInstanceId
+          // went null. The groupChanged branch above owns gizmo lifecycle
+          // while a group is selected.
           instanceGizmo.detach()
+          _setMotionChip(null)
         }
         // Show locks for all anchored parts when an anchored part is selected; hide otherwise
         const depths = computeFixedDepths(newState.currentAssembly)
@@ -10028,6 +10189,163 @@ Typical debugging workflow for "reverts to 3D" bug:
       assemblyJointRenderer.setLiveJointTransform(id, liveMat, asm)
     }
     _applyFKLive(asm, delta, [...ctx.groupStartTransforms.keys()])
+    return delta
+  }
+
+  function _signedAngleFromWorldDelta(delta, axis) {
+    if (!delta || !axis) return 0
+    const axisDir = axis.clone().normalize()
+    const ref0 = makeRefVec(axisDir)
+    const ref1 = ref0.clone().transformDirection(delta).normalize()
+    const cross = new THREE.Vector3().crossVectors(ref0, ref1)
+    return Math.atan2(cross.dot(axisDir), ref0.dot(ref1))
+  }
+
+  function _movingSideSignForRevolute(joint, movingIds) {
+    if (!joint || !movingIds) return 1
+    const aMoving = joint.instance_a_id && movingIds.has(joint.instance_a_id)
+    const bMoving = joint.instance_b_id && movingIds.has(joint.instance_b_id)
+    if (bMoving && !aMoving) return 1
+    if (aMoving && !bMoving) return -1
+    return 1
+  }
+
+  function _clampJointValue(joint, value) {
+    let next = value
+    if (joint?.min_limit != null && next < joint.min_limit) next = joint.min_limit
+    if (joint?.max_limit != null && next > joint.max_limit) next = joint.max_limit
+    return next
+  }
+
+  function _gearEndpointSide(rel, which, joint) {
+    if (!joint) return 'b'
+    const side = rel?.[`endpoint_${which}_side`]
+    const instanceId = rel?.[`endpoint_${which}_instance_id`]
+    if (side === 'a' || side === 'b') return side
+    if (instanceId && instanceId === joint.instance_a_id) return 'a'
+    return 'b'
+  }
+
+  function _rotationDeltaMatrix(axisOrigin, axisDir, angleRad) {
+    const axis = new THREE.Vector3(...(axisDir ?? [0, 0, 1])).normalize()
+    const origin = new THREE.Vector3(...(axisOrigin ?? [0, 0, 0]))
+    return new THREE.Matrix4()
+      .makeTranslation(origin.x, origin.y, origin.z)
+      .multiply(new THREE.Matrix4().makeRotationAxis(axis, angleRad))
+      .multiply(new THREE.Matrix4().makeTranslation(-origin.x, -origin.y, -origin.z))
+  }
+
+  function _applyGearLiveJointValue(assembly, joint, value, movingIds, endpointSide = 'b') {
+    if (!assembly || !joint) return
+    const seedId = endpointSide === 'a' ? joint.instance_a_id : joint.instance_b_id
+    if (!seedId) return
+    const groupIds = getRigidBodyGroup(assembly, seedId)
+    for (const memberId of groupIds) {
+      if (movingIds?.has(memberId)) continue
+      const inst = assembly.instances?.find(i => i.id === memberId)
+      const values = inst?.transform?.values
+      if (!Array.isArray(values) || values.length !== 16) continue
+      let mat
+      if (endpointSide === 'a') {
+        const delta = _rotationDeltaMatrix(
+          joint.axis_origin ?? [0, 0, 0],
+          joint.axis_direction ?? [0, 0, 1],
+          (joint.current_value ?? 0) - value,
+        )
+        mat = delta.multiply(new THREE.Matrix4().fromArray(values).transpose())
+      } else {
+        mat = computeRevoluteTransform(
+          values,
+          joint.axis_origin ?? [0, 0, 0],
+          joint.axis_direction ?? [0, 0, 1],
+          value - (joint.current_value ?? 0),
+        )
+      }
+      assemblyRenderer.setLiveTransform(memberId, mat)
+      assemblyJointRenderer.setLiveJointTransform(memberId, mat, assembly)
+    }
+  }
+
+  function _applyGearLiveForRevoluteDrag(assembly, constraint, movingIds, delta) {
+    if (!assembly || constraint?.dof !== 'revolute' || !delta) return
+    const joints = assembly.joints ?? []
+    const seedJoint = joints.find(j => j.id === constraint.jointId)
+    if (!seedJoint) return
+    const rels = assembly.gear_relations ?? []
+    if (!rels.length) return
+
+    const seedDelta = _signedAngleFromWorldDelta(delta, constraint.axis)
+      * _movingSideSignForRevolute(seedJoint, movingIds)
+    const values = new Map(joints.map(j => [j.id, j.current_value ?? 0]))
+    values.set(seedJoint.id, _clampJointValue(seedJoint, (seedJoint.current_value ?? 0) + seedDelta))
+
+    const queue = [seedJoint.id]
+    const changed = new Set([seedJoint.id])
+    const byId = new Map(joints.map(j => [j.id, j]))
+    const endpointSideByJoint = new Map()
+    let guard = 0
+    const maxSteps = Math.max(1, rels.length * 2 + 1)
+    while (queue.length && guard++ < maxSteps) {
+      const sourceId = queue.shift()
+      const sourceValue = values.get(sourceId)
+      if (sourceValue == null) continue
+      for (const rel of rels) {
+        const sign = rel.invert ? -1 : 1
+        let targetId = null
+        let targetValue = null
+        if (sourceId === rel.joint_a_id) {
+          targetId = rel.joint_b_id
+          const anchorSrc = rel.joint_a_anchor ?? 0
+          const anchorTgt = rel.joint_b_anchor ?? 0
+          const factor = rel.ratio
+          const rawTarget = anchorTgt + sign * (sourceValue - anchorSrc) * factor
+          targetValue = rawTarget
+          endpointSideByJoint.set(targetId, _gearEndpointSide(rel, 'b', byId.get(targetId)))
+          const targetJoint = byId.get(targetId)
+          const clampedTarget = _clampJointValue(targetJoint, rawTarget)
+          if (Math.abs(clampedTarget - rawTarget) > 1e-9 && Math.abs(factor) > 1e-12) {
+            values.set(sourceId, _clampJointValue(byId.get(sourceId), anchorSrc + sign * (clampedTarget - anchorTgt) / factor))
+            changed.add(sourceId)
+          }
+        } else if (sourceId === rel.joint_b_id) {
+          if (!Number.isFinite(rel.ratio) || Math.abs(rel.ratio) < 1e-9) continue
+          targetId = rel.joint_a_id
+          const anchorSrc = rel.joint_b_anchor ?? 0
+          const anchorTgt = rel.joint_a_anchor ?? 0
+          const factor = 1 / rel.ratio
+          const rawTarget = anchorTgt + sign * (sourceValue - anchorSrc) * factor
+          targetValue = rawTarget
+          endpointSideByJoint.set(targetId, _gearEndpointSide(rel, 'a', byId.get(targetId)))
+          const targetJoint = byId.get(targetId)
+          const clampedTarget = _clampJointValue(targetJoint, rawTarget)
+          if (Math.abs(clampedTarget - rawTarget) > 1e-9 && Math.abs(factor) > 1e-12) {
+            values.set(sourceId, _clampJointValue(byId.get(sourceId), anchorSrc + sign * (clampedTarget - anchorTgt) / factor))
+            changed.add(sourceId)
+          }
+        } else {
+          continue
+        }
+        const targetJoint = byId.get(targetId)
+        if (!targetJoint || targetJoint.joint_type !== 'revolute') continue
+        targetValue = _clampJointValue(targetJoint, targetValue)
+        if (Math.abs((values.get(targetId) ?? 0) - targetValue) < 1e-9) continue
+        values.set(targetId, targetValue)
+        changed.add(targetId)
+        queue.push(targetId)
+      }
+    }
+
+    for (const jointId of changed) {
+      if (jointId === seedJoint.id) continue
+      const joint = byId.get(jointId)
+      _applyGearLiveJointValue(
+        assembly,
+        joint,
+        values.get(jointId),
+        movingIds,
+        endpointSideByJoint.get(jointId) ?? 'b',
+      )
+    }
   }
 
   function _queueAssemblyPrimaryCommit(ctx, primaryMat4) {
@@ -10055,19 +10373,43 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   function _attachGroupGizmo(instanceId, ctx = null) {
     ctx ??= _createAssemblyTransformContext(instanceId)
-    if (!ctx) return
+    if (!ctx) {
+      _setMotionChip(null)
+      return
+    }
 
-    // Anchor the gizmo at the world-space centroid of the part's visible geometry,
-    // not at the instance's part-local origin (which can sit well outside the
-    // visible structure for polymerize-seeded parts).
+    // Pre-flight constraint analysis. If the part can't move (anchored or
+    // over-constrained), don't attach a gizmo at all — surface a chip with
+    // the reason. For a single revolute/prismatic/spherical mate, anchor the
+    // gizmo at the joint origin so the user rotates/translates about the
+    // joint, not the part centroid.
+    const constraint = _analyzeMotionConstraints({ kind: 'instance', id: instanceId })
+    const summary = _summarizeConstraint(constraint)
+    if (summary) _setMotionChip(summary.text, summary.severity)
+    else         _setMotionChip(null)
+    if (constraint.dof === 'anchored' || constraint.dof === 'over-constrained') {
+      instanceGizmo.detach()
+      return
+    }
+
     const centerEntry = assemblyRenderer.getInstanceCenters?.()?.find(c => c.id === instanceId)
-    const centroidWorld = centerEntry?.center ?? null
+    const fallbackCentroid = centerEntry?.center ?? null
+    const centroidWorld =
+      (constraint.dof === 'revolute' || constraint.dof === 'prismatic' || constraint.dof === 'spherical')
+        ? constraint.origin
+        : fallbackCentroid
 
     instanceGizmo.attach(
       instanceId, scene, camera, canvas,
       // onLiveTransform: apply delta to ALL group members + FK descendants each frame
       (primaryMat4) => {
-        _applyAssemblyPrimaryLive(ctx, primaryMat4)
+        const delta = _applyAssemblyPrimaryLive(ctx, primaryMat4)
+        _applyGearLiveForRevoluteDrag(
+          store.getState().currentAssembly,
+          constraint,
+          new Set(ctx.groupStartTransforms.keys()),
+          delta,
+        )
         if (_mrAssemblyCtx?.instanceId === instanceId) _mrSetTransformValuesFromMatrix(primaryMat4)
       },
       // onCommit: keep the transform local until the selection is cleared.
@@ -10077,7 +10419,149 @@ Typical debugging workflow for "reverts to 3D" bug:
       ctx.primaryStart,
       centroidWorld,
     )
+
+    if (constraint.dof === 'revolute') {
+      instanceGizmo.applyConstraint({
+        mode: 'rotate', axis: constraint.axis,
+        showX: false, showY: false, showZ: true,
+      })
+    } else if (constraint.dof === 'prismatic') {
+      instanceGizmo.applyConstraint({
+        mode: 'translate', axis: constraint.axis,
+        showX: false, showY: false, showZ: true,
+      })
+    } else if (constraint.dof === 'spherical') {
+      instanceGizmo.applyConstraint({
+        mode: 'rotate', spherical: true,
+        showX: true, showY: true, showZ: true,
+      })
+    }
   }
+
+  // ── PartGroup gizmo — translate/rotate the whole group as a rigid body.
+  // Anchors the existing TransformControls to the FIRST group member but
+  // overrides live + commit so the delta is applied to EVERY member; commit
+  // POSTs the delta matrix to /assembly/groups/{id}/transform which extends
+  // the move via the rigid-mate transitive closure on the server.
+  function _createGroupTransformContext(groupId) {
+    const assembly = store.getState().currentAssembly
+    if (!assembly) return null
+    const memberIds = _collectGroupMemberInstanceIds(groupId, assembly)
+    if (!memberIds.length) return null
+    const primaryId = memberIds[0]
+    const memberStartTransforms = new Map()
+    for (const id of memberIds) {
+      const inst = assembly.instances.find(i => i.id === id)
+      if (!inst) continue
+      memberStartTransforms.set(id, _effectiveInstanceMatrix(inst))
+    }
+    const primaryStart = memberStartTransforms.get(primaryId)
+    if (!primaryStart) return null
+    return { groupId, primaryId, memberIds, memberStartTransforms, primaryStart }
+  }
+
+  function _attachGroupGizmoForGroup(groupId) {
+    const ctx = _createGroupTransformContext(groupId)
+    if (!ctx) { instanceGizmo.detach(); _setMotionChip(null); return }
+
+    // Pre-flight constraint analysis for the whole group as a rigid body.
+    // Same dispatch as the single-instance path; an anchored group means at
+    // least one member is rigidly fixed (cascades to the whole group).
+    const constraint = _analyzeMotionConstraints({ kind: 'group', id: groupId })
+    const summary = _summarizeConstraint(constraint)
+    if (summary) _setMotionChip(summary.text, summary.severity)
+    else         _setMotionChip(null)
+    if (constraint.dof === 'anchored' || constraint.dof === 'over-constrained') {
+      instanceGizmo.detach()
+      return
+    }
+
+    // Anchor at the union AABB centroid for free moves; at the joint origin
+    // when a single-DOF mate constrains the motion (so the user rotates /
+    // translates about the joint, not the visual middle of the group).
+    const centers = assemblyRenderer.getInstanceCenters?.() ?? []
+    const wanted = new Set(ctx.memberIds)
+    const union = new THREE.Box3(); union.makeEmpty()
+    for (const c of centers) {
+      if (!wanted.has(c.id) || !c.size) continue
+      const half = new THREE.Vector3(c.size.x * 0.5, c.size.y * 0.5, c.size.z * 0.5)
+      union.expandByPoint(c.center.clone().sub(half))
+      union.expandByPoint(c.center.clone().add(half))
+    }
+    const fallbackCentroid = union.isEmpty() ? null : union.getCenter(new THREE.Vector3())
+    const centroidWorld =
+      (constraint.dof === 'revolute' || constraint.dof === 'prismatic' || constraint.dof === 'spherical')
+        ? constraint.origin
+        : fallbackCentroid
+
+    instanceGizmo.attach(
+      ctx.primaryId, scene, camera, canvas,
+      // onLiveTransform: delta = newPrimary @ inv(primaryStart); push every
+      // member's live world transform so the user sees the whole group move
+      // as a rigid body.
+      (newPrimaryMat) => {
+        const delta = newPrimaryMat.clone().multiply(ctx.primaryStart.clone().invert())
+        const asm   = store.getState().currentAssembly
+        for (const [id, startMat] of ctx.memberStartTransforms) {
+          const liveMat = delta.clone().multiply(startMat)
+          assemblyRenderer.setLiveTransform(id, liveMat)
+          assemblyJointRenderer.setLiveJointTransform?.(id, liveMat, asm)
+        }
+        _applyGearLiveForRevoluteDrag(
+          asm,
+          constraint,
+          new Set(ctx.memberIds),
+          delta,
+        )
+        // Live re-fit of the purple union BoxHelper so the user sees it
+        // follow the drag. RAF avoids re-allocating every move event.
+        if (_groupGizmoLiveBoxPending) return
+        _groupGizmoLiveBoxPending = true
+        requestAnimationFrame(() => {
+          _groupGizmoLiveBoxPending = false
+          _updateAssemblyMultiBox()
+        })
+      },
+      // onCommit: POST the delta to the server. The backend walks the rigid
+      // transitive closure (joints + duplex bindings) so externally-mated
+      // partners follow along, then returns the new assembly state. The
+      // store subscriber re-attaches the gizmo at the new centroid.
+      async (newPrimaryMat) => {
+        const delta = newPrimaryMat.clone().multiply(ctx.primaryStart.clone().invert())
+        // NADOC matrices are row-major; Three.js Matrix4.toArray emits the
+        // current column-major elements buffer. Transpose before sending so
+        // the backend reads it back as row-major (matches `transform_group`
+        // route's `np.asarray(...).reshape(4,4)` expectation).
+        const rowMajor = delta.clone().transpose().toArray()
+        try {
+          await api.transformGroup(groupId, { matrix: rowMajor })
+        } catch (err) {
+          console.error('[assembly] transformGroup failed:', err)
+        }
+      },
+      ctx.primaryStart,
+      centroidWorld,
+    )
+
+    if (constraint.dof === 'revolute') {
+      instanceGizmo.applyConstraint({
+        mode: 'rotate', axis: constraint.axis,
+        showX: false, showY: false, showZ: true,
+      })
+    } else if (constraint.dof === 'prismatic') {
+      instanceGizmo.applyConstraint({
+        mode: 'translate', axis: constraint.axis,
+        showX: false, showY: false, showZ: true,
+      })
+    } else if (constraint.dof === 'spherical') {
+      instanceGizmo.applyConstraint({
+        mode: 'rotate', spherical: true,
+        showX: true, showY: true, showZ: true,
+      })
+    }
+  }
+
+  let _groupGizmoLiveBoxPending = false
 
   // ── Forward kinematics live visual propagation ───────────────────────────────
   /**
@@ -10226,6 +10710,317 @@ Typical debugging workflow for "reverts to 3D" bug:
   let _partJointDrag     = null
   let _assemblySelectedPartJoint = null
   let _selectedAssemblyCluster   = null  // { instanceId, clusterId } | null
+
+  // ── Assembly-mode lasso (Ctrl-drag → multi-select PartInstances) ────────────
+  // Mirrors design-mode lasso (selection_manager.js: _createLassoOverlay /
+  // _updateLassoOverlay / _finalizeLasso) so the gesture is identical: hold
+  // Ctrl (or Meta on macOS) and drag a rectangle; instances whose projected
+  // world-space center falls inside the rect on pointerup populate
+  // multiSelectedInstanceIds. Ctrl-click without drag toggles the picked
+  // instance in/out of the set (see _onAssemblyClick).
+  let _assemblyLasso = null     // { startX, startY, overlayEl, additive } | null
+
+  function _createAssemblyLassoOverlay() {
+    const div = document.createElement('div')
+    div.style.cssText = (
+      'position:fixed;border:1.5px dashed #8b5cf6;background:rgba(139,92,246,0.08);' +
+      'pointer-events:none;z-index:1000;box-sizing:border-box'
+    )
+    document.body.appendChild(div)
+    return div
+  }
+
+  function _updateAssemblyLassoOverlay(x1, y1, x2, y2) {
+    if (!_assemblyLasso?.overlayEl) return
+    _assemblyLasso.overlayEl.style.left   = Math.min(x1, x2) + 'px'
+    _assemblyLasso.overlayEl.style.top    = Math.min(y1, y2) + 'px'
+    _assemblyLasso.overlayEl.style.width  = Math.abs(x2 - x1) + 'px'
+    _assemblyLasso.overlayEl.style.height = Math.abs(y2 - y1) + 'px'
+  }
+
+  function _onAssemblyLassoMove(e) {
+    if (!_assemblyLasso) return
+    _updateAssemblyLassoOverlay(_assemblyLasso.startX, _assemblyLasso.startY, e.clientX, e.clientY)
+  }
+
+  function _finalizeAssemblyLasso(endE) {
+    const state = _assemblyLasso
+    _assemblyLasso = null
+    canvas.removeEventListener('pointermove', _onAssemblyLassoMove)
+    canvas.removeEventListener('pointerup',   _onAssemblyLassoUp)
+    controls.enabled = true
+    if (!state) return
+    state.overlayEl?.remove()
+    // Canvas-relative rect for hit-testing.
+    const rect = canvas.getBoundingClientRect()
+    const cx1 = Math.min(state.startX, endE.clientX) - rect.left
+    const cx2 = Math.max(state.startX, endE.clientX) - rect.left
+    const cy1 = Math.min(state.startY, endE.clientY) - rect.top
+    const cy2 = Math.max(state.startY, endE.clientY) - rect.top
+    // Tiny rects are accidental clicks; let _onAssemblyClick handle them.
+    if ((cx2 - cx1) < 4 && (cy2 - cy1) < 4) return
+
+    // Strict containment: every one of the instance's 8 world-AABB corners
+    // must project inside the rect AND lie within the camera's z range. If
+    // ANY corner is outside, the part is partially visible (or off-screen)
+    // and skipped. Stops a thin tilted rod from being selected just because
+    // its centroid happened to fall inside a small lasso.
+    const centers = assemblyRenderer.getInstanceCenters?.() ?? []
+    const hits = []
+    const v = new THREE.Vector3()
+    for (const c of centers) {
+      if (!c.size) continue
+      const hx = c.size.x * 0.5, hy = c.size.y * 0.5, hz = c.size.z * 0.5
+      const cx = c.center.x, cy = c.center.y, cz = c.center.z
+      let allInside = true
+      for (let i = 0; i < 8 && allInside; i++) {
+        v.set(
+          cx + (i & 1 ? hx : -hx),
+          cy + (i & 2 ? hy : -hy),
+          cz + (i & 4 ? hz : -hz),
+        ).project(camera)
+        if (v.z < -1 || v.z > 1) { allInside = false; break }
+        const sx = ((v.x + 1) / 2) * rect.width
+        const sy = ((-v.y + 1) / 2) * rect.height
+        if (sx < cx1 || sx > cx2 || sy < cy1 || sy > cy2) allInside = false
+      }
+      if (allInside) hits.push(c.id)
+    }
+    const next = state.additive
+      ? Array.from(new Set([...(store.getState().multiSelectedInstanceIds ?? []), ...hits]))
+      : hits
+    store.setState({
+      multiSelectedInstanceIds: next,
+      activeInstanceId: null,
+      activeGroupId:    null,
+    })
+  }
+
+  function _onAssemblyLassoUp(e) { _finalizeAssemblyLasso(e) }
+
+  // ── PartGroup helpers (id walks; mirror backend/core/assembly_groups.py) ────
+  function _findOwningGroupId(instanceId, assembly = null) {
+    const groups = (assembly ?? store.getState().currentAssembly)?.groups ?? []
+    for (const g of groups) {
+      if ((g.instance_ids ?? []).includes(instanceId)) return g.id
+    }
+    return null
+  }
+
+  // ── Motion-constraint analyzer ─────────────────────────────────────────────
+  // Inspect the joint graph from a moving body (instance or group) to the
+  // "anchored network" (instances with `fixed=true` + everything rigidly
+  // transitive). Returns the available DOF so the gizmo can expose only the
+  // joint's allowed motion instead of a misleading 6-DOF widget.
+  //
+  // Classification:
+  //   { dof: 'free' }                                              — no anchored mates
+  //   { dof: 'anchored', anchorId, reason }                         — 0 DOF
+  //   { dof: 'revolute',  origin, axis, jointId, name, limits }     — 1 DOF rotation
+  //   { dof: 'prismatic', origin, axis, jointId, name, limits }     — 1 DOF translation
+  //   { dof: 'spherical', origin, jointId, name }                   — 3 DOF rotation
+  //   { dof: 'over-constrained', count, reason }                    — conservatively 0
+  function _analyzeMotionConstraints(target) {
+    const assembly = store.getState().currentAssembly
+    if (!assembly || !target?.id) return { dof: 'free' }
+    const movingIds = new Set(
+      target.kind === 'group'
+        ? _collectGroupMemberInstanceIds(target.id, assembly)
+        : [target.id],
+    )
+    if (movingIds.size === 0) return { dof: 'free' }
+
+    // Anchored = fixed=true seeds + rigid-joint transitive closure. Spherical
+    // doesn't propagate position-fixedness; it pins the joint origin but
+    // lets the other body rotate around it freely.
+    const anchored = new Set()
+    for (const inst of (assembly.instances ?? [])) {
+      if (inst.fixed) anchored.add(inst.id)
+    }
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const j of (assembly.joints ?? [])) {
+        if (j.joint_type !== 'rigid') continue
+        const a = j.instance_a_id, b = j.instance_b_id
+        if (!a || !b) continue
+        if (anchored.has(a) && !anchored.has(b)) { anchored.add(b); changed = true }
+        if (anchored.has(b) && !anchored.has(a)) { anchored.add(a); changed = true }
+      }
+    }
+
+    // If any member of the moving body is itself anchored → can't move.
+    for (const id of movingIds) {
+      if (anchored.has(id)) return { dof: 'anchored', anchorId: id, reason: 'Part is rigidly anchored.' }
+    }
+
+    // External mates: joints whose ONE endpoint is in movingIds and the OTHER
+    // is in anchored (or world via instance_a_id === null).
+    const externals = []
+    for (const j of (assembly.joints ?? [])) {
+      const a = j.instance_a_id, b = j.instance_b_id
+      const aIn = !!(a && movingIds.has(a))
+      const bIn = !!(b && movingIds.has(b))
+      if (aIn === bIn) continue
+      const otherId = aIn ? b : a
+      const externalAnchored = (otherId == null) || anchored.has(otherId)
+      if (!externalAnchored) continue
+      externals.push(j)
+    }
+    if (externals.length === 0) return { dof: 'free' }
+    if (externals.length > 1) {
+      return {
+        dof: 'over-constrained',
+        count: externals.length,
+        reason: `${externals.length} mates to anchored parts — use joint sliders instead.`,
+      }
+    }
+
+    const j = externals[0]
+    const origin = new THREE.Vector3(...(j.axis_origin ?? [0, 0, 0]))
+    const axis   = new THREE.Vector3(...(j.axis_direction ?? [0, 0, 1])).normalize()
+    const limits = {
+      min: j.min_limit ?? null,
+      max: j.max_limit ?? null,
+      current: j.current_value ?? 0,
+    }
+    if (j.joint_type === 'rigid') {
+      return { dof: 'anchored', anchorId: j.instance_a_id ?? j.instance_b_id,
+               reason: 'Rigidly mated to an anchored part.' }
+    }
+    if (j.joint_type === 'revolute')  return { dof: 'revolute',  origin, axis, jointId: j.id, name: j.name, limits }
+    if (j.joint_type === 'prismatic') return { dof: 'prismatic', origin, axis, jointId: j.id, name: j.name, limits }
+    if (j.joint_type === 'spherical') return { dof: 'spherical', origin, jointId: j.id, name: j.name }
+    return { dof: 'free' }
+  }
+
+  // ── Motion-constraint status chip ──────────────────────────────────────────
+  // Lightweight overlay so the user sees WHY their gizmo looks the way it does
+  // (or why no gizmo appeared). One persistent element above the canvas; the
+  // text + colour swap based on the analyzer's verdict.
+  const _motionChip = document.createElement('div')
+  _motionChip.id = 'assembly-motion-chip'
+  _motionChip.style.cssText = [
+    'position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:30',
+    'padding:4px 10px;border-radius:12px;border:1px solid #30363d',
+    'font-size:11px;font-weight:500;pointer-events:none;user-select:none',
+    'background:#161b22;color:#8b949e;display:none',
+    'box-shadow:0 2px 6px rgba(0,0,0,0.4)',
+  ].join(';')
+  document.body.appendChild(_motionChip)
+
+  function _setMotionChip(text, severity = 'info') {
+    if (!text) { _motionChip.style.display = 'none'; return }
+    _motionChip.textContent = text
+    _motionChip.style.display = ''
+    const colors = {
+      info:    { fg: '#8b949e', bd: '#30363d', bg: '#161b22' },
+      ok:      { fg: '#3fb950', bd: '#238636', bg: '#0d2316' },
+      warn:    { fg: '#d29922', bd: '#9e6a03', bg: '#1c1810' },
+      locked:  { fg: '#f85149', bd: '#a40e26', bg: '#1c0d0d' },
+    }
+    const c = colors[severity] || colors.info
+    _motionChip.style.color = c.fg
+    _motionChip.style.borderColor = c.bd
+    _motionChip.style.background = c.bg
+  }
+
+  function _summarizeConstraint(c) {
+    if (!c || c.dof === 'free') return null
+    if (c.dof === 'anchored') return { text: `Anchored — ${c.reason ?? ''}`.trim(), severity: 'locked' }
+    if (c.dof === 'over-constrained') return { text: c.reason, severity: 'warn' }
+    if (c.dof === 'revolute')  return { text: `1-DOF rotation about joint${c.name ? ` "${c.name}"` : ''}`,    severity: 'ok' }
+    if (c.dof === 'prismatic') return { text: `1-DOF translation along joint${c.name ? ` "${c.name}"` : ''}`, severity: 'ok' }
+    if (c.dof === 'spherical') return { text: `3-DOF rotation at joint${c.name ? ` "${c.name}"` : ''}`,       severity: 'ok' }
+    return null
+  }
+
+  // Did any constraint input change between two assembly snapshots?
+  //   - any joint added / removed
+  //   - any joint's type / axis / endpoints / limits changed
+  //   - any instance's `fixed` flag changed
+  // Cheap heuristic — JSON-stringify the relevant fields per joint and the
+  // sorted (id, fixed) list of instances. Avoids re-attaching the gizmo on
+  // pure transform-only updates (a part moved, but its DOF didn't change).
+  function _constraintRelevantChanged(prev, next, _activeInstanceId) {
+    if (!prev || !next) return prev !== next
+    const sigJoints = (asm) => JSON.stringify(
+      (asm.joints ?? []).map(j => [
+        j.id, j.joint_type, j.instance_a_id, j.instance_b_id,
+        j.axis_origin, j.axis_direction,
+        j.min_limit ?? null, j.max_limit ?? null,
+      ]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+    )
+    if (sigJoints(prev) !== sigJoints(next)) return true
+    const sigFixed = (asm) => JSON.stringify(
+      (asm.instances ?? []).map(i => [i.id, !!i.fixed])
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+    )
+    if (sigFixed(prev) !== sigFixed(next)) return true
+    return false
+  }
+
+  function _collectGroupMemberInstanceIds(groupId, assembly = null) {
+    const groups = (assembly ?? store.getState().currentAssembly)?.groups ?? []
+    const byId = new Map(groups.map(g => [g.id, g]))
+    const out = []
+    const stack = [groupId]
+    while (stack.length) {
+      const gid = stack.pop()
+      const cur = byId.get(gid)
+      if (!cur) continue
+      for (const iid of (cur.instance_ids ?? [])) out.push(iid)
+      for (const sgid of (cur.subgroup_ids ?? [])) stack.push(sgid)
+    }
+    return out
+  }
+
+  // ── Multi-select visual feedback: one purple union BoxHelper around every
+  //    instance in multiSelectedInstanceIds. Hidden when < 2 ids selected
+  //    (the single-select case keeps the existing white per-instance helper).
+  //    Recomputed when the multi-select set changes OR the assembly rebuilds
+  //    (a move/rotate of any member must re-fit the union box).
+  let _assemblyMultiBox = null
+  function _updateAssemblyMultiBox() {
+    const s = store.getState()
+    const wanted = new Set(s.multiSelectedInstanceIds ?? [])
+    // An activeGroupId means "every transitive member is conceptually selected"
+    // for the purposes of the union BoxHelper — the user needs visual feedback
+    // for the group as a whole, not just for ad-hoc multi-selects.
+    if (s.activeGroupId) {
+      for (const id of _collectGroupMemberInstanceIds(s.activeGroupId, s.currentAssembly)) {
+        wanted.add(id)
+      }
+    }
+    if (_assemblyMultiBox) {
+      scene.remove(_assemblyMultiBox)
+      _assemblyMultiBox.geometry?.dispose?.()
+      _assemblyMultiBox.material?.dispose?.()
+      _assemblyMultiBox = null
+    }
+    // Skip for single-part selections — the per-instance white BoxHelper from
+    // the renderer already covers that case. Always render when a group is
+    // active even if it has one member (the gizmo + box are the only signal).
+    if (wanted.size === 0) return
+    if (wanted.size < 2 && !s.activeGroupId) return
+    const centers = assemblyRenderer.getInstanceCenters?.() ?? []
+    const union = new THREE.Box3(); union.makeEmpty()
+    for (const c of centers) {
+      if (!wanted.has(c.id) || !c.size) continue
+      const half = new THREE.Vector3(c.size.x * 0.5, c.size.y * 0.5, c.size.z * 0.5)
+      const min = c.center.clone().sub(half)
+      const max = c.center.clone().add(half)
+      union.expandByPoint(min)
+      union.expandByPoint(max)
+    }
+    if (union.isEmpty()) return
+    _assemblyMultiBox = new THREE.Box3Helper(union, 0x8b5cf6)
+    _assemblyMultiBox.material.depthTest = false
+    _assemblyMultiBox.material.transparent = true
+    _assemblyMultiBox.material.opacity = 0.95
+    _assemblyMultiBox.renderOrder = 1001
+    scene.add(_assemblyMultiBox)
+  }
 
   function _updateFreeDragPosition(e) {
     if (!_freeDrag) return
@@ -10515,6 +11310,24 @@ Typical debugging workflow for "reverts to 3D" bug:
 
       }
 
+      // Priority 2c: Ctrl/Meta + left-down on empty space or any instance →
+      // start a lasso. Disables OrbitControls for the drag duration so the
+      // user's drag doesn't fight the camera. Picking is suppressed; the
+      // pointerup finalizes the multi-select.
+      if (e.ctrlKey || e.metaKey) {
+        const additive = e.shiftKey
+        _assemblyLasso = {
+          startX:   e.clientX,
+          startY:   e.clientY,
+          overlayEl: _createAssemblyLassoOverlay(),
+          additive,
+        }
+        controls.enabled = false
+        canvas.addEventListener('pointermove', _onAssemblyLassoMove)
+        canvas.addEventListener('pointerup',   _onAssemblyLassoUp)
+        return
+      }
+
       // Priority 3: record for click-to-select
       _assemblyPtrDownAt = { x: e.clientX, y: e.clientY }
     } else if (e.button === 2) {
@@ -10598,6 +11411,71 @@ Typical debugging workflow for "reverts to 3D" bug:
     const dy = e.clientY - _assemblyPtrDownAt.y
     _assemblyPtrDownAt = null
     if (dx * dx + dy * dy > 25) return   // was a drag, not a click
+
+    // Ctrl/Meta-click → toggle the picked instance in/out of the multi-select
+    // set instead of replacing the single-select. Mirrors the Ctrl-click
+    // behavior on instance rows in the parts panel so users can build a
+    // multi-select either by clicking in 3D or by clicking in the list.
+    if (e.ctrlKey || e.metaKey) {
+      const hit = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
+      if (!hit) return
+      const cur = store.getState().multiSelectedInstanceIds ?? []
+      const next = cur.includes(hit.id)
+        ? cur.filter(id => id !== hit.id)
+        : [...cur, hit.id]
+      store.setState({
+        multiSelectedInstanceIds: next,
+        activeInstanceId: null,
+        activeGroupId:    null,
+      })
+      return
+    }
+
+    // ── PartGroup click-through (PowerPoint-style) ─────────────────────────
+    // Behavior:
+    //  - Click a part that belongs to a group whose group is NOT currently
+    //    selected → select the GROUP (not the individual part). Visual: purple
+    //    union BoxHelper + group gizmo at centroid.
+    //  - Click a part inside the currently-selected group → "enter" the group:
+    //    push the gid onto groupDiveStack, clear activeGroupId, and fall
+    //    through to the regular single-instance selection below.
+    //  - Click an ungrouped part → falls through.
+    // The dive stack lets Escape (future) pop one level back to the group.
+    {
+      const sNow = store.getState()
+      const earlyHit = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
+      const owningGid = earlyHit ? _findOwningGroupId(earlyHit.id, sNow.currentAssembly) : null
+      if (earlyHit && owningGid && sNow.activeGroupId !== owningGid) {
+        // First click on a grouped part → select the group, no fallthrough.
+        store.setState({
+          activeGroupId:            owningGid,
+          activeInstanceId:         null,
+          multiSelectedInstanceIds: [],
+          groupDiveStack:           [],
+        })
+        return
+      }
+      if (earlyHit && owningGid && sNow.activeGroupId === owningGid) {
+        // Second click on a member of the active group → enter the group;
+        // fall through so the existing flow below sets activeInstanceId.
+        store.setState({
+          activeGroupId:  null,
+          groupDiveStack: [...(sNow.groupDiveStack ?? []), owningGid],
+        })
+        // Fall through.
+      }
+    }
+
+    // Non-Ctrl click — always collapses any active multi-select back to either
+    // a fresh single-select (click on a part) or no selection (click on empty
+    // space). Without this, the purple union box stays painted after the user
+    // moves on and tries to interact with something else.
+    {
+      const s = store.getState()
+      if ((s.multiSelectedInstanceIds ?? []).length || s.activeGroupId) {
+        store.setState({ multiSelectedInstanceIds: [], activeGroupId: null, groupDiveStack: [] })
+      }
+    }
 
     // Overhang selection — a click within a medium radius of an overhang
     // toggles it into the ordered selection (which prefills the Overhangs

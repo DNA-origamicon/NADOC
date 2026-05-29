@@ -44,6 +44,10 @@ import {
 
 const HELIX_RADIUS    = 1.0    // nm — must match backend/core/constants.py
 const BDNA_RISE_PER_BP = 0.334  // nm/bp — must match backend/core/constants.py
+// Must match `_AXIS_SAMPLE_STEP` in backend/core/deformation.py. tubeSamp from
+// deformed_helix_axes() is one entry every AXIS_SAMPLE_STEP bp along the
+// helix's local bp axis, with length_bp-1 appended last.
+const AXIS_SAMPLE_STEP = 7
 
 // Re-export palette helpers consumed by external modules (main.js, etc.).
 export { buildNucLetterMap, buildStapleColorMap }
@@ -391,8 +395,17 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const segsVisible = (mode !== 'hidden')
     for (const arrow of axisArrows) {
       if (arrow.useSegments) {
+        // Curved multi-segment helices carry both a straight cylinder (drives
+        // the lerp animation; correct shape at t=0) and a curved tube (true
+        // bent center-line; shown at deformed steady state). They swap as a
+        // mutually-exclusive pair just like the single-shaft case below.
         for (const seg of arrow.segments ?? []) {
-          if (seg.mesh) seg.mesh.visible = segsVisible
+          if (seg.tubeMesh) {
+            seg.mesh.visible      = (mode === 'straight')
+            seg.tubeMesh.visible  = (mode === 'deformed')
+          } else if (seg.mesh) {
+            seg.mesh.visible = segsVisible
+          }
         }
       } else if (arrow.isCurved) {
         if (arrow.shaft)         arrow.shaft.visible         = (mode === 'deformed')
@@ -530,6 +543,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // backend path covers cluster transforms and partial-coverage clusters
       // correctly; the local fallback only applies to designs without a backend
       // axes payload.
+      //
+      // Curved + multi-segment: also build a TubeGeometry per segment that
+      // follows the bent helix center-line within the segment's bp range
+      // (sub-sampled from tubeSamp). Visible at the deformed steady state
+      // (mode='deformed'); the straight cylinder takes over during the lerp
+      // and when un-deformed (mode='straight'). Mirrors the single-shaft
+      // cross-fade so multi-domain bent helices don't show straight chords.
       const aVec = aEnd.clone().sub(aStart)
       const aLen = aVec.length()
       const aDir = aLen > 0.001 ? aVec.clone().normalize() : _AY.clone()
@@ -565,10 +585,50 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         mesh.position.copy(ws.clone().addScaledVector(wsUnit, adjLen * 0.5))
         mesh.quaternion.setFromUnitVectors(_AY, wsUnit)
         root.add(mesh)
+
+        // Curved tube companion for bent helices. tubeSamp is the helix-wide
+        // post-cluster-transformed center-line; we pluck the interior samples
+        // whose local bp index falls strictly inside (bp_lo, bp_hi] and anchor
+        // the curve at the segment's own ws/we (which may carry a per-segment
+        // cluster transform). For helices with diverging per-segment transforms
+        // the interior samples may not match the endpoint frame exactly — the
+        // tube still looks far closer to the truth than a straight chord.
+        let tubeMesh = null
+        if (isCurved && tubeSamp && tubeSamp.length > 2) {
+          const localLo = ds.bp_lo - helix.bp_start
+          const localHi = ds.bp_hi - helix.bp_start
+          const pts = [ws.clone()]
+          const lastSampleIdx = tubeSamp.length - 1
+          for (let si = 0; si < tubeSamp.length; si++) {
+            // Mirror backend _sample_bp_list_for_axis: samples are at local bp
+            // 0, AXIS_SAMPLE_STEP, 2*step, …, with length_bp-1 appended last.
+            const localBp = (si === lastSampleIdx)
+              ? helix.length_bp - 1
+              : si * AXIS_SAMPLE_STEP
+            if (localBp > localLo && localBp <= localHi) {
+              pts.push(new THREE.Vector3(...tubeSamp[si]))
+            }
+          }
+          pts.push(we.clone())
+          // Skip tube construction when the segment spans no interior samples
+          // (pts is just [ws, we] → would render as a straight line, no win
+          // over the cylinder companion we already built).
+          if (pts.length >= 3) {
+            const curve = new THREE.CatmullRomCurve3(pts)
+            const tubeSegs = Math.max(pts.length * 4, 16)
+            const tubeGeo = new THREE.TubeGeometry(curve, tubeSegs, AXIS_SHAFT_R, 6, false)
+            tubeMesh = new THREE.Mesh(tubeGeo, new THREE.MeshPhongMaterial({ color: C.axis }))
+            tubeMesh.material.userData.skipOpacityRestore = true
+            tubeMesh.visible = false  // setAxisShaftMode swaps it in at deformed steady state
+            root.add(tubeMesh)
+          }
+        }
+
         // Normalise key names since backend uses snake_case while our local
         // helper emits camelCase.
         segments.push({
           mesh,
+          tubeMesh,
           strandId:    bs ? bs.strand_id    : ds.strandId,
           domainIndex: bs ? bs.domain_index : ds.domainIndex,
           ovhgId:      bs ? bs.ovhg_id      : ds.ovhgId,
@@ -1385,13 +1445,14 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   // Iterate every material on an axis arrow (shaft + per-domain segments) so
   // dim/highlight passes can flip opacity/colour without touching node count.
+  // Yields every mesh on the arrow including the straight-shaft companion
+  // and per-segment curved tubes — callers need all of them to stay in sync.
   function* _arrowMaterials(arrow) {
-    if (arrow.isCurved) {
-      if (arrow.shaft?.material) yield arrow.shaft.material
-    } else {
-      for (const seg of arrow.segments ?? []) {
-        if (seg.mesh?.material) yield seg.mesh.material
-      }
+    if (arrow.shaft?.material)         yield arrow.shaft.material
+    if (arrow.straightShaft?.material) yield arrow.straightShaft.material
+    for (const seg of arrow.segments ?? []) {
+      if (seg.mesh?.material)     yield seg.mesh.material
+      if (seg.tubeMesh?.material) yield seg.tubeMesh.material
     }
   }
 
@@ -2089,7 +2150,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (!_refOnlyHelixIds.has(arrow.helixId)) continue
         if (arrow.shaft)         arrow.shaft.visible         = false
         if (arrow.straightShaft) arrow.straightShaft.visible = false
-        for (const seg of arrow.segments ?? []) if (seg.mesh) seg.mesh.visible = false
+        for (const seg of arrow.segments ?? []) {
+          if (seg.mesh)     seg.mesh.visible     = false
+          if (seg.tubeMesh) seg.tubeMesh.visible = false
+        }
       }
     } else if (_axisArrowsVisible) {
       _applyShaftModeVisibility(_currentShaftMode)
@@ -2905,7 +2969,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         for (const arrow of axisArrows) {
           if (arrow.shaft) arrow.shaft.visible = false
           if (arrow.straightShaft) arrow.straightShaft.visible = false
-          for (const seg of arrow.segments ?? []) seg.mesh.visible = false
+          for (const seg of arrow.segments ?? []) {
+            if (seg.mesh)     seg.mesh.visible     = false
+            if (seg.tubeMesh) seg.tubeMesh.visible = false
+          }
         }
       } else {
         // Respect current shaft mode rather than flipping every mesh on,
@@ -3699,7 +3766,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const fp = fnuc.backbone_position
         const tp = tnuc.backbone_position
         const color = fnuc.strand_type === 'scaffold'
-          ? 0x29b6f6
+          ? 0x0070bb
           : (stapleColorMap.get(fnuc.strand_id) ?? 0x445566)
         conns.push({
           from:        new THREE.Vector3(fp[0], fp[1], fp[2]),
@@ -3733,7 +3800,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         for (const arrow of axisArrows) {
           if (arrow.shaft) arrow.shaft.visible = false
           if (arrow.straightShaft) arrow.straightShaft.visible = false
-          for (const seg of arrow.segments ?? []) seg.mesh.visible = false
+          for (const seg of arrow.segments ?? []) {
+            if (seg.mesh)     seg.mesh.visible     = false
+            if (seg.tubeMesh) seg.tubeMesh.visible = false
+          }
         }
       } else {
         _applyShaftModeVisibility(_currentShaftMode)

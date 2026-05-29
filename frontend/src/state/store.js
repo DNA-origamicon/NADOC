@@ -318,6 +318,29 @@ const _initialState = {
   activeInstanceId: null,
 
   /**
+   * Multi-selection for assembly PartInstances. Extended via Ctrl-click on
+   * instance rows or 3D pick. Used to choose targets for Group / Duplicate /
+   * Delete batch ops. Cleared when leaving assembly mode.
+   */
+  multiSelectedInstanceIds: [],
+
+  /**
+   * Currently selected PartGroup id, or null. Mutually exclusive with
+   * `activeInstanceId` — selecting a group clears the instance selection
+   * and vice-versa. Group selection drives the move-tool gizmo onto
+   * `POST /assembly/groups/{id}/transform`.
+   */
+  activeGroupId: null,
+
+  /**
+   * PowerPoint-style "entered" group stack. Empty = top-level selection
+   * model. Pushed when the same group is double-clicked (or a group's
+   * member is clicked twice in a row) to "enter" the group and select
+   * individual members. Escape pops one level.
+   */
+  groupDiveStack: [],
+
+  /**
    * Ordered overhang selection in assembly mode — list of
    * `{ instanceId, overhangId, label }`. Built by clicking overhang name
    * labels in the 3D view (overhang selectable on). The Assembly Overhangs
@@ -366,8 +389,9 @@ const _SLICES = {
   /** Tool panel toggles and error state */
   ui:        new Set(['toolFilters', 'lastError']),
 
-  /** Assembly layer: active assembly, mode flag, selected instance */
+  /** Assembly layer: active assembly, mode flag, selected instance, groups */
   assembly:  new Set(['currentAssembly', 'assemblyActive', 'activeInstanceId',
+                      'multiSelectedInstanceIds', 'activeGroupId', 'groupDiveStack',
                       'assemblyOverhangSelection']),
 }
 

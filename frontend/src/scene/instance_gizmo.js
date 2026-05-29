@@ -52,26 +52,41 @@ export function initInstanceGizmo(store, controls) {
 
   // Centroid offset (in instance-LOCAL coordinates). When non-null, the gizmo
   // is anchored at the world-space centroid of the instance rather than at the
-  // instance's part-local origin. The instance's transform matrix is then
-  // recovered from the dummy's matrix by post-multiplying with T(-centroid_local).
-  //
-  //   instance_world_matrix = dummy_world_matrix · T(-centroid_local)
-  //
-  // This makes the gizmo land in the middle of the part's visible geometry,
-  // which is much easier to find than the part's local origin (which can be
-  // anywhere — the polymerize-from-mate seed often puts it well outside the
-  // visible structure).
+  // instance's part-local origin.
   let _centroidLocal = null   // THREE.Vector3 | null
 
-  /** Compose dummy → instance-world matrix, accounting for centroid offset. */
+  // Delta-based recovery of the instance matrix. Captured at attach() time
+  // (and refreshed by setMatrix/applyConstraint), these let us compute:
+  //
+  //   instance_world = (dummy_now · inv(dummy_start)) · instance_start
+  //
+  // which is equivalent to the historical `dummy · T(-centroid_local)` formula
+  // whenever the dummy starts aligned with the instance's rotation — and
+  // remains CORRECT when applyConstraint rotates the dummy to align with an
+  // arbitrary joint axis (the old formula silently broke in that case because
+  // centroid_local was computed before the dummy was re-oriented, leading the
+  // instance to jump by the constraint rotation on the first drag tick).
+  let _dummyStart    = null   // THREE.Matrix4 — dummy's world matrix at attach time
+  let _instanceStart = null   // THREE.Matrix4 — instance's world matrix at attach time
+
+  /** Compose dummy → instance-world matrix via the delta from drag-start. */
   function _instanceMatrixFromDummy() {
-    if (!_dummy) return null
+    if (!_dummy || !_dummyStart || !_instanceStart) return null
     _dummy.updateMatrix()
-    if (!_centroidLocal) return _dummy.matrix.clone()
-    const inv = new THREE.Matrix4().makeTranslation(
-      -_centroidLocal.x, -_centroidLocal.y, -_centroidLocal.z,
+    const dummyDelta = new THREE.Matrix4().multiplyMatrices(
+      _dummy.matrix,
+      new THREE.Matrix4().copy(_dummyStart).invert(),
     )
-    return new THREE.Matrix4().multiplyMatrices(_dummy.matrix, inv)
+    return new THREE.Matrix4().multiplyMatrices(dummyDelta, _instanceStart)
+  }
+
+  function _captureStartMatrices() {
+    if (!_dummy) return
+    _dummy.updateMatrix()
+    _dummyStart = _dummy.matrix.clone()
+    // _instanceStart is set by the caller (attach / setMatrix); only refresh
+    // _dummyStart here. _instanceStart represents the instance pose paired
+    // with this dummy_start, and must stay anchored to that pairing.
   }
 
   // ── Send matrix to backend on drag-end ───────────────────────────────────
@@ -149,6 +164,9 @@ export function initInstanceGizmo(store, controls) {
       _dummy.position.copy(pos)
       _dummy.quaternion.copy(quat)
     }
+    _instanceStart = m.clone()
+    _dummy.updateMatrix()
+    _dummyStart    = _dummy.matrix.clone()
     scene.add(_dummy)
     _scene = scene
 
@@ -206,6 +224,11 @@ export function initInstanceGizmo(store, controls) {
     _dummy.quaternion.copy(quat)
     _dummy.updateMatrix()
     _tc?.updateMatrixWorld?.()
+    // Re-anchor the delta math: the caller has just declared "the instance
+    // is now at matrix4". The next drag should compute its delta from THIS
+    // pose, not the one captured at attach() time.
+    _instanceStart = matrix4.clone()
+    _dummyStart    = _dummy.matrix.clone()
   }
 
   // ── Detach ───────────────────────────────────────────────────────────────
@@ -226,13 +249,65 @@ export function initInstanceGizmo(store, controls) {
     _scene         = null
     _mode          = 'translate'
     _centroidLocal = null
+    _dummyStart    = null
+    _instanceStart = null
     document.removeEventListener('keydown', _onKey)
+  }
+
+  /** Restrict the attached gizmo to one DOF along a world-space axis.
+   *  Call AFTER attach() to convert the standard 6-DOF gizmo into a
+   *  constraint-aware widget that exposes only the joint's allowed motion.
+   *
+   *  opts:
+   *    mode:    'translate' | 'rotate'                 — which kind of handle to show
+   *    axis:    THREE.Vector3 (world space, normalized)— constraint axis (Z in dummy local)
+   *    showX, showY, showZ: booleans                   — which local-axis handles are visible
+   *
+   *  The dummy is rotated so its local +Z aligns with `axis` and the gizmo
+   *  is switched to LOCAL space so the rings/arrows rotate with the dummy.
+   *  Callers that pass `axis` should set showZ=true and showX/showY=false to
+   *  expose exactly one DOF along the constraint. For spherical (3-DOF
+   *  rotation about a point) skip `axis` and pass showX/Y/Z = true. */
+  function applyConstraint(opts) {
+    if (!_tc || !_dummy || !opts) return
+    if (opts.mode) {
+      _mode = opts.mode
+      _tc.setMode(opts.mode)
+    }
+    if (opts.axis) {
+      const fromZ = new THREE.Vector3(0, 0, 1)
+      const a = opts.axis.clone().normalize()
+      const q = new THREE.Quaternion()
+      // setFromUnitVectors handles the degenerate near-anti-parallel case
+      // (returns a 180° rotation about the X axis) — safe to call always.
+      q.setFromUnitVectors(fromZ, a)
+      _dummy.quaternion.copy(q)
+      _dummy.updateMatrix()
+      _tc.setSpace('local')
+      _tc.updateMatrixWorld?.()
+    } else if (opts.spherical) {
+      // 3-DOF rotation about the pivot. Keep dummy quaternion identity so
+      // the rings line up with world axes (cleaner read for the user).
+      _dummy.quaternion.identity()
+      _dummy.updateMatrix()
+      _tc.setSpace('world')
+    }
+    if (typeof opts.showX === 'boolean') _tc.showX = opts.showX
+    if (typeof opts.showY === 'boolean') _tc.showY = opts.showY
+    if (typeof opts.showZ === 'boolean') _tc.showZ = opts.showZ
+    // Re-capture the dummy's "rest" matrix AFTER rotating it to the constraint
+    // axis. Without this, the very act of constraining the gizmo would register
+    // as a non-zero starting delta and the user's first drag tick would snap
+    // the instance through the constraint rotation (see Before/After bug).
+    _dummy.updateMatrix()
+    _dummyStart = _dummy.matrix.clone()
   }
 
   return {
     attach,
     detach,
     setMatrix,
+    applyConstraint,
     isActive: () => _instanceId !== null,
     getMode:  () => _mode,
     isDragging: () => _isDragging,

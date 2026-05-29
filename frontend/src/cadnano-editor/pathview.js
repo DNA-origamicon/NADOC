@@ -671,6 +671,30 @@ export function initPathview(canvasEl, containerEl, {
     return [seg(xA, yA, xB - dx, yB), seg(xB, yB, xA + dx, yA)]
   }
 
+  /** True when periodic-seam FL `fl` should render as TWO short fading stubs instead
+   *  of the long straight arc across the structure. Triggers when the periodic boundary
+   *  is OFF but the FL was flagged as a polymerization seam — the long connector across
+   *  the part isn't meaningful in that mode (user choice). DRAW + HIT-TEST + LASSO all
+   *  gate on this via _pbSeamFLStubs so the stubs are clickable where they're drawn. */
+  function _pbSeamFLAsStubs(fl) {
+    return !_pbOn() && !!fl.is_periodic_seam
+  }
+
+  /** The two short stub segments for a periodic-seam FL drawn in fading-stub mode.
+   *  Each stub leaves its endpoint outward along x (away from the other endpoint),
+   *  STUB_LEN world units long, at the same y as the endpoint. Returned in the same
+   *  {x0,y0,cx,cy,x1,y1} shape as the arc segments — cx,cy is the midpoint so the
+   *  quadratic collapses to the straight stub, letting hit-test reuse the Bezier code. */
+  function _pbSeamFLStubs(fl, xA, yA, xB, yB) {
+    const STUB_LEN = BP_W * 5
+    const dirA = (Math.sign(fl.three_prime_bp - fl.five_prime_bp) || 1)
+    const stub = (x0, y0, dir) => {
+      const x1 = x0 + dir * STUB_LEN
+      return { x0, y0, x1, y1: y0, cx: (x0 + x1) / 2, cy: y0 }
+    }
+    return [stub(xA, yA, dirA), stub(xB, yB, -dirA)]
+  }
+
   /** {lo,hi} bp extent over ACTIVE (non-reference) strand domains, or null.
    *  Used for slider defaults + auto-shift. Excludes is_reference ALWAYS — distinct
    *  from _totalBp/_minBp which are helix-based and include reference strands. */
@@ -1007,8 +1031,11 @@ export function initPathview(canvasEl, containerEl, {
         const xB   = _bpCenterX(fl.five_prime_bp)
         const yA   = fl.three_prime_direction === 'FORWARD' ? infoA.fwdY : infoA.revY
         const yB   = fl.five_prime_direction  === 'FORWARD' ? infoB.fwdY : infoB.revY
-        // Match the renderer for seam FLs routed through the boundary (two short arcs).
-        const segs = _pbSeamFLThroughBoundary(fl)
+        // Match the renderer: through-boundary routes as two seam arcs; PB-off periodic-
+        // seam FLs render as two short stubs at each end (clickable along the stub line).
+        const segs = _pbSeamFLAsStubs(fl)
+          ? _pbSeamFLStubs(fl, xA, yA, xB, yB)
+          : _pbSeamFLThroughBoundary(fl)
           ? _pbSeamFLArcs(fl, xA, yA, xB, yB)
           : [{ x0: xA, y0: yA, x1: xB, y1: yB,
                cx: (xA + xB) / 2 + Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07), cy: (yA + yB) / 2 }]
@@ -1161,8 +1188,11 @@ export function initPathview(canvasEl, containerEl, {
       const yA   = fl.three_prime_direction === 'FORWARD' ? infoA.fwdY : infoA.revY
       const yB   = fl.five_prime_direction  === 'FORWARD' ? infoB.fwdY : infoB.revY
       // Match the renderer: a seam FL routed through the boundary is two short arcs to
-      // each endpoint's mirror image, so hit-test against those (not the long straight arc).
-      const segs = _pbSeamFLThroughBoundary(fl)
+      // each endpoint's mirror image; with PB off + is_periodic_seam, two short stubs at
+      // each end. Either case → hit-test against the segs (not the long straight arc).
+      const segs = _pbSeamFLAsStubs(fl)
+        ? _pbSeamFLStubs(fl, xA, yA, xB, yB)
+        : _pbSeamFLThroughBoundary(fl)
         ? _pbSeamFLArcs(fl, xA, yA, xB, yB)
         : (() => { const bowAmt = Math.max(BP_W * 0.27, Math.abs(yB - yA) * 0.07)
                    return [{ x0: xA, y0: yA, x1: xB, y1: yB, cx: (xA + xB) / 2 + bowAmt, cy: (yA + yB) / 2 }] })()
@@ -2300,6 +2330,34 @@ export function initPathview(canvasEl, containerEl, {
             ctx.quadraticCurveTo(a.cx, a.cy, a.x1, a.y1)
             ctx.stroke()
           }
+          ctx.restore()
+        }
+        continue   // skip the long straight arc (and its ticks) in every pass
+      }
+
+      // Periodic-seam FL, periodic boundary OFF: the long across-the-structure arc isn't
+      // meaningful here. Draw a SHORT dashed stub at each endpoint that fades to
+      // transparent outward — a visual reminder that this end pairs with the other end
+      // of the polymerization seam, without painting the whole length. MUST stay in sync
+      // with the _pbSeamFLAsStubs branches in _hitTestArc + _hitTestLassoElements.
+      if (_pbSeamFLAsStubs(fl)) {
+        if (_ghostPass === 0) {
+          const FADE_DASHES = 6
+          const prevAlpha = ctx.globalAlpha
+          ctx.save()
+          ctx.lineCap = 'butt'
+          for (const s of _pbSeamFLStubs(fl, xA, yA, xB, yB)) {
+            const step = (s.x1 - s.x0) / FADE_DASHES
+            for (let i = 0; i < FADE_DASHES; i++) {
+              ctx.globalAlpha = prevAlpha * (1 - (i + 0.5) / FADE_DASHES)
+              const xs = s.x0 + i * step
+              ctx.beginPath()
+              ctx.moveTo(xs, s.y0)
+              ctx.lineTo(xs + step * 0.6, s.y0)
+              ctx.stroke()
+            }
+          }
+          ctx.globalAlpha = prevAlpha
           ctx.restore()
         }
         continue   // skip the long straight arc (and its ticks) in every pass

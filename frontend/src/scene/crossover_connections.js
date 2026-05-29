@@ -40,7 +40,7 @@ const GEO_SPHERE   = new THREE.SphereGeometry(BEAD_RADIUS, 8, 6)
 const GEO_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1)
 
 // Palette — matches helix_renderer.js / constants.py
-const C_SCAFFOLD_BACKBONE = 0x29b6f6
+const C_SCAFFOLD_BACKBONE = 0x0070bb
 const C_SCAFFOLD_SLAB     = 0x0277bd
 const C_UNASSIGNED        = 0x445566
 

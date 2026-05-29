@@ -764,6 +764,16 @@ def test_patch_joint_clamps_to_limits():
     joint = r.json()["assembly"]["joints"][0]
     assert joint["current_value"] == pytest.approx(1.0)
 
+    r = client.patch(f"/api/assembly/joints/{joint_id}", json={
+        "clear_limits": True,
+        "current_value": 5.0,
+    })
+    assert r.status_code == 200
+    joint = r.json()["assembly"]["joints"][0]
+    assert joint["min_limit"] is None
+    assert joint["max_limit"] is None
+    assert joint["current_value"] == pytest.approx(5.0)
+
 
 def test_patch_joint_silent_skips_undo():
     """silent=True should not push to undo stack (for animation playback)."""

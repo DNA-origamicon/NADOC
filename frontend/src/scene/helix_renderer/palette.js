@@ -1,7 +1,7 @@
 // ── Palette ───────────────────────────────────────────────────────────────────
 
 export const C = {
-  scaffold_backbone: 0x29b6f6,
+  scaffold_backbone: 0x0070bb,
   scaffold_slab:     0x0277bd,
   scaffold_arrow:    0x0288d1,
   axis:              0x555566,

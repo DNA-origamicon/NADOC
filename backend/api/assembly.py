@@ -69,6 +69,7 @@ from backend.api import state as design_state
 from backend.core.models import (
     Assembly,
     AssemblyConfigurationSnapshot,
+    AssemblyGearRelationConfigState,
     AssemblyInstanceConfigState,
     AssemblyJointConfigState,
     AnimationKeyframe,
@@ -79,15 +80,18 @@ from backend.core.models import (
     DesignAnimation,
     DesignMetadata,
     Direction,
+    GearRelation,
     Helix,
     InterfacePoint,
     Mat4x4,
+    PartGroup,
     PartInstance,
     PartLibraryEntry,
     PartSourceFile,
     Strand,
     Vec3,
 )
+from backend.core import assembly_groups as _ag
 
 router = APIRouter()
 
@@ -1185,6 +1189,7 @@ class PatchJointRequest(BaseModel):
     axis_direction: Optional[list[float]] = None
     min_limit: Optional[float] = None
     max_limit: Optional[float] = None
+    clear_limits: Optional[bool] = None
     angular_velocity_rpm: Optional[float] = None   # revolute only; 0 = static
     spin_paused: Optional[bool] = None             # per-joint freeze
     silent: Optional[bool] = None  # True during animation playback (suppress undo push)
@@ -1977,11 +1982,15 @@ def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
         inst = next(i for i in assembly.instances if i.id == instance_id)
 
     # ── Transform change: in-place mutation + FK propagation ─────────────────
+    fk_visited: set[str] = set()
     if body.transform is not None:
         old_T = _mat4_from_model(inst.transform)
         new_T = np.array(body.transform["values"], dtype=float).reshape(4, 4)
-        inst.transform      = Mat4x4(values=[float(v) for v in new_T.flatten()])
-        inst.base_transform = None
+        inst.transform = Mat4x4(values=[float(v) for v in new_T.flatten()])
+        # NOTE: do NOT clear inst.base_transform yet. The gear-sync step below
+        # needs the original base_transform to derive the implied joint angle
+        # from (current vs base). We clear it after sync, mirroring the
+        # original semantic of "this PATCH is now the new base pose".
         try:
             delta   = new_T @ np.linalg.inv(old_T)
             visited = {instance_id}
@@ -1989,8 +1998,33 @@ def patch_instance(instance_id: str, body: PatchInstanceRequest) -> dict:
             _fk_expand_rigid_group(assembly, instance_id, delta, visited, [], inst_by_id)
             _fk_propagate(assembly, visited.copy(), delta, visited, inst_by_id)
             _enforce_connector_coincidence(assembly, visited, inst_by_id)
+            fk_visited = visited
         except np.linalg.LinAlgError:
             pass  # singular old transform — skip FK
+
+    # Re-sync revolute joint values for any joint whose child is the moved
+    # instance (or got swept along by FK), then propagate gear relations.
+    # Without this, the instance gizmo (TransformControls) would update the
+    # transform directly without driving any gear-coupled counterpart.
+    if body.transform is not None:
+        affected = fk_visited | {instance_id}
+        updated_joint_ids = _sync_revolute_values_for_instances(assembly, affected)
+        # Parent-side sync: also handle joints where the moved instance is the
+        # PARENT (instance_a) of a revolute joint whose child stayed put (e.g.
+        # because the child is fixed). Δ = the rotation of (new_T @ inv(old_T))
+        # about the joint axis.
+        try:
+            world_delta_M = new_T @ np.linalg.inv(old_T)
+            parent_updates = _sync_revolute_values_for_parent_moves(
+                assembly, affected, world_delta_M,
+            )
+            updated_joint_ids = [*updated_joint_ids, *parent_updates]
+        except (np.linalg.LinAlgError, NameError):
+            pass
+        for jid in updated_joint_ids:
+            _propagate_gear_relations_from(assembly, jid)
+        # Now safe to clear base_transform — gear sync has already used it.
+        inst.base_transform = None
 
     assembly_state.set_assembly_silent(assembly)
     return _assembly_response(assembly_state.get_or_404())
@@ -3767,7 +3801,14 @@ def delete_instance(instance_id: str) -> dict:
     new_instances = [i for i in assembly.instances if i.id != instance_id]
     new_joints    = [j for j in assembly.joints
                      if j.instance_a_id != instance_id and j.instance_b_id != instance_id]
-    mutated = assembly.model_copy(update={"instances": new_instances, "joints": new_joints})
+    new_groups    = _ag.filter_groups_after_instance_removal(
+        list(assembly.groups), {instance_id},
+    )
+    mutated = assembly.model_copy(update={
+        "instances": new_instances,
+        "joints":    new_joints,
+        "groups":    new_groups,
+    })
 
     _apply_assembly_mutation_with_feature_log(
         mutated,
@@ -3777,6 +3818,326 @@ def delete_instance(instance_id: str) -> dict:
     )
     assembly_state.forget_instance_display(instance_id)
     return _assembly_response(assembly_state.get_or_404())
+
+
+# ── PartGroup routes (PowerPoint-style grouping) ──────────────────────────────
+
+
+def _find_group(assembly: Assembly, group_id: str) -> PartGroup:
+    for g in assembly.groups:
+        if g.id == group_id:
+            return g
+    raise HTTPException(404, detail=f"Group {group_id!r} not found.")
+
+
+def _autogen_group_name(assembly: Assembly) -> str:
+    """Pick the next sequential 'Group N' name."""
+    used = {g.name for g in assembly.groups if g.name}
+    n = 1
+    while f"Group {n}" in used:
+        n += 1
+    return f"Group {n}"
+
+
+class CreateGroupRequest(BaseModel):
+    """Body for ``POST /assembly/groups``.
+
+    Members may be a mix of top-level PartInstances and existing
+    PartGroups; the partition invariant (a member can only belong to one
+    parent group) is enforced.
+    """
+    instance_ids: list[str] = Field(default_factory=list)
+    subgroup_ids: list[str] = Field(default_factory=list)
+    name: Optional[str] = None
+
+
+@router.post("/assembly/groups", status_code=200)
+def create_group(body: CreateGroupRequest) -> dict:
+    assembly = assembly_state.get_or_404()
+    if not body.instance_ids and not body.subgroup_ids:
+        raise HTTPException(400, detail="Group needs at least one member.")
+    # Validate referenced ids exist + no double-parenting.
+    instance_ids_set = {i.id for i in assembly.instances}
+    group_ids_set    = {g.id for g in assembly.groups}
+    for iid in body.instance_ids:
+        if iid not in instance_ids_set:
+            raise HTTPException(404, detail=f"Instance {iid!r} not found.")
+    for sgid in body.subgroup_ids:
+        if sgid not in group_ids_set:
+            raise HTTPException(404, detail=f"Subgroup {sgid!r} not found.")
+    for g in assembly.groups:
+        for iid in body.instance_ids:
+            if iid in g.instance_ids:
+                raise HTTPException(
+                    400,
+                    detail=f"Instance {iid!r} already belongs to group {g.id!r}.",
+                )
+        for sgid in body.subgroup_ids:
+            if sgid in g.subgroup_ids:
+                raise HTTPException(
+                    400,
+                    detail=f"Subgroup {sgid!r} already belongs to group {g.id!r}.",
+                )
+
+    new_group = PartGroup(
+        name=body.name or _autogen_group_name(assembly),
+        instance_ids=list(body.instance_ids),
+        subgroup_ids=list(body.subgroup_ids),
+    )
+    new_groups = list(assembly.groups) + [new_group]
+    mutated = assembly.model_copy(update={"groups": new_groups})
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-create-group",
+        label=f"Group: {new_group.name}",
+        params={
+            "group_id":     new_group.id,
+            "name":         new_group.name,
+            "instance_ids": list(body.instance_ids),
+            "subgroup_ids": list(body.subgroup_ids),
+        },
+    )
+    return _assembly_response(assembly_state.get_or_404())
+
+
+@router.delete("/assembly/groups/{group_id}", status_code=200)
+def ungroup(group_id: str) -> dict:
+    """Remove the group itself; members re-enter the top level.
+
+    Cascade-removes ``group_id`` from any parent group's ``subgroup_ids``.
+    Instance ids and subgroup ids inside the removed group are unaffected —
+    subgroups become top-level groups, instances become top-level instances.
+    """
+    assembly = assembly_state.get_or_404()
+    target = _find_group(assembly, group_id)
+    new_groups = _ag.filter_groups_after_group_removal(
+        list(assembly.groups), {group_id}
+    )
+    mutated = assembly.model_copy(update={"groups": new_groups})
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-ungroup",
+        label=f"Ungroup: {target.name or group_id}",
+        params={"group_id": group_id, "name": target.name},
+    )
+    return _assembly_response(assembly_state.get_or_404())
+
+
+class PatchGroupRequest(BaseModel):
+    name:           Optional[str] = None
+    visible:        Optional[bool] = None
+    representation: Optional[Literal[
+        "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism", "surface"
+    ]] = None
+    # null/empty string is treated as "clear the override → respect member reps"
+    clear_representation: bool = False
+    expanded:       Optional[bool] = None
+
+
+@router.patch("/assembly/groups/{group_id}", status_code=200)
+def patch_group(group_id: str, body: PatchGroupRequest) -> dict:
+    """Update overlay fields on a group. Never mutates member instances."""
+    assembly = assembly_state.get_or_404()
+    target = _find_group(assembly, group_id)
+    updates: dict = {}
+    if body.name is not None:
+        updates["name"] = body.name
+    if body.visible is not None:
+        updates["visible"] = body.visible
+    if body.clear_representation:
+        updates["representation"] = None
+    elif body.representation is not None:
+        updates["representation"] = body.representation
+    if body.expanded is not None:
+        updates["expanded"] = body.expanded
+    if not updates:
+        return _assembly_response(assembly)
+    new_target = target.model_copy(update=updates)
+    new_groups = [new_target if g.id == group_id else g for g in assembly.groups]
+    mutated = assembly.model_copy(update={"groups": new_groups})
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-patch-group",
+        label=f"Update group: {new_target.name or group_id}",
+        params={"group_id": group_id, "updates": updates},
+    )
+    return _assembly_response(assembly_state.get_or_404())
+
+
+class DuplicateGroupRequest(BaseModel):
+    offset: list[float] = [5.0, 0.0, 0.0]
+    name:   Optional[str] = None
+
+
+@router.post("/assembly/groups/{group_id}/duplicate", status_code=200)
+def duplicate_group(group_id: str, body: DuplicateGroupRequest = DuplicateGroupRequest()) -> dict:
+    """Deep-copy a group: clone all transitive members + nested subgroups +
+    internal joints + internal bindings. External joints/bindings are dropped.
+    """
+    assembly = assembly_state.get_or_404()
+    _find_group(assembly, group_id)   # 404 if missing
+    offset = (
+        float(body.offset[0]) if len(body.offset) > 0 else 5.0,
+        float(body.offset[1]) if len(body.offset) > 1 else 0.0,
+        float(body.offset[2]) if len(body.offset) > 2 else 0.0,
+    )
+    new_insts, new_joints, new_bindings, new_groups, root_id = _ag.clone_group_subtree(
+        assembly, group_id, offset=offset,
+    )
+    if body.name is not None:
+        new_groups = [
+            g.model_copy(update={"name": body.name}) if g.id == root_id else g
+            for g in new_groups
+        ]
+
+    mutated = assembly.model_copy(update={
+        "instances":         list(assembly.instances) + new_insts,
+        "joints":            list(assembly.joints) + new_joints,
+        "overhang_bindings": list(assembly.overhang_bindings) + new_bindings,
+        "groups":            list(assembly.groups) + new_groups,
+    })
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-duplicate-group",
+        label=f"Duplicate group",
+        params={
+            "source_group_id": group_id,
+            "new_group_id":    root_id,
+            "offset":          list(body.offset),
+            "n_instances":     len(new_insts),
+        },
+    )
+    return _assembly_response(assembly_state.get_or_404())
+
+
+@router.delete("/assembly/groups/{group_id}/cascade", status_code=200)
+def cascade_delete_group(group_id: str) -> dict:
+    """Delete a group and all its transitive members (instances + subgroups).
+    Cascade-removes joints + overhang bindings referencing deleted instances.
+    """
+    assembly = assembly_state.get_or_404()
+    target = _find_group(assembly, group_id)
+    inst_ids, group_ids = _ag.collect_group_member_ids(assembly, group_id)
+
+    new_instances = [i for i in assembly.instances if i.id not in inst_ids]
+    new_joints    = [j for j in assembly.joints
+                     if j.instance_a_id not in inst_ids and j.instance_b_id not in inst_ids]
+    new_bindings  = [b for b in assembly.overhang_bindings
+                     if b.instance_a_id not in inst_ids and b.instance_b_id not in inst_ids]
+    new_groups    = _ag.filter_groups_after_group_removal(list(assembly.groups), group_ids)
+
+    mutated = assembly.model_copy(update={
+        "instances":         new_instances,
+        "joints":            new_joints,
+        "overhang_bindings": new_bindings,
+        "groups":            new_groups,
+    })
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-delete-group",
+        label=f"Delete group: {target.name or group_id}",
+        params={
+            "group_id":         group_id,
+            "name":             target.name,
+            "deleted_instance_ids": sorted(inst_ids),
+            "deleted_group_ids":    sorted(group_ids),
+        },
+    )
+    for iid in inst_ids:
+        assembly_state.forget_instance_display(iid)
+    return _assembly_response(assembly_state.get_or_404())
+
+
+class TransformGroupRequest(BaseModel):
+    """Body for ``POST /assembly/groups/{id}/transform``.
+
+    Either ``translation`` (3 floats, world-space) OR ``matrix`` (16 floats,
+    row-major 4×4 that is left-multiplied into each affected instance's
+    transform). Translation is the common case for the drag-handle gizmo;
+    matrix covers translate+rotate group moves.
+    """
+    translation: Optional[list[float]] = None
+    matrix:      Optional[list[float]] = None
+
+
+@router.post("/assembly/groups/{group_id}/transform", status_code=200)
+def transform_group(group_id: str, body: TransformGroupRequest) -> dict:
+    """Apply a rigid transform to a group; rigidly-mated external partners
+    follow via the joint/binding transitive closure."""
+    assembly = assembly_state.get_or_404()
+    target = _find_group(assembly, group_id)
+    # Snapshot pre-move base_transforms — apply_group_transform clears them
+    # on every moved instance, and gear-sync below needs the originals to
+    # derive each revolute joint's implied new angle.
+    pre_move_bases = {
+        i.id: i.base_transform for i in assembly.instances if i.base_transform is not None
+    }
+    if body.translation is not None:
+        if len(body.translation) != 3:
+            raise HTTPException(400, detail="translation must have 3 floats.")
+        mutated = _ag.apply_group_translation(
+            assembly, group_id,
+            (float(body.translation[0]), float(body.translation[1]), float(body.translation[2])),
+        )
+        op_params = {"group_id": group_id, "translation": list(body.translation)}
+    elif body.matrix is not None:
+        if len(body.matrix) != 16:
+            raise HTTPException(400, detail="matrix must have 16 floats (row-major 4×4).")
+        M = np.asarray(body.matrix, dtype=float).reshape(4, 4)
+        mutated = _ag.apply_group_transform(assembly, group_id, M)
+        op_params = {"group_id": group_id, "matrix": list(body.matrix)}
+    else:
+        raise HTTPException(400, detail="One of translation or matrix is required.")
+
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-transform-group",
+        label=f"Move group: {target.name or group_id}",
+        params=op_params,
+    )
+    # After the bulk transform, every mated joint touching a moved instance
+    # may be out of sync (revolute/prismatic axes are stored in world space;
+    # rigid/spherical mates are connector-coincident in world space). Run the
+    # joint solver in-place so externally-mated partners that the rigid
+    # transitive closure left behind get re-snapped, axis origins re-derived
+    # from connector positions, and the post-move state matches what the
+    # Resolve button would produce. Mirrors the same pattern used after part
+    # geometry edits at L2101. resolve_assembly() writes back via
+    # set_assembly_silent so the entire group move (transform + resolve)
+    # stays one undo step.
+    solve_status = None
+    if mutated.joints:
+        resolve_resp = resolve_assembly()
+        solve_status = resolve_resp.get("solve_status")
+
+    # Re-sync revolute joint values for any joint whose child is in the moved
+    # group, then propagate gear relations. Without this step, dragging a
+    # group via the group gizmo (which only updates instance transforms, never
+    # joint.current_value) would not drive a gear-coupled counterpart.
+    latest = assembly_state.get_or_404()
+    member_instance_ids, _gids = _ag.collect_group_member_ids(latest, group_id)
+    updated_joint_ids = _sync_revolute_values_for_instances(
+        latest, member_instance_ids, base_transforms_override=pre_move_bases,
+    )
+    # Parent-side sync: joints where the moved group is the PARENT (instance_a)
+    # and the child (instance_b) stayed put (e.g. fixed axle). The child's
+    # angle relative to the parent goes down by Δ (the parent's rotation
+    # about the joint axis), so the gear-coupled side fires on inverse.
+    if body.matrix is not None:
+        M = np.asarray(body.matrix, dtype=float).reshape(4, 4)
+        parent_updates = _sync_revolute_values_for_parent_moves(
+            latest, member_instance_ids, M,
+        )
+        updated_joint_ids = [*updated_joint_ids, *parent_updates]
+    for jid in updated_joint_ids:
+        _propagate_gear_relations_from(latest, jid)
+    if updated_joint_ids:
+        assembly_state.set_assembly_silent(latest)
+
+    response = _assembly_response(assembly_state.get_or_404())
+    if solve_status is not None:
+        response["solve_status"] = solve_status
+    return response
 
 
 # ── Joint routes ──────────────────────────────────────────────────────────────
@@ -4033,6 +4394,10 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
     """
     assembly = assembly_state.get_or_404()
     joint = _find_joint(assembly, joint_id)
+    if os.environ.get('NADOC_GEAR_DEBUG', '1') != '0':
+        print(f"[patch_joint] joint={joint_id[:8]} type={joint.joint_type} "
+              f"body.current_value={body.current_value} "
+              f"joint.current_value={joint.current_value}", flush=True)
 
     joint_updates: dict = {}
     if body.name is not None:
@@ -4046,9 +4411,13 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
         joint_updates["axis_origin"] = body.axis_origin
     if body.axis_direction is not None:
         joint_updates["axis_direction"] = body.axis_direction
-    if body.min_limit is not None:
+    if body.clear_limits:
+        joint_updates["min_limit"] = None
+        joint_updates["max_limit"] = None
+    fields_set = getattr(body, "model_fields_set", set())
+    if "min_limit" in fields_set:
         joint_updates["min_limit"] = body.min_limit
-    if body.max_limit is not None:
+    if "max_limit" in fields_set:
         joint_updates["max_limit"] = body.max_limit
     if body.angular_velocity_rpm is not None:
         joint_updates["angular_velocity_rpm"] = float(body.angular_velocity_rpm)
@@ -4059,8 +4428,10 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
     if body.current_value is not None:
         # Clamp to limits if set
         val = body.current_value
-        lo  = joint.min_limit if joint.min_limit is not None else -math.inf
-        hi  = joint.max_limit if joint.max_limit is not None else  math.inf
+        active_min = joint_updates.get("min_limit", joint.min_limit)
+        active_max = joint_updates.get("max_limit", joint.max_limit)
+        lo  = active_min if active_min is not None else -math.inf
+        hi  = active_max if active_max is not None else  math.inf
         joint_updates["current_value"] = max(lo, min(hi, val))
 
     new_joint = joint.model_copy(update=joint_updates)
@@ -4108,8 +4479,350 @@ def patch_joint(joint_id: str, body: PatchJointRequest) -> dict:
         except np.linalg.LinAlgError:
             pass  # singular old transform — skip FK propagation
 
+    # Gear-relation propagation: if this joint is a driver of any GearRelation,
+    # update each driven joint's current_value + instance_b transform + FK so
+    # the gear-coupled part follows whether the user got here via ring drag,
+    # the joint edit form, or any other source.
+    if value_changed and new_joint.joint_type == 'revolute':
+        _propagate_gear_relations_from(new_assembly, joint_id)
+
     assembly_state.set_assembly_silent(new_assembly)
     return _assembly_response(assembly_state.get_or_404())
+
+
+def _derive_revolute_angle(base_T, current_T, axis_direction):
+    """Given an instance's `base_transform` (pose at current_value=0) and its
+    current world transform, derive the rotation angle about `axis_direction`
+    such that current_T ≈ R(axis, angle) @ base_T. Used to re-anchor a
+    revolute joint's `current_value` after the user moved its child via the
+    instance gizmo or the group gizmo (paths that update transforms directly
+    without ever touching joint.current_value).
+    """
+    try:
+        delta = current_T @ np.linalg.inv(base_T)
+    except np.linalg.LinAlgError:
+        return None
+    R = delta[:3, :3]
+    cos_a = (np.trace(R) - 1.0) / 2.0
+    cos_a = max(-1.0, min(1.0, cos_a))
+    angle = float(np.arccos(cos_a))
+    sin_a = float(np.sin(angle))
+    if abs(sin_a) > 1e-9:
+        axis = np.asarray(axis_direction, dtype=float)
+        n = np.linalg.norm(axis)
+        if n < 1e-9:
+            return None
+        axis = axis / n
+        # Recover rotation axis from antisymmetric part of R; sign vs the
+        # given axis_direction tells us which way the rotation went.
+        w = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]]) / (2.0 * sin_a)
+        if float(np.dot(w, axis)) < 0.0:
+            angle = -angle
+    return angle
+
+
+def _sync_revolute_values_for_instances(assembly, instance_ids, *,
+                                          base_transforms_override=None):
+    """For each revolute joint whose ``instance_b_id`` is in ``instance_ids``,
+    derive the new ``current_value`` from the current vs base transform and
+    update the joint in place. Returns the list of joint ids whose value
+    actually changed (suitable for then calling
+    :func:`_propagate_gear_relations_from`).
+
+    ``base_transforms_override``: optional ``{instance_id: Mat4x4}`` map used
+    when the caller has already overwritten ``inst.base_transform`` and needs
+    the *pre-mutation* base for angle derivation. ``transform_group`` uses
+    this because ``apply_group_transform`` clears ``base_transform`` on every
+    moved instance; without the override the sync would silently bail and the
+    gear-coupled side wouldn't follow.
+    """
+    if not instance_ids:
+        return []
+    updated: list[str] = []
+    inst_by_id = _build_inst_by_id(assembly)
+    debug = os.environ.get('NADOC_GEAR_DEBUG', '1') != '0'
+    for j in assembly.joints:
+        if j.joint_type != 'revolute':         continue
+        if j.instance_b_id not in instance_ids: continue
+        inst = inst_by_id.get(j.instance_b_id)
+        if inst is None:                       continue
+        base_model = (base_transforms_override or {}).get(j.instance_b_id) or inst.base_transform
+        if base_model is None:                 continue
+        try:
+            base_T    = _mat4_from_model(base_model)
+            current_T = _mat4_from_model(inst.transform)
+        except Exception:
+            continue
+        new_value = _derive_revolute_angle(base_T, current_T, j.axis_direction)
+        if new_value is None or not math.isfinite(new_value):
+            continue
+        old_value = j.current_value
+        if abs(old_value - new_value) < 1e-6:
+            continue
+        j.current_value = float(new_value)
+        if debug:
+            print(f"[gear-sync] joint={j.id[:8]} current_value {old_value:+.3f} → {new_value:+.3f}",
+                  flush=True)
+        updated.append(j.id)
+    return updated
+
+
+def _sync_revolute_values_for_parent_moves(assembly, moved_ids, world_delta_M):
+    """Parent-side counterpart to :func:`_sync_revolute_values_for_instances`.
+
+    For each revolute joint where ``instance_a_id`` (the parent / world side)
+    is in ``moved_ids`` but ``instance_b_id`` (the child / rotating side) is
+    NOT — the typical "user rotated the big wheel that the fixed axle hangs
+    off of" case — we derive the rotation angle of ``world_delta_M`` about
+    the joint axis and update ``joint.current_value`` by **−Δ**: a positive
+    parent rotation means the child's angle relative to the parent goes
+    DOWN by the same amount.
+
+    Returns the joint ids whose ``current_value`` actually changed; callers
+    pass these to :func:`_propagate_gear_relations_from` so any gear-coupled
+    counterpart side fires.
+
+    Without this helper, a gear on an assembly authored "axle-as-child"
+    (file ``Big_wheel_base.nass`` for example) would silently never trigger
+    because the moved set only contains the parent.
+    """
+    if not moved_ids or world_delta_M is None:
+        return []
+    M = np.asarray(world_delta_M, dtype=float).reshape(4, 4)
+    updated: list[str] = []
+    debug = os.environ.get('NADOC_GEAR_DEBUG', '1') != '0'
+    for j in assembly.joints:
+        if j.joint_type != 'revolute':           continue
+        if not j.instance_a_id:                  continue
+        if j.instance_a_id not in moved_ids:     continue
+        if j.instance_b_id is None:              continue
+        if j.instance_b_id in moved_ids:         continue   # both moved → standard FK
+        delta_angle = _derive_revolute_angle(np.eye(4), M, j.axis_direction)
+        if delta_angle is None or not math.isfinite(delta_angle):
+            continue
+        if abs(delta_angle) < 1e-9:
+            continue
+        old_value = j.current_value
+        # Child angle relative to parent rotates by −Δ when parent rotates by +Δ
+        # and child stays put. axis_direction is the parent-side convention used
+        # by the joint, so the sign matches.
+        j.current_value = float(old_value - delta_angle)
+        if debug:
+            print(f"[gear-sync-parent] joint={j.id[:8]} parent_rotated={delta_angle:+.3f} → "
+                  f"current_value {old_value:+.3f} → {j.current_value:+.3f}", flush=True)
+        updated.append(j.id)
+    return updated
+
+
+def _gear_endpoint_side(rel, which: str, joint) -> str:
+    if joint is None:
+        return "b"
+    side = getattr(rel, f"endpoint_{which}_side", None)
+    inst_id = getattr(rel, f"endpoint_{which}_instance_id", None)
+    if side in ("a", "b"):
+        return side
+    if inst_id and inst_id == joint.instance_a_id:
+        return "a"
+    return "b"
+
+
+def _axis_angle_rotation_matrix(axis, angle: float) -> np.ndarray:
+    x, y, z = np.asarray(axis, dtype=float)
+    c = math.cos(angle)
+    s = math.sin(angle)
+    C = 1.0 - c
+    return np.array([
+        [c + x * x * C,     x * y * C - z * s, x * z * C + y * s],
+        [y * x * C + z * s, c + y * y * C,     y * z * C - x * s],
+        [z * x * C - y * s, z * y * C + x * s, c + z * z * C],
+    ], dtype=float)
+
+
+def _gear_endpoint_seed(rel, which: str, joint):
+    side = _gear_endpoint_side(rel, which, joint)
+    return joint.instance_a_id if side == "a" else joint.instance_b_id
+
+
+def _apply_revolute_value_to_gear_endpoint(assembly, joint, endpoint_side: str, new_value: float,
+                                           inst_by_id: dict, debug: bool = False):
+    """Apply ``joint.current_value = new_value`` by moving the relation's chosen endpoint.
+
+    Legacy revolute driving always moves ``instance_b``. Endpoint-aware gear
+    relations may target ``instance_a`` instead, which is exactly the
+    Big_wheel_base-style case where the fixed axle is authored as the child and
+    the visually rotating wheel/base is the parent side.
+    """
+    old_value = joint.current_value
+    old_seed_id = joint.instance_a_id if endpoint_side == "a" else joint.instance_b_id
+    if not old_seed_id:
+        return False
+    seed = inst_by_id.get(old_seed_id)
+    if seed is None or seed.fixed:
+        if debug:
+            print(f"[gear]   skip endpoint side={endpoint_side}: seed missing/fixed", flush=True)
+        return False
+
+    old_T = _mat4_from_model(seed.transform)
+    if endpoint_side == "b":
+        base_mat = _mat4_from_model(seed.base_transform or seed.transform)
+        new_T = _apply_revolute_joint(
+            base_mat, joint.axis_origin, joint.axis_direction, new_value,
+        )
+    else:
+        # Parent-side motion is the inverse of child-side current_value:
+        # parent rotates by +(old-new) to make child-relative angle become new.
+        delta_angle = float(old_value - new_value)
+        axis = np.asarray(joint.axis_direction, dtype=float)
+        n = np.linalg.norm(axis)
+        if n < 1e-9:
+            return False
+        axis = axis / n
+        origin = np.asarray(joint.axis_origin, dtype=float)
+        R = _axis_angle_rotation_matrix(axis, delta_angle)
+        T = np.eye(4)
+        T[:3, :3] = R
+        to_o = np.eye(4); to_o[:3, 3] = origin
+        from_o = np.eye(4); from_o[:3, 3] = -origin
+        delta = to_o @ T @ from_o
+        new_T = delta @ old_T
+
+    joint.current_value = float(new_value)
+    seed.transform = _mat4_to_model(new_T)
+    try:
+        delta = new_T @ np.linalg.inv(old_T)
+        visited = {old_seed_id}
+        _fk_expand_rigid_group(assembly, old_seed_id, delta, visited, [], inst_by_id)
+        _fk_propagate(assembly, visited.copy(), delta, visited, inst_by_id)
+        _enforce_connector_coincidence(assembly, visited, inst_by_id)
+    except np.linalg.LinAlgError:
+        pass
+    return True
+
+
+def _propagate_gear_relations_from(assembly, source_joint_id):
+    """BIDIRECTIONAL gear-relation propagation from ``source_joint_id``.
+
+    Each :class:`GearRelation` provides two edges in the propagation graph:
+
+      forward edge   joint_a → joint_b   θ_b = anchor_b + sign · (θ_a − anchor_a) · ratio
+      inverse edge   joint_b → joint_a   θ_a = anchor_a + sign · (θ_b − anchor_b) / ratio
+
+    So spinning EITHER side of a gear pair drives the OTHER — matching how
+    real gears mesh, and matching the user's expectation when they grab the
+    gold ring on either coupled wheel. Cycle-safe via ``visited_relations``;
+    in chains (A ↔ B ↔ C), propagation walks both directions to settle
+    every joint reachable from the source.
+
+    First-wins rule: a joint already updated by an earlier relation this pass
+    isn't re-driven, mirroring the frontend ticker policy.
+
+    For each driven joint reached, we update ``current_value`` + instance_b
+    transform + run FK propagation through any rigid-attached descendants,
+    re-using the existing in-place mutation pattern from
+    :func:`_fk_expand_rigid_group`.
+
+    Diagnostics: emits one ``[gear]`` log line per relation processed and one
+    summary. Toggle with ``NADOC_GEAR_DEBUG`` env var (default ON for now).
+    """
+    if not assembly.gear_relations:
+        return
+    debug = os.environ.get('NADOC_GEAR_DEBUG', '1') != '0'
+    if debug:
+        print(f"[gear] propagate_from(source={source_joint_id[:8]!r}, "
+              f"relations_in_assembly={len(assembly.gear_relations)})", flush=True)
+    inst_by_id  = _build_inst_by_id(assembly)
+    joint_by_id = {j.id: j for j in assembly.joints}
+    visited_relations: set = set()
+    written_set: set      = set()    # joint ids that have been driven by propagation (first-wins)
+    queue: list           = [source_joint_id]
+    n_applied             = 0
+
+    def _apply(rel, src_joint, tgt_id, anchor_src, anchor_tgt, factor, direction,
+               endpoint_side, source_endpoint_side):
+        nonlocal n_applied
+        tgt = joint_by_id.get(tgt_id)
+        if not tgt:
+            if debug: print(f"[gear]   skip rel={rel.id[:8]!r} ({direction}): target joint missing", flush=True)
+            return
+        if tgt.joint_type != 'revolute':
+            if debug: print(f"[gear]   skip rel={rel.id[:8]!r} ({direction}): target not revolute", flush=True)
+            return
+        sign = -1.0 if rel.invert else 1.0
+        raw_value = anchor_tgt + sign * (src_joint.current_value - anchor_src) * factor
+        lo = tgt.min_limit if tgt.min_limit is not None else -math.inf
+        hi = tgt.max_limit if tgt.max_limit is not None else  math.inf
+        new_value = max(lo, min(hi, raw_value))
+
+        if abs(new_value - raw_value) > 1e-9 and abs(factor) > 1e-12:
+            source_raw = anchor_src + sign * (new_value - anchor_tgt) / factor
+            src_lo = src_joint.min_limit if src_joint.min_limit is not None else -math.inf
+            src_hi = src_joint.max_limit if src_joint.max_limit is not None else math.inf
+            source_value = max(src_lo, min(src_hi, source_raw))
+            if abs(source_value - src_joint.current_value) > 1e-9:
+                _apply_revolute_value_to_gear_endpoint(
+                    assembly, src_joint, source_endpoint_side, float(source_value), inst_by_id, debug,
+                )
+
+        old_value = tgt.current_value
+        if not _apply_revolute_value_to_gear_endpoint(
+            assembly, tgt, endpoint_side, float(new_value), inst_by_id, debug,
+        ):
+            return
+        n_applied += 1
+        if debug:
+            print(f"[gear]   APPLY rel={rel.id[:8]!r} ({direction}) "
+                  f"{src_joint.id[:8]}={src_joint.current_value:+.3f} → "
+                  f"{tgt_id[:8]} {old_value:+.3f} → {new_value:+.3f} "
+                  f"(ratio={rel.ratio} factor={factor:+.4f} invert={rel.invert} endpoint={endpoint_side})",
+                  flush=True)
+
+        # Recurse: the target joint may itself be coupled by further gear
+        # relations on either side.
+        queue.append(tgt_id)
+
+    while queue:
+        cur_id = queue.pop(0)
+        cur_joint = joint_by_id.get(cur_id)
+        if cur_joint is None:
+            continue
+        for rel in assembly.gear_relations:
+            if rel.id in visited_relations:
+                continue
+            # Forward edge: source is joint_a, target is joint_b
+            if rel.joint_a_id == cur_id:
+                if rel.joint_b_id in written_set:
+                    continue
+                visited_relations.add(rel.id)
+                written_set.add(rel.joint_b_id)
+                _apply(
+                    rel, cur_joint, rel.joint_b_id,
+                    anchor_src=rel.joint_a_anchor,
+                    anchor_tgt=rel.joint_b_anchor,
+                    factor=float(rel.ratio),
+                    direction='fwd',
+                    endpoint_side=_gear_endpoint_side(rel, "b", joint_by_id.get(rel.joint_b_id)),
+                    source_endpoint_side=_gear_endpoint_side(rel, "a", cur_joint),
+                )
+                continue
+            # Inverse edge: source is joint_b, target is joint_a
+            if rel.joint_b_id == cur_id:
+                if rel.joint_a_id in written_set:
+                    continue
+                visited_relations.add(rel.id)
+                written_set.add(rel.joint_a_id)
+                # Inverse factor = 1/ratio; ratio is validated non-zero by GearRelation
+                _apply(
+                    rel, cur_joint, rel.joint_a_id,
+                    anchor_src=rel.joint_b_anchor,
+                    anchor_tgt=rel.joint_a_anchor,
+                    factor=1.0 / float(rel.ratio),
+                    direction='inv',
+                    endpoint_side=_gear_endpoint_side(rel, "a", joint_by_id.get(rel.joint_a_id)),
+                    source_endpoint_side=_gear_endpoint_side(rel, "b", cur_joint),
+                )
+                continue
+    if debug:
+        print(f"[gear] done: {n_applied} joint(s) updated", flush=True)
 
 
 @router.get("/assembly/connector-frames", status_code=200)
@@ -4381,7 +5094,10 @@ def delete_joint(joint_id: str) -> dict:
     assembly = assembly_state.get_or_404()
     target   = _find_joint(assembly, joint_id)
     new_joints = [j for j in assembly.joints if j.id != joint_id]
-    mutated = assembly.model_copy(update={"joints": new_joints})
+    # Cascade-drop any gear relations that referenced this joint.
+    new_gears  = [g for g in assembly.gear_relations
+                  if g.joint_a_id != joint_id and g.joint_b_id != joint_id]
+    mutated = assembly.model_copy(update={"joints": new_joints, "gear_relations": new_gears})
     _apply_assembly_mutation_with_feature_log(
         mutated,
         op_kind="assembly-delete-joint",
@@ -4389,6 +5105,176 @@ def delete_joint(joint_id: str) -> dict:
         params={"joint_id": joint_id, "name": target.name},
     )
     return _assembly_response(assembly_state.get_or_404())
+
+
+# ── Gear relations ────────────────────────────────────────────────────────────
+#
+# A GearRelation couples two existing revolute AssemblyJoints with a constant
+# ratio: θ_b = anchor_b + sign * (θ_a - anchor_a) * ratio  (sign = -1 if invert).
+# It is rendered as a row in the Mates list (no separate panel section) and is
+# applied each frame by the frontend kinematics ticker — the backend stores +
+# validates state but does not propagate gear coupling itself (the silent
+# patches the ticker sends already do that work on the frontend).
+
+class CreateGearRelationRequest(BaseModel):
+    name: str = "Gear"
+    joint_a_id: str
+    joint_b_id: str
+    endpoint_a_instance_id: Optional[str] = None
+    endpoint_b_instance_id: Optional[str] = None
+    endpoint_a_side: Optional[Literal["a", "b"]] = None
+    endpoint_b_side: Optional[Literal["a", "b"]] = None
+    ratio: float = 1.0
+    invert: bool = False
+    capture_anchors_from_current: bool = True
+
+
+class PatchGearRelationRequest(BaseModel):
+    name: Optional[str] = None
+    ratio: Optional[float] = None
+    invert: Optional[bool] = None
+    joint_a_anchor: Optional[float] = None
+    joint_b_anchor: Optional[float] = None
+
+
+def _find_gear_relation(assembly: Assembly, rel_id: str):
+    rel = next((g for g in assembly.gear_relations if g.id == rel_id), None)
+    if rel is None:
+        raise HTTPException(404, detail=f"GearRelation {rel_id!r} not found.")
+    return rel
+
+
+def _resolve_gear_endpoint(joint: AssemblyJoint, instance_id: Optional[str], side: Optional[str],
+                           label: str) -> tuple[Optional[str], str]:
+    if side not in (None, "a", "b"):
+        raise HTTPException(400, detail=f"{label}.side must be 'a' or 'b'.")
+    if instance_id:
+        if instance_id == joint.instance_a_id:
+            resolved_side = "a"
+        elif instance_id == joint.instance_b_id:
+            resolved_side = "b"
+        else:
+            raise HTTPException(400, detail=f"{label} instance is not an endpoint of the selected revolute mate.")
+        if side and side != resolved_side:
+            raise HTTPException(400, detail=f"{label} side does not match its instance.")
+        return instance_id, resolved_side
+    resolved_side = side or "b"
+    resolved_id = joint.instance_a_id if resolved_side == "a" else joint.instance_b_id
+    return resolved_id, resolved_side
+
+
+@router.post("/assembly/gear-relations", status_code=201)
+def create_gear_relation(body: CreateGearRelationRequest) -> dict:
+    assembly = assembly_state.get_or_create()
+    joint_a = next((j for j in assembly.joints if j.id == body.joint_a_id), None)
+    joint_b = next((j for j in assembly.joints if j.id == body.joint_b_id), None)
+    if joint_a is None or joint_b is None:
+        raise HTTPException(404, detail="One or both referenced joints do not exist.")
+    if joint_a.joint_type != "revolute" or joint_b.joint_type != "revolute":
+        raise HTTPException(400, detail="Gear relation requires two revolute joints.")
+    if body.joint_a_id == body.joint_b_id:
+        raise HTTPException(400, detail="joint_a_id and joint_b_id must differ.")
+    if not math.isfinite(body.ratio) or abs(body.ratio) < 1e-9:
+        raise HTTPException(400, detail=f"ratio must be finite and nonzero, got {body.ratio}.")
+    endpoint_a_id, endpoint_a_side = _resolve_gear_endpoint(
+        joint_a, body.endpoint_a_instance_id, body.endpoint_a_side, "endpoint_a",
+    )
+    endpoint_b_id, endpoint_b_side = _resolve_gear_endpoint(
+        joint_b, body.endpoint_b_instance_id, body.endpoint_b_side, "endpoint_b",
+    )
+    inst_by_id = _build_inst_by_id(assembly)
+    explicit_a = body.endpoint_a_instance_id is not None or body.endpoint_a_side is not None
+    explicit_b = body.endpoint_b_instance_id is not None or body.endpoint_b_side is not None
+    for label, iid, explicit in (("endpoint_a", endpoint_a_id, explicit_a), ("endpoint_b", endpoint_b_id, explicit_b)):
+        inst = inst_by_id.get(iid) if iid else None
+        if inst is None:
+            raise HTTPException(400, detail=f"{label} must reference an assembly part.")
+        if explicit and inst.fixed:
+            raise HTTPException(400, detail=f"{label} cannot reference a fixed part.")
+
+    anchor_a = joint_a.current_value if body.capture_anchors_from_current else 0.0
+    anchor_b = joint_b.current_value if body.capture_anchors_from_current else 0.0
+    relation = GearRelation(
+        name=body.name,
+        joint_a_id=body.joint_a_id,
+        joint_b_id=body.joint_b_id,
+        endpoint_a_instance_id=endpoint_a_id if explicit_a else None,
+        endpoint_b_instance_id=endpoint_b_id if explicit_b else None,
+        endpoint_a_side=endpoint_a_side if explicit_a else None,
+        endpoint_b_side=endpoint_b_side if explicit_b else None,
+        ratio=body.ratio,
+        invert=body.invert,
+        joint_a_anchor=anchor_a,
+        joint_b_anchor=anchor_b,
+    )
+    new_gears = [*assembly.gear_relations, relation]
+    mutated = assembly.model_copy(update={"gear_relations": new_gears})
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-create-gear",
+        label=f"Add gear relation: {relation.name}",
+        params={"relation_id": relation.id, "name": relation.name},
+    )
+    return _assembly_response(assembly_state.get_or_404())
+
+
+@router.patch("/assembly/gear-relations/{rel_id}", status_code=200)
+def patch_gear_relation(rel_id: str, body: PatchGearRelationRequest) -> dict:
+    assembly = assembly_state.get_or_404()
+    rel      = _find_gear_relation(assembly, rel_id)
+    updates: dict = {}
+    if body.name is not None:           updates["name"]           = body.name
+    if body.ratio is not None:
+        if not math.isfinite(body.ratio) or abs(body.ratio) < 1e-9:
+            raise HTTPException(400, detail=f"ratio must be finite and nonzero, got {body.ratio}.")
+        updates["ratio"] = float(body.ratio)
+    if body.invert is not None:         updates["invert"]         = bool(body.invert)
+    if body.joint_a_anchor is not None: updates["joint_a_anchor"] = float(body.joint_a_anchor)
+    if body.joint_b_anchor is not None: updates["joint_b_anchor"] = float(body.joint_b_anchor)
+
+    new_rel = rel.model_copy(update=updates)
+    new_gears = [new_rel if g.id == rel_id else g for g in assembly.gear_relations]
+    mutated = assembly.model_copy(update={"gear_relations": new_gears})
+    assembly_state.set_assembly_silent(mutated)
+    return _assembly_response(mutated)
+
+
+@router.delete("/assembly/gear-relations/{rel_id}", status_code=200)
+def delete_gear_relation(rel_id: str) -> dict:
+    assembly = assembly_state.get_or_404()
+    rel      = _find_gear_relation(assembly, rel_id)
+    new_gears = [g for g in assembly.gear_relations if g.id != rel_id]
+    mutated   = assembly.model_copy(update={"gear_relations": new_gears})
+    _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-delete-gear",
+        label=f"Delete gear relation: {rel.name}",
+        params={"relation_id": rel_id, "name": rel.name},
+    )
+    return _assembly_response(assembly_state.get_or_404())
+
+
+@router.post("/assembly/gear-relations/{rel_id}/resolve", status_code=200)
+def resolve_gear_relation(rel_id: str) -> dict:
+    """Drive joint_b to the value implied by joint_a + ratio + anchors RIGHT NOW.
+
+    Used by the frontend on configuration restore + when the user explicitly
+    asks the relation to be re-satisfied at the current pose.
+    """
+    assembly = assembly_state.get_or_404()
+    rel      = _find_gear_relation(assembly, rel_id)
+    joint_a = next((j for j in assembly.joints if j.id == rel.joint_a_id), None)
+    joint_b = next((j for j in assembly.joints if j.id == rel.joint_b_id), None)
+    if joint_a is None or joint_b is None:
+        raise HTTPException(404, detail="Referenced joint missing.")
+    sign      = -1.0 if rel.invert else 1.0
+    new_value = rel.joint_b_anchor + sign * (joint_a.current_value - rel.joint_a_anchor) * rel.ratio
+    inst_by_id = _build_inst_by_id(assembly)
+    endpoint_side = _gear_endpoint_side(rel, "b", joint_b)
+    if not _apply_revolute_value_to_gear_endpoint(assembly, joint_b, endpoint_side, new_value, inst_by_id):
+        raise HTTPException(400, detail="Gear endpoint cannot be moved.")
+    assembly_state.set_assembly_silent(assembly)
+    return _assembly_response(assembly)
 
 
 # ── Polymerize Origami ────────────────────────────────────────────────────────
@@ -5200,6 +6086,20 @@ def _capture_assembly_configuration(assembly: Assembly, name: str) -> AssemblyCo
             )
             for j in assembly.joints
         ],
+        gear_relation_states=[
+            AssemblyGearRelationConfigState(
+                relation_id=g.id,
+                ratio=g.ratio,
+                invert=g.invert,
+                joint_a_anchor=g.joint_a_anchor,
+                joint_b_anchor=g.joint_b_anchor,
+                endpoint_a_instance_id=g.endpoint_a_instance_id,
+                endpoint_b_instance_id=g.endpoint_b_instance_id,
+                endpoint_a_side=g.endpoint_a_side,
+                endpoint_b_side=g.endpoint_b_side,
+            )
+            for g in assembly.gear_relations
+        ],
     )
 
 
@@ -5261,9 +6161,28 @@ def restore_assembly_configuration(config_id: str) -> dict:
             "spin_paused": state.spin_paused,
         }, deep=True))
 
+    gear_state_by_id = {s.relation_id: s for s in cfg.gear_relation_states}
+    new_gears = []
+    for rel in assembly.gear_relations:
+        gs = gear_state_by_id.get(rel.id)
+        if gs is None:
+            new_gears.append(rel)
+            continue
+        new_gears.append(rel.model_copy(update={
+            "ratio": gs.ratio,
+            "invert": gs.invert,
+            "joint_a_anchor": gs.joint_a_anchor,
+            "joint_b_anchor": gs.joint_b_anchor,
+            "endpoint_a_instance_id": gs.endpoint_a_instance_id,
+            "endpoint_b_instance_id": gs.endpoint_b_instance_id,
+            "endpoint_a_side": gs.endpoint_a_side,
+            "endpoint_b_side": gs.endpoint_b_side,
+        }, deep=True))
+
     updated = assembly.model_copy(update={
         "instances": new_instances,
         "joints": new_joints,
+        "gear_relations": new_gears,
         "configuration_cursor": cfg.id,
     }, deep=True)
     assembly_state.set_assembly_silent(updated)

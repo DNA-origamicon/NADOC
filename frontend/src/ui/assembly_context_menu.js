@@ -58,6 +58,10 @@ export function initAssemblyContextMenu({
   onDuplicate,
   onPolymerize,
   onDelete,
+  onGroup,
+  onUngroup,
+  getMultiSelectedInstanceIds,
+  getOwningGroupId,
 }) {
   let _el   = null
 
@@ -203,6 +207,24 @@ export function initAssemblyContextMenu({
     if (onPolymerize) {
       el.appendChild(_item('Polymerize…', () => { hide(); onPolymerize(inst) }))
     }
+
+    // ── Group / Ungroup (only when callbacks are provided) ──────────────────
+    const multi = getMultiSelectedInstanceIds?.() ?? []
+    const owningGid = getOwningGroupId?.(inst.id) ?? null
+    const grupableIds = multi.length >= 1
+      ? Array.from(new Set([inst.id, ...multi]))
+      : [inst.id]
+    if (onGroup && multi.length >= 1) {
+      el.appendChild(_divider())
+      el.appendChild(_item(`Group (${grupableIds.length} parts)`, () => {
+        hide(); onGroup(grupableIds)
+      }))
+    }
+    if (onUngroup && owningGid) {
+      if (!onGroup || multi.length < 1) el.appendChild(_divider())
+      el.appendChild(_item('Ungroup', () => { hide(); onUngroup(owningGid) }))
+    }
+
     if (onDelete) {
       if (onToggleVisible || onEditPart || onDuplicate || onPolymerize) {
         el.appendChild(_divider())

@@ -164,17 +164,10 @@ function _buildIndicator(origin, direction, broken = false) {
   cone.renderOrder = 9999
   group.add(cone)
 
-  const ringMat = new THREE.MeshBasicMaterial({
-    color: colour, depthTest: false, depthWrite: false, transparent: true,
-  })
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(RING_R, RING_TUBE, 8, RING_SEGS), ringMat,
-  )
-  ring.rotation.x           = -Math.PI / 2
-  ring.position.y           = -HALF_LEN
-  ring.renderOrder          = 9999
-  ring.userData.isJointRing = true
-  group.add(ring)
+  // Gold ring removed: rotation is driven exclusively through the
+  // TransformControls gizmo's 1-DOF rotate handle (applyConstraint in
+  // main.js sets axis + showZ-only). The shaft + cone above remain as a
+  // visual indicator of the revolute axis.
 
   group.quaternion.copy(q)
   group.position.copy(new THREE.Vector3(...origin)).addScaledVector(ax, HALF_LEN)
@@ -309,10 +302,23 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
   let _mateOnExitCb      = null
   let _mateFirst         = null       // { instanceId, label, worldPos, worldNorm, instanceLabel }
   let _mateSecond        = undefined  // undefined=not set, null=World, obj=connector
+  // Gear-mate picks are shown as movable parts, but still reference existing
+  // revolute joints by id for the backend relation.
+  let _gearJointAId      = null
+  let _gearJointBId      = null
+  let _gearEndpointA     = null
+  let _gearEndpointB     = null
   let _mateSidebarEl     = null
   let _onLivePreview     = null       // (instanceId, THREE.Matrix4) → void
   let _previewInstanceId = null       // currently previewed instance id
   const _connectorDataMap = new Map() // "instanceId::label" → connData
+  // Overlay group for direction-arrow indicators shown during mate edit
+  // (revolute & gear). Built on demand; cleared on exit / preview rebuild.
+  // High renderOrder + depth-test-off materials → arrow always draws on top.
+  const _mateDirectionGroup = new THREE.Group()
+  _mateDirectionGroup.renderOrder = 9999
+  _mateDirectionGroup.frustumCulled = false
+  scene.add(_mateDirectionGroup)
 
   // ── NDC helper ───────────────────────────────────────────────────────────
   function _ndc(e) {
@@ -681,18 +687,94 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       return row
     }
 
+    // Mate type — moved to the TOP of the dialog so the picker UI below can
+    // adapt to the chosen type (connector pickers for rigid/revolute/prismatic/
+    // spherical; revolute-joint pickers for gear).
+    const typeSel = document.createElement('select')
+    typeSel.id = '_mate-type-sel'
+    typeSel.style.cssText = 'width:100%;background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:3px;padding:3px 6px;font-size:11px;cursor:pointer;'
+    for (const [v, t] of [
+      ['rigid', 'Rigid'], ['revolute', 'Revolute'], ['prismatic', 'Prismatic'],
+      ['spherical', 'Spherical'], ['gear', 'Gear'],
+    ]) {
+      const opt = document.createElement('option'); opt.value = v; opt.textContent = t
+      typeSel.appendChild(opt)
+    }
+    panel.appendChild(labelledRow('Mate Type', typeSel))
+
+    // Picker container — connector dropdowns for normal mates, movable-part
+    // dropdowns for gear mates. Rebuilt on type change.
+    const pickerEl = document.createElement('div')
+    panel.appendChild(pickerEl)
     const childSel  = makeSelect(false, '_mate-child-sel')
     const parentSel = makeSelect(true,  '_mate-parent-sel')
-    panel.appendChild(labelledRow('Child Connector',  childSel))
-    panel.appendChild(labelledRow('Parent Connector', parentSel))
+    const gearASel  = document.createElement('select')
+    const gearBSel  = document.createElement('select')
+    for (const sel of [gearASel, gearBSel]) {
+      sel.style.cssText = 'width:100%;background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:3px;padding:3px 6px;font-size:11px;cursor:pointer;'
+    }
+    gearASel.id = '_mate-gear-a-sel'
+    gearBSel.id = '_mate-gear-b-sel'
 
-    // Live "which part moves" status — updated as connectors are picked.
+    function _populateGearSelects() {
+      const joints = store.getState().currentAssembly?.joints ?? []
+      const instances = store.getState().currentAssembly?.instances ?? []
+      const instById = new Map(instances.map(i => [i.id, i]))
+      const options = []
+      for (const j of joints) {
+        if (j.joint_type !== 'revolute') continue
+        for (const side of ['b', 'a']) {
+          const instanceId = side === 'a' ? j.instance_a_id : j.instance_b_id
+          if (!instanceId) continue
+          const inst = instById.get(instanceId)
+          if (!inst || inst.fixed) continue
+          const otherId = side === 'a' ? j.instance_b_id : j.instance_a_id
+          const other = otherId ? instById.get(otherId) : null
+          options.push({
+            jointId: j.id,
+            instanceId,
+            side,
+            text: `${inst.name ?? instanceId.slice(0, 6)} (${j.name || 'Revolute'} to ${other?.name ?? 'World'})`,
+          })
+        }
+      }
+      for (const sel of [gearASel, gearBSel]) {
+        sel.innerHTML = ''
+        const ph = document.createElement('option')
+        ph.value = ''; ph.textContent = '— select movable part —'; ph.disabled = true; ph.selected = true
+        sel.appendChild(ph)
+        for (const item of options) {
+          const opt = document.createElement('option')
+          opt.value = JSON.stringify({ jointId: item.jointId, instanceId: item.instanceId, side: item.side })
+          opt.textContent = item.text
+          sel.appendChild(opt)
+        }
+      }
+      if (_gearEndpointA) gearASel.value = JSON.stringify(_gearEndpointA)
+      if (_gearEndpointB) gearBSel.value = JSON.stringify(_gearEndpointB)
+    }
+
+    function _rebuildPicker() {
+      pickerEl.innerHTML = ''
+      if (typeSel.value === 'gear') {
+        _populateGearSelects()
+        pickerEl.appendChild(labelledRow('Part 1', gearASel))
+        pickerEl.appendChild(labelledRow('Part 2', gearBSel))
+      } else {
+        pickerEl.appendChild(labelledRow('Child Connector',  childSel))
+        pickerEl.appendChild(labelledRow('Parent Connector', parentSel))
+      }
+    }
+    _rebuildPicker()
+
+    // Live "which part moves" status — connector mates only; hidden for gear.
     const moveInfo = document.createElement('div')
     moveInfo.id = '_mate-move-info'
     moveInfo.style.cssText = 'font-size:var(--text-xs);margin:0 0 9px;line-height:1.4;min-height:14px;color:#6e7681;'
     panel.appendChild(moveInfo)
 
-    // Invert toggle
+    // Invert toggle — for connector mates "Invert direction" flips the connector
+    // normal; for gear mates the same checkbox reverses the coupling sign.
     const invertRow = document.createElement('div')
     invertRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:7px;'
     const invertCb = document.createElement('input')
@@ -703,16 +785,6 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     invertLbl.style.cssText = 'font-size:11px;color:#c9d1d9;cursor:pointer;user-select:none;'
     invertRow.appendChild(invertCb); invertRow.appendChild(invertLbl)
     panel.appendChild(invertRow)
-
-    // Mate type
-    const typeSel = document.createElement('select')
-    typeSel.id = '_mate-type-sel'
-    typeSel.style.cssText = 'width:100%;background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:3px;padding:3px 6px;font-size:11px;cursor:pointer;'
-    for (const [v, t] of [['rigid', 'Rigid'], ['revolute', 'Revolute'], ['prismatic', 'Prismatic'], ['spherical', 'Spherical']]) {
-      const opt = document.createElement('option'); opt.value = v; opt.textContent = t
-      typeSel.appendChild(opt)
-    }
-    panel.appendChild(labelledRow('Mate Type', typeSel))
 
     // Type-specific fields
     const fieldsEl = document.createElement('div')
@@ -730,27 +802,66 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
         `
       } else if (typeSel.value === 'revolute') {
         fieldsEl.innerHTML = `
+          <label style="display:flex;align-items:center;gap:6px;margin-bottom:7px;cursor:pointer">
+            <input id="_mate-limits-enabled" type="checkbox" style="cursor:pointer">
+            <span style="font-size:11px;color:#c9d1d9">Use rotation limits</span>
+          </label>
+          <div id="_mate-limit-fields" style="display:none">
           <div style="display:flex;gap:6px">
             <div style="flex:1">
               <div style="font-size:var(--text-xs);color:#6e7681;margin-bottom:2px">Min Angle (°)</div>
-              <input id="_mate-min-angle" type="number" value="-180" step="1"
+              <input id="_mate-min-angle" type="number" value="" step="1" placeholder="Unlimited"
                 style="width:100%;box-sizing:border-box;background:#161b22;color:#c9d1d9;
                        border:1px solid #30363d;border-radius:3px;padding:3px 6px;font-size:11px;">
             </div>
             <div style="flex:1">
               <div style="font-size:var(--text-xs);color:#6e7681;margin-bottom:2px">Max Angle (°)</div>
-              <input id="_mate-max-angle" type="number" value="180" step="1"
+              <input id="_mate-max-angle" type="number" value="" step="1" placeholder="Unlimited"
                 style="width:100%;box-sizing:border-box;background:#161b22;color:#c9d1d9;
                        border:1px solid #30363d;border-radius:3px;padding:3px 6px;font-size:11px;">
             </div>
+          </div>
+          </div>
+        `
+        const limitsCb = fieldsEl.querySelector('#_mate-limits-enabled')
+        const limitFields = fieldsEl.querySelector('#_mate-limit-fields')
+        limitsCb?.addEventListener('change', () => {
+          if (limitFields) limitFields.style.display = limitsCb.checked ? '' : 'none'
+          _applyPreview()
+        })
+      } else if (typeSel.value === 'gear') {
+        fieldsEl.innerHTML = `
+          <div style="font-size:var(--text-xs);color:#6e7681;margin-bottom:2px">Ratio (θ_a / θ_b)</div>
+          <input id="_mate-gear-ratio" type="number" value="1.0" step="0.1" min="0.01"
+            style="width:100%;box-sizing:border-box;background:#161b22;color:#c9d1d9;
+                   border:1px solid #30363d;border-radius:3px;padding:3px 6px;font-size:11px;">
+          <div style="font-size:10px;color:#6e7681;margin-top:3px;line-height:1.3">
+            Couples two movable parts that each have a revolute mate. ratio = 1 → same speed. ratio = 2 → Part 1 spins twice as fast as Part 2.
           </div>
         `
       }
       _applyPreview()
     }
     updateFields()
-    typeSel.addEventListener('change', updateFields)
+    typeSel.addEventListener('change', () => {
+      _rebuildPicker()
+      updateFields()
+      moveInfo.style.display = typeSel.value === 'gear' ? 'none' : ''
+      _applyPreview()
+    })
     fieldsEl.addEventListener('input', () => _applyPreview())
+
+    // Hook gear dropdown picks → live preview (direction arrows).
+    gearASel.addEventListener('change', () => {
+      _gearEndpointA = gearASel.value ? JSON.parse(gearASel.value) : null
+      _gearJointAId = _gearEndpointA?.jointId ?? null
+      _applyPreview()
+    })
+    gearBSel.addEventListener('change', () => {
+      _gearEndpointB = gearBSel.value ? JSON.parse(gearBSel.value) : null
+      _gearJointBId = _gearEndpointB?.jointId ?? null
+      _applyPreview()
+    })
 
     // Preview toggle
     const previewRow = document.createElement('div')
@@ -794,16 +905,51 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     previewCb.addEventListener('change', () => _applyPreview())
 
     createBtn.addEventListener('click', async () => {
-      if (!_mateFirst) { alert('Select a child connector.'); return }
-      if (_mateSecond === undefined) { alert('Select a parent connector.'); return }
       const type   = typeSel.value
       const invert = invertCb.checked
+      if (type === 'gear') {
+        if (!_gearJointAId || !_gearJointBId) {
+          alert('Pick two movable revolute-mated parts for the gear relation.')
+          return
+        }
+        if (_gearJointAId === _gearJointBId) {
+          alert('Pick parts from two different revolute mates.')
+          return
+        }
+        const ratio = parseFloat(fieldsEl.querySelector('#_mate-gear-ratio')?.value ?? 1) || 1
+        const name  = `Gear`
+        try {
+          await api.createGearRelation({
+            joint_a_id: _gearJointAId,
+            joint_b_id: _gearJointBId,
+            endpoint_a_instance_id: _gearEndpointA?.instanceId,
+            endpoint_b_instance_id: _gearEndpointB?.instanceId,
+            endpoint_a_side: _gearEndpointA?.side,
+            endpoint_b_side: _gearEndpointB?.side,
+            ratio, invert, name,
+          })
+        } catch (err) {
+          alert(`Gear relation failed: ${err?.message ?? err}`)
+          return
+        }
+        exitMateDefineMode()
+        return
+      }
+      if (!_mateFirst) { alert('Select a child connector.'); return }
+      if (_mateSecond === undefined) { alert('Select a parent connector.'); return }
       let fixedAngleDeg = 0, minAngleDeg, maxAngleDeg
       if (type === 'rigid') {
         fixedAngleDeg = parseFloat(fieldsEl.querySelector('#_mate-fixed-angle')?.value ?? 0) || 0
       } else if (type === 'revolute') {
-        minAngleDeg = parseFloat(fieldsEl.querySelector('#_mate-min-angle')?.value ?? -180)
-        maxAngleDeg = parseFloat(fieldsEl.querySelector('#_mate-max-angle')?.value ?? 180)
+        const limitsEnabled = !!fieldsEl.querySelector('#_mate-limits-enabled')?.checked
+        if (limitsEnabled) {
+          const minRaw = fieldsEl.querySelector('#_mate-min-angle')?.value ?? ''
+          const maxRaw = fieldsEl.querySelector('#_mate-max-angle')?.value ?? ''
+          const minParsed = parseFloat(minRaw)
+          const maxParsed = parseFloat(maxRaw)
+          minAngleDeg = minRaw.trim() !== '' && Number.isFinite(minParsed) ? minParsed : undefined
+          maxAngleDeg = maxRaw.trim() !== '' && Number.isFinite(maxParsed) ? maxParsed : undefined
+        }
       }
       const first = _mateFirst, second = _mateSecond
       exitMateDefineMode(true)  // keep preview visible until rebuild() settles it
@@ -903,6 +1049,135 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       }
     }
     _previewInstanceId = null
+    _clearDirectionArrows()
+  }
+
+  // ── Direction-arrow indicators (revolute + gear edit) ────────────────────
+  // Show a curved arrow around each chosen revolute axis indicating the
+  // rotation direction the mate will produce. For a gear pair we draw one
+  // arrow per coupled axis with the second flipped when `invert` is set.
+  function _clearDirectionArrows() {
+    while (_mateDirectionGroup.children.length) {
+      const obj = _mateDirectionGroup.children.pop()
+      obj.traverse?.((o) => {
+        o.geometry?.dispose?.()
+        if (o.material) { o.material.map?.dispose?.(); o.material.dispose?.() }
+      })
+    }
+  }
+
+  // Build a curved arrow lying in the plane perpendicular to `axisDir`,
+  // centred at `axisOrigin`. `reverse=true` flips rotation direction.
+  // Sweep is 240° so the head + tail are both clearly visible. Materials use
+  // depthTest=false so the arrow draws on top of the assembly geometry — it's
+  // a UI overlay, not part of the physical scene. Returns null if the inputs
+  // would build a degenerate / unrenderable arrow (NaN axis, zero radius)
+  // so callers don't accidentally show a line-shaped artifact.
+  function _buildDirectionArrow(axisOrigin, axisDir, radius, reverse, color = 0xffb347) {
+    // Validate inputs — a zero / NaN axis would yield a NaN quaternion and the
+    // resulting geometry can degenerate into a long thin shape on screen.
+    const ax = Number(axisDir?.[0]), ay = Number(axisDir?.[1]), az = Number(axisDir?.[2])
+    const axLen = Math.hypot(ax, ay, az)
+    if (!Number.isFinite(axLen) || axLen < 1e-6) return null
+    if (!(radius > 1e-4)) return null
+    const ox = Number(axisOrigin?.[0]), oy = Number(axisOrigin?.[1]), oz = Number(axisOrigin?.[2])
+    if (![ox, oy, oz].every(v => Number.isFinite(v))) return null
+
+    const grp = new THREE.Group()
+    const ARC_DEG = 240
+    // Floor TUBE_R at 0.15 nm so the partial torus never collapses to a
+    // hairline from an edge-on camera angle, regardless of arrow radius.
+    const TUBE_R  = Math.max(0.15, radius * 0.12)
+    const arcRad  = ARC_DEG * Math.PI / 180
+    const sign    = reverse ? -1 : 1
+
+    const overlayMat = (col, opacity = 1.0) => new THREE.MeshBasicMaterial({
+      color: col,
+      transparent: true,
+      opacity,
+      depthTest: false,
+      depthWrite: false,
+    })
+
+    const torus = new THREE.Mesh(
+      new THREE.TorusGeometry(radius, TUBE_R, 12, 64, arcRad),
+      overlayMat(color, 0.95),
+    )
+    if (sign < 0) torus.scale.y = -1
+    torus.renderOrder = 9999
+    grp.add(torus)
+
+    const headAngle = sign > 0 ? arcRad : -arcRad
+    const head = new THREE.Mesh(
+      new THREE.ConeGeometry(TUBE_R * 3.5, TUBE_R * 8.0, 18),
+      overlayMat(color, 1.0),
+    )
+    const cx = Math.cos(headAngle) * radius
+    const cy = Math.sin(headAngle) * radius
+    const tx = -Math.sin(headAngle) * sign
+    const ty =  Math.cos(headAngle) * sign
+    head.position.set(cx, cy, 0)
+    const tangent = new THREE.Vector3(tx, ty, 0)
+    const fromY   = new THREE.Vector3(0, 1, 0)
+    head.quaternion.setFromUnitVectors(fromY, tangent)
+    head.renderOrder = 9999
+    grp.add(head)
+
+    // A small sphere at the rotation axis so the arrow visually "anchors" to
+    // the joint axis rather than floating in mid-air — gives the user a
+    // landmark separate from the curved arc.
+    const hub = new THREE.Mesh(
+      new THREE.SphereGeometry(TUBE_R * 1.4, 16, 12),
+      overlayMat(color, 0.9),
+    )
+    hub.renderOrder = 9999
+    grp.add(hub)
+
+    const z = new THREE.Vector3(ax / axLen, ay / axLen, az / axLen)
+    const fromZ = new THREE.Vector3(0, 0, 1)
+    grp.quaternion.setFromUnitVectors(fromZ, z)
+    grp.position.set(ox, oy, oz)
+    return grp
+  }
+
+  function _drawRevoluteDirectionArrow(joint, opts = {}) {
+    if (!joint || joint.joint_type !== 'revolute') return
+    const radius = opts.radius ?? 1.4
+    const reverse = !!opts.reverse
+    const color   = opts.color ?? 0xffb347
+    const arrow = _buildDirectionArrow(joint.axis_origin, joint.axis_direction, radius, reverse, color)
+    if (arrow) _mateDirectionGroup.add(arrow)
+  }
+
+  function _drawMateDirectionArrows() {
+    _clearDirectionArrows()
+    if (!_mateSidebarEl) return
+    const type   = _mateSidebarEl.querySelector('#_mate-type-sel')?.value ?? 'rigid'
+    const invert = _mateSidebarEl.querySelector('#_mate-invert-cb')?.checked ?? false
+
+    if (type === 'gear') {
+      const joints = store.getState().currentAssembly?.joints ?? []
+      const ja = joints.find(j => j.id === _gearJointAId)
+      const jb = joints.find(j => j.id === _gearJointBId)
+      if (!ja || !jb) return
+      const ratio = parseFloat(_mateSidebarEl.querySelector('#_mate-gear-ratio')?.value ?? 1) || 1
+      // Arrow on joint A is the driver (full size). Joint B is sized by the
+      // coupling so the user sees "this one spins slower" visually.
+      _drawRevoluteDirectionArrow(ja, { radius: 1.4, reverse: false, color: 0xffb347 })
+      const rB = 1.4 * Math.max(0.4, 1 / Math.abs(ratio))
+      _drawRevoluteDirectionArrow(jb, { radius: rB, reverse: invert, color: 0x58a6ff })
+      return
+    }
+
+    if (type === 'revolute') {
+      // For a newly-created revolute mate we don't have the joint yet, but we
+      // know the axis comes from the parent connector. Mirror the alignment
+      // math: axisOrigin = second.worldPos, axisDir = second.worldNorm.
+      if (!_mateSecond || _mateSecond === null) return
+      _mateDirectionGroup.add(
+        _buildDirectionArrow(_mateSecond.worldPos, _mateSecond.worldNorm, 1.4, invert, 0xffb347),
+      )
+    }
   }
 
   // Describe which part moves vs stays, given the current child/parent picks +
@@ -939,11 +1214,20 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
   }
 
   function _applyPreview() {
-    if (!_onLivePreview || !_mateSidebarEl) return
-    if (!_mateSidebarEl.querySelector('#_mate-preview-cb')?.checked) { _clearPreview(); return }
+    if (!_mateSidebarEl) return
+    const type    = _mateSidebarEl.querySelector('#_mate-type-sel')?.value ?? 'rigid'
+    const preview = _mateSidebarEl.querySelector('#_mate-preview-cb')?.checked ?? true
+
+    // Direction arrows: refresh every time the dialog state changes. For gear
+    // they need only the two joint picks; for revolute they need the parent
+    // connector. Drawn even when the connector preview is off.
+    _drawMateDirectionArrows()
+
+    if (!_onLivePreview) return
+    if (!preview) { _clearPreview(); return }
+    if (type === 'gear') { _clearPreview(); return }
     if (!_mateFirst || _mateSecond === undefined || _mateSecond === null) { _clearPreview(); return }
 
-    const type           = _mateSidebarEl.querySelector('#_mate-type-sel')?.value ?? 'rigid'
     const invert         = _mateSidebarEl.querySelector('#_mate-invert-cb')?.checked ?? false
     const fixedAngleDeg  = type === 'rigid'
       ? (parseFloat(_mateSidebarEl.querySelector('#_mate-fixed-angle')?.value ?? 0) || 0) : 0
@@ -1206,6 +1490,10 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     _previewInstanceId = null
     _mateFirst         = null
     _mateSecond        = undefined
+    _gearJointAId      = null
+    _gearJointBId      = null
+    _gearEndpointA     = null
+    _gearEndpointB     = null
 
     // Populate blunt-end connectors before building the sidebar so they appear in dropdowns
     _syncBluntConnIndicators()
@@ -1238,10 +1526,15 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
   function exitMateDefineMode(skipPreviewClear = false) {
     if (!_mateMode) return
     if (!skipPreviewClear) _clearPreview()
+    _clearDirectionArrows()
     _onLivePreview = null
     _mateMode      = false
     _mateFirst     = null
     _mateSecond    = undefined
+    _gearJointAId  = null
+    _gearJointBId  = null
+    _gearEndpointA = null
+    _gearEndpointB = null
     // Restore connector indicator opacity / visibility to the default so
     // when mate-define is re-entered next time they don't start at the
     // last-faded opacity. (The group is hidden right below; this just
@@ -1374,13 +1667,12 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       _jointGroup.add(mesh)
     }
 
-    // Ring is the picking target for the revolute drag — flag every instance
-    // slot via userData so pickJointRing can filter (no per-instance userData
-    // exists in Three.js, so we filter by mesh identity instead). Easier:
-    // pickJointRing intersects only _sharedRingMesh; pickJointAny intersects
-    // all three. The legacy `userData.isJointRing` per-mesh check is replaced
-    // by mesh-identity comparison.
+    // Gold ring removed: rotation is driven only via the TransformControls
+    // gizmo (1-DOF rotate-about-axis). The ring mesh stays allocated so the
+    // shared joint code (matrix writes, dispose, count) doesn't fragment,
+    // but its visibility is forced off so it never draws.
     _sharedRingMesh.userData.isSharedRingMesh = true
+    _sharedRingMesh.visible = false
   }
 
   /** Re-upload per-instance attributes after population/edit. */
@@ -1587,25 +1879,12 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
   }
 
   // ── Public: pick ring ────────────────────────────────────────────────────
-  function pickJointRing(e) {
-    _rc.setFromCamera(_ndc(e), camera)
-    if (_useSharedJoints) {
-      if (!_sharedRingMesh || _sharedRingMesh.count === 0) return null
-      const hits = _rc.intersectObject(_sharedRingMesh, false)
-      if (!hits.length) return null
-      const idx = hits[0].instanceId
-      if (idx == null) return null
-      return _sharedJointIds[idx] ?? null
-    }
-    if (!_jointMeshes.size) return null
-    const rings = []
-    for (const grp of _jointMeshes.values()) {
-      if (!grp.visible) continue   // hidden (non-selected) joints aren't pickable
-      grp.traverse(o => { if (o.userData.isJointRing) rings.push(o) })
-    }
-    if (!rings.length) return null
-    const hits = _rc.intersectObjects(rings, false)
-    return hits.length ? hits[0].object.userData.jointId : null
+  // Gold ring removed (see _buildIndicator / shared init). Rotation is
+  // driven exclusively through the TransformControls 1-DOF gizmo, so
+  // pickJointRing always returns null — main.js's click-on-ring dispatch
+  // no-ops and falls through to instance picking.
+  function pickJointRing(_e) {
+    return null
   }
 
   // ── Public: pick the entire indicator (shaft / cone / ring) ─────────────

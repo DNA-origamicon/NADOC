@@ -69,10 +69,9 @@ function terminalOverhang(strand, design, which) {
 }
 
 function effectiveColor(strand) {
-  if (strand.strand_type === 'scaffold') return '#29b6f6'   // spreadsheet's lighter scaffold swatch tint
-  // Shared, stable per-strand-id palette — agrees with the pathview canvas and
-  // doesn't reshuffle when a nick/ligation changes the strand list. Caller must
-  // have run ensureStapleColors(design) first (done in sortedStrands + render).
+  // stapleColorOf handles scaffold (CLR_SCAFFOLD) + explicit strand.color + per-id
+  // palette in one place, so pathview / sliceview / spreadsheet all agree.
+  // Caller must have run ensureStapleColors(design) first (done in sortedStrands).
   return stapleColorOf(strand)
 }
 
@@ -401,6 +400,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange } = {
             break
           }
           case 'color': {
+            td.className = 'sheet-col-color'
             td.appendChild(_makeColorCell(strand, color))
             break
           }
@@ -422,17 +422,33 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange } = {
   }
 
   // ── Color picker cell ─────────────────────────────────────────────
+  // The <input type="color"> value setter silently falls back to #000000 for
+  // anything that isn't a 7-char lowercase #rrggbb, so normalise first.
+  function _normaliseHex(c) {
+    if (!c) return '#000000'
+    let s = String(c).trim().toLowerCase()
+    if (!s.startsWith('#')) s = '#' + s
+    if (/^#[0-9a-f]{3}$/.test(s)) return '#' + s[1]+s[1] + s[2]+s[2] + s[3]+s[3]
+    if (/^#[0-9a-f]{6}$/.test(s)) return s
+    return '#000000'
+  }
+
   function _makeColorCell(strand, currentColor) {
     const input = document.createElement('input')
     input.type      = 'color'
     input.className = 'sheet-color-input'
-    input.value     = currentColor
+    const startHex  = _normaliseHex(currentColor)
+    input.value     = startHex
+    // Paint the input itself so the cell shows the strand color even when the
+    // native swatch chrome doesn't fill the input (browser-dependent).
+    input.style.backgroundColor = startHex
     input.title     = 'Click to change strand color'
 
     input.addEventListener('click', e => e.stopPropagation())
 
     input.addEventListener('change', async () => {
       const hex = input.value
+      input.style.backgroundColor = hex
       await patchStrand(strand.id, { color: hex })
     })
 

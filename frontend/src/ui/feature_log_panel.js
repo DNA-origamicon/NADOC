@@ -870,8 +870,26 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         'border-radius:3px;font-size:var(--text-xs);line-height:1.4',
         'padding:3px 4px;cursor:pointer;flex-shrink:0',
       ].join(';')
-      delBtn.addEventListener('click', e => {
+      delBtn.addEventListener('click', async e => {
         e.stopPropagation()
+        // Safeguard: a Fine Routing cluster row collapses many minor ops into
+        // one log entry — deleting a big one (e.g. 200+ nick/ligate/colors) is
+        // easy to misclick. Confirm above the threshold; small clusters and
+        // non-cluster rows still delete immediately.
+        if (entry.feature_type === 'routing-cluster') {
+          const n = entry.children?.length ?? 0
+          if (n > 10) {
+            const ok = await showConfirm({
+              title: 'Delete Fine Routing entry',
+              message:
+                `This log entry bundles ${n} sub-steps. Delete it?\n\n` +
+                `Geometry is kept — use revert (↶) to roll the changes back.`,
+              danger: true,
+              confirmLabel: 'Delete',
+            })
+            if (!ok) return
+          }
+        }
         if (_isAssemblyPartMode() && _latestDesign && api.patchInstanceDesign) {
           const design = JSON.parse(JSON.stringify(_latestDesign))
           design.feature_log?.splice(i, 1)

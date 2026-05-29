@@ -2146,6 +2146,56 @@ export async function duplicateInstance(instanceId, { offset, name } = {}) {
   return _syncFromAssemblyResponse(json)
 }
 
+// ── PartGroup (PowerPoint-style grouping) ──────────────────────────────────
+
+export async function createGroup({ instanceIds = [], subgroupIds = [], name } = {}) {
+  const body = { instance_ids: instanceIds, subgroup_ids: subgroupIds }
+  if (name) body.name = name
+  const json = await _request('POST', '/assembly/groups', body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function ungroup(groupId) {
+  const json = await _request('DELETE', `/assembly/groups/${encodeURIComponent(groupId)}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function patchGroup(groupId, { name, visible, representation, clearRepresentation, expanded } = {}) {
+  const body = {}
+  if (name !== undefined)          body.name = name
+  if (visible !== undefined)       body.visible = visible
+  if (representation !== undefined) body.representation = representation
+  if (clearRepresentation)         body.clear_representation = true
+  if (expanded !== undefined)      body.expanded = expanded
+  const json = await _request('PATCH', `/assembly/groups/${encodeURIComponent(groupId)}`, body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function duplicateGroup(groupId, { offset, name } = {}) {
+  const body = {}
+  if (offset) body.offset = offset
+  if (name)   body.name   = name
+  const json = await _request('POST', `/assembly/groups/${encodeURIComponent(groupId)}/duplicate`, body)
+  return _syncFromAssemblyResponse(json)
+}
+
+/** Delete a group AND all its transitive members (cascade). To remove only the
+ *  group wrapper while keeping the parts, use `ungroup`. */
+export async function deleteGroupCascade(groupId) {
+  const json = await _request('DELETE', `/assembly/groups/${encodeURIComponent(groupId)}/cascade`)
+  return _syncFromAssemblyResponse(json)
+}
+
+/** Rigid transform of a group; rigidly-mated external partners follow. Pass
+ *  either `translation` (3 floats) or `matrix` (16 floats, row-major 4×4). */
+export async function transformGroup(groupId, { translation, matrix } = {}) {
+  const body = {}
+  if (translation) body.translation = translation
+  if (matrix)      body.matrix      = matrix
+  const json = await _request('POST', `/assembly/groups/${encodeURIComponent(groupId)}/transform`, body)
+  return _syncFromAssemblyResponse(json)
+}
+
 export async function polymerizeAssembly(body) {
   const json = await _request('POST', '/assembly/polymerize', body)
   return _syncFromAssemblyResponse(json)
@@ -2361,6 +2411,26 @@ export async function patchAssemblyJoint(id, body) {
 
 export async function deleteAssemblyJoint(id) {
   const json = await _request('DELETE', `/assembly/joints/${id}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function createGearRelation(body) {
+  const json = await _request('POST', '/assembly/gear-relations', body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function patchGearRelation(id, body) {
+  const json = await _request('PATCH', `/assembly/gear-relations/${id}`, body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function deleteGearRelation(id) {
+  const json = await _request('DELETE', `/assembly/gear-relations/${id}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function resolveGearRelation(id) {
+  const json = await _request('POST', `/assembly/gear-relations/${id}/resolve`)
   return _syncFromAssemblyResponse(json)
 }
 

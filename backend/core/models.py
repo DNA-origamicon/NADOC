@@ -875,6 +875,19 @@ class AssemblyJointConfigState(BaseModel):
     spin_paused: bool = False
 
 
+class AssemblyGearRelationConfigState(BaseModel):
+    """Saved gear-relation state for an assembly configuration snapshot."""
+    relation_id: str
+    ratio: float = 1.0
+    invert: bool = False
+    joint_a_anchor: float = 0.0
+    joint_b_anchor: float = 0.0
+    endpoint_a_instance_id: Optional[str] = None
+    endpoint_b_instance_id: Optional[str] = None
+    endpoint_a_side: Optional[Literal["a", "b"]] = None
+    endpoint_b_side: Optional[Literal["a", "b"]] = None
+
+
 class AssemblyConfigurationSnapshot(BaseModel):
     """
     A named assembly configuration.
@@ -886,6 +899,7 @@ class AssemblyConfigurationSnapshot(BaseModel):
     name: str = "Configuration"
     instance_states: List[AssemblyInstanceConfigState] = Field(default_factory=list)
     joint_states: List[AssemblyJointConfigState] = Field(default_factory=list)
+    gear_relation_states: List[AssemblyGearRelationConfigState] = Field(default_factory=list)
 
 
 class DeformationLogEntry(BaseModel):
@@ -1048,6 +1062,14 @@ SnapshotOpKind = Literal[
     'protein-attach',
     'protein-attach-patch',
     'protein-attach-delete',
+    'assembly-create-group',
+    'assembly-ungroup',
+    'assembly-patch-group',
+    'assembly-duplicate-group',
+    'assembly-delete-group',
+    'assembly-transform-group',
+    'assembly-create-gear',
+    'assembly-delete-gear',
 ]
 
 
@@ -2183,6 +2205,46 @@ class AssemblyJoint(BaseModel):
     spin_paused: bool = False
 
 
+class GearRelation(BaseModel):
+    """
+    Couples two existing revolute AssemblyJoints with a constant ratio.
+
+    Coupling math (frontend kinematics ticker, each frame):
+      sign = -1 if invert else +1
+      θ_b = joint_b_anchor + sign * (θ_a - joint_a_anchor) * ratio
+
+    `ratio = 1.0` keeps the two pulleys/gears synchronized at the same rate.
+    `ratio = 2.0` means joint_a spins twice as fast as joint_b (a 2:1 reduction
+    from a-driven to b-driven). Anchors snapshot each joint's `current_value`
+    at the moment the relation is created, so the relation is satisfied from
+    any starting pose without forcing an immediate jump.
+
+    THREE-LAYER LAW: a gear relation only mutates AssemblyJoint.current_value
+    (via the silent-patch path). It never writes to any field inside an
+    embedded Design.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "Gear"
+    joint_a_id: str
+    joint_b_id: str
+    endpoint_a_instance_id: Optional[str] = None
+    endpoint_b_instance_id: Optional[str] = None
+    endpoint_a_side: Optional[Literal["a", "b"]] = None
+    endpoint_b_side: Optional[Literal["a", "b"]] = None
+    ratio: float = 1.0
+    invert: bool = False
+    joint_a_anchor: float = 0.0
+    joint_b_anchor: float = 0.0
+
+    @model_validator(mode='after')
+    def _check(self):
+        if not math.isfinite(self.ratio) or abs(self.ratio) < 1e-9:
+            raise ValueError(f"GearRelation {self.id}: ratio must be finite and nonzero, got {self.ratio}")
+        if self.joint_a_id == self.joint_b_id:
+            raise ValueError("GearRelation: joint_a_id and joint_b_id must differ.")
+        return self
+
+
 class PartLibraryEntry(BaseModel):
     """Registry entry for a known .nadoc file in the part library."""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -2198,6 +2260,33 @@ class PartLibrary(BaseModel):
     entries: List[PartLibraryEntry] = Field(default_factory=list)
 
 
+class PartGroup(BaseModel):
+    """Grouping of PartInstances in an Assembly (PowerPoint-style).
+
+    Lets the user bundle a sub-assembly so it can be selected, moved, copied,
+    and deleted as a single entity. Groups may nest via ``subgroup_ids``.
+
+    ``visible`` / ``representation`` are *overlays*: when the renderer applies
+    them, each member's own ``visible`` / ``representation`` is preserved
+    underneath and restored when the group toggle is cleared. The group never
+    mutates its members' fields.
+
+    Partition invariants (enforced by ``Assembly`` validator):
+    - Every ``instance_id`` exists in ``Assembly.instances``.
+    - Every ``subgroup_id`` references a different ``PartGroup``; no cycles.
+    - Each instance/subgroup belongs to at most one parent group.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = ""
+    instance_ids: List[str] = Field(default_factory=list)
+    subgroup_ids: List[str] = Field(default_factory=list)
+    visible: bool = True
+    representation: Optional[Literal[
+        "full", "beads", "cylinders", "vdw", "ballstick", "hull-prism", "surface"
+    ]] = None
+    expanded: bool = True
+
+
 class Assembly(BaseModel):
     """
     A multi-origami assembly.
@@ -2210,6 +2299,9 @@ class Assembly(BaseModel):
     connections rendered as dashed lines).  Virtual scaffold connections are
     strands with strand_type=SCAFFOLD and id prefix "__vsc__".
 
+    groups: PowerPoint-style PartGroups (may nest). Optional; an assembly
+    without groups behaves exactly as before.
+
     feature_log: undo/redo trail for assembly-level operations only.
     Each Part's own feature_log is separate and unaffected by assembly ops.
     """
@@ -2217,6 +2309,8 @@ class Assembly(BaseModel):
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
     instances: List[PartInstance] = Field(default_factory=list)
     joints: List[AssemblyJoint] = Field(default_factory=list)
+    gear_relations: List[GearRelation] = Field(default_factory=list)
+    groups: List[PartGroup] = Field(default_factory=list)
     assembly_helices: List[Helix] = Field(default_factory=list)
     assembly_strands: List[Strand] = Field(default_factory=list)
     camera_poses: List[CameraPose] = Field(default_factory=list)
@@ -2356,3 +2450,62 @@ class Assembly(BaseModel):
                if k not in ("format_version", "sources", "instances_v2")}
         out["instances"] = expanded
         return out
+
+    # ── PartGroup invariants ───────────────────────────────────────────────────
+
+    @model_validator(mode="after")
+    def _validate_groups(self) -> "Assembly":
+        """Enforce partition + acyclic invariants on PartGroups.
+
+        Allows the validator to be called repeatedly (history snapshots,
+        feature-log replays) so this is cheap and side-effect-free.
+        """
+        if not self.groups:
+            return self
+        instance_ids = {inst.id for inst in self.instances}
+        group_ids = [g.id for g in self.groups]
+        if len(group_ids) != len(set(group_ids)):
+            raise ValueError("Assembly.groups: duplicate group ids")
+        by_id = {g.id: g for g in self.groups}
+        owner: dict[str, str] = {}  # member id (instance or subgroup) → owning group id
+        for g in self.groups:
+            for iid in g.instance_ids:
+                if iid not in instance_ids:
+                    raise ValueError(
+                        f"PartGroup {g.id!r} references missing instance {iid!r}"
+                    )
+                if iid in owner:
+                    raise ValueError(
+                        f"Instance {iid!r} belongs to multiple groups "
+                        f"({owner[iid]!r} and {g.id!r})"
+                    )
+                owner[iid] = g.id
+            for sgid in g.subgroup_ids:
+                if sgid not in by_id:
+                    raise ValueError(
+                        f"PartGroup {g.id!r} references missing subgroup {sgid!r}"
+                    )
+                if sgid == g.id:
+                    raise ValueError(f"PartGroup {g.id!r} contains itself")
+                if sgid in owner:
+                    raise ValueError(
+                        f"Subgroup {sgid!r} belongs to multiple groups "
+                        f"({owner[sgid]!r} and {g.id!r})"
+                    )
+                owner[sgid] = g.id
+        # Cycle check: DFS over subgroup edges, every group must be reachable
+        # without revisiting itself.
+        WHITE, GRAY, BLACK = 0, 1, 2
+        color = {gid: WHITE for gid in group_ids}
+        def _dfs(gid: str) -> None:
+            color[gid] = GRAY
+            for sgid in by_id[gid].subgroup_ids:
+                if color[sgid] == GRAY:
+                    raise ValueError(f"PartGroup cycle detected at {sgid!r}")
+                if color[sgid] == WHITE:
+                    _dfs(sgid)
+            color[gid] = BLACK
+        for gid in group_ids:
+            if color[gid] == WHITE:
+                _dfs(gid)
+        return self
