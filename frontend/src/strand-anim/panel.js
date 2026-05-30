@@ -9,7 +9,6 @@
 
 import { el } from '../ui/primitives/dom.js'
 import { createPanelSection } from '../ui/primitives/panel_section.js'
-import { attachAllDragScrub } from '../input/drag_scrub.js'
 
 /**
  * @param {HTMLElement} panelRoot
@@ -149,7 +148,6 @@ export function buildPanel(panelRoot, state, { onChange, onPlayToggle, isPlaying
   checkRow(sModel.body, 'Fork from centerline', 'forkToCenter')
 
   for (const s of [sForm, sRx, sAnim, sModel]) panelRoot.appendChild(s.root)
-  attachAllDragScrub(panelRoot)
 
   function refresh() {
     _refreshers.forEach((fn) => fn())

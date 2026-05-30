@@ -35,11 +35,26 @@ const FLOOR_GROUP_NAME = 'photoFloor'
 const FLOOR_MESH_NAME  = 'photoFloorMesh'
 const FLOOR_GRID_NAME  = 'photoFloorGrid'
 
+// The plane is sized to run past the camera's render horizon at any sane
+// framing → reads as infinite. It extends at least this many bbox-diameters,
+// AND never less than ABSOLUTE_MIN_REACH nm, so even a tiny structure still
+// gets a floor that reaches the far-clip plane (part-mode far clip = 2000 nm,
+// see main.js). The far clip itself crops the floor into a distant horizon.
+const INFINITE_FACTOR = 80
+const ABSOLUTE_MIN_REACH = 4000   // nm (half-extent 2000 ≈ part-mode far clip)
+// Cap on grid line subdivisions so a very dense grid over the huge plane can't
+// explode the line count. At the cap the effective cell gets coarser than
+// requested rather than spawning hundreds of thousands of segments. 4000 keeps
+// the whole density slider exact for typical (tens-of-nm) structures.
+const MAX_GRID_DIVISIONS = 4000
+
 export function createFloor({ scene }) {
   let _group = null
   let _mesh  = null   // either a Mesh (PBR/Shadow) or a Reflector
   let _grid  = null
   let _lastBBox = null
+  let _lastReach  = 0      // world half-extent of the plane (planeSize / 2)
+  let _lastCenter = null   // world-space plane centre (for camera far-clip fit)
 
   // Walk the scene and tally a Box3 over everything that should "rest on" the
   // floor. Excludes: photo helper groups, additive blending sprites, lines,
@@ -121,6 +136,8 @@ export function createFloor({ scene }) {
       _group = null
     }
     _lastBBox = null
+    _lastReach = 0
+    _lastCenter = null
   }
 
   // (Re)build the floor from the given settings snapshot. Returns the scene
@@ -136,7 +153,12 @@ export function createFloor({ scene }) {
     const size      = bbox.getSize(new THREE.Vector3())
     const center    = bbox.getCenter(new THREE.Vector3())
     const diameter  = Math.max(size.length(), 1.0)
-    const planeSize = diameter * (settings.floorSize ?? 2.0)
+    // Effectively-infinite plane: large enough to reach the camera's far-clip
+    // horizon at any framing. (The old per-floor "Size" slider was replaced by
+    // the grid-density control below.)
+    const planeSize = Math.max(diameter * INFINITE_FACTOR, ABSOLUTE_MIN_REACH)
+    _lastReach  = planeSize * 0.5
+    _lastCenter = center.clone()
 
     _group = new THREE.Group()
     _group.name = FLOOR_GROUP_NAME
@@ -186,7 +208,16 @@ export function createFloor({ scene }) {
 
     // Optional GridHelper. Default plane is XZ (normal=+Y); re-orient to match.
     if (settings.floorGrid) {
-      const divisions = 20
+      // Grid density = number of cells per bbox diameter → cell size =
+      // diameter / density (nm). Subdivisions = planeSize / cellSize, capped so
+      // a fine grid over the huge plane can't explode the line count. Higher
+      // slider = finer grid.
+      const density   = Math.max(0.5, settings.floorGridDensity ?? 10)
+      const cellSize  = diameter / density
+      const divisions = Math.min(
+        MAX_GRID_DIVISIONS,
+        Math.max(4, Math.round(planeSize / cellSize)),
+      )
       // Neon mode: HDR-boost the grid colour so Bloom catches it as a glow.
       // GridHelper stores per-vertex colours, and three's LineBasicMaterial
       // honours values >1 when `toneMapped` is false — they reach the bloom
@@ -225,6 +256,12 @@ export function createFloor({ scene }) {
   function getLastBBox() { return _lastBBox }
   function getMesh()     { return _mesh }
   function isActive()    { return _mesh != null }
+  // World-space reach of the floor plane so the caller can extend the camera's
+  // far clip to include it (otherwise the far clip crops the floor near the
+  // content — especially in assembly mode where far brackets the content tight).
+  function getReach() {
+    return _mesh ? { center: _lastCenter, reach: _lastReach } : null
+  }
 
-  return { build, dispose, getLastBBox, getMesh, isActive }
+  return { build, dispose, getLastBBox, getMesh, isActive, getReach }
 }

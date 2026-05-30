@@ -64,6 +64,7 @@ import { initOverhangLocations }   from './scene/overhang_locations.js'
 import { initOverhangLinkArcs }    from './scene/overhang_link_arcs.js'
 import { initOverhangBindingLines } from './scene/overhang_binding_lines.js'
 import { initOverhangUnzipOverlay } from './scene/overhang_unzip_overlay.js'
+import { initMultiOverhangStrandAnim } from './scene/overhang_strand_anim.js'
 import { initUnligatedCrossoverMarkers } from './scene/unligated_crossover_markers.js'
 import { initLinkerAnchorDebug }   from './scene/linker_anchor_debug.js'
 import { initOverhangNameOverlay } from './scene/overhang_name_overlay.js'
@@ -110,7 +111,6 @@ import { BDNA_RISE_PER_BP, HELIX_RADIUS } from './constants.js'
 import { initZoomScope }           from './scene/zoom_scope.js'
 import { initExpandedSpacing }     from './scene/expanded_spacing.js'
 import { registerShortcut, dispatchKeyEvent } from './input/shortcuts.js'
-import { attachAllDragScrub }                 from './input/drag_scrub.js'
 import { showConfirm }                         from './ui/primitives/confirm.js'
 import { createContextMenu }                   from './ui/primitives/context_menu.js'
 import { initSidebarResize }                   from './ui/sidebar_resize.js'
@@ -478,9 +478,30 @@ async function main() {
     const _clipSize = new THREE.Vector3()
     let _clipRadius = 0
     let _clipTick   = 0
+    const _applyClip = (far, near) => {
+      if (near >= far) near = far * 1e-4
+      if (Math.abs(camera.far - far) > far * 1e-3 ||
+          Math.abs(camera.near - near) > Math.max(near, 0.01) * 1e-2) {
+        camera.far  = far
+        camera.near = near
+        camera.updateProjectionMatrix()
+      }
+    }
+    // Photo-mode floor reach (world centre + half-extent) or null. When a floor
+    // is active the far clip must reach past it, or the floor gets cropped near
+    // the content — this is what made the "infinite" floor still look small,
+    // especially in assembly mode where far brackets the content tightly.
+    const _floorReach = () => photoRenderer?.getFloorReach?.() ?? null
     addFrameCallback(() => {
       if (!store.getState().assemblyActive) {
-        if (camera.near !== 0.1 || camera.far !== 2000) {
+        // Part mode: far is normally pinned at 2000. If a photo floor is up,
+        // extend far to include the whole plane so it reaches a far horizon.
+        const floor = _floorReach()
+        if (floor?.center) {
+          const d   = camera.position.distanceTo(floor.center)
+          const far = Math.max(2000, d + floor.reach + 1)
+          _applyClip(far, Math.max(0.1, far / 1e5))
+        } else if (camera.near !== 0.1 || camera.far !== 2000) {
           camera.near = 0.1; camera.far = 2000; camera.updateProjectionMatrix()
         }
         return
@@ -496,19 +517,19 @@ async function main() {
       }
       if (_clipRadius <= 1e-3) return
       const d = camera.position.distanceTo(_clipCtr)
-      const margin = _clipRadius * 0.1 + 1
-      const far  = d + _clipRadius + margin
+      // Expand the effective radius to enclose the photo floor (if any) so the
+      // far clip doesn't crop it. near still tracks the CONTENT radius so the
+      // depth buffer stays tight around the parts.
+      let reach = _clipRadius
+      const floor = _floorReach()
+      if (floor?.center) reach = Math.max(reach, floor.center.distanceTo(_clipCtr) + floor.reach)
+      const margin = reach * 0.1 + 1
+      const far  = d + reach + margin
       // Tightest near that still covers the content, floored both absolutely
       // (0.1 nm) and relative to far (cap the depth-buffer ratio so distant
       // billboards don't z-fight the near parts into mush).
-      let near = Math.max(d - _clipRadius - margin, far / 1e5, 0.1)
-      if (near >= far) near = far * 1e-4
-      if (Math.abs(camera.far - far) > far * 1e-3 ||
-          Math.abs(camera.near - near) > Math.max(near, 0.01) * 1e-2) {
-        camera.far  = far
-        camera.near = near
-        camera.updateProjectionMatrix()
-      }
+      const near = Math.max(d - _clipRadius - (_clipRadius * 0.1 + 1), far / 1e5, 0.1)
+      _applyClip(far, near)
     })
   }
 
@@ -1484,6 +1505,7 @@ async function main() {
     getDesignRenderer:      () => designRenderer,
     getOverhangLinkArcs:    () => overhangLinkArcs,
     getOverhangUnzipOverlay: () => overhangUnzipOverlay,
+    getMultiOverhangStrandAnim: () => multiOverhangStrandAnim,
     getDesignGeometry:      () => store.getState().currentGeometry,
     // Pass through any opts (signal, suppressBusy) the player provides — the
     // bake loop wires its own AbortController and asks _request to skip the
@@ -1613,6 +1635,16 @@ async function main() {
   const overhangUnzipOverlay = initOverhangUnzipOverlay({
     getHelixCtrl: () => designRenderer.getHelixCtrl(),
     getDesign:    () => store.getState().currentDesign,
+  })
+
+  // Rich strand-animation multi-driver for keyframe playback: one per-overhang
+  // un/hybridization driver (overhang_strand_anim.js) per active overhang, sharing
+  // the right-sidebar panel's math. The player calls setActive()/clear() itself.
+  const multiOverhangStrandAnim = initMultiOverhangStrandAnim({
+    getHelixCtrl: () => designRenderer.getHelixCtrl(),
+    getGeometry:  () => store.getState().currentGeometry,
+    getDesign:    () => store.getState().currentDesign,
+    getScene:     () => scene,
   })
 
   store.subscribe((newState, prevState) => {
@@ -4284,6 +4316,11 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   /** Clear per-file state (slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
+    // Leave photo mode before tearing the scene down. Otherwise the photo
+    // render override stays installed and the next loaded design comes up
+    // "in photo mode" (no-op if not active). Runs first so deactivate() can
+    // restore the live materials/lights while the meshes still exist.
+    _photoModeExit()
     _lastDetailLevel = -1     // force LOD re-evaluation on first tick after new design
     _clearScaffoldChecks()
     _clearStapleChecks()
@@ -4533,6 +4570,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   function _enterAssemblyMode() {
     if (window.nadocDebug?.verbose)
       console.log('[restore] _enterAssemblyMode() — assemblyActive →', true)
+    // A photo-mode session belongs to the design/assembly it was opened in;
+    // entering an assembly (open/new) must drop it (no-op if not active).
+    _photoModeExit()
     _setDesignGeometryVisible(false)
     // The workspace plane-picker (XY/XZ/YZ grid at world origin) is a
     // new-design-only affordance; hide it whenever we enter assembly mode so
@@ -7137,6 +7177,9 @@ Typical debugging workflow for "reverts to 3D" bug:
     getGeometry:  () => store.getState().currentGeometry,
     getDesign:    () => store.getState().currentDesign,
     getScene:     () => scene,
+    api,
+    // Lazy: animPanel is assigned later in main() (~L12150). Only called on click.
+    getAnimContext: () => animPanel?.getKeyframeContext?.() ?? null,
   })
 
   const clusterGizmo    = initClusterGizmo(
@@ -7787,9 +7830,6 @@ Typical debugging workflow for "reverts to 3D" bug:
   let   _mrPivotIsJoint  = false
   let   _mrAssemblyCtx   = null
 
-  // Drag-scrub on the cluster transform fields (tx/ty/tz/rx/ry/rz/joint angle).
-  // Idempotent — safe to call multiple times.
-  if (_mrPanel) attachAllDragScrub(_mrPanel)
 
   function _mrShowJointMode(on) {
     _mrPivotIsJoint = on
@@ -12337,6 +12377,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   function _photoModeExit() {
+    // Idempotent: safe to call from any teardown path (file close/open/new,
+    // assembly enter) even when photo mode isn't active — just no-op.
+    if (!photoRenderer.isActive()) return
     photoRenderer.deactivate()
 
     // Restore annotation overlays to their pre-photo-mode state.

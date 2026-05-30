@@ -635,3 +635,55 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
 
   return { bind, setPhi, getFrame, isBound, clear, dispose }
 }
+
+/**
+ * Multi-overhang wrapper for keyframe playback. Reuses the per-overhang math by
+ * holding one single-instance driver per overhang (no fork of the geometry). The
+ * animation player calls `setActive` each frame with the currently-animated
+ * overhangs + their interpolated φ; overhangs that drop out are restored.
+ *
+ * `setBeadOverrides` merges by bead key (helix_renderer.js), so independent
+ * drivers on disjoint overhang+binder beads coexist safely without batching.
+ *
+ * @param deps  same {getHelixCtrl, getGeometry, getDesign, getScene} as the single driver
+ */
+export function initMultiOverhangStrandAnim(deps) {
+  const _drivers = new Map()   // overhangId → { driver, binderId, ok }
+
+  /** @param {Array<{overhangId, binderId, phi, params}>} specs */
+  function setActive(specs) {
+    const want = new Set()
+    for (const { overhangId, binderId, phi, params } of (specs ?? [])) {
+      if (!overhangId || !binderId) continue
+      want.add(overhangId)
+      let entry = _drivers.get(overhangId)
+      if (!entry) {
+        entry = { driver: initOverhangStrandAnim(deps), binderId: null, ok: false }
+        _drivers.set(overhangId, entry)
+      }
+      if (entry.binderId !== binderId || !entry.driver.isBound()) {
+        const res = entry.driver.bind(overhangId, binderId)
+        entry.binderId = binderId
+        entry.ok = !!res?.ok
+      }
+      if (entry.ok) entry.driver.setPhi(phi, params ?? {})
+    }
+    // Restore + drop any driver no longer in the active set.
+    for (const [ohId, entry] of [..._drivers]) {
+      if (want.has(ohId)) continue
+      entry.driver.clear()
+      _drivers.delete(ohId)
+    }
+  }
+
+  function clear() {
+    for (const { driver } of _drivers.values()) driver.clear()
+    _drivers.clear()
+  }
+  function dispose() {
+    for (const { driver } of _drivers.values()) driver.dispose()
+    _drivers.clear()
+  }
+
+  return { setActive, clear, dispose }
+}

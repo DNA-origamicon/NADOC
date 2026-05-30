@@ -10311,6 +10311,36 @@ def patch_binding_display_pose(binding_id: str, body: BindingDisplayPoseBody) ->
     return _binding_response(updated, report, binding_id=binding_id)
 
 
+class StrandAnimSetupBody(BaseModel):
+    """Display-only "Strand Animation" setup for one overhang+binder pair.
+
+    `setup` is the full param dict captured from the right-sidebar panel (or null
+    to clear). Annotation-only — never read by topology/relax/geometry; consumed
+    solely by the animation player's rich un/hybridization driver.
+    """
+    setup: Optional[dict] = None
+
+
+@router.patch("/design/overhangs/{overhang_id}/strand-anim-setup", status_code=200)
+def patch_overhang_strand_anim_setup(overhang_id: str, body: StrandAnimSetupBody) -> dict:
+    """Set (or clear) the display-only strand-animation setup for an overhang.
+
+    Writes ONLY `OverhangSpec.strand_anim_setup`. Three-layer safe — the field is
+    read solely by the display/animation layer. Mirrors `patch_binding_display_pose`.
+    """
+    design = design_state.get_or_404()
+    if not any(o.id == overhang_id for o in design.overhangs):
+        raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
+
+    def _fn(d: Design) -> None:
+        o = next((oo for oo in d.overhangs if oo.id == overhang_id), None)
+        if o is not None:
+            o.strand_anim_setup = body.setup
+
+    updated, report = design_state.mutate_and_validate(_fn)
+    return _design_response(updated, report)
+
+
 @router.delete("/design/overhang-bindings/{binding_id}", status_code=200)
 def delete_overhang_binding(binding_id: str) -> dict:
     """Remove an OverhangBinding.
@@ -12522,6 +12552,7 @@ class CreateKeyframeBody(BaseModel):
     text_italic: bool = False
     text_align: str = "center"
     binding_states: dict[str, float] = Field(default_factory=dict)  # binding id → φ
+    strand_anim_phi: dict[str, float] = Field(default_factory=dict)  # overhang id → φ
 
 
 class BindingDisplayPoseBody(BaseModel):
@@ -12552,6 +12583,7 @@ class PatchKeyframeBody(BaseModel):
     text_italic: Optional[bool] = None
     text_align: Optional[str] = None
     binding_states: Optional[dict[str, float]] = None  # binding id → φ
+    strand_anim_phi: Optional[dict[str, float]] = None  # overhang id → φ
 
 
 class ReorderKeyframesBody(BaseModel):
@@ -12637,6 +12669,7 @@ def create_keyframe(anim_id: str, body: CreateKeyframeBody) -> dict:
         text_italic=body.text_italic,
         text_align=body.text_align,
         binding_states=body.binding_states,
+        strand_anim_phi=body.strand_anim_phi,
     )
     updated_anim = anims[idx].model_copy(
         update={"keyframes": list(anims[idx].keyframes) + [kf]}, deep=True

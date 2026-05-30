@@ -248,3 +248,15 @@ export async function patchBindingDisplayPose(bindingId, patch) {
   )
   return _syncFromDesignResponse(json)
 }
+
+export async function patchOverhangStrandAnimSetup(overhangId, setup) {
+  // setup: the full Strand-Animation param dict (or null to clear). Display-only
+  // annotation stored on OverhangSpec.strand_anim_setup; the per-keyframe φ lives
+  // on AnimationKeyframe.strand_anim_phi.
+  const json = await _request(
+    'PATCH',
+    `/design/overhangs/${encodeURIComponent(overhangId)}/strand-anim-setup`,
+    { setup },
+  )
+  return _syncFromDesignResponse(json)
+}

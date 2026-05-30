@@ -24,6 +24,7 @@
 import * as THREE from 'three'
 
 import { clampQuatToJointBounds } from './assembly_revolute_math.js'
+import { findBinderStrand } from './overhang_strand_anim.js'
 
 // ── Easing functions ─────────────────────────────────────────────────────────
 function _ease(t, curve) {
@@ -47,7 +48,7 @@ function _ease(t, curve) {
  * @param {function(number[]): Promise} [opts.onFetchGeometryBatch] — fetches geometry for multiple feature-log positions
  * @param {function(object): void} [opts.onEvent]          — receives player events
  */
-export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, getOverhangUnzipOverlay, getDesignGeometry, onFetchGeometryBatch, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate }) {
+export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, getOverhangUnzipOverlay, getMultiOverhangStrandAnim, getDesignGeometry, onFetchGeometryBatch, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate }) {
   let _raf          = null
   let _playing      = false
   let _direction    = 1       // 1 = forward, -1 = reverse
@@ -224,6 +225,11 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       bindingStates: kf.binding_states && Object.keys(kf.binding_states).length > 0
         ? { ...kf.binding_states }
         : null,
+      // Per-overhang reaction coordinate φ for the rich strand-anim driver
+      // (overhang id → [0,1]). Non-null only when explicitly stored.
+      strandAnimPhi: kf.strand_anim_phi && Object.keys(kf.strand_anim_phi).length > 0
+        ? { ...kf.strand_anim_phi }
+        : null,
     }
   }
 
@@ -295,6 +301,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         clusterTransforms: toState.clusterTransforms ?? prevState.clusterTransforms,
         jointValues:       toState.jointValues        ?? prevState.jointValues,
         bindingStates:     toState.bindingStates       ?? prevState.bindingStates,
+        strandAnimPhi:     toState.strandAnimPhi        ?? prevState.strandAnimPhi,
       }
       prevFLI = toFLI
     }
@@ -872,6 +879,28 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       }
       if (overlay) overlay.update(items, getDesignGeometry?.() ?? null)
     }
+
+    // Rich strand-animation φ — drives the full parametric un/hybridization model
+    // (overhang_strand_anim.js) for each overhang in strand_anim_phi, using that
+    // overhang's saved OverhangSpec.strand_anim_setup. Distinct from bindingStates
+    // above (simple OH↔OH overlay); the two operate on disjoint beads.
+    const multi = getMultiOverhangStrandAnim?.()
+    if (multi && toState.strandAnimPhi) {
+      const design = getDesign()
+      const specs = []
+      for (const [ohId, toPhi] of Object.entries(toState.strandAnimPhi)) {
+        const setup = design?.overhangs?.find(o => o.id === ohId)?.strand_anim_setup
+        if (!setup) continue
+        const fromPhi = fromState.strandAnimPhi?.[ohId] ?? toPhi
+        const phi = fromPhi + (toPhi - fromPhi) * t
+        const binderId = setup.binder_strand_id ?? findBinderStrand(design, ohId)
+        if (!binderId) continue
+        specs.push({ overhangId: ohId, binderId, phi, params: setup })
+      }
+      multi.setActive(specs)
+    } else if (multi && !toState.strandAnimPhi && fromState.strandAnimPhi) {
+      multi.clear()
+    }
   }
 
   // ── RAF loop ─────────────────────────────────────────────────────────────────
@@ -1004,6 +1033,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     // Tear down the bind/unbind unzip overlay (the hinge itself is restored by
     // _restoreBaseClusters above — it used the same applyClusterTransform path).
     getOverhangUnzipOverlay?.()?.clear?.()
+    // Tear down the rich strand-anim drivers: restores moved beads to authored
+    // positions and hides any displacement-mode synthetic invaders.
+    getMultiOverhangStrandAnim?.()?.clear?.()
 
     // Restore assembly joints to pre-play values if callback is set
     if (_onJointUpdate && _liveJointValues) {

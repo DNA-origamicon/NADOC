@@ -282,3 +282,101 @@ def test_keyframe_binding_states_defaults_empty():
     k = client.post(f"/api/design/animations/{anim_id}/keyframes", json={})
     anim = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)
     assert anim["keyframes"][-1]["binding_states"] == {}
+
+
+# ── Keyframe strand_anim_phi (rich un/hybridization φ on the timeline) ───────
+
+def test_keyframe_strand_anim_phi_create_patch_roundtrip():
+    """A design keyframe carries per-overhang φ via strand_anim_phi; create and
+    patch both persist it. Distinct from binding_states."""
+    design_state.set_design(_demo_design())
+    a = client.post("/api/design/animations", json={"name": "A"})
+    anim_id = a.json()["design"]["animations"][-1]["id"]
+
+    k = client.post(f"/api/design/animations/{anim_id}/keyframes",
+                    json={"strand_anim_phi": {"ovhg_x": 1.0}})
+    assert k.status_code == 200, k.text
+    anim = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)
+    kf = anim["keyframes"][-1]
+    assert kf["strand_anim_phi"] == {"ovhg_x": 1.0}
+    assert kf["binding_states"] == {}  # the two fields are independent
+
+    p = client.patch(f"/api/design/animations/{anim_id}/keyframes/{kf['id']}",
+                     json={"strand_anim_phi": {"ovhg_x": 0.0, "ovhg_y": 0.5}})
+    assert p.status_code == 200, p.text
+    anim = next(an for an in p.json()["design"]["animations"] if an["id"] == anim_id)
+    kf2 = next(x for x in anim["keyframes"] if x["id"] == kf["id"])
+    assert kf2["strand_anim_phi"] == {"ovhg_x": 0.0, "ovhg_y": 0.5}
+
+
+def test_keyframe_strand_anim_phi_defaults_empty():
+    design_state.set_design(_demo_design())
+    a = client.post("/api/design/animations", json={"name": "A"})
+    anim_id = a.json()["design"]["animations"][-1]["id"]
+    k = client.post(f"/api/design/animations/{anim_id}/keyframes", json={})
+    anim = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)
+    assert anim["keyframes"][-1]["strand_anim_phi"] == {}
+
+
+def test_keyframe_strand_anim_phi_patch_clears():
+    """PATCH with an explicit empty map clears it (model_fields_set path)."""
+    design_state.set_design(_demo_design())
+    a = client.post("/api/design/animations", json={"name": "A"})
+    anim_id = a.json()["design"]["animations"][-1]["id"]
+    k = client.post(f"/api/design/animations/{anim_id}/keyframes",
+                    json={"strand_anim_phi": {"ovhg_x": 1.0}})
+    kf_id = next(an for an in k.json()["design"]["animations"]
+                 if an["id"] == anim_id)["keyframes"][-1]["id"]
+    p = client.patch(f"/api/design/animations/{anim_id}/keyframes/{kf_id}",
+                     json={"strand_anim_phi": {}})
+    anim = next(an for an in p.json()["design"]["animations"] if an["id"] == anim_id)
+    kf2 = next(x for x in anim["keyframes"] if x["id"] == kf_id)
+    assert kf2["strand_anim_phi"] == {}
+
+
+# ── Overhang strand_anim_setup endpoint ──────────────────────────────────────
+
+def _demo_design_with_overhang():
+    """Demo design plus one OverhangSpec referencing the existing helix/strand."""
+    from backend.core.models import OverhangSpec
+    d = _demo_design()
+    oh = OverhangSpec(id="ovhg_x", helix_id="demo_helix", strand_id="staple_0")
+    return d.model_copy(update={"overhangs": [oh]}, deep=True)
+
+
+def test_overhang_strand_anim_setup_roundtrip_and_clear():
+    design_state.set_design(_demo_design_with_overhang())
+    setup = {"mode": "unzip", "form": "helical", "meltBp": 2.0,
+             "thetaDeg": 30, "binder_strand_id": "binder_1"}
+
+    r = client.patch("/api/design/overhangs/ovhg_x/strand-anim-setup",
+                     json={"setup": setup})
+    assert r.status_code == 200, r.text
+
+    g = client.get("/api/design")
+    oh = next(o for o in g.json()["design"]["overhangs"] if o["id"] == "ovhg_x")
+    assert oh["strand_anim_setup"] == setup
+
+    # Clear.
+    r2 = client.patch("/api/design/overhangs/ovhg_x/strand-anim-setup",
+                      json={"setup": None})
+    assert r2.status_code == 200, r2.text
+    g2 = client.get("/api/design")
+    oh2 = next(o for o in g2.json()["design"]["overhangs"] if o["id"] == "ovhg_x")
+    assert oh2["strand_anim_setup"] is None
+
+
+def test_overhang_strand_anim_setup_404():
+    design_state.set_design(_demo_design())
+    r = client.patch("/api/design/overhangs/nope/strand-anim-setup",
+                     json={"setup": {"mode": "unzip"}})
+    assert r.status_code == 404
+
+
+def test_strand_anim_fields_survive_model_roundtrip():
+    """Both new display-only fields survive a Design JSON dump→reload."""
+    from backend.core.models import Design
+    d = _demo_design_with_overhang()
+    d.overhangs[0].strand_anim_setup = {"mode": "displacement", "thetaDeg": 45}
+    reloaded = Design.model_validate(d.model_dump())
+    assert reloaded.overhangs[0].strand_anim_setup == {"mode": "displacement", "thetaDeg": 45}

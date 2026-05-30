@@ -86,7 +86,6 @@ function _fmt(n) { return n ? n.toLocaleString() : '—' }
  * @param {function} [callbacks.exportPhotoVideo] — high-res video exporter
  */
 
-import { attachAllDragScrub } from '../input/drag_scrub.js'
 import { showConfirm } from './primitives/confirm.js'
 
 export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store, player, exportPhotoVideo, withExportRepresentation, setExportRepresentation }) {
@@ -152,8 +151,8 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   const floorColorIn   = _el('photo-floor-color')
   const floorOpacityIn = _el('photo-floor-opacity')
   const floorOpacityLbl= _el('photo-floor-opacity-label')
-  const floorSizeIn    = _el('photo-floor-size')
-  const floorSizeLbl   = _el('photo-floor-size-label')
+  const floorDensityIn = _el('photo-floor-grid-density')
+  const floorDensityLbl= _el('photo-floor-grid-density-label')
   const floorOffsetIn  = _el('photo-floor-offset')
   const floorOffsetLbl = _el('photo-floor-offset-label')
   const floorShadowsIn = _el('photo-floor-shadows')
@@ -193,9 +192,6 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
 
   if (!exitBtn) return   // panel HTML not loaded yet
 
-  // Drag-scrub on every number input in the panel (FOV, light yaw/pitch,
-  // bloom strength, mist density, animation fps, etc.). Idempotent.
-  attachAllDragScrub(document.getElementById('tab-content-photo'))
 
   // ── Profile machinery ─────────────────────────────────────────────────────
   // Settings to skip when applying a profile (HDR file blob can't be persisted;
@@ -229,7 +225,7 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     if (s.floorMaterial !== undefined) photoRenderer.setFloorMaterial(s.floorMaterial)
     if (s.floorColor    !== undefined) photoRenderer.setFloorColor(s.floorColor)
     if (s.floorOpacity  !== undefined) photoRenderer.setFloorOpacity(s.floorOpacity)
-    if (s.floorSize     !== undefined) photoRenderer.setFloorSize(s.floorSize)
+    if (s.floorGridDensity !== undefined) photoRenderer.setFloorGridDensity(s.floorGridDensity)
     if (s.floorOffset   !== undefined) photoRenderer.setFloorOffset(s.floorOffset)
     if (s.floorShadows  !== undefined) photoRenderer.setFloorShadows(s.floorShadows)
     if (s.floorGridColor !== undefined) photoRenderer.setFloorGridColor(s.floorGridColor)
@@ -610,10 +606,10 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     if (floorOpacityLbl) floorOpacityLbl.textContent = `${Math.round(v * 100)}%`
     photoRenderer.setFloorOpacity(v)
   })
-  floorSizeIn?.addEventListener('input', () => {
-    const v = parseFloat(floorSizeIn.value)
-    if (floorSizeLbl) floorSizeLbl.textContent = `${v.toFixed(1)}×`
-    photoRenderer.setFloorSize(v)
+  floorDensityIn?.addEventListener('input', () => {
+    const v = parseFloat(floorDensityIn.value)
+    if (floorDensityLbl) floorDensityLbl.textContent = `${v.toFixed(0)}`
+    photoRenderer.setFloorGridDensity(v)
   })
   floorOffsetIn?.addEventListener('input', () => {
     const v = parseFloat(floorOffsetIn.value)
@@ -800,8 +796,8 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     if (floorColorIn)    floorColorIn.value    = s.floorColor ?? '#888888'
     if (floorOpacityIn)  floorOpacityIn.value  = s.floorOpacity ?? 1
     if (floorOpacityLbl) floorOpacityLbl.textContent = `${Math.round((s.floorOpacity ?? 1) * 100)}%`
-    if (floorSizeIn)     floorSizeIn.value     = s.floorSize ?? 2
-    if (floorSizeLbl)    floorSizeLbl.textContent = `${(s.floorSize ?? 2).toFixed(1)}×`
+    if (floorDensityIn)  floorDensityIn.value  = s.floorGridDensity ?? 10
+    if (floorDensityLbl) floorDensityLbl.textContent = `${(s.floorGridDensity ?? 10).toFixed(0)}`
     if (floorOffsetIn)   floorOffsetIn.value   = s.floorOffset ?? 0
     if (floorOffsetLbl)  floorOffsetLbl.textContent = `${(s.floorOffset ?? 0).toFixed(1)} nm`
     if (floorShadowsIn)  floorShadowsIn.checked = s.floorShadows ?? true

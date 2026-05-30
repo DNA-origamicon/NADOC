@@ -137,10 +137,11 @@ export function createPhotoRenderer(sceneCtx) {
     floorMaterial:   'matte',       // 'matte' | 'glossy' | 'metallic' | 'mirror' | 'shadow-catcher'
     floorColor:      '#888888',
     floorOpacity:    1.0,
-    floorSize:       2.0,           // multiplier of scene bounding-box diameter
+    floorSize:       2.0,           // (deprecated) plane is now effectively infinite; kept for old profiles
     floorOffset:     0.0,           // additional offset along outward normal (nm)
     floorShadows:    true,          // cast rig shadows onto the floor
     floorGrid:       false,         // overlay a GridHelper on the floor
+    floorGridDensity: 10,           // grid cells per bbox diameter (higher = finer)
     floorGridNeon:   false,         // 80s-vaporwave neon style for the grid
     floorGridColor:  '#ff00ff',     // neon colour (magenta default)
     floorGridGlow:   3.0,           // HDR multiplier on neon grid colour (drives Bloom)
@@ -751,6 +752,7 @@ export function createPhotoRenderer(sceneCtx) {
   function setFloorOffset(v)      { _settings.floorOffset   = v;    _rebuildFloor() }
   function setFloorShadows(on)    { _settings.floorShadows  = !!on; _rebuildFloor() }
   function setFloorGrid(on)       { _settings.floorGrid     = !!on; _rebuildFloor() }
+  function setFloorGridDensity(v) { _settings.floorGridDensity = v; _rebuildFloor() }
   function setFloorGridNeon(on)   { _settings.floorGridNeon = !!on; _rebuildFloor() }
   function setFloorGridColor(hex) { _settings.floorGridColor = hex; _rebuildFloor() }
   function setFloorGridGlow(v)    { _settings.floorGridGlow  = v;   _rebuildFloor() }
@@ -1212,6 +1214,9 @@ export function createPhotoRenderer(sceneCtx) {
   function isPathTracingEnabled()  { return _ptEnabled }
   function isActive()              { return _active }
   function getSettings()           { return { ..._settings } }
+  // Floor plane world reach (or null) so the render loop can extend the camera
+  // far clip to include the floor. Only meaningful while photo mode is active.
+  function getFloorReach()         { return _active ? _floor.getReach() : null }
 
   // ── High-resolution PNG export ────────────────────────────────────────────
 
@@ -1535,6 +1540,7 @@ export function createPhotoRenderer(sceneCtx) {
     setFloorOffset,
     setFloorShadows,
     setFloorGrid,
+    setFloorGridDensity,
     setFloorGridNeon,
     setFloorGridColor,
     setFloorGridGlow,
@@ -1549,6 +1555,7 @@ export function createPhotoRenderer(sceneCtx) {
     isPathTracingEnabled,
     isActive,
     getSettings,
+    getFloorReach,
     resyncMaterials,
     renderToBlob,
     beginFrameSession,

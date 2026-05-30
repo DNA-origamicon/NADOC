@@ -6,7 +6,6 @@
  * Validates that at least one cell is selected before extruding.
  */
 
-import { attachDragScrub } from '../input/drag_scrub.js'
 
 export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}) {
   container.innerHTML = `
@@ -61,7 +60,6 @@ export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}
   `
 
   const lengthInput  = container.querySelector('#extrude-length-val')
-  attachDragScrub(lengthInput)
   const unitBp       = container.querySelector('#unit-bp')
   const unitNm       = container.querySelector('#unit-nm')
   const dirFwd       = container.querySelector('#dir-fwd')

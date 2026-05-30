@@ -24,7 +24,6 @@
  */
 
 import * as api from '../api/client.js'
-import { attachDragScrub } from '../input/drag_scrub.js'
 import { showConfirm } from './primitives/confirm.js'
 
 const PANEL_HTML = `
@@ -112,8 +111,6 @@ export function initPolymerizePanel(store, { isInstancePeriodic } = {}) {
   selectAllBtn.addEventListener('click', () => _setAllAdditional(true))
   selectNoneBtn.addEventListener('click', () => _setAllAdditional(false))
 
-  // Drag-scrub on the chain-count input (standard CAD/DAW convention).
-  attachDragScrub(countInput)
 
   let _open                = false
   let _selectedJointId     = null

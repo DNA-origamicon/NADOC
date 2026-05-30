@@ -281,6 +281,15 @@ class OverhangSpec(BaseModel):
     # no per-domain color field is needed.
     parent_overhang_id: Optional[str] = None
 
+    # Display-only "Strand Animation" setup captured from the right-sidebar panel.
+    # Permissive dict mirroring frontend/src/strand-anim/params.js keys (mode, form,
+    # meltBp, thetaDeg, invaderSplayDeg, exitAngleDeg, armPull, unwindScale, dispGap,
+    # direction, easing) plus the resolved binder_strand_id. The "how it looks" for
+    # this overhang+binder un/hybridization; the per-keyframe φ lives on
+    # AnimationKeyframe.strand_anim_phi. Never read by topology/relax — analogous to
+    # the OverhangBinding display-pose annotation. None until the user captures.
+    strand_anim_setup: Optional[Dict[str, Any]] = None
+
     @model_validator(mode='after')
     def _backfill_whole_overhang_sub_domain(self) -> 'OverhangSpec':
         """Ensure every overhang has at least one sub-domain.
@@ -1305,6 +1314,14 @@ class AnimationKeyframe(BaseModel):
     # (φ=1 bound/closed, φ=0 unbound/open). Interpolated linearly across
     # keyframes exactly like joint_values. Empty = no assertion (carried forward).
     binding_states: dict[str, float] = Field(default_factory=dict)
+    # Per-overhang reaction coordinate for the RICH strand-animation model:
+    # OverhangSpec id → φ ∈ [0,1] (φ=1 fully paired, φ=0 fully unzipped).
+    # Interpolated linearly across keyframes like joint_values/binding_states, but
+    # drives overhang_strand_anim.js (the full parametric un/hybridization, using
+    # each overhang's OverhangSpec.strand_anim_setup) — DISTINCT from binding_states,
+    # whose keys are OverhangBinding/OverhangConnection ids feeding the simple
+    # overhang_unzip_overlay path. The two coexist on disjoint beads.
+    strand_anim_phi: dict[str, float] = Field(default_factory=dict)
 
     # Spin = camera orbits the model centroid for the full keyframe duration.
     # Mutually exclusive with camera_pose_id at the UI layer.

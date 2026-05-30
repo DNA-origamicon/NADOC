@@ -11,7 +11,6 @@
  * @param {object} opts.api                               — API module
  */
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
-import { attachAllDragScrub } from '../input/drag_scrub.js'
 
 export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, api }) {
   const listEl   = document.getElementById('camera-pose-list')
@@ -107,9 +106,6 @@ export function initCameraPanel(store, { captureCurrentCamera, animateCameraTo, 
       const row = _makeRow(pose, poses)
       listEl.appendChild(row)
     }
-    // Attach drag-scrub to FOV inputs (and any future number inputs) in each
-    // pose row. Idempotent — already-attached inputs are skipped.
-    attachAllDragScrub(listEl)
   }
 
   const _editStyle  = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'

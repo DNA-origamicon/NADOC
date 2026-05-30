@@ -4083,12 +4083,6 @@
                   <span id="photo-floor-opacity-label" style="color:#c9d1d9;min-width:34px;text-align:right">100%</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                  <span style="min-width:60px" title="Plane size as a multiple of the scene bounding-box diagonal">Size</span>
-                  <input id="photo-floor-size" type="range" min="1" max="8" step="0.1" value="2"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-floor-size-label" style="color:#c9d1d9;min-width:34px;text-align:right">2.0×</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
                   <span style="min-width:60px" title="Distance (nm) the floor is pushed outward from the scene's bounding-box face">Offset</span>
                   <input id="photo-floor-offset" type="range" min="-20" max="20" step="0.1" value="0"
                          style="flex:1;accent-color:#58a6ff">
@@ -4101,6 +4095,12 @@
                   <input id="photo-floor-grid" type="checkbox"> Grid overlay
                 </label>
                 <div id="photo-floor-grid-style-row" style="display:none;flex-direction:column;gap:4px;margin-left:20px">
+                  <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                    <span style="min-width:60px" title="Number of grid cells across the part's bounding-box diagonal. Higher = finer grid. The plane itself is effectively infinite.">Density</span>
+                    <input id="photo-floor-grid-density" type="range" min="2" max="40" step="0.5" value="10"
+                           style="flex:1;accent-color:#58a6ff">
+                    <span id="photo-floor-grid-density-label" style="color:#c9d1d9;min-width:34px;text-align:right">10</span>
+                  </div>
                   <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
                     <input id="photo-floor-grid-neon" type="checkbox"> Neon glow (80's vaporwave)
                   </label>

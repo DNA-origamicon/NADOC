@@ -22,7 +22,6 @@
 import { openKeyframeTextPopup } from './keyframe_text_popup.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel, setOpProgressFraction } from './op_progress.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
-import { attachDragScrub } from '../input/drag_scrub.js'
 
 // Build a one-line label for a feature-log entry as shown in the keyframe
 // State dropdown. Mirrors the wording the user sees in the Feature Log tab.
@@ -49,6 +48,27 @@ function _featureLogTickLabel(e, idx) {
     lbl += `: ${e.label}`
   }
   return lbl
+}
+
+const _SA_MODE_WORD = { unzip: 'Unzip', displacement: 'Toehold displacement' }
+const _SA_FORM_WORD = { helical: 'Helical', straight: 'Straight' }
+
+// Human label for a strand-animation keyframe's state, e.g.
+// "OH1 (Unzip, Helical) φ=1.00" — one clause per overhang in strand_anim_phi.
+// mode/form come from each overhang's saved strand_anim_setup.
+function _strandAnimSummary(strandAnimPhi, design) {
+  const ohs = design?.overhangs ?? []
+  const parts = []
+  for (const [ohId, phi] of Object.entries(strandAnimPhi)) {
+    const oh = ohs.find(o => o.id === ohId)
+    const name = oh?.label ?? ohId
+    const s = oh?.strand_anim_setup
+    const mode = _SA_MODE_WORD[s?.mode]
+    const form = _SA_FORM_WORD[s?.form]
+    const desc = (mode || form) ? ` (${[mode, form].filter(Boolean).join(', ')})` : ''
+    parts.push(`${name}${desc} φ=${Number(phi).toFixed(2)}`)
+  }
+  return parts.join(', ')
 }
 
 export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature }) {
@@ -312,7 +332,6 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     ].join(';')
     inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') inp.blur() })
     inp.addEventListener('change', () => onChange(parseFloat(inp.value)))
-    attachDragScrub(inp)
     return inp
   }
 
@@ -460,12 +479,22 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       : (store.getState().currentDesign?.feature_log ?? [])
     const configurations = _assemblyMode ? (store.getState().currentAssembly?.configurations ?? []) : []
 
+    // Strand-animation keyframe (created from the right-sidebar panel): its
+    // "State" is the un/hybridization of one or more overhangs, not a feature-log
+    // pin or assembly config. Detected by a non-empty strand_anim_phi map.
+    const strandAnimPhi = (kf.strand_anim_phi && Object.keys(kf.strand_anim_phi).length > 0)
+      ? kf.strand_anim_phi : null
+    const isStrandAnim = !!strandAnimPhi
+
     const row = document.createElement('div')
     row.dataset.kfId = kf.id
     row.style.cssText = [
       'display:flex;flex-direction:column;gap:4px',
       'padding:5px 6px;border-radius:4px',
-      'border:1px solid #21262d;margin-bottom:3px',
+      // Magenta accent (matches the OH-binder strand color) marks strand-anim kfs.
+      isStrandAnim
+        ? 'border:1px solid #c050d0;border-left:3px solid #c050d0;margin-bottom:3px'
+        : 'border:1px solid #21262d;margin-bottom:3px',
     ].join(';')
 
     // ── Top row: drag handle + index badge + delete ───────────────────────────
@@ -583,11 +612,20 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
     // Joints badge — shown in assembly mode when keyframe has joint_values
     const jointCount = Object.keys(kf.joint_values ?? {}).length
+    let saBadge = null
+    if (isStrandAnim) {
+      saBadge = document.createElement('span')
+      saBadge.textContent = 'Strand'
+      saBadge.title = 'Strand-animation keyframe (un/hybridization φ)'
+      saBadge.style.cssText = 'font-size:var(--text-xs);color:#c050d0;background:#1a0a1f;border:1px solid #c050d0;border-radius:3px;padding:0 3px;flex-shrink:0'
+    }
     if (_assemblyMode && jointCount > 0) {
       const jBadge = document.createElement('span')
       jBadge.textContent = `Joints: ${jointCount}`
       jBadge.style.cssText = 'font-size:var(--text-xs);color:#ff8c00;background:#1a1200;border:1px solid #ff8c00;border-radius:3px;padding:0 3px;flex-shrink:0'
       topRow.append(handle, badge, spacer, jBadge, textBtn, delBtn)
+    } else if (saBadge) {
+      topRow.append(handle, badge, spacer, saBadge, textBtn, delBtn)
     } else {
       topRow.append(handle, badge, spacer, textBtn, delBtn)
     }
@@ -751,7 +789,14 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     cfgLbl.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
     cfgRow.appendChild(cfgLbl)
 
-    if (_assemblyMode) {
+    if (isStrandAnim) {
+      // Read-only summary in place of the feature-log/config selector.
+      const saState = document.createElement('span')
+      saState.textContent = _strandAnimSummary(strandAnimPhi, store.getState().currentDesign)
+      saState.title = 'Edit in the right-sidebar Strand Animation panel (settings + φ), then “Update last”.'
+      saState.style.cssText = 'flex:1;min-width:0;font-size:var(--text-xs);color:#c050d0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+      cfgRow.appendChild(saState)
+    } else if (_assemblyMode) {
       const cfgSelect = document.createElement('select')
       cfgSelect.style.cssText = [
         'flex:1;min-width:0;box-sizing:border-box',
@@ -871,7 +916,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     // A driver is an OverhangBinding (WC pair) or a linker (overhang_connection).
     let bindingsRow = null
     const bindDesign = _bindingsDesign()
-    const bindings = _drivers(bindDesign)
+    const bindings = isStrandAnim ? [] : _drivers(bindDesign)
     if (bindings.length) {
       bindingsRow = document.createElement('div')
       bindingsRow.style.cssText = 'display:flex;flex-direction:column;gap:3px;padding-left:18px'
@@ -1211,16 +1256,39 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   // ── Store subscription ────────────────────────────────────────────────────────
 
+  // While the user is actively editing a keyframe field (e.g. typing trans/hold
+  // durations), a design-slice change — typically their OWN async commit landing
+  // a moment later — must NOT rebuild the keyframe list. The rebuild discards the
+  // focused <input>, dropping focus to <body>, and the next typed digit then
+  // escapes to the global number hotkeys (1–6). Defer the rebuild until focus
+  // leaves the list, so the box the user is typing in stays alive and focused.
+  let _pendingRebuild = false
+  const _editingInKfList = () => !!kfListEl && kfListEl.contains(document.activeElement)
+
+  function _rebuildSelectMaybeDefer(animations) {
+    if (_editingInKfList()) { _pendingRebuild = true; return }
+    _rebuildSelect(animations)
+  }
+
+  kfListEl?.addEventListener('focusout', (e) => {
+    // Ignore focus moving between inputs within the list — only act when focus
+    // actually leaves the list (relatedTarget null or outside).
+    if (kfListEl.contains(e.relatedTarget)) return
+    if (!_pendingRebuild) return
+    _pendingRebuild = false
+    _rebuildSelect(_getAnimations())
+  })
+
   store.subscribeSlice('design', (n, p) => {
     if (_assemblyMode || _partMode) return  // other mode has its own data source
     if (n.currentDesign === p.currentDesign) return
-    if (!_collapsed) _rebuildSelect(n.currentDesign?.animations ?? [])
+    if (!_collapsed) _rebuildSelectMaybeDefer(n.currentDesign?.animations ?? [])
   })
 
   store.subscribeSlice('assembly', (n, p) => {
     if (!_assemblyMode) return
     if (n.currentAssembly === p.currentAssembly) return
-    if (!_collapsed) _rebuildSelect(n.currentAssembly?.animations ?? [])
+    if (!_collapsed) _rebuildSelectMaybeDefer(n.currentAssembly?.animations ?? [])
   })
 
   // Initial render
@@ -1251,5 +1319,20 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     _rebuildSelect(_getAnimations())
   }
 
-  return { onPlayerEvent, setAssemblyMode, setPartContext, clearPartContext }
+  /**
+   * Context for the right-sidebar Strand Animation panel's capture buttons.
+   * Design-mode only — the rich strand-anim driver operates on design overhangs.
+   */
+  function getKeyframeContext() {
+    const anim = _getAnimations().find(a => a.id === _activeAnimId)
+    const kfs = anim?.keyframes ?? []
+    return {
+      animId:       _activeAnimId,
+      lastKfId:     kfs.length ? kfs[kfs.length - 1].id : null,
+      lastKfPhi:    kfs.length ? { ...(kfs[kfs.length - 1].strand_anim_phi ?? {}) } : {},
+      isDesignMode: !_partMode && !_assemblyMode,
+    }
+  }
+
+  return { onPlayerEvent, setAssemblyMode, setPartContext, clearPartContext, getKeyframeContext }
 }

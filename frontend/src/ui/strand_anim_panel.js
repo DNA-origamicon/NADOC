@@ -12,7 +12,7 @@ import { createParamState } from '../strand-anim/params.js'
 import { createPhiTicker } from '../strand-anim/ticker.js'
 import { initOverhangStrandAnim, findBinderStrand } from '../scene/overhang_strand_anim.js'
 
-export function initStrandAnimPanel(store, { getHelixCtrl, getGeometry, getDesign, getScene }) {
+export function initStrandAnimPanel(store, { getHelixCtrl, getGeometry, getDesign, getScene, api, getAnimContext }) {
   const heading = document.getElementById('strand-anim-heading')
   const arrow   = document.getElementById('strand-anim-arrow')
   const body    = document.getElementById('strand-anim-body')
@@ -29,6 +29,7 @@ export function initStrandAnimPanel(store, { getHelixCtrl, getGeometry, getDesig
   let _activeId = null          // dropdown value = persistent overhang under animation
   const _inputs = []
   let _roN, _roR, _playBtn, _phiInput, _phiNum, _ovhgSelect
+  let _addKfBtn, _updKfBtn, _capHintEl
 
   // ── condensed control builders ──────────────────────────────────────────────
   function _row(label) {
@@ -126,6 +127,26 @@ export function initStrandAnimPanel(store, { getHelixCtrl, getGeometry, getDesig
     reset.addEventListener('click', () => { ticker.stop(); _setPhi(1) })
     r.appendChild(_playBtn); r.appendChild(reset)
   }
+  // ── capture into the Animation-tab keyframe timeline ─────────────────────────
+  {
+    const r = _row(null)
+    _addKfBtn = document.createElement('button')
+    _addKfBtn.textContent = '+ Add keyframe'
+    _addKfBtn.title = 'Append a new keyframe in the Animation tab at the current φ (saves these settings for this overhang)'
+    _addKfBtn.style.cssText = 'padding:2px 8px;background:#1f6feb;border:none;border-radius:3px;color:#fff;cursor:pointer;font-size:11px'
+    _addKfBtn.addEventListener('click', () => _capture('add'))
+    _updKfBtn = document.createElement('button')
+    _updKfBtn.textContent = 'Update last'
+    _updKfBtn.title = 'Overwrite the most recent keyframe with this overhang at the current φ'
+    _updKfBtn.style.cssText = 'padding:2px 8px;background:#30363d;border:none;border-radius:3px;color:#c9d1d9;cursor:pointer;font-size:11px'
+    _updKfBtn.addEventListener('click', () => _capture('update'))
+    r.appendChild(_addKfBtn); r.appendChild(_updKfBtn)
+  }
+  {
+    _capHintEl = document.createElement('div')
+    _capHintEl.style.cssText = 'font-size:10px;color:#6e7681;margin:-2px 0 4px;min-height:12px'
+    root.appendChild(_capHintEl)
+  }
   _select('Direction', 'direction', [{ label: 'Dehybridize (1→0)', value: 'dehybridize' }, { label: 'Hybridize (0→1)', value: 'hybridize' }])
   _num('Speed', 'speed', { min: 0.02, max: 2, step: 0.02, unit: 'φ/s' })
   _select('Easing', 'easing', ['linear', 'ease-in', 'ease-out', 'ease-in-out'].map(v => ({ label: v, value: v })))
@@ -158,8 +179,40 @@ export function initStrandAnimPanel(store, { getHelixCtrl, getGeometry, getDesig
     _enabled = on
     for (const { el } of _inputs) el.style.opacity = on ? '1' : '0.45'
     for (const { el } of _inputs) el.disabled = !on
-    _playBtn.disabled = !on
-    _playBtn.style.opacity = on ? '1' : '0.45'
+    for (const btn of [_playBtn, _addKfBtn, _updKfBtn]) {
+      if (!btn) continue
+      btn.disabled = !on
+      btn.style.opacity = on ? '1' : '0.45'
+    }
+  }
+
+  function _capHint(msg) { if (_capHintEl) _capHintEl.textContent = msg }
+
+  // Persist this overhang's setup + write its φ into a keyframe in the Animation tab.
+  // mode: 'add' = append a new keyframe; 'update' = overwrite the most recent one.
+  async function _capture(mode) {
+    if (!_enabled || !_activeId || !api) return
+    const ctx = getAnimContext?.()
+    if (!ctx || !ctx.isDesignMode) { _capHint('Switch to the design Animation tab first.'); return }
+    if (!ctx.animId) { _capHint('Select or create an animation in the Animation tab first.'); return }
+    if (mode === 'update' && !ctx.lastKfId) { _capHint('No keyframe yet — use “Add keyframe”.'); return }
+    const setup = paramState.snapshot()
+    setup.binder_strand_id = findBinderStrand(store.getState().currentDesign, _activeId)
+    const phi = paramState.get('phi')
+    try {
+      await api.patchOverhangStrandAnimSetup(_activeId, setup)
+      if (mode === 'add') {
+        await api.createKeyframe(ctx.animId, { strand_anim_phi: { [_activeId]: phi } })
+        _capHint(`Added keyframe at φ=${Number(phi).toFixed(2)}.`)
+      } else {
+        const merged = { ...ctx.lastKfPhi, [_activeId]: phi }
+        await api.updateKeyframe(ctx.animId, ctx.lastKfId, { strand_anim_phi: merged })
+        _capHint(`Updated last keyframe (φ=${Number(phi).toFixed(2)}).`)
+      }
+    } catch (e) {
+      _capHint('Capture failed — see console.')
+      console.error('[strand-anim] capture failed', e)
+    }
   }
 
   // ── overhang dropdown population (preserve current selection if still valid) ──
