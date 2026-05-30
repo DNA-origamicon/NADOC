@@ -277,6 +277,10 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
   function _rebuildKfList(keyframes) {
     kfListEl.innerHTML = ''
+    // Bind/Unbind pose authoring (design editor only) — shown even with no
+    // keyframes so the user can set open/closed angles before building the timeline.
+    const posesSection = _makeBindingPosesSection(_bindingsDesign())
+    if (posesSection) kfListEl.appendChild(posesSection)
     if (!keyframes?.length) {
       const empty = document.createElement('div')
       empty.style.cssText = 'color:#484f58;font-size:11px;padding:4px 0'
@@ -310,6 +314,141 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     inp.addEventListener('change', () => onChange(parseFloat(inp.value)))
     attachDragScrub(inp)
     return inp
+  }
+
+  // ── Overhang bind/unbind authoring (design editor only) ──────────────────────
+  // Bindings + the relax/topology machinery live on the active design, so these
+  // controls are gated to the default design mode (not assembly / part-context).
+  function _bindingsDesign() {
+    return (!_partMode && !_assemblyMode) ? store.getState().currentDesign : null
+  }
+
+  /** All bind/unbind animation drivers: OverhangBindings (WC) + linkers. */
+  function _drivers(design) {
+    const bindings = (design?.overhang_bindings ?? []).map(b => ({ ...b, _kind: 'binding' }))
+    const linkers  = (design?.overhang_connections ?? []).map(c => ({
+      ...c, _kind: 'linker', name: c.name || `Linker ${c.id.slice(0, 4)}`,
+    }))
+    return [...bindings, ...linkers]
+  }
+
+  /** Persist authored open/closed angle for a driver (dispatch by kind). */
+  function _patchDisplayPose(driver, patch) {
+    return driver._kind === 'linker'
+      ? api.patchConnectionDisplayPose(driver.id, patch)
+      : api.patchBindingDisplayPose(driver.id, patch)
+  }
+
+  /** Smallest cluster (by helix count) that owns an overhang's helix. */
+  function _owningClusterId(design, overhangId) {
+    const oh = design?.overhangs?.find(o => o.id === overhangId)
+    if (!oh) return null
+    const cands = (design.cluster_transforms ?? [])
+      .map((c, i) => ({ c, i }))
+      .filter(({ c }) => (c.helix_ids ?? []).includes(oh.helix_id))
+    if (!cands.length) return null
+    cands.sort((a, b) => (a.c.helix_ids.length - b.c.helix_ids.length) || (b.i - a.i))
+    return cands[0].c.id
+  }
+
+  /** Resolve a driver's target joint: stored id, else the single spanning joint. */
+  function _autoJointForDriver(design, driver) {
+    if (driver.target_joint_id) {
+      return design.cluster_joints?.find(j => j.id === driver.target_joint_id) ?? null
+    }
+    const ca = _owningClusterId(design, driver.overhang_a_id)
+    const cb = _owningClusterId(design, driver.overhang_b_id)
+    const cands = (design.cluster_joints ?? []).filter(j => j.cluster_id === ca || j.cluster_id === cb)
+    return cands.length === 1 ? cands[0] : null
+  }
+
+  /** Signed twist angle (deg) of a cluster's current rotation about a joint axis. */
+  function _currentJointAngleDeg(design, joint) {
+    const ct = design?.cluster_transforms?.find(c => c.id === joint.cluster_id)
+    const ax = joint?.axis_direction
+    if (!ct || !ax) return null
+    const n = Math.hypot(ax[0], ax[1], ax[2]) || 1
+    const r = ct.rotation
+    const dot = (r[0] * ax[0] + r[1] * ax[1] + r[2] * ax[2]) / n
+    let a = 2 * Math.atan2(dot, r[3])
+    while (a >  Math.PI) a -= 2 * Math.PI
+    while (a < -Math.PI) a += 2 * Math.PI
+    return a * 180 / Math.PI
+  }
+
+  /** Patch one keyframe's binding φ (null removes it). Design mode only. */
+  async function _patchKfBindingState(kf, bindingId, phiOrNull) {
+    if (_partMode || _assemblyMode || !_activeAnimId) return
+    const cur = { ...(kf.binding_states ?? {}) }
+    if (phiOrNull == null) delete cur[bindingId]
+    else cur[bindingId] = phiOrNull
+    await api.updateKeyframe(_activeAnimId, kf.id, { binding_states: cur })
+  }
+
+  /** One-time "Bind/Unbind poses" section: authored open/closed hinge angles. */
+  function _makeBindingPosesSection(design) {
+    const drivers = _drivers(design)
+    if (!drivers.length) return null
+    const wrap = document.createElement('div')
+    wrap.style.cssText = 'margin-bottom:6px;padding:5px 6px;border:1px solid #21262d;border-radius:4px'
+    const hdr = document.createElement('div')
+    hdr.textContent = 'Bind/Unbind poses'
+    hdr.style.cssText = 'font-size:var(--text-xs);color:#8b949e;margin-bottom:4px'
+    wrap.appendChild(hdr)
+
+    const tiny = (txt) => {
+      const s = document.createElement('span')
+      s.textContent = txt
+      s.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
+      return s
+    }
+    const grabBtn = (txt, title, onClick) => {
+      const b = document.createElement('button')
+      b.textContent = txt; b.title = title; b.style.cssText = _editStyle
+      b.addEventListener('click', onClick)
+      return b
+    }
+
+    for (const b of drivers) {
+      const joint = _autoJointForDriver(design, b)
+      const row = document.createElement('div')
+      row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:3px;flex-wrap:wrap'
+      const lbl = document.createElement('span')
+      lbl.textContent = b.name || 'B'
+      lbl.title = b._kind === 'linker' ? 'Linker' : 'Overhang binding'
+      lbl.style.cssText = 'font-size:var(--text-xs);color:#c9d1d9;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0'
+      if (!joint) {
+        const warn = document.createElement('span')
+        warn.textContent = '(no spanning joint)'
+        warn.style.cssText = 'font-size:var(--text-xs);color:#d29922'
+        row.append(lbl, warn); wrap.appendChild(row); continue
+      }
+      const openVal   = Number.isFinite(b.unbound_angle_deg) ? b.unbound_angle_deg.toFixed(1) : ''
+      const closedSeed = Number.isFinite(b.bound_angle_deg) ? b.bound_angle_deg
+                        : (Number.isFinite(b.locked_angle_deg) ? b.locked_angle_deg : null)
+      const closedVal = closedSeed != null ? closedSeed.toFixed(1) : ''
+
+      const openInp = _numInput(openVal, '1', '-360', async v => {
+        await _patchDisplayPose(b, { unbound_angle_deg: v })
+      })
+      openInp.style.width = '50px'; openInp.title = 'Unbound (open) hinge angle (°)'
+      const closedInp = _numInput(closedVal, '1', '-360', async v => {
+        await _patchDisplayPose(b, { bound_angle_deg: v })
+      })
+      closedInp.style.width = '50px'; closedInp.title = 'Bound (closed) hinge angle (°)'
+
+      const grabOpen = grabBtn('⟲', 'Set unbound from current hinge angle', async () => {
+        const a = _currentJointAngleDeg(design, joint)
+        if (a != null) { openInp.value = a.toFixed(1); await _patchDisplayPose(b, { unbound_angle_deg: a }) }
+      })
+      const grabClosed = grabBtn('⟲', 'Set bound from current hinge angle', async () => {
+        const a = _currentJointAngleDeg(design, joint)
+        if (a != null) { closedInp.value = a.toFixed(1); await _patchDisplayPose(b, { bound_angle_deg: a }) }
+      })
+      row.append(lbl, tiny('open'), openInp, grabOpen, tiny('closed'), closedInp, grabClosed)
+      wrap.appendChild(row)
+    }
+    return wrap
   }
 
   function _makeKfRow(kf, index, allKfs) {
@@ -727,7 +866,51 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
 
     timingRow.append(_lbl('trans'), transInp, _lbl('hold'), holdInp)
 
-    row.append(topRow, poseRow, spinRow, cfgRow, timingRow)
+    // ── Drivers sub-row: per-driver reaction coordinate φ ──────────────────────
+    // Bound (φ=1) / Unbound (φ=0) / Custom φ for a mid-transition keyframe.
+    // A driver is an OverhangBinding (WC pair) or a linker (overhang_connection).
+    let bindingsRow = null
+    const bindDesign = _bindingsDesign()
+    const bindings = _drivers(bindDesign)
+    if (bindings.length) {
+      bindingsRow = document.createElement('div')
+      bindingsRow.style.cssText = 'display:flex;flex-direction:column;gap:3px;padding-left:18px'
+      for (const b of bindings) {
+        const r = document.createElement('div')
+        r.style.cssText = 'display:flex;align-items:center;gap:5px'
+        const lbl = document.createElement('span')
+        lbl.textContent = b.name || 'B'
+        lbl.title = b._kind === 'linker' ? 'Linker' : 'Overhang binding'
+        lbl.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+        const sel = document.createElement('select')
+        sel.style.cssText = poseSelect.style.cssText
+        for (const [v, txt] of [['', '— ignore —'], ['1', 'Bound (φ=1)'], ['0', 'Unbound (φ=0)'], ['custom', 'Custom φ…']]) {
+          const o = document.createElement('option'); o.value = v; o.textContent = txt; sel.appendChild(o)
+        }
+        const cur = kf.binding_states?.[b.id]
+        const phiInp = _numInput(Number.isFinite(cur) ? cur : 0.5, '0.05', '0', async v => {
+          await _patchKfBindingState(kf, b.id, Math.max(0, Math.min(1, v)))
+        })
+        phiInp.max = '1'
+        if (cur == null)      { sel.value = '';       phiInp.style.display = 'none' }
+        else if (cur === 1)   { sel.value = '1';      phiInp.style.display = 'none' }
+        else if (cur === 0)   { sel.value = '0';      phiInp.style.display = 'none' }
+        else                  { sel.value = 'custom'; phiInp.style.display = '' }
+        sel.addEventListener('keydown', e => e.stopPropagation())
+        sel.addEventListener('change', async () => {
+          if (sel.value === '')        { phiInp.style.display = 'none'; await _patchKfBindingState(kf, b.id, null) }
+          else if (sel.value === '1')  { phiInp.style.display = 'none'; await _patchKfBindingState(kf, b.id, 1) }
+          else if (sel.value === '0')  { phiInp.style.display = 'none'; await _patchKfBindingState(kf, b.id, 0) }
+          else                         { phiInp.style.display = '';     await _patchKfBindingState(kf, b.id, Number.isFinite(cur) ? cur : 0.5) }
+        })
+        r.append(lbl, sel, phiInp)
+        bindingsRow.appendChild(r)
+      }
+    }
+
+    row.append(topRow, poseRow, spinRow, cfgRow)
+    if (bindingsRow) row.append(bindingsRow)
+    row.append(timingRow)
     return row
   }
 
@@ -795,6 +978,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
         k.spin_rotations ?? 0,
         k.spin_invert ? '1' : '0',
         k.text_overlay?.text ?? '',
+        JSON.stringify(k.binding_states ?? {}),
       ].join(':'))
       .join('|')
   }

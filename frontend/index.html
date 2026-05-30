@@ -691,6 +691,9 @@
     #spreadsheet-table tr.sheet-scaffold td {
       color: #29b6f6;
     }
+    #spreadsheet-table tr.sheet-oh-binder td {
+      color: #d96fe6;
+    }
     #spreadsheet-table tr.sheet-linker td {
       background: #14191e;
       color: #c9d1d9;
@@ -3188,6 +3191,7 @@
           <button class="dropdown-item" id="menu-help-oh-roots">Show OH Roots</button>
           <button class="dropdown-item" id="menu-help-linker-debug">Show Linker Anchor Debug</button>
           <button class="dropdown-item" id="menu-help-fjc-sim">FJC sim…</button>
+          <button class="dropdown-item" id="menu-help-strand-anim">Strand Animations Testing…</button>
           <button class="dropdown-item" id="menu-show-domain-ends">Show Domain Ends</button>
           <button class="dropdown-item" id="menu-create-seam">Create Seam</button>
           <button class="dropdown-item" id="menu-create-near-ends">Create Near Ends</button>
@@ -4636,8 +4640,22 @@
                    style="flex:1;accent-color:#f5a623">
             <span id="overhang-label-size-val" style="width:2.5em;text-align:right">1.5</span>
           </div>
-          <div id="overhang-list" style="display:none">
+          <div id="overhang-list" style="display:none;max-height:240px;overflow-y:auto;padding-right:4px">
             <!-- Populated dynamically by main.js -->
+          </div>
+        </div>
+
+        <!-- Strand Animation (collapsible) — un/hybridization of a selected
+             overhang + its binder, ported from the Strand Animations sandbox. -->
+        <div class="panel-section" id="strand-anim-panel">
+          <h2 id="strand-anim-heading" style="cursor:pointer;user-select:none">
+            Strand Animation <span id="strand-anim-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+          </h2>
+          <div id="strand-anim-body" style="display:none">
+            <div id="strand-anim-hint" style="font-size:11px;color:#8b949e;margin-bottom:8px">
+              Select an overhang with a binder to animate.
+            </div>
+            <div id="strand-anim-controls"><!-- built by strand_anim_panel.js --></div>
           </div>
         </div>
 

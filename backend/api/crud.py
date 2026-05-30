@@ -3950,10 +3950,16 @@ def add_strand(body: StrandRequest) -> dict:
         color=color,
     )
 
+    # Pen-tool auto-designation: a staple painted antiparallel over an existing
+    # overhang becomes an OH binder linked to that overhang.
+    if new_strand.strand_type == StrandType.STAPLE:
+        from backend.core.lattice import tag_painted_binder
+        new_strand = tag_painted_binder(design_cur, new_strand)
+
     def _apply(d: Design) -> None:
         d.strands.append(new_strand)
 
-    label = f"Add {body.strand_type.value} strand · {len(body.domains)} domain(s)"
+    label = f"Add {new_strand.strand_type.value} strand · {len(body.domains)} domain(s)"
     design, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='strand-add',
         label=label,
@@ -4001,6 +4007,83 @@ def update_strand(strand_id: str, body: StrandRequest) -> dict:
         "strand": replacement.model_dump(),
         **_design_response(design, report),
     }
+
+
+@router.post("/design/strands/{strand_id}/convert-to-binder", status_code=200)
+def convert_strand_to_binder_endpoint(strand_id: str) -> dict:
+    """Re-designate a strand as an OH binder (overhang-binding oligo).
+
+    Links each domain to the overhang it antiparallel-overlaps, tagging the
+    partner region as an overhang if it isn't one yet. 404 if the strand is
+    missing; 422 when the strand has no antiparallel partner to bind.
+    """
+    from backend.core.lattice import convert_strand_to_binder
+
+    def _build(d: Design) -> Design:
+        return convert_strand_to_binder(d, strand_id)
+
+    try:
+        design, report, _entry = design_state.mutate_with_feature_log(
+            op_kind='overhang-bulk',
+            label=f"Convert strand {strand_id} → OH binder",
+            params={'strand_id': strand_id},
+            fn=_build,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        status = 404 if "not found" in msg else 422
+        raise HTTPException(status, detail=msg) from exc
+
+    return _design_response_with_geometry(design, report)
+
+
+@router.post("/design/overhang/{overhang_id}/generate-binder", status_code=201)
+def generate_binder_for_overhang_endpoint(overhang_id: str) -> dict:
+    """Create a new OH-binder strand antiparallel to an overhang.
+
+    Same length as the overhang, reverse complement of its sequence when set.
+    404 if the overhang (or its backing domain) is missing.
+    """
+    from backend.core.lattice import make_binder_for_overhang
+
+    def _build(d: Design) -> Design:
+        return make_binder_for_overhang(d, overhang_id)
+
+    try:
+        design, report, _entry = design_state.mutate_with_feature_log(
+            op_kind='overhang-bulk',
+            label=f"Generate OH binding strand for {overhang_id}",
+            params={'overhang_id': overhang_id},
+            fn=_build,
+        )
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc)) from exc
+
+    return _design_response_with_geometry(design, report)
+
+
+@router.post("/design/strands/{strand_id}/convert-to-scaffold", status_code=200)
+def convert_binder_to_scaffold_endpoint(strand_id: str) -> dict:
+    """Inverse of convert-to-binder: retype an OH-binder strand back to scaffold,
+    clear its binder links, and remove any overhang the conversion auto-created
+    once orphaned. 404 if the strand is missing.
+    """
+    from backend.core.lattice import convert_binder_to_scaffold
+
+    def _build(d: Design) -> Design:
+        return convert_binder_to_scaffold(d, strand_id)
+
+    try:
+        design, report, _entry = design_state.mutate_with_feature_log(
+            op_kind='overhang-bulk',
+            label=f"Convert strand {strand_id} → scaffold",
+            params={'strand_id': strand_id},
+            fn=_build,
+        )
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc)) from exc
+
+    return _design_response_with_geometry(design, report)
 
 
 def _build_strand_end_resize(d: Design, body: 'StrandEndResizeRequest') -> Design:
@@ -7702,6 +7785,12 @@ def generate_overhang_random_sequence(overhang_id: str) -> dict:
     # leaving all non-overhang bases unchanged.
     updated = _resplice_overhang_in_strand(updated, overhang_id, spec.strand_id)
 
+    # Propagate the reverse complement to any OH-binder / linker complement
+    # strands bound to this overhang (no-op for strands without a sequence).
+    for s in list(updated.strands):
+        if s.id != spec.strand_id and any(d.binds_overhang_id == overhang_id for d in s.domains):
+            updated = _resplice_overhang_in_strand(updated, overhang_id, s.id)
+
     # Phase 3: rescan boundaries for hairpins spanning adjacent sub-domains
     # (the generator already filters per-sub-domain hairpins, but a junction
     # window can still form one).
@@ -7782,6 +7871,12 @@ def generate_all_overhang_sequences() -> dict:
             count += 1
         else:
             new_overhangs.append(spec)
+
+    # OH-binder / linker complement strands that pair with a regenerated
+    # overhang must re-derive their reverse-complement sequence too.
+    for s in design.strands:
+        if any(d.binds_overhang_id in generated for d in s.domains if d.binds_overhang_id):
+            affected_strand_ids.add(s.id)
 
     updated = design.model_copy(update={"overhangs": new_overhangs})
 
@@ -9250,6 +9345,49 @@ def delete_overhang_connection(conn_id: str) -> dict:
     return _design_response(updated, report)
 
 
+@router.patch("/design/overhang-connections/{conn_id}/display-pose", status_code=200)
+def patch_connection_display_pose(conn_id: str, body: BindingDisplayPoseBody) -> dict:
+    """Authored display-only hinge angles for a LINKER (animation driver).
+
+    Sets `unbound_angle_deg` / `bound_angle_deg` and auto-detects + stores
+    `target_joint_id` (the single ClusterJoint connecting the two clusters the
+    linker spans). Annotation-only — never modifies the linker topology, bridge,
+    or any joint window; read solely by the display/animation layer.
+    """
+    from backend.core.linker_relax import _overhang_owning_cluster_id
+
+    design = design_state.get_or_404()
+    target = next((c for c in design.overhang_connections if c.id == conn_id), None)
+    if target is None:
+        raise HTTPException(404, detail=f"Overhang connection {conn_id!r} not found.")
+
+    patch = body.model_dump(exclude_unset=True)
+
+    # Auto-detect the spanning joint: the single ClusterJoint whose cluster is
+    # one of the two clusters the linker's overhangs belong to.
+    auto_joint = target.target_joint_id
+    if auto_joint is None:
+        ca = _overhang_owning_cluster_id(design, target.overhang_a_id)
+        cb = _overhang_owning_cluster_id(design, target.overhang_b_id)
+        cands = [j for j in design.cluster_joints if j.cluster_id in (ca, cb)]
+        if len(cands) == 1:
+            auto_joint = cands[0].id
+
+    def _fn(d: Design) -> None:
+        c = next((cc for cc in d.overhang_connections if cc.id == conn_id), None)
+        if c is None:
+            return
+        if 'unbound_angle_deg' in patch:
+            c.unbound_angle_deg = patch['unbound_angle_deg']
+        if 'bound_angle_deg' in patch:
+            c.bound_angle_deg = patch['bound_angle_deg']
+        if auto_joint is not None:
+            c.target_joint_id = auto_joint
+
+    updated, report = design_state.mutate_and_validate(_fn)
+    return _design_response(updated, report)
+
+
 @router.get("/ssdna-fjc-lookup", status_code=200)
 def get_ssdna_fjc_lookup() -> dict:
     """Pre-computed ssDNA freely-jointed-chain lookup.
@@ -10141,6 +10279,35 @@ def patch_overhang_binding(binding_id: str, body: OverhangBindingPatchRequest) -
         },
         fn=_fn,
     )
+    return _binding_response(updated, report, binding_id=binding_id)
+
+
+@router.patch("/design/overhang-bindings/{binding_id}/display-pose", status_code=200)
+def patch_binding_display_pose(binding_id: str, body: BindingDisplayPoseBody) -> dict:
+    """Set the authored display-only hinge angles used by the animation player.
+
+    Annotation-only: writes ONLY `unbound_angle_deg` / `bound_angle_deg`. Never
+    touches `bound`, `target_joint_id`, `locked_angle_deg`, the joint's angle
+    window, or `prior_driven_topology`. Does not relocate topology. Three-layer
+    safe — these fields are read solely by the display/animation layer.
+    """
+    design = design_state.get_or_404()
+    target = next((b for b in design.overhang_bindings if b.id == binding_id), None)
+    if target is None:
+        raise HTTPException(404, detail=f"Overhang binding {binding_id!r} not found.")
+
+    patch = body.model_dump(exclude_unset=True)
+
+    def _fn(d: Design) -> None:
+        b = next((bb for bb in d.overhang_bindings if bb.id == binding_id), None)
+        if b is None:
+            return
+        if 'unbound_angle_deg' in patch:
+            b.unbound_angle_deg = patch['unbound_angle_deg']
+        if 'bound_angle_deg' in patch:
+            b.bound_angle_deg = patch['bound_angle_deg']
+
+    updated, report = design_state.mutate_and_validate(_fn)
     return _binding_response(updated, report, binding_id=binding_id)
 
 
@@ -12354,6 +12521,17 @@ class CreateKeyframeBody(BaseModel):
     text_bold: bool = False
     text_italic: bool = False
     text_align: str = "center"
+    binding_states: dict[str, float] = Field(default_factory=dict)  # binding id → φ
+
+
+class BindingDisplayPoseBody(BaseModel):
+    """Annotation-only: authored hinge angles for the animation player.
+
+    Sets ONLY the display-pose fields. Never touches `bound`, `target_joint_id`,
+    `locked_angle_deg`, joint min/max, or `prior_driven_topology`.
+    """
+    unbound_angle_deg: Optional[float] = None
+    bound_angle_deg: Optional[float] = None
 
 
 class PatchKeyframeBody(BaseModel):
@@ -12373,6 +12551,7 @@ class PatchKeyframeBody(BaseModel):
     text_bold: Optional[bool] = None
     text_italic: Optional[bool] = None
     text_align: Optional[str] = None
+    binding_states: Optional[dict[str, float]] = None  # binding id → φ
 
 
 class ReorderKeyframesBody(BaseModel):
@@ -12457,6 +12636,7 @@ def create_keyframe(anim_id: str, body: CreateKeyframeBody) -> dict:
         text_bold=body.text_bold,
         text_italic=body.text_italic,
         text_align=body.text_align,
+        binding_states=body.binding_states,
     )
     updated_anim = anims[idx].model_copy(
         update={"keyframes": list(anims[idx].keyframes) + [kf]}, deep=True

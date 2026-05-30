@@ -245,3 +245,40 @@ def test_geometry_batch_duplicates_deduplicated():
     assert r.status_code == 200
     body = r.json()
     assert list(body.keys()) == ["-1"]
+
+
+# ── Keyframe binding_states (bind/unbind φ on the timeline) ──────────────────
+
+def test_keyframe_binding_states_create_patch_roundtrip():
+    """A design keyframe carries per-binding φ via binding_states; create and
+    patch both persist it, and it survives a design JSON round-trip."""
+    design_state.set_design(_demo_design())
+    a = client.post("/api/design/animations",
+                    json={"name": "A", "fps": 30, "loop": False})
+    assert a.status_code == 200, a.text
+    anim_id = a.json()["design"]["animations"][-1]["id"]
+
+    # Create with binding_states.
+    k = client.post(f"/api/design/animations/{anim_id}/keyframes",
+                    json={"binding_states": {"b1": 1.0}})
+    assert k.status_code == 200, k.text
+    anim = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)
+    kf = anim["keyframes"][-1]
+    assert kf["binding_states"] == {"b1": 1.0}
+
+    # Patch to a new φ map.
+    p = client.patch(f"/api/design/animations/{anim_id}/keyframes/{kf['id']}",
+                     json={"binding_states": {"b1": 0.0, "b2": 0.5}})
+    assert p.status_code == 200, p.text
+    anim = next(an for an in p.json()["design"]["animations"] if an["id"] == anim_id)
+    kf2 = next(x for x in anim["keyframes"] if x["id"] == kf["id"])
+    assert kf2["binding_states"] == {"b1": 0.0, "b2": 0.5}
+
+
+def test_keyframe_binding_states_defaults_empty():
+    design_state.set_design(_demo_design())
+    a = client.post("/api/design/animations", json={"name": "A"})
+    anim_id = a.json()["design"]["animations"][-1]["id"]
+    k = client.post(f"/api/design/animations/{anim_id}/keyframes", json={})
+    anim = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)
+    assert anim["keyframes"][-1]["binding_states"] == {}

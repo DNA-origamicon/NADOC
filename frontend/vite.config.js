@@ -23,6 +23,7 @@ export default {
       input: {
         main:            resolve(__dirname, 'index.html'),
         'cadnano-editor': resolve(__dirname, 'cadnano-editor.html'),
+        'strand-anim':    resolve(__dirname, 'strand-anim.html'),
       },
     },
   },

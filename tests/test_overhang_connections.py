@@ -1636,3 +1636,60 @@ def test_refresh_bridges_no_ds_linkers_returns_empty():
     r = client.post("/api/design/refresh-bridges", json={"cluster_ids": []})
     assert r.status_code == 200
     assert r.json()["bridge_nucs"] == []
+
+
+# ── Linker display-pose (bind/unbind animation driver) ───────────────────────
+
+def test_connection_display_pose_sets_angles_and_autodetects_joint():
+    """PATCH …/display-pose writes authored open/closed angles and auto-detects
+    the single spanning joint, without touching linker topology/bridge."""
+    seeded = _seed_with_two_clusters_and_one_joint()
+    conn = OverhangConnection(
+        name="L1",
+        overhang_a_id="oh_a_5p", overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p", overhang_b_attach="root",
+        linker_type="ds", length_value=8, length_unit="bp",
+    )
+    design_state.set_design(seeded.model_copy(update={"overhang_connections": [conn]}))
+
+    r = client.patch(
+        f"/api/design/overhang-connections/{conn.id}/display-pose",
+        json={"unbound_angle_deg": 18.0, "bound_angle_deg": 0.0},
+    )
+    assert r.status_code == 200, r.text
+
+    post = design_state.get_or_404()
+    c = next(c for c in post.overhang_connections if c.id == conn.id)
+    assert c.unbound_angle_deg == 18.0
+    assert c.bound_angle_deg == 0.0
+    # Spanning joint auto-detected (joint_a is on cluster_a, which owns oh_a_5p).
+    assert c.target_joint_id == "joint_a"
+    # Linker topology fields untouched.
+    assert c.length_value == 8 and c.length_unit == "bp" and c.linker_type == "ds"
+
+
+def test_connection_display_pose_no_joint_leaves_target_none():
+    """With no joints on either spanned cluster, target_joint_id stays None
+    but the authored angles are still stored."""
+    seeded = _seed_with_two_clusters_and_one_joint()
+    no_joints = seeded.model_copy(update={"cluster_joints": []})
+    conn = OverhangConnection(
+        name="L1",
+        overhang_a_id="oh_a_5p", overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p", overhang_b_attach="root",
+        linker_type="ds", length_value=8, length_unit="bp",
+    )
+    design_state.set_design(no_joints.model_copy(update={"overhang_connections": [conn]}))
+    r = client.patch(f"/api/design/overhang-connections/{conn.id}/display-pose",
+                     json={"unbound_angle_deg": 5.0})
+    assert r.status_code == 200, r.text
+    c = next(c for c in design_state.get_or_404().overhang_connections if c.id == conn.id)
+    assert c.unbound_angle_deg == 5.0
+    assert c.target_joint_id is None
+
+
+def test_connection_display_pose_404_unknown():
+    design_state.set_design(_seed_with_two_clusters_and_one_joint())
+    r = client.patch("/api/design/overhang-connections/nope/display-pose",
+                     json={"bound_angle_deg": 0.0})
+    assert r.status_code == 404

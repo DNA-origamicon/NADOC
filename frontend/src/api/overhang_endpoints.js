@@ -82,6 +82,18 @@ export async function deleteOverhangConnection(connId) {
   return _syncFromDesignResponse(json)
 }
 
+export async function patchConnectionDisplayPose(connId, patch) {
+  // patch: subset of { unbound_angle_deg, bound_angle_deg } — authored hinge
+  // angles for the animation player; the server auto-detects + stores
+  // target_joint_id. Annotation-only (never touches linker topology/bridge).
+  const json = await _request(
+    'PATCH',
+    `/design/overhang-connections/${encodeURIComponent(connId)}/display-pose`,
+    patch,
+  )
+  return _syncFromDesignResponse(json)
+}
+
 /** Server-side Johnson random sequence — used by the bridge-sequence box's
  *  "Gen" button before the linker exists. Returns a string of length `length`
  *  drawn against the current scaffold + staple corpus. */
@@ -222,6 +234,17 @@ export async function deleteOverhangBinding(bindingId) {
   const json = await _request(
     'DELETE',
     `/design/overhang-bindings/${encodeURIComponent(bindingId)}`,
+  )
+  return _syncFromDesignResponse(json)
+}
+
+export async function patchBindingDisplayPose(bindingId, patch) {
+  // patch: subset of { unbound_angle_deg, bound_angle_deg } — authored hinge
+  // angles for the animation player. Annotation-only (never flips `bound`).
+  const json = await _request(
+    'PATCH',
+    `/design/overhang-bindings/${encodeURIComponent(bindingId)}/display-pose`,
+    patch,
   )
   return _syncFromDesignResponse(json)
 }

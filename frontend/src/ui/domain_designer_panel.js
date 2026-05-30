@@ -641,6 +641,43 @@ export function initDomainDesignerPanel(rootEl, { store, api, pathview }) {
 
     // ── Phase 5: OverhangBinding cross-references ─────────────────────────
     _renderBindingsSection(ovhg, design, overhangs)
+
+    // ── OH-binder strands bound to this overhang ──────────────────────────
+    _renderBindersSection(ovhg, design)
+  }
+
+  // Strands (standalone OH_BINDER oligos + LINKER complements) whose domains
+  // carry binds_overhang_id === this overhang. This is the Overhangs-Manager
+  // registration surface for overhang-binding domains.
+  function _renderBindersSection(ovhg, design) {
+    if (!crossEl) return
+    const binders = (design?.strands ?? []).filter(
+      s => (s.domains ?? []).some(d => d.binds_overhang_id === ovhg.id))
+    const header = document.createElement('div')
+    header.style.cssText = 'font-size:10px;color:#8b949e;margin:8px 0 4px'
+    header.textContent = `Binders (${binders.length})`
+    crossEl.appendChild(header)
+    if (binders.length === 0) {
+      const empty = document.createElement('div')
+      empty.style.cssText = 'color:#6e7681'
+      empty.textContent = 'No binding strands on this overhang.'
+      crossEl.appendChild(empty)
+      return
+    }
+    for (const s of binders) {
+      const row = document.createElement('div')
+      row.style.cssText = 'padding:2px 0;font-size:11px;color:#c9d1d9;display:flex;gap:6px;align-items:center'
+      const swatch = document.createElement('span')
+      swatch.style.cssText =
+        `display:inline-block;width:9px;height:9px;border-radius:2px;background:${s.color ?? '#c050d0'}`
+      const kind = s.strand_type === 'linker' ? 'linker complement' : 'OH binder'
+      const label = document.createElement('span')
+      label.textContent = `${s.id.length > 20 ? s.id.slice(0, 18) + '…' : s.id} · ${kind}`
+      label.title = s.id
+      row.appendChild(swatch)
+      row.appendChild(label)
+      crossEl.appendChild(row)
+    }
   }
 
 

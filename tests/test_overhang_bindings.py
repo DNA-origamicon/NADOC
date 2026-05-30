@@ -786,3 +786,82 @@ def test_round_trip_preserves_zero_dof_bound_binding():
     assert b_post.target_joint_id is None
     assert b_post.locked_angle_deg is None
     assert b_post.prior_driven_topology == pre_binding.prior_driven_topology
+
+
+# ── Display-pose endpoint (animation-layer annotation, additive) ─────────────
+
+def test_display_pose_sets_authored_angles_without_touching_bind_state():
+    """PATCH …/display-pose writes only unbound/bound_angle_deg and never
+    mutates bound / target_joint_id / locked_angle_deg / joint window /
+    prior_driven_topology (it is a pure display annotation)."""
+    design_state.set_design(_seed_two_clusters_with_overhangs(
+        seq_a="AAGG", seq_b="CCTT",
+    ))
+    r1 = client.post("/api/design/overhang-bindings", json={
+        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
+        "target_joint_id": "joint_a",
+    })
+    bid = r1.json()["design"]["overhang_bindings"][0]["id"]
+
+    pre = design_state.get_or_404()
+    b_pre = next(b for b in pre.overhang_bindings if b.id == bid)
+    j_pre = next(j for j in pre.cluster_joints if j.id == "joint_a")
+    assert b_pre.unbound_angle_deg is None and b_pre.bound_angle_deg is None
+
+    r2 = client.patch(
+        f"/api/design/overhang-bindings/{bid}/display-pose",
+        json={"unbound_angle_deg": 12.5, "bound_angle_deg": 0.0},
+    )
+    assert r2.status_code == 200, r2.text
+
+    post = design_state.get_or_404()
+    b = next(b for b in post.overhang_bindings if b.id == bid)
+    # Authored angles set.
+    assert b.unbound_angle_deg == 12.5
+    assert b.bound_angle_deg == 0.0
+    # Bind mechanics untouched.
+    assert b.bound is b_pre.bound
+    assert b.target_joint_id == b_pre.target_joint_id
+    assert b.locked_angle_deg == b_pre.locked_angle_deg
+    assert b.prior_driven_topology == b_pre.prior_driven_topology
+    # Joint window untouched.
+    j = next(j for j in post.cluster_joints if j.id == "joint_a")
+    assert j.min_angle_deg == j_pre.min_angle_deg
+    assert j.max_angle_deg == j_pre.max_angle_deg
+
+
+def test_display_pose_partial_patch_keeps_other_angle():
+    design_state.set_design(_seed_two_clusters_with_overhangs(
+        seq_a="AAGG", seq_b="CCTT",
+    ))
+    r1 = client.post("/api/design/overhang-bindings", json={
+        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
+    })
+    bid = r1.json()["design"]["overhang_bindings"][0]["id"]
+    client.patch(f"/api/design/overhang-bindings/{bid}/display-pose",
+                 json={"bound_angle_deg": 3.0})
+    client.patch(f"/api/design/overhang-bindings/{bid}/display-pose",
+                 json={"unbound_angle_deg": 30.0})
+    b = next(b for b in design_state.get_or_404().overhang_bindings if b.id == bid)
+    assert b.bound_angle_deg == 3.0
+    assert b.unbound_angle_deg == 30.0
+
+
+def test_display_pose_404_unknown_binding():
+    design_state.set_design(_seed_two_clusters_with_overhangs())
+    r = client.patch("/api/design/overhang-bindings/nope/display-pose",
+                     json={"unbound_angle_deg": 1.0})
+    assert r.status_code == 404
+
+
+def test_binding_display_fields_roundtrip_and_default_none():
+    """New fields default to None (old .nadoc compat) and survive JSON round-trip."""
+    b = OverhangBinding(
+        name="B1", sub_domain_a_id="sd_a", sub_domain_b_id="sd_b",
+        overhang_a_id="oh_a_5p", overhang_b_id="oh_b_5p",
+    )
+    assert b.unbound_angle_deg is None and b.bound_angle_deg is None
+    b2 = b.model_copy(update={"unbound_angle_deg": 15.0, "bound_angle_deg": -2.0})
+    restored = OverhangBinding.model_validate_json(b2.model_dump_json())
+    assert restored.unbound_angle_deg == 15.0
+    assert restored.bound_angle_deg == -2.0

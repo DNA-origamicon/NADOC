@@ -1472,6 +1472,21 @@ export async function deleteStrand(strandId) {
   return _syncFromDesignResponse(json)
 }
 
+export async function convertStrandToBinder(strandId) {
+  const json = await _request('POST', `/design/strands/${strandId}/convert-to-binder`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function generateBinderForOverhang(overhangId) {
+  const json = await _request('POST', `/design/overhang/${overhangId}/generate-binder`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function convertBinderToScaffold(strandId) {
+  const json = await _request('POST', `/design/strands/${strandId}/convert-to-scaffold`)
+  return _syncFromDesignResponse(json)
+}
+
 export async function deleteStrandsBatch(strandIds) {
   const json = await _request('DELETE', '/design/strands/batch', { strand_ids: strandIds })
   return _syncFromDesignResponse(json)

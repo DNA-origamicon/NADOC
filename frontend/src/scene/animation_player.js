@@ -47,7 +47,7 @@ function _ease(t, curve) {
  * @param {function(number[]): Promise} [opts.onFetchGeometryBatch] — fetches geometry for multiple feature-log positions
  * @param {function(object): void} [opts.onEvent]          — receives player events
  */
-export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, onFetchGeometryBatch, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate }) {
+export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, getOverhangUnzipOverlay, getDesignGeometry, onFetchGeometryBatch, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate }) {
   let _raf          = null
   let _playing      = false
   let _direction    = 1       // 1 = forward, -1 = reverse
@@ -219,6 +219,11 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       jointValues: kf.joint_values && Object.keys(kf.joint_values).length > 0
         ? { ...kf.joint_values }
         : null,
+      // Per-binding display reaction coordinate φ (binding id → [0,1]).
+      // Non-null only when the keyframe explicitly stores binding states.
+      bindingStates: kf.binding_states && Object.keys(kf.binding_states).length > 0
+        ? { ...kf.binding_states }
+        : null,
     }
   }
 
@@ -289,6 +294,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         fov:               toState.fov               ?? prevState.fov,
         clusterTransforms: toState.clusterTransforms ?? prevState.clusterTransforms,
         jointValues:       toState.jointValues        ?? prevState.jointValues,
+        bindingStates:     toState.bindingStates       ?? prevState.bindingStates,
       }
       prevFLI = toFLI
     }
@@ -593,6 +599,75 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _baseClusters = null
   }
 
+  // ── Binding bind/unbind φ (hinge drive + unzip overlay) ──────────────────────
+
+  /** Signed twist angle (rad) of a quaternion [x,y,z,w] about a unit axis. */
+  function _twistAngleRad(rot, axisDir) {
+    const dot = rot[0] * axisDir.x + rot[1] * axisDir.y + rot[2] * axisDir.z
+    let a = 2 * Math.atan2(dot, rot[3])
+    while (a >  Math.PI) a -= 2 * Math.PI
+    while (a < -Math.PI) a += 2 * Math.PI
+    return a
+  }
+
+  /**
+   * Rotate a driver's hinge (its target_joint_id ClusterJoint's driven cluster)
+   * to the absolute joint angle lerp(unbound, bound, φ). A driver is an
+   * OverhangBinding (WC pair) or an OverhangConnection (linker) — both carry
+   * target_joint_id + authored unbound/bound angles. Display-only: applies a
+   * transient incremental rotation about the joint axis from the play-time base
+   * pose via the same helixCtrl.applyClusterTransform path _applyClusterLerp uses
+   * (so stop()'s _restoreBaseClusters undoes it). Never clamps against the live
+   * joint window — the authored [unbound, bound] window wins during playback, so
+   * a live-locked (bound) joint can still play.
+   */
+  function _driveBindingHinge(driver, phi) {
+    if (!driver?.target_joint_id || !_baseClusters?.length) return null
+    const design = getDesign()
+    const joint = design?.cluster_joints?.find(j => j.id === driver.target_joint_id)
+    if (!joint?.axis_direction || !joint?.axis_origin) return null
+    const base = _baseClusters.find(b => b.id === joint.cluster_id)
+    if (!base) return null
+
+    const closedDeg = driver.bound_angle_deg ?? driver.locked_angle_deg
+    const openDeg   = driver.unbound_angle_deg
+    if (!Number.isFinite(closedDeg) || !Number.isFinite(openDeg)) return null
+
+    const targetDeg = openDeg + (closedDeg - openDeg) * phi
+    const axisDir   = new THREE.Vector3(...joint.axis_direction).normalize()
+    const baseRad   = _twistAngleRad(base.rotation, axisDir)
+    const deltaRad  = targetDeg * Math.PI / 180 - baseRad
+
+    const incrRot = new THREE.Quaternion().setFromAxisAngle(axisDir, deltaRad)
+    const helixCtrl = getHelixCtrl()
+    if (!helixCtrl) return null
+
+    const pivot  = new THREE.Vector3(...base.pivot)
+    const center = pivot.clone().add(new THREE.Vector3(...base.translation))
+    // Pure rotation about the joint line (J, axisDir): keeps J fixed at all φ.
+    const J = new THREE.Vector3(...joint.axis_origin)
+    const dummy = center.clone().sub(J).applyQuaternion(incrRot).add(J)
+
+    helixCtrl.applyClusterTransform(
+      base.helix_ids, center, dummy, incrRot,
+      base.domain_ids?.length ? base.domain_ids : null,
+      { forceAxes: true },
+    )
+    getBluntEnds?.()?.applyClusterTransform(base.helix_ids, center, dummy, incrRot)
+    getUnfoldView?.()?.applyClusterArcUpdate(base.helix_ids)
+    getUnfoldView?.()?.applyClusterExtArcUpdate(base.helix_ids)
+    getDesignRenderer?.()?.applyClusterCrossoverUpdate(base.helix_ids)
+
+    // Hinge info so the unzip overlay can keep moving-arm overhang beads attached
+    // to the rotating cluster (rotate them by the SAME incrRot about J).
+    return {
+      clusterId: joint.cluster_id,
+      J:        [J.x, J.y, J.z],
+      axisDir:  [axisDir.x, axisDir.y, axisDir.z],
+      deltaRad,
+    }
+  }
+
   // ── Text overlay ─────────────────────────────────────────────────────────────
 
   // Fade in/out duration in seconds at each edge of a text-bearing segment.
@@ -777,6 +852,26 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         _onJointUpdate(jointId, fromVal + (toVal - fromVal) * t)
       }
     }
+
+    // Bind/unbind φ — drive each animated driver's hinge + unzip overlay from one
+    // interpolated reaction coordinate. A "driver" is an OverhangBinding (WC pair)
+    // OR an OverhangConnection (linker); both carry target_joint_id + authored
+    // unbound/bound angles + overhang_a/b ids. Display-only (see _driveBindingHinge).
+    if (toState.bindingStates) {
+      const design  = getDesign()
+      const drivers = [...(design?.overhang_bindings ?? []), ...(design?.overhang_connections ?? [])]
+      const overlay  = getOverhangUnzipOverlay?.()
+      const items = []
+      for (const [driverId, toPhi] of Object.entries(toState.bindingStates)) {
+        const driver = drivers.find(d => d.id === driverId)
+        if (!driver) continue
+        const fromPhi = fromState.bindingStates?.[driverId] ?? toPhi
+        const phi = fromPhi + (toPhi - fromPhi) * t
+        const hinge = _driveBindingHinge(driver, phi)
+        if (overlay) items.push({ binding: driver, phi, hinge })
+      }
+      if (overlay) overlay.update(items, getDesignGeometry?.() ?? null)
+    }
   }
 
   // ── RAF loop ─────────────────────────────────────────────────────────────────
@@ -906,6 +1001,9 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     // Restore overhang link arcs to full visibility — playback may have
     // scaled them down for linker creation/deletion fade-outs.
     getOverhangLinkArcs?.()?.resetConnectionScales?.()
+    // Tear down the bind/unbind unzip overlay (the hinge itself is restored by
+    // _restoreBaseClusters above — it used the same applyClusterTransform path).
+    getOverhangUnzipOverlay?.()?.clear?.()
 
     // Restore assembly joints to pre-play values if callback is set
     if (_onJointUpdate && _liveJointValues) {

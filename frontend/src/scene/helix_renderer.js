@@ -1592,6 +1592,39 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const n = entry.nuc
     _keyToEntry.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, entry)
   }
+  // key string → slab entry (for surgical per-bead overrides, e.g. overhang
+  // unzip animation that moves only a handful of beads each frame).
+  const _keyToSlab = new Map()
+  for (const slab of slabEntries) {
+    const n = slab.nuc
+    _keyToSlab.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, slab)
+  }
+  // key string → connector cones touching that bead (from OR to), so a surgical
+  // per-bead move (setBeadOverrides) can recompose only the affected cones.
+  const _keyToCones = new Map()
+  for (const cone of coneEntries) {
+    for (const n of [cone.fromNuc, cone.toNuc]) {
+      const k = `${n.helix_id}:${n.bp_index}:${n.direction}`
+      let arr = _keyToCones.get(k); if (!arr) { arr = []; _keyToCones.set(k, arr) }
+      arr.push(cone)
+    }
+  }
+  /** Recompose one connector cone from its endpoints' CURRENT bead positions. */
+  function _recomposeCone(cone) {
+    const fe = _nucToEntry.get(cone.fromNuc)
+    const te = _nucToEntry.get(cone.toNuc)
+    if (fe && te) {
+      _physDir.copy(te.pos).sub(fe.pos)
+      const dist = _physDir.length()
+      cone.coneHeight = Math.max(0.001, dist)
+      _physDir.divideScalar(dist || 1)
+      cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
+      cone.quat.setFromUnitVectors(Y_HAT, _physDir)
+    }
+    const r = cone.isCrossHelix ? 0 : cone.coneRadius
+    _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, cone.coneHeight, r))
+    iCones.setMatrixAt(cone.id, _tMatrix)
+  }
   // Fluorophore beads live in fluoroEntries (separate from backboneEntries) and
   // are intentionally NOT added to _nucToEntry — the cone-update path doesn't
   // gate cross-helix cones to radius 0, so including fluoros there would draw
@@ -2808,6 +2841,68 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      * instanced beads/cones/slabs in place; pass null to revert to geometry).
      * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
      */
+    /**
+     * Surgical per-bead override for a SMALL set of nucleotides — moves only
+     * the named beads + their slabs, with no console logging and no full-scene
+     * sweep. Safe to call every animation frame (unlike applyFemPositions,
+     * which logs + rewrites every slab/cone). Used by the overhang/linker
+     * unzip animation to splay just the overhang beads. Display-only.
+     *
+     * @param {Array<{helix_id, bp_index, direction, backbone_position:[x,y,z],
+     *                nx?, ny?, nz?}>} updates  absolute positions; optional base
+     *                normal (nx,ny,nz) reorients the slab, else slab keeps its
+     *                build-time orientation and just follows the bead.
+     */
+    setBeadOverrides(updates) {
+      if (!updates?.length) return
+      let touchedBead = false, touchedSlab = false
+      for (let i = 0; i < updates.length; i++) {
+        const u = updates[i]
+        const key = `${u.helix_id}:${u.bp_index}:${u.direction}`
+        const entry = _keyToEntry.get(key)
+        if (entry) {
+          const p = u.backbone_position
+          entry.pos.set(p[0], p[1], p[2])
+          _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
+          entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+          touchedBead = true
+        }
+        const slab = _keyToSlab.get(key)
+        if (slab) {
+          if (entry) slab.bbPos.copy(entry.pos)
+          let q = slab.quat, bn = slab.bnDir
+          if (u.nx !== undefined) {
+            _slabBnS.set(u.nx, u.ny, u.nz)
+            _slabAxisDir.set(...slab.nuc.axis_tangent)
+            _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()
+            _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
+            _slabQuatS.setFromRotationMatrix(_slabBasis)
+            q = _slabQuatS; bn = _slabBnS
+          }
+          const center = slabCenter(slab.bbPos, bn, slabParams.distance)
+          _tMatrix.compose(center, q, _tScale.set(slabParams.length, slabParams.width, slabParams.thickness))
+          slab.instMesh.setMatrixAt(slab.id, _tMatrix)
+          touchedSlab = true
+        }
+      }
+      if (touchedBead) {
+        iSpheres.instanceMatrix.needsUpdate = true; iCubes.instanceMatrix.needsUpdate = true
+        // Recompose connector cones whose endpoints moved (dedup shared cones).
+        const seenCones = new Set()
+        for (let i = 0; i < updates.length; i++) {
+          const u = updates[i]
+          const cones = _keyToCones.get(`${u.helix_id}:${u.bp_index}:${u.direction}`)
+          if (!cones) continue
+          for (const cone of cones) {
+            if (seenCones.has(cone.id)) continue
+            seenCones.add(cone.id); _recomposeCone(cone)
+          }
+        }
+        if (seenCones.size) iCones.instanceMatrix.needsUpdate = true
+      }
+      if (touchedSlab) { iSlabs.instanceMatrix.needsUpdate = true }
+    },
+
     applyFemPositions(updates, amp = 1.0) {
       if (!updates) { revertToGeometry(); return }
 

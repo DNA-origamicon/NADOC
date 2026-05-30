@@ -2714,7 +2714,12 @@ def _scaffold_coverage_by_helix(design: Design) -> dict[str, tuple[int, int]]:
     """
     coverage: dict[str, tuple[int, int]] = {}
     for strand in design.strands:
-        if strand.strand_type != StrandType.STAPLE and not strand.is_reference:
+        # Only genuine scaffold strands contribute scaffold coverage. The old
+        # predicate (``!= STAPLE and not is_reference``) also counted LINKER and
+        # OH_BINDER complement domains — both of which sit on a real bundle helix
+        # at an overhang's bp range — as "scaffold", which corrupts overhang
+        # autodetection / inline reconciliation for other staples on that helix.
+        if strand.strand_type == StrandType.SCAFFOLD and not strand.is_reference:
             for dom in strand.domains:
                 lo = min(dom.start_bp, dom.end_bp)
                 hi = max(dom.start_bp, dom.end_bp)
@@ -3036,6 +3041,279 @@ def autodetect_overhangs(design: Design) -> Design:
         strands=[strands_by_id[s.id] for s in design.strands],
         overhangs=list(overhangs_by_id.values()),
     )
+
+
+# Distinct non-scaffold hue for OH-binder strands in 3D + cadnano. Mirrors the
+# frontend CLR_OH_BINDER constant — keep the two in sync.
+_OH_BINDER_DEFAULT_COLOR = "#c050d0"   # magenta
+
+
+def _antiparallel_partner_domains(
+    design: Design, binder_strand_id: str, binder_domain: Domain,
+) -> list[tuple[Strand, int, Domain]]:
+    """Domains on OTHER strands that pair antiparallel with *binder_domain*.
+
+    Same helix, opposite direction, overlapping bp range — the Watson-Crick
+    partner of a binder domain (mirrors the linker-complement geometry in
+    ``_make_complement_domain`` / ``deformation._linker_complement_domain_refs``).
+    The binder strand itself, and other binder/linker strands, are excluded as
+    candidates — only a real overhang-bearing strand (staple) or an
+    already-tagged overhang domain can be the bound partner.
+
+    Returns ``[(strand, domain_index, domain), …]``.
+    """
+    b_lo = min(binder_domain.start_bp, binder_domain.end_bp)
+    b_hi = max(binder_domain.start_bp, binder_domain.end_bp)
+    out: list[tuple[Strand, int, Domain]] = []
+    for s in design.strands:
+        if s.id == binder_strand_id:
+            continue
+        if s.strand_type in (StrandType.OH_BINDER, StrandType.LINKER):
+            continue  # complements, not overhangs
+        for di, d in enumerate(s.domains):
+            if d.helix_id != binder_domain.helix_id:
+                continue
+            if d.direction == binder_domain.direction:
+                continue  # not antiparallel
+            d_lo = min(d.start_bp, d.end_bp)
+            d_hi = max(d.start_bp, d.end_bp)
+            if d_hi < b_lo or d_lo > b_hi:
+                continue
+            out.append((s, di, d))
+    return out
+
+
+def convert_strand_to_binder(design: Design, strand_id: str) -> Design:
+    """Re-designate *strand_id* as an OH_BINDER and link each of its domains to
+    the overhang it antiparallel-overlaps.
+
+    For every domain on the strand:
+      * find the antiparallel partner domain (same helix, opposite direction,
+        overlapping bp range) on a real overhang-bearing strand;
+      * if that partner is already tagged as an overhang, link to it;
+      * otherwise tag the partner domain with a fresh ``OverhangSpec`` (so the
+        ssDNA region it represents is recognised as an overhang) and link to it;
+      * record the link on the binder domain via ``binds_overhang_id``.
+
+    Raises ``ValueError`` only when NO domain on the strand has any antiparallel
+    partner at all (nothing to bind).
+    """
+    strands_by_id: dict[str, Strand] = {s.id: s for s in design.strands}
+    strand = strands_by_id.get(strand_id)
+    if strand is None:
+        raise ValueError(f"strand {strand_id!r} not found")
+
+    helices_by_id: dict[str, Helix] = {h.id: h for h in design.helices}
+    overhangs_by_id: dict[str, OverhangSpec] = {o.id: o for o in design.overhangs}
+    # mutable copies of partner strands' domain lists, keyed by strand id
+    partner_domains: dict[str, list[Domain]] = {}
+
+    import uuid as _uuid_local
+    from backend.core.models import SubDomain as _SubDomain, NADOC_SUBDOMAIN_NS as _NS
+
+    new_binder_domains: list[Domain] = list(strand.domains)
+    any_partner = False
+
+    for bi, bdom in enumerate(strand.domains):
+        partners = _antiparallel_partner_domains(design, strand_id, bdom)
+        if not partners:
+            continue
+        any_partner = True
+
+        # Prefer an already-tagged overhang partner; else tag a staple partner.
+        tagged = next((p for p in partners if p[2].overhang_id is not None), None)
+        if tagged is not None:
+            p_strand, _p_idx, p_dom = tagged
+            ovhg_id = p_dom.overhang_id
+        else:
+            p_strand, p_idx, p_dom = next(
+                (p for p in partners if p[0].strand_type == StrandType.STAPLE),
+                partners[0],
+            )
+            ovhg_id = f"ovhg_binder_{p_strand.id}_{p_idx}"
+            # tag the partner domain in a working copy of its strand's domains
+            dom_list = partner_domains.setdefault(p_strand.id, list(p_strand.domains))
+            dom_list[p_idx] = p_dom.model_copy(update={"overhang_id": ovhg_id})
+            # build the OverhangSpec (whole-domain sub-domain, mirrors autodetect)
+            inline_len = abs(p_dom.end_bp - p_dom.start_bp) + 1
+            pivot_xyz = _pivot_for_junction(
+                helices_by_id, p_dom.helix_id,
+                min(p_dom.start_bp, p_dom.end_bp),
+            )
+            overhangs_by_id[ovhg_id] = OverhangSpec(
+                id=ovhg_id,
+                helix_id=p_dom.helix_id,
+                strand_id=p_strand.id,
+                pivot=pivot_xyz,
+                label=_next_overhang_label(overhangs_by_id.values()),
+                sub_domains=[_SubDomain(
+                    id=str(_uuid_local.uuid5(_NS, f"{ovhg_id}:whole")),
+                    name="a",
+                    start_bp_offset=0,
+                    length_bp=inline_len,
+                )],
+            )
+
+        new_binder_domains[bi] = bdom.model_copy(update={"binds_overhang_id": ovhg_id})
+
+    if not any_partner:
+        raise ValueError(
+            "no antiparallel partner strand found — nothing for this strand to bind"
+        )
+
+    # rebuild the binder strand (new type + colour + linked domains)
+    strands_by_id[strand_id] = strand.model_copy(update={
+        "strand_type": StrandType.OH_BINDER,
+        "color": strand.color or _OH_BINDER_DEFAULT_COLOR,
+        "domains": new_binder_domains,
+    })
+    # apply partner domain tags
+    for pid, dom_list in partner_domains.items():
+        strands_by_id[pid] = strands_by_id[pid].model_copy(update={"domains": dom_list})
+
+    return design.copy_with(
+        strands=[strands_by_id[s.id] for s in design.strands],
+        overhangs=list(overhangs_by_id.values()),
+    )
+
+
+def convert_binder_to_scaffold(design: Design, strand_id: str) -> Design:
+    """Inverse of ``convert_strand_to_binder``: retype an OH-binder strand back
+    to SCAFFOLD, clear its ``binds_overhang_id`` links + colour override, and
+    remove any overhang the original conversion AUTO-created (``ovhg_binder_``
+    prefix) once it is orphaned — no other binder still binds it and no
+    linker/binding references it. Pre-existing overhangs the binder merely linked
+    to are left untouched.
+
+    Raises ``ValueError`` if the strand is not found.
+    """
+    strands_by_id: dict[str, Strand] = {s.id: s for s in design.strands}
+    strand = strands_by_id.get(strand_id)
+    if strand is None:
+        raise ValueError(f"strand {strand_id!r} not found")
+
+    bound_ids = {d.binds_overhang_id for d in strand.domains if d.binds_overhang_id}
+
+    # Retype the binder → scaffold; drop colour + binder links.
+    strands_by_id[strand_id] = strand.model_copy(update={
+        "strand_type": StrandType.SCAFFOLD,
+        "color": None,
+        "domains": [d.model_copy(update={"binds_overhang_id": None})
+                    for d in strand.domains],
+    })
+
+    # Determine which auto-created overhangs are now orphaned + unreferenced.
+    conn_refs: set[str] = set()
+    for c in design.overhang_connections:
+        conn_refs.add(c.overhang_a_id); conn_refs.add(c.overhang_b_id)
+    bind_refs: set[str] = set()
+    for b in design.overhang_bindings:
+        bind_refs.add(getattr(b, "overhang_a_id", None))
+        bind_refs.add(getattr(b, "overhang_b_id", None))
+
+    remove_ovhg: set[str] = set()
+    for oid in bound_ids:
+        if not oid.startswith("ovhg_binder_"):
+            continue  # pre-existing overhang — leave it
+        still_bound = any(
+            d.binds_overhang_id == oid
+            for s in strands_by_id.values() if s.id != strand_id
+            for d in s.domains
+        )
+        if still_bound or oid in conn_refs or oid in bind_refs:
+            continue
+        remove_ovhg.add(oid)
+
+    if remove_ovhg:
+        # untag the partner domains + drop the OverhangSpecs
+        for sid, s in list(strands_by_id.items()):
+            if any(d.overhang_id in remove_ovhg for d in s.domains):
+                strands_by_id[sid] = s.model_copy(update={"domains": [
+                    d.model_copy(update={"overhang_id": None})
+                    if d.overhang_id in remove_ovhg else d
+                    for d in s.domains
+                ]})
+        new_overhangs = [o for o in design.overhangs if o.id not in remove_ovhg]
+    else:
+        new_overhangs = list(design.overhangs)
+
+    return design.copy_with(
+        strands=[strands_by_id[s.id] for s in design.strands],
+        overhangs=new_overhangs,
+    )
+
+
+def tag_painted_binder(design: Design, strand: Strand) -> Strand:
+    """If a freshly-painted *strand* lands antiparallel over an EXISTING tagged
+    overhang, re-designate it as an OH binder linked to that overhang.
+
+    Used by the pen tool (``add_strand``): drawing a strand on a region already
+    recognised as an overhang auto-classifies it as a binder. Unlike
+    ``convert_strand_to_binder`` this never CREATES overhangs — it only links to
+    overhangs that already exist (the overhang the user drew on top of). Returns
+    *strand* unchanged when no domain overlaps a tagged overhang.
+    """
+    new_domains = list(strand.domains)
+    changed = False
+    for di, bdom in enumerate(strand.domains):
+        partners = _antiparallel_partner_domains(design, strand.id, bdom)
+        tagged = next((p for p in partners if p[2].overhang_id is not None), None)
+        if tagged is None:
+            continue
+        new_domains[di] = bdom.model_copy(
+            update={"binds_overhang_id": tagged[2].overhang_id}
+        )
+        changed = True
+    if not changed:
+        return strand
+    return strand.model_copy(update={
+        "strand_type": StrandType.OH_BINDER,
+        "color": _OH_BINDER_DEFAULT_COLOR,
+        "domains": new_domains,
+    })
+
+
+def make_binder_for_overhang(design: Design, overhang_id: str) -> Design:
+    """Create a new OH-binder strand antiparallel to *overhang_id*.
+
+    The new strand is a single domain on the overhang's helix at the same bp
+    range, opposite direction (``_make_complement_domain``), tagged
+    ``binds_overhang_id=overhang_id``, magenta. When the overhang already has a
+    sequence the binder's ``sequence`` is set to its reverse complement (same
+    length); otherwise it is left unset (rendered as N×length until assigned).
+
+    Raises ``ValueError`` if the overhang or its backing domain is not found.
+    """
+    spec = next((o for o in design.overhangs if o.id == overhang_id), None)
+    if spec is None:
+        raise ValueError(f"overhang {overhang_id!r} not found")
+    oh_dom = next(
+        (d for s in design.strands for d in s.domains if d.overhang_id == overhang_id),
+        None,
+    )
+    if oh_dom is None:
+        raise ValueError(f"no domain references overhang {overhang_id!r}")
+
+    comp = _make_complement_domain(oh_dom, binds_overhang_id=overhang_id)
+
+    # Reverse complement of the overhang's assembled 5'→3' sequence (handles
+    # sub-domain overrides + short/partial sequences → trailing N's, LESSONS F3).
+    from backend.core.sequences import _assemble_overhang_5to3, complement_base
+    oh_len = abs(oh_dom.end_bp - oh_dom.start_bp) + 1
+    oh_bases = _assemble_overhang_5to3(spec, oh_len)
+    seq = None
+    if any(b != "N" for b in oh_bases):
+        seq = "".join(complement_base(b) for b in reversed(oh_bases))
+
+    import uuid as _uuid_local
+    new_strand = Strand(
+        id=f"ohbind_{overhang_id}_{_uuid_local.uuid4().hex[:8]}",
+        domains=[comp],
+        strand_type=StrandType.OH_BINDER,
+        color=_OH_BINDER_DEFAULT_COLOR,
+        sequence=seq,
+    )
+    return design.copy_with(strands=[*design.strands, new_strand])
 
 
 def migrate_split_staple_domains(design: Design) -> Design:
@@ -3384,7 +3662,7 @@ def _opposite_direction(d: Direction) -> Direction:
     return Direction.REVERSE if d == Direction.FORWARD else Direction.FORWARD
 
 
-def _make_complement_domain(oh_dom: Domain) -> Domain:
+def _make_complement_domain(oh_dom: Domain, binds_overhang_id: Optional[str] = None) -> Domain:
     """Antiparallel complement of an overhang domain.
 
     Lives on the SAME real helix at the SAME bp range as the overhang, but with
@@ -3392,12 +3670,18 @@ def _make_complement_domain(oh_dom: Domain) -> Domain:
     locally. This is what makes the new linker strand visible in 3D — the
     geometry pipeline emits backbone positions for it as part of the regular
     pass over that helix.
+
+    ``binds_overhang_id`` tags this complement as an overhang-binding domain so
+    it registers in the Overhangs Manager binder listing and receives the
+    reverse-complement sequence of the overhang it pairs with (same mechanism as
+    standalone OH_BINDER strands).
     """
     return Domain(
         helix_id=oh_dom.helix_id,
         start_bp=oh_dom.end_bp,           # swap for antiparallel traversal
         end_bp=oh_dom.start_bp,
         direction=_opposite_direction(oh_dom.direction),
+        binds_overhang_id=binds_overhang_id,
     )
 
 
@@ -3710,7 +3994,7 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
         # no backing domain emit a bridge-only strand so cleanup hooks have
         # something to delete.
         comp_first = _is_comp_first(oh_id, attach) if oh_dom is not None else True
-        complement = _make_complement_domain(oh_dom) if oh_dom is not None else None
+        complement = _make_complement_domain(oh_dom, oh_id) if oh_dom is not None else None
         bridge = _make_bridge_domain(side, comp_first)
         if complement is None:
             domains = [bridge]
@@ -3732,8 +4016,8 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
         # Bridge polarity: FORWARD 0 → L-1 so that complementA's 3' tip
         # connects to bridge bp 0 (5' end of bridge) and bridge bp L-1
         # (3' end) connects to complementB's 5' tip.
-        complementA = _make_complement_domain(oh_a_dom) if oh_a_dom is not None else None
-        complementB = _make_complement_domain(oh_b_dom) if oh_b_dom is not None else None
+        complementA = _make_complement_domain(oh_a_dom, conn.overhang_a_id) if oh_a_dom is not None else None
+        complementB = _make_complement_domain(oh_b_dom, conn.overhang_b_id) if oh_b_dom is not None else None
         bridge = Domain(
             helix_id=bridge_helix_id,
             start_bp=0,

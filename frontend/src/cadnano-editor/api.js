@@ -318,6 +318,24 @@ export async function deleteStrand(strandId) {
   return mutate(req => req('DELETE', `/design/strands/${strandId}`))
 }
 
+/** Re-designate a strand as an OH binder (links its domains to the overhangs
+ *  they antiparallel-overlap, tagging partners as overhangs where needed). */
+export async function convertStrandToBinder(strandId) {
+  return mutate(req => req('POST', `/design/strands/${strandId}/convert-to-binder`))
+}
+
+/** Generate a fresh OH-binder strand antiparallel to an overhang (same length,
+ *  reverse complement of the overhang sequence if it has one). */
+export async function generateBinderForOverhang(overhangId) {
+  return mutate(req => req('POST', `/design/overhang/${overhangId}/generate-binder`))
+}
+
+/** Inverse of convertStrandToBinder: retype an OH binder back to scaffold,
+ *  removing any overhang the conversion auto-created once orphaned. */
+export async function convertBinderToScaffold(strandId) {
+  return mutate(req => req('POST', `/design/strands/${strandId}/convert-to-scaffold`))
+}
+
 /** Delete multiple strands in one atomic request. */
 export async function deleteStrandsBatch(strandIds) {
   if (!strandIds.length) return null

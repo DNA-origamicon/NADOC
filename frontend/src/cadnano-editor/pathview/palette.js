@@ -37,6 +37,10 @@ export const CLR_LABEL_TEXT       = '#ffffff'
 
 // ── Strand / scaffold ────────────────────────────────────────────────────────
 export const CLR_SCAFFOLD     = '#0070bb'
+// OH binder (overhang-binding oligo) — distinct non-scaffold hue. Mirrors the
+// backend _OH_BINDER_DEFAULT_COLOR in lattice.py and CLR_OH_BINDER in
+// frontend/src/scene/helix_renderer/palette.js — keep all three in sync.
+export const CLR_OH_BINDER    = '#c050d0'
 export const CLR_GHOST_SCAF   = 'rgba(0, 100, 220, 0.32)'
 export const CLR_GHOST_STPL   = 'rgba(200, 60, 0, 0.32)'
 
@@ -120,5 +124,6 @@ export function stapleColorOf(strand) {
   if (!strand) return STAPLE_PALETTE[0]
   if (strand.strand_type === 'scaffold') return CLR_SCAFFOLD
   if (strand.color) return strand.color
+  if (strand.strand_type === 'oh_binder') return CLR_OH_BINDER
   return _stapleColors.get(strand.id) ?? STAPLE_PALETTE[0]
 }

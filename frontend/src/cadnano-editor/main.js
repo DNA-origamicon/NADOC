@@ -22,7 +22,7 @@ import {
   deleteForcedLigation, batchDeleteForcedLigations,
   patchStrandsColor, patchStrandsReference, patchOverhang, undoDesign, redoDesign, placeCrossover, moveCrossover, batchMoveCrossovers,
   deleteCrossover, batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases, patchForcedLigationExtraBases,
-  upsertStrandExtensionsBatch, deleteStrandExtensionsBatch, savePlateLayout,
+  upsertStrandExtensionsBatch, deleteStrandExtensionsBatch, savePlateLayout, convertStrandToBinder, generateBinderForOverhang, convertBinderToScaffold,
   resizeStrandEnds, shiftDomains, insertLoopSkip, clearAllLoopSkips, generateAllOverhangSequences,
   // menu bar operations
   createDesign, importDesign,
@@ -1459,8 +1459,9 @@ window.addEventListener('keydown', (e) => {
 
 // ── Overhang context menu ─────────────────────────────────────────────────────
 
-const ovhgMenuEl      = document.getElementById('overhang-context-menu')
-const ovhgMenuNameBtn = document.getElementById('overhang-menu-set-name')
+const ovhgMenuEl       = document.getElementById('overhang-context-menu')
+const ovhgMenuNameBtn  = document.getElementById('overhang-menu-set-name')
+const ovhgMenuBinderBtn = document.getElementById('overhang-menu-generate-binder')
 
 const _ovhgMenu = (() => {
   let _currentId = null
@@ -1489,6 +1490,13 @@ const _ovhgMenu = (() => {
     const name = await _ovhgNameDialog.open(existing)
     if (name === null) return
     await patchOverhang(id, { label: name || null })
+  })
+
+  ovhgMenuBinderBtn?.addEventListener('click', async () => {
+    const id = _currentId
+    hide()
+    if (!id) return
+    await generateBinderForOverhang(id)
   })
 
   document.addEventListener('mousedown', (e) => {
@@ -1586,6 +1594,25 @@ function _showStrandCtxMenu(strand, clientX, clientY) {
       + 'excluded from exports/validation, but still visible (translucent) and manually editable.',
     () => patchStrandsReference(sel, !allRef),
   )
+  // Convert a single scaffold-like strand into an OH binding strand.
+  if (sel.length === 1 && strand.strand_type === 'scaffold') {
+    mkItem(
+      'Convert to OH binding strand',
+      'Re-designate this strand as an overhang-binding oligo: link each domain to the '
+        + 'overhang it antiparallel-pairs with (tagging the partner as an overhang if '
+        + 'needed) and recolor it. Add a fluorophore afterward via "Edit extensions".',
+      () => convertStrandToBinder(strand.id),
+    )
+  }
+  // Inverse: revert an OH binder back to scaffold.
+  if (sel.length === 1 && strand.strand_type === 'oh_binder') {
+    mkItem(
+      'Convert to scaffold',
+      'Revert this overhang-binding oligo back to a scaffold strand: clear its binder '
+        + 'links and remove any overhang the original conversion auto-created.',
+      () => convertBinderToScaffold(strand.id),
+    )
+  }
   const sep = document.createElement('div')
   sep.className = 'xover-menu-separator'
   menu.appendChild(sep)

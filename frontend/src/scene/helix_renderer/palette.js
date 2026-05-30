@@ -11,6 +11,7 @@ export const C = {
   highlight_magenta: 0xff00ff,
   highlight_orange:  0xff8c00,
   overhang:          0xf5a623,   // amber — single-stranded overhang domains
+  oh_binder:         0xc050d0,   // magenta — overhang-binding oligo (matches CLR_OH_BINDER)
   white:             0xffffff,
   dim:               0x15202e,
   dim_gray:          0xbbbbbb,
@@ -201,6 +202,7 @@ export function nucColor(nuc, stapleColorMap, customColors, loopSet) {
   if (nuc.strand_type === 'scaffold') return C.scaffold_backbone
   if (loopSet.has(nuc.strand_id)) return C.highlight_red
   if (customColors[nuc.strand_id] != null) return customColors[nuc.strand_id]
+  if (nuc.strand_type === 'oh_binder') return C.oh_binder
   return stapleColorMap.get(nuc.strand_id) ?? C.unassigned
 }
 export function nucSlabColor(nuc, stapleColorMap, customColors, loopSet) {
@@ -208,6 +210,7 @@ export function nucSlabColor(nuc, stapleColorMap, customColors, loopSet) {
   if (nuc.strand_type === 'scaffold') return C.scaffold_slab
   if (loopSet.has(nuc.strand_id)) return C.highlight_red
   if (customColors[nuc.strand_id] != null) return customColors[nuc.strand_id]
+  if (nuc.strand_type === 'oh_binder') return C.oh_binder
   return stapleColorMap.get(nuc.strand_id) ?? C.unassigned
 }
 export function nucArrowColor(nuc, stapleColorMap, customColors, loopSet) {
@@ -215,5 +218,6 @@ export function nucArrowColor(nuc, stapleColorMap, customColors, loopSet) {
   if (nuc.strand_type === 'scaffold') return C.scaffold_arrow
   if (loopSet.has(nuc.strand_id)) return C.highlight_red
   if (customColors[nuc.strand_id] != null) return customColors[nuc.strand_id]
+  if (nuc.strand_type === 'oh_binder') return C.oh_binder
   return stapleColorMap.get(nuc.strand_id) ?? C.unassigned
 }

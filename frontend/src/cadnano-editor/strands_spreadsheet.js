@@ -337,12 +337,14 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange } = {
 
     strands.forEach((strand) => {
       const isScaffold = strand.strand_type === 'scaffold'
+      const isOhBinder = strand.strand_type === 'oh_binder'
       const color      = effectiveColor(strand)
       const ovhg5p     = terminalOverhang(strand, design, '5p')
       const ovhg3p     = terminalOverhang(strand, design, '3p')
 
       const tr = document.createElement('tr')
       if (isScaffold)                          tr.classList.add('sheet-scaffold')
+      if (isOhBinder)                          tr.classList.add('sheet-oh-binder')
       if (_selectedStrandIds.has(strand.id))   tr.classList.add('sheet-selected')
 
       // Left-click → select strand in pathview
@@ -359,7 +361,10 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange } = {
           case 'start': {
             td.className = 'sheet-col-endpoint'
             td.textContent = strandEndpoint(strand, '5p', helixIndex)
-            td.title = strand.id
+            const typeLabel = isScaffold ? 'scaffold'
+              : isOhBinder ? 'OH binder'
+              : strand.strand_type === 'linker' ? 'linker' : 'staple'
+            td.title = `${strand.id} · ${typeLabel}`
             break
           }
           case 'end': {

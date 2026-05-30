@@ -100,6 +100,7 @@ function effectiveColor(strand, strandIndex, strandColors, strandGroups) {
   if (sc != null) return '#' + sc.toString(16).padStart(6, '0')
   if (strand.strand_type === 'scaffold') return '#0070bb'
   if (strand.color) return strand.color
+  if (strand.strand_type === 'oh_binder') return '#c050d0'
   return paletteColor(strandIndex)
 }
 
@@ -120,6 +121,35 @@ function groupName(strand, strandGroups) {
  * @param {object} design
  * @returns {string|null}
  */
+const _RC = { A: 'T', T: 'A', G: 'C', C: 'G', N: 'N' }
+function _revComp(s) {
+  let out = ''
+  for (let i = s.length - 1; i >= 0; i--) out += _RC[s[i].toUpperCase()] ?? 'N'
+  return out
+}
+
+/** Live reverse-complement sequence for an OH-binder strand from the overhang(s)
+ *  it binds. Pad-then-RC per LESSONS F3 (an overhang's stored sequence can be
+ *  shorter than the backing domain → trailing N's). Returns null when no bound
+ *  overhang has a sequence yet. */
+function _liveBinderSequence(strand, design) {
+  const overhangs = design?.overhangs ?? []
+  let live = '', any = false
+  for (const d of (strand.domains ?? [])) {
+    const len = domainLength(d)
+    const spec = d.binds_overhang_id
+      ? overhangs.find(o => o.id === d.binds_overhang_id)
+      : null
+    if (spec?.sequence) {
+      live += _revComp(spec.sequence.slice(0, len).padEnd(len, 'N'))
+      any = true
+    } else {
+      live += 'N'.repeat(len)
+    }
+  }
+  return any ? live : null
+}
+
 function _strandDisplaySequence(strand, design) {
   const extensions = design?.extensions ?? []
   const domains    = strand.domains ?? []
@@ -134,10 +164,18 @@ function _strandDisplaySequence(strand, design) {
   const ext3 = extensions.find(e => e.strand_id === strand.id && e.end === 'three_prime')
   const hasExtensions = !!(ext5 || ext3)
 
-  if (!strand.sequence && !hasExtensions) return null
+  // OH-binder strands derive their sequence live from the bound overhang(s) so
+  // generating an overhang sequence shows the reverse complement here at once,
+  // even before "Assign staple sequences" materialises strand.sequence.
+  let assembledSeq = strand.sequence
+  if (!assembledSeq && domains.some(d => d.binds_overhang_id)) {
+    assembledSeq = _liveBinderSequence(strand, design)
+  }
+
+  if (!assembledSeq && !hasExtensions) return null
 
   // Strip overhang bases from both ends of the assembled sequence.
-  let seq = strand.sequence ?? ''
+  let seq = assembledSeq ?? ''
   if (seq && domains.length > 0) {
     const trim5 = has5pOvhg ? domainLength(domains[0])       : 0
     const trim3 = has3pOvhg ? domainLength(domains[lastIdx]) : 0
@@ -553,8 +591,10 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       const ovhg5p     = terminalOverhang(strand, design, '5p')
       const ovhg3p     = terminalOverhang(strand, design, '3p')
 
+      const isOhBinder = strand.strand_type === 'oh_binder'
       const tr = document.createElement('tr')
       if (isScaffold)                       tr.classList.add('sheet-scaffold')
+      if (isOhBinder)                       tr.classList.add('sheet-oh-binder')
       if (highlightedIds.has(strand.id))    tr.classList.add('sheet-selected')
 
       // Left-click → select strand in 3D exactly as a manual click would
@@ -576,7 +616,10 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
           case 'start': {
             td.className = 'sheet-col-endpoint'
             td.textContent = strandEndpoint(strand, '5p', helixIndex)
-            td.title = strand.id
+            const typeLabel = isScaffold ? 'scaffold'
+              : isOhBinder ? 'OH binder'
+              : strand.strand_type === 'linker' ? 'linker' : 'staple'
+            td.title = `${strand.id} · ${typeLabel}`
             break
           }
           case 'end': {
@@ -621,6 +664,27 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             td.addEventListener('contextmenu', e => {
               e.stopPropagation()
               const items = [{ label: 'Go to strand', action: () => goToStrand(strand.id) }]
+              // "Vice versa" path: set a binder's sequence → write the reverse
+              // complement onto the single overhang it binds (overhang stays the
+              // canonical source of truth).
+              const boundIds = [...new Set((strand.domains ?? [])
+                .map(d => d.binds_overhang_id).filter(Boolean))]
+              if (boundIds.length === 1) {
+                items.push(null)
+                items.push({ label: 'Set binder sequence…', action: () => {
+                  const spec = (design.overhangs ?? []).find(o => o.id === boundIds[0])
+                  const len  = spec?.sub_domains?.reduce((a, sd) => a + sd.length_bp, 0)
+                    ?? domainLength(strand.domains[0])
+                  const typed = (window.prompt(
+                    `Binder sequence (5'→3', ${len} nt). The bound overhang is set to its `
+                    + `reverse complement.`, '') ?? '').trim().toUpperCase()
+                  if (!typed) return
+                  if (!/^[ACGTN]+$/.test(typed) || typed.length !== len) {
+                    showToast(`Need exactly ${len} bases (A/C/G/T/N).`, 'error'); return
+                  }
+                  api.patchOverhang(boundIds[0], { sequence: _revComp(typed) })
+                }})
+              }
               if (strand.sequence != null) {
                 items.push(null)
                 items.push({ label: 'Clear sequence', action: () => api.patchStrand(strand.id, { sequence: null }) })

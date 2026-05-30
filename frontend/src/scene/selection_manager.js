@@ -670,7 +670,34 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
 
   // Check if this strand is a scaffold
   const design = store.getState().currentDesign
-  const isScaffold = design?.strands?.find(s => s.id === strandId)?.strand_type === 'scaffold'
+  const _stype = design?.strands?.find(s => s.id === strandId)?.strand_type
+  const isScaffold = _stype === 'scaffold'
+  const isOhBinder = _stype === 'oh_binder'
+
+  // Convert a scaffold-like strand into an OH binding strand (overhang-binding
+  // oligo). Single strand only — links each domain to the overhang it pairs with.
+  if (isScaffold && multiStrandIds.length === 0) {
+    menu.appendChild(_menuItem(
+      'Convert to OH binding strand',
+      async () => { try { await api.convertStrandToBinder(strandId) } catch { /* lastError */ } },
+      { title: 'Re-designate this strand as an overhang-binding oligo: link each domain to '
+             + 'the overhang it antiparallel-pairs with (tagging the partner as an overhang '
+             + 'if needed) and recolor it. Add a fluorophore afterward via "Add extension".' },
+    ))
+    menu.appendChild(_menuSep())
+  }
+
+  // Inverse: revert an OH binder back to scaffold.
+  if (isOhBinder && multiStrandIds.length === 0) {
+    menu.appendChild(_menuItem(
+      'Convert to scaffold',
+      async () => { try { await api.convertBinderToScaffold(strandId) } catch { /* lastError */ } },
+      { title: 'Revert this overhang-binding oligo back to a scaffold strand: clear its '
+             + 'binder links and remove any overhang the original conversion auto-created '
+             + '(once nothing else binds it).' },
+    ))
+    menu.appendChild(_menuSep())
+  }
 
   // Isolate / Un-isolate (only for non-scaffold strands)
   if (!isScaffold) {

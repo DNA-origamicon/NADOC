@@ -128,6 +128,34 @@ score percentile.  Mutual diversity is enforced by adding each generated sequenc
 to the corpus before generating the next.  Available per-overhang via the spreadsheet
 Gen button or in batch via Tools → Sequencing → Generate Overhangs.
 
+### Overhang binders & strand animation
+A dedicated **OH-binder** strand type designates oligos that hybridize to an
+overhang (the complement of a sticky end, a linker's binding domain, etc.).
+Binders carry a per-domain `binds_overhang_id` link, so the same machinery covers
+free binders and the complementary domains of linker strands. Right-click a
+scaffold strand (3D or cadnano view) to **convert to / from an OH binder**;
+pen-drawing on an existing overhang auto-tags the new strand; sequence edits sync
+bidirectionally as reverse complements (set the overhang sequence → the binder
+gets its RC, and vice-versa). Binders get their own spreadsheet line and a magenta
+label.
+
+A collapsible **Strand Animation** sidebar section (below Overhangs) animates the
+un/hybridization of a selected overhang and its binder by driving the *real* beads
+(display layer only — `setBeadOverrides`, restored on clear; topology never
+mutates). Two modes:
+
+- **Unzip** — the duplex melts from the root, a per-base melt fork travels toward
+  the free tip, the overhang unwinds into a line at constant radius while the
+  binder peels into a straight splayed arm.
+- **Toehold displacement (TMSD)** — a synthetic invader (no backend) binds the
+  toehold and branch-migrates, displacing the binder; the binder front leads the
+  invader by a tunable gap so the two strands never clip.
+
+Each mode renders in a **helical** or **straight** (de-spiraled, root-aligned)
+form, with live controls for the reaction coordinate (φ), melt width, splay /
+exit / invader-splay angles, ssDNA stretch, unwind, and branch gap. Works with
+overhang and binder of unequal length.
+
 ### Fluorescence & FRET
 Strand terminal extensions with fluorophore beads; FRET checker with Förster
 radii (Cy3→Cy5, FAM→TAMRA, ATTO488→ATTO550).

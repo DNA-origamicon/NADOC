@@ -52,6 +52,7 @@ import { initAssemblyOverhangsManagerPopup,
          open as openAssemblyOverhangsManager,
        } from './ui/assembly_overhangs_manager_popup.js'
 import { initPolymerizePanel }     from './ui/polymerize_panel.js'
+import { initStrandAnimPanel }     from './ui/strand_anim_panel.js'
 import { openProteinAttachModal }  from './ui/protein_attach_modal.js'
 import { openImportPdbModal }      from './ui/import_pdb_modal.js'
 import { initProteinGizmo }        from './scene/protein_gizmo.js'
@@ -62,6 +63,7 @@ import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initOverhangLocations }   from './scene/overhang_locations.js'
 import { initOverhangLinkArcs }    from './scene/overhang_link_arcs.js'
 import { initOverhangBindingLines } from './scene/overhang_binding_lines.js'
+import { initOverhangUnzipOverlay } from './scene/overhang_unzip_overlay.js'
 import { initUnligatedCrossoverMarkers } from './scene/unligated_crossover_markers.js'
 import { initLinkerAnchorDebug }   from './scene/linker_anchor_debug.js'
 import { initOverhangNameOverlay } from './scene/overhang_name_overlay.js'
@@ -1481,6 +1483,8 @@ async function main() {
     getUnfoldView:          () => unfoldView,
     getDesignRenderer:      () => designRenderer,
     getOverhangLinkArcs:    () => overhangLinkArcs,
+    getOverhangUnzipOverlay: () => overhangUnzipOverlay,
+    getDesignGeometry:      () => store.getState().currentGeometry,
     // Pass through any opts (signal, suppressBusy) the player provides — the
     // bake loop wires its own AbortController and asks _request to skip the
     // generic "Working…" auto-popup so the panel's "Rendering Animation"
@@ -1603,6 +1607,14 @@ async function main() {
   // Right-click on a line exposes a Toggle Bind / Delete menu (capture-phase
   // contextmenu listener below).
   const overhangBindingLines = initOverhangBindingLines(scene)
+  // Display-only unzip animation driven by the animation player during bind/unbind
+  // φ playback. Moves the REAL overhang beads via the helix renderer (no synthetic
+  // geometry, no store subscription — the player calls update()/clear() itself).
+  const overhangUnzipOverlay = initOverhangUnzipOverlay({
+    getHelixCtrl: () => designRenderer.getHelixCtrl(),
+    getDesign:    () => store.getState().currentDesign,
+  })
+
   store.subscribe((newState, prevState) => {
     if (newState.currentGeometry === prevState.currentGeometry &&
         newState.currentDesign   === prevState.currentDesign) return
@@ -2500,6 +2512,14 @@ async function main() {
                             'margin-bottom:4px;align-items:center;padding:2px 4px;' +
                             'border-radius:3px;border-left:2px solid transparent;transition:background 0.1s'
         row.dataset.strandId = ovhg.strand_id
+        row.style.cursor = 'pointer'
+
+        // Row click selects this overhang (so the Strand Animation section can
+        // bind to it). Clicks on the inputs/buttons keep their own behavior.
+        row.addEventListener('click', (e) => {
+          if (e.target.closest('input,button')) return
+          store.setState({ multiSelectedOverhangIds: [ovhg.id] })
+        })
 
         // Register for highlight tracking
         if (!_rowsByStrandId[ovhg.strand_id]) _rowsByStrandId[ovhg.strand_id] = []
@@ -3604,6 +3624,9 @@ Typical debugging workflow for "reverts to 3D" bug:
         const name = prompt('Overhang label:', existing)
         if (name === null) return
         api.patchOverhang(ovhgIds[0], { label: name.trim() || null })
+      }))
+      menu.appendChild(_mItem('Generate OH binding strand', async () => {
+        try { await api.generateBinderForOverhang(ovhgIds[0]) } catch { /* lastError */ }
       }))
     }
     // Always-available entry into the manager — passes whichever overhang(s)
@@ -7106,6 +7129,15 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (len < 1e-8) return 0
     return 2 * Math.atan2(dot / len, quaternion.w / len) * (180 / Math.PI)
   }
+
+  // Strand Animation sidebar section — un/hybridization of a selected overhang
+  // + its binder, driving the real beads (ported from the strand-anim sandbox).
+  initStrandAnimPanel(store, {
+    getHelixCtrl: () => designRenderer.getHelixCtrl(),
+    getGeometry:  () => store.getState().currentGeometry,
+    getDesign:    () => store.getState().currentDesign,
+    getScene:     () => scene,
+  })
 
   const clusterGizmo    = initClusterGizmo(
     store, controls,
@@ -13741,6 +13773,8 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Help / Hotkeys modal ─────────────────────────────────────────────────────
   const helpModal = document.getElementById('help-modal')
   document.getElementById('menu-help-hotkeys')?.addEventListener('click', () => helpModal.classList.add('visible'))
+  document.getElementById('menu-help-strand-anim')?.addEventListener('click',
+    () => window.open('/strand-anim.html', 'nadoc-strand-anim'))
   document.getElementById('help-modal-close')?.addEventListener('click', () => helpModal.classList.remove('visible'))
   helpModal?.addEventListener('click', e => { if (e.target === helpModal) helpModal.classList.remove('visible') })
 
