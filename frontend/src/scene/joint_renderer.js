@@ -43,6 +43,7 @@ import {
   HONEYCOMB_ROW_PITCH,
   SQUARE_HELIX_SPACING,
 } from '../constants.js'
+import { buildClusterLookup } from './helix_renderer/palette.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SURFACE_COLOUR   = 0x4488ff   // lattice exterior panels
@@ -913,6 +914,85 @@ function _filterSmallBlocks(boxes, fraction) {
   return kept.map(b => b.geo)
 }
 
+// Like _filterSmallBlocks but returns the KEPT box RECORDS ({geo, vol, …}) so
+// downstream per-cluster bucketing can still see helixIds/swept on survivors.
+// Dropped boxes' geometries are disposed.
+function _keepLargeBlocks(boxes, fraction) {
+  if (!boxes.length) return []
+  const total  = boxes.reduce((s, b) => s + b.vol, 0)
+  const thresh = fraction * total
+  let kept = boxes.filter(b => b.vol >= thresh)
+  if (!kept.length) {
+    let big = boxes[0]
+    for (const b of boxes) if (b.vol > big.vol) big = b
+    kept = [big]
+  }
+  const keptSet = new Set(kept)
+  for (const b of boxes) if (!keptSet.has(b)) b.geo.dispose()
+  return kept
+}
+
+// World matrix for a ClusterRigidTransform: p' = R·(p − pivot) + pivot + T.
+// Returns null for an identity (no-op) transform so callers can skip baking.
+function _clusterMatrix(cluster) {
+  const T = cluster.translation || [0, 0, 0]
+  const R = cluster.rotation    || [0, 0, 0, 1]
+  const P = cluster.pivot       || [0, 0, 0]
+  const isIdentity =
+    Math.abs(T[0]) < 1e-9 && Math.abs(T[1]) < 1e-9 && Math.abs(T[2]) < 1e-9 &&
+    Math.abs(R[0]) < 1e-9 && Math.abs(R[1]) < 1e-9 && Math.abs(R[2]) < 1e-9 &&
+    Math.abs(R[3] - 1) < 1e-9
+  if (isIdentity) return null
+  const quat = new THREE.Quaternion(R[0], R[1], R[2], R[3])
+  return new THREE.Matrix4()
+    .makeTranslation(P[0] + T[0], P[1] + T[1], P[2] + T[2])
+    .multiply(new THREE.Matrix4().makeRotationFromQuaternion(quat))
+    .multiply(new THREE.Matrix4().makeTranslation(-P[0], -P[1], -P[2]))
+}
+
+// (helix_id, bp) → index into `clusters` (the supplied cluster subset), or -1 when
+// that base belongs to no cluster in the subset. Resolves at DOMAIN granularity so
+// a sub-helix (domain-level) cluster — including a partial-coverage "bridge" helix
+// where only some domains move — is attributed correctly, base by base. Reuses the
+// canonical buildClusterLookup (the same domain/bridge rule used for cluster colour)
+// and maps its global cluster index onto the subset.
+function _buildBpClusterResolver(design, clusters) {
+  const lookup = buildClusterLookup(design)             // (nuc) → global cluster index
+  const globalIdxById = new Map((design.cluster_transforms ?? []).map((c, i) => [c.id, i]))
+  const subsetByGlobal = new Map()                      // global index → subset index
+  clusters.forEach((c, si) => {
+    const gi = globalIdxById.get(c.id)
+    if (gi !== undefined) subsetByGlobal.set(gi, si)
+  })
+
+  // Per-helix sorted domain bp ranges so (helix, bp) maps to a (strand_id, domain_index).
+  const domsByHelix = new Map()
+  for (const s of (design.strands ?? [])) {
+    const doms = s.domains ?? []
+    for (let di = 0; di < doms.length; di++) {
+      const d = doms[di]
+      if (!d?.helix_id) continue
+      const lo = Math.min(d.start_bp, d.end_bp), hi = Math.max(d.start_bp, d.end_bp)
+      let arr = domsByHelix.get(d.helix_id)
+      if (!arr) { arr = []; domsByHelix.set(d.helix_id, arr) }
+      arr.push({ lo, hi, strand_id: s.id, domain_index: di })
+    }
+  }
+  for (const arr of domsByHelix.values()) arr.sort((a, b) => a.lo - b.lo)
+
+  return (helixId, bp) => {
+    const arr = domsByHelix.get(helixId)
+    let nuc = { helix_id: helixId }
+    if (arr) {
+      for (const d of arr) {
+        if (bp >= d.lo && bp <= d.hi) { nuc = { helix_id: helixId, strand_id: d.strand_id, domain_index: d.domain_index }; break }
+      }
+    }
+    const gi = lookup(nuc)
+    return (gi != null && subsetByGlobal.has(gi)) ? subsetByGlobal.get(gi) : -1
+  }
+}
+
 // Bundle frame for a set of helices: average axis direction → (U, dir, V),
 // origin = centroid of helix midpoints. Same convention as _scanExtrusionGroup.
 function _bundleFrame(helixIds, helixAxes) {
@@ -1103,6 +1183,33 @@ function _dsBpByHelix(geometry) {
   return { helixBp, totalBp }
 }
 
+/**
+ * Per-helix dsDNA bp-INDEX range [minBp, maxBp] (inclusive) over genuinely
+ * double-stranded positions (a (helix, bp_index) covered by ≥2 stranded,
+ * non-overhang nucleotides). Unlike the feature-log op's length_bp/offset — which
+ * goes STALE once scaffold routing / continuations extend the helices past the
+ * original bundle — this reflects the part's ACTUAL axial extent, so the hull box
+ * lines up with the cylinder/full rep (back-porch ends, staggered helix starts).
+ * Returns Map<helixId, [minBp, maxBp]>.
+ */
+function _dsBpRangeByHelix(geometry) {
+  const dsCount = new Map()   // "hid:bp" → covered-strand count
+  for (const nuc of geometry ?? []) {
+    if (!nuc.strand_id || nuc.overhang_id) continue
+    dsCount.set(`${nuc.helix_id}:${nuc.bp_index}`, (dsCount.get(`${nuc.helix_id}:${nuc.bp_index}`) ?? 0) + 1)
+  }
+  const range = new Map()
+  for (const [k, c] of dsCount) {
+    if (c < 2) continue
+    const i = k.lastIndexOf(':')
+    const hid = k.slice(0, i), bp = +k.slice(i + 1)
+    const r = range.get(hid)
+    if (!r) range.set(hid, [bp, bp])
+    else { if (bp < r[0]) r[0] = bp; if (bp > r[1]) r[1] = bp }
+  }
+  return range
+}
+
 /** Canvas-textured sprite for a cluster debug label (name + size %). */
 function _makeClusterLabelSprite(text, colorHex) {
   const pad = 8, fontPx = 36
@@ -1284,8 +1391,29 @@ function _cellComponents(cells) {
  *
  * Returns a THREE.Group (merged mesh + edges) or null when the design has no
  * extrusion history (e.g. a cadnano import).
+ *
+ * When ``opts.clusters`` is supplied (a subset of ClusterRigidTransforms), each
+ * straight box is DECOMPOSED base-by-base: every cell × bp slice is attributed to
+ * its owning cluster via a (helix, bp) resolver, and sub-boxes are emitted per
+ * cluster per axial run. This handles helix-level clusters, full-coverage
+ * domain-level clusters, AND sub-helix PARTIAL coverage (a box that straddles a
+ * cluster boundary axially or across its cross-section splits cleanly). Each
+ * sub-box has its cluster's rigid transform baked in. Deformed/swept boxes are
+ * NOT decomposed or re-baked (their spine samples are already cluster-transformed
+ * by the backend) — they're attributed whole, by majority.
+ *   - ``opts.keyByCluster`` (design view): return a
+ *     ``Map<clusterId|'__extrusions__', THREE.Group>`` so each cluster's hull is a
+ *     separate keyed group the live cluster-gizmo drag (captureClusterBase /
+ *     applyClusterTransform) and the post-commit rebuild both move.
+ *   - otherwise (assembly): return ONE merged Group with the transforms baked in
+ *     (the part is a single instance; no per-cluster keying needed).
+ * ``opts.dsBpRange`` (Map<helixId,[minBp,maxBp]> from _dsBpRangeByHelix) overrides
+ * each cell's axial extent with the helix's ACTUAL dsDNA span, so the box matches
+ * the cylinder rep after scaffold routing / continuations move the real ends past
+ * the stale bundle-create length_bp.
+ * Without opts the legacy single-merged-Group behaviour is unchanged.
  */
-function _buildExtrusionBoxes(design, helixAxes = null, curveTolNm = 0) {
+function _buildExtrusionBoxes(design, helixAxes = null, curveTolNm = 0, opts = null) {
   const fl = design?.feature_log
   if (!Array.isArray(fl) || !fl.length) return null
   const isHC  = (design.lattice_type === 'HONEYCOMB')
@@ -1293,14 +1421,34 @@ function _buildExtrusionBoxes(design, helixAxes = null, curveTolNm = 0) {
   const spRow = isHC ? HONEYCOMB_ROW_PITCH : SQUARE_HELIX_SPACING
 
   // Deformed designs: sweep each box along its helices' deformed spine so the
-  // bent comb is preserved (per-extrusion fidelity). Build a cell→helix lookup once.
+  // bent comb is preserved (per-extrusion fidelity). cell→helix lookup is also
+  // used for per-cluster box assignment, so build it unconditionally.
   const deformed = !!helixAxes && Object.values(helixAxes).some(a => (a?.samples?.length ?? 0) > 2)
-  let cellToHelix = null
-  if (deformed) {
-    cellToHelix = new Map()
-    for (const h of (design.helices ?? [])) {
-      if (h.grid_pos) cellToHelix.set(`${h.grid_pos[0]},${h.grid_pos[1]}`, h.id)
-    }
+  const cellToHelix = new Map()
+  for (const h of (design.helices ?? [])) {
+    if (h.grid_pos) cellToHelix.set(`${h.grid_pos[0]},${h.grid_pos[1]}`, h.id)
+  }
+
+  // Cluster-aware mode: a (helix, bp) → cluster-subset-index resolver drives the
+  // straight-box decomposition (and majority attribution for swept boxes).
+  const clusters = opts?.clusters ?? null
+  const ownerAt  = (clusters?.length) ? _buildBpClusterResolver(design, clusters) : null
+  // Actual per-helix dsDNA bp range (from geometry). When present it OVERRIDES the
+  // feature-log op's length_bp/offset for each cell's axial extent — so the box
+  // follows the real (post-routing) helix spans + stagger instead of the stale
+  // build-time dimensions. Axial coord of a global bp index is bp·rise.
+  const dsBpRange = opts?.dsBpRange ?? null
+
+  // Emit one box geometry record. `clusterIdx` (subset index, -1 = none) is only
+  // meaningful in cluster-aware mode.
+  const pushBox = (geos, m, wCol, wRow, cCol, cRow, extCenter, axialLen, clusterIdx) => {
+    const size = [0, 0, 0], pos = [0, 0, 0]
+    size[m.col] = wCol;  size[m.row] = wRow;  size[m.ext] = axialLen
+    pos[m.col]  = cCol;  pos[m.row]  = cRow;  pos[m.ext]  = extCenter
+    const geo = new THREE.BoxGeometry(size[0], size[1], size[2])
+    geo.translate(pos[0], pos[1], pos[2])
+    geo.deleteAttribute('uv')   // keep attrs uniform with swept geos for mergeGeometries
+    geos.push({ geo, vol: wCol * wRow * axialLen, clusterIdx, swept: false })
   }
 
   const geos = []
@@ -1314,6 +1462,9 @@ function _buildExtrusionBoxes(design, helixAxes = null, curveTolNm = 0) {
     const axialLen = lenBp * BDNA_RISE_PER_BP
     const offset   = (typeof p.offset_nm === 'number') ? p.offset_nm : 0
     const bpLo     = Math.round(offset / BDNA_RISE_PER_BP)
+    const bpHi     = bpLo + lenBp
+    const m        = _PLANE_AXES[p.plane] || _PLANE_AXES.XY
+    const extOf    = (bp) => offset + (bp - bpLo) * BDNA_RISE_PER_BP   // axial coord of bp
 
     // One box per lattice-connected region of this extrusion's cells, so
     // disjoint regions (e.g. two hinge arms) become separate hull blocks.
@@ -1326,55 +1477,154 @@ function _buildExtrusionBoxes(design, helixAxes = null, curveTolNm = 0) {
       }
       const wCol = (maxC - minC + 1) * spCol
       const wRow = (maxR - minR + 1) * spRow
-      const vol  = wCol * wRow * axialLen
+      const boxHelixIds = compCells.map(([r, c]) => cellToHelix.get(`${r},${c}`)).filter(Boolean)
 
       // Curved path: sweep the box's rectangle along its helices' deformed spine.
       // Falls through to a straight box when the box isn't in the deformed arm.
+      // (Swept geometry already carries the cluster transform in its samples, so
+      // it isn't decomposed — only attributed whole, by majority, for keying.)
       if (deformed) {
-        const boxHelixIds = compCells.map(([r, c]) => cellToHelix.get(`${r},${c}`)).filter(Boolean)
-        let sections = _boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpLo + lenBp, wCol, wRow)
+        let sections = _boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpHi, wCol, wRow)
         if (sections) {
           sections = _decimateSections(sections, curveTolNm)
-          geos.push({ geo: _buildSweptHullGeometry(sections), vol })
+          let clusterIdx = -1
+          if (ownerAt) {
+            const mid = Math.floor((bpLo + bpHi) / 2), tally = new Map()
+            for (const hid of boxHelixIds) { const ci = ownerAt(hid, mid); if (ci >= 0) tally.set(ci, (tally.get(ci) ?? 0) + 1) }
+            let bestN = 0; for (const [ci, n] of tally) if (n > bestN) { bestN = n; clusterIdx = ci }
+          }
+          geos.push({ geo: _buildSweptHullGeometry(sections), vol: wCol * wRow * axialLen, clusterIdx, swept: true })
           continue
         }
       }
 
-      const cCol = (minC + maxC) / 2 * spCol
-      const cRow = (minR + maxR) / 2 * spRow
-      const m = _PLANE_AXES[p.plane] || _PLANE_AXES.XY
-      const size = [0, 0, 0], pos = [0, 0, 0]
-      size[m.col] = wCol;  size[m.row] = wRow;  size[m.ext] = axialLen
-      pos[m.col]  = cCol;  pos[m.row]  = cRow;  pos[m.ext]  = offset + axialLen / 2
-      const geo = new THREE.BoxGeometry(size[0], size[1], size[2])
-      geo.translate(pos[0], pos[1], pos[2])
-      geo.deleteAttribute('uv')   // keep attrs uniform with swept geos for mergeGeometries
-      geos.push({ geo, vol })
+      if (!ownerAt) {
+        // Legacy: one straight box for the whole region.
+        const cCol = (minC + maxC) / 2 * spCol, cRow = (minR + maxR) / 2 * spRow
+        pushBox(geos, m, wCol, wRow, cCol, cRow, offset + axialLen / 2, axialLen, -1)
+        continue
+      }
+
+      // Cluster-aware: walk each cell's owner base-by-base into runs over the
+      // cell's ACTUAL axial bp range (dsDNA extent when available, else the op
+      // range), then split the region into axial segments at every owner/extent
+      // boundary and, within each segment, into one sub-box per distinct owning
+      // cluster (bounding rect of the cells PRESENT there). Handles axial cuts,
+      // cross-section splits, AND staggered/extended helix ends.
+      const axOf = dsBpRange ? (bp) => bp * BDNA_RISE_PER_BP : extOf
+      const cellRuns = []                      // { r, c, lo, hi, runs: [{ s, e, ci }] }
+      const bset = new Set()
+      for (const [r, c] of compCells) {
+        const hid = cellToHelix.get(`${r},${c}`)
+        let lo = bpLo, hi = bpHi
+        if (dsBpRange) {
+          const dr = hid ? dsBpRange.get(hid) : null
+          if (!dr) continue                    // no dsDNA on this helix → not in the hull
+          lo = dr[0]; hi = dr[1] + 1           // [minBp, maxBp] inclusive → exclusive end
+        }
+        const runs = []
+        if (!hid) { runs.push({ s: lo, e: hi, ci: -1 }) }
+        else {
+          let s = lo, prev = ownerAt(hid, lo)
+          for (let bp = lo + 1; bp < hi; bp++) {
+            const ci = ownerAt(hid, bp)
+            if (ci !== prev) { runs.push({ s, e: bp, ci: prev }); s = bp; prev = ci }
+          }
+          runs.push({ s, e: hi, ci: prev })
+        }
+        for (const run of runs) { bset.add(run.s); bset.add(run.e) }
+        cellRuns.push({ r, c, runs })
+      }
+      if (!cellRuns.length) continue
+      const bnds = [...bset].sort((a, b) => a - b)
+      for (let i = 0; i < bnds.length - 1; i++) {
+        const lo = bnds[i], hi = bnds[i + 1]
+        if (hi <= lo) continue
+        const mid = (lo + hi) / 2
+        const byCi = new Map()                 // ci → { minR, maxR, minC, maxC }
+        for (const cr of cellRuns) {
+          const run = cr.runs.find(rr => rr.s <= mid && rr.e >= mid)
+          if (!run) continue                   // cell absent here (staggered end) → skip
+          let b = byCi.get(run.ci)
+          if (!b) { b = { minR: Infinity, maxR: -Infinity, minC: Infinity, maxC: -Infinity }; byCi.set(run.ci, b) }
+          if (cr.r < b.minR) b.minR = cr.r; if (cr.r > b.maxR) b.maxR = cr.r
+          if (cr.c < b.minC) b.minC = cr.c; if (cr.c > b.maxC) b.maxC = cr.c
+        }
+        const segAxial = (hi - lo) * BDNA_RISE_PER_BP
+        const extCenter = (axOf(lo) + axOf(hi)) / 2
+        for (const [ci, b] of byCi) {
+          pushBox(geos, m,
+            (b.maxC - b.minC + 1) * spCol, (b.maxR - b.minR + 1) * spRow,
+            (b.minC + b.maxC) / 2 * spCol, (b.minR + b.maxR) / 2 * spRow,
+            extCenter, segAxial, ci)
+        }
+      }
     }
   }
   if (!geos.length) return null
 
-  const keptGeos = _filterSmallBlocks(geos, 0.05)   // drop blocks < 5% of total volume
-  const merged = mergeGeometries(keptGeos, false)
-  keptGeos.forEach(g => g.dispose())
-  if (!merged) return null
+  // Global 5% small-block filter (declutter stubs), preserving box records so the
+  // per-cluster split below can still read helixIds/swept on survivors.
+  const keptRecs = _keepLargeBlocks(geos, 0.05)
+  if (!keptRecs.length) return null
 
-  const group = new THREE.Group()
-  merged.computeBoundingBox()
-  const c = new THREE.Vector3(); merged.boundingBox.getCenter(c)
-  group.userData.bundleMid   = c
-  group.userData.clusterName = design.metadata?.name || 'Part'
-  const mesh = new THREE.Mesh(merged, _extrusionMeshMat())
-  mesh.renderOrder = 100
-  const edges = new THREE.LineSegments(
-    // 15° when curved → only facet boundaries + corner/cap edges (not every triangle);
-    // 1° straight → crisp box edges.
-    new THREE.EdgesGeometry(merged, deformed ? 15 : 1),
-    new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.55, depthWrite: false }),
-  )
-  edges.renderOrder = 101
-  group.add(mesh, edges)
-  return group
+  // Merge a set of box records into a finished hull Group (mesh + edges).
+  const buildGroup = (recs, name) => {
+    if (!recs.length) return null
+    const merged = mergeGeometries(recs.map(r => r.geo), false)
+    recs.forEach(r => r.geo.dispose())
+    if (!merged) return null
+    const group = new THREE.Group()
+    merged.computeBoundingBox()
+    const c = new THREE.Vector3(); merged.boundingBox.getCenter(c)
+    group.userData.bundleMid   = c
+    group.userData.clusterName = name
+    const mesh = new THREE.Mesh(merged, _extrusionMeshMat())
+    mesh.renderOrder = 100
+    const edges = new THREE.LineSegments(
+      // 15° when curved → only facet boundaries + corner/cap edges (not every triangle);
+      // 1° straight → crisp box edges.
+      new THREE.EdgesGeometry(merged, deformed ? 15 : 1),
+      new THREE.LineBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.55, depthWrite: false }),
+    )
+    edges.renderOrder = 101
+    group.add(mesh, edges)
+    return group
+  }
+
+  const partName = design.metadata?.name || 'Part'
+
+  // Legacy single-merged-Group path (no cluster info supplied).
+  if (!ownerAt) return buildGroup(keptRecs, partName)
+
+  // Bake each (straight) sub-box's owning-cluster transform. Swept boxes already
+  // carry the transform in their spine samples — don't double-apply.
+  for (const rec of keptRecs) {
+    if (rec.swept || rec.clusterIdx < 0) continue
+    const mtx = _clusterMatrix(clusters[rec.clusterIdx])
+    if (mtx) rec.geo.applyMatrix4(mtx)
+  }
+
+  // Assembly path: one merged source hull with transforms baked (the part is a
+  // single instance, so no per-cluster keying is needed).
+  if (!opts.keyByCluster) return buildGroup(keptRecs, partName)
+
+  // Design view: one keyed group per cluster (+ '__extrusions__' for unclustered),
+  // so the live cluster-gizmo drag and post-commit rebuild both move each block.
+  const buckets = new Map()   // key (cluster.id | '__extrusions__') → records
+  for (const rec of keptRecs) {
+    const key = rec.clusterIdx >= 0 ? clusters[rec.clusterIdx].id : '__extrusions__'
+    if (!buckets.has(key)) buckets.set(key, [])
+    buckets.get(key).push(rec)
+  }
+  const out = new Map()
+  for (const [key, recs] of buckets) {
+    const name = key === '__extrusions__' ? partName
+      : (clusters.find(c => c.id === key)?.name || 'Cluster')
+    const g = buildGroup(recs, name)
+    if (g) out.set(key, g)
+  }
+  return out.size ? out : null
 }
 
 /**
@@ -2554,16 +2804,38 @@ export function initJointRenderer(scene, camera, canvas, store, api) {
     const _spacing = _helixSpacing(_scanAxes, (design.helices ?? []).map(h => h.id))
 
     // ── Build the hull ───────────────────────────────────────────────────────
-    // Extrusion mode: NADOC-built parts use the feature-log build history
-    // (global mesh). Imported parts (no build history) fall through to the
-    // per-cluster cross-section scan, so each cluster gets its own frame + scan.
+    // Extrusion mode: NADOC-built parts use the feature-log build history,
+    // split per finer cluster (so moved clusters follow their transform) with
+    // everything else in '__extrusions__'. Imported parts (no build history)
+    // fall through to the per-cluster cross-section scan (own frame + scan).
     let _hullDone = false
     if (_hullMode === 'extrusions') {
+      // Split out finer clusters big enough to matter (≥ _hullMinSizeFraction of
+      // dsDNA bp); small ones + the whole-part cluster keep their boxes in
+      // '__extrusions__' so nothing vanishes. Each split cluster gets its own
+      // keyed hull group whose boxes carry that cluster's rigid transform — so a
+      // moved cluster's block follows on both live drag and post-commit rebuild
+      // (parity with the cadnano per-cluster scan path).
+      const _fracOf = (cl) => {
+        if (totalBp <= 0) return 1
+        let bp = 0; for (const hid of cl.helix_ids) bp += (helixBp.get(hid) ?? 0)
+        return bp / totalBp
+      }
+      const _splitClusters = _finer.filter(c => _fracOf(c) >= _hullMinSizeFraction)
+
       // Pass RAW helixAxes (with .samples) — not _scanAxes (dsDNA-trimmed) — so a
       // deformed design sweeps each box along its spine. curveTol drives faceting.
-      const fl = _buildExtrusionBoxes(design, helixAxes, _hullCurveTolNm)
-      if (fl) { scene.add(fl); _hullReprMeshes.set('__extrusions__', fl); _hullDone = true }
-      else if (!design.cluster_transforms?.length) {
+      // dsBpRange gives each box its real (post-routing) dsDNA axial extent so the
+      // hull lines up with the cylinder rep (back-porch ends, staggered starts).
+      const _dsBpRange = _dsBpRangeByHelix(store.getState().currentGeometry)
+      const fl = _buildExtrusionBoxes(design, helixAxes, _hullCurveTolNm,
+        _splitClusters.length ? { clusters: _splitClusters, keyByCluster: true, dsBpRange: _dsBpRange } : null)
+      if (fl instanceof Map) {
+        for (const [key, grp] of fl) { scene.add(grp); _hullReprMeshes.set(key, grp) }
+        _hullDone = true
+      } else if (fl) {
+        scene.add(fl); _hullReprMeshes.set('__extrusions__', fl); _hullDone = true
+      } else if (!design.cluster_transforms?.length) {
         const grp = _scanExtrusionGroup((design.helices ?? []).map(h => h.id),
           _scanAxes, helixBp, design.lattice_type, design.metadata?.name, _hullScanTickBp)
         if (grp) { scene.add(grp); _hullReprMeshes.set('__extrusions__', grp) }
@@ -2940,6 +3212,7 @@ export {
   _scanExtrusionGroup     as scanExtrusionGroup,
   _dsTrimmedAxes          as dsTrimmedAxes,
   _dsBpByHelix            as dsBpByHelix,
+  _dsBpRangeByHelix       as dsBpRangeByHelix,
   _buildOverhangMarkers   as buildOverhangMarkers,
   HULL_OPACITY,
   SURFACE_COLOUR, SURFACE_OPACITY,

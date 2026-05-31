@@ -78,7 +78,7 @@ import { BDNA_RISE_PER_BP } from '../constants.js'
 import {
   buildBundleGeometry, buildPrismGeometry, buildPanelSurface,
   buildSpineSections, buildSweptHullGeometry, buildHullMeshPhong,
-  buildExtrusionBoxes, scanExtrusionGroup, dsTrimmedAxes, dsBpByHelix,
+  buildExtrusionBoxes, scanExtrusionGroup, dsTrimmedAxes, dsBpByHelix, dsBpRangeByHelix,
   buildOverhangMarkers,
   HULL_OPACITY, CROSS_MARGIN, AXIAL_MARGIN, MIN_HC_FACES,
 } from './joint_renderer.js'
@@ -860,7 +860,20 @@ function _hullGeoForSource(design, nucleotides, helixAxes) {
   // Pass the source's deformed helixAxes (carries .samples) + curve tol so a bent
   // part's extrusion boxes sweep along its spine here too (parity with the design
   // view). Non-deformed sources (no samples) build straight boxes as before.
-  let grp = buildExtrusionBoxes(design, helixAxes ?? null, HULL_CURVE_TOL_NM)  // 1. extrusion boxes
+  // When the part has a moved cluster (a rigidly-displaced arm, no bend → straight
+  // boxes that would otherwise ignore it), pass the clusters so each sub-box gets
+  // its owning cluster's transform baked in. Merged into ONE source hull (the part
+  // is a single instance — no per-cluster keying). Omitted when nothing moved, so
+  // the common case is byte-identical to before. (Swept boxes already carry the
+  // transform in their samples and are left untouched.)
+  const clusterMoved = (c) => {
+    const T = c.translation || [0, 0, 0], R = c.rotation || [0, 0, 0, 1]
+    return Math.abs(T[0]) > 1e-9 || Math.abs(T[1]) > 1e-9 || Math.abs(T[2]) > 1e-9 ||
+           Math.abs(R[0]) > 1e-9 || Math.abs(R[1]) > 1e-9 || Math.abs(R[2]) > 1e-9 || Math.abs(R[3] - 1) > 1e-9
+  }
+  const hullOpts = allClusters.some(clusterMoved)
+    ? { clusters: allClusters, dsBpRange: dsBpRangeByHelix(nucleotides) } : null
+  let grp = buildExtrusionBoxes(design, helixAxes ?? null, HULL_CURVE_TOL_NM, hullOpts)  // 1. extrusion boxes
   if (!grp && !allClusters.length) {                          // 2. scan (no clusters)
     grp = scanExtrusionGroup(
       (design.helices ?? []).map(h => h.id),
