@@ -265,8 +265,33 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       ? new Set((store.getState().currentDesign?.strands ?? [])
           .filter(s => s.is_reference).map(s => s.id))
       : null
+    // Flexible ssDNA segments. The cross-helix backbone arc spanning a flexible
+    // run connects the run's two RIGID anchors (the flexible beads are excluded
+    // from the bead list, so the anchors become adjacent) — that's the straight
+    // "drawstring" across the bow. flexible_arcs.js already draws that connection
+    // as the bowed arc, so hide the unfold chord. Match by anchor PAIR (the chord
+    // endpoints equal the FlexibleConnection's anchor_a/anchor_b) AND by touching
+    // a flexible bead (covers any arc that still ends on one).
+    const design = store.getState().currentDesign
+    const geometry = store.getState().currentGeometry ?? []
+    const flexKeys = new Set(geometry
+      .filter(n => n.is_flexible_segment)
+      .map(n => `${n.helix_id}:${n.bp_index}:${n.direction}`))
+    const _strandsById = new Map((design?.strands ?? []).map(s => [s.id, s]))
+    const _anchorKey = (a) => {
+      const dom = _strandsById.get(a?.strand_id)?.domains?.[a?.domain_index]
+      return dom ? `${dom.helix_id}:${a.bp_index}:${a.direction}` : null
+    }
+    const flexPairs = new Set()
+    for (const c of (design?.flexible_connections ?? [])) {
+      const ka = _anchorKey(c.anchor_a), kb = _anchorKey(c.anchor_b)
+      if (ka && kb) { flexPairs.add(`${ka}|${kb}`); flexPairs.add(`${kb}|${ka}`) }
+    }
+    const _k = nuc => nuc ? `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}` : '?'
     for (const e of _arcMeta) {
       e.hidden = _isNucHidden(e.fromNuc) || _isNucHidden(e.toNuc) ||
+                 flexKeys.has(_k(e.fromNuc)) || flexKeys.has(_k(e.toNuc)) ||
+                 flexPairs.has(`${_k(e.fromNuc)}|${_k(e.toNuc)}`) ||
                  (hidePeriodic && e.isPeriodicSeam) ||
                  (hideRef && refIds.has(e.fromNuc?.strand_id) && refIds.has(e.toNuc?.strand_id))
     }

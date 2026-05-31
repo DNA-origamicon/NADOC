@@ -38,7 +38,7 @@ const _scratchQ  = new THREE.Quaternion()
 const _Y_HAT     = new THREE.Vector3(0, 1, 0)
 const _Z_HAT     = new THREE.Vector3(0, 0, 1)
 
-function _clusterMemberFilter(cluster, currentDesign) {
+export function clusterMemberFilter(cluster, currentDesign) {
   if (!cluster?.helix_ids?.length) return null
 
   if (cluster.domain_ids?.length) {
@@ -83,7 +83,7 @@ function _pivotFromVisualCentroid(cluster, visualCentroid) {
 
 export function computeClusterPivotFromGeometry(cluster, currentDesign, currentGeometry) {
   if (!currentGeometry?.length) return [0, 0, 0]
-  const filter = _clusterMemberFilter(cluster, currentDesign)
+  const filter = clusterMemberFilter(cluster, currentDesign)
   if (!filter) return [0, 0, 0]
 
   let sx = 0, sy = 0, sz = 0, n = 0
@@ -99,7 +99,7 @@ export function computeClusterPivotFromGeometry(cluster, currentDesign, currentG
 
 export function computeClusterPivotFromEntries(cluster, currentDesign, backboneEntries) {
   if (!backboneEntries?.length) return [0, 0, 0]
-  const filter = _clusterMemberFilter(cluster, currentDesign)
+  const filter = clusterMemberFilter(cluster, currentDesign)
   if (!filter) return [0, 0, 0]
 
   const visualCentroid = new THREE.Vector3()
@@ -180,8 +180,15 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   let _mode           = 'translate'   // 'translate' | 'rotate'
 
   // ── Constraint state ─────────────────────────────────────────────────────────
-  let _constraintType  = 'centroid'  // 'centroid' | 'joint'
+  let _constraintType  = 'centroid'  // 'centroid' | 'joint' | 'ssdna'
   let _constraintJoint = null        // ClusterJoint object when type = 'joint'
+  // ssDNA-constrained drag: flexible tethers from the active cluster to others.
+  // `_ssConstraints` = [{ movingKey, fixedKey, contour }] (anchor keys
+  // 'helix:bp:DIR'); `_resolveSsWorldPos(key)` → live THREE.Vector3. Armed at
+  // drag start into `_ssArmed` = [{ pM0, pF, contour }] (start world positions).
+  let _ssConstraints   = null
+  let _resolveSsWorldPos = null
+  let _ssArmed         = null
   const _pendingTransforms = new Map()  // clusterId -> { pivot, translation, rotation }
 
   // ── Axis-ring state ─────────────────────────────────────────────────────────
@@ -716,6 +723,17 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
           const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
           if (cl) captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null)
         }
+        // Arm ssDNA constraints: snapshot each tether's moving-anchor start world
+        // position (pM0) + fixed-anchor world position (pF, constant during drag).
+        _ssArmed = null
+        if (_constraintType === 'ssdna' && _ssConstraints && _resolveSsWorldPos) {
+          _ssArmed = []
+          for (const c of _ssConstraints) {
+            const pM0 = _resolveSsWorldPos(c.movingKey)
+            const pF  = _resolveSsWorldPos(c.fixedKey)
+            if (pM0 && pF) _ssArmed.push({ pM0: pM0.clone(), pF: pF.clone(), contour: c.contour })
+          }
+        }
       } else {
         // Drag ended — persist final transform to backend once.
         _isDragging = false
@@ -726,6 +744,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _tc.addEventListener('change', () => {
       if (!_isDragging) return
       _incrQuat.copy(_dummy.quaternion).multiply(_startQuat.clone().invert())
+      _projectSsdnaConstraints()   // clamp _dummy so no tether exceeds contour
       const { currentDesign } = store.getState()
       const cluster = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
       if (!cluster) return
@@ -784,14 +803,91 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     return { count: clusterIds.length, clusterIds }
   }
 
+  // ── ssDNA-constrained projection ─────────────────────────────────────────────
+  // Position-based rigid solve: clamp the candidate drag transform so every
+  // flexible tether's |moving_anchor − fixed_anchor| ≤ contour ("free until
+  // taut"). Each iteration applies a rotation about the pivot (from the tether
+  // "torque") then a residual translation. 1 taut tether → slide on its sphere;
+  // 2+ → rotation about the line through the taut anchors (emergent hinge axis).
+  // NOTE: the torque-rotation is a linearised approximation (no SVD); gains are
+  // conservative. This is the piece most likely to want tuning.
+  const _SS_GAIN = 0.6
+  const _SS_ITERS = 6
+  const _ssScratch = {
+    pM: new THREE.Vector3(), r: new THREE.Vector3(), delta: new THREE.Vector3(),
+    torque: new THREE.Vector3(), dT: new THREE.Vector3(), q: new THREE.Quaternion(),
+    pivot: new THREE.Vector3(),
+  }
+
+  function _ssCandidatePos(pM0, out) {
+    // world = incrQuat·(pM0 − startDummyPos) + dummyPos
+    return out.copy(pM0).sub(_startDummyPos).applyQuaternion(_incrQuat).add(_dummy.position)
+  }
+
+  function _projectSsdnaConstraints() {
+    if (_constraintType !== 'ssdna' || !_ssArmed?.length || !_pivot) return
+    const s = _ssScratch
+    s.pivot.set(_pivot[0], _pivot[1], _pivot[2])
+    for (let iter = 0; iter < _SS_ITERS; iter++) {
+      // ── Rotation pass: accumulate torque about the pivot from violations.
+      s.torque.set(0, 0, 0)
+      let sumR2 = 0, nViol = 0
+      for (const t of _ssArmed) {
+        const pM = _ssCandidatePos(t.pM0, s.pM)
+        const dist = pM.distanceTo(t.pF)
+        if (dist <= t.contour || dist < 1e-9) continue
+        s.delta.copy(pM).sub(t.pF).multiplyScalar(t.contour / dist).add(t.pF).sub(pM) // target−pM
+        s.r.copy(pM).sub(s.pivot)
+        s.torque.add(new THREE.Vector3().crossVectors(s.r, s.delta))
+        sumR2 += s.r.lengthSq()
+        nViol++
+      }
+      if (nViol === 0) break
+      if (sumR2 > 1e-6) {
+        const rv = s.torque.multiplyScalar(_SS_GAIN / sumR2)
+        let angle = rv.length()
+        if (angle > 1e-9) {
+          if (angle > 0.25) angle = 0.25   // clamp per-iter rotation for stability
+          s.q.setFromAxisAngle(rv.normalize(), angle)
+          _dummy.position.sub(s.pivot).applyQuaternion(s.q).add(s.pivot)
+          _dummy.quaternion.premultiply(s.q)
+          _incrQuat.copy(_dummy.quaternion).multiply(_startQuat.clone().invert())
+        }
+      }
+      // ── Translation pass: residual after rotation.
+      s.dT.set(0, 0, 0)
+      let nT = 0
+      for (const t of _ssArmed) {
+        const pM = _ssCandidatePos(t.pM0, s.pM)
+        const dist = pM.distanceTo(t.pF)
+        if (dist <= t.contour || dist < 1e-9) continue
+        s.delta.copy(pM).sub(t.pF).multiplyScalar(t.contour / dist).add(t.pF).sub(pM)
+        s.dT.add(s.delta)
+        nT++
+      }
+      if (nT > 0) _dummy.position.addScaledVector(s.dT, _SS_GAIN / nT)
+    }
+  }
+
   /**
    * Set axis constraint for the active cluster.
-   * @param {'centroid'|'joint'} type
-   * @param {object|null}        joint  ClusterJoint object (required when type='joint')
+   * @param {'centroid'|'joint'|'ssdna'} type
+   * @param {object|null}        joint  ClusterJoint (type='joint') OR
+   *                                    {connections, resolveWorldPos} (type='ssdna')
    */
   function setConstraint(type, joint) {
     _constraintType  = type
-    _constraintJoint = joint ?? null
+    _constraintJoint = (type === 'joint') ? (joint ?? null) : null
+    // ssDNA-constrained mode reuses the normal translate/rotate TC widget and
+    // only adds a per-frame projection. The payload is {connections, resolveWorldPos}.
+    if (type === 'ssdna') {
+      _ssConstraints     = joint?.connections ?? null
+      _resolveSsWorldPos = joint?.resolveWorldPos ?? null
+    } else {
+      _ssConstraints = null
+      _resolveSsWorldPos = null
+      _ssArmed = null
+    }
     if (_clusterId) {
       // Revolute joints constrain rotation — switch to rotate mode when joint is selected
       if (type === 'joint' && _mode === 'translate') _mode = 'rotate'

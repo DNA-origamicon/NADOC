@@ -1620,6 +1620,34 @@ export async function relaxBond(bond, opts = {}) {
   return _syncFromDesignResponse(json)
 }
 
+// ── Flexible ssDNA segments (pose & explore mechanisms) ──────────────────────
+
+/** Mark one unpaired bead as part of a flexible segment + re-derive connections.
+ *  bead: {strand_id, domain_index, bp_index, direction}. Full geometry returns
+ *  (beads reclassify out of the rigid meshes, arcs appear). */
+export async function markFlexibleSegment(bead) {
+  const json = await _request('POST', '/design/flexible-segment', bead)
+  return _syncFromDesignResponse(json)
+}
+
+export async function unmarkFlexibleSegment(markId) {
+  const json = await _request('DELETE', `/design/flexible-segment/${encodeURIComponent(markId)}`)
+  return _syncFromDesignResponse(json)
+}
+
+/** Mark an explicit list of beads flexible (selective). opts: {marks?:[{...}],
+ *  replace?:bool}. replace:true with no marks clears all flexible segments. */
+export async function batchFlexibleSegment(opts = {}) {
+  const json = await _request('POST', '/design/flexible-segment/batch', opts)
+  return _syncFromDesignResponse(json)
+}
+
+/** Derived flexible connections + per-cluster gate (no mutation). Used to enable
+ *  the move/rotate "ssDNA constrained" mode and feed the drag constraint. */
+export async function getFlexibleConnections() {
+  return _request('GET', '/design/flexible-connections')
+}
+
 export async function patchStrand(strandId, { notes, color, sequence } = {}) {
   const body = {}
   if (notes    !== undefined) body.notes    = notes

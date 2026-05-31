@@ -136,6 +136,7 @@ const _initialState = {
     scaffold:      true,   // global: include scaffold elements (strands/ends/arcs)
     staples:       true,   // global: include staple elements (strands/ends/arcs)
 
+    clusters:      false,  // category: cluster-level selection (auto-drill level 0)
     strands:       true,   // category: whole-strand selection
     domains:       false,  // category: domain-level selection (sub-strand granularity)
     ends:          false,  // category: end bead selection enabled

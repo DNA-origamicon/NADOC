@@ -374,6 +374,59 @@ class OverhangConnection(BaseModel):
     bound_angle_deg: Optional[float] = None
 
 
+class FlexibleSegmentMark(BaseModel):
+    """Display-layer annotation marking one UNPAIRED (ssDNA) backbone bead as part
+    of a FLEXIBLE segment (a tether between two rigid clusters).
+
+    This NEVER edits strands/domains/crossovers — it is user intent (like
+    ``Strand.is_reference``), consumed only by the Layer-3 derivation in
+    ``backend.core.flexible_segments``. Marks are the single source of truth; the
+    derived ``flexible_connections`` are regenerable from them.
+
+    A bead is eligible for marking iff it is UNPAIRED — no Watson-Crick partner at
+    the same (helix, bp) (enforced at the API layer via
+    ``flexible_segments.unpaired_bead_keys``). It need NOT be on its own helix; a
+    mid-helix ssDNA run is fully supported.
+
+    Bead identity = ``(strand_id, domain_index, bp_index, direction)`` — matches
+    the per-bead key emitted by ``crud._strand_nucleotide_info``. A stale mark
+    (strand/domain no longer resolves) is harmless: derivation simply ignores it.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    strand_id: str
+    domain_index: int
+    bp_index: int
+    direction: Direction
+
+
+class FlexibleAnchor(BaseModel):
+    """A rigid bead flanking a flexible segment, OR a bead within the segment run."""
+    strand_id: str
+    domain_index: int
+    bp_index: int
+    direction: Direction
+
+
+class FlexibleConnection(BaseModel):
+    """Derived (regenerable) record of one flexible ssDNA tether between two
+    EXISTING rigid clusters.
+
+    Display-layer only. A single coarse element with a fixed contour-length cap:
+    the rigid arms are free to move until ``|anchor_a − anchor_b|`` reaches
+    ``contour_length_nm`` ("free until taut"). The marked run renders as a
+    fixed-length geometric arc; ``segment_bead_keys`` are its beads in 5′→3′ order
+    so the renderer can place them along the arc.
+    """
+    id: str
+    cluster_a_id: str
+    cluster_b_id: str
+    anchor_a: FlexibleAnchor
+    anchor_b: FlexibleAnchor
+    n_ss_bases: int
+    contour_length_nm: float
+    segment_bead_keys: List[FlexibleAnchor] = Field(default_factory=list)
+
+
 def _resolve_sd_sequence(ovhg: 'OverhangSpec', sd: 'SubDomain') -> Optional[str]:
     """Module-level helper used by Design._validate_overhang_bindings.
 
@@ -1085,6 +1138,8 @@ SnapshotOpKind = Literal[
     'create-far-ends',
     'overhang-bulk',
     'apply-loop-skips',
+    'flexible-segment-mark',
+    'flexible-segment-unmark',
     'linker-add',
     'linker-delete',
     'assembly-overhang-bind',
@@ -1680,6 +1735,12 @@ class Design(BaseModel):
     overhangs: List[OverhangSpec] = Field(default_factory=list)
     overhang_connections: List[OverhangConnection] = Field(default_factory=list)
     overhang_bindings: List[OverhangBinding] = Field(default_factory=list)
+    # Flexible ssDNA segments (pose & explore mechanisms): user-marked ssDNA beads
+    # (marks) + derived ties between EXISTING clusters (connections). The rigid
+    # arms are the user's own clusters; flexible segments are a per-bead display
+    # overlay. Display-layer only; never mutates topology.
+    flexible_segment_marks: List[FlexibleSegmentMark] = Field(default_factory=list)
+    flexible_connections: List[FlexibleConnection] = Field(default_factory=list)
     protein_assets: List[ProteinAsset] = Field(default_factory=list)
     protein_attachments: List[ProteinAttachment] = Field(default_factory=list)
     tm_settings: TmSettings = Field(default_factory=TmSettings)

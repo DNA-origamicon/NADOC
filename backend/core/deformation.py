@@ -1964,6 +1964,46 @@ def _apply_ovhg_rotations_to_axes(
     return axes
 
 
+def _flexible_bps_on_helix(design: "Design", helix_id: str) -> set:
+    """bp indices on *helix_id* that belong to a flexible ssDNA segment.
+
+    These are excluded from the helix axis sticks — the beads no longer follow
+    the straight helix axis (they're drawn as a bowed arc by flexible_arcs.js),
+    so an axis line through them would be misleading.
+    """
+    marks = getattr(design, "flexible_segment_marks", None) or []
+    if not marks:
+        return set()
+    strands_by_id = {s.id: s for s in design.strands}
+    out: set = set()
+    for m in marks:
+        s = strands_by_id.get(m.strand_id)
+        if s is None or m.domain_index >= len(s.domains):
+            continue
+        if s.domains[m.domain_index].helix_id == helix_id:
+            out.add(m.bp_index)
+    return out
+
+
+def _split_segment_by_bps(seg: dict, drop_bps: set) -> list[dict]:
+    """Split a segment's [bp_lo, bp_hi] into maximal runs that contain none of
+    *drop_bps*, preserving the segment's strand/domain identity. A fully-dropped
+    segment yields []."""
+    lo, hi = seg["bp_lo"], seg["bp_hi"]
+    out: list[dict] = []
+    run_start = None
+    for bp in range(lo, hi + 1):
+        if bp in drop_bps:
+            if run_start is not None:
+                out.append({**seg, "bp_lo": run_start, "bp_hi": bp - 1})
+                run_start = None
+        elif run_start is None:
+            run_start = bp
+    if run_start is not None:
+        out.append({**seg, "bp_lo": run_start, "bp_hi": hi})
+    return out
+
+
 def _segments_for_helix(design: "Design", h: "Helix") -> list[dict]:
     """Return per-domain axis segment descriptors for helix *h*, sorted by bp_lo.
 
@@ -2017,6 +2057,10 @@ def _segments_for_helix(design: "Design", h: "Helix") -> list[dict]:
             "bp_lo":        lo,
             "bp_hi":        hi,
         })
+    # Carve out flexible ssDNA bp ranges — no axis stick over a flexible segment.
+    flex_bps = _flexible_bps_on_helix(design, h.id)
+    if flex_bps:
+        deduped = [sub for seg in deduped for sub in _split_segment_by_bps(seg, flex_bps)]
     return deduped
 
 

@@ -62,6 +62,7 @@ import { initDeformView }          from './scene/deform_view.js'
 import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initOverhangLocations }   from './scene/overhang_locations.js'
 import { initOverhangLinkArcs }    from './scene/overhang_link_arcs.js'
+import { initFlexibleArcs }        from './scene/flexible_arcs.js'
 import { initOverhangBindingLines } from './scene/overhang_binding_lines.js'
 import { initOverhangUnzipOverlay } from './scene/overhang_unzip_overlay.js'
 import { initMultiOverhangStrandAnim } from './scene/overhang_strand_anim.js'
@@ -129,6 +130,42 @@ import { createPhotoRenderer } from './scene/photo_renderer.js'
 import { initPhotoPanel }      from './ui/photo_panel.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
+
+/**
+ * Flexible ssDNA segments: the contiguous run of UNPAIRED beads containing the
+ * clicked bead, within its strand (5'→3' order). Returns a list of mark bodies
+ * {strand_id, domain_index, bp_index, direction}. Falls back to the single bead
+ * if the run can't be resolved. Used to mark/unmark a whole tether at once.
+ */
+function _flexibleRunForBead(design, geometry, nuc) {
+  const single = [{ strand_id: nuc.strand_id, domain_index: nuc.domain_index,
+                    bp_index: nuc.bp_index, direction: nuc.direction }]
+  const strand = design?.strands?.find(s => s.id === nuc.strand_id)
+  if (!strand) return single
+  // Build the strand's 5'→3' bead order with (domain_index, helix, bp, direction).
+  const order = []
+  strand.domains.forEach((d, di) => {
+    const step = d.end_bp >= d.start_bp ? 1 : -1
+    for (let bp = d.start_bp; ; bp += step) {
+      order.push({ helix_id: d.helix_id, bp, direction: d.direction, domain_index: di })
+      if (bp === d.end_bp) break
+    }
+  })
+  const k = o => `${o.helix_id}:${o.bp}:${o.direction}`
+  const unpaired = new Set((geometry ?? [])
+    .filter(n => n.is_unpaired)
+    .map(n => `${n.helix_id}:${n.bp_index}:${n.direction}`))
+  const idx = order.findIndex(o =>
+    o.helix_id === nuc.helix_id && o.bp === nuc.bp_index && o.direction === nuc.direction)
+  if (idx < 0 || !unpaired.has(k(order[idx]))) return single
+  let lo = idx, hi = idx
+  while (lo - 1 >= 0 && unpaired.has(k(order[lo - 1]))) lo--
+  while (hi + 1 < order.length && unpaired.has(k(order[hi + 1]))) hi++
+  return order.slice(lo, hi + 1).map(o => ({
+    strand_id: nuc.strand_id, domain_index: o.domain_index,
+    bp_index: o.bp, direction: o.direction,
+  }))
+}
 
 // Inflate any [data-icon] markup in static HTML and watch for new ones in
 // dynamically-added DOM (modals, context menus, panel rebuilds).
@@ -679,9 +716,54 @@ async function main() {
     _ovhgGhost = mesh
   }
 
+  // ── Selection-filter mode (auto-drill vs manual) ─────────────────────────────
+  // Empty _manualFilters ⇒ auto-drill: repeated clicks descend cluster → strand →
+  // domain → bead/xover and the matching filter button auto-lights. Once the user
+  // clicks a filter button it is "pinned" (red border) and traditional
+  // selectableTypes gating applies; Tab or un-pinning the last button restores
+  // auto-drill. dataKey strings (e.g. 'clust', 'line') match the .sf-btn[data-key].
+  const _manualFilters = new Set()
+  const _LEVEL_BTN = { cluster: 'clust', strand: 'strand', domain: 'line', bead: 'ends', xover: 'xover' }
+
+  function _isManualSelect() { return _manualFilters.size > 0 }
+
+  // Light the filter button matching the current drill level (display only —
+  // does NOT touch selectableTypes or _manualFilters). No-op in manual mode.
+  function _reflectDrillLevel(level) {
+    if (_isManualSelect()) return
+    const target = level ? (_LEVEL_BTN[level] ?? null) : null
+    for (const dk of Object.values(_LEVEL_BTN)) {
+      const b = document.querySelector(`#select-filter .sf-btn[data-key="${dk}"]`)
+      if (b) b.classList.toggle('active', dk === target)
+    }
+  }
+
+  // Clear all manual pins and restore the neutral auto-drill baseline (scaffold/
+  // staples/strands on, everything else off). Also fixes button .active classes
+  // so they don't show stale manual state.
+  function _resetToAutoBaseline() {
+    _manualFilters.clear()
+    document.querySelectorAll('#select-filter .sf-btn.sf-pinned').forEach(b => b.classList.remove('sf-pinned'))
+    store.setState({
+      selectableTypes: {
+        scaffold: true, staples: true,
+        clusters: false, strands: true, domains: false, ends: false, crossoverArcs: false,
+        loops: false, skips: false, extensions: false, overhangs: false,
+      },
+    })
+    const baseActive = { scaf: true, stap: true, strand: true, clust: false, line: false, ends: false, xover: false, skip: false, loop: false, ovhangs: false }
+    for (const [dk, on] of Object.entries(baseActive)) {
+      const b = document.querySelector(`#select-filter .sf-btn[data-key="${dk}"]`)
+      if (b) b.classList.toggle('active', on)
+    }
+    selectionManager?.resetDrill?.()
+  }
+
   // ── Selection manager ───────────────────────────────────────────────────────
   const selectionManager = initSelectionManager(canvas, camera, designRenderer, {
     getProteinRenderer: () => proteinRenderer,
+    isManualSelect: _isManualSelect,
+    onDrillLevel: _reflectDrillLevel,
     onNick: async ({ helixId, bpIndex, direction }) => {
       _clearStapleChecks()
       const result = await api.addNick({ helixId, bpIndex, direction })
@@ -731,6 +813,52 @@ async function main() {
       if (name === null) return  // cancelled
       api.patchOverhang(overhangId, { label: name.trim() || null })
     },
+    onFlexibleSegmentRightClick: async (nuc, action, extra) => {
+      // Flexible ssDNA segments (pose & explore mechanisms). Mark/unmark the
+      // contiguous unpaired RUN containing the clicked bead, unmark a whole
+      // connection (right-click its arc), or clear all. Display-layer only.
+      try {
+        if (action === 'clear') {
+          await api.batchFlexibleSegment({ replace: true })
+          showToast('Cleared all flexible segments')
+          return
+        }
+        if (action === 'unmark_connection') {
+          const cd = store.getState().currentDesign
+          const conn = (cd?.flexible_connections ?? []).find(c => c.id === extra)
+          if (!conn) return
+          const segKeys = new Set((conn.segment_bead_keys ?? [])
+            .map(k => `${k.strand_id}:${k.domain_index}:${k.bp_index}:${k.direction}`))
+          const keep = (cd?.flexible_segment_marks ?? [])
+            .filter(m => !segKeys.has(`${m.strand_id}:${m.domain_index}:${m.bp_index}:${m.direction}`))
+            .map(m => ({ strand_id: m.strand_id, domain_index: m.domain_index, bp_index: m.bp_index, direction: m.direction }))
+          await api.batchFlexibleSegment({ marks: keep, replace: true })
+          showToast('Unmarked flexible segment')
+          return
+        }
+        const { currentDesign, currentGeometry } = store.getState()
+        const run = _flexibleRunForBead(currentDesign, currentGeometry, nuc)
+        if (!run.length) return
+        if (action === 'mark') {
+          const existing = currentDesign?.flexible_segment_marks ?? []
+          const keep = existing.map(m => ({
+            strand_id: m.strand_id, domain_index: m.domain_index,
+            bp_index: m.bp_index, direction: m.direction,
+          }))
+          await api.batchFlexibleSegment({ marks: [...keep, ...run], replace: true })
+          showToast(`Marked ${run.length}-base flexible segment`)
+        } else if (action === 'unmark') {
+          const runKeys = new Set(run.map(r => `${r.strand_id}:${r.domain_index}:${r.bp_index}:${r.direction}`))
+          const keep = (currentDesign?.flexible_segment_marks ?? [])
+            .filter(m => !runKeys.has(`${m.strand_id}:${m.domain_index}:${m.bp_index}:${m.direction}`))
+            .map(m => ({ strand_id: m.strand_id, domain_index: m.domain_index, bp_index: m.bp_index, direction: m.direction }))
+          await api.batchFlexibleSegment({ marks: keep, replace: true })
+          showToast('Unmarked flexible segment')
+        }
+      } catch (err) {
+        showToast(err?.message || String(err), { severity: 'error' })
+      }
+    },
     onOverhangRightClick: (ovhgIds, clientX, clientY) => {
       _showOverhangOrientMenu(ovhgIds, clientX, clientY)
     },
@@ -751,6 +879,7 @@ async function main() {
     getUnfoldView:          () => unfoldView,
     getOverhangLocations:   () => overhangLocations,
     getOverhangLinkArcs:    () => overhangLinkArcs,
+    getFlexibleArcs:        () => flexibleArcs,
     getLoopSkipHighlight:   () => loopSkipHighlight,
     controls,
     getHoverEntry: () => zoomScope.getHoverEntry(),
@@ -1610,10 +1739,12 @@ async function main() {
 
   // ── Overhang Link Arcs (white tubes for design.overhang_connections) ────────
   const overhangLinkArcs = initOverhangLinkArcs(scene)
+  const flexibleArcs = initFlexibleArcs(scene, designRenderer, () => store.getState().currentHelixAxes)
   store.subscribe((newState, prevState) => {
     if (newState.currentGeometry === prevState.currentGeometry &&
         newState.currentDesign   === prevState.currentDesign) return
     overhangLinkArcs.rebuild(newState.currentDesign, newState.currentGeometry)
+    flexibleArcs.rebuild(newState.currentDesign)
   })
   // Initial rebuild — when the persisted design was applied to the store
   // before this subscription was registered, the listener never fires.
@@ -1621,6 +1752,7 @@ async function main() {
     const s = store.getState()
     if (s.currentDesign && s.currentGeometry) {
       overhangLinkArcs.rebuild(s.currentDesign, s.currentGeometry)
+      flexibleArcs.rebuild(s.currentDesign)
     }
   }
 
@@ -6235,6 +6367,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     const _selKeyMap = [
       ['scaffold',      'scaf'   ],
       ['staples',       'stap'   ],
+      ['clusters',      'clust'  ],
       ['strands',       'strand' ],
       ['domains',       'line'   ],
       ['ends',          'ends'   ],
@@ -6254,6 +6387,14 @@ Typical debugging workflow for "reverts to 3D" bug:
       btn.addEventListener('click', () => {
         const { deformToolActive, translateRotateActive } = store.getState()
         if (deformToolActive || translateRotateActive) return
+
+        // Clicking a filter button enters/adjusts manual mode: pin it (red border)
+        // and apply traditional gating. Un-pinning the last button restores auto-drill.
+        const wasPinned = _manualFilters.has(dataKey)
+        if (wasPinned) _manualFilters.delete(dataKey)
+        else           _manualFilters.add(dataKey)
+        btn.classList.toggle('sf-pinned', !wasPinned)
+
         const st = store.getState().selectableTypes
         if (storeKey === 'loops' || storeKey === 'skips' || storeKey === 'overhangs') {
           if (!st[storeKey]) {
@@ -6272,9 +6413,17 @@ Typical debugging workflow for "reverts to 3D" bug:
         } else {
           store.setState({ selectableTypes: { ...st, [storeKey]: !st[storeKey] } })
         }
+
+        // Stop the auto-drill cursor from fighting the manual selection.
+        selectionManager?.resetDrill?.()
+        // No manual pins left → return to auto-drill with a clean baseline.
+        if (_manualFilters.size === 0) _resetToAutoBaseline()
       })
 
       store.subscribe(() => {
+        // In auto-drill mode the buttons are driven by _reflectDrillLevel; only
+        // sync .active from selectableTypes while a manual pin is active.
+        if (!_isManualSelect()) return
         btn.classList.toggle('active', !!store.getState().selectableTypes[storeKey])
       })
     }
@@ -6732,36 +6881,18 @@ Typical debugging workflow for "reverts to 3D" bug:
     handler() { _toggleCadnano() },
   })
 
-  // Tab — cycle selection mode: strands → domains → ends → strands
+  // Tab — clear any manually-pinned selection filters and return to auto-drill.
   // Skipped when the move/rotate gizmo is active (cluster_gizmo.js owns Tab there).
   registerShortcut({
     key: 'Tab', ctrl: false,
-    description: 'Cycle selection mode',
+    description: 'Reset selection filters to auto-drill',
     blockedInInput: true,
     blockedWhen: () => _translateRotateActive,
     handler(e) {
       e.preventDefault()
-      const st = store.getState().selectableTypes
-      let next
-      if      ( st.strands && !st.domains && !st.ends && !st.crossoverArcs) next = 'domains'
-      else if (!st.strands &&  st.domains && !st.ends && !st.crossoverArcs) next = 'ends'
-      else if (!st.strands && !st.domains &&  st.ends && !st.crossoverArcs) next = 'crossoverArcs'
-      else                                                                   next = 'strands'
-      store.setState({
-        selectableTypes: {
-          ...st,
-          strands:       next === 'strands',
-          domains:       next === 'domains',
-          ends:          next === 'ends',
-          crossoverArcs: next === 'crossoverArcs',
-        },
-      })
-      showToast({
-        strands:       'Select: Strands',
-        domains:       'Select: Domains',
-        ends:          'Select: Ends',
-        crossoverArcs: 'Select: Crossover Arcs',
-      }[next])
+      const hadPins = _isManualSelect()
+      _resetToAutoBaseline()
+      showToast(hadPins ? 'Auto-drill selection' : 'Selection: auto-drill')
     },
   })
 
@@ -7200,6 +7331,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       unfoldView.applyClusterArcUpdate(helixIds)
       unfoldView.applyClusterExtArcUpdate(helixIds)
       designRenderer.applyClusterCrossoverUpdate(helixIds)
+      flexibleArcs.applyLiveUpdate(helixIds, centerVec, dummyPos, incrRotQuat)   // re-solve arcs + bow-away from live cylinders
       // Extra-base beads now live in crossoverConnections group — rebuilt on full scene rebuild.
       // DEBUG — log once per frame so you can see cone state during a drag
       helixCtrl?.logConeDebug('LIVE-FRAME')
@@ -7860,7 +7992,19 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (_mrJaInp && document.activeElement !== _mrJaInp) _mrJaInp.value = deg.toFixed(1)
   }
 
-  function _mrSetPivotOptions(joints) {
+  // Flexible-segment gate cache (refreshed when the move/rotate tool opens /
+  // switches cluster). Drives the "ssDNA constrained" dropdown option.
+  let _flexGates = {}
+  let _flexConnections = []
+  async function _refreshFlexGates() {
+    try {
+      const info = await api.getFlexibleConnections()
+      _flexGates = info?.gates ?? {}
+      _flexConnections = info?.connections ?? []
+    } catch { _flexGates = {}; _flexConnections = [] }
+  }
+
+  function _mrSetPivotOptions(joints, clusterId = null) {
     if (!_mrPivotSel) return
     while (_mrPivotSel.options.length > 1) _mrPivotSel.remove(1)
     for (const j of (joints ?? [])) {
@@ -7869,6 +8013,45 @@ Typical debugging workflow for "reverts to 3D" bug:
       opt.textContent = `Joint: ${j.name}`
       _mrPivotSel.appendChild(opt)
     }
+    // "ssDNA constrained" — only when every inter-cluster connection from this
+    // cluster passes through a flexible segment (free-until-taut drag).
+    if (clusterId && _flexGates[clusterId]?.gate) {
+      const opt = document.createElement('option')
+      opt.value = 'ssdna'
+      opt.textContent = 'ssDNA constrained'
+      _mrPivotSel.appendChild(opt)
+    }
+  }
+
+  /** Resolve a flexible anchor (FlexibleAnchor) → 'helix:bp:DIR' key. */
+  function _flexAnchorKey(anc, design) {
+    const s = design?.strands?.find(s => s.id === anc.strand_id)
+    const d = s?.domains?.[anc.domain_index]
+    return d ? `${d.helix_id}:${anc.bp_index}:${anc.direction}` : null
+  }
+
+  /** Build the gizmo ssDNA-constraint payload for a cluster: per-tether moving/
+   *  fixed anchor keys + a live world-position resolver from backboneEntries. */
+  function _buildSsdnaPayload(clusterId) {
+    const design = store.getState().currentDesign
+    const connections = []
+    for (const c of (_flexConnections ?? [])) {
+      if (c.cluster_a_id !== clusterId && c.cluster_b_id !== clusterId) continue
+      const onA = c.cluster_a_id === clusterId
+      const movingKey = _flexAnchorKey(onA ? c.anchor_a : c.anchor_b, design)
+      const fixedKey  = _flexAnchorKey(onA ? c.anchor_b : c.anchor_a, design)
+      if (movingKey && fixedKey) connections.push({ movingKey, fixedKey, contour: c.contour_length_nm })
+    }
+    const resolveWorldPos = (key) => {
+      const [h, bp, dir] = key.split(':')
+      const bpN = Number(bp)
+      for (const e of (designRenderer.getBackboneEntries?.() ?? [])) {
+        const n = e.nuc
+        if (n && n.helix_id === h && n.bp_index === bpN && n.direction === dir) return e.pos
+      }
+      return null
+    }
+    return { connections, resolveWorldPos }
   }
 
   function _mrSetSelectedPivot(id) {
@@ -7946,6 +8129,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (val === 'centroid') {
       _mrShowJointMode(false)
       clusterGizmo.setConstraint('centroid', null)
+    } else if (val === 'ssdna') {
+      _mrShowJointMode(false)
+      const clusterId = store.getState().activeClusterId
+      clusterGizmo.setConstraint('ssdna', _buildSsdnaPayload(clusterId))
+      showToast('ssDNA constrained: drag the arm — tethers won’t overstretch')
     } else {
       const joint = store.getState().currentDesign?.cluster_joints?.find(j => j.id === val)
       if (joint) { _mrShowJointMode(true); clusterGizmo.setConstraint('joint', joint) }
@@ -7984,6 +8172,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (clusterId === store.getState().activeClusterId) return
     await _refreshClusterPivotForAttach(clusterId)
     clusterGizmo.attach(clusterId, scene, camera, canvas)
+    // Repopulate pivot options (joints + ssDNA-constrained gate) for this cluster.
+    await _refreshFlexGates()
+    const joints = store.getState().currentDesign?.cluster_joints?.filter(j => j.cluster_id === clusterId) ?? []
+    _mrSetPivotOptions(joints, clusterId)
+    _mrSetSelectedPivot('centroid')
+    clusterGizmo.setConstraint('centroid', null)
   })
 
   const instanceGizmo = initInstanceGizmo(store, controls)
@@ -8368,8 +8562,9 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (_mrClusterSel) _mrClusterSel.disabled = false
     if (_mrPivotSel) _mrPivotSel.disabled = false
     _mrSetClusterOptions(clusters, first.id)
+    await _refreshFlexGates()
     const initJoints = store.getState().currentDesign?.cluster_joints?.filter(j => j.cluster_id === first.id) ?? []
-    _mrSetPivotOptions(initJoints)
+    _mrSetPivotOptions(initJoints, first.id)
     _mrSetSelectedPivot('centroid')
     const [irx, iry, irz] = _quatToEulerDeg(first.rotation)
     _mrSetTransformValues(first.translation[0], first.translation[1], first.translation[2], irx, iry, irz)

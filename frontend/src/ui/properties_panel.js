@@ -278,6 +278,25 @@ export function initPropertiesPanel() {
     `
   }
 
+  function _renderCluster(selectedObject) {
+    const d = selectedObject.data ?? {}
+    const helixCount = d.helix_ids?.length ?? 0
+    content.innerHTML = `
+      <div class="prop-row">
+        <span class="prop-label">cluster</span>
+        <span class="prop-val mono" style="font-size:var(--text-xs)">${(selectedObject.id ?? '').slice(0, 8)}…</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">helices</span>
+        <span class="prop-val">${helixCount}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">type</span>
+        <span class="prop-val">${d.is_default ? 'default (all helices)' : 'sub-cluster'}</span>
+      </div>
+    `
+  }
+
   function _render(selectedObject) {
     if (!selectedObject) {
       content.innerHTML = '<span class="dim">Click a backbone bead to select.</span>'
@@ -298,6 +317,8 @@ export function initPropertiesPanel() {
       })
     } else if (selectedObject.type === 'crossover') {
       _renderCrossover(selectedObject)
+    } else if (selectedObject.type === 'cluster') {
+      _renderCluster(selectedObject)
     } else {
       _renderNucleotide(selectedObject)
     }

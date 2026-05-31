@@ -1242,6 +1242,36 @@ const _PLANE_AXES = {
   YZ: { col: 1, row: 2, ext: 0 },
 }
 
+// Split a list of [row, col] cells into 4-neighbour (Manhattan-1) connected
+// components.  An extrusion that spans lattice-disconnected regions (e.g. the
+// two arms of a hinge separated by an empty row gap) then renders as one hull
+// block per region — mirroring the backend's per-region bundle clustering
+// (Onshape-style: disjoint sketch regions → separate part bodies).  Cells in
+// one contiguous region return a single component, so connected bundles are
+// unaffected.
+function _cellComponents(cells) {
+  const key = (r, c) => `${r},${c}`
+  const present = new Set(cells.map(([r, c]) => key(r, c)))
+  const seen = new Set()
+  const comps = []
+  for (const [r0, c0] of cells) {
+    if (seen.has(key(r0, c0))) continue
+    const comp = []
+    const stack = [[r0, c0]]
+    seen.add(key(r0, c0))
+    while (stack.length) {
+      const [r, c] = stack.pop()
+      comp.push([r, c])
+      for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nk = key(r + dr, c + dc)
+        if (present.has(nk) && !seen.has(nk)) { seen.add(nk); stack.push([r + dr, c + dc]) }
+      }
+    }
+    comps.push(comp)
+  }
+  return comps
+}
+
 /**
  * One rectangular box per feature-log extrusion, merged into a single mesh.
  *
@@ -1281,41 +1311,46 @@ function _buildExtrusionBoxes(design, helixAxes = null, curveTolNm = 0) {
     const lenBp = p.length_bp || 0
     if (!Array.isArray(cells) || !cells.length || lenBp <= 0) continue
 
-    let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity
-    for (const cell of cells) {
-      const r = cell[0], c = cell[1]
-      if (r < minR) minR = r; if (r > maxR) maxR = r
-      if (c < minC) minC = c; if (c > maxC) maxC = c
-    }
     const axialLen = lenBp * BDNA_RISE_PER_BP
     const offset   = (typeof p.offset_nm === 'number') ? p.offset_nm : 0
-    const wCol = (maxC - minC + 1) * spCol
-    const wRow = (maxR - minR + 1) * spRow
-    const vol  = wCol * wRow * axialLen
+    const bpLo     = Math.round(offset / BDNA_RISE_PER_BP)
 
-    // Curved path: sweep the box's rectangle along its helices' deformed spine.
-    // Falls through to a straight box when the box isn't in the deformed arm.
-    if (deformed) {
-      const boxHelixIds = cells.map(([r, c]) => cellToHelix.get(`${r},${c}`)).filter(Boolean)
-      const bpLo = Math.round(offset / BDNA_RISE_PER_BP)
-      let sections = _boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpLo + lenBp, wCol, wRow)
-      if (sections) {
-        sections = _decimateSections(sections, curveTolNm)
-        geos.push({ geo: _buildSweptHullGeometry(sections), vol })
-        continue
+    // One box per lattice-connected region of this extrusion's cells, so
+    // disjoint regions (e.g. two hinge arms) become separate hull blocks.
+    for (const compCells of _cellComponents(cells)) {
+      let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity
+      for (const cell of compCells) {
+        const r = cell[0], c = cell[1]
+        if (r < minR) minR = r; if (r > maxR) maxR = r
+        if (c < minC) minC = c; if (c > maxC) maxC = c
       }
-    }
+      const wCol = (maxC - minC + 1) * spCol
+      const wRow = (maxR - minR + 1) * spRow
+      const vol  = wCol * wRow * axialLen
 
-    const cCol = (minC + maxC) / 2 * spCol
-    const cRow = (minR + maxR) / 2 * spRow
-    const m = _PLANE_AXES[p.plane] || _PLANE_AXES.XY
-    const size = [0, 0, 0], pos = [0, 0, 0]
-    size[m.col] = wCol;  size[m.row] = wRow;  size[m.ext] = axialLen
-    pos[m.col]  = cCol;  pos[m.row]  = cRow;  pos[m.ext]  = offset + axialLen / 2
-    const geo = new THREE.BoxGeometry(size[0], size[1], size[2])
-    geo.translate(pos[0], pos[1], pos[2])
-    geo.deleteAttribute('uv')   // keep attrs uniform with swept geos for mergeGeometries
-    geos.push({ geo, vol })
+      // Curved path: sweep the box's rectangle along its helices' deformed spine.
+      // Falls through to a straight box when the box isn't in the deformed arm.
+      if (deformed) {
+        const boxHelixIds = compCells.map(([r, c]) => cellToHelix.get(`${r},${c}`)).filter(Boolean)
+        let sections = _boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpLo + lenBp, wCol, wRow)
+        if (sections) {
+          sections = _decimateSections(sections, curveTolNm)
+          geos.push({ geo: _buildSweptHullGeometry(sections), vol })
+          continue
+        }
+      }
+
+      const cCol = (minC + maxC) / 2 * spCol
+      const cRow = (minR + maxR) / 2 * spRow
+      const m = _PLANE_AXES[p.plane] || _PLANE_AXES.XY
+      const size = [0, 0, 0], pos = [0, 0, 0]
+      size[m.col] = wCol;  size[m.row] = wRow;  size[m.ext] = axialLen
+      pos[m.col]  = cCol;  pos[m.row]  = cRow;  pos[m.ext]  = offset + axialLen / 2
+      const geo = new THREE.BoxGeometry(size[0], size[1], size[2])
+      geo.translate(pos[0], pos[1], pos[2])
+      geo.deleteAttribute('uv')   // keep attrs uniform with swept geos for mergeGeometries
+      geos.push({ geo, vol })
+    }
   }
   if (!geos.length) return null
 

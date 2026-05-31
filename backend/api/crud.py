@@ -176,6 +176,16 @@ def _strand_nucleotide_info(design: Design, helix_ids: frozenset[str] | None = N
     helices are included.  Used by partial geometry to avoid iterating all strands.
     """
     info: dict = {}
+    # Display-only flexible-segment marks → per-bead flag (flows through `**sinfo`,
+    # exactly like is_reference). Keyed by (strand_id, domain_index, bp, dir).
+    flex_marks = {
+        (m.strand_id, m.domain_index, m.bp_index, m.direction)
+        for m in design.flexible_segment_marks
+    }
+    # Unpaired (ssDNA) beads — gates the flexible-segment right-click menu on the
+    # frontend. (helix_id, bp, direction) with no Watson-Crick partner.
+    from backend.core.flexible_segments import unpaired_bead_keys
+    _unpaired = unpaired_bead_keys(design)
     for strand in design.strands:
         if not strand.domains:
             continue
@@ -203,6 +213,8 @@ def _strand_nucleotide_info(design: Design, helix_ids: frozenset[str] | None = N
                     "domain_index":   di,
                     "overhang_id":    domain.overhang_id,
                     "is_reference":   strand.is_reference,
+                    "is_flexible_segment": (strand.id, di, bp, domain.direction) in flex_marks,
+                    "is_unpaired":    (domain.helix_id, bp, domain.direction) in _unpaired,
                 }
     return info
 
@@ -651,6 +663,88 @@ def _ensure_default_cluster(design: Design) -> Design:
     updated = design.copy_with(cluster_transforms=[default_ct])
     design_state.set_design_silent(updated)
     return updated
+
+
+def _cluster_bundle_regions(design: Design) -> Design:
+    """Assign one cluster per lattice-connected region of a freshly-built bundle.
+
+    Onshape-style "extrude disjoint sketches → separate part bodies": when a
+    bundle's cells form two or more lattice-disconnected groups (e.g. the two
+    arms of a hinge separated by an empty row gap), each group becomes its own
+    cluster so it can be posed and hull-rendered independently.
+
+    A single connected region keeps the historical behaviour exactly: ONE
+    cluster named "Cluster 1" with ``is_default=True`` (identical to
+    ``_ensure_default_cluster``), so deformation arm-scoping, assembly sorting
+    and the hull whole-part skip all behave as before. Only multi-region
+    bundles produce multiple ``is_default=False`` clusters.
+
+    Pure function — returns a new Design with ``cluster_transforms`` set. A
+    no-op (returns ``design`` unchanged) if clusters already exist or there are
+    no clusterable helices. Adjacency uses canonical crossover neighbours; a
+    fresh bundle carries no crossovers or forced ligations, so this is pure
+    lattice adjacency.
+    """
+    if design.cluster_transforms or not design.helices:
+        return design
+    from backend.core.models import ClusterRigidTransform
+    from backend.core.crossover_positions import crossover_neighbor
+    from backend.core.constants import HC_CROSSOVER_PERIOD, SQ_CROSSOVER_PERIOD
+
+    ref_ids = design.reference_helix_ids()
+    gridded = [h for h in design.helices
+               if h.grid_pos is not None and h.id not in ref_ids]
+    if not gridded:
+        return design  # nothing clusterable; _ensure_default_cluster handles it
+
+    cell_to_id: dict[tuple[int, int], str] = {
+        (h.grid_pos[0], h.grid_pos[1]): h.id for h in gridded
+    }
+    helix_ids = {h.id for h in gridded}
+    period = (HC_CROSSOVER_PERIOD if design.lattice_type == LatticeType.HONEYCOMB
+              else SQ_CROSSOVER_PERIOD)
+
+    adj: dict[str, set[str]] = {hid: set() for hid in helix_ids}
+    for h in gridded:
+        row, col = h.grid_pos
+        for is_scaf in (False, True):
+            for idx in range(period):
+                nb = crossover_neighbor(design.lattice_type, row, col, idx, is_scaffold=is_scaf)
+                if nb is not None and nb in cell_to_id:
+                    nb_id = cell_to_id[nb]
+                    if nb_id != h.id:
+                        adj[h.id].add(nb_id)
+                        adj[nb_id].add(h.id)
+
+    visited: set[str] = set()
+    components: list[list[str]] = []
+    for hid in helix_ids:
+        if hid in visited:
+            continue
+        comp: list[str] = []
+        queue = [hid]
+        visited.add(hid)
+        while queue:
+            cur = queue.pop(0)
+            comp.append(cur)
+            for nb in adj[cur]:
+                if nb not in visited:
+                    visited.add(nb)
+                    queue.append(nb)
+        components.append(sorted(comp))
+
+    # One connected region → leave clusters empty so the downstream
+    # _ensure_default_cluster builds the single is_default umbrella, exactly as
+    # before (preserves deformation/assembly/hull fallback behaviour).
+    if len(components) <= 1:
+        return design
+
+    components.sort(key=lambda c: c[0])
+    clusters = [
+        ClusterRigidTransform(name=f"Cluster {n}", is_default=False, helix_ids=hids)
+        for n, hids in enumerate(components, start=1)
+    ]
+    return design.copy_with(cluster_transforms=clusters)
 
 
 def _cluster_by_lattice_neighbors(design: Design) -> Design:
@@ -1946,6 +2040,12 @@ def _topology_diff_field(prev: 'Design', new: 'Design') -> str | None:
     if prev.forced_ligations != new.forced_ligations: return "forced_ligations"
     if prev.photoproduct_junctions != new.photoproduct_junctions: return "photoproduct_junctions"
     if prev.deformations != new.deformations: return "deformations"
+    # Flexible-segment marks change per-bead `is_flexible_segment` (which beads
+    # render rigid vs. as a bowed arc) and carve the helix axis — the
+    # positions_only fast path ships neither, so force full geometry. Without
+    # this, undo/redo/seek of a mark leaves beads excluded with a stale flag and
+    # no arc → the segment vanishes.
+    if prev.flexible_segment_marks != new.flexible_segment_marks: return "flexible_segment_marks"
     return None
 
 
@@ -2206,6 +2306,13 @@ def _design_replace_response(
         # Tag with the rejecting field so the frontend perf log shows
         # why positions_only didn't fire (e.g. path:full_geometry_strands).
         trace._steps.append((f"path:full_geometry_{diff_field}", 0.0))
+    if diff_field == "flexible_segment_marks":
+        # The compact deformed arrays omit per-nuc metadata, but the per-bead
+        # `is_flexible_segment` flag MUST refresh so beads re-classify (rigid vs.
+        # bowed arc) on undo/redo/seek. Ship the per-nuc form so it's included.
+        return _design_response_with_geometry(
+            design, report, embed_straight=True, compact_deformed=False,
+        )
     # embed_straight=True bundles the straight (un-deformed) geometry into
     # the same response, so deform_view doesn't have to fire a second
     # ~5-second `/design/geometry?apply_deformations=false` round-trip
@@ -2465,7 +2572,7 @@ def create_bundle(body: BundleRequest) -> dict:
         op_kind='bundle-create',
         label=f'Create bundle: {body.name}',
         params=body.model_dump(mode='json'),
-        fn=lambda _d: _build_bundle(cells, body),
+        fn=lambda _d: _cluster_bundle_regions(_build_bundle(cells, body)),
     )
     return _design_response(new_design, report)
 
@@ -12894,6 +13001,136 @@ def delete_cluster(cluster_id: str) -> dict:
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
+
+
+# ── Flexible ssDNA segments (pose & explore mechanisms) ──────────────────────
+#
+# Mark a contiguous run of UNPAIRED (ssDNA) beads as a flexible tether. Each
+# marked run bridging two EXISTING clusters becomes a fixed-contour-length
+# connection. The rigid arms are the user's own clusters; the move/rotate tool's
+# "ssDNA constrained" mode then lets one cluster be dragged free-until-taut. The
+# segment renders as a geometric arc. Display-layer only — NEVER mutates topology.
+# See backend/core/flexible_segments.py + memory/project_ssdna_ball_joints.md.
+
+
+class FlexibleSegmentMarkBody(BaseModel):
+    strand_id: str
+    domain_index: int
+    bp_index: int
+    direction: Literal["FORWARD", "REVERSE"]
+
+
+class FlexibleSegmentBatchBody(BaseModel):
+    """Mark an explicit list of unpaired beads (selective — no 'mark all ssDNA').
+    ``replace`` clears existing marks first (default appends)."""
+    marks: Optional[list[FlexibleSegmentMarkBody]] = None
+    replace: bool = False
+
+
+def _flex_mark_from_body(design: Design, b: FlexibleSegmentMarkBody, unpaired=None):
+    """Validate that the addressed bead is UNPAIRED (no Watson-Crick partner) and
+    return a FlexibleSegmentMark. Pass a precomputed *unpaired* set for batches."""
+    from backend.core.flexible_segments import unpaired_bead_keys
+    from backend.core.models import FlexibleSegmentMark, Direction
+    s = next((s for s in design.strands if s.id == b.strand_id), None)
+    if s is None:
+        raise HTTPException(404, detail=f"Strand {b.strand_id!r} not found.")
+    if not (0 <= b.domain_index < len(s.domains)):
+        raise HTTPException(400, detail="domain_index out of range.")
+    d = s.domains[b.domain_index]
+    lo, hi = min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp)
+    if not (lo <= b.bp_index <= hi):
+        raise HTTPException(400, detail="bp_index outside the domain's range.")
+    if unpaired is None:
+        unpaired = unpaired_bead_keys(design)
+    if (d.helix_id, b.bp_index, Direction(b.direction)) not in unpaired:
+        raise HTTPException(400, detail="Only unpaired (single-stranded) beads can be flexible.")
+    return FlexibleSegmentMark(strand_id=b.strand_id, domain_index=b.domain_index,
+                               bp_index=b.bp_index, direction=Direction(b.direction))
+
+
+def _flex_log_response(op_kind, label, params, fn):
+    """Apply a flexible-segment mutation through the feature log (revertable +
+    deletable like other snapshot ops), then ship full geometry so beads
+    reclassify out of the rigid meshes and arcs/axis update."""
+    updated, validation, _entry = design_state.mutate_with_feature_log(op_kind, label, params, fn)
+    return _design_response_with_geometry(updated, validation)
+
+
+@router.post("/design/flexible-segment", status_code=200)
+def add_flexible_segment(body: FlexibleSegmentMarkBody) -> dict:
+    """Mark one unpaired bead flexible and re-derive connections. Feature-log step."""
+    from backend.core.flexible_segments import apply_marks
+    mark = _flex_mark_from_body(design_state.get_or_404(), body)  # validates unpaired
+
+    def fn(d: Design) -> Design:
+        return apply_marks(d.copy_with(flexible_segment_marks=list(d.flexible_segment_marks) + [mark]))
+
+    return _flex_log_response('flexible-segment-mark', 'Mark flexible ssDNA',
+                              {'mark_ids': [mark.id]}, fn)
+
+
+@router.delete("/design/flexible-segment/{mark_id}", status_code=200)
+def delete_flexible_segment(mark_id: str) -> dict:
+    """Remove a flexible-segment mark and re-derive connections. Feature-log step."""
+    from backend.core.flexible_segments import apply_marks
+    design = design_state.get_or_404()
+    if not any(m.id == mark_id for m in design.flexible_segment_marks):
+        raise HTTPException(404, detail=f"Flexible-segment mark {mark_id!r} not found.")
+
+    def fn(d: Design) -> Design:
+        marks = [m for m in d.flexible_segment_marks if m.id != mark_id]
+        return apply_marks(d.copy_with(flexible_segment_marks=marks))
+
+    return _flex_log_response('flexible-segment-unmark', 'Unmark flexible ssDNA',
+                              {'mark_ids': [mark_id]}, fn)
+
+
+@router.post("/design/flexible-segment/batch", status_code=200)
+def batch_flexible_segment(body: FlexibleSegmentBatchBody) -> dict:
+    """Mark an explicit list of unpaired beads flexible, re-derive once. Feature-log
+    step. ``replace=True`` with no marks clears all flexible segments."""
+    from backend.core.flexible_segments import apply_marks, unpaired_bead_keys
+    from backend.core.models import FlexibleSegmentMark
+    design = design_state.get_or_404()
+
+    new_marks: list[FlexibleSegmentMark] = []
+    if body.marks:
+        unpaired = unpaired_bead_keys(design)
+        for mb in body.marks:
+            new_marks.append(_flex_mark_from_body(design, mb, unpaired))
+    if not new_marks and not body.replace:
+        raise HTTPException(400, detail="No marks supplied (use marks=[...] or replace=true to clear).")
+
+    def fn(d: Design) -> Design:
+        existing = [] if body.replace else list(d.flexible_segment_marks)
+        seen, merged = set(), []
+        for m in existing + new_marks:
+            kdup = (m.strand_id, m.domain_index, m.bp_index, m.direction)
+            if kdup in seen:
+                continue
+            seen.add(kdup)
+            merged.append(m)
+        return apply_marks(d.copy_with(flexible_segment_marks=merged))
+
+    is_clear = body.replace and not new_marks
+    op_kind = 'flexible-segment-unmark' if is_clear else 'flexible-segment-mark'
+    label = ('Clear flexible ssDNA' if is_clear
+             else f'Mark flexible ssDNA ({len(new_marks)} base{"" if len(new_marks) == 1 else "s"})')
+    return _flex_log_response(op_kind, label, {'n_marks': len(new_marks), 'replace': body.replace}, fn)
+
+
+@router.get("/design/flexible-connections", status_code=200)
+def get_flexible_connections() -> dict:
+    """Derived flexible connections + per-cluster gate (no mutation). The gate
+    tells the frontend which clusters can use 'ssDNA constrained' drag."""
+    from backend.core.flexible_segments import all_cluster_gates
+    design = design_state.get_or_404()
+    return {
+        "connections": [c.model_dump() for c in design.flexible_connections],
+        "gates": all_cluster_gates(design),
+        "n_marks": len(design.flexible_segment_marks),
+    }
 
 
 @router.post("/design/cluster/{cluster_id}/begin-drag", status_code=200)

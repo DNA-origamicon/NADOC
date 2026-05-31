@@ -317,11 +317,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     && typeof nuc.helix_id === 'string'
     && nuc.helix_id.startsWith('__lnk__')
 
+  // Beads marked as a flexible ssDNA segment are excluded from the rigid bead
+  // meshes (they don't follow their helix's cluster); overhang_link_arcs.js
+  // draws them on a fixed-length arc between the live cluster anchors instead.
+  const _isFlexibleSegmentNuc = (nuc) => nuc.is_flexible_segment === true
+
   const byStrand = new Map()
   const byBp     = new Map()
 
   for (const nuc of geometry) {
-    if (_isSsLinkerBridgeNuc(nuc)) continue
+    if (_isSsLinkerBridgeNuc(nuc) || _isFlexibleSegmentNuc(nuc)) continue
     if (nuc.strand_id) {
       if (!byStrand.has(nuc.strand_id)) byStrand.set(nuc.strand_id, [])
       byStrand.get(nuc.strand_id).push(nuc)
@@ -742,7 +747,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // Also exclude ss-linker bridge nucs (see _isSsLinkerBridgeNuc above) so their
   // chord-aligned bead/cone/slab chain doesn't compete with the curved arc that
   // overhang_link_arcs.js renders for ss linkers.
-  const assignedGeometry = geometry.filter(n => n.strand_id && !n.is_modification && !_isSsLinkerBridgeNuc(n))
+  const assignedGeometry = geometry.filter(n => n.strand_id && !n.is_modification && !_isSsLinkerBridgeNuc(n) && !_isFlexibleSegmentNuc(n))
   const fluoroGeometry   = geometry.filter(n => n.is_modification)
   const sphereNucs  = assignedGeometry.filter(n => !n.is_five_prime)
   const cubeNucs    = assignedGeometry.filter(n =>  n.is_five_prime)
