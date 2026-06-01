@@ -1648,6 +1648,20 @@ export async function getFlexibleConnections() {
   return _request('GET', '/design/flexible-connections')
 }
 
+/** Commit a flexible-segment relax: persist the moved-cluster transforms as ONE
+ *  feature-log step (revertable / deletable / single undo). `transforms` =
+ *  [{cluster_id, pivot, translation, rotation}]. */
+export async function relaxFlexibleSegments(transforms, label) {
+  const json = await _request('POST', '/design/flexible-relax', { transforms, label })
+  // The backend applies only cluster_transforms, so the response is classified
+  // cluster_only / positions_only; fall back to the full sync otherwise. Without
+  // one of these, the store's currentDesign (which holds feature_log) never
+  // updates → the relax entry wouldn't appear in the panel and wouldn't persist.
+  if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
+  if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
+  return _syncFromDesignResponse(json)
+}
+
 export async function patchStrand(strandId, { notes, color, sequence } = {}) {
   const body = {}
   if (notes    !== undefined) body.notes    = notes

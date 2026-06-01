@@ -1140,6 +1140,7 @@ SnapshotOpKind = Literal[
     'apply-loop-skips',
     'flexible-segment-mark',
     'flexible-segment-unmark',
+    'flexible-relax',
     'linker-add',
     'linker-delete',
     'assembly-overhang-bind',

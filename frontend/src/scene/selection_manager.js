@@ -1317,6 +1317,11 @@ function _showFlexibleSegmentMenu(x, y, nuc, onFlexibleSegmentRightClick) {
   } else {
     menu.appendChild(_menuItem('Mark flexible segment', () => onFlexibleSegmentRightClick?.(nuc, 'mark')))
   }
+  if (marked) {
+    menu.appendChild(_menuSep())
+    menu.appendChild(_menuItem('Relax this segment', () => onFlexibleSegmentRightClick?.(nuc, 'relax_one')))
+    menu.appendChild(_menuItem('Relax all flexible segments', () => onFlexibleSegmentRightClick?.(nuc, 'relax_all')))
+  }
   if (marks.length > 0) {
     menu.appendChild(_menuSep())
     const clear = _menuItem('Clear all flexible segments', () => onFlexibleSegmentRightClick?.(nuc, 'clear'))
@@ -1334,11 +1339,37 @@ function _showFlexibleSegmentMenu(x, y, nuc, onFlexibleSegmentRightClick) {
 function _showFlexibleConnectionMenu(x, y, connId, onFlexibleSegmentRightClick) {
   _dismissMenu()
   const menu = _menuBase(x, y)
+  menu.appendChild(_menuItem('Relax this segment', () => onFlexibleSegmentRightClick?.(null, 'relax_one', connId)))
+  menu.appendChild(_menuItem('Relax all flexible segments', () => onFlexibleSegmentRightClick?.(null, 'relax_all')))
+  menu.appendChild(_menuSep())
   const rm = _menuItem('Unmark as flexible', () => onFlexibleSegmentRightClick?.(null, 'unmark_connection', connId))
   rm.style.color = '#ff6b6b'
   menu.appendChild(rm)
   menu.appendChild(_menuSep())
   menu.appendChild(_menuItem('Clear all flexible segments', () => onFlexibleSegmentRightClick?.(null, 'clear')))
+  document.body.appendChild(menu)
+  _menuEl = menu
+  _menuOutsideListeners(menu)
+}
+
+// Right-click on a selected cluster (drill `_mode === 'cluster'`) → offer the
+// move/rotate gizmo for that cluster. Mirrors the assembly part-instance menu's
+// "Move / Rotate" entry; the callback owns gizmo attachment in main.js.
+function _showClusterMenu(x, y, clusterId, onClusterMoveRotate) {
+  _dismissMenu()
+  const menu = _menuBase(x, y)
+  const design = store.getState().currentDesign
+  const cluster = design?.cluster_transforms?.find(c => c.id === clusterId)
+  const name = cluster?.name || clusterId?.slice(0, 8) || 'cluster'
+
+  const hdr = document.createElement('div')
+  hdr.textContent = name
+  hdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+    'text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
+  menu.appendChild(hdr)
+
+  menu.appendChild(_menuItem('Move / Rotate', () => onClusterMoveRotate?.(clusterId)))
+
   document.body.appendChild(menu)
   _menuEl = menu
   _menuOutsideListeners(menu)
@@ -1432,7 +1463,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldRightClick?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, isManualSelect, onDrillLevel } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, isManualSelect, onDrillLevel } = opts
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -2927,6 +2958,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
     if (_multiStrandIds.length > 0) {
       _showMultiMenu(e.clientX, e.clientY, _multiStrandIds, designRenderer)
+      return
+    }
+
+    // A cluster is the active selection (click-drill landed on the cluster
+    // level) → offer the move/rotate gizmo for it. Takes priority over the
+    // per-strand color menu so a selected cluster is always actionable.
+    if (_mode === 'cluster' && _drillClusterId && onClusterMoveRotate) {
+      _showClusterMenu(e.clientX, e.clientY, _drillClusterId, onClusterMoveRotate)
       return
     }
 

@@ -7323,6 +7323,12 @@ class _ScaffoldSeqBody(BaseModel):
     strand_id: Optional[str] = None        # target strand (multi-scaffold support)
 
 
+class _StapleScoreBody(BaseModel):
+    temperature_c: float = 50.0
+    staple_conc_m: float = 100.0e-9
+    scaffold_conc_m: float = 10.0e-9
+
+
 class _AutoScaffoldBody(BaseModel):
     seam_tol: int = 5
     end_tol: int = 5
@@ -7557,6 +7563,38 @@ def assign_staple_sequences_endpoint() -> dict:
         raise HTTPException(status_code=422, detail=str(exc))
     updated, report = design_state.set_design_silent_reconciled(updated, design)
     return _design_response(updated, report)
+
+
+@router.post("/design/staples/score", status_code=200)
+def score_staples_endpoint(body: _StapleScoreBody = _StapleScoreBody()) -> dict:
+    """Read-only Aksel-style thermodynamic score report for current staples.
+
+    Requires an assigned scaffold sequence.  The endpoint does not snapshot or
+    mutate the design; it only builds a scaffold-position map and scores the
+    current staple routes.
+    """
+    from backend.core.staple_scoring import score_staples
+
+    if body.staple_conc_m <= 0:
+        raise HTTPException(status_code=422, detail="staple_conc_m must be positive.")
+    if body.scaffold_conc_m <= 0:
+        raise HTTPException(status_code=422, detail="scaffold_conc_m must be positive.")
+    if body.staple_conc_m <= 0.5 * body.scaffold_conc_m:
+        raise HTTPException(
+            status_code=422,
+            detail="staple_conc_m must be greater than half scaffold_conc_m.",
+        )
+
+    design = design_state.get_or_404()
+    try:
+        return score_staples(
+            design,
+            temperature_c=body.temperature_c,
+            staple_conc=body.staple_conc_m,
+            scaffold_conc=body.scaffold_conc_m,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 # ── Overhang random-sequence generation ───────────────────────────────────────
@@ -13054,6 +13092,59 @@ def _flex_log_response(op_kind, label, params, fn):
     deletable like other snapshot ops), then ship full geometry so beads
     reclassify out of the rigid meshes and arcs/axis update."""
     updated, validation, _entry = design_state.mutate_with_feature_log(op_kind, label, params, fn)
+    return _design_response_with_geometry(updated, validation)
+
+
+class FlexibleRelaxTransform(BaseModel):
+    """New absolute rigid pose for one cluster, produced by the frontend ssDNA
+    relax solve (same {pivot, translation, rotation} shape as a cluster patch)."""
+    cluster_id: str
+    pivot: list[float]
+    translation: list[float]
+    rotation: list[float]  # quaternion [x, y, z, w]
+
+
+class FlexibleRelaxBody(BaseModel):
+    """Atomic relax commit: apply N cluster transforms as ONE feature-log step.
+
+    The relax minimisation (pull the smaller cluster of each flexible-connected
+    pair in until no tether exceeds its contour length) runs in the frontend on
+    live anchor positions; this endpoint just persists the resulting cluster
+    poses as a single revertable / deletable / undoable operation."""
+    transforms: list[FlexibleRelaxTransform]
+    label: Optional[str] = None
+
+
+@router.post("/design/flexible-relax", status_code=200)
+def flexible_relax(body: FlexibleRelaxBody) -> dict:
+    """Commit a flexible-segment relax: apply all moved-cluster transforms in a
+    single ``mutate_with_feature_log`` step (one SnapshotLogEntry → revertable +
+    deletable + a single undo). Display/pose-layer only — never touches topology."""
+    if not body.transforms:
+        raise HTTPException(400, detail="No cluster transforms provided.")
+    design0 = design_state.get_or_404()
+    known = {c.id for c in design0.cluster_transforms}
+    for t in body.transforms:
+        if t.cluster_id not in known:
+            raise HTTPException(404, detail=f"Cluster {t.cluster_id!r} not found.")
+
+    def fn(d: Design) -> Design:
+        by_id = {t.cluster_id: t for t in body.transforms}
+        cts = [
+            c.model_copy(update={
+                "pivot": list(by_id[c.id].pivot),
+                "translation": list(by_id[c.id].translation),
+                "rotation": list(by_id[c.id].rotation),
+            }) if c.id in by_id else c
+            for c in d.cluster_transforms
+        ]
+        return d.copy_with(cluster_transforms=cts)
+
+    n = len(body.transforms)
+    label = body.label or ("Relax flexible segment" if n == 1 else "Relax flexible segments")
+    params = {"cluster_ids": [t.cluster_id for t in body.transforms]}
+    updated, validation, _entry = design_state.mutate_with_feature_log(
+        'flexible-relax', label, params, fn)
     return _design_response_with_geometry(updated, validation)
 
 

@@ -270,6 +270,103 @@ def test_api_batch_then_connections_then_clear():
     assert info["n_marks"] == 0
 
 
+# ── Relax commit (one atomic, revertable/deletable/undoable feature-log step) ──
+
+def _ct(design, cid):
+    return next(c for c in design.cluster_transforms if c.id == cid)
+
+
+def test_api_relax_applies_transforms_one_feature_log_entry():
+    design_state.set_design(_hinge_design())
+    n0 = len(design_state.get_or_404().feature_log)
+    r = client.post("/api/design/flexible-relax", json={
+        "transforms": [{"cluster_id": "cl_a", "pivot": [0, 0, 0],
+                        "translation": [1.0, 2.0, 3.0], "rotation": [0, 0, 0, 1]}],
+        "label": "Relax flexible segment"})
+    assert r.status_code == 200, r.text
+    d = design_state.get_or_404()
+    # Transform applied, the OTHER cluster untouched.
+    assert _ct(d, "cl_a").translation == [1.0, 2.0, 3.0]
+    assert _ct(d, "cl_b").translation == [0.0, 0.0, 0.0]
+    # Exactly one new feature-log entry of the right kind.
+    log = d.feature_log
+    assert len(log) == n0 + 1
+    entry = log[-1].model_dump()
+    assert entry["feature_type"] == "snapshot"
+    assert entry["op_kind"] == "flexible-relax"
+
+
+def test_api_relax_is_revertable():
+    design_state.set_design(_hinge_design())
+    n0 = len(design_state.get_or_404().feature_log)
+    client.post("/api/design/flexible-relax", json={
+        "transforms": [{"cluster_id": "cl_a", "pivot": [0, 0, 0],
+                        "translation": [5.0, 0.0, 0.0], "rotation": [0, 0, 0, 1]}]})
+    assert _ct(design_state.get_or_404(), "cl_a").translation == [5.0, 0.0, 0.0]
+    rr = client.post(f"/api/design/features/{n0}/revert")
+    assert rr.status_code == 200, rr.text
+    assert _ct(design_state.get_or_404(), "cl_a").translation == [0.0, 0.0, 0.0]
+
+
+def test_api_relax_is_deletable_keeps_state():
+    design_state.set_design(_hinge_design())
+    n0 = len(design_state.get_or_404().feature_log)
+    client.post("/api/design/flexible-relax", json={
+        "transforms": [{"cluster_id": "cl_a", "pivot": [0, 0, 0],
+                        "translation": [5.0, 0.0, 0.0], "rotation": [0, 0, 0, 1]}]})
+    rd = client.delete(f"/api/design/features/{n0}")
+    assert rd.status_code == 200, rd.text
+    d = design_state.get_or_404()
+    # Row forgotten, but the relaxed pose is kept (app-wide delete convention).
+    assert len(d.feature_log) == n0
+    assert _ct(d, "cl_a").translation == [5.0, 0.0, 0.0]
+
+
+def test_api_relax_undo_redo():
+    design_state.set_design(_hinge_design())
+    client.post("/api/design/flexible-relax", json={
+        "transforms": [{"cluster_id": "cl_a", "pivot": [0, 0, 0],
+                        "translation": [7.0, 0.0, 0.0], "rotation": [0, 0, 0, 1]}]})
+    assert _ct(design_state.get_or_404(), "cl_a").translation == [7.0, 0.0, 0.0]
+    assert client.post("/api/design/undo").status_code == 200
+    assert _ct(design_state.get_or_404(), "cl_a").translation == [0.0, 0.0, 0.0]
+    assert client.post("/api/design/redo").status_code == 200
+    assert _ct(design_state.get_or_404(), "cl_a").translation == [7.0, 0.0, 0.0]
+
+
+def test_api_relax_multi_cluster_single_entry_single_undo():
+    design_state.set_design(_hinge_design())
+    n0 = len(design_state.get_or_404().feature_log)
+    r = client.post("/api/design/flexible-relax", json={
+        "transforms": [
+            {"cluster_id": "cl_a", "pivot": [0, 0, 0], "translation": [1.0, 0, 0], "rotation": [0, 0, 0, 1]},
+            {"cluster_id": "cl_b", "pivot": [0, 0, 0], "translation": [0, 1.0, 0], "rotation": [0, 0, 0, 1]},
+        ], "label": "Relax all flexible segments"})
+    assert r.status_code == 200, r.text
+    d = design_state.get_or_404()
+    assert _ct(d, "cl_a").translation == [1.0, 0.0, 0.0]
+    assert _ct(d, "cl_b").translation == [0.0, 1.0, 0.0]
+    # Two clusters moved, but ONE feature-log entry and ONE undo reverses both.
+    assert len(d.feature_log) == n0 + 1
+    assert client.post("/api/design/undo").status_code == 200
+    d2 = design_state.get_or_404()
+    assert _ct(d2, "cl_a").translation == [0.0, 0.0, 0.0]
+    assert _ct(d2, "cl_b").translation == [0.0, 0.0, 0.0]
+
+
+def test_api_relax_unknown_cluster_404():
+    design_state.set_design(_hinge_design())
+    r = client.post("/api/design/flexible-relax", json={
+        "transforms": [{"cluster_id": "nope", "pivot": [0, 0, 0],
+                        "translation": [1, 0, 0], "rotation": [0, 0, 0, 1]}]})
+    assert r.status_code == 404
+
+
+def test_api_relax_empty_400():
+    design_state.set_design(_hinge_design())
+    assert client.post("/api/design/flexible-relax", json={"transforms": []}).status_code == 400
+
+
 # ── Real design (the worked example) ───────────────────────────────────────────
 
 _MINI = "workspace/mini_hinge.nadoc"

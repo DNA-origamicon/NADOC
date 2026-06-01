@@ -189,6 +189,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   let _ssConstraints   = null
   let _resolveSsWorldPos = null
   let _ssArmed         = null
+  let _ssTranslateOnly = false       // relax: when true, skip the rotation pass
   const _pendingTransforms = new Map()  // clusterId -> { pivot, translation, rotation }
 
   // ── Axis-ring state ─────────────────────────────────────────────────────────
@@ -843,7 +844,10 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
         nViol++
       }
       if (nViol === 0) break
-      if (sumR2 > 1e-6) {
+      // Relax with a single flexible region (or caller-forced translate-only):
+      // a lone tether has no rotation basis, so the cluster should slide straight
+      // toward the fixed anchor rather than swing about the pivot.
+      if (!_ssTranslateOnly && sumR2 > 1e-6) {
         const rv = s.torque.multiplyScalar(_SS_GAIN / sumR2)
         let angle = rv.length()
         if (angle > 1e-9) {
@@ -867,6 +871,125 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       }
       if (nT > 0) _dummy.position.addScaledVector(s.dT, _SS_GAIN / nT)
     }
+  }
+
+  // Largest amount (nm) by which any armed tether exceeds its contour length at
+  // the current candidate pose. 0 = no tether overstretched (fully relaxed).
+  function _maxSsViolation() {
+    if (!_ssArmed?.length) return 0
+    let m = 0
+    for (const t of _ssArmed) {
+      const pM = _ssCandidatePos(t.pM0, _ssScratch.pM)
+      const d = pM.distanceTo(t.pF) - t.contour
+      if (d > m) m = d
+    }
+    return m
+  }
+
+  const _SS_RELAX_EPS   = 1e-3   // nm — converged when max violation below this
+  const _SS_RELAX_OUTER = 80     // outer iterations (each runs _SS_ITERS internally)
+
+  /**
+   * Headless ssDNA relax for the currently-attached cluster: run the same
+   * position-based projection used by the constrained drag, but from the cluster's
+   * CURRENT pose and to convergence, then paint + queue the resulting transform as
+   * a pending transform (caller commits via the normal confirm path). Mirrors a
+   * drag-start → change → end sequence with no pointer interaction.
+   *
+   * @param {object}   opts
+   * @param {Array}    opts.connections     [{ movingKey, fixedKey, contour }]
+   * @param {Function} opts.resolveWorldPos (key) → THREE.Vector3 | null
+   * @param {boolean}  [opts.translateOnly] true → slide only (single flexible region)
+   * @returns {{ moved: boolean, residual: number }}
+   */
+  function relaxSsdna({ connections, resolveWorldPos, translateOnly = false } = {}) {
+    if (!_clusterId || !_dummy || !_pivot || !connections?.length || !resolveWorldPos) {
+      return { moved: false, residual: 0 }
+    }
+    _constraintType    = 'ssdna'
+    _ssConstraints     = connections
+    _resolveSsWorldPos = resolveWorldPos
+    _ssTranslateOnly   = translateOnly
+
+    // Snapshot base rendered positions BEFORE moving the dummy (= drag-start).
+    if (captureBase) {
+      const { currentDesign } = store.getState()
+      const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
+      if (cl) captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null)
+    }
+    _startDummyPos = _dummy.position.clone()
+    _startQuat     = _dummy.quaternion.clone()
+    _incrQuat.identity()
+
+    // Arm tethers from current live anchor world positions.
+    _ssArmed = []
+    for (const c of connections) {
+      const pM0 = resolveWorldPos(c.movingKey)
+      const pF  = resolveWorldPos(c.fixedKey)
+      if (pM0 && pF) _ssArmed.push({ pM0: pM0.clone(), pF: pF.clone(), contour: c.contour })
+    }
+    if (!_ssArmed.length || _maxSsViolation() <= _SS_RELAX_EPS) {
+      _ssTranslateOnly = false
+      return { moved: false, residual: _maxSsViolation() }
+    }
+
+    for (let k = 0; k < _SS_RELAX_OUTER && _maxSsViolation() > _SS_RELAX_EPS; k++) {
+      _projectSsdnaConstraints()
+    }
+    const residual = _maxSsViolation()
+    _ssTranslateOnly = false
+
+    // Paint the moved geometry + flag dirty + update the panel (= drag 'change').
+    _incrQuat.copy(_dummy.quaternion).multiply(_startQuat.clone().invert())
+    const { currentDesign } = store.getState()
+    const cl = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
+    if (cl && onLiveTransform) {
+      onLiveTransform(cl.helix_ids, _startDummyPos, _dummy.position, _incrQuat,
+        cl.domain_ids?.length ? cl.domain_ids : null)
+    }
+    if (onTransformUpdate) {
+      const [px, py, pz] = _pivot
+      const p = _dummy.position
+      onTransformUpdate([p.x - px, p.y - py, p.z - pz], _dummy.quaternion)
+    }
+    _recordCurrentTransform()
+    return { moved: true, residual }
+  }
+
+  /**
+   * Headless relax for an UN-attached cluster (no gizmo widget, no scene object):
+   * set up the transform frame from the cluster's current + pending transform, then
+   * run {@link relaxSsdna}. Used by the Relax command to solve each flexible-connected
+   * pair without opening the move/rotate tool. The resulting transform is queued as a
+   * pending transform (read it back via {@link getAllPendingTransforms}); the caller
+   * commits all of them atomically through the flexible-relax endpoint.
+   *
+   * @param {string} clusterId
+   * @param {object} payload  { connections, resolveWorldPos, translateOnly }
+   * @returns {{ moved: boolean, residual: number }}
+   */
+  function relaxClusterHeadless(clusterId, payload = {}) {
+    const { currentDesign } = store.getState()
+    const cluster = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === clusterId))
+    if (!cluster) return { moved: false, residual: 0 }
+    _clusterId = clusterId
+    _pivot     = [...cluster.pivot]
+    _dummy     = new THREE.Object3D()   // math frame only — NOT added to the scene
+    const [tx, ty, tz] = cluster.translation
+    const [px, py, pz] = cluster.pivot
+    _dummy.position.set(px + tx, py + ty, pz + tz)
+    _dummy.quaternion.set(...cluster.rotation)
+    return relaxSsdna(payload)
+  }
+
+  /** All queued pending transforms as [{clusterId, pivot, translation, rotation}]. */
+  function getAllPendingTransforms() {
+    return [..._pendingTransforms.entries()].map(([clusterId, t]) => ({
+      clusterId,
+      pivot:       [...t.pivot],
+      translation: [...t.translation],
+      rotation:    [...t.rotation],
+    }))
   }
 
   /**
@@ -1095,6 +1218,8 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     setTransform,
     setJointRotation,
     setConstraint,
+    relaxClusterHeadless,
+    getAllPendingTransforms,
     setPendingTransform,
     hasPendingTransform,
     getPendingTransform,
