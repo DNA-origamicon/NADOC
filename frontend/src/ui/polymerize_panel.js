@@ -44,7 +44,7 @@ const PANEL_HTML = `
     <input type="number" id="poly-count" min="2" value="3" style="width:60px">
     <span class="unit" style="font-size:var(--text-xs);color:#8b949e;margin-left:4px">total</span>
   </div>
-  <div style="font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin:6px 0 2px">Direction</div>
+  <div id="poly-direction-label" style="font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin:6px 0 2px">Direction</div>
   <div id="poly-direction" style="display:flex;gap:10px;margin-bottom:10px;font-size:var(--text-xs)">
     <label><input type="radio" name="poly-dir" value="forward" checked> Forward</label>
     <label><input type="radio" name="poly-dir" value="backward"> Backward</label>
@@ -72,7 +72,7 @@ const PANEL_HTML = `
   <div id="poly-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:16px"></div>
 `
 
-export function initPolymerizePanel(store, { isInstancePeriodic } = {}) {
+export function initPolymerizePanel(store, { isInstancePeriodic, getBeltFillCount, onPolymerizeBelt } = {}) {
   // ── Build panel DOM and mount below #properties-section ────────────────────
   const panel = document.createElement('div')
   panel.id = 'polymerize-panel'
@@ -118,6 +118,10 @@ export function initPolymerizePanel(store, { isInstancePeriodic } = {}) {
   // grows from this single instance via POST /assembly/polymerize-periodic
   // (no mate). Mutually exclusive with _selectedJointId.
   let _periodicInstanceId  = null
+  // When set, a belt-rider seed is selected: repeat it around the belt loop via
+  // onPolymerizeBelt. Mutually exclusive with _selectedJointId/_periodicInstanceId.
+  let _beltRiderId         = null
+  let _beltCountPrefilled  = false   // so we pre-fill the auto count only once per selection
   // Set of instance ids the user wants to clone alongside the seed pair.
   let _additionalSelected  = new Set()
 
@@ -229,18 +233,64 @@ export function initPolymerizePanel(store, { isInstancePeriodic } = {}) {
       opt.textContent = `${inst.name} — via periodic boundary`
       mateSelect.appendChild(opt)
     }
+    // Belt riders: one entry each — repeat the part around the belt loop.
+    const beltById = Object.fromEntries((assembly?.belt_paths ?? []).map(b => [b.id, b]))
+    const riders = assembly?.belt_riders ?? []
+    if (riders.length) mateSelect.disabled = false
+    for (const r of riders) {
+      const part = instById[r.instance_id]
+      const belt = beltById[r.belt_path_id]
+      const opt = document.createElement('option')
+      opt.value = `beltrider:${r.id}`
+      opt.textContent = `${part?.name ?? 'part'} on ${belt?.name ?? 'belt'} — around belt loop`
+      mateSelect.appendChild(opt)
+    }
     const valid = prev && (
       joints.some(j => j.id === prev) ||
-      (prev.startsWith('periodic:') && periodic.some(i => `periodic:${i.id}` === prev))
+      (prev.startsWith('periodic:') && periodic.some(i => `periodic:${i.id}` === prev)) ||
+      (prev.startsWith('beltrider:') && riders.some(r => `beltrider:${r.id}` === prev))
     )
     mateSelect.value = valid ? prev : ''
   }
+
+  // Direction radios + their label — hidden in belt mode (a closed loop has no
+  // forward/backward; copies are distributed evenly around it).
+  const dirSectionEls = () => [panel.querySelector('#poly-direction'), panel.querySelector('#poly-direction-label')]
 
   function _renderStateFromStore() {
     if (!_open) return
     const state    = store.getState()
     const assembly = state.currentAssembly
     _rebuildMateDropdown(assembly)
+
+    // ── Belt-loop mode (seed = a belt rider) ─────────────────────────────────
+    if (_beltRiderId) {
+      patternSectionEl.style.display = 'none'
+      for (const el of dirSectionEls()) if (el) el.style.display = 'none'
+      const fill = getBeltFillCount?.(_beltRiderId)
+      if (!fill) {
+        selectionEl.style.color = '#f85149'
+        selectionEl.textContent = 'Belt rider unavailable — re-attach the part, then try again.'
+        eligibilityEl.textContent = ''
+        goBtn.disabled = true
+        costPreviewEl.textContent = ''
+        return
+      }
+      // Pre-fill the count with the auto edge-to-edge fill (once per selection).
+      if (!_beltCountPrefilled) { countInput.value = String(fill.count); _beltCountPrefilled = true }
+      selectionEl.style.color = '#8b949e'
+      selectionEl.textContent = 'Repeat this part around the belt loop.'
+      eligibilityEl.style.color = '#3fb950'
+      eligibilityEl.textContent =
+        `✓ Auto: ${fill.count} copies fill the loop edge-to-edge (spacing ≈ ${fill.spacingNm.toFixed(1)} nm). Adjust count if needed.`
+      goBtn.disabled = false
+      const n = Math.max(2, parseInt(countInput.value, 10) || 2)
+      costPreviewEl.style.color = 'var(--color-text-muted)'
+      costPreviewEl.textContent = `Projected: ${n - 1} new instance${n - 1 === 1 ? '' : 's'} (chain of ${n} around the loop).`
+      closureEl.style.display = 'none'
+      return
+    }
+    for (const el of dirSectionEls()) if (el) el.style.display = ''
 
     // ── Periodic-part mode (no mate) ─────────────────────────────────────────
     if (_periodicInstanceId) {
@@ -308,12 +358,16 @@ export function initPolymerizePanel(store, { isInstancePeriodic } = {}) {
 
   mateSelect.addEventListener('change', () => {
     const v = mateSelect.value || ''
+    _periodicInstanceId = null
+    _selectedJointId = null
+    _beltRiderId = null
     if (v.startsWith('periodic:')) {
       _periodicInstanceId = v.slice('periodic:'.length)
-      _selectedJointId = null
+    } else if (v.startsWith('beltrider:')) {
+      _beltRiderId = v.slice('beltrider:'.length)
+      _beltCountPrefilled = false
     } else {
       _selectedJointId = v || null
-      _periodicInstanceId = null
     }
     // Selecting a different mate clears the pattern checklist — the
     // candidate set changes when the seed pair changes.
@@ -397,7 +451,7 @@ export function initPolymerizePanel(store, { isInstancePeriodic } = {}) {
     }
   })
 
-  countInput.addEventListener('input', _updateCostPreview)
+  countInput.addEventListener('input', () => { if (_beltRiderId) _renderStateFromStore(); else _updateCostPreview() })
   panel.querySelectorAll('input[name="poly-dir"]').forEach(r =>
     r.addEventListener('change', _updateCostPreview),
   )
@@ -429,6 +483,28 @@ export function initPolymerizePanel(store, { isInstancePeriodic } = {}) {
   goBtn.addEventListener('click', async () => {
     const count     = Math.max(2, parseInt(countInput.value, 10) || 2)
     const direction = panel.querySelector('input[name="poly-dir"]:checked')?.value || 'forward'
+
+    // ── Belt-loop path: repeat the seed rider around the belt ────────────────
+    if (_beltRiderId) {
+      if ((count - 1) >= 20) {
+        const ok = await showConfirm({
+          title: 'Large polymerize',
+          message: `This will add ${count - 1} new part instances around the belt loop.`,
+          confirmLabel: 'Polymerize',
+        })
+        if (!ok) return
+      }
+      goBtn.disabled = true
+      statusEl.style.color = '#8b949e'
+      statusEl.textContent = `Polymerizing ${count} copies around the belt…`
+      await onPolymerizeBelt?.(_beltRiderId, count)
+      const err = store.getState().lastError
+      if (err?.message) { statusEl.style.color = '#f85149'; statusEl.textContent = err.message }
+      else { statusEl.style.color = '#3fb950'; statusEl.textContent = `Polymerized ${count} copies around the belt.` }
+      goBtn.disabled = false
+      _renderStateFromStore()
+      return
+    }
 
     // ── Periodic path: single seed, no mate ──────────────────────────────────
     if (_periodicInstanceId) {
@@ -503,6 +579,8 @@ export function initPolymerizePanel(store, { isInstancePeriodic } = {}) {
     _open = true
     _selectedJointId = null
     _periodicInstanceId = opts?.periodicInstanceId || null
+    _beltRiderId = null
+    _beltCountPrefilled = false
     statusEl.textContent = ''
     panel.style.display = ''
     _renderStateFromStore()
@@ -514,6 +592,7 @@ export function initPolymerizePanel(store, { isInstancePeriodic } = {}) {
     _open = false
     _selectedJointId = null
     _periodicInstanceId = null
+    _beltRiderId = null
     panel.style.display = 'none'
     document.removeEventListener('keydown', _onKey)
   }
@@ -528,6 +607,7 @@ export function initPolymerizePanel(store, { isInstancePeriodic } = {}) {
     if (!_open) return
     _selectedJointId = jointId
     _periodicInstanceId = null
+    _beltRiderId = null
     statusEl.textContent = ''
     _renderStateFromStore()
   }

@@ -41,6 +41,8 @@ import {
   MIN_HC_FACES, MIN_SQ_FACES,
 } from './joint_renderer.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
+import { createBeltPreviewLayer } from './belt_preview_layer.js'
+import { beltCurvePoints, nearestArcParam, seatTransform, beltFrameAt } from './belt_geometry.js'
 
 // ── Joint indicator geometry constants ───────────────────────────────────────
 const SHAFT_R   = 0.13
@@ -164,10 +166,9 @@ function _buildIndicator(origin, direction, broken = false) {
   cone.renderOrder = 9999
   group.add(cone)
 
-  // Gold ring removed: rotation is driven exclusively through the
-  // TransformControls gizmo's 1-DOF rotate handle (applyConstraint in
-  // main.js sets axis + showZ-only). The shaft + cone above remain as a
-  // visual indicator of the revolute axis.
+  // Rotation is driven via the TransformControls gizmo (screen-space scaled, so
+  // usable on large pulleys); the fixed-size world-space ring was impractical at
+  // part scale. The shaft + cone remain as a visual indicator of the axis.
 
   group.quaternion.copy(q)
   group.position.copy(new THREE.Vector3(...origin)).addScaledVector(ax, HALF_LEN)
@@ -283,6 +284,464 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
   scene.add(_jointGroup)
   scene.add(_connectorGroup)
   scene.add(_bluntConnGroup)
+
+  // ── Belt-path define mode ─────────────────────────────────────────────────
+  // Owns the glowing belt preview tube plus an interactive two-phase picker:
+  //   phase 'joint' → emphasized green revolute markers; click one to pick a pulley.
+  //   phase 'rim'   → a preview circle follows the mouse from the picked axis;
+  //                   click a rim connector to lock the radius.
+  // The belt panel holds the A/B + rim state machine and calls beltSetPhase().
+  // Display-only — never touches topology.
+  const _beltPreview = createBeltPreviewLayer(scene)
+  let _beltMode      = false
+  let _beltPhase     = 'idle'          // 'idle' | 'joint' | 'rim'
+  let _beltCallbacks = null            // { onJointPick, onRimPick, onCancel }
+  let _beltRimCtx    = null            // { center: Vector3, axisDir: Vector3, instanceId }
+  // Locked rim geometry + selected connector key per pulley; persist until the
+  // panel closes (Create/Apply/Cancel) so both circles stay drawn.
+  const _beltLocked   = { a: null, b: null }  // { center: Vector3, axisDir: Vector3, radius }
+  const _beltSelConn  = { a: null, b: null }  // selected rim connector key (highlighted)
+  let _beltHoverConn  = null                  // hovered rim connector key (snap candidate)
+  const _BELT_SNAP_DIST = 4.0                 // nm: snap circle to a connector within this of the cursor
+  const _beltMarkerGroup = new THREE.Group()
+  _beltMarkerGroup.name = 'beltJointMarkers'
+  _beltMarkerGroup.visible = false
+  scene.add(_beltMarkerGroup)
+  const _beltMarkerHits = []           // pickable disc meshes, userData.endpoint
+
+  // Unit-circle lines: one mouse-follow (active rim phase) + one locked per pulley.
+  // Transform (position/quaternion/scale) is updated in place — no geometry churn.
+  // depthTest:false → they draw on top of parts (cylinder / hull-prism reps).
+  function _makeBeltCircleLine(name, opacity) {
+    const N = 64, pts = []
+    for (let i = 0; i <= N; i++) {
+      const t = (i / N) * Math.PI * 2
+      pts.push(new THREE.Vector3(Math.cos(t), Math.sin(t), 0))
+    }
+    const geo  = new THREE.BufferGeometry().setFromPoints(pts)
+    const mat  = new THREE.LineBasicMaterial({ color: 0x3fb950, transparent: true, opacity, depthTest: false, depthWrite: false })
+    const line = new THREE.Line(geo, mat)
+    line.name = name; line.renderOrder = 999; line.frustumCulled = false; line.visible = false
+    scene.add(line)
+    return line
+  }
+  const _beltCircle   = _makeBeltCircleLine('beltRimCircle', 0.95)    // active mouse-follow
+  const _beltCircleA  = _makeBeltCircleLine('beltCircleA', 0.8)       // locked pulley A
+  const _beltCircleB  = _makeBeltCircleLine('beltCircleB', 0.8)       // locked pulley B
+  const _BELT_RING_R = RING_R * 1.5    // emphasized marker radius (50% larger)
+
+  /**
+   * Enumerate the movable endpoints of every revolute joint, for gear/belt
+   * pulley dropdowns. Returns [{ jointId, instanceId, side, text }].
+   */
+  function enumerateRevoluteEndpoints() {
+    const joints    = store.getState().currentAssembly?.joints ?? []
+    const instances = store.getState().currentAssembly?.instances ?? []
+    const instById  = new Map(instances.map(i => [i.id, i]))
+    const options = []
+    for (const j of joints) {
+      if (j.joint_type !== 'revolute') continue
+      for (const side of ['b', 'a']) {
+        const instanceId = side === 'a' ? j.instance_a_id : j.instance_b_id
+        if (!instanceId) continue
+        const inst = instById.get(instanceId)
+        if (!inst || inst.fixed) continue
+        const otherId = side === 'a' ? j.instance_b_id : j.instance_a_id
+        const other = otherId ? instById.get(otherId) : null
+        options.push({
+          jointId: j.id,
+          instanceId,
+          side,
+          text: `${inst.name ?? instanceId.slice(0, 6)} (${j.name || 'Revolute'} to ${other?.name ?? 'World'})`,
+        })
+      }
+    }
+    return options
+  }
+
+  /** Live read access to the connector data map for the belt panel dropdowns. */
+  function getConnectorDataMap() { return _connectorDataMap }
+
+  function _jointById(id) {
+    return (store.getState().currentAssembly?.joints ?? []).find(j => j.id === id) ?? null
+  }
+  function _axisVecs(joint) {
+    const o = joint.axis_origin ?? [0, 0, 0]
+    const d = joint.axis_direction ?? [0, 0, 1]
+    const dir = new THREE.Vector3(d[0], d[1], d[2])
+    if (dir.lengthSq() < 1e-12) dir.set(0, 0, 1)
+    dir.normalize()
+    return { origin: new THREE.Vector3(o[0], o[1], o[2]), dir }
+  }
+
+  // Rebuild the emphasized revolute markers. One ring per revolute joint at its
+  // axis_origin, oriented in the rotation plane. `excludeJointIds` drops joints
+  // already assigned to a pulley. `emphasized` scales the ring 1.5×.
+  const _Z_AXIS = new THREE.Vector3(0, 0, 1)
+  function _rebuildBeltMarkers({ emphasized = true, excludeJointIds = [] } = {}) {
+    _beltMarkerGroup.traverse(o => { o.geometry?.dispose(); o.material?.dispose() })
+    _beltMarkerGroup.clear()
+    _beltMarkerHits.length = 0
+    const exclude = new Set(excludeJointIds)
+    const seen = new Set()
+    const r = emphasized ? _BELT_RING_R : RING_R
+    for (const ep of enumerateRevoluteEndpoints()) {
+      if (exclude.has(ep.jointId) || seen.has(ep.jointId)) continue
+      seen.add(ep.jointId)
+      const joint = _jointById(ep.jointId)
+      if (!joint) continue
+      const { origin, dir } = _axisVecs(joint)
+      const quat = new THREE.Quaternion().setFromUnitVectors(_Z_AXIS, dir)
+
+      const ringGeo = new THREE.TorusGeometry(r, emphasized ? 0.14 : 0.09, 10, 40)
+      const ringMat = new THREE.MeshBasicMaterial({
+        // depthTest:false → markers stay visible through parts (cylinder / hull reps).
+        color: 0x3fb950, transparent: true, opacity: emphasized ? 0.95 : 0.5,
+        blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
+      })
+      const ring = new THREE.Mesh(ringGeo, ringMat)
+      ring.position.copy(origin); ring.quaternion.copy(quat)
+      ring.renderOrder = 998; ring.frustumCulled = false
+      _beltMarkerGroup.add(ring)
+
+      if (emphasized) {
+        // Invisible disc for forgiving hit-testing (the torus is thin).
+        const discGeo = new THREE.CircleGeometry(r * 1.05, 24)
+        const discMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })
+        const disc = new THREE.Mesh(discGeo, discMat)
+        disc.position.copy(origin); disc.quaternion.copy(quat)
+        disc.userData = { endpoint: { jointId: ep.jointId, instanceId: ep.instanceId, side: ep.side } }
+        _beltMarkerGroup.add(disc)
+        _beltMarkerHits.push(disc)
+      }
+    }
+    _beltMarkerGroup.visible = true
+  }
+
+  // Pulley center (closest point on the joint axis to the connector) + radius.
+  function _pulleyGeom(joint, connWorld) {
+    const { origin, dir } = _axisVecs(joint)
+    const P = new THREE.Vector3(connWorld[0], connWorld[1], connWorld[2])
+    const t = P.clone().sub(origin).dot(dir)
+    const center = origin.clone().addScaledVector(dir, t)
+    return { center, axisDir: dir, radius: P.distanceTo(center) }
+  }
+
+  // Connector visibility + colors during belt mode: show the active rim
+  // instance's connectors plus any already-selected rim connectors (which stay
+  // highlighted until the panel closes). Selected → green, hovered/snap → white.
+  function _refreshBeltConnectors() {
+    const selA = _beltSelConn.a, selB = _beltSelConn.b
+    const activeInst = (_beltPhase === 'rim' && _beltRimCtx) ? _beltRimCtx.instanceId : null
+    for (const m of _connectorMeshes) {
+      const key = `${m.userData.instanceId}::${m.userData.label}`
+      const isSel = key === selA || key === selB
+      const show  = isSel || (activeInst && m.userData.instanceId === activeInst)
+      const grp = m.parent
+      if (grp) grp.visible = !!show
+      m.visible = !!show
+      if (!show) continue
+      const isBend = m.userData.isBendCenter === true
+      const col = isSel ? CONN_PARENT_COL
+        : key === _beltHoverConn ? CONN_HOV_COL
+        : (isBend ? CONN_BEND_CENTER_COL : CONN_COLOUR)
+      if (grp) grp.traverse(o => o.material?.color?.set(col))
+    }
+    _connectorGroup.visible = true
+  }
+
+  function _setBeltCircle(line, center, axisDir, radius) {
+    if (!(radius > 1e-4)) { line.visible = false; return }
+    line.position.copy(center)
+    line.quaternion.setFromUnitVectors(_Z_AXIS, axisDir)
+    line.scale.setScalar(radius)
+    line.visible = true
+  }
+
+  /**
+   * Lock (or clear) a pulley's rim circle + selected-connector highlight. Stays
+   * drawn until the panel closes, so both pulley circles persist until Create.
+   *   geom = { connKey, center:[x,y,z]|Vector3, axisDir:[x,y,z]|Vector3, radius }
+   */
+  function beltSetPulley(which, geom) {
+    const line = which === 'a' ? _beltCircleA : _beltCircleB
+    if (geom) {
+      _beltLocked[which]  = geom
+      _beltSelConn[which] = geom.connKey ?? null
+      const c = geom.center?.isVector3 ? geom.center : new THREE.Vector3(geom.center[0], geom.center[1], geom.center[2])
+      const d = geom.axisDir?.isVector3 ? geom.axisDir : new THREE.Vector3(geom.axisDir[0], geom.axisDir[1], geom.axisDir[2]).normalize()
+      _setBeltCircle(line, c, d, geom.radius)
+    } else {
+      _beltLocked[which]  = null
+      _beltSelConn[which] = null
+      line.visible = false
+    }
+    _refreshBeltConnectors()
+  }
+
+  /**
+   * Drive the picker into a phase (does NOT touch locked pulley circles).
+   *   'joint' { excludeJointIds } → emphasized markers, no active circle.
+   *   'rim'   { jointId }         → normal markers + rim connectors + mouse circle.
+   *   'idle'                      → markers hidden (belt tube shown separately).
+   */
+  function beltSetPhase(phase, opts = {}) {
+    if (!_beltMode) return
+    _beltPhase = phase
+    _beltCircle.visible = false
+    _beltRimCtx = null
+    _beltHoverConn = null
+    if (phase === 'joint') {
+      _rebuildBeltMarkers({ emphasized: true, excludeJointIds: opts.excludeJointIds ?? [] })
+    } else if (phase === 'rim') {
+      const joint = _jointById(opts.jointId)
+      const exclude = opts.excludeJointIds ?? (opts.jointId ? [opts.jointId] : [])
+      _rebuildBeltMarkers({ emphasized: false, excludeJointIds: exclude })
+      if (joint) {
+        const { origin, dir } = _axisVecs(joint)
+        _beltRimCtx = { jointId: opts.jointId, center: origin, axisDir: dir, instanceId: opts.instanceId }
+      }
+      _syncBluntConnIndicators()
+    } else {
+      _beltMarkerGroup.visible = false
+    }
+    _refreshBeltConnectors()
+  }
+
+  function _onBeltPointerDown(e) { _pointerDownAt = { x: e.clientX, y: e.clientY } }
+
+  function _onBeltPointerMove(e) {
+    if (_beltPhase !== 'rim' || !_beltRimCtx) return
+    const hit = _ringPlaneHitUtil(_rc, e, camera, canvas, _beltRimCtx.axisDir, _beltRimCtx.center)
+    if (!hit) { _beltCircle.visible = false; return }
+    // Snap the circle to the nearest rim connector on this instance when the
+    // cursor is within _BELT_SNAP_DIST of it.
+    const joint = _jointById(_beltRimCtx.jointId)
+    let snapKey = null, snapGeom = null, best = _BELT_SNAP_DIST
+    for (const [key, data] of _connectorDataMap) {
+      if (data.instanceId !== _beltRimCtx.instanceId) continue
+      const cw = new THREE.Vector3(data.worldPos[0], data.worldPos[1], data.worldPos[2])
+      const d  = hit.distanceTo(cw)
+      if (d < best) { best = d; snapKey = key; snapGeom = joint ? _pulleyGeom(joint, data.worldPos) : null }
+    }
+    if (snapGeom) {
+      _beltHoverConn = snapKey
+      _setBeltCircle(_beltCircle, snapGeom.center, snapGeom.axisDir, snapGeom.radius)
+    } else {
+      _beltHoverConn = null
+      _setBeltCircle(_beltCircle, _beltRimCtx.center, _beltRimCtx.axisDir, hit.distanceTo(_beltRimCtx.center))
+    }
+    _refreshBeltConnectors()
+  }
+
+  function _onBeltClick(e) {
+    if (_wasDrag(e)) return
+    _rc.setFromCamera(_ndc(e), camera)
+    if (_beltPhase === 'joint') {
+      if (!_beltMarkerHits.length) return
+      const hits = _rc.intersectObjects(_beltMarkerHits, false)
+      if (!hits.length) return
+      _beltCallbacks?.onJointPick?.(hits[0].object.userData.endpoint)
+    } else if (_beltPhase === 'rim') {
+      // Prefer the snapped connector; else raycast the visible connector spheres.
+      let conn = _beltHoverConn ? _connectorDataMap.get(_beltHoverConn) : null
+      if (!conn) {
+        const targets = _connectorMeshes.filter(m => m.visible)
+        const hits = targets.length ? _rc.intersectObjects(targets, false) : []
+        if (hits.length) {
+          const { instanceId, label } = hits[0].object.userData
+          conn = _connectorDataMap.get(`${instanceId}::${label}`)
+        }
+      }
+      if (conn) _beltCallbacks?.onRimPick?.(conn)
+    }
+  }
+
+  function _onBeltKeyDown(e) {
+    if (e.key === 'Escape') { e.preventDefault(); _beltCallbacks?.onCancel?.() }
+  }
+
+  /** Enter interactive belt-define mode. Callbacks: { onJointPick, onRimPick, onCancel }. */
+  function enterBeltDefineMode(callbacks = {}) {
+    exitMateDefineMode()
+    exitConnectorDefineMode()
+    _beltMode = true
+    _beltCallbacks = callbacks
+    _syncBluntConnIndicators()
+    canvas.style.cursor = 'crosshair'
+    canvas.addEventListener('pointerdown', _onBeltPointerDown)
+    canvas.addEventListener('pointermove', _onBeltPointerMove)
+    canvas.addEventListener('click',       _onBeltClick)
+    document.addEventListener('keydown',    _onBeltKeyDown)
+    beltSetPhase('joint')
+  }
+
+  function exitBeltDefineMode() {
+    if (!_beltMode) return
+    _beltMode = false
+    _beltPhase = 'idle'
+    _beltCallbacks = null
+    _beltRimCtx = null
+    _beltHoverConn = null
+    _beltLocked.a = _beltLocked.b = null
+    _beltSelConn.a = _beltSelConn.b = null
+    _beltCircle.visible = _beltCircleA.visible = _beltCircleB.visible = false
+    _beltPreview.clear()
+    _beltMarkerGroup.traverse(o => { o.geometry?.dispose(); o.material?.dispose() })
+    _beltMarkerGroup.clear()
+    _beltMarkerGroup.visible = false
+    _beltMarkerHits.length = 0
+    canvas.style.cursor = ''
+    canvas.removeEventListener('pointerdown', _onBeltPointerDown)
+    canvas.removeEventListener('pointermove', _onBeltPointerMove)
+    canvas.removeEventListener('click',       _onBeltClick)
+    document.removeEventListener('keydown',    _onBeltKeyDown)
+    _syncBluntConnIndicators()
+    _applyActiveVisibility()
+  }
+
+  /** Push a belt polyline (array of THREE.Vector3) to the glow preview; null clears. */
+  function setBeltPreview(points) { _beltPreview.setPath(points) }
+
+  // ── Attach-part-to-belt mode ──────────────────────────────────────────────
+  // Click a connector on a part to select it (highlighted green; click it again
+  // to deselect, or click another to change). The selection persists until the
+  // user clicks the belt path, which seats the part there (connector normal →
+  // belt tangent) and emits the attachment. Right-click entry scopes to a belt.
+  let _attachMode      = false
+  let _attachBeltId    = null
+  let _attachConn      = null          // selected connector data (or null)
+  let _attachCallbacks = null          // { onAttach, onCancel, onSelect, onNeedConnector }
+
+  function _beltPathById(beltId) {
+    return (store.getState().currentAssembly?.belt_paths ?? []).find(b => b.id === beltId) ?? null
+  }
+
+  // Highlight the selected connector green; everything else at its base colour.
+  function _refreshAttachConnColors() {
+    const selKey = _attachConn ? `${_attachConn.instanceId}::${_attachConn.label}` : null
+    for (const m of _connectorMeshes) {
+      const key = `${m.userData.instanceId}::${m.userData.label}`
+      const isBend = m.userData.isBendCenter === true
+      const col = key === selKey ? CONN_PARENT_COL : (isBend ? CONN_BEND_CENTER_COL : CONN_COLOUR)
+      const grp = m.parent
+      if (grp) grp.traverse(o => o.material?.color?.set(col))
+    }
+  }
+
+  function _finishAttach(arcPoint) {
+    const belt = _beltPathById(_attachBeltId)
+    const conn = _attachConn
+    if (!belt || !conn) return
+    const jointById = new Map((store.getState().currentAssembly?.joints ?? []).map(j => [j.id, j]))
+    const points = beltCurvePoints(belt, jointById)
+    const ja = jointById.get(belt.pulley_a.joint_id)
+    const inst = (store.getState().currentAssembly?.instances ?? []).find(i => i.id === conn.instanceId)
+    if (!points || !ja || !inst) { exitAttachMode(); return }
+    const { arcParam, point, tangent } = nearestArcParam(points, arcPoint)
+    const planeNormal = new THREE.Vector3(...(ja.axis_direction ?? [0, 0, 1]))
+    const Pc = new THREE.Vector3(conn.worldPos[0], conn.worldPos[1], conn.worldPos[2])
+    const Nc = new THREE.Vector3(conn.worldNorm[0], conn.worldNorm[1], conn.worldNorm[2])
+    const newMat = seatTransform(Pc, Nc, point, tangent, planeNormal, _instMat4(inst))
+    // Ride state: part pose relative to the belt frame at the attach point, plus
+    // the driver pulley angle now — so the part can be advanced along the loop.
+    const F0 = beltFrameAt(points, arcParam, ja.axis_direction)
+    const local = F0.clone().invert().multiply(newMat)
+    const payload = {
+      belt_path_id: belt.id,
+      instance_id: conn.instanceId,
+      connector_label: conn.label,
+      arc_param: arcParam,
+      ref_angle: ja.current_value ?? 0,
+      local_transform: local.clone().transpose().toArray(),
+      transform: { values: newMat.clone().transpose().toArray() },
+    }
+    const cb = _attachCallbacks
+    exitAttachMode()
+    cb?.onAttach?.(payload)
+  }
+
+  function _beltTubeHit(e) {
+    const grp = scene.getObjectByName('beltPaths')
+    if (!grp) return null
+    const meshes = []
+    grp.traverse(o => { if (o.isMesh && o.userData.beltId === _attachBeltId) meshes.push(o) })
+    if (!meshes.length) return null
+    _rc.setFromCamera(_ndc(e), camera)
+    const hits = _rc.intersectObjects(meshes, false)
+    return hits.length ? hits[0].point : null
+  }
+
+  function _onAttachClick(e) {
+    if (_wasDrag(e)) return
+    // Connectors render on top, so test them first: select / toggle-deselect.
+    _rc.setFromCamera(_ndc(e), camera)
+    const targets = _connectorMeshes.filter(m => m.visible)
+    const cHits = targets.length ? _rc.intersectObjects(targets, false) : []
+    if (cHits.length) {
+      const { instanceId, label } = cHits[0].object.userData
+      const key = `${instanceId}::${label}`
+      const selKey = _attachConn ? `${_attachConn.instanceId}::${_attachConn.label}` : null
+      _attachConn = (key === selKey) ? null : (_connectorDataMap.get(key) ?? null)
+      _refreshAttachConnColors()
+      _attachCallbacks?.onSelect?.(_attachConn)
+      return
+    }
+    // Otherwise, a click on the belt path finalizes (needs a selected connector).
+    const hit = _beltTubeHit(e)
+    if (hit) {
+      if (_attachConn) _finishAttach(hit)
+      else _attachCallbacks?.onNeedConnector?.()
+    }
+  }
+
+  function _onAttachKeyDown(e) {
+    if (e.key === 'Escape') { e.preventDefault(); const cb = _attachCallbacks; exitAttachMode(); cb?.onCancel?.() }
+  }
+
+  /**
+   * Enter attach-part-to-belt mode.
+   * @param {string} beltId
+   * @param {object} callbacks  { onAttach(payload), onCancel, onSelect(conn|null), onNeedConnector }
+   */
+  function enterAttachMode(beltId, callbacks = {}) {
+    exitMateDefineMode(); exitConnectorDefineMode(); exitBeltDefineMode()
+    _attachMode = true
+    _attachBeltId = beltId
+    _attachConn = null
+    _attachCallbacks = callbacks
+    _syncBluntConnIndicators()
+    _connectorGroup.visible = true
+    _updateConnectorVisibility()
+    _refreshAttachConnColors()
+    canvas.style.cursor = 'crosshair'
+    canvas.addEventListener('click',     _onAttachClick)
+    document.addEventListener('keydown', _onAttachKeyDown)
+  }
+
+  function exitAttachMode() {
+    if (!_attachMode) return
+    _attachMode = false
+    _attachBeltId = null
+    _attachConn = null
+    canvas.style.cursor = ''
+    canvas.removeEventListener('click',     _onAttachClick)
+    document.removeEventListener('keydown', _onAttachKeyDown)
+    _syncBluntConnIndicators()
+    _applyActiveVisibility()
+  }
+
+  /** Belt id under the cursor (for the right-click "Attach part to belt" menu), or null. */
+  function pickBeltAt(e) {
+    const grp = scene.getObjectByName('beltPaths')
+    if (!grp) return null
+    const meshes = []
+    grp.traverse(o => { if (o.isMesh && o.userData.beltId) meshes.push(o) })
+    if (!meshes.length) return null
+    _rc.setFromCamera(_ndc(e), camera)
+    const hits = _rc.intersectObjects(meshes, false)
+    return hits.length ? { beltId: hits[0].object.userData.beltId, point: hits[0].point } : null
+  }
 
   // ── Preview mesh (ghost arrow during connector define mode) ───────────────
   const _previewMesh = buildJointPreviewMesh()
@@ -615,7 +1074,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     _bluntConnMeshes = []
     _bluntConnGroup.visible = false
 
-    if (!_mateMode || !_extraConnectors.length) return
+    if ((!_mateMode && !_beltMode && !_attachMode) || !_extraConnectors.length) return
 
     for (const be of _extraConnectors) {
       const key = `${be.instanceId}::${be.label}`
@@ -717,27 +1176,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     gearBSel.id = '_mate-gear-b-sel'
 
     function _populateGearSelects() {
-      const joints = store.getState().currentAssembly?.joints ?? []
-      const instances = store.getState().currentAssembly?.instances ?? []
-      const instById = new Map(instances.map(i => [i.id, i]))
-      const options = []
-      for (const j of joints) {
-        if (j.joint_type !== 'revolute') continue
-        for (const side of ['b', 'a']) {
-          const instanceId = side === 'a' ? j.instance_a_id : j.instance_b_id
-          if (!instanceId) continue
-          const inst = instById.get(instanceId)
-          if (!inst || inst.fixed) continue
-          const otherId = side === 'a' ? j.instance_b_id : j.instance_a_id
-          const other = otherId ? instById.get(otherId) : null
-          options.push({
-            jointId: j.id,
-            instanceId,
-            side,
-            text: `${inst.name ?? instanceId.slice(0, 6)} (${j.name || 'Revolute'} to ${other?.name ?? 'World'})`,
-          })
-        }
-      }
+      const options = enumerateRevoluteEndpoints()
       for (const sel of [gearASel, gearBSel]) {
         sel.innerHTML = ''
         const ph = document.createElement('option')
@@ -1667,10 +2106,9 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       _jointGroup.add(mesh)
     }
 
-    // Gold ring removed: rotation is driven only via the TransformControls
-    // gizmo (1-DOF rotate-about-axis). The ring mesh stays allocated so the
-    // shared joint code (matrix writes, dispose, count) doesn't fragment,
-    // but its visibility is forced off so it never draws.
+    // Ring hidden: rotation is driven via the TransformControls gizmo (screen-
+    // space scaled). The mesh stays allocated so the shared-joint code (matrix
+    // writes, dispose, count) doesn't fragment, but it never draws.
     _sharedRingMesh.userData.isSharedRingMesh = true
     _sharedRingMesh.visible = false
   }
@@ -1945,9 +2383,17 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     if (!_drag) return
     const hit = _ringPlaneHit(e, _drag.axisDir, _drag.axisOrigin)
     if (!hit) return
-    const angle    = _angleInRing(hit, _drag.axisOrigin, _drag.axisDir, _drag.refVec)
-    const delta    = angle - _drag.startAngle
-    const newValue = _drag.startValue + delta
+    const angle = _angleInRing(hit, _drag.axisOrigin, _drag.axisDir, _drag.refVec)
+    // Unwrap across the ±π atan2 seam: accumulate the shortest step from the last
+    // sample so dragging past half a turn doesn't make current_value jump by 2π.
+    // (Invisible for a spinning pulley, but a belt rider would teleport ~half the
+    // loop on the jump.)
+    let step = angle - _drag.lastAngle
+    if (step >  Math.PI) step -= 2 * Math.PI
+    if (step < -Math.PI) step += 2 * Math.PI
+    _drag.accum += step
+    _drag.lastAngle = angle
+    const newValue = _drag.startValue + _drag.accum
     _drag.currentValue = newValue
     _sendDebounced(_drag.jointId, newValue)
   }
@@ -1982,6 +2428,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     const startAngle = _angleInRing(hit, axisOrigin, axisDir, refVec)
 
     _drag = { jointId, axisDir, axisOrigin, refVec, startAngle,
+              lastAngle: startAngle, accum: 0,
               startValue: joint.current_value, currentValue: joint.current_value }
 
     controls.enabled = false
@@ -1999,9 +2446,16 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     if (!_instDrag) return
     const hit = _ringPlaneHit(e, _instDrag.axisDir, _instDrag.axisOrigin)
     if (!hit) return
-    const angle    = _angleInRing(hit, _instDrag.axisOrigin, _instDrag.axisDir, _instDrag.refVec)
-    const delta    = angle - _instDrag.startAngle
-    const newValue = _instDrag.startValue + delta
+    const angle = _angleInRing(hit, _instDrag.axisOrigin, _instDrag.axisDir, _instDrag.refVec)
+    // Unwrap the ±π atan2 seam (see _onRingPointerMove): without it, dragging the
+    // pulley body past half a turn jumps current_value by 2π and teleports a belt
+    // rider ~half the loop.
+    let step = angle - _instDrag.lastAngle
+    if (step >  Math.PI) step -= 2 * Math.PI
+    if (step < -Math.PI) step += 2 * Math.PI
+    _instDrag.accum += step
+    _instDrag.lastAngle = angle
+    const newValue = _instDrag.startValue + _instDrag.accum
     _instDrag.currentValue = newValue
     _instDrag.onLiveTransform?.(newValue)
     // Debounce backend current_value update
@@ -2046,7 +2500,8 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
 
     _instDrag = {
       jointId: joint.id, axisDir, axisOrigin, refVec,
-      startAngle, startValue, currentValue: startValue,
+      startAngle, lastAngle: startAngle, accum: 0,
+      startValue, currentValue: startValue,
       onLiveTransform, onCommit,
     }
 
@@ -2226,6 +2681,14 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
   function dispose() {
     exitConnectorDefineMode()
     exitMateDefineMode()
+    exitBeltDefineMode()
+    _beltPreview.dispose()
+    for (const line of [_beltCircle, _beltCircleA, _beltCircleB]) {
+      line.geometry?.dispose()
+      line.material?.dispose()
+      line.parent?.remove(line)
+    }
+    _beltMarkerGroup.parent?.remove(_beltMarkerGroup)
     clearTimeout(_sendTimer)
     clearTimeout(_instSendTimer)
     clearTimeout(_instPrisSendTimer)
@@ -2457,6 +2920,20 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     enterMateDefineMode,
     exitMateDefineMode,
     isMateMode: () => _mateMode,
+    isBeltMode: () => _beltMode,
+    // Belt-path define mode (used by belt_path_panel.js)
+    enterBeltDefineMode,
+    exitBeltDefineMode,
+    beltSetPhase,
+    beltSetPulley,
+    setBeltPreview,
+    getConnectorDataMap,
+    enumerateRevoluteEndpoints,
+    // Attach-part-to-belt mode
+    enterAttachMode,
+    exitAttachMode,
+    isAttachMode: () => _attachMode,
+    pickBeltAt,
     pickJointRing,
     pickJointAny,
     beginRingDrag,

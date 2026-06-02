@@ -35,7 +35,7 @@ from typing import Callable
 from fastapi import HTTPException
 
 from backend.api.doc_context import (
-    current_request_revision,
+    current_request_revision as _doc_current_request_revision,
     get_current_doc,
     set_request_revision,
 )
@@ -62,6 +62,12 @@ MAX_UNDO_STEPS = 50
 # snapshot bodies are evicted (zeroed out, evicted=True) until under budget.
 # Entries themselves remain in the log so historical labels stay visible.
 MAX_SNAPSHOT_BUDGET_BYTES = 5_000_000
+
+
+def current_request_revision() -> int | None:
+    """Current request revision, re-exported for backend.api.crud."""
+
+    return _doc_current_request_revision()
 
 
 @dataclass
@@ -467,7 +473,15 @@ def mutate_with_feature_log(
             report = result if isinstance(result, MutationReport) else None
 
         reconciled = reconcile_cluster_membership(before, s.design, report)
-        s.design = _retry_pending_ligations(before, reconciled)
+        if op_kind in ('auto-break-aksel', 'auto-route-aksel', 'full-autostaple'):
+            # Aksel autobreak deliberately creates nicks on crossover-routed
+            # staple chains.  Retrying pre-existing unligated crossovers here
+            # can immediately re-ligate across those selected breaks, undoing
+            # the optimizer's persisted topology while leaving its report
+            # describing the pre-retry design.
+            s.design = reconciled
+        else:
+            s.design = _retry_pending_ligations(before, reconciled)
 
         # Capture POST-state AFTER reconcile + retry so back-and-forth seeking
         # can restore the live topology even after the slider has been scrubbed

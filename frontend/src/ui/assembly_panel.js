@@ -38,7 +38,7 @@ const _JOINT_TYPE_ICON = {
 
 const _JOINT_TYPES = ['revolute', 'prismatic', 'rigid', 'spherical']
 
-export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextChange, beforePatchDesign, onDefineConnector, onDefineMate, onMateHighlight, onMateHighlightClear, onMateDebugMarkers, computeDuplicateOffset }) {
+export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextChange, beforePatchDesign, onDefineConnector, onDefineMate, onMateHighlight, onMateHighlightClear, onMateDebugMarkers, computeDuplicateOffset, onEditBeltPath, isBeltHidden, onToggleBeltVisibility, onAttachToBelt, onDeleteBeltRider }) {
   const panelEl    = document.getElementById('assembly-panel')
   const instanceEl = document.getElementById('assembly-instance-list')
   const nameEl     = document.getElementById('assembly-panel-name')
@@ -813,6 +813,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
   // ── Mates section ──────────────────────────────────────────────────────────────
 
   let _matesCollapsed = false
+  const _beltRidersExpanded = new Set()   // belt ids whose "Parts on path" list is open
   let _editingJointId = null
   let _editingGearId  = null
   let _highlightedJointId = null
@@ -1517,6 +1518,138 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     }
 
     _matesSectionEl.append(header, listEl, editFormHostEl)
+
+    // ── Belt paths — own sub-section below Mates ────────────────────────────
+    const beltPaths = assembly?.belt_paths ?? []
+    if (beltPaths.length) {
+      const beltHeader = document.createElement('div')
+      beltHeader.style.cssText = [
+        'font-size:var(--text-xs);font-weight:600;color:#8b949e',
+        'padding:4px 0 2px;margin-top:6px;border-top:1px solid #21262d',
+      ].join(';')
+      beltHeader.textContent = `Belt Paths (${beltPaths.length})`
+
+      const beltList = document.createElement('div')
+      beltList.style.cssText = 'display:flex;flex-direction:column;gap:2px;padding:0 2px 2px 0'
+
+      function _pulleyLabel(pulley) {
+        const id = pulley?.instance_id
+        if (!id) return '?'
+        const groupLabel = _groupLabelForInstance(id)
+        if (groupLabel) return groupLabel
+        const inst = instances.find(i => i.id === id)
+        return inst?.name ?? id.slice(0, 6)
+      }
+
+      for (const belt of beltPaths) {
+        const aLabel = _pulleyLabel(belt.pulley_a)
+        const bLabel = _pulleyLabel(belt.pulley_b)
+        const row = document.createElement('div')
+        row.style.cssText = [
+          'display:flex;align-items:center;gap:4px;padding:3px 4px;border-radius:3px',
+          'border-left:2px solid #3fb950;padding-left:6px',
+        ].join(';')
+
+        const hidden = isBeltHidden?.(belt.id) ?? false
+
+        const eyeBtn = document.createElement('button')
+        eyeBtn.textContent = hidden ? '○' : '◉'
+        eyeBtn.title = hidden ? 'Show belt path' : 'Hide belt path'
+        eyeBtn.style.cssText = `background:none;border:none;cursor:pointer;flex-shrink:0;padding:0 2px;font-size:11px;line-height:1;color:${hidden ? '#484f58' : '#3fb950'}`
+        eyeBtn.addEventListener('click', (e) => { e.stopPropagation(); onToggleBeltVisibility?.(belt.id) })
+
+        const icon = document.createElement('span')
+        icon.textContent = '⟳'
+        icon.title = 'Belt path'
+        icon.style.cssText = 'font-size:var(--text-xs);color:#3fb950;flex-shrink:0'
+
+        const label = document.createElement('span')
+        label.textContent = `${aLabel} ⟿ ${bLabel}`
+        label.title = belt.name
+        label.style.cssText = `flex:1;font-size:var(--text-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${hidden ? '#6e7681' : '#c9d1d9'}`
+
+        const attachBtn = document.createElement('button')
+        attachBtn.textContent = '⊕'
+        attachBtn.title = 'Attach a part to this belt'
+        attachBtn.style.cssText = 'background:none;border:none;cursor:pointer;flex-shrink:0;padding:0 2px;color:#6e7681;font-size:13px;line-height:1'
+        attachBtn.addEventListener('pointerenter', () => { attachBtn.style.color = '#3fb950' })
+        attachBtn.addEventListener('pointerleave', () => { attachBtn.style.color = '#6e7681' })
+        attachBtn.addEventListener('click', (e) => { e.stopPropagation(); onAttachToBelt?.(belt.id) })
+
+        const editBtn = document.createElement('button')
+        editBtn.textContent = '✎'
+        editBtn.title = 'Edit belt path'
+        editBtn.style.cssText = 'background:none;border:none;cursor:pointer;flex-shrink:0;padding:0 2px;color:#6e7681;font-size:11px;line-height:1'
+        editBtn.addEventListener('pointerenter', () => { editBtn.style.color = '#58a6ff' })
+        editBtn.addEventListener('pointerleave', () => { editBtn.style.color = '#6e7681' })
+        editBtn.addEventListener('click', (e) => { e.stopPropagation(); onEditBeltPath?.(belt) })
+
+        const delBtn = document.createElement('button')
+        delBtn.textContent = '×'
+        delBtn.title = 'Delete belt path'
+        delBtn.style.cssText = 'background:none;border:none;cursor:pointer;flex-shrink:0;padding:0 2px;color:#6e7681;font-size:13px;line-height:1'
+        delBtn.addEventListener('pointerenter', () => { delBtn.style.color = '#f85149' })
+        delBtn.addEventListener('pointerleave', () => { delBtn.style.color = '#6e7681' })
+        delBtn.addEventListener('click', async (e) => {
+          e.stopPropagation()
+          const ok = await showConfirm({
+            title: 'Delete belt path?',
+            message: `${belt.name} (${aLabel} ⟿ ${bLabel})`,
+          })
+          if (!ok) return
+          try { await api.deleteBeltPath(belt.id) }
+          catch (err) { console.error('[assembly] delete belt path failed:', err) }
+        })
+
+        row.append(eyeBtn, icon, label, attachBtn, editBtn, delBtn)
+        beltList.appendChild(row)
+
+        // ── Collapsible "Parts on path" sub-list (belt riders) ──────────────
+        const riders = (assembly?.belt_riders ?? []).filter(r => r.belt_path_id === belt.id)
+        const expanded = _beltRidersExpanded.has(belt.id)
+        const subHeader = document.createElement('div')
+        subHeader.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;padding:1px 0 1px 18px;font-size:var(--text-xs);color:#6e7681'
+        subHeader.textContent = `${expanded ? '▾' : '▸'} Parts on path (${riders.length})`
+        subHeader.addEventListener('click', (e) => {
+          e.stopPropagation()
+          if (_beltRidersExpanded.has(belt.id)) _beltRidersExpanded.delete(belt.id)
+          else _beltRidersExpanded.add(belt.id)
+          _rebuildMates(store.getState().currentAssembly)
+        })
+        beltList.appendChild(subHeader)
+
+        if (expanded) {
+          if (!riders.length) {
+            const empty = document.createElement('div')
+            empty.textContent = 'No parts attached'
+            empty.style.cssText = 'font-size:var(--text-xs);color:#484f58;padding:1px 0 1px 30px'
+            beltList.appendChild(empty)
+          }
+          for (const rider of riders) {
+            const inst = instances.find(i => i.id === rider.instance_id)
+            const rRow = document.createElement('div')
+            rRow.style.cssText = 'display:flex;align-items:center;gap:4px;padding:1px 4px 1px 30px'
+            const rLabel = document.createElement('span')
+            rLabel.textContent = `${inst?.name ?? rider.instance_id.slice(0, 6)} · ${Math.round((rider.arc_param ?? 0) * 100)}%`
+            rLabel.style.cssText = 'flex:1;font-size:var(--text-xs);color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+            const rDel = document.createElement('button')
+            rDel.textContent = '×'
+            rDel.title = 'Detach part from belt'
+            rDel.style.cssText = 'background:none;border:none;cursor:pointer;flex-shrink:0;padding:0 2px;color:#6e7681;font-size:12px;line-height:1'
+            rDel.addEventListener('pointerenter', () => { rDel.style.color = '#f85149' })
+            rDel.addEventListener('pointerleave', () => { rDel.style.color = '#6e7681' })
+            rDel.addEventListener('click', async (e) => {
+              e.stopPropagation()
+              try { await onDeleteBeltRider?.(rider.id) }
+              catch (err) { console.error('[assembly] detach belt rider failed:', err) }
+            })
+            rRow.append(rLabel, rDel)
+            beltList.appendChild(rRow)
+          }
+        }
+      }
+      _matesSectionEl.append(beltHeader, beltList)
+    }
   }
 
   // ── Public API ────────────────────────────────────────────────────────────────

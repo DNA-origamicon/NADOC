@@ -156,6 +156,26 @@ form, with live controls for the reaction coordinate (φ), melt width, splay /
 exit / invader-splay angles, ssDNA stretch, unwind, and branch gap. Works with
 overhang and binder of unequal length.
 
+### Belt & pulley systems
+
+Assembly-level **belt/pulley mechanisms** built on the revolute-mate + gear-relation
+machinery. Define a belt by picking two revolute mates as pulleys and a rim connector on
+each (radius = perpendicular distance to the axis); the open belt (external tangents) is
+previewed as a glowing line and persisted on `Assembly.belt_paths`. The two pulleys are
+**kinematically coupled** like a gear pair but with belt physics — angular ratio
+`r_a / r_b` (equal rim speed) and the same world rotational sense — so rotating either
+pulley (ring, gizmo, or RPM spin) drives the other; coupling propagates through the same
+graph as gears, on the backend and the per-frame kinematics ticker.
+
+**Belt riders** attach a part to the belt: pick a connector on the part, click a point on
+the loop, and the part is seated (connector normal → travel tangent) and stored relative
+to a moving belt frame. Riders **ride the loop** drift-free — position derived from the
+absolute pulley angle (`arc` advances by `Δθ · r / L`), so spinning a pulley carries the
+part around the belt. **Polymerize along belt** fills the loop with a chain of identical
+riders, auto-spaced edge-to-edge from the part's footprint along the tangent, so a whole
+train rides together. Display-layer only (assembly transforms + belt records); embedded
+Designs are never mutated.
+
 ### Fluorescence & FRET
 Strand terminal extensions with fluorophore beads; FRET checker with Förster
 radii (Cy3→Cy5, FAM→TAMRA, ATTO488→ATTO550).

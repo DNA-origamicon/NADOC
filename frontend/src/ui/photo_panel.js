@@ -164,6 +164,8 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   const floorGridColor    = _el('photo-floor-grid-color')
   const floorGridGlow     = _el('photo-floor-grid-glow')
   const floorGridGlowLbl  = _el('photo-floor-grid-glow-label')
+  const floorGridFade     = _el('photo-floor-grid-fade')
+  const floorGridFadeLbl  = _el('photo-floor-grid-fade-label')
   const ssaoChk      = _el('photo-ssao')
   const bloomChk     = _el('photo-bloom')
   const bloomRow     = _el('photo-bloom-strength-row')
@@ -230,6 +232,7 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     if (s.floorShadows  !== undefined) photoRenderer.setFloorShadows(s.floorShadows)
     if (s.floorGridColor !== undefined) photoRenderer.setFloorGridColor(s.floorGridColor)
     if (s.floorGridGlow  !== undefined) photoRenderer.setFloorGridGlow(s.floorGridGlow)
+    if (s.floorGridFade  !== undefined) photoRenderer.setFloorGridFade(s.floorGridFade)
     if (s.floorGridNeon  !== undefined) photoRenderer.setFloorGridNeon(s.floorGridNeon)
     if (s.floorGrid     !== undefined) photoRenderer.setFloorGrid(s.floorGrid)
     if (s.floor         !== undefined) photoRenderer.setFloor(s.floor)
@@ -640,6 +643,11 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     if (floorGridGlowLbl) floorGridGlowLbl.textContent = `${v.toFixed(1)}×`
     photoRenderer.setFloorGridGlow(v)
   })
+  floorGridFade?.addEventListener('input', () => {
+    const v = parseFloat(floorGridFade.value)
+    if (floorGridFadeLbl) floorGridFadeLbl.textContent = `${v.toFixed(1)}×`
+    photoRenderer.setFloorGridFade(v)
+  })
 
   // Background
   bgRadios.forEach(radio => {
@@ -806,6 +814,8 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     if (floorGridColor)  floorGridColor.value  = s.floorGridColor ?? '#ff00ff'
     if (floorGridGlow)   floorGridGlow.value   = s.floorGridGlow ?? 3.0
     if (floorGridGlowLbl) floorGridGlowLbl.textContent = `${(s.floorGridGlow ?? 3.0).toFixed(1)}×`
+    if (floorGridFade)   floorGridFade.value   = s.floorGridFade ?? 1.5
+    if (floorGridFadeLbl) floorGridFadeLbl.textContent = `${(s.floorGridFade ?? 1.5).toFixed(1)}×`
     _syncFloorGridSubRows()
     _syncFloorRowVisibility()
     if (ssaoChk) ssaoChk.checked  = s.ssao

@@ -178,8 +178,10 @@ def test_marks_change_forces_full_geometry():
 
 def test_undo_mark_restores_rigid_beads():
     design_state.set_design(_hinge_design())
-    r = client.post("/api/design/flexible-segment", json={
-        "strand_id": "scaf", "domain_index": 1, "bp_index": 9, "direction": "FORWARD"})
+    # Mark the full bridging run so a connection forms and the beads are excluded
+    # from rigid rendering (is_flexible_segment True); undo must restore them.
+    r = client.post("/api/design/flexible-segment/batch",
+                    json={"marks": _run_mark_bodies(), "replace": True})
     assert r.status_code == 200, r.text
     assert any(n.get("is_flexible_segment") for n in (r.json().get("nucleotides") or []))
     u = client.post("/api/design/undo").json()
@@ -201,6 +203,17 @@ def test_old_file_without_fields_loads_empty():
 
 # ── API ──────────────────────────────────────────────────────────────────────
 
+def _run_mark_bodies() -> list[dict]:
+    """Batch-mark bodies for the full bridging ssDNA run (cl_a↔cl_b)."""
+    return [
+        {"strand_id": "scaf", "domain_index": 1, "bp_index": bp, "direction": "FORWARD"}
+        for bp in range(_SS_A[0], _SS_A[1] + 1)
+    ] + [
+        {"strand_id": "scaf", "domain_index": 2, "bp_index": bp, "direction": "FORWARD"}
+        for bp in range(_SS_B[0], _SS_B[1] + 1)
+    ]
+
+
 def test_api_mark_requires_unpaired():
     design_state.set_design(_hinge_design())
     # Paired scaffold bead (domain 0, h_a) → rejected.
@@ -208,12 +221,29 @@ def test_api_mark_requires_unpaired():
         "strand_id": "scaf", "domain_index": 0, "bp_index": 0, "direction": "FORWARD"})
     assert r.status_code == 400, r.text
     assert "unpaired" in r.json()["detail"].lower()
-    # Unpaired ssDNA bead (domain 1) → accepted; geometry carries is_flexible_segment.
-    r = client.post("/api/design/flexible-segment", json={
-        "strand_id": "scaf", "domain_index": 1, "bp_index": 9, "direction": "FORWARD"})
+    # Marking the full unpaired run bridges cl_a↔cl_b → a connection forms, so the
+    # geometry carries is_flexible_segment (the flag tracks connection membership,
+    # not raw marks — an unconnected mark leaves its bead rigid-rendered).
+    r = client.post("/api/design/flexible-segment/batch",
+                    json={"marks": _run_mark_bodies(), "replace": True})
     assert r.status_code == 200, r.text
     nucs = r.json().get("nucleotides") or []
     assert any(n.get("is_flexible_segment") for n in nucs)
+
+
+def test_unconnected_mark_leaves_bead_rigid():
+    """Safety net: a marked run that forms NO connection (both ends on the same
+    cluster) must NOT exclude its beads from rigid rendering — is_flexible_segment
+    stays False so marking can never silently delete geometry."""
+    design_state.set_design(_hinge_design())
+    # A single mid-run bead: its rigid neighbours are both on cl_a → no bridge.
+    r = client.post("/api/design/flexible-segment", json={
+        "strand_id": "scaf", "domain_index": 1, "bp_index": 9, "direction": "FORWARD"})
+    assert r.status_code == 200, r.text  # accepted (unpaired) …
+    assert design_state.get_or_404().flexible_segment_marks  # … and the mark persists
+    assert design_state.get_or_404().flexible_connections == []  # but no connection
+    nucs = r.json().get("nucleotides") or []
+    assert nucs and not any(n.get("is_flexible_segment") for n in nucs)  # bead stays rigid
 
 
 def test_api_mark_adds_feature_log_entry_and_reverts():

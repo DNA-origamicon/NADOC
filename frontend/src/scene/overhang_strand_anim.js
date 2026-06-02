@@ -199,12 +199,22 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
     }
     if (!_invader) { const sc = getScene?.(); if (sc) _invader = createStrandRenderer(sc, { roleColor: { invader: 0x3fb950 }, lineOpacity: 0.6 }) }
 
+    // Axial polarity: +1 if the overhang tip (i=M−1) lies in +Adir from its root
+    // (i=0), −1 otherwise. The freed binder arm leans toward the ROOT (−tipSign·Adir),
+    // the side freed beads accumulate. Adir is the fixed helix axis and is NOT flipped
+    // by the root-at-0 reversal, so a 3′ overhang (extending opposite Adir) needs this
+    // sign or its arm leans toward the free tip (the bug). +1 = old hardcoded −Adir.
+    const _spanAx = (ohAxis[(M - 1) * 3] - ohAxis[0]) * _Adir.x
+      + (ohAxis[(M - 1) * 3 + 1] - ohAxis[1]) * _Adir.y
+      + (ohAxis[(M - 1) * 3 + 2] - ohAxis[2]) * _Adir.z
+    const tipSign = _spanAx >= 0 ? 1 : -1
+
     _bound = {
       overhangId, binderStrandId, M, Mb, ohNucs: oh, binderNucs, bnToOh,
       Adir: _Adir.clone(), U: _U.clone(), V: _V.clone(),
       ohAxis, ohR, ohTheta, ohBnUVA, thetaRoot: ohTheta[0],
       bnAxis, bnR, bnTheta, bnBnUVA, twist, meanRise, meanW, bnRootTheta: bnTheta[0], bnRootR: bnR[0],
-      hasToehold, dOf, grooveOffset, toeholdAtTip,
+      hasToehold, dOf, grooveOffset, toeholdAtTip, tipSign,
     }
     return { ok: true, N: M, R: rSum / M, hasToehold }
   }
@@ -246,22 +256,33 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
     const brefY = Math.cos(exitRad) * U.y + Math.sin(exitRad) * V.y
     const brefZ = Math.cos(exitRad) * U.z + Math.sin(exitRad) * V.z
     const armStep = b.meanRise * armPull
+    // Fork anchor: forkPos is an OVERHANG-index coordinate, so anchor on the
+    // overhang axis (ohAxis), NOT the binder axis. The binder runs antiparallel,
+    // so its index order is reversed vs the overhang's for 3′ overhangs — indexing
+    // bnAxis by forkPos there sweeps the anchor tip→root while the fork sweeps
+    // root→tip, reversing the freed-arm motion. (_unzipStraight already uses ohAxis.)
     const fp = Math.max(0, Math.min(M - 1, forkPos))
     const f0 = Math.floor(fp), f1 = Math.min(M - 1, f0 + 1), ft = fp - f0
-    const faxX = b.bnAxis[f0 * 3] * (1 - ft) + b.bnAxis[f1 * 3] * ft
-    const faxY = b.bnAxis[f0 * 3 + 1] * (1 - ft) + b.bnAxis[f1 * 3 + 1] * ft
-    const faxZ = b.bnAxis[f0 * 3 + 2] * (1 - ft) + b.bnAxis[f1 * 3 + 2] * ft
+    const faxX = b.ohAxis[f0 * 3] * (1 - ft) + b.ohAxis[f1 * 3] * ft
+    const faxY = b.ohAxis[f0 * 3 + 1] * (1 - ft) + b.ohAxis[f1 * 3 + 1] * ft
+    const faxZ = b.ohAxis[f0 * 3 + 2] * (1 - ft) + b.ohAxis[f1 * 3 + 2] * ft
     const pfX = faxX + b.bnRootR * brefX, pfY = faxY + b.bnRootR * brefY, pfZ = faxZ + b.bnRootR * brefZ
-    let adX = -Math.cos(thRad) * b.Adir.x + Math.sin(thRad) * brefX
-    let adY = -Math.cos(thRad) * b.Adir.y + Math.sin(thRad) * brefY
-    let adZ = -Math.cos(thRad) * b.Adir.z + Math.sin(thRad) * brefZ
+    // axial lean = toward the overhang ROOT (−tipSign·Adir), the side where freed
+    // beads accumulate as the fork melts root→tip. tipSign captures the overhang's
+    // own root→tip axial polarity, so 3′ overhangs (which extend opposite the raw
+    // helix axis) lean correctly instead of toward their free tip. tipSign=+1
+    // reproduces the old hardcoded −Adir (the polarity that already rendered right).
+    const tipSign = b.tipSign ?? 1
+    let adX = -tipSign * Math.cos(thRad) * b.Adir.x + Math.sin(thRad) * brefX
+    let adY = -tipSign * Math.cos(thRad) * b.Adir.y + Math.sin(thRad) * brefY
+    let adZ = -tipSign * Math.cos(thRad) * b.Adir.z + Math.sin(thRad) * brefZ
     const adl = Math.hypot(adX, adY, adZ) || 1; adX /= adl; adY /= adl; adZ /= adl
     const Adir = b.Adir
     // freed binder slab: a single uniform direction 90° from the splay/arm, in the
-    // arm plane (sinθ·Adir + cosθ·bref). All freed binder slabs share this.
-    const pdX = Math.sin(thRad) * Adir.x + Math.cos(thRad) * brefX
-    const pdY = Math.sin(thRad) * Adir.y + Math.cos(thRad) * brefY
-    const pdZ = Math.sin(thRad) * Adir.z + Math.cos(thRad) * brefZ
+    // arm plane. bref term carries +tipSign so it stays ⟂ the (polarity-adjusted) arm.
+    const pdX = Math.sin(thRad) * Adir.x + tipSign * Math.cos(thRad) * brefX
+    const pdY = Math.sin(thRad) * Adir.y + tipSign * Math.cos(thRad) * brefY
+    const pdZ = Math.sin(thRad) * Adir.z + tipSign * Math.cos(thRad) * brefZ
     const cosD = Math.cos(dTheta), sinD = Math.sin(dTheta)   // paired-slab unwind rotation
 
     const updates = []
@@ -499,8 +520,9 @@ export function initOverhangStrandAnim({ getHelixCtrl, getGeometry, getDesign, g
     const f = _straightFrame(b, params)
     const cN = Math.cos(thRad), sN = Math.sin(thRad)
     const _n3 = (x, y, z) => { const l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l] }
-    const [aX, aY, aZ] = _n3(-cN * Adir.x + sN * f.brefX, -cN * Adir.y + sN * f.brefY, -cN * Adir.z + sN * f.brefZ) // toward root + outward
-    const pdX = sN * Adir.x + cN * f.brefX, pdY = sN * Adir.y + cN * f.brefY, pdZ = sN * Adir.z + cN * f.brefZ // 90° from splay/arm (uniform)
+    const tipSign = b.tipSign ?? 1   // axial lean toward the overhang ROOT (5′/3′-agnostic)
+    const [aX, aY, aZ] = _n3(-tipSign * cN * Adir.x + sN * f.brefX, -tipSign * cN * Adir.y + sN * f.brefY, -tipSign * cN * Adir.z + sN * f.brefZ) // toward root + outward
+    const pdX = sN * Adir.x + tipSign * cN * f.brefX, pdY = sN * Adir.y + tipSign * cN * f.brefY, pdZ = sN * Adir.z + tipSign * cN * f.brefZ // 90° from splay/arm (uniform)
     const fp = Math.max(0, Math.min(M - 1, forkPos)), f0 = Math.floor(fp), f1 = Math.min(M - 1, f0 + 1), ft = fp - f0
     const faxX = b.ohAxis[f0 * 3] * (1 - ft) + b.ohAxis[f1 * 3] * ft
     const faxY = b.ohAxis[f0 * 3 + 1] * (1 - ft) + b.ohAxis[f1 * 3 + 1] * ft

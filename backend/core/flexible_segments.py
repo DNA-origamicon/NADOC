@@ -91,10 +91,21 @@ def _build_bead_graph(design: Design):
 
 def _owning_cluster_id(design: Design, bead_key, sd) -> str | None:
     """Which existing cluster owns this bead. Prefers a domain-level match over a
-    helix-level one, and a non-default cluster over the default catch-all."""
+    helix-level one, a non-default cluster over the default catch-all, and — when a
+    helix belongs to several overlapping clusters — the MORE SPECIFIC (fewer-helix)
+    one.
+
+    The specificity tie-break matters for imported / auto-detected designs, where a
+    large scaffold-spanning cluster overlaps the smaller geometry clusters that are
+    the real rigid arms. Without it, both ends of a flexible run collapse onto the
+    shared spanning cluster (first in the list wins the tie) → no inter-cluster
+    bridge → no connection → the run's beads are excluded from rigid rendering with
+    nothing drawn in their place ("marked segment disappears"). Preferring the
+    smaller cluster resolves each end to its own geometry arm so a tether forms.
+    """
     helix = bead_key[0]
     best = None
-    best_score = -1
+    best_key: tuple[int, int] | None = None  # (score, -helix_count); higher wins
     for c in design.cluster_transforms:
         score = -1
         if c.domain_ids:
@@ -108,8 +119,11 @@ def _owning_cluster_id(design: Design, bead_key, sd) -> str | None:
             continue
         if c.is_default:
             score = 0
-        if score > best_score:
-            best_score, best = score, c.id
+        # Among equal-score matches, prefer the cluster with the fewest helices
+        # (the most specific rigid body) over a broad spanning cluster.
+        key = (score, -len(c.helix_ids))
+        if best_key is None or key > best_key:
+            best_key, best = key, c.id
     return best
 
 

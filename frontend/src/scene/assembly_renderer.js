@@ -6485,6 +6485,43 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     return out
   }
 
+  // ── Public: applyGroupVisibilityOverlay ───────────────────────────────────
+  // Combined per-instance + group visibility, applied WITHOUT a rebuild. An
+  // instance draws iff its own `visible !== false` AND it is not inside a
+  // hidden PartGroup. We write the per-source visibility texture (the shared
+  // shaders discard rows whose `v_visible < 0.5`) and flag the row dirty so the
+  // per-frame `_uploadRows` flush picks it up — O(N) over instances, no geometry
+  // re-fetch. Surface-rep sources have no vis-texture path (a plain
+  // InstancedMesh), so we bake visibility into their instanceMatrix directly;
+  // surface sources skip the LOD permutation (see `_updateLodForSource`), so
+  // `instanceIndex` rows stay aligned with the surface mesh's rows.
+  function applyGroupVisibilityOverlay(hiddenInstanceIds) {
+    const hidden = hiddenInstanceIds instanceof Set
+      ? hiddenInstanceIds
+      : new Set(hiddenInstanceIds || [])
+    const instances = store.getState().currentAssembly?.instances ?? []
+    const selfVisible = new Map(instances.map(i => [i.id, i.visible !== false]))
+    const _m = new THREE.Matrix4()
+    for (const srcEntry of _sources.values()) {
+      const sm = srcEntry.surfaceMesh?.mesh
+      for (const [id, row] of srcEntry.instanceIndex.entries()) {
+        const vis = (selfVisible.get(id) ?? true) && !hidden.has(id)
+        srcEntry.visibility[row]        = vis ? 1.0 : 0.0
+        srcEntry.visData[row * 16 + 0]  = srcEntry.visibility[row]
+        srcEntry.dirtyVisRows.add(row)
+        if (sm) {
+          if (vis) {
+            for (let k = 0; k < 16; k++) _m.elements[k] = srcEntry.xformData[row * 16 + k]
+            sm.setMatrixAt(row, _m)
+          } else {
+            sm.setMatrixAt(row, _m.makeScale(0, 0, 0))
+          }
+        }
+      }
+      if (sm) sm.instanceMatrix.needsUpdate = true
+    }
+  }
+
   // ── Public: onRebuildComplete ─────────────────────────────────────────────
   function onRebuildComplete(fn) { _onRebuildCompleteCbs.push(fn) }
   function _fireRebuildComplete() {
@@ -6518,6 +6555,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     rebuild,
     dispose,
     setActiveInstance,
+    applyGroupVisibilityOverlay,
     getBoundingBox,
     getInstanceCenters,
     pickInstance,

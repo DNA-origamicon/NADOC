@@ -3074,6 +3074,7 @@
               <button class="dropdown-item" id="menu-routing-scaffold-ends">Autoscaffold <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:var(--text-xs);float:right;margin-left:12px">[1]</span></button>
               <button class="dropdown-item" id="menu-routing-auto-crossover">Auto Crossover <span class="routing-check-mark">✓</span><span style="color:#484f58;font-size:var(--text-xs);float:right;margin-left:12px">[2]</span></button>
               <button class="dropdown-item" id="menu-routing-autobreak">Autobreak<span style="color:#484f58;font-size:var(--text-xs);float:right;margin-left:12px">[3]</span></button>
+              <button class="dropdown-item" id="menu-routing-full-autostaple">Full Autostaple</button>
               <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
               <button class="dropdown-item" id="menu-seq-update-routing" disabled>Add Loops/Skips<span style="color:#484f58;font-size:var(--text-xs);float:right;margin-left:12px">[4]</span></button>
               <button class="dropdown-item" id="menu-seq-clear-all-loop-skips">Clear All Loop/Skips</button>
@@ -3178,6 +3179,7 @@
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-assembly-define-joint" disabled>Define Connector</button>
           <button class="dropdown-item" id="menu-assembly-define-mate" disabled>Define Mate</button>
+          <button class="dropdown-item" id="menu-assembly-define-belt" disabled>Define Belt Path…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-assembly-strand-connections" disabled style="color:#484f58">Add Strand Connections</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
@@ -3262,6 +3264,7 @@
             <div class="hk-row"><span class="hk-desc">Autoscaffold</span><span class="hk-key">1</span></div>
             <div class="hk-row"><span class="hk-desc">Auto Crossover</span><span class="hk-key">2</span></div>
             <div class="hk-row"><span class="hk-desc">Autobreak</span><span class="hk-key">3</span></div>
+            <div class="hk-row"><span class="hk-desc">Full Autostaple</span><span class="hk-key">Tools</span></div>
             <div class="hk-row"><span class="hk-desc">Add Loops/Skips</span><span class="hk-key">4</span></div>
             <div class="hk-row"><span class="hk-desc">Scaffold Sequence</span><span class="hk-key">5</span></div>
             <div class="hk-row"><span class="hk-desc">Staple Sequences</span><span class="hk-key">6</span></div>
@@ -4105,6 +4108,12 @@
                            style="flex:1;accent-color:#58a6ff">
                     <span id="photo-floor-grid-density-label" style="color:#c9d1d9;min-width:34px;text-align:right">10</span>
                   </div>
+                  <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                    <span style="min-width:60px" title="How far the grid extends before fading into the distance. Higher = grid reaches farther toward the horizon. Fades the distant lines so they don't pile into a bright band.">Fade reach</span>
+                    <input id="photo-floor-grid-fade" type="range" min="0.3" max="6" step="0.1" value="1.5"
+                           style="flex:1;accent-color:#58a6ff">
+                    <span id="photo-floor-grid-fade-label" style="color:#c9d1d9;min-width:34px;text-align:right">1.5×</span>
+                  </div>
                   <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
                     <input id="photo-floor-grid-neon" type="checkbox"> Neon glow (80's vaporwave)
                   </label>
@@ -4806,12 +4815,31 @@
         </div>
       </label>
       <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
-        <input type="radio" name="ab-algo" value="advanced" style="margin-top:4px">
+        <input type="radio" name="ab-algo" value="aksel" style="margin-top:4px">
         <div>
-          <div style="font-size:var(--text-sm);color:var(--color-text-primary)">Advanced — Thermodynamic optimizer</div>
-          <div style="font-size:var(--text-xs);color:var(--color-text-muted)">Run global thermodynamic optimizer to select staple breakpoints.</div>
+          <div style="font-size:var(--text-sm);color:var(--color-text-primary)">Aksel route — Auto crossover + thermodynamic autobreak</div>
+          <div style="font-size:var(--text-xs);color:var(--color-text-muted)">Place compliant crossovers, then apply optimized legal-length staple breaks.</div>
         </div>
       </label>
+      <div id="ab-aksel-controls" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding-top:4px">
+        <label style="display:grid;gap:4px;font-size:var(--text-xs);color:var(--color-text-muted)">
+          Min nt
+          <input id="ab-min-nt" type="number" min="1" step="1" value="21" style="background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);color:var(--color-text-primary);padding:6px 8px;font-size:var(--text-sm)">
+        </label>
+        <label style="display:grid;gap:4px;font-size:var(--text-xs);color:var(--color-text-muted)">
+          Max nt
+          <input id="ab-max-nt" type="number" min="1" step="1" value="60" style="background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);color:var(--color-text-primary);padding:6px 8px;font-size:var(--text-sm)">
+        </label>
+        <label style="display:grid;gap:4px;font-size:var(--text-xs);color:var(--color-text-muted)">
+          Paths
+          <input id="ab-k-paths" type="number" min="1" max="50" step="1" value="3" style="background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);color:var(--color-text-primary);padding:6px 8px;font-size:var(--text-sm)">
+        </label>
+        <label style="display:grid;gap:4px;font-size:var(--text-xs);color:var(--color-text-muted)">
+          Use path
+          <input id="ab-path-index" type="number" min="0" step="1" value="0" style="background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);color:var(--color-text-primary);padding:6px 8px;font-size:var(--text-sm)">
+        </label>
+      </div>
+      <div id="ab-aksel-report" style="display:none;border-top:1px solid var(--color-border-default);padding-top:10px;font-size:var(--text-xs);color:var(--color-text-muted);line-height:1.55;white-space:pre-line"></div>
     </div>
   </div>
 

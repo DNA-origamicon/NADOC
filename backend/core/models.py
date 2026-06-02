@@ -1132,6 +1132,9 @@ SnapshotOpKind = Literal[
     'auto-scaffold-seamed',
     'auto-scaffold-seamless',
     'auto-break',
+    'auto-break-aksel',
+    'auto-route-aksel',
+    'full-autostaple',
     'auto-merge',
     'auto-crossover',
     'create-near-ends',
@@ -1172,6 +1175,11 @@ SnapshotOpKind = Literal[
     'assembly-transform-group',
     'assembly-create-gear',
     'assembly-delete-gear',
+    'assembly-create-belt',
+    'assembly-delete-belt',
+    'assembly-create-belt-rider',
+    'assembly-delete-belt-rider',
+    'assembly-polymerize-belt',
 ]
 
 
@@ -2365,6 +2373,90 @@ class GearRelation(BaseModel):
         return self
 
 
+class BeltPulley(BaseModel):
+    """One pulley of a BeltPath. Only references are stored; geometry is derived.
+
+    joint_id        — revolute AssemblyJoint giving the rotation axis (axis_origin /
+                      axis_direction, world-space at current_value=0).
+    side            — which body of the joint rotates ('a'/'b'); the rim connector and
+                      (later) the carried part live on this body. Default 'b' (child).
+    instance_id     — resolved PartInstance id of the rotating body (cached for lookup).
+    connector_label — InterfacePoint label on the rotating body that lies on the rim;
+                      fixes the belt contact phase.
+
+    radius / center_world / connector_world — frontend-computed cached geometry,
+    ADVISORY ONLY (never the source of truth). Kept so a headless reader or test can
+    show approximate belt geometry without re-deriving connector world positions.
+    """
+    joint_id: str
+    side: Literal["a", "b"] = "b"
+    instance_id: Optional[str] = None
+    connector_label: Optional[str] = None
+    radius: float = 0.0
+    center_world: Optional[List[float]] = None
+    connector_world: Optional[List[float]] = None
+
+
+class BeltPath(BaseModel):
+    """An open belt wrapping exactly two pulleys (external tangents, same spin sense).
+
+    DISPLAY-LAYER ONLY in this phase: rendered as a glowing line; no kinematic
+    coupling and no part mating yet. Forward-compatible — a later phase adds a
+    carried-part reference + travel parameter WITHOUT changing the pulley refs.
+
+    THREE-LAYER LAW: a BeltPath only stores assembly-level display metadata. It
+    never writes into any field of an embedded Design, and carries no current_value,
+    so it is static across configuration snapshots (no AssemblyConfigurationSnapshot
+    change required this phase).
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "Belt"
+    pulley_a: BeltPulley
+    pulley_b: BeltPulley
+    # Kinematic coupling anchors (radians), snapshotted at create/edit time so the
+    # belt is satisfied from the current pose without an immediate jump — exactly
+    # like GearRelation. An open belt couples the two pulley joints so rotating
+    # one drives the other at ratio r_a/r_b in the SAME world rotational sense.
+    joint_a_anchor: float = 0.0
+    joint_b_anchor: float = 0.0
+
+    @model_validator(mode='after')
+    def _check(self):
+        if self.pulley_a.joint_id == self.pulley_b.joint_id:
+            raise ValueError("BeltPath: pulley_a and pulley_b must use different joints.")
+        for p, lbl in ((self.pulley_a, "pulley_a"), (self.pulley_b, "pulley_b")):
+            if not math.isfinite(p.radius) or p.radius < 0:
+                raise ValueError(f"BeltPath {lbl}: radius must be finite and >= 0.")
+        return self
+
+
+class BeltRider(BaseModel):
+    """A PartInstance attached to (riding) a BeltPath.
+
+    Phase 1 (static placement): the part is seated so its ``connector_label``
+    InterfacePoint sits on the belt at ``arc_param`` (0..1 along the loop by arc
+    length), oriented to the belt frame. The placement transform is applied to
+    the PartInstance at attach time. A later phase advances ``arc_param`` as the
+    belt's driver pulley rotates so the part travels the loop.
+
+    DISPLAY-LAYER ONLY: like the belt/gears, this only affects assembly-level
+    PartInstance.transform — never an embedded Design's topology.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    belt_path_id: str
+    instance_id: str
+    connector_label: Optional[str] = None
+    arc_param: float = 0.0
+    # Ride state (Phase 2). ``ref_angle`` is the belt's driver-pulley angle
+    # (pulley_a.current_value) at attach time; ``local_transform`` is the part's
+    # pose relative to the belt frame at the attach arc point (16 floats, row-major).
+    # The live position is derived on the frontend from the current pulley angle:
+    # arc advances by Δθ·(ds/dθ)/L along the loop, then world = beltFrame(arc) ·
+    # local_transform. Drift-free (derived from the absolute angle, not integrated).
+    ref_angle: float = 0.0
+    local_transform: Optional[List[float]] = None
+
+
 class PartLibraryEntry(BaseModel):
     """Registry entry for a known .nadoc file in the part library."""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -2430,6 +2522,8 @@ class Assembly(BaseModel):
     instances: List[PartInstance] = Field(default_factory=list)
     joints: List[AssemblyJoint] = Field(default_factory=list)
     gear_relations: List[GearRelation] = Field(default_factory=list)
+    belt_paths: List[BeltPath] = Field(default_factory=list)
+    belt_riders: List[BeltRider] = Field(default_factory=list)
     groups: List[PartGroup] = Field(default_factory=list)
     assembly_helices: List[Helix] = Field(default_factory=list)
     assembly_strands: List[Strand] = Field(default_factory=list)

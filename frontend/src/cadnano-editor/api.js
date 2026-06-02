@@ -595,6 +595,21 @@ export async function addAutoBreak(opts = {}) {
   return mutate(req => req('POST', '/design/auto-break', opts))
 }
 
+/** Apply Aksel-style thermodynamic staple breakpoints. */
+export async function addAutoBreakAksel(opts = {}) {
+  return mutate(req => req('POST', '/design/auto-break-aksel', opts))
+}
+
+/** Run auto-crossover followed by Aksel-style thermodynamic autobreak. */
+export async function addAutoRouteAksel(opts = {}) {
+  return mutate(req => req('POST', '/design/auto-route-aksel', opts))
+}
+
+/** Assign scaffold/staple sequences and run the full Aksel routing path. */
+export async function addFullAutostaple(opts = {}) {
+  return mutate(req => req('POST', '/design/full-autostaple', opts))
+}
+
 /** Merge short staple fragments across nicks. */
 export async function addAutoMerge() {
   return mutate(req => req('POST', '/design/auto-merge'))

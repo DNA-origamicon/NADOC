@@ -166,6 +166,9 @@ function _busyHeaderForPath(method, path) {
   if (path === '/design/auto-scaffold')                            return 'Auto Scaffold'
   if (path.startsWith('/design/auto-staple'))                      return 'Auto Staple'
   if (path === '/design/auto-break')                               return 'Auto Break'
+  if (path === '/design/auto-break-aksel')                         return 'Aksel Autobreak'
+  if (path === '/design/auto-route-aksel')                         return 'Aksel Route'
+  if (path === '/design/full-autostaple')                           return 'Full Autostaple'
   if (path.startsWith('/design/auto-crossover'))                   return 'Auto Crossover'
   if (path.startsWith('/design/bundle'))                           return 'Building Bundle'
   if (path.startsWith('/design/extrude'))                          return 'Extruding'
@@ -945,6 +948,29 @@ export async function patchForcedLigationExtraBases(flId, sequence) {
 export async function addAutoBreak(opts = {}) {
   const json = await _request('POST', '/design/auto-break', opts)
   return _syncFromDesignResponse(json)
+}
+
+export async function addAutoBreakAksel(opts = {}) {
+  const json = await _request('POST', '/design/auto-break-aksel', opts)
+  return _syncFromDesignResponse(json)
+}
+
+export async function addAutoRouteAksel(opts = {}) {
+  const json = await _request('POST', '/design/auto-route-aksel', opts)
+  return _syncFromDesignResponse(json)
+}
+
+export async function addFullAutostaple(opts = {}) {
+  const json = await _request('POST', '/design/full-autostaple', opts)
+  return _syncFromDesignResponse(json)
+}
+
+export async function scoreStaples(opts = {}) {
+  return _request('POST', '/design/staples/score', opts, { suppressBusy: true })
+}
+
+export async function buildStaplePrecursorGraphs(opts = {}) {
+  return _request('POST', '/design/staples/precursor-graphs', opts)
 }
 
 export async function addAutoMerge() {
@@ -2488,6 +2514,36 @@ export async function deleteGearRelation(id) {
 
 export async function resolveGearRelation(id) {
   const json = await _request('POST', `/assembly/gear-relations/${id}/resolve`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function createBeltPath(body) {
+  const json = await _request('POST', '/assembly/belt-paths', body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function patchBeltPath(id, body) {
+  const json = await _request('PATCH', `/assembly/belt-paths/${id}`, body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function deleteBeltPath(id) {
+  const json = await _request('DELETE', `/assembly/belt-paths/${id}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function createBeltRider(body) {
+  const json = await _request('POST', '/assembly/belt-riders', body)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function deleteBeltRider(id) {
+  const json = await _request('DELETE', `/assembly/belt-riders/${id}`)
+  return _syncFromAssemblyResponse(json)
+}
+
+export async function polymerizeBelt(body) {
+  const json = await _request('POST', '/assembly/polymerize-belt', body)
   return _syncFromAssemblyResponse(json)
 }
 

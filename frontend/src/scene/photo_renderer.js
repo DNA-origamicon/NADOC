@@ -145,6 +145,7 @@ export function createPhotoRenderer(sceneCtx) {
     floorGridNeon:   false,         // 80s-vaporwave neon style for the grid
     floorGridColor:  '#ff00ff',     // neon colour (magenta default)
     floorGridGlow:   3.0,           // HDR multiplier on neon grid colour (drives Bloom)
+    floorGridFade:   1.5,           // grid fade reach (× the base camera-height window; higher = grid extends farther before dissolving)
   }
 
   // Environment state — kept separately so we can restore on deactivate and
@@ -427,7 +428,10 @@ export function createPhotoRenderer(sceneCtx) {
         _scratchAmbientColor.b += obj.color.b * w
       }
     }
-    _photoGroup?.traverse(visit)
+    // Skip the preset rig when it's hidden (sun-on single-light mode) so mist
+    // inscatter matches the lighting actually rendered. (traverse ignores
+    // .visible, so gate on the group flag explicitly.)
+    if (_photoGroup?.visible) _photoGroup.traverse(visit)
     _sunGroup?.traverse(visit)
     for (const l of _fluoroLights) {
       _scratchPoints.push({
@@ -634,11 +638,23 @@ export function createPhotoRenderer(sceneCtx) {
     }
   }
 
+  // When the Sun is enabled it becomes the single light source: hide the entire
+  // preset studio rig (its ambient + hemisphere + directional lights) so only
+  // the sun illuminates the scene. Restored to visible when the sun is off.
+  // (Image-based lighting from the Environment dropdown is independent and still
+  // applies — turn the environment off too for a pure single-light look.)
+  function _applyRigVisibility() {
+    if (_photoGroup) _photoGroup.visible = !_settings.sun
+  }
+
   // (Re)position the sun light from current settings. Uses the floor's bbox
   // when available (for shadow camera fit + target); falls back to scene
   // origin / unit distance if there's no floor or no scene yet.
   function _applySun() {
     if (!_active) return
+    // Sun on → suppress the preset rig; sun off → bring it back. Covers entry
+    // (called from activate) and every sun setter.
+    _applyRigVisibility()
     if (!_settings.sun) {
       _disposeSunGroup()
       // Sun is off → preset rig reclaims the single-key shadow.
@@ -756,6 +772,7 @@ export function createPhotoRenderer(sceneCtx) {
   function setFloorGridNeon(on)   { _settings.floorGridNeon = !!on; _rebuildFloor() }
   function setFloorGridColor(hex) { _settings.floorGridColor = hex; _rebuildFloor() }
   function setFloorGridGlow(v)    { _settings.floorGridGlow  = v;   _rebuildFloor() }
+  function setFloorGridFade(v)    { _settings.floorGridFade  = v;   _rebuildFloor() }
 
   // ── Path tracer ───────────────────────────────────────────────────────────
 
@@ -1544,6 +1561,7 @@ export function createPhotoRenderer(sceneCtx) {
     setFloorGridNeon,
     setFloorGridColor,
     setFloorGridGlow,
+    setFloorGridFade,
     setBackground,
     setSSAO,
     setBloom,

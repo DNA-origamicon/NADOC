@@ -52,6 +52,7 @@ import { initAssemblyOverhangsManagerPopup,
          open as openAssemblyOverhangsManager,
        } from './ui/assembly_overhangs_manager_popup.js'
 import { initPolymerizePanel }     from './ui/polymerize_panel.js'
+import { initBeltPathPanel }       from './ui/belt_path_panel.js'
 import { initStrandAnimPanel }     from './ui/strand_anim_panel.js'
 import { openProteinAttachModal }  from './ui/protein_attach_modal.js'
 import { openImportPdbModal }      from './ui/import_pdb_modal.js'
@@ -87,6 +88,8 @@ import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
 import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
 import { initKinematicsTicker }      from './scene/kinematics_ticker.js'
+import { beltCouplingRelations, applyBeltRiders, beltCurvePoints, beltLoopLength, beltFrameAt } from './scene/belt_geometry.js'
+import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { makeRefVec, ringPlaneHit, angleInRing, computeRevoluteTransform } from './scene/assembly_revolute_math.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
@@ -5133,6 +5136,10 @@ Typical debugging workflow for "reverts to 3D" bug:
     _defineAssemblyMate()
   })
 
+  document.getElementById('menu-assembly-define-belt')?.addEventListener('click', () => {
+    beltPathPanel.open()
+  })
+
   document.getElementById('menu-assembly-polymerize-origami')?.addEventListener('click', () => {
     polymerizePanel.open()
   })
@@ -5537,9 +5544,24 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   })
 
+  document.getElementById('menu-routing-full-autostaple')?.addEventListener('click', async () => {
+    if (!store.getState().currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
+    _showProgress('Full autostaple', 'Assigning sequences and routing staples…')
+    const result = await api.addFullAutostaple({ scaffold_name: 'M13mp18', k_paths: 3 })
+    _hideProgress()
+    if (!result) {
+      showToast('Full autostaple failed: ' + (store.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
+      return
+    }
+    const full = result.full_autostaple ?? {}
+    const removed = full.removed_circularizing_crossover_count ?? 0
+    showToast(`Full autostaple complete: ${full.aksel_break?.new_staple_count ?? 0} staples, ${removed} circularizing crossovers removed.`)
+  })
+
   ;(() => {
     let _abModalCtrl = null
     let _abBody      = null
+    let _abReport    = null
 
     let _animTimer = null
     function _startIndeterminate() {
@@ -5557,18 +5579,96 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (fill) fill.style.width = '100%'
     }
 
+    function _readAkselOptions() {
+      const minNt = Number.parseInt(_abBody?.querySelector('#ab-min-nt')?.value ?? '21', 10)
+      const maxNt = Number.parseInt(_abBody?.querySelector('#ab-max-nt')?.value ?? '60', 10)
+      const kPaths = Number.parseInt(_abBody?.querySelector('#ab-k-paths')?.value ?? '3', 10)
+      const pathIndex = Number.parseInt(_abBody?.querySelector('#ab-path-index')?.value ?? '0', 10)
+      return {
+        min_staple_nt: Number.isFinite(minNt) ? minNt : 21,
+        max_staple_nt: Number.isFinite(maxNt) ? maxNt : 60,
+        k_paths: Number.isFinite(kPaths) ? kPaths : 3,
+        path_index: Number.isFinite(pathIndex) ? pathIndex : 0,
+      }
+    }
+
+    function _setAkselReport(lines, severity = 'normal') {
+      if (!_abReport) return
+      _abReport.style.display = 'block'
+      _abReport.style.color = severity === 'error'
+        ? 'var(--color-danger, #ff6b6b)'
+        : 'var(--color-text-muted)'
+      _abReport.textContent = lines.filter(Boolean).join('\n')
+    }
+
+    function _formatScoreSummary(report) {
+      const s = report?.summary ?? {}
+      return [
+        `Staples: ${s.staple_count ?? 0} (${s.scored_staple_count ?? 0} scored)`,
+        `Bound nt: ${s.total_bound_nt ?? 0}`,
+        `Length violations: ${s.length_violation_count ?? 0}`,
+        `Warnings: ${s.warning_count ?? 0}`,
+        `Q: ${s.Q_origami == null ? 'n/a' : Number(s.Q_origami).toExponential(3)}`,
+      ]
+    }
+
+    function _formatGraphSummary(report) {
+      const s = report?.summary ?? {}
+      return [
+        `Precursors: ${s.complete_precursor_count ?? 0}/${s.precursor_count ?? 0} complete`,
+        `Candidate edges: ${s.edge_count ?? 0}`,
+        `Best bound nt: ${s.best_total_bound_nt ?? 0}`,
+        `Best Q: ${s.best_Q_origami == null ? 'n/a' : Number(s.best_Q_origami).toExponential(3)}`,
+      ]
+    }
+
+    async function _scoreAksel3d() {
+      const opts = _readAkselOptions()
+      _setAkselReport(['Scoring current staples…'])
+      const report = await api.scoreStaples(opts)
+      if (!report) {
+        _setAkselReport(['Score failed: ' + (store.getState().lastError?.message ?? 'unknown error')], 'error')
+        return
+      }
+      _setAkselReport(['Current route', ..._formatScoreSummary(report)])
+    }
+
+    async function _previewAksel3d() {
+      const opts = _readAkselOptions()
+      _setAkselReport(['Building precursor graph…'])
+      _showProgress('Aksel preview', 'Scoring candidate breaks…')
+      const report = await api.buildStaplePrecursorGraphs(opts)
+      _hideProgress()
+      if (!report) {
+        _setAkselReport(['Preview failed: ' + (store.getState().lastError?.message ?? 'unknown error')], 'error')
+        return
+      }
+      _setAkselReport(['Precursor graph', ..._formatGraphSummary(report)])
+    }
+
     async function _runAutoBreak3d() {
       _abModalCtrl?.close()
       const algo = _abBody?.querySelector('input[name="ab-algo"]:checked')?.value || 'basic'
-      _showProgress('Autobreak', algo === 'advanced' ? 'Running advanced optimizer…' : 'Running nick planner…')
-      if (algo === 'advanced') _startIndeterminate()
-      const result = await api.addAutoBreak({ algorithm: algo })
-      if (algo === 'advanced') _stopIndeterminate()
+      const isAksel = algo === 'aksel' || algo === 'advanced'
+      _showProgress('Autobreak', isAksel ? 'Running Aksel optimizer…' : 'Running nick planner…')
+      if (isAksel) _startIndeterminate()
+      const result = isAksel
+        ? await api.addAutoRouteAksel(_readAkselOptions())
+        : await api.addAutoBreak({ algorithm: algo })
+      if (isAksel) _stopIndeterminate()
       _hideProgress()
       if (!result) {
         showToast('Autobreak failed: ' + (store.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
       } else {
-        showToast('Autobreak complete.')
+        const akselRoute = result.aksel_route
+        const aksel = akselRoute?.aksel_break ?? result.aksel_break
+        if (aksel) {
+          const placed = akselRoute?.auto_crossover?.placed
+          const prefix = placed == null ? 'Aksel autobreak' : `Aksel route (${placed} crossovers)`
+          showToast(`${prefix} complete: ${aksel.new_staple_count ?? 0} staples, ${aksel.length_violation_count ?? 0} length violations.`)
+        } else {
+          showToast('Autobreak complete.')
+        }
       }
     }
 
@@ -5577,13 +5677,16 @@ Typical debugging workflow for "reverts to 3D" bug:
       _abBody = document.getElementById('autobreak-modal-body')
       if (!_abBody) return
       _abBody.removeAttribute('hidden')
+      _abReport = _abBody.querySelector('#ab-aksel-report')
       const cancelBtn = createButton({ label: 'Cancel', variant: 'default', onClick: () => _abModalCtrl.close() })
+      const scoreBtn  = createButton({ label: 'Score', variant: 'default', onClick: _scoreAksel3d })
+      const graphBtn  = createButton({ label: 'Preview', variant: 'default', onClick: _previewAksel3d })
       const runBtn    = createButton({ label: 'Run Autobreak', variant: 'primary', onClick: _runAutoBreak3d })
       _abModalCtrl = createModal({
         title: 'Autobreak — choose algorithm',
-        size: 'sm',
+        size: 'md',
         body: _abBody,
-        actions: [cancelBtn, runBtn],
+        actions: [cancelBtn, scoreBtn, graphBtn, runBtn],
       })
     }
 
@@ -7263,6 +7366,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   const polymerizePanel = initPolymerizePanel(store, {
     isInstancePeriodic: (id) =>
       !!assemblyRenderer.getInstanceDesign?.(id)?.forced_ligations?.some(fl => fl.is_periodic_seam),
+    // Belt-loop polymerize: seed = an existing belt rider; geometry is JS-side.
+    getBeltFillCount: (riderId) => _beltFillInfo(riderId),
+    onPolymerizeBelt: (riderId, count) => _polymerizeBelt(riderId, count),
   })
   const spreadsheet = initSpreadsheet(store, {
     designRenderer,
@@ -8326,6 +8432,102 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   const instanceGizmo = initInstanceGizmo(store, controls)
   const assemblyJointRenderer = initAssemblyJointRenderer(scene, camera, canvas, store, api, controls)
+  const beltPathRenderer = initBeltPathRenderer(scene)
+  // Per-belt visibility (session-only; default visible). The persistent belt
+  // tubes are suppressed while the define/edit panel is open (it shows its own
+  // live preview), and rebuilt on assembly change + panel close + toggle.
+  const _beltHiddenIds = new Set()
+  function _rebuildBeltPaths() {
+    beltPathRenderer.rebuild(store.getState().currentAssembly, {
+      hiddenIds: _beltHiddenIds,
+      suppress:  beltPathPanel.isOpen(),
+    })
+  }
+  function _toggleBeltVisibility(beltId) {
+    if (_beltHiddenIds.has(beltId)) _beltHiddenIds.delete(beltId)
+    else _beltHiddenIds.add(beltId)
+    _rebuildBeltPaths()
+    assemblyPanel.rebuild(store.getState())   // refresh the row's eye icon
+  }
+  // Attach-part-to-belt: click a connector to select it (highlighted; click again
+  // to deselect), then click the belt path to seat the part there. The belt must
+  // be visible to be a click target, so force-show it first.
+  function _attachPartToBelt(beltId) {
+    if (_beltHiddenIds.has(beltId)) { _beltHiddenIds.delete(beltId); _rebuildBeltPaths() }
+    showToast('Attach to belt: click a connector on a part, then click the belt path.')
+    assemblyJointRenderer.enterAttachMode(beltId, {
+      onSelect: (conn) => showToast(conn
+        ? 'Connector selected — click the belt path to place it (or click it again to deselect).'
+        : 'Connector deselected — pick a connector.'),
+      onNeedConnector: () => showToast('Select a connector first, then click the belt path.'),
+      onAttach: async (payload) => {
+        const res = await api.createBeltRider(payload)
+        if (res === null) showToast(`Attach failed: ${store.getState().lastError?.message ?? ''}`, { severity: 'error' })
+        else showToast('Part attached to belt.')
+      },
+      onCancel: () => {},
+    })
+  }
+
+  // ── Polymerize along a belt (seed = an existing belt rider) ─────────────────
+  // Build the per-belt geometry context for a rider, or null if unavailable.
+  function _beltCtxForRider(riderId) {
+    const asm = store.getState().currentAssembly
+    const rider = (asm?.belt_riders ?? []).find(r => r.id === riderId)
+    if (!rider || !rider.local_transform) return null
+    const belt = (asm?.belt_paths ?? []).find(b => b.id === rider.belt_path_id)
+    if (!belt) return null
+    const jointById = new Map((asm.joints ?? []).map(j => [j.id, j]))
+    const ja = jointById.get(belt.pulley_a?.joint_id)
+    const points = beltCurvePoints(belt, jointById)
+    if (!ja || !points) return null
+    return { asm, rider, belt, jointById, ja, points,
+             L: beltLoopLength(points), planeNormal: ja.axis_direction }
+  }
+
+  // Auto fill count from the seed part's footprint along the belt tangent, so
+  // copies sit edge-to-edge. Returns { count, spacingNm, footprintNm } or null.
+  function _beltFillInfo(riderId) {
+    const ctx = _beltCtxForRider(riderId)
+    if (!ctx) return null
+    // Tangent at the seed = x-axis of the belt frame there.
+    const frame = beltFrameAt(ctx.points, ctx.rider.arc_param ?? 0, ctx.planeNormal)
+    const tan = new THREE.Vector3().setFromMatrixColumn(frame, 0).normalize()
+    const entry = assemblyRenderer.getInstanceCenters?.()?.find(c => c.id === ctx.rider.instance_id)
+    const size = entry?.size
+    let footprint = size ? Math.abs(size.x * tan.x) + Math.abs(size.y * tan.y) + Math.abs(size.z * tan.z) : 0
+    if (!(footprint > 1e-3)) footprint = ctx.L / 4   // fallback when no bbox
+    const count = Math.max(2, Math.round(ctx.L / footprint))
+    return { count, spacingNm: ctx.L / count, footprintNm: footprint }
+  }
+
+  // Create count-1 evenly-spaced copies of the seed rider around the loop.
+  async function _polymerizeBelt(riderId, count) {
+    const ctx = _beltCtxForRider(riderId)
+    if (!ctx) { showToast('Belt geometry unavailable — re-attach the part first.', { severity: 'error' }); return }
+    const n = Math.max(2, Math.floor(count) || 2)
+    const base = ctx.rider.arc_param ?? 0
+    const local = new THREE.Matrix4().fromArray(ctx.rider.local_transform).transpose()
+    const copies = []
+    for (let k = 1; k < n; k++) {
+      const arc = ((base + k / n) % 1 + 1) % 1
+      const world = beltFrameAt(ctx.points, arc, ctx.planeNormal).multiply(local)
+      copies.push({ arc_param: arc, transform: { values: world.clone().transpose().toArray() } })
+    }
+    const res = await api.polymerizeBelt({ rider_id: riderId, copies })
+    if (res === null) showToast(`Polymerize failed: ${store.getState().lastError?.message ?? ''}`, { severity: 'error' })
+    else showToast(`Polymerized ${n} copies around the belt.`)
+  }
+
+  const beltPathPanel = initBeltPathPanel(store, { api, jointRenderer: assemblyJointRenderer,
+    onOpen:  () => _rebuildBeltPaths(),   // suppress persistent tubes while previewing
+    onClose: () => _rebuildBeltPaths() })
+  if (window.__NADOC_DBG__) {
+    window.__NADOC_DBG__.beltPathPanel = beltPathPanel
+    window.__NADOC_DBG__.toggleBeltVisibility = _toggleBeltVisibility
+    window.__NADOC_DBG__.beltFillCount = (riderId) => _beltFillInfo(riderId)
+    window.__NADOC_DBG__.polymerizeBelt = (riderId, count) => _polymerizeBelt(riderId, count)
+  }
 
   // ── Kinematics ticker: continuous-spin for revolute joints ────────────────
   // Integrates AssemblyJoint.angular_velocity_rpm per frame and rotates each
@@ -9395,6 +9597,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     },
     onDefineConnector: (instanceId) => _defineAssemblyConnector(instanceId),
     onDefineMate: () => _defineAssemblyMate(),
+    onEditBeltPath: (belt) => beltPathPanel.open(belt),
+    isBeltHidden: (beltId) => _beltHiddenIds.has(beltId),
+    onToggleBeltVisibility: (beltId) => _toggleBeltVisibility(beltId),
+    onAttachToBelt: (beltId) => _attachPartToBelt(beltId),
+    onDeleteBeltRider: (riderId) => api.deleteBeltRider(riderId),
     onMateHighlight: (frames) => assemblyJointRenderer.showMateConnectorHighlights(frames),
     onMateHighlightClear: () => assemblyJointRenderer.clearMateConnectorHighlights(),
     onMateDebugMarkers: (debugFrames) => assemblyJointRenderer.showMateDebugMarkers(debugFrames),
@@ -10281,7 +10488,9 @@ Typical debugging workflow for "reverts to 3D" bug:
         _assemblyPendingTransforms.clear()
         _assemblyPendingPartJoints.clear()
         assemblyRenderer.dispose()
+        assemblyJointRenderer.exitAttachMode()
         assemblyJointRenderer.rebuild(null)   // clear all joint indicators
+        beltPathRenderer.rebuild(null)        // clear persistent belt tubes
         canvas.removeEventListener('pointerdown',  _onAssemblyPointerDown)
         canvas.removeEventListener('click',        _onAssemblyClick)
         canvas.removeEventListener('pointermove',  _onAssemblyHoverMove)
@@ -10339,6 +10548,16 @@ Typical debugging workflow for "reverts to 3D" bug:
         ?.toggleAttribute('disabled', !inAssembly)
     }
 
+    // Belt path needs at least two revolute mates to wrap; re-evaluate whenever
+    // the joint set may have changed (adding a mate fires assemblyChanged).
+    if (modeChanged || activeChanged || assemblyChanged) {
+      const inAssembly = newState.assemblyActive
+      const revoluteCount = (newState.currentAssembly?.joints ?? [])
+        .filter(j => j.joint_type === 'revolute').length
+      document.getElementById('menu-assembly-define-belt')
+        ?.toggleAttribute('disabled', !(inAssembly && revoluteCount >= 2))
+    }
+
     if (!modeChanged && newState.assemblyActive) {
       if (assemblyChanged) {
         // Hide the assembly welcome when the first part is added
@@ -10392,6 +10611,22 @@ Typical debugging workflow for "reverts to 3D" bug:
             fitOnDone: isLoad,
             activeInstanceId: newState.activeInstanceId,
           })
+        }
+        // Persistent belt-path tubes (create/edit/delete change belt_paths).
+        _rebuildBeltPaths()
+        // Drive belt riders to their live pose for the current pulley angles
+        // (covers discrete rotations — ring/gizmo/group commits + load). Skip
+        // while a joint is actively RPM-spinning: the ticker owns riders then,
+        // and running both (store angle vs the ticker's live _shadow) would make
+        // the rider hitch. Mutually exclusive with the ticker's gated update.
+        const _spinning = (newState.currentAssembly?.joints ?? []).some(
+          j => j.joint_type === 'revolute' && j.angular_velocity_rpm && !j.spin_paused)
+        if (!_spinning) {
+          applyBeltRiders(
+            newState.currentAssembly,
+            (id, j) => j.current_value ?? 0,
+            (iid, mat) => assemblyRenderer.setLiveTransform(iid, mat),
+          )
         }
       }
       // Multi-select union box: refresh whenever the multi-select set, the
@@ -10528,6 +10763,24 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Rigid-body group gizmo attachment ────────────────────────────────────────
   const _assemblyPendingTransforms = new Map()
   const _assemblyPendingPartJoints = new Map()
+  // Unwrapped angle accumulator for the current revolute gizmo drag (so the
+  // committed value is continuous past ±π and the rotation commits as a joint
+  // current_value rather than a transform the backend re-derives + wraps).
+  let _revoluteGizmoAngle = null
+  // The committed { current_value, endpoint_side } for a finished revolute gizmo
+  // drag, or null if the gizmo wasn't rotating a revolute joint. `endpoint_side`
+  // tells the backend WHICH body actually moves ('a' = parent, 'b' = child) so a
+  // joint authored "backward" (moving body = parent, fixed axle = child) rotates
+  // the right part instead of the fixed axle. Consumes + clears the accumulator.
+  function _revoluteGizmoCommitValue(constraint) {
+    if (constraint?.dof !== 'revolute') return null
+    if (!_revoluteGizmoAngle || _revoluteGizmoAngle.jointId !== constraint.jointId) return null
+    const seedJoint = store.getState().currentAssembly?.joints?.find(j => j.id === constraint.jointId)
+    const sideSign = _revoluteGizmoAngle.sideSign
+    const v = (seedJoint?.current_value ?? 0) + _revoluteGizmoAngle.accum * sideSign
+    _revoluteGizmoAngle = null
+    return { current_value: _clampJointValue(seedJoint, v), endpoint_side: sideSign < 0 ? 'a' : 'b' }
+  }
 
   function _matrixFromInstance(inst) {
     return new THREE.Matrix4().fromArray(inst.transform.values).transpose()
@@ -10562,10 +10815,14 @@ Typical debugging workflow for "reverts to 3D" bug:
     for (const inst of ni) {
       const p = pById.get(inst.id)
       if (!p) return false
-      // Any geometry- or visibility-affecting field change forces a rebuild.
+      // Any geometry-affecting field change forces a rebuild.  A pure
+      // `visible` toggle is NOT one of them: it's applied through the cheap
+      // visibility overlay (applyGroupVisibilityOverlay) in the fast path
+      // below — writing the per-instance visibility texture instead of
+      // disposing + re-fetching the whole assembly's geometry.  Letting a
+      // hide/show stay on the fast path is what makes the eye icon snappy.
       if (p.representation !== inst.representation) return false
       if (p.mode          !== inst.mode)          return false
-      if (p.visible       !== inst.visible)       return false
       if ((p.source?.type) !== (inst.source?.type)) return false
       if ((p.source?.path) !== (inst.source?.path)) return false
       if (JSON.stringify(p.cluster_transform_overrides ?? [])
@@ -10689,11 +10946,30 @@ Typical debugging workflow for "reverts to 3D" bug:
     const joints = assembly.joints ?? []
     const seedJoint = joints.find(j => j.id === constraint.jointId)
     if (!seedJoint) return
-    const rels = assembly.gear_relations ?? []
+
+    // Unwrap the gizmo's live rotation angle across frames: _signedAngleFromWorldDelta
+    // is atan2 (±π), so past half a turn it wraps and a belt rider would teleport.
+    // Accumulate the shortest step from the previous sample. State persists for
+    // the commit (which sends current_value, not a transform).
+    const sideSign = _movingSideSignForRevolute(seedJoint, movingIds)
+    const raw = _signedAngleFromWorldDelta(delta, constraint.axis)
+    if (!_revoluteGizmoAngle || _revoluteGizmoAngle.jointId !== constraint.jointId) {
+      _revoluteGizmoAngle = { jointId: constraint.jointId, lastRaw: raw, accum: raw, sideSign }
+    } else {
+      let step = raw - _revoluteGizmoAngle.lastRaw
+      if (step >  Math.PI) step -= 2 * Math.PI
+      if (step < -Math.PI) step += 2 * Math.PI
+      _revoluteGizmoAngle.accum += step
+      _revoluteGizmoAngle.lastRaw = raw
+      _revoluteGizmoAngle.sideSign = sideSign
+    }
+    const seedDelta = _revoluteGizmoAngle.accum * sideSign
+
+    // Gears + belts share the live-drag coupling graph (belts modelled as
+    // gear-shaped edges with ratio r_a/r_b and open-belt direction).
+    const rels = [...(assembly.gear_relations ?? []), ...beltCouplingRelations(assembly)]
     if (!rels.length) return
 
-    const seedDelta = _signedAngleFromWorldDelta(delta, constraint.axis)
-      * _movingSideSignForRevolute(seedJoint, movingIds)
     const values = new Map(joints.map(j => [j.id, j.current_value ?? 0]))
     values.set(seedJoint.id, _clampJointValue(seedJoint, (seedJoint.current_value ?? 0) + seedDelta))
 
@@ -10764,6 +11040,13 @@ Typical debugging workflow for "reverts to 3D" bug:
         endpointSideByJoint.get(jointId) ?? 'b',
       )
     }
+    // Belt riders follow live during a gizmo/group drag — use the freshly
+    // computed coupled joint values (seed included).
+    applyBeltRiders(
+      assembly,
+      (id, j) => values.get(id) ?? (j.current_value ?? 0),
+      (iid, mat) => assemblyRenderer.setLiveTransform(iid, mat),
+    )
   }
 
   function _queueAssemblyPrimaryCommit(ctx, primaryMat4) {
@@ -10830,13 +11113,20 @@ Typical debugging workflow for "reverts to 3D" bug:
         )
         if (_mrAssemblyCtx?.instanceId === instanceId) _mrSetTransformValuesFromMatrix(primaryMat4)
       },
-      // onCommit: keep the transform local until the selection is cleared.
+      // onCommit (drag end). For a revolute joint, commit the UNWRAPPED rotation
+      // as the joint's current_value (the continuous-angle path) instead of a
+      // transform the backend re-derives via atan2 (which wraps past ±π and
+      // teleports belt riders). Other DOFs keep the transform-commit path.
       (primaryMat4) => {
-        _queueAssemblyPrimaryCommit(ctx, primaryMat4)
+        const rev = _revoluteGizmoCommitValue(constraint)
+        if (rev != null) api.patchAssemblyJoint(constraint.jointId, rev)
+        else _queueAssemblyPrimaryCommit(ctx, primaryMat4)
       },
       ctx.primaryStart,
       centroidWorld,
     )
+
+    _revoluteGizmoAngle = null   // fresh accumulator for this attach
 
     if (constraint.dof === 'revolute') {
       instanceGizmo.applyConstraint({
@@ -10945,6 +11235,15 @@ Typical debugging workflow for "reverts to 3D" bug:
       // partners follow along, then returns the new assembly state. The
       // store subscriber re-attaches the gizmo at the new centroid.
       async (newPrimaryMat) => {
+        // Revolute-constrained group → commit the UNWRAPPED rotation as the
+        // joint's current_value (continuous past ±π), same as the instance
+        // gizmo, so belt riders don't teleport. Other DOFs POST the group delta.
+        const rev = _revoluteGizmoCommitValue(constraint)
+        if (rev != null) {
+          try { await api.patchAssemblyJoint(constraint.jointId, rev) }
+          catch (err) { console.error('[assembly] group revolute commit failed:', err) }
+          return
+        }
         const delta = newPrimaryMat.clone().multiply(ctx.primaryStart.clone().invert())
         // NADOC matrices are row-major; Three.js Matrix4.toArray emits the
         // current column-major elements buffer. Transpose before sending so
@@ -10960,6 +11259,8 @@ Typical debugging workflow for "reverts to 3D" bug:
       ctx.primaryStart,
       centroidWorld,
     )
+
+    _revoluteGizmoAngle = null   // fresh accumulator for this group attach
 
     if (constraint.dof === 'revolute') {
       instanceGizmo.applyConstraint({
@@ -11588,6 +11889,10 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Assembly canvas pointer handler (joint ring pick + instance selection) ──
   function _onAssemblyPointerDown(e) {
     if (e.button === 0) {
+      // Belt-define / attach-to-belt modes run their own picking on separate
+      // handlers; suppress all other left-button assembly interactions while
+      // they own the canvas.
+      if (assemblyJointRenderer.isBeltMode() || assemblyJointRenderer.isAttachMode()) return
       // Polymerize panel intercepts the click anywhere on the joint indicator
       // (shaft / cone / ring) — using the whole-indicator picker since the ring
       // alone is a narrow target. Selecting a mate this way doesn't start a
@@ -11608,7 +11913,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         return
       }
 
-      if (!_translateRotateActive && !assemblyJointRenderer.isMateMode()) {
+      if (!_translateRotateActive && !assemblyJointRenderer.isMateMode() && !assemblyJointRenderer.isBeltMode()) {
         const partJointHit = assemblyRenderer.pickPartJoint?.(_canvasNdc(e), camera)
         if (partJointHit?.inst?.id === store.getState().activeInstanceId) {
           _assemblySelectedPartJoint = {
@@ -11824,6 +12129,10 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   async function _onAssemblyClick(e) {
     if (e.button !== 0) return
+    // Belt-define mode owns the canvas (revolute-marker + rim-connector picks).
+    // Suppress normal part/group selection so picking a rim doesn't box-select
+    // the part underneath it.
+    if (assemblyJointRenderer.isBeltMode() || assemblyJointRenderer.isAttachMode()) { _assemblyPtrDownAt = null; return }
     if (!_assemblyPtrDownAt) return
     const dx = e.clientX - _assemblyPtrDownAt.x
     const dy = e.clientY - _assemblyPtrDownAt.y
@@ -12028,6 +12337,17 @@ Typical debugging workflow for "reverts to 3D" bug:
     // arc) → a Relax menu, mirroring the per-design linker right-click.
     const linkerConnId = assemblyRenderer.pickLinker?.(_canvasNdc(e), camera)
     if (linkerConnId) { _showAssemblyLinkerMenu(linkerConnId, e.clientX, e.clientY); return }
+
+    // Right-click on a belt path → "Attach part to belt" (uses the clicked point
+    // as the belt location; then pick the part's connector).
+    const beltHit = assemblyJointRenderer.pickBeltAt(e)
+    if (beltHit) {
+      createContextMenu({ x: e.clientX, y: e.clientY, items: [
+        { type: 'header', label: 'Belt path' },
+        { label: 'Attach part to belt', onClick: () => _attachPartToBelt(beltHit.beltId) },
+      ] })
+      return
+    }
 
     const inst = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
     if (!inst) return

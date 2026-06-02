@@ -110,7 +110,17 @@ export function makeMaterial(repr, presetName, vertexColors = false, opacity = 1
   // when sliding back below 1.0 after we've zeroed it for full-opacity.
   mat.userData.presetTransmission = params.transmission ?? 0
 
-  if (opacity >= 1.0) {
+  // Only the surface rep carries a meaningful incoming opacity (it has its own
+  // opacity slider). For full / cylinders / atomistic the global Translucency
+  // slider is the sole transparency control, so a normal-mode <1 opacity must
+  // NOT leak in — e.g. base slabs are built at opacity 0.90 in normal mode so
+  // beads read through them; inheriting that here left slabs permanently
+  // semi-transparent and unresponsive to the Translucency slider (which only
+  // drives `transmission`, never resets `opacity`). Force these reps opaque so
+  // each slab matches its corresponding bead and the slider is authoritative.
+  const effectiveOpacity = (repr === 'surface') ? opacity : 1.0
+
+  if (effectiveOpacity >= 1.0) {
     // opacity=1 must mean fully opaque even on SSS/transmissive presets — the
     // slider is authoritative.  Zero transmission and disable blending.
     mat.transmission = 0
@@ -118,7 +128,7 @@ export function makeMaterial(repr, presetName, vertexColors = false, opacity = 1
     mat.opacity      = 1
   } else {
     mat.transparent = true
-    if (!params.transmission) mat.opacity = opacity
+    if (!params.transmission) mat.opacity = effectiveOpacity
   }
   return mat
 }

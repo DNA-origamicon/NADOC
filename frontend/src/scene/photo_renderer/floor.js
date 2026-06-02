@@ -48,6 +48,28 @@ const ABSOLUTE_MIN_REACH = 4000   // nm (half-extent 2000 ≈ part-mode far clip
 // the whole density slider exact for typical (tens-of-nm) structures.
 const MAX_GRID_DIVISIONS = 4000
 
+// Camera-distance grid fade (Option B). Distant grid lines converge toward the
+// horizon and — with no falloff — pile up into a solid bright band (especially
+// in neon HDR mode, where Bloom amplifies it; and especially for assemblies,
+// whose spread-out parts stretch the plane over huge distances). Because the
+// lines are semi-transparent, the band can't be removed by gently dimming each
+// line — ten overlapping lines at 0.5 alpha still composite to ~opaque — so the
+// far lines must fade to ~zero BEFORE they pack together near the horizon.
+//
+// We fade by per-fragment EYE DEPTH, with the fade window scaled to the CAMERA'S
+// HEIGHT ABOVE THE FLOOR PLANE (H). That height is the only thing that sets where
+// a ground plane visually packs toward the horizon, so the band sits at a roughly
+// fixed multiple of H regardless of scene scale, far clip, or grazing angle —
+// which is why fraction-of-far / fraction-of-bbox windows all failed (the far
+// clip is inflated by the floor-reach extension, and the bbox collapses when the
+// structure is impostors). H is computed live in the shader from the built-in
+// `cameraPosition` uniform, so the fade tracks orbit/dolly every frame with no
+// per-frame JS and works identically on the offscreen export renderer. Verified
+// against a repro matching the user's banding screenshot, across camera heights
+// 25/90/200 (frontend/grid_shader_test.html, since deleted).
+const GRID_FADE_START_HEIGHTS = 2.0   // × camera height above floor: eye depth where fade begins
+const GRID_FADE_END_HEIGHTS   = 6.0   // × camera height above floor: eye depth where grid is gone
+
 export function createFloor({ scene }) {
   let _group = null
   let _mesh  = null   // either a Mesh (PBR/Shadow) or a Reflector
@@ -237,6 +259,50 @@ export function createFloor({ scene }) {
       _grid.material.opacity     = neon ? 1.0 : 0.5
       _grid.material.depthWrite  = false
       _grid.material.toneMapped  = !neon   // off in neon so HDR magnitudes survive
+
+      // Camera-distance fade: dissolve far grid lines so they don't pile up into
+      // a bright horizon band (see constants above). Patch the LineBasicMaterial
+      // shader. The vertex stage passes per-fragment EYE DEPTH (`-mvPosition.z`,
+      // linear distance along the view axis) plus the camera's height above the
+      // floor plane H = |(cameraPosition - floorPoint) · floorNormal|, computed
+      // from the built-in `cameraPosition` uniform so it re-evaluates every frame
+      // (tracks orbit/dolly, no per-frame JS). The fragment stage scales the final
+      // colour + alpha by a smoothstep over [START·H, END·H] of eye depth. floor
+      // point/normal ride in as uniforms; both stages run identically on the
+      // offscreen export renderer.
+      // User "Fade reach" slider scales the whole window (keeps the start:end
+      // ratio, just pushes the dissolve farther/closer). Default 1.5.
+      const fadeReach = Math.max(0.05, settings.floorGridFade ?? 1.5)
+      const sm = (GRID_FADE_START_HEIGHTS * fadeReach).toFixed(3)
+      const em = (GRID_FADE_END_HEIGHTS   * fadeReach).toFixed(3)
+      const _floorPoint  = position.clone()
+      const _floorNormal = normal.clone()
+      _grid.material.onBeforeCompile = (shader) => {
+        shader.uniforms.uFloorPoint  = { value: _floorPoint }
+        shader.uniforms.uFloorNormal = { value: _floorNormal }
+        shader.vertexShader =
+          'uniform vec3 uFloorPoint;\nuniform vec3 uFloorNormal;\n'
+          + 'varying float vGridEyeDepth;\nvarying float vGridH;\n'
+          + shader.vertexShader.replace(
+            '#include <project_vertex>',
+            '#include <project_vertex>\n'
+            + '\tvGridEyeDepth = -mvPosition.z;\n'
+            + '\tvGridH = max(abs(dot(cameraPosition - uFloorPoint, normalize(uFloorNormal))), 1e-3);',
+          )
+        shader.fragmentShader =
+          'varying float vGridEyeDepth;\nvarying float vGridH;\n'
+          + shader.fragmentShader.replace(
+            '#include <dithering_fragment>',
+            [
+              '#include <dithering_fragment>',
+              `\tfloat _gridFade = 1.0 - smoothstep(${sm} * vGridH, ${em} * vGridH, vGridEyeDepth);`,
+              '\tgl_FragColor.rgb *= _gridFade;',
+              '\tgl_FragColor.a   *= _gridFade;',
+            ].join('\n'),
+          )
+      }
+      _grid.material.needsUpdate = true
+
       const gridDefaultNormal = new THREE.Vector3(0, 1, 0)
       const gq = new THREE.Quaternion().setFromUnitVectors(gridDefaultNormal, normal)
       _grid.quaternion.copy(gq)

@@ -33,6 +33,7 @@
 
 import { computeRevoluteTransform } from './assembly_revolute_math.js'
 import { getRigidBodyGroup }         from './assembly_constraint_graph.js'
+import { beltCouplingRelations, applyBeltRiders } from './belt_geometry.js'
 
 const FLUSH_INTERVAL_SEC = 0.2   // ~5 Hz persistence to backend
 const MAX_DT_SEC         = 1 / 15 // cap on a single integration step (background-tab return)
@@ -114,7 +115,10 @@ export function initKinematicsTicker({
     _gearDrivenBy.clear()
     _gearWarned = false
     const jointIds = new Set((assembly.joints ?? []).map(j => j.id))
-    for (const rel of assembly.gear_relations ?? []) {
+    // Belts couple their two pulley joints like a gear (ratio r_a/r_b, same world
+    // sense); fold them into the same edge graph so RPM + propagation drive them.
+    const couplings = [...(assembly.gear_relations ?? []), ...beltCouplingRelations(assembly)]
+    for (const rel of couplings) {
       if (!jointIds.has(rel.joint_a_id) || !jointIds.has(rel.joint_b_id)) continue
       if (_gearDrivenBy.has(rel.joint_b_id)) continue   // first wins
       _gearDrivenBy.set(rel.joint_b_id, rel.joint_a_id)
@@ -291,6 +295,7 @@ export function initKinematicsTicker({
 
     _rebuildIfNeeded(currentAssembly)
 
+    let spun = false
     for (const joint of currentAssembly.joints) {
       if (joint.joint_type !== 'revolute') continue
       if (joint.spin_paused) continue
@@ -313,9 +318,26 @@ export function initKinematicsTicker({
       _shadow.set(joint.id, next)
       _applyToRenderer(joint, next, currentAssembly)
       _pendingFlush.add(joint.id)
+      spun = true
     }
 
     _propagateGearRelations(currentAssembly)
+
+    // Belt riders ride along the loop, driven by the spinning pulley angle.
+    // ONLY when this tick actually integrated a joint (RPM spin) — otherwise
+    // `_shadow` may hold a stale angle (preserved across rebuilds for in-flight
+    // patches) and would fight the store-driven update path (subscription /
+    // live-drag), making riders flicker. For manual rotation those paths own it.
+    if (spun) {
+      applyBeltRiders(
+        currentAssembly,
+        (id, j) => _shadow.get(id) ?? (j.current_value ?? 0),
+        (iid, mat) => {
+          getAssemblyRenderer?.()?.setLiveTransform?.(iid, mat)
+          getAssemblyJointRenderer?.()?.setLiveJointTransform?.(iid, mat, currentAssembly)
+        },
+      )
+    }
 
     _maybeFlush()
   }
