@@ -41,7 +41,9 @@ __all__ = [
     "auto_scale",
     "scaffold_staple_groups",
     "scaffold_staple_colored_groups",
+    "compute_staple_coloring",
     "export_3mf",
+    "export_3mf_parts",
 ]
 
 
@@ -139,70 +141,83 @@ def _color_staples(n: int, pairs: np.ndarray, k: int) -> tuple[list[int], int]:
     return color, conflicts
 
 
-def scaffold_staple_colored_groups(
+def compute_staple_coloring(
     mesh: SurfaceMesh, design: Design, n_staple_colors: int = 3
-) -> tuple[np.ndarray, list[str], list[str], dict]:
-    """Scaffold + map-coloured staples (4 groups for ``n_staple_colors == 3``).
+) -> tuple[dict[str, int], list[str], list[str], dict]:
+    """Map-colour staples → ``(strand_to_group, names, colors, stats)``.
 
-    The scaffold is one group; staples are partitioned into ``n_staple_colors``
-    sets so that staples whose surface regions *touch* get different colours
-    (graph map-colouring — see ``_staple_adjacency`` / ``_color_staples``).
-
-    Returns ``(face_group, names, colors, stats)``.  ``face_group[i]`` is the
-    group of face ``i``: 0 = scaffold, 1..k = staple sets A..K.  ``stats`` holds
-    ``n_staples``, ``conflicts`` (unavoidable same-colour borders) and the
-    per-set staple ``counts`` — useful for surfacing in the UI.
+    Every staple strand in the design is coloured into one of ``n_staple_colors``
+    sets (group 1..k); the scaffold is group 0.  Adjacency for the colouring is
+    "their surface regions touch" — staples joined by a surface mesh edge get
+    different colours (graph map-colouring; see ``_staple_adjacency`` /
+    ``_color_staples``).  Staples that never reach the surface are isolated nodes
+    that simply balance the sets.  ``strand_to_group`` maps every scaffold/staple
+    strand id to its group index; ``stats`` holds ``n_staples``, ``conflicts``
+    (unavoidable same-colour touching borders) and per-set ``counts``.
     """
     k = max(1, min(int(n_staple_colors), len(_STAPLE_SET_COLORS)))
     names = ["scaffold"] + [f"staples {chr(ord('A') + i)}" for i in range(k)]
     colors = ["#29B6F6"] + _STAPLE_SET_COLORS[:k]
     stats = {"n_staples": 0, "conflicts": 0, "counts": [0] * k}
 
+    scaffold_ids = {s.id for s in design.strands if s.is_scaffold and s.id}
+    staple_ids = [s.id for s in design.strands if s.id and not s.is_scaffold]
+    sid_to_staple = {sid: i for i, sid in enumerate(staple_ids)}
+
+    strand_to_group: dict[str, int] = {sid: 0 for sid in scaffold_ids}
+    stats["n_staples"] = len(staple_ids)
+    if not staple_ids:
+        return strand_to_group, names, colors, stats
+
+    # Per-surface-vertex code: -1 scaffold, -2 unassigned, >= 0 a staple index.
+    vert_code = np.fromiter(
+        (
+            -1 if sid in scaffold_ids else (sid_to_staple.get(sid, -2) if sid else -2)
+            for sid in mesh.vertex_strand_ids
+        ),
+        dtype=np.int64,
+        count=len(mesh.vertex_strand_ids),
+    )
+    pairs = (
+        _staple_adjacency(mesh.faces, vert_code)
+        if mesh.faces.shape[0]
+        else np.zeros((0, 2), dtype=np.int64)
+    )
+    staple_color, conflicts = _color_staples(len(staple_ids), pairs, k)
+    stats["conflicts"] = conflicts
+    for c in staple_color:
+        stats["counts"][c] += 1
+    for sid, idx in sid_to_staple.items():
+        strand_to_group[sid] = 1 + staple_color[idx]
+
+    return strand_to_group, names, colors, stats
+
+
+def scaffold_staple_colored_groups(
+    mesh: SurfaceMesh, design: Design, n_staple_colors: int = 3
+) -> tuple[np.ndarray, list[str], list[str], dict]:
+    """Per-face group labels for the single-mesh split path (4 groups for k=3).
+
+    Thin wrapper over :func:`compute_staple_coloring`: maps each surface vertex
+    to its strand's group, then assigns each face the group most of its three
+    vertices belong to.  ``face_group[i]`` ∈ {0=scaffold, 1..k=staple sets}.
+    (The manifold export uses :func:`compute_staple_coloring` +
+    ``compute_colored_surfaces`` instead; this remains for the simpler split.)
+    """
+    strand_to_group, names, colors, stats = compute_staple_coloring(
+        mesh, design, n_staple_colors
+    )
+    k = len(colors) - 1
     faces = mesh.faces
     if faces.shape[0] == 0:
         return np.zeros(0, dtype=np.int8), names, colors, stats
 
-    scaffold_ids = {s.id for s in design.strands if s.is_scaffold and s.id}
-
-    # Per-vertex code: -1 scaffold, -2 unassigned, >= 0 a staple index.
-    sid_to_staple: dict[str, int] = {}
-    vert_code = np.empty(len(mesh.vertex_strand_ids), dtype=np.int64)
-    for i, sid in enumerate(mesh.vertex_strand_ids):
-        if sid in scaffold_ids:
-            vert_code[i] = -1
-        elif not sid:
-            vert_code[i] = -2
-        else:
-            idx = sid_to_staple.get(sid)
-            if idx is None:
-                idx = len(sid_to_staple)
-                sid_to_staple[sid] = idx
-            vert_code[i] = idx
-
-    n_staples = len(sid_to_staple)
-    stats["n_staples"] = n_staples
-
-    if n_staples == 0:
-        # Scaffold-only (or fully unassigned): everything → group 0.
-        return np.zeros(faces.shape[0], dtype=np.int8), names, colors, stats
-
-    pairs = _staple_adjacency(faces, vert_code)
-    staple_color, conflicts = _color_staples(n_staples, pairs, k)
-    stats["conflicts"] = conflicts
-    for c in staple_color:
-        stats["counts"][c] += 1
-
-    # Per-vertex group index: scaffold → 0, unassigned → staple-set A (1),
-    # staple → 1 + its assigned colour.
-    color_arr = np.asarray(staple_color, dtype=np.int64)
-    vert_group = np.empty(vert_code.shape[0], dtype=np.int64)
-    vert_group[vert_code == -1] = 0
-    vert_group[vert_code == -2] = 1
-    staple_mask = vert_code >= 0
-    vert_group[staple_mask] = 1 + color_arr[vert_code[staple_mask]]
-
-    # Face group = the group most of its three vertices belong to (argmax of a
-    # per-face bincount → deterministic, lowest index wins ties).
+    # Per-vertex group: scaffold → 0, staple → its set, unassigned → set A (1).
+    vert_group = np.fromiter(
+        (strand_to_group.get(sid, 1) for sid in mesh.vertex_strand_ids),
+        dtype=np.int64,
+        count=len(mesh.vertex_strand_ids),
+    )
     g = vert_group[faces]                              # (M, 3)
     counts = np.zeros((faces.shape[0], k + 1), dtype=np.int64)
     rows = np.arange(faces.shape[0])
@@ -376,6 +391,67 @@ def export_3mf(
         faces = faces[:, ::-1]
 
     model_xml = _build_model_xml(verts, faces, fg, names, colors, name)
+    files = [
+        ("[Content_Types].xml", _CONTENT_TYPES.encode("utf-8")),
+        ("_rels/.rels", _RELS.encode("utf-8")),
+        ("3D/3dmodel.model", model_xml.encode("utf-8")),
+    ]
+    return _zip_store(files)
+
+
+def export_3mf_parts(
+    parts: list[tuple[SurfaceMesh | None, str, str]],
+    scale: float = 1.0,
+    name: str = "surface",
+) -> bytes:
+    """Serialise distinct CLOSED part meshes as a manifold multi-material 3MF.
+
+    ``parts`` is a list of ``(mesh, group_name, hex_color)``.  Each non-empty
+    part becomes its own ``<object>`` — an independent watertight solid — with a
+    default base material; all are gathered as ``<component>``s of one assembly
+    object so they stay aligned.  Unlike :func:`export_3mf` (which splits one
+    shell into open parts), every object here is closed, and the shared interface
+    walls between colours coincide, so the package satisfies the 3MF watertight
+    requirement that slicers enforce.
+    """
+    bases: list[str] = []
+    objects: list[str] = []
+    comp_ids: list[int] = []
+    oid = 2  # id 1 reserved for <basematerials>
+
+    for mesh, gname, color in parts:
+        if mesh is None or mesh.faces.shape[0] == 0:
+            continue
+        verts = mesh.vertices.astype(np.float64) * float(scale)
+        faces = mesh.faces.astype(np.int64)
+        if _signed_volume(verts, faces) < 0.0:        # outward winding per part
+            faces = faces[:, ::-1]
+        pindex = len(bases)
+        bases.append(f'<base name="{_xml_attr(gname)}" displaycolor="{_hex_rgba(color)}"/>')
+        objects.append(
+            f'<object id="{oid}" type="model" pid="1" pindex="{pindex}" '
+            f'name="{_xml_attr(gname)}">{_mesh_xml(verts, faces)}</object>'
+        )
+        comp_ids.append(oid)
+        oid += 1
+
+    assembly_id = oid
+    components = "".join(f'<component objectid="{c}"/>' for c in comp_ids)
+    assembly = (
+        f'<object id="{assembly_id}" type="model" name="{_xml_attr(name)}">'
+        f"<components>{components}</components></object>"
+    )
+    model_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        f'<model unit="millimeter" xml:lang="en-US" xmlns="{_CORE_NS}" xmlns:m="{_MAT_NS}">'
+        "<resources>"
+        f'<basematerials id="1">{"".join(bases)}</basematerials>'
+        + "".join(objects)
+        + assembly
+        + "</resources>"
+        f'<build><item objectid="{assembly_id}"/></build>'
+        "</model>"
+    )
     files = [
         ("[Content_Types].xml", _CONTENT_TYPES.encode("utf-8")),
         ("_rels/.rels", _RELS.encode("utf-8")),

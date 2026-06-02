@@ -255,6 +255,139 @@ def smooth_mesh(
     )
 
 
+# ── Per-colour closed sub-surfaces (manifold multi-material export) ────────────
+
+def _weld_smooth_parts(
+    parts: list[tuple[np.ndarray, np.ndarray] | None],
+    iterations: int,
+    weld_round: int = 4,
+) -> list[tuple[np.ndarray, np.ndarray] | None]:
+    """Taubin-smooth several meshes as one welded complex, then redistribute.
+
+    Vertices that coincide across parts (the shared interface walls, extracted at
+    identical voxel mid-planes) are welded to a single vertex before smoothing,
+    so they move identically and the walls stay coincident — each part remains
+    closed.  ``parts`` is a list of ``(vertices, faces)`` (or ``None``); the same
+    structure is returned with smoothed vertices.
+    """
+    metas: list[tuple[int, int] | None] = []
+    chunks_v: list[np.ndarray] = []
+    chunks_f: list[np.ndarray] = []
+    voff = 0
+    for p in parts:
+        if p is None:
+            metas.append(None)
+            continue
+        v, f = p
+        metas.append((voff, v.shape[0]))
+        chunks_v.append(v)
+        chunks_f.append(f + voff)
+        voff += v.shape[0]
+
+    if not chunks_v:
+        return parts
+
+    V = np.concatenate(chunks_v, axis=0)
+    F = np.concatenate(chunks_f, axis=0)
+
+    # Weld coincident vertices by rounded position (1e-4 nm ⇒ sub-picometre).
+    _, inv = np.unique(np.round(V, weld_round), axis=0, return_inverse=True)
+    inv = inv.ravel()
+    welded = SurfaceMesh(
+        vertices=np.unique(np.round(V, weld_round), axis=0).astype(np.float32),
+        faces=inv[F].astype(np.int32),
+        vertex_strand_ids=[],
+    )
+    smoothed = smooth_mesh(welded, iterations=iterations)
+    V_new = smoothed.vertices.astype(np.float64)[inv]      # back to per-part order
+
+    out: list[tuple[np.ndarray, np.ndarray] | None] = []
+    for p, meta in zip(parts, metas):
+        if p is None or meta is None:
+            out.append(None)
+            continue
+        start, count = meta
+        out.append((V_new[start : start + count], p[1]))
+    return out
+
+
+def compute_colored_surfaces(
+    atoms: list[Atom],
+    strand_to_group: dict[str, int],
+    n_groups: int,
+    grid_spacing: float = 0.20,
+    probe_radius: float = 0.28,
+    radius_scale: float = 1.2,
+    smooth: int = 15,
+) -> list[SurfaceMesh | None]:
+    """Per-group CLOSED (watertight) molecular sub-surfaces with shared walls.
+
+    The SES volume is built exactly as :func:`compute_surface`, then every
+    occupied voxel is labelled with the group of its nearest atom (via
+    ``strand_to_group``; default group 0).  Marching cubes runs separately on
+    each group's voxel mask, so every returned part is a closed surface.  The
+    masks partition one grid, so the internal wall between two groups is the same
+    voxel mid-plane for both — the walls coincide.  All parts are welded and
+    Taubin-smoothed together (:func:`_weld_smooth_parts`) so shared walls move in
+    lock-step while each part stays watertight.
+
+    Returns a list of length ``n_groups``; entry ``g`` is the closed SurfaceMesh
+    for group ``g`` (vertices in nm), or ``None`` if that group has no voxels.
+    """
+    scaled_radii = {elem: r * radius_scale for elem, r in VDW_RADIUS.items()}
+    grid, bbox_min = _build_occupancy_grid(
+        atoms, scaled_radii, grid_spacing, padding=0.5 + probe_radius
+    )
+    if probe_radius > 0:
+        struct = _sphere_struct(probe_radius / grid_spacing)
+        grid = binary_erosion(binary_dilation(grid, structure=struct), structure=struct)
+
+    if not grid.any():
+        return [None] * n_groups
+
+    # Label occupied voxels by nearest-atom group.
+    positions = np.array([[a.x, a.y, a.z] for a in atoms], dtype=np.float64)
+    atom_group = np.fromiter(
+        (strand_to_group.get(a.strand_id or "", 0) for a in atoms),
+        dtype=np.int64,
+        count=len(atoms),
+    )
+    tree = cKDTree(positions)
+    occ = np.argwhere(grid)                                # (K, 3) voxel indices
+    _, nn = tree.query(occ * grid_spacing + bbox_min, workers=-1)
+    label = np.full(grid.shape, -1, dtype=np.int64)
+    label[occ[:, 0], occ[:, 1], occ[:, 2]] = atom_group[nn]
+
+    shape = np.array(grid.shape)
+    raw: list[tuple[np.ndarray, np.ndarray] | None] = []
+    for g in range(n_groups):
+        mask = label == g
+        if not mask.any():
+            raw.append(None)
+            continue
+        idx = np.argwhere(mask)
+        lo = np.maximum(idx.min(axis=0) - 1, 0)
+        hi = np.minimum(idx.max(axis=0) + 2, shape)
+        sub = mask[lo[0] : hi[0], lo[1] : hi[1], lo[2] : hi[2]].astype(np.float32)
+        sub = np.pad(sub, 1, mode="constant", constant_values=0.0)
+        v, f, _, _ = marching_cubes(sub, level=0.5, allow_degenerate=False)
+        # Undo the +1 pad and the crop origin (lo), then voxel → world (nm).
+        v = (v - 1.0 + lo) * grid_spacing + bbox_min
+        raw.append((v.astype(np.float64), f.astype(np.int64)))
+
+    if smooth > 0:
+        raw = _weld_smooth_parts(raw, smooth)
+
+    return [
+        None if p is None else SurfaceMesh(
+            vertices=p[0].astype(np.float32),
+            faces=p[1].astype(np.int32),
+            vertex_strand_ids=[],
+        )
+        for p in raw
+    ]
+
+
 # ── JSON serialisation ────────────────────────────────────────────────────────
 
 def surface_to_json(

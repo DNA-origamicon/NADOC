@@ -15,10 +15,17 @@ import numpy as np
 
 from backend.core.atomistic import build_atomistic_model
 from backend.core.lattice import make_bundle_design
-from backend.core.surface import SurfaceMesh, compute_surface, smooth_mesh
+from backend.core.surface import (
+    SurfaceMesh,
+    compute_colored_surfaces,
+    compute_surface,
+    smooth_mesh,
+)
 from backend.core.threemf_export import (
     auto_scale,
+    compute_staple_coloring,
     export_3mf,
+    export_3mf_parts,
     scaffold_staple_colored_groups,
     scaffold_staple_groups,
     _color_staples,
@@ -208,6 +215,78 @@ def test_colored_groups_clamps_staple_colors():
     # Out-of-range clamps to the 3-colour palette, not beyond.
     _, names9, colors9, _ = scaffold_staple_colored_groups(mesh, design, n_staple_colors=9)
     assert len(colors9) == 4
+
+
+# ── Closed per-colour sub-solids (manifold export) ───────────────────────────
+
+def _odd_edges(faces) -> int:
+    """Number of edges shared by an odd number of triangles (i.e. holes)."""
+    ec: dict[tuple[int, int], int] = {}
+    for a, b, c in faces:
+        for u, v in ((int(a), int(b)), (int(b), int(c)), (int(c), int(a))):
+            k = (u, v) if u < v else (v, u)
+            ec[k] = ec.get(k, 0) + 1
+    return sum(1 for n in ec.values() if n % 2 == 1)
+
+
+def _colored_parts():
+    design = make_bundle_design(cells=_CELLS_6HB, length_bp=42, plane="XY")
+    atoms = build_atomistic_model(design).atoms
+    mesh = smooth_mesh(compute_surface(atoms, grid_spacing=0.30, probe_radius=0.28), 15)
+    s2g, names, colors, stats = compute_staple_coloring(mesh, design, 3)
+    parts = compute_colored_surfaces(
+        atoms, s2g, len(names),
+        grid_spacing=0.30, probe_radius=0.28, radius_scale=1.2, smooth=15,
+    )
+    return parts, names, colors, stats
+
+
+def test_colored_surfaces_parts_are_closed():
+    """Every per-colour part is watertight — no boundary/hole edges (the bug)."""
+    parts, names, _, _ = _colored_parts()
+    populated = [p for p in parts if p is not None]
+    assert len(populated) >= 2, "expected scaffold + staple parts"
+    for p in populated:
+        assert p.faces.shape[0] > 0
+        assert _odd_edges(p.faces) == 0, "part has holes → not watertight"
+
+
+def test_colored_surfaces_walls_coincide():
+    """Adjacent parts meet at coincident wall vertices (no gaps between colours)."""
+    parts, names, _, _ = _colored_parts()
+    assert parts[0] is not None  # scaffold
+
+    def keyset(m):
+        return set(map(tuple, np.round(m.vertices.astype(float), 4)))
+
+    scaffold_keys = keyset(parts[0])
+    shared = sum(
+        len(scaffold_keys & keyset(parts[g]))
+        for g in range(1, len(names))
+        if parts[g] is not None
+    )
+    assert shared > 0, "no shared wall vertices → parts are disjoint with gaps"
+
+
+def test_export_3mf_parts_manifold_objects():
+    """export_3mf_parts writes one closed object per colour + an assembly."""
+    parts, names, colors, _ = _colored_parts()
+    specs = [(parts[g], names[g], colors[g]) for g in range(len(names)) if parts[g] is not None]
+    root = _model_root(export_3mf_parts(specs, scale=1.0, name="t"))
+
+    part_objs = [o for o in root.findall(f".//{_ns('object')}") if o.get("pid") == "1"]
+    assert len(part_objs) == len(specs)
+    assert len(root.findall(f".//{_ns('base')}")) == len(specs)
+    assert len(root.findall(f".//{_ns('component')}")) == len(specs)
+    assert root.find(f".//{_ns('item')}") is not None
+
+    # Each exported object is itself watertight.
+    for o in part_objs:
+        faces = [
+            (int(t.get("v1")), int(t.get("v2")), int(t.get("v3")))
+            for t in o.findall(f".//{_ns('triangle')}")
+        ]
+        assert _odd_edges(faces) == 0
 
 
 def test_empty_mesh_exports_valid_3mf():

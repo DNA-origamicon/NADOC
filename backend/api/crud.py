@@ -14825,13 +14825,15 @@ def export_surface_3mf(
     smooth:          int   = 15,
     staple_colors:   int   = 3,
 ) -> Response:
-    """Export the molecular surface as a multi-colour 3MF for 3D printing.
+    """Export the molecular surface as a manifold multi-colour 3MF for 3D printing.
 
-    Identical surface pipeline to the STL export (same inflate + Taubin smooth +
-    nm→mm auto-scale), but emits a 3MF whose scaffold and staple surfaces are
-    separate coloured parts of one assembly object.  Every common slicer
-    (PrusaSlicer, Bambu Studio, OrcaSlicer, Cura) reads these as filament slots;
-    the parts share one coordinate frame so they stay aligned.
+    Same surface pipeline as the STL export (same inflate + Taubin smooth + nm→mm
+    auto-scale), but emits each colour as its own **closed, watertight** solid:
+    every occupied surface voxel is labelled by its nearest strand's colour and
+    re-surfaced per colour, so the parts share coincident interface walls and the
+    file satisfies the 3MF watertight requirement slicers enforce (no open
+    seams).  The parts are components of one assembly object so they stay aligned;
+    Bambu Studio / OrcaSlicer / PrusaSlicer map each to a filament slot.
 
     Staples are map-coloured into ``staple_colors`` sets (default 3 → 4 groups
     total with the scaffold) so that staples whose surface regions touch get
@@ -14841,34 +14843,54 @@ def export_surface_3mf(
     Query params mirror ``/design/export/stl`` plus ``staple_colors`` (1-3).
     """
     from backend.core.atomistic import build_atomistic_model
-    from backend.core.surface import compute_surface, smooth_mesh
+    from backend.core.surface import compute_colored_surfaces, compute_surface, smooth_mesh
     from backend.core.threemf_export import (
         auto_scale,
-        export_3mf,
-        scaffold_staple_colored_groups,
+        compute_staple_coloring,
+        export_3mf_parts,
     )
 
     design = _design_for_export()
     model  = build_atomistic_model(design)
-    mesh   = compute_surface(
+    radius_scale = 1.2 * radius_inflate
+
+    # 1. One smoothed surface drives the staple map-colouring (which staples
+    #    touch on the surface → different colours).
+    mesh = compute_surface(
         model.atoms,
         grid_spacing=grid_spacing,
         probe_radius=probe_radius,
-        radius_scale=1.2 * radius_inflate,
+        radius_scale=radius_scale,
     )
     if mesh.faces.shape[0] == 0:
         raise HTTPException(422, detail="Surface mesh is empty; nothing to export.")
-
     mesh = smooth_mesh(mesh, iterations=smooth)
 
-    face_group, names, colors, stats = scaffold_staple_colored_groups(
+    strand_to_group, names, colors, stats = compute_staple_coloring(
         mesh, design, n_staple_colors=staple_colors
     )
-    name = (design.metadata.name or "design").replace(" ", "_")
-    data = export_3mf(
-        mesh, face_group, names, colors,
-        scale=auto_scale(mesh, target_mm=target_mm), name=name,
+
+    # 2. Re-surface each colour group as its own closed solid (shared walls).
+    parts = compute_colored_surfaces(
+        model.atoms,
+        strand_to_group,
+        n_groups=len(names),
+        grid_spacing=grid_spacing,
+        probe_radius=probe_radius,
+        radius_scale=radius_scale,
+        smooth=smooth,
     )
+
+    # Scale by the same factor the single surface would have used (so size and
+    # placement match the STL export exactly).
+    scale = auto_scale(mesh, target_mm=target_mm)
+    part_specs = [
+        (parts[g], names[g], colors[g])
+        for g in range(len(names))
+        if parts[g] is not None
+    ]
+    name = (design.metadata.name or "design").replace(" ", "_")
+    data = export_3mf_parts(part_specs, scale=scale, name=name)
     return Response(
         content     = data,
         media_type  = "model/3mf",
