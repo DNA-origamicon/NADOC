@@ -69,6 +69,7 @@ rebuilds around it as a modern, browser-based three-layer engine —
 | **No design history or conformational animation** | Snapshot-bearing feature log with revert/edit, plus camera poses, keyframes, and pre-baked 60 fps animation |
 | **Schematic cartoons for publication figures** | Photo mode — PBR materials, HDRI lighting, subsurface scattering, fluorophores as real light sources, progressive path tracing, and 300/600 DPI tiled export (see below) |
 | **A separate converter for every downstream tool** | One-click atomistic (PDB/PSF), NAMD package, and GROMACS export; native import of caDNAno v2 **and** scadnano designs |
+| **No path from model to a physical object** | One-click 3D-print export of the molecular surface — watertight binary STL, or a multi-color 3MF (scaffold plus three map-colored staple sets, so touching staples print in different filaments) auto-scaled for a consumer printer bed |
 | **Desktop install on a heavyweight GUI toolchain** | A web app — one `./setup.sh`, open a browser; runs on Linux, macOS, and Windows (WSL2) |
 
 Every behavior is grounded in peer-reviewed literature (`Literature/`) and

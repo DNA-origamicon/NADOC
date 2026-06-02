@@ -13781,6 +13781,20 @@ Typical debugging workflow for "reverts to 3D" bug:
     else showToast('STL export failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
   })
 
+  // ── Export Surface 3MF (multi-color print) ──────────────────────────────────────
+  document.getElementById('menu-file-export-3mf')?.addEventListener('click', async () => {
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
+    showToast('Building multi-color 3MF…', { severity: 'info' })
+    const res = await api.exportSurface3mf()
+    if (res && res.ok) {
+      const detail = res.coloring ? ` (${res.coloring})` : ''
+      showToast('Surface 3MF exported: scaffold + 3 staple colors, 200 mm' + detail + '.', { severity: 'success' })
+    } else {
+      showToast('3MF export failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
+    }
+  })
+
   // ── Export NAMD complete package ──────────────────────────────────────────────
   document.getElementById('menu-file-export-namd-complete')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()

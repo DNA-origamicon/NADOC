@@ -1168,6 +1168,28 @@ export async function exportSurfaceStl({ targetMm = 200, gridSpacing, probeRadiu
   return true
 }
 
+export async function exportSurface3mf({ targetMm = 200, gridSpacing, probeRadius } = {}) {
+  const params = new URLSearchParams({ target_mm: String(targetMm) })
+  if (gridSpacing != null) params.set('grid_spacing', String(gridSpacing))
+  if (probeRadius != null) params.set('probe_radius', String(probeRadius))
+  const r = await fetch(`${BASE}/design/export/3mf?${params}`, { headers: docHeaders() })
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    return false
+  }
+  const coloring = r.headers.get('X-NADOC-Coloring') || ''
+  const blob = await r.blob()
+  const cd = r.headers.get('Content-Disposition') || ''
+  const match = cd.match(/filename="?([^"]+)"?/)
+  const filename = match ? match[1] : 'surface.3mf'
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+  return { ok: true, coloring }
+}
+
 // ── Deformation endpoints ──────────────────────────────────────────────────
 
 export async function addDeformation(type, planeA, planeB, params, helixIds = [], preview = false, clusterIds = []) {
