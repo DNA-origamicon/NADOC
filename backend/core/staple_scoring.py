@@ -988,6 +988,50 @@ def _score_route_slice(
     )
 
 
+def interior_scaffold_crossover_positions(
+    design: Design, min_segment_nt: int
+) -> dict[str, list[int]]:
+    """Per-helix bp positions of *interior* scaffold crossovers (not at a cap).
+
+    A scaffold crossover is "interior" when its bp sits more than
+    ``min_segment_nt`` inside the scaffold's coverage on that helix — i.e. it is
+    a seam/mid-helix junction, not a near/far-end cap crossover (which sit at the
+    coverage extremes).  Staple breaks must keep ``min_segment_nt`` clearance
+    from these so a nick never lands on top of a scaffold seam crossover.
+    """
+    cov: dict[str, tuple[int, int]] = {}
+    for s in design.strands:
+        if not s.is_scaffold or s.is_reference:
+            continue
+        for dom in s.domains:
+            lo = min(dom.start_bp, dom.end_bp)
+            hi = max(dom.start_bp, dom.end_bp)
+            cur = cov.get(dom.helix_id)
+            cov[dom.helix_id] = (min(cur[0], lo), max(cur[1], hi)) if cur else (lo, hi)
+
+    helix_map = {h.id: h for h in design.helices if h.grid_pos is not None}
+
+    def _scaf_dir(hid: str) -> Direction | None:
+        h = helix_map.get(hid)
+        if h is None:
+            return None
+        row, col = h.grid_pos
+        return Direction.FORWARD if (row + col) % 2 == 0 else Direction.REVERSE
+
+    out: dict[str, set[int]] = {}
+    for xo in design.crossovers:
+        for half in (xo.half_a, xo.half_b):
+            if half.strand != _scaf_dir(half.helix_id):
+                continue  # not the scaffold-strand half → not a scaffold crossover
+            span = cov.get(half.helix_id)
+            if span is None:
+                continue
+            lo, hi = span
+            if lo + min_segment_nt < half.index < hi - min_segment_nt:
+                out.setdefault(half.helix_id, set()).add(half.index)
+    return {hid: sorted(v) for hid, v in out.items()}
+
+
 def build_precursor_graph(
     strand: Strand,
     scaf_map: ScaffoldPositionMap,
@@ -1000,8 +1044,14 @@ def build_precursor_graph(
     break_rule: str = DEFAULT_BREAK_RULE,
     allow_crossover_breaks: bool = False,
     min_segment_nt: int | None = None,
+    scaffold_block: dict[str, list[int]] | None = None,
 ) -> PrecursorGraph:
-    """Build a weighted candidate-break graph for one staple precursor."""
+    """Build a weighted candidate-break graph for one staple precursor.
+
+    ``scaffold_block`` maps helix_id → interior scaffold-crossover bp positions;
+    internal break offsets within ``rule.min_segment_nt`` of one are dropped so a
+    staple nick never lands too close to a scaffold seam crossover.
+    """
 
     route = _strand_route_nucleotides(strand, scaf_map, ls_map)
     nodes = _breakpoint_nodes(route)
@@ -1011,6 +1061,21 @@ def build_precursor_graph(
         min_segment_nt=min_segment_nt,
     )
     allowed_offsets = _candidate_break_offsets(nodes, rule)
+    if scaffold_block:
+        n_route = len(route)
+        kept: set[int] = set()
+        for off in allowed_offsets:
+            if off == 0 or off == n_route:
+                kept.add(off)  # precursor termini are fixed, not breaker choices
+                continue
+            nt = route[off - 1]
+            if any(
+                abs(nt.bp - sx) < rule.min_segment_nt
+                for sx in scaffold_block.get(nt.helix_id, ())
+            ):
+                continue  # too close to an interior scaffold crossover
+            kept.add(off)
+        allowed_offsets = kept
     edges_by_start: dict[int, list[CandidateRouteEdge]] = {}
     n = len(route)
 
@@ -1200,6 +1265,7 @@ def build_precursor_graphs(
         if min_segment_nt is None
         else min_segment_nt
     )
+    scaffold_block = interior_scaffold_crossover_positions(design, effective_min_segment_nt)
     graphs: list[PrecursorGraph] = []
     paths_by_strand: dict[str, list[PrecursorPath]] = {}
 
@@ -1218,6 +1284,7 @@ def build_precursor_graphs(
             break_rule=break_rule,
             allow_crossover_breaks=allow_crossover_breaks,
             min_segment_nt=effective_min_segment_nt,
+            scaffold_block=scaffold_block,
         )
         graphs.append(graph)
         paths_by_strand[strand.id] = _top_k_paths(graph, k=max(1, k_paths))
@@ -1302,6 +1369,7 @@ def apply_precursor_breaks(
         if min_segment_nt is None
         else min_segment_nt
     )
+    scaffold_block = interior_scaffold_crossover_positions(design, effective_min_segment_nt)
 
     plan: list[dict[str, Any]] = []
     total_internal_breaks = 0
@@ -1343,6 +1411,7 @@ def apply_precursor_breaks(
             break_rule=break_rule,
             allow_crossover_breaks=allow_crossover_breaks,
             min_segment_nt=effective_min_segment_nt,
+            scaffold_block=scaffold_block,
         )
         paths = _top_k_paths(graph, k=max(1, k_paths))
         graphs_by_strand[strand.id] = graph

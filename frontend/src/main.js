@@ -5495,6 +5495,15 @@ Typical debugging workflow for "reverts to 3D" bug:
         } else {
           _setRoutingCheck('scaffoldEnds', true)
         }
+      } else if (mode === 'matched') {
+        _showProgress('Matched Ends', 'Routing scaffold with matched ends for end-to-end polymerization…')
+        const ok = await api.autoScaffoldMatched()
+        _hideProgress()
+        if (!ok) {
+          showToast('Matched-ends scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
+        } else {
+          _setRoutingCheck('scaffoldEnds', true)
+        }
       } else if (mode === 'advanced-seamed') {
         _showProgress('Advanced Seam Routing', 'Routing scaffold with experimental seam planner…')
         const ok = await api.autoScaffoldAdvancedSeamed()

@@ -5164,26 +5164,30 @@ def auto_crossover() -> dict:
         hb_min = hb.bp_start if hb else 0
         hb_max = (hb.bp_start + hb.length_bp - 1) if hb else 0
 
-        # Aksel-style staple routing assumes autocrossover does not isolate
-        # sub-minimum terminal oligos.  Sites too close to either helix end
-        # create tiny end fragments (for example 6-14 nt at bundle caps) that
-        # no downstream break optimizer can repair without moving/removing the
-        # crossover.  Keep manual crossover placement permissive, but make the
-        # automated placer conservative.
-        _MIN_AUTOCROSSOVER_STAPLE_NT = 21
+        # Skip a site only when it would leave a staple arm shorter than the
+        # lattice minimum segment (7 nt HC / 8 nt SQ).  Measure the arm against
+        # the STAPLE STRAND's actual coverage boundary, not the helix end: near
+        # the bundle caps the scaffold occupies the last bp, so the staple ends
+        # before the helix does — a crossover that looks safe vs the helix end
+        # can still isolate a 3-4 nt arm vs the true staple end.  Arms >= the min
+        # segment are legal (a short arm just becomes part of a longer staple
+        # across the crossover); this places crossovers right up to a 7/8 nt arm
+        # instead of reserving a full 21 nt staple-length margin (which left
+        # edges under-crossed) while still never creating a sub-minimum segment.
+        _MIN_AUTOCROSSOVER_SEGMENT_NT = 7 if is_hc else 8
 
-        def _terminal_fragment_too_short(h_min: int, h_max: int) -> bool:
-            left_len = lower_bp - h_min + 1
-            right_len = h_max - lower_bp
-            return (
-                0 < left_len < _MIN_AUTOCROSSOVER_STAPLE_NT
-                or 0 < right_len < _MIN_AUTOCROSSOVER_STAPLE_NT
-            )
+        def _staple_arm_too_short(hid: str, stap_dir: str) -> bool:
+            for lo, hi in sr.get((hid, stap_dir), []):
+                if lo <= lower_bp <= hi:
+                    left_len = lower_bp - lo + 1
+                    right_len = hi - lower_bp
+                    return (
+                        0 < left_len < _MIN_AUTOCROSSOVER_SEGMENT_NT
+                        or 0 < right_len < _MIN_AUTOCROSSOVER_SEGMENT_NT
+                    )
+            return False
 
-        if (
-            _terminal_fragment_too_short(ha_min, ha_max)
-            or _terminal_fragment_too_short(hb_min, hb_max)
-        ):
+        if _staple_arm_too_short(hid_a, stap_a) or _staple_arm_too_short(hid_b, stap_b):
             continue
 
         # Both sides of the nick gap must be covered by strands (skip if out of range)
@@ -5326,20 +5330,24 @@ def _build_auto_crossover_design(design: Design) -> tuple[Design, dict]:
         hb_min = hb.bp_start if hb else 0
         hb_max = (hb.bp_start + hb.length_bp - 1) if hb else 0
 
-        min_autocrossover_staple_nt = 21
+        # Match the standalone auto-crossover endpoint: only skip a site that
+        # would leave a staple arm shorter than the lattice min segment, measured
+        # against the STAPLE STRAND's true coverage boundary (the scaffold caps
+        # the last bp, so the staple ends before the helix does).
+        min_autocrossover_segment_nt = 7 if is_hc else 8
 
-        def _terminal_fragment_too_short(h_min: int, h_max: int) -> bool:
-            left_len = lower_bp - h_min + 1
-            right_len = h_max - lower_bp
-            return (
-                0 < left_len < min_autocrossover_staple_nt
-                or 0 < right_len < min_autocrossover_staple_nt
-            )
+        def _staple_arm_too_short(hid: str, stap_dir: str) -> bool:
+            for lo, hi in sr.get((hid, stap_dir), []):
+                if lo <= lower_bp <= hi:
+                    left_len = lower_bp - lo + 1
+                    right_len = hi - lower_bp
+                    return (
+                        0 < left_len < min_autocrossover_segment_nt
+                        or 0 < right_len < min_autocrossover_segment_nt
+                    )
+            return False
 
-        if (
-            _terminal_fragment_too_short(ha_min, ha_max)
-            or _terminal_fragment_too_short(hb_min, hb_max)
-        ):
+        if _staple_arm_too_short(hid_a, stap_a) or _staple_arm_too_short(hid_b, stap_b):
             continue
 
         if ha_min <= lower_bp <= ha_max and not slot_covered(sr, hid_a, lower_bp, stap_a):
@@ -7604,6 +7612,32 @@ def auto_scaffold_seamed_endpoint() -> dict:
     return resp
 
 
+@router.post("/design/auto-scaffold-matched", status_code=200)
+def auto_scaffold_matched_endpoint() -> dict:
+    """Matched-ends scaffold routing for blunt-end end-to-end polymerization.
+
+    Like seamed routing, but the far (+hi) face is made an exact translate of the
+    near (-lo) face by one repeat period (a whole multiple of the lattice
+    crossover period), so identical copies stack end-to-end: every helix's far
+    cap lands on the next copy's near cap.  Seam marking + sequence assignment
+    stay with the existing periodic tools.
+    """
+    from backend.core.seamed_router import auto_scaffold_matched
+
+    updated, report, result = _run_auto_scaffold_with_feature_log(
+        op_kind='auto-scaffold-matched',
+        label='Auto-scaffold (matched ends)',
+        params={},
+        runner=lambda d: auto_scaffold_matched(d),
+    )
+    resp = _design_response_with_geometry(updated, report)
+    resp["warnings"]         = result.warnings
+    resp["seam_xovers"]      = result.seam_xovers
+    resp["near_end_xovers"]  = result.near_end_xovers
+    resp["far_end_xovers"]   = result.far_end_xovers
+    return resp
+
+
 @router.post("/design/auto-scaffold-advanced-seamed", status_code=200)
 def auto_scaffold_advanced_seamed_endpoint() -> dict:
     """Experimental seamed scaffold routing with manual scaffold anchors."""
@@ -8103,7 +8137,14 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
             k_paths=body.k_paths,
             reassign_sequences=False,
             break_rule=body.break_rule,
-            allow_crossover_breaks=body.allow_crossover_breaks,
+            # Full autostaple always breaks AT crossovers (standard origami
+            # practice): on dense lattices the inter-crossover runs are mostly
+            # ~7 nt, so the >=7 nt break-clearance rule leaves long stretches
+            # with no legal internal break — without crossover breaks those
+            # giant precursors are unroutable (422 "No complete legal breakpoint
+            # path").  The downstream prune + circular-staple guard keep the
+            # result clean.  See full-autostaple troubleshooting notes.
+            allow_crossover_breaks=True,
             min_segment_nt=body.min_segment_nt,
         )
         clean, removed_circularizing = _prune_circularizing_crossovers(routed)

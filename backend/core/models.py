@@ -1130,6 +1130,7 @@ SnapshotOpKind = Literal[
     'overhang-extrude',
     'auto-scaffold',
     'auto-scaffold-seamed',
+    'auto-scaffold-matched',
     'auto-scaffold-seamless',
     'auto-break',
     'auto-break-aksel',

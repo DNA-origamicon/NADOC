@@ -201,6 +201,11 @@ export async function autoScaffoldSeamed() {
   return mutate(req => req('POST', '/design/auto-scaffold-seamed'))
 }
 
+/** Route a matched-ends scaffold (far face = translate of near face) for blunt-end polymers. */
+export async function autoScaffoldMatched() {
+  return mutate(req => req('POST', '/design/auto-scaffold-matched'))
+}
+
 /** Route an experimental seamed scaffold. */
 export async function autoScaffoldAdvancedSeamed() {
   return mutate(req => req('POST', '/design/auto-scaffold-advanced-seamed'))

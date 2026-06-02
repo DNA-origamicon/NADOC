@@ -29,11 +29,13 @@ from backend.core.models import (
 from backend.core.seamed_router import (
     _HC_SCAF_BOW_RIGHT,
     _SQ_SCAF_BOW_RIGHT,
+    _HAM_PATH_BUDGET,
     _build_adj,
     _extend_helix_hi,
     _extend_helix_lo,
     _extend_scaf_domain_hi,
     _extend_scaf_domain_lo,
+    _ham_path_search,
     _hamiltonian_path,
     _intersect,
     _is_forward,
@@ -59,28 +61,21 @@ def _ham_path_ending(
     at path[-1].  A secondary lexicographic sort makes the result reproducible
     across Python runs regardless of set-iteration order.
     """
-    vis: set[str] = set()
-    path: list[str] = []
-
-    def dfs(node: str) -> bool:
-        vis.add(node); path.append(node)
-        if len(path) == len(ids):
-            return True
-        for nb in sorted(adj[node] - vis, key=lambda n: (-len(adj[n]), n)):
-            if dfs(nb):
-                return True
-        vis.discard(node); path.pop()
-        return False
-
+    nbr_key = lambda n: (-len(adj[n]), n)  # noqa: E731 — descending degree, lex tie-break
     starters = (
         [start_from] + [n for n in sorted(ids, key=lambda n: (len(adj[n]), n))
                         if n != start_from]
         if start_from is not None
         else sorted(ids, key=lambda n: (len(adj[n]), n))
     )
+    # One shared budget across starts (each start gets a single-start pruned
+    # search; we keep the original "first path per start, check endpoint" rule).
+    budget = [_HAM_PATH_BUDGET]
     for s in starters:
-        vis.clear(); path.clear()
-        if dfs(s) and path[-1] == target_end:
+        if budget[0] <= 0:
+            break
+        path = _ham_path_search(ids, adj, nbr_key, [s], budget)
+        if path and path[-1] == target_end:
             return path
     return None
 

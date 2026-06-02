@@ -163,6 +163,7 @@ function _busyHeaderForPath(method, path) {
   if (path === '/design/redo')                                     return 'Redo'
   if (path.startsWith('/design/overhang-connections/') && path.endsWith('/relax')) return 'Relaxing Linker'
   if (path.startsWith('/design/cluster/') && method === 'PATCH')   return 'Applying Transform'
+  if (path === '/design/auto-scaffold-matched')                    return 'Auto Scaffold (Matched Ends)'
   if (path === '/design/auto-scaffold')                            return 'Auto Scaffold'
   if (path.startsWith('/design/auto-staple'))                      return 'Auto Staple'
   if (path === '/design/auto-break')                               return 'Auto Break'
@@ -989,6 +990,12 @@ export async function autoScaffold(opts = {}) {
 export async function autoScaffoldSeamed() {
   const json = await _request('POST', '/design/auto-scaffold-seamed')
   if (json?.warnings?.length) console.warn('[AutoScaffoldSeamed] warnings:', json.warnings)
+  return _syncFromDesignResponse(json)
+}
+
+export async function autoScaffoldMatched() {
+  const json = await _request('POST', '/design/auto-scaffold-matched')
+  if (json?.warnings?.length) console.warn('[AutoScaffoldMatched] warnings:', json.warnings)
   return _syncFromDesignResponse(json)
 }
 

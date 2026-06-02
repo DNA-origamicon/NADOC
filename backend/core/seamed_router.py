@@ -185,33 +185,113 @@ def _build_adj(
     return adj
 
 
+# Visit-count ceiling for Hamiltonian-path DFS.  Pruning makes graphs that admit
+# a path terminate far below this; the cap guarantees we never hang on graphs
+# that admit NO Hamiltonian path (e.g. a closed-tube cross-section), where the
+# naive search tree is exponential.  At ~25 us/visit this caps a hopeless search
+# at roughly 25 s rather than forever.
+_HAM_PATH_BUDGET = 1_000_000
+
+
+def _ham_path_search(
+    ids: list[str],
+    adj: dict[str, set[str]],
+    neighbor_key,
+    starters: list[str],
+    budget: list[int] | None = None,
+) -> list[str] | None:
+    """Budgeted, connectivity/degree-pruned Hamiltonian-path DFS.
+
+    `neighbor_key(n)` orders the neighbours explored at each step (callers pick
+    ascending- or descending-degree heuristics).  `starters` is the ordered list
+    of start nodes to try; `budget` (a single-element list) is shared across
+    calls so a multi-start search has one combined ceiling.
+
+    Returns the first complete path found, or ``None`` if no Hamiltonian path
+    exists OR the visit budget is exhausted — a graceful give-up instead of an
+    unbounded recursion.  The pruning is *admissible* (it only cuts branches that
+    provably cannot complete), so for solvable graphs the first path returned is
+    identical to the un-pruned search; it just skips the dead sub-trees.
+    """
+    id_set = set(ids)
+    n = len(id_set)
+    vis: set[str] = set()
+    path: list[str] = []
+    if budget is None:
+        budget = [_HAM_PATH_BUDGET]
+
+    def _can_complete(node: str) -> bool:
+        """True iff the unvisited remainder could still extend `node` to a path."""
+        rem = id_set - vis
+        if not rem:
+            return True
+        frontier = [nb for nb in adj[node] if nb in rem]
+        if not frontier:
+            return False  # current end is boxed in
+        # remaining subgraph must be connected AND reachable from the current end
+        seen = {frontier[0]}
+        stack = [frontier[0]]
+        while stack:
+            x = stack.pop()
+            for nb in adj[x]:
+                if nb in rem and nb not in seen:
+                    seen.add(nb); stack.append(nb)
+        if seen != rem:
+            return False
+        if len(rem) == 1:
+            return True  # last node just has to attach to the current end (it does)
+        # a Hamiltonian path has at most 2 endpoints, so at most 2 remaining
+        # nodes may have a single unvisited neighbour; an isolated one is fatal
+        ends = 0
+        for x in rem:
+            deg = sum(1 for nb in adj[x] if nb in rem)
+            if deg == 0:
+                return False
+            if deg == 1:
+                ends += 1
+                if ends > 2:
+                    return False
+        return True
+
+    def dfs(node: str) -> bool:
+        budget[0] -= 1
+        if budget[0] <= 0:
+            return False
+        vis.add(node); path.append(node)
+        if len(path) == n:
+            return True
+        if _can_complete(node):
+            for nb in sorted(adj[node] - vis, key=neighbor_key):
+                if budget[0] <= 0:
+                    break
+                if dfs(nb):
+                    return True
+        vis.discard(node); path.pop()
+        return False
+
+    for s in starters:
+        if budget[0] <= 0:
+            break
+        vis.clear(); path.clear()
+        if dfs(s):
+            return list(path)
+    return None
+
+
 def _hamiltonian_path(
     ids: list[str],
     adj: dict[str, set[str]],
     start_from: str | None = None,
 ) -> list[str] | None:
-    """DFS Hamiltonian path with degree-ascending neighbor ordering."""
-    vis: set[str] = set()
-    path: list[str] = []
+    """DFS Hamiltonian path with degree-ascending neighbor ordering.
 
-    def dfs(node: str) -> bool:
-        vis.add(node); path.append(node)
-        if len(path) == len(ids):
-            return True
-        for nb in sorted(adj[node] - vis, key=lambda n: len(adj[n])):
-            if dfs(nb):
-                return True
-        vis.discard(node); path.pop()
-        return False
-
+    Budgeted + pruned (see `_ham_path_search`): returns ``None`` instead of
+    hanging when the graph admits no Hamiltonian path.
+    """
     ordered = sorted(ids, key=lambda n: len(adj[n]))
     starters = ([start_from] + [n for n in ordered if n != start_from]
                 if start_from is not None else ordered)
-    for s in starters:
-        vis.clear(); path.clear()
-        if dfs(s):
-            return path
-    return None
+    return _ham_path_search(ids, adj, lambda n: len(adj[n]), starters)
 
 
 def _nick_if_needed(
@@ -393,11 +473,25 @@ class SeamedResult:
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
-    """Run the full seamed scaffold pipeline (Seam → Near Ends → Far Ends).
+def _auto_scaffold_seamed_impl(
+    design: Design, *, matched_ends: bool = False
+) -> tuple[Design, SeamedResult]:
+    """Shared seamed pipeline body (Seam → Near Ends → Far Ends).
 
-    All three phases share one atomic Design update; no undo checkpointing here
+    All phases share one atomic Design update; no undo checkpointing here
     (the caller in crud.py handles snapshot/set_design_silent).
+
+    When ``matched_ends`` is False this is the classic seamed router: the far
+    face skips the lowest-helix pair to park the scaffold's open terminus, and
+    each far crossover is searched independently of the near face.
+
+    When ``matched_ends`` is True the far face is made an exact translate of the
+    near face for blunt-end end-to-end polymerization: every near pair is also
+    capped at the far face at ``near_xover_bp + P`` (P a whole multiple of the
+    lattice crossover period, so the translate stays lattice-valid and the two
+    blunt faces sit in integer-turn helical register), and a single interior
+    nick per component reopens the resulting circular scaffold into one linear
+    strand with its 5'/3' buried mid-bundle.  See the "matched ends" plan.
 
     Returns (updated_design, result).  result.warnings lists any placements that
     were skipped due to validation errors or missing crossover sites.
@@ -624,26 +718,51 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
     # =========================================================================
     coverage = _scaffold_coverage_excluding(current, protected_scaffold_ids)
 
-    # Derive far-end pairs from near-end crossovers just placed.
+    # Derive far-end pairs from near-end crossovers just placed.  Capture each
+    # pair's near xover bp position(s) (ascending) so matched-ends mode can
+    # mirror them to the far face as exact translates.
     pair_seen: set[tuple[str, str]] = set()
     far_end_pairs: list[tuple[str, str]] = []
+    near_xover_by_pair: dict[tuple[str, str], list[int]] = {}
     for xo in current.crossovers:
         if xo.process_id != "create_near_ends":
             continue
         key: tuple[str, str] = tuple(sorted([xo.half_a.helix_id, xo.half_b.helix_id]))  # type: ignore[assignment]
+        near_xover_by_pair.setdefault(key, []).append(xo.half_a.index)
         if key not in pair_seen:
             pair_seen.add(key)
             far_end_pairs.append((xo.half_a.helix_id, xo.half_b.helix_id))
+    for lst in near_xover_by_pair.values():
+        lst.sort()
 
-    # Skip the pair that includes the lowest-indexed helix (open scaffold end).
-    helix_array_idx = {h.id: i for i, h in enumerate(current.helices)}
+    # Classic mode: skip the pair with the lowest-indexed helix (parks the open
+    # scaffold terminus there).  Matched mode caps every pair (no open face) and
+    # reopens the resulting circle with one interior nick later.
     skip_id: str | None = None
-    lowest = float("inf")
-    for ha_id, hb_id in far_end_pairs:
-        mi = min(helix_array_idx.get(ha_id, 0), helix_array_idx.get(hb_id, 0))
-        if mi < lowest:
-            lowest = mi
-            skip_id = ha_id if helix_array_idx.get(ha_id, 0) <= helix_array_idx.get(hb_id, 0) else hb_id
+    if not matched_ends:
+        helix_array_idx = {h.id: i for i, h in enumerate(current.helices)}
+        lowest = float("inf")
+        for ha_id, hb_id in far_end_pairs:
+            mi = min(helix_array_idx.get(ha_id, 0), helix_array_idx.get(hb_id, 0))
+            if mi < lowest:
+                lowest = mi
+                skip_id = ha_id if helix_array_idx.get(ha_id, 0) <= helix_array_idx.get(hb_id, 0) else hb_id
+
+    # Matched mode: one repeat period P = smallest whole multiple of the lattice
+    # crossover period that spans the bundle, so far_xover = near_xover + P stays
+    # lattice-valid (validity is bp % period) and the two blunt faces land in
+    # integer-turn helical register.
+    P = 0
+    if matched_ends:
+        all_near = [bp for lst in near_xover_by_pair.values() for bp in lst]
+        all_hi = [iv["hi"] for ivs in coverage.values() for iv in ivs]
+        if all_near and all_hi:
+            min_near, max_hi = min(all_near), max(all_hi)
+            P = math.ceil((max_hi - min_near + 1) / period) * period
+        else:
+            result.warnings.append(
+                "[MatchedEnds] No near-end crossovers to mirror; far ends unmatched."
+            )
 
     far_specs: list[dict] = []
     for ha_id, hb_id in far_end_pairs:
@@ -659,16 +778,44 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
         strand_b = Direction.REVERSE if fwd else Direction.FORWARD
         covA, covB = coverage.get(ha_id, []), coverage.get(hb_id, [])
 
-        for iv in _intersect(covA, covB):
-            hi = iv["hi"]
-            if (not any(c["hi"] == hi for c in covA)
-                    or not any(c["hi"] == hi for c in covB)):
-                continue
-            xover_bp = next(
-                (bp for bp in range(hi + 3, hi + period + 1)
-                 if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)),
-                None,
+        intervals = [
+            iv for iv in _intersect(covA, covB)
+            if any(c["hi"] == iv["hi"] for c in covA)
+            and any(c["hi"] == iv["hi"] for c in covB)
+        ]
+        near_list = near_xover_by_pair.get(tuple(sorted([ha_id, hb_id])), [])  # type: ignore[arg-type]
+        if matched_ends and P and len(intervals) != len(near_list):
+            result.warnings.append(
+                f"[MatchedEnds] {ha_id}↔{hb_id}: {len(near_list)} near vs "
+                f"{len(intervals)} far interval(s); ends may not match exactly."
             )
+
+        for idx, iv in enumerate(intervals):
+            hi = iv["hi"]
+            xover_bp: int | None
+            if matched_ends and P and idx < len(near_list):
+                # Exact translate of the matching near crossover.
+                xover_bp = near_list[idx] + P
+                if _scaf_nb(current, rowA, colA, xover_bp) != tuple(hB.grid_pos):
+                    # Translate unexpectedly invalid → fall back to a local search.
+                    xover_bp = next(
+                        (bp for bp in range(hi + 3, hi + period + 1)
+                         if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)),
+                        None,
+                    )
+                # Put every far crossover on the LEFT side of its junction: a
+                # bow-right site is the right member of the bow, so step to its
+                # left partner (bp-1); non-bow-right sites already sit on the
+                # left.  This makes copy N's far crossover and copy N+1's near
+                # crossover an adjacent (bp-1, bp) HJ pair at the polymer seam.
+                if xover_bp is not None and (xover_bp % period) in bow_right:
+                    xover_bp -= 1
+            else:
+                xover_bp = next(
+                    (bp for bp in range(hi + 3, hi + period + 1)
+                     if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)),
+                    None,
+                )
             if xover_bp is None:
                 result.warnings.append(
                     f"[FarEnds] No xover found for {ha_id}↔{hb_id} near hi={hi}"
@@ -713,6 +860,51 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
     from backend.core.lattice import retry_all_pending_ligations
     current = retry_all_pending_ligations(current)
 
+    # Matched mode caps every pair at both faces.  Empirically the serpentine
+    # stays a single *linear* strand (the path's two termini remain open), so no
+    # nick is needed.  But a topology that happens to close into a *circular*
+    # scaffold would have no 5'/3' for sequence assignment, so reopen any such
+    # circle with one interior nick at the mid-span of its middle domain.
+    if matched_ends:
+        for s in list(current.strands):
+            if not (s.is_scaffold and not s.is_reference and getattr(s, "is_circular", False)):
+                continue
+            dom = s.domains[len(s.domains) // 2]
+            mid_bp = (dom.start_bp + dom.end_bp) // 2
+            current = _nick_if_needed(current, dom.helix_id, mid_bp, dom.direction)
+
+    return current, result
+
+
+def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
+    """Classic seamed scaffold pipeline (Seam → Near Ends → Far Ends).
+
+    The far face skips the lowest-helix pair to park the scaffold's open 5'/3'
+    terminus; the two ends are routed independently.
+    """
+    return _auto_scaffold_seamed_impl(design, matched_ends=False)
+
+
+def auto_scaffold_matched(design: Design) -> tuple[Design, SeamedResult]:
+    """Matched-ends scaffold pipeline for blunt-end end-to-end polymerization.
+
+    Routes so the far (hi-bp) face is an exact translate of the near (lo-bp)
+    face by one repeat period P (a whole multiple of the lattice crossover
+    period): every helix's far cap lands on the next copy's near cap, so
+    identical copies stack end-to-end.  Seam marking + sequence assignment stay
+    with the existing periodic tools.
+
+    Like the advanced variants, a prior auto-scaffold route is cleared and
+    re-seeded first (so this can be applied to an already-routed design); manual
+    forced-ligation routes are preserved (with a warning).
+    """
+    result = SeamedResult()
+    seed = _clear_auto_scaffold_route_for_seamed(design, result)
+    current, matched = _auto_scaffold_seamed_impl(seed, matched_ends=True)
+    result.warnings.extend(matched.warnings)
+    result.seam_xovers += matched.seam_xovers
+    result.near_end_xovers += matched.near_end_xovers
+    result.far_end_xovers += matched.far_end_xovers
     return current, result
 
 
@@ -813,7 +1005,12 @@ def _advanced_hamiltonian_path(design: Design, graph: dict[str, list[dict]]) -> 
         ),
     )
 
+    budget = [_HAM_PATH_BUDGET]
+
     def dfs(path: list[str], used: set[str]) -> list[str] | None:
+        budget[0] -= 1
+        if budget[0] <= 0:
+            return None  # give up rather than hang on a hopeless search tree
         if len(path) == n:
             return path
         current = path[-1]
@@ -827,12 +1024,16 @@ def _advanced_hamiltonian_path(design: Design, graph: dict[str, list[dict]]) -> 
             next_id = edge["to_id"]
             if next_id in used:
                 continue
+            if budget[0] <= 0:
+                return None
             found = dfs(path + [next_id], used | {next_id})
             if found is not None:
                 return found
         return None
 
     for start in starts:
+        if budget[0] <= 0:
+            break
         found = dfs([start], {start})
         if found is not None:
             return found

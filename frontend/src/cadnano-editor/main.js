@@ -28,7 +28,7 @@ import {
   createDesign, importDesign,
   exportDesign, exportCadnano, exportSequenceCsv,
   addAutoCrossover, addAutoBreak, addAutoRouteAksel, addFullAutostaple,
-  scaffoldExtrudeNear, scaffoldExtrudeFar, autoScaffoldSeamed,
+  scaffoldExtrudeNear, scaffoldExtrudeFar, autoScaffoldSeamed, autoScaffoldMatched,
   autoScaffoldAdvancedSeamed, autoScaffoldSeamless, autoScaffoldAdvancedSeamless,
   assignScaffoldSequence, syncScaffoldSequenceResponse, assignStapleSequences,
   applyAllDeformations,
@@ -1020,6 +1020,12 @@ document.getElementById('menu-edit-redo')?.addEventListener('click', () => redoD
       const ok = await autoScaffoldAdvancedSeamless()
       _hideProgress()
       if (!ok) { showToast('Advanced seamless routing failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' }) }
+      else { _setRoutingCheck('scaffoldEnds', true) }
+    } else if (mode === 'matched') {
+      _showProgress('Matched Ends — routing…')
+      const ok = await autoScaffoldMatched()
+      _hideProgress()
+      if (!ok) { showToast('Matched-ends scaffold failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' }) }
       else { _setRoutingCheck('scaffoldEnds', true) }
     } else {
       _showProgress('Autoscaffold — routing…')
