@@ -34,6 +34,7 @@ import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
 import { computeGroupHiddenInstanceIds } from './scene/assembly_groups_util.js'
 import { heatmapHex } from './scene/color_util.js'
+import { fretQuenchedDonors } from './scene/fret_util.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -14196,23 +14197,6 @@ Typical debugging workflow for "reverts to 3D" bug:
    * Return the set of fluoroEntries that are donors currently within their
    * Förster radius of at least one compatible acceptor.
    */
-  function _fretQuenchedDonors(allEntries) {
-    const quenched = new Set()
-    for (const entry of allEntries) {
-      const mod          = entry.nuc?.modification
-      const acceptorKeys = _FRET_DONOR_MAP.get(mod)
-      if (!acceptorKeys) continue
-      for (const other of allEntries) {
-        if (other === entry) continue
-        const otherMod = other.nuc?.modification
-        if (!otherMod) continue
-        const r0 = _FRET_R0_MAP.get(`${mod}:${otherMod}`)
-        if (r0 === undefined) continue
-        if (entry.pos.distanceTo(other.pos) <= r0) { quenched.add(entry); break }
-      }
-    }
-    return quenched
-  }
 
   /**
    * Unified glow refresh for Fluorescence and FRET Checker modes.
@@ -14225,7 +14209,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!_fluorescenceOn && !_fretOn) { designRenderer.clearFluorescenceGlow(); return }
 
     const all      = designRenderer.getFluoroEntries()   // includes BHQ/Biotin for distance checks
-    const quenched = _fretOn ? _fretQuenchedDonors(all) : new Set()
+    const quenched = _fretOn ? fretQuenchedDonors(all, _FRET_DONOR_MAP, _FRET_R0_MAP) : new Set()
 
     const entries = all
       .filter(fe => FLUORO_EMISSION_COLORS.has(fe.nuc?.modification))
