@@ -25,6 +25,7 @@ import { bundleMidOffset }           from './scene/bundle_geometry.js'
 import { quatToEulerDeg, eulerDegToQuat, extractJointAngleDeg } from './scene/rotation_math.js'
 import { initMeasurementTool }       from './scene/measurement_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
+import { strandLengthNt, strandLengthNtFromDesign, strandDomainNt } from './scene/strand_length.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -6691,11 +6692,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       const ch = n => Math.round((l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))) * 255)
       return (ch(0) << 16) | (ch(8) << 8) | ch(4)
     }
-    function _strandNt(strand) {
-      let t = 0
-      for (const d of strand.domains ?? []) t += Math.abs((d.end_bp ?? 0) - (d.start_bp ?? 0)) + 1
-      return t
-    }
 
     let _lengthHeatmapOn = false
     const _lenLegend = document.getElementById('length-heatmap-legend')
@@ -6706,7 +6702,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       const colorMap = new Map()
       for (const s of design.strands ?? []) {
         if (s.strand_type === 'scaffold') continue
-        colorMap.set(s.id, _heatmapHex(_strandNt(s)))
+        colorMap.set(s.id, _heatmapHex(strandDomainNt(s)))
       }
       // backbone + slab entries expose strand_id via nuc; cone entries expose it directly
       for (const e of designRenderer.getBackboneEntries?.() ?? []) {
@@ -12820,16 +12816,6 @@ Typical debugging workflow for "reverts to 3D" bug:
 
       // Strand length in nt (domain bp + loop/skip deltas) — mirrors the cadnano
       // spreadsheet's strandLength().
-      function _strandLen(strand, helixById) {
-        return (strand.domains ?? []).reduce((sum, d) => {
-          const h = helixById[d.helix_id]
-          const lo = Math.min(d.start_bp, d.end_bp), hi = Math.max(d.start_bp, d.end_bp)
-          const skip = (h?.loop_skips ?? [])
-            .filter(ls => ls.bp_index >= lo && ls.bp_index <= hi)
-            .reduce((s, ls) => s + ls.delta, 0)
-          return sum + (Math.abs(d.end_bp - d.start_bp) + 1) + skip
-        }, 0)
-      }
 
       const plateView = initPlateView(canvasEl, {
         wrapEl,
@@ -12904,7 +12890,7 @@ Typical debugging workflow for "reverts to 3D" bug:
           records.push({
             strandId:   s.id,
             color,
-            lengthNt:   _strandLen(s, helixById),
+            lengthNt:   strandLengthNt(s, helixById),
             groupId:    grp?.id ?? null,
             groupOrder: grp ? grp.order : Infinity,
             hasMod:     !!mod,
@@ -13411,21 +13397,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (_expanded) _redraw(store.getState().currentDesign)
     })
 
-    function _strandLength(strand, design) {
-      const helixById = Object.fromEntries((design?.helices ?? []).map(h => [h.id, h]))
-      let t = 0
-      for (const d of strand.domains) {
-        const span = Math.abs(d.end_bp - d.start_bp) + 1
-        const helix = helixById[d.helix_id]
-        const lo = Math.min(d.start_bp, d.end_bp)
-        const hi = Math.max(d.start_bp, d.end_bp)
-        const skipDelta = helix?.loop_skips
-          ?.filter(ls => ls.bp_index >= lo && ls.bp_index <= hi)
-          ?.reduce((s, ls) => s + ls.delta, 0) ?? 0
-        t += span + skipDelta
-      }
-      return t
-    }
 
     function _redraw(design) {
       const ctx = canvas.getContext('2d')
@@ -13445,7 +13416,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
       const byLength = new Map()
       for (const s of staples) {
-        const len = _strandLength(s, design)
+        const len = strandLengthNtFromDesign(s, design)
         if (!byLength.has(len)) byLength.set(len, [])
         byLength.get(len).push(s.id)
       }
@@ -13456,9 +13427,9 @@ Typical debugging workflow for "reverts to 3D" bug:
       const maxCount = Math.max(...[...byLength.values()].map(v => v.length))
 
       // Count in-range
-      const nOk   = staples.filter(s => { const l = _strandLength(s, design); return l >= 18 && l <= 50 }).length
-      const nShort = staples.filter(s => _strandLength(s, design) < 18).length
-      const nLong  = staples.filter(s => _strandLength(s, design) > 50).length
+      const nOk   = staples.filter(s => { const l = strandLengthNtFromDesign(s, design); return l >= 18 && l <= 50 }).length
+      const nShort = staples.filter(s => strandLengthNtFromDesign(s, design) < 18).length
+      const nLong  = staples.filter(s => strandLengthNtFromDesign(s, design) > 50).length
       const pct    = Math.round(100 * nOk / staples.length)
       summary.textContent = `${staples.length} staples · ${pct}% in 18–50 nt`
         + (nShort ? ` · ${nShort} short` : '')
