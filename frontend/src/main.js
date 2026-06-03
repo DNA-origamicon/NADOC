@@ -22,6 +22,7 @@ import { initSelectionManager }      from './scene/selection_manager.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
 import { bundleMidOffset }           from './scene/bundle_geometry.js'
+import { quatToEulerDeg, eulerDegToQuat, extractJointAngleDeg } from './scene/rotation_math.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -7569,29 +7570,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     },
   })
 
-  // ── Move/Rotate tool ─────────────────────────────────────────────────────────
-  // Euler↔quaternion helpers for transform fields (degrees, XYZ order)
-  function _quatToEulerDeg(rotation) {
-    const q = new THREE.Quaternion(rotation[0], rotation[1], rotation[2], rotation[3])
-    const e = new THREE.Euler().setFromQuaternion(q, 'XYZ')
-    const toDeg = r => r * (180 / Math.PI)
-    return [toDeg(e.x), toDeg(e.y), toDeg(e.z)]
-  }
-  function _eulerDegToQuat(rx, ry, rz) {
-    const toRad = d => d * (Math.PI / 180)
-    const e = new THREE.Euler(toRad(rx), toRad(ry), toRad(rz), 'XYZ')
-    const q = new THREE.Quaternion().setFromEuler(e)
-    return [q.x, q.y, q.z, q.w]
-  }
-  /** Swing-twist decomposition: extract the signed rotation angle (degrees) around joint.axis_direction. */
-  function _extractJointAngleDeg(quaternion, joint) {
-    const axisDir = new THREE.Vector3(...joint.axis_direction).normalize()
-    const dot = quaternion.x * axisDir.x + quaternion.y * axisDir.y + quaternion.z * axisDir.z
-    const len = Math.sqrt(dot * dot + quaternion.w * quaternion.w)
-    if (len < 1e-8) return 0
-    return 2 * Math.atan2(dot / len, quaternion.w / len) * (180 / Math.PI)
-  }
-
   // Strand Animation sidebar section — un/hybridization of a selected overhang
   // + its binder, driving the real beads (ported from the strand-anim sandbox).
   initStrandAnimPanel(store, {
@@ -7638,11 +7616,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     },
     (translation, quaternion) => {
       _clusterDirty = true
-      const [rx, ry, rz] = _quatToEulerDeg([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
+      const [rx, ry, rz] = quatToEulerDeg([quaternion.x, quaternion.y, quaternion.z, quaternion.w])
       _mrSetTransformValues(translation[0], translation[1], translation[2], rx, ry, rz)
       const activeJoint = clusterGizmo?.getActiveJoint()
       if (activeJoint) {
-        _mrSetJointAngle(_extractJointAngleDeg(quaternion, activeJoint))
+        _mrSetJointAngle(extractJointAngleDeg(quaternion, activeJoint))
       }
     },
   )
@@ -8275,7 +8253,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     const quat = new THREE.Quaternion()
     const scale = new THREE.Vector3()
     matrix4.decompose(pos, quat, scale)
-    const [rx, ry, rz] = _quatToEulerDeg([quat.x, quat.y, quat.z, quat.w])
+    const [rx, ry, rz] = quatToEulerDeg([quat.x, quat.y, quat.z, quat.w])
     _mrSetTransformValues(pos.x, pos.y, pos.z, rx, ry, rz)
   }
 
@@ -8505,7 +8483,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       const rx = parseFloat(_mrRxInp?.value) || 0
       const ry = parseFloat(_mrRyInp?.value) || 0
       const rz = parseFloat(_mrRzInp?.value) || 0
-      const q = _eulerDegToQuat(rx, ry, rz)
+      const q = eulerDegToQuat(rx, ry, rz)
       const mat = new THREE.Matrix4().compose(
         new THREE.Vector3(tx, ty, tz),
         new THREE.Quaternion(q[0], q[1], q[2], q[3]),
@@ -8531,7 +8509,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     const rx = parseFloat(_mrRxInp?.value) || 0
     const ry = parseFloat(_mrRyInp?.value) || 0
     const rz = parseFloat(_mrRzInp?.value) || 0
-    clusterGizmo.setTransform([tx, ty, tz], _eulerDegToQuat(rx, ry, rz))
+    clusterGizmo.setTransform([tx, ty, tz], eulerDegToQuat(rx, ry, rz))
   }
 
   // Wire translation/rotation text inputs
@@ -9083,7 +9061,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     const initJoints = store.getState().currentDesign?.cluster_joints?.filter(j => j.cluster_id === first.id) ?? []
     _mrSetPivotOptions(initJoints, first.id)
     _mrSetSelectedPivot('centroid')
-    const [irx, iry, irz] = _quatToEulerDeg(first.rotation)
+    const [irx, iry, irz] = quatToEulerDeg(first.rotation)
     _mrSetTransformValues(first.translation[0], first.translation[1], first.translation[2], irx, iry, irz)
     if (_mrPanel) _mrPanel.style.display = ''
   }
@@ -13297,7 +13275,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!newState.activeClusterId || !newState.translateRotateActive) return
     const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === newState.activeClusterId)
     if (!cluster) return
-    const [rx, ry, rz] = _quatToEulerDeg(cluster.rotation)
+    const [rx, ry, rz] = quatToEulerDeg(cluster.rotation)
     _mrSetTransformValues(cluster.translation[0], cluster.translation[1], cluster.translation[2], rx, ry, rz)
     const joints = newState.currentDesign?.cluster_joints?.filter(j => j.cluster_id === newState.activeClusterId) ?? []
     _mrSetPivotOptions(joints)
