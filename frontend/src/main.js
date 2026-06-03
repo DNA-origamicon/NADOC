@@ -27,6 +27,7 @@ import { initMeasurementTool }       from './scene/measurement_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
 import { strandLengthNt, strandLengthNtFromDesign, strandDomainNt } from './scene/strand_length.js'
 import { buildSpecMap, buildDomainMapFromDesign, buildDomainMapFromGeom, buildJunctionMapFromXovers, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
+import { signedAngleFromWorldDelta, movingSideSignForRevolute, clampJointValue, gearEndpointSide, rotationDeltaMatrix } from './scene/gear_math.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -10808,7 +10809,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     const sideSign = _revoluteGizmoAngle.sideSign
     const v = (seedJoint?.current_value ?? 0) + _revoluteGizmoAngle.accum * sideSign
     _revoluteGizmoAngle = null
-    return { current_value: _clampJointValue(seedJoint, v), endpoint_side: sideSign < 0 ? 'a' : 'b' }
+    return { current_value: clampJointValue(seedJoint, v), endpoint_side: sideSign < 0 ? 'a' : 'b' }
   }
 
   function _matrixFromInstance(inst) {
@@ -10896,49 +10897,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     return delta
   }
 
-  function _signedAngleFromWorldDelta(delta, axis) {
-    if (!delta || !axis) return 0
-    const axisDir = axis.clone().normalize()
-    const ref0 = makeRefVec(axisDir)
-    const ref1 = ref0.clone().transformDirection(delta).normalize()
-    const cross = new THREE.Vector3().crossVectors(ref0, ref1)
-    return Math.atan2(cross.dot(axisDir), ref0.dot(ref1))
-  }
-
-  function _movingSideSignForRevolute(joint, movingIds) {
-    if (!joint || !movingIds) return 1
-    const aMoving = joint.instance_a_id && movingIds.has(joint.instance_a_id)
-    const bMoving = joint.instance_b_id && movingIds.has(joint.instance_b_id)
-    if (bMoving && !aMoving) return 1
-    if (aMoving && !bMoving) return -1
-    return 1
-  }
-
-  function _clampJointValue(joint, value) {
-    let next = value
-    if (joint?.min_limit != null && next < joint.min_limit) next = joint.min_limit
-    if (joint?.max_limit != null && next > joint.max_limit) next = joint.max_limit
-    return next
-  }
-
-  function _gearEndpointSide(rel, which, joint) {
-    if (!joint) return 'b'
-    const side = rel?.[`endpoint_${which}_side`]
-    const instanceId = rel?.[`endpoint_${which}_instance_id`]
-    if (side === 'a' || side === 'b') return side
-    if (instanceId && instanceId === joint.instance_a_id) return 'a'
-    return 'b'
-  }
-
-  function _rotationDeltaMatrix(axisOrigin, axisDir, angleRad) {
-    const axis = new THREE.Vector3(...(axisDir ?? [0, 0, 1])).normalize()
-    const origin = new THREE.Vector3(...(axisOrigin ?? [0, 0, 0]))
-    return new THREE.Matrix4()
-      .makeTranslation(origin.x, origin.y, origin.z)
-      .multiply(new THREE.Matrix4().makeRotationAxis(axis, angleRad))
-      .multiply(new THREE.Matrix4().makeTranslation(-origin.x, -origin.y, -origin.z))
-  }
-
   function _applyGearLiveJointValue(assembly, joint, value, movingIds, endpointSide = 'b') {
     if (!assembly || !joint) return
     const seedId = endpointSide === 'a' ? joint.instance_a_id : joint.instance_b_id
@@ -10951,7 +10909,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (!Array.isArray(values) || values.length !== 16) continue
       let mat
       if (endpointSide === 'a') {
-        const delta = _rotationDeltaMatrix(
+        const delta = rotationDeltaMatrix(
           joint.axis_origin ?? [0, 0, 0],
           joint.axis_direction ?? [0, 0, 1],
           (joint.current_value ?? 0) - value,
@@ -10976,12 +10934,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     const seedJoint = joints.find(j => j.id === constraint.jointId)
     if (!seedJoint) return
 
-    // Unwrap the gizmo's live rotation angle across frames: _signedAngleFromWorldDelta
+    // Unwrap the gizmo's live rotation angle across frames: signedAngleFromWorldDelta
     // is atan2 (±π), so past half a turn it wraps and a belt rider would teleport.
     // Accumulate the shortest step from the previous sample. State persists for
     // the commit (which sends current_value, not a transform).
-    const sideSign = _movingSideSignForRevolute(seedJoint, movingIds)
-    const raw = _signedAngleFromWorldDelta(delta, constraint.axis)
+    const sideSign = movingSideSignForRevolute(seedJoint, movingIds)
+    const raw = signedAngleFromWorldDelta(delta, constraint.axis)
     if (!_revoluteGizmoAngle || _revoluteGizmoAngle.jointId !== constraint.jointId) {
       _revoluteGizmoAngle = { jointId: constraint.jointId, lastRaw: raw, accum: raw, sideSign }
     } else {
@@ -11000,7 +10958,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!rels.length) return
 
     const values = new Map(joints.map(j => [j.id, j.current_value ?? 0]))
-    values.set(seedJoint.id, _clampJointValue(seedJoint, (seedJoint.current_value ?? 0) + seedDelta))
+    values.set(seedJoint.id, clampJointValue(seedJoint, (seedJoint.current_value ?? 0) + seedDelta))
 
     const queue = [seedJoint.id]
     const changed = new Set([seedJoint.id])
@@ -11023,11 +10981,11 @@ Typical debugging workflow for "reverts to 3D" bug:
           const factor = rel.ratio
           const rawTarget = anchorTgt + sign * (sourceValue - anchorSrc) * factor
           targetValue = rawTarget
-          endpointSideByJoint.set(targetId, _gearEndpointSide(rel, 'b', byId.get(targetId)))
+          endpointSideByJoint.set(targetId, gearEndpointSide(rel, 'b', byId.get(targetId)))
           const targetJoint = byId.get(targetId)
-          const clampedTarget = _clampJointValue(targetJoint, rawTarget)
+          const clampedTarget = clampJointValue(targetJoint, rawTarget)
           if (Math.abs(clampedTarget - rawTarget) > 1e-9 && Math.abs(factor) > 1e-12) {
-            values.set(sourceId, _clampJointValue(byId.get(sourceId), anchorSrc + sign * (clampedTarget - anchorTgt) / factor))
+            values.set(sourceId, clampJointValue(byId.get(sourceId), anchorSrc + sign * (clampedTarget - anchorTgt) / factor))
             changed.add(sourceId)
           }
         } else if (sourceId === rel.joint_b_id) {
@@ -11038,11 +10996,11 @@ Typical debugging workflow for "reverts to 3D" bug:
           const factor = 1 / rel.ratio
           const rawTarget = anchorTgt + sign * (sourceValue - anchorSrc) * factor
           targetValue = rawTarget
-          endpointSideByJoint.set(targetId, _gearEndpointSide(rel, 'a', byId.get(targetId)))
+          endpointSideByJoint.set(targetId, gearEndpointSide(rel, 'a', byId.get(targetId)))
           const targetJoint = byId.get(targetId)
-          const clampedTarget = _clampJointValue(targetJoint, rawTarget)
+          const clampedTarget = clampJointValue(targetJoint, rawTarget)
           if (Math.abs(clampedTarget - rawTarget) > 1e-9 && Math.abs(factor) > 1e-12) {
-            values.set(sourceId, _clampJointValue(byId.get(sourceId), anchorSrc + sign * (clampedTarget - anchorTgt) / factor))
+            values.set(sourceId, clampJointValue(byId.get(sourceId), anchorSrc + sign * (clampedTarget - anchorTgt) / factor))
             changed.add(sourceId)
           }
         } else {
@@ -11050,7 +11008,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         }
         const targetJoint = byId.get(targetId)
         if (!targetJoint || targetJoint.joint_type !== 'revolute') continue
-        targetValue = _clampJointValue(targetJoint, targetValue)
+        targetValue = clampJointValue(targetJoint, targetValue)
         if (Math.abs((values.get(targetId) ?? 0) - targetValue) < 1e-9) continue
         values.set(targetId, targetValue)
         changed.add(targetId)
