@@ -24,6 +24,7 @@ import { initSlicePlane }            from './scene/slice_plane.js'
 import { bundleMidOffset }           from './scene/bundle_geometry.js'
 import { quatToEulerDeg, eulerDegToQuat, extractJointAngleDeg } from './scene/rotation_math.js'
 import { initMeasurementTool }       from './scene/measurement_tool.js'
+import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -14792,18 +14793,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     // Compute the intersection of two scaffold-coverage interval arrays.
     // Returns all overlapping sub-intervals, which define the bp range where a
     // Holliday junction between two helices is physically valid.
-    function intersectCoverage(cA, cB) {
-      const result = []
-      for (const a of cA) {
-        for (const b of cB) {
-          const lo = Math.max(a.lo, b.lo)
-          const hi = Math.min(a.hi, b.hi)
-          if (lo <= hi) result.push({ lo, hi })
-        }
-      }
-      return result
-    }
-
     // Collect all scaffold helices that have a grid position.
     const scaffoldHelices = []
     for (const [helixId] of scaffoldCoverage) {
@@ -14855,26 +14844,6 @@ Typical debugging workflow for "reverts to 3D" bug:
         for (const nb of globalAdj.get(id)) { if (!_visited.has(nb)) stack.push(nb) }
       }
       components.push(comp)
-    }
-
-    // Hamiltonian path via DFS with degree-ascending neighbor ordering.
-    // startFrom, if provided, is tried as the first starting candidate.
-    const findHamiltonianPath = (ids, adjMap, startFrom = null) => {
-      const vis = new Set(), p = []
-      const dfs = id => {
-        vis.add(id); p.push(id)
-        if (p.length === ids.length) return true
-        const nbs = [...adjMap.get(id)].filter(nb => !vis.has(nb))
-          .sort((a, b) => adjMap.get(a).size - adjMap.get(b).size)
-        for (const nb of nbs) { if (dfs(nb)) return true }
-        vis.delete(id); p.pop(); return false
-      }
-      const sorted = [...ids].sort((a, b) => adjMap.get(a).size - adjMap.get(b).size)
-      const starters = startFrom != null
-        ? [startFrom, ...sorted.filter(id => id !== startFrom)]
-        : sorted
-      for (const s of starters) { if (dfs(s)) return p }
-      return null
     }
 
     const placements = []
@@ -15080,18 +15049,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (h.grid_pos) helixByGridPos.set(`${h.grid_pos[0]}_${h.grid_pos[1]}`, h)
     }
 
-    function intersectCoverage(cA, cB) {
-      const result = []
-      for (const a of cA) {
-        for (const b of cB) {
-          const lo = Math.max(a.lo, b.lo)
-          const hi = Math.min(a.hi, b.hi)
-          if (lo <= hi) result.push({ lo, hi })
-        }
-      }
-      return result
-    }
-
     const scaffoldHelices = []
     for (const [helixId] of scaffoldCoverage) {
       const h = allHelixById.get(helixId)
@@ -15138,25 +15095,6 @@ Typical debugging workflow for "reverts to 3D" bug:
         for (const nb of globalAdj.get(id)) { if (!_visited.has(nb)) stack.push(nb) }
       }
       components.push(comp)
-    }
-
-    // Hamiltonian path via DFS with degree-ascending ordering (same as Create Seam).
-    const findHamiltonianPath = (ids, adjMap, startFrom = null) => {
-      const vis = new Set(), p = []
-      const dfs = id => {
-        vis.add(id); p.push(id)
-        if (p.length === ids.length) return true
-        const nbs = [...adjMap.get(id)].filter(nb => !vis.has(nb))
-          .sort((a, b) => adjMap.get(a).size - adjMap.get(b).size)
-        for (const nb of nbs) { if (dfs(nb)) return true }
-        vis.delete(id); p.pop(); return false
-      }
-      const sorted = [...ids].sort((a, b) => adjMap.get(a).size - adjMap.get(b).size)
-      const starters = startFrom != null
-        ? [startFrom, ...sorted.filter(id => id !== startFrom)]
-        : sorted
-      for (const s of starters) { if (dfs(s)) return p }
-      return null
     }
 
     // Derive near-end pairs from the Hamiltonian path.
@@ -15344,18 +15282,6 @@ Typical debugging workflow for "reverts to 3D" bug:
 
     const allHelixById = new Map()
     for (const h of design.helices) allHelixById.set(h.id, h)
-
-    function intersectCoverage(cA, cB) {
-      const result = []
-      for (const a of cA) {
-        for (const b of cB) {
-          const lo = Math.max(a.lo, b.lo)
-          const hi = Math.min(a.hi, b.hi)
-          if (lo <= hi) result.push({ lo, hi })
-        }
-      }
-      return result
-    }
 
     // Derive far-end pairs directly from the create_near_ends crossovers already on
     // the design.  Running an independent Hamiltonian path here risks a different

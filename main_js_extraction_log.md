@@ -22,6 +22,7 @@ GO/NO-GO call on scaling before grinding through the whole file.
 | 1 | 2026-06-03 | EASY | `bundleAxisRange/bundleMaxOffset/bundleMidOffset` → `scene/bundle_geometry.js` | ~15 min | −16 (top-level; closure body unchanged) | 9 (3 fns → ratio 3.0) | 1 (green first run) | 0 (pure; console-error gate auto) | none — clean |
 | 2 | 2026-06-03 | MEDIUM | `quatToEulerDeg/eulerDegToQuat/extractJointAngleDeg` → `scene/rotation_math.js` | ~12 min | −22 (inside closure — real shrink) | 8 (3 fns → ratio 2.7) | 1 (green first run) | 0 (pure; console-error gate auto) | none — manual-confirmed by user |
 | 3 | 2026-06-03 | HARD | measurement tool (state + `_measClear/_measShow` + ctrl-bead subscription) → `scene/measurement_tool.js` (factory) | ~20 min | −32 (inside closure) | 7 (factory: show/clear/subscription/dispose) | 1 (green first run) | 0 — interactive gesture now automated (see below) | none in vitest + smoke 21/21 + gesture e2e 3/3 |
+| 4 | 2026-06-03 | MEDIUM (dedup) | `intersectCoverage` (×3) + `findHamiltonianPath` (×2) → `scene/scaffold_coverage.js` | ~15 min | **−74 (inside closure; 5 copies → 1)** | 9 (intersect + Hamiltonian-path validity/null/startFrom) | 1 (green first run) | 0 (pure verbatim; identical names → 0 call-site edits) | none — vitest + boot gate; verbatim so router behavior preserved |
 
 **Metric definitions** — `wall-clock`: rough session minutes (target EASY <15, MEDIUM <30, HARD <90).
 `main.js LOC Δ`: lines removed from `main()` body (imports stay, so total drops less). `tests added /
@@ -38,6 +39,33 @@ vitest / smoke / manual / **escaped-to-user** (the failure we most want to avoid
   scale with the smoke gate.
 - HARD **escaped** a regression despite smoke → smoke alone insufficient for stateful clusters; add
   targeted jsdom interaction tests (Tier 1.5) before scaling HARD extractions.
+
+## MEDIUM extraction backlog (mapped 2026-06-03)
+
+Pure functions trapped inside the `main()` closure, found by a purity scan (reference only
+params/locals/THREE/Math/imports — no scene/store/designRenderer/DOM/api). Grouped into cohesive
+target modules, highest leverage first. **Key finding: real triplication** — several helpers are
+defined 2–3× verbatim, so extracting collapses copies AND drains the closure.
+
+| Order | Target module | Functions | Why / leverage |
+|---|---|---|---|
+| 1 | `scene/scaffold_coverage.js` | `intersectCoverage` (×3 verbatim), `findHamiltonianPath` (×2 verbatim) | ✅ DONE (extraction #4, −74 lines). Collapsed 5 copies; used by Create Seam / Near-Ends / Far-Ends. |
+| 2 | `scene/overhang_maps.js` | `_buildSpecMap`, `_buildDomainMapFromDesign`, `_buildDomainMapFromGeom`, `_buildJunctionMapFromXovers`, `_buildJunctionMapFromDomains`, `_buildRootMap` | One coherent overhang-resolver pipeline (~65 lines); orchestrator `_buildOvhgMaps` (impure) stays and calls them. |
+| 3 | `scene/strand_length.js` | `_strandLength`, `_strandLen`, `_strandNt` (+ `_geomCentroid`) | **3 near-dup strand-length impls** → one loop-skip-aware fn + a no-skip variant (~30 lines + dedup). |
+| 4 | `scene/gear_math.js` | `_signedAngleFromWorldDelta`, `_rotationDeltaMatrix`, `_clampJointValue` (7 callers), `_movingSideSignForRevolute`, `_gearEndpointSide` | Pure revolute/gear math; `_applyGearLive*` callers (touch assemblyRenderer) stay (~38 lines). |
+| 5 | `scene/assembly_diff.js` | `_matrixFromInstance`, `_sameInstanceTransform`, `_assemblyTransformOnlyChange`, `_constraintRelevantChanged`, `_summarizeConstraint` | Snapshot-diff / fast-path-gate family (~70 lines). |
+| 6 | `scene/design_queries.js` | `_isExtrudeOverhang`, `_ovhgDomainIds`, `_ovhgDomainBpRange`, `_flexAnchorKey`, `_connIdForBead`, `_clusterBeadCount`, `_surfaceSegments` | Plain `(…, design)` lookups, several multi-call-site (~45 lines). |
+
+Singletons (do one when convenient): `_clusterTransformAfterJointDelta` (cluster_joint_math), the
+`_format*` report helpers (aksel_format), `_computeGroupHiddenInstanceIds` (assembly_groups_util),
+`_heatmapHex`/`_fretQuenchedDonors` (BORDERLINE — each reads 2 constant lookup maps; pass them in
+or co-locate the maps with the function).
+
+**Excluded (look pure, aren't):** `_applyFKLive` / `_applyGearLive*` (assemblyRenderer), `_filterAtomData`
+(`_atomDataCache`), `_rebakeHelixAxesForClusterDelta` (`store`), `_effectiveInstanceMatrix`
+(`_assemblyPendingTransforms`), `_buildSsdnaPayload` / `_ooPreviewFromFields` (store/DOM).
+
+Recommended next: **group 1** (max dedup + lines, zero risk), then 3 (dedup), then 2/4/5/6 in any order.
 
 ## Notes / lessons per extraction
 
