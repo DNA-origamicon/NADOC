@@ -27,6 +27,7 @@ GO/NO-GO call on scaling before grinding through the whole file.
 | 6 | 2026-06-03 | MEDIUM | 6 overhang-resolver builders (`buildSpecMap`/`…DomainMap…`/`…JunctionMap…`/`buildRootMap`) → `scene/overhang_maps.js` | ~18 min | **−86 (inside closure)** | 12 (each builder: resolve + skip/empty paths) | 1 (green first run) | 0 — boot gate loads a real design WITH overhangs, so `_buildOvhgMaps` runs all 6 → genuine integration check | none — vitest + boot gate (pipeline exercised on 26hb) |
 | 7 | 2026-06-03 | MEDIUM | 5 revolute/gear math fns (`signedAngleFromWorldDelta`/`movingSideSignForRevolute`/`clampJointValue`/`gearEndpointSide`/`rotationDeltaMatrix`) → `scene/gear_math.js` | ~15 min | −42 (inside closure) | 12 (clamp/sign/endpoint/rotation-matrix/world-delta-angle) | 1 (green first run) | 0 (verbatim; gear paths are assembly-mode, not boot-exercised, but unit-tested + identical call args) | none — vitest + boot gate |
 | 8 | 2026-06-03 | MEDIUM | 5 assembly snapshot-diff fns (`matrixFromInstance`/`sameInstanceTransform`/`assemblyTransformOnlyChange`/`summarizeConstraint`/`constraintRelevantChanged`) → `scene/assembly_diff.js` | ~16 min | −83 (inside closure) | 13 (matrix/equality/fast-path incl. visible-toggle + linker-topology + repr branches; DOF chips; constraint-change) | 1 (green first run) | 0 (verbatim; impure subscribers `_effectiveInstanceMatrix`/`_collectGroupMemberInstanceIds` stay) | none — vitest + boot gate |
+| 9 | 2026-06-03 | MEDIUM | 5 pure design-graph lookups (`surfaceSegments`/`isExtrudeOverhang`/`ovhgDomainIds`/`flexAnchorKey`/`connIdForBead`) → `scene/design_queries.js` | ~20 min | −51 (inside closure; incl. dropping dead `_ovhgDomainBpRange`) | 11 | 1 (green first run) | 0 (verbatim) | none — vitest 125 + boot gate (after config fix) |
 
 **Metric definitions** — `wall-clock`: rough session minutes (target EASY <15, MEDIUM <30, HARD <90).
 `main.js LOC Δ`: lines removed from `main()` body (imports stay, so total drops less). `tests added /
@@ -58,7 +59,7 @@ defined 2–3× verbatim, so extracting collapses copies AND drains the closure.
 | 3 | `scene/strand_length.js` | `_strandLength`, `_strandLen`, `_strandNt` | ✅ DONE (extraction #5, −29). Verified `_strandLength`≡`_strandLen`; kept `_strandNt` as the distinct no-skip variant. `_geomCentroid` deliberately NOT bundled (unrelated centroid helper — avoided scope creep). |
 | 4 | `scene/gear_math.js` | `_signedAngleFromWorldDelta`, `_rotationDeltaMatrix`, `_clampJointValue` (7 callers), `_movingSideSignForRevolute`, `_gearEndpointSide` | ✅ DONE (extraction #7, −42). `_applyGearLive*`/`_applyFKLive` (touch assemblyRenderer) stay; imports makeRefVec from assembly_revolute_math.js. |
 | 5 | `scene/assembly_diff.js` | `_matrixFromInstance`, `_sameInstanceTransform`, `_assemblyTransformOnlyChange`, `_constraintRelevantChanged`, `_summarizeConstraint` | ✅ DONE (extraction #8, −83). Impure subscribers (`_effectiveInstanceMatrix`, `_collectGroupMemberInstanceIds`) stay. |
-| 6 | `scene/design_queries.js` | `_isExtrudeOverhang`, `_ovhgDomainIds`, `_ovhgDomainBpRange`, `_flexAnchorKey`, `_connIdForBead`, `_clusterBeadCount`, `_surfaceSegments` | Plain `(…, design)` lookups, several multi-call-site (~45 lines). |
+| 6 | `scene/design_queries.js` | `isExtrudeOverhang`, `ovhgDomainIds`, `flexAnchorKey`, `connIdForBead`, `surfaceSegments` | ✅ DONE (extraction #9, −51). **Excluded `_clusterBeadCount`** — agent mis-flagged it CLEAR but it calls `designRenderer.getBackboneEntries()` (impure, stays). **Dropped `_ovhgDomainBpRange`** — dead (0 callers). |
 
 Singletons (do one when convenient): `_clusterTransformAfterJointDelta` (cluster_joint_math), the
 `_format*` report helpers (aksel_format), `_computeGroupHiddenInstanceIds` (assembly_groups_util),
@@ -116,3 +117,24 @@ into the template as a comment so the next one is quick):
 
 New reusable dev-only test hooks on `window.__nadocTest` (main.js): `getBackboneBeadScreenPositions(maxN)`
 and `getCtrlBeadCount()`.
+
+## Difficulties ledger (for later attempts / the autonomous loop)
+
+Append-only. Record candidates that turned out NOT to be clean pure extractions, plus any
+gotcha worth remembering. The autonomous extraction loop writes here when it skips something.
+
+- **`_clusterBeadCount` — NOT pure (skip).** The purity-scan agent flagged it CLEAR, but it
+  calls `designRenderer.getBackboneEntries()`. Left in main.js (group 6). Lesson: re-verify the
+  agent's "CLEAR" rating by reading the body before extracting — the scan over-trusts signatures.
+- **`_ovhgDomainBpRange` — dead (0 callers).** Removed rather than carried into a module.
+- **Playwright boot gate was unrunnable on this machine** until `playwright.config.js` cwd was
+  fixed (it hardcoded `/home/jojo/Work/NADOC`). Now derived from the config file location, so
+  `just smoke` / the console-error gate auto-start the servers anywhere. If the gate ever fails
+  with `spawn /bin/sh ENOENT`, the servers are down AND the cwd is wrong again.
+- **Other backlog impure exclusions (do NOT extract):** `_applyFKLive`, `_applyGearLive*`
+  (assemblyRenderer); `_filterAtomData` (`_atomDataCache`); `_rebakeHelixAxesForClusterDelta`
+  (`store`); `_effectiveInstanceMatrix` (`_assemblyPendingTransforms`); `_buildSsdnaPayload`,
+  `_ooPreviewFromFields` (store/DOM); `_computeAssemblyDuplicateOffset` (assemblyRenderer).
+- **Borderline singletons (need a small tweak):** `_heatmapHex` reads `_HEATMAP_MIN/MAX`
+  consts → pass as params or co-locate; `_fretQuenchedDonors` reads `_FRET_DONOR_MAP`/`_FRET_R0_MAP`
+  → co-locate the maps with it.

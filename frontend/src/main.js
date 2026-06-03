@@ -29,6 +29,7 @@ import { strandLengthNt, strandLengthNtFromDesign, strandDomainNt } from './scen
 import { buildSpecMap, buildDomainMapFromDesign, buildDomainMapFromGeom, buildJunctionMapFromXovers, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
 import { signedAngleFromWorldDelta, movingSideSignForRevolute, clampJointValue, gearEndpointSide, rotationDeltaMatrix } from './scene/gear_math.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, summarizeConstraint, constraintRelevantChanged } from './scene/assembly_diff.js'
+import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead } from './scene/design_queries.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -837,7 +838,7 @@ async function main() {
         if (action === 'relax_all') { await _relaxFlexible('all'); return }
         if (action === 'relax_one') {
           let connId = extra
-          if (!connId && nuc) connId = _connIdForBead(nuc, store.getState().currentDesign)
+          if (!connId && nuc) connId = connIdForBead(nuc, store.getState().currentDesign)
           if (!connId) { showToast('No flexible connection here', { severity: 'error' }); return }
           await _relaxFlexible('one', connId)
           return
@@ -2560,15 +2561,8 @@ async function main() {
   // Surface overlay — debounced + signature-cached (surface compute is slow).
   let _regionSurfaceSig   = null
   let _regionSurfaceTimer = null
-  function _surfaceSegments(design) {
-    const segs = []
-    for (const ov of design?.representation_overrides ?? []) {
-      if (ov.representation === 'surface') for (const s of ov.segments ?? []) segs.push(s)
-    }
-    return segs
-  }
   async function _recomputeRegionSurface(design) {
-    const segs = _surfaceSegments(design)
+    const segs = surfaceSegments(design)
     if (!segs.length) { regionSurfaceRenderer.dispose(); return }
     showPersistentToast('Computing region surface…')
     try {
@@ -2584,7 +2578,7 @@ async function main() {
     }
   }
   function _applyRegionSurfaceOverlay(design, force = false) {
-    const sig = _surfaceSegments(design)
+    const sig = surfaceSegments(design)
       .map(s => `${s.helix_id}:${s.bp_start}-${s.bp_end}`).sort().join('|')
     if (!force && sig === _regionSurfaceSig) return
     _regionSurfaceSig = sig
@@ -7920,9 +7914,9 @@ Typical debugging workflow for "reverts to 3D" bug:
       const o = currentDesign?.overhangs?.find(x => x.id === id)
       if (!o) continue
       helixIds.push(o.helix_id)
-      const domIds = _ovhgDomainIds(id, currentDesign)
+      const domIds = ovhgDomainIds(id, currentDesign)
       if (domIds) allDomainIds.push(...domIds)
-      if (_isExtrudeOverhang(id, currentDesign)) {
+      if (isExtrudeOverhang(id, currentDesign)) {
         extrudeHelixIds.push(o.helix_id)
       }
     }
@@ -7938,8 +7932,8 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (!o) continue
       const pivot = _ooPivotPositions[id]
         ?? new THREE.Vector3(o.pivot[0], o.pivot[1], o.pivot[2])
-      const domIds = _ovhgDomainIds(id, currentDesign)
-      const isExtrude = _isExtrudeOverhang(id, currentDesign)
+      const domIds = ovhgDomainIds(id, currentDesign)
+      const isExtrude = isExtrudeOverhang(id, currentDesign)
       helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, q_inc, domIds,
         isExtrude ? { forceAxes: true } : undefined)
       bluntEnds?.applyClusterTransform([id], pivot, pivot, q_inc)
@@ -8018,43 +8012,15 @@ Typical debugging workflow for "reverts to 3D" bug:
   // imported designs (including helices that once had scaffold but the user deleted it).
   // Split-domain inline overhangs (helix shared with scaffold) return false — their axis
   // cannot be rotated independently.
-  function _isExtrudeOverhang(ovhgId, design) {
-    const o = design?.overhangs?.find(x => x.id === ovhgId)
-    if (!o?.helix_id) return false
-    return !design?.strands?.some(
-      s => s.strand_type === 'scaffold' && s.domains?.some(d => d.helix_id === o.helix_id)
-    )
-  }
-
-  // Returns domain ID objects for the overhang's strand — used to filter captureClusterBase
-  // and applyClusterTransform so that unselected overhangs sharing the same child helix are
-  // not affected by the live preview transform.
-  function _ovhgDomainIds(ovhgId, design) {
-    const o = design?.overhangs?.find(x => x.id === ovhgId)
-    if (!o) return null
-    const strand = design?.strands?.find(s => s.id === o.strand_id)
-    if (!strand?.domains?.length) return null
-    return strand.domains.map((_, i) => ({ strand_id: strand.id, domain_index: i }))
-  }
-
-  function _ovhgDomainBpRange(ovhgId, design) {
-    const o = design?.overhangs?.find(x => x.id === ovhgId)
-    if (!o) return null
-    const strand = design?.strands?.find(s => s.id === o.strand_id)
-    const d = strand?.domains?.find(d => d.overhang_id === ovhgId)
-    if (!d) return null
-    return [Math.min(d.start_bp, d.end_bp), Math.max(d.start_bp, d.end_bp)]
-  }
-
   const overhangGizmo = initOverhangGizmo(scene, camera, canvas, controls)
   overhangGizmo.setCallbacks({
     onDragStart: (helixIds) => {
       const { currentDesign } = store.getState()
       const helixCtrl = designRenderer.getHelixCtrl()
-      const allDomainIds = _ooActiveIds.flatMap(id => _ovhgDomainIds(id, currentDesign) ?? [])
+      const allDomainIds = _ooActiveIds.flatMap(id => ovhgDomainIds(id, currentDesign) ?? [])
       helixCtrl?.captureClusterBase(helixIds, allDomainIds.length ? allDomainIds : null)
       const extrudeHelixIds = _ooActiveIds
-        .filter(id => _isExtrudeOverhang(id, currentDesign))
+        .filter(id => isExtrudeOverhang(id, currentDesign))
         .map(id => currentDesign?.overhangs?.find(x => x.id === id)?.helix_id)
         .filter(Boolean)
       bluntEnds?.captureClusterBase(new Set(_ooActiveIds))
@@ -8072,8 +8038,8 @@ Typical debugging workflow for "reverts to 3D" bug:
         if (!o) continue
         const pivot = _ooPivotPositions[id]
           ?? new THREE.Vector3(o.pivot[0], o.pivot[1], o.pivot[2])
-        const domIds = _ovhgDomainIds(id, currentDesign)
-        const isExtrude = _isExtrudeOverhang(id, currentDesign)
+        const domIds = ovhgDomainIds(id, currentDesign)
+        const isExtrude = isExtrudeOverhang(id, currentDesign)
         helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, R_delta, domIds,
           isExtrude ? { forceAxes: true } : undefined)
         bluntEnds?.applyClusterTransform([id], pivot, pivot, R_delta)
@@ -8174,12 +8140,6 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   /** Resolve a flexible anchor (FlexibleAnchor) → 'helix:bp:DIR' key. */
-  function _flexAnchorKey(anc, design) {
-    const s = design?.strands?.find(s => s.id === anc.strand_id)
-    const d = s?.domains?.[anc.domain_index]
-    return d ? `${d.helix_id}:${anc.bp_index}:${anc.direction}` : null
-  }
-
   /** Build the gizmo ssDNA-constraint payload for a cluster: per-tether moving/
    *  fixed anchor keys + a live world-position resolver from backboneEntries. */
   function _buildSsdnaPayload(clusterId) {
@@ -8188,8 +8148,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     for (const c of (_flexConnections ?? [])) {
       if (c.cluster_a_id !== clusterId && c.cluster_b_id !== clusterId) continue
       const onA = c.cluster_a_id === clusterId
-      const movingKey = _flexAnchorKey(onA ? c.anchor_a : c.anchor_b, design)
-      const fixedKey  = _flexAnchorKey(onA ? c.anchor_b : c.anchor_a, design)
+      const movingKey = flexAnchorKey(onA ? c.anchor_a : c.anchor_b, design)
+      const fixedKey  = flexAnchorKey(onA ? c.anchor_b : c.anchor_a, design)
       if (movingKey && fixedKey) connections.push({ movingKey, fixedKey, contour: c.contour_length_nm })
     }
     const resolveWorldPos = (key) => {
@@ -8202,17 +8162,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       return null
     }
     return { connections, resolveWorldPos }
-  }
-
-  /** Find the flexible connection whose marked run contains this bead, or null. */
-  function _connIdForBead(nuc, design) {
-    for (const c of (design?.flexible_connections ?? [])) {
-      for (const k of (c.segment_bead_keys ?? [])) {
-        if (k.strand_id === nuc.strand_id && k.domain_index === nuc.domain_index &&
-            k.bp_index === nuc.bp_index && k.direction === nuc.direction) return c.id
-      }
-    }
-    return null
   }
 
   /** Bead count of a cluster (its "size") — used to pick the smaller cluster to move. */
@@ -8235,8 +8184,8 @@ Typical debugging workflow for "reverts to 3D" bug:
       const onA = c.cluster_a_id === movingId
       const onB = c.cluster_b_id === movingId
       if (!onA && !onB) continue
-      const movingKey = _flexAnchorKey(onA ? c.anchor_a : c.anchor_b, design)
-      const fixedKey  = _flexAnchorKey(onA ? c.anchor_b : c.anchor_a, design)
+      const movingKey = flexAnchorKey(onA ? c.anchor_a : c.anchor_b, design)
+      const fixedKey  = flexAnchorKey(onA ? c.anchor_b : c.anchor_a, design)
       if (movingKey && fixedKey) connections.push({ movingKey, fixedKey, contour: c.contour_length_nm })
     }
     const resolveWorldPos = (key) => {
