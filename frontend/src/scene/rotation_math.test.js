@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { quatToEulerDeg, eulerDegToQuat, extractJointAngleDeg } from './rotation_math.js'
+import { quatToEulerDeg, eulerDegToQuat, extractJointAngleDeg, posEulerFromMatrix } from './rotation_math.js'
 
 // Quaternion (as {x,y,z,w}) for `deg` degrees about `axis`.
 const quatAbout = (axis, deg) =>
@@ -67,5 +67,20 @@ describe('extractJointAngleDeg', () => {
   it('guards the degenerate len≈0 case (returns 0)', () => {
     // 180° about X, measured against the Z axis: dot=0 and w=0 → len=0.
     expect(extractJointAngleDeg({ x: 1, y: 0, z: 0, w: 0 }, jointZ)).toBe(0)
+  })
+})
+
+describe('posEulerFromMatrix', () => {
+  it('recovers translation and XYZ Euler degrees from a compose', () => {
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2)
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(5, 6, 7), q, new THREE.Vector3(1, 1, 1))
+    const { pos, euler } = posEulerFromMatrix(m)
+    expect(pos[0]).toBeCloseTo(5); expect(pos[1]).toBeCloseTo(6); expect(pos[2]).toBeCloseTo(7)
+    expect(euler[0]).toBeCloseTo(90); expect(euler[1]).toBeCloseTo(0); expect(euler[2]).toBeCloseTo(0)
+  })
+  it('identity matrix → origin + zero Euler', () => {
+    const { pos, euler } = posEulerFromMatrix(new THREE.Matrix4())
+    expect(pos).toEqual([0, 0, 0])
+    euler.forEach(e => expect(e).toBeCloseTo(0))
   })
 })

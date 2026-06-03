@@ -22,6 +22,16 @@ export function eulerDegToQuat(rx, ry, rz) {
   return [q.x, q.y, q.z, q.w]
 }
 
+/** Decompose a THREE.Matrix4 into a translation [x,y,z] + XYZ Euler degrees [rx,ry,rz]. */
+export function posEulerFromMatrix(matrix4) {
+  const pos = new THREE.Vector3()
+  const quat = new THREE.Quaternion()
+  const scale = new THREE.Vector3()
+  matrix4.decompose(pos, quat, scale)
+  const [rx, ry, rz] = quatToEulerDeg([quat.x, quat.y, quat.z, quat.w])
+  return { pos: [pos.x, pos.y, pos.z], euler: [rx, ry, rz] }
+}
+
 /** Swing-twist decomposition: signed rotation angle (degrees) about joint.axis_direction. */
 export function extractJointAngleDeg(quaternion, joint) {
   const axisDir = new THREE.Vector3(...joint.axis_direction).normalize()

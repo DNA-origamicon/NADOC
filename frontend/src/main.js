@@ -22,7 +22,7 @@ import { initSelectionManager }      from './scene/selection_manager.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
 import { bundleMidOffset }           from './scene/bundle_geometry.js'
-import { quatToEulerDeg, eulerDegToQuat, extractJointAngleDeg } from './scene/rotation_math.js'
+import { quatToEulerDeg, eulerDegToQuat, extractJointAngleDeg, posEulerFromMatrix } from './scene/rotation_math.js'
 import { initMeasurementTool }       from './scene/measurement_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
 import { strandLengthNt, strandLengthNtFromDesign, strandDomainNt } from './scene/strand_length.js'
@@ -8071,12 +8071,8 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   function _mrSetTransformValuesFromMatrix(matrix4) {
     if (!matrix4) return
-    const pos = new THREE.Vector3()
-    const quat = new THREE.Quaternion()
-    const scale = new THREE.Vector3()
-    matrix4.decompose(pos, quat, scale)
-    const [rx, ry, rz] = quatToEulerDeg([quat.x, quat.y, quat.z, quat.w])
-    _mrSetTransformValues(pos.x, pos.y, pos.z, rx, ry, rz)
+    const { pos, euler } = posEulerFromMatrix(matrix4)
+    _mrSetTransformValues(pos[0], pos[1], pos[2], euler[0], euler[1], euler[2])
   }
 
   function _mrSetJointAngle(deg) {
