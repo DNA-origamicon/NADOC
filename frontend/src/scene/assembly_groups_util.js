@@ -3,6 +3,14 @@
  * object. Unit-tested in assembly_groups_util.test.js.
  */
 
+/** Id of the (top-level) group directly containing `instanceId`, or null. */
+export function findOwningGroupId(assembly, instanceId) {
+  for (const g of (assembly?.groups ?? [])) {
+    if ((g.instance_ids ?? []).includes(instanceId)) return g.id
+  }
+  return null
+}
+
 /** Ordered instance ids belonging to a group, recursing into its subgroups. */
 export function collectGroupMemberInstanceIds(assembly, groupId) {
   const groups = assembly?.groups ?? []

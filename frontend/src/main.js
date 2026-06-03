@@ -32,7 +32,7 @@ import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange,
 import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead } from './scene/design_queries.js'
 import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
-import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './scene/assembly_groups_util.js'
+import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds, findOwningGroupId } from './scene/assembly_groups_util.js'
 import { heatmapHex } from './scene/color_util.js'
 import { fretQuenchedDonors } from './scene/fret_util.js'
 import { motionChipStyle } from './scene/motion_chip.js'
@@ -11267,13 +11267,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   function _onAssemblyLassoUp(e) { _finalizeAssemblyLasso(e) }
 
   // ── PartGroup helpers (id walks; mirror backend/core/assembly_groups.py) ────
-  function _findOwningGroupId(instanceId, assembly = null) {
-    const groups = (assembly ?? store.getState().currentAssembly)?.groups ?? []
-    for (const g of groups) {
-      if ((g.instance_ids ?? []).includes(instanceId)) return g.id
-    }
-    return null
-  }
+
 
   // ── Motion-constraint analyzer ─────────────────────────────────────────────
   // Inspect the joint graph from a moving body (instance or group) to the
@@ -11833,7 +11827,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     {
       const sNow = store.getState()
       const earlyHit = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
-      const owningGid = earlyHit ? _findOwningGroupId(earlyHit.id, sNow.currentAssembly) : null
+      const owningGid = earlyHit ? findOwningGroupId(sNow.currentAssembly, earlyHit.id) : null
       if (earlyHit && owningGid && sNow.activeGroupId !== owningGid) {
         // First click on a grouped part → select the group, no fallthrough.
         store.setState({

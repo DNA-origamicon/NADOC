@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './assembly_groups_util.js'
+import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds, findOwningGroupId } from './assembly_groups_util.js'
 
 const set = (s) => [...s].sort()
 
@@ -61,5 +61,20 @@ describe('collectGroupMemberInstanceIds', () => {
   it('empty for an unknown group or null assembly', () => {
     expect(collectGroupMemberInstanceIds({ groups: [] }, 'nope')).toEqual([])
     expect(collectGroupMemberInstanceIds(null, 'g1')).toEqual([])
+  })
+})
+
+describe('findOwningGroupId', () => {
+  const asm = { groups: [
+    { id: 'g1', instance_ids: ['a', 'b'] },
+    { id: 'g2', instance_ids: ['c'] },
+  ] }
+  it('finds the group directly containing the instance', () => {
+    expect(findOwningGroupId(asm, 'c')).toBe('g2')
+    expect(findOwningGroupId(asm, 'a')).toBe('g1')
+  })
+  it('null when no group owns it / null assembly', () => {
+    expect(findOwningGroupId(asm, 'zzz')).toBeNull()
+    expect(findOwningGroupId(null, 'a')).toBeNull()
   })
 })
