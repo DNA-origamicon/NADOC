@@ -37,6 +37,7 @@ import { heatmapHex } from './scene/color_util.js'
 import { fretQuenchedDonors } from './scene/fret_util.js'
 import { motionChipStyle } from './scene/motion_chip.js'
 import { ascWarningText, SCAFFOLD_LENGTHS } from './scene/scaffold_assign.js'
+import { filterAtomData } from './scene/atom_filter.js'
 import { vecClose } from './scene/vec_math.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
@@ -2537,15 +2538,6 @@ async function main() {
   // Filter the cached all-atom model to a set of columns ("helix:bp"). Keeps each
   // atom's original `serial` so ballstick bonds (serial pairs) resolve without
   // renumbering — bonds are filtered to pairs whose both endpoints survive.
-  function _filterAtomData(colSet, withBonds) {
-    const atoms = (_atomDataCache?.atoms ?? []).filter(a => colSet.has(`${a.helix_id}:${a.bp_index}`))
-    let bonds = []
-    if (withBonds && Array.isArray(_atomDataCache?.bonds)) {
-      const live = new Set(atoms.map(a => a.serial))
-      bonds = _atomDataCache.bonds.filter(([i, j]) => live.has(i) && live.has(j))
-    }
-    return { atoms, bonds, element_meta: _atomDataCache?.element_meta }
-  }
 
   async function _applyRegionAtomisticOverlays(design) {
     const { vdw, ballstick } = repColumnsByRep(design)
@@ -2558,9 +2550,9 @@ async function main() {
     if (!data) return
     // Always dispose-then-update — update() does not pre-clear element meshes.
     regionVdwRenderer.dispose()
-    if (vdw.size) { regionVdwRenderer.update(_filterAtomData(vdw, false)); regionVdwRenderer.setMode('vdw') }
+    if (vdw.size) { regionVdwRenderer.update(filterAtomData(_atomDataCache, vdw, false)); regionVdwRenderer.setMode('vdw') }
     regionBallstickRenderer.dispose()
-    if (ballstick.size) { regionBallstickRenderer.update(_filterAtomData(ballstick, true)); regionBallstickRenderer.setMode('ballstick') }
+    if (ballstick.size) { regionBallstickRenderer.update(filterAtomData(_atomDataCache, ballstick, true)); regionBallstickRenderer.setMode('ballstick') }
     const { selectedObject, multiSelectedStrandIds } = store.getState()
     regionVdwRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
     regionBallstickRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
