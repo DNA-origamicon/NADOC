@@ -37,6 +37,7 @@ import { heatmapHex } from './scene/color_util.js'
 import { fretQuenchedDonors } from './scene/fret_util.js'
 import { motionChipStyle } from './scene/motion_chip.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
+import { selectionBBox } from './scene/selection_bbox.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
 import { ascWarningText, SCAFFOLD_LENGTHS } from './scene/scaffold_assign.js'
@@ -4812,25 +4813,11 @@ Typical debugging workflow for "reverts to 3D" bug:
   // domains + single selectedObject). Returns null if nothing is selected.
   function _selectionBBox() {
     const st = store.getState()
-    const geom = st.currentGeometry
-    if (!geom?.length) return null
-    const strandIds = new Set(st.multiSelectedStrandIds ?? [])
-    const domainIds = new Set(st.multiSelectedDomainIds ?? [])
-    const sel = st.selectedObject?.data
-    if (!strandIds.size && !domainIds.size && !sel?.strand_id) return null
-    const box = new THREE.Box3()
-    let count = 0
-    for (const n of geom) {
-      const hit = (strandIds.size && strandIds.has(n.strand_id))
-        || (domainIds.size && domainIds.has(n.domain_id))
-        || (sel && (n.strand_id === sel.strand_id))
-      if (!hit) continue
-      const [x, y, z] = n.backbone_position
-      if (count === 0) box.set(new THREE.Vector3(x, y, z), new THREE.Vector3(x, y, z))
-      else             box.expandByPoint(new THREE.Vector3(x, y, z))
-      count++
-    }
-    return count > 0 ? box : null
+    return selectionBBox(st.currentGeometry, {
+      strandIds:   new Set(st.multiSelectedStrandIds ?? []),
+      domainIds:   new Set(st.multiSelectedDomainIds ?? []),
+      selStrandId: st.selectedObject?.data?.strand_id ?? null,
+    })
   }
 
   // F-key handler: frame the selection if there is one, otherwise fit the whole
