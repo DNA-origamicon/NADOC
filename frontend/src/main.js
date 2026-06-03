@@ -37,6 +37,7 @@ import { heatmapHex } from './scene/color_util.js'
 import { fretQuenchedDonors } from './scene/fret_util.js'
 import { motionChipStyle } from './scene/motion_chip.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
+import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
 import { ascWarningText, SCAFFOLD_LENGTHS } from './scene/scaffold_assign.js'
 import { filterAtomData } from './scene/atom_filter.js'
@@ -6406,8 +6407,8 @@ Typical debugging workflow for "reverts to 3D" bug:
       overhangLocations.setVisible(tf.overhangLocations)
       if (tf.overhangLocations) _rebuildOverhangLocations()
       // Turning the overhang tool off in assembly mode drops any transient
-      // hover label (hover-reveal is gated on this tool — see _onAssemblyHoverMove).
-      else if (newState.assemblyActive) { _ovhgHoverKey = null; assemblyRenderer.setHoveredOverhang?.(null) }
+      // hover label (hover-reveal is gated on this tool — see overhangHoverPicker.onHoverMove).
+      else if (newState.assemblyActive) { overhangHoverPicker.reset() }
     }
     if (tf.extensionLocations !== prev.extensionLocations) {
       designRenderer.setExtensionsVisible(tf.extensionLocations)
@@ -10347,7 +10348,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         controls.addEventListener('change', _updateFixedLockPositions)
         canvas.addEventListener('pointerdown',  _onAssemblyPointerDown)
         canvas.addEventListener('click',        _onAssemblyClick)
-        canvas.addEventListener('pointermove',  _onAssemblyHoverMove)
+        canvas.addEventListener('pointermove',  overhangHoverPicker.onHoverMove)
         canvas.addEventListener('contextmenu',  _onAssemblyContextMenu)
       } else {
         if (_hasAssemblyPending()) {
@@ -10369,10 +10370,9 @@ Typical debugging workflow for "reverts to 3D" bug:
         beltPathRenderer.rebuild(null)        // clear persistent belt tubes
         canvas.removeEventListener('pointerdown',  _onAssemblyPointerDown)
         canvas.removeEventListener('click',        _onAssemblyClick)
-        canvas.removeEventListener('pointermove',  _onAssemblyHoverMove)
+        canvas.removeEventListener('pointermove',  overhangHoverPicker.onHoverMove)
         canvas.removeEventListener('contextmenu',  _onAssemblyContextMenu)
-        assemblyRenderer.setHoveredOverhang?.(null)
-        _ovhgHoverKey = null
+        overhangHoverPicker.reset()
         // Clean up any in-flight free drag
         if (_pendingFreeDrag || _freeDrag) {
           canvas.removeEventListener('pointermove', _onAssemblyDragMove)
@@ -11773,47 +11773,16 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   // Medium screen radius for hovering/clicking near an overhang's label anchor.
-  const _OVHG_PICK_RADIUS_PX = 36
-
-  // Nearest overhang anchor to a screen point, within `radiusPx` — or null.
-  // Selection/hover are proximity-based (no toggle, no exact-sprite raycast).
-  function _nearestOverhangAt(clientX, clientY, radiusPx = _OVHG_PICK_RADIUS_PX) {
-    const anchors = assemblyRenderer.getOverhangAnchors?.()
-    if (!anchors?.length || anchors.length > 1200) return null   // perf cap: rely on "show all"
-    const rect = canvas.getBoundingClientRect()
-    const v = new THREE.Vector3()
-    let best = null, bestD = radiusPx
-    for (const a of anchors) {
-      v.copy(a.world).project(camera)
-      if (v.z < -1 || v.z > 1) continue
-      const sx = rect.left + (v.x * 0.5 + 0.5) * rect.width
-      const sy = rect.top  + (-v.y * 0.5 + 0.5) * rect.height
-      const d = Math.hypot(sx - clientX, sy - clientY)
-      if (d < bestD) { bestD = d; best = a }
-    }
-    return best ? { instanceId: best.instanceId, overhangId: best.overhangId, label: best.label } : null
-  }
-
-  // Hover: reveal the nearest overhang's label transiently. Skipped while a
-  // button is held (orbit/drag). Deduped so we only notify the renderer on
-  // change.
-  let _ovhgHoverKey = null
-  function _onAssemblyHoverMove(e) {
-    if (e.buttons !== 0) return
-    // Overhang hover-reveal is gated on the overhang tool (the "ovhg" button
-    // in the assembly tool strip → toolFilters.overhangLocations). When the
-    // tool is off, a part buried under overhangs stays freely hoverable so it
-    // can be selected; overhangs only respond once the tool is armed.
-    if (!store.getState().toolFilters?.overhangLocations) {
-      if (_ovhgHoverKey !== null) { _ovhgHoverKey = null; assemblyRenderer.setHoveredOverhang?.(null) }
-      return
-    }
-    const oh = _nearestOverhangAt(e.clientX, e.clientY)
-    const key = oh ? `${oh.instanceId}|${oh.overhangId}` : null
-    if (key === _ovhgHoverKey) return
-    _ovhgHoverKey = key
-    assemblyRenderer.setHoveredOverhang?.(oh)
-  }
+  // Overhang hover/pick — proximity-based (no exact-sprite raycast). Factory in
+  // scene/overhang_hover_picker.js (pure nearest-anchor core is unit-tested).
+  // All callers are deferred handlers, so this const is built before any fires;
+  // assemblyRenderer is reached via lazy getters (not captured at construction).
+  const overhangHoverPicker = initOverhangHoverPicker({
+    camera, canvas,
+    getAnchors:    () => assemblyRenderer.getOverhangAnchors?.(),
+    setHovered:    (oh) => assemblyRenderer.setHoveredOverhang?.(oh),
+    getToolActive: () => !!store.getState().toolFilters?.overhangLocations,
+  })
 
   // Toggle an overhang into/out of the ordered assembly overhang selection.
   // First two entries become the Overhangs Manager's Side A / Side B on open.
@@ -11919,7 +11888,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     // When on, a click that lands on anything that ISN'T an overhang (part body
     // or empty space) clears the overhang selection, then falls through.
     if (store.getState().toolFilters?.overhangLocations) {
-      const oh = _nearestOverhangAt(e.clientX, e.clientY)
+      const oh = overhangHoverPicker.nearestAt(e.clientX, e.clientY)
       if (oh) { _toggleAssemblyOverhangSelection(oh); return }
       if ((store.getState().assemblyOverhangSelection ?? []).length)
         store.setState({ assemblyOverhangSelection: [] })
