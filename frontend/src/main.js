@@ -33,6 +33,7 @@ import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connI
 import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
 import { computeGroupHiddenInstanceIds } from './scene/assembly_groups_util.js'
+import { heatmapHex } from './scene/color_util.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -6573,17 +6574,6 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── View tool buttons — length heatmap, seq, undef, grid, overhang names ──────
   {
     // Length heatmap
-    const _HEATMAP_MIN = 14, _HEATMAP_MAX = 60
-    function _heatmapHex(ntCount) {
-      const t = Math.max(0, Math.min(1, (ntCount - _HEATMAP_MIN) / (_HEATMAP_MAX - _HEATMAP_MIN)))
-      const hue = Math.round(240 * (1 - t))
-      // HSL → hex
-      const s = 0.9, l = 0.5
-      const k = n => (n + hue / 30) % 12
-      const a = s * Math.min(l, 1 - l)
-      const ch = n => Math.round((l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))) * 255)
-      return (ch(0) << 16) | (ch(8) << 8) | ch(4)
-    }
 
     let _lengthHeatmapOn = false
     const _lenLegend = document.getElementById('length-heatmap-legend')
@@ -6594,7 +6584,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       const colorMap = new Map()
       for (const s of design.strands ?? []) {
         if (s.strand_type === 'scaffold') continue
-        colorMap.set(s.id, _heatmapHex(strandDomainNt(s)))
+        colorMap.set(s.id, heatmapHex(strandDomainNt(s)))
       }
       // backbone + slab entries expose strand_id via nuc; cone entries expose it directly
       for (const e of designRenderer.getBackboneEntries?.() ?? []) {
