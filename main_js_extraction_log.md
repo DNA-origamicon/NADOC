@@ -30,6 +30,7 @@ GO/NO-GO call on scaling before grinding through the whole file.
 | 9 | 2026-06-03 | MEDIUM | 5 pure design-graph lookups (`surfaceSegments`/`isExtrudeOverhang`/`ovhgDomainIds`/`flexAnchorKey`/`connIdForBead`) → `scene/design_queries.js` | ~20 min | −51 (inside closure; incl. dropping dead `_ovhgDomainBpRange`) | 11 | 1 (green first run) | 0 (verbatim) | none — vitest 125 + boot gate (after config fix) |
 | 10 | 2026-06-03 | MEDIUM | `clusterTransformAfterJointDelta` → `scene/cluster_joint_math.js` | ~12 min | −21 (inside closure) | 3 (property: world-rotation-about-joint composition; zero-delta identity; field spread) | 1 (green first run) | 0 (verbatim) | none — vitest 128 |
 | 11 | 2026-06-03 | MEDIUM | `formatScoreSummary` + `formatGraphSummary` → `scene/aksel_format.js` | ~8 min | −20 (inside closure) | 4 (populated + defaulted/n-a branches, each fn) | 1 (green first run) | 0 (verbatim) | none — vitest 132 |
+| 12 | 2026-06-03 | MEDIUM | `computeGroupHiddenInstanceIds` → `scene/assembly_groups_util.js` | ~8 min | −18 (inside closure) | 6 (empty / hidden / visible-ignored / subgroup recursion / hidden-parent-wins / dangling subgroup) | 1 (green first run) | 0 (verbatim) | none — vitest 138 |
 
 **Metric definitions** — `wall-clock`: rough session minutes (target EASY <15, MEDIUM <30, HARD <90).
 `main.js LOC Δ`: lines removed from `main()` body (imports stay, so total drops less). `tests added /
@@ -64,7 +65,7 @@ defined 2–3× verbatim, so extracting collapses copies AND drains the closure.
 | 6 | `scene/design_queries.js` | `isExtrudeOverhang`, `ovhgDomainIds`, `flexAnchorKey`, `connIdForBead`, `surfaceSegments` | ✅ DONE (extraction #9, −51). **Excluded `_clusterBeadCount`** — agent mis-flagged it CLEAR but it calls `designRenderer.getBackboneEntries()` (impure, stays). **Dropped `_ovhgDomainBpRange`** — dead (0 callers). |
 
 Singletons (do one when convenient): ~~`_clusterTransformAfterJointDelta`~~ ✅ #10 (cluster_joint_math), the
-`_format*` report helpers (aksel_format), `_computeGroupHiddenInstanceIds` (assembly_groups_util),
+`_format*` report helpers (aksel_format), ~~`_computeGroupHiddenInstanceIds`~~ ✅ #12 (assembly_groups_util),
 `_heatmapHex`/`_fretQuenchedDonors` (BORDERLINE — each reads 2 constant lookup maps; pass them in
 or co-locate the maps with the function).
 

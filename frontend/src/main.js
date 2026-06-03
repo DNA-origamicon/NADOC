@@ -32,6 +32,7 @@ import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange,
 import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead } from './scene/design_queries.js'
 import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
+import { computeGroupHiddenInstanceIds } from './scene/assembly_groups_util.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -10358,25 +10359,6 @@ Typical debugging workflow for "reverts to 3D" bug:
   // `visible` overlay is false (recursively walks subgroups). Used to drive
   // the renderer's group-visibility overlay AFTER each rebuild so per-instance
   // `visible` flags stay untouched (overlay-only semantics).
-  function _computeGroupHiddenInstanceIds(assembly) {
-    const out = new Set()
-    const groups = assembly?.groups ?? []
-    if (!groups.length) return out
-    const byId = new Map(groups.map(g => [g.id, g]))
-    for (const g of groups) {
-      if (g.visible === false) {
-        const stack = [g.id]
-        while (stack.length) {
-          const gid = stack.pop()
-          const cur = byId.get(gid)
-          if (!cur) continue
-          for (const iid of (cur.instance_ids ?? [])) out.add(iid)
-          for (const sgid of (cur.subgroup_ids ?? [])) stack.push(sgid)
-        }
-      }
-    }
-    return out
-  }
 
   function _runAssemblyRebuild(assembly, { fitOnDone = false, activeInstanceId = null } = {}) {
     const onProgress = _assemblyLoadOnProgress
@@ -10392,7 +10374,7 @@ Typical debugging workflow for "reverts to 3D" bug:
           if (depths.has(activeInstanceId)) _rebuildFixedLocks(assembly)
         }
         _syncAssemblyReprMenu(assembly)
-        assemblyRenderer.applyGroupVisibilityOverlay?.(_computeGroupHiddenInstanceIds(assembly))
+        assemblyRenderer.applyGroupVisibilityOverlay?.(computeGroupHiddenInstanceIds(assembly))
         if (fitOnDone) _fitToView()
         settle?.resolve()
       })
@@ -10557,7 +10539,7 @@ Typical debugging workflow for "reverts to 3D" bug:
           // Re-apply the group visibility overlay — a transform-only patch
           // could have changed a group's `visible` flag without touching any
           // instance's `visible`. Cheap O(N) walk; no-op when no group is hidden.
-          assemblyRenderer.applyGroupVisibilityOverlay?.(_computeGroupHiddenInstanceIds(newState.currentAssembly))
+          assemblyRenderer.applyGroupVisibilityOverlay?.(computeGroupHiddenInstanceIds(newState.currentAssembly))
           if (newState.activeInstanceId) {
             assemblyRenderer.setActiveInstance(newState.activeInstanceId)
             const depths = computeFixedDepths(newState.currentAssembly)
