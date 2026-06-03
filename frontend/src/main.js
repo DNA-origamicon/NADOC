@@ -113,6 +113,7 @@ import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
 import { initKinematicsTicker }      from './scene/kinematics_ticker.js'
 import { beltCouplingRelations, applyBeltRiders, beltCurvePoints, beltLoopLength, beltFrameAt } from './scene/belt_geometry.js'
+import { beltRiderCtx, beltRiderFill } from './scene/belt_rider.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { makeRefVec, ringPlaneHit, angleInRing, computeRevoluteTransform } from './scene/assembly_revolute_math.js'
@@ -8359,17 +8360,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Polymerize along a belt (seed = an existing belt rider) ─────────────────
   // Build the per-belt geometry context for a rider, or null if unavailable.
   function _beltCtxForRider(riderId) {
-    const asm = store.getState().currentAssembly
-    const rider = (asm?.belt_riders ?? []).find(r => r.id === riderId)
-    if (!rider || !rider.local_transform) return null
-    const belt = (asm?.belt_paths ?? []).find(b => b.id === rider.belt_path_id)
-    if (!belt) return null
-    const jointById = new Map((asm.joints ?? []).map(j => [j.id, j]))
-    const ja = jointById.get(belt.pulley_a?.joint_id)
-    const points = beltCurvePoints(belt, jointById)
-    if (!ja || !points) return null
-    return { asm, rider, belt, jointById, ja, points,
-             L: beltLoopLength(points), planeNormal: ja.axis_direction }
+    return beltRiderCtx(store.getState().currentAssembly, riderId)
   }
 
   // Auto fill count from the seed part's footprint along the belt tangent, so
@@ -8377,15 +8368,8 @@ Typical debugging workflow for "reverts to 3D" bug:
   function _beltFillInfo(riderId) {
     const ctx = _beltCtxForRider(riderId)
     if (!ctx) return null
-    // Tangent at the seed = x-axis of the belt frame there.
-    const frame = beltFrameAt(ctx.points, ctx.rider.arc_param ?? 0, ctx.planeNormal)
-    const tan = new THREE.Vector3().setFromMatrixColumn(frame, 0).normalize()
     const entry = assemblyRenderer.getInstanceCenters?.()?.find(c => c.id === ctx.rider.instance_id)
-    const size = entry?.size
-    let footprint = size ? Math.abs(size.x * tan.x) + Math.abs(size.y * tan.y) + Math.abs(size.z * tan.z) : 0
-    if (!(footprint > 1e-3)) footprint = ctx.L / 4   // fallback when no bbox
-    const count = Math.max(2, Math.round(ctx.L / footprint))
-    return { count, spacingNm: ctx.L / count, footprintNm: footprint }
+    return beltRiderFill(ctx, entry?.size)
   }
 
   // Create count-1 evenly-spaced copies of the seed rider around the loop.
