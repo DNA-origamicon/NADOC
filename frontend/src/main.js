@@ -28,6 +28,7 @@ import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverag
 import { strandLengthNt, strandLengthNtFromDesign, strandDomainNt } from './scene/strand_length.js'
 import { buildSpecMap, buildDomainMapFromDesign, buildDomainMapFromGeom, buildJunctionMapFromXovers, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
 import { signedAngleFromWorldDelta, movingSideSignForRevolute, clampJointValue, gearEndpointSide, rotationDeltaMatrix } from './scene/gear_math.js'
+import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, summarizeConstraint, constraintRelevantChanged } from './scene/assembly_diff.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -10601,7 +10602,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         // _openAssemblyFromServer's load promise unsettled (hang).  Force the
         // full rebuild whenever a load is in flight.
         const isLoad = !!_assemblyLoadSettle
-        if (!isLoad && _assemblyTransformOnlyChange(prevState.currentAssembly, newState.currentAssembly)) {
+        if (!isLoad && assemblyTransformOnlyChange(prevState.currentAssembly, newState.currentAssembly)) {
           // Transform-only change (e.g. a move/rotate commit via propagateFk):
           // push each instance's new world matrix straight into the renderer
           // instead of disposing + re-fetching geometry — avoids the whole
@@ -10619,8 +10620,8 @@ Typical debugging workflow for "reverts to 3D" bug:
           )
           for (const inst of newState.currentAssembly.instances) {
             const prev = _prevById.get(inst.id)
-            if (prev && _sameInstanceTransform(prev, inst)) continue
-            assemblyRenderer.setLiveTransform(inst.id, _matrixFromInstance(inst))
+            if (prev && sameInstanceTransform(prev, inst)) continue
+            assemblyRenderer.setLiveTransform(inst.id, matrixFromInstance(inst))
           }
           assemblyJointRenderer.rebuild(newState.currentAssembly)
           // Re-apply the group visibility overlay — a transform-only patch
@@ -10703,7 +10704,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         !newState.activeGroupId &&
         !instanceGizmo.isDragging() &&
         !_hasAssemblyPending() &&
-        _constraintRelevantChanged(prevState.currentAssembly, newState.currentAssembly, newState.activeInstanceId)
+        constraintRelevantChanged(prevState.currentAssembly, newState.currentAssembly, newState.activeInstanceId)
       ) {
         _attachGroupGizmo(newState.activeInstanceId)
       }
@@ -10812,57 +10813,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     return { current_value: clampJointValue(seedJoint, v), endpoint_side: sideSign < 0 ? 'a' : 'b' }
   }
 
-  function _matrixFromInstance(inst) {
-    return new THREE.Matrix4().fromArray(inst.transform.values).transpose()
-  }
-
-  // Element-wise compare of two instances' 4×4 transform value arrays.
-  // Missing / mismatched arrays → treated as changed (safe: forces a push).
-  function _sameInstanceTransform(a, b) {
-    const av = a?.transform?.values, bv = b?.transform?.values
-    if (!av || !bv || av.length !== bv.length) return false
-    for (let i = 0; i < av.length; i++) if (av[i] !== bv[i]) return false
-    return true
-  }
-
-  // True when prev → next differs ONLY in per-instance transforms (same
-  // instance set, same geometry-affecting fields).  Lets the assembly
-  // subscriber update transforms in place via setLiveTransform instead of
-  // a full dispose + re-fetch rebuild — which made the whole assembly
-  // blink out and re-render on every move/rotate commit.
-  function _assemblyTransformOnlyChange(prev, next) {
-    if (!prev || !next) return false
-    const pi = prev.instances ?? [], ni = next.instances ?? []
-    if (pi.length === 0 || pi.length !== ni.length) return false
-    // Materialized cross-part linker topology changing is NOT transform-only:
-    // the light path skips rebuildLinkers, which would leave a stale bridge
-    // after a linker relax (it both moves a part AND regenerates the bridge).
-    // These arrays are tiny (a few per overhang-connection; empty when no
-    // linkers), so the stringify compare is cheap.
-    if (JSON.stringify(prev.assembly_helices ?? []) !== JSON.stringify(next.assembly_helices ?? [])) return false
-    if (JSON.stringify(prev.assembly_strands ?? []) !== JSON.stringify(next.assembly_strands ?? [])) return false
-    const pById = new Map(pi.map(i => [i.id, i]))
-    for (const inst of ni) {
-      const p = pById.get(inst.id)
-      if (!p) return false
-      // Any geometry-affecting field change forces a rebuild.  A pure
-      // `visible` toggle is NOT one of them: it's applied through the cheap
-      // visibility overlay (applyGroupVisibilityOverlay) in the fast path
-      // below — writing the per-instance visibility texture instead of
-      // disposing + re-fetching the whole assembly's geometry.  Letting a
-      // hide/show stay on the fast path is what makes the eye icon snappy.
-      if (p.representation !== inst.representation) return false
-      if (p.mode          !== inst.mode)          return false
-      if ((p.source?.type) !== (inst.source?.type)) return false
-      if ((p.source?.path) !== (inst.source?.path)) return false
-      if (JSON.stringify(p.cluster_transform_overrides ?? [])
-          !== JSON.stringify(inst.cluster_transform_overrides ?? [])) return false
-    }
-    return true
-  }
-
   function _effectiveInstanceMatrix(inst) {
-    return _assemblyPendingTransforms.get(inst.id)?.clone() ?? _matrixFromInstance(inst)
+    return _assemblyPendingTransforms.get(inst.id)?.clone() ?? matrixFromInstance(inst)
   }
 
   function _createAssemblyTransformContext(instanceId) {
@@ -11072,7 +11024,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     // gizmo at the joint origin so the user rotates/translates about the
     // joint, not the part centroid.
     const constraint = _analyzeMotionConstraints({ kind: 'instance', id: instanceId })
-    const summary = _summarizeConstraint(constraint)
+    const summary = summarizeConstraint(constraint)
     if (summary) _setMotionChip(summary.text, summary.severity)
     else         _setMotionChip(null)
     if (constraint.dof === 'anchored' || constraint.dof === 'over-constrained') {
@@ -11163,7 +11115,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     // Same dispatch as the single-instance path; an anchored group means at
     // least one member is rigidly fixed (cascades to the whole group).
     const constraint = _analyzeMotionConstraints({ kind: 'group', id: groupId })
-    const summary = _summarizeConstraint(constraint)
+    const summary = summarizeConstraint(constraint)
     if (summary) _setMotionChip(summary.text, summary.severity)
     else         _setMotionChip(null)
     if (constraint.dof === 'anchored' || constraint.dof === 'over-constrained') {
@@ -11338,7 +11290,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
     function _startMat(id) {
       const inst = assembly.instances?.find(i => i.id === id)
-      return startTransforms.get(id) ?? (inst ? _matrixFromInstance(inst) : null)
+      return startTransforms.get(id) ?? (inst ? matrixFromInstance(inst) : null)
     }
 
     function _moveSeed(seedId) {
@@ -11629,41 +11581,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     _motionChip.style.color = c.fg
     _motionChip.style.borderColor = c.bd
     _motionChip.style.background = c.bg
-  }
-
-  function _summarizeConstraint(c) {
-    if (!c || c.dof === 'free') return null
-    if (c.dof === 'anchored') return { text: `Anchored — ${c.reason ?? ''}`.trim(), severity: 'locked' }
-    if (c.dof === 'over-constrained') return { text: c.reason, severity: 'warn' }
-    if (c.dof === 'revolute')  return { text: `1-DOF rotation about joint${c.name ? ` "${c.name}"` : ''}`,    severity: 'ok' }
-    if (c.dof === 'prismatic') return { text: `1-DOF translation along joint${c.name ? ` "${c.name}"` : ''}`, severity: 'ok' }
-    if (c.dof === 'spherical') return { text: `3-DOF rotation at joint${c.name ? ` "${c.name}"` : ''}`,       severity: 'ok' }
-    return null
-  }
-
-  // Did any constraint input change between two assembly snapshots?
-  //   - any joint added / removed
-  //   - any joint's type / axis / endpoints / limits changed
-  //   - any instance's `fixed` flag changed
-  // Cheap heuristic — JSON-stringify the relevant fields per joint and the
-  // sorted (id, fixed) list of instances. Avoids re-attaching the gizmo on
-  // pure transform-only updates (a part moved, but its DOF didn't change).
-  function _constraintRelevantChanged(prev, next, _activeInstanceId) {
-    if (!prev || !next) return prev !== next
-    const sigJoints = (asm) => JSON.stringify(
-      (asm.joints ?? []).map(j => [
-        j.id, j.joint_type, j.instance_a_id, j.instance_b_id,
-        j.axis_origin, j.axis_direction,
-        j.min_limit ?? null, j.max_limit ?? null,
-      ]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
-    )
-    if (sigJoints(prev) !== sigJoints(next)) return true
-    const sigFixed = (asm) => JSON.stringify(
-      (asm.instances ?? []).map(i => [i.id, !!i.fixed])
-        .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
-    )
-    if (sigFixed(prev) !== sigFixed(next)) return true
-    return false
   }
 
   function _collectGroupMemberInstanceIds(groupId, assembly = null) {
