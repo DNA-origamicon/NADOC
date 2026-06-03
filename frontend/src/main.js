@@ -26,6 +26,7 @@ import { quatToEulerDeg, eulerDegToQuat, extractJointAngleDeg } from './scene/ro
 import { initMeasurementTool }       from './scene/measurement_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
 import { strandLengthNt, strandLengthNtFromDesign, strandDomainNt } from './scene/strand_length.js'
+import { buildSpecMap, buildDomainMapFromDesign, buildDomainMapFromGeom, buildJunctionMapFromXovers, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -1959,105 +1960,18 @@ async function main() {
   let _domainEndsGlowActive = false
   let _domainEndEntries     = []
 
-  // Map 1 — trivial; any missing entry here means design.overhangs is incomplete
-  function _buildSpecMap(design) {
-    return new Map((design?.overhangs ?? []).map(o => [o.id, o]))
-  }
-
-  // Map 2 (design path) — uses d.overhang_id === spec.id for exact match.
-  // NOTE: d.helix_id match was the original approach and is WRONG when a strand
-  // visits the same helix on two separate domains (findIndex returns first match).
-  function _buildDomainMapFromDesign(design, specMap) {
-    const map = new Map()
-    for (const spec of specMap.values()) {
-      const strand = design.strands?.find(s => s.id === spec.strand_id)
-      if (!strand) continue
-      const domIdx = strand.domains.findIndex(d => d.overhang_id === spec.id)
-      if (domIdx < 0) continue
-      map.set(spec.id, { strand, domIdx, domain: strand.domains[domIdx] })
-    }
-    return map
-  }
-
-  // Map 2 (geometry path, cross-validation) — uses nuc.domain_index, which is the
-  // authoritative index emitted by the backend. Independent of d.overhang_id scan.
-  function _buildDomainMapFromGeom(design, backboneEntries) {
-    const map = new Map()
-    for (const entry of backboneEntries) {
-      const id = entry.nuc.overhang_id
-      if (!id || map.has(id)) continue
-      const strand = design?.strands?.find(s => s.id === entry.nuc.strand_id)
-      if (!strand) continue
-      const domIdx = entry.nuc.domain_index
-      const domain = strand.domains[domIdx]
-      if (domain) map.set(id, { strand, domIdx, domain })
-    }
-    return map
-  }
-
-  // Map 3 (crossover path) — reads design.crossovers for the exact (bp_index, direction)
-  // of the junction bead. design.crossovers contains all inter-helix strand transitions
-  // including those for inline overhangs created before overhang detection ran.
-  function _buildJunctionMapFromXovers(design, specMap, domainMap) {
-    const map = new Map()
-    for (const [id, spec] of specMap) {
-      const domEntry = domainMap.get(id)
-      if (!domEntry) continue
-      const { strand, domIdx } = domEntry
-      const parentDomIdx = domIdx === 0 ? 1 : domIdx - 1
-      if (parentDomIdx < 0 || parentDomIdx >= strand.domains.length) continue
-      const parentDom = strand.domains[parentDomIdx]
-      const xover = design.crossovers?.find(x =>
-        (x.half_a?.helix_id === spec.helix_id && x.half_b?.helix_id === parentDom.helix_id) ||
-        (x.half_b?.helix_id === spec.helix_id && x.half_a?.helix_id === parentDom.helix_id)
-      )
-      if (!xover) continue
-      const side = xover.half_a?.helix_id === spec.helix_id ? xover.half_a : xover.half_b
-      map.set(id, { junctionBp: side.index, junctionDir: side.strand })
-    }
-    return map
-  }
-
-  // Map 3 (domain-endpoint path, PRIMARY) — derives junction bp from domain start_bp/end_bp.
-  // In NADOC start_bp is ALWAYS the 5′ end regardless of direction, so the junction is:
-  //   overhang at 3' end of strand (domIdx > 0) → junction = 5' end of domain = start_bp
-  //   overhang at 5' end of strand (domIdx = 0) → junction = 3' end of domain = end_bp
-  // No direction check needed — the start_bp/end_bp convention handles it for HC and SQ.
-  function _buildJunctionMapFromDomains(domainMap) {
-    const map = new Map()
-    for (const [id, { domIdx, domain }] of domainMap) {
-      const isFirst = domIdx === 0
-      const junctionBp = isFirst ? domain.end_bp : domain.start_bp
-      map.set(id, { junctionBp, junctionDir: domain.direction })
-    }
-    return map
-  }
-
-  // Map 4 — uses helixCtrl.lookupEntry for O(1) lookup. The key format matches
-  // the one used internally by helix_renderer: "helix_id:bp_index:direction".
-  function _buildRootMap(specMap, junctionMap, helixCtrl) {
-    const map = new Map()
-    for (const [id, { junctionBp, junctionDir }] of junctionMap) {
-      const spec = specMap.get(id)
-      if (!spec) continue
-      const entry = helixCtrl?.lookupEntry(`${spec.helix_id}:${junctionBp}:${junctionDir}`)
-      if (entry) map.set(id, { entry, pos: entry.pos })
-    }
-    return map
-  }
-
   // Master build — called on every geometry/design change.
   // junctionMap uses domain endpoints as primary source; _xval_junctionXover is compared
   // in the debug report to check agreement. Crossover path is ambiguous when multiple
   // strands share the same parent↔overhang helix pair — it returns the first crossover.
   function _buildOvhgMaps(design, backboneEntries) {
     const helixCtrl = designRenderer.getHelixCtrl()
-    _ovhgSpecMap        = _buildSpecMap(design)
-    _ovhgDomainMap      = _buildDomainMapFromDesign(design, _ovhgSpecMap)
-    _ovhgJunctionMap    = _buildJunctionMapFromDomains(_ovhgDomainMap)
-    _ovhgRootMap        = _buildRootMap(_ovhgSpecMap, _ovhgJunctionMap, helixCtrl)
-    _xval_domainGeo     = _buildDomainMapFromGeom(design, backboneEntries)
-    _xval_junctionXover = _buildJunctionMapFromXovers(design, _ovhgSpecMap, _ovhgDomainMap)
+    _ovhgSpecMap        = buildSpecMap(design)
+    _ovhgDomainMap      = buildDomainMapFromDesign(design, _ovhgSpecMap)
+    _ovhgJunctionMap    = buildJunctionMapFromDomains(_ovhgDomainMap)
+    _ovhgRootMap        = buildRootMap(_ovhgSpecMap, _ovhgJunctionMap, helixCtrl)
+    _xval_domainGeo     = buildDomainMapFromGeom(design, backboneEntries)
+    _xval_junctionXover = buildJunctionMapFromXovers(design, _ovhgSpecMap, _ovhgDomainMap)
     if (_ohRootsGlowActive) _applyOhRootsGlow()
   }
 
