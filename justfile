@@ -17,9 +17,25 @@ dev:
 test:
     uv run pytest tests/ -v
 
-# Run frontend unit tests (Vitest)
+# Run frontend unit tests (Vitest), single pass
 test-frontend:
     cd frontend && npm test
+
+# Tight loop: Vitest in watch mode — re-runs affected tests on save (sub-second)
+test-frontend-watch:
+    cd frontend && npx vitest
+
+# Run backend + frontend unit tests together ("is everything green?")
+test-all:
+    uv run pytest tests/
+    cd frontend && npm test
+
+# Commit gate for main.js refactor work: the full smoke suite — app boot, the
+# File>New dialog flow, command palette, API, and the console-error gate that
+# loads a real design and asserts the scene renders with nothing thrown (~1 min,
+# NOT per-iteration).
+smoke:
+    cd frontend && npx playwright test smoke.spec.js
 
 # Start Vite frontend dev server (requires FastAPI running separately)
 frontend:

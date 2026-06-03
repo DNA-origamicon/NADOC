@@ -375,6 +375,14 @@ Profile `just frontend` interactions (animation playback, large-design load) and
 
 ## Universal preconditions (every refactor)
 
+> **main.js pure-function extractions use the STREAMLINED loop, not this framework.** As of 2026-06-02,
+> closure→module extractions from `frontend/src/main.js` follow the lightweight loop in
+> `.claude/rules/main-init.md` (move verbatim → import back → ≥1 vitest test per pure fn →
+> `just test-frontend` green; stateful clusters additionally need one app exercise + `just smoke`).
+> The fast vitest loop now provides the regression safety the worktree/3×-baseline/worker+followup
+> ceremony below was compensating for. Reserve the full ceremony for backend god-file decomposition
+> and risky multi-file moves. Pilot metrics for the streamlined loop are tracked in the table below.
+
 Distilled from Pass 1+2 mistakes. Mandatory; worker should refuse a prompt that doesn't reference them. Followup sessions verify each was satisfied.
 
 1. **Baseline 3×, record flakes.** (Pass 6-A strengthened from 2× to 3× after `test_seamless_router::test_teeth_closing_zig` passed in 2 pre-runs but failed post-refactor — 2 runs were insufficient to surface it.) Run `just test` THREE times before any change. Save `FAILED|ERROR` line sets to `/tmp/baseline_run{1,2,3}.txt`. Record stable failures (intersection of all 3) as the *baseline failure set*; tests that fail in any run but pass in others are *flake-quarantined* for the duration of the refactor. Refactor success = post-set ⊆ stable_baseline ∪ flakes. Known flakes (carry forward across passes): `tests/test_seamless_router.py::test_teeth_closing_zig`.

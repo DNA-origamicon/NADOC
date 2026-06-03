@@ -111,8 +111,9 @@ If any of these come up, I'll stop and explain rather than charge ahead:
 
 - **Every backend code change runs `just test` before claiming done — no exceptions, even for one-line changes that mirror a documented fix.** Flag any unexpected test-count drop.
 - **Every frontend code change must be exercised in the running app before claiming done.** If `just frontend` isn't running or no representative design has been loaded, your "done" message must lead with `NOT VERIFIED IN APP` and explain why. Type-checking and tests do not validate UI correctness.
-- Geometry/topology changes: load a representative `.nadoc` design (e.g. `Examples/teeth.nadoc`) and visually confirm.
+- Geometry/topology changes: load a representative `.nadoc` design (e.g. `Examples/26hb_platform_v3.nadoc`) and visually confirm.
 - Don't claim "tests pass" without running them.
+- **Refactor extractions (closure → module): every pure function extracted gets ≥1 vitest test asserting its input→output behavior; `just test-frontend` must be green before claiming the extraction done.** This is the fast loop (`just test-frontend-watch` to iterate). See the streamlined extraction-loop in [.claude/rules/main-init.md](.claude/rules/main-init.md). Stateful (DOM/scene/store) extractions additionally need one app exercise + `just smoke` (the console-error commit gate) before commit — this is the *one* sanctioned routine use of Playwright.
 - **Playwright/E2E is NOT part of the routine dev cycle — it's too slow for tight iteration.** Default frontend verification is exercising the running app directly. Reach for Playwright only to (a) reproduce or troubleshoot a specific error/bug, or (b) clarify behavior when you're unsure what the user is describing. Do not write or run E2E specs as a default "done" step. See [REFERENCE_PLAYWRIGHT](memory/REFERENCE_PLAYWRIGHT.md).
 - Verification of specific features often needs user-generated designs. Ask which design should be used for testing.
 
@@ -123,6 +124,7 @@ If any of these come up, I'll stop and explain rather than charge ahead:
 - [ ] Relevant `project_*.md` topic file from `MEMORY.md` was read this session (cite which one); if not, justify why
 - [ ] Topic file scanned for stale claims this change addressed; updated if needed
 - [ ] If you touched a known-bug area (crossover, three-layer boundary, length/index conventions, cluster/deformation, rendering invariants, stale-state) — cite which LESSONS.md entry you checked, or explicitly say "LESSONS not relevant: [why]"
+- [ ] If this was a refactor extraction from a closure: ≥1 vitest test per extracted pure function, `just test-frontend` green (cite count); stateful extractions also ran `just smoke` + one app exercise
 
 ## Risky-action policy
 
