@@ -16118,6 +16118,30 @@ Typical debugging workflow for "reverts to 3D" bug:
         }
         return out
       },
+      /** Screen {x,y} centres of up to `maxN` visible, on-screen backbone beads.
+       *  Reusable primitive for gesture e2e tests (e.g. measurement_tool.spec.js). */
+      getBackboneBeadScreenPositions(maxN = 12) {
+        const rect = canvas.getBoundingClientRect()
+        let mesh = null
+        scene.traverse(o => { if (o.isInstancedMesh && o.name === 'backboneSpheres' && o.visible && o.count > 0) mesh = o })
+        if (!mesh) return []
+        const m = new THREE.Matrix4(), v = new THREE.Vector3()
+        const out = []
+        const n = Math.min(maxN, mesh.count)
+        for (let i = 0; i < n; i++) {
+          mesh.getMatrixAt(i, m)
+          v.setFromMatrixPosition(m).applyMatrix4(mesh.matrixWorld)
+          const ndc = v.clone().project(camera)
+          if (ndc.z > 1 || Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue  // behind camera / off-screen
+          out.push({
+            x: rect.left + (ndc.x  *  0.5 + 0.5) * rect.width,
+            y: rect.top  + (-ndc.y * 0.5 + 0.5) * rect.height,
+          })
+        }
+        return out
+      },
+      /** Count of Alt-picked measurement beads (the measurement tool's input). */
+      getCtrlBeadCount: () => selectionManager.getCtrlBeads?.().length ?? 0,
     }
   }
 

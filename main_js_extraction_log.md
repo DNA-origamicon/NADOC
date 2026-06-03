@@ -21,7 +21,7 @@ GO/NO-GO call on scaling before grinding through the whole file.
 |---|------|------|----------------------------|-----------|---------------|--------------------|----------------|----------------|----------------------|
 | 1 | 2026-06-03 | EASY | `bundleAxisRange/bundleMaxOffset/bundleMidOffset` → `scene/bundle_geometry.js` | ~15 min | −16 (top-level; closure body unchanged) | 9 (3 fns → ratio 3.0) | 1 (green first run) | 0 (pure; console-error gate auto) | none — clean |
 | 2 | 2026-06-03 | MEDIUM | `quatToEulerDeg/eulerDegToQuat/extractJointAngleDeg` → `scene/rotation_math.js` | ~12 min | −22 (inside closure — real shrink) | 8 (3 fns → ratio 2.7) | 1 (green first run) | 0 (pure; console-error gate auto) | none — manual-confirmed by user |
-| 3 | 2026-06-03 | HARD | measurement tool (state + `_measClear/_measShow` + ctrl-bead subscription) → `scene/measurement_tool.js` (factory) | ~20 min | −32 (inside closure) | 7 (factory: show/clear/subscription/dispose) | 1 (green first run) | n/a auto — interactive M-gesture is a USER TODO | none in vitest + smoke 21/21; interactive path unverified by automation |
+| 3 | 2026-06-03 | HARD | measurement tool (state + `_measClear/_measShow` + ctrl-bead subscription) → `scene/measurement_tool.js` (factory) | ~20 min | −32 (inside closure) | 7 (factory: show/clear/subscription/dispose) | 1 (green first run) | 0 — interactive gesture now automated (see below) | none in vitest + smoke 21/21 + gesture e2e 3/3 |
 
 **Metric definitions** — `wall-clock`: rough session minutes (target EASY <15, MEDIUM <30, HARD <90).
 `main.js LOC Δ`: lines removed from `main()` body (imports stay, so total drops less). `tests added /
@@ -55,10 +55,32 @@ vitest / smoke / manual / **escaped-to-user** (the failure we most want to avoid
 - **The decisive HARD lesson (answers the plan's open question):** vitest covers the module's logic and `just smoke` (21/21) covers boot + a real-design render, but **neither exercises the interactive gesture** (Alt/Ctrl-pick two beads → press M → line + readout appears → clears). That path is only reachable through real selection + keypress. So for stateful tools, vitest + smoke is *necessary but not sufficient*; the interactive path needs either a dedicated Playwright interaction test or a manual USER TODO. The move here was verbatim (identical call args at the 3 sites), which is why the risk is still low — but "verbatim + unit-tested + boots clean" is the ceiling of automated confidence for this tier.
 - **Decision-rule verdict:** EASY/MEDIUM → scale freely (zero manual, zero escapes). HARD → safe to scale *with the verbatim discipline + smoke*, but each stateful extraction should ship with either a Playwright interaction test for its gesture or a logged USER TODO. Worth building one reusable measurement-gesture e2e as the template before doing many HARD extractions.
 
-### USER TODO — manually verify the measurement tool (HARD pilot #3)
-Automated gates can't drive the gesture. Please confirm once:
-1. Load a design (e.g. `Examples/26hb_platform_v3.nadoc`).
-2. Alt-click two backbone beads (so exactly 2 ctrl-beads are selected).
-3. Press `M` → a cyan line connects them and a "Distance: X.XXX nm" box appears bottom-left.
-4. Press `M` again (or change the selection so it's not a pair) → the line + box clear.
-5. Press `Esc` with an active measurement → it clears.
+### Gesture e2e template (resolves the HARD-tier "interactive path" gap)
+The measurement gesture is now covered by `frontend/e2e/measurement_tool.spec.js` — it
+drives the real Alt-click → `M` path and asserts the readout + scene line, then toggle-off
+(3/3 stable). It's the **reusable template** for verifying any stateful tool's gesture.
+
+Run it for the measurement tool with: `cd frontend && npx playwright test measurement_tool.spec.js`.
+(Not in `just smoke` — that stays the fast generic boot/console gate; gesture specs are
+per-tool and run on demand for HARD extractions.)
+
+**Building it surfaced the four real obstacles to GPU-gesture e2e in this app** (each baked
+into the template as a comment so the next one is quick):
+1. **Multi-doc:** a tab with no `?doc` adopts a sticky *random* doc id, so `page.request`
+   (default doc) hits a different document than the tab. Pin `?doc=<DOC>` + stamp
+   `X-NADOC-Doc:<DOC>` on builds, and emit the rebuild nudge with the matching `docId`
+   (the `design-changed` receiver scopes by `isSameDoc`).
+2. **No auto-render on boot:** plain `goto` shows the welcome screen and never loads the
+   server design — you must go through a real load path (here: File>New + API build + a
+   doc-scoped BroadcastChannel nudge). `auto-scaffold` 422s on a lone helix → fall back to
+   `scaffold-domain-paint`.
+3. **LOD + panel occlusion:** beads must be at full scale (zoom in past cylinder-LOD), and
+   the side panels overlay the full-width canvas — beads projecting under `#left/right-panel`
+   or `#menu-bar` aren't clickable (the event goes to the panel). Filter those out.
+4. **Miss-clears:** an Alt-click that misses a bead calls `_clearCtrlBeads()` (resets to 0),
+   so you can't assume two clicks = two beads — click central beads and re-pick until the
+   count actually reaches 2. Match the measurement line by its colour (0x00e5ff), not just
+   `renderOrder 999` (other overlays share it).
+
+New reusable dev-only test hooks on `window.__nadocTest` (main.js): `getBackboneBeadScreenPositions(maxN)`
+and `getCtrlBeadCount()`.
