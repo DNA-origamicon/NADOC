@@ -38,6 +38,7 @@ import { fretQuenchedDonors } from './scene/fret_util.js'
 import { motionChipStyle } from './scene/motion_chip.js'
 import { ascWarningText, SCAFFOLD_LENGTHS } from './scene/scaffold_assign.js'
 import { filterAtomData } from './scene/atom_filter.js'
+import { initSliceHighlighter } from './scene/slice_highlighter.js'
 import { vecClose } from './scene/vec_math.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
@@ -3353,7 +3354,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       if (!slicePlane.isVisible()) {
         crossSectionMinimap.clearSlice()
         crossSectionMinimap.hide()
-        _clearSliceHighlights()
+        sliceHighlighter.clear()
       }
       document.getElementById('mode-indicator').textContent =
         '2D UNFOLD — helices stacked by label order · [U] to return to 3D'
@@ -3435,7 +3436,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       // Cadnano slice indicator was hidden — clear minimap and base highlights.
       crossSectionMinimap.clearSlice()
       crossSectionMinimap.hide()
-      _clearSliceHighlights()
+      sliceHighlighter.clear()
     }
     document.getElementById('mode-indicator').textContent = active
       ? 'CADNANO MODE — two-track 2D view · [K] to exit'
@@ -3535,7 +3536,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       // then gives the correct result because axis_start.z ≈ bp_start × RISE.
       const effectivePlane = store.getState().cadnanoActive ? 'XY' : plane
       crossSectionMinimap.update(offsetNm, effectivePlane, designRenderer.getBackboneEntries())
-      _updateSliceHighlights(offsetNm, effectivePlane)
+      sliceHighlighter.update(offsetNm, effectivePlane)
     },
     onPreviewToggle: (enabled) => {
       // "Show preview" checkbox in the slice extrude popup → persist + sync overhang ghost.
@@ -3560,7 +3561,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         slicePlane.hide()
         crossSectionMinimap.clearSlice()
         crossSectionMinimap.hide()
-        _clearSliceHighlights()
+        sliceHighlighter.clear()
         _setMenuToggle('menu-view-slice', false)
         document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       }
@@ -3583,7 +3584,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       slicePlane.hide()
       crossSectionMinimap.clearSlice()
       crossSectionMinimap.hide()
-      _clearSliceHighlights()
+      sliceHighlighter.clear()
       _setMenuToggle('menu-view-slice', false)
     }
     workspace.show(newState.currentDesign.lattice_type ?? 'HONEYCOMB')
@@ -3613,7 +3614,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (sliceWasVisible) {
       crossSectionMinimap.clearSlice()
       crossSectionMinimap.hide()
-      _clearSliceHighlights()
+      sliceHighlighter.clear()
       _setMenuToggle('menu-view-slice', false)
     }
     document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
@@ -3623,49 +3624,19 @@ Typical debugging workflow for "reverts to 3D" bug:
   // Colours all backbone beads at the slice plane's current bp position white,
   // restoring default colours when the plane moves or is hidden.
 
-  let _sliceHighlightedEntries = []
-
-  function _clearSliceHighlights() {
-    for (const entry of _sliceHighlightedEntries) {
-      designRenderer.setEntryColor(entry, entry.defaultColor)
-    }
-    _sliceHighlightedEntries = []
-  }
-
-  function _updateSliceHighlights(offsetNm, plane) {
-    _clearSliceHighlights()
-    const design  = store.getState().currentDesign
-    if (!design) return
-    const normalAxis = { XY: 'z', XZ: 'y', YZ: 'x' }[plane] ?? 'z'
-    // Build a Set of "helixId::bpIndex" keys for quick matching.
-    const targetKeys = new Set()
-    for (const helix of design.helices) {
-      const z0 = helix.axis_start[normalAxis]
-      const bp = Math.round(helix.bp_start + (offsetNm - z0) / BDNA_RISE_PER_BP)
-      if (bp < helix.bp_start || bp >= helix.bp_start + helix.length_bp) continue
-      targetKeys.add(`${helix.id}::${bp}`)
-    }
-    if (!targetKeys.size) return
-    for (const entry of designRenderer.getBackboneEntries()) {
-      if (targetKeys.has(`${entry.nuc.helix_id}::${entry.nuc.bp_index}`)) {
-        designRenderer.setEntryColor(entry, 0xffffff)
-        _sliceHighlightedEntries.push(entry)
-      }
-    }
-    for (const entry of designRenderer.getSlabEntries()) {
-      if (targetKeys.has(`${entry.nuc.helix_id}::${entry.nuc.bp_index}`)) {
-        designRenderer.setEntryColor(entry, 0xffffff)
-        _sliceHighlightedEntries.push(entry)
-      }
-    }
-  }
+  // Slice-plane bead highlighter (factory in scene/slice_highlighter.js). All
+  // callers are deferred handlers, so this const is constructed before any fire.
+  const sliceHighlighter = initSliceHighlighter({
+    designRenderer,
+    getDesign: () => store.getState().currentDesign,
+  })
 
   function _toggleSlicePlane() {
     if (slicePlane.isVisible()) {
       slicePlane.hide()
       crossSectionMinimap.clearSlice()
       crossSectionMinimap.hide()
-      _clearSliceHighlights()
+      sliceHighlighter.clear()
       _setMenuToggle('menu-view-slice', false)
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       return
@@ -4499,7 +4470,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     slicePlane.hide()
     crossSectionMinimap.clearSlice()
     crossSectionMinimap.hide()
-    _clearSliceHighlights()
+    sliceHighlighter.clear()
     bluntEnds.clear()
     _hideBluntPanel()
     _setMenuToggle('menu-view-slice', false)
@@ -6388,7 +6359,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         slicePlane.hide()
         crossSectionMinimap.clearSlice()
         crossSectionMinimap.hide()
-        _clearSliceHighlights()
+        sliceHighlighter.clear()
         _setMenuToggle('menu-view-slice', false)
         document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       }
@@ -7311,7 +7282,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         slicePlane.hide()
         crossSectionMinimap.clearSlice()
         crossSectionMinimap.hide()
-        _clearSliceHighlights()
+        sliceHighlighter.clear()
         _setMenuToggle('menu-view-slice', false)
         document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       } else if (selectionManager.getDrillLock?.()) {
