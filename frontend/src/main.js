@@ -36,6 +36,7 @@ import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './
 import { heatmapHex } from './scene/color_util.js'
 import { fretQuenchedDonors } from './scene/fret_util.js'
 import { motionChipStyle } from './scene/motion_chip.js'
+import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
 import { ascWarningText, SCAFFOLD_LENGTHS } from './scene/scaffold_assign.js'
 import { filterAtomData } from './scene/atom_filter.js'
 import { initSliceHighlighter } from './scene/slice_highlighter.js'
@@ -13704,16 +13705,6 @@ Typical debugging workflow for "reverts to 3D" bug:
   // meaningful on atomistic; Hull Prism has no per-strand colour at all.
   // Surface vertices are keyed by strand_id only (no per-bp letter), so 'base'
   // is unsupported there; 'cluster' rides on the strand→cluster colour map.
-  const _COLORING_SUPPORT = {
-    'full':       new Set(['strand', 'base', 'cluster', 'overhang-only']),
-    'beads':      new Set(['strand', 'base', 'cluster', 'overhang-only']),
-    'cylinders':  new Set(['strand', 'cluster', 'overhang-only']),
-    'vdw':        new Set(['strand', 'base', 'cluster', 'cpk']),
-    'ballstick':  new Set(['strand', 'base', 'cluster', 'cpk']),
-    'surface':    new Set(['strand', 'cluster']),
-    'hull-prism': new Set(),
-  }
-
   // Friendly labels for coloring modes — used for the toast shown when an
   // F-key cycles coloring (the menu is closed, so the toast is the feedback).
   const _COLORING_LABELS = {
@@ -13725,35 +13716,21 @@ Typical debugging workflow for "reverts to 3D" bug:
     source:          'By part / source',
   }
 
-  // Coloring modes available for a representation, accounting for the assembly
-  // atomistic path (per-atom cpk/strand/cluster + per-source tint; no 'base').
-  // Shared by the menu-availability and the F-key cycle so they stay in sync.
-  function _supportedColoringSet(repr) {
-    const isAtom = repr === 'vdw' || repr === 'ballstick'
-    if (store.getState().assemblyActive) {
-      if (isAtom)             return new Set(['cpk', 'strand', 'cluster', 'source'])
-      if (repr === 'surface') return new Set(['strand', 'cluster', 'source'])
-    }
-    return _COLORING_SUPPORT[repr] ?? new Set(['strand', 'base', 'cluster'])
-  }
-
-  // Cycle to the next coloring mode supported by `repr`, in the insertion order
-  // of _COLORING_SUPPORT.  Invoked when an F-key is pressed again while its
-  // representation is already active.  No-op for reprs with <2 options
-  // (Hull Prism has none).
+  // Cycle to the next coloring mode supported by `repr` (supportedColoringSet +
+  // nextColoringMode live in scene/coloring_modes.js). Invoked when an F-key is
+  // pressed again while its representation is already active. No-op for reprs
+  // with <2 options (Hull Prism has none).
   function _cycleColoringForRepr(repr) {
-    const modes = [...(_supportedColoringSet(repr))]
-    if (modes.length < 2) return
-    const current = store.getState().coloringMode || 'strand'
-    const idx = modes.indexOf(current)
-    const next = modes[(idx + 1) % modes.length]
+    const modes = [...supportedColoringSet(repr, store.getState().assemblyActive)]
+    const next = nextColoringMode(modes, store.getState().coloringMode || 'strand')
+    if (!next) return
     _setColoringMode(next)
     showToast(`Coloring: ${_COLORING_LABELS[next] ?? next}`)
   }
 
   function _updateColoringMenuAvailability(activeRepr) {
     const isAtom = activeRepr === 'vdw' || activeRepr === 'ballstick'
-    const supported = _supportedColoringSet(activeRepr)
+    const supported = supportedColoringSet(activeRepr, store.getState().assemblyActive)
     const map = {
       strand:         'menu-view-coloring-strand',
       base:           'menu-view-coloring-base',
