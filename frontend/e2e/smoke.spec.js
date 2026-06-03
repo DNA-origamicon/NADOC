@@ -136,7 +136,7 @@ test.describe('File > New Part dialog', () => {
 
   test('Create dismisses the dialog and leaves the welcome screen', async ({ page }) => {
     await openDropdownAndClick(page, 'File', 'menu-file-new')
-    await page.fill('#new-design-name', 'Test Part')
+    await page.fill('#new-design-name', '__e2e__Test Part')
     await modalOf(page).getByRole('button', { name: 'Create' }).click()
     await expect(page.locator('#new-design-modal-body')).not.toBeVisible()
     await expect(page.locator('#welcome-screen')).not.toBeVisible()
@@ -148,12 +148,12 @@ test.describe('File > New Part dialog', () => {
     )
 
     await openDropdownAndClick(page, 'File', 'menu-file-new')
-    await page.fill('#new-design-name', 'My Honeycomb Part')
+    await page.fill('#new-design-name', '__e2e__My Honeycomb Part')
     await modalOf(page).getByRole('button', { name: 'Create' }).click()
 
     await expect(page.locator('#new-design-modal-body')).not.toBeVisible()
     const req = await apiCall
-    expect(req.postDataJSON()?.name).toBe('My Honeycomb Part')
+    expect(req.postDataJSON()?.name).toBe('__e2e__My Honeycomb Part')
   })
 
   test('Create with Square lattice fires API with SQUARE lattice type', async ({ page }) => {
@@ -166,7 +166,7 @@ test.describe('File > New Part dialog', () => {
 
     await openDropdownAndClick(page, 'File', 'menu-file-new')
     await page.click('input[name="new-lattice-type"][value="SQUARE"]')
-    await page.fill('#new-design-name', 'Square Test')
+    await page.fill('#new-design-name', '__e2e__Square Test')
     await modalOf(page).getByRole('button', { name: 'Create' }).click()
 
     await expect(page.locator('#new-design-modal-body')).not.toBeVisible()

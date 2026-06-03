@@ -31,7 +31,8 @@ export async function loadScaffoldedPart(page, { doc, name = 'harness' }) {
   const fileMenu = page.locator('.menu-item').filter({ hasText: 'File' }).first()
   await fileMenu.hover()
   await page.click('#menu-file-new')
-  await page.fill('#new-design-name', name)
+  // `__e2e__` prefix → global-teardown removes the auto-saved workspace file.
+  await page.fill('#new-design-name', `__e2e__${name}`)
   await page.getByRole('button', { name: 'Create', exact: true }).click()
   await expect(page.locator('#welcome-screen')).not.toBeVisible({ timeout: 10_000 })
   await page.waitForTimeout(500)

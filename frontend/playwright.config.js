@@ -26,6 +26,7 @@ const REPO_ROOT = path.resolve(FRONTEND_DIR, '..')
  */
 export default defineConfig({
   testDir: './e2e',
+  globalTeardown: './e2e/global-teardown.js',  // remove __e2e__* workspace artifacts after the run
   timeout: 30_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
