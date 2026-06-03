@@ -36,6 +36,7 @@ import { computeGroupHiddenInstanceIds } from './scene/assembly_groups_util.js'
 import { heatmapHex } from './scene/color_util.js'
 import { fretQuenchedDonors } from './scene/fret_util.js'
 import { motionChipStyle } from './scene/motion_chip.js'
+import { ascWarningText, SCAFFOLD_LENGTHS } from './scene/scaffold_assign.js'
 import { vecClose } from './scene/vec_math.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
@@ -5706,7 +5707,6 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Sequencing ────────────────────────────────────────────────────────────
 
   // Scaffold lengths for each option (must match SCAFFOLD_LIBRARY in sequences.py)
-  const _SCAFFOLD_LENGTHS = { M13mp18: 7249, p7560: 7560, p8064: 8064 }
 
   function _openScaffoldModal() {
     const { currentDesign } = store.getState()
@@ -5766,25 +5766,12 @@ Typical debugging workflow for "reverts to 3D" bug:
     const warnEl      = _ascBody.querySelector('#asc-warning')
     if (!warnEl) return
     const customRaw = customSeqEl?.value?.replace(/\s/g, '').toUpperCase() ?? ''
-    if (customRaw) {
-      if (customRaw.length < _ascTotalNt) {
-        warnEl.textContent = `⚠ Custom sequence (${customRaw.length} nt) is shorter than scaffold (${_ascTotalNt} nt). `
-          + `${_ascTotalNt - customRaw.length} bases will be assigned 'N'.`
-        warnEl.style.display = 'block'
-      } else {
-        warnEl.style.display = 'none'
-      }
-      return
-    }
-    const sel = _ascBody.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
-    const seqLen = _SCAFFOLD_LENGTHS[sel] ?? 0
-    if (_ascTotalNt > seqLen) {
-      warnEl.textContent = `⚠ Scaffold (${_ascTotalNt} nt) exceeds ${sel} (${seqLen} nt). `
-        + `${_ascTotalNt - seqLen} bases will be assigned 'N'.`
-      warnEl.style.display = 'block'
-    } else {
-      warnEl.style.display = 'none'
-    }
+    const scaffoldName = _ascBody.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
+    const text = ascWarningText({
+      customRaw, totalNt: _ascTotalNt, scaffoldName, scaffoldLen: SCAFFOLD_LENGTHS[scaffoldName] ?? 0,
+    })
+    if (text) { warnEl.textContent = text; warnEl.style.display = 'block' }
+    else warnEl.style.display = 'none'
   }
 
   function _buildScaffoldModalOnce() {
