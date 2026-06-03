@@ -38,6 +38,7 @@ import { fretQuenchedDonors } from './scene/fret_util.js'
 import { motionChipStyle } from './scene/motion_chip.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { selectionBBox } from './scene/selection_bbox.js'
+import { initAssemblyLasso } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
 import { ascWarningText, SCAFFOLD_LENGTHS } from './scene/scaffold_assign.js'
@@ -10352,14 +10353,7 @@ Typical debugging workflow for "reverts to 3D" bug:
           _freeDrag        = null
           controls.enabled = true
         }
-        // Clean up any in-flight lasso
-        if (_assemblyLasso) {
-          _assemblyLasso.overlayEl?.remove()
-          canvas.removeEventListener('pointermove', _onAssemblyLassoMove)
-          canvas.removeEventListener('pointerup',   _onAssemblyLassoUp)
-          _assemblyLasso = null
-          controls.enabled = true
-        }
+        assemblyLasso.cancel()
         // Dispose the multi-select union box; setState below also fires the
         // subscriber which will re-dispose it, but doing it inline keeps the
         // scene clean even if the recursive setState path is short-circuited.
@@ -11170,85 +11164,19 @@ Typical debugging workflow for "reverts to 3D" bug:
   // world-space center falls inside the rect on pointerup populate
   // multiSelectedInstanceIds. Ctrl-click without drag toggles the picked
   // instance in/out of the set (see _onAssemblyClick).
-  let _assemblyLasso = null     // { startX, startY, overlayEl, additive } | null
-
-  function _createAssemblyLassoOverlay() {
-    const div = document.createElement('div')
-    div.style.cssText = (
-      'position:fixed;border:1.5px dashed #8b5cf6;background:rgba(139,92,246,0.08);' +
-      'pointer-events:none;z-index:1000;box-sizing:border-box'
-    )
-    document.body.appendChild(div)
-    return div
-  }
-
-  function _updateAssemblyLassoOverlay(x1, y1, x2, y2) {
-    if (!_assemblyLasso?.overlayEl) return
-    _assemblyLasso.overlayEl.style.left   = Math.min(x1, x2) + 'px'
-    _assemblyLasso.overlayEl.style.top    = Math.min(y1, y2) + 'px'
-    _assemblyLasso.overlayEl.style.width  = Math.abs(x2 - x1) + 'px'
-    _assemblyLasso.overlayEl.style.height = Math.abs(y2 - y1) + 'px'
-  }
-
-  function _onAssemblyLassoMove(e) {
-    if (!_assemblyLasso) return
-    _updateAssemblyLassoOverlay(_assemblyLasso.startX, _assemblyLasso.startY, e.clientX, e.clientY)
-  }
-
-  function _finalizeAssemblyLasso(endE) {
-    const state = _assemblyLasso
-    _assemblyLasso = null
-    canvas.removeEventListener('pointermove', _onAssemblyLassoMove)
-    canvas.removeEventListener('pointerup',   _onAssemblyLassoUp)
-    controls.enabled = true
-    if (!state) return
-    state.overlayEl?.remove()
-    // Canvas-relative rect for hit-testing.
-    const rect = canvas.getBoundingClientRect()
-    const cx1 = Math.min(state.startX, endE.clientX) - rect.left
-    const cx2 = Math.max(state.startX, endE.clientX) - rect.left
-    const cy1 = Math.min(state.startY, endE.clientY) - rect.top
-    const cy2 = Math.max(state.startY, endE.clientY) - rect.top
-    // Tiny rects are accidental clicks; let _onAssemblyClick handle them.
-    if ((cx2 - cx1) < 4 && (cy2 - cy1) < 4) return
-
-    // Strict containment: every one of the instance's 8 world-AABB corners
-    // must project inside the rect AND lie within the camera's z range. If
-    // ANY corner is outside, the part is partially visible (or off-screen)
-    // and skipped. Stops a thin tilted rod from being selected just because
-    // its centroid happened to fall inside a small lasso.
-    const centers = assemblyRenderer.getInstanceCenters?.() ?? []
-    const hits = []
-    const v = new THREE.Vector3()
-    for (const c of centers) {
-      if (!c.size) continue
-      const hx = c.size.x * 0.5, hy = c.size.y * 0.5, hz = c.size.z * 0.5
-      const cx = c.center.x, cy = c.center.y, cz = c.center.z
-      let allInside = true
-      for (let i = 0; i < 8 && allInside; i++) {
-        v.set(
-          cx + (i & 1 ? hx : -hx),
-          cy + (i & 2 ? hy : -hy),
-          cz + (i & 4 ? hz : -hz),
-        ).project(camera)
-        if (v.z < -1 || v.z > 1) { allInside = false; break }
-        const sx = ((v.x + 1) / 2) * rect.width
-        const sy = ((-v.y + 1) / 2) * rect.height
-        if (sx < cx1 || sx > cx2 || sy < cy1 || sy > cy2) allInside = false
-      }
-      if (allInside) hits.push(c.id)
-    }
-    const next = state.additive
-      ? Array.from(new Set([...(store.getState().multiSelectedInstanceIds ?? []), ...hits]))
-      : hits
-    store.setState({
-      multiSelectedInstanceIds: next,
-      activeInstanceId: null,
-      activeGroupId:    null,
-    })
-  }
-
-  function _onAssemblyLassoUp(e) { _finalizeAssemblyLasso(e) }
+  // Assembly drag-rectangle multi-select — factory in scene/assembly_lasso.js
+  // (pure hit-test core unit-tested). Deferred handlers, so the const is built
+  // before any fires; assemblyRenderer via a lazy getter.
+  const assemblyLasso = initAssemblyLasso({
+    canvas, camera, controls,
+    getInstanceCenters: () => assemblyRenderer.getInstanceCenters?.() ?? [],
+    onSelect: (hits, additive) => {
+      const next = additive
+        ? Array.from(new Set([...(store.getState().multiSelectedInstanceIds ?? []), ...hits]))
+        : hits
+      store.setState({ multiSelectedInstanceIds: next, activeInstanceId: null, activeGroupId: null })
+    },
+  })
 
   // ── PartGroup helpers (id walks; mirror backend/core/assembly_groups.py) ────
 
@@ -11708,19 +11636,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       // start a lasso. Disables OrbitControls for the drag duration so the
       // user's drag doesn't fight the camera. Picking is suppressed; the
       // pointerup finalizes the multi-select.
-      if (e.ctrlKey || e.metaKey) {
-        const additive = e.shiftKey
-        _assemblyLasso = {
-          startX:   e.clientX,
-          startY:   e.clientY,
-          overlayEl: _createAssemblyLassoOverlay(),
-          additive,
-        }
-        controls.enabled = false
-        canvas.addEventListener('pointermove', _onAssemblyLassoMove)
-        canvas.addEventListener('pointerup',   _onAssemblyLassoUp)
-        return
-      }
+      if (assemblyLasso.start(e)) return
 
       // Priority 3: record for click-to-select
       _assemblyPtrDownAt = { x: e.clientX, y: e.clientY }
