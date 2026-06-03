@@ -21,6 +21,7 @@ import { FLUORO_EMISSION_COLORS, buildNucLetterMap, buildStapleColorMap, BEAD_RA
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
+import { bundleMidOffset }           from './scene/bundle_geometry.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -184,24 +185,6 @@ if (document.readyState === 'loading') {
 }
 
 const DEBUG = new URLSearchParams(window.location.search).has('debug')
-
-// Compute the maximum extent of the current design along the given plane normal.
-// This is where the slice plane starts when first toggled on.
-function _bundleAxisRange(design, plane) {
-  if (!design || !design.helices.length) return { min: 0, max: 0 }
-  let min = Infinity, max = -Infinity
-  for (const h of design.helices) {
-    let lo, hi
-    if      (plane === 'XY') { lo = Math.min(h.axis_start.z, h.axis_end.z); hi = Math.max(h.axis_start.z, h.axis_end.z) }
-    else if (plane === 'XZ') { lo = Math.min(h.axis_start.y, h.axis_end.y); hi = Math.max(h.axis_start.y, h.axis_end.y) }
-    else                     { lo = Math.min(h.axis_start.x, h.axis_end.x); hi = Math.max(h.axis_start.x, h.axis_end.x) }
-    if (lo < min) min = lo
-    if (hi > max) max = hi
-  }
-  return { min, max }
-}
-function _bundleMaxOffset(design, plane) { return _bundleAxisRange(design, plane).max }
-function _bundleMidOffset(design, plane) { const { min, max } = _bundleAxisRange(design, plane); return (min + max) / 2 }
 
 async function main() {
   const canvas = document.getElementById('canvas')
@@ -3812,7 +3795,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       showToast('Slice plane is only available on the undeformed model — press D to suppress deformations first')
       return
     }
-    const offset = _bundleMidOffset(currentDesign, currentPlane)
+    const offset = bundleMidOffset(currentDesign, currentPlane)
     expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
     slicePlane.show(currentPlane, offset, false, true)   // read-only: no lattice, no extrude
     crossSectionMinimap.show()
