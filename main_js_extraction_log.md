@@ -147,3 +147,14 @@ gotcha worth remembering. The autonomous extraction loop writes here when it ski
   - `_highDetailGeometries` — reads/writes closure cache `_hdGeoCache` + allocates THREE geometries (impure resource cache, skip).
   - `_atomisticUrl` (returns the literal '/api/design/atomistic') and `_formatAqueousBackground` (returns a constant CSS string) — pure but TRIVIAL constants, not worth a module; left in place.
   - Remaining heuristic hits are overwhelmingly DOM/panel show/hide helpers (capture element refs → stateful) — not pure; not individually logged.
+- **Discovery pass #2 (deeper) — well is DRY.** Read all remaining substantive heuristic hits; every one is impure/stateful, so the autonomous loop STOPPED here:
+  - `_applyResponseDelta` (delegates to `_applyClusterUndoRedoDeltas`/`_applyPositionsOnlyDiff` + registers with `api`), `_broadcastInstanceChanged` (`nadocBroadcast.emit`), `_runCoalescedAssemblyRefresh` (closure `_asmRefresh*` state + setTimeout), `_applyRegionSurfaceOverlay` (closure `_regionSurfaceSig/_regionSurfaceTimer` + setTimeout) — stateful.
+  - `_setMotionChip`, `_mrSetTransformValuesFromMatrix` (→ `_mrSetTransformValues`), `_updateReprRadio`/`_updateAtomisticRadio`, `_ascUpdateWarning` — DOM mutators.
+  - `_clearStapleChecks`/`_clearScaffoldChecks` — empty no-ops (nothing to extract).
+  - Remaining heuristic hits are all panel show/hide DOM helpers. **Conclusion: the pure-helper well inside main() is exhausted; further decomposition requires stateful/HARD extraction (factory + gesture e2e + human eye), out of scope for the autonomous pure-only loop.**
+
+## Loop complete (2026-06-03)
+Autonomous pure-extraction loop terminated on dry discovery pass. 6 loop iterations
+(#10–#15) on top of the 6 mapped groups (#4–#9) and 3 pilots (#1–#3). Next decomposition
+step is the HARD/stateful tier (per-tool factory extractions with the gesture-e2e template),
+which needs human review and is intentionally NOT automated.
