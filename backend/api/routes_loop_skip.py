@@ -232,6 +232,49 @@ def get_loop_skip_limits(
     }
 
 
+class DeformationValidateRequest(BaseModel):
+    type: str                      # 'twist' | 'bend'
+    plane_a_bp: int
+    plane_b_bp: int
+    helix_ids: list[str] = []
+    cluster_ids: list[str] = []
+    params: dict = {}              # raw TwistParams | BendParams fields
+
+
+@router.post("/design/deformation/validate", status_code=200)
+def validate_deformation(body: DeformationValidateRequest) -> dict:
+    """Predict + classify a bend/twist WITHOUT mutating the design.
+
+    Returns ``classify_deformation(...)`` raw — ALWAYS HTTP 200. The verdict is
+    carried in the ``status`` field ('ok' | 'warn' | 'block'); WARN/BLOCK never
+    raise here so the frontend can poll this live as the user drags sliders.
+    The hard 422 stays at realize time (apply-deformations / loop-skip/{twist,bend}).
+    """
+    from backend.api.crud import _parse_params, _resolve_cluster_scope
+    from backend.core.deformation import helices_crossing_planes
+    from backend.core.loop_skip_calculator import classify_deformation
+
+    design = design_state.get_or_404()
+    params = _parse_params(body.type, body.params)
+
+    helix_ids = body.helix_ids or helices_crossing_planes(
+        design, body.plane_a_bp, body.plane_b_bp
+    )
+    helix_ids = _resolve_cluster_scope(design, body.cluster_ids, helix_ids)["helix_ids"]
+
+    h_map = {h.id: h for h in design.helices}
+    segment_helices = [h_map[hid] for hid in helix_ids if hid in h_map]
+
+    return classify_deformation(
+        segment_helices,
+        body.plane_a_bp,
+        body.plane_b_bp,
+        body.type,
+        params,
+        design=design,
+    )
+
+
 @router.delete("/design/loop-skip", status_code=200)
 def clear_loop_skip_range(
     helix_ids: str = Query(..., description="comma-separated helix IDs"),

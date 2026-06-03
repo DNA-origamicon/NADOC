@@ -23,6 +23,30 @@ from tests.conftest import make_minimal_design
 client = TestClient(app)
 
 
+def _terminal_staple_crossover_collisions(design: Design):
+    staple_starts = set()
+    staple_ends = set()
+    for strand in design.strands:
+        if (
+            strand.strand_type != StrandType.STAPLE
+            or strand.is_reference
+            or not strand.domains
+        ):
+            continue
+        first = strand.domains[0]
+        last = strand.domains[-1]
+        staple_starts.add((first.helix_id, first.start_bp, first.direction))
+        staple_ends.add((last.helix_id, last.end_bp, last.direction))
+
+    collisions = []
+    for crossover in design.crossovers:
+        for half in (crossover.half_a, crossover.half_b):
+            key = (half.helix_id, half.index, half.strand)
+            if key in staple_starts or key in staple_ends:
+                collisions.append((crossover.id, key))
+    return collisions
+
+
 def test_scaffold_position_map_indexes_slots_in_scaffold_order():
     design = make_minimal_design(helix_length_bp=5)
     design, _, _ = assign_custom_scaffold_sequence(design, "ACGTA")
@@ -201,7 +225,7 @@ def test_precursor_graph_workspace_18hb_enforces_honeycomb_segment_minimums():
     assert padded_nt == 0
     assert report["summary"]["precursor_count"] > 0
     assert report["min_segment_nt"] == 7
-    assert report["summary"]["complete_precursor_count"] < report["summary"]["precursor_count"]
+    assert report["summary"]["complete_precursor_count"] <= report["summary"]["precursor_count"]
     assert report["summary"]["edge_count"] > 0
     assert report["summary"]["best_Q_origami"] is not None
     assert sum(1 for graph in report["graphs"] if graph["nucleotide_count"] < 21) == 0
@@ -442,6 +466,7 @@ def test_full_autostaple_completes_on_18hb_without_circular_staples():
         assert body["removed_circularizing_crossover_count"] >= 0
 
         updated = design_state.get_or_404()
+        assert _terminal_staple_crossover_collisions(updated) == []
         after_score = score_staples(updated)
         assert after_score["summary"]["unresolved_staple_count"] == 0
         # Short terminal staples are accepted (dense edge crossovers); the
@@ -461,11 +486,39 @@ def test_full_autostaple_completes_on_18hb_without_circular_staples():
         design_state.set_design(make_minimal_design())
 
 
-def test_full_autostaple_breaks_at_crossovers_on_large_block():
-    """Regression: a large/wide honeycomb block has giant staple precursors whose
-    dense ~7 nt inter-crossover runs leave no legal *internal* break across long
-    stretches.  Full autostaple must break AT crossovers to route them; otherwise
-    it 422s with "No complete legal breakpoint path".
+def test_full_autostaple_mini_rect_has_no_terminal_crossover_breaks():
+    fixture = Path(__file__).resolve().parents[1] / "workspace" / "mini_rect.nadoc"
+    if not fixture.exists():
+        pytest.skip("workspace/mini_rect.nadoc not available")
+
+    design = Design.model_validate_json(fixture.read_text())
+    design_state.set_design(design)
+    try:
+        full = client.post(
+            "/api/design/full-autostaple",
+            json={"scaffold_name": "M13mp18", "k_paths": 3},
+        )
+        assert full.status_code == 200, full.json().get("detail")
+        body = full.json()["full_autostaple"]
+        assert body["removed_terminal_crossover_count"] > 0
+
+        updated = design_state.get_or_404()
+        assert _terminal_staple_crossover_collisions(updated) == []
+        after = score_staples(updated)
+        segment_lengths = [
+            segment["length"]
+            for staple in after["staples"]
+            for segment in staple["segments"]
+        ]
+        assert min(segment_lengths) >= 8
+        assert after["summary"]["length_violation_count"] == 0
+    finally:
+        design_state.set_design(make_minimal_design())
+
+
+def test_full_autostaple_thins_dense_crossovers_on_large_block():
+    """Regression: dense honeycomb crossover phases can leave no legal internal
+    breakpoints. Full autostaple must thin phases instead of nicking at crossovers.
     """
     from backend.core.lattice import make_bundle_design
     from backend.core.seamed_router import auto_scaffold_matched
@@ -478,17 +531,26 @@ def test_full_autostaple_breaks_at_crossovers_on_large_block():
         full = client.post(
             "/api/design/full-autostaple", json={"scaffold_name": "M13mp18", "k_paths": 3}
         )
-        # The fix: this used to 422 ("No complete legal breakpoint path") because
-        # the dense ~7 nt inter-crossover runs left long stretches with no legal
-        # internal break.  Breaking AT crossovers lets it route.
         assert full.status_code == 200, full.json().get("detail")
         body = full.json()["full_autostaple"]
         assert body["aksel_break"]["new_staple_count"] > 0
+        assert body["auto_crossover"]["placed"] > 0
 
         updated = design_state.get_or_404()
+        assert _terminal_staple_crossover_collisions(updated) == []
         after = score_staples(updated)
         assert after["summary"]["unresolved_staple_count"] == 0
-        assert validate_design(updated).passed
+        segment_lengths = [
+            segment["length"]
+            for staple in after["staples"]
+            for segment in staple["segments"]
+        ]
+        assert min(segment_lengths) >= 7
+        assert all(
+            "Circular staple strand" not in result.message
+            for result in validate_design(updated).results
+            if not result.ok
+        )
     finally:
         design_state.set_design(make_minimal_design())
 

@@ -13,6 +13,7 @@
 
 import * as THREE from 'three'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
+import { resolveRepOverrides } from './representation_overrides.js'
 import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances } from './crossover_connections.js'
 import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 
@@ -221,6 +222,24 @@ export function initDesignRenderer(scene, storeRef) {
     return bp ? out.set(bp[0], bp[1], bp[2]) : null
   }
 
+  /**
+   * Mixed representation: resolve the design's per-region representation
+   * overrides against the current geometry and push them to the helix renderer.
+   * Pure visibility (no rebuild). Clears when there are no overrides.
+   */
+  function _applyRepresentationOverrides(design) {
+    if (!_helixCtrl?.applyRepOverrides) return
+    // A rebuild always rebuilds the helix meshes at FULL detail, and the tick only
+    // re-applies the global LOD when _lastDetailLevel changes — so after e.g. an
+    // override save (which refetches geometry → rebuild) the fresh helixCtrl is at
+    // level 0 even though the global rep is cylinders. Re-sync it here so the
+    // override's notion of the global rep ("baseCyl") is correct; otherwise every
+    // non-overridden column would resolve to full. No-op when already in sync.
+    _helixCtrl.setDetailLevel(_detailLevel)
+    const { columnRep } = resolveRepOverrides(design)
+    _helixCtrl.applyRepOverrides(columnRep)
+  }
+
   // ── Geometric scene rebuild ───────────────────────────────────────────────
 
   function _rebuild(geometry, design, helixAxes) {
@@ -304,6 +323,9 @@ export function initDesignRenderer(scene, storeRef) {
       _helixCtrl.setReferenceStrands(_refIds)
       _helixCtrl.setReferenceHidden(storeRef.getState().showReferenceGeometry === false)
     }
+    // Mixed representation: pin per-region reps (must run after reference alpha,
+    // since override visibility multiplies over reference alpha).
+    _applyRepresentationOverrides(design)
     _applyXoverVisibility()
     _applyReferenceXoverVisibility()   // hide reference crossover extra-bases when ref toggle off
     _applyXoverExtrasLod()             // hide extra-base beads/slabs in coarse rep (survives rebuild)
@@ -454,6 +476,14 @@ export function initDesignRenderer(scene, storeRef) {
     if (newState.showReferenceGeometry !== prevState.showReferenceGeometry && _helixCtrl) {
       _helixCtrl.setReferenceHidden(newState.showReferenceGeometry === false)
       _applyReferenceXoverVisibility()
+    }
+
+    // Mixed-representation overrides are a visual-only design field: editing them
+    // changes no topology array, so the rebuild is skipped below. Apply them here
+    // as a pure visibility update (no rebuild) whenever the design changed.
+    if (designChanged && _helixCtrl &&
+        newState.currentDesign?.representation_overrides !== prevState.currentDesign?.representation_overrides) {
+      _applyRepresentationOverrides(newState.currentDesign)
     }
 
     if (!geoChanged && !designChanged && !loopChanged) return
@@ -654,11 +684,29 @@ export function initDesignRenderer(scene, storeRef) {
     setBeadRadius(r)     { _helixCtrl?.setBeadRadius(r) },
     setCylinderRadius(r) { _helixCtrl?.setCylinderRadius(r) },
 
+    /** Current GLOBAL LOD level: 0=full, 1=beads, 2=cylinders. Use this — not the
+     *  cylinder mesh's .visible — to decide "are beads globally hidden", since
+     *  mixed-representation overrides make the cylinder mesh visible at full LOD. */
+    getDetailLevel()                 { return _detailLevel },
+
     getCylinderMesh()                { return _helixCtrl?.getCylinderMesh() ?? null },
+    getOverhangCylinderMesh()        { return _helixCtrl?.getOverhangCylinderMesh() ?? null },
     getCylinderDomainData()          { return _helixCtrl?.getCylinderDomainData() ?? [] },
     getCylinderDomainAt(id)          { return _helixCtrl?.getCylinderDomainAt(id) ?? null },
+    getOverhangCylinderDomainAt(id)  { return _helixCtrl?.getOverhangCylinderDomainAt(id) ?? null },
+    getLinkerBridgeCylinderMesh()    { return _helixCtrl?.getLinkerBridgeCylinderMesh() ?? null },
+    getLinkerBridgeCylinderAt(id)    { return _helixCtrl?.getLinkerBridgeCylinderAt(id) ?? null },
     highlightCylinderStrands(sids)   { _helixCtrl?.highlightCylinderStrands(sids) },
     clearCylinderHighlight()         { _helixCtrl?.clearCylinderHighlight() },
+    // Per-domain cylinder selection glow + cylinder-rep predicates (mixed rep).
+    glowCylinderDomains(refs)        { _helixCtrl?.glowCylinderDomains(refs) },
+    clearCylinderDomainGlow()        { _helixCtrl?.clearCylinderDomainGlow() },
+    refreshCylinderDomainGlow()      { _helixCtrl?.refreshCylinderDomainGlow() },
+    isColumnCylinder(helixId, bp)    { return _helixCtrl?.isColumnCylinder(helixId, bp) ?? false },
+    columnRepAt(helixId, bp)         { return _helixCtrl?.columnRepAt(helixId, bp) ?? 'full' },
+    isColumnAtomistic(helixId, bp)   { const r = _helixCtrl?.columnRepAt(helixId, bp); return r === 'vdw' || r === 'ballstick' },
+    isColumnSurface(helixId, bp)     { return _helixCtrl?.columnRepAt(helixId, bp) === 'surface' },
+    isDomainCylinder(strandId, di)   { return _helixCtrl?.isDomainCylinder(strandId, di) ?? false },
 
     /**
      * Return live {pos} glow entries for extra-base crossover beads on the given strand IDs.

@@ -38,6 +38,7 @@ export function initSurfaceRenderer(scene) {
   let _mode         = 'off'  // 'off' | 'on' — mirrors _surfaceMode in main.js
   let _liveVerts    = null   // Float32Array reference into the live mesh position buffer
   let _strandHexMap = null   // Map<strand_id, hex> last applied via applyStrandColors
+  let _meshName     = 'dna-surface'  // overridable so the region overlay can use a distinct name
 
   // ── Geometry builder ────────────────────────────────────────────────────────
 
@@ -121,9 +122,10 @@ export function initSurfaceRenderer(scene) {
    * @param {object} data  - response from GET /api/design/surface
    * @param {string} colorMode - 'strand' | 'uniform'
    */
-  function update(data, colorMode) {
+  function update(data, colorMode, name) {
     _cachedData = data
     _colorMode  = colorMode ?? _colorMode
+    if (name) _meshName = name
     _mode       = data ? 'on' : 'off'
     _replaceMesh()
   }
@@ -209,7 +211,7 @@ export function initSurfaceRenderer(scene) {
     const geo  = _buildGeometry(_cachedData)
     const mat  = _buildMaterial()
     _mesh = new THREE.Mesh(geo, mat)
-    _mesh.name = 'dna-surface'    // used by photo_renderer for material-swap detection
+    _mesh.name = _meshName        // 'dna-surface' (global) or 'dna-surface-region' (overlay)
     _mesh.frustumCulled = false   // surface spans the full design; skip frustum test
     scene.add(_mesh)
   }
@@ -306,5 +308,17 @@ export function initSurfaceRenderer(scene) {
   /** Return 'on' when a surface mesh is displayed, 'off' otherwise. */
   function getMode() { return _mode }
 
-  return { update, setColorMode, setOpacity, dispose, applyPositionLerp, getMode, applyStrandColors }
+  /** The live THREE.Mesh (for raycasting), or null. */
+  function getMesh() { return _mesh }
+
+  /** Strand id at a raycast Face3 (nearest-atom attribution; uses vertex a). */
+  function strandIdAt(face) {
+    const tbl = _cachedData?.vertex_strand_index_table
+    const idx = _cachedData?.vertex_strand_index
+    if (!tbl || !idx || !face) return null
+    return tbl[idx[face.a]] ?? null
+  }
+
+  return { update, setColorMode, setOpacity, dispose, applyPositionLerp, getMode,
+           applyStrandColors, getMesh, strandIdAt }
 }

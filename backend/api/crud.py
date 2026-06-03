@@ -132,6 +132,8 @@ from backend.core.models import (
     OverhangBinding,
     OverhangSpec,
     PlateLayout,
+    RepresentationOverride,
+    RepresentationSegment,
     Strand,
     StrandExtension,
     StrandType,
@@ -1688,6 +1690,22 @@ class PlateLayoutSaveRequest(BaseModel):
     plate_count: int
     wells: List[PlateWellItem]
     tubes: List[PlateTubeItem]
+
+
+class RepresentationOverridesSaveRequest(BaseModel):
+    """Replace the design's full list of per-region representation overrides."""
+    overrides: List[RepresentationOverride]
+
+
+class SurfaceRegionRequest(BaseModel):
+    """Compute a molecular surface over ONLY the columns covered by `segments`
+    (the surface-rep regions). Stateless; same knobs as GET /design/surface."""
+    segments: List[RepresentationSegment]
+    color_mode:     str   = "strand"
+    grid_spacing:   float = 0.20
+    probe_radius:   float = 0.28
+    radius_inflate: float = 1.30
+    smooth:         int   = 15
 
 
 class StrandBatchDeleteRequest(BaseModel):
@@ -5295,6 +5313,15 @@ def _build_auto_crossover_design(design: Design) -> tuple[Design, dict]:
                 scaffold_xover_by_helix.setdefault(half.helix_id, []).append(half.index)
 
     sites = all_valid_crossover_sites(design)
+    min_autocrossover_segment_nt = 7 if is_hc else 8
+    autocrossover_phase_mod = 2 * min_autocrossover_segment_nt
+    phase_counts: dict[int, int] = {}
+    for site in sites:
+        bp = site["index"]
+        lower_bp = bp - 1 if (bp % period) in bow_right else bp
+        phase = lower_bp % autocrossover_phase_mod
+        phase_counts[phase] = phase_counts.get(phase, 0) + 1
+    preferred_phase = max(phase_counts, key=phase_counts.get) if phase_counts else 0
     seen_pairs: set[tuple[str, str, int]] = set()
     current = design
     placed = 0
@@ -5330,11 +5357,18 @@ def _build_auto_crossover_design(design: Design) -> tuple[Design, dict]:
         hb_min = hb.bp_start if hb else 0
         hb_max = (hb.bp_start + hb.length_bp - 1) if hb else 0
 
+        # Aksel-style breaks are not allowed at crossovers, so a fully populated
+        # lattice phase pattern can make every inter-crossover arm too short to
+        # host a legal nick.  Keep an alternating phase so the eventual routing
+        # graph has at least one lattice-min-clear internal offset between
+        # neighboring staple crossovers.
+        if lower_bp % autocrossover_phase_mod != preferred_phase:
+            continue
+
         # Match the standalone auto-crossover endpoint: only skip a site that
         # would leave a staple arm shorter than the lattice min segment, measured
         # against the STAPLE STRAND's true coverage boundary (the scaffold caps
         # the last bp, so the staple ends before the helix does).
-        min_autocrossover_segment_nt = 7 if is_hc else 8
 
         def _staple_arm_too_short(hid: str, stap_dir: str) -> bool:
             for lo, hi in sr.get((hid, stap_dir), []):
@@ -7804,6 +7838,39 @@ def _prune_circularizing_crossovers(design: Design) -> tuple[Design, list[str]]:
     return design.model_copy(update={"crossovers": kept}), sorted(ids)
 
 
+def _terminal_staple_crossover_ids(design: Design) -> set[str]:
+    starts: set[tuple[str, int, Direction]] = set()
+    ends: set[tuple[str, int, Direction]] = set()
+    for strand in design.strands:
+        if (
+            strand.strand_type != StrandType.STAPLE
+            or strand.is_reference
+            or not strand.domains
+        ):
+            continue
+        first = strand.domains[0]
+        last = strand.domains[-1]
+        starts.add((first.helix_id, first.start_bp, first.direction))
+        ends.add((last.helix_id, last.end_bp, last.direction))
+
+    out: set[str] = set()
+    for xo in design.crossovers:
+        for half in (xo.half_a, xo.half_b):
+            key = (half.helix_id, half.index, half.strand)
+            if key in starts or key in ends:
+                out.add(xo.id)
+                break
+    return out
+
+
+def _prune_invalid_terminal_crossovers(design: Design) -> tuple[Design, list[str]]:
+    ids = set(unligated_crossover_ids(design)) | _terminal_staple_crossover_ids(design)
+    if not ids:
+        return design, []
+    kept = [xo for xo in design.crossovers if xo.id not in ids]
+    return design.model_copy(update={"crossovers": kept}), sorted(ids)
+
+
 def _linearize_staple_precursors(design: Design) -> tuple[Design, dict]:
     """Remove staple crossovers and split staples into single-domain precursors."""
     helix_map = {h.id: h for h in design.helices if h.grid_pos is not None}
@@ -8126,6 +8193,7 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
 
         precursors, precursor_report = _linearize_staple_precursors(sequenced)
         crossed, crossover_report = _build_auto_crossover_design(precursors)
+        crossed, removed_terminal_before_break = _prune_invalid_terminal_crossovers(crossed)
         routed, break_report = apply_precursor_breaks(
             crossed,
             temperature_c=body.temperature_c,
@@ -8137,17 +8205,16 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
             k_paths=body.k_paths,
             reassign_sequences=False,
             break_rule=body.break_rule,
-            # Full autostaple always breaks AT crossovers (standard origami
-            # practice): on dense lattices the inter-crossover runs are mostly
-            # ~7 nt, so the >=7 nt break-clearance rule leaves long stretches
-            # with no legal internal break — without crossover breaks those
-            # giant precursors are unroutable (422 "No complete legal breakpoint
-            # path").  The downstream prune + circular-staple guard keep the
-            # result clean.  See full-autostaple troubleshooting notes.
-            allow_crossover_breaks=True,
+            # Staples never nick AT a crossover — breaks are mid-arm only.
+            # NOTE: with maximal crossover density a dense design can have
+            # precursors with no legal mid-arm break and will 422 ("No complete
+            # legal breakpoint path"); the planned crossover-thinning step is
+            # what makes those routable mid-arm.
+            allow_crossover_breaks=False,
             min_segment_nt=body.min_segment_nt,
         )
         clean, removed_circularizing = _prune_circularizing_crossovers(routed)
+        clean, removed_terminal_after_break = _prune_invalid_terminal_crossovers(clean)
         clean = assign_staple_sequences(clean)
         _assert_no_circular_staples(clean)
         _run.full_report = {
@@ -8159,6 +8226,12 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
             "precursors": precursor_report,
             "auto_crossover": crossover_report,
             "aksel_break": break_report,
+            "removed_terminal_crossover_count": (
+                len(removed_terminal_before_break) + len(removed_terminal_after_break)
+            ),
+            "removed_terminal_crossover_ids": (
+                removed_terminal_before_break + removed_terminal_after_break
+            ),
             "removed_circularizing_crossover_count": len(removed_circularizing),
             "removed_circularizing_crossover_ids": removed_circularizing,
         }
@@ -12870,6 +12943,34 @@ def _parse_params(op_type: str, params_dict: dict):
     raise HTTPException(400, detail=f"Unknown deformation type {op_type!r}")
 
 
+def _attach_deformation_warning(
+    response: dict,
+    design: Design,
+    op_type: str,
+    helix_ids: list[str],
+    plane_a_bp: int,
+    plane_b_bp: int,
+    params,
+) -> None:
+    """Attach a non-fatal ``deformation_warning`` to *response* when a bend/twist
+    would fold poorly (WARN) or is geometrically unachievable (BLOCK).
+
+    Never raises and never blocks: the geometric editing layer stays permissive
+    (warn-in-editor); the hard 422 lives only in the loop/skip realization path
+    (apply-deformations). See classify_deformation for the 9–12 / 6–15 bp/turn
+    thresholds.
+    """
+    from backend.core.loop_skip_calculator import classify_deformation
+
+    h_map = {h.id: h for h in design.helices}
+    segment_helices = [h_map[hid] for hid in helix_ids if hid in h_map]
+    warning = classify_deformation(
+        segment_helices, plane_a_bp, plane_b_bp, op_type, params, design=design
+    )
+    if warning["status"] != "ok":
+        response["deformation_warning"] = warning
+
+
 def _resolve_cluster_scope(design: Design, cluster_ids: list[str], helix_ids: list[str]) -> dict:
     """Filter helix_ids to the union of the named clusters' helix_ids.
 
@@ -13065,7 +13166,9 @@ def add_deformation(body: AddDeformationBody) -> dict:
         )
         design_state.set_design(updated)
     report = validate_design(updated)
-    return _design_response(updated, report)
+    response = _design_response(updated, report)
+    _attach_deformation_warning(response, updated, body.type, helix_ids, body.plane_a_bp, body.plane_b_bp, params)
+    return response
 
 
 @router.patch("/design/deformation/{op_id}", status_code=200)
@@ -13086,7 +13189,12 @@ def update_deformation(op_id: str, body: UpdateDeformationBody) -> dict:
     updated = design.model_copy(update={"deformations": ops}, deep=True)
     design_state.set_design_silent(updated)
     report = validate_design(updated)
-    return _design_response(updated, report)
+    response = _design_response(updated, report)
+    _attach_deformation_warning(
+        response, updated, old_op.type, old_op.affected_helix_ids,
+        old_op.plane_a_bp, old_op.plane_b_bp, new_params,
+    )
+    return response
 
 
 @router.delete("/design/deformation/{op_id}", status_code=200)
@@ -14190,7 +14298,7 @@ def apply_loop_skips_from_deformations() -> dict:
 
     For each DeformationOp:
       - twist → call twist_loop_skips with computed target_twist_deg
-      - bend  → convert angle_deg to radius_nm and call bend_loop_skips
+      - bend  → convert curvature_deg_per_bp to radius_nm and call bend_loop_skips
 
     All modifications are merged and applied atomically via apply_loop_skips.
     Pushes to undo history.
@@ -14205,6 +14313,7 @@ def apply_loop_skips_from_deformations() -> dict:
         clear_all_loop_skips,
         sq_lattice_periodic_skips,
         twist_loop_skips,
+        _bend_params_to_radius_nm,
         CELL_BP_DEFAULT,
     )
     from backend.core.constants import BDNA_RISE_PER_BP
@@ -14263,11 +14372,10 @@ def apply_loop_skips_from_deformations() -> dict:
             mods = twist_loop_skips(affected, plane_a, plane_b, target_deg, design=design)
         else:  # bend
             p = op.params
-            angle_rad = math.radians(p.angle_deg)
-            if angle_rad < 1e-9:
-                continue
-            length_nm = n_cells * CELL_BP_DEFAULT * BDNA_RISE_PER_BP
-            radius_nm = length_nm / angle_rad
+            # Geometric radius from κ (matches deformation.py: R = RISE / radians(κ)).
+            radius_nm = _bend_params_to_radius_nm(p.curvature_deg_per_bp)
+            if math.isinf(radius_nm):
+                continue  # κ ≈ 0 → infinite radius, no bend
             mods = bend_loop_skips(affected, plane_a, plane_b, radius_nm, p.direction_deg, design=design)
 
         for hid, ls_list in mods.items():
@@ -14412,6 +14520,43 @@ def clear_plate_layout() -> dict:
 
     def _apply(d: Design) -> None:
         d.plate_layout = None
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response(design, report)
+
+
+@router.put("/design/representation-overrides", status_code=200)
+def save_representation_overrides(body: RepresentationOverridesSaveRequest) -> dict:
+    """Replace the design's per-region representation overrides.
+
+    Display-only metadata (pin a render rep onto selected strands/clusters so a
+    focal region can show full detail against a coarser background). Touches no
+    topology or geometry. Every referenced strand and cluster id must exist
+    (404 otherwise); an override that names neither is rejected (422).
+    """
+    design = design_state.get_or_404()
+    valid_helices = {h.id for h in design.helices}
+    for ov in body.overrides:
+        if not ov.segments:
+            raise HTTPException(422, detail=f"Override {ov.id!r} covers no segments.")
+        missing_h = {seg.helix_id for seg in ov.segments} - valid_helices
+        if missing_h:
+            raise HTTPException(404, detail=f"Helix id(s) not found: {sorted(missing_h)}")
+
+    def _apply(d: Design) -> None:
+        d.representation_overrides = [ov.model_copy(deep=True) for ov in body.overrides]
+
+    design, report = design_state.mutate_and_validate(_apply)
+    return _design_response(design, report)
+
+
+@router.delete("/design/representation-overrides", status_code=200)
+def clear_representation_overrides() -> dict:
+    """Clear all per-region representation overrides."""
+    design = design_state.get_or_404()
+
+    def _apply(d: Design) -> None:
+        d.representation_overrides = []
 
     design, report = design_state.mutate_and_validate(_apply)
     return _design_response(design, report)
@@ -14763,6 +14908,46 @@ def get_surface(
     t_ms = (time.perf_counter() - t0) * 1000.0
 
     return surface_to_json(mesh, design, color_mode=color_mode, t_ms=t_ms)
+
+
+@router.post("/design/surface/region")
+def get_region_surface(body: SurfaceRegionRequest) -> dict:
+    """Molecular surface over ONLY the duplex columns covered by ``segments`` —
+    used by the per-region SURFACE representation (mixed rep). Stateless: reads
+    the active design, filters the all-atom model to the region's nucleotides,
+    and returns the same payload shape as GET /design/surface. An empty
+    ``segments`` list returns a zero-vertex mesh so the client can clear cleanly.
+    """
+    import time
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
+
+    design = design_state.get_or_404()
+
+    colset: set[tuple[str, int]] = set()
+    for seg in body.segments:
+        lo, hi = min(seg.bp_start, seg.bp_end), max(seg.bp_start, seg.bp_end)
+        for bp in range(lo, hi + 1):
+            colset.add((seg.helix_id, bp))
+
+    if not colset:
+        return {"vertices": [], "faces": [], "vertex_colors": None,
+                "stats": {"n_verts": 0, "n_faces": 0, "compute_ms": 0.0}}
+
+    model = build_atomistic_model(design)
+    atoms = [a for a in model.atoms if (a.helix_id, a.bp_index) in colset]
+
+    t0 = time.perf_counter()
+    mesh = compute_surface(
+        atoms,
+        grid_spacing=body.grid_spacing,
+        probe_radius=body.probe_radius,
+        radius_scale=1.2 * body.radius_inflate,
+    )
+    mesh = smooth_mesh(mesh, iterations=body.smooth)
+    t_ms = (time.perf_counter() - t0) * 1000.0
+
+    return surface_to_json(mesh, design, color_mode=body.color_mode, t_ms=t_ms)
 
 
 @router.get("/design/export/stl")

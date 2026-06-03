@@ -36,6 +36,7 @@ import * as api from '../api/client.js'
 import { ensureLoaded as _ensureFjcLookup } from './ssdna_fjc.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
 import { clusterMemberFilter } from './cluster_gizmo.js'
+import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -309,6 +310,9 @@ function _dismissMenu() {
 }
 
 function _menuOutsideListeners(menu) {
+  // The menu is in the DOM by now, so its real size is measurable — re-fit it
+  // inside the viewport (extends upward when right-clicked low on the screen).
+  _placeMenu(menu)
   const onOutside = e => {
     if (!menu.contains(e.target)) {
       _dismissMenu()
@@ -337,7 +341,44 @@ function _menuBase(x, y) {
     padding: 4px 0; min-width: 110px; z-index: 9999;
     box-shadow: 0 4px 16px rgba(0,0,0,0.5); font-family: var(--font-ui); font-size: 12px;
   `
+  // Remember the requested anchor so _placeMenu() can re-fit after the items
+  // are added and the real height is known.
+  menu._anchorX = x
+  menu._anchorY = y
   return menu
+}
+
+/**
+ * Re-fit an already-appended context menu inside the viewport. Shifts left if it
+ * would overflow the right edge, and **extends upward** (anchors its bottom near
+ * the cursor) if it would overflow the bottom — so a menu right-clicked low on
+ * the screen grows up instead of being clipped. If the menu is taller than the
+ * whole viewport even when flipped, it gets a max-height + scrollbar.
+ */
+function _placeMenu(menu) {
+  const margin = 8
+  const x = menu._anchorX ?? 0
+  const y = menu._anchorY ?? 0
+  const rect = menu.getBoundingClientRect()
+  const maxH = window.innerHeight - margin * 2
+
+  let left = x
+  if (left + rect.width > window.innerWidth) left = window.innerWidth - rect.width - margin
+  if (left < margin) left = margin
+
+  let top = y
+  if (rect.height > maxH) {
+    // Taller than the screen even when flipped — cap it and let it scroll.
+    menu.style.maxHeight = `${maxH}px`
+    menu.style.overflowY = 'auto'
+    top = margin
+  } else if (top + rect.height > window.innerHeight) {
+    top = window.innerHeight - rect.height - margin
+  }
+  if (top < margin) top = margin
+
+  menu.style.left = `${left}px`
+  menu.style.top  = `${top}px`
 }
 
 function _menuItem(text, onClick, opts = {}) {
@@ -356,6 +397,27 @@ function _menuItem(text, onClick, opts = {}) {
     item.addEventListener('click', e => { e.stopPropagation() })
   }
   return item
+}
+
+/**
+ * Append a "Representation" section to a right-click menu (mixed representation).
+ * Pins a render rep onto the duplex region the selected strands/clusters cover
+ * (BOTH strands, by column position), or resets it to the global rep. Stored as
+ * positions so it survives break/crossover edits. Display-only.
+ */
+function _appendRepresentationMenu(menu, { strandIds = [], clusterIds = [], domainRefs = [] }) {
+  if (!strandIds.length && !clusterIds.length && !domainRefs.length) return
+  const apply = (rep) => {
+    const design = store.getState().currentDesign
+    let segs = []
+    if (strandIds.length)  segs = segs.concat(strandsToSegments(design, strandIds))
+    if (clusterIds.length) segs = segs.concat(clustersToSegments(design, clusterIds))
+    if (domainRefs.length) segs = segs.concat(domainsToSegments(design, domainRefs))
+    const next = editOverridesForSegments(design?.representation_overrides ?? [], segs, rep)
+    api.saveRepresentationOverrides(next)
+  }
+  menu.appendChild(_menuSep())
+  menu.appendChild(createRepresentationMenuItem({ apply, dismiss: _dismissMenu }))
 }
 
 function _menuSep() {
@@ -610,7 +672,7 @@ function _openExtensionDialog(x, y, strandIds, existingsByStrand) {
   })
 }
 
-function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], overhangOpts = null, ovhgMultiIds = null, onOpenOverhangsManager = null) {
+function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], overhangOpts = null, ovhgMultiIds = null, onOpenOverhangsManager = null, domainRef = null) {
   _dismissMenu()
   const menu = _menuBase(x, y)
   const singleEffectiveIds = linkerComponentIds(strandId)
@@ -940,6 +1002,17 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
     }
   }
 
+  // Representation override: scope to the single right-clicked DOMAIN when the
+  // selection is at domain level, otherwise the whole strand(s).
+  if (domainRef) {
+    _appendRepresentationMenu(menu, { domainRefs: [domainRef] })
+  } else if (strandId) {
+    const repIds = multiStrandIds.length > 0
+      ? [...new Set([...multiStrandIds, strandId])]
+      : [strandId]
+    _appendRepresentationMenu(menu, { strandIds: repIds })
+  }
+
   // Delete (all strand types including scaffold). Linker strands are generated
   // from OverhangConnection records, so delete the connection rather than one
   // generated strand fragment.
@@ -1228,6 +1301,9 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
     }
   }
 
+  // Representation override for all selected strands.
+  _appendRepresentationMenu(menu, { strandIds: strandIds.slice() })
+
   // Delete all
   menu.appendChild(_menuSep())
   const delItem = _menuItem(`Delete ${strandIds.length} strand${strandIds.length === 1 ? '' : 's'}`, async () => {
@@ -1329,6 +1405,11 @@ function _showFlexibleSegmentMenu(x, y, nuc, onFlexibleSegmentRightClick) {
     menu.appendChild(clear)
   }
 
+  // Representation override for the flexible region's domain.
+  if (nuc?.strand_id != null && nuc?.domain_index != null) {
+    _appendRepresentationMenu(menu, { domainRefs: [{ strandId: nuc.strand_id, domainIndex: nuc.domain_index }] })
+  }
+
   document.body.appendChild(menu)
   _menuEl = menu
   _menuOutsideListeners(menu)
@@ -1369,6 +1450,9 @@ function _showClusterMenu(x, y, clusterId, onClusterMoveRotate) {
   menu.appendChild(hdr)
 
   menu.appendChild(_menuItem('Move / Rotate', () => onClusterMoveRotate?.(clusterId)))
+
+  // Representation override for this cluster's region.
+  _appendRepresentationMenu(menu, { clusterIds: [clusterId] })
 
   document.body.appendChild(menu)
   _menuEl = menu
@@ -1463,7 +1547,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldRightClick?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, isManualSelect, onDrillLevel } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionSurfaceRenderer, isManualSelect, onDrillLevel } = opts
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -1491,6 +1575,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   let _drillLevel     = 0
   let _drillSeq       = []
   let _drillClusterId = null
+  // Tab drill-lock: when set ('cluster'|'strand'|'domain'|'bead'|'xover'), the
+  // auto-drill stops cycling and every click selects at this FIXED level instead.
+  // null = normal descend-on-repeat-click behaviour.
+  let _drillLock      = null
 
   function _autoDrill() { return !isManualSelect?.() }
 
@@ -1564,8 +1652,22 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   function _autoDrillBead(hitEntry, hitStrandId, backboneEntries, coneEntries) {
     const design = store.getState().currentDesign
     const anchor = `${hitStrandId}:bead`
-    if (_drillAnchor === anchor) _drillLevel = (_drillLevel + 1) % 4
-    else { _drillAnchor = anchor; _drillSeq = ['cluster', 'strand', 'domain', 'bead']; _drillLevel = 0 }
+    // Cap the drill by what this column actually renders as: cylinders → domain
+    // (no visible bead); surface → strand (no per-bp attribution); full/vdw/ballstick
+    // → down to the nucleotide (beads or atoms are visible there).
+    const _rep = designRenderer.columnRepAt?.(hitEntry.nuc.helix_id, hitEntry.nuc.bp_index)
+    _drillSeq = _rep === 'cylinders' ? ['cluster', 'strand', 'domain']
+              : _rep === 'surface'   ? ['cluster', 'strand']
+              : ['cluster', 'strand', 'domain', 'bead']
+    if (_drillLock) {
+      const i = _drillSeq.indexOf(_drillLock)
+      _drillLevel = i >= 0 ? i : 1   // a lock not on this sequence (xover) → strand
+      _drillAnchor = anchor
+    } else if (_drillAnchor === anchor) {
+      _drillLevel = (_drillLevel + 1) % _drillSeq.length
+    } else {
+      _drillAnchor = anchor; _drillLevel = 0
+    }
     let level = _drillSeq[_drillLevel]
 
     if (level === 'cluster') {
@@ -1623,8 +1725,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   function _autoDrillCone(hitCone, hitStrandId, backboneEntries, coneEntries) {
     const design = store.getState().currentDesign
     const anchor = `${hitStrandId}:cone`
-    if (_drillAnchor === anchor) _drillLevel = (_drillLevel + 1) % 3
-    else { _drillAnchor = anchor; _drillSeq = ['cluster', 'strand', 'xover']; _drillLevel = 0 }
+    _drillSeq = ['cluster', 'strand', 'xover']
+    if (_drillLock) {
+      const i = _drillSeq.indexOf(_drillLock)
+      _drillLevel = i >= 0 ? i : 1   // a lock not on this sequence (domain/bead) → strand
+      _drillAnchor = anchor
+    } else if (_drillAnchor === anchor) {
+      _drillLevel = (_drillLevel + 1) % _drillSeq.length
+    } else {
+      _drillAnchor = anchor; _drillLevel = 0
+    }
     let level = _drillSeq[_drillLevel]
 
     if (level === 'cluster') {
@@ -1658,6 +1768,88 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       })
     }
     _emitDrillLevel(level)
+  }
+
+  // Unified backbone-bead-level hit handler — used by a real bead hit AND by the
+  // region overlays (atom / surface / cylinder, via a representative entry). Honours
+  // the SAME rules: auto-drill (with the Tab drill-lock) when in auto mode, else the
+  // manual selectableTypes granularity. The auto-drill cap is rep-aware (cylinders →
+  // domain, surface → strand) via columnRepAt inside _autoDrillBead.
+  function _handleBeadHit(hitEntry, backboneEntries, coneEntries, prevOverhangId = null) {
+    const hitStrandId = hitEntry.nuc.strand_id
+    if (_autoDrill()) { _autoDrillBead(hitEntry, hitStrandId, backboneEntries, coneEntries); return }
+
+    const { selectableTypes } = store.getState()
+    // Overhang filter → overhang granularity.
+    if (selectableTypes.overhangs && hitEntry.nuc.overhang_id) {
+      const ovhgId = hitEntry.nuc.overhang_id
+      if (prevOverhangId !== ovhgId) {
+        _applyMultiOverhangHighlight([ovhgId])
+        store.setState({ multiSelectedOverhangIds: [ovhgId] })
+      }
+      return
+    }
+    // Domain filter → domain granularity.
+    if (selectableTypes.domains) {
+      const domainIdx = hitEntry.nuc.domain_index ?? 0
+      if (_mode === 'domain' && _strandId === hitStrandId && _domainIndex === domainIdx) {
+        _clearAll()
+      } else {
+        _restoreStrand()
+        _mode = 'domain'; _strandId = hitStrandId
+        _highlightStrand(backboneEntries, coneEntries, hitStrandId)
+        _highlightDomain(domainIdx)
+        const design = store.getState().currentDesign
+        const domainObj = design?.strands?.find(s => s.id === hitStrandId)?.domains?.[domainIdx]
+        store.setState({
+          selectedObject: {
+            type: 'domain',
+            id:   `${hitStrandId}:${domainIdx}`,
+            data: {
+              strand_id:    hitStrandId,
+              domain_index: domainIdx,
+              helix_id:     domainObj?.helix_id    ?? hitEntry.nuc.helix_id,
+              direction:    domainObj?.direction   ?? hitEntry.nuc.direction,
+              overhang_id:  domainObj?.overhang_id ?? null,
+            },
+          },
+        })
+      }
+      return
+    }
+    // Default manual: strand, then nucleotide on repeat clicks.
+    if (_mode === 'none' || hitStrandId !== _strandId) {
+      _mode = 'strand'; _strandId = hitStrandId; _coneEntry = null
+      _highlightStrand(backboneEntries, coneEntries, hitStrandId)
+      store.setState({
+        selectedObject: _strandSelection(
+          hitStrandId ?? `unassigned:${hitEntry.nuc.helix_id}:${hitEntry.nuc.direction}`,
+          { helix_id: hitEntry.nuc.helix_id },
+        ),
+      })
+    } else if (_mode === 'strand') {
+      _mode = 'bead'; _highlightBead(hitEntry)
+      store.setState({ selectedObject: { type: 'nucleotide', id: `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`, data: hitEntry.nuc } })
+    } else if (_mode === 'bead' && _beadEntry &&
+               _beadEntry.nuc.helix_id  === hitEntry.nuc.helix_id &&
+               _beadEntry.nuc.bp_index  === hitEntry.nuc.bp_index &&
+               _beadEntry.nuc.direction === hitEntry.nuc.direction) {
+      _clearAll()
+    } else {
+      _mode = 'bead'; _highlightBead(hitEntry)
+      store.setState({ selectedObject: { type: 'nucleotide', id: `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`, data: hitEntry.nuc } })
+    }
+  }
+
+  // Find a representative backbone entry for a strand (optionally constrained to a
+  // domain and/or a column rep) — used to route overlay/cylinder hits through the
+  // same bead handler. Returns null when the strand renders without beads (e.g. a
+  // flexible-segment or ss-linker-bridge run drawn as an arc).
+  function _repEntryFor(backboneEntries, strandId, { domainIndex = null, rep = null } = {}) {
+    return backboneEntries.find(e =>
+      e.nuc.strand_id === strandId &&
+      (domainIndex == null || e.nuc.domain_index === domainIndex) &&
+      (rep == null || designRenderer.columnRepAt?.(e.nuc.helix_id, e.nuc.bp_index) === rep)) ?? null
   }
 
   // ── Highlight helpers ────────────────────────────────────────────────────
@@ -1918,6 +2110,22 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     store.setState({ multiSelectedOverhangIds: [] })
   }
 
+  // ── Multi-domain right-click menu (representation override) ──────────────
+
+  function _showMultiDomainMenu(x, y, domainRefs, _designRenderer) {
+    _dismissMenu()
+    const menu = _menuBase(x, y)
+    const hdr = document.createElement('div')
+    hdr.textContent = `${domainRefs.length} domain${domainRefs.length === 1 ? '' : 's'} selected`
+    hdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+                        'border-bottom:1px solid #3a4a5a;margin-bottom:4px'
+    menu.appendChild(hdr)
+    _appendRepresentationMenu(menu, { domainRefs })
+    document.body.appendChild(menu)
+    _menuEl = menu
+    _menuOutsideListeners(menu)
+  }
+
   // ── Multi-loop/skip right-click menu ────────────────────────────────────
 
   function _showMultiLoopSkipMenu(x, y) {
@@ -1960,11 +2168,26 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // Merged glow: always combines selection glow + ctrl bead glow.
   function _setSelectionGlow(entries) {
     _selectionGlowEntries = entries
-    designRenderer.setGlowEntries([..._selectionGlowEntries, ..._ctrlBeads.map(b => b.entry)])
+    // Split highlighted entries: bead-rendered domains keep the sphere glow;
+    // cylinder-rendered domains get the additive cylinder glow instead (no double
+    // halo). Both come from the same entry list, so every highlight path is covered.
+    const beadEntries = []
+    const cylRefs = new Map()
+    for (const e of entries) {
+      const sid = e.nuc?.strand_id, di = e.nuc?.domain_index
+      if (sid != null && di != null && designRenderer.isDomainCylinder?.(sid, di)) {
+        cylRefs.set(`${sid}:${di}`, { strandId: sid, domainIndex: di })
+      } else {
+        beadEntries.push(e)
+      }
+    }
+    designRenderer.setGlowEntries([...beadEntries, ..._ctrlBeads.map(b => b.entry)])
+    designRenderer.glowCylinderDomains([...cylRefs.values()])
   }
 
   function _clearSelectionGlow() {
     _selectionGlowEntries = []
+    designRenderer.clearCylinderDomainGlow?.()
     const ctrlEntries = _ctrlBeads.map(b => b.entry)
     if (ctrlEntries.length) designRenderer.setGlowEntries(ctrlEntries)
     else                    designRenderer.clearGlow()
@@ -2250,7 +2473,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const useXover    = drillType ? drillType === 'xover'  : st.crossoverArcs
     const useCluster  = drillType === 'cluster'
     const cylMesh = designRenderer.getCylinderMesh()
-    const inCylinderLOD = cylMesh?.visible ?? false
+    // Global LOD level, not mesh .visible — mixed-rep makes cylinders visible at full LOD.
+    const inCylinderLOD = (designRenderer.getDetailLevel?.() ?? 0) === 2
 
     // ── Cylinder LOD strands ───────────────────────────────────────────────
     // When iHelixCylinders is visible, project each cylinder center into screen
@@ -2607,11 +2831,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const backboneEntries = designRenderer.getBackboneEntries()
     const coneEntries     = designRenderer.getConeEntries()
 
-    // In cylinder LOD, beads and cones are hidden — skip their raycasting entirely.
-    const _inCylinderLOD = designRenderer.getCylinderMesh()?.visible ?? false
-
     // Respect selection filter
-    const selBackbone = _inCylinderLOD ? [] : backboneEntries.filter(e => {
+    const selBackbone = backboneEntries.filter(e => {
       if (selectableTypes.overhangs && e.nuc.overhang_id) return true
       const isScaffold = e.nuc.strand_type === 'scaffold'
       const isEnd      = e.nuc.is_five_prime || e.nuc.is_three_prime
@@ -2619,24 +2840,39 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (selectableTypes.ends && isEnd) return true
       return selectableTypes.strands || selectableTypes.domains
     })
-    const selCones = _inCylinderLOD ? [] : coneEntries.filter(e => {
+    const selCones = coneEntries.filter(e => {
       if (!selectableTypes.strands) return false
       const isScaf = e.fromNuc?.strand_type === 'scaffold'
       return isScaf ? selectableTypes.scaffold : selectableTypes.staples
     })
 
-    // Raycast against all unique InstancedMeshes, then find the closest
-    // intersection whose instanceId belongs to a selectable entry.
-    const beadMeshes = _inCylinderLOD ? [] : [...new Set(backboneEntries.map(e => e.instMesh))]
-    const coneMeshes = _inCylinderLOD ? [] : [...new Set(coneEntries.map(e => e.instMesh))]
+    // Raycast against the VISIBLE bead/cone InstancedMeshes, then find the closest
+    // intersection whose instanceId belongs to a selectable entry. Filtering by
+    // actual mesh visibility (rather than a "cylinder LOD" flag) is what makes
+    // mixed-representation work: in true cylinder LOD the bead meshes are hidden →
+    // filtered out → cylinder-hit fallback below; at full LOD (incl. mixed-rep,
+    // where iHelixCylinders is visible too) beads stay selectable.
+    const beadMeshes = [...new Set(backboneEntries.map(e => e.instMesh))].filter(m => m.visible)
+    const coneMeshes = [...new Set(coneEntries.map(e => e.instMesh))].filter(m => m.visible)
 
     const allBeadHits = beadMeshes.length ? raycaster.intersectObjects(beadMeshes) : []
     const allConeHits = coneMeshes.length ? raycaster.intersectObjects(coneMeshes) : []
 
-    const beadHit0 = allBeadHits.find(h =>
-      selBackbone.some(e => e.instMesh === h.object && e.id === h.instanceId))
-    const coneHit0 = allConeHits.find(h =>
-      selCones.some(e => e.instMesh === h.object && e.id === h.instanceId))
+    // A column rendered as surface/vdw/ballstick is drawn by an overlay; its CG
+    // beads/cones are alpha-0 but keep full-scale matrices, so exclude them from
+    // bead/cone hits — the atom/surface hit below should win there.
+    const _isOverlayCol = (nuc) => {
+      const r = nuc && designRenderer.columnRepAt?.(nuc.helix_id, nuc.bp_index)
+      return r === 'vdw' || r === 'ballstick' || r === 'surface'
+    }
+    const beadHit0 = allBeadHits.find(h => {
+      const e = selBackbone.find(e => e.instMesh === h.object && e.id === h.instanceId)
+      return e && !_isOverlayCol(e.nuc)
+    })
+    const coneHit0 = allConeHits.find(h => {
+      const e = selCones.find(e => e.instMesh === h.object && e.id === h.instanceId)
+      return e && !_isOverlayCol(e.fromNuc)
+    })
 
     const beadDist = beadHit0?.distance ?? Infinity
     const coneDist = coneHit0?.distance ?? Infinity
@@ -2662,33 +2898,94 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       }
     }
 
-    // ── Cylinder LOD hit (only active when iHelixCylinders is visible) ───────
+    // ── Region overlay hits (per-region surface / vdw / ballstick) ───────────
+    // Atoms are the click target in atomistic regions; the surface mesh in surface
+    // regions. Each wins only when it is the closest hit.
+    let _atomHit = null
+    for (const rr of [getRegionVdwRenderer?.(), getRegionBallstickRenderer?.()]) {
+      if (!rr || rr.getMode() === 'off') continue
+      const h = rr.raycastPick(raycaster)
+      if (h && (!_atomHit || h.distance < _atomHit.distance)) _atomHit = h
+    }
+    const _surfMesh = getRegionSurfaceRenderer?.()?.getMesh?.()
+    const _surfHit  = _surfMesh?.visible ? raycaster.intersectObject(_surfMesh, false)[0] : null
+    const _atomDist = _atomHit?.distance ?? Infinity
+    const _surfDist = _surfHit?.distance ?? Infinity
+
+    if (_atomHit && _atomDist <= Math.min(beadDist, coneDist, _surfDist)) {
+      // Atom hit → route the atom's nucleotide through the unified bead handler
+      // (auto-drill / manual / Tab rules). Falls back to strand for atoms with no
+      // backbone entry (extra-base / aux, or arc-rendered flexible/ss-linker nucs).
+      const a = _atomHit.atom
+      const hitEntry = backboneEntries.find(e =>
+        e.nuc.helix_id === a.helix_id && e.nuc.bp_index === a.bp_index && e.nuc.direction === a.direction)
+      if (hitEntry) { _handleBeadHit(hitEntry, backboneEntries, coneEntries, _prevOverhangId); return }
+      if (a.strand_id) {
+        _restoreStrand()
+        _mode = 'strand'; _strandId = a.strand_id
+        _highlightStrand(backboneEntries, coneEntries, a.strand_id)
+        store.setState({ selectedObject: _strandSelection(a.strand_id) })
+        return
+      }
+    }
+
+    if (_surfHit && _surfDist <= Math.min(beadDist, coneDist, _atomDist)) {
+      // Surface hit → strand (vertices carry nearest-atom strand id). Route a
+      // surface-column representative through the bead handler so the auto-drill
+      // caps at strand (columnRepAt==='surface') and manual/Tab rules apply.
+      const strandId = getRegionSurfaceRenderer().strandIdAt(_surfHit.face)
+      if (strandId) {
+        const rep = _repEntryFor(backboneEntries, strandId, { rep: 'surface' })
+        if (rep) { _handleBeadHit(rep, backboneEntries, coneEntries, _prevOverhangId); return }
+        _restoreStrand()   // arc-rendered region (no beads) → strand select
+        _mode = 'strand'; _strandId = strandId
+        _highlightStrand(backboneEntries, coneEntries, strandId)
+        store.setState({ selectedObject: _strandSelection(strandId) })
+        return
+      }
+    }
+
+    // ── Cylinder LOD hit (active in global cylinder LOD, where beads are hidden,
+    // so beadDist/coneDist are Infinity). Drives the SAME drill as a bead hit but
+    // capped cluster → strand → domain (no bead level for cylinders). ──────────
     if (beadDist === Infinity && coneDist === Infinity && selectableTypes.strands) {
-      const cylMesh = designRenderer.getCylinderMesh()
-      if (cylMesh?.visible) {
-        const cylHits = raycaster.intersectObjects([cylMesh])
-        const cylHit0 = cylHits[0]
+      const cylMesh   = designRenderer.getCylinderMesh()
+      const ovhgCyl   = designRenderer.getOverhangCylinderMesh?.()
+      const bridgeCyl = designRenderer.getLinkerBridgeCylinderMesh?.()
+      const cylTargets = [cylMesh, ovhgCyl, bridgeCyl].filter(m => m?.visible)
+      if (cylTargets.length) {
+        const cylHit0 = raycaster.intersectObjects(cylTargets)[0]
         if (cylHit0 != null) {
-          const dom = designRenderer.getCylinderDomainAt(cylHit0.instanceId)
+          // ds-linker bridge cylinder → select the BRIDGE domain (route via a bead
+          // ON the bridge helix so drill/right-click target the bridge, independent
+          // of the linker's binding domains). ss linker (no beads) → strand select.
+          if (cylHit0.object === bridgeCyl) {
+            const br = designRenderer.getLinkerBridgeCylinderAt(cylHit0.instanceId)
+            if (br?.strandId && selectableTypes.staples) {
+              const rep = backboneEntries.find(e =>
+                e.nuc.strand_id === br.strandId && e.nuc.helix_id === br.bridgeHelixId)
+                ?? _repEntryFor(backboneEntries, br.strandId)
+              if (rep) { _handleBeadHit(rep, backboneEntries, coneEntries, _prevOverhangId); return }
+              _restoreStrand()
+              _mode = 'strand'; _strandId = br.strandId
+              _highlightStrand(backboneEntries, coneEntries, br.strandId)
+              store.setState({ selectedObject: _strandSelection(br.strandId) })
+              return
+            }
+          }
+          const dom = cylHit0.object === bridgeCyl ? null
+            : cylHit0.object === ovhgCyl
+              ? designRenderer.getOverhangCylinderDomainAt(cylHit0.instanceId)
+              : designRenderer.getCylinderDomainAt(cylHit0.instanceId)
           if (dom?.strandId) {
             const design = store.getState().currentDesign
             const strand = design?.strands?.find(s => s.id === dom.strandId)
             const isScaffold = strand?.strand_type === 'scaffold'
             if (isScaffold ? selectableTypes.scaffold : selectableTypes.staples) {
-              const hitStrandId = dom.strandId
-              _restoreStrand()       // clear any bead-mode selection
-              if (_cylStrandId !== hitStrandId) {
-                _clearCylinderSelection()
-                _cylStrandId = hitStrandId
-                _mode        = 'cylinder'
-                _strandId    = hitStrandId
-                designRenderer.highlightCylinderStrands([hitStrandId])
-                store.setState({ selectedObject: _strandSelection(hitStrandId) })
-              } else {
-                // Second click same strand → deselect
-                _clearAll()
-              }
-              return
+              // Route a domain representative through the unified handler — auto-drill
+              // caps at domain (columnRepAt==='cylinders'), manual/Tab rules apply.
+              const rep = _repEntryFor(backboneEntries, dom.strandId, { domainIndex: dom.domainIndex })
+              if (rep) { _handleBeadHit(rep, backboneEntries, coneEntries, _prevOverhangId); return }
             }
           }
         }
@@ -2811,96 +3108,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       // ── Bead hit ────────────────────────────────────────────────────────
       const hitEntry = selBackbone.find(e => e.instMesh === beadHit0.object && e.id === beadHit0.instanceId)
       if (!hitEntry) return
-      const hitStrandId = hitEntry.nuc.strand_id
-
-      if (_autoDrill()) { _autoDrillBead(hitEntry, hitStrandId, backboneEntries, coneEntries); return }
-
-      // ── Overhang filter active → select at overhang granularity ────────────
-      if (selectableTypes.overhangs && hitEntry.nuc.overhang_id) {
-        const ovhgId = hitEntry.nuc.overhang_id
-        if (_prevOverhangId !== ovhgId) {
-          _applyMultiOverhangHighlight([ovhgId])
-          store.setState({ multiSelectedOverhangIds: [ovhgId] })
-        }
-        // If same overhang clicked again → already cleared above → leave deselected
-        return
-      }
-
-      // ── Domain filter active → select at domain granularity ─────────────
-      if (selectableTypes.domains) {
-        const domainIdx = hitEntry.nuc.domain_index ?? 0
-        if (_mode === 'domain' && _strandId === hitStrandId && _domainIndex === domainIdx) {
-          // Same domain clicked again → deselect
-          _clearAll()
-        } else {
-          // New domain (same or different strand) → select it
-          _restoreStrand()
-          _mode     = 'domain'
-          _strandId = hitStrandId
-          _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-          _highlightDomain(domainIdx)
-          const design = store.getState().currentDesign
-          const domainObj = design?.strands?.find(s => s.id === hitStrandId)?.domains?.[domainIdx]
-          store.setState({
-            selectedObject: {
-              type: 'domain',
-              id:   `${hitStrandId}:${domainIdx}`,
-              data: {
-                strand_id:    hitStrandId,
-                domain_index: domainIdx,
-                helix_id:     domainObj?.helix_id    ?? hitEntry.nuc.helix_id,
-                direction:    domainObj?.direction   ?? hitEntry.nuc.direction,
-                overhang_id:  domainObj?.overhang_id ?? null,
-              },
-            },
-          })
-        }
-        return
-      }
-
-      if (_mode === 'none' || hitStrandId !== _strandId) {
-        // New strand → select strand
-        _mode      = 'strand'
-        _strandId  = hitStrandId
-        _coneEntry = null
-        _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-        store.setState({
-          selectedObject: _strandSelection(
-            hitStrandId ?? `unassigned:${hitEntry.nuc.helix_id}:${hitEntry.nuc.direction}`,
-            { helix_id: hitEntry.nuc.helix_id },
-          ),
-        })
-      } else if (_mode === 'strand') {
-        // Second click on same strand → select individual nucleotide
-        _mode = 'bead'
-        _highlightBead(hitEntry)
-        store.setState({
-          selectedObject: {
-            type: 'nucleotide',
-            id:   `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`,
-            data: hitEntry.nuc,
-          },
-        })
-      } else if (
-        _mode === 'bead' && _beadEntry &&
-        _beadEntry.nuc.helix_id  === hitEntry.nuc.helix_id &&
-        _beadEntry.nuc.bp_index  === hitEntry.nuc.bp_index &&
-        _beadEntry.nuc.direction === hitEntry.nuc.direction
-      ) {
-        // Same bead clicked while already in bead mode → deselect
-        _clearAll()
-      } else {
-        // Different bead in bead mode → select that bead
-        _mode = 'bead'
-        _highlightBead(hitEntry)
-        store.setState({
-          selectedObject: {
-            type: 'nucleotide',
-            id:   `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`,
-            data: hitEntry.nuc,
-          },
-        })
-      }
+      _handleBeadHit(hitEntry, backboneEntries, coneEntries, _prevOverhangId)
     }
   })
 
@@ -2953,8 +3161,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
     if (_multiDomainIds.length > 0) {
-      _clearMultiDomainSelection()
-      // Fall through — show strand menu if one is selected
+      // Capture refs BEFORE any teardown; the menu's apply() rebuilds the scene
+      // (clearing the lasso via the post-rebuild subscription).
+      _showMultiDomainMenu(e.clientX, e.clientY, [..._multiDomainIds], designRenderer)
+      return
     }
     if (_multiStrandIds.length > 0) {
       _showMultiMenu(e.clientX, e.clientY, _multiStrandIds, designRenderer)
@@ -3033,11 +3243,17 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       }
     }
 
+    // When a single DOMAIN is selected, scope the strand menu's Representation
+    // submenu to that domain (captured before any menu teardown).
+    const _domainRef = (_mode === 'domain' && _strandId != null && _domainIndex != null)
+      ? { strandId: _strandId, domainIndex: _domainIndex }
+      : null
+
     // If the click lands on the selected strand's own cone, show the color/delete menu immediately.
     // This must run before the overhang arrow check so that right-clicking a selected strand's
     // terminus always opens the strand menu, even when an extrude arrow is visible at that position.
     if ((_mode === 'strand' || _mode === 'domain') && hitCone?.strandId === _strandId) {
-      _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager)
+      _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager, _domainRef)
       return
     }
 
@@ -3067,7 +3283,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         }
       }
       if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && hitCone.strandId === _strandId) {
-        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager)
+        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager, _domainRef)
         return
       }
       // Cone sits on an overhang domain — the strand already terminates there,
@@ -3110,7 +3326,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       // strand. This keeps the "isolate from arc" flow working for
       // intra-strand arcs that have no associated record.
       if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && arcHit.strandId === _strandId) {
-        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager)
+        _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager, _domainRef)
         return
       }
       return
@@ -3123,7 +3339,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       onEmptyContextMenu?.(e.clientX, e.clientY)
       return
     }
-    _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager)
+    _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager, _domainRef)
   })
 
   // ── Re-apply highlights after scene rebuild ──────────────────────────────
@@ -3193,6 +3409,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         }
       }
 
+    } else if (_mode === 'domain' && _strandId) {
+      // Re-apply domain highlight (incl. cylinder glow) — e.g. after converting
+      // this domain to/from a cylinder, which rebuilds the scene.
+      _highlightStrand(backboneEntries, coneEntries, _strandId)
+      const di = newState.selectedObject?.data?.domain_index
+      if (di != null) _highlightDomain(di)
+
+    } else if (_mode === 'cluster' && _drillClusterId) {
+      _highlightCluster(_drillClusterId, backboneEntries)
+
     } else {
       _mode = 'none'
       store.setState({ selectedObject: null })
@@ -3242,6 +3468,17 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
      *  manual filter or presses Tab so the auto-state stops fighting the manual
      *  selection. Does not clear the current highlight. */
     resetDrill() { _resetDrill(); _emitDrillLevel(null) },
+
+    /** Tab drill-lock: pin the auto-drill to a fixed level so every click selects
+     *  at that level (no descent). Pass null to return to normal auto-drill.
+     *  Emits the level so the matching filter button reflects the lock. */
+    setDrillLock(level) {
+      _drillLock = level || null
+      _resetDrill()
+      _emitDrillLevel(_drillLock)
+    },
+    /** The active Tab drill-lock level, or null when in normal auto-drill. */
+    getDrillLock() { return _drillLock },
 
     /** Returns a copy of the current ctrl-click nucleotide selection. */
     getCtrlBeads() { return [..._ctrlBeads] },

@@ -68,6 +68,7 @@ API
 from __future__ import annotations
 
 import math
+from enum import Enum
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -93,6 +94,39 @@ CELL_TWIST_DEG: float = CELL_BP_DEFAULT * _LOOP_SKIP_TWIST_PER_BP_DEG  # ≈ 240
 # Per-cell modification limits (from Dietz et al. — 6≤T≤15 bp/turn constraint)
 # Cell bp count range: [4, 10], so |delta| ≤ 3 per cell.
 MAX_DELTA_PER_CELL: int = 3
+
+# ── Feasibility thresholds (twist density, bp/turn) ─────────────────────────────
+# HARD limit (block / "physically unachievable"): outside 6–15 bp/turn you cannot
+# place the marks — this is the geometric ceiling, equivalent to |δ| > 3 per cell
+# (MAX_DELTA_PER_CELL). Re-expressed here in bp/turn for the classifier.
+HARD_BP_PER_TURN_MIN: float = 6.0
+HARD_BP_PER_TURN_MAX: float = 15.0
+
+# SOFT limit (warn / "low folding yield expected"): outside 9–12 bp/turn the
+# structure can still be built but folds with reduced yield. From Lee Tin Wah
+# et al., "Automated design of 3D DNA origami with non-rasterized 2D curvature"
+# (Sci. Adv. 9, 2023): "placing crossovers such that all sections of the DNA
+# helices are between 9 and 12 bp per turn will help to maintain a high yield."
+# Tight rings "form poorly because of being highly strained due to the low
+# radius of curvature"; a 90° bend retains ~1–8% broken base pairs in MD.
+RECOMMENDED_BP_PER_TURN_MIN: float = 9.0
+RECOMMENDED_BP_PER_TURN_MAX: float = 12.0
+
+# Per-cell delta corresponding to the recommended window:
+#   bp/turn = (7 + δ) × 10.5 / 7  ⇒  9 bp/turn → δ = −1,  12 bp/turn → δ = +1.
+# So the high-yield band is roughly |δ_per_cell| ≤ 1 (vs the hard limit of 3).
+RECOMMENDED_DELTA_PER_CELL: int = 1
+
+# Float tolerance for inclusive boundary comparisons (exactly 9/12/6/15 bp/turn).
+_BP_PER_TURN_EPS: float = 1e-9
+
+
+class DeformationFeasibility(str, Enum):
+    """Verdict for a requested bend/twist's local loop/skip density."""
+
+    OK = "ok"        # inside the 9–12 bp/turn high-yield window
+    WARN = "warn"    # outside 9–12 but inside 6–15 → low folding yield expected
+    BLOCK = "block"  # outside 6–15 bp/turn → physically unachievable
 
 # ── Geometry helpers ──────────────────────────────────────────────────────────
 
@@ -314,6 +348,207 @@ def max_twist_deg(n_cells: int) -> float:
     return n_cells * MAX_DELTA_PER_CELL * _LOOP_SKIP_TWIST_PER_BP_DEG
 
 
+# ── Feasibility classification ─────────────────────────────────────────────────
+
+
+def classify_local_density(
+    signed_delta_per_cell: float,
+) -> tuple[DeformationFeasibility, float]:
+    """
+    Classify a *signed* per-cell loop/skip density into OK / WARN / BLOCK and
+    return the implied local twist density.
+
+    The 7-bp array cell becomes ``7 + signed_delta`` bp, so::
+
+        local_bp_per_turn = (CELL_BP_DEFAULT + signed_delta) × 10.5 / CELL_BP_DEFAULT
+
+    Sign matters because the high-yield window is asymmetric in delta-space:
+    deletions (δ < 0, overtwist) leave the 9–12 band at 9 bp/turn (δ = −1) while
+    insertions (δ > 0, undertwist) leave it at 12 bp/turn (δ = +1). The caller
+    must pass the worst (most-strained) helix's signed density.
+
+    Boundaries are inclusive: exactly 9/12 bp/turn → OK, exactly 6/15 → WARN.
+    """
+    local_bp_per_turn = (
+        (CELL_BP_DEFAULT + signed_delta_per_cell)
+        * _LOOP_SKIP_BP_PER_TURN
+        / CELL_BP_DEFAULT
+    )
+    if (
+        local_bp_per_turn < HARD_BP_PER_TURN_MIN - _BP_PER_TURN_EPS
+        or local_bp_per_turn > HARD_BP_PER_TURN_MAX + _BP_PER_TURN_EPS
+    ):
+        return DeformationFeasibility.BLOCK, local_bp_per_turn
+    if (
+        local_bp_per_turn < RECOMMENDED_BP_PER_TURN_MIN - _BP_PER_TURN_EPS
+        or local_bp_per_turn > RECOMMENDED_BP_PER_TURN_MAX + _BP_PER_TURN_EPS
+    ):
+        return DeformationFeasibility.WARN, local_bp_per_turn
+    return DeformationFeasibility.OK, local_bp_per_turn
+
+
+def _bend_params_to_radius_nm(curvature_deg_per_bp: float) -> float:
+    """
+    Convert a ``BendParams.curvature_deg_per_bp`` (κ) into a radius of curvature
+    in nm, matching the geometric layer exactly (``deformation.py`` uses
+    ``R = RISE_PER_BP / radians(κ)``).
+
+    Returns inf for a (near-)zero curvature — an unbent, infinite-radius arc.
+    The radius is plane-independent: κ alone fixes the curvature; the window
+    length [plane_a, plane_b] only scales the *total* bend angle, not the radius.
+    """
+    kappa_rad = math.radians(abs(curvature_deg_per_bp))
+    if kappa_rad < 1e-9:
+        return math.inf
+    return BDNA_RISE_PER_BP / kappa_rad
+
+
+def classify_deformation(
+    segment_helices: list[Helix],
+    plane_a_bp: int,
+    plane_b_bp: int,
+    op_type: str,
+    params,
+    *,
+    design: "Design | None" = None,
+) -> dict:
+    """
+    Predict the per-cell loop/skip density a bend or twist ``DeformationOp`` will
+    require, and classify it OK / WARN / BLOCK — WITHOUT mutating anything.
+
+    Reuses the exact conversion / per-cell math that ``twist_loop_skips`` and
+    ``bend_loop_skips`` use at realization time, so the warning always agrees
+    with what Apply will actually do (no drift). Never raises on WARN/BLOCK —
+    the verdict is carried in the returned ``status`` field.
+
+    Args:
+        segment_helices: helices spanning the deformation window.
+        plane_a_bp, plane_b_bp: bp window the op acts on.
+        op_type: 'twist' | 'bend'.
+        params: a ``TwistParams`` or ``BendParams``.
+        design: optional, for dsDNA-aware per-helix cell scoping (bend).
+
+    Returns a dict with keys: status, op_type, local_bp_per_turn,
+    max_abs_delta_per_cell, n_cells, requested_twist_deg, max_twist_deg,
+    requested_radius_nm, min_bend_radius_nm, message.
+    """
+    n_cells = len(_cell_boundaries(plane_a_bp, plane_b_bp))
+
+    result = {
+        "status": DeformationFeasibility.OK.value,
+        "op_type": op_type,
+        "local_bp_per_turn": _LOOP_SKIP_BP_PER_TURN,
+        "max_abs_delta_per_cell": 0.0,
+        "n_cells": n_cells,
+        "requested_twist_deg": None,
+        "max_twist_deg": None,
+        "requested_radius_nm": None,
+        "min_bend_radius_nm": None,
+        "message": "",
+    }
+
+    if n_cells == 0 or not segment_helices:
+        result["message"] = "Segment too short for any 7-bp array cell — no marks placed."
+        return result
+
+    if op_type == "twist":
+        # Mirror crud.py twist conversion: total_degrees | degrees_per_nm.
+        target_deg = getattr(params, "total_degrees", None)
+        if target_deg is None:
+            dpn = getattr(params, "degrees_per_nm", None)
+            if dpn is None:
+                result["message"] = "No twist specified."
+                return result
+            length_nm = n_cells * CELL_BP_DEFAULT * BDNA_RISE_PER_BP
+            target_deg = dpn * length_nm
+
+        total_mods = target_deg / _LOOP_SKIP_TWIST_PER_BP_DEG
+        # +twist (left-handed) → deletions → cell loses bp → signed delta < 0.
+        signed_delta = -total_mods / n_cells
+        status, bp_per_turn = classify_local_density(signed_delta)
+        max_twist = max_twist_deg(n_cells)
+
+        result.update(
+            status=status.value,
+            local_bp_per_turn=bp_per_turn,
+            max_abs_delta_per_cell=abs(total_mods) / n_cells,
+            requested_twist_deg=target_deg,
+            max_twist_deg=max_twist,
+        )
+        if status is DeformationFeasibility.BLOCK:
+            result["message"] = (
+                f"Twist {target_deg:.0f}° exceeds maximum {max_twist:.0f}° over "
+                f"{n_cells} cells ({bp_per_turn:.1f} bp/turn outside 6–15) — unachievable."
+            )
+        elif status is DeformationFeasibility.WARN:
+            result["message"] = (
+                f"Local density {bp_per_turn:.1f} bp/turn outside recommended "
+                f"9–12 — low folding yield expected."
+            )
+        return result
+
+    # ── bend ──
+    radius_nm = _bend_params_to_radius_nm(
+        getattr(params, "curvature_deg_per_bp", 0.0)
+    )
+    direction_deg = getattr(params, "direction_deg", 0.0)
+    min_radius = min_bend_radius_nm(segment_helices, plane_a_bp, plane_b_bp, direction_deg)
+    result["requested_radius_nm"] = None if math.isinf(radius_nm) else radius_nm
+    result["min_bend_radius_nm"] = None if math.isinf(min_radius) else min_radius
+
+    if math.isinf(radius_nm):
+        result["message"] = "No bend curvature specified."
+        return result
+
+    # Worst-case signed per-cell density across helices (same math as realization).
+    per_helix = _bend_per_cell_deltas(
+        segment_helices, plane_a_bp, plane_b_bp, radius_nm, direction_deg, design=design
+    )
+    worst_status = DeformationFeasibility.OK
+    worst_bp_per_turn = _LOOP_SKIP_BP_PER_TURN
+    worst_rank = (-1, 0.0)  # (severity, |deviation from 10.5|)
+    max_abs = 0.0
+    for _h_id, delta_sign, n_mods, h_cells in per_helix:
+        h_n_cells = len(h_cells)
+        if h_n_cells == 0 or n_mods == 0:
+            continue
+        signed_delta = delta_sign * (n_mods / h_n_cells)
+        max_abs = max(max_abs, abs(signed_delta))
+        status, bp_per_turn = classify_local_density(signed_delta)
+        # Rank by (severity, deviation) so local_bp_per_turn is the most-strained
+        # helix's density even when every helix is still OK.
+        rank = (_SEVERITY[status], abs(bp_per_turn - _LOOP_SKIP_BP_PER_TURN))
+        if rank > worst_rank:
+            worst_rank = rank
+            worst_status = status
+            worst_bp_per_turn = bp_per_turn
+
+    result.update(
+        status=worst_status.value,
+        local_bp_per_turn=worst_bp_per_turn,
+        max_abs_delta_per_cell=max_abs,
+    )
+    if worst_status is DeformationFeasibility.BLOCK:
+        min_txt = f"{min_radius:.1f}" if not math.isinf(min_radius) else "∞"
+        result["message"] = (
+            f"Bend radius {radius_nm:.1f} nm below minimum {min_txt} nm "
+            f"({worst_bp_per_turn:.1f} bp/turn outside 6–15) — unachievable."
+        )
+    elif worst_status is DeformationFeasibility.WARN:
+        result["message"] = (
+            f"Local density {worst_bp_per_turn:.1f} bp/turn outside recommended "
+            f"9–12 — low folding yield expected."
+        )
+    return result
+
+
+_SEVERITY = {
+    DeformationFeasibility.OK: 0,
+    DeformationFeasibility.WARN: 1,
+    DeformationFeasibility.BLOCK: 2,
+}
+
+
 # ── Twist loop/skip computation ────────────────────────────────────────────────
 
 
@@ -414,6 +649,88 @@ def twist_loop_skips(
 # ── Bend loop/skip computation ─────────────────────────────────────────────────
 
 
+def _bend_per_cell_deltas(
+    segment_helices: list[Helix],
+    plane_a_bp: int,
+    plane_b_bp: int,
+    radius_nm: float,
+    direction_deg: float = 0.0,
+    *,
+    design: "Design | None" = None,
+) -> list[tuple[str, int, int, list[tuple[int, int]]]]:
+    """
+    Compute, per helix, the loop/skip count required for a bend of *radius_nm*,
+    WITHOUT validating limits or placing marks.
+
+    Shared by ``bend_loop_skips`` (which validates + Bresenham-distributes) and
+    ``classify_deformation`` (which classifies the density) so the two never
+    disagree about what a given bend requires.
+
+    Returns a list of ``(helix_id, delta_sign, n_mods, h_cells)`` for every helix
+    that needs at least one modification. ``delta_sign`` is +1 (insertions/outer
+    arc) or −1 (deletions/inner arc); ``n_mods`` is the total bp change; ``h_cells``
+    is that helix's list of (start, end) array cells.
+    """
+    global_cells = _cell_boundaries(plane_a_bp, plane_b_bp)
+    n_cells = len(global_cells)
+    if n_cells == 0 or not segment_helices:
+        return []
+
+    # Pre-compute per-helix active cells so they can be reused for centroid.
+    if design is not None:
+        h_cells_map: dict[str, list[tuple[int, int]]] | None = {
+            h.id: _cells_from_active_intervals(
+                _active_intervals_for_helices(design, {h.id}),
+                plane_a_bp, plane_b_bp,
+            )
+            for h in segment_helices
+        }
+        active_for_centroid = [h for h in segment_helices if h_cells_map[h.id]]
+        centroid_helices = active_for_centroid if active_for_centroid else segment_helices
+    else:
+        h_cells_map = None
+        centroid_helices = segment_helices
+
+    centroid, tangent = _bundle_centroid_and_tangent(centroid_helices)
+
+    # Bend direction unit vector in the cross-section plane.
+    phi = math.radians(direction_deg)
+    raw_bend = np.array([math.cos(phi), math.sin(phi), 0.0])
+    raw_bend = raw_bend - np.dot(raw_bend, tangent) * tangent
+    bn = np.linalg.norm(raw_bend)
+    if bn < 1e-12:
+        return []  # Degenerate: bend direction parallel to axis
+    bend_hat = raw_bend / bn
+
+    curvature = 1.0 / radius_nm
+
+    out: list[tuple[str, int, int, list[tuple[int, int]]]] = []
+    for h in segment_helices:
+        h_cells = h_cells_map[h.id] if h_cells_map is not None else global_cells
+        h_n_cells = len(h_cells)
+        if h_n_cells == 0:
+            continue
+
+        cs_offset = _helix_cross_section_offset(h, centroid, tangent)
+        r_i = float(np.dot(cs_offset, bend_hat))  # nm; signed
+
+        # Helix's own arc length so partially-spanning helices get proportionally
+        # fewer modifications instead of clustering them at the left edge.
+        h_L_nom = h_n_cells * CELL_BP_DEFAULT * BDNA_RISE_PER_BP  # nm
+
+        # bend_hat points toward the centre of curvature (inner side); r_i > 0 is
+        # the inner (shorter) arc → needs deletions, so negate delta_L.
+        delta_L = -h_L_nom * r_i * curvature
+        delta_bp_total = round(delta_L / BDNA_RISE_PER_BP)
+        if delta_bp_total == 0:
+            continue
+
+        delta_sign = 1 if delta_bp_total > 0 else -1
+        out.append((h.id, delta_sign, abs(delta_bp_total), h_cells))
+
+    return out
+
+
 def bend_loop_skips(
     segment_helices: list[Helix],
     plane_a_bp: int,
@@ -449,88 +766,23 @@ def bend_loop_skips(
         ValueError if the required modification density at any helix exceeds
         ±3 bp/cell (radius_nm < min_bend_radius_nm).
     """
-    global_cells = _cell_boundaries(plane_a_bp, plane_b_bp)
-    n_cells = len(global_cells)
-
-    if n_cells == 0 or not segment_helices:
-        return {h.id: [] for h in segment_helices}
-
-    # Pre-compute per-helix active cells so they can be reused for centroid.
-    if design is not None:
-        h_cells_map: dict[str, list[tuple[int, int]]] = {
-            h.id: _cells_from_active_intervals(
-                _active_intervals_for_helices(design, {h.id}),
-                plane_a_bp, plane_b_bp,
-            )
-            for h in segment_helices
-        }
-        # Centroid from only the helices that have active DNA in the bend plane.
-        active_for_centroid = [h for h in segment_helices if h_cells_map[h.id]]
-        centroid_helices = active_for_centroid if active_for_centroid else segment_helices
-    else:
-        h_cells_map = None
-        centroid_helices = segment_helices
-
-    centroid, tangent = _bundle_centroid_and_tangent(centroid_helices)
-
-    # Bend direction unit vector in the cross-section plane
-    phi = math.radians(direction_deg)
-    raw_bend = np.array([math.cos(phi), math.sin(phi), 0.0])
-    raw_bend = raw_bend - np.dot(raw_bend, tangent) * tangent
-    bn = np.linalg.norm(raw_bend)
-    if bn < 1e-12:
-        # Degenerate: bend direction parallel to axis — nothing to do
-        return {h.id: [] for h in segment_helices}
-    bend_hat = raw_bend / bn
-
-    curvature = 1.0 / radius_nm
-
     result: dict[str, list[LoopSkip]] = {h.id: [] for h in segment_helices}
 
-    for h in segment_helices:
-        # Retrieve pre-computed active cells, or fall back to global cells.
-        if h_cells_map is not None:
-            h_cells = h_cells_map[h.id]
-        else:
-            h_cells = global_cells
+    for h_id, delta_sign, n_mods, h_cells in _bend_per_cell_deltas(
+        segment_helices, plane_a_bp, plane_b_bp, radius_nm, direction_deg, design=design
+    ):
         h_n_cells = len(h_cells)
-        if h_n_cells == 0:
-            continue
 
-        cs_offset = _helix_cross_section_offset(h, centroid, tangent)
-        r_i = float(np.dot(cs_offset, bend_hat))  # nm; signed
-
-        # Use the helix's own arc length (not the global segment length) so that
-        # helices spanning only part of [plane_a_bp, plane_b_bp] receive
-        # proportionally fewer modifications instead of clustering them at the
-        # helix's left edge.
-        h_L_nom = h_n_cells * CELL_BP_DEFAULT * BDNA_RISE_PER_BP  # nm
-
-        # Required total length change for this helix (nm).
-        # bend_hat points toward the centre of curvature (concave/inner side),
-        # so r_i > 0 means the helix is on the INNER (shorter) arc → needs skips.
-        # Negate so that inner helices get negative delta_L (deletions).
-        delta_L = -h_L_nom * r_i * curvature
-
-        # Convert to integer bp modifications (round to nearest)
-        delta_bp_total = round(delta_L / BDNA_RISE_PER_BP)
-
-        if delta_bp_total == 0:
-            continue
-
-        delta_sign = 1 if delta_bp_total > 0 else -1
-        n_mods = abs(delta_bp_total)
-
-        # Per-cell density check (using this helix's cell count)
+        # Per-cell density check (using this helix's cell count).
         n_del_cell = n_mods / h_n_cells if delta_sign < 0 else 0.0
         n_ins_cell = n_mods / h_n_cells if delta_sign > 0 else 0.0
         validate_loop_skip_limits(
             n_del_cell,
             n_ins_cell,
-            label=f"helix {h.id} R={radius_nm:.1f}nm dir={direction_deg:.0f}°",
+            label=f"helix {h_id} R={radius_nm:.1f}nm dir={direction_deg:.0f}°",
         )
 
-        # Bresenham distribution across this helix's cells
+        # Bresenham distribution across this helix's cells.
         cell_mod_counts = [0] * h_n_cells
         for i in range(n_mods):
             cell_idx = (i * h_n_cells) // n_mods
@@ -543,9 +795,9 @@ def bend_loop_skips(
             cell_len = cell_end - cell_start
             for j in range(count):
                 bp_pos = cell_start + (j * cell_len) // count
-                result[h.id].append(LoopSkip(bp_index=bp_pos, delta=delta_sign))
+                result[h_id].append(LoopSkip(bp_index=bp_pos, delta=delta_sign))
 
-        result[h.id].sort(key=lambda ls: ls.bp_index)
+        result[h_id].sort(key=lambda ls: ls.bp_index)
 
     return result
 

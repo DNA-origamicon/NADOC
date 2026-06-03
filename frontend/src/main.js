@@ -79,6 +79,7 @@ import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
 // InstancedMeshes for the export-only high-detail swap (see _withHighDetailGeometry).
 import { SPHERE_GEO as ATOM_SPHERE_GEO, CYLINDER_GEO as BOND_CYL_GEO } from './scene/atomistic_renderer/geometry_builder.js'
 import { initSurfaceRenderer }     from './scene/surface_renderer.js'
+import { repColumnsByRep, overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './scene/representation_overrides.js'
 import { initSpreadsheet, getStapleColorOrder } from './ui/spreadsheet.js'
 import { initAssemblyPanel }        from './ui/assembly_panel.js'
 import { initAssemblyContextMenu }  from './ui/assembly_context_menu.js'
@@ -273,6 +274,8 @@ async function main() {
 
     window.__NADOC_DBG__ = {
       scene, camera, renderer, assemblyRenderer, store, THREE, controls, animateCameraTo,
+      designRenderer,
+      get unfoldView() { return unfoldView },
 
       /**
        * Track-B diagnostic. Pre-conditions:
@@ -741,6 +744,16 @@ async function main() {
     }
   }
 
+  // Red "pinned" border on the level button matching the active Tab drill-lock
+  // (level = 'cluster'|'strand'|'domain'|'bead'|'xover', or null to clear all).
+  function _reflectLockOnButtons(level) {
+    const pinnedKey = level ? _LEVEL_BTN[level] : null
+    for (const dk of Object.values(_LEVEL_BTN)) {
+      const b = document.querySelector(`#select-filter .sf-btn[data-key="${dk}"]`)
+      if (b) b.classList.toggle('sf-pinned', dk === pinnedKey)
+    }
+  }
+
   // Clear all manual pins and restore the neutral auto-drill baseline (scaffold/
   // staples/strands on, everything else off). Also fixes button .active classes
   // so they don't show stale manual state.
@@ -765,6 +778,11 @@ async function main() {
   // ── Selection manager ───────────────────────────────────────────────────────
   const selectionManager = initSelectionManager(canvas, camera, designRenderer, {
     getProteinRenderer: () => proteinRenderer,
+    // Per-region overlay renderers (mixed rep) — lazy getters resolve after they're
+    // created below; used for atom/surface picking in atomistic/surface regions.
+    getRegionVdwRenderer:       () => regionVdwRenderer,
+    getRegionBallstickRenderer: () => regionBallstickRenderer,
+    getRegionSurfaceRenderer:   () => regionSurfaceRenderer,
     isManualSelect: _isManualSelect,
     onDrillLevel: _reflectDrillLevel,
     onNick: async ({ helixId, bpIndex, direction }) => {
@@ -2140,6 +2158,14 @@ async function main() {
   const _proteinCentroid = (id) =>
     proteinRenderer.centroidOf(a => a.helix_id === `__protein__${id}`)
 
+  // ── Per-region overlay renderers (mixed representation) ─────────────────────
+  // A focal domain/strand/cluster can be pinned to surface / vdw / ballstick; the
+  // helix renderer auto-hides the CG beads/cylinders at those columns and these
+  // overlays draw the region. Two atomistic instances because vdw and ballstick
+  // are distinct geometry and each renderer holds a single mode.
+  const regionVdwRenderer       = initAtomisticRenderer(scene)
+  const regionBallstickRenderer = initAtomisticRenderer(scene)
+
   // Transform gizmo for the selected protein. Live preview during drag; on
   // drag-end it commits a gizmo_move (which syncs the design → the currentDesign
   // subscription below re-renders + re-anchors the gizmo). No onCommitted needed.
@@ -2236,6 +2262,12 @@ async function main() {
 
   // ── Surface renderer (VdW / SES) ─────────────────────────────────────────────
   const surfaceRenderer = initSurfaceRenderer(scene)
+  const regionSurfaceRenderer = initSurfaceRenderer(scene)   // per-region SURFACE overlay
+  if (window.__NADOC_DBG__) {
+    window.__NADOC_DBG__.regionVdwRenderer       = regionVdwRenderer
+    window.__NADOC_DBG__.regionBallstickRenderer = regionBallstickRenderer
+    window.__NADOC_DBG__.regionSurfaceRenderer   = regionSurfaceRenderer
+  }
   let _surfaceDataCache   = null   // cached API response; null = needs re-fetch
   let _surfaceProbeRadius = 0.28   // current probe radius for SES (nm)
   let _surfaceMode        = 'off'  // mirrors store.surfaceMode
@@ -2549,16 +2581,27 @@ async function main() {
   function _setCGVisible(visible) {
     const root = designRenderer.getHelixCtrl()?.root
     if (root) root.visible = visible   // extra-base beads/slabs are children of root
-    // Arc lines gate on LOD too: hidden in the coarse cylinders/sticks rep, where
-    // they'd otherwise show through empty domain gaps (e.g. teeth) now that the
-    // cylinders no longer occlude them. Without the `_lastDetailLevel < 2` guard,
-    // ANY path that re-shows CG geometry while in cylinder rep re-shows the arcs.
-    unfoldView?.setArcsVisible(visible && _lastDetailLevel < 2)
+    // Arc lines track design visibility; the coarse cylinders/sticks LOD no longer
+    // hides the whole group — instead each arc is collapsed per-region by the
+    // mixed-representation rep gate (unfold_view._arcRepHidden), so a region pinned
+    // to full still shows its crossovers under a global cylinder LOD.
+    unfoldView?.setArcsVisible(visible)
+    unfoldView?.refreshArcVisibility()
     overhangLinkArcs?.setVisible?.(visible)
   }
 
   function _atomisticUrl() {
     return '/api/design/atomistic'
+  }
+
+  // Lazily fetch + cache the all-atom model. Shared by the global atomistic mode
+  // and the per-region atomistic overlays.
+  async function _ensureAtomData() {
+    if (_atomDataCache) return _atomDataCache
+    const resp = await fetch(_atomisticUrl(), { headers: docHeaders() })
+    if (!resp.ok) { console.error('Atomistic fetch failed:', resp.status); return null }
+    _atomDataCache = await resp.json()
+    return _atomDataCache
   }
 
   async function _applyAtomisticMode(mode) {
@@ -2569,17 +2612,13 @@ async function main() {
     if (mode !== 'off' && !_atomDataCache) {
       showPersistentToast('Loading atomistic model…')
       try {
-        const resp = await fetch(_atomisticUrl(), { headers: docHeaders() })
-        if (!resp.ok) {
-          dismissToast()
-          console.error('Atomistic fetch failed:', resp.status)
-          return
+        const data = await _ensureAtomData()
+        if (data) {
+          atomisticRenderer.update(data)
+          _refreshAtomColors()
+          const { selectedObject, multiSelectedStrandIds } = store.getState()
+          atomisticRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
         }
-        _atomDataCache = await resp.json()
-        atomisticRenderer.update(_atomDataCache)
-        _refreshAtomColors()
-        const { selectedObject, multiSelectedStrandIds } = store.getState()
-        atomisticRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
       } catch (e) {
         console.error('Atomistic fetch error:', e)
       } finally {
@@ -2610,6 +2649,100 @@ async function main() {
       newState.selectedObject,
       newState.multiSelectedStrandIds ?? [],
     )
+  })
+
+  // ── Per-region overlay coordinators (mixed representation) ──────────────────
+  // Drive the surface / vdw / ballstick overlays from the design's representation
+  // overrides. The helix renderer auto-hides CG at those columns; these draw them.
+
+  // Filter the cached all-atom model to a set of columns ("helix:bp"). Keeps each
+  // atom's original `serial` so ballstick bonds (serial pairs) resolve without
+  // renumbering — bonds are filtered to pairs whose both endpoints survive.
+  function _filterAtomData(colSet, withBonds) {
+    const atoms = (_atomDataCache?.atoms ?? []).filter(a => colSet.has(`${a.helix_id}:${a.bp_index}`))
+    let bonds = []
+    if (withBonds && Array.isArray(_atomDataCache?.bonds)) {
+      const live = new Set(atoms.map(a => a.serial))
+      bonds = _atomDataCache.bonds.filter(([i, j]) => live.has(i) && live.has(j))
+    }
+    return { atoms, bonds, element_meta: _atomDataCache?.element_meta }
+  }
+
+  async function _applyRegionAtomisticOverlays(design) {
+    const { vdw, ballstick } = repColumnsByRep(design)
+    if (!vdw.size && !ballstick.size) {
+      regionVdwRenderer.dispose()
+      regionBallstickRenderer.dispose()
+      return
+    }
+    const data = await _ensureAtomData()
+    if (!data) return
+    // Always dispose-then-update — update() does not pre-clear element meshes.
+    regionVdwRenderer.dispose()
+    if (vdw.size) { regionVdwRenderer.update(_filterAtomData(vdw, false)); regionVdwRenderer.setMode('vdw') }
+    regionBallstickRenderer.dispose()
+    if (ballstick.size) { regionBallstickRenderer.update(_filterAtomData(ballstick, true)); regionBallstickRenderer.setMode('ballstick') }
+    const { selectedObject, multiSelectedStrandIds } = store.getState()
+    regionVdwRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
+    regionBallstickRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
+  }
+
+  // Surface overlay — debounced + signature-cached (surface compute is slow).
+  let _regionSurfaceSig   = null
+  let _regionSurfaceTimer = null
+  function _surfaceSegments(design) {
+    const segs = []
+    for (const ov of design?.representation_overrides ?? []) {
+      if (ov.representation === 'surface') for (const s of ov.segments ?? []) segs.push(s)
+    }
+    return segs
+  }
+  async function _recomputeRegionSurface(design) {
+    const segs = _surfaceSegments(design)
+    if (!segs.length) { regionSurfaceRenderer.dispose(); return }
+    showPersistentToast('Computing region surface…')
+    try {
+      const colorMode = store.getState().surfaceColorMode
+      const mesh = await api.getRegionSurface(segs, { colorMode })
+      regionSurfaceRenderer.update(mesh, colorMode, 'dna-surface-region')
+      regionSurfaceRenderer.applyStrandColors(_getAtomStrandColors())
+      regionSurfaceRenderer.setOpacity(store.getState().surfaceOpacity)
+    } catch (e) {
+      console.error('Region surface error:', e)
+    } finally {
+      dismissToast()
+    }
+  }
+  function _applyRegionSurfaceOverlay(design, force = false) {
+    const sig = _surfaceSegments(design)
+      .map(s => `${s.helix_id}:${s.bp_start}-${s.bp_end}`).sort().join('|')
+    if (!force && sig === _regionSurfaceSig) return
+    _regionSurfaceSig = sig
+    if (_regionSurfaceTimer) clearTimeout(_regionSurfaceTimer)
+    _regionSurfaceTimer = setTimeout(() => _recomputeRegionSurface(design), 400)
+  }
+
+  // Override change OR geometry/design rebuild → re-apply overlays. (Registered
+  // AFTER the atomistic cache-invalidation sub so `_atomDataCache` is null'd first
+  // on a design change, forcing a re-fetch.) Surface recompute is forced when the
+  // geometry moved; otherwise the signature-cache skips unchanged columns.
+  store.subscribe((n, p) => {
+    const designChanged = n.currentDesign   !== p.currentDesign
+    const geoChanged    = n.currentGeometry !== p.currentGeometry ||
+                          n.currentHelixAxes !== p.currentHelixAxes
+    if (!designChanged && !geoChanged) return
+    _applyRegionAtomisticOverlays(n.currentDesign)
+    _applyRegionSurfaceOverlay(n.currentDesign, geoChanged)
+  })
+
+  // Selection change → atomistic highlight + surface strand recolor (no recompute).
+  store.subscribe((n, p) => {
+    if (n.selectedObject === p.selectedObject &&
+        n.multiSelectedStrandIds === p.multiSelectedStrandIds) return
+    const sel = n.selectedObject, multi = n.multiSelectedStrandIds ?? []
+    if (regionVdwRenderer.getMode() !== 'off')       regionVdwRenderer.highlight(sel, multi)
+    if (regionBallstickRenderer.getMode() !== 'off') regionBallstickRenderer.highlight(sel, multi)
+    if (regionSurfaceRenderer.getMode() === 'on')    regionSurfaceRenderer.applyStrandColors(_getAtomStrandColors())
   })
 
   // ── Overhang sequences panel ─────────────────────────────────────────────────
@@ -3810,6 +3943,18 @@ Typical debugging workflow for "reverts to 3D" bug:
         try { await api.generateBinderForOverhang(ovhgIds[0]) } catch { /* lastError */ }
       }))
     }
+    // Representation override for the overhang region(s).
+    menu.appendChild(_mSep())
+    menu.appendChild(createRepresentationMenuItem({
+      dismiss: _dismissOvhgMenu,
+      apply: (rep) => {
+        const design = store.getState().currentDesign
+        const segs = overhangsToSegments(design, ovhgIds)
+        const next = editOverridesForSegments(design?.representation_overrides ?? [], segs, rep)
+        api.saveRepresentationOverrides(next)
+      },
+    }))
+
     // Always-available entry into the manager — passes whichever overhang(s)
     // were right-clicked through as the prepopulation.
     menu.appendChild(_mSep())
@@ -5918,7 +6063,16 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!result) {
       showToast('Add Loops/Skips failed: ' + (store.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
     } else {
-      showToast('Loops/skips added.')
+      showToast(
+        'Loops/skips added — method of Dietz, Douglas & Shih, Science 2009 (doi:10.1126/science.1174251).',
+        {
+          duration: 8000,
+          action: {
+            label: 'View paper',
+            onClick: () => window.open('https://doi.org/10.1126/science.1174251', '_blank', 'noopener'),
+          },
+        },
+      )
     }
   })
 
@@ -6514,6 +6668,13 @@ Typical debugging workflow for "reverts to 3D" bug:
         const { deformToolActive, translateRotateActive } = store.getState()
         if (deformToolActive || translateRotateActive) return
 
+        // Manual filter pins and the Tab drill-lock are mutually exclusive — a
+        // manual click cancels any active drill-lock first.
+        if (selectionManager?.getDrillLock?.()) {
+          selectionManager.setDrillLock(null)
+          _reflectLockOnButtons(null)
+        }
+
         // Clicking a filter button enters/adjusts manual mode: pin it (red border)
         // and apply traditional gating. Un-pinning the last button restores auto-drill.
         const wasPinned = _manualFilters.has(dataKey)
@@ -7007,18 +7168,27 @@ Typical debugging workflow for "reverts to 3D" bug:
     handler() { _toggleCadnano() },
   })
 
-  // Tab — clear any manually-pinned selection filters and return to auto-drill.
+  // Tab — cycle-lock the selection DRILL LEVEL: auto-drill → cluster → strand →
+  // domain → ends(bead) → crossover → auto-drill. The lock pins the auto-drill to
+  // a fixed level (every click selects at that level, no descent on repeat clicks),
+  // reflected as a pinned highlight on the matching filter button. Escape (or
+  // cycling past crossover) returns to auto-drill.
   // Skipped when the move/rotate gizmo is active (cluster_gizmo.js owns Tab there).
+  const _TAB_LOCKS  = [null, 'cluster', 'strand', 'domain', 'bead', 'xover']
+  const _LOCK_LABEL = { cluster: 'cluster', strand: 'strand', domain: 'domain', bead: 'ends', xover: 'crossover' }
   registerShortcut({
     key: 'Tab', ctrl: false,
-    description: 'Reset selection filters to auto-drill',
+    description: 'Cycle selection lock (cluster → strand → domain → ends → crossover)',
     blockedInInput: true,
     blockedWhen: () => _translateRotateActive,
     handler(e) {
       e.preventDefault()
-      const hadPins = _isManualSelect()
-      _resetToAutoBaseline()
-      showToast(hadPins ? 'Auto-drill selection' : 'Selection: auto-drill')
+      const cur  = selectionManager.getDrillLock?.() ?? null
+      const next = _TAB_LOCKS[(_TAB_LOCKS.indexOf(cur) + 1) % _TAB_LOCKS.length]
+      _resetToAutoBaseline()                 // clear manual pins + restore baseline selectability
+      selectionManager.setDrillLock?.(next)  // null = back to normal auto-drill
+      _reflectLockOnButtons(next)
+      showToast(next ? `Selection locked: ${_LOCK_LABEL[next]}` : 'Selection: auto-drill')
     },
   })
 
@@ -7331,6 +7501,15 @@ Typical debugging workflow for "reverts to 3D" bug:
         _clearSliceHighlights()
         _setMenuToggle('menu-view-slice', false)
         document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      } else if (selectionManager.getDrillLock?.()) {
+        // No active tool/popup — a Tab drill-lock returns to auto-drill.
+        selectionManager.setDrillLock(null)
+        _reflectLockOnButtons(null)
+        showToast('Selection: auto-drill')
+      } else if (_isManualSelect()) {
+        // A manually-pinned selection filter returns to auto-drill.
+        _resetToAutoBaseline()
+        showToast('Selection: auto-drill')
       }
     },
   })
@@ -10275,7 +10454,8 @@ Typical debugging workflow for "reverts to 3D" bug:
     bluntEnds.setVisible(visible)
     endExtrudeArrows.setVisible(visible)
     jointRenderer.setVisible(visible)
-    unfoldView.setArcsVisible(visible && _lastDetailLevel < 2)  // arc lines (_arcGroup); gated on LOD too (hidden in cylinders/sticks)
+    unfoldView.setArcsVisible(visible)  // arc lines (_arcGroup); LOD/rep gating is per-arc (refreshArcVisibility)
+    unfoldView.refreshArcVisibility()
     overhangLinkArcs?.setVisible?.(visible)
   }
 
@@ -14148,7 +14328,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         _lastDetailLevel = lvl
         _lodMode = repr
         designRenderer.setDetailLevel(lvl)
-        unfoldView?.setArcsVisible(lvl < 2)
+        unfoldView?.refreshArcVisibility()
       }
     } else if (repr === 'vdw' || repr === 'ballstick') {
       await _applyAtomisticMode(repr)
@@ -14209,6 +14389,13 @@ Typical debugging workflow for "reverts to 3D" bug:
 
       // ── Design mode: existing single-design behaviour ────────────────────────
       if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
+      // Choosing a global representation (View → Representation menu or an F-key) is
+      // a master reset: it clears any per-region representation overrides so the new
+      // global wins everywhere. Internal _setRepresentation calls (reset-to-full,
+      // hull-prism auto-switch on edit) bypass this handler and leave overrides intact.
+      if (currentDesign.representation_overrides?.length) {
+        await api.clearRepresentationOverrides()
+      }
       await _setRepresentation(repr)
     })
   }
@@ -14231,10 +14418,15 @@ Typical debugging workflow for "reverts to 3D" bug:
         e.preventDefault()
         const btn = document.getElementById(id)
         if (!btn || btn.disabled) return
-        // is-checked means this representation is already the active one →
-        // repeat press cycles its coloring; otherwise switch to it.
-        if (btn.classList.contains('is-checked')) _cycleColoringForRepr(repr)
-        else                                      btn.click()
+        // is-checked means this representation is already the active GLOBAL one →
+        // repeat press cycles its coloring. EXCEPT when per-region representation
+        // overrides are active: the displayed structure then diverges from the
+        // nominal global rep, so the press should reset to the clean global rep
+        // (btn.click() clears overrides) rather than cycle coloring.
+        const _hasRepOverrides =
+          (store.getState().currentDesign?.representation_overrides?.length ?? 0) > 0
+        if (btn.classList.contains('is-checked') && !_hasRepOverrides) _cycleColoringForRepr(repr)
+        else                                                           btn.click()
       },
     })
   })
@@ -15537,7 +15729,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         _lastDetailLevel = targetLevel
         designRenderer.setDetailLevel(targetLevel)
         overhangLinkArcs?.setDetailLevel?.(targetLevel)
-        unfoldView.setArcsVisible(targetLevel < 2)
+        unfoldView.refreshArcVisibility()
       }
     }
 

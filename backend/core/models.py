@@ -807,6 +807,43 @@ class PlateLayout(BaseModel):
     tubes: List[TubeAssignment] = Field(default_factory=list)
 
 
+# ── Per-region representation overrides (display-only annotation) ─────────────
+
+
+class RepresentationSegment(BaseModel):
+    """A contiguous run of base-pair COLUMNS on one helix (both strands), in the
+    helix's bp index space. Inclusive [bp_start, bp_end]. Position-based so it
+    survives strand break/merge/crossover edits (which reassign strand ids but
+    leave nucleotide positions in place)."""
+    helix_id: str
+    bp_start: int   # inclusive
+    bp_end: int     # inclusive
+
+
+class RepresentationOverride(BaseModel):
+    """A render representation pinned onto a set of duplex COLUMNS (helix + bp
+    ranges), so different regions of ONE structure can render at different detail
+    — e.g. a focal duplex at full bead-and-base detail against a cylinder-bundle
+    background, for publication figures.
+
+    The rep applies to BOTH strands at each covered column: setting a region to
+    'cylinders' hides every bead/slab there (staple AND scaffold) and shows the
+    duplex cylinder; 'full' shows beads/slabs. 'surface'/'vdw'/'ballstick' hide
+    the coarse-grained geometry at those columns and are drawn by dedicated overlay
+    renderers (molecular surface / all-atom). Stored as positions (not strand ids)
+    so it survives break/crossover edits.
+
+    Display-only metadata persisted in the .nadoc file; never affects topology or
+    geometry. Overrides apply on top of the design's global representation, in
+    list order; when two overrides cover the same column, the later one wins.
+
+    New field, default empty → old .nadoc files load unchanged (no migration)."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = ""
+    representation: Literal["full", "cylinders", "surface", "vdw", "ballstick"] = "full"
+    segments: List[RepresentationSegment] = Field(default_factory=list)
+
+
 # ── Deformation models (geometric layer, Phase 6) ─────────────────────────────
 
 
@@ -1756,6 +1793,10 @@ class Design(BaseModel):
     tm_settings: TmSettings = Field(default_factory=TmSettings)
     extensions: List[StrandExtension] = Field(default_factory=list)
     plate_layout: Optional[PlateLayout] = None  # IDT plate/tube ordering (display-only)
+    # Per-region representation overrides: pin a render rep (full / cylinders) onto
+    # selected strands or clusters so a focal region can show full detail against a
+    # coarser background. Display-only; never affects topology or geometry.
+    representation_overrides: List[RepresentationOverride] = Field(default_factory=list)
     photoproduct_junctions: List[PhotoproductJunction] = Field(default_factory=list)
     crossovers: List[Crossover] = Field(default_factory=list)
     forced_ligations: List[ForcedLigation] = Field(default_factory=list)

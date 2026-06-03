@@ -10,6 +10,7 @@
 
 import { BDNA_RISE_PER_BP } from '../constants.js'
 import { store } from '../state/store.js'
+import { validateDeformation } from '../api/client.js'
 import {
   setDeformSessionClusterIds,
   getDeformDefaultClusterIds,
@@ -45,11 +46,13 @@ let _clusterEmpty   = null  // <div id="def-cluster-empty-msg">
 let _clusterAllBtn  = null
 let _clusterNoneBtn = null
 let _bendHint       = null  // <div id="def-bend-hint"> — κ + closure hint
+let _feasibility    = null  // <div id="def-feasibility"> — yield/achievability readout
 
 let _callbacks   = null  // { onPreview, onConfirm, onCancel, onPlaneChanged }
 let _toolType    = null  // 'twist' | 'bend'
 let _dragging    = false
 let _selectedClusterIds = []  // current cluster scope (mirrors checkbox state)
+let _validateTimer = null     // debounce handle for the live /validate POST
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -90,6 +93,7 @@ export function initBendTwistPopup(callbacks) {
   _clusterAllBtn  = document.getElementById('def-cluster-all-btn')
   _clusterNoneBtn = document.getElementById('def-cluster-none-btn')
   _bendHint       = document.getElementById('def-bend-hint')
+  _feasibility    = document.getElementById('def-feasibility')
 
   if (!_popup) return   // DOM not ready
 
@@ -134,12 +138,14 @@ export function initBendTwistPopup(callbacks) {
     _planeABp.value = bp
     if (_planeANm) _planeANm.textContent = (bp * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
     _callbacks?.onPlaneChanged?.('A', bp)
+    _fireValidate()  // window width changed → re-check achievability
   })
   _planeBBp?.addEventListener('change', () => {
     const bp = Math.max(0, Math.round(parseFloat(_planeBBp.value) || 0))
     _planeBBp.value = bp
     if (_planeBNm) _planeBNm.textContent = (bp * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
     _callbacks?.onPlaneChanged?.('B', bp)
+    _fireValidate()  // window width changed → re-check achievability
   })
 
   // Preview checkbox
@@ -235,6 +241,7 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
   // would just re-compute identical geometry (a wasted round-trip). Preview fires
   // on the first slider change instead.
   if (!skipInitialPreview) _firePreview()
+  else _fireValidate()  // still show feasibility immediately in edit mode
 }
 
 /**
@@ -251,6 +258,7 @@ export function setPlanePositions(bpA, bpB) {
   // Effective span (auto-extended for stagger) depends on plane positions —
   // refresh the hint so κ display stays consistent with the visual bend.
   if (_toolType === 'bend') _updateBendHint()
+  _fireValidate()  // plane drag in the 3D scene changes the window → re-check
 }
 
 export function closePopup() {
@@ -262,6 +270,8 @@ export function closePopup() {
 function _hide() {
   if (_popup) _popup.style.display = 'none'
   _toolType = null
+  clearTimeout(_validateTimer)
+  if (_feasibility) { _feasibility.style.display = 'none'; _feasibility.textContent = '' }
 }
 
 function _readParams() {
@@ -309,8 +319,54 @@ function _updateBendHint() {
 }
 
 function _firePreview() {
+  // Feasibility check fires regardless of the preview checkbox — the user always
+  // wants to know if a bend/twist is unachievable, even with live preview off.
+  _fireValidate()
   if (!_previewChk?.checked) return
   _callbacks?.onPreview(_readParams())
+}
+
+// ── Feasibility (physically-achievable bend/twist) feedback ──────────────────────
+
+/** Debounced live feasibility check against the backend (no mutation). */
+function _fireValidate() {
+  if (!_toolType) return
+  clearTimeout(_validateTimer)
+  _validateTimer = setTimeout(_doValidate, 120)
+}
+
+async function _doValidate() {
+  if (!_toolType || !_feasibility) return
+  const type   = _toolType
+  const planeA = Math.round(parseFloat(_planeABp?.value) || 0)
+  const planeB = Math.round(parseFloat(_planeBBp?.value) || 0)
+  const params = _readParams()
+  try {
+    const res = await validateDeformation({
+      type, planeA, planeB, params, clusterIds: _selectedClusterIds,
+    })
+    // Ignore stale responses if the tool closed or switched mid-flight.
+    if (_toolType === type) _renderFeasibility(res)
+  } catch { /* non-fatal: feedback only */ }
+}
+
+function _renderFeasibility(r) {
+  if (!_feasibility) return
+  _feasibility.classList.remove('def-feasibility--warn', 'def-feasibility--block')
+  if (!r || r.status === 'ok' || !r.message) {
+    _feasibility.style.display = 'none'
+    _feasibility.textContent = ''
+    return
+  }
+  _feasibility.style.display = ''
+  _feasibility.textContent = r.message
+  if (r.status === 'block') {
+    _feasibility.classList.add('def-feasibility--block')
+    _feasibility.style.color = 'var(--color-danger, #f85149)'
+  } else {
+    _feasibility.classList.add('def-feasibility--warn')
+    _feasibility.style.color = 'var(--color-warning, #d29922)'
+  }
 }
 
 // ── Cluster scope picker ──────────────────────────────────────────────────────

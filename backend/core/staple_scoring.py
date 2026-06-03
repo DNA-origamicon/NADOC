@@ -1286,8 +1286,21 @@ def build_precursor_graphs(
             min_segment_nt=effective_min_segment_nt,
             scaffold_block=scaffold_block,
         )
+        paths = _top_k_paths(graph, k=max(1, k_paths))
+        if not paths and scaffold_block:
+            # Soft seam-clearance (see apply_precursor_breaks): relax for any
+            # precursor the clearance would otherwise leave unbreakable.
+            graph = build_precursor_graph(
+                strand, scaf_map, ls_map,
+                temperature_k=temperature_k, staple_conc=staple_conc,
+                scaffold_conc=scaffold_conc, min_staple_nt=min_staple_nt,
+                max_staple_nt=max_staple_nt, break_rule=break_rule,
+                allow_crossover_breaks=allow_crossover_breaks,
+                min_segment_nt=effective_min_segment_nt, scaffold_block=None,
+            )
+            paths = _top_k_paths(graph, k=max(1, k_paths))
         graphs.append(graph)
-        paths_by_strand[strand.id] = _top_k_paths(graph, k=max(1, k_paths))
+        paths_by_strand[strand.id] = paths
 
     complete_count = sum(1 for paths in paths_by_strand.values() if paths)
     graphs_by_strand = {graph.strand_id: graph for graph in graphs}
@@ -1414,6 +1427,20 @@ def apply_precursor_breaks(
             scaffold_block=scaffold_block,
         )
         paths = _top_k_paths(graph, k=max(1, k_paths))
+        if not paths and scaffold_block:
+            # Soft seam-clearance: keeping breaks clear of seam crossovers is a
+            # preference, not a hard rule.  If it left this precursor with no
+            # legal mid-arm break, relax it for this precursor (a break near a
+            # seam is still far better than no break / a break at a crossover).
+            graph = build_precursor_graph(
+                strand, scaf_map, ls_map,
+                temperature_k=temperature_k, staple_conc=staple_conc,
+                scaffold_conc=scaffold_conc, min_staple_nt=min_staple_nt,
+                max_staple_nt=max_staple_nt, break_rule=break_rule,
+                allow_crossover_breaks=allow_crossover_breaks,
+                min_segment_nt=effective_min_segment_nt, scaffold_block=None,
+            )
+            paths = _top_k_paths(graph, k=max(1, k_paths))
         graphs_by_strand[strand.id] = graph
         paths_by_strand[strand.id] = paths
         routes_by_strand[strand.id] = route

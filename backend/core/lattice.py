@@ -1379,14 +1379,9 @@ def make_nick(
             f"bp_index={bp_index} is the 3′ terminus of the strand — cannot nick there."
         )
 
-    # ── DEBUG ──────────────────────────────────────────────────────────────────────
     # Cell bp=N occupies the square between boundary N and boundary N+1.
     # FORWARD at bp=N → nick at right boundary of cell N (= left boundary of cell N+1)
     # REVERSE at bp=N → nick at left boundary of cell N
-    gap_boundary = bp_index + 1 if direction == Direction.FORWARD else bp_index
-    print(f"[make_nick] helix={helix_id[:8]} bp={bp_index} dir={direction.value}")
-    print(f"[make_nick] domain: start={domain.start_bp} end={domain.end_bp} | gap at boundary={gap_boundary}")
-
     if is_last_bp_of_dom:
         # Inter-domain split — no domain modification needed.
         left_domains  = list(strand.domains[:domain_idx + 1])
@@ -1419,10 +1414,6 @@ def make_nick(
                                overhang_id=right_ovhg)
         left_domains  = list(strand.domains[:domain_idx]) + [left_dom]
         right_domains = [right_dom] + list(strand.domains[domain_idx + 1:])
-
-    left_3p  = left_domains[-1].end_bp
-    right_5p = right_domains[0].start_bp
-    print(f"[make_nick] left 3'={left_3p}  right 5'={right_5p}")
 
     # ── Build new strands ──────────────────────────────────────────────────
     new_strand_left = strand.model_copy(deep=True)

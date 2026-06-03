@@ -1113,7 +1113,16 @@ document.getElementById('menu-seq-update-routing')?.addEventListener('click', as
   const result = await applyAllDeformations()
   _hideProgress()
   if (!result) showToast('Add Loops/Skips failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
-  else showToast('Loops/skips added.')
+  else showToast(
+    'Loops/skips added — method of Dietz, Douglas & Shih, Science 2009 (doi:10.1126/science.1174251).',
+    {
+      duration: 8000,
+      action: {
+        label: 'View paper',
+        onClick: () => window.open('https://doi.org/10.1126/science.1174251', '_blank', 'noopener'),
+      },
+    },
+  )
 })
 
 document.getElementById('menu-seq-clear-all-loop-skips')?.addEventListener('click', async () => {

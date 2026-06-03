@@ -293,8 +293,22 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
                  flexKeys.has(_k(e.fromNuc)) || flexKeys.has(_k(e.toNuc)) ||
                  flexPairs.has(`${_k(e.fromNuc)}|${_k(e.toNuc)}`) ||
                  (hidePeriodic && e.isPeriodicSeam) ||
-                 (hideRef && refIds.has(e.fromNuc?.strand_id) && refIds.has(e.toNuc?.strand_id))
+                 (hideRef && refIds.has(e.fromNuc?.strand_id) && refIds.has(e.toNuc?.strand_id)) ||
+                 _arcRepHidden(e)
     }
+  }
+
+  /** Mixed-representation gate: a crossover arc belongs to the full/beads rep.
+   *  Hide it when BOTH endpoints render coarse (cylinders) or as surface/atomistic
+   *  — i.e. globally in cylinder LOD, and per-region for cylinder/surface columns.
+   *  An arc with at least one full-rendered endpoint stays visible (so a region
+   *  pinned to full shows its crossovers even under a global cylinder LOD). */
+  function _colRepForNuc(nuc) {
+    if (!nuc) return 'full'
+    return designRenderer.columnRepAt?.(nuc.helix_id, nuc.bp_index) ?? 'full'
+  }
+  function _arcRepHidden(e) {
+    return _colRepForNuc(e.fromNuc) !== 'full' && _colRepForNuc(e.toNuc) !== 'full'
   }
 
   function _clearArcs() {
@@ -1429,6 +1443,16 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
     setArcsVisible(visible) {
       _arcGroup.visible = visible
+    },
+
+    /** Re-evaluate per-arc visibility (mixed-representation rep gate + the other
+     *  hide rules) and repaint the merged buffers at the current lerp position.
+     *  Call after a global LOD change or a representation-override change — the
+     *  arc group stays visible while cylinder/surface columns collapse per-arc. */
+    refreshArcVisibility() {
+      _reapplyArcHidden()
+      const offsets = _buildOffsets(store.getState().unfoldSpacing)
+      _updateArcPositions(_currentT, offsets, _active ? _straightPosMap : null)
     },
 
     /**

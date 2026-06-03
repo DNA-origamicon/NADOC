@@ -392,12 +392,23 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // store default `deformVisuActive: true`.
   let _currentShaftMode = 'deformed'
 
+  // Axis lines belong to the full/beads representation. These gate ALL axis-mesh
+  // visibility (here AND in applyDeformLerp/_lerpPerSegment, which set .visible
+  // directly during the deform lerp) so axis lines only show where the helix
+  // renders as beads — hidden for cylinder/surface/atomistic columns (and globally
+  // in cylinder LOD). Called every lerp frame → keep it to a couple of lookups.
+  const _axisColRep = (helixId, bp) =>
+    _repColumnRep.get(`${helixId}:${bp}`) ?? (_detailLevel === 2 ? 'cylinders' : 'full')
+  const _axisSegOn = (helixId, lo, hi) =>
+    _axisColRep(helixId, lo) === 'full' && _axisColRep(helixId, hi) === 'full'
+
   // Apply mode-based visibility to every axis arrow.  Extracted so
   // setAxisShaftMode and setAxisArrowsVisible(true) share one implementation
   // and stay consistent — never set `arrow.shaft.visible = true` directly,
   // always route through here so mutual exclusion is preserved.
   function _applyShaftModeVisibility(mode) {
     const segsVisible = (mode !== 'hidden')
+    const _segAxisOn = _axisSegOn
     for (const arrow of axisArrows) {
       if (arrow.useSegments) {
         // Curved multi-segment helices carry both a straight cylinder (drives
@@ -405,16 +416,18 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         // bent center-line; shown at deformed steady state). They swap as a
         // mutually-exclusive pair just like the single-shaft case below.
         for (const seg of arrow.segments ?? []) {
+          const on = _segAxisOn(arrow.helixId, seg.bp_lo, seg.bp_hi)
           if (seg.tubeMesh) {
-            seg.mesh.visible      = (mode === 'straight')
-            seg.tubeMesh.visible  = (mode === 'deformed')
+            seg.mesh.visible      = on && (mode === 'straight')
+            seg.tubeMesh.visible  = on && (mode === 'deformed')
           } else if (seg.mesh) {
-            seg.mesh.visible = segsVisible
+            seg.mesh.visible = on && segsVisible
           }
         }
       } else if (arrow.isCurved) {
-        if (arrow.shaft)         arrow.shaft.visible         = (mode === 'deformed')
-        if (arrow.straightShaft) arrow.straightShaft.visible = (mode === 'straight')
+        const on = _segAxisOn(arrow.helixId, arrow.bp_lo ?? 0, arrow.bp_hi ?? 0)
+        if (arrow.shaft)         arrow.shaft.visible         = on && (mode === 'deformed')
+        if (arrow.straightShaft) arrow.straightShaft.visible = on && (mode === 'straight')
       }
     }
   }
@@ -522,6 +535,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const segs  = Math.max(tubeSamp.length * 4, 16)
       const geo   = new THREE.TubeGeometry(curve, segs, AXIS_SHAFT_R, 6, false)
       shaft = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: C.axis }))
+      shaft.name = 'axisLine'
       // Shaft + straightShaft opacities are the curved/straight cross-fade
       // driven by deform_view's lerp. _traverseSetOpacity (deform tool dim/
       // restore + ghost preview) must NOT clobber them, otherwise the
@@ -533,6 +547,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, 1, 8),
         new THREE.MeshPhongMaterial({ color: C.axis }),
       )
+      straightShaft.name = 'axisLine'
       // Hidden by default — the curved shaft starts visible (deformVisuActive
       // is true by default). deform_view.setAxisShaftMode() flips these two
       // meshes as a mutually-exclusive pair on every toggle.
@@ -587,6 +602,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           new THREE.CylinderGeometry(AXIS_SHAFT_R, AXIS_SHAFT_R, adjLen, 8),
           new THREE.MeshPhongMaterial({ color: C.axis }),
         )
+        mesh.name = 'axisLine'
         mesh.position.copy(ws.clone().addScaledVector(wsUnit, adjLen * 0.5))
         mesh.quaternion.setFromUnitVectors(_AY, wsUnit)
         root.add(mesh)
@@ -623,6 +639,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             const tubeSegs = Math.max(pts.length * 4, 16)
             const tubeGeo = new THREE.TubeGeometry(curve, tubeSegs, AXIS_SHAFT_R, 6, false)
             tubeMesh = new THREE.Mesh(tubeGeo, new THREE.MeshPhongMaterial({ color: C.axis }))
+            tubeMesh.name = 'axisLine'
             tubeMesh.material.userData.skipOpacityRestore = true
             tubeMesh.visible = false  // setAxisShaftMode swaps it in at deformed steady state
             root.add(tubeMesh)
@@ -648,6 +665,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     axisArrows.push({
       helixId: helix.id,
+      bp_lo:   helix.bp_start,
+      bp_hi:   helix.bp_start + helix.length_bp - 1,
       isCurved,
       // True when this helix renders its axis via per-segment cylinders
       // rather than a single shaft. Set for every non-curved helix and for
@@ -1051,6 +1070,70 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   iOverhangCylinders.name = 'overhangCylinders'
   root.add(iOverhangCylinders)
 
+  // ── Per-domain cylinder selection glow (additive outline) ──────────────────
+  // A halo InstancedMesh that mirrors selected domains' solid-cylinder poses,
+  // inflated slightly so it rims the solid additively. Driven by the selection
+  // drill (see glowCylinderDomains); tracks the live solid matrices via
+  // _refreshCylGlow at every cylinder-matrix recompute (deform / radius).
+  const GLOW_CYL_FACTOR = 1.28
+  const _cylGlowMat = new THREE.MeshBasicMaterial({
+    color: 0x3fb950, transparent: true, opacity: 0.45,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  })
+  const iHelixCylGlow = new THREE.InstancedMesh(GEO_UNIT_CYL, _cylGlowMat, Math.max(1, _domainCylCount))
+  iHelixCylGlow.count = 0
+  iHelixCylGlow.frustumCulled = false
+  iHelixCylGlow.renderOrder = 1
+  iHelixCylGlow.name = 'helixCylGlow'
+  root.add(iHelixCylGlow)
+  const iOverhangCylGlow = new THREE.InstancedMesh(GEO_HALF_CYL, _cylGlowMat, Math.max(1, _overhangCylCount))
+  iOverhangCylGlow.count = 0
+  iOverhangCylGlow.frustumCulled = false
+  iOverhangCylGlow.renderOrder = 1
+  iOverhangCylGlow.name = 'overhangCylGlow'
+  root.add(iOverhangCylGlow)
+  let _cylGlowRefs = []   // [{strandId, domainIndex}] currently glowing
+
+  // Resolve domain refs → sets of cylIdx for the straight + overhang cyl meshes.
+  function _refsToCylIdxSets(domainRefs) {
+    const want = new Set((domainRefs ?? []).map(r => `${r.strandId}:${r.domainIndex}`))
+    const straight = new Set(), overhang = new Set()
+    for (const d of _domainCylData)   if (want.has(`${d.strandId}:${d.domainIndex}`)) straight.add(d.cylIdx)
+    for (const d of _overhangCylData) if (want.has(`${d.strandId}:${d.domainIndex}`)) overhang.add(d.cylIdx)
+    return { straight, overhang }
+  }
+  // Re-pose glow instances from the live solid-cylinder matrices, inflated.
+  function _writeCylGlow(glowMesh, srcMesh, domEntries, cylIdxSet) {
+    let n = 0
+    for (const dom of domEntries) {
+      if (!cylIdxSet.has(dom.cylIdx)) continue
+      srcMesh.getMatrixAt(dom.cylIdx, _tMatrix)
+      _tMatrix.decompose(_tPos, _cylQ, _tScale)
+      _tScale.x *= GLOW_CYL_FACTOR; _tScale.z *= GLOW_CYL_FACTOR
+      _tMatrix.compose(_tPos, _cylQ, _tScale)
+      glowMesh.setMatrixAt(n++, _tMatrix)
+    }
+    glowMesh.count = n
+    glowMesh.instanceMatrix.needsUpdate = true
+  }
+  function _refreshCylGlow() {
+    if (!_cylGlowRefs.length) return
+    const { straight, overhang } = _refsToCylIdxSets(_cylGlowRefs)
+    _writeCylGlow(iHelixCylGlow, iHelixCylinders, _domainCylData, straight)
+    _writeCylGlow(iOverhangCylGlow, iOverhangCylinders, _overhangCylData, overhang)
+  }
+  // Is this domain FULLY cylinder-rendered right now? (every column → 'cylinders')
+  function _isDomainCyl(strandId, domainIndex) {
+    const dom = _domainCylData.find(d => d.strandId === strandId && d.domainIndex === domainIndex)
+             ?? _overhangCylData.find(d => d.strandId === strandId && d.domainIndex === domainIndex)
+    if (!dom) return false
+    const baseCyl = _detailLevel === 2
+    for (let bp = dom.bp_lo; bp <= dom.bp_hi; bp++) {
+      if ((_repColumnRep.get(`${dom.helixId}:${bp}`) ?? (baseCyl ? 'cylinders' : 'full')) !== 'cylinders') return false
+    }
+    return true
+  }
+
   // Curved-helix straight-proxy for overhang half-cylinders.
   const iCurvedOverhangCylinders = new THREE.InstancedMesh(
     GEO_HALF_CYL,
@@ -1108,6 +1191,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // Linker cylinder bookkeeping (populated in the cylinder build pass).
   const _deferredBindings     = []   // {helixId, lo, hi, color, arrow} — emitted opposite their overhang
   const _ovhgBuildXform       = new Map()  // `${helixId}|${lo}|${hi}` → {pos, quat, lenY} of the overhang half
+  const _bridgeCylData        = []   // per ds-bridge cylinder instance: {bridgeHelixId, strandId}
 
   let _detailLevel    = 0    // 0=full, 1=beads-only, 2=cylinders
   let _beadScale      = 1.0  // global scale factor applied to all backbone beads
@@ -1301,7 +1385,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           } else {
             iHelixCylinders.setMatrixAt(cylIdx, _tMatrix)
             iHelixCylinders.setColorAt(cylIdx, _tColor.setHex(strandColor))
-            _domainCylData.push({ helixId: dom.helix_id, strandId: strand.id, bp_lo: lo, bp_hi: hi, t0, t1, cylIdx, arrow, defaultColor: strandColor })
+            _domainCylData.push({ helixId: dom.helix_id, strandId: strand.id, domainIndex: domIdx, bp_lo: lo, bp_hi: hi, t0, t1, cylIdx, arrow, defaultColor: strandColor })
             cylIdx++
           }
         }
@@ -1370,6 +1454,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _tMatrix.compose(_tPos, _cylQ, _tScale.set(_cylRadiusScale, Math.max(len, 0.001), _cylRadiusScale))
       iLinkerBridgeCylinders.setMatrixAt(bridgeIdx, _tMatrix)
       iLinkerBridgeCylinders.setColorAt(bridgeIdx, _tColor.setHex(color))
+      // Map this cylinder instance → the ds-linker strand (so it's clickable) and
+      // its bridge-helix bp span (so per-region reps can drive its visibility).
+      _bridgeCylData[bridgeIdx] = { bridgeHelixId, strandId: `${bridgeHelixId}__a`, bp_lo: loBp, bp_hi: hiBp, cylIdx: bridgeIdx }
       bridgeIdx++
     }
     iLinkerBridgeCylinders.count = bridgeIdx
@@ -1792,9 +1879,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         _lerpPerSegment(arrow, sa?.segments, useStraight ? 0 : 1)
       } else if (arrow.isCurved) {
         arrow.shaft.position.set(0, 0, 0)
-        // Mutually-exclusive visibility (same rule as setAxisShaftMode).
-        if (arrow.shaft)         arrow.shaft.visible         = !useStraight
-        if (arrow.straightShaft) arrow.straightShaft.visible =  useStraight
+        // Mutually-exclusive visibility (same rule as setAxisShaftMode), but
+        // also gated by per-region rep so cylinder/surface columns stay axis-free.
+        const axOn = _axisSegOn(arrow.helixId, arrow.bp_lo ?? 0, arrow.bp_hi ?? 0)
+        if (arrow.shaft)         arrow.shaft.visible         = axOn && !useStraight
+        if (arrow.straightShaft) arrow.straightShaft.visible = axOn &&  useStraight
         if (arrow.straightShaft && sa) {
           arrow.straightShaft.position.set(
             (sa.start.x + sa.end.x) * 0.5,
@@ -1824,6 +1913,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
     }
     iHelixCylinders.instanceMatrix.needsUpdate = true
+    _refreshCylGlow()
 
     // 5b. Overhang half-cylinders.
     for (const dom of _overhangCylData) {
@@ -2071,6 +2161,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
     }
     iHelixCylinders.instanceMatrix.needsUpdate = true
+    _refreshCylGlow()
 
     // 5b. Overhang half-cylinders — translate with unfold offset.
     for (const dom of _overhangCylData) {
@@ -2197,6 +2288,102 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _applyShaftModeVisibility(_currentShaftMode)
     }
   }
+  // ── Per-region representation overrides (mixed representation) ──────────────
+  // Pin some domains/strands to a different render rep than the global LOD, so a
+  // focal region can show full bead-and-base detail against a cylinder-bundle
+  // background. Implemented with per-instance alpha (NOT scale): bead/cylinder
+  // matrices are rewritten by deform-lerp / radius changes, but the alpha
+  // attribute is not, so the override survives every overlay. Reference alpha
+  // and override visibility multiply.
+  let _repColumnRep  = new Map()  // "helixId:bp" -> 'full' | 'cylinders' (both strands)
+  let _repActive     = false
+  let _repAlphaReady = false
+  function _setCylAlpha(mesh, idx, a) {
+    const attr = mesh._instanceAlpha
+    if (!attr) return
+    attr.setX(idx, a)
+    attr.needsUpdate = true
+  }
+  function _ensureRepAlpha() {
+    if (_repAlphaReady) return
+    if (!_useImpostors) _installInstanceAlpha(iSpheres)
+    _installInstanceAlpha(iCubes)
+    if (!_useImpostors) _installInstanceAlpha(iFluoros)
+    _installInstanceAlpha(iCones)
+    _installInstanceAlpha(iSlabs)
+    _installInstanceAlpha(iHelixCylinders)
+    _installInstanceAlpha(iOverhangCylinders)
+    _installInstanceAlpha(iLinkerBridgeCylinders)
+    _repAlphaReady = true
+  }
+  // Re-run the LOD .visible toggles for the current _detailLevel (used when
+  // overrides are cleared, to hand visibility back to setDetailLevel's scheme).
+  function _reapplyDetailVisibility() {
+    const coarse = _detailLevel === 2
+    iSpheres.visible = !coarse; iCubes.visible = !coarse; iCones.visible = !coarse
+    iSlabs.visible = _detailLevel === 0; iFluoros.visible = !coarse
+    iHelixCylinders.visible = coarse; iOverhangCylinders.visible = coarse
+    iCurvedHelixCylinders.visible = coarse; _curvedCylGroup.visible = coarse
+    iCurvedOverhangCylinders.visible = coarse; _curvedOvhgGroup.visible = coarse
+    iLinkerBindingCylinders.visible = coarse; iLinkerBridgeCylinders.visible = coarse
+  }
+  function _applyRepOverrides() {
+    if (!_repActive) {
+      if (_repAlphaReady) {
+        // Restore alpha to reference-only (1.0 for non-reference) and cyl→opaque.
+        for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
+        for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
+        for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
+        for (const e of coneEntries)     _setEntryAlpha(e, _refAlphaFor(e.strandId))
+        for (const dom of _domainCylData)   _setCylAlpha(iHelixCylinders, dom.cylIdx, 1)
+        for (const dom of _overhangCylData) _setCylAlpha(iOverhangCylinders, dom.cylIdx, 1)
+        for (const br of _bridgeCylData)    _setCylAlpha(iLinkerBridgeCylinders, br.cylIdx, 1)
+      }
+      _reapplyDetailVisibility()
+      return
+    }
+    _ensureRepAlpha()
+    const baseCyl = _detailLevel === 2   // global rep is cylinders
+    // Effective rep at a duplex column (override wins; else the global rep).
+    const effCol = (helixId, bp) => {
+      const r = _repColumnRep.get(`${helixId}:${bp}`)
+      return r ?? (baseCyl ? 'cylinders' : 'full')
+    }
+    // A bead (either strand) shows only where its column resolves to 'full'.
+    const beadVis = (nuc) => (nuc && effCol(nuc.helix_id, nuc.bp_index) === 'full' ? 1 : 0)
+    for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc))
+    for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc))
+    for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc))
+    for (const e of coneEntries) {
+      const vis = e.isCrossHelix ? 1 : beadVis(e.fromNuc)
+      _setEntryAlpha(e, _refAlphaFor(e.strandId) * vis)
+    }
+    // A domain cylinder (the duplex tube) shows only where EVERY column it spans
+    // resolves to 'cylinders' — so a region boundary cutting a domain falls back
+    // to beads rather than covering the full-rep half.
+    const cylVis = (dom) => {
+      for (let bp = dom.bp_lo; bp <= dom.bp_hi; bp++) {
+        if (effCol(dom.helixId, bp) !== 'cylinders') return 0
+      }
+      return 1
+    }
+    for (const dom of _domainCylData)   _setCylAlpha(iHelixCylinders, dom.cylIdx, cylVis(dom))
+    for (const dom of _overhangCylData) _setCylAlpha(iOverhangCylinders, dom.cylIdx, cylVis(dom))
+    // ds-linker bridge cylinder: keyed on its own __lnk__ bridge helix span.
+    const bridgeVis = (br) => {
+      for (let bp = br.bp_lo; bp <= br.bp_hi; bp++) {
+        if (effCol(br.bridgeHelixId, bp) !== 'cylinders') return 0
+      }
+      return 1
+    }
+    for (const br of _bridgeCylData) _setCylAlpha(iLinkerBridgeCylinders, br.cylIdx, bridgeVis(br))
+    // Make every driven mesh renderable; alpha selects what actually shows.
+    iSpheres.visible = iCubes.visible = iCones.visible = iSlabs.visible = iFluoros.visible = true
+    iHelixCylinders.visible = iOverhangCylinders.visible = iLinkerBridgeCylinders.visible = true
+    // Re-gate axis lines per-region: only full-rendered columns keep their axis.
+    if (_axisArrowsVisible) _applyShaftModeVisibility(_currentShaftMode)
+  }
+
   // ── Public interface ───────────────────────────────────────────────────────
 
   return {
@@ -2226,6 +2413,20 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     setReferenceHidden(hidden) {
       _refHidden = !!hidden
       _applyReferenceAlpha()
+      if (_repActive) _applyRepOverrides()   // re-multiply override visibility over ref alpha
+    },
+
+    /**
+     * Apply per-region representation overrides (mixed representation).
+     * @param {Map<string,string>} columnRep  "helixId:bp" -> 'full' | 'cylinders'
+     *   (overridden duplex columns only; both strands at a column share the rep).
+     * Pass an empty map (or no args) to clear and hand visibility back to the LOD.
+     */
+    applyRepOverrides(columnRep) {
+      _repColumnRep = columnRep instanceof Map ? columnRep : new Map()
+      _repActive    = _repColumnRep.size > 0
+      _applyRepOverrides()
+      return { active: _repActive }
     },
 
     /** Three-state axis line visibility:
@@ -2270,6 +2471,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
       }
       iHelixCylinders.instanceMatrix.needsUpdate = true
+      _refreshCylGlow()
       for (const dom of _overhangCylData) {
         const s = dom.arrow.aStart, e = dom.arrow.aEnd
         const d0x = s.x + (e.x - s.x) * dom.t0, d0y = s.y + (e.y - s.y) * dom.t0, d0z = s.z + (e.z - s.z) * dom.t0
@@ -2599,6 +2801,42 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     getCylinderDomainAt(instanceId) { return _domainCylData[instanceId] ?? null },
     /** Return the _overhangCylData entry for a given InstancedMesh instanceId. */
     getOverhangCylinderDomainAt(instanceId) { return _overhangCylData[instanceId] ?? null },
+    /** The ds-linker bridge cylinder InstancedMesh (full cylinder per __lnk__ helix). */
+    getLinkerBridgeCylinderMesh() { return iLinkerBridgeCylinders },
+    /** Return {bridgeHelixId, strandId} for a bridge cylinder instanceId. */
+    getLinkerBridgeCylinderAt(instanceId) { return _bridgeCylData[instanceId] ?? null },
+
+    /** Additive glow outline on the cylinders of the given domains (selection feedback).
+     *  domainRefs: [{strandId, domainIndex}]. Straight + overhang cylinders only. */
+    glowCylinderDomains(domainRefs) {
+      // Only glow domains that are ACTUALLY cylinder-rendered (skip bead-rendered
+      // ones — they have a cyl record but the solid cylinder is hidden).
+      _cylGlowRefs = (Array.isArray(domainRefs) ? domainRefs : [])
+        .filter(r => _isDomainCyl(r.strandId, r.domainIndex))
+      const { straight, overhang } = _refsToCylIdxSets(_cylGlowRefs)
+      _writeCylGlow(iHelixCylGlow, iHelixCylinders, _domainCylData, straight)
+      _writeCylGlow(iOverhangCylGlow, iOverhangCylinders, _overhangCylData, overhang)
+    },
+    clearCylinderDomainGlow() {
+      _cylGlowRefs = []
+      iHelixCylGlow.count = 0; iOverhangCylGlow.count = 0
+      iHelixCylGlow.instanceMatrix.needsUpdate = true
+      iOverhangCylGlow.instanceMatrix.needsUpdate = true
+    },
+    refreshCylinderDomainGlow() { _refreshCylGlow() },
+
+    /** Effective rep at a duplex column right now: override wins, else the global LOD. */
+    columnRepAt(helixId, bp) {
+      const baseCyl = _detailLevel === 2
+      return _repColumnRep.get(`${helixId}:${bp}`) ?? (baseCyl ? 'cylinders' : 'full')
+    },
+    /** Is the duplex column (helix_id, bp) rendered as a cylinder right now? */
+    isColumnCylinder(helixId, bp) {
+      const baseCyl = _detailLevel === 2
+      return (_repColumnRep.get(`${helixId}:${bp}`) ?? (baseCyl ? 'cylinders' : 'full')) === 'cylinders'
+    },
+    /** Is this domain fully cylinder-rendered? (every column resolves to 'cylinders') */
+    isDomainCylinder(strandId, domainIndex) { return _isDomainCyl(strandId, domainIndex) },
 
     /**
      * Highlight all cylinders whose strandId is in strandIds (string or array/Set);
@@ -3080,6 +3318,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         // straight shafts simultaneously after switching LOD back to Full.
         _applyShaftModeVisibility(_currentShaftMode)
       }
+      // Mixed representation: the override's visibility depends on the global
+      // level (which way each unoverridden domain renders), so re-apply it.
+      if (_repActive) _applyRepOverrides()
       return { needsRebuild: false }
     },
 
@@ -3263,6 +3504,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
       }
       iHelixCylinders.instanceMatrix.needsUpdate = true
+      _refreshCylGlow()
 
       // 5b. Straight-helix overhang cylinders (LOD) — same approach.
       for (const dom of _overhangCylData) {

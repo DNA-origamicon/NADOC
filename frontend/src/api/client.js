@@ -659,6 +659,24 @@ export async function savePlateLayout(layout) {
   return _syncFromDesignResponse(json)
 }
 
+/**
+ * Replace the design's per-region representation overrides. Each override pins a
+ * render rep ('full' | 'cylinders') onto a selection of strands and/or clusters,
+ * so a focal region can show full detail against a coarser background.
+ * Display-only metadata persisted in the .nadoc file; does not change geometry.
+ * `overrides` = [{ id?, name, representation, strand_ids:[...], cluster_ids:[...] }]
+ */
+export async function saveRepresentationOverrides(overrides) {
+  const json = await _request('PUT', '/design/representation-overrides', { overrides })
+  return _syncFromDesignResponse(json)
+}
+
+/** Clear all per-region representation overrides. */
+export async function clearRepresentationOverrides() {
+  const json = await _request('DELETE', '/design/representation-overrides')
+  return _syncFromDesignResponse(json)
+}
+
 /** Optional handler invoked after store sync for cluster_only / positions_only
  * responses. Set by main.js at init to push the diff through the renderer
  * (helixCtrl + bluntEnds + joint/overhang renderers). Centralising this here
@@ -1205,7 +1223,33 @@ export async function addDeformation(type, planeA, planeB, params, helixIds = []
   const json = await _request('POST', '/design/deformation', body)
   // A preview op is transient (no undo, no commit) → must not auto-save/propagate
   // to the assembly. The non-preview add IS the commit → save normally.
-  return _syncFromDesignResponse(json, { transient: preview })
+  const synced = _syncFromDesignResponse(json, { transient: preview })
+  // On commit (not preview), surface any feasibility warning the backend attached.
+  if (!preview && json?.deformation_warning) _toastDeformationWarning(json.deformation_warning)
+  return synced
+}
+
+/** Surface a backend deformation_warning ({status, message}) as a toast. */
+function _toastDeformationWarning(w) {
+  if (!w?.message) return
+  if (w.status === 'block') showToast(w.message, { severity: 'error', duration: 6000 })
+  else if (w.status === 'warn') showToast(w.message, { severity: 'warning', duration: 5000 })
+}
+
+/**
+ * Non-mutating bend/twist feasibility check (live editor feedback).
+ * Returns { status, local_bp_per_turn, requested_radius_nm, min_bend_radius_nm,
+ * requested_twist_deg, max_twist_deg, message } — never throws on warn/block.
+ */
+export async function validateDeformation({ type, planeA, planeB, params, helixIds = [], clusterIds = [] }) {
+  return _request('POST', '/design/deformation/validate', {
+    type,
+    plane_a_bp: planeA,
+    plane_b_bp: planeB,
+    helix_ids: helixIds,
+    cluster_ids: Array.isArray(clusterIds) ? clusterIds : (clusterIds ? [clusterIds] : []),
+    params,
+  })
 }
 
 export async function updateDeformation(opId, params) {
@@ -2128,6 +2172,20 @@ export async function getSurfaceBatch(positions, colorMode = 'strand', probeRadi
     color_mode:   colorMode,
     probe_radius: probeRadius,
     grid_spacing: gridSpacing,
+  }, { signal, suppressBusy })
+}
+
+/**
+ * Molecular surface over ONLY the given column segments (per-region SURFACE rep).
+ * `segments` = [{helix_id, bp_start, bp_end}]. Returns the raw mesh JSON
+ * ({vertices, faces, vertex_strand_index*, stats}); NOT a design response.
+ */
+export async function getRegionSurface(segments, { colorMode = 'strand', probeRadius = 0.28,
+                                                   signal, suppressBusy = false } = {}) {
+  return _request('POST', '/design/surface/region', {
+    segments,
+    color_mode:   colorMode,
+    probe_radius: probeRadius,
   }, { signal, suppressBusy })
 }
 

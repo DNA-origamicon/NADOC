@@ -26,8 +26,11 @@ from backend.core.loop_skip_calculator import (
     _LOOP_SKIP_TWIST_PER_BP_DEG as BDNA_TWIST_PER_BP_DEG,
     CELL_BP_DEFAULT,
     MAX_DELTA_PER_CELL,
+    DeformationFeasibility,
     apply_loop_skips,
     bend_loop_skips,
+    classify_deformation,
+    classify_local_density,
     clear_loop_skips,
     max_twist_deg,
     min_bend_radius_nm,
@@ -36,10 +39,12 @@ from backend.core.loop_skip_calculator import (
     twist_loop_skips,
     validate_loop_skip_limits,
     _active_intervals_for_helices,
+    _bend_params_to_radius_nm,
     _cell_boundaries,
     _cells_from_active_intervals,
 )
 from backend.core.models import (
+    BendParams,
     Design,
     DesignMetadata,
     Direction,
@@ -49,6 +54,7 @@ from backend.core.models import (
     LoopSkip,
     Strand,
     StrandType,
+    TwistParams,
     Vec3,
 )
 
@@ -700,3 +706,176 @@ def test_bend_without_design_unchanged():
     # Without design, mods can be anywhere — just verify we get some
     all_indices = [ls.bp_index for ls_list in mods.values() for ls in ls_list]
     assert len(all_indices) > 0
+
+
+# ── Feasibility classification (bend/twist guard warnings) ──────────────────────
+#
+# Thresholds (loop_skip_calculator): hard 6–15 bp/turn (|δ| ≤ 3/cell, BLOCK beyond);
+# soft 9–12 bp/turn high-yield window (WARN outside, from Sci Adv 2023). Boundaries
+# at exactly 9/12/6/15 bp/turn are inclusive (OK / WARN respectively).
+
+OK = DeformationFeasibility.OK
+WARN = DeformationFeasibility.WARN
+BLOCK = DeformationFeasibility.BLOCK
+
+
+def test_classify_local_density_nominal():
+    status, bpt = classify_local_density(0.0)
+    assert status is OK
+    assert abs(bpt - 10.5) < 1e-9
+
+
+def test_classify_local_density_recommended_boundaries_inclusive():
+    # δ = −1 → 9 bp/turn, δ = +1 → 12 bp/turn: both exactly on the soft band edge → OK.
+    s_lo, bpt_lo = classify_local_density(-1.0)
+    s_hi, bpt_hi = classify_local_density(1.0)
+    assert s_lo is OK and abs(bpt_lo - 9.0) < 1e-9
+    assert s_hi is OK and abs(bpt_hi - 12.0) < 1e-9
+
+
+def test_classify_local_density_warn_band():
+    s, bpt = classify_local_density(-1.5)
+    assert s is WARN and abs(bpt - 8.25) < 1e-9
+
+
+def test_classify_local_density_hard_boundaries_are_warn_not_block():
+    # δ = ±3 → 6 / 15 bp/turn: still achievable (inclusive hard limit) → WARN.
+    s_lo, bpt_lo = classify_local_density(-3.0)
+    s_hi, bpt_hi = classify_local_density(3.0)
+    assert s_lo is WARN and abs(bpt_lo - 6.0) < 1e-9
+    assert s_hi is WARN and abs(bpt_hi - 15.0) < 1e-9
+
+
+def test_classify_local_density_block_beyond_hard_limit():
+    assert classify_local_density(-3.01)[0] is BLOCK
+    assert classify_local_density(3.01)[0] is BLOCK
+
+
+# ── classify_deformation: twist ────────────────────────────────────────────────
+
+
+def _two_row_design():
+    """Two helices at ±2.25 nm → min_bend_radius = 5.25 nm; 126 bp = 18 cells."""
+    hs = [_make_helix("h0", x=2.25), _make_helix("h1", x=-2.25)]
+    return hs, _simple_design(hs)
+
+
+def test_classify_deformation_twist_zero_is_ok():
+    hs, d = _two_row_design()
+    r = classify_deformation(hs, 0, 126, "twist", TwistParams(total_degrees=0.0), design=d)
+    assert r["status"] == OK.value
+    assert r["n_cells"] == 18
+    assert abs(r["max_twist_deg"] - max_twist_deg(18)) < 1e-6
+    assert abs(r["requested_twist_deg"]) < 1e-9
+
+
+def test_classify_deformation_twist_over_max_blocks():
+    hs, d = _two_row_design()
+    over = max_twist_deg(18) * 1.1
+    r = classify_deformation(hs, 0, 126, "twist", TwistParams(total_degrees=over), design=d)
+    assert r["status"] == BLOCK.value
+    assert r["requested_twist_deg"] > r["max_twist_deg"]
+
+
+def test_classify_deformation_twist_degrees_per_nm_matches_total():
+    hs, d = _two_row_design()
+    length_nm = 18 * CELL_BP_DEFAULT * BDNA_RISE_PER_BP
+    total = 300.0
+    r_total = classify_deformation(hs, 0, 126, "twist", TwistParams(total_degrees=total), design=d)
+    r_pernm = classify_deformation(
+        hs, 0, 126, "twist", TwistParams(degrees_per_nm=total / length_nm), design=d
+    )
+    assert abs(r_total["requested_twist_deg"] - r_pernm["requested_twist_deg"]) < 1e-6
+    assert r_total["status"] == r_pernm["status"]
+
+
+# ── classify_deformation: bend ─────────────────────────────────────────────────
+
+
+def _bend_params_for_radius(radius_nm):
+    """BendParams whose κ yields the given geometric radius (R = RISE/radians(κ))."""
+    kappa_deg = math.degrees(BDNA_RISE_PER_BP / radius_nm)
+    return BendParams(curvature_deg_per_bp=kappa_deg)
+
+
+def test_bend_params_to_radius_round_trip():
+    p = _bend_params_for_radius(8.0)
+    assert abs(_bend_params_to_radius_nm(p.curvature_deg_per_bp) - 8.0) < 1e-6
+    # κ ≈ 0 → infinite radius
+    assert math.isinf(_bend_params_to_radius_nm(0.0))
+
+
+def test_classify_deformation_bend_gentle_is_ok():
+    hs, d = _two_row_design()
+    r = classify_deformation(hs, 0, 126, "bend", _bend_params_for_radius(20.0), design=d)
+    assert r["status"] == OK.value
+    assert abs(r["requested_radius_nm"] - 20.0) < 1e-3
+    assert abs(r["min_bend_radius_nm"] - 5.25) < 1e-2
+
+
+def test_classify_deformation_bend_below_min_radius_blocks():
+    hs, d = _two_row_design()
+    r = classify_deformation(hs, 0, 126, "bend", _bend_params_for_radius(4.0), design=d)
+    assert r["status"] == BLOCK.value
+    assert r["requested_radius_nm"] < r["min_bend_radius_nm"]
+
+
+def test_classify_deformation_bend_just_above_min_warns():
+    hs, d = _two_row_design()
+    r = classify_deformation(hs, 0, 126, "bend", _bend_params_for_radius(6.0), design=d)
+    assert r["status"] == WARN.value
+
+
+def test_classify_deformation_bend_on_axis_helix_cannot_bend():
+    h = _make_helix("h0")  # single helix at origin → on the neutral axis
+    d = _simple_design([h])
+    r = classify_deformation([h], 0, 126, "bend", _bend_params_for_radius(8.0), design=d)
+    assert r["status"] == OK.value  # no marks produced → nothing to warn about
+
+
+def test_classify_deformation_empty_segment_is_ok():
+    hs, d = _two_row_design()
+    r = classify_deformation(hs, 0, 3, "bend", _bend_params_for_radius(8.0), design=d)
+    assert r["status"] == OK.value and r["n_cells"] == 0
+
+
+# ── Consistency: the warning predicts realize-time behaviour exactly ─────────────
+
+
+def test_classify_predicts_bend_loop_skips_raise():
+    """classify BLOCK ⇔ bend_loop_skips raises; non-block ⇔ it succeeds."""
+    hs, d = _two_row_design()
+    for radius_nm in (20.0, 6.0, 4.0):
+        params = _bend_params_for_radius(radius_nm)
+        verdict = classify_deformation(hs, 0, 126, "bend", params, design=d)
+        radius_from_classify = verdict["requested_radius_nm"]
+        # The radius the classifier reports must equal the shared converter's output.
+        assert abs(radius_from_classify - _bend_params_to_radius_nm(params.curvature_deg_per_bp)) < 1e-9
+        if verdict["status"] == BLOCK.value:
+            with pytest.raises(ValueError):
+                bend_loop_skips(hs, 0, 126, radius_nm, design=d)
+        else:
+            bend_loop_skips(hs, 0, 126, radius_nm, design=d)  # must not raise
+
+
+# ── /design/deformation/validate endpoint ──────────────────────────────────────
+
+
+def test_validate_deformation_endpoint_never_422_on_block():
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    from backend.api import state as design_state
+
+    hs, d = _two_row_design()
+    design_state.set_design(d)
+    client = TestClient(app)
+    params = _bend_params_for_radius(4.0)  # below min radius → BLOCK
+    resp = client.post("/api/design/deformation/validate", json={
+        "type": "bend",
+        "plane_a_bp": 0,
+        "plane_b_bp": 126,
+        "helix_ids": [h.id for h in hs],
+        "params": {"curvature_deg_per_bp": params.curvature_deg_per_bp},
+    })
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "block"
