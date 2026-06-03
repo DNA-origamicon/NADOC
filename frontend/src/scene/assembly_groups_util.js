@@ -1,7 +1,23 @@
 /**
  * Assembly group utilities extracted from main.js. Pure: read a plain assembly
- * object, return a Set. Unit-tested in assembly_groups_util.test.js.
+ * object. Unit-tested in assembly_groups_util.test.js.
  */
+
+/** Ordered instance ids belonging to a group, recursing into its subgroups. */
+export function collectGroupMemberInstanceIds(assembly, groupId) {
+  const groups = assembly?.groups ?? []
+  const byId = new Map(groups.map(g => [g.id, g]))
+  const out = []
+  const stack = [groupId]
+  while (stack.length) {
+    const gid = stack.pop()
+    const cur = byId.get(gid)
+    if (!cur) continue
+    for (const iid of (cur.instance_ids ?? [])) out.push(iid)
+    for (const sgid of (cur.subgroup_ids ?? [])) stack.push(sgid)
+  }
+  return out
+}
 
 /** Set of instance ids hidden by any `visible:false` group (recursing subgroups). */
 export function computeGroupHiddenInstanceIds(assembly) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeGroupHiddenInstanceIds } from './assembly_groups_util.js'
+import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './assembly_groups_util.js'
 
 const set = (s) => [...s].sort()
 
@@ -39,5 +39,27 @@ describe('computeGroupHiddenInstanceIds', () => {
   it('tolerates a dangling subgroup id', () => {
     const assembly = { groups: [{ id: 'g1', visible: false, instance_ids: ['a'], subgroup_ids: ['missing'] }] }
     expect(set(computeGroupHiddenInstanceIds(assembly))).toEqual(['a'])
+  })
+})
+
+describe('collectGroupMemberInstanceIds', () => {
+  it('collects a group\'s instance ids, recursing subgroups (order preserved)', () => {
+    const asm = { groups: [
+      { id: 'g1', instance_ids: ['a', 'b'], subgroup_ids: ['g2'] },
+      { id: 'g2', instance_ids: ['c'], subgroup_ids: ['g3'] },
+      { id: 'g3', instance_ids: ['d'] },
+    ] }
+    expect(collectGroupMemberInstanceIds(asm, 'g1').sort()).toEqual(['a', 'b', 'c', 'd'])
+  })
+  it('returns only the subtree under the requested group', () => {
+    const asm = { groups: [
+      { id: 'g1', instance_ids: ['a'] },
+      { id: 'g2', instance_ids: ['b'] },
+    ] }
+    expect(collectGroupMemberInstanceIds(asm, 'g2')).toEqual(['b'])
+  })
+  it('empty for an unknown group or null assembly', () => {
+    expect(collectGroupMemberInstanceIds({ groups: [] }, 'nope')).toEqual([])
+    expect(collectGroupMemberInstanceIds(null, 'g1')).toEqual([])
   })
 })

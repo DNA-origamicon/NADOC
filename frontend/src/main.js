@@ -32,7 +32,7 @@ import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange,
 import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead } from './scene/design_queries.js'
 import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
-import { computeGroupHiddenInstanceIds } from './scene/assembly_groups_util.js'
+import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './scene/assembly_groups_util.js'
 import { heatmapHex } from './scene/color_util.js'
 import { fretQuenchedDonors } from './scene/fret_util.js'
 import { motionChipStyle } from './scene/motion_chip.js'
@@ -10941,7 +10941,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   function _createGroupTransformContext(groupId) {
     const assembly = store.getState().currentAssembly
     if (!assembly) return null
-    const memberIds = _collectGroupMemberInstanceIds(groupId, assembly)
+    const memberIds = collectGroupMemberInstanceIds(assembly, groupId)
     if (!memberIds.length) return null
     const primaryId = memberIds[0]
     const memberStartTransforms = new Map()
@@ -11309,7 +11309,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!assembly || !target?.id) return { dof: 'free' }
     const movingIds = new Set(
       target.kind === 'group'
-        ? _collectGroupMemberInstanceIds(target.id, assembly)
+        ? collectGroupMemberInstanceIds(assembly, target.id)
         : [target.id],
     )
     if (movingIds.size === 0) return { dof: 'free' }
@@ -11403,21 +11403,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     _motionChip.style.background = c.bg
   }
 
-  function _collectGroupMemberInstanceIds(groupId, assembly = null) {
-    const groups = (assembly ?? store.getState().currentAssembly)?.groups ?? []
-    const byId = new Map(groups.map(g => [g.id, g]))
-    const out = []
-    const stack = [groupId]
-    while (stack.length) {
-      const gid = stack.pop()
-      const cur = byId.get(gid)
-      if (!cur) continue
-      for (const iid of (cur.instance_ids ?? [])) out.push(iid)
-      for (const sgid of (cur.subgroup_ids ?? [])) stack.push(sgid)
-    }
-    return out
-  }
-
   // ── Multi-select visual feedback: one purple union BoxHelper around every
   //    instance in multiSelectedInstanceIds. Hidden when < 2 ids selected
   //    (the single-select case keeps the existing white per-instance helper).
@@ -11431,7 +11416,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     // for the purposes of the union BoxHelper — the user needs visual feedback
     // for the group as a whole, not just for ad-hoc multi-selects.
     if (s.activeGroupId) {
-      for (const id of _collectGroupMemberInstanceIds(s.activeGroupId, s.currentAssembly)) {
+      for (const id of collectGroupMemberInstanceIds(s.currentAssembly, s.activeGroupId)) {
         wanted.add(id)
       }
     }
