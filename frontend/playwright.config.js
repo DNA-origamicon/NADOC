@@ -1,4 +1,12 @@
 import { defineConfig, devices } from '@playwright/test'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// Resolve server CWDs relative to this config file so the e2e/boot gate works on
+// any checkout (previously hardcoded to one machine's absolute path, which made
+// webServer auto-start fail with spawn ENOENT elsewhere).
+const FRONTEND_DIR = path.dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = path.resolve(FRONTEND_DIR, '..')
 
 /**
  * Playwright config for NADOC end-to-end tests.
@@ -42,7 +50,7 @@ export default defineConfig({
     {
       // FastAPI backend — use 127.0.0.1 explicitly; localhost may resolve to ::1
       command: 'uv run uvicorn backend.api.main:app --port 8000 --host 127.0.0.1',
-      cwd: '/home/jojo/Work/NADOC',
+      cwd: REPO_ROOT,
       url: 'http://127.0.0.1:8000/docs',
       reuseExistingServer: true,
       timeout: 30_000,
@@ -50,7 +58,7 @@ export default defineConfig({
     {
       // Vite dev server — use 127.0.0.1 explicitly
       command: 'npx vite --port 5173 --host 127.0.0.1',
-      cwd: '/home/jojo/Work/NADOC/frontend',
+      cwd: FRONTEND_DIR,
       url: 'http://127.0.0.1:5173',
       reuseExistingServer: true,
       timeout: 20_000,
