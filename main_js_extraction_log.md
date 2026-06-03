@@ -158,3 +158,37 @@ Autonomous pure-extraction loop terminated on dry discovery pass. 6 loop iterati
 (#10–#15) on top of the 6 mapped groups (#4–#9) and 3 pilots (#1–#3). Next decomposition
 step is the HARD/stateful tier (per-tool factory extractions with the gesture-e2e template),
 which needs human review and is intentionally NOT automated.
+
+## Robust gesture validation (2026-06-03) — research + harness
+
+Deep-research (WebGL/Three.js e2e validation, 24/25 claims confirmed) → built a reusable gesture
+harness so the HARD/stateful tier isn't hand-rolled per spec. Key conclusions:
+
+- **The project→screen + real synthetic-click pattern is the recognized approach** (MapGrab is the
+  productized reference). The robustness is NOT in pre-verifying the pixel — it's in **clicking through
+  the REAL raycast + asserting exposed state + RETRYING on miss**. Empirically: integer-pixel clicks on
+  small WebGL beads hit only ~half the time, so a single "verified" click is flaky; the retry loop is
+  what works (the original measurement spec already relied on it).
+- **GPU object-ID color-picking was NOT evidenced in production e2e** — don't build it; the real-raycast
+  pick (`pickBeadAt`) is the occlusion-correct oracle teams actually use.
+- **r3f `fireEvent` skips raycasting** → can't validate occlusion; real clicks are required.
+- **Tier 3 visual-regression** (Playwright `toHaveScreenshot`/pixelmatch, odiff, Loki/Chromatic) is the
+  "does it look right" complement, but needs a **pinned software rasterizer** (headless Chrome defaults
+  to SwiftShader; baselines are per-OS/browser) — deferred until we have CI determinism. First-time
+  aesthetic correctness is the irreducible human-eye boundary pixel-diffing never covers.
+
+**Shipped:** `frontend/e2e/helpers/scene_harness.js` (`loadScaffoldedPart`, `beadCandidates`,
+`altPickBeads`) + dev-only `__nadocTest.pickBeadAt` / `getSelectedObject`. Proven on EASY
+(`bead_select.spec.js`, alt-pick 1 bead) and HARD (`measurement_tool.spec.js`, alt-pick 2 + M + clear)
+— 6/6 across repeats. **Dropped** an earlier `findClickableBeads` "pre-verify the pixel" hook: it gave
+false confidence (a float-center-verified point still misses at integer click precision) — retry beats it.
+
+### USER TODO — manually confirm the robust gesture loop works on your machine
+The automated specs pass here; please sanity-check once that they pass for you (servers auto-start via
+the fixed `playwright.config.js`):
+1. `cd frontend && npx playwright test bead_select.spec.js measurement_tool.spec.js` → expect all green.
+2. Re-run with `--repeat-each=3` once → confirm non-flaky on your hardware (WSL2 timing differs).
+3. Manually in the app (`just dev` + `just frontend`, load a real design): Alt-click two beads, press
+   `M` → cyan line + "Distance: … nm"; press `M` again → it clears. (This is what the HARD spec automates.)
+4. If a spec hangs at server start with `spawn /bin/sh ENOENT`, the dev servers aren't up AND the config
+   cwd regressed — see the ledger entry on `playwright.config.js`.

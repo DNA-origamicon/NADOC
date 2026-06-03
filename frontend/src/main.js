@@ -15690,6 +15690,36 @@ Typical debugging workflow for "reverts to 3D" bug:
       },
       /** Count of Alt-picked measurement beads (the measurement tool's input). */
       getCtrlBeadCount: () => selectionManager.getCtrlBeads?.().length ?? 0,
+      /** Current single-selection ({type,id,...}) or null. */
+      getSelectedObject: () => store.getState().selectedObject ?? null,
+
+      // ── Robust gesture harness (MapGrab-style controller) ──────────────────
+      // pickBeadAt runs the REAL raycast (same camera + bead meshes the selection
+      // manager uses) against client (viewport) coords, returning the frontmost
+      // bead hit or null. This is occlusion-correct — it answers "what would a
+      // click here actually hit?" — unlike projecting a point and hoping.
+      pickBeadAt(clientX, clientY) {
+        const rect = canvas.getBoundingClientRect()
+        const ndc = new THREE.Vector2(
+          ((clientX - rect.left) / rect.width) * 2 - 1,
+          -((clientY - rect.top) / rect.height) * 2 + 1,
+        )
+        const ray = new THREE.Raycaster()
+        ray.setFromCamera(ndc, camera)
+        const entries = designRenderer.getBackboneEntries?.() ?? []
+        const meshes = [...new Set(entries.map(e => e.instMesh))].filter(m => m && m.visible)
+        if (!meshes.length) return null
+        const hits = ray.intersectObjects(meshes)
+        if (!hits.length) return null
+        const hit = hits[0]
+        const entry = entries.find(e => e.instMesh === hit.object && e.id === hit.instanceId)
+        if (!entry) return null
+        return {
+          instanceId: hit.instanceId,
+          strand_id: entry.nuc?.strand_id, helix_id: entry.nuc?.helix_id,
+          bp_index: entry.nuc?.bp_index, direction: entry.nuc?.direction,
+        }
+      },
     }
   }
 
