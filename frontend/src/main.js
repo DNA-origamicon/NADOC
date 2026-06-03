@@ -30,6 +30,7 @@ import { buildSpecMap, buildDomainMapFromDesign, buildDomainMapFromGeom, buildJu
 import { signedAngleFromWorldDelta, movingSideSignForRevolute, clampJointValue, gearEndpointSide, rotationDeltaMatrix } from './scene/gear_math.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, summarizeConstraint, constraintRelevantChanged } from './scene/assembly_diff.js'
 import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead } from './scene/design_queries.js'
+import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -11284,28 +11285,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
-  function _clusterTransformAfterJointDelta(cluster, joint, deltaRad) {
-    const axisDir = new THREE.Vector3(...joint.axis_direction).normalize()
-    const J = new THREE.Vector3(...joint.axis_origin)
-    const P0 = new THREE.Vector3(...(cluster.pivot ?? [0, 0, 0]))
-    const R0 = new THREE.Quaternion(...(cluster.rotation ?? [0, 0, 0, 1]))
-    const T0 = new THREE.Vector3(...(cluster.translation ?? [0, 0, 0]))
-    const R_delta = new THREE.Quaternion().setFromAxisAngle(axisDir, deltaRad)
-    const R_new = R_delta.clone().multiply(R0)
-
-    const inner = J.clone().sub(P0).applyQuaternion(R0).add(P0).add(T0).sub(J)
-    const T_new = inner.clone().applyQuaternion(R_delta)
-    const P0_minus_J = P0.clone().sub(J)
-    const T_new_c = P0_minus_J.clone().applyQuaternion(R_new).sub(P0_minus_J).add(T_new)
-
-    return {
-      ...cluster,
-      translation: [T_new_c.x, T_new_c.y, T_new_c.z],
-      rotation: [R_new.x, R_new.y, R_new.z, R_new.w],
-      pivot: [P0.x, P0.y, P0.z],
-    }
-  }
-
   // ── Camera-plane free drag (non-revolute parts) ──────────────────────────────
   let _assemblyPtrDownAt = null
   // Right-button-down position. OrbitControls pans on right-drag, but the
@@ -11713,7 +11692,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       const drag = _partJointDrag
       _partJointDrag = null
       if (Math.abs(drag.currentDelta) < 1e-8) return
-      const clusterTransform = _clusterTransformAfterJointDelta(drag.cluster, drag.joint, drag.currentDelta)
+      const clusterTransform = clusterTransformAfterJointDelta(drag.cluster, drag.joint, drag.currentDelta)
       _assemblyPendingPartJoints.set(`${drag.instId}:${drag.cluster.id}`, {
         instanceId: drag.instId,
         body: {
