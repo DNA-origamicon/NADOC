@@ -33,6 +33,7 @@ GO/NO-GO call on scaling before grinding through the whole file.
 | 12 | 2026-06-03 | MEDIUM | `computeGroupHiddenInstanceIds` → `scene/assembly_groups_util.js` | ~8 min | −18 (inside closure) | 6 (empty / hidden / visible-ignored / subgroup recursion / hidden-parent-wins / dangling subgroup) | 1 (green first run) | 0 (verbatim) | none — vitest 138 |
 | 13 | 2026-06-03 | MEDIUM | `heatmapHex` (+ co-located `HEATMAP_MIN/MAX` consts) → `scene/color_util.js` | ~8 min | −10 (inside closure) | 4 (range; blue/red clamps; midpoint distinct) | 1 (green first run) | 0 (borderline → co-located the 2 consts, which only this fn used) | none — vitest 142 |
 | 14 | 2026-06-03 | MEDIUM | `fretQuenchedDonors` → `scene/fret_util.js` (donor/r0 maps parameterized) | ~10 min | −16 (inside closure) | 5 (within/beyond r0; non-donor/no-mod ignored; lone donor; missing r0) | 1 (green first run) | 0 (borderline → parameterized the 2 maps; they stay in main.js, populated there) | none — vitest 147 |
+| 15 | 2026-06-03 | MEDIUM (discovered) | `vecClose` → `scene/vec_math.js` | ~8 min | −2 (inside closure) | 5 (identical/eps/custom-eps/length-mismatch/empty) | 1 (green first run) | 0 (pure array math; first discovered-not-mapped extraction) | none — vitest 152 |
 
 **Metric definitions** — `wall-clock`: rough session minutes (target EASY <15, MEDIUM <30, HARD <90).
 `main.js LOC Δ`: lines removed from `main()` body (imports stay, so total drops less). `tests added /
@@ -141,3 +142,8 @@ gotcha worth remembering. The autonomous extraction loop writes here when it ski
   (`store`); `_effectiveInstanceMatrix` (`_assemblyPendingTransforms`); `_buildSsdnaPayload`,
   `_ooPreviewFromFields` (store/DOM); `_computeAssemblyDuplicateOffset` (assemblyRenderer).
 - **Borderline singletons (need a small tweak):** ~~`_heatmapHex`~~ ✅ #13 — co-located `HEATMAP_MIN/MAX` (only this fn used them) in color_util.js; ~~`_fretQuenchedDonors`~~ ✅ #14 — parameterized the maps (left in main.js, populated there); fret_util.js
+- **Discovery pass #1 findings (after mapped backlog drained):** scanned main() for pure fns. Extracted `vecClose` (#15). Logged non-candidates:
+  - `_isManualSelect` — reads closure `_manualFilters` Set (impure, skip).
+  - `_highDetailGeometries` — reads/writes closure cache `_hdGeoCache` + allocates THREE geometries (impure resource cache, skip).
+  - `_atomisticUrl` (returns the literal '/api/design/atomistic') and `_formatAqueousBackground` (returns a constant CSS string) — pure but TRIVIAL constants, not worth a module; left in place.
+  - Remaining heuristic hits are overwhelmingly DOM/panel show/hide helpers (capture element refs → stateful) — not pure; not individually logged.

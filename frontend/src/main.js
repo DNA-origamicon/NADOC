@@ -35,6 +35,7 @@ import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
 import { computeGroupHiddenInstanceIds } from './scene/assembly_groups_util.js'
 import { heatmapHex } from './scene/color_util.js'
 import { fretQuenchedDonors } from './scene/fret_util.js'
+import { vecClose } from './scene/vec_math.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -8342,9 +8343,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   })
 
-  function _vecClose(a = [], b = [], eps = 1e-6) {
-    return a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) <= eps)
-  }
 
   async function _refreshClusterPivotForAttach(clusterId) {
     if (clusterGizmo.hasPendingTransform?.(clusterId)) return
@@ -8358,7 +8356,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!pivot.every(Number.isFinite)) return
 
     const translation = rebaseClusterTranslationForPivot(cluster, pivot)
-    if (_vecClose(cluster.pivot, pivot) && _vecClose(cluster.translation, translation)) return
+    if (vecClose(cluster.pivot, pivot) && vecClose(cluster.translation, translation)) return
 
     clusterGizmo.setPendingTransform(clusterId, {
       pivot,
