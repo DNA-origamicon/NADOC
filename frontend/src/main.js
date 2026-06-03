@@ -36,6 +36,7 @@ import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './
 import { heatmapHex } from './scene/color_util.js'
 import { fretQuenchedDonors } from './scene/fret_util.js'
 import { motionChipStyle } from './scene/motion_chip.js'
+import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
 import { ascWarningText, SCAFFOLD_LENGTHS } from './scene/scaffold_assign.js'
 import { filterAtomData } from './scene/atom_filter.js'
@@ -8572,12 +8573,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   // to X gets a tight offset matching its X-width, not its long-axis length.
   function _computeAssemblyDuplicateOffset(sourceId) {
     const entry = assemblyRenderer.getInstanceCenters().find(c => c.id === sourceId)
-    if (!entry) return null
-    const GAP = 2.0  // nm — small breathing room past the touch point
-    const MIN = 5    // nm — keeps single-helix parts visibly jumping too
-    const xExtent = entry.size?.x ?? (entry.radius * 2)
-    const dx = Math.max(MIN, xExtent + GAP)
-    return [dx, 0, 0]
+    return assemblyDuplicateOffset(entry)
   }
 
   const assemblyContextMenu = initAssemblyContextMenu({
