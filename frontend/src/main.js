@@ -35,6 +35,7 @@ import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
 import { computeGroupHiddenInstanceIds } from './scene/assembly_groups_util.js'
 import { heatmapHex } from './scene/color_util.js'
 import { fretQuenchedDonors } from './scene/fret_util.js'
+import { motionChipStyle } from './scene/motion_chip.js'
 import { vecClose } from './scene/vec_math.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
@@ -11450,13 +11451,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (!text) { _motionChip.style.display = 'none'; return }
     _motionChip.textContent = text
     _motionChip.style.display = ''
-    const colors = {
-      info:    { fg: '#8b949e', bd: '#30363d', bg: '#161b22' },
-      ok:      { fg: '#3fb950', bd: '#238636', bg: '#0d2316' },
-      warn:    { fg: '#d29922', bd: '#9e6a03', bg: '#1c1810' },
-      locked:  { fg: '#f85149', bd: '#a40e26', bg: '#1c0d0d' },
-    }
-    const c = colors[severity] || colors.info
+    const c = motionChipStyle(severity)
     _motionChip.style.color = c.fg
     _motionChip.style.borderColor = c.bd
     _motionChip.style.background = c.bg
