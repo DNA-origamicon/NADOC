@@ -31,6 +31,7 @@ import { signedAngleFromWorldDelta, movingSideSignForRevolute, clampJointValue, 
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, summarizeConstraint, constraintRelevantChanged } from './scene/assembly_diff.js'
 import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead } from './scene/design_queries.js'
 import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
+import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
@@ -5620,27 +5621,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       _abReport.textContent = lines.filter(Boolean).join('\n')
     }
 
-    function _formatScoreSummary(report) {
-      const s = report?.summary ?? {}
-      return [
-        `Staples: ${s.staple_count ?? 0} (${s.scored_staple_count ?? 0} scored)`,
-        `Bound nt: ${s.total_bound_nt ?? 0}`,
-        `Length violations: ${s.length_violation_count ?? 0}`,
-        `Warnings: ${s.warning_count ?? 0}`,
-        `Q: ${s.Q_origami == null ? 'n/a' : Number(s.Q_origami).toExponential(3)}`,
-      ]
-    }
-
-    function _formatGraphSummary(report) {
-      const s = report?.summary ?? {}
-      return [
-        `Precursors: ${s.complete_precursor_count ?? 0}/${s.precursor_count ?? 0} complete`,
-        `Candidate edges: ${s.edge_count ?? 0}`,
-        `Best bound nt: ${s.best_total_bound_nt ?? 0}`,
-        `Best Q: ${s.best_Q_origami == null ? 'n/a' : Number(s.best_Q_origami).toExponential(3)}`,
-      ]
-    }
-
     async function _scoreAksel3d() {
       const opts = _readAkselOptions()
       _setAkselReport(['Scoring current staples…'])
@@ -5649,7 +5629,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         _setAkselReport(['Score failed: ' + (store.getState().lastError?.message ?? 'unknown error')], 'error')
         return
       }
-      _setAkselReport(['Current route', ..._formatScoreSummary(report)])
+      _setAkselReport(['Current route', ...formatScoreSummary(report)])
     }
 
     async function _previewAksel3d() {
@@ -5662,7 +5642,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         _setAkselReport(['Preview failed: ' + (store.getState().lastError?.message ?? 'unknown error')], 'error')
         return
       }
-      _setAkselReport(['Precursor graph', ..._formatGraphSummary(report)])
+      _setAkselReport(['Precursor graph', ...formatGraphSummary(report)])
     }
 
     async function _runAutoBreak3d() {
