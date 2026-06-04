@@ -37,33 +37,33 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after extraction #38 (Coalesced assembly part-refresh — Tier 3 COMPLETE)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after extractions #39+#40 (Keyboard shortcuts → `ui/keyboard_shortcuts.js`, −492 ln, Tier 4's biggest region DONE)._
 
-**Tier 3 is fully drained** (#38, `scene/assembly_refresh.js`, −83 ln). The fake-timer factory test pattern
-worked cleanly: `vi.useFakeTimers()` + `await vi.advanceTimersByTimeAsync(250)`, and a hand-rolled
-`deferred()` promise to hold the refresh "in flight" so the mid-flight-coalesce branch is exercised. No GPU
-gesture needed — debounce/coalesce is pure timing. Bank: this is the template for any other setTimeout-debounce
-region (e.g. the `_applyRegionSurfaceOverlay` `_regionSurfaceTimer` coalescer noted in the log's discovery pass).
+**Keyboard shortcuts DONE (#39/#40, −492 ln).** Premise was stale — the "monolithic keydown handler" had
+already been refactored to per-shortcut `registerShortcut()` calls; the real work was the factory lift, not
+a table extraction. Wide (~33 deps) but shallow (verbatim handlers). Tested by dispatching a plain fake
+event object `{key, ctrlKey, shiftKey, altKey, repeat, target:{tagName}, preventDefault}` through the REAL
+`dispatchKeyEvent` (no jsdom KeyboardEvent needed — it just reads fields, and a real `new KeyboardEvent`
+dispatched off-document has `target:null` → throws). Added `clearShortcuts()` to `input/shortcuts.js` for
+test isolation (registry is a module singleton — reset in `beforeEach`).
 
-**Next best: Tier 4 — Keyboard shortcuts** — banner `// ── Keyboard shortcuts` (~528 ln, the single
-biggest LOC payoff left) → `ui/keyboard_shortcuts.js` `initKeyboardShortcuts({commandMap, …})`. It's ONE
-giant keydown handler; the win is factoring it to a **key→action table** so it's testable by dispatching
-synthetic `KeyboardEvent('keydown')` (jsdom, no GPU). It's a dispatcher into nearly everything, so pass a
-single `commands` object of injected callbacks rather than 40 individual deps. Mechanical but broad —
-**split across ≥2 commits** (e.g. the table extraction first, then the modifier/guard logic). Risk MED-HIGH
-(surface breadth, not coupling depth). Gate: jsdom synthetic-keydown factory tests + smoke.
+**Next best: Tier 4 — View menu toggles + selection/tool filters** — banners `// ── View menu toggle pill
+state` … `// ── View tool buttons` (~365 ln) → `ui/view_toggles.js`. Deps: store + DOM buttons (use the
+`_setMenuToggle` class-pill pattern). jsdom-testable (click a button → assert store/menu state), no GPU
+gesture. Risk MED. **VERIFY the banner spans first** (the keyboard region taught the lesson AGAIN: premises
+drift). Pairs conceptually with the just-finished work — both are DOM-button→action wiring.
 
-- **Lower-risk alternatives if you'd rather warm up:** Tier 6 dev-only (`extension_arc_debug` ~424 ln /
-  `devtools_helpers` ~412 ln / `terminus_audit` ~210 ln / `help_menu_toggles` ~76 ln) — gated by
-  `?debug`/DEV, LOW risk, good token-cheap wins. Or Tier 4 **View menu toggles** (~365 ln) / **Coloring/
-  tools submenus** (~280 ln).
-- **Still-in-main, deliberately deferred:** FK propagation (`_applyFKLive`, `// ── Forward kinematics live
-  visual propagation`) — its own future region. The remaining Polymerize-region sub-part `scene/joint_pick.js`
-  (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound) is the only Tier-3-adjacent leftover.
-- **Gotcha banked this batch:** a `const` factory does NOT hoist — when both call sites fire async (event
-  handlers) you can still place the `const` init before the FIRST handler *definition* (not just before its
-  registration) and skip the lazy-let; reserve lazy-let for when a call site can fire *synchronously during
-  init* before the factory line runs.
+- **Lower-risk warm-ups (Tier 6 dev-only, gated by `?debug`/DEV, LOW risk, token-cheap):**
+  `devtools_helpers` (~412 ln, `window.__*`) / `extension_arc_debug` (~424 ln) / `terminus_audit` (~210 ln) /
+  `help_menu_toggles` (~76 ln). Or Tier 4 **Coloring/orbit/tools submenus** (~280 ln → `ui/view_menus.js`).
+- **Still-in-main, deliberately deferred:** FK propagation (`_applyFKLive`); Polymerize-region sub-part
+  `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound).
+- **Gotcha banked this batch:** when extracting many `registerShortcut` calls, the document `keydown`
+  listener can move into the factory cleanly (commit 2) — but it's then the SINGLE point of failure for ALL
+  shortcuts, and `just smoke` won't catch a missing listener (its Ctrl+K/Escape go through `initCommandPalette`,
+  not this registry). The app exercise MUST press one of THIS module's keys (e.g. `` ` `` → debug menu pill)
+  to prove the listener attached. Other `registerShortcut` call sites elsewhere in main.js are NOT part of
+  the region — scope by line range, not by symbol.
 
 ---
 
@@ -287,10 +287,24 @@ The largest single blocks and the most coupling into assembly state. Each needs 
 
 ## Tier 4 — menus / toggles / shortcuts (many small handlers)
 
-- [ ] **Keyboard shortcuts** — banner `// ── Keyboard shortcuts` (~6608–7136, ~528 ln) →
-  `ui/keyboard_shortcuts.js` as `initKeyboardShortcuts({commandMap, ...})`. ONE giant keydown handler;
-  factor to a key→action table so it's testable by dispatching synthetic keydowns. Deps: nearly
-  everything (it's a dispatcher) — pass a command object. Risk: MED-HIGH (broad surface, but mechanical).
+- [x] **Keyboard shortcuts** — banner `// ── Keyboard shortcuts` (~6207–6731, ~525 ln) →
+  `ui/keyboard_shortcuts.js` `initKeyboardShortcuts({deps})`. **DONE in 2 commits (2026-06-04).**
+  **Map premise was STALE:** the "ONE giant keydown handler / factor to a key→action table" was already
+  done — the region was 21 individual `registerShortcut({...})` calls into `input/shortcuts.js`'s registry
+  + a single `document.addEventListener('keydown', dispatchKeyEvent)`. So the real work was the *factory
+  lift* (drain the closure), not table extraction. Wide-but-shallow: ~33 deps, but handlers move verbatim.
+  - **#39 `c4c5039` (Group 1):** view/tool toggles + number hotkeys (u/k/Tab/q/Shift+D/v/1–6/`/f/m/b/c/o)
+    → factory; G2 stays inline. Added `clearShortcuts()` to `input/shortcuts.js` for test isolation
+    (registry is a module singleton). 13 vitest.
+  - **#40 `a519334` (Group 2 — COMPLETES region):** Ctrl-modifier file/edit (Ctrl+O/S/Shift+S, Ctrl+Z/Y/
+    Shift+Z) + Delete + Escape folded in; the document `keydown` listener now attaches from the factory;
+    dropped now-unused `dispatchKeyEvent` import (registerShortcut stays — 4 OTHER call sites at 8735/9180/
+    11029/11513 are NOT part of this region). 9 more vitest (22 total).
+  - main.js **−492 ln** total. Live-mutable closure state (part-edit ctx, assembly ws path, oo-edit id set,
+    translate/rotate flag) injected as getters; all else as stable fn/module refs. Gate: vitest 461 +
+    smoke 21/21 + 2 running-app exercises (factory-attached listener toggles the debug pill; Ctrl+Z+Escape
+    fire clean). **Lesson (re-confirmed): the carve-up banner premises drift — the infra under this banner
+    had already been refactored once; READ before trusting the "what it is" description, not just the LOC.**
 - [ ] **View menu toggles + selection/tool filters** — banners `// ── View menu toggle pill state` …
   `// ── View tool buttons` (~6124–6489, ~365 ln) → `ui/view_toggles.js`. Deps: store, DOM buttons.
   Risk: MED.
