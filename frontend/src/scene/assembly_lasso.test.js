@@ -80,3 +80,54 @@ describe('initAssemblyLasso', () => {
     expect(controls.enabled).toBe(true)
   })
 })
+
+describe('initAssemblyLasso — Ctrl-click toggle + Esc-cancel (new UX)', () => {
+  function setup() {
+    const handlers = {}
+    const canvas = {
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 200 }),
+      addEventListener: (t, h) => { handlers[t] = h },
+      removeEventListener: (t) => { delete handlers[t] },
+    }
+    const controls = { enabled: true }
+    const onSelect = vi.fn(); const onClick = vi.fn()
+    const lasso = initAssemblyLasso({
+      canvas, camera: camera(), controls,
+      getInstanceCenters: () => [at('a', [0, 0, 0])], onSelect, onClick,
+    })
+    return { lasso, controls, onSelect, onClick, handlers }
+  }
+
+  it('a tiny Ctrl-drag fires onClick (toggle), not onSelect', () => {
+    const { lasso, onSelect, onClick, handlers } = setup()
+    lasso.start({ ctrlKey: true, clientX: 50, clientY: 50 })
+    handlers.pointerup({ clientX: 52, clientY: 52 })   // <4px → click
+    expect(onClick).toHaveBeenCalledTimes(1)
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('a real drag fires onSelect, not onClick', () => {
+    const { lasso, onSelect, onClick, handlers } = setup()
+    lasso.start({ ctrlKey: true, clientX: 5, clientY: 5 })
+    handlers.pointerup({ clientX: 195, clientY: 195 })
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(onClick).not.toHaveBeenCalled()
+  })
+
+  it('Esc during a drag cancels it: controls re-enabled, no selection on release', () => {
+    const { lasso, controls, onSelect, handlers } = setup()
+    lasso.start({ ctrlKey: true, clientX: 5, clientY: 5 })
+    expect(controls.enabled).toBe(false)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(controls.enabled).toBe(true)          // cancelled
+    expect(handlers.pointerup).toBeUndefined()   // pointer + key listeners detached
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('detaches the Esc listener after finalize (no late cancel / leak)', () => {
+    const { lasso, handlers } = setup()
+    lasso.start({ ctrlKey: true, clientX: 5, clientY: 5 })
+    handlers.pointerup({ clientX: 195, clientY: 195 })   // finalize detaches keydown
+    expect(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))).not.toThrow()
+  })
+})

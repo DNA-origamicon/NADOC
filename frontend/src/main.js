@@ -11176,6 +11176,14 @@ Typical debugging workflow for "reverts to 3D" bug:
         : hits
       store.setState({ multiSelectedInstanceIds: next, activeInstanceId: null, activeGroupId: null })
     },
+    // Ctrl-click (no drag) → toggle the picked instance in/out of the multi-select.
+    onClick: (e) => {
+      const hit = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
+      if (!hit) return
+      const cur = store.getState().multiSelectedInstanceIds ?? []
+      const next = cur.includes(hit.id) ? cur.filter(id => id !== hit.id) : [...cur, hit.id]
+      store.setState({ multiSelectedInstanceIds: next, activeInstanceId: null, activeGroupId: null })
+    },
   })
 
   // ── PartGroup helpers (id walks; mirror backend/core/assembly_groups.py) ────

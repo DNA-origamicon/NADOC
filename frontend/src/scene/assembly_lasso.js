@@ -45,7 +45,7 @@ export function instancesInRect(centers, camera, { width, height }, cx1, cy1, cx
  * @param {(hits:string[], additive:boolean)=>void} deps.onSelect
  * @returns {{ start:(e)=>boolean, cancel:()=>void }}
  */
-export function initAssemblyLasso({ canvas, camera, controls, getInstanceCenters, onSelect }) {
+export function initAssemblyLasso({ canvas, camera, controls, getInstanceCenters, onSelect, onClick }) {
   let state = null   // { startX, startY, overlayEl, additive } | null
 
   function createOverlay() {
@@ -67,11 +67,19 @@ export function initAssemblyLasso({ canvas, camera, controls, getInstanceCenters
     el.style.height = Math.abs(e.clientY - state.startY) + 'px'
   }
 
+  // Esc aborts an in-flight drag (listener added on start, removed on end).
+  function onKey(e) { if (e.key === 'Escape') cancel() }
+
+  function detach() {
+    canvas.removeEventListener('pointermove', onMove)
+    canvas.removeEventListener('pointerup',   onUp)
+    window.removeEventListener('keydown', onKey)
+  }
+
   function finalize(endE) {
     const s = state
     state = null
-    canvas.removeEventListener('pointermove', onMove)
-    canvas.removeEventListener('pointerup',   onUp)
+    detach()
     controls.enabled = true
     if (!s) return
     s.overlayEl?.remove()
@@ -80,7 +88,8 @@ export function initAssemblyLasso({ canvas, camera, controls, getInstanceCenters
     const cx2 = Math.max(s.startX, endE.clientX) - rect.left
     const cy1 = Math.min(s.startY, endE.clientY) - rect.top
     const cy2 = Math.max(s.startY, endE.clientY) - rect.top
-    if ((cx2 - cx1) < 4 && (cy2 - cy1) < 4) return   // tiny rect = accidental click
+    // Tiny rect = a click, not a drag → a Ctrl-click; let the caller toggle the pick.
+    if ((cx2 - cx1) < 4 && (cy2 - cy1) < 4) { onClick?.(endE); return }
     const hits = instancesInRect(getInstanceCenters(), camera, { width: rect.width, height: rect.height }, cx1, cy1, cx2, cy2)
     onSelect(hits, s.additive)
   }
@@ -94,15 +103,15 @@ export function initAssemblyLasso({ canvas, camera, controls, getInstanceCenters
     controls.enabled = false
     canvas.addEventListener('pointermove', onMove)
     canvas.addEventListener('pointerup',   onUp)
+    window.addEventListener('keydown', onKey)
     return true
   }
 
-  /** Abort an in-flight drag (e.g. on assembly-mode exit). */
+  /** Abort an in-flight drag (Esc, or assembly-mode exit). */
   function cancel() {
     if (!state) return
     state.overlayEl?.remove()
-    canvas.removeEventListener('pointermove', onMove)
-    canvas.removeEventListener('pointerup',   onUp)
+    detach()
     state = null
     controls.enabled = true
   }
