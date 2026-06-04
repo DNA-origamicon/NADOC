@@ -43,6 +43,7 @@ _(Between #15 and #16, several interactive batches ran post-autonomous-loop and 
 | 19 | 2026-06-03 | HARD (stateful) | loop-strand popup → `scene/loop_popup.js` factory `initLoopPopup` + pure `bestLoopNick` | ~35 min | −82 | 10 (4 nick-math + 6 factory: mount/show/suppress/non-loop/Nick/Leave) | 2 (jsdom didn't reflect `display` from cssText → explicit set) | manual: deferred (needs a circular-staple design) — caught by vitest+smoke | none — vitest 251, smoke 21/21 |
 | — | 2026-06-03 | FEATURE REMOVAL | **#19 reverted**: loop_popup.js + test + `_ctrlHeld` deleted per user — the auto-nick "Nick here" popup was unwanted (its context menu was buried; users linearize circular staples manually). Warning highlight (loopStrandIds → red in 3D/cadnano) KEPT untouched. | ~10 min | −13 (popup wiring + _ctrlHeld) | −10 (test file deleted) | — | — | none — vitest 241, smoke 21/21 |
 | 20 | 2026-06-03 | STATEFUL (Tier 1) | Strand length histogram IIFE → `ui/strand_length_histogram.js` factory `initStrandLengthHistogram` + pure `computeStrandLengthBins` | ~30 min | **−192 (inside closure; first stateful-subsystem extraction of the new tier)** | 13 (6 pure: status/binning/out-of-range/boundary/summary; 7 jsdom factory: no-DOM no-op/expand/collapse/bar-click-selects/subscription redraw-on-expand + no-redraw-when-collapsed) | 1 (green first run) | ~3 (real-app expand exercise via throwaway spec, then deleted) | none — vitest 253, smoke 21/21, real-app panel-expand zero-console-errors |
+| 21 | 2026-06-03 | STATEFUL (Tier 1) | Overhang sequences panel IIFE → `ui/overhang_sequences_panel.js` factory `initOverhangSequencesPanel` + pure `liveOverhangs` / `selectedStrandIds` | ~40 min | **−224 (inside closure)** | 20 (9 pure: live/ghost/no-strand filter + 3-source selection union/dedupe; 11 jsdom factory: no-DOM no-op/collapse/expand/empty/slider→setScale/Gen-visibility/Set-patch-trim-upper/Bind-toggle/row-select/highlight-on-selection/design-rebuild) | 1 (green first run) | ~5 (app exercise via loadScaffoldedPart: expand+slider+collapse, then deleted) | none — vitest 273, smoke 21/21, real-app expand zero-console-errors |
 
 **Metric definitions** — `wall-clock`: rough session minutes (target EASY <15, MEDIUM <30, HARD <90).
 `main.js LOC Δ`: lines removed from `main()` body (imports stay, so total drops less). `tests added /
@@ -161,6 +162,15 @@ gotcha worth remembering. The autonomous extraction loop writes here when it ski
   fixed (it hardcoded `/home/jojo/Work/NADOC`). Now derived from the config file location, so
   `just smoke` / the console-error gate auto-start the servers anywhere. If the gate ever fails
   with `spawn /bin/sh ENOENT`, the servers are down AND the cwd is wrong again.
+- **Test-design picking for overhang panels (#21):** a `.nadoc`'s *file-level* `overhangs` array is NOT
+  the runtime `design.overhangs` — hingeV4 stores 36 file-level overhangs but loads with
+  `design.overhangs`=0 (legacy/embedded representation that doesn't re-materialize). To exercise an
+  overhang panel against real rows, use **`Examples/NS_trans_fix.nadoc`** (51 runtime overhangs after
+  `/api/design/load`); verify with `GET /api/design` (stamp `X-NADOC-Doc`!) before relying on it.
+  ALSO: the `?open=` boot path imports into the tab's OWN random doc, so a bare `fetch('/api/design')`
+  in `page.evaluate` reads the *default* doc (empty) — the multi-doc trap again. For a reliable
+  welcome-dismissing app exercise, prefer `scene_harness.loadScaffoldedPart` (File>New, pinned doc) over
+  `?open` of a big legacy file (which intermittently re-shows welcome / stalls render under the test timeout).
 - **2D sidebar-canvas gestures DON'T need scene_harness (#20).** The histogram's click/hover/right-click
   are plain 2D-canvas hit-tests (`getBoundingClientRect` + `_barData` rectangles), NOT WebGL raycasts.
   jsdom covers them directly: stub `getContext`/`getBoundingClientRect`, dispatch a `MouseEvent('click')`,

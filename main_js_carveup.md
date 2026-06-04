@@ -50,8 +50,15 @@ Self-contained feature blocks that map cleanly to a factory; lowest coupling, hi
   **DONE** (extraction #20, commit pending) — factory `initStrandLengthHistogram` + pure
   `computeStrandLengthBins`; −192 ln off closure; 13 vitest (6 pure + 7 jsdom factory); smoke 21/21 +
   real-app expand exercise. 2D-canvas hit-testing covered by jsdom click test (no scene_harness needed).
-- [ ] **Overhang sequences panel** — banner `// ── Overhang sequences panel` (~2488–2715, ~227 ln) →
+- [x] **Overhang sequences panel** — banner `// ── Overhang sequences panel` (~2488–2715, ~227 ln) →
   `ui/overhang_sequences_panel.js`. Deps: store, api, DOM, selectionManager. Risk: MED.
+  **DONE** (extraction #21, commit pending) — factory `initOverhangSequencesPanel` + pure
+  `liveOverhangs` (ghost-strand filter) & `selectedStrandIds`; −224 ln off closure; 20 vitest (9 pure +
+  11 jsdom factory: collapse/expand/empty/slider/Gen-visibility/Set-patch/Bind-toggle/row-select/
+  highlight/design-rebuild); smoke 21/21 + real-app expand+slider+collapse exercise (zero console errors).
+  `showToast` imported directly (not a dep). Gotcha: hingeV4's 36 *file-level* overhangs don't
+  materialize at runtime (`design.overhangs`=0 after load) — NS_trans_fix (51) is the design with real
+  runtime overhangs. 2D/DOM panel → no scene_harness needed.
 - [ ] **Strand groups panel** — banner `// ── Strand groups panel` (~2715–2913, ~198 ln) →
   `ui/strand_groups_panel.js`. Deps: store (strandGroups), DOM rebuild + subscribe. Risk: MED.
 - [ ] **Library panel (welcome screen)** — banner `// ── Library panel (welcome screen)`
