@@ -41,7 +41,6 @@ import { selectionBBox } from './scene/selection_bbox.js'
 import { clientToNdc } from './scene/ndc.js'
 import { flexTetherConnections } from './scene/flex_tethers.js'
 import { clusterBackboneEntries } from './scene/cluster_entries.js'
-import { initLoopPopup } from './scene/loop_popup.js'
 import { initEmptySpaceMenu } from './scene/empty_space_menu.js'
 import { initAssemblyLasso } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
@@ -1213,18 +1212,10 @@ async function main() {
     }, true)
   })()
 
-  // Track Ctrl key state — used to suppress popups during Ctrl+click interactions.
-  let _ctrlHeld = false
-  window.addEventListener('keydown', e => { if (e.key === 'Control') _ctrlHeld = true  })
-  window.addEventListener('keyup',   e => { if (e.key === 'Control') _ctrlHeld = false })
-  window.addEventListener('blur',    ()  => { _ctrlHeld = false })
-
-  // ── Loop strand popup ────────────────────────────────────────────────────────
-  // When the user clicks a red circular-staple strand, show a warning popup with
-  // an option to automatically nick at a valid position (≥7bp from domain ends).
-  // Extracted to scene/loop_popup.js (DOM + subscription factory; nick math is
-  // the pure bestLoopNick). [store subscriber — registration order preserved here]
-  initLoopPopup({ store, api, isCtrlHeld: () => _ctrlHeld })
+  // Circular (loop) staples are flagged purely by the warning highlight in the 3D
+  // + cadnano views (driven by store.loopStrandIds). There is intentionally no
+  // auto-nick suggestion UI — the user linearizes manually via the generic
+  // "Nick here" context-menu action.
 
   // ── Collapsible-panel helper ──────────────────────────────────────────────
   // tabId / sectionId persist collapse state per-tab to localStorage so each

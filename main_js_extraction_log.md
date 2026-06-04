@@ -41,6 +41,7 @@ _(Between #15 and #16, several interactive batches ran post-autonomous-loop and 
 | 17 | 2026-06-03 | EASY (dedup) | `hexFromInt` (2 inline copies) → `scene/color_util.js` | ~8 min | −5 net | 3 (format/zero-pad/mask negatives) | 1 | 0 (pure; masked impl == slice impl for valid colours) | none |
 | 18 | 2026-06-03 | EASY (parameterize) | `atomColorsFromLetters` + `BASE_HEX` → `scene/color_util.js` (wrapper keeps store read) | ~7 min | −7 | 2 (keyed mapping / empty input) | 1 | 0 (pure core; store stays in wrapper) | none |
 | 19 | 2026-06-03 | HARD (stateful) | loop-strand popup → `scene/loop_popup.js` factory `initLoopPopup` + pure `bestLoopNick` | ~35 min | −82 | 10 (4 nick-math + 6 factory: mount/show/suppress/non-loop/Nick/Leave) | 2 (jsdom didn't reflect `display` from cssText → explicit set) | manual: deferred (needs a circular-staple design) — caught by vitest+smoke | none — vitest 251, smoke 21/21 |
+| — | 2026-06-03 | FEATURE REMOVAL | **#19 reverted**: loop_popup.js + test + `_ctrlHeld` deleted per user — the auto-nick "Nick here" popup was unwanted (its context menu was buried; users linearize circular staples manually). Warning highlight (loopStrandIds → red in 3D/cadnano) KEPT untouched. | ~10 min | −13 (popup wiring + _ctrlHeld) | −10 (test file deleted) | — | — | none — vitest 241, smoke 21/21 |
 
 **Metric definitions** — `wall-clock`: rough session minutes (target EASY <15, MEDIUM <30, HARD <90).
 `main.js LOC Δ`: lines removed from `main()` body (imports stay, so total drops less). `tests added /
