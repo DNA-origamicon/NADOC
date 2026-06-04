@@ -27,8 +27,7 @@ import { initMeasurementTool }       from './scene/measurement_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
 import { strandLengthNt, strandDomainNt } from './scene/strand_length.js'
 import { buildSpecMap, buildDomainMapFromDesign, buildDomainMapFromGeom, buildJunctionMapFromXovers, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
-import { signedAngleFromWorldDelta, movingSideSignForRevolute, clampJointValue, gearEndpointSide, rotationDeltaMatrix } from './scene/gear_math.js'
-import { revoluteCommitValue } from './scene/group_gizmo.js'
+import { initGroupGizmo } from './scene/group_gizmo.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, summarizeConstraint, constraintRelevantChanged } from './scene/assembly_diff.js'
 import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
@@ -124,11 +123,10 @@ import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
 import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
 import { initKinematicsTicker }      from './scene/kinematics_ticker.js'
-import { beltCouplingRelations, applyBeltRiders, beltCurvePoints, beltLoopLength } from './scene/belt_geometry.js'
+import { applyBeltRiders, beltCurvePoints, beltLoopLength } from './scene/belt_geometry.js'
 import { initBeltPolymerize } from './scene/belt_polymerize.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
-import { computeRevoluteTransform } from './scene/assembly_revolute_math.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
 import { initPlateView }                           from './ui/plate_view.js'
 import { STAPLE_PALETTE as PLATE_STAPLE_PALETTE } from './scene/helix_renderer/palette.js'
@@ -7740,6 +7738,24 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   const instanceGizmo = initInstanceGizmo(store, controls)
   const assemblyJointRenderer = initAssemblyJointRenderer(scene, camera, canvas, store, api, controls)
+
+  // Group/instance gizmo subsystem (revolute-drag angle accumulator + gear/belt
+  // live-coupling engine + single-instance gizmo attach). The shared helpers it
+  // leans on (transform-context builder, Move/Rotate live-apply + commit-queue,
+  // motion analysis + chip) are function declarations hoisted within main(), so
+  // they're already bound here even though defined further down.
+  const _groupGizmo = initGroupGizmo({
+    store, scene, camera, canvas,
+    instanceGizmo, assemblyRenderer, assemblyJointRenderer, api,
+    analyzeMotionConstraints:        _analyzeMotionConstraints,
+    setMotionChip:                   _setMotionChip,
+    createAssemblyTransformContext:  _createAssemblyTransformContext,
+    applyAssemblyPrimaryLive:        _applyAssemblyPrimaryLive,
+    queueAssemblyPrimaryCommit:      _queueAssemblyPrimaryCommit,
+    getMrAssemblyCtx:                () => _mrAssemblyCtx,
+    setMrTransformValuesFromMatrix:  _mrSetTransformValuesFromMatrix,
+  })
+  const _attachGroupGizmo = _groupGizmo.attachGroupGizmo
   const beltPathRenderer = initBeltPathRenderer(scene)
   // Per-belt visibility (session-only; default visible). The persistent belt
   // tubes are suppressed while the define/edit panel is open (it shows its own
@@ -9902,23 +9918,12 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   // ── Rigid-body group gizmo attachment ────────────────────────────────────────
+  // The revolute-drag angle accumulator + gear/belt live-coupling engine + the
+  // single-instance gizmo attach now live in scene/group_gizmo.js (initGroupGizmo,
+  // created below once its deps are available). The pending-transform Maps stay
+  // here — they're touched file-wide (dev hooks, exit-cleanup, keyboard-commit).
   const _assemblyPendingTransforms = new Map()
   const _assemblyPendingPartJoints = new Map()
-  // Unwrapped angle accumulator for the current revolute gizmo drag (so the
-  // committed value is continuous past ±π and the rotation commits as a joint
-  // current_value rather than a transform the backend re-derives + wraps).
-  let _revoluteGizmoAngle = null
-  // The committed { current_value, endpoint_side } for a finished revolute gizmo
-  // drag, or null if the gizmo wasn't rotating a revolute joint. `endpoint_side`
-  // tells the backend WHICH body actually moves ('a' = parent, 'b' = child) so a
-  // joint authored "backward" (moving body = parent, fixed axle = child) rotates
-  // the right part instead of the fixed axle. Consumes + clears the accumulator.
-  function _revoluteGizmoCommitValue(constraint) {
-    const seedJoint = store.getState().currentAssembly?.joints?.find(j => j.id === constraint.jointId)
-    const out = revoluteCommitValue({ constraint, gizmoAngle: _revoluteGizmoAngle, seedJoint })
-    if (out != null) _revoluteGizmoAngle = null   // consume the accumulator on commit
-    return out
-  }
 
   function _effectiveInstanceMatrix(inst) {
     return _assemblyPendingTransforms.get(inst.id)?.clone() ?? matrixFromInstance(inst)
@@ -9956,145 +9961,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     return delta
   }
 
-  function _applyGearLiveJointValue(assembly, joint, value, movingIds, endpointSide = 'b') {
-    if (!assembly || !joint) return
-    const seedId = endpointSide === 'a' ? joint.instance_a_id : joint.instance_b_id
-    if (!seedId) return
-    const groupIds = getRigidBodyGroup(assembly, seedId)
-    for (const memberId of groupIds) {
-      if (movingIds?.has(memberId)) continue
-      const inst = assembly.instances?.find(i => i.id === memberId)
-      const values = inst?.transform?.values
-      if (!Array.isArray(values) || values.length !== 16) continue
-      let mat
-      if (endpointSide === 'a') {
-        const delta = rotationDeltaMatrix(
-          joint.axis_origin ?? [0, 0, 0],
-          joint.axis_direction ?? [0, 0, 1],
-          (joint.current_value ?? 0) - value,
-        )
-        mat = delta.multiply(new THREE.Matrix4().fromArray(values).transpose())
-      } else {
-        mat = computeRevoluteTransform(
-          values,
-          joint.axis_origin ?? [0, 0, 0],
-          joint.axis_direction ?? [0, 0, 1],
-          value - (joint.current_value ?? 0),
-        )
-      }
-      assemblyRenderer.setLiveTransform(memberId, mat)
-      assemblyJointRenderer.setLiveJointTransform(memberId, mat, assembly)
-    }
-  }
-
-  function _applyGearLiveForRevoluteDrag(assembly, constraint, movingIds, delta) {
-    if (!assembly || constraint?.dof !== 'revolute' || !delta) return
-    const joints = assembly.joints ?? []
-    const seedJoint = joints.find(j => j.id === constraint.jointId)
-    if (!seedJoint) return
-
-    // Unwrap the gizmo's live rotation angle across frames: signedAngleFromWorldDelta
-    // is atan2 (±π), so past half a turn it wraps and a belt rider would teleport.
-    // Accumulate the shortest step from the previous sample. State persists for
-    // the commit (which sends current_value, not a transform).
-    const sideSign = movingSideSignForRevolute(seedJoint, movingIds)
-    const raw = signedAngleFromWorldDelta(delta, constraint.axis)
-    if (!_revoluteGizmoAngle || _revoluteGizmoAngle.jointId !== constraint.jointId) {
-      _revoluteGizmoAngle = { jointId: constraint.jointId, lastRaw: raw, accum: raw, sideSign }
-    } else {
-      let step = raw - _revoluteGizmoAngle.lastRaw
-      if (step >  Math.PI) step -= 2 * Math.PI
-      if (step < -Math.PI) step += 2 * Math.PI
-      _revoluteGizmoAngle.accum += step
-      _revoluteGizmoAngle.lastRaw = raw
-      _revoluteGizmoAngle.sideSign = sideSign
-    }
-    const seedDelta = _revoluteGizmoAngle.accum * sideSign
-
-    // Gears + belts share the live-drag coupling graph (belts modelled as
-    // gear-shaped edges with ratio r_a/r_b and open-belt direction).
-    const rels = [...(assembly.gear_relations ?? []), ...beltCouplingRelations(assembly)]
-    if (!rels.length) return
-
-    const values = new Map(joints.map(j => [j.id, j.current_value ?? 0]))
-    values.set(seedJoint.id, clampJointValue(seedJoint, (seedJoint.current_value ?? 0) + seedDelta))
-
-    const queue = [seedJoint.id]
-    const changed = new Set([seedJoint.id])
-    const byId = new Map(joints.map(j => [j.id, j]))
-    const endpointSideByJoint = new Map()
-    let guard = 0
-    const maxSteps = Math.max(1, rels.length * 2 + 1)
-    while (queue.length && guard++ < maxSteps) {
-      const sourceId = queue.shift()
-      const sourceValue = values.get(sourceId)
-      if (sourceValue == null) continue
-      for (const rel of rels) {
-        const sign = rel.invert ? -1 : 1
-        let targetId = null
-        let targetValue = null
-        if (sourceId === rel.joint_a_id) {
-          targetId = rel.joint_b_id
-          const anchorSrc = rel.joint_a_anchor ?? 0
-          const anchorTgt = rel.joint_b_anchor ?? 0
-          const factor = rel.ratio
-          const rawTarget = anchorTgt + sign * (sourceValue - anchorSrc) * factor
-          targetValue = rawTarget
-          endpointSideByJoint.set(targetId, gearEndpointSide(rel, 'b', byId.get(targetId)))
-          const targetJoint = byId.get(targetId)
-          const clampedTarget = clampJointValue(targetJoint, rawTarget)
-          if (Math.abs(clampedTarget - rawTarget) > 1e-9 && Math.abs(factor) > 1e-12) {
-            values.set(sourceId, clampJointValue(byId.get(sourceId), anchorSrc + sign * (clampedTarget - anchorTgt) / factor))
-            changed.add(sourceId)
-          }
-        } else if (sourceId === rel.joint_b_id) {
-          if (!Number.isFinite(rel.ratio) || Math.abs(rel.ratio) < 1e-9) continue
-          targetId = rel.joint_a_id
-          const anchorSrc = rel.joint_b_anchor ?? 0
-          const anchorTgt = rel.joint_a_anchor ?? 0
-          const factor = 1 / rel.ratio
-          const rawTarget = anchorTgt + sign * (sourceValue - anchorSrc) * factor
-          targetValue = rawTarget
-          endpointSideByJoint.set(targetId, gearEndpointSide(rel, 'a', byId.get(targetId)))
-          const targetJoint = byId.get(targetId)
-          const clampedTarget = clampJointValue(targetJoint, rawTarget)
-          if (Math.abs(clampedTarget - rawTarget) > 1e-9 && Math.abs(factor) > 1e-12) {
-            values.set(sourceId, clampJointValue(byId.get(sourceId), anchorSrc + sign * (clampedTarget - anchorTgt) / factor))
-            changed.add(sourceId)
-          }
-        } else {
-          continue
-        }
-        const targetJoint = byId.get(targetId)
-        if (!targetJoint || targetJoint.joint_type !== 'revolute') continue
-        targetValue = clampJointValue(targetJoint, targetValue)
-        if (Math.abs((values.get(targetId) ?? 0) - targetValue) < 1e-9) continue
-        values.set(targetId, targetValue)
-        changed.add(targetId)
-        queue.push(targetId)
-      }
-    }
-
-    for (const jointId of changed) {
-      if (jointId === seedJoint.id) continue
-      const joint = byId.get(jointId)
-      _applyGearLiveJointValue(
-        assembly,
-        joint,
-        values.get(jointId),
-        movingIds,
-        endpointSideByJoint.get(jointId) ?? 'b',
-      )
-    }
-    // Belt riders follow live during a gizmo/group drag — use the freshly
-    // computed coupled joint values (seed included).
-    applyBeltRiders(
-      assembly,
-      (id, j) => values.get(id) ?? (j.current_value ?? 0),
-      (iid, mat) => assemblyRenderer.setLiveTransform(iid, mat),
-    )
-  }
-
   function _queueAssemblyPrimaryCommit(ctx, primaryMat4) {
     if (!ctx || !primaryMat4) return
     _assemblyPendingTransforms.set(ctx.instanceId, primaryMat4.clone())
@@ -10116,80 +9982,6 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   function _hasAssemblyPending() {
     return _assemblyPendingTransforms.size > 0 || _assemblyPendingPartJoints.size > 0
-  }
-
-  function _attachGroupGizmo(instanceId, ctx = null) {
-    ctx ??= _createAssemblyTransformContext(instanceId)
-    if (!ctx) {
-      _setMotionChip(null)
-      return
-    }
-
-    // Pre-flight constraint analysis. If the part can't move (anchored or
-    // over-constrained), don't attach a gizmo at all — surface a chip with
-    // the reason. For a single revolute/prismatic/spherical mate, anchor the
-    // gizmo at the joint origin so the user rotates/translates about the
-    // joint, not the part centroid.
-    const constraint = _analyzeMotionConstraints({ kind: 'instance', id: instanceId })
-    const summary = summarizeConstraint(constraint)
-    if (summary) _setMotionChip(summary.text, summary.severity)
-    else         _setMotionChip(null)
-    if (constraint.dof === 'anchored' || constraint.dof === 'over-constrained') {
-      instanceGizmo.detach()
-      return
-    }
-
-    const centerEntry = assemblyRenderer.getInstanceCenters?.()?.find(c => c.id === instanceId)
-    const fallbackCentroid = centerEntry?.center ?? null
-    const centroidWorld =
-      (constraint.dof === 'revolute' || constraint.dof === 'prismatic' || constraint.dof === 'spherical')
-        ? constraint.origin
-        : fallbackCentroid
-
-    instanceGizmo.attach(
-      instanceId, scene, camera, canvas,
-      // onLiveTransform: apply delta to ALL group members + FK descendants each frame
-      (primaryMat4) => {
-        const delta = _applyAssemblyPrimaryLive(ctx, primaryMat4)
-        _applyGearLiveForRevoluteDrag(
-          store.getState().currentAssembly,
-          constraint,
-          new Set(ctx.groupStartTransforms.keys()),
-          delta,
-        )
-        if (_mrAssemblyCtx?.instanceId === instanceId) _mrSetTransformValuesFromMatrix(primaryMat4)
-      },
-      // onCommit (drag end). For a revolute joint, commit the UNWRAPPED rotation
-      // as the joint's current_value (the continuous-angle path) instead of a
-      // transform the backend re-derives via atan2 (which wraps past ±π and
-      // teleports belt riders). Other DOFs keep the transform-commit path.
-      (primaryMat4) => {
-        const rev = _revoluteGizmoCommitValue(constraint)
-        if (rev != null) api.patchAssemblyJoint(constraint.jointId, rev)
-        else _queueAssemblyPrimaryCommit(ctx, primaryMat4)
-      },
-      ctx.primaryStart,
-      centroidWorld,
-    )
-
-    _revoluteGizmoAngle = null   // fresh accumulator for this attach
-
-    if (constraint.dof === 'revolute') {
-      instanceGizmo.applyConstraint({
-        mode: 'rotate', axis: constraint.axis,
-        showX: false, showY: false, showZ: true,
-      })
-    } else if (constraint.dof === 'prismatic') {
-      instanceGizmo.applyConstraint({
-        mode: 'translate', axis: constraint.axis,
-        showX: false, showY: false, showZ: true,
-      })
-    } else if (constraint.dof === 'spherical') {
-      instanceGizmo.applyConstraint({
-        mode: 'rotate', spherical: true,
-        showX: true, showY: true, showZ: true,
-      })
-    }
   }
 
   // ── PartGroup gizmo — translate/rotate the whole group as a rigid body.
@@ -10261,7 +10053,7 @@ Typical debugging workflow for "reverts to 3D" bug:
           assemblyRenderer.setLiveTransform(id, liveMat)
           assemblyJointRenderer.setLiveJointTransform?.(id, liveMat, asm)
         }
-        _applyGearLiveForRevoluteDrag(
+        _groupGizmo.applyGearLiveForRevoluteDrag(
           asm,
           constraint,
           new Set(ctx.memberIds),
@@ -10284,7 +10076,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         // Revolute-constrained group → commit the UNWRAPPED rotation as the
         // joint's current_value (continuous past ±π), same as the instance
         // gizmo, so belt riders don't teleport. Other DOFs POST the group delta.
-        const rev = _revoluteGizmoCommitValue(constraint)
+        const rev = _groupGizmo.revoluteGizmoCommitValue(constraint)
         if (rev != null) {
           try { await api.patchAssemblyJoint(constraint.jointId, rev) }
           catch (err) { console.error('[assembly] group revolute commit failed:', err) }
@@ -10306,7 +10098,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       centroidWorld,
     )
 
-    _revoluteGizmoAngle = null   // fresh accumulator for this group attach
+    _groupGizmo.resetRevoluteAngle()   // fresh accumulator for this group attach
 
     if (constraint.dof === 'revolute') {
       instanceGizmo.applyConstraint({
