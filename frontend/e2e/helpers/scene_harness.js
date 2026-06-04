@@ -19,6 +19,27 @@ import { expect } from '@playwright/test'
 const API = 'http://localhost:8000/api'
 
 /**
+ * Collect browser console errors + uncaught page errors into an array.
+ *
+ * The stateful-extraction "one app exercise" gate is, at minimum, "drive the
+ * feature and assert zero console errors". Every throwaway exercise spec opened
+ * with the same three lines; this centralizes them.
+ *
+ *   const errors = trackConsoleErrors(page)
+ *   ... exercise the feature ...
+ *   expect(errors, errors.join('\n')).toEqual([])
+ *
+ * @param {import('@playwright/test').Page} page
+ * @returns {string[]} live array, appended to as errors occur
+ */
+export function trackConsoleErrors(page) {
+  const errors = []
+  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
+  page.on('pageerror', e => errors.push(String(e)))
+  return errors
+}
+
+/**
  * Boot on a PINNED ?doc, create a part, build a scaffolded 200-bp helix in that
  * same backend doc (so page.request and the tab agree — multi-doc), nudge a
  * rebuild, wait for backbone beads, then zoom past cylinder-LOD so beads are

@@ -6,6 +6,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as THREE from 'three'
+import { createMockStore } from '../test-helpers/mock_store.js'
+import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 import { buildFretLookups, FRET_PAIRS, initFretChecker } from './fret_checker.js'
 
 // ── buildFretLookups (pure) ─────────────────────────────────────────────────────
@@ -43,21 +45,7 @@ describe('buildFretLookups', () => {
 
 // ── initFretChecker (factory, jsdom) ────────────────────────────────────────────
 
-function mountMenu() {
-  document.body.innerHTML = `
-    <button id="menu-view-fluorescence"></button>
-    <button id="menu-view-fret"></button>`
-}
-
-function makeStore() {
-  let state = { currentGeometry: { v: 0 } }
-  const subs = []
-  return {
-    getState: () => state,
-    subscribe: cb => { subs.push(cb) },
-    _emit: patch => { const prev = state; state = { ...state, ...patch }; subs.forEach(cb => cb(state, prev)) },
-  }
-}
+const mountMenu = () => mountIds({ 'menu-view-fluorescence': 'button', 'menu-view-fret': 'button' })
 
 // fluoro entries: two glowing fluorophores (cy3 donor, cy5 acceptor) + one
 // non-emitting quencher (bhq2, present for distance checks but never glowed).
@@ -70,7 +58,7 @@ function makeEntries() {
 }
 
 function makeDeps() {
-  const store = makeStore()
+  const store = createMockStore({ currentGeometry: { v: 0 } })
   const designRenderer = {
     getFluoroEntries: vi.fn(() => makeEntries()),
     setFluorescenceGlow: vi.fn(),
@@ -80,7 +68,7 @@ function makeDeps() {
   return { store, designRenderer, setMenuToggle }
 }
 
-beforeEach(() => { document.body.innerHTML = '' })
+beforeEach(() => clearDom())
 
 describe('initFretChecker', () => {
   it('does not glow anything before any mode is toggled on', () => {

@@ -6,6 +6,8 @@
  *   initStrandGroupsPanel    — factory wiring, jsdom DOM + mock store/selectionManager.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createMockStore } from '../test-helpers/mock_store.js'
+import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 import {
   effectiveStrandColors,
   groupStrandsByColor,
@@ -122,49 +124,29 @@ describe('selectableGroupStrandIds', () => {
 
 // ── initStrandGroupsPanel (factory, jsdom) ──────────────────────────────────────
 
-function mountDom() {
-  document.body.innerHTML = `
-    <div id="groups-panel">
-      <h2 id="groups-panel-heading">Staple Groups <span id="groups-panel-arrow"></span></h2>
-      <div id="groups-list"></div>
-      <button id="groups-colors-btn">From colors</button>
-      <button id="groups-new-btn">New</button>
-    </div>`
-}
+const mountDom = () => mountIds({
+  'groups-panel': 'div',
+  'groups-panel-heading': 'h2',
+  'groups-panel-arrow': 'span',
+  'groups-list': 'div',
+  'groups-colors-btn': 'button',
+  'groups-new-btn': 'button',
+})
 
-function makeStore(initial) {
-  let state = {
+function makeDeps(initial) {
+  const store = createMockStore({
     currentDesign: null,
     currentGeometry: null,
     strandColors: {},
     strandGroups: [],
     multiSelectedStrandIds: [],
     ...initial,
-  }
-  const subs = []
-  return {
-    getState: () => state,
-    setState: patch => {
-      const prev = state
-      state = { ...state, ...patch }
-      subs.forEach(cb => cb(state, prev))
-    },
-    subscribe: cb => { subs.push(cb) },
-    _emit: patch => {
-      const prev = state
-      state = { ...state, ...patch }
-      subs.forEach(cb => cb(state, prev))
-    },
-  }
-}
-
-function makeDeps(initial) {
-  const store = makeStore(initial)
+  })
   const selectionManager = { setMultiHighlight: vi.fn() }
   return { store, selectionManager }
 }
 
-beforeEach(() => { document.body.innerHTML = '' })
+beforeEach(() => clearDom())
 
 describe('initStrandGroupsPanel', () => {
   it('no-ops gracefully when panel DOM is absent', () => {

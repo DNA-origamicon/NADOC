@@ -5,6 +5,8 @@
  *   initOverhangSequencesPanel        — factory wiring, jsdom DOM + mock store/api/selectionManager.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createMockStore } from '../test-helpers/mock_store.js'
+import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 import {
   liveOverhangs,
   selectedStrandIds,
@@ -115,43 +117,25 @@ describe('selectedStrandIds', () => {
 
 // ── initOverhangSequencesPanel (factory, jsdom) ─────────────────────────────────
 
-// Build the DOM the factory queries by id.
-function mountDom() {
-  document.body.innerHTML = `
-    <div id="overhang-panel">
-      <div id="overhang-panel-heading">Overhangs <span id="overhang-panel-arrow"></span></div>
-      <div id="overhang-label-size-row"><input id="overhang-label-size" type="range" /><span id="overhang-label-size-val"></span></div>
-      <div id="overhang-list"></div>
-    </div>`
-}
+// Build the DOM the factory queries by id (getElementById ignores nesting).
+const mountDom = () => mountIds({
+  'overhang-panel': 'div',
+  'overhang-panel-heading': 'div',
+  'overhang-panel-arrow': 'span',
+  'overhang-label-size-row': 'div',
+  'overhang-label-size': 'input',
+  'overhang-label-size-val': 'span',
+  'overhang-list': 'div',
+})
 
-function makeStore(initialDesign) {
-  let state = {
-    currentDesign: initialDesign,
+function makeDeps(design) {
+  const store = createMockStore({
+    currentDesign: design,
     selectedObject: null,
     multiSelectedStrandIds: [],
     multiSelectedDomainIds: [],
     multiSelectedOverhangIds: [],
-  }
-  const subs = []
-  return {
-    getState: () => state,
-    setState: patch => {
-      const prev = state
-      state = { ...state, ...patch }
-      subs.forEach(cb => cb(state, prev))
-    },
-    subscribe: cb => { subs.push(cb) },
-    _emit: (patch) => {           // test helper: change state + notify
-      const prev = state
-      state = { ...state, ...patch }
-      subs.forEach(cb => cb(state, prev))
-    },
-  }
-}
-
-function makeDeps(design) {
-  const store = makeStore(design)
+  })
   const selectionManager = { selectStrand: vi.fn() }
   const api = {
     generateOverhangRandomSequence: vi.fn(() => Promise.resolve()),
@@ -171,7 +155,7 @@ const DESIGN = {
   overhang_bindings: [{ id: 'b1', overhang_a_id: 'o1', overhang_b_id: 'o2', bound: false, name: 'pair' }],
 }
 
-beforeEach(() => { document.body.innerHTML = '' })
+beforeEach(() => clearDom())
 
 describe('initOverhangSequencesPanel', () => {
   it('no-ops gracefully when panel DOM is absent', () => {

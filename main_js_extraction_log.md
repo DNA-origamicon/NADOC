@@ -147,6 +147,40 @@ in **`main_js_carveup.md`**. Each session claims ONE region from there. Run each
 session (token cost scales with conversation length; the log + carve-up map + main-init.md carry all
 the state a cold session needs).
 
+## Test infrastructure (2026-06-04) — shared helpers + scaffolding skill
+
+The per-region test boilerplate (mock store, DOM mount, mock deps) was being
+hand-copied each extraction. Factored out so future regions are cheaper, and so
+the generate-vs-judge boundary is explicit:
+
+- **`frontend/src/test-helpers/mock_store.js`** — `createMockStore(initialState)`:
+  getState / setState-that-notifies / subscribe (returns unsubscribe) / `_emit`.
+  Replaces the ~15-line hand-rolled store in every factory test.
+- **`frontend/src/test-helpers/factory_dom.js`** — `mountIds(spec)` (array→`<div>`,
+  or `{id: tag}`) + `clearDom()`. `getElementById` ignores nesting, so a flat
+  by-id set is enough to wire a factory.
+- **`frontend/e2e/helpers/scene_harness.js` → `trackConsoleErrors(page)`** — the
+  three-line console/pageerror collector every throwaway app-exercise spec used.
+- **`frontend/scripts/scaffold-tests.mjs`** — reads an extracted module, emits a
+  `.test.js` skeleton (helper imports, `mountIds` stub from its `getElementById`
+  ids, `makeDeps()` `vi.fn()` stubs from `dep.method()` / direct-fn call sites,
+  empty `describe`/`it` with TODOs). Regex, no AST — a starting point to edit.
+- **Skill `extract-tests`** (`.claude/skills/extract-tests/SKILL.md`) — wraps the
+  above into the loop step 4.
+
+**The bright line (load-bearing):** these generate test *structure*, never the
+*oracle*. Assertions stay human-authored — an LLM writing assertions from the same
+reading of the code under test produces tautological tests that pass and pin
+nothing, silently. The reusable pattern is **propose → validate against an
+authoritative oracle (`just test-frontend` + `just smoke` + verbatim-move) →
+retry**; that same harness shape is the intended foundation for later
+validator-gated generation (e.g. text→design gated on topology/three-layer
+validators). Keep generate and validate separate; never let the generator judge.
+
+Retrofitted #21/#22/#24 factory tests onto the helpers (vitest 314→326, all green;
++12 from the two helper specs). The generated skeleton runs green as-is before any
+assertions are filled (verified end-to-end).
+
 ## Difficulties ledger (for later attempts / the autonomous loop)
 
 Append-only. Record candidates that turned out NOT to be clean pure extractions, plus any
