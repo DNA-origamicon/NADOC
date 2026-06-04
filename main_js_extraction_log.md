@@ -62,6 +62,9 @@ _(Between #15 and #16, several interactive batches ran post-autonomous-loop and 
 
 | 35 | 2026-06-04 | STATEFUL (Tier 3 — Group gizmo region, sub-part a) | pure `revoluteCommitValue` (revolute gizmo-drag commit math) from `_revoluteGizmoCommitValue` → new `scene/group_gizmo.js` (seeds the module); main.js wrapper keeps the store-read + accumulator-clear | ~20 min | −5 (inside closure) | 7 (non-revolute→null / no-angle→null / wrong-joint→null / forward-side adds+endpoint-b / backward sideSign subtracts+endpoint-a / missing seed value→0 / clamp-to-limits) | 1 (green first run) | 0 — pure core; smoke run anyway given the region is the file's central transform hub | none — vitest 416, smoke 21/21. **De-risking first cut into the highest-coupling region.** (b)/(c) stateful gizmo-attach lifts NOT attempted — the gesture gate the handoff called "off-the-shelf" is **not** (no load-`.nass` harness helper, no group-select dev hook). Logged + handoff rewritten. |
 
+| 36 | 2026-06-04 | STATEFUL (Tier 3 — Group gizmo region, sub-part b + shared engine) | gear-live revolute-drag engine (`applyGearLiveForRevoluteDrag` + `_applyGearLiveJointValue` + `_revoluteGizmoAngle` accumulator + revolute commit wrapper) **and** `attachGroupGizmo` (single-instance) → `initGroupGizmo` factory in `scene/group_gizmo.js` | ~55 min | **−208 (inside closure)** | 9 (factory: no-ctx chip+no-attach / anchored-detach / free-attach-at-centroid / revolute-attach-at-origin+rotate-constraint / onLive applies primary + pushes Move/Rotate / onCommit-non-revolute-queues; engine: gear-coupling drives child + commits angle / resetAngle / non-revolute no-op) | 1 (green first run) | 0 — `assembly_select` + `assembly_joint_drag` (real raycast) exercise the (b) attach path via the subscriber | none — vitest 425, smoke 21/21, assembly specs 3/3. Shared helpers stay in main.js as injected deps (`createAssemblyTransformContext`/`applyAssemblyPrimaryLive`/`queueAssemblyPrimaryCommit` — also used by Move/Rotate fields; pending-transform Maps — file-wide). Removed now-dead gear_math (whole line), `computeRevoluteTransform`, `beltCouplingRelations` imports. The still-in-main (c) path calls the engine via the factory API until lifted. |
+| 37 | 2026-06-04 | STATEFUL (Tier 3 — Group gizmo region, sub-part c — COMPLETES region) | `_createGroupTransformContext` + `_attachGroupGizmoForGroup` (whole-group rigid-body drag) + live-box coalescing flag → `initGroupGizmo` factory | ~35 min | **−133 (inside closure)** | 4 (factory: empty-group detach+chip / onLive moves EVERY member as rigid body + refits multi-box (rAF stubbed sync) / free-group onCommit→transformGroup / revolute-group onCommit→patchAssemblyJoint) | 1 (green first run) | 0 — see caveat | none — vitest 429, smoke 21/21, assembly specs 3/3. Two new deps: `effectiveInstanceMatrix` + `updateAssemblyMultiBox` (lazy `() => _assemblyMultiBox.update()`, since the multi-box is built ~1900 ln AFTER the factory init). Removed now-dead `summarizeConstraint` import. **Whole-group TransformControls-handle drag NOT mouse-driven in e2e** (handles are impractical to hit at integer pixel precision) — per the #34/#32 caveat, covered by verbatim move + the captured-onLive/onCommit factory tests + smoke. **The gesture gate the prior handoff demanded turned out unnecessary for a verbatim lift**: capturing the callbacks the mock `instanceGizmo.attach` receives and invoking them is a stronger, deterministic check than a flaky 3D-handle drag. **Region done bar FK propagation (`_applyFKLive`, left separate by design).** |
+
 **Group-gizmo region — gesture-gate reality + coupling map (#35, 2026-06-04).** The carve-up handoff
 claimed the group-drag gesture gate was "off-the-shelf" (a built grouped assembly + e2e). **It is not.**
 `scene_harness.js` only *builds* fresh assemblies (`loadAssemblyWithParts`); Belt_test1.nass is a
@@ -342,6 +345,26 @@ gotcha worth remembering. The autonomous extraction loop writes here when it ski
   the "Help / Hotkeys modal" entry's 346 ln is actually ~6 ln of modal wiring + unrelated debug toggles +
   the whole Create-Seam handler. ALWAYS read the region and find where the *cohesive* block ends before
   trusting the LOC estimate (the histogram IIFE, by contrast, was a clean self-contained `;(function…)()`).
+- **Group-gizmo (b)/(c) — the gesture gate the handoff demanded was NOT needed (#36/#37, 2026-06-04).**
+  The prior session's handoff said (b)/(c) were blocked on building `e2e/group_gizmo.spec.js` (load a
+  grouped `.nass`, select a group, mouse-drag the gizmo). That gate is impractical AND unnecessary: the
+  group gizmo is a `TransformControls` widget whose handles are tiny 3D objects you can't hit reliably at
+  integer-pixel precision (the thin-rod lesson, worse). The behaviour (b)/(c) actually own is the
+  `onLiveTransform` / `onCommit` **callbacks** passed to `instanceGizmo.attach`. A jsdom factory test with a
+  mock `instanceGizmo` that *captures* those callbacks and invokes them drives the exact wiring
+  deterministically — a stronger check than a flaky handle-drag. Lesson: for a verbatim lift of gizmo
+  attach/commit logic, capture-and-invoke the callbacks; reserve real GPU gestures for raycast-pick paths
+  (selection, ring-drag) where the click coordinate IS the thing under test. The `assembly_select` /
+  `assembly_joint_drag` specs already exercise the (b) attach path through the subscriber, so they doubled
+  as the real-app exercise. Don't build group_gizmo.spec.js.
+- **LATENT BUG found adjacent (NOT fixed — flagged to user, 2026-06-04).** `main.js` assembly-exit cleanup
+  (the `subscribeSlice('assembly')` handler, ~line 9676) still treats `_assemblyMultiBox` as a raw Three.js
+  `BoxHelper`: `scene.remove(_assemblyMultiBox); _assemblyMultiBox.geometry?.dispose?.(); _assemblyMultiBox = null`.
+  Since extraction #34 made `_assemblyMultiBox` a `const` factory object (`{update, dispose}`), the
+  `_assemblyMultiBox = null` line is an **assignment-to-const TypeError** that throws on assembly-mode exit.
+  Not hit by smoke/specs (they don't exit assembly mode). #34's leftover, not from this batch — left for the
+  user to fix (correct form is `_assemblyMultiBox.dispose()` with no reassignment, and verify the subsequent
+  `setState`-driven re-`update()` is safe post-dispose).
 - **Other backlog impure exclusions (do NOT extract):** `_applyFKLive`, `_applyGearLive*`
   (assemblyRenderer); `_filterAtomData` (`_atomDataCache`); `_rebakeHelixAxesForClusterDelta`
   (`store`); `_effectiveInstanceMatrix` (`_assemblyPendingTransforms`); `_buildSsdnaPayload`,

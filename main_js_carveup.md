@@ -37,41 +37,30 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after extraction #35._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after extraction #37 (group-gizmo region COMPLETE)._
 
-**Region in progress: Rigid-body group gizmo + PartGroup gizmo** (Tier 3) — banners
-`// ── Rigid-body group gizmo attachment` (~9897) + `// ── PartGroup gizmo` (~10191) → `scene/group_gizmo.js`.
-**Sub-part (a) DONE (#35, commit 374721b)** — pure `revoluteCommitValue` lifted, module seeded, 7 vitest.
-**(b)/(c) still BLOCKED — the gesture gate is NOT off-the-shelf (handoff was wrong).** What's missing:
+**Group-gizmo region is DONE** (a/b/c, commits `374721b`/`20c3347`/`ea1fd12`; −346 ln; `scene/group_gizmo.js`).
+Key lesson banked for the next gizmo-ish region: **a verbatim gizmo attach/commit lift does NOT need a GPU
+gesture e2e** — capture the `onLive`/`onCommit` callbacks the mock `instanceGizmo.attach` receives and invoke
+them in jsdom; that's deterministic and beats a flaky TransformControls-handle drag. Reserve real raycast
+gestures for selection/ring-drag (where the click pixel is the thing under test).
 
-- **The gate needs new harness infra first.** `scene_harness.js` only *builds* fresh assemblies
-  (`loadAssemblyWithParts`) — it has **no load-existing-`.nass` helper** and **no group-select dev hook**.
-  Belt_test1.nass is a *file-source* assembly (2 groups, 10 instances_v2, 8 joints, gear_relations + belt_paths)
-  you must OPEN, not build. So before `e2e/group_gizmo.spec.js` can exist you must add: (1) a harness path that
-  loads a saved `.nass` + enters assembly mode (mirror the open-file flow, pin `?doc`/`X-NADOC-Doc`), and
-  (2) a `__nadocTest` dev hook to select a group (set `activeGroupId` → fires the `subscribeSlice('assembly')`
-  subscriber that calls `_attachGroupGizmoForGroup`). THEN: select group → drag gizmo → assert rigid-body delta
-  **and** the #34 union box (`_assemblyMultiBox.update()`) follows. Mirror `assembly_joint_drag.spec.js`.
-- **Coupling map (verified this batch — the gizmo-attach fns are the file's central transform hub):**
-  `_attachGroupGizmo`/`_attachGroupGizmoForGroup` depend on `_createAssemblyTransformContext`/
-  `_createGroupTransformContext`, `_analyzeMotionConstraints`, `summarizeConstraint`, `_setMotionChip`,
-  `instanceGizmo`, `assemblyRenderer`/`assemblyJointRenderer`, `_assemblyMultiBox`, `_mrAssemblyCtx`, and the
-  live/commit helpers `_applyAssemblyPrimaryLive`/`_queueAssemblyPrimaryCommit` (these two are **shared** with the
-  Move/Rotate fields at ~7653/7655 → must stay in main.js or become deps). The Maps
-  `_assemblyPendingTransforms`/`_assemblyPendingPartJoints` are touched in ~10 sites file-wide (dev hooks,
-  exit-cleanup, keyboard-commit) → leave in main.js, pass by reference.
-- **Recommended NEXT extraction (safe, no gate needed):** the **gear-live revolute-drag engine** —
-  `_applyGearLiveForRevoluteDrag` (~9986) + `_applyGearLiveJointValue` (~9955) + the `_revoluteGizmoAngle`
-  accumulator + its two resets — is called **only** by the two attach fns (verified: no other callers). It's a
-  cohesive, self-contained sub-cluster owning the angle state; move it into `group_gizmo.js` as a factory
-  `initGroupGizmoCoupling({store, assemblyRenderer, assemblyJointRenderer})` exposing
-  `applyGearLiveForRevoluteDrag` / `revoluteCommitValue` (fold in the #35 pure core's store-wrapper) /
-  `resetAngle`. Impure (assemblyRenderer) so gesture-bound, but per the #32/#24 caveat verbatim-move +
-  unit-test the angle-unwrap/coupling math (mock setLiveTransform spies) + smoke is the accepted gate when the
-  gesture needs a built gear/belt assembly. Doing this drains ~140 ln of the densest math from the closure and
-  shrinks the eventual (b)/(c) factory's surface. Do it BEFORE building the gate.
-- **Then** build the gate + lift (b)/(c). **Leave** FK propagation (`// ── Forward kinematics live visual
-  propagation` ~10327) separate.
+**Next best: Coalesced assembly part-refresh** (Tier 3, the last Tier-3 `[ ]`) — banner
+`// ── Coalesced assembly part-refresh` → `scene/assembly_refresh.js`. ~200 ln. Self-contained: a setTimeout
+debounce that batches per-source geometry rebuilds. **No gesture** — it's timing, so the gate is a vitest
+fake-timer test (`vi.useFakeTimers`) asserting N rapid `requestRefresh(sourceId)` calls collapse to one
+rebuild after the debounce window, plus per-source coalescing. Deps: assemblyRenderer (rebuild call), store,
+the `_asmRefresh*` coalescing state. MED-HIGH risk = the timing, not the coupling. Factory
+`initAssemblyRefresh({assemblyRenderer, store})→{requestRefresh, flush, dispose}`; mirror `initMeasurementTool`.
+
+- **Alternatives if you'd rather:** Tier 4 **Keyboard shortcuts** (~528 ln, biggest single LOC payoff;
+  factor the giant keydown handler to a key→action table, dispatch synthetic keydowns to test — mechanical
+  but broad). Or a Tier 6 dev-only warm-up (`extension_arc_debug` / `devtools_helpers`, LOW risk).
+- **Still-in-main, deliberately deferred:** FK propagation (`_applyFKLive`, `// ── Forward kinematics live
+  visual propagation`) — the group_gizmo factory injects nothing for it; leave it its own future region.
+- **FLAG before you start:** there's an unfixed latent crash from #34 in the assembly-exit cleanup
+  (`_assemblyMultiBox = null` on a `const` → TypeError on assembly-mode exit, ~main.js:9676). Not in any
+  test path. See the difficulties ledger; quick fix is `_assemblyMultiBox.dispose()` (no reassignment).
 
 ---
 
@@ -254,14 +243,15 @@ The largest single blocks and the most coupling into assembly state. Each needs 
     NOTE: the region as read is interleaved with `assemblyContextMenu` / `_defineAssemblyMate` /
     `_activateTranslateRotateTool` (a giant fn) — those are NOT part of this region; scope each sub-part
     to its cohesive block. The blunt-end-sync + cluster-pick block now has its own banner (above).
-- [~] **Rigid-body group gizmo + PartGroup gizmo** — banners `// ── Rigid-body group gizmo attachment`
-  + `// ── PartGroup gizmo` (~9897–10329, ~430 ln) → `scene/group_gizmo.js`. Deps: TransformControls,
-  store, assemblyRenderer, group helpers. GESTURE E2E. Risk: HIGH.
-  **(a) DONE** (extraction #35, commit 374721b): pure `revoluteCommitValue` (revolute-drag commit math)
-  → new `scene/group_gizmo.js`; main.js wrapper keeps store-read + accumulator-clear; 7 vitest; behavior-
-  identical (pure → vitest gate, smoke 21/21 run anyway given coupling). **(b)/(c) NOT done — gate not
-  off-the-shelf.** Next: gear-live engine (safe, no gate), THEN build the gate (needs load-`.nass` harness
-  + group-select hook), THEN lift (b)/(c). Full plan in the handoff block above.
+- [x] **Rigid-body group gizmo + PartGroup gizmo** — banners `// ── Rigid-body group gizmo attachment`
+  + `// ── PartGroup gizmo` → `scene/group_gizmo.js` (factory `initGroupGizmo` + pure `revoluteCommitValue`).
+  **DONE in 3 commits (2026-06-04):** (a) #35 `374721b` pure commit-value; (b)+engine #36 `20c3347`
+  gear-live revolute-drag engine + `attachGroupGizmo`; (c) #37 `ea1fd12` `attachGroupGizmoForGroup` +
+  group transform-context. −346 ln off the closure total; 20 vitest (7 pure + 13 factory). Shared helpers
+  (`createAssemblyTransformContext`/`applyAssemblyPrimaryLive`/`queueAssemblyPrimaryCommit`/pending Maps)
+  stay in main.js as injected deps. **FK propagation (`_applyFKLive`) deliberately left separate.**
+  Finding: the demanded group-drag gesture e2e was unnecessary — captured-callback factory tests beat a
+  flaky TransformControls-handle drag (see log). Flagged a latent #34 bug in assembly-exit cleanup.
 - [x] **Multi-select visual feedback (purple union BoxHelper)** — banner `// ── Multi-select visual
   feedback` → `scene/assembly_multi_box.js` (NOT the map's `multi_select_box.js`; named for the assembly
   scope). Deps: scene, store, assemblyRenderer. Pure core lifted into existing `selection_bbox.js`. Risk: MED.
