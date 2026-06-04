@@ -35,6 +35,13 @@ GO/NO-GO call on scaling before grinding through the whole file.
 | 14 | 2026-06-03 | MEDIUM | `fretQuenchedDonors` → `scene/fret_util.js` (donor/r0 maps parameterized) | ~10 min | −16 (inside closure) | 5 (within/beyond r0; non-donor/no-mod ignored; lone donor; missing r0) | 1 (green first run) | 0 (borderline → parameterized the 2 maps; they stay in main.js, populated there) | none — vitest 147 |
 | 15 | 2026-06-03 | MEDIUM (discovered) | `vecClose` → `scene/vec_math.js` | ~8 min | −2 (inside closure) | 5 (identical/eps/custom-eps/length-mismatch/empty) | 1 (green first run) | 0 (pure array math; first discovered-not-mapped extraction) | none — vitest 152 |
 
+_(Between #15 and #16, several interactive batches ran post-autonomous-loop and were committed but NOT tabulated here: `ndc`/`flex_tethers`/`cluster_entries`/`empty_space_menu` (+ feature work on `assembly_lasso` Ctrl-click/Esc) and the dead `_onAssemblyClick`-branch removal. They took vitest 152→231. The rows below resume tabulation.)_
+
+| 16 | 2026-06-03 | EASY (discovered) | `flexibleRunForBead` → `scene/design_queries.js` | ~10 min | −33 (top-level pure helper) | 5 (run/boundary/2× fallback/reverse-domain) | 1 | 0 (pure) | none — vitest 16/file |
+| 17 | 2026-06-03 | EASY (dedup) | `hexFromInt` (2 inline copies) → `scene/color_util.js` | ~8 min | −5 net | 3 (format/zero-pad/mask negatives) | 1 | 0 (pure; masked impl == slice impl for valid colours) | none |
+| 18 | 2026-06-03 | EASY (parameterize) | `atomColorsFromLetters` + `BASE_HEX` → `scene/color_util.js` (wrapper keeps store read) | ~7 min | −7 | 2 (keyed mapping / empty input) | 1 | 0 (pure core; store stays in wrapper) | none |
+| 19 | 2026-06-03 | HARD (stateful) | loop-strand popup → `scene/loop_popup.js` factory `initLoopPopup` + pure `bestLoopNick` | ~35 min | −82 | 10 (4 nick-math + 6 factory: mount/show/suppress/non-loop/Nick/Leave) | 2 (jsdom didn't reflect `display` from cssText → explicit set) | manual: deferred (needs a circular-staple design) — caught by vitest+smoke | none — vitest 251, smoke 21/21 |
+
 **Metric definitions** — `wall-clock`: rough session minutes (target EASY <15, MEDIUM <30, HARD <90).
 `main.js LOC Δ`: lines removed from `main()` body (imports stay, so total drops less). `tests added /
 pure fns`: must be ≥1.0. `edits-to-green`: vitest runs until pass (lower = pattern internalized).
@@ -129,6 +136,11 @@ and `getCtrlBeadCount()`.
 Append-only. Record candidates that turned out NOT to be clean pure extractions, plus any
 gotcha worth remembering. The autonomous extraction loop writes here when it skips something.
 
+- **jsdom does NOT reflect `style.display` set via a multi-prop `cssText`** (factory tier).
+  Building `overlay.style.cssText = 'display:none;position:fixed;...'` leaves `overlay.style.display`
+  as `''` under vitest/jsdom, so initial-hidden assertions fail. Fix: set `overlay.style.display`
+  explicitly after the `cssText` line (harmless in the browser, makes the hidden state robust + the
+  intent explicit). Hit during the loop_popup (#19) factory extraction.
 - **`_clusterBeadCount` — NOT pure (skip).** The purity-scan agent flagged it CLEAR, but it
   calls `designRenderer.getBackboneEntries()`. Left in main.js (group 6). Lesson: re-verify the
   agent's "CLEAR" rating by reading the body before extracting — the scan over-trusts signatures.
