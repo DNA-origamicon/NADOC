@@ -44,6 +44,14 @@ export function registerShortcut(spec) {
 }
 
 /**
+ * Clear the registry. Intended for test isolation (the registry is a
+ * module-level singleton, so factory tests must reset it between cases).
+ */
+export function clearShortcuts() {
+  _registry.length = 0
+}
+
+/**
  * Return metadata for all registered shortcuts.
  * Useful for building a help overlay or command palette entry list.
  */
