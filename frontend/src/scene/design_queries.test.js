@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead } from './design_queries.js'
+import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead } from './design_queries.js'
 
 describe('surfaceSegments', () => {
   it('collects segments from surface-rep overrides only', () => {
@@ -72,5 +72,40 @@ describe('connIdForBead', () => {
   it('returns null when no run contains the bead', () => {
     expect(connIdForBead({ strand_id: 's1', domain_index: 0, bp_index: 99, direction: 'FORWARD' }, design)).toBeNull()
     expect(connIdForBead({ strand_id: 's1', domain_index: 0, bp_index: 3, direction: 'FORWARD' }, {})).toBeNull()
+  })
+})
+
+describe('flexibleRunForBead', () => {
+  // One strand, one FORWARD domain on helix hA spanning bp 0..4 (5 beads).
+  const design = { strands: [{ id: 's1', domains: [{ helix_id: 'hA', start_bp: 0, end_bp: 4, direction: 'FORWARD' }] }] }
+  const bead = (bp) => ({ strand_id: 's1', domain_index: 0, helix_id: 'hA', bp_index: bp, direction: 'FORWARD' })
+  const geom = (unpairedBps) => Array.from({ length: 5 }, (_, bp) =>
+    ({ helix_id: 'hA', bp_index: bp, direction: 'FORWARD', is_unpaired: unpairedBps.includes(bp) }))
+
+  it('returns the contiguous unpaired run containing the bead', () => {
+    // bps 1,2,3 unpaired; click bp 2 → run = [1,2,3].
+    const run = flexibleRunForBead(design, geom([1, 2, 3]), bead(2))
+    expect(run.map(r => r.bp_index)).toEqual([1, 2, 3])
+    expect(run.every(r => r.strand_id === 's1' && r.domain_index === 0 && r.direction === 'FORWARD')).toBe(true)
+  })
+
+  it('stops the run at paired beads on either side', () => {
+    // only bps 2,3 unpaired; click bp 3 → run = [2,3] (bp1 paired, bp4 paired).
+    expect(flexibleRunForBead(design, geom([2, 3]), bead(3)).map(r => r.bp_index)).toEqual([2, 3])
+  })
+
+  it('falls back to the single bead when the clicked bead is not unpaired', () => {
+    expect(flexibleRunForBead(design, geom([0, 1]), bead(3)).map(r => r.bp_index)).toEqual([3])
+  })
+
+  it('falls back to the single bead when the strand is unknown', () => {
+    const run = flexibleRunForBead(design, geom([0]), { ...bead(0), strand_id: 'sZ' })
+    expect(run).toEqual([{ strand_id: 'sZ', domain_index: 0, bp_index: 0, direction: 'FORWARD' }])
+  })
+
+  it('handles a reverse-direction domain (end_bp < start_bp)', () => {
+    const rev = { strands: [{ id: 's1', domains: [{ helix_id: 'hA', start_bp: 4, end_bp: 0, direction: 'FORWARD' }] }] }
+    // all unpaired → whole 5-bead run regardless of traversal direction.
+    expect(flexibleRunForBead(rev, geom([0, 1, 2, 3, 4]), bead(2)).map(r => r.bp_index).sort()).toEqual([0, 1, 2, 3, 4])
   })
 })

@@ -29,7 +29,7 @@ import { strandLengthNt, strandLengthNtFromDesign, strandDomainNt } from './scen
 import { buildSpecMap, buildDomainMapFromDesign, buildDomainMapFromGeom, buildJunctionMapFromXovers, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
 import { signedAngleFromWorldDelta, movingSideSignForRevolute, clampJointValue, gearEndpointSide, rotationDeltaMatrix } from './scene/gear_math.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, summarizeConstraint, constraintRelevantChanged } from './scene/assembly_diff.js'
-import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead } from './scene/design_queries.js'
+import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
 import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
 import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds, findOwningGroupId } from './scene/assembly_groups_util.js'
@@ -163,42 +163,6 @@ import { createPhotoRenderer } from './scene/photo_renderer.js'
 import { initPhotoPanel }      from './ui/photo_panel.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
-
-/**
- * Flexible ssDNA segments: the contiguous run of UNPAIRED beads containing the
- * clicked bead, within its strand (5'→3' order). Returns a list of mark bodies
- * {strand_id, domain_index, bp_index, direction}. Falls back to the single bead
- * if the run can't be resolved. Used to mark/unmark a whole tether at once.
- */
-function _flexibleRunForBead(design, geometry, nuc) {
-  const single = [{ strand_id: nuc.strand_id, domain_index: nuc.domain_index,
-                    bp_index: nuc.bp_index, direction: nuc.direction }]
-  const strand = design?.strands?.find(s => s.id === nuc.strand_id)
-  if (!strand) return single
-  // Build the strand's 5'→3' bead order with (domain_index, helix, bp, direction).
-  const order = []
-  strand.domains.forEach((d, di) => {
-    const step = d.end_bp >= d.start_bp ? 1 : -1
-    for (let bp = d.start_bp; ; bp += step) {
-      order.push({ helix_id: d.helix_id, bp, direction: d.direction, domain_index: di })
-      if (bp === d.end_bp) break
-    }
-  })
-  const k = o => `${o.helix_id}:${o.bp}:${o.direction}`
-  const unpaired = new Set((geometry ?? [])
-    .filter(n => n.is_unpaired)
-    .map(n => `${n.helix_id}:${n.bp_index}:${n.direction}`))
-  const idx = order.findIndex(o =>
-    o.helix_id === nuc.helix_id && o.bp === nuc.bp_index && o.direction === nuc.direction)
-  if (idx < 0 || !unpaired.has(k(order[idx]))) return single
-  let lo = idx, hi = idx
-  while (lo - 1 >= 0 && unpaired.has(k(order[lo - 1]))) lo--
-  while (hi + 1 < order.length && unpaired.has(k(order[hi + 1]))) hi++
-  return order.slice(lo, hi + 1).map(o => ({
-    strand_id: nuc.strand_id, domain_index: o.domain_index,
-    bp_index: o.bp, direction: o.direction,
-  }))
-}
 
 // Inflate any [data-icon] markup in static HTML and watch for new ones in
 // dynamically-added DOM (modals, context menus, panel rebuilds).
@@ -877,7 +841,7 @@ async function main() {
           return
         }
         const { currentDesign, currentGeometry } = store.getState()
-        const run = _flexibleRunForBead(currentDesign, currentGeometry, nuc)
+        const run = flexibleRunForBead(currentDesign, currentGeometry, nuc)
         if (!run.length) return
         if (action === 'mark') {
           const existing = currentDesign?.flexible_segment_marks ?? []
