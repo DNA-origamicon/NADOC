@@ -37,21 +37,24 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after extractions #39+#40 (Keyboard shortcuts → `ui/keyboard_shortcuts.js`, −492 ln, Tier 4's biggest region DONE)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after extraction #41 (View tool buttons → `ui/view_tool_buttons.js`, −113 ln)._
 
-**Keyboard shortcuts DONE (#39/#40, −492 ln).** Premise was stale — the "monolithic keydown handler" had
-already been refactored to per-shortcut `registerShortcut()` calls; the real work was the factory lift, not
-a table extraction. Wide (~33 deps) but shallow (verbatim handlers). Tested by dispatching a plain fake
-event object `{key, ctrlKey, shiftKey, altKey, repeat, target:{tagName}, preventDefault}` through the REAL
-`dispatchKeyEvent` (no jsdom KeyboardEvent needed — it just reads fields, and a real `new KeyboardEvent`
-dispatched off-document has `target:null` → throws). Added `clearShortcuts()` to `input/shortcuts.js` for
-test isolation (registry is a module singleton — reset in `beforeEach`).
+**View tool buttons DONE (#41, −113 ln).** The handoff's "View menu toggles + selection/tool filters →
+one `ui/view_toggles.js`, ~365 ln, MED" premise was MIS-SCOPED — it's ~5 adjacency-lumped blocks, not one
+subsystem (see the Tier-4 entry's breakdown). Extracted only the cleanly-cohesive `.vt-btn` row; `_setMenuToggle`
+is a 43-use shared util and the Selection-Filter block is welded to the drill-lock machine owned by region
+~717 — both logged as separate future lifts, NOT this region. Shared `_undefinedHighlightOn` (a `let`
+declared ~250 ln *after* the factory init) reached via get/set shim arrows — TDZ-safe because they're only
+invoked from deferred click handlers (same as the inline code).
 
-**Next best: Tier 4 — View menu toggles + selection/tool filters** — banners `// ── View menu toggle pill
-state` … `// ── View tool buttons` (~365 ln) → `ui/view_toggles.js`. Deps: store + DOM buttons (use the
-`_setMenuToggle` class-pill pattern). jsdom-testable (click a button → assert store/menu state), no GPU
-gesture. Risk MED. **VERIFY the banner spans first** (the keyboard region taught the lesson AGAIN: premises
-drift). Pairs conceptually with the just-finished work — both are DOM-button→action wiring.
+**Next best (clean, well-bounded): Tier 4 — Coloring / orbit / tools submenus** — banners `// ── Tools menu
+(Bend / Twist)` (~5337) … `// ── Coloring submenu` (~5407–5618) → `ui/view_menus.js` (pairs with existing
+`scene/coloring_modes.js`). Deps: store, designRenderer, DOM. The Coloring submenu (Strand/Base/Cluster/
+Overhang/CPK) is the meaty cohesive sub-block. Risk MED. jsdom-testable, no GPU gesture. **VERIFY spans
+first** (#39/#40/#41 each taught this lesson — the map's "what it is" descriptions drift).
+- Alternative if you want a token-cheap warm-up: Tier 6 dev-only (`devtools_helpers` ~412 / `terminus_audit`
+  ~210 / `help_menu_toggles` ~76). Or the small independent blocks left in the View-toggles region
+  (Tool Filter toggles ~45 ln; the pill-state subscriber + 3 visibility helpers).
 
 - **Lower-risk warm-ups (Tier 6 dev-only, gated by `?debug`/DEV, LOW risk, token-cheap):**
   `devtools_helpers` (~412 ln, `window.__*`) / `extension_arc_debug` (~424 ln) / `terminus_audit` (~210 ln) /
@@ -305,12 +308,27 @@ The largest single blocks and the most coupling into assembly state. Each needs 
     smoke 21/21 + 2 running-app exercises (factory-attached listener toggles the debug pill; Ctrl+Z+Escape
     fire clean). **Lesson (re-confirmed): the carve-up banner premises drift — the infra under this banner
     had already been refactored once; READ before trusting the "what it is" description, not just the LOC.**
-- [ ] **View menu toggles + selection/tool filters** — banners `// ── View menu toggle pill state` …
-  `// ── View tool buttons` (~6124–6489, ~365 ln) → `ui/view_toggles.js`. Deps: store, DOM buttons.
-  Risk: MED.
-- [ ] **Coloring / orbit / tools submenus** — banners `// ── Tools menu (Bend / Twist)` …
-  `// ── Coloring submenu` (~5737–6019, ~280 ln) → `ui/view_menus.js` (pairs with existing
-  `scene/coloring_modes.js`). Deps: store, designRenderer, DOM. Risk: MED.
+- [~] **View menu toggles + selection/tool filters** — banners `// ── View menu toggle pill state` …
+  `// ── View tool buttons` (~5724–6088, ~365 ln). **PREMISE WAS STALE / MIS-SCOPED (verified 2026-06-04):
+  this is NOT one cohesive subsystem** — it's ~5 adjacency-lumped blocks, several entangled with state
+  owned by *other* regions. Do NOT force the whole thing into one `ui/view_toggles.js`. Breakdown:
+    - **View tool buttons** (`.vt-btn` row: length heatmap / seq / undef / grid / overhang names / expanded
+      / deform / unfold / cadnano2d) → **DONE** `ui/view_tool_buttons.js` (extraction #41, commit pending;
+      −113 ln; 13 vitest; smoke 21/21 + real-app vt-button exercise). Self-contained; shared
+      `_undefinedHighlightOn` reached via get/set shims.
+    - **`_setMenuToggle`** (the menu-pill toggler defined at the top of the region) is a **43-use shared
+      util**, NOT a feature factory member — if extracted at all it belongs in its own `ui/menu_toggle.js`
+      shared-util lift (mechanical 43-site import swap), separate from this region.
+    - **Selection Filter toggles** (`#select-filter .sf-btn`) is entangled with the **drill-lock state
+      machine** (`_manualFilters`/`_isManualSelect`/`_reflectDrillLevel`/`_resetToAutoBaseline`) owned by the
+      `// ── Selection-filter mode` region (~717) — extract those together, not here.
+    - The **View-menu pill-state subscriber** + 3 visibility helpers (`_syncAssemblyMenuVisibility` /
+      `_syncImportMenuVisibility` / `_syncDeformMenuEnabled`), the **Tool Filter toggles** block, the
+      **deform→selectableTypes save/restore** subscriber, and **Browser tab title** are each small
+      independent blocks — pick off opportunistically, do not bundle.
+- [ ] **Coloring / orbit / tools submenus** — banners `// ── Tools menu (Bend / Twist)` (~5337) …
+  `// ── Orbit mode submenu` (~5395) … `// ── Coloring submenu` (~5407–5618, ~280 ln) → `ui/view_menus.js`
+  (pairs with existing `scene/coloring_modes.js`). Deps: store, designRenderer, DOM. Risk: MED.
 
 ## Tier 5 — file / session infra (central — extract carefully, late)
 

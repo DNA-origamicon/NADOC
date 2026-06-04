@@ -25,7 +25,7 @@ import { bundleMidOffset }           from './scene/bundle_geometry.js'
 import { quatToEulerDeg, eulerDegToQuat, extractJointAngleDeg, posEulerFromMatrix } from './scene/rotation_math.js'
 import { initMeasurementTool }       from './scene/measurement_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
-import { strandLengthNt, strandDomainNt } from './scene/strand_length.js'
+import { strandLengthNt } from './scene/strand_length.js'
 import { buildSpecMap, buildDomainMapFromDesign, buildDomainMapFromGeom, buildJunctionMapFromXovers, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
 import { initGroupGizmo } from './scene/group_gizmo.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, constraintRelevantChanged } from './scene/assembly_diff.js'
@@ -33,7 +33,7 @@ import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connI
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
 import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './scene/assembly_groups_util.js'
 import { initAssemblyPointer } from './scene/assembly_pointer.js'
-import { heatmapHex, hexFromInt, atomColorsFromLetters } from './scene/color_util.js'
+import { hexFromInt, atomColorsFromLetters } from './scene/color_util.js'
 import { initFretChecker } from './scene/fret_checker.js'
 import { motionChipStyle } from './scene/motion_chip.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
@@ -152,6 +152,7 @@ import { initZoomScope }           from './scene/zoom_scope.js'
 import { initExpandedSpacing }     from './scene/expanded_spacing.js'
 import { registerShortcut } from './input/shortcuts.js'
 import { initKeyboardShortcuts } from './ui/keyboard_shortcuts.js'
+import { initViewToolButtons } from './ui/view_tool_buttons.js'
 import { showConfirm }                         from './ui/primitives/confirm.js'
 import { createContextMenu }                   from './ui/primitives/context_menu.js'
 import { initSidebarResize }                   from './ui/sidebar_resize.js'
@@ -5958,133 +5959,19 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   // ── View tool buttons — length heatmap, seq, undef, grid, overhang names ──────
-  {
-    // Length heatmap
-
-    let _lengthHeatmapOn = false
-    const _lenLegend = document.getElementById('length-heatmap-legend')
-
-    function _applyLengthHeatmap() {
-      const design = store.getState().currentDesign
-      if (!design) return
-      const colorMap = new Map()
-      for (const s of design.strands ?? []) {
-        if (s.strand_type === 'scaffold') continue
-        colorMap.set(s.id, heatmapHex(strandDomainNt(s)))
-      }
-      // backbone + slab entries expose strand_id via nuc; cone entries expose it directly
-      for (const e of designRenderer.getBackboneEntries?.() ?? []) {
-        const c = colorMap.get(e.nuc?.strand_id)
-        if (c !== undefined) designRenderer.setEntryColor(e, c)
-      }
-      for (const e of designRenderer.getSlabEntries?.() ?? []) {
-        const c = colorMap.get(e.nuc?.strand_id)
-        if (c !== undefined) designRenderer.setEntryColor(e, c)
-      }
-      for (const e of designRenderer.getConeEntries?.() ?? []) {
-        const c = colorMap.get(e.strandId)
-        if (c !== undefined) designRenderer.setEntryColor(e, c)
-      }
-      _lenLegend?.classList.add('visible')
-    }
-    function _clearLengthHeatmap() {
-      for (const e of designRenderer.getBackboneEntries?.() ?? []) {
-        designRenderer.setEntryColor(e, e.defaultColor)
-      }
-      for (const e of designRenderer.getSlabEntries?.() ?? []) {
-        designRenderer.setEntryColor(e, e.defaultColor)
-      }
-      for (const e of designRenderer.getConeEntries?.() ?? []) {
-        designRenderer.setEntryColor(e, e.defaultColor)
-      }
-      _lenLegend?.classList.remove('visible')
-    }
-
-    // Grid helper
-    const _gridHelper = new THREE.GridHelper(500, 50, 0x21262d, 0x1a1f27)
-    _gridHelper.visible = false
-    scene.add(_gridHelper)
-
-    function _syncVtButtons() {
-      const { showSequences, showOverhangNames, unfoldActive, cadnanoActive, deformVisuActive } = store.getState()
-      document.querySelector('.vt-btn[data-vt="lengthHeatmap"]')?.classList.toggle('active', _lengthHeatmapOn)
-      document.querySelector('.vt-btn[data-vt="sequences"]')?.classList.toggle('active', showSequences)
-      document.querySelector('.vt-btn[data-vt="undefinedBases"]')?.classList.toggle('active', _undefinedHighlightOn)
-      document.querySelector('.vt-btn[data-vt="grid"]')?.classList.toggle('active', _gridHelper.visible)
-      document.querySelector('.vt-btn[data-vt="overhangNames"]')?.classList.toggle('active', showOverhangNames)
-      document.querySelector('.vt-btn[data-vt="expanded"]')?.classList.toggle('active', expandedSpacing.isActive())
-      document.querySelector('.vt-btn[data-vt="deform"]')?.classList.toggle('active', deformVisuActive)
-      document.querySelector('.vt-btn[data-vt="unfold"]')?.classList.toggle('active', unfoldActive)
-      document.querySelector('.vt-btn[data-vt="cadnano2d"]')?.classList.toggle('active', cadnanoActive)
-    }
-
-    document.querySelector('.vt-btn[data-vt="lengthHeatmap"]')?.addEventListener('click', () => {
-      _lengthHeatmapOn = !_lengthHeatmapOn
-      if (_lengthHeatmapOn) _applyLengthHeatmap()
-      else _clearLengthHeatmap()
-      _syncVtButtons()
-    })
-
-    document.querySelector('.vt-btn[data-vt="sequences"]')?.addEventListener('click', () => {
-      const { showSequences } = store.getState()
-      store.setState({ showSequences: !showSequences })
-      _setMenuToggle('menu-view-sequences', !showSequences)
-    })
-
-    document.querySelector('.vt-btn[data-vt="undefinedBases"]')?.addEventListener('click', () => {
-      _undefinedHighlightOn = !_undefinedHighlightOn
-      _setMenuToggle('menu-view-undefined-bases', _undefinedHighlightOn)
-      if (_undefinedHighlightOn) _refreshUndefinedHighlight()
-      else designRenderer.clearUndefinedHighlight()
-      _syncVtButtons()
-    })
-
-    document.querySelector('.vt-btn[data-vt="grid"]')?.addEventListener('click', () => {
-      _gridHelper.visible = !_gridHelper.visible
-      _syncVtButtons()
-    })
-
-    document.querySelector('.vt-btn[data-vt="overhangNames"]')?.addEventListener('click', () => {
-      const { showOverhangNames } = store.getState()
-      store.setState({ showOverhangNames: !showOverhangNames })
-      _setMenuToggle('menu-view-overhang-names', !showOverhangNames)
-    })
-
-    document.querySelector('.vt-btn[data-vt="expanded"]')?.addEventListener('click', () => {
-      expandedSpacing.toggle()
-      _syncVtButtons()
-    })
-
-    document.querySelector('.vt-btn[data-vt="deform"]')?.addEventListener('click', () => {
-      _toggleDeformView()
-    })
-
-    document.querySelector('.vt-btn[data-vt="unfold"]')?.addEventListener('click', () => {
-      _toggleUnfold()
-    })
-
-    document.querySelector('.vt-btn[data-vt="cadnano2d"]')?.addEventListener('click', () => {
-      _toggleCadnano()
-    })
-
-    // Keep vt buttons in sync when store changes (menu or other code toggling them)
-    store.subscribe((newState, prevState) => {
-      if (newState.showSequences !== prevState.showSequences ||
-          newState.showOverhangNames !== prevState.showOverhangNames ||
-          newState.unfoldActive !== prevState.unfoldActive ||
-          newState.cadnanoActive !== prevState.cadnanoActive ||
-          newState.deformVisuActive !== prevState.deformVisuActive) {
-        _syncVtButtons()
-      }
-    })
-
-    // Re-apply length heatmap when design changes
-    store.subscribe((newState, prevState) => {
-      if (_lengthHeatmapOn && newState.currentDesign !== prevState.currentDesign) {
-        _applyLengthHeatmap()
-      }
-    })
-  }
+  // Extracted to ui/view_tool_buttons.js. Owns length-heatmap + grid state; the
+  // shared _undefinedHighlightOn mutable (declared in the Highlight Undefined
+  // Bases region below) is reached via get/set shims.
+  initViewToolButtons({
+    store, scene, designRenderer, expandedSpacing,
+    setMenuToggle: _setMenuToggle,
+    refreshUndefinedHighlight: _refreshUndefinedHighlight,
+    getUndefinedHighlightOn: () => _undefinedHighlightOn,
+    setUndefinedHighlightOn: (v) => { _undefinedHighlightOn = v },
+    toggleDeformView: () => _toggleDeformView(),
+    toggleUnfold: () => _toggleUnfold(),
+    toggleCadnano: () => _toggleCadnano(),
+  })
 
   // ── Nucleotide Slab collapse toggle ──────────────────────────────────────────
   ;(function () {
