@@ -58,9 +58,9 @@ the `_asmRefresh*` coalescing state. MED-HIGH risk = the timing, not the couplin
   but broad). Or a Tier 6 dev-only warm-up (`extension_arc_debug` / `devtools_helpers`, LOW risk).
 - **Still-in-main, deliberately deferred:** FK propagation (`_applyFKLive`, `// ── Forward kinematics live
   visual propagation`) — the group_gizmo factory injects nothing for it; leave it its own future region.
-- **FLAG before you start:** there's an unfixed latent crash from #34 in the assembly-exit cleanup
-  (`_assemblyMultiBox = null` on a `const` → TypeError on assembly-mode exit, ~main.js:9676). Not in any
-  test path. See the difficulties ledger; quick fix is `_assemblyMultiBox.dispose()` (no reassignment).
+- **Fixed this session:** the latent #34 crash in assembly-exit cleanup (`_assemblyMultiBox = null` on a
+  `const` → TypeError on exit) is FIXED (commit d5be41c) + now covered by `e2e/assembly_exit_cleanup.spec.js`
+  (with a new `__nadocTest.exitAssemblyMode` hook). See the difficulties ledger.
 
 ---
 

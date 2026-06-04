@@ -357,14 +357,17 @@ gotcha worth remembering. The autonomous extraction loop writes here when it ski
   (selection, ring-drag) where the click coordinate IS the thing under test. The `assembly_select` /
   `assembly_joint_drag` specs already exercise the (b) attach path through the subscriber, so they doubled
   as the real-app exercise. Don't build group_gizmo.spec.js.
-- **LATENT BUG found adjacent (NOT fixed — flagged to user, 2026-06-04).** `main.js` assembly-exit cleanup
-  (the `subscribeSlice('assembly')` handler, ~line 9676) still treats `_assemblyMultiBox` as a raw Three.js
-  `BoxHelper`: `scene.remove(_assemblyMultiBox); _assemblyMultiBox.geometry?.dispose?.(); _assemblyMultiBox = null`.
-  Since extraction #34 made `_assemblyMultiBox` a `const` factory object (`{update, dispose}`), the
-  `_assemblyMultiBox = null` line is an **assignment-to-const TypeError** that throws on assembly-mode exit.
-  Not hit by smoke/specs (they don't exit assembly mode). #34's leftover, not from this batch — left for the
-  user to fix (correct form is `_assemblyMultiBox.dispose()` with no reassignment, and verify the subsequent
-  `setState`-driven re-`update()` is safe post-dispose).
+- **LATENT BUG found adjacent — now FIXED (commit d5be41c, 2026-06-04).** `main.js` assembly-exit cleanup
+  (the `subscribeSlice('assembly')` handler, ~line 9676) treated `_assemblyMultiBox` as a raw Three.js
+  `BoxHelper`: `scene.remove(...); ...geometry?.dispose?.(); _assemblyMultiBox = null`. Since extraction #34
+  made `_assemblyMultiBox` a `const` factory object (`{update, dispose}`), the `_assemblyMultiBox = null` line
+  was an **assignment-to-const TypeError** that threw on EVERY assembly-mode exit (close session / open
+  another doc while in assembly mode). No test hit the exit path, so it escaped. Fixed: replaced the inline
+  teardown with the factory's `dispose()` (identical behavior, no reassignment). Added a dev-only
+  `__nadocTest.exitAssemblyMode` hook + `e2e/assembly_exit_cleanup.spec.js` (first coverage of the exit
+  tear-down; verified it fails pre-fix, passes post-fix). **Lesson: when an extraction converts a raw
+  scene-object closure var into a `const` factory, grep every site that reassigned or poked `.geometry`/
+  `.material`/`scene.remove` on it — those break silently if they're outside the boot/smoke path.**
 - **Other backlog impure exclusions (do NOT extract):** `_applyFKLive`, `_applyGearLive*`
   (assemblyRenderer); `_filterAtomData` (`_atomDataCache`); `_rebakeHelixAxesForClusterDelta`
   (`store`); `_effectiveInstanceMatrix` (`_assemblyPendingTransforms`); `_buildSsdnaPayload`,
