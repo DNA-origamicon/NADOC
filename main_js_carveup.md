@@ -38,9 +38,18 @@ Self-contained feature blocks that map cleanly to a factory; lowest coupling, hi
 - [ ] **Help / Hotkeys modal** — banner `// ── Help / Hotkeys modal` (~13793–14139, ~346 ln) →
   `ui/help_modal.js`. Deps: DOM (static content) + a hotkey list. Risk: LOW (mostly static markup).
   No gesture e2e; smoke only.
-- [ ] **Strand length histogram** — banner `// ── Strand length histogram` (~12614–12813, ~200 ln) →
+  ⚠️ **LINE-SPAN MISLEADING (verified 2026-06-03):** the actual help-modal wiring is only ~6 lines
+  (13793–13799). The 13793–14139 span is a grab-bag — Help-menu *debug* toggles (OH-roots/domain-ends/
+  linker-debug/FJC-sim) + the whole **Create Seam** handler. The modal alone isn't worth a factory
+  (the markup lives in index.html; only `.classList` toggles are here). De-prioritize, OR rescope to
+  "Help-menu wiring cluster" and bundle the debug toggles. The Create-Seam handler is a separate
+  region (pairs with `scaffold_coverage.js`) — don't fold it in.
+- [x] **Strand length histogram** — banner `// ── Strand length histogram` (~12614–12813, ~200 ln) →
   `ui/strand_length_histogram.js`. Deps: store (currentGeometry/Design), DOM canvas, api (delete-by-bin
   context menu). Has a pure core (bin counts) — extract + test that. Risk: LOW-MED.
+  **DONE** (extraction #20, commit pending) — factory `initStrandLengthHistogram` + pure
+  `computeStrandLengthBins`; −192 ln off closure; 13 vitest (6 pure + 7 jsdom factory); smoke 21/21 +
+  real-app expand exercise. 2D-canvas hit-testing covered by jsdom click test (no scene_harness needed).
 - [ ] **Overhang sequences panel** — banner `// ── Overhang sequences panel` (~2488–2715, ~227 ln) →
   `ui/overhang_sequences_panel.js`. Deps: store, api, DOM, selectionManager. Risk: MED.
 - [ ] **Strand groups panel** — banner `// ── Strand groups panel` (~2715–2913, ~198 ln) →

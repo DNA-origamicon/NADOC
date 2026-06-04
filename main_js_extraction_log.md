@@ -42,6 +42,7 @@ _(Between #15 and #16, several interactive batches ran post-autonomous-loop and 
 | 18 | 2026-06-03 | EASY (parameterize) | `atomColorsFromLetters` + `BASE_HEX` → `scene/color_util.js` (wrapper keeps store read) | ~7 min | −7 | 2 (keyed mapping / empty input) | 1 | 0 (pure core; store stays in wrapper) | none |
 | 19 | 2026-06-03 | HARD (stateful) | loop-strand popup → `scene/loop_popup.js` factory `initLoopPopup` + pure `bestLoopNick` | ~35 min | −82 | 10 (4 nick-math + 6 factory: mount/show/suppress/non-loop/Nick/Leave) | 2 (jsdom didn't reflect `display` from cssText → explicit set) | manual: deferred (needs a circular-staple design) — caught by vitest+smoke | none — vitest 251, smoke 21/21 |
 | — | 2026-06-03 | FEATURE REMOVAL | **#19 reverted**: loop_popup.js + test + `_ctrlHeld` deleted per user — the auto-nick "Nick here" popup was unwanted (its context menu was buried; users linearize circular staples manually). Warning highlight (loopStrandIds → red in 3D/cadnano) KEPT untouched. | ~10 min | −13 (popup wiring + _ctrlHeld) | −10 (test file deleted) | — | — | none — vitest 241, smoke 21/21 |
+| 20 | 2026-06-03 | STATEFUL (Tier 1) | Strand length histogram IIFE → `ui/strand_length_histogram.js` factory `initStrandLengthHistogram` + pure `computeStrandLengthBins` | ~30 min | **−192 (inside closure; first stateful-subsystem extraction of the new tier)** | 13 (6 pure: status/binning/out-of-range/boundary/summary; 7 jsdom factory: no-DOM no-op/expand/collapse/bar-click-selects/subscription redraw-on-expand + no-redraw-when-collapsed) | 1 (green first run) | ~3 (real-app expand exercise via throwaway spec, then deleted) | none — vitest 253, smoke 21/21, real-app panel-expand zero-console-errors |
 
 **Metric definitions** — `wall-clock`: rough session minutes (target EASY <15, MEDIUM <30, HARD <90).
 `main.js LOC Δ`: lines removed from `main()` body (imports stay, so total drops less). `tests added /
@@ -160,6 +161,16 @@ gotcha worth remembering. The autonomous extraction loop writes here when it ski
   fixed (it hardcoded `/home/jojo/Work/NADOC`). Now derived from the config file location, so
   `just smoke` / the console-error gate auto-start the servers anywhere. If the gate ever fails
   with `spawn /bin/sh ENOENT`, the servers are down AND the cwd is wrong again.
+- **2D sidebar-canvas gestures DON'T need scene_harness (#20).** The histogram's click/hover/right-click
+  are plain 2D-canvas hit-tests (`getBoundingClientRect` + `_barData` rectangles), NOT WebGL raycasts.
+  jsdom covers them directly: stub `getContext`/`getBoundingClientRect`, dispatch a `MouseEvent('click')`,
+  assert `selectStrand`/`centerOnStrand` fired. Reserve `scene_harness` for WebGL-bead picking only. So a
+  Tier-1 panel whose only "gesture" is a 2D canvas/DOM click is fully closeable with vitest + smoke + one
+  app exercise — no Playwright gesture spec.
+- **#20 banner-span trap (recurring):** the carve-up map's line spans are banner-to-banner and OVERSHOOT —
+  the "Help / Hotkeys modal" entry's 346 ln is actually ~6 ln of modal wiring + unrelated debug toggles +
+  the whole Create-Seam handler. ALWAYS read the region and find where the *cohesive* block ends before
+  trusting the LOC estimate (the histogram IIFE, by contrast, was a clean self-contained `;(function…)()`).
 - **Other backlog impure exclusions (do NOT extract):** `_applyFKLive`, `_applyGearLive*`
   (assemblyRenderer); `_filterAtomData` (`_atomDataCache`); `_rebakeHelixAxesForClusterDelta`
   (`store`); `_effectiveInstanceMatrix` (`_assemblyPendingTransforms`); `_buildSsdnaPayload`,

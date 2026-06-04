@@ -25,7 +25,7 @@ import { bundleMidOffset }           from './scene/bundle_geometry.js'
 import { quatToEulerDeg, eulerDegToQuat, extractJointAngleDeg, posEulerFromMatrix } from './scene/rotation_math.js'
 import { initMeasurementTool }       from './scene/measurement_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
-import { strandLengthNt, strandLengthNtFromDesign, strandDomainNt } from './scene/strand_length.js'
+import { strandLengthNt, strandDomainNt } from './scene/strand_length.js'
 import { buildSpecMap, buildDomainMapFromDesign, buildDomainMapFromGeom, buildJunctionMapFromXovers, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
 import { signedAngleFromWorldDelta, movingSideSignForRevolute, clampJointValue, gearEndpointSide, rotationDeltaMatrix } from './scene/gear_math.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, summarizeConstraint, constraintRelevantChanged } from './scene/assembly_diff.js'
@@ -52,6 +52,7 @@ import { vecClose } from './scene/vec_math.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
 import { initEndExtrudeArrows }      from './scene/end_extrude_arrows.js'
 import { initCommandPalette }  from './ui/command_palette.js'
+import { initStrandLengthHistogram } from './ui/strand_length_histogram.js'
 import { initPropertiesPanel } from './ui/properties_panel.js'
 import { createScriptRunner }  from './ui/script_runner.js'
 import { store, pushGroupUndo, popGroupUndo } from './state/store.js'
@@ -12614,200 +12615,8 @@ Typical debugging workflow for "reverts to 3D" bug:
   // ── Strand length histogram ──────────────────────────────────────────────────
   // Collapsible canvas histogram of staple lengths.  Outlier bars (< 18 or > 50 nt)
   // are red; clicking any bar selects and zooms to the first matching strand.
-  ;(function _initStrandHistogram() {
-    const heading  = document.getElementById('strand-hist-heading')
-    const arrow    = document.getElementById('strand-hist-arrow')
-    const body     = document.getElementById('strand-hist-body')
-    const canvas   = document.getElementById('strand-hist-canvas')
-    const tooltip  = document.getElementById('strand-hist-tooltip')
-    const summary  = document.getElementById('strand-hist-summary')
-    if (!heading || !canvas) return
-
-    let _expanded = false
-    let _barData  = []  // [{x, w, strandIds, length, color}] — hit areas
-
-    heading.addEventListener('click', () => {
-      _expanded = !_expanded
-      body.style.display = _expanded ? 'block' : 'none'
-      arrow.classList.toggle('is-collapsed', !(_expanded))
-      if (_expanded) _redraw(store.getState().currentDesign)
-    })
-
-
-    function _redraw(design) {
-      const ctx = canvas.getContext('2d')
-      const W   = canvas.width
-      const H   = canvas.height
-      ctx.clearRect(0, 0, W, H)
-      _barData = []
-
-      if (!design?.strands?.length) {
-        summary.textContent = 'No design loaded.'
-        return
-      }
-
-      // Collect staple lengths grouped by length value
-      const staples = design.strands.filter(s => s.strand_type === 'staple')
-      if (staples.length === 0) { summary.textContent = 'No staple strands.'; return }
-
-      const byLength = new Map()
-      for (const s of staples) {
-        const len = strandLengthNtFromDesign(s, design)
-        if (!byLength.has(len)) byLength.set(len, [])
-        byLength.get(len).push(s.id)
-      }
-
-      const lengths  = [...byLength.keys()].sort((a, b) => a - b)
-      const minLen   = lengths[0]
-      const maxLen   = lengths[lengths.length - 1]
-      const maxCount = Math.max(...[...byLength.values()].map(v => v.length))
-
-      // Count in-range
-      const nOk   = staples.filter(s => { const l = strandLengthNtFromDesign(s, design); return l >= 18 && l <= 50 }).length
-      const nShort = staples.filter(s => strandLengthNtFromDesign(s, design) < 18).length
-      const nLong  = staples.filter(s => strandLengthNtFromDesign(s, design) > 50).length
-      const pct    = Math.round(100 * nOk / staples.length)
-      summary.textContent = `${staples.length} staples · ${pct}% in 18–50 nt`
-        + (nShort ? ` · ${nShort} short` : '')
-        + (nLong  ? ` · ${nLong} long`   : '')
-
-      const nBins  = lengths.length
-      const pad    = 4
-      const barW   = Math.max(2, Math.floor((W - 2 * pad) / nBins) - 1)
-      const totalW = (barW + 1) * nBins
-      const startX = pad + Math.floor((W - 2 * pad - totalW) / 2)
-
-      // Draw canonical range background
-      if (nBins > 1) {
-        const xRange18 = startX + (18 >= minLen ? (18 - minLen) * (barW + 1) : 0)
-        const xRange50 = startX + (50 <= maxLen ? (50 - minLen + 1) * (barW + 1) : W - 2 * pad)
-        ctx.fillStyle = 'rgba(61,220,132,0.06)'
-        ctx.fillRect(Math.max(pad, xRange18), 0, xRange50 - xRange18, H - 1)
-      }
-
-      // Draw bars
-      for (let i = 0; i < nBins; i++) {
-        const len    = lengths[i]
-        const count  = byLength.get(len).length
-        const x      = startX + i * (barW + 1)
-        const barH   = Math.max(2, Math.round((count / maxCount) * (H - 14)))
-        const y      = H - barH - 1
-        const isOut  = len < 18 || len > 50
-
-        ctx.fillStyle = isOut ? '#ff6b6b' : '#3ddc84'
-        ctx.fillRect(x, y, barW, barH)
-
-        _barData.push({ x, w: barW, y, h: barH, strandIds: byLength.get(len), length: len, isOut })
-      }
-
-      // X-axis ticks for 18 and 50
-      ctx.fillStyle = '#484f58'
-      ctx.font = '8px monospace'
-      ctx.textAlign = 'center'
-      for (const tick of [18, 50]) {
-        if (tick >= minLen && tick <= maxLen) {
-          const xi = startX + (tick - minLen) * (barW + 1) + barW / 2
-          ctx.fillText(tick, xi, H)
-        }
-      }
-    }
-
-    // Click: select a strand of the clicked bar, cycling through all strands on repeated clicks
-    let _lastClickedLength = null
-    let _cycleIndex = 0
-    canvas.addEventListener('click', e => {
-      const rect = canvas.getBoundingClientRect()
-      const scaleX = canvas.width / rect.width
-      const mx = (e.clientX - rect.left) * scaleX
-
-      for (const bar of _barData) {
-        if (mx >= bar.x && mx <= bar.x + bar.w) {
-          if (bar.length === _lastClickedLength) {
-            _cycleIndex = (_cycleIndex + 1) % bar.strandIds.length
-          } else {
-            _lastClickedLength = bar.length
-            _cycleIndex = 0
-          }
-          const strandId = bar.strandIds[_cycleIndex]
-          const total = bar.strandIds.length
-          tooltip.textContent = `${bar.length} nt · ${_cycleIndex + 1}/${total} strand(s)`
-
-          selectionManager.selectStrand(strandId)
-          _centerOnStrand(strandId)
-          return
-        }
-      }
-      tooltip.textContent = ''
-    })
-
-    // Tooltip on hover
-    canvas.addEventListener('mousemove', e => {
-      const rect = canvas.getBoundingClientRect()
-      const scaleX = canvas.width / rect.width
-      const mx = (e.clientX - rect.left) * scaleX
-      for (const bar of _barData) {
-        if (mx >= bar.x && mx <= bar.x + bar.w) {
-          tooltip.textContent = `${bar.length} nt · ${bar.strandIds.length} strand(s)${bar.isOut ? ' ⚠ out of range' : ''}`
-          return
-        }
-      }
-      tooltip.textContent = ''
-    })
-    canvas.addEventListener('mouseleave', () => { tooltip.textContent = '' })
-
-    // ── Right-click context menu: delete all strands of this bin length ──────
-    const _histCtx       = document.getElementById('hist-ctx-menu')
-    const _histCtxHeader = document.getElementById('hist-ctx-header')
-    const _histCtxCount  = document.getElementById('hist-ctx-count')
-    const _histCtxDelete = document.getElementById('hist-ctx-delete-btn')
-    let _ctxBar = null
-
-    function _hideHistCtx() {
-      if (_histCtx) _histCtx.style.display = 'none'
-      _ctxBar = null
-    }
-
-    canvas.addEventListener('contextmenu', e => {
-      e.preventDefault()
-      const rect   = canvas.getBoundingClientRect()
-      const scaleX = canvas.width / rect.width
-      const mx     = (e.clientX - rect.left) * scaleX
-      for (const bar of _barData) {
-        if (mx >= bar.x && mx <= bar.x + bar.w) {
-          _ctxBar = bar
-          if (_histCtxHeader) _histCtxHeader.textContent = `${bar.length} nt`
-          if (_histCtxCount)  _histCtxCount.textContent  = bar.strandIds.length
-          if (_histCtx) {
-            _histCtx.style.left    = `${e.clientX}px`
-            _histCtx.style.top     = `${e.clientY}px`
-            _histCtx.style.display = 'block'
-          }
-          return
-        }
-      }
-    })
-
-    document.addEventListener('pointerdown', e => {
-      if (_histCtx?.style.display !== 'none' && !_histCtx.contains(e.target)) _hideHistCtx()
-    })
-
-    _histCtxDelete?.addEventListener('click', async () => {
-      if (!_ctxBar) return
-      const bar = _ctxBar
-      _hideHistCtx()
-      if (bar.strandIds.length === 1) await api.deleteStrand(bar.strandIds[0])
-      else await api.deleteStrandsBatch(bar.strandIds)
-    })
-
-    // Redraw when design changes and histogram is visible; reset cycle state
-    store.subscribe((newState, prevState) => {
-      if (_expanded && newState.currentDesign !== prevState.currentDesign) {
-        _lastClickedLength = null
-        _cycleIndex = 0
-        _redraw(newState.currentDesign)
-      }
-    })
-  })()
+  // Extracted to ui/strand_length_histogram.js (factory + pure computeStrandLengthBins).
+  initStrandLengthHistogram({ store, selectionManager, api, centerOnStrand: _centerOnStrand })
 
 
   // ── Import helpers ─────────────────────────────────────────────────────────────
