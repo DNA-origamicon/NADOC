@@ -125,6 +125,7 @@ import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
 import { initKinematicsTicker }      from './scene/kinematics_ticker.js'
 import { applyBeltRiders, beltCurvePoints, beltLoopLength } from './scene/belt_geometry.js'
 import { initBeltPolymerize } from './scene/belt_polymerize.js'
+import { initAssemblyRefresh } from './scene/assembly_refresh.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
@@ -559,7 +560,7 @@ async function main() {
   // ── Cross-tab sync ──────────────────────────────────────────────────────────
   // Reuses the existing nadocBroadcast channel + the established
   // "part-design-updated" message type (already emitted from part-edit Save
-  // and handled below by `_refreshAssemblyPartInstance` for assembly windows).
+  // and handled below by `_assemblyRefresh.requestRefresh` for assembly windows).
   // Below we also add a part-edit handler so a part-editor tab viewing the
   // same instance re-imports its design when the assembly window mutates it.
   function _broadcastInstanceChanged(instanceId) {
@@ -9274,6 +9275,21 @@ Typical debugging workflow for "reverts to 3D" bug:
     _libRefreshTimer = setTimeout(() => libraryPanel.refresh(), 400)
   }
 
+  // Coalesced assembly part-refresh: a burst of part-edit broadcasts + watchdog
+  // SSEs collapses to ONE getAssembly + rebuild. clusterPanel is wired ~1000 ln
+  // later, so it's injected lazily.
+  const _assemblyRefresh = initAssemblyRefresh({
+    store,
+    api,
+    assemblyRenderer,
+    assemblyJointRenderer,
+    syncLog: _syncLog,
+    setSyncStatus: _setSyncStatus,
+    syncAssemblyBluntEnds: _syncAssemblyBluntEnds,
+    selfSavedPaths: _selfSavedPaths,
+    getClusterPanel: () => clusterPanel,
+  })
+
 	  function _handleLibraryEvent({ type, path, file_type }) {
     if (type !== 'file-changed' && type !== 'file-deleted') return
     _syncLog('info', 'SSE', `${type} ${file_type}:${path}`)
@@ -9296,7 +9312,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       // didn't beat the SSE — our own part-editor save). Route through the
       // COALESCED refresh so this + the `part-design-updated` broadcast + any
       // burst of saves collapse into ONE getAssembly + rebuild + getInstanceDesign
-      // instead of a per-instance, per-event flood. _refreshAssemblyPartInstance
+      // instead of a per-instance, per-event flood. _assemblyRefresh
       // invalidates every instance sharing this source and fetches the design once.
       const assembly = store.getState().currentAssembly
       const affected = (assembly?.instances ?? []).filter(
@@ -9304,7 +9320,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       )
       if (affected.length) {
         _syncLog('info', 'SSE', `${affected.length} instance(s) affected → coalesced refresh`)
-        _scheduleAssemblyPartRefresh(affected[0].id, 'sse')
+        _assemblyRefresh.requestRefresh(affected[0].id, 'sse')
       }
     } else if (file_type === 'part' && !store.getState().assemblyActive && _workspacePath === path) {
       // Design tab: this is the file we have open. If a sibling tab is live-editing
@@ -9328,105 +9344,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
 	  }
 	  api.subscribeLibraryEvents(_handleLibraryEvent)
-
-  // ── Coalesced assembly part-refresh ──────────────────────────────────────────
-  // A single part edit fires BOTH a `part-design-updated` broadcast AND a watchdog
-  // `file-changed` SSE; a slider drag in the part editor fires a whole BURST of
-  // them. Each used to run a full `_refreshAssemblyPartInstance` (getAssembly +
-  // rebuild-all-instances + getInstanceDesign) — so N rapid edits → N concurrent
-  // heavy rebuilds that saturated the backend (20-30 s responses) AND raced into
-  // the hull+cylinder LOD overlay. Funnel every trigger through this debounced,
-  // drop-while-in-flight scheduler so a burst collapses to ONE refresh.
-  let _asmRefreshTimer    = null
-  let _asmRefreshInFlight = false
-  let _asmRefreshPending  = false
-  let _asmRefreshId       = null
-  let _asmRefreshReason   = 'part update'
-
-  function _scheduleAssemblyPartRefresh(instanceId, reason = 'part update') {
-    if (!instanceId || !store.getState().assemblyActive) return
-    _asmRefreshId = instanceId
-    _asmRefreshReason = reason
-    if (_asmRefreshInFlight) { _asmRefreshPending = true; return }
-    clearTimeout(_asmRefreshTimer)
-    _asmRefreshTimer = setTimeout(_runCoalescedAssemblyRefresh, 250)
-  }
-
-  async function _runCoalescedAssemblyRefresh() {
-    if (_asmRefreshInFlight) { _asmRefreshPending = true; return }
-    _asmRefreshInFlight = true
-    _asmRefreshPending  = false
-    try {
-      await _refreshAssemblyPartInstance(_asmRefreshId, _asmRefreshReason)
-    } catch (err) {
-      console.warn('[sync] assembly part refresh failed:', err?.message ?? err)
-    } finally {
-      _asmRefreshInFlight = false
-      // A trigger arrived while we were refreshing — run exactly once more.
-      if (_asmRefreshPending) {
-        _asmRefreshPending = false
-        clearTimeout(_asmRefreshTimer)
-        _asmRefreshTimer = setTimeout(_runCoalescedAssemblyRefresh, 250)
-      }
-    }
-  }
-
-  async function _refreshAssemblyPartInstance(instanceId, reason = 'part update') {
-    if (!instanceId || !store.getState().assemblyActive) return
-    _syncLog('info', 'ASM', `${reason}: refreshing ${instanceId}`)
-    _setSyncStatus('yellow', 'syncing part…')
-
-    // The edited part is usually shared by several instances (a polymerized
-    // chain). Do NOT invalidate per-instance: on the shared renderer
-    // `invalidateInstance` IGNORES the id and triggers a FULL rebuild, so a
-    // per-instance loop fired one rebuild PER copy (40 instances → 40
-    // getAssemblyGeometry calls → backend saturation + the rebuild-race overlay).
-    // A single `rebuild()` below disposes every source and refetches the batch
-    // geometry once, so all copies pick up the new shape from one rebuild.
-    const cur     = store.getState().currentAssembly
-    const srcInst = cur?.instances?.find(i => i.id === instanceId)
-    const srcPath = srcInst?.source?.type === 'file' ? srcInst.source.path : null
-    const affected = srcPath
-      ? (cur?.instances ?? []).filter(i => i.source?.type === 'file' && i.source.path === srcPath)
-      : (srcInst ? [srcInst] : [])
-
-    // The part-editor save also writes the .nadoc file, which fires a watchdog
-    // SSE `file-changed`. Mark the path self-saved so `_handleLibraryEvent`
-    // doesn't schedule a second (coalesced-but-still-extra) refresh for it.
-    if (srcPath) {
-      _selfSavedPaths.add(srcPath)
-      setTimeout(() => _selfSavedPaths.delete(srcPath), 5000)
-    }
-
-    // getAssembly pulls the re-docked transforms the backend produced when the
-    // part edit auto-resolved (PATCH /assembly/instances/{id}/design). rebuild()
-    // then disposes all sources and refetches fresh geometry once (the part-edit
-    // cleared the backend geo cache), so every instance updates.
-    //
-    // CRITICAL: use the EXPANDED store assembly, NOT result.assembly. getAssembly()
-    // returns the RAW backend JSON, whose `assembly` is the v2 wire format —
-    // parts live under `instances_v2` and the v1 `instances` field is dropped
-    // (_assembly_response does `full.pop("instances")`). So result.assembly.instances
-    // is undefined → rebuild() sees zero instances and DISPOSES every source,
-    // blanking the assembly (visible only after a rep-change forced a fresh
-    // rebuild from the store). _syncFromAssemblyResponse already expanded v2 → v1
-    // into store.currentAssembly (`.instances` populated), so read that.
-    await api.getAssembly()
-    const assembly = store.getState().currentAssembly
-    if (!assembly?.instances?.length) return
-    await assemblyRenderer.rebuild(assembly)
-    assemblyRenderer.rebuildLinkers(assembly)
-    _syncAssemblyBluntEnds()
-    assemblyJointRenderer.rebuild(assembly)
-    try {
-      // All affected instances share one source design — fetch it ONCE.
-      const r = await api.getInstanceDesign(instanceId)
-      if (r?.design) {
-        for (const i of affected) clusterPanel?.syncInstanceDesign(i.id, r.design)
-      }
-    } catch { /* sidebar cache refresh is best-effort */ }
-    _setSyncStatus('green', 'part synced')
-  }
 
   /**
    * Show or hide ALL design-level scene geometry.
@@ -13437,7 +13354,7 @@ Typical debugging workflow for "reverts to 3D" bug:
       _syncLog('info', 'BC-RX', `part-design-updated id=${instanceId}`)
       // Coalesced: a burst of edits (slider drag) emits a burst of these; collapse
       // them into one refresh instead of one heavy rebuild per broadcast.
-      _scheduleAssemblyPartRefresh(instanceId, 'broadcast')
+      _assemblyRefresh.requestRefresh(instanceId, 'broadcast')
       // Part-edit tabs (?part-instance=<id>) show this instance's design as
       // their active design. Re-import from the backend so the topology in
       // this tab reflects the assembly window's mutation. Re-import also

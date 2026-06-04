@@ -37,30 +37,33 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after extraction #37 (group-gizmo region COMPLETE)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after extraction #38 (Coalesced assembly part-refresh — Tier 3 COMPLETE)._
 
-**Group-gizmo region is DONE** (a/b/c, commits `374721b`/`20c3347`/`ea1fd12`; −346 ln; `scene/group_gizmo.js`).
-Key lesson banked for the next gizmo-ish region: **a verbatim gizmo attach/commit lift does NOT need a GPU
-gesture e2e** — capture the `onLive`/`onCommit` callbacks the mock `instanceGizmo.attach` receives and invoke
-them in jsdom; that's deterministic and beats a flaky TransformControls-handle drag. Reserve real raycast
-gestures for selection/ring-drag (where the click pixel is the thing under test).
+**Tier 3 is fully drained** (#38, `scene/assembly_refresh.js`, −83 ln). The fake-timer factory test pattern
+worked cleanly: `vi.useFakeTimers()` + `await vi.advanceTimersByTimeAsync(250)`, and a hand-rolled
+`deferred()` promise to hold the refresh "in flight" so the mid-flight-coalesce branch is exercised. No GPU
+gesture needed — debounce/coalesce is pure timing. Bank: this is the template for any other setTimeout-debounce
+region (e.g. the `_applyRegionSurfaceOverlay` `_regionSurfaceTimer` coalescer noted in the log's discovery pass).
 
-**Next best: Coalesced assembly part-refresh** (Tier 3, the last Tier-3 `[ ]`) — banner
-`// ── Coalesced assembly part-refresh` → `scene/assembly_refresh.js`. ~200 ln. Self-contained: a setTimeout
-debounce that batches per-source geometry rebuilds. **No gesture** — it's timing, so the gate is a vitest
-fake-timer test (`vi.useFakeTimers`) asserting N rapid `requestRefresh(sourceId)` calls collapse to one
-rebuild after the debounce window, plus per-source coalescing. Deps: assemblyRenderer (rebuild call), store,
-the `_asmRefresh*` coalescing state. MED-HIGH risk = the timing, not the coupling. Factory
-`initAssemblyRefresh({assemblyRenderer, store})→{requestRefresh, flush, dispose}`; mirror `initMeasurementTool`.
+**Next best: Tier 4 — Keyboard shortcuts** — banner `// ── Keyboard shortcuts` (~528 ln, the single
+biggest LOC payoff left) → `ui/keyboard_shortcuts.js` `initKeyboardShortcuts({commandMap, …})`. It's ONE
+giant keydown handler; the win is factoring it to a **key→action table** so it's testable by dispatching
+synthetic `KeyboardEvent('keydown')` (jsdom, no GPU). It's a dispatcher into nearly everything, so pass a
+single `commands` object of injected callbacks rather than 40 individual deps. Mechanical but broad —
+**split across ≥2 commits** (e.g. the table extraction first, then the modifier/guard logic). Risk MED-HIGH
+(surface breadth, not coupling depth). Gate: jsdom synthetic-keydown factory tests + smoke.
 
-- **Alternatives if you'd rather:** Tier 4 **Keyboard shortcuts** (~528 ln, biggest single LOC payoff;
-  factor the giant keydown handler to a key→action table, dispatch synthetic keydowns to test — mechanical
-  but broad). Or a Tier 6 dev-only warm-up (`extension_arc_debug` / `devtools_helpers`, LOW risk).
+- **Lower-risk alternatives if you'd rather warm up:** Tier 6 dev-only (`extension_arc_debug` ~424 ln /
+  `devtools_helpers` ~412 ln / `terminus_audit` ~210 ln / `help_menu_toggles` ~76 ln) — gated by
+  `?debug`/DEV, LOW risk, good token-cheap wins. Or Tier 4 **View menu toggles** (~365 ln) / **Coloring/
+  tools submenus** (~280 ln).
 - **Still-in-main, deliberately deferred:** FK propagation (`_applyFKLive`, `// ── Forward kinematics live
-  visual propagation`) — the group_gizmo factory injects nothing for it; leave it its own future region.
-- **Fixed this session:** the latent #34 crash in assembly-exit cleanup (`_assemblyMultiBox = null` on a
-  `const` → TypeError on exit) is FIXED (commit d5be41c) + now covered by `e2e/assembly_exit_cleanup.spec.js`
-  (with a new `__nadocTest.exitAssemblyMode` hook). See the difficulties ledger.
+  visual propagation`) — its own future region. The remaining Polymerize-region sub-part `scene/joint_pick.js`
+  (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound) is the only Tier-3-adjacent leftover.
+- **Gotcha banked this batch:** a `const` factory does NOT hoist — when both call sites fire async (event
+  handlers) you can still place the `const` init before the FIRST handler *definition* (not just before its
+  registration) and skip the lazy-let; reserve lazy-let for when a call site can fire *synchronously during
+  init* before the factory line runs.
 
 ---
 
@@ -265,9 +268,22 @@ The largest single blocks and the most coupling into assembly state. Each needs 
   registration (scene/store/assemblyRenderer all available there) — no lazy-let needed. Gate: vitest 409 +
   smoke 21/21. **Live purple-box gesture NOT hand-exercised** (needs a built ≥2-part assembly + Ctrl-lasso
   multi-select) — verbatim move + unit-tested + smoke boot gate, per #32/#24's accepted caveat.
-- [ ] **Coalesced assembly part-refresh** — banner `// ── Coalesced assembly part-refresh`
-  (~9814–10014, ~200 ln) → `scene/assembly_refresh.js`. Deps: assemblyRenderer, store, setTimeout
-  coalescing state. Risk: MED-HIGH (timing/coalescing — assert the debounce, not just the output).
+- [x] **Coalesced assembly part-refresh** — banner `// ── Coalesced assembly part-refresh`
+  (~9332–9429, ~98 ln — the "~200 ln" estimate overshot again) → `scene/assembly_refresh.js`.
+  **DONE** (extraction #38, this batch) — factory `initAssemblyRefresh({store, api, assemblyRenderer,
+  assemblyJointRenderer, syncLog, setSyncStatus, syncAssemblyBluntEnds, selfSavedPaths, getClusterPanel})
+  →{requestRefresh, flush, dispose}`. −83 ln off the closure. No pure core (the debounce IS the behavior).
+  10 vitest with **fake timers** (`vi.useFakeTimers` + `advanceTimersByTimeAsync`): inactive-no-op /
+  no-id-no-op / burst→one-refresh / last-id-wins / full-pipeline+shared-source-sync / empty-assembly-bails /
+  mid-flight-queues-one-followup (via a deferred-promise in-flight hold) / dispose-cancels / flush-runs-now /
+  throw-recovers-latch. Gate: vitest 439 + smoke 21/21. **Placement:** real `const` init placed right before
+  `_handleLibraryEvent` (both callers — SSE @9308, broadcast @13342 — fire async post-init, so no lazy-let
+  needed; `selfSavedPaths`/syncLog/etc. all defined earlier). `clusterPanel` (wired ~1000 ln later) via lazy
+  `getClusterPanel: () => clusterPanel`. dispose/flush are additive API (unused by main.js — a pending timer
+  surviving assembly-exit still no-ops via the `assemblyActive` guard, so exit behavior is verbatim-preserved;
+  NOT wired into exit cleanup to keep the lift verbatim). **Live coalesced-refresh gesture NOT hand-exercised**
+  (needs a built multi-part assembly + a part-editor save burst) — fake-timer units cover the exact
+  debounce/coalesce contract, per #34/#32/#24's accepted caveat. **Tier 3 is now fully drained.**
 
 ## Tier 4 — menus / toggles / shortcuts (many small handlers)
 
