@@ -17,7 +17,7 @@ import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
-import { FLUORO_EMISSION_COLORS, buildNucLetterMap, buildStapleColorMap, BEAD_RADIUS } from './scene/helix_renderer.js'
+import { buildNucLetterMap, buildStapleColorMap, BEAD_RADIUS } from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
@@ -34,7 +34,7 @@ import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
 import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds, findOwningGroupId } from './scene/assembly_groups_util.js'
 import { heatmapHex, hexFromInt, atomColorsFromLetters } from './scene/color_util.js'
-import { fretQuenchedDonors } from './scene/fret_util.js'
+import { initFretChecker } from './scene/fret_checker.js'
 import { motionChipStyle } from './scene/motion_chip.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { selectionBBox } from './scene/selection_bbox.js'
@@ -13054,84 +13054,12 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   // ── Fluorescence + FRET Checker ──────────────────────────────────────────────
-  let _fluorescenceOn = false
-  let _fretOn         = false
-
-  // Förster radii (nm) for donor→acceptor pairs supported by NADOC modifications.
-  const _FRET_PAIRS = [
-    { donor: 'cy3',     acceptor: 'cy5',     r0: 5.4 },
-    { donor: 'fam',     acceptor: 'tamra',   r0: 4.6 },
-    { donor: 'atto488', acceptor: 'atto550', r0: 6.3 },
-    { donor: 'fam',     acceptor: 'bhq1',    r0: 4.2 },
-    { donor: 'fam',     acceptor: 'bhq2',    r0: 4.2 },
-    { donor: 'cy3',     acceptor: 'bhq2',    r0: 4.5 },
-    { donor: 'tamra',   acceptor: 'bhq2',    r0: 4.5 },
-  ]
-  // Build donor → [acceptor list] and pair → r0 lookup tables.
-  const _FRET_DONOR_MAP = new Map()  // donor mod key → [acceptor mod keys]
-  const _FRET_R0_MAP    = new Map()  // "donor:acceptor" → r0 (nm)
-  for (const { donor, acceptor, r0 } of _FRET_PAIRS) {
-    if (!_FRET_DONOR_MAP.has(donor)) _FRET_DONOR_MAP.set(donor, [])
-    _FRET_DONOR_MAP.get(donor).push(acceptor)
-    _FRET_R0_MAP.set(`${donor}:${acceptor}`, r0)
-  }
-
-  // Sprite scale for a donor whose energy is being transferred (≈3 nm diameter).
-  const _FRET_QUENCHED_SCALE = 3
-
-  /**
-   * Return the set of fluoroEntries that are donors currently within their
-   * Förster radius of at least one compatible acceptor.
-   */
-
-  /**
-   * Unified glow refresh for Fluorescence and FRET Checker modes.
-   * Fluorescence: all fluorophores glow at full size (10 nm radius).
-   * FRET: same, but donors within Förster radius of a compatible acceptor
-   *       are shown at ~1.5 nm radius (scale 3) to indicate energy transfer.
-   * Both modes share one setFluorescenceGlow() call; FRET takes priority on scale.
-   */
-  function _refreshGlowModes() {
-    if (!_fluorescenceOn && !_fretOn) { designRenderer.clearFluorescenceGlow(); return }
-
-    const all      = designRenderer.getFluoroEntries()   // includes BHQ/Biotin for distance checks
-    const quenched = _fretOn ? fretQuenchedDonors(all, _FRET_DONOR_MAP, _FRET_R0_MAP) : new Set()
-
-    const entries = all
-      .filter(fe => FLUORO_EMISSION_COLORS.has(fe.nuc?.modification))
-      .map(fe => ({
-        pos:          fe.pos,
-        emissionColor: FLUORO_EMISSION_COLORS.get(fe.nuc.modification),
-        scale:        quenched.has(fe) ? _FRET_QUENCHED_SCALE : undefined,
-      }))
-
-    if (entries.length > 0) designRenderer.setFluorescenceGlow(entries)
-    else                    designRenderer.clearFluorescenceGlow()
-  }
-
-  document.getElementById('menu-view-fluorescence')?.addEventListener('click', () => {
-    _fluorescenceOn = !_fluorescenceOn
-    _setMenuToggle('menu-view-fluorescence', _fluorescenceOn)
-    _refreshGlowModes()
-  })
-
-  document.getElementById('menu-view-fret')?.addEventListener('click', () => {
-    _fretOn = !_fretOn
-    _setMenuToggle('menu-view-fret', _fretOn)
-    _refreshGlowModes()
-  })
+  const fretChecker = initFretChecker({ designRenderer, store, setMenuToggle: _setMenuToggle })
 
   document.getElementById('menu-view-joints')?.addEventListener('click', () => {
     const on = !jointRenderer?.isVisible()
     jointRenderer?.setVisible(on)
     _setMenuToggle('menu-view-joints', on)
-  })
-
-  // Rebuild glow whenever the geometry reloads while either mode is on.
-  store.subscribe((newState, prevState) => {
-    if ((_fluorescenceOn || _fretOn) && newState.currentGeometry !== prevState.currentGeometry) {
-      _refreshGlowModes()
-    }
   })
 
   // ── Help / Hotkeys modal ─────────────────────────────────────────────────────
@@ -14074,7 +14002,7 @@ Typical debugging workflow for "reverts to 3D" bug:
     sequenceOverlay.orientToCamera(camera)
 
     // Live FRET re-check — runs every frame so translate/rotate moves update glow instantly.
-    if (_fretOn) _refreshGlowModes()
+    fretChecker.refreshIfFret()
 
     // Pin unligated-crossover ⚠ markers to live bead midpoints so they
     // track the crossover through unfold view, cadnano view, expanded

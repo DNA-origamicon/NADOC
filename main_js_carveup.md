@@ -81,9 +81,19 @@ Self-contained feature blocks that map cleanly to a factory; lowest coupling, hi
       `_assemblyLoadOnProgress`/`_assemblyLoadSettle`/`_setWorkspacePath`/`_revealWorkspaceForEmptyPart`…).
       These belong with **File open / save** (Tier 5), not a clean standalone lift.
     - the `initLibraryPanel({…})` call + inline `onNewPart`/`onNewAssembly` callbacks — thin wiring, leave in place.
-- [ ] **Fluorescence + FRET checker** — banner `// ── Fluorescence + FRET Checker` (~13712–13793,
-  ~80 ln) → `ui/fret_panel.js` (pairs with existing `scene/fret_util.js`). Deps: store, DOM, fret_util.
-  Risk: LOW-MED.
+- [x] **Fluorescence + FRET checker** — banner `// ── Fluorescence + FRET Checker` (~13056–13135,
+  ~80 ln) → `scene/fret_checker.js` (named `scene/`, NOT the map's `ui/fret_panel.js` — there's no panel
+  DOM, it's a glow/menu-toggle controller; co-located with `scene/fret_util.js`). Deps: designRenderer,
+  store, `_setMenuToggle`. Risk: LOW-MED.
+  **DONE** (extraction #24, commit pending) — factory `initFretChecker` + pure `buildFretLookups`
+  (lookup-table build); `FRET_PAIRS`/`FRET_QUENCHED_SCALE` moved into the module. −72 ln off closure.
+  9 vitest (3 pure + 6 jsdom factory: no-glow-before-toggle / fluorescence-on-glows-emitters-only /
+  fluorescence-off-clears / FRET-quench-scale / refreshIfFret-only-when-on / geometry-reload-rebuild).
+  Render-loop coupling (`if (_fretOn) _refreshGlowModes()` every frame) → exposed `refreshIfFret()`.
+  Left the unrelated `menu-view-joints` handler in main.js. Removed now-dead `fretQuenchedDonors` +
+  `FLUORO_EMISSION_COLORS` imports from main.js. smoke 21/21 + real-app exercise (toggle both modes +
+  600ms render-loop ticks, zero console errors — **glow not visually confirmed**: scaffold-only part has
+  no fluorophores; glow LOGIC is unit-tested, visual path needs a fluorophore design).
 
 ## Tier 2 — import / export menus (mechanical, repetitive)
 
