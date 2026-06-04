@@ -112,9 +112,22 @@ per direction with a handler table.
   smoke 21/21 + real-app exercise (load scaffolded part → CSV download + PDB download + GROMACS toast,
   zero console errors). Removed now-unused `getStapleColorOrder` from main.js's spreadsheet import.
   GROMACS export stays stubbed (poller removed 2026-05-17); `label`/`dlBtn` kept dead for the re-impl.
-- [ ] **Import menu + callbacks** — banners `// ── Import helpers` … `// ── Import PDB` + library import
-  callbacks (~12813–13046, ~233 ln) → `ui/import_menu.js`. Deps: api, lattice autodetect, DOM dialogs.
-  Risk: MED (autodetection branch).
+- [x] **Import menu + callbacks** — banners `// ── Import helpers` … `// ── Import PDB` + library import
+  callbacks (~12162–12388, ~227 ln) → `ui/import_menu.js`. Deps: store, api, workspace, libraryPanel +
+  8 lifecycle callbacks (`resetForNewDesign`/`show`+`hideWelcome`/`renderRecentMenu`/`setWorkspacePath`/
+  `setFileName`/`setSyncStatus`/`saveAs`/`setFileHandle`). Risk: MED-HIGH (more coupling than Export).
+  **DONE** (extraction #26, commit pending) — factory `initImportMenu(deps)` + pure
+  `sanitizeImportName` / `importedClusterOverhangExtras`; returns
+  `{importCadnanoWithAutodetection, importScadnanoWithAutodetection, runPdbImport}`. −210 ln off closure.
+  12 vitest (3 sanitize + 2 extras + 7 factory/runPdbImport: returns-callbacks/no-DOM, PDB-menu→modal
+  wiring, runPdbImport null/needs-decision/dna/protein/both). smoke 21/21 + real-app exercise
+  (library-panel caDNAno button → lazy `_importMenu` wrapper → file input; PDB menu → modal; zero console
+  errors). **Wiring gotcha:** the two autodetection callbacks are consumed at the `initLibraryPanel` call
+  ~3000 ln earlier (was function-hoisting); replaced with lazy `() => _importMenu?.…()` wrappers (mirrors
+  the existing `onOpenPart` arrow pattern) + a `let _importMenu = null` declared before that init.
+  Removed now-dead `openImportPdbModal` import from main.js. `showToast`/`openFileBrowser`/
+  `openImportPdbModal` imported directly in the module. The file-input flows can't be jsdom-driven (no
+  user file) → covered by verbatim move + app exercise, not vitest.
 
 ## Tier 3 — assembly interaction (big, higher coupling — gesture-e2e REQUIRED)
 

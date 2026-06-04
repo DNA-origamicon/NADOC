@@ -86,7 +86,6 @@ import { initPolymerizePanel }     from './ui/polymerize_panel.js'
 import { initBeltPathPanel }       from './ui/belt_path_panel.js'
 import { initStrandAnimPanel }     from './ui/strand_anim_panel.js'
 import { openProteinAttachModal }  from './ui/protein_attach_modal.js'
-import { openImportPdbModal }      from './ui/import_pdb_modal.js'
 import { initProteinGizmo }        from './scene/protein_gizmo.js'
 import { initUnfoldView }          from './scene/unfold_view.js'
 import { initCadnanoView }         from './scene/cadnano_view.js'
@@ -113,6 +112,7 @@ import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { repColumnsByRep, overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './scene/representation_overrides.js'
 import { initSpreadsheet } from './ui/spreadsheet.js'
 import { initExportMenu }          from './ui/export_menu.js'
+import { initImportMenu }          from './ui/import_menu.js'
 import { initAssemblyPanel }        from './ui/assembly_panel.js'
 import { initAssemblyContextMenu }  from './ui/assembly_context_menu.js'
 import { initLibraryPanel }         from './ui/library_panel.js'
@@ -9016,10 +9016,13 @@ Typical debugging workflow for "reverts to 3D" bug:
     }
   }
 
+  // Assigned later (the import-menu region near the bottom of main()); the
+  // library panel only *invokes* these on user click, so a lazy wrapper is safe.
+  let _importMenu = null
   const libraryPanel = initLibraryPanel({
     api,
-    onImportCadnano:  _importCadnanoWithAutodetection,
-    onImportScadnano: _importScadnanoWithAutodetection,
+    onImportCadnano:  () => _importMenu?.importCadnanoWithAutodetection(),
+    onImportScadnano: () => _importMenu?.importScadnanoWithAutodetection(),
     onNewPart: async () => {
       const dest = await openFileBrowser({ title: 'New Part — Choose Location', mode: 'save', fileType: 'part', suggestedName: 'Untitled', suggestedExt: '.nadoc', noOverwrite: true, api })
       if (!dest) return
@@ -12155,232 +12158,18 @@ Typical debugging workflow for "reverts to 3D" bug:
   initStrandLengthHistogram({ store, selectionManager, api, centerOnStrand: _centerOnStrand })
 
 
-  // ── Import helpers ─────────────────────────────────────────────────────────────
-
-  // Prompt Save As for an already-imported design, then add it as an assembly part.
-  async function _importAsAssemblyPart(suggestedName) {
-    const saveResult = await openFileBrowser({
-      title: 'Save New Part As',
-      mode: 'save',
-      fileType: 'part',
-      suggestedName,
-      suggestedExt: '.nadoc',
-      api,
-    })
-    if (!saveResult) {
-      store.setState({ currentDesign: null })
-      return
-    }
-    const saved = await api.saveDesignAs(saveResult.path, saveResult.overwrite ?? false)
-    if (!saved) { showToast('Failed to save part.', { severity: 'error' }); store.setState({ currentDesign: null }); return }
-    store.setState({ currentDesign: null })
-    await api.addInstance({ source: { type: 'file', path: saveResult.path }, name: saveResult.name.replace(/\.nadoc$/i, '') })
-    libraryPanel?.refresh()
-    showToast(`Part "${saveResult.name}" added to assembly.`)
-  }
-
-  // ── Library panel import callbacks (cadnano / scadnano with autodetection) ──────
-
-  async function _importCadnanoWithAutodetection() {
-    const input = document.createElement('input')
-    input.type = 'file'; input.accept = '.json'
-    const file = await new Promise(r => { input.onchange = () => r(input.files?.[0] ?? null); input.click() })
-    if (!file) return
-    const content = await file.text()
-    _resetForNewDesign()
-    const result = await api.importCadnanoDesign(content)
-    if (!result) {
-      showToast('Failed to import caDNAno file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
-      if (!store.getState().assemblyActive) _showWelcome()
-      return
-    }
-    if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
-    showToast('Note: caDNAno designs appear upside down due to the original caDNAno coordinate convention.', 8000)
-    api.addRecentFile(file.name, content, 'cadnano')
-    _renderRecentMenu()
-
-    const design = store.getState().currentDesign
-    const clusters = (design?.cluster_transforms ?? []).filter(c => !c.is_default)
-    const overhangs = design?.overhangs ?? []
-    const suggestedName = (design?.metadata?.name ?? file.name.replace(/\.[^.]+$/, '')).replace(/[^a-zA-Z0-9-_ ]/g, '_')
-
-    _hideWelcome(); workspace.hide()
-
-    const dest = await openFileBrowser({
-      title: 'Save Imported Design',
-      mode: 'save', fileType: 'part',
-      suggestedName, suggestedExt: '.nadoc', api,
-      autodetection: (clusters.length || overhangs.length) ? { clusters, overhangs } : null,
-    })
-    if (!dest) return
-
-    if (dest.includeClusters === false && clusters.length) {
-      for (const cl of clusters) await api.deleteCluster(cl.id)
-    }
-    if (dest.includeOverhangs === false && overhangs.length) {
-      await api.clearOverhangs()
-    }
-
-    const r = await api.saveDesignAs(dest.path, dest.overwrite ?? false)
-    if (r) {
-      _fileHandle = null
-      _setWorkspacePath(dest.path)
-      _setFileName(dest.name)
-      _setSyncStatus('green', 'saved')
-      libraryPanel?.refresh()
-    }
-  }
-
-  async function _importScadnanoWithAutodetection() {
-    const input = document.createElement('input')
-    input.type = 'file'; input.accept = '.sc'
-    const file = await new Promise(r => { input.onchange = () => r(input.files?.[0] ?? null); input.click() })
-    if (!file) return
-    const content = await file.text()
-    const baseName = file.name.replace(/\.sc$/i, '')
-    _resetForNewDesign()
-    const result = await api.importScadnanoDesign(content, baseName)
-    if (!result) {
-      showToast('Failed to import scadnano file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
-      if (!store.getState().assemblyActive) _showWelcome()
-      return
-    }
-    if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
-    showToast('Note: scadnano designs appear upside down due to the original scadnano coordinate convention.', 8000)
-    api.addRecentFile(file.name, content, 'scadnano')
-    _renderRecentMenu()
-
-    const design = store.getState().currentDesign
-    const clusters = (design?.cluster_transforms ?? []).filter(c => !c.is_default)
-    const overhangs = design?.overhangs ?? []
-    const suggestedName = (design?.metadata?.name ?? baseName).replace(/[^a-zA-Z0-9-_ ]/g, '_')
-
-    _hideWelcome(); workspace.hide()
-
-    const dest = await openFileBrowser({
-      title: 'Save Imported Design',
-      mode: 'save', fileType: 'part',
-      suggestedName, suggestedExt: '.nadoc', api,
-      autodetection: (clusters.length || overhangs.length) ? { clusters, overhangs } : null,
-    })
-    if (!dest) return
-
-    if (dest.includeClusters === false && clusters.length) {
-      for (const cl of clusters) await api.deleteCluster(cl.id)
-    }
-    if (dest.includeOverhangs === false && overhangs.length) {
-      await api.clearOverhangs()
-    }
-
-    const r = await api.saveDesignAs(dest.path, dest.overwrite ?? false)
-    if (r) {
-      _fileHandle = null
-      _setWorkspacePath(dest.path)
-      _setFileName(dest.name)
-      _setSyncStatus('green', 'saved')
-      libraryPanel?.refresh()
-    }
-  }
-
-  // ── Import caDNAno ─────────────────────────────────────────────────────────────
-  document.getElementById('menu-file-import-cadnano')?.addEventListener('click', () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.json'
-    input.onchange = async () => {
-      const file = input.files?.[0]
-      if (!file) return
-      const content = await file.text()
-      _resetForNewDesign()
-      const result = await api.importCadnanoDesign(content)
-      if (!result) {
-        showToast('Failed to import caDNAno file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
-        if (!store.getState().assemblyActive) _showWelcome()
-        return
-      }
-      if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
-      showToast('Note: caDNAno designs appear upside down due to the original caDNAno coordinate convention.', 8000)
-      api.addRecentFile(file.name, content, 'cadnano')
-      _renderRecentMenu()
-      const design = store.getState().currentDesign
-      const suggestedName = (design?.metadata?.name ?? file.name.replace(/\.[^.]+$/, '')).replace(/[^a-zA-Z0-9-_ ]/g, '_')
-      if (store.getState().assemblyActive) {
-        await _importAsAssemblyPart(suggestedName)
-      } else {
-        _hideWelcome()
-        workspace.hide()
-        await _saveAs()
-      }
-    }
-    input.click()
-  })
-
-  // ── Import scadnano ────────────────────────────────────────────────────────────
-  document.getElementById('menu-file-import-scadnano')?.addEventListener('click', () => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.sc'
-    input.onchange = async () => {
-      const file = input.files?.[0]
-      if (!file) return
-      const content = await file.text()
-      const baseName = file.name.replace(/\.sc$/i, '')
-      _resetForNewDesign()
-      const result = await api.importScadnanoDesign(content, baseName)
-      if (!result) {
-        showToast('Failed to import scadnano file: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
-        if (!store.getState().assemblyActive) _showWelcome()
-        return
-      }
-      if (result.import_warnings?.length) showToast(result.import_warnings.join(' | '), 5000)
-      showToast('Note: scadnano designs appear upside down due to the original scadnano coordinate convention.', 8000)
-      api.addRecentFile(file.name, content, 'scadnano')
-      _renderRecentMenu()
-      const design = store.getState().currentDesign
-      const suggestedName = (design?.metadata?.name ?? baseName).replace(/[^a-zA-Z0-9-_ ]/g, '_')
-      if (store.getState().assemblyActive) {
-        await _importAsAssemblyPart(suggestedName)
-      } else {
-        _hideWelcome()
-        workspace.hide()
-        await _saveAs()
-      }
-    }
-    input.click()
-  })
-
-  // ── Import PDB (DNA design and/or protein, by RCSB id or file) ──────────────────
-  async function _runPdbImport(args) {
-    const json = await api.importPdbAuto(args)
-    if (!json) {
-      showToast('PDB import failed: ' + (store.getState().lastError?.message ?? 'Unknown error'), { severity: 'error' })
-      return null
-    }
-    if (json.needs_dna_decision) return json   // modal prompts, then re-calls with the choice
-    const parts = []
-    if (json.imported?.dna) {
-      _resetForNewDesign()
-      api.syncDesignResponse(json)
-      _hideWelcome()
-      workspace.hide()
-      parts.push('DNA design')
-      if (json.import_warnings?.length) showToast(json.import_warnings.join(' | '), 5000)
-    }
-    if (json.imported?.protein) {
-      // Sync the design (the import added a free attachment, server-side); the
-      // currentDesign subscription then re-renders the protein. Hide the welcome
-      // screen so the freshly-placed protein is visible.
-      api.syncDesignResponse(json)
-      _hideWelcome()
-      workspace.hide()
-      parts.push(`protein ${json.protein.name} (${json.protein.atom_count} atoms)`)
-    }
-    if (parts.length) showToast('Imported ' + parts.join(' + '), 4000)
-    return json
-  }
-
-  document.getElementById('menu-file-import-pdb')?.addEventListener('click', () => {
-    openImportPdbModal({ onResult: _runPdbImport })
+  // ── Import menu (File → Import + library-panel import callbacks) ───────────────
+  _importMenu = initImportMenu({
+    store, api, workspace, libraryPanel,
+    resetForNewDesign: _resetForNewDesign,
+    showWelcome: _showWelcome,
+    hideWelcome: _hideWelcome,
+    renderRecentMenu: _renderRecentMenu,
+    setWorkspacePath: _setWorkspacePath,
+    setFileName: _setFileName,
+    setSyncStatus: _setSyncStatus,
+    saveAs: _saveAs,
+    setFileHandle: (v) => { _fileHandle = v },
   })
 
   // ── Attach Protein to Overhang ─────────────────────────────────────────────────
