@@ -11644,24 +11644,10 @@ Typical debugging workflow for "reverts to 3D" bug:
     _assemblyPtrDownAt = null
     if (dx * dx + dy * dy > 25) return   // was a drag, not a click
 
-    // Ctrl/Meta-click → toggle the picked instance in/out of the multi-select
-    // set instead of replacing the single-select. Mirrors the Ctrl-click
-    // behavior on instance rows in the parts panel so users can build a
-    // multi-select either by clicking in 3D or by clicking in the list.
-    if (e.ctrlKey || e.metaKey) {
-      const hit = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
-      if (!hit) return
-      const cur = store.getState().multiSelectedInstanceIds ?? []
-      const next = cur.includes(hit.id)
-        ? cur.filter(id => id !== hit.id)
-        : [...cur, hit.id]
-      store.setState({
-        multiSelectedInstanceIds: next,
-        activeInstanceId: null,
-        activeGroupId:    null,
-      })
-      return
-    }
+    // (Ctrl/Meta-click multi-select toggle now lives in the assembly-lasso
+    // factory's onClick: a tiny Ctrl-drag finalizes as a click → toggle. The
+    // former branch here was unreachable — Ctrl-pointerdown starts the lasso and
+    // never sets _assemblyPtrDownAt, so this handler never saw a Ctrl-click.)
 
     // ── PartGroup click-through (PowerPoint-style) ─────────────────────────
     // Behavior:
