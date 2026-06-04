@@ -59,8 +59,16 @@ Self-contained feature blocks that map cleanly to a factory; lowest coupling, hi
   `showToast` imported directly (not a dep). Gotcha: hingeV4's 36 *file-level* overhangs don't
   materialize at runtime (`design.overhangs`=0 after load) — NS_trans_fix (51) is the design with real
   runtime overhangs. 2D/DOM panel → no scene_harness needed.
-- [ ] **Strand groups panel** — banner `// ── Strand groups panel` (~2715–2913, ~198 ln) →
-  `ui/strand_groups_panel.js`. Deps: store (strandGroups), DOM rebuild + subscribe. Risk: MED.
+- [x] **Strand groups panel** — banner `// ── Strand groups panel` (~2493–2687, ~194 ln) →
+  `ui/strand_groups_panel.js`. Deps: store (strandGroups), selectionManager, DOM rebuild + subscribe. Risk: MED.
+  **DONE** (extraction #22, commit pending) — factory `initStrandGroupsPanel` + 4 pure cores
+  (`effectiveStrandColors` / `groupStrandsByColor` / `trimGroupsRemovingStrands` /
+  `selectableGroupStrandIds`); −192 ln off closure; 20 vitest (12 pure + 8 jsdom factory:
+  no-DOM no-op/expand-rebuild/collapse-suppress/row-multiselect/New-seed/New-trims-old/From-colors-bucket/
+  delete); smoke 21/21 + real-app exercise (New×2 + inline rename ✎→✓ + From-colors + delete + collapse,
+  zero console errors). `pushGroupUndo`/`buildStapleColorMap`/`hexFromInt`/`showToast` imported directly
+  (not deps). Dead `pushGroupUndo` import removed from main.js. Pure-DOM panel → no scene_harness gesture
+  needed (the harness load was only to dismiss welcome for the exercise).
 - [ ] **Library panel (welcome screen)** — banner `// ── Library panel (welcome screen)`
   (~9291–9527, ~236 ln) → `ui/library_panel.js`. Deps: api (file list), DOM, import callbacks. Risk: MED.
 - [ ] **Fluorescence + FRET checker** — banner `// ── Fluorescence + FRET Checker` (~13712–13793,
