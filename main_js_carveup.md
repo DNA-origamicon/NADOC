@@ -35,15 +35,16 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 Self-contained feature blocks that map cleanly to a factory; lowest coupling, highest LOC payoff.
 
-- [ ] **Help / Hotkeys modal** — banner `// ── Help / Hotkeys modal` (~13793–14139, ~346 ln) →
-  `ui/help_modal.js`. Deps: DOM (static content) + a hotkey list. Risk: LOW (mostly static markup).
-  No gesture e2e; smoke only.
-  ⚠️ **LINE-SPAN MISLEADING (verified 2026-06-03):** the actual help-modal wiring is only ~6 lines
-  (13793–13799). The 13793–14139 span is a grab-bag — Help-menu *debug* toggles (OH-roots/domain-ends/
-  linker-debug/FJC-sim) + the whole **Create Seam** handler. The modal alone isn't worth a factory
-  (the markup lives in index.html; only `.classList` toggles are here). De-prioritize, OR rescope to
-  "Help-menu wiring cluster" and bundle the debug toggles. The Create-Seam handler is a separate
-  region (pairs with `scaffold_coverage.js`) — don't fold it in.
+- [~] **Help / Hotkeys modal** — banner `// ── Help / Hotkeys modal` (~13187, 6 ln). **RESOLVED
+  2026-06-03: NOT a factory target — leave inline.** Re-read confirmed the modal itself is 6 lines of
+  `.classList` toggles (markup lives in index.html); extracting it would add a module for zero payoff.
+  The remaining mass under this banner is two *separate* regions, re-homed below — don't treat them as
+  "the help modal":
+    - Help-menu **debug toggles** (OH-roots / domain-ends / linker-debug / FJC-sim, incl. the
+      `_logOvhgMapReport` cross-validation dump) → folded into Tier 6 as **Help-menu debug toggles**.
+    - The **Create Seam** handler (HC/SQ scaffold-crossover lookup tables + Hamiltonian path) → a
+      standalone region under "Smaller leftovers" (pairs with `scaffold_coverage.js`). Do NOT fold it
+      into any help-modal extraction.
 - [x] **Strand length histogram** — banner `// ── Strand length histogram` (~12614–12813, ~200 ln) →
   `ui/strand_length_histogram.js`. Deps: store (currentGeometry/Design), DOM canvas, api (delete-by-bin
   context menu). Has a pure core (bin counts) — extract + test that. Risk: LOW-MED.
@@ -69,8 +70,17 @@ Self-contained feature blocks that map cleanly to a factory; lowest coupling, hi
   zero console errors). `pushGroupUndo`/`buildStapleColorMap`/`hexFromInt`/`showToast` imported directly
   (not deps). Dead `pushGroupUndo` import removed from main.js. Pure-DOM panel → no scene_harness gesture
   needed (the harness load was only to dismiss welcome for the exercise).
-- [ ] **Library panel (welcome screen)** — banner `// ── Library panel (welcome screen)`
-  (~9291–9527, ~236 ln) → `ui/library_panel.js`. Deps: api (file list), DOM, import callbacks. Risk: MED.
+- [~] **Library panel (welcome screen)** — banner `// ── Library panel (welcome screen)` (~8877).
+  **MOSTLY ALREADY DONE (corrected 2026-06-03):** the panel itself was extracted to `ui/library_panel.js`
+  long ago (`initLibraryPanel`, May 17) — the carve-up entry was stale. What lives under the banner now
+  is NOT the panel; it's three pieces:
+    - `_pickLattice` (the New-Part lattice-type modal) → **DONE** `ui/lattice_picker.js` `pickLattice()`
+      (extraction #23, commit pending; 7 jsdom tests; −50 ln off closure).
+    - `_openPartFromServer` / `_openAssemblyFromServer` (file-open orchestration) — **DEFER to Tier 5**:
+      heavily coupled to closure lifecycle (`_flAppendLog`/`_flSetProgress`/`_flShowError`/`_enterAssemblyMode`/
+      `_assemblyLoadOnProgress`/`_assemblyLoadSettle`/`_setWorkspacePath`/`_revealWorkspaceForEmptyPart`…).
+      These belong with **File open / save** (Tier 5), not a clean standalone lift.
+    - the `initLibraryPanel({…})` call + inline `onNewPart`/`onNewAssembly` callbacks — thin wiring, leave in place.
 - [ ] **Fluorescence + FRET checker** — banner `// ── Fluorescence + FRET Checker` (~13712–13793,
   ~80 ln) → `ui/fret_panel.js` (pairs with existing `scene/fret_util.js`). Deps: store, DOM, fret_util.
   Risk: LOW-MED.
@@ -148,6 +158,12 @@ for a fresh session.
   (~2950–3362, ~412 ln) → `scene/debug/devtools_helpers.js`. Dev-only (`window.__*`). Risk: LOW.
 - [ ] **Label / terminus audit** — banner `// ── Label / terminus audit` (~7356–7565, ~210 ln) →
   `scene/debug/terminus_audit.js`. Debug. Risk: LOW.
+- [ ] **Help-menu debug toggles** — under banner `// ── Help / Hotkeys modal` (~13195–13271, ~76 ln) →
+  `scene/debug/help_menu_toggles.js`. The OH-roots / domain-ends / linker-anchor / FJC-sim menu wiring
+  plus `_logOvhgMapReport` (the 4-map cross-validation console dump). Deps: designRenderer (glow),
+  `_applyOhRootsGlow`/`_applyDomainEndsGlow`, linkerAnchorDebug, the `_ovhg*Map` lookup tables. Risk:
+  LOW-MED (the report reads several closure maps — pass them in or keep the report a thin closure shim).
+  Re-homed here from the mis-scoped Tier-1 "Help / Hotkeys modal" entry.
 
 ---
 
@@ -167,3 +183,9 @@ Slice-plane wiring (`// ── Slice plane`, much already in `slice_plane.js`), 
 (most in `plate_view.js`), context-menu blocks (scaffold/overhang/blunt — `~3548–3817`), Create Near/Far
 Ends (`~14139–14539`, ~400 ln — pairs with `project_near_far_ends`), Photo-mode/export-repr wiring
 (`~12214–12545`). Pick these up opportunistically once the tiers drain.
+
+**Create Seam handler** — `menu-create-seam` click handler under the `// ── Help / Hotkeys modal`
+banner (~13273 onward, ~250 ln). HC/SQ scaffold-crossover lookup tables + bow-direction sets + a
+Hamiltonian-path seam build → `scene/create_seam.js` (pairs with `scaffold_coverage.js`'s
+`findHamiltonianPath`; see `project_create_seam`). Has a pure core (the lookup-table-driven crossover
+resolution). Risk: MED. Re-homed from the mis-scoped "Help / Hotkeys modal" entry.
