@@ -9673,15 +9673,12 @@ Typical debugging workflow for "reverts to 3D" bug:
         // Clean up any in-flight free drag (handlers + state in assembly_pointer.js)
         _assemblyPointer.cancelDrag()
         assemblyLasso.cancel()
-        // Dispose the multi-select union box; setState below also fires the
-        // subscriber which will re-dispose it, but doing it inline keeps the
-        // scene clean even if the recursive setState path is short-circuited.
-        if (_assemblyMultiBox) {
-          scene.remove(_assemblyMultiBox)
-          _assemblyMultiBox.geometry?.dispose?.()
-          _assemblyMultiBox.material?.dispose?.()
-          _assemblyMultiBox = null
-        }
+        // Drop the multi-select union box from the scene; setState below also
+        // fires the subscriber which re-runs update() (which clears it), but
+        // doing it inline keeps the scene clean even if the recursive setState
+        // path is short-circuited. The factory stays reusable — a later
+        // re-entry rebuilds the box on the next update().
+        _assemblyMultiBox.dispose()
         _setMotionChip(null)
         // Mode exit should also drop any orphaned multi-selection so the
         // panel/contextmenu don't surface stale group-able candidates.
@@ -13296,6 +13293,13 @@ Typical debugging workflow for "reverts to 3D" bug:
       async enterAssemblyMode() {
         await api.getAssembly()
         _enterAssemblyMode()
+      },
+      /** Exit assembly mode (flips assemblyActive → false, firing the
+       *  subscriber's tear-down: gizmo detach, renderer dispose, multi-box
+       *  dispose, listener removal). Mirrors the real close/new-doc path's
+       *  call to _exitAssemblyMode; used by e2e to exercise the cleanup. */
+      exitAssemblyMode() {
+        _exitAssemblyMode()
       },
       /** Deterministically frame the camera on the assembly's RENDERED geometry
        *  (the actual instance meshes, not their transform origins — the rod body
