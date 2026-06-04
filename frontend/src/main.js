@@ -122,8 +122,8 @@ import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
 import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
 import { initKinematicsTicker }      from './scene/kinematics_ticker.js'
-import { beltCouplingRelations, applyBeltRiders, beltCurvePoints, beltLoopLength, beltFrameAt } from './scene/belt_geometry.js'
-import { beltRiderCtx, beltRiderFill } from './scene/belt_rider.js'
+import { beltCouplingRelations, applyBeltRiders, beltCurvePoints, beltLoopLength } from './scene/belt_geometry.js'
+import { initBeltPolymerize } from './scene/belt_polymerize.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { computeRevoluteTransform } from './scene/assembly_revolute_math.js'
@@ -6756,12 +6756,15 @@ Typical debugging workflow for "reverts to 3D" bug:
   initPropertiesPanel()
   // Periodic parts surface inside the Polymerize Origami panel's Mate dropdown
   // as "<part> — via periodic boundary" (unified with regular polymerize).
+  // Assigned ~1000 ln below at its original definition site; these arrows run at
+  // panel-interaction time (long after init), so the lazy reference is safe.
+  let _beltPolymerize = null
   const polymerizePanel = initPolymerizePanel(store, {
     isInstancePeriodic: (id) =>
       !!assemblyRenderer.getInstanceDesign?.(id)?.forced_ligations?.some(fl => fl.is_periodic_seam),
     // Belt-loop polymerize: seed = an existing belt rider; geometry is JS-side.
-    getBeltFillCount: (riderId) => _beltFillInfo(riderId),
-    onPolymerizeBelt: (riderId, count) => _polymerizeBelt(riderId, count),
+    getBeltFillCount: (riderId) => _beltPolymerize?.beltFillInfo(riderId),
+    onPolymerizeBelt: (riderId, count) => _beltPolymerize?.polymerizeBelt(riderId, count),
   })
   const spreadsheet = initSpreadsheet(store, {
     designRenderer,
@@ -7773,37 +7776,9 @@ Typical debugging workflow for "reverts to 3D" bug:
   }
 
   // ── Polymerize along a belt (seed = an existing belt rider) ─────────────────
-  // Build the per-belt geometry context for a rider, or null if unavailable.
-  function _beltCtxForRider(riderId) {
-    return beltRiderCtx(store.getState().currentAssembly, riderId)
-  }
-
-  // Auto fill count from the seed part's footprint along the belt tangent, so
-  // copies sit edge-to-edge. Returns { count, spacingNm, footprintNm } or null.
-  function _beltFillInfo(riderId) {
-    const ctx = _beltCtxForRider(riderId)
-    if (!ctx) return null
-    const entry = assemblyRenderer.getInstanceCenters?.()?.find(c => c.id === ctx.rider.instance_id)
-    return beltRiderFill(ctx, entry?.size)
-  }
-
-  // Create count-1 evenly-spaced copies of the seed rider around the loop.
-  async function _polymerizeBelt(riderId, count) {
-    const ctx = _beltCtxForRider(riderId)
-    if (!ctx) { showToast('Belt geometry unavailable — re-attach the part first.', { severity: 'error' }); return }
-    const n = Math.max(2, Math.floor(count) || 2)
-    const base = ctx.rider.arc_param ?? 0
-    const local = new THREE.Matrix4().fromArray(ctx.rider.local_transform).transpose()
-    const copies = []
-    for (let k = 1; k < n; k++) {
-      const arc = ((base + k / n) % 1 + 1) % 1
-      const world = beltFrameAt(ctx.points, arc, ctx.planeNormal).multiply(local)
-      copies.push({ arc_param: arc, transform: { values: world.clone().transpose().toArray() } })
-    }
-    const res = await api.polymerizeBelt({ rider_id: riderId, copies })
-    if (res === null) showToast(`Polymerize failed: ${store.getState().lastError?.message ?? ''}`, { severity: 'error' })
-    else showToast(`Polymerized ${n} copies around the belt.`)
-  }
+  // Helpers extracted to scene/belt_polymerize.js. Assign the lazy reference
+  // captured by the polymerizePanel dep arrows above.
+  _beltPolymerize = initBeltPolymerize({ store, api, getAssemblyRenderer: () => assemblyRenderer })
 
   const beltPathPanel = initBeltPathPanel(store, { api, jointRenderer: assemblyJointRenderer,
     onOpen:  () => _rebuildBeltPaths(),   // suppress persistent tubes while previewing
@@ -7811,8 +7786,8 @@ Typical debugging workflow for "reverts to 3D" bug:
   if (window.__NADOC_DBG__) {
     window.__NADOC_DBG__.beltPathPanel = beltPathPanel
     window.__NADOC_DBG__.toggleBeltVisibility = _toggleBeltVisibility
-    window.__NADOC_DBG__.beltFillCount = (riderId) => _beltFillInfo(riderId)
-    window.__NADOC_DBG__.polymerizeBelt = (riderId, count) => _polymerizeBelt(riderId, count)
+    window.__NADOC_DBG__.beltFillCount = (riderId) => _beltPolymerize.beltFillInfo(riderId)
+    window.__NADOC_DBG__.polymerizeBelt = (riderId, count) => _beltPolymerize.polymerizeBelt(riderId, count)
   }
 
   // ── Kinematics ticker: continuous-spin for revolute joints ────────────────

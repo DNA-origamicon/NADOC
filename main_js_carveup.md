@@ -180,11 +180,27 @@ The largest single blocks and the most coupling into assembly state. Each needs 
     touched them, so they're owned by the module; the only external toucher (assembly-exit cleanup) calls
     `cancelDrag()`. Shims used: get/set `_assemblySelectedPartJoint`, get `_selectedAssemblyCluster`,
     set `_assemblyRightDownAt`, set `_assemblyPtrDownAt`, get `_translateRotateActive`.
-- [ ] **Polymerize / kinematics / joint-pick cluster** — banners `// ── Polymerize along a belt` …
-  `// ── Joint arrow pick handler` (~8187–9171, ~984 ln) → MULTIPLE modules
+- [~] **Polymerize / kinematics / joint-pick cluster** — banners `// ── Polymerize along a belt` …
+  `// ── Joint arrow pick handler` (~7775–8108 now, drifted from ~8187) → MULTIPLE modules
   (`scene/kinematics_ticker.js` already exists — move ticker wiring there;
   `scene/joint_pick.js`; polymerize → its own). Deps: assemblyRenderer, assemblyJointRenderer, api,
   store. Risk: HIGH. **Must split into ≥3 commits.**
+  - **(belt polymerize) — DONE** (extraction #32, this batch): `_beltCtxForRider`/`_beltFillInfo`/
+    `_polymerizeBelt` → `scene/belt_polymerize.js` factory `initBeltPolymerize` + pure
+    `buildBeltPolymerizeCopies` (the count-1 evenly-spaced copy-transform builder). Confirmed WANTED —
+    wired into the real belt-path panel (`getBeltFillCount`/`onPolymerizeBelt` deps at the
+    `initPolymerizePanel` call), not just dbg hooks. Lazy `let _beltPolymerize` mirrors #26's `_importMenu`
+    (deps consumed ~1000 ln before the factory init). −34 ln off closure; removed now-dead
+    `beltRiderCtx`/`beltRiderFill`/`beltFrameAt` imports. 10 vitest (5 pure copy-builder + 5 factory:
+    no-ctx-null / fill-passes-bbox / no-ctx-error-toast-no-api / success-posts-copies / null-response-fail).
+    Gate: vitest 393 + smoke 21/21. Belt-polymerize gesture not hand-exercised (needs a built belt
+    assembly) — verbatim move + unit-tested + smoke boot gate, per #24's accepted caveat.
+  - **Remaining sub-parts (NOT done):** kinematics-ticker wiring (`nadocGearDebug`/visibilitychange
+    flush/`__NADOC_KINEMATICS__` — small, mostly debug); `scene/joint_pick.js` (`_onToolPickPointerDown`
+    + `_pickActiveClusterEntry` + cluster raycaster — HARD, gesture-bound to clusterGizmo/jointRenderer).
+    NOTE: the region as read is interleaved with `assemblyContextMenu` / `_defineAssemblyMate` /
+    `_activateTranslateRotateTool` (a giant fn) — those are NOT part of this region; scope each sub-part
+    to its cohesive block.
 - [ ] **Rigid-body group gizmo + PartGroup gizmo** — banners `// ── Rigid-body group gizmo attachment`
   + `// ── PartGroup gizmo` (~10406–10836, ~430 ln) → `scene/group_gizmo.js`. Deps: TransformControls,
   store, assemblyRenderer, group helpers. GESTURE E2E. Risk: HIGH.
