@@ -114,6 +114,8 @@ function makeDeps(o = {}) {
     queueAssemblyPrimaryCommit: vi.fn(),
     getMrAssemblyCtx: vi.fn(() => o.mrCtx ?? null),
     setMrTransformValuesFromMatrix: vi.fn(),
+    effectiveInstanceMatrix: vi.fn(() => new THREE.Matrix4()),
+    updateAssemblyMultiBox: vi.fn(),
   }
   return deps
 }
@@ -224,5 +226,70 @@ describe('initGroupGizmo — gear-live revolute drag engine', () => {
     const gz = initGroupGizmo(deps)
     gz.applyGearLiveForRevoluteDrag(assembly, { dof: 'free' }, new Set(['i1']), new THREE.Matrix4())
     expect(deps.assemblyRenderer.setLiveTransform).not.toHaveBeenCalled()
+  })
+})
+
+describe('initGroupGizmo — attachGroupGizmoForGroup (whole group rigid body)', () => {
+  // Two-member group g1 (i1, i2). rAF is stubbed synchronous so the live
+  // multi-box refit is observable within the onLive call.
+  function groupAssembly(extra = {}) {
+    return {
+      groups: [{ id: 'g1', instance_ids: ['i1', 'i2'] }],
+      instances: [{ id: 'i1', transform: { values: I16 } }, { id: 'i2', transform: { values: I16 } }],
+      joints: [], gear_relations: [], belt_paths: [],
+      ...extra,
+    }
+  }
+
+  it('detaches + clears the chip for an empty / unknown group', () => {
+    const deps = makeDeps({ assembly: groupAssembly() })
+    initGroupGizmo(deps).attachGroupGizmoForGroup('nope')
+    expect(deps.instanceGizmo._calls.detach).toBe(1)
+    expect(deps.setMotionChip).toHaveBeenCalledWith(null)
+    expect(deps.instanceGizmo._calls.attach).toHaveLength(0)
+  })
+
+  it('attaches at the first member; onLive moves EVERY member as a rigid body + refits the box', () => {
+    const orig = global.requestAnimationFrame
+    global.requestAnimationFrame = (cb) => { cb(); return 0 }
+    try {
+      const deps = makeDeps({ assembly: groupAssembly(), constraint: { dof: 'free' } })
+      initGroupGizmo(deps).attachGroupGizmoForGroup('g1')
+      expect(deps.instanceGizmo._calls.last[0]).toBe('i1')   // primary = first member
+      deps.instanceGizmo._onLive()(new THREE.Matrix4().makeTranslation(1, 0, 0))
+      const movedIds = deps.assemblyRenderer.setLiveTransform.mock.calls.map(c => c[0])
+      expect(new Set(movedIds)).toEqual(new Set(['i1', 'i2']))
+      expect(deps.updateAssemblyMultiBox).toHaveBeenCalled()
+    } finally {
+      global.requestAnimationFrame = orig
+    }
+  })
+
+  it('onCommit for a free group POSTs the rigid delta to transformGroup', async () => {
+    const deps = makeDeps({ assembly: groupAssembly(), constraint: { dof: 'free' } })
+    deps.api.transformGroup = vi.fn(() => Promise.resolve())
+    initGroupGizmo(deps).attachGroupGizmoForGroup('g1')
+    await deps.instanceGizmo._onCommit()(new THREE.Matrix4().makeTranslation(2, 0, 0))
+    expect(deps.api.transformGroup).toHaveBeenCalledTimes(1)
+    const [gid, body] = deps.api.transformGroup.mock.calls[0]
+    expect(gid).toBe('g1')
+    expect(body.matrix).toHaveLength(16)
+  })
+
+  it('onCommit for a revolute group patches the joint (not transformGroup)', async () => {
+    const assembly = groupAssembly({
+      joints: [{ id: 'jA', joint_type: 'revolute', current_value: 0, instance_a_id: 'i1', instance_b_id: 'i2', axis_origin: [0, 0, 0], axis_direction: [0, 0, 1] }],
+    })
+    const constraint = { dof: 'revolute', jointId: 'jA', axis: new THREE.Vector3(0, 0, 1), origin: new THREE.Vector3(0, 0, 0) }
+    const deps = makeDeps({ assembly, constraint })
+    deps.api.transformGroup = vi.fn(() => Promise.resolve())
+    initGroupGizmo(deps).attachGroupGizmoForGroup('g1')
+    // A live rotation tick accumulates the unwrapped angle for jA…
+    deps.instanceGizmo._onLive()(new THREE.Matrix4().makeRotationZ(0.5))
+    // …so commit takes the revolute path.
+    await deps.instanceGizmo._onCommit()(new THREE.Matrix4().makeRotationZ(0.5))
+    expect(deps.api.patchAssemblyJoint).toHaveBeenCalledTimes(1)
+    expect(deps.api.patchAssemblyJoint.mock.calls[0][0]).toBe('jA')
+    expect(deps.api.transformGroup).not.toHaveBeenCalled()
   })
 })

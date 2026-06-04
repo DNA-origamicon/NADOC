@@ -28,7 +28,7 @@ import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverag
 import { strandLengthNt, strandDomainNt } from './scene/strand_length.js'
 import { buildSpecMap, buildDomainMapFromDesign, buildDomainMapFromGeom, buildJunctionMapFromXovers, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
 import { initGroupGizmo } from './scene/group_gizmo.js'
-import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, summarizeConstraint, constraintRelevantChanged } from './scene/assembly_diff.js'
+import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, constraintRelevantChanged } from './scene/assembly_diff.js'
 import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
 import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './scene/assembly_groups_util.js'
@@ -7754,8 +7754,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     queueAssemblyPrimaryCommit:      _queueAssemblyPrimaryCommit,
     getMrAssemblyCtx:                () => _mrAssemblyCtx,
     setMrTransformValuesFromMatrix:  _mrSetTransformValuesFromMatrix,
+    effectiveInstanceMatrix:         _effectiveInstanceMatrix,
+    updateAssemblyMultiBox:          () => _assemblyMultiBox.update(),
   })
-  const _attachGroupGizmo = _groupGizmo.attachGroupGizmo
+  const _attachGroupGizmo         = _groupGizmo.attachGroupGizmo
+  const _attachGroupGizmoForGroup = _groupGizmo.attachGroupGizmoForGroup
   const beltPathRenderer = initBeltPathRenderer(scene)
   // Per-belt visibility (session-only; default visible). The persistent belt
   // tubes are suppressed while the define/edit panel is open (it shows its own
@@ -9983,142 +9986,6 @@ Typical debugging workflow for "reverts to 3D" bug:
   function _hasAssemblyPending() {
     return _assemblyPendingTransforms.size > 0 || _assemblyPendingPartJoints.size > 0
   }
-
-  // ── PartGroup gizmo — translate/rotate the whole group as a rigid body.
-  // Anchors the existing TransformControls to the FIRST group member but
-  // overrides live + commit so the delta is applied to EVERY member; commit
-  // POSTs the delta matrix to /assembly/groups/{id}/transform which extends
-  // the move via the rigid-mate transitive closure on the server.
-  function _createGroupTransformContext(groupId) {
-    const assembly = store.getState().currentAssembly
-    if (!assembly) return null
-    const memberIds = collectGroupMemberInstanceIds(assembly, groupId)
-    if (!memberIds.length) return null
-    const primaryId = memberIds[0]
-    const memberStartTransforms = new Map()
-    for (const id of memberIds) {
-      const inst = assembly.instances.find(i => i.id === id)
-      if (!inst) continue
-      memberStartTransforms.set(id, _effectiveInstanceMatrix(inst))
-    }
-    const primaryStart = memberStartTransforms.get(primaryId)
-    if (!primaryStart) return null
-    return { groupId, primaryId, memberIds, memberStartTransforms, primaryStart }
-  }
-
-  function _attachGroupGizmoForGroup(groupId) {
-    const ctx = _createGroupTransformContext(groupId)
-    if (!ctx) { instanceGizmo.detach(); _setMotionChip(null); return }
-
-    // Pre-flight constraint analysis for the whole group as a rigid body.
-    // Same dispatch as the single-instance path; an anchored group means at
-    // least one member is rigidly fixed (cascades to the whole group).
-    const constraint = _analyzeMotionConstraints({ kind: 'group', id: groupId })
-    const summary = summarizeConstraint(constraint)
-    if (summary) _setMotionChip(summary.text, summary.severity)
-    else         _setMotionChip(null)
-    if (constraint.dof === 'anchored' || constraint.dof === 'over-constrained') {
-      instanceGizmo.detach()
-      return
-    }
-
-    // Anchor at the union AABB centroid for free moves; at the joint origin
-    // when a single-DOF mate constrains the motion (so the user rotates /
-    // translates about the joint, not the visual middle of the group).
-    const centers = assemblyRenderer.getInstanceCenters?.() ?? []
-    const wanted = new Set(ctx.memberIds)
-    const union = new THREE.Box3(); union.makeEmpty()
-    for (const c of centers) {
-      if (!wanted.has(c.id) || !c.size) continue
-      const half = new THREE.Vector3(c.size.x * 0.5, c.size.y * 0.5, c.size.z * 0.5)
-      union.expandByPoint(c.center.clone().sub(half))
-      union.expandByPoint(c.center.clone().add(half))
-    }
-    const fallbackCentroid = union.isEmpty() ? null : union.getCenter(new THREE.Vector3())
-    const centroidWorld =
-      (constraint.dof === 'revolute' || constraint.dof === 'prismatic' || constraint.dof === 'spherical')
-        ? constraint.origin
-        : fallbackCentroid
-
-    instanceGizmo.attach(
-      ctx.primaryId, scene, camera, canvas,
-      // onLiveTransform: delta = newPrimary @ inv(primaryStart); push every
-      // member's live world transform so the user sees the whole group move
-      // as a rigid body.
-      (newPrimaryMat) => {
-        const delta = newPrimaryMat.clone().multiply(ctx.primaryStart.clone().invert())
-        const asm   = store.getState().currentAssembly
-        for (const [id, startMat] of ctx.memberStartTransforms) {
-          const liveMat = delta.clone().multiply(startMat)
-          assemblyRenderer.setLiveTransform(id, liveMat)
-          assemblyJointRenderer.setLiveJointTransform?.(id, liveMat, asm)
-        }
-        _groupGizmo.applyGearLiveForRevoluteDrag(
-          asm,
-          constraint,
-          new Set(ctx.memberIds),
-          delta,
-        )
-        // Live re-fit of the purple union BoxHelper so the user sees it
-        // follow the drag. RAF avoids re-allocating every move event.
-        if (_groupGizmoLiveBoxPending) return
-        _groupGizmoLiveBoxPending = true
-        requestAnimationFrame(() => {
-          _groupGizmoLiveBoxPending = false
-          _assemblyMultiBox.update()
-        })
-      },
-      // onCommit: POST the delta to the server. The backend walks the rigid
-      // transitive closure (joints + duplex bindings) so externally-mated
-      // partners follow along, then returns the new assembly state. The
-      // store subscriber re-attaches the gizmo at the new centroid.
-      async (newPrimaryMat) => {
-        // Revolute-constrained group → commit the UNWRAPPED rotation as the
-        // joint's current_value (continuous past ±π), same as the instance
-        // gizmo, so belt riders don't teleport. Other DOFs POST the group delta.
-        const rev = _groupGizmo.revoluteGizmoCommitValue(constraint)
-        if (rev != null) {
-          try { await api.patchAssemblyJoint(constraint.jointId, rev) }
-          catch (err) { console.error('[assembly] group revolute commit failed:', err) }
-          return
-        }
-        const delta = newPrimaryMat.clone().multiply(ctx.primaryStart.clone().invert())
-        // NADOC matrices are row-major; Three.js Matrix4.toArray emits the
-        // current column-major elements buffer. Transpose before sending so
-        // the backend reads it back as row-major (matches `transform_group`
-        // route's `np.asarray(...).reshape(4,4)` expectation).
-        const rowMajor = delta.clone().transpose().toArray()
-        try {
-          await api.transformGroup(groupId, { matrix: rowMajor })
-        } catch (err) {
-          console.error('[assembly] transformGroup failed:', err)
-        }
-      },
-      ctx.primaryStart,
-      centroidWorld,
-    )
-
-    _groupGizmo.resetRevoluteAngle()   // fresh accumulator for this group attach
-
-    if (constraint.dof === 'revolute') {
-      instanceGizmo.applyConstraint({
-        mode: 'rotate', axis: constraint.axis,
-        showX: false, showY: false, showZ: true,
-      })
-    } else if (constraint.dof === 'prismatic') {
-      instanceGizmo.applyConstraint({
-        mode: 'translate', axis: constraint.axis,
-        showX: false, showY: false, showZ: true,
-      })
-    } else if (constraint.dof === 'spherical') {
-      instanceGizmo.applyConstraint({
-        mode: 'rotate', spherical: true,
-        showX: true, showY: true, showZ: true,
-      })
-    }
-  }
-
-  let _groupGizmoLiveBoxPending = false
 
   // ── Forward kinematics live visual propagation ───────────────────────────────
   /**
