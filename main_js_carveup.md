@@ -100,9 +100,18 @@ Self-contained feature blocks that map cleanly to a factory; lowest coupling, hi
 Many sibling handlers that each wire a menu item → api call → download/import. Extract as one factory
 per direction with a handler table.
 
-- [ ] **Export menu** — banners `// ── Export Sequences (CSV)` … `// ── Export GROMACS …`
-  (~13046–13266, ~220 ln) → `ui/export_menu.js`. Deps: api, design state, file-download helper. Each
-  export is independent → easy to test the wiring table. Risk: LOW-MED (no canvas).
+- [x] **Export menu** — banners `// ── Export Sequences (CSV)` … `// ── Export GROMACS …`
+  (~12391–12609, ~218 ln) → `ui/export_menu.js`. Deps: store, api (`showToast`/`docHeaders`/
+  `getStapleColorOrder` imported directly, not deps). Each export is independent → easy to test the
+  wiring table. Risk: LOW-MED (no canvas).
+  **DONE** (extraction #25, commit pending) — factory `initExportMenu({store, api})` + module fns
+  `exportErrorMessage` (pure) / `triggerDownload` / `showNamdPromptModal`. −215 ln off closure. 16 vitest
+  (2 pure exportErrorMessage + triggerDownload + 2 showNamdPromptModal + 11 factory: no-DOM no-op /
+  CSV-success / no-design-guard / failed-export-msg / xlsx-color-order / PDB+PSF download URLs / STL
+  success / 3MF-coloring-detail / GROMACS-stub-toast / dismiss-clears-class / NAMD-download+modal).
+  smoke 21/21 + real-app exercise (load scaffolded part → CSV download + PDB download + GROMACS toast,
+  zero console errors). Removed now-unused `getStapleColorOrder` from main.js's spreadsheet import.
+  GROMACS export stays stubbed (poller removed 2026-05-17); `label`/`dlBtn` kept dead for the re-impl.
 - [ ] **Import menu + callbacks** — banners `// ── Import helpers` … `// ── Import PDB` + library import
   callbacks (~12813–13046, ~233 ln) → `ui/import_menu.js`. Deps: api, lattice autodetect, DOM dialogs.
   Risk: MED (autodetection branch).
