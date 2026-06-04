@@ -54,6 +54,8 @@ _(Between #15 and #16, several interactive batches ran post-autonomous-loop and 
 
 | 28 | 2026-06-04 | DEDUP (Tier 3 sub-part a) | Part-joint drag `worldDelta` (inline `T(origin)·R·T(-origin)` in `_updatePartJointDrag`) → reuse existing tested `rotationDeltaMatrix` (gear_math, #7) | ~20 min | −7 (inside closure; 1 copy collapsed into the gear path's helper) | 0 new (reuses #7's 3 tests; mathematically identical) | 1 (green first run) | 0 (verbatim-equivalent matrix; smoke 21/21) | none — vitest 361, smoke 21/21 |
 | 29 | 2026-06-04 | STATEFUL (Tier 3 sub-part b) | Assembly click handler `_onAssemblyClick` + single-use `_toggleAssemblyOverhangSelection` → `scene/assembly_pointer.js` factory `initAssemblyPointer({…})→{onAssemblyClick}` | ~55 min | **−122 (inside closure; broke the (a)/(b) coupling wall)** | 11 jsdom factory (non-left/belt-clears/no-ptrdown/drag-not-click/new-select+gizmo/empty-clears/reclick-picks-cluster/overhang-toggle/group-click-through-selectGroup/gizmo-leaves-active-body/gizmo-commits-elsewhere) | 1 (green first run) | 0 — `assembly_select.spec.js` (real raycast) IS the app exercise | none — vitest 372, `assembly_select.spec.js` 2/2, smoke 21/21 |
+| 30 | 2026-06-04 | STATEFUL (Tier 3 sub-part a, step 1) | Assembly drag handlers `_updateFreeDragPosition`/`_updatePartJointDrag`/`_onAssemblyDragMove`/`_onAssemblyDragUp` + drag state (`_partJointDrag`/`_freeDrag`/`_pendingFreeDrag`) → `initAssemblyPointer` (module-internal state) + `beginPartJointDrag`/`cancelDrag` API | ~45 min | **−160 (inside closure)** | 5 jsdom (beginPartJointDrag-arms-listeners / dragUp-records-pending+re-enables-controls / dragUp-near-zero-no-record / cancelDrag-noop-when-idle / dragMove-noop-when-idle) | 1 (green first run) | 0 — `assembly_joint_drag.spec.js` (real pointer-down→drag→up) IS the app exercise | none — vitest 377, joint_drag+select 3/3, smoke 21/21. Removed orphaned `clusterTransformAfterJointDelta` import. |
+| 31 | 2026-06-04 | STATEFUL (Tier 3 sub-part a, step 2 — COMPLETES the region) | `_onAssemblyPointerDown` → `initAssemblyPointer` `onAssemblyPointerDown`; `beginPartJointDrag` now an internal call | ~40 min | **−155 (inside closure)** | 6 jsdom (belt-bails / Priority-1-ring-drag / empty-records-ptrdown / lasso-consumes / right-down-records / active-part-joint-records+stopPropagation) | 1 (green first run) | 0 — `assembly_joint_drag.spec.js` drives the real pointer-down Priority-2b arm | none — vitest 383, joint_drag+select 3/3, smoke 21/21. Removed orphaned `makeRefVec`/`ringPlaneHit`/`angleInRing` imports (kept `computeRevoluteTransform`). |
 
 **Assembly-gesture harness (2026-06-04) — prerequisite for the (a)/(b) lift.** Built the missing
 gate the coupling-wall note called for: a Playwright harness that drives the assembly canvas pointer
@@ -123,6 +125,23 @@ is far smaller than the union the wall note tallied (that union spanned (a)'s dr
 remains — `_onAssemblyPointerDown` + drag-move/up, which genuinely owns `_partJointDrag` and writes the
 state (b) only reads; its gate is `assembly_joint_drag.spec.js` (already built, #28). (b)'s shims are now in
 main.js ready to reuse for (a).
+
+**Coupling wall — (a) resolved (#30+#31, 2026-06-04) — REGION COMPLETE.** The wall note's scariest item
+(`_translateRotateActive` "owned/written by the translate-rotate tool in ~25 sites") turned out to be a
+*read-only* dependency in the pointer handler — one get shim, not a re-plumb of all 25 writers. The other
+feared cross-handler vars resolved the same way the (b) ones did: pointer-down only *reads*
+`_selectedAssemblyCluster`, get+sets `_assemblySelectedPartJoint`, and *sets* `_assemblyPtrDownAt` /
+`_assemblyRightDownAt`. The genuinely-local drag state (`_partJointDrag`/`_freeDrag`/`_pendingFreeDrag`)
+needed NO shims at all — a grep confirmed only the 5 drag/pointer handlers + the assembly-exit cleanup ever
+touched it, so it became module-internal and the cleanup became one `cancelDrag()` call. The Map
+(`_assemblyPendingPartJoints`, shared with commit + a dev hook) passed by reference — both sides mutate the
+same instance. **Two-commit split** (drag handlers first with a temporary `beginPartJointDrag` seam, then
+pointer-down) kept each step verbatim-equivalent + independently green. `beginPartJointDrag` stayed exported
+as the drag-commit unit-test seam (the real arming path needs a successful `ringPlaneHit`, which a jsdom
+mock camera can't produce — so the commit-side observable is unit-tested, the arm side is e2e-tested).
+Lesson confirmed (3rd time now): the wall note's dep tallies counted the *union* across sibling handlers and
+badly over-estimated each individual handler's actual slice — read the specific handler's reads/writes, not
+the var's global footprint.
 
 **Tier-3 note (#27):** first cut into the HIGHEST-coupling region (Assembly canvas pointer handler, ~340 ln across `_onAssemblyPointerDown` + `_onAssemblyClick` + drag-move/up). Only sub-part (c) is cleanly pure — it's a store-state decision given the picked instance. Lifted it to the module where `findOwningGroupId` already lives (which is now no longer imported in main.js). (a) joint-ring pick and (b) instance select remain — both entangled with `_partJointDrag`/drag-move-up/`ringPlaneHit`/`instanceGizmo`/`_commitAssemblyPending` and need the gesture e2e (built grouped assembly) when (b) lands. Lesson: in a HIGH-coupling handler, the pure *decision* branches lift out cleanly first and de-risk the stateful remainder.
 

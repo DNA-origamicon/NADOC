@@ -134,10 +134,14 @@ per direction with a handler table.
 The largest single blocks and the most coupling into assembly state. Each needs a gesture e2e
 (scene_harness) + smoke. Split the giant ones; don't extract 900 lines in one commit.
 
-- [~] **Assembly canvas pointer handler** — banner `// ── Assembly canvas pointer handler` +
+- [x] **Assembly canvas pointer handler** — banner `// ── Assembly canvas pointer handler` +
   `// ── PartGroup click-through` (~10838–11174 now, ~340 ln) → `scene/assembly_pointer.js`. Deps:
   assemblyRenderer, camera, store, group helpers, lasso. Contains `_onAssemblyClick`. GESTURE E2E.
   Risk: HIGH. **Split:** (a) joint-ring pick, (b) instance select, (c) group click-through.
+  **DONE 2026-06-04** — all of (a)/(b)/(c) lifted; the whole pointer/drag region now lives in the
+  factory. (a) ring-drag was the last piece: extractions #30 (drag handlers + state, commit 7c466b4)
+  + #31 (`_onAssemblyPointerDown`, commit 012d4ce). −315 ln off closure across both. Gate: vitest 383
+  + assembly_joint_drag.spec.js + assembly_select.spec.js 3/3 + smoke 21/21.
   - **(c) group click-through — DONE** (extraction #27, commit pending): pure decision
     `resolveGroupClickThrough({assembly,hitInstanceId,activeGroupId,groupDiveStack})→{action,patch}`
     added to existing `scene/assembly_groups_util.js` (co-located with `findOwningGroupId`, now no
@@ -166,12 +170,16 @@ The largest single blocks and the most coupling into assembly state. Each needs 
     exercise) + smoke 21/21. Removed now-dead `resolveGroupClickThrough` import from main.js (only the
     module uses it). No TDZ: no top-level `await` precedes the const, so it's defined before any deferred
     `_enterAssemblyMode`.
-  - (a) ring-drag SHELL: still inline, now the only remaining piece. Verbatim-move
-    `_onAssemblyPointerDown` + `_onAssemblyDragMove`/`_onAssemblyDragUp` into `scene/assembly_pointer.js`
-    with get/set shims for the shared state it ALSO touches (`_partJointDrag`, `_assemblyPtrDownAt`,
-    `_assemblySelectedPartJoint`, `_selectedAssemblyCluster`, `_assemblyRightDownAt`,
-    read-only `_translateRotateActive`), gated by `assembly_joint_drag.spec.js` + `assembly_select.spec.js`
-    + smoke. (b)'s shims are already in place to reuse.
+  - **(a) ring-drag SHELL — DONE 2026-06-04** (extractions #30 + #31). Step 1 (#30, commit 7c466b4):
+    moved the drag handlers (`_updateFreeDragPosition`/`_updatePartJointDrag`/`_onAssemblyDragMove`/
+    `_onAssemblyDragUp`) + their drag state (`_partJointDrag`/`_freeDrag`/`_pendingFreeDrag`) into the
+    factory as module-internal state; exposed `beginPartJointDrag` / `cancelDrag` so the still-inline
+    pointer-down could arm a drag and the exit-cleanup could tear one down. Step 2 (#31, commit 012d4ce):
+    moved `_onAssemblyPointerDown` itself in (now `onAssemblyPointerDown`), `beginPartJointDrag` became an
+    internal call. `_partJointDrag`/`_freeDrag`/`_pendingFreeDrag` are NOT shims — only these handlers
+    touched them, so they're owned by the module; the only external toucher (assembly-exit cleanup) calls
+    `cancelDrag()`. Shims used: get/set `_assemblySelectedPartJoint`, get `_selectedAssemblyCluster`,
+    set `_assemblyRightDownAt`, set `_assemblyPtrDownAt`, get `_translateRotateActive`.
 - [ ] **Polymerize / kinematics / joint-pick cluster** — banners `// ── Polymerize along a belt` …
   `// ── Joint arrow pick handler` (~8187–9171, ~984 ln) → MULTIPLE modules
   (`scene/kinematics_ticker.js` already exists — move ticker wiring there;
