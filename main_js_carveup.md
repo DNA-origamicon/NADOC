@@ -195,12 +195,21 @@ The largest single blocks and the most coupling into assembly state. Each needs 
     no-ctx-null / fill-passes-bbox / no-ctx-error-toast-no-api / success-posts-copies / null-response-fail).
     Gate: vitest 393 + smoke 21/21. Belt-polymerize gesture not hand-exercised (needs a built belt
     assembly) — verbatim move + unit-tested + smoke boot gate, per #24's accepted caveat.
-  - **Remaining sub-parts (NOT done):** kinematics-ticker wiring (`nadocGearDebug`/visibilitychange
-    flush/`__NADOC_KINEMATICS__` — small, mostly debug); `scene/joint_pick.js` (`_onToolPickPointerDown`
+  - **(kinematics-ticker wiring) — DONE** (extraction #33, this batch): moved the 17-line
+    `nadocGearDebug` dump into `scene/kinematics_ticker.js` as a `gearDebug()` method (it pokes the
+    ticker's internal `debugState` + gear graph, so it belongs in the module). main.js keeps
+    `window.nadocGearDebug = () => kinematicsTicker.gearDebug()` + the visibilitychange-flush listener +
+    the `__NADOC_KINEMATICS__` handle as thin DOM/window lifecycle wiring (DOM-listener registration is
+    an app-composition concern, not the module's — left at main-loop altitude on purpose). Also
+    **de-interleaved the banner**: the `_syncAssemblyBluntEnds` + cluster-pick helpers were wrongly under
+    the "Kinematics ticker" banner; they now have their own `// ── Assembly blunt-end sync + cluster pick
+    helpers` banner. 3 vitest (first coverage for this module: empty-dump / joint-summary-subset /
+    log-tag+return). Gate: vitest 396 + smoke 21/21.
+  - **Remaining sub-parts (NOT done):** `scene/joint_pick.js` (`_onToolPickPointerDown`
     + `_pickActiveClusterEntry` + cluster raycaster — HARD, gesture-bound to clusterGizmo/jointRenderer).
     NOTE: the region as read is interleaved with `assemblyContextMenu` / `_defineAssemblyMate` /
     `_activateTranslateRotateTool` (a giant fn) — those are NOT part of this region; scope each sub-part
-    to its cohesive block.
+    to its cohesive block. The blunt-end-sync + cluster-pick block now has its own banner (above).
 - [ ] **Rigid-body group gizmo + PartGroup gizmo** — banners `// ── Rigid-body group gizmo attachment`
   + `// ── PartGroup gizmo` (~10406–10836, ~430 ln) → `scene/group_gizmo.js`. Deps: TransformControls,
   store, assemblyRenderer, group helpers. GESTURE E2E. Risk: HIGH.

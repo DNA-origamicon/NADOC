@@ -7810,31 +7810,13 @@ Typical debugging workflow for "reverts to 3D" bug:
     if (document.hidden) kinematicsTicker.flushNow()
   })
   window.__NADOC_KINEMATICS__ = kinematicsTicker
-  // Diagnostic helper for gear mates. From the browser console:
-  //   nadocGearDebug()
-  // prints + returns the current gear-relation state, the ticker's gear
-  // graph, shadow values, and per-revolute joint summary. Use this to
-  // confirm a gear was created, see what ratio it has, and verify the
-  // ticker's shadow agrees with the backend's `current_value`.
-  window.nadocGearDebug = () => {
-    const a = store.getState().currentAssembly
-    const out = {
-      assembly_id: a?.id,
-      joints: (a?.joints ?? []).map(j => ({
-        id: j.id, name: j.name, type: j.joint_type,
-        current_value: j.current_value,
-        angular_velocity_rpm: j.angular_velocity_rpm,
-        instance_a_id: j.instance_a_id,
-        instance_b_id: j.instance_b_id,
-      })),
-      gear_relations: a?.gear_relations ?? [],
-      ticker: kinematicsTicker.debugState?.() ?? null,
-    }
-    // eslint-disable-next-line no-console
-    console.log('[nadocGearDebug]', out)
-    return out
-  }
+  // Console diagnostic for gear mates (the dump itself lives in the ticker
+  // module, which owns the gear graph + shadow state). From the browser console:
+  // `nadocGearDebug()` prints + returns gear relations, the ticker's gear graph,
+  // shadow values, and a per-joint summary.
+  window.nadocGearDebug = () => kinematicsTicker.gearDebug()
 
+  // ── Assembly blunt-end sync + cluster pick helpers ──────────────────────────
   // Sync blunt-end connectors into the assembly joint renderer when:
   //   • assembly mode is active AND toolFilters.bluntEnds is ON → pass blunt ends
   //   • otherwise → clear them

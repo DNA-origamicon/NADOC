@@ -368,6 +368,30 @@ export function initKinematicsTicker({
     _lastAssembly = null
   }
 
+  // Console diagnostic for gear mates (wired to window.nadocGearDebug in main.js).
+  // Prints + returns the current gear-relation state, the ticker's gear graph,
+  // shadow values, and a per-joint summary — so you can confirm a gear was
+  // created, see its ratio, and verify the ticker's shadow agrees with the
+  // backend's `current_value`.
+  function gearDebug() {
+    const a = store.getState().currentAssembly
+    const out = {
+      assembly_id: a?.id,
+      joints: (a?.joints ?? []).map(j => ({
+        id: j.id, name: j.name, type: j.joint_type,
+        current_value: j.current_value,
+        angular_velocity_rpm: j.angular_velocity_rpm,
+        instance_a_id: j.instance_a_id,
+        instance_b_id: j.instance_b_id,
+      })),
+      gear_relations: a?.gear_relations ?? [],
+      ticker: debugState(),
+    }
+    // eslint-disable-next-line no-console
+    console.log('[nadocGearDebug]', out)
+    return out
+  }
+
   function debugState() {
     const { currentAssembly } = store.getState() ?? {}
     return {
@@ -392,5 +416,6 @@ export function initKinematicsTicker({
     flushNow,
     dispose,
     debugState,
+    gearDebug,
   }
 }
