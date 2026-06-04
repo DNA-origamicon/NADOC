@@ -6,6 +6,15 @@
 // Strand-length heatmap domain (nt): clamps below 14 / above 60.
 const HEATMAP_MIN = 14, HEATMAP_MAX = 60
 
+/**
+ * Packed 0xRRGGBB int → '#rrggbb' string. Masks to 24 bits so negatives /
+ * over-range ints (e.g. signed colours) still produce a 6-digit hex.
+ * (Deduped from two inline copies in main.js.)
+ */
+export function hexFromInt(value) {
+  return '#' + ((value >>> 0) & 0xffffff).toString(16).padStart(6, '0')
+}
+
 /** Map an nt count to a blue→red heatmap colour (packed 0xRRGGBB int). */
 export function heatmapHex(ntCount) {
   const t = Math.max(0, Math.min(1, (ntCount - HEATMAP_MIN) / (HEATMAP_MAX - HEATMAP_MIN)))

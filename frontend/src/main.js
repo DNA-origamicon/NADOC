@@ -33,7 +33,7 @@ import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connI
 import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
 import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds, findOwningGroupId } from './scene/assembly_groups_util.js'
-import { heatmapHex } from './scene/color_util.js'
+import { heatmapHex, hexFromInt } from './scene/color_util.js'
 import { fretQuenchedDonors } from './scene/fret_util.js'
 import { motionChipStyle } from './scene/motion_chip.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
@@ -2962,10 +2962,6 @@ async function main() {
       }
       const palette = currentGeometry ? buildStapleColorMap(currentGeometry, currentDesign) : new Map()
 
-      function _hexFromInt(value) {
-        return `#${Number(value).toString(16).padStart(6, '0').slice(-6)}`
-      }
-
       const byColor = new Map()
       for (const strand of strands) {
         if (strand.strand_type === 'scaffold') continue
@@ -2973,7 +2969,7 @@ async function main() {
         if (color == null && strand.color) color = parseInt(strand.color.replace('#', ''), 16)
         if (color == null) color = palette.get(strand.id)
         if (color == null) continue
-        const key = _hexFromInt(color).toLowerCase()
+        const key = hexFromInt(color).toLowerCase()
         if (!byColor.has(key)) byColor.set(key, [])
         byColor.get(key).push(strand.id)
       }
@@ -12152,7 +12148,6 @@ Typical debugging workflow for "reverts to 3D" bug:
         cy3: 'Cy3', cy5: 'Cy5', fam: 'FAM', tamra: 'TAMRA', bhq1: 'BHQ-1',
         bhq2: 'BHQ-2', atto488: 'ATTO488', atto550: 'ATTO550', biotin: 'Biotin',
       }
-      const _hexFromInt = n => '#' + ((n >>> 0) & 0xffffff).toString(16).padStart(6, '0')
 
       // Strand length in nt (domain bp + loop/skip deltas) — mirrors the cadnano
       // spreadsheet's strandLength().
@@ -12218,12 +12213,12 @@ Typical debugging workflow for "reverts to 3D" bug:
           // — every staple gets its scene colour.
           let color
           if (s.id in eff) {
-            color = _hexFromInt(eff[s.id])
+            color = hexFromInt(eff[s.id])
           } else {
             const pm = paletteMap.get(s.id)
             color = (pm != null)
-              ? _hexFromInt(pm)
-              : _hexFromInt(PLATE_STAPLE_PALETTE[(strandIdxOf.get(s.id) ?? 0) % PLATE_STAPLE_PALETTE.length])
+              ? hexFromInt(pm)
+              : hexFromInt(PLATE_STAPLE_PALETTE[(strandIdxOf.get(s.id) ?? 0) % PLATE_STAPLE_PALETTE.length])
           }
           const grp = groupOf.get(s.id)
           const mod = modOf.get(s.id) || null

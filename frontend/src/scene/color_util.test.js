@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { heatmapHex } from './color_util.js'
+import { heatmapHex, hexFromInt } from './color_util.js'
 
 const rgb = (hex) => [(hex >> 16) & 0xff, (hex >> 8) & 0xff, hex & 0xff]
 
@@ -29,5 +29,21 @@ describe('heatmapHex', () => {
   it('is monotonic-ish: midpoint differs from both ends', () => {
     expect(heatmapHex(37)).not.toBe(heatmapHex(14))
     expect(heatmapHex(37)).not.toBe(heatmapHex(60))
+  })
+})
+
+describe('hexFromInt', () => {
+  it('formats a packed int as #rrggbb', () => {
+    expect(hexFromInt(0x74b9ff)).toBe('#74b9ff')
+    expect(hexFromInt(0x000000)).toBe('#000000')
+    expect(hexFromInt(0xffffff)).toBe('#ffffff')
+  })
+  it('zero-pads low values to 6 digits', () => {
+    expect(hexFromInt(0x0000ff)).toBe('#0000ff')
+    expect(hexFromInt(0xff)).toBe('#0000ff')
+  })
+  it('masks negatives and over-range ints to 24 bits', () => {
+    expect(hexFromInt(-1)).toBe('#ffffff')          // (-1 >>> 0) & 0xffffff
+    expect(hexFromInt(0x1abcdef)).toBe('#abcdef')   // high bits dropped
   })
 })
