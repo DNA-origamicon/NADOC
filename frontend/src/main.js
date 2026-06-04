@@ -40,6 +40,7 @@ import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { selectionBBox } from './scene/selection_bbox.js'
 import { clientToNdc } from './scene/ndc.js'
 import { flexTetherConnections } from './scene/flex_tethers.js'
+import { clusterBackboneEntries } from './scene/cluster_entries.js'
 import { initAssemblyLasso } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
@@ -8463,27 +8464,7 @@ Typical debugging workflow for "reverts to 3D" bug:
 
   function _clusterBackboneEntries(cluster, design, backboneEntries = null) {
     backboneEntries ??= designRenderer.getBackboneEntries?.() ?? []
-    if (!cluster?.helix_ids?.length || !backboneEntries.length) return []
-
-    if (cluster.domain_ids?.length) {
-      // Mixed cluster: domain bridge entries plus full exclusive helices. This
-      // mirrors the active-cluster glow so picking matches the highlighted body.
-      const domainKeySet = new Set(cluster.domain_ids.map(d => `${d.strand_id}:${d.domain_index}`))
-      const strands = design?.strands ?? []
-      const strandMap = new Map(strands.map(s => [s.id, s]))
-      const bridgeHelixIds = new Set()
-      for (const dr of cluster.domain_ids) {
-        const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
-        if (dom) bridgeHelixIds.add(dom.helix_id)
-      }
-      const exclusiveHelixSet = new Set(cluster.helix_ids.filter(hid => !bridgeHelixIds.has(hid)))
-      return backboneEntries.filter(entry =>
-        domainKeySet.has(`${entry.nuc.strand_id}:${entry.nuc.domain_index}`) ||
-        exclusiveHelixSet.has(entry.nuc.helix_id))
-    }
-
-    const helixSet = new Set(cluster.helix_ids)
-    return backboneEntries.filter(entry => helixSet.has(entry.nuc.helix_id))
+    return clusterBackboneEntries(cluster, design, backboneEntries)
   }
 
   const _clusterPickRaycaster = new THREE.Raycaster()
