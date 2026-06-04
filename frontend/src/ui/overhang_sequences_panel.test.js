@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   liveOverhangs,
   selectedStrandIds,
+  sortOverhangsForDisplay,
   initOverhangSequencesPanel,
 } from './overhang_sequences_panel.js'
 
@@ -42,6 +43,40 @@ describe('liveOverhangs', () => {
       overhangs: [{ id: 'free', strand_id: null }, { id: 'free2' }],
     }
     expect(liveOverhangs(design).map(o => o.id)).toEqual(['free', 'free2'])
+  })
+})
+
+// ── sortOverhangsForDisplay (pure) ──────────────────────────────────────────────
+
+describe('sortOverhangsForDisplay', () => {
+  it('sorts alphanumerically by label (Name)', () => {
+    const out = sortOverhangsForDisplay([
+      { id: 'x', label: 'beta' }, { id: 'y', label: 'alpha' }, { id: 'z', label: 'gamma' },
+    ])
+    expect(out.map(o => o.label)).toEqual(['alpha', 'beta', 'gamma'])
+  })
+
+  it('uses natural numeric order (oh2 before oh10) and is case-insensitive', () => {
+    const out = sortOverhangsForDisplay([
+      { id: '1', label: 'oh10' }, { id: '2', label: 'OH2' }, { id: '3', label: 'oh1' },
+    ])
+    expect(out.map(o => o.label)).toEqual(['oh1', 'OH2', 'oh10'])
+  })
+
+  it('breaks label ties by sequence, then by id', () => {
+    const out = sortOverhangsForDisplay([
+      { id: 'b', label: 'p', sequence: 'GGGG' },
+      { id: 'a', label: 'p', sequence: 'AAAA' },
+      { id: 'c', label: 'p', sequence: 'AAAA' },
+    ])
+    expect(out.map(o => o.id)).toEqual(['a', 'c', 'b'])  // AAAA(a,c by id) then GGGG(b)
+  })
+
+  it('handles missing label/sequence without throwing and does not mutate input', () => {
+    const input = [{ id: 'z' }, { id: 'a', label: 'a' }]
+    const out = sortOverhangsForDisplay(input)
+    expect(out.map(o => o.id)).toEqual(['z', 'a'])   // '' label sorts before 'a'
+    expect(input.map(o => o.id)).toEqual(['z', 'a']) // original order preserved
   })
 })
 
@@ -165,6 +200,24 @@ describe('initOverhangSequencesPanel', () => {
     // header row + one row per overhang
     const rows = [...list.children].filter(c => c.dataset.strandId)
     expect(rows.map(r => r.dataset.strandId)).toEqual(['s1', 's2'])
+  })
+
+  it('renders rows sorted alphanumerically by Name regardless of design order', () => {
+    mountDom()
+    const unsorted = {
+      strands: [{ id: 's1' }, { id: 's2' }, { id: 's3' }],
+      overhangs: [
+        { id: 'o3', strand_id: 's3', label: 'oh10' },
+        { id: 'o1', strand_id: 's1', label: 'oh2' },
+        { id: 'o2', strand_id: 's2', label: 'oh1' },
+      ],
+    }
+    const deps = makeDeps(unsorted)
+    initOverhangSequencesPanel(deps)
+    document.getElementById('overhang-panel-heading').click()
+    const rows = [...document.getElementById('overhang-list').children].filter(c => c.dataset.strandId)
+    // oh1, oh2, oh10 → strands s2, s1, s3
+    expect(rows.map(r => r.dataset.strandId)).toEqual(['s2', 's1', 's3'])
   })
 
   it('shows an empty message when expanded with no overhangs', () => {

@@ -40,6 +40,21 @@ export function liveOverhangs(design) {
 }
 
 /**
+ * Pure: overhangs ordered for display — alphanumeric by Name (label), ties broken
+ * by Sequence, then id. Natural numeric ordering (oh2 before oh10), case-insensitive.
+ * Returns a new array; does not mutate the input.
+ *
+ * @param {object[]} overhangs
+ * @returns {object[]}
+ */
+export function sortOverhangsForDisplay(overhangs) {
+  const cmp = (a, b) => (a ?? '').localeCompare(b ?? '', undefined, { numeric: true, sensitivity: 'base' })
+  return [...overhangs].sort((a, b) =>
+    cmp(a.label, b.label) || cmp(a.sequence, b.sequence) || cmp(a.id, b.id),
+  )
+}
+
+/**
  * Pure: all strand IDs currently selected (single nucleotide, multi-strand, or
  * multi-domain selection), as a Set.
  *
@@ -98,7 +113,7 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
   let _rowsByStrandId = {}
 
   function _rebuildPanel(design) {
-    const overhangs = liveOverhangs(design)
+    const overhangs = sortOverhangsForDisplay(liveOverhangs(design))
     _rowsByStrandId = {}
     if (_collapsed) return
 
@@ -191,6 +206,13 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
         await api.patchOverhang(ovhg.id, patch)
       })
 
+      // ⚠️ TECH DEBT / FOR REVIEW (flagged 2026-06-03): the Bind/Unbind button drives
+      // the LEGACY OverhangBinding pair model (overhang_a_id/overhang_b_id + `bound`
+      // flag, toggled via api.patchOverhangBinding). This whole approach is being
+      // superseded by oh_binder strands (StrandType.OH_BINDER + Domain.binds_overhang_id).
+      // Do NOT extend it; it's slated for removal once the binder migration completes.
+      // See memory project_oh_binder + project_tech_debt.
+      //
       // Bind/Unbind toggle — visible only when this overhang is in an
       // OverhangBinding pair. Click toggles `bound` server-side via
       // patchOverhangBinding; the cluster-pose move (or restore) happens
