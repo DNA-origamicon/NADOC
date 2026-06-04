@@ -41,6 +41,7 @@ import { selectionBBox } from './scene/selection_bbox.js'
 import { clientToNdc } from './scene/ndc.js'
 import { flexTetherConnections } from './scene/flex_tethers.js'
 import { clusterBackboneEntries } from './scene/cluster_entries.js'
+import { initEmptySpaceMenu } from './scene/empty_space_menu.js'
 import { initAssemblyLasso } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
@@ -918,7 +919,7 @@ async function main() {
       // its own interaction) and in assembly mode (separate context menu).
       if (store.getState().assemblyActive) return
       if (slicePlane.isVisible() || workspace.isVisible()) return
-      _showEmptySpaceMenu(clientX, clientY)
+      emptySpaceMenu.show(clientX, clientY)
     },
     // Lazy getters — defined later in this init sequence.
     getUnfoldView:          () => unfoldView,
@@ -4010,31 +4011,6 @@ Typical debugging workflow for "reverts to 3D" bug:
   // Right-clicking empty 3D space (no strand/bead/arc/overhang under the cursor)
   // pops a minimal menu whose only item, "Extrude", launches the workspace
   // plane-picker — the same flow as File > New Part.
-  const _emptyCtxMenu = document.getElementById('empty-space-ctx-menu')
-
-  function _hideEmptySpaceMenu() {
-    if (_emptyCtxMenu) _emptyCtxMenu.style.display = 'none'
-  }
-
-  function _showEmptySpaceMenu(x, y) {
-    if (!_emptyCtxMenu) return
-    _emptyCtxMenu.style.left    = `${x}px`
-    _emptyCtxMenu.style.top     = `${y}px`
-    _emptyCtxMenu.style.display = 'block'
-    const onOutside = (ev) => {
-      if (_emptyCtxMenu.contains(ev.target)) return
-      _teardown()
-    }
-    const onKey = (ev) => { if (ev.key === 'Escape') _teardown() }
-    function _teardown() {
-      _hideEmptySpaceMenu()
-      document.removeEventListener('pointerdown', onOutside, true)
-      document.removeEventListener('keydown', onKey, true)
-    }
-    document.addEventListener('pointerdown', onOutside, true)
-    document.addEventListener('keydown', onKey, true)
-  }
-
   async function _startEmptySpaceExtrude() {
     const { currentDesign, assemblyActive } = store.getState()
     if (assemblyActive) return
@@ -4054,9 +4030,10 @@ Typical debugging workflow for "reverts to 3D" bug:
     workspace.show(lattice)
   }
 
-  document.getElementById('empty-extrude-btn')?.addEventListener('click', () => {
-    _hideEmptySpaceMenu()
-    _startEmptySpaceExtrude()
+  const emptySpaceMenu = initEmptySpaceMenu({
+    menuEl:     document.getElementById('empty-space-ctx-menu'),
+    extrudeBtn: document.getElementById('empty-extrude-btn'),
+    onExtrude:  _startEmptySpaceExtrude,
   })
 
   // ── Welcome screen ────────────────────────────────────────────────────────────
