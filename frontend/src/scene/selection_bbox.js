@@ -28,3 +28,27 @@ export function selectionBBox(geom, { strandIds = new Set(), domainIds = new Set
   }
   return count > 0 ? box : null
 }
+
+/**
+ * Union AABB (THREE.Box3) of the assembly instance centers whose id is in
+ * `wanted`, or null if none match / all matches are sizeless / the union is
+ * empty. Each center is `{ id, center: THREE.Vector3, size: {x,y,z} }` (the
+ * shape returned by `assemblyRenderer.getInstanceCenters()`). Pure — geometry
+ * + selection in, box out. Used for the multi-select / active-group purple
+ * union BoxHelper.
+ * @param {Array} centers  instance centers ({id, center:Vector3, size:{x,y,z}})
+ * @param {Set}   wanted   instance ids to include in the union
+ */
+export function instanceUnionBox(centers, wanted) {
+  if (!centers?.length || !wanted || wanted.size === 0) return null
+  const union = new THREE.Box3(); union.makeEmpty()
+  let count = 0
+  for (const c of centers) {
+    if (!wanted.has(c.id) || !c.size) continue
+    const half = new THREE.Vector3(c.size.x * 0.5, c.size.y * 0.5, c.size.z * 0.5)
+    union.expandByPoint(c.center.clone().sub(half))
+    union.expandByPoint(c.center.clone().add(half))
+    count++
+  }
+  return count > 0 && !union.isEmpty() ? union : null
+}

@@ -213,9 +213,19 @@ The largest single blocks and the most coupling into assembly state. Each needs 
 - [ ] **Rigid-body group gizmo + PartGroup gizmo** — banners `// ── Rigid-body group gizmo attachment`
   + `// ── PartGroup gizmo` (~10406–10836, ~430 ln) → `scene/group_gizmo.js`. Deps: TransformControls,
   store, assemblyRenderer, group helpers. GESTURE E2E. Risk: HIGH.
-- [ ] **Multi-select visual feedback (purple union BoxHelper)** — banner `// ── Multi-select visual
-  feedback` (~11106–11298, ~192 ln) → `scene/multi_select_box.js`. Deps: scene, store, assemblyRenderer
-  (instance centers). Has a pure core (union bbox — see existing `selection_bbox.js`). Risk: MED.
+- [x] **Multi-select visual feedback (purple union BoxHelper)** — banner `// ── Multi-select visual
+  feedback` → `scene/assembly_multi_box.js` (NOT the map's `multi_select_box.js`; named for the assembly
+  scope). Deps: scene, store, assemblyRenderer. Pure core lifted into existing `selection_bbox.js`. Risk: MED.
+  **DONE** (extraction #34, this batch) — the banner's "~192 ln" was overshoot: the cohesive block is the
+  single `_updateAssemblyMultiBox` fn (~46 ln). Factory `initAssemblyMultiBox({scene,store,assemblyRenderer})
+  →{update,dispose}` + pure `instanceUnionBox(centers, wanted)` added to `selection_bbox.js`. −37 ln off
+  main.js. 14 vitest (5 pure union-box: union/ignore-unwanted/skip-sizeless/null-no-match/null-all-sizeless +
+  9 jsdom factory: empty/single-suppress/≥2-draws-purple/single-member-group-draws/transitive-group-fold/
+  dispose-prior-no-dupe/drop-below-2-clears/dispose). Hoisting gotcha (call sites at the 'assembly' subscriber
+  + group-gizmo drag PRECEDE the old fn def): init moved to a `const` right before the `subscribeSlice('assembly')`
+  registration (scene/store/assemblyRenderer all available there) — no lazy-let needed. Gate: vitest 409 +
+  smoke 21/21. **Live purple-box gesture NOT hand-exercised** (needs a built ≥2-part assembly + Ctrl-lasso
+  multi-select) — verbatim move + unit-tested + smoke boot gate, per #32/#24's accepted caveat.
 - [ ] **Coalesced assembly part-refresh** — banner `// ── Coalesced assembly part-refresh`
   (~9814–10014, ~200 ln) → `scene/assembly_refresh.js`. Deps: assemblyRenderer, store, setTimeout
   coalescing state. Risk: MED-HIGH (timing/coalescing — assert the debounce, not just the output).

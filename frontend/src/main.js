@@ -38,6 +38,7 @@ import { initFretChecker } from './scene/fret_checker.js'
 import { motionChipStyle } from './scene/motion_chip.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { selectionBBox } from './scene/selection_bbox.js'
+import { initAssemblyMultiBox } from './scene/assembly_multi_box.js'
 import { clientToNdc } from './scene/ndc.js'
 import { flexTetherConnections } from './scene/flex_tethers.js'
 import { clusterBackboneEntries } from './scene/cluster_entries.js'
@@ -9590,6 +9591,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     assemblyJointRenderer.rebuild(assembly)
   }
 
+  // Multi-select union BoxHelper (purple box around every multi-selected /
+  // active-group instance). Initialized here so it exists before the assembly
+  // store subscriber below (and the group-gizmo drag handler) call `.update()`.
+  const _assemblyMultiBox = initAssemblyMultiBox({ scene, store, assemblyRenderer })
+
   // Drive assembly panel + assembly renderer from the assembly slice
   store.subscribeSlice('assembly', (newState, prevState) => {
     const modeChanged     = newState.assemblyActive    !== prevState.assemblyActive
@@ -9772,7 +9778,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         newState.multiSelectedInstanceIds !== prevState.multiSelectedInstanceIds ||
         newState.activeGroupId !== prevState.activeGroupId
       ) {
-        requestAnimationFrame(_updateAssemblyMultiBox)
+        requestAnimationFrame(() => _assemblyMultiBox.update())
       }
 
       // PartGroup gizmo lifecycle. Attach on group-select; re-attach when
@@ -10269,7 +10275,7 @@ Typical debugging workflow for "reverts to 3D" bug:
         _groupGizmoLiveBoxPending = true
         requestAnimationFrame(() => {
           _groupGizmoLiveBoxPending = false
-          _updateAssemblyMultiBox()
+          _assemblyMultiBox.update()
         })
       },
       // onCommit: POST the delta to the server. The backend walks the rigid
@@ -10592,52 +10598,9 @@ Typical debugging workflow for "reverts to 3D" bug:
     _motionChip.style.background = c.bg
   }
 
-  // ── Multi-select visual feedback: one purple union BoxHelper around every
-  //    instance in multiSelectedInstanceIds. Hidden when < 2 ids selected
-  //    (the single-select case keeps the existing white per-instance helper).
-  //    Recomputed when the multi-select set changes OR the assembly rebuilds
-  //    (a move/rotate of any member must re-fit the union box).
-  let _assemblyMultiBox = null
-  function _updateAssemblyMultiBox() {
-    const s = store.getState()
-    const wanted = new Set(s.multiSelectedInstanceIds ?? [])
-    // An activeGroupId means "every transitive member is conceptually selected"
-    // for the purposes of the union BoxHelper — the user needs visual feedback
-    // for the group as a whole, not just for ad-hoc multi-selects.
-    if (s.activeGroupId) {
-      for (const id of collectGroupMemberInstanceIds(s.currentAssembly, s.activeGroupId)) {
-        wanted.add(id)
-      }
-    }
-    if (_assemblyMultiBox) {
-      scene.remove(_assemblyMultiBox)
-      _assemblyMultiBox.geometry?.dispose?.()
-      _assemblyMultiBox.material?.dispose?.()
-      _assemblyMultiBox = null
-    }
-    // Skip for single-part selections — the per-instance white BoxHelper from
-    // the renderer already covers that case. Always render when a group is
-    // active even if it has one member (the gizmo + box are the only signal).
-    if (wanted.size === 0) return
-    if (wanted.size < 2 && !s.activeGroupId) return
-    const centers = assemblyRenderer.getInstanceCenters?.() ?? []
-    const union = new THREE.Box3(); union.makeEmpty()
-    for (const c of centers) {
-      if (!wanted.has(c.id) || !c.size) continue
-      const half = new THREE.Vector3(c.size.x * 0.5, c.size.y * 0.5, c.size.z * 0.5)
-      const min = c.center.clone().sub(half)
-      const max = c.center.clone().add(half)
-      union.expandByPoint(min)
-      union.expandByPoint(max)
-    }
-    if (union.isEmpty()) return
-    _assemblyMultiBox = new THREE.Box3Helper(union, 0x8b5cf6)
-    _assemblyMultiBox.material.depthTest = false
-    _assemblyMultiBox.material.transparent = true
-    _assemblyMultiBox.material.opacity = 0.95
-    _assemblyMultiBox.renderOrder = 1001
-    scene.add(_assemblyMultiBox)
-  }
+  // Multi-select union BoxHelper lifted to scene/assembly_multi_box.js
+  // (carve-up Tier 3). `_assemblyMultiBox` is initialized earlier (before the
+  // 'assembly' store subscriber that drives it); call `.update()` to re-fit.
 
   // Assembly canvas pointer-down + free/part-joint drag handlers lifted to
   // scene/assembly_pointer.js (carve-up Tier 3, sub-part a). _onAssemblyPointerDown
