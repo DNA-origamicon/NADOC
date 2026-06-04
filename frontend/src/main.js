@@ -39,6 +39,7 @@ import { motionChipStyle } from './scene/motion_chip.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { selectionBBox } from './scene/selection_bbox.js'
 import { clientToNdc } from './scene/ndc.js'
+import { flexTetherConnections } from './scene/flex_tethers.js'
 import { initAssemblyLasso } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
@@ -8058,14 +8059,7 @@ Typical debugging workflow for "reverts to 3D" bug:
    *  fixed anchor keys + a live world-position resolver from backboneEntries. */
   function _buildSsdnaPayload(clusterId) {
     const design = store.getState().currentDesign
-    const connections = []
-    for (const c of (_flexConnections ?? [])) {
-      if (c.cluster_a_id !== clusterId && c.cluster_b_id !== clusterId) continue
-      const onA = c.cluster_a_id === clusterId
-      const movingKey = flexAnchorKey(onA ? c.anchor_a : c.anchor_b, design)
-      const fixedKey  = flexAnchorKey(onA ? c.anchor_b : c.anchor_a, design)
-      if (movingKey && fixedKey) connections.push({ movingKey, fixedKey, contour: c.contour_length_nm })
-    }
+    const connections = flexTetherConnections(_flexConnections, clusterId, design)
     const resolveWorldPos = (key) => {
       const [h, bp, dir] = key.split(':')
       const bpN = Number(bp)
@@ -8093,15 +8087,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   /** Per-tether {movingKey, fixedKey, contour} for the given moving cluster over a
    *  specific subset of connections, plus a live world-position resolver. */
   function _buildRelaxPayload(movingId, conns, design) {
-    const connections = []
-    for (const c of conns) {
-      const onA = c.cluster_a_id === movingId
-      const onB = c.cluster_b_id === movingId
-      if (!onA && !onB) continue
-      const movingKey = flexAnchorKey(onA ? c.anchor_a : c.anchor_b, design)
-      const fixedKey  = flexAnchorKey(onA ? c.anchor_b : c.anchor_a, design)
-      if (movingKey && fixedKey) connections.push({ movingKey, fixedKey, contour: c.contour_length_nm })
-    }
+    const connections = flexTetherConnections(conns, movingId, design)
     const resolveWorldPos = (key) => {
       const [h, bp, dir] = key.split(':')
       const bpN = Number(bp)
