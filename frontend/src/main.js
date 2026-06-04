@@ -33,7 +33,7 @@ import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connI
 import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
 import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds, findOwningGroupId } from './scene/assembly_groups_util.js'
-import { heatmapHex, hexFromInt } from './scene/color_util.js'
+import { heatmapHex, hexFromInt, atomColorsFromLetters } from './scene/color_util.js'
 import { fretQuenchedDonors } from './scene/fret_util.js'
 import { motionChipStyle } from './scene/motion_chip.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
@@ -2337,17 +2337,11 @@ async function main() {
   }
 
   // Build per-atom base-letter colour map (key: "strand_id:bp_index:direction").
-  const _BASE_HEX = { A: 0x44dd88, T: 0xff5555, G: 0xffcc00, C: 0x55aaff }
+  // The store/geometry read lives here; the pure mapping is atomColorsFromLetters.
   function _getAtomBaseColors() {
     const { currentDesign, currentGeometry } = store.getState()
-    const out = new Map()
-    if (!currentDesign || !currentGeometry) return out
-    const nucLetter = buildNucLetterMap(currentDesign, currentGeometry)
-    for (const [nuc, ch] of nucLetter) {
-      const k = `${nuc.strand_id}:${nuc.bp_index}:${nuc.direction}`
-      out.set(k, _BASE_HEX[ch])
-    }
-    return out
+    if (!currentDesign || !currentGeometry) return new Map()
+    return atomColorsFromLetters(buildNucLetterMap(currentDesign, currentGeometry))
   }
 
   // Dispatch atomistic colouring based on the global coloringMode.

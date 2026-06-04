@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { heatmapHex, hexFromInt } from './color_util.js'
+import { heatmapHex, hexFromInt, atomColorsFromLetters, BASE_HEX } from './color_util.js'
 
 const rgb = (hex) => [(hex >> 16) & 0xff, (hex >> 8) & 0xff, hex & 0xff]
 
@@ -45,5 +45,22 @@ describe('hexFromInt', () => {
   it('masks negatives and over-range ints to 24 bits', () => {
     expect(hexFromInt(-1)).toBe('#ffffff')          // (-1 >>> 0) & 0xffffff
     expect(hexFromInt(0x1abcdef)).toBe('#abcdef')   // high bits dropped
+  })
+})
+
+describe('atomColorsFromLetters', () => {
+  it('keys colours by strand:bp:dir using the base palette', () => {
+    const nucLetter = new Map([
+      [{ strand_id: 's1', bp_index: 0, direction: 'FORWARD' }, 'A'],
+      [{ strand_id: 's1', bp_index: 1, direction: 'REVERSE' }, 'G'],
+    ])
+    const out = atomColorsFromLetters(nucLetter)
+    expect(out.get('s1:0:FORWARD')).toBe(BASE_HEX.A)
+    expect(out.get('s1:1:REVERSE')).toBe(BASE_HEX.G)
+    expect(out.size).toBe(2)
+  })
+  it('returns an empty map for null/empty input', () => {
+    expect(atomColorsFromLetters(null).size).toBe(0)
+    expect(atomColorsFromLetters([]).size).toBe(0)
   })
 })
