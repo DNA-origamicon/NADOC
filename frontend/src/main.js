@@ -14113,6 +14113,22 @@ Typical debugging workflow for "reverts to 3D" bug:
       getActiveInstanceId: () => store.getState().activeInstanceId ?? null,
       getActiveGroupId:    () => store.getState().activeGroupId ?? null,
       isAssemblyActive:    () => !!store.getState().assemblyActive,
+      /** Arm the part-joint cluster drag (Priority 2b in _onAssemblyPointerDown):
+       *  set the selected cluster so a subsequent pointer-down on the instance
+       *  starts a cluster rotation. This is the gesture's selection PREREQUISITE
+       *  (normally a cluster re-click / panel select); the ring DRAG itself stays
+       *  the real gesture under test. */
+      selectAssemblyClusterForTest(instanceId, clusterId) {
+        _selectedAssemblyCluster = { instanceId, clusterId }
+      },
+      /** Pending (uncommitted) part-joint rotations recorded by _onAssemblyDragUp.
+       *  The observable for the part-joint drag gesture: each entry's joint_value
+       *  is the rotated angle. */
+      getAssemblyPendingPartJoints() {
+        return [..._assemblyPendingPartJoints.entries()].map(([key, v]) => ({
+          key, jointValue: v?.body?.joint_value ?? null,
+        }))
+      },
       /** Enter assembly mode on the doc's current server assembly. The 'a'
        *  toggle was removed (real entry is opening/creating a .nass); this
        *  mirrors that path's two steps — fetch into currentAssembly, then

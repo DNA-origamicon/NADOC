@@ -150,6 +150,10 @@ The largest single blocks and the most coupling into assembly state. Each needs 
     the real raycast and assert on selection state. This is the **(b) gesture gate**. Build notes + the 5
     hard-won gotchas (v2 wire format, file-source-not-inline, broken auto-fit → deterministic framing,
     thin-rod pixel precision, MOVE-mode occlusion) are in `main_js_extraction_log.md`.
+  - **(a) ring-drag gate — DONE (2026-06-04).** `e2e/assembly_joint_drag.spec.js` drives the part-joint
+    cluster drag and asserts a recorded rotation (covers #28's `rotationDeltaMatrix`). Writing it uncovered
+    + FIXED a real bug: assembly per-instance designs weren't enriched with world joint axes, so the drag
+    threw (`joint.axis_origin` undefined). See log.
   - (a) ring-drag SHELL + (b) instance select: still inline, but now UNBLOCKED to lift. Verbatim-move
     `_onAssemblyClick` (b) / `_onAssemblyPointerDown` + drag handlers (a) into `scene/assembly_pointer.js`
     with get/set shims for the shared mutable state (`_selectedAssemblyCluster`, `_assemblySelectedPartJoint`,

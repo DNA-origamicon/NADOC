@@ -191,28 +191,27 @@ export async function loadAssemblyWithParts(page, { doc, n = 2, name = 'asm' }) 
     }
     ids.push(insts[insts.length - 1].id)
   }
+  await _enterAssemblyAndFrame(page)
+  return ids
+}
+
+/**
+ * Enter assembly mode and converge on a STABLE camera framing where the parts
+ * are pickable. The renderer's bounding box is empty for these instances, so
+ * the assembly's auto-fit can't frame the camera AND fires late (drifting it
+ * off); we frame deterministically on the rendered geometry and require two
+ * consecutive fine scans to see clickable parts (the rods are thin, so a coarse
+ * scan steps over them — see assemblyInstanceCandidates). Throws if never stable.
+ */
+async function _enterAssemblyAndFrame(page) {
   await page.evaluate(() => window.__nadocTest.enterAssemblyMode())
   await expect(page.locator('#mode-indicator')).toContainText('ASSEMBLY', { timeout: 10_000 })
-  // Wait until at least one instance is pickable on the canvas (the real raycast
-  // resolves a part body somewhere on the grid).
-  // The renderer's bounding box is empty for these instances, so the assembly's
-  // auto-fit can't frame the camera (and worse, fires LATE and moves it to a
-  // bad pose). Frame deterministically from the instance transforms and wait
-  // until the framing is STABLE — two consecutive scans see clickable parts —
-  // so a late auto-fit has already fired and been corrected.
-  // The renderer's bounding box is empty for these instances, so the assembly's
-  // auto-fit can't frame the camera (and fires late, drifting it off). Frame
-  // deterministically on the rendered geometry and wait until the parts are
-  // STABLY pickable (two consecutive fine scans find a clickable part) — the
-  // rods are thin, so a coarse scan steps over them (see assemblyInstanceCandidates).
-  let cands = []
   for (let t = 0; t < 24; t++) {
     await frameAssembly(page)
     await page.waitForTimeout(400)
-    cands = await assemblyInstanceCandidates(page)
-    if (cands.length) {
+    if ((await assemblyInstanceCandidates(page)).length) {
       await page.waitForTimeout(400)
-      if ((await assemblyInstanceCandidates(page)).length) return ids
+      if ((await assemblyInstanceCandidates(page)).length) return
     }
   }
   throw new Error('assembly instances never became stably pickable (framing / geometry)')
@@ -334,4 +333,74 @@ export async function clickEmptyAssemblySpace(page) {
     }
   }
   return null
+}
+
+/**
+ * Build a single-instance assembly whose part has a CLUSTER carrying a revolute
+ * CLUSTER-JOINT, with the instance flagged `allow_part_joints`. This is the
+ * fixture for the part-joint ring-drag gesture (Priority 2b in
+ * _onAssemblyPointerDown → _partJointDrag → _updatePartJointDrag, which builds
+ * the revolute world-delta via gear_math.rotationDeltaMatrix). The joint axis is
+ * +Y so it faces the broad-face framing camera (ring in the XZ plane → screen
+ * drags map to a clean angle). Returns { instanceId, clusterId }.
+ */
+export async function loadAssemblyWithClusterJoint(page, { doc, name = 'pjoint' }) {
+  const H = { 'Content-Type': 'application/json', 'X-NADOC-Doc': doc }
+  await loadScaffoldedPart(page, { doc, name, extraQuery: '&shared=0' })
+  const helixId = (await (await page.request.get(`${API}/design`, { headers: H })).json())
+    .design.helices[0].id
+  // Cluster owning the (only) helix → rotating it rotates the whole part.
+  const cl = await (await page.request.post(`${API}/design/cluster`, {
+    data: { name: 'pj', helix_ids: [helixId] }, headers: H,
+  })).json()
+  const clusters = cl.design.cluster_transforms
+  const clusterId = clusters[clusters.length - 1].id
+  // Revolute joint, axis +Y through the rod mid-point.
+  await page.request.post(`${API}/design/cluster/${clusterId}/joint`, {
+    data: { axis_origin: [0, 0, 33], axis_direction: [0, 1, 0], name: 'pj-joint' }, headers: H,
+  })
+  const partRel = `__e2e__${name}_part.nadoc`
+  await page.request.post(`${API}/design/save`, { data: { path: `workspace/${partRel}` }, headers: H })
+  await page.request.post(`${API}/assembly`, { data: { name: `__e2e__${name}` }, headers: H })
+  const addBody = await (await page.request.post(`${API}/assembly/instances`, {
+    data: { source: { type: 'file', path: partRel }, name: 'Joint Part' }, headers: H,
+  })).json()
+  const insts = addBody?.assembly?.instances_v2 ?? addBody?.assembly?.instances
+  const instanceId = insts[insts.length - 1].id
+  // Flexible + part-joints enabled is the precondition the drag branch checks.
+  await page.request.patch(`${API}/assembly/instances/${instanceId}`, {
+    data: { allow_part_joints: true, mode: 'flexible' }, headers: H,
+  })
+  await _enterAssemblyAndFrame(page)
+  return { instanceId, clusterId }
+}
+
+/**
+ * Drive the part-joint ring drag and return the pending part-joint rotations it
+ * records. Arms the selected cluster (the gesture's selection prerequisite),
+ * then does a REAL pointer-down on the part body → drag → up so the angle
+ * accumulates through _updatePartJointDrag and commits in _onAssemblyDragUp.
+ * Retries a few drag vectors until a non-zero rotation is recorded.
+ */
+export async function dragPartJointRing(page, { instanceId, clusterId }) {
+  const drags = [[70, 60], [-70, 60], [80, -50], [50, 90]]
+  for (const [dx, dy] of drags) {
+    await frameAssembly(page)
+    await page.evaluate(([i, c]) => window.__nadocTest.selectAssemblyClusterForTest(i, c), [instanceId, clusterId])
+    const cands = await assemblyInstanceCandidates(page)
+    const target = cands.find(c => c.id === instanceId) ?? cands[0]
+    if (!target) continue
+    const px = await _pixelForInstance(page, target.x, target.y, instanceId)
+    if (!px) continue
+    // Real drag: down on the part → move (rotate around the +Y ring) → up.
+    await page.mouse.move(px.x, px.y)
+    await page.mouse.down()
+    await page.mouse.move(px.x + dx / 2, px.y + dy / 2, { steps: 4 })
+    await page.mouse.move(px.x + dx, px.y + dy, { steps: 4 })
+    await page.mouse.up()
+    await page.waitForTimeout(250)
+    const pending = await page.evaluate(() => window.__nadocTest.getAssemblyPendingPartJoints())
+    if (pending.some(p => Math.abs(p.jointValue ?? 0) > 1e-6)) return pending
+  }
+  return page.evaluate(() => window.__nadocTest.getAssemblyPendingPartJoints())
 }

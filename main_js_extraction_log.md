@@ -93,6 +93,24 @@ Shipped:
 `_onAssemblyClick`/`_onAssemblyPointerDown` into `scene/assembly_pointer.js`, running `assembly_select.spec.js`
 + smoke as the gate. The shared mutable state still needs get/set shims (see the coupling-wall note below).
 
+**Part-joint drag gesture test + bug fix (2026-06-04) — covers #28.** Added
+`e2e/assembly_joint_drag.spec.js` (the (a) ring-drag gate): builds a part with a cluster + revolute
+cluster-joint + `allow_part_joints`, arms the selected cluster (`selectAssemblyClusterForTest` hook),
+does a real pointer-down→drag→up on the part, and asserts a non-zero pending part-joint rotation
+(`getAssemblyPendingPartJoints` hook). This exercises `_updatePartJointDrag` → the `rotationDeltaMatrix`
+dedup (#28), which had no automated coverage. Stable under `--repeat-each=2`.
+- **Bug the test uncovered + FIXED:** the assembly part-joint cluster-drag (`_onAssemblyPointerDown`
+  Priority 2b / sibling) reads `joint.axis_origin`/`axis_direction`, but a `ClusterJoint` stores only
+  `local_axis_origin`/`local_axis_direction`. The world axes are derived by `_inject_joint_world_axes`,
+  which ran ONLY on the design-view GET (`crud.py:1356`), never on the assembly per-instance design — so
+  `getInstanceDesign().cluster_joints[*].axis_origin` was `undefined` and `new THREE.Vector3(...undefined)`
+  threw on pointer-down (selecting+dragging a cluster to rotate it about its joint was broken for any part
+  with a cluster joint). Fix: call `_inject_joint_world_axes(design_dict)` in `get_instance_geometry` +
+  the seek path (`backend/api/assembly.py`), mirroring the design view. The injected axes are design-world
+  (= instance-local), which is exactly what the handler then maps through `instMat`. Pre-existing bug, not
+  from the refactor. Backend suite: 0 new failures vs HEAD (the 2 router/staple failures pre-exist;
+  `teeth_closing_zig` is order-flaky, passes in isolation).
+
 **Tier-3 (a)/(b) COUPLING WALL (#28, 2026-06-04):** investigated factory-lifting the stateful shells of (a) joint-ring pick (`_onAssemblyPointerDown` + `_updatePartJointDrag`/`_onAssemblyDragMove`/`_onAssemblyDragUp`) and (b) instance select (`_onAssemblyClick` tail). **Not safely extractable in one batch.** The handlers share SEVEN mutable closure vars, several read/written by *sibling* handlers outside the region: `_partJointDrag`/`_freeDrag`/`_pendingFreeDrag`/`_assemblyPtrDownAt` (local to the cluster) but `_assemblyRightDownAt` (also contextmenu), `_assemblySelectedPartJoint` (also cluster-context), `_selectedAssemblyCluster` (also panel-selection @9866 + cluster-context @11249/11264), `_assemblyPendingPartJoints` (Map shared with commit), and `_translateRotateActive` (read here, owned/written by the translate-rotate tool in ~25 sites). A factory would need ~25 deps + get/set shims for 4 cross-handler vars — that rewiring is NOT verbatim (real semantic change) and there is **no assembly-drag gesture e2e harness** (scene_harness is design-view bead-picking only; validating part-joint rotation / free-drag / cluster re-click needs a built multi-part *mated* assembly fixture). Per the loop's "too coupled → log and stop, don't force" rule, lifted only the safe pure dedup (#28) and stopped. The pure cores beyond it are trivial (a 1-line world-entry map, duplicated twice) — not worth a module. **To finish (a)/(b): build an assembly-gesture harness first (prerequisite), then verbatim-lift the shells with get/set shims.** Flagged to user.
 
 **Tier-3 note (#27):** first cut into the HIGHEST-coupling region (Assembly canvas pointer handler, ~340 ln across `_onAssemblyPointerDown` + `_onAssemblyClick` + drag-move/up). Only sub-part (c) is cleanly pure — it's a store-state decision given the picked instance. Lifted it to the module where `findOwningGroupId` already lives (which is now no longer imported in main.js). (a) joint-ring pick and (b) instance select remain — both entangled with `_partJointDrag`/drag-move-up/`ringPlaneHit`/`instanceGizmo`/`_commitAssemblyPending` and need the gesture e2e (built grouped assembly) when (b) lands. Lesson: in a HIGH-coupling handler, the pure *decision* branches lift out cleanly first and de-risk the stateful remainder.

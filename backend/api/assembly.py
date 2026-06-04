@@ -2532,6 +2532,7 @@ def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) 
     axes = deformed_helix_axes(display_design)
     _apply_ovhg_rotations_to_axes(display_design, axes, nucleotides)
     design_dict = display_design.to_dict()
+    crud_api._inject_joint_world_axes(design_dict)   # world cluster-joint axes (see get_instance_geometry)
     key = _geo_cache_key(new_inst)
     if key:
         _geo_cache_set(key, {"nucleotides": nucleotides, "helix_axes": axes,
@@ -7239,7 +7240,7 @@ def get_instance_geometry(instance_id: str) -> dict:
     Response includes "design" (with cluster_transform_overrides applied) so
     callers do not need a separate /design request.
     """
-    from backend.api.crud import _geometry_for_design, _compact_geometry_from_nucleotides
+    from backend.api.crud import _geometry_for_design, _compact_geometry_from_nucleotides, _inject_joint_world_axes
     from backend.core.deformation import deformed_helix_axes, _apply_ovhg_rotations_to_axes
     assembly = assembly_state.get_or_404()
     inst     = _find_instance(assembly, instance_id)
@@ -7258,6 +7259,10 @@ def get_instance_geometry(instance_id: str) -> dict:
     axes        = deformed_helix_axes(design)
     _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
     design_dict = design.to_dict()
+    # Derive world-space cluster-joint axes (axis_origin / axis_direction) from the
+    # local-frame storage, same as the design-view GET. Without this the assembly
+    # part-joint drag reads undefined joint.axis_origin and throws.
+    _inject_joint_world_axes(design_dict)
     if key:
         _geo_cache_set(key, {"nucleotides": nucleotides, "helix_axes": axes,
                              "design": design_dict})
