@@ -20,9 +20,18 @@ function setup(stateOverrides = {}, depOverrides = {}) {
   })
 
   const clusterPanel = { selectAssemblyCluster: vi.fn() }
+  const pendingPartJoints = new Map()
+  const canvas = { addEventListener: vi.fn(), removeEventListener: vi.fn() }
+  const controls = { enabled: true }
   const deps = {
     store,
     camera: {},
+    canvas,
+    controls,
+    api: { propagateFk: vi.fn(async () => {}) },
+    applyFKLive: vi.fn(),
+    applyClusterMateFKLive: vi.fn(),
+    assemblyPendingPartJoints: pendingPartJoints,
     assemblyRenderer: {
       pickInstance: vi.fn(() => null),
       pickInstanceCluster: vi.fn(() => null),
@@ -49,14 +58,30 @@ function setup(stateOverrides = {}, depOverrides = {}) {
     setAssemblySelectedPartJoint: (v) => { selectedPartJoint = v },
     ...depOverrides,
   }
-  const { onAssemblyClick } = initAssemblyPointer(deps)
+  const ptr = initAssemblyPointer(deps)
   const setStateSpy = vi.spyOn(store, 'setState')
   return {
-    onAssemblyClick, deps, store, clusterPanel, setStateSpy,
+    ...ptr, deps, store, clusterPanel, setStateSpy, pendingPartJoints, canvas, controls,
     getPtrDownAt: () => ptrDownAt,
     setTranslateActive: (v) => { translateActive = v },
     getSelectedCluster: () => selectedCluster,
     getSelectedPartJoint: () => selectedPartJoint,
+  }
+}
+
+// A part-joint drag descriptor with the bits onAssemblyDragUp reads. The drag
+// MOVE math (ringPlaneHit/angleInRing → currentDelta/currentWorldDelta) is
+// covered by e2e/assembly_joint_drag.spec.js; here we pre-seed a finished drag.
+function makePartJointDrag(currentDelta) {
+  return {
+    instId: 'inst-A',
+    inst: { joint_states: { 'j1': 0.5 } },
+    cluster: { id: 'cl-1', translation: [0, 0, 0], rotation: [0, 0, 0, 1], pivot: [0, 0, 0] },
+    joint: { id: 'j1', axis_origin: [0, 0, 0], axis_direction: [0, 0, 1] },
+    assembly: { instances: [] },
+    currentDelta,
+    currentWorldDelta: new THREE.Matrix4(),
+    startTransforms: new Map(),
   }
 }
 
@@ -158,5 +183,48 @@ describe('initAssemblyPointer · onAssemblyClick', () => {
     await t.onAssemblyClick(ev())
     expect(t.deps.confirmTranslateRotateTool).toHaveBeenCalledTimes(1)
     expect(t.store.getState().activeInstanceId).toBe('inst-B')
+  })
+})
+
+describe('initAssemblyPointer · part-joint drag (sub-part a)', () => {
+  it('beginPartJointDrag arms the move/up listeners', () => {
+    const t = setup()
+    t.beginPartJointDrag(makePartJointDrag(0.3))
+    expect(t.canvas.addEventListener).toHaveBeenCalledWith('pointermove', t.onAssemblyDragMove)
+    expect(t.canvas.addEventListener).toHaveBeenCalledWith('pointerup', t.onAssemblyDragUp)
+  })
+
+  it('drag-up records a pending part-joint rotation and re-enables controls', () => {
+    const t = setup()
+    t.controls.enabled = false                      // a live drag disabled them
+    t.beginPartJointDrag(makePartJointDrag(0.4))
+    t.onAssemblyDragUp()
+    const entry = t.pendingPartJoints.get('inst-A:cl-1')
+    expect(entry).toBeTruthy()
+    expect(entry.instanceId).toBe('inst-A')
+    expect(entry.body.joint_id).toBe('j1')
+    expect(entry.body.joint_value).toBeCloseTo(0.9)   // prior 0.5 + delta 0.4
+    expect(t.controls.enabled).toBe(true)
+    expect(t.canvas.removeEventListener).toHaveBeenCalledWith('pointermove', t.onAssemblyDragMove)
+  })
+
+  it('drag-up with a near-zero delta records nothing', () => {
+    const t = setup()
+    t.beginPartJointDrag(makePartJointDrag(1e-12))
+    t.onAssemblyDragUp()
+    expect(t.pendingPartJoints.size).toBe(0)
+  })
+
+  it('cancelDrag is a no-op when no drag is in flight', () => {
+    const t = setup()
+    t.cancelDrag()
+    expect(t.canvas.removeEventListener).not.toHaveBeenCalled()
+  })
+
+  it('onAssemblyDragMove is a no-op when nothing is being dragged', () => {
+    const t = setup()
+    t.onAssemblyDragMove({ clientX: 5, clientY: 5 })
+    expect(t.deps.applyFKLive).not.toHaveBeenCalled()
+    expect(t.deps.applyClusterMateFKLive).not.toHaveBeenCalled()
   })
 })

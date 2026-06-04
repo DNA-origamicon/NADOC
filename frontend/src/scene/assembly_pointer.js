@@ -1,23 +1,34 @@
-// Assembly canvas pointer handlers — extracted from main.js (carve-up Tier 3,
-// sub-part (b): instance / cluster selection click). Verbatim-equivalent lift of
-// `_onAssemblyClick` + its single-use helper `_toggleAssemblyOverhangSelection`.
+// Assembly canvas pointer handlers — extracted from main.js (carve-up Tier 3).
+// Owns the assembly canvas pointer interactions:
+//   sub-part (b): instance / cluster selection click (`onAssemblyClick`)
+//   sub-part (a): part-joint ring drag + camera-plane free drag
+//                 (`beginPartJointDrag` / the drag move/up handlers / `cancelDrag`)
 //
-// The handler reads/writes four pieces of mutable state that sibling handlers
-// (pointer-down, contextmenu, cluster-context) in main.js also touch, so those
-// are passed in as get/set shims rather than owned here. `clusterPanel` is wired
-// after this factory in main(), so it comes in as a lazy getter. Everything else
-// is a stable dep defined before construction.
+// Some pieces of mutable state are also touched by sibling handlers in main.js
+// (contextmenu, cluster-context, the translate-rotate tool, dev hooks), so those
+// are passed in as get/set shims rather than owned here. The drag state itself
+// (`_partJointDrag` / `_freeDrag` / `_pendingFreeDrag`) is module-internal — only
+// these handlers touch it; the exit-cleanup path calls `cancelDrag()`.
+// `clusterPanel` is wired after this factory in main(), so it comes in as a lazy
+// getter. Everything else is a stable dep defined before construction.
 //
-// Behaviour is identical to the in-closure original; the gesture is covered by
-// e2e/assembly_select.spec.js (real raycast) and the branch logic by
-// scene/assembly_pointer.test.js (jsdom + mock deps).
+// Behaviour is identical to the in-closure original; the click gesture is covered
+// by e2e/assembly_select.spec.js, the ring-drag by e2e/assembly_joint_drag.spec.js
+// (both real raycast), and the branch logic by scene/assembly_pointer.test.js.
 import * as THREE from 'three'
 import { showToast } from '../ui/toast.js'
 import { resolveGroupClickThrough } from './assembly_groups_util.js'
+import { ringPlaneHit, angleInRing } from './assembly_revolute_math.js'
+import { rotationDeltaMatrix } from './gear_math.js'
+import { clusterTransformAfterJointDelta } from './cluster_joint_math.js'
+import { getRigidBodyGroup } from './assembly_constraint_graph.js'
 
 export function initAssemblyPointer({
   store,
   camera,
+  canvas,
+  controls,
+  api,
   assemblyRenderer,
   assemblyJointRenderer,
   instanceGizmo,
@@ -32,6 +43,10 @@ export function initAssemblyPointer({
   commitAssemblyPending,
   showProgress,
   hideProgress,
+  // drag-mechanics deps (sub-part a)
+  applyFKLive,
+  applyClusterMateFKLive,
+  assemblyPendingPartJoints,
   // shared mutable state (owned by main.js, also touched by sibling handlers)
   getAssemblyPtrDownAt,
   setAssemblyPtrDownAt,
@@ -39,6 +54,171 @@ export function initAssemblyPointer({
   setSelectedAssemblyCluster,
   setAssemblySelectedPartJoint,
 }) {
+  // ── Drag state (module-internal — only these handlers touch it) ───────────
+  let _pendingFreeDrag = null   // { instId, startNdc, startX, startY }
+  let _freeDrag        = null   // { instId, groupStartTransforms, plane, startHit, currentDelta }
+  let _partJointDrag   = null
+
+  function _updateFreeDragPosition(e) {
+    if (!_freeDrag) return
+    const rc = new THREE.Raycaster()
+    rc.setFromCamera(canvasNdc(e), camera)
+    const hit = new THREE.Vector3()
+    if (!rc.ray.intersectPlane(_freeDrag.plane, hit)) return
+    _freeDrag.currentDelta.copy(hit).sub(_freeDrag.startHit)
+    const dM = new THREE.Matrix4().makeTranslation(
+      _freeDrag.currentDelta.x, _freeDrag.currentDelta.y, _freeDrag.currentDelta.z)
+    for (const [id, startMat] of _freeDrag.groupStartTransforms) {
+      const liveMat = dM.clone().multiply(startMat)
+      assemblyRenderer.setLiveTransform(id, liveMat)
+      assemblyJointRenderer.setLiveJointTransform(id, liveMat, _freeDrag.assembly)
+    }
+    applyFKLive(_freeDrag.assembly, dM, [..._freeDrag.groupStartTransforms.keys()])
+  }
+
+  function _updatePartJointDrag(e) {
+    if (!_partJointDrag) return
+    const hit = ringPlaneHit(
+      _partJointDrag.raycaster,
+      e,
+      camera,
+      canvas,
+      _partJointDrag.worldAxis,
+      _partJointDrag.worldOrigin,
+    )
+    if (!hit) return
+    const angle = angleInRing(hit, _partJointDrag.worldOrigin, _partJointDrag.worldAxis, _partJointDrag.refVec)
+    const delta = angle - _partJointDrag.startAngle
+    _partJointDrag.currentDelta = delta
+
+    const qLocal = new THREE.Quaternion().setFromAxisAngle(_partJointDrag.localAxis, delta)
+    assemblyRenderer.applyInstanceClusterTransform(
+      _partJointDrag.instId,
+      _partJointDrag.cluster,
+      _partJointDrag.localOrigin,
+      _partJointDrag.localOrigin,
+      qLocal,
+    )
+
+    // T(origin)·R(axis,delta)·T(-origin) — identical to the gear path's revolute
+    // delta, so share the tested helper instead of re-deriving it inline.
+    const worldDelta = rotationDeltaMatrix(
+      _partJointDrag.worldOrigin.toArray(),
+      _partJointDrag.worldAxis.toArray(),
+      delta,
+    )
+    _partJointDrag.currentWorldDelta.copy(worldDelta)
+    applyClusterMateFKLive(
+      _partJointDrag.assembly,
+      _partJointDrag.instId,
+      _partJointDrag.cluster.id,
+      worldDelta,
+      _partJointDrag.startTransforms,
+    )
+  }
+
+  function onAssemblyDragMove(e) {
+    if (_partJointDrag) {
+      _updatePartJointDrag(e)
+      return
+    }
+    if (_pendingFreeDrag) {
+      const dx = e.clientX - _pendingFreeDrag.startX
+      const dy = e.clientY - _pendingFreeDrag.startY
+      if (dx * dx + dy * dy < 25) return   // below threshold
+
+      const { instId, startNdc } = _pendingFreeDrag
+      _pendingFreeDrag   = null
+      setAssemblyPtrDownAt(null)   // prevent click-to-select on the upcoming click event
+
+      store.setState({ activeInstanceId: instId })
+      controls.enabled = false
+
+      const assembly = store.getState().currentAssembly
+      if (!assembly) return
+
+      const groupIds = getRigidBodyGroup(assembly, instId)
+      const groupStartTransforms = new Map()
+      for (const id of groupIds) {
+        const gi = assembly.instances.find(i => i.id === id)
+        if (gi) groupStartTransforms.set(id,
+          new THREE.Matrix4().fromArray(gi.transform.values).transpose())
+      }
+      const primaryMat = groupStartTransforms.get(instId)
+      if (!primaryMat) return
+
+      const worldPos = new THREE.Vector3().setFromMatrixPosition(primaryMat)
+      const camDir   = new THREE.Vector3()
+      camera.getWorldDirection(camDir)
+      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(camDir, worldPos)
+
+      const rc       = new THREE.Raycaster()
+      rc.setFromCamera(startNdc, camera)
+      const startHit = new THREE.Vector3()
+      if (!rc.ray.intersectPlane(plane, startHit)) return
+
+      _freeDrag = { instId, groupStartTransforms, assembly, plane, startHit, currentDelta: new THREE.Vector3() }
+      _updateFreeDragPosition(e)
+    } else if (_freeDrag) {
+      _updateFreeDragPosition(e)
+    }
+  }
+
+  function onAssemblyDragUp() {
+    canvas.removeEventListener('pointermove', onAssemblyDragMove)
+    canvas.removeEventListener('pointerup',   onAssemblyDragUp)
+    controls.enabled = true
+    _pendingFreeDrag = null
+    if (_partJointDrag) {
+      const drag = _partJointDrag
+      _partJointDrag = null
+      if (Math.abs(drag.currentDelta) < 1e-8) return
+      const clusterTransform = clusterTransformAfterJointDelta(drag.cluster, drag.joint, drag.currentDelta)
+      assemblyPendingPartJoints.set(`${drag.instId}:${drag.cluster.id}`, {
+        instanceId: drag.instId,
+        body: {
+          cluster_id: drag.cluster.id,
+          cluster_transform: clusterTransform,
+          joint_id: drag.joint.id,
+          joint_value: (drag.inst.joint_states?.[drag.joint.id] ?? 0) + drag.currentDelta,
+          delta_transform: { values: drag.currentWorldDelta.clone().transpose().toArray() },
+        },
+      })
+      return
+    }
+    if (_freeDrag) {
+      const drag = _freeDrag
+      _freeDrag = null
+      if (drag.currentDelta.lengthSq() < 1e-10) return   // no movement — nothing to commit
+      const dM           = new THREE.Matrix4().makeTranslation(
+        drag.currentDelta.x, drag.currentDelta.y, drag.currentDelta.z)
+      const primaryStart = drag.groupStartTransforms.get(drag.instId)
+      const primaryFinal = dM.clone().multiply(primaryStart)
+      api.propagateFk(drag.instId, primaryFinal.clone().transpose().toArray())
+        .catch(err => console.error('[assembly] free drag commit:', err))
+    }
+  }
+
+  // Arm a part-joint cluster drag: store the drag descriptor and attach the
+  // move/up listeners. Called from the pointer-down handler (still in main.js
+  // until sub-part (a)'s second commit) so the descriptor it builds drives the
+  // module-internal drag state.
+  function beginPartJointDrag(drag) {
+    _partJointDrag = drag
+    canvas.addEventListener('pointermove', onAssemblyDragMove)
+    canvas.addEventListener('pointerup',   onAssemblyDragUp)
+  }
+
+  // Tear down any in-flight free/part-joint drag (assembly-mode exit cleanup).
+  function cancelDrag() {
+    if (_pendingFreeDrag || _freeDrag) {
+      canvas.removeEventListener('pointermove', onAssemblyDragMove)
+      canvas.removeEventListener('pointerup',   onAssemblyDragUp)
+      _pendingFreeDrag = null
+      _freeDrag        = null
+      controls.enabled = true
+    }
+  }
   // Toggle an overhang into/out of the ordered assembly overhang selection.
   // First two entries become the Overhangs Manager's Side A / Side B on open.
   function _toggleAssemblyOverhangSelection(oh) {
@@ -189,5 +369,5 @@ export function initAssemblyPointer({
     }
   }
 
-  return { onAssemblyClick }
+  return { onAssemblyClick, onAssemblyDragMove, onAssemblyDragUp, beginPartJointDrag, cancelDrag }
 }

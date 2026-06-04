@@ -30,7 +30,6 @@ import { buildSpecMap, buildDomainMapFromDesign, buildDomainMapFromGeom, buildJu
 import { signedAngleFromWorldDelta, movingSideSignForRevolute, clampJointValue, gearEndpointSide, rotationDeltaMatrix } from './scene/gear_math.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, summarizeConstraint, constraintRelevantChanged } from './scene/assembly_diff.js'
 import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
-import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
 import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './scene/assembly_groups_util.js'
 import { initAssemblyPointer } from './scene/assembly_pointer.js'
@@ -9688,14 +9687,8 @@ Typical debugging workflow for "reverts to 3D" bug:
         canvas.removeEventListener('pointermove',  overhangHoverPicker.onHoverMove)
         canvas.removeEventListener('contextmenu',  _onAssemblyContextMenu)
         overhangHoverPicker.reset()
-        // Clean up any in-flight free drag
-        if (_pendingFreeDrag || _freeDrag) {
-          canvas.removeEventListener('pointermove', _onAssemblyDragMove)
-          canvas.removeEventListener('pointerup',   _onAssemblyDragUp)
-          _pendingFreeDrag = null
-          _freeDrag        = null
-          controls.enabled = true
-        }
+        // Clean up any in-flight free drag (handlers + state in assembly_pointer.js)
+        _assemblyPointer.cancelDrag()
         assemblyLasso.cancel()
         // Dispose the multi-select union box; setState below also fires the
         // subscriber which will re-dispose it, but doing it inline keeps the
@@ -10494,9 +10487,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   // browser still fires `contextmenu` on release — track this so the context
   // menu / selection is suppressed when the right-click was actually a pan.
   let _assemblyRightDownAt = null
-  let _pendingFreeDrag   = null   // { instId, startNdc, startX, startY }
-  let _freeDrag          = null   // { instId, groupStartTransforms, plane, startHit, currentDelta }
-  let _partJointDrag     = null
+  // Free/part-joint drag state moved into scene/assembly_pointer.js (sub-part a).
   let _assemblySelectedPartJoint = null
   let _selectedAssemblyCluster   = null  // { instanceId, clusterId } | null
 
@@ -10691,145 +10682,11 @@ Typical debugging workflow for "reverts to 3D" bug:
     scene.add(_assemblyMultiBox)
   }
 
-  function _updateFreeDragPosition(e) {
-    if (!_freeDrag) return
-    const rc = new THREE.Raycaster()
-    rc.setFromCamera(_canvasNdc(e), camera)
-    const hit = new THREE.Vector3()
-    if (!rc.ray.intersectPlane(_freeDrag.plane, hit)) return
-    _freeDrag.currentDelta.copy(hit).sub(_freeDrag.startHit)
-    const dM = new THREE.Matrix4().makeTranslation(
-      _freeDrag.currentDelta.x, _freeDrag.currentDelta.y, _freeDrag.currentDelta.z)
-    for (const [id, startMat] of _freeDrag.groupStartTransforms) {
-      const liveMat = dM.clone().multiply(startMat)
-      assemblyRenderer.setLiveTransform(id, liveMat)
-      assemblyJointRenderer.setLiveJointTransform(id, liveMat, _freeDrag.assembly)
-    }
-    _applyFKLive(_freeDrag.assembly, dM, [..._freeDrag.groupStartTransforms.keys()])
-  }
-
-  function _updatePartJointDrag(e) {
-    if (!_partJointDrag) return
-    const hit = ringPlaneHit(
-      _partJointDrag.raycaster,
-      e,
-      camera,
-      canvas,
-      _partJointDrag.worldAxis,
-      _partJointDrag.worldOrigin,
-    )
-    if (!hit) return
-    const angle = angleInRing(hit, _partJointDrag.worldOrigin, _partJointDrag.worldAxis, _partJointDrag.refVec)
-    const delta = angle - _partJointDrag.startAngle
-    _partJointDrag.currentDelta = delta
-
-    const qLocal = new THREE.Quaternion().setFromAxisAngle(_partJointDrag.localAxis, delta)
-    assemblyRenderer.applyInstanceClusterTransform(
-      _partJointDrag.instId,
-      _partJointDrag.cluster,
-      _partJointDrag.localOrigin,
-      _partJointDrag.localOrigin,
-      qLocal,
-    )
-
-    // T(origin)·R(axis,delta)·T(-origin) — identical to the gear path's revolute
-    // delta, so share the tested helper instead of re-deriving it inline.
-    const worldDelta = rotationDeltaMatrix(
-      _partJointDrag.worldOrigin.toArray(),
-      _partJointDrag.worldAxis.toArray(),
-      delta,
-    )
-    _partJointDrag.currentWorldDelta.copy(worldDelta)
-    _applyClusterMateFKLive(
-      _partJointDrag.assembly,
-      _partJointDrag.instId,
-      _partJointDrag.cluster.id,
-      worldDelta,
-      _partJointDrag.startTransforms,
-    )
-  }
-
-  function _onAssemblyDragMove(e) {
-    if (_partJointDrag) {
-      _updatePartJointDrag(e)
-      return
-    }
-    if (_pendingFreeDrag) {
-      const dx = e.clientX - _pendingFreeDrag.startX
-      const dy = e.clientY - _pendingFreeDrag.startY
-      if (dx * dx + dy * dy < 25) return   // below threshold
-
-      const { instId, startNdc } = _pendingFreeDrag
-      _pendingFreeDrag   = null
-      _assemblyPtrDownAt = null   // prevent click-to-select on the upcoming click event
-
-      store.setState({ activeInstanceId: instId })
-      controls.enabled = false
-
-      const assembly = store.getState().currentAssembly
-      if (!assembly) return
-
-      const groupIds = getRigidBodyGroup(assembly, instId)
-      const groupStartTransforms = new Map()
-      for (const id of groupIds) {
-        const gi = assembly.instances.find(i => i.id === id)
-        if (gi) groupStartTransforms.set(id,
-          new THREE.Matrix4().fromArray(gi.transform.values).transpose())
-      }
-      const primaryMat = groupStartTransforms.get(instId)
-      if (!primaryMat) return
-
-      const worldPos = new THREE.Vector3().setFromMatrixPosition(primaryMat)
-      const camDir   = new THREE.Vector3()
-      camera.getWorldDirection(camDir)
-      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(camDir, worldPos)
-
-      const rc       = new THREE.Raycaster()
-      rc.setFromCamera(startNdc, camera)
-      const startHit = new THREE.Vector3()
-      if (!rc.ray.intersectPlane(plane, startHit)) return
-
-      _freeDrag = { instId, groupStartTransforms, assembly, plane, startHit, currentDelta: new THREE.Vector3() }
-      _updateFreeDragPosition(e)
-    } else if (_freeDrag) {
-      _updateFreeDragPosition(e)
-    }
-  }
-
-  function _onAssemblyDragUp() {
-    canvas.removeEventListener('pointermove', _onAssemblyDragMove)
-    canvas.removeEventListener('pointerup',   _onAssemblyDragUp)
-    controls.enabled = true
-    _pendingFreeDrag = null
-    if (_partJointDrag) {
-      const drag = _partJointDrag
-      _partJointDrag = null
-      if (Math.abs(drag.currentDelta) < 1e-8) return
-      const clusterTransform = clusterTransformAfterJointDelta(drag.cluster, drag.joint, drag.currentDelta)
-      _assemblyPendingPartJoints.set(`${drag.instId}:${drag.cluster.id}`, {
-        instanceId: drag.instId,
-        body: {
-          cluster_id: drag.cluster.id,
-          cluster_transform: clusterTransform,
-          joint_id: drag.joint.id,
-          joint_value: (drag.inst.joint_states?.[drag.joint.id] ?? 0) + drag.currentDelta,
-          delta_transform: { values: drag.currentWorldDelta.clone().transpose().toArray() },
-        },
-      })
-      return
-    }
-    if (_freeDrag) {
-      const drag = _freeDrag
-      _freeDrag = null
-      if (drag.currentDelta.lengthSq() < 1e-10) return   // no movement — nothing to commit
-      const dM           = new THREE.Matrix4().makeTranslation(
-        drag.currentDelta.x, drag.currentDelta.y, drag.currentDelta.z)
-      const primaryStart = drag.groupStartTransforms.get(drag.instId)
-      const primaryFinal = dM.clone().multiply(primaryStart)
-      api.propagateFk(drag.instId, primaryFinal.clone().transpose().toArray())
-        .catch(err => console.error('[assembly] free drag commit:', err))
-    }
-  }
+  // Free/part-joint drag handlers + drag state lifted to
+  // scene/assembly_pointer.js (carve-up Tier 3, sub-part a). main.js keeps
+  // _onAssemblyPointerDown (below) which arms a part-joint drag via
+  // _assemblyPointer.beginPartJointDrag(); the move/up handlers and the
+  // exit-cleanup (_assemblyPointer.cancelDrag) live in the module.
 
   // ── Assembly canvas pointer handler (joint ring pick + instance selection) ──
   function _onAssemblyPointerDown(e) {
@@ -10900,7 +10757,7 @@ Typical debugging workflow for "reverts to 3D" bug:
                 assemblyRenderer.captureInstanceClusterBase(selInstId, cluster)
                 controls.enabled  = false
                 _assemblyPtrDownAt = null
-                _partJointDrag = {
+                _assemblyPointer.beginPartJointDrag({
                   instId: selInstId,
                   inst,
                   cluster,
@@ -10916,9 +10773,7 @@ Typical debugging workflow for "reverts to 3D" bug:
                   currentDelta: 0,
                   currentWorldDelta: new THREE.Matrix4(),
                   startTransforms,
-                }
-                canvas.addEventListener('pointermove', _onAssemblyDragMove)
-                canvas.addEventListener('pointerup',   _onAssemblyDragUp)
+                })
                 return
               }
             }
@@ -10952,7 +10807,7 @@ Typical debugging workflow for "reverts to 3D" bug:
               startTransforms.set(asmInst.id, _effectiveInstanceMatrix(asmInst))
             }
             assemblyRenderer.captureInstanceClusterBase(inst.id, cluster)
-            _partJointDrag = {
+            _assemblyPointer.beginPartJointDrag({
               instId: inst.id,
               inst,
               cluster,
@@ -10968,9 +10823,7 @@ Typical debugging workflow for "reverts to 3D" bug:
               currentDelta: 0,
               currentWorldDelta: new THREE.Matrix4(),
               startTransforms,
-            }
-            canvas.addEventListener('pointermove', _onAssemblyDragMove)
-            canvas.addEventListener('pointerup',   _onAssemblyDragUp)
+            })
             return
           }
           controls.enabled = true
@@ -11018,7 +10871,8 @@ Typical debugging workflow for "reverts to 3D" bug:
   // shims; clusterPanel is wired ~200 ln below so it comes in as a lazy getter.
   // `_toggleAssemblyOverhangSelection` (single-use) moved into the module.
   const _assemblyPointer = initAssemblyPointer({
-    store, camera, assemblyRenderer, assemblyJointRenderer, instanceGizmo,
+    store, camera, canvas, controls, api,
+    assemblyRenderer, assemblyJointRenderer, instanceGizmo,
     clusterGlowLayer, overhangHoverPicker,
     getClusterPanel:             () => clusterPanel,
     canvasNdc:                   _canvasNdc,
@@ -11029,6 +10883,9 @@ Typical debugging workflow for "reverts to 3D" bug:
     commitAssemblyPending:       _commitAssemblyPending,
     showProgress:                _showProgress,
     hideProgress:                _hideProgress,
+    applyFKLive:                 _applyFKLive,
+    applyClusterMateFKLive:      _applyClusterMateFKLive,
+    assemblyPendingPartJoints:   _assemblyPendingPartJoints,
     getAssemblyPtrDownAt:        () => _assemblyPtrDownAt,
     setAssemblyPtrDownAt:        (v) => { _assemblyPtrDownAt = v },
     getTranslateRotateActive:    () => _translateRotateActive,
