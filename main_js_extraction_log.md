@@ -60,6 +60,30 @@ _(Between #15 and #16, several interactive batches ran post-autonomous-loop and 
 | 33 | 2026-06-04 | DEBUG (Tier 3 — Polymerize region, kinematics-ticker wiring) | inline `window.nadocGearDebug` dump → `gearDebug()` method on existing `scene/kinematics_ticker.js`; main.js keeps the visibilitychange-flush + `__NADOC_KINEMATICS__` handle as thin DOM/window wiring; **de-interleaved** the mislabeled "Kinematics ticker" banner (blunt-end-sync + cluster-pick block now its own banner) | ~20 min | −19 (inside closure) | 3 (module's FIRST unit coverage: empty-dump shape / joint-summary-field-subset / log-tag+identical-return) | 1 (green first run) | 0 — debug-only console helper; verbatim dump move + smoke boot gate | none — vitest 396, smoke 21/21. Design call: DOM-listener registration stays at main-loop altitude (app-composition concern); the *data dump* moved into the module because it reads the ticker's internal `debugState`/gear graph. `kinematicsTicker.debugState?.() ?? null` → internal `debugState()` (always defined → behavior-identical). |
 | 34 | 2026-06-04 | STATEFUL (Tier 3 — Multi-select visual feedback) | `_updateAssemblyMultiBox` (purple union BoxHelper) → `scene/assembly_multi_box.js` factory `initAssemblyMultiBox({scene,store,assemblyRenderer})→{update,dispose}` + pure `instanceUnionBox(centers,wanted)` added to existing `scene/selection_bbox.js` | ~30 min | −37 (inside closure; banner "~192 ln" was overshoot — cohesive block is one ~46 ln fn) | 14 (5 pure union-box: union-half-extents/ignore-unwanted/skip-sizeless/null-no-match/null-all-sizeless + 9 jsdom factory: empty-no-draw/single-multiselect-suppressed/≥2-draws-purple-Box3Helper/single-member-active-group-draws/transitive-subgroup-fold/dispose-prior-no-dupe/drop-below-2-clears/dispose-removes) | 1 (green first run) | 0 — see caveat | none — vitest 409, smoke 21/21. **Hoisting gotcha:** the two `.update()` call sites (the `subscribeSlice('assembly')` subscriber @~9770 + the group-gizmo onDrag RAF @~10270) PRECEDE the old `function _updateAssemblyMultiBox` def @~10600 (worked via hoisting). A `const` factory isn't hoisted → moved the init to right before the `subscribeSlice('assembly')` registration (scene/store/assemblyRenderer all defined by then) — cleaner than the #26/#32 lazy-let since a single contiguous earlier spot dominates both call sites. Pure core paired into `selection_bbox.js` (already the selection-AABB home) rather than a new module. **Live purple-box gesture NOT hand-exercised** (needs a built ≥2-part assembly + Ctrl-lasso multi-select; no such fixture) — verbatim move + unit-tested + smoke boot gate, per #32/#24's accepted caveat. |
 
+| 35 | 2026-06-04 | STATEFUL (Tier 3 — Group gizmo region, sub-part a) | pure `revoluteCommitValue` (revolute gizmo-drag commit math) from `_revoluteGizmoCommitValue` → new `scene/group_gizmo.js` (seeds the module); main.js wrapper keeps the store-read + accumulator-clear | ~20 min | −5 (inside closure) | 7 (non-revolute→null / no-angle→null / wrong-joint→null / forward-side adds+endpoint-b / backward sideSign subtracts+endpoint-a / missing seed value→0 / clamp-to-limits) | 1 (green first run) | 0 — pure core; smoke run anyway given the region is the file's central transform hub | none — vitest 416, smoke 21/21. **De-risking first cut into the highest-coupling region.** (b)/(c) stateful gizmo-attach lifts NOT attempted — the gesture gate the handoff called "off-the-shelf" is **not** (no load-`.nass` harness helper, no group-select dev hook). Logged + handoff rewritten. |
+
+**Group-gizmo region — gesture-gate reality + coupling map (#35, 2026-06-04).** The carve-up handoff
+claimed the group-drag gesture gate was "off-the-shelf" (a built grouped assembly + e2e). **It is not.**
+`scene_harness.js` only *builds* fresh assemblies (`loadAssemblyWithParts`); Belt_test1.nass is a
+*file-source* assembly (2 groups / 10 instances_v2 / 8 joints / gear_relations + belt_paths) that must be
+OPENED, and there is **no load-existing-`.nass` harness helper** and **no group-select dev hook**. So the
+gate's two prerequisites (load-saved-`.nass` + enter-assembly, and a `__nadocTest` hook that sets
+`activeGroupId` to fire `_attachGroupGizmoForGroup`) must be built BEFORE `e2e/group_gizmo.spec.js` can
+exist. Per the loop's "build the gesture gate first" rule for HARD canvas-gesture regions, the stateful
+gizmo-attach lifts (b)/(c) were NOT forced. Banked only the safe pure de-risk (a).
+**Coupling map (verified by grepping every symbol in the region):** `_attachGroupGizmo` /
+`_attachGroupGizmoForGroup` pull on `_createAssemblyTransformContext` / `_createGroupTransformContext`,
+`_analyzeMotionConstraints`, `summarizeConstraint`, `_setMotionChip`, `instanceGizmo`, `assemblyRenderer` /
+`assemblyJointRenderer`, `_assemblyMultiBox`, `_mrAssemblyCtx`, and `_applyAssemblyPrimaryLive` /
+`_queueAssemblyPrimaryCommit` (the last two **shared** with the Move/Rotate fields at ~7653/7655 → can't
+just move them). The pending-state Maps (`_assemblyPendingTransforms` / `_assemblyPendingPartJoints`) are
+touched in ~10 file-wide sites (dev hooks @13631, exit-cleanup @9631, keyboard-commit @8456) → stay in
+main.js, pass by reference. **Self-contained sub-cluster found:** the gear-live revolute-drag engine
+(`_applyGearLiveForRevoluteDrag` + `_applyGearLiveJointValue` + the `_revoluteGizmoAngle` accumulator + its
+2 resets) is called ONLY by the two attach fns — a clean factory candidate that owns the angle state and
+drains ~140 ln, doable BEFORE the gate via the #32/#24 verbatim+unit+smoke caveat. That's the recommended
+next extraction (see carve-up handoff).
+
 **Assembly-gesture harness (2026-06-04) — prerequisite for the (a)/(b) lift.** Built the missing
 gate the coupling-wall note called for: a Playwright harness that drives the assembly canvas pointer
 handlers through the REAL raycast and asserts on exposed state (mirrors the design-view bead harness).
