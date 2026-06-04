@@ -132,6 +132,16 @@ into the template as a comment so the next one is quick):
 New reusable dev-only test hooks on `window.__nadocTest` (main.js): `getBackboneBeadScreenPositions(maxN)`
 and `getCtrlBeadCount()`.
 
+## Strategy shift (2026-06-03): pure helpers → stateful subsystems
+
+The pure-helper well is drained. main.js is still ~15.6k lines because the mass lives in stateful
+subsystems (panels/dialogs/menus/handler-clusters). Further decomposition now targets those, factory-
+extracted (`initX({deps})→{api}`) with gesture-e2e + smoke for interactive ones. The prioritized
+backlog — region → target module, est. size, dependency surface, risk tier, gesture-gate flag — lives
+in **`main_js_carveup.md`**. Each session claims ONE region from there. Run each batch in a FRESH
+session (token cost scales with conversation length; the log + carve-up map + main-init.md carry all
+the state a cold session needs).
+
 ## Difficulties ledger (for later attempts / the autonomous loop)
 
 Append-only. Record candidates that turned out NOT to be clean pure extractions, plus any
