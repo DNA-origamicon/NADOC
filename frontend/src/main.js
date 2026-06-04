@@ -32,7 +32,8 @@ import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange,
 import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
 import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
-import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds, resolveGroupClickThrough } from './scene/assembly_groups_util.js'
+import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './scene/assembly_groups_util.js'
+import { initAssemblyPointer } from './scene/assembly_pointer.js'
 import { heatmapHex, hexFromInt, atomColorsFromLetters } from './scene/color_util.js'
 import { initFretChecker } from './scene/fret_checker.js'
 import { motionChipStyle } from './scene/motion_chip.js'
@@ -11010,154 +11011,31 @@ Typical debugging workflow for "reverts to 3D" bug:
     getToolActive: () => !!store.getState().toolFilters?.overhangLocations,
   })
 
-  // Toggle an overhang into/out of the ordered assembly overhang selection.
-  // First two entries become the Overhangs Manager's Side A / Side B on open.
-  function _toggleAssemblyOverhangSelection(oh) {
-    const cur = store.getState().assemblyOverhangSelection ?? []
-    const idx = cur.findIndex(s => s.instanceId === oh.instanceId && s.overhangId === oh.overhangId)
-    const name = oh.label ? `“${oh.label}” ` : ''
-    let next
-    if (idx >= 0) {
-      next = cur.filter((_, i) => i !== idx)
-      showToast(`Overhang ${name}deselected`)
-    } else {
-      next = [...cur, { instanceId: oh.instanceId, overhangId: oh.overhangId, label: oh.label }]
-      const side = next.length === 1 ? 'A' : next.length === 2 ? 'B' : `#${next.length}`
-      showToast(`Overhang ${name}→ Side ${side}`)
-    }
-    store.setState({ assemblyOverhangSelection: next })
-  }
-
-  async function _onAssemblyClick(e) {
-    if (e.button !== 0) return
-    // Belt-define mode owns the canvas (revolute-marker + rim-connector picks).
-    // Suppress normal part/group selection so picking a rim doesn't box-select
-    // the part underneath it.
-    if (assemblyJointRenderer.isBeltMode() || assemblyJointRenderer.isAttachMode()) { _assemblyPtrDownAt = null; return }
-    if (!_assemblyPtrDownAt) return
-    const dx = e.clientX - _assemblyPtrDownAt.x
-    const dy = e.clientY - _assemblyPtrDownAt.y
-    _assemblyPtrDownAt = null
-    if (dx * dx + dy * dy > 25) return   // was a drag, not a click
-
-    // (Ctrl/Meta-click multi-select toggle now lives in the assembly-lasso
-    // factory's onClick: a tiny Ctrl-drag finalizes as a click → toggle. The
-    // former branch here was unreachable — Ctrl-pointerdown starts the lasso and
-    // never sets _assemblyPtrDownAt, so this handler never saw a Ctrl-click.)
-
-    // ── PartGroup click-through (PowerPoint-style) ─────────────────────────
-    // Behavior:
-    //  - Click a part that belongs to a group whose group is NOT currently
-    //    selected → select the GROUP (not the individual part). Visual: purple
-    //    union BoxHelper + group gizmo at centroid.
-    //  - Click a part inside the currently-selected group → "enter" the group:
-    //    push the gid onto groupDiveStack, clear activeGroupId, and fall
-    //    through to the regular single-instance selection below.
-    //  - Click an ungrouped part → falls through.
-    // The dive stack lets Escape (future) pop one level back to the group.
-    {
-      const sNow = store.getState()
-      const earlyHit = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
-      const decision = resolveGroupClickThrough({
-        assembly:       sNow.currentAssembly,
-        hitInstanceId:  earlyHit?.id ?? null,
-        activeGroupId:  sNow.activeGroupId,
-        groupDiveStack: sNow.groupDiveStack ?? [],
-      })
-      // selectGroup → first click on a grouped part: select the group, no
-      // fallthrough. enterGroup → second click on a member of the active group:
-      // push the dive stack and fall through so the part gets selected below.
-      if (decision.action === 'selectGroup') { store.setState(decision.patch); return }
-      if (decision.action === 'enterGroup') { store.setState(decision.patch) }
-    }
-
-    // Non-Ctrl click — always collapses any active multi-select back to either
-    // a fresh single-select (click on a part) or no selection (click on empty
-    // space). Without this, the purple union box stays painted after the user
-    // moves on and tries to interact with something else.
-    {
-      const s = store.getState()
-      if ((s.multiSelectedInstanceIds ?? []).length || s.activeGroupId) {
-        store.setState({ multiSelectedInstanceIds: [], activeGroupId: null, groupDiveStack: [] })
-      }
-    }
-
-    // Overhang selection — a click within a medium radius of an overhang
-    // toggles it into the ordered selection (which prefills the Overhangs
-    // Manager's Side A / Side B on open) and shows a green ring + persistent
-    // label, rather than selecting/moving the part. Gated on the overhang tool
-    // (the "ovhg" button → toolFilters.overhangLocations): when the tool is
-    // off, clicks ignore overhangs entirely and fall through to part selection.
-    // When on, a click that lands on anything that ISN'T an overhang (part body
-    // or empty space) clears the overhang selection, then falls through.
-    if (store.getState().toolFilters?.overhangLocations) {
-      const oh = overhangHoverPicker.nearestAt(e.clientX, e.clientY)
-      if (oh) { _toggleAssemblyOverhangSelection(oh); return }
-      if ((store.getState().assemblyOverhangSelection ?? []).length)
-        store.setState({ assemblyOverhangSelection: [] })
-    }
-
-    // While the move/rotate gizmo is active, a click ON the selected
-    // instance is left to the gizmo (it intercepts its own handle hits at
-    // pointerdown; a click on the instance body is a no-op so the user can
-    // grab handles freely).  A click ANYWHERE ELSE — empty space or a
-    // different instance — commits the pending transform, then falls
-    // through to normal selection (which may select + re-arm the gizmo on
-    // the new target, or clear the selection).  Replaces the green-check
-    // confirm button.
-    if (_translateRotateActive) {
-      // A click that landed on a gizmo handle (translate arrow / rotate
-      // ring) must not commit — the user is grabbing the gizmo.  The
-      // TransformControls `axis` is non-null while the cursor is over a
-      // handle.  Likewise a drag that just finished is handled by the
-      // gizmo's own dragging-changed → onCommit path.
-      if (instanceGizmo.getActiveAxis() || instanceGizmo.isDragging()) return
-      const hitDuringGizmo = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
-      if (hitDuringGizmo && hitDuringGizmo.id === store.getState().activeInstanceId) {
-        return  // click on the active instance body → leave the gizmo alone
-      }
-      await _confirmTranslateRotateTool()
-      // Fall through: this same click now (re)selects whatever was under it.
-    }
-
-    const inst   = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
-    const prevId = store.getState().activeInstanceId
-
-    // Re-clicking the already-active instance → pick cluster and highlight
-    if (inst && inst.id === prevId) {
-      const clusterHit = assemblyRenderer.pickInstanceCluster(_canvasNdc(e), camera, { scopeInstId: inst.id })
-      if (clusterHit?.cluster) {
-        const { entries, matrixWorld } = assemblyRenderer.getInstanceBackboneEntries(inst.id)
-        const design = assemblyRenderer.getInstanceDesign(inst.id)
-        const localEntries = _clusterBackboneEntries(clusterHit.cluster, design, entries)
-        const worldEntries = localEntries.map(e2 => ({ ...e2, pos: e2.pos.clone().applyMatrix4(matrixWorld) }))
-        clusterGlowLayer.setEntries(worldEntries)
-        clusterPanel?.selectAssemblyCluster?.(inst.id, clusterHit.cluster.id)
-        _selectedAssemblyCluster = { instanceId: inst.id, clusterId: clusterHit.cluster.id }
-        instanceGizmo.detach()
-      }
-      return
-    }
-
-    const newId = inst ? inst.id : null
-    if (newId !== prevId && _hasAssemblyPending()) {
-      _showProgress('Updating Assembly', 'Applying part transform…', { indeterminate: true })
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-      try {
-        await _commitAssemblyPending()
-      } finally {
-        _hideProgress()
-      }
-    }
-    if (newId !== prevId) _assemblySelectedPartJoint = null
-    store.setState({ activeInstanceId: newId })
-    // Selecting an instance by click immediately attaches the move/rotate
-    // gizmo so the user can manipulate it without an extra menu step.
-    // Skipped when the click cleared the selection (newId == null).
-    if (newId && newId !== prevId) {
-      await _activateTranslateRotateTool()
-    }
-  }
+  // Assembly canvas click (instance / cluster selection) lifted to
+  // scene/assembly_pointer.js (carve-up Tier 3, sub-part b). The four pieces of
+  // mutable state below are owned here (sibling handlers — pointer-down,
+  // contextmenu, cluster-context — also touch them) and passed in as get/set
+  // shims; clusterPanel is wired ~200 ln below so it comes in as a lazy getter.
+  // `_toggleAssemblyOverhangSelection` (single-use) moved into the module.
+  const _assemblyPointer = initAssemblyPointer({
+    store, camera, assemblyRenderer, assemblyJointRenderer, instanceGizmo,
+    clusterGlowLayer, overhangHoverPicker,
+    getClusterPanel:             () => clusterPanel,
+    canvasNdc:                   _canvasNdc,
+    clusterBackboneEntries:      _clusterBackboneEntries,
+    confirmTranslateRotateTool:  _confirmTranslateRotateTool,
+    activateTranslateRotateTool: _activateTranslateRotateTool,
+    hasAssemblyPending:          _hasAssemblyPending,
+    commitAssemblyPending:       _commitAssemblyPending,
+    showProgress:                _showProgress,
+    hideProgress:                _hideProgress,
+    getAssemblyPtrDownAt:        () => _assemblyPtrDownAt,
+    setAssemblyPtrDownAt:        (v) => { _assemblyPtrDownAt = v },
+    getTranslateRotateActive:    () => _translateRotateActive,
+    setSelectedAssemblyCluster:  (v) => { _selectedAssemblyCluster = v },
+    setAssemblySelectedPartJoint:(v) => { _assemblySelectedPartJoint = v },
+  })
+  const _onAssemblyClick = _assemblyPointer.onAssemblyClick
 
   // Right-click menu for an assembly cross-part linker. Mirrors the per-design
   // linker menu's "Relax linker": the assembly relax rigid-places the free part

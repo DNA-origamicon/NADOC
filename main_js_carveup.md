@@ -154,11 +154,24 @@ The largest single blocks and the most coupling into assembly state. Each needs 
     cluster drag and asserts a recorded rotation (covers #28's `rotationDeltaMatrix`). Writing it uncovered
     + FIXED a real bug: assembly per-instance designs weren't enriched with world joint axes, so the drag
     threw (`joint.axis_origin` undefined). See log.
-  - (a) ring-drag SHELL + (b) instance select: still inline, but now UNBLOCKED to lift. Verbatim-move
-    `_onAssemblyClick` (b) / `_onAssemblyPointerDown` + drag handlers (a) into `scene/assembly_pointer.js`
-    with get/set shims for the shared mutable state (`_selectedAssemblyCluster`, `_assemblySelectedPartJoint`,
-    `_assemblyRightDownAt`, `_assemblyPendingPartJoints` Map, read-only `_translateRotateActive`), gated by
-    `assembly_select.spec.js` + smoke. Do the lift in ≥2 commits (b first — it's covered by the spec; then a).
+  - **(b) instance select — DONE** (extraction #29, commit pending): `_onAssemblyClick` + its single-use
+    helper `_toggleAssemblyOverhangSelection` lifted to `scene/assembly_pointer.js` factory
+    `initAssemblyPointer({…})→{onAssemblyClick}`. Shared mutable state passed as get/set shims
+    (`_assemblyPtrDownAt` get+set; `_translateRotateActive` get; `_selectedAssemblyCluster` /
+    `_assemblySelectedPartJoint` set); `clusterPanel` (wired ~200 ln later) as a lazy getter. main.js keeps
+    the `const _onAssemblyClick = _assemblyPointer.onAssemblyClick` name so the two listener (de)register
+    sites are untouched. −122 ln off closure. 11 jsdom factory tests (non-left/belt/no-ptrdown/drag/
+    new-select+gizmo/empty-clears/reclick-cluster/overhang-toggle/group-click-through/gizmo-leave/
+    gizmo-commit-elsewhere). Gate: vitest 372 + `assembly_select.spec.js` 2/2 (real raycast = the app
+    exercise) + smoke 21/21. Removed now-dead `resolveGroupClickThrough` import from main.js (only the
+    module uses it). No TDZ: no top-level `await` precedes the const, so it's defined before any deferred
+    `_enterAssemblyMode`.
+  - (a) ring-drag SHELL: still inline, now the only remaining piece. Verbatim-move
+    `_onAssemblyPointerDown` + `_onAssemblyDragMove`/`_onAssemblyDragUp` into `scene/assembly_pointer.js`
+    with get/set shims for the shared state it ALSO touches (`_partJointDrag`, `_assemblyPtrDownAt`,
+    `_assemblySelectedPartJoint`, `_selectedAssemblyCluster`, `_assemblyRightDownAt`,
+    read-only `_translateRotateActive`), gated by `assembly_joint_drag.spec.js` + `assembly_select.spec.js`
+    + smoke. (b)'s shims are already in place to reuse.
 - [ ] **Polymerize / kinematics / joint-pick cluster** — banners `// ── Polymerize along a belt` …
   `// ── Joint arrow pick handler` (~8187–9171, ~984 ln) → MULTIPLE modules
   (`scene/kinematics_ticker.js` already exists — move ticker wiring there;
