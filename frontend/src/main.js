@@ -28,6 +28,7 @@ import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverag
 import { strandLengthNt, strandDomainNt } from './scene/strand_length.js'
 import { buildSpecMap, buildDomainMapFromDesign, buildDomainMapFromGeom, buildJunctionMapFromXovers, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
 import { signedAngleFromWorldDelta, movingSideSignForRevolute, clampJointValue, gearEndpointSide, rotationDeltaMatrix } from './scene/gear_math.js'
+import { revoluteCommitValue } from './scene/group_gizmo.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, summarizeConstraint, constraintRelevantChanged } from './scene/assembly_diff.js'
 import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
@@ -9913,13 +9914,10 @@ Typical debugging workflow for "reverts to 3D" bug:
   // joint authored "backward" (moving body = parent, fixed axle = child) rotates
   // the right part instead of the fixed axle. Consumes + clears the accumulator.
   function _revoluteGizmoCommitValue(constraint) {
-    if (constraint?.dof !== 'revolute') return null
-    if (!_revoluteGizmoAngle || _revoluteGizmoAngle.jointId !== constraint.jointId) return null
     const seedJoint = store.getState().currentAssembly?.joints?.find(j => j.id === constraint.jointId)
-    const sideSign = _revoluteGizmoAngle.sideSign
-    const v = (seedJoint?.current_value ?? 0) + _revoluteGizmoAngle.accum * sideSign
-    _revoluteGizmoAngle = null
-    return { current_value: clampJointValue(seedJoint, v), endpoint_side: sideSign < 0 ? 'a' : 'b' }
+    const out = revoluteCommitValue({ constraint, gizmoAngle: _revoluteGizmoAngle, seedJoint })
+    if (out != null) _revoluteGizmoAngle = null   // consume the accumulator on commit
+    return out
   }
 
   function _effectiveInstanceMatrix(inst) {
