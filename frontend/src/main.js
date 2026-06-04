@@ -38,6 +38,7 @@ import { fretQuenchedDonors } from './scene/fret_util.js'
 import { motionChipStyle } from './scene/motion_chip.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { selectionBBox } from './scene/selection_bbox.js'
+import { clientToNdc } from './scene/ndc.js'
 import { initAssemblyLasso } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
@@ -8471,11 +8472,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   function _canvasNdc(e) {
-    const r = canvas.getBoundingClientRect()
-    return {
-      x:  ((e.clientX - r.left) / r.width)  * 2 - 1,
-      y: -((e.clientY - r.top)  / r.height) * 2 + 1,
-    }
+    return clientToNdc(e.clientX, e.clientY, canvas.getBoundingClientRect())
   }
 
   function _clusterBackboneEntries(cluster, design, backboneEntries = null) {
