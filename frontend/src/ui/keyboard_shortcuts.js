@@ -13,25 +13,29 @@
  * overhang-orientation edit set, the translate/rotate active flag, the
  * assembly workspace path) is read through getters so the values stay live.
  *
+ * Registration order matters only for ambiguous key matches (first match wins);
+ * the original main.js order is preserved here (file/edit → view/tool toggles →
+ * Delete/Escape) even though all the keys are distinct.
+ *
  * @param {Object} deps
- * @param {Object} deps.store                       - app store (getState/setState)
- * @param {Object} deps.api                          - api client
- * @param {Object} deps.slicePlane
- * @param {Object} deps.expandedSpacing
- * @param {Object} deps.debugOverlay
- * @param {Object} deps.measurementTool
- * @param {Object} deps.selectionManager
- * @param {Function} deps.isUnfoldActive            - () => bool
- * @param {Function} deps.captureCurrentCamera      - () => camState
- * @param {Function} deps.setMenuToggle             - (id, on) => void
- * @param {Function} deps.frameSelectionOrAll       - () => void
- * @param {Function} deps.toggleUnfold              - () => void
- * @param {Function} deps.toggleCadnano             - () => void
- * @param {Function} deps.resetToAutoBaseline       - () => void
- * @param {Function} deps.reflectLockOnButtons      - (level) => void
+ * @param {Object} deps.store / deps.api
+ * @param {Object} deps.slicePlane / deps.expandedSpacing / deps.debugOverlay
+ * @param {Object} deps.measurementTool / deps.selectionManager
+ * @param {Object} deps.workspace / deps.deformView
+ * @param {Object} deps.crossSectionMinimap / deps.sliceHighlighter
+ * @param {Function} deps.isUnfoldActive / deps.isDeformActive / deps.isManualSelect
+ * @param {Function} deps.captureCurrentCamera / deps.frameSelectionOrAll
+ * @param {Function} deps.setMenuToggle / deps.reflectLockOnButtons / deps.resetToAutoBaseline
+ * @param {Function} deps.toggleUnfold / deps.toggleCadnano
+ * @param {Function} deps.savePartToAssembly / deps.saveAssemblyAsGuarded / deps.setAssemblyWorkspacePath
+ * @param {Function} deps.showWelcome / deps.ooClose / deps.cancelTranslateRotateTool
+ * @param {Function} deps.watchDeformState / deps.deformEscape / deps.popGroupUndo
  * @param {Function} deps.isTranslateRotateActive   - () => bool (live getter)
+ * @param {Function} deps.getPartEditContext        - () => ctx|null (live getter)
+ * @param {Function} deps.getAssemblyWorkspacePath  - () => path|null (live getter)
+ * @param {Function} deps.getOoActiveIds            - () => string[] (live getter)
  */
-import { registerShortcut } from '../input/shortcuts.js'
+import { registerShortcut, dispatchKeyEvent } from '../input/shortcuts.js'
 import { showToast } from './toast.js'
 
 // Tab cycle-lock drill levels (region-local consts, moved with the Tab handler).
@@ -42,10 +46,183 @@ export function initKeyboardShortcuts(deps) {
   const {
     store, api,
     slicePlane, expandedSpacing, debugOverlay, measurementTool, selectionManager,
-    isUnfoldActive, captureCurrentCamera, setMenuToggle, frameSelectionOrAll,
-    toggleUnfold, toggleCadnano, resetToAutoBaseline, reflectLockOnButtons,
-    isTranslateRotateActive,
+    workspace, deformView, crossSectionMinimap, sliceHighlighter,
+    isUnfoldActive, isDeformActive, isManualSelect,
+    captureCurrentCamera, frameSelectionOrAll,
+    setMenuToggle, reflectLockOnButtons, resetToAutoBaseline,
+    toggleUnfold, toggleCadnano,
+    savePartToAssembly, saveAssemblyAsGuarded, setAssemblyWorkspacePath,
+    showWelcome, ooClose, cancelTranslateRotateTool,
+    watchDeformState, deformEscape, popGroupUndo,
+    isTranslateRotateActive, getPartEditContext, getAssemblyWorkspacePath, getOoActiveIds,
   } = deps
+
+  // ── File / edit (Ctrl-modifier) ──────────────────────────────────────────
+
+  registerShortcut({
+    key: 'o', ctrl: true, shift: false,
+    description: 'Open design file',
+    handler(e) {
+      e.preventDefault()
+      document.getElementById('menu-file-open')?.click()
+    },
+  })
+
+  registerShortcut({
+    key: 's', ctrl: true, shift: false,
+    description: 'Save design or assembly',
+    handler(e) {
+      e.preventDefault()
+      if (getPartEditContext()) {
+        savePartToAssembly()
+      } else if (store.getState().assemblyActive) {
+        const modeEl = document.getElementById('mode-indicator')
+        const wsPath = getAssemblyWorkspacePath()
+        ;(wsPath ? api.saveAssemblyAs(wsPath) : api.saveAssemblyToWorkspace()).then(r => {
+          if (r) {
+            if (r.path) setAssemblyWorkspacePath(r.path)
+            modeEl.textContent = 'ASSEMBLY MODE — saved ✓'
+            setTimeout(() => { modeEl.textContent = 'ASSEMBLY MODE' }, 2000)
+          }
+        })
+      } else {
+        document.getElementById('menu-file-save')?.click()
+      }
+    },
+  })
+
+  registerShortcut({
+    key: 's', ctrl: true, shift: true,
+    description: 'Save as…',
+    handler(e) {
+      e.preventDefault()
+      // Ctrl+Shift+S dispatches by mode same as the menu Save As item.
+      if (store.getState().assemblyActive) {
+        saveAssemblyAsGuarded()
+      } else {
+        document.getElementById('menu-file-save-as')?.click()
+      }
+    },
+  })
+
+  registerShortcut({
+    key: 'z', ctrl: true, shift: false,
+    description: 'Undo',
+    blockedWhen: () => isDeformActive(),
+    async handler(e) {
+      e.preventDefault()
+      if (store.getState().assemblyActive) {
+        const result = await api.undoAssembly()
+        if (!result) {
+          const err = store.getState().lastError
+          if (err?.status === 404) {
+            document.getElementById('mode-indicator').textContent = 'Nothing to undo'
+            setTimeout(() => {
+              document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
+            }, 1500)
+          }
+        }
+        return
+      }
+      if (popGroupUndo()) return
+      const result = await api.undo()
+      if (!result) {
+        const err = store.getState().lastError
+        if (err?.status === 404) {
+          document.getElementById('mode-indicator').textContent = 'Nothing to undo'
+          setTimeout(() => {
+            document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+          }, 1500)
+        }
+      } else {
+        // Delta applied inside api.undo() via _responseDeltaHandler.
+        const { currentDesign } = store.getState()
+        if (!currentDesign?.helices?.length) {
+          slicePlane.hide()
+          workspace.show()
+          showWelcome()
+        }
+        if (!currentDesign?.deformations?.length && !deformView.isActive()) {
+          await deformView.activate()
+          setMenuToggle('menu-view-deform', true)
+          document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+        }
+      }
+    },
+  })
+
+  // Ctrl+Y — redo
+  registerShortcut({
+    key: 'y', ctrl: true,
+    description: 'Redo',
+    blockedWhen: () => isDeformActive(),
+    async handler(e) {
+      e.preventDefault()
+      if (store.getState().assemblyActive) {
+        const result = await api.redoAssembly()
+        if (!result) {
+          const err = store.getState().lastError
+          if (err?.status === 404) {
+            document.getElementById('mode-indicator').textContent = 'Nothing to redo'
+            setTimeout(() => {
+              document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
+            }, 1500)
+          }
+        }
+        return
+      }
+      const result = await api.redo()
+      if (!result) {
+        const err = store.getState().lastError
+        if (err?.status === 404) {
+          document.getElementById('mode-indicator').textContent = 'Nothing to redo'
+          setTimeout(() => {
+            document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+          }, 1500)
+        }
+      }
+      // Delta applied inside api.redo() via _responseDeltaHandler.
+    },
+  })
+
+  // Ctrl+Shift+Z — redo (alternate)
+  registerShortcut({
+    key: 'z', ctrl: true, shift: true,
+    description: 'Redo (alternate)',
+    blockedWhen: () => isDeformActive(),
+    async handler(e) {
+      e.preventDefault()
+      if (store.getState().assemblyActive) {
+        const result = await api.redoAssembly()
+        if (!result) {
+          const err = store.getState().lastError
+          if (err?.status === 404) {
+            document.getElementById('mode-indicator').textContent = 'Nothing to redo'
+            setTimeout(() => {
+              document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
+            }, 1500)
+          }
+        }
+        return
+      }
+      const result = await api.redo()
+      if (!result) {
+        const err = store.getState().lastError
+        if (err?.status === 404) {
+          document.getElementById('mode-indicator').textContent = 'Nothing to redo'
+          setTimeout(() => {
+            document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+          }, 1500)
+        }
+      }
+      // Delta applied inside api.redo() via _responseDeltaHandler.
+    },
+  })
+
+  // 's' is reserved for WASD pan-down — spreadsheet toggle removed.
+  // Use the sidebar tab or command palette instead.
+
+  // ── View / tool toggles + number hotkeys ─────────────────────────────────
 
   registerShortcut({
     key: 'u', ctrl: false,
@@ -97,6 +274,9 @@ export function initKeyboardShortcuts(deps) {
       expandedSpacing.toggle()
     },
   })
+
+  // 'd' is reserved for WASD pan-right — deform-view toggle removed.
+  // Use the View menu or assign a different key.
 
   registerShortcut({
     key: 'd', ctrl: false, shift: true,
@@ -267,4 +447,142 @@ export function initKeyboardShortcuts(deps) {
       store.setState({ toolFilters: { ...tf, overhangLocations: !tf.overhangLocations } })
     },
   })
+
+  // ── Delete / Escape ──────────────────────────────────────────────────────
+
+  registerShortcut({
+    key: 'Delete',
+    description: 'Delete selected strand, overhang, or unplace selected crossover',
+    blockedInInput: true,
+    async handler(e) {
+      e.preventDefault()
+      const { selectedObject, multiSelectedStrandIds, multiSelectedOverhangIds } = store.getState()
+
+      if (multiSelectedOverhangIds?.length > 0) {
+        const ids = [...multiSelectedOverhangIds]
+        selectionManager.clearMultiOverhangSelection?.()
+        ooClose()
+        await api.deleteOverhangs(ids)
+        return
+      }
+
+      if (multiSelectedStrandIds?.length > 0) {
+        const ids = [...multiSelectedStrandIds]
+        if (ids.length === 1) await api.deleteStrand(ids[0])
+        else await api.deleteStrandsBatch(ids)
+        return
+      }
+
+      const { multiSelectedDomainIds } = store.getState()
+      if (multiSelectedDomainIds?.length > 0) {
+        const ids = [...new Set(multiSelectedDomainIds.map(d => d.strandId))]
+        if (ids.length === 1) await api.deleteStrand(ids[0])
+        else await api.deleteStrandsBatch(ids)
+        return
+      }
+
+      const multiArcs = selectionManager.getMultiCrossoverArcs()
+      if (multiArcs.length > 0) {
+        selectionManager.clearMultiCrossoverArcs()
+        const design = store.getState().currentDesign
+        const flIds = new Set((design?.forced_ligations ?? []).map(fl => fl.id))
+
+        // Separate forced-ligation arcs from regular crossover arcs
+        const flArcIds = []
+        const nicks = []
+        for (const a of multiArcs) {
+          if (!a.fromNuc) continue
+          if (flIds.has(a.crossover_id)) {
+            flArcIds.push(a.crossover_id)
+          } else {
+            nicks.push({
+              helixId:   a.fromNuc.helix_id,
+              bpIndex:   a.fromNuc.bp_index,
+              direction: a.fromNuc.direction,
+            })
+          }
+        }
+
+        // Delete forced ligations (splits strands + removes FL records)
+        if (flArcIds.length === 1) await api.deleteForcedLigation(flArcIds[0])
+        else if (flArcIds.length > 1) await api.batchDeleteForcedLigations(flArcIds)
+
+        // Nick regular crossovers
+        if (nicks.length === 1) await api.addNick(nicks[0])
+        else if (nicks.length > 1) await api.addNickBatch(nicks)
+        return
+      }
+
+      if (!selectedObject) return
+
+      if (selectedObject.type === 'strand' || selectedObject.type === 'bead' || selectedObject.type === 'nucleotide') {
+        const strandId = selectedObject.data?.strand_id
+        if (strandId) await api.deleteStrand(strandId)
+      } else if (selectedObject.type === 'domain') {
+        const strandId = selectedObject.data?.strand_id
+        if (/^__lnk__.+__(a|b)$/.test(strandId ?? '')) await api.deleteStrand(strandId)
+      } else if (selectedObject.type === 'cone') {
+        const strandId = selectedObject.data?.strand_id
+        if (/^__lnk__.+__(a|b)$/.test(strandId ?? '')) {
+          await api.deleteStrand(strandId)
+          return
+        }
+        const fromNuc = selectedObject.data?.fromNuc
+        if (fromNuc) {
+          await api.addNick({
+            helixId:   fromNuc.helix_id,
+            bpIndex:   fromNuc.bp_index,
+            direction: fromNuc.direction,
+          })
+        }
+      }
+    },
+  })
+
+  // Escape — exit force crossover selection, deformation tool, or slice plane.
+  // Not blockedInInput so Escape always works regardless of focus.
+  registerShortcut({
+    key: 'Escape',
+    description: 'Cancel active tool / clear selection',
+    handler() {
+      if (getOoActiveIds().length > 0) {
+        ooClose()
+        return
+      }
+      if (measurementTool.isActive()) { measurementTool.clear() }
+      if (selectionManager.getCtrlBeads().length > 0) {
+        selectionManager.clearCtrlBeads()
+        return
+      }
+      if (isTranslateRotateActive()) {
+        cancelTranslateRotateTool()
+        return
+      }
+      if (isDeformActive()) {
+        deformEscape()
+        watchDeformState()
+        if (!isDeformActive()) {
+          document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+        }
+      } else if (slicePlane.isVisible()) {
+        slicePlane.hide()
+        crossSectionMinimap.clearSlice()
+        crossSectionMinimap.hide()
+        sliceHighlighter.clear()
+        setMenuToggle('menu-view-slice', false)
+        document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      } else if (selectionManager.getDrillLock?.()) {
+        // No active tool/popup — a Tab drill-lock returns to auto-drill.
+        selectionManager.setDrillLock(null)
+        reflectLockOnButtons(null)
+        showToast('Selection: auto-drill')
+      } else if (isManualSelect()) {
+        // A manually-pinned selection filter returns to auto-drill.
+        resetToAutoBaseline()
+        showToast('Selection: auto-drill')
+      }
+    },
+  })
+
+  document.addEventListener('keydown', dispatchKeyEvent)
 }

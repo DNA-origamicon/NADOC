@@ -27,12 +27,26 @@ function makeDeps(overrides = {}) {
   const store = createMockStore({
     currentDesign: { helices: [{}], camera_poses: [] },
     unfoldActive: false,
+    assemblyActive: false,
     toolFilters: { bluntEnds: false, crossoverLocations: false, overhangLocations: false },
+    selectedObject: null,
+    multiSelectedStrandIds: [],
+    multiSelectedOverhangIds: [],
+    multiSelectedDomainIds: [],
   })
   return {
     store,
-    api: { getDeformDebug: vi.fn(), createCameraPose: vi.fn() },
-    slicePlane: { isVisible: vi.fn(() => false) },
+    api: {
+      getDeformDebug: vi.fn(), createCameraPose: vi.fn(),
+      undo: vi.fn(async () => ({})), redo: vi.fn(async () => ({})),
+      undoAssembly: vi.fn(async () => ({})), redoAssembly: vi.fn(async () => ({})),
+      saveAssemblyAs: vi.fn(async () => ({})), saveAssemblyToWorkspace: vi.fn(async () => ({})),
+      deleteStrand: vi.fn(async () => ({})), deleteStrandsBatch: vi.fn(async () => ({})),
+      deleteOverhangs: vi.fn(async () => ({})), addNick: vi.fn(async () => ({})),
+      addNickBatch: vi.fn(async () => ({})),
+      deleteForcedLigation: vi.fn(async () => ({})), batchDeleteForcedLigations: vi.fn(async () => ({})),
+    },
+    slicePlane: { isVisible: vi.fn(() => false), hide: vi.fn() },
     expandedSpacing: { toggle: vi.fn() },
     debugOverlay: { toggle: vi.fn(), isActive: vi.fn(() => true) },
     measurementTool: { isActive: vi.fn(() => false), clear: vi.fn(), show: vi.fn() },
@@ -41,16 +55,38 @@ function makeDeps(overrides = {}) {
       setDrillLock: vi.fn(),
       getCtrlBeads: vi.fn(() => []),
       getCtrlBeadPos: vi.fn(() => [0, 0, 0]),
+      clearCtrlBeads: vi.fn(),
+      clearMultiOverhangSelection: vi.fn(),
+      getMultiCrossoverArcs: vi.fn(() => []),
+      clearMultiCrossoverArcs: vi.fn(),
     },
+    workspace: { show: vi.fn() },
+    deformView: { isActive: vi.fn(() => false), activate: vi.fn(async () => {}) },
+    crossSectionMinimap: { clearSlice: vi.fn(), hide: vi.fn() },
+    sliceHighlighter: { clear: vi.fn() },
     isUnfoldActive: vi.fn(() => false),
+    isDeformActive: vi.fn(() => false),
+    isManualSelect: vi.fn(() => false),
     captureCurrentCamera: vi.fn(() => ({ pos: [1, 2, 3] })),
-    setMenuToggle: vi.fn(),
     frameSelectionOrAll: vi.fn(),
+    setMenuToggle: vi.fn(),
+    reflectLockOnButtons: vi.fn(),
+    resetToAutoBaseline: vi.fn(),
     toggleUnfold: vi.fn(),
     toggleCadnano: vi.fn(),
-    resetToAutoBaseline: vi.fn(),
-    reflectLockOnButtons: vi.fn(),
+    savePartToAssembly: vi.fn(),
+    saveAssemblyAsGuarded: vi.fn(),
+    setAssemblyWorkspacePath: vi.fn(),
+    showWelcome: vi.fn(),
+    ooClose: vi.fn(),
+    cancelTranslateRotateTool: vi.fn(),
+    watchDeformState: vi.fn(),
+    deformEscape: vi.fn(),
+    popGroupUndo: vi.fn(() => false),
     isTranslateRotateActive: vi.fn(() => false),
+    getPartEditContext: vi.fn(() => null),
+    getAssemblyWorkspacePath: vi.fn(() => null),
+    getOoActiveIds: vi.fn(() => []),
     ...overrides,
   }
 }
@@ -219,5 +255,201 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     // Held key (repeat) does not re-toggle.
     await press('b', { repeat: true })
     expect(d.store.getState().toolFilters.bluntEnds).toBe(true)
+  })
+})
+
+describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
+  beforeEach(() => {
+    clearShortcuts()
+    clearDom()
+    mountIds({
+      'menu-file-open': 'button',
+      'menu-file-save': 'button',
+      'menu-file-save-as': 'button',
+      'mode-indicator': 'div',
+    })
+  })
+
+  it('Ctrl+O clicks the File>Open menu item', async () => {
+    const d = makeDeps()
+    initKeyboardShortcuts(d)
+    const click = vi.fn()
+    document.getElementById('menu-file-open').click = click
+    await press('o', { ctrl: true })
+    expect(click).toHaveBeenCalledTimes(1)
+  })
+
+  it("Ctrl+S routes by mode: part-edit→savePartToAssembly, assembly→saveAssemblyToWorkspace, else menu Save", async () => {
+    // part-edit context
+    let d = makeDeps({ getPartEditContext: vi.fn(() => ({ instanceId: 'x' })) })
+    initKeyboardShortcuts(d)
+    await press('s', { ctrl: true })
+    expect(d.savePartToAssembly).toHaveBeenCalled()
+
+    // assembly mode, no workspace path → saveAssemblyToWorkspace
+    clearShortcuts()
+    d = makeDeps()
+    d.store.setState({ assemblyActive: true })
+    initKeyboardShortcuts(d)
+    await press('s', { ctrl: true })
+    expect(d.api.saveAssemblyToWorkspace).toHaveBeenCalled()
+    expect(d.api.saveAssemblyAs).not.toHaveBeenCalled()
+
+    // plain design → clicks menu Save
+    clearShortcuts()
+    d = makeDeps()
+    initKeyboardShortcuts(d)
+    const click = vi.fn()
+    document.getElementById('menu-file-save').click = click
+    await press('s', { ctrl: true })
+    expect(click).toHaveBeenCalledTimes(1)
+  })
+
+  it('Ctrl+S in assembly mode WITH a workspace path uses saveAssemblyAs(path)', async () => {
+    const d = makeDeps({ getAssemblyWorkspacePath: vi.fn(() => 'workspace/foo.nass') })
+    d.store.setState({ assemblyActive: true })
+    initKeyboardShortcuts(d)
+    await press('s', { ctrl: true })
+    expect(d.api.saveAssemblyAs).toHaveBeenCalledWith('workspace/foo.nass')
+  })
+
+  it('Ctrl+Shift+S → saveAssemblyAsGuarded in assembly mode, else clicks Save As', async () => {
+    let d = makeDeps()
+    d.store.setState({ assemblyActive: true })
+    initKeyboardShortcuts(d)
+    await press('s', { ctrl: true, shift: true })
+    expect(d.saveAssemblyAsGuarded).toHaveBeenCalled()
+
+    clearShortcuts()
+    d = makeDeps()
+    initKeyboardShortcuts(d)
+    const click = vi.fn()
+    document.getElementById('menu-file-save-as').click = click
+    await press('s', { ctrl: true, shift: true })
+    expect(click).toHaveBeenCalledTimes(1)
+  })
+
+  it('Ctrl+Z undoes (design), is blocked during deform, short-circuits on group-undo, and undoes assembly in assembly mode', async () => {
+    // normal design undo
+    let d = makeDeps()
+    initKeyboardShortcuts(d)
+    await press('z', { ctrl: true })
+    expect(d.api.undo).toHaveBeenCalled()
+
+    // blocked while deform active (blockedWhen)
+    clearShortcuts()
+    d = makeDeps({ isDeformActive: vi.fn(() => true) })
+    initKeyboardShortcuts(d)
+    await press('z', { ctrl: true })
+    expect(d.api.undo).not.toHaveBeenCalled()
+
+    // group-undo short-circuits the api call
+    clearShortcuts()
+    d = makeDeps({ popGroupUndo: vi.fn(() => true) })
+    initKeyboardShortcuts(d)
+    await press('z', { ctrl: true })
+    expect(d.popGroupUndo).toHaveBeenCalled()
+    expect(d.api.undo).not.toHaveBeenCalled()
+
+    // assembly mode → undoAssembly
+    clearShortcuts()
+    d = makeDeps()
+    d.store.setState({ assemblyActive: true })
+    initKeyboardShortcuts(d)
+    await press('z', { ctrl: true })
+    expect(d.api.undoAssembly).toHaveBeenCalled()
+    expect(d.api.undo).not.toHaveBeenCalled()
+  })
+
+  it('Ctrl+Y / Ctrl+Shift+Z redo (design + assembly)', async () => {
+    let d = makeDeps()
+    initKeyboardShortcuts(d)
+    await press('y', { ctrl: true })
+    expect(d.api.redo).toHaveBeenCalledTimes(1)
+    await press('z', { ctrl: true, shift: true })
+    expect(d.api.redo).toHaveBeenCalledTimes(2)
+
+    clearShortcuts()
+    d = makeDeps()
+    d.store.setState({ assemblyActive: true })
+    initKeyboardShortcuts(d)
+    await press('y', { ctrl: true })
+    expect(d.api.redoAssembly).toHaveBeenCalled()
+  })
+
+  it('Delete: multi-overhang → deleteOverhangs + ooClose; single selected strand → deleteStrand', async () => {
+    let d = makeDeps()
+    d.store.setState({ multiSelectedOverhangIds: ['oh1', 'oh2'] })
+    initKeyboardShortcuts(d)
+    await press('Delete')
+    expect(d.selectionManager.clearMultiOverhangSelection).toHaveBeenCalled()
+    expect(d.ooClose).toHaveBeenCalled()
+    expect(d.api.deleteOverhangs).toHaveBeenCalledWith(['oh1', 'oh2'])
+
+    clearShortcuts()
+    d = makeDeps()
+    d.store.setState({ selectedObject: { type: 'strand', data: { strand_id: 's7' } } })
+    initKeyboardShortcuts(d)
+    await press('Delete')
+    expect(d.api.deleteStrand).toHaveBeenCalledWith('s7')
+  })
+
+  it('Delete with no selection is a no-op (no api calls)', async () => {
+    const d = makeDeps()
+    initKeyboardShortcuts(d)
+    await press('Delete')
+    expect(d.api.deleteStrand).not.toHaveBeenCalled()
+    expect(d.api.deleteOverhangs).not.toHaveBeenCalled()
+    expect(d.api.addNick).not.toHaveBeenCalled()
+  })
+
+  it('Escape cancels in priority order: oo edit → ctrl-beads → translate/rotate → deform → slice → drill-lock', async () => {
+    // oo edit set active
+    let d = makeDeps({ getOoActiveIds: vi.fn(() => ['oh']) })
+    initKeyboardShortcuts(d)
+    await press('Escape')
+    expect(d.ooClose).toHaveBeenCalled()
+
+    // ctrl-beads present → clearCtrlBeads (after measurement clear)
+    clearShortcuts()
+    d = makeDeps()
+    d.selectionManager.getCtrlBeads.mockReturnValue([{}])
+    initKeyboardShortcuts(d)
+    await press('Escape')
+    expect(d.selectionManager.clearCtrlBeads).toHaveBeenCalled()
+
+    // translate/rotate active → cancel tool
+    clearShortcuts()
+    d = makeDeps({ isTranslateRotateActive: vi.fn(() => true) })
+    initKeyboardShortcuts(d)
+    await press('Escape')
+    expect(d.cancelTranslateRotateTool).toHaveBeenCalled()
+
+    // deform active → deformEscape + watch
+    clearShortcuts()
+    d = makeDeps({ isDeformActive: vi.fn(() => true) })
+    initKeyboardShortcuts(d)
+    await press('Escape')
+    expect(d.deformEscape).toHaveBeenCalled()
+    expect(d.watchDeformState).toHaveBeenCalled()
+
+    // slice visible → hide slice + minimap
+    clearShortcuts()
+    d = makeDeps()
+    d.slicePlane.isVisible.mockReturnValue(true)
+    initKeyboardShortcuts(d)
+    await press('Escape')
+    expect(d.slicePlane.hide).toHaveBeenCalled()
+    expect(d.crossSectionMinimap.hide).toHaveBeenCalled()
+    expect(d.setMenuToggle).toHaveBeenCalledWith('menu-view-slice', false)
+
+    // drill lock set → back to auto-drill
+    clearShortcuts()
+    d = makeDeps()
+    d.selectionManager.getDrillLock.mockReturnValue('cluster')
+    initKeyboardShortcuts(d)
+    await press('Escape')
+    expect(d.selectionManager.setDrillLock).toHaveBeenCalledWith(null)
+    expect(d.reflectLockOnButtons).toHaveBeenCalledWith(null)
   })
 })
