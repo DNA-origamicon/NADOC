@@ -488,6 +488,16 @@ async function main() {
     addFrameCallback,
   })
 
+  // Forward-declared so the per-frame camera-clip callback below (which reads
+  // photoRenderer.getFloorReach) is safe before photoRenderer is created far
+  // below. Without this, any boot path that yields to requestAnimationFrame
+  // before that creation (e.g. the part-editor tab, which awaits its design
+  // fetch early) hits a `const` temporal-dead-zone throw INSIDE the frame
+  // callback — and since three.js reschedules the loop only AFTER the callback,
+  // one throw kills the render loop permanently (blank workspace). null until
+  // assigned; the callback no-ops via `?.` until then. (mirrors `clusterPanel`.)
+  let photoRenderer = null
+
   // ── Adaptive camera clipping for large assemblies ─────────────────────────
   // The camera's far plane is a fixed 2000 nm (sized for a single design — see
   // scene.js). A large assembly spans far more, so instances past 2000 nm from
@@ -10812,7 +10822,7 @@ Typical debugging workflow for "reverts to 3D" bug:
   })
 
   // ── Photo mode ───────────────────────────────────────────────────────────────
-  const photoRenderer = createPhotoRenderer(sceneCtx)
+  photoRenderer = createPhotoRenderer(sceneCtx)
   let _photoPanelCtrl = null
 
   // ── Export representation (final-render LOD) ───────────────────────────────
