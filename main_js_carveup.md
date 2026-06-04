@@ -143,10 +143,15 @@ The largest single blocks and the most coupling into assembly state. Each needs 
     added to existing `scene/assembly_groups_util.js` (co-located with `findOwningGroupId`, now no
     longer imported in main.js). 7 vitest. The scene pick + `setState` stay inline (verbatim patches).
     Pure → vitest+smoke gate (no gesture e2e: behavior-identical wiring). −10 ln off closure.
-  - (a) joint-ring pick + (b) instance select: STILL TODO — heavily entangled with `_partJointDrag`,
-    `_onAssemblyDragMove/Up`, `ringPlaneHit`/`angleInRing`/`makeRefVec`, `instanceGizmo`,
-    `_commitAssemblyPending`. The group-click-through gesture e2e (needs a built grouped assembly) is
-    the right gate when (b) lands — it shares the `_onAssemblyClick` handler.
+  - **(a) dedup — DONE** (extraction #28, commit pending): part-joint drag `worldDelta` now reuses the
+    tested `rotationDeltaMatrix` (gear_math) instead of an inline `T·R·T⁻¹` copy. −7 ln.
+  - (a) ring-drag SHELL + (b) instance select: **BLOCKED — coupling wall (see log #28).** Seven shared
+    mutable closure vars, four read/written by sibling handlers (contextmenu / panel-selection /
+    cluster-context / the translate-rotate tool's `_translateRotateActive` across ~25 sites). A factory
+    needs ~25 deps + get/set shims = non-verbatim rewiring, AND there's no assembly-drag gesture e2e
+    harness to validate it. Prerequisite before finishing: build an assembly-gesture harness (a built
+    multi-part mated assembly fixture + part-joint-drag / free-drag / cluster-re-click pick hooks). Do
+    NOT force a 25-dep factory without it.
 - [ ] **Polymerize / kinematics / joint-pick cluster** — banners `// ── Polymerize along a belt` …
   `// ── Joint arrow pick handler` (~8187–9171, ~984 ln) → MULTIPLE modules
   (`scene/kinematics_ticker.js` already exists — move ticker wiring there;

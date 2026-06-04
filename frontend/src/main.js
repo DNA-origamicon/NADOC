@@ -10731,18 +10731,13 @@ Typical debugging workflow for "reverts to 3D" bug:
       qLocal,
     )
 
-    const worldDelta = new THREE.Matrix4()
-      .makeRotationAxis(_partJointDrag.worldAxis, delta)
-      .premultiply(new THREE.Matrix4().makeTranslation(
-        _partJointDrag.worldOrigin.x,
-        _partJointDrag.worldOrigin.y,
-        _partJointDrag.worldOrigin.z,
-      ))
-      .multiply(new THREE.Matrix4().makeTranslation(
-        -_partJointDrag.worldOrigin.x,
-        -_partJointDrag.worldOrigin.y,
-        -_partJointDrag.worldOrigin.z,
-      ))
+    // T(origin)·R(axis,delta)·T(-origin) — identical to the gear path's revolute
+    // delta, so share the tested helper instead of re-deriving it inline.
+    const worldDelta = rotationDeltaMatrix(
+      _partJointDrag.worldOrigin.toArray(),
+      _partJointDrag.worldAxis.toArray(),
+      delta,
+    )
     _partJointDrag.currentWorldDelta.copy(worldDelta)
     _applyClusterMateFKLive(
       _partJointDrag.assembly,
