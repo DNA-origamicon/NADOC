@@ -14095,6 +14095,64 @@ Typical debugging workflow for "reverts to 3D" bug:
           bp_index: entry.nuc?.bp_index, direction: entry.nuc?.direction,
         }
       },
+
+      // ── Assembly gesture harness (mirrors the design-view hooks above) ─────
+      // Used by e2e/helpers/scene_harness.js to validate the assembly canvas
+      // pointer handlers (_onAssemblyPointerDown / _onAssemblyClick) — part
+      // selection, group click-through, joint pick. Dev-only, never shipped.
+
+      /** Occlusion-correct "which instance is front-most at this client point?" — the
+       *  REAL pick (same NDC + camera the click handler uses). null if nothing hit.
+       *  This is the identity oracle the gesture harness scans + clicks through. */
+      pickAssemblyInstanceAt(clientX, clientY) {
+        const ndc = clientToNdc(clientX, clientY, canvas.getBoundingClientRect())
+        const hit = assemblyRenderer.pickInstance?.(ndc, camera)
+        return hit ? { id: hit.id } : null
+      },
+      /** Selection-state oracles the retry loops assert against. */
+      getActiveInstanceId: () => store.getState().activeInstanceId ?? null,
+      getActiveGroupId:    () => store.getState().activeGroupId ?? null,
+      isAssemblyActive:    () => !!store.getState().assemblyActive,
+      /** Enter assembly mode on the doc's current server assembly. The 'a'
+       *  toggle was removed (real entry is opening/creating a .nass); this
+       *  mirrors that path's two steps — fetch into currentAssembly, then
+       *  _enterAssemblyMode (which attaches the canvas pointer handlers). */
+      async enterAssemblyMode() {
+        await api.getAssembly()
+        _enterAssemblyMode()
+      },
+      /** Deterministically frame the camera on the assembly's RENDERED geometry
+       *  (the actual instance meshes, not their transform origins — the rod body
+       *  is offset from a part's local origin). The auto-fit relies on the
+       *  renderer's bounding box, which is empty for these instances and fires
+       *  late, leaving the parts off-screen / under a side panel. Returns false
+       *  if no instance geometry is in the scene yet. */
+      frameAssemblyForTest() {
+        const bbox = new THREE.Box3()
+        let any = false
+        scene.traverse(o => {
+          if (o.userData?.assemblyInstance) {
+            o.updateWorldMatrix(true, true)
+            const b = new THREE.Box3().setFromObject(o)
+            if (!b.isEmpty() && isFinite(b.min.x) && isFinite(b.max.x)) { bbox.union(b); any = true }
+          }
+        })
+        if (!any) return false
+        const center = bbox.getCenter(new THREE.Vector3())
+        const size = bbox.getSize(new THREE.Vector3())
+        // View the broad face: place the camera dominantly along the SMALLEST
+        // bbox axis (the parts can be thin ribbons; an edge-on view makes the
+        // raycast graze past them and pick nothing).
+        const dims = [size.x, size.y, size.z]
+        const minAxis = dims.indexOf(Math.min(...dims))
+        const dist = Math.max(Math.max(...dims) * 0.85, 25)
+        const off = [0.25, 0.25, 0.25]; off[minAxis] = 1.0
+        camera.position.set(center.x + off[0] * dist, center.y + off[1] * dist, center.z + off[2] * dist)
+        camera.lookAt(center)
+        camera.updateMatrixWorld(true)
+        if (controls) { controls.target.copy(center); controls.update() }
+        return true
+      },
     }
   }
 

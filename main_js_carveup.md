@@ -145,13 +145,16 @@ The largest single blocks and the most coupling into assembly state. Each needs 
     Pure → vitest+smoke gate (no gesture e2e: behavior-identical wiring). −10 ln off closure.
   - **(a) dedup — DONE** (extraction #28, commit pending): part-joint drag `worldDelta` now reuses the
     tested `rotationDeltaMatrix` (gear_math) instead of an inline `T·R·T⁻¹` copy. −7 ln.
-  - (a) ring-drag SHELL + (b) instance select: **BLOCKED — coupling wall (see log #28).** Seven shared
-    mutable closure vars, four read/written by sibling handlers (contextmenu / panel-selection /
-    cluster-context / the translate-rotate tool's `_translateRotateActive` across ~25 sites). A factory
-    needs ~25 deps + get/set shims = non-verbatim rewiring, AND there's no assembly-drag gesture e2e
-    harness to validate it. Prerequisite before finishing: build an assembly-gesture harness (a built
-    multi-part mated assembly fixture + part-joint-drag / free-drag / cluster-re-click pick hooks). Do
-    NOT force a 25-dep factory without it.
+  - **Assembly-gesture harness — DONE (2026-06-04, prerequisite for the lift).** `e2e/assembly_select.spec.js`
+    (2 tests, stable) + harness helpers + dev hooks now drive the assembly canvas pointer handlers through
+    the real raycast and assert on selection state. This is the **(b) gesture gate**. Build notes + the 5
+    hard-won gotchas (v2 wire format, file-source-not-inline, broken auto-fit → deterministic framing,
+    thin-rod pixel precision, MOVE-mode occlusion) are in `main_js_extraction_log.md`.
+  - (a) ring-drag SHELL + (b) instance select: still inline, but now UNBLOCKED to lift. Verbatim-move
+    `_onAssemblyClick` (b) / `_onAssemblyPointerDown` + drag handlers (a) into `scene/assembly_pointer.js`
+    with get/set shims for the shared mutable state (`_selectedAssemblyCluster`, `_assemblySelectedPartJoint`,
+    `_assemblyRightDownAt`, `_assemblyPendingPartJoints` Map, read-only `_translateRotateActive`), gated by
+    `assembly_select.spec.js` + smoke. Do the lift in ≥2 commits (b first — it's covered by the spec; then a).
 - [ ] **Polymerize / kinematics / joint-pick cluster** — banners `// ── Polymerize along a belt` …
   `// ── Joint arrow pick handler` (~8187–9171, ~984 ln) → MULTIPLE modules
   (`scene/kinematics_ticker.js` already exists — move ticker wiring there;

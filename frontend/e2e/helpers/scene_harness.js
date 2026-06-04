@@ -45,9 +45,9 @@ export function trackConsoleErrors(page) {
  * rebuild, wait for backbone beads, then zoom past cylinder-LOD so beads are
  * full-scale + pickable. Returns once the scene has pickable beads.
  */
-export async function loadScaffoldedPart(page, { doc, name = 'harness' }) {
+export async function loadScaffoldedPart(page, { doc, name = 'harness', extraQuery = '' }) {
   const H = { 'Content-Type': 'application/json', 'X-NADOC-Doc': doc }
-  await page.goto(`/?doc=${doc}`)
+  await page.goto(`/?doc=${doc}${extraQuery}`)
   await page.waitForSelector('#canvas')
   const fileMenu = page.locator('.menu-item').filter({ hasText: 'File' }).first()
   await fileMenu.hover()
@@ -134,4 +134,204 @@ export async function altPickBeads(page, n = 2) {
     if (count === n) break
   }
   return count
+}
+
+// ── Assembly gesture harness ───────────────────────────────────────────────
+// The design-view helpers above pick backbone BEADS. The assembly canvas
+// pointer handlers (_onAssemblyPointerDown / _onAssemblyClick) instead pick
+// part INSTANCES, so these helpers build a rendered multi-part assembly and
+// drive instance selection through the real raycast + state oracles (same
+// robust pattern: pick → click → assert exposed state → retry on miss).
+
+/**
+ * Build a rendered multi-part assembly in a PINNED doc and enter assembly mode.
+ *
+ * The existing inline `MINIMAL_DESIGN` fixture (assembly_gizmo.spec.js) renders
+ * NOTHING — empty helices, so its instances have no pickable body and that spec
+ * selects via the panel row. For a canvas-gesture test we need real geometry,
+ * so this reuses `loadScaffoldedPart` to build a 200-bp design, captures it via
+ * the API, then adds it as `n` inline instances (offset on Y so their screen
+ * centres are distinct). Pressing `a` enters assembly mode → the pointer
+ * handlers attach and `_runAssemblyRebuild` fits the camera to the parts.
+ *
+ * Returns the instance ids in add order.
+ */
+export async function loadAssemblyWithParts(page, { doc, n = 2, name = 'asm' }) {
+  const H = { 'Content-Type': 'application/json', 'X-NADOC-Doc': doc }
+  // Force the per-instance renderer (?shared=0): it builds inline-source designs
+  // into a pickable cache, so pickInstance / getInstanceCenters work. The shared
+  // GPU path doesn't materialize a freshly-built inline design's geometry. The
+  // pointer HANDLERS under test (_onAssemblyClick / _onAssemblyPointerDown) call
+  // assemblyRenderer.pickInstance regardless of path, so this faithfully gates
+  // their selection wiring — only the renderer's pick implementation differs.
+  await loadScaffoldedPart(page, { doc, name, extraQuery: '&shared=0' })
+  // Save the built design to a workspace file and reference it as a FILE source.
+  // A freshly-built INLINE design doesn't reliably materialize geometry in the
+  // renderer; the file path goes through the server's standard geometry pipeline
+  // (load topology → derive B-DNA geometry), which is the app's real assembly
+  // case and renders reliably. `__e2e__` prefix → global-teardown removes it.
+  const partRel = `__e2e__${name}_part.nadoc`
+  await page.request.post(`${API}/design/save`, { data: { path: `workspace/${partRel}` }, headers: H })
+  await page.request.post(`${API}/assembly`, { data: { name: `__e2e__${name}` }, headers: H })
+  const ids = []
+  for (let i = 0; i < n; i++) {
+    // Row-major 4×4: translate on X by 25·i nm (last entry of row 0). Enough to
+    // separate the two thin rods on screen, small enough that both stay in view
+    // when the camera frames close (needed so the thin rods are fat targets).
+    const transform = { values: [1, 0, 0, 25 * i, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }
+    const r = await page.request.post(`${API}/assembly/instances`, {
+      data: { source: { type: 'file', path: partRel }, name: `Part ${i + 1}`, transform }, headers: H,
+    })
+    const body = await r.json()
+    // The doc-scoped path returns the .nass v2 wire format (instances_v2 +
+    // deduped sources); the legacy default-doc path returns instances.
+    const insts = body?.assembly?.instances_v2 ?? body?.assembly?.instances
+    if (!Array.isArray(insts) || !insts.length) {
+      throw new Error(`add-instance ${r.status()} asmKeys=${Object.keys(body.assembly ?? {}).join(',')}`)
+    }
+    ids.push(insts[insts.length - 1].id)
+  }
+  await page.evaluate(() => window.__nadocTest.enterAssemblyMode())
+  await expect(page.locator('#mode-indicator')).toContainText('ASSEMBLY', { timeout: 10_000 })
+  // Wait until at least one instance is pickable on the canvas (the real raycast
+  // resolves a part body somewhere on the grid).
+  // The renderer's bounding box is empty for these instances, so the assembly's
+  // auto-fit can't frame the camera (and worse, fires LATE and moves it to a
+  // bad pose). Frame deterministically from the instance transforms and wait
+  // until the framing is STABLE — two consecutive scans see clickable parts —
+  // so a late auto-fit has already fired and been corrected.
+  // The renderer's bounding box is empty for these instances, so the assembly's
+  // auto-fit can't frame the camera (and fires late, drifting it off). Frame
+  // deterministically on the rendered geometry and wait until the parts are
+  // STABLY pickable (two consecutive fine scans find a clickable part) — the
+  // rods are thin, so a coarse scan steps over them (see assemblyInstanceCandidates).
+  let cands = []
+  for (let t = 0; t < 24; t++) {
+    await frameAssembly(page)
+    await page.waitForTimeout(400)
+    cands = await assemblyInstanceCandidates(page)
+    if (cands.length) {
+      await page.waitForTimeout(400)
+      if ((await assemblyInstanceCandidates(page)).length) return ids
+    }
+  }
+  throw new Error('assembly instances never became stably pickable (framing / geometry)')
+}
+
+/** Deterministically aim the camera at the assembly instances (the auto-fit
+ *  can't, and may drift the camera off them). Call before any gesture so a late
+ *  auto-fit can't leave the parts off-screen. */
+export async function frameAssembly(page) {
+  await page.evaluate(() => window.__nadocTest.frameAssemblyForTest?.())
+  await page.waitForTimeout(120)
+}
+
+/** Bounding rects of the overlays that sit above the full-width canvas. */
+async function _overlayRects(page) {
+  const rects = []
+  for (const sel of ['#menu-bar', '#left-panel', '#right-panel', '#assembly-panel']) {
+    const b = await page.locator(sel).boundingBox().catch(() => null)
+    if (b) rects.push(b)
+  }
+  return rects
+}
+
+/**
+ * Grid-scan the canvas with the REAL raycast (`pickAssemblyInstanceAt`) and
+ * return one client point per pickable instance — the point closest to canvas
+ * centre (most reliably re-hittable). Renderer-agnostic: works wherever
+ * pickInstance does, without depending on getInstanceCenters (which is empty on
+ * the shared path and, for freshly-built inline designs, on the per-instance
+ * path too). Points under the menu bar / side panels are excluded.
+ */
+export async function assemblyInstanceCandidates(page) {
+  const box = await page.locator('#canvas').boundingBox()
+  const panels = await _overlayRects(page)
+  return page.evaluate(({ b, panels }) => {
+    const covered = (x, y) => panels.some(r => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height)
+    const cx = b.x + b.width / 2, cy = b.y + b.height / 2
+    const best = {}
+    // FINE grid: instances render as thin rods (~2 nm wide); a coarse grid steps
+    // over them. The scan runs in-browser (cheap raycasts), so density is free.
+    for (let fy = 0.1; fy <= 0.9; fy += 0.015) {
+      for (let fx = 0.05; fx <= 0.95; fx += 0.015) {
+        const x = b.x + b.width * fx, y = b.y + b.height * fy
+        if (covered(x, y)) continue
+        const h = window.__nadocTest.pickAssemblyInstanceAt(x, y)
+        if (!h) continue
+        const dc = Math.hypot(x - cx, y - cy)
+        if (!best[h.id] || dc < best[h.id].dc) best[h.id] = { x, y, dc }
+      }
+    }
+    return Object.entries(best).map(([id, p]) => ({ id, x: p.x, y: p.y }))
+  }, { b: box, panels })
+}
+
+/**
+ * Find the nearest INTEGER pixel to (cx,cy) at which the real pick resolves an
+ * instance (matching `want` if given), searching outward in rings. The clicked
+ * pixel must equal the pre-checked pixel — instances render as thin rods, so a
+ * float candidate rounded to the click's integer pixel can miss by 1px.
+ */
+async function _pixelForInstance(page, cx, cy, want) {
+  return page.evaluate(({ cx, cy, want }) => {
+    for (let r = 0; r <= 10; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue   // ring only
+          const x = Math.round(cx) + dx, y = Math.round(cy) + dy
+          const h = window.__nadocTest.pickAssemblyInstanceAt(x, y)
+          if (h && (!want || h.id === want)) return { x, y, id: h.id }
+        }
+      }
+    }
+    return null
+  }, { cx, cy, want })
+}
+
+/**
+ * Click a part instance on the canvas until it becomes the active instance.
+ * Locates an exact pickable integer pixel (ring search) so the click hits the
+ * same pixel the pick confirmed. Pass `{id}` to target a specific instance,
+ * else any. Returns the active id.
+ */
+export async function selectAssemblyInstance(page, { id = null } = {}) {
+  await frameAssembly(page)
+  const cands = await assemblyInstanceCandidates(page)
+  const targets = id ? cands.filter(c => c.id === id) : cands
+  for (const c of targets) {
+    const px = await _pixelForInstance(page, c.x, c.y, id)
+    if (!px) continue
+    await page.mouse.click(px.x, px.y)
+    await page.waitForTimeout(250)
+    const active = await page.evaluate(() => window.__nadocTest.getActiveInstanceId())
+    if (active && (!id || active === id)) return active
+  }
+  return page.evaluate(() => window.__nadocTest.getActiveInstanceId())
+}
+
+/**
+ * Click a point on the canvas that the real pick reports as EMPTY (no instance),
+ * avoiding the menu bar, side panels, and the bottom-left ✓ confirm button.
+ * Used to assert that an empty click clears the assembly selection.
+ */
+export async function clickEmptyAssemblySpace(page) {
+  const box = await page.locator('#canvas').boundingBox()
+  const rects = []
+  for (const sel of ['#menu-bar', '#left-panel', '#right-panel', '#assembly-panel']) {
+    const b = await page.locator(sel).boundingBox().catch(() => null)
+    if (b) rects.push(b)
+  }
+  const covered = (p) => rects.some(r => p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height)
+  // Scan a coarse grid, skip the top 50px (menu) and bottom 70px (confirm btn).
+  for (let fy = 0.25; fy <= 0.75; fy += 0.15) {
+    for (let fx = 0.08; fx <= 0.5; fx += 0.12) {
+      const p = { x: box.x + box.width * fx, y: box.y + box.height * fy }
+      if (p.y < box.y + 50 || p.y > box.y + box.height - 70) continue
+      if (covered(p)) continue
+      const hit = await page.evaluate(([X, Y]) => window.__nadocTest.pickAssemblyInstanceAt(X, Y), [p.x, p.y])
+      if (!hit) { await page.mouse.click(p.x, p.y); await page.waitForTimeout(400); return p }
+    }
+  }
+  return null
 }

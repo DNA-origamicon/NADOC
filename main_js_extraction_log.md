@@ -54,6 +54,45 @@ _(Between #15 and #16, several interactive batches ran post-autonomous-loop and 
 
 | 28 | 2026-06-04 | DEDUP (Tier 3 sub-part a) | Part-joint drag `worldDelta` (inline `T(origin)·R·T(-origin)` in `_updatePartJointDrag`) → reuse existing tested `rotationDeltaMatrix` (gear_math, #7) | ~20 min | −7 (inside closure; 1 copy collapsed into the gear path's helper) | 0 new (reuses #7's 3 tests; mathematically identical) | 1 (green first run) | 0 (verbatim-equivalent matrix; smoke 21/21) | none — vitest 361, smoke 21/21 |
 
+**Assembly-gesture harness (2026-06-04) — prerequisite for the (a)/(b) lift.** Built the missing
+gate the coupling-wall note called for: a Playwright harness that drives the assembly canvas pointer
+handlers through the REAL raycast and asserts on exposed state (mirrors the design-view bead harness).
+Shipped:
+- **Dev hooks** (`main.js`, `import.meta.env.DEV` only, no prod behavior change): `pickAssemblyInstanceAt`
+  (occlusion-correct identity oracle via `assemblyRenderer.pickInstance`), `getActiveInstanceId` /
+  `getActiveGroupId` / `isAssemblyActive` (state oracles), `enterAssemblyMode` (the `'a'` toggle was
+  REMOVED — real entry is open/create a .nass; the hook mirrors that: `api.getAssembly()` → currentAssembly,
+  then `_enterAssemblyMode()` attaches the handlers), `frameAssemblyForTest` (deterministic camera framing —
+  see gotchas).
+- **Harness helpers** (`e2e/helpers/scene_harness.js`): `loadAssemblyWithParts` (build a rendered N-part
+  assembly), `assemblyInstanceCandidates` (fine grid-scan of the pick oracle), `selectAssemblyInstance`
+  (ring-search exact pickable pixel → click → assert), `clickEmptyAssemblySpace`, `frameAssembly`.
+- **Spec** `e2e/assembly_select.spec.js`: canvas-click selects a part; empty click clears; click switches
+  between parts. 2/2, stable under `--repeat-each=2` (4/4). This is the **(b) instance-select gesture gate**.
+
+**Hard-won gotchas (the reason this took a full batch — bank these for the next attempt):**
+1. **Wire format:** doc-scoped `/assembly` returns `.nass v2` (`instances_v2` + deduped `sources`), NOT
+   `instances`. `assembly_gizmo.spec.js` reads `.instances` (legacy default-doc) and is stale.
+2. **Inline sources don't render** a freshly-built design's geometry on either renderer path (flaky/empty).
+   Use a **file source**: `POST /design/save {path:'workspace/__e2e__*.nadoc'}` then
+   `source:{type:'file', path:'__e2e__*.nadoc'}` (resolves against the workspace dir) — the server geometry
+   pipeline is reliable. Force `?shared=0` (per-instance renderer) so inline/file builds into a pickable cache.
+3. **Auto-fit is broken for these instances** — the renderer's bounding box is empty (so `getInstanceCenters`
+   is empty AND auto-fit can't frame), and it fires LATE, drifting the camera off the parts. Frame
+   deterministically from the **rendered geometry** (`Box3().setFromObject` on `userData.assemblyInstance`
+   groups), view the **broad face** (camera along the smallest bbox axis — parts are thin ribbons, edge-on
+   views graze past), and converge on a STABLE framing (two consecutive scans see clickable parts).
+4. **Thin-rod pixel precision:** parts render as ~2 nm rods; the pre-checked pick pixel must EQUAL the
+   clicked integer pixel (Playwright rounds), so a float candidate misses by 1px. Ring-search for an exact
+   integer pixel where `pickInstance` resolves the target id, then click THAT pixel. (The bead-harness
+   "retry on miss" lesson, applied to instances.)
+5. **MOVE-mode occlusion:** selecting a part auto-arms the translate gizmo; clear (empty click, also exits
+   MOVE) before selecting another so the gizmo doesn't sit over the next target.
+
+**Next:** with this gate green, verbatim-lift (b) instance-select (and then (a) ring-drag) from
+`_onAssemblyClick`/`_onAssemblyPointerDown` into `scene/assembly_pointer.js`, running `assembly_select.spec.js`
++ smoke as the gate. The shared mutable state still needs get/set shims (see the coupling-wall note below).
+
 **Tier-3 (a)/(b) COUPLING WALL (#28, 2026-06-04):** investigated factory-lifting the stateful shells of (a) joint-ring pick (`_onAssemblyPointerDown` + `_updatePartJointDrag`/`_onAssemblyDragMove`/`_onAssemblyDragUp`) and (b) instance select (`_onAssemblyClick` tail). **Not safely extractable in one batch.** The handlers share SEVEN mutable closure vars, several read/written by *sibling* handlers outside the region: `_partJointDrag`/`_freeDrag`/`_pendingFreeDrag`/`_assemblyPtrDownAt` (local to the cluster) but `_assemblyRightDownAt` (also contextmenu), `_assemblySelectedPartJoint` (also cluster-context), `_selectedAssemblyCluster` (also panel-selection @9866 + cluster-context @11249/11264), `_assemblyPendingPartJoints` (Map shared with commit), and `_translateRotateActive` (read here, owned/written by the translate-rotate tool in ~25 sites). A factory would need ~25 deps + get/set shims for 4 cross-handler vars — that rewiring is NOT verbatim (real semantic change) and there is **no assembly-drag gesture e2e harness** (scene_harness is design-view bead-picking only; validating part-joint rotation / free-drag / cluster re-click needs a built multi-part *mated* assembly fixture). Per the loop's "too coupled → log and stop, don't force" rule, lifted only the safe pure dedup (#28) and stopped. The pure cores beyond it are trivial (a 1-line world-entry map, duplicated twice) — not worth a module. **To finish (a)/(b): build an assembly-gesture harness first (prerequisite), then verbatim-lift the shells with get/set shims.** Flagged to user.
 
 **Tier-3 note (#27):** first cut into the HIGHEST-coupling region (Assembly canvas pointer handler, ~340 ln across `_onAssemblyPointerDown` + `_onAssemblyClick` + drag-move/up). Only sub-part (c) is cleanly pure — it's a store-state decision given the picked instance. Lifted it to the module where `findOwningGroupId` already lives (which is now no longer imported in main.js). (a) joint-ring pick and (b) instance select remain — both entangled with `_partJointDrag`/drag-move-up/`ringPlaneHit`/`instanceGizmo`/`_commitAssemblyPending` and need the gesture e2e (built grouped assembly) when (b) lands. Lesson: in a HIGH-coupling handler, the pure *decision* branches lift out cleanly first and de-risk the stateful remainder.
