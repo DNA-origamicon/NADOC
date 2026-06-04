@@ -27,6 +27,45 @@ export function collectGroupMemberInstanceIds(assembly, groupId) {
   return out
 }
 
+/**
+ * Decide how a plain (non-Ctrl) assembly click on a part affects PartGroup
+ * selection state, BEFORE individual-part selection runs. Pure: reads the
+ * picked instance + current group-selection state, returns the action the
+ * caller must take. The scene raycast (which instance was hit) stays at the
+ * call site; only the PowerPoint-style click-through logic lives here.
+ *
+ * Semantics (see project-assembly-groups):
+ *  - Click a grouped part whose group is NOT active → select the GROUP, stop
+ *    (no fallthrough to part selection).
+ *  - Click a member of the already-active group → "enter" the group (push the
+ *    gid onto groupDiveStack, clear activeGroupId) and fall through so the part
+ *    gets selected.
+ *  - Click an ungrouped part (or no part) → fall through, no state change.
+ *
+ * @param {object} args
+ * @param {object|null} args.assembly        currentAssembly (or null)
+ * @param {string|null} args.hitInstanceId   instance under the click, or null
+ * @param {string|null} args.activeGroupId   currently-selected group id, or null
+ * @param {string[]}    [args.groupDiveStack] current dive stack
+ * @returns {{action:'selectGroup'|'enterGroup'|'none', patch?:object}}
+ *   `selectGroup` → apply patch + return (stop). `enterGroup` → apply patch +
+ *   fall through. `none` → fall through, no patch.
+ */
+export function resolveGroupClickThrough({ assembly, hitInstanceId, activeGroupId, groupDiveStack = [] }) {
+  const owningGid = hitInstanceId ? findOwningGroupId(assembly, hitInstanceId) : null
+  if (!hitInstanceId || !owningGid) return { action: 'none' }
+  if (activeGroupId !== owningGid) {
+    return {
+      action: 'selectGroup',
+      patch: { activeGroupId: owningGid, activeInstanceId: null, multiSelectedInstanceIds: [], groupDiveStack: [] },
+    }
+  }
+  return {
+    action: 'enterGroup',
+    patch: { activeGroupId: null, groupDiveStack: [...groupDiveStack, owningGid] },
+  }
+}
+
 /** Set of instance ids hidden by any `visible:false` group (recursing subgroups). */
 export function computeGroupHiddenInstanceIds(assembly) {
   const out = new Set()

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds, findOwningGroupId } from './assembly_groups_util.js'
+import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds, findOwningGroupId, resolveGroupClickThrough } from './assembly_groups_util.js'
 
 const set = (s) => [...s].sort()
 
@@ -76,5 +76,53 @@ describe('findOwningGroupId', () => {
   it('null when no group owns it / null assembly', () => {
     expect(findOwningGroupId(asm, 'zzz')).toBeNull()
     expect(findOwningGroupId(null, 'a')).toBeNull()
+  })
+})
+
+describe('resolveGroupClickThrough', () => {
+  const asm = { groups: [
+    { id: 'g1', instance_ids: ['a', 'b'] },
+    { id: 'g2', instance_ids: ['c'] },
+  ] }
+
+  it('no hit → none (click on empty space)', () => {
+    expect(resolveGroupClickThrough({ assembly: asm, hitInstanceId: null, activeGroupId: null })
+      .action).toBe('none')
+  })
+
+  it('ungrouped part → none (falls through to normal select)', () => {
+    expect(resolveGroupClickThrough({ assembly: asm, hitInstanceId: 'ungrouped', activeGroupId: null })
+      .action).toBe('none')
+  })
+
+  it('first click on a grouped part → selectGroup with full reset patch', () => {
+    const r = resolveGroupClickThrough({ assembly: asm, hitInstanceId: 'a', activeGroupId: null, groupDiveStack: [] })
+    expect(r.action).toBe('selectGroup')
+    expect(r.patch).toEqual({
+      activeGroupId: 'g1', activeInstanceId: null, multiSelectedInstanceIds: [], groupDiveStack: [],
+    })
+  })
+
+  it('click a grouped part while a DIFFERENT group is active → selectGroup (switch)', () => {
+    const r = resolveGroupClickThrough({ assembly: asm, hitInstanceId: 'c', activeGroupId: 'g1' })
+    expect(r.action).toBe('selectGroup')
+    expect(r.patch.activeGroupId).toBe('g2')
+  })
+
+  it('click a member of the ACTIVE group → enterGroup, pushes gid onto dive stack', () => {
+    const r = resolveGroupClickThrough({ assembly: asm, hitInstanceId: 'b', activeGroupId: 'g1', groupDiveStack: [] })
+    expect(r.action).toBe('enterGroup')
+    expect(r.patch).toEqual({ activeGroupId: null, groupDiveStack: ['g1'] })
+  })
+
+  it('enterGroup preserves an existing dive stack (append, not replace)', () => {
+    const r = resolveGroupClickThrough({ assembly: asm, hitInstanceId: 'a', activeGroupId: 'g1', groupDiveStack: ['gx'] })
+    expect(r.patch.groupDiveStack).toEqual(['gx', 'g1'])
+  })
+
+  it('does not mutate the passed-in dive stack', () => {
+    const stack = ['gx']
+    resolveGroupClickThrough({ assembly: asm, hitInstanceId: 'a', activeGroupId: 'g1', groupDiveStack: stack })
+    expect(stack).toEqual(['gx'])
   })
 })

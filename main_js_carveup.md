@@ -134,10 +134,19 @@ per direction with a handler table.
 The largest single blocks and the most coupling into assembly state. Each needs a gesture e2e
 (scene_harness) + smoke. Split the giant ones; don't extract 900 lines in one commit.
 
-- [ ] **Assembly canvas pointer handler** — banner `// ── Assembly canvas pointer handler` +
-  `// ── PartGroup click-through` (~11298–11815, ~517 ln) → `scene/assembly_pointer.js`. Deps:
+- [~] **Assembly canvas pointer handler** — banner `// ── Assembly canvas pointer handler` +
+  `// ── PartGroup click-through` (~10838–11174 now, ~340 ln) → `scene/assembly_pointer.js`. Deps:
   assemblyRenderer, camera, store, group helpers, lasso. Contains `_onAssemblyClick`. GESTURE E2E.
   Risk: HIGH. **Split:** (a) joint-ring pick, (b) instance select, (c) group click-through.
+  - **(c) group click-through — DONE** (extraction #27, commit pending): pure decision
+    `resolveGroupClickThrough({assembly,hitInstanceId,activeGroupId,groupDiveStack})→{action,patch}`
+    added to existing `scene/assembly_groups_util.js` (co-located with `findOwningGroupId`, now no
+    longer imported in main.js). 7 vitest. The scene pick + `setState` stay inline (verbatim patches).
+    Pure → vitest+smoke gate (no gesture e2e: behavior-identical wiring). −10 ln off closure.
+  - (a) joint-ring pick + (b) instance select: STILL TODO — heavily entangled with `_partJointDrag`,
+    `_onAssemblyDragMove/Up`, `ringPlaneHit`/`angleInRing`/`makeRefVec`, `instanceGizmo`,
+    `_commitAssemblyPending`. The group-click-through gesture e2e (needs a built grouped assembly) is
+    the right gate when (b) lands — it shares the `_onAssemblyClick` handler.
 - [ ] **Polymerize / kinematics / joint-pick cluster** — banners `// ── Polymerize along a belt` …
   `// ── Joint arrow pick handler` (~8187–9171, ~984 ln) → MULTIPLE modules
   (`scene/kinematics_ticker.js` already exists — move ticker wiring there;

@@ -32,7 +32,7 @@ import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange,
 import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
 import { clusterTransformAfterJointDelta } from './scene/cluster_joint_math.js'
 import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
-import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds, findOwningGroupId } from './scene/assembly_groups_util.js'
+import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds, resolveGroupClickThrough } from './scene/assembly_groups_util.js'
 import { heatmapHex, hexFromInt, atomColorsFromLetters } from './scene/color_util.js'
 import { initFretChecker } from './scene/fret_checker.js'
 import { motionChipStyle } from './scene/motion_chip.js'
@@ -11063,26 +11063,17 @@ Typical debugging workflow for "reverts to 3D" bug:
     {
       const sNow = store.getState()
       const earlyHit = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
-      const owningGid = earlyHit ? findOwningGroupId(sNow.currentAssembly, earlyHit.id) : null
-      if (earlyHit && owningGid && sNow.activeGroupId !== owningGid) {
-        // First click on a grouped part → select the group, no fallthrough.
-        store.setState({
-          activeGroupId:            owningGid,
-          activeInstanceId:         null,
-          multiSelectedInstanceIds: [],
-          groupDiveStack:           [],
-        })
-        return
-      }
-      if (earlyHit && owningGid && sNow.activeGroupId === owningGid) {
-        // Second click on a member of the active group → enter the group;
-        // fall through so the existing flow below sets activeInstanceId.
-        store.setState({
-          activeGroupId:  null,
-          groupDiveStack: [...(sNow.groupDiveStack ?? []), owningGid],
-        })
-        // Fall through.
-      }
+      const decision = resolveGroupClickThrough({
+        assembly:       sNow.currentAssembly,
+        hitInstanceId:  earlyHit?.id ?? null,
+        activeGroupId:  sNow.activeGroupId,
+        groupDiveStack: sNow.groupDiveStack ?? [],
+      })
+      // selectGroup → first click on a grouped part: select the group, no
+      // fallthrough. enterGroup → second click on a member of the active group:
+      // push the dive stack and fall through so the part gets selected below.
+      if (decision.action === 'selectGroup') { store.setState(decision.patch); return }
+      if (decision.action === 'enterGroup') { store.setState(decision.patch) }
     }
 
     // Non-Ctrl click — always collapses any active multi-select back to either
