@@ -126,7 +126,7 @@ import { beltCouplingRelations, applyBeltRiders, beltCurvePoints, beltLoopLength
 import { beltRiderCtx, beltRiderFill } from './scene/belt_rider.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
-import { makeRefVec, ringPlaneHit, angleInRing, computeRevoluteTransform } from './scene/assembly_revolute_math.js'
+import { computeRevoluteTransform } from './scene/assembly_revolute_math.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
 import { initPlateView }                           from './ui/plate_view.js'
 import { STAPLE_PALETTE as PLATE_STAPLE_PALETTE } from './scene/helix_renderer/palette.js'
@@ -10682,169 +10682,10 @@ Typical debugging workflow for "reverts to 3D" bug:
     scene.add(_assemblyMultiBox)
   }
 
-  // Free/part-joint drag handlers + drag state lifted to
-  // scene/assembly_pointer.js (carve-up Tier 3, sub-part a). main.js keeps
-  // _onAssemblyPointerDown (below) which arms a part-joint drag via
-  // _assemblyPointer.beginPartJointDrag(); the move/up handlers and the
-  // exit-cleanup (_assemblyPointer.cancelDrag) live in the module.
-
-  // ── Assembly canvas pointer handler (joint ring pick + instance selection) ──
-  function _onAssemblyPointerDown(e) {
-    if (e.button === 0) {
-      // Belt-define / attach-to-belt modes run their own picking on separate
-      // handlers; suppress all other left-button assembly interactions while
-      // they own the canvas.
-      if (assemblyJointRenderer.isBeltMode() || assemblyJointRenderer.isAttachMode()) return
-      // Polymerize panel intercepts the click anywhere on the joint indicator
-      // (shaft / cone / ring) — using the whole-indicator picker since the ring
-      // alone is a narrow target. Selecting a mate this way doesn't start a
-      // revolute drag.
-      if (polymerizePanel.isOpen()) {
-        const anyJointId = assemblyJointRenderer.pickJointAny(e)
-        if (anyJointId) {
-          polymerizePanel.setSelectedJoint(anyJointId)
-          e.stopPropagation()
-          return
-        }
-      }
-
-      // Priority 1: joint ring drag
-      const jointId = assemblyJointRenderer.pickJointRing(e)
-      if (jointId) {
-        assemblyJointRenderer.beginRingDrag(jointId, e)
-        return
-      }
-
-      if (!_translateRotateActive && !assemblyJointRenderer.isMateMode() && !assemblyJointRenderer.isBeltMode()) {
-        const partJointHit = assemblyRenderer.pickPartJoint?.(_canvasNdc(e), camera)
-        if (partJointHit?.inst?.id === store.getState().activeInstanceId) {
-          _assemblySelectedPartJoint = {
-            instanceId: partJointHit.inst.id,
-            jointId: partJointHit.joint.id,
-            clusterId: partJointHit.cluster.id,
-          }
-          _assemblyPtrDownAt = null
-          e.stopPropagation()
-          return
-        }
-
-        // Priority 2b: cluster already selected (via panel/re-click) + allow_part_joints
-        // → drag rotates the cluster around its joint without requiring a prior ring click
-        if (_selectedAssemblyCluster) {
-          const { instanceId: selInstId, clusterId: selClusterId } = _selectedAssemblyCluster
-          const assembly = store.getState().currentAssembly
-          const inst = assembly?.instances?.find(i => i.id === selInstId)
-          const pickedInst = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
-          if (inst?.allow_part_joints && !inst.fixed && pickedInst?.id === selInstId) {
-            const design = assemblyRenderer.getInstanceDesign(selInstId)
-            const cluster = design?.cluster_transforms?.find(c => c.id === selClusterId)
-            const joint   = design?.cluster_joints?.find(j => j.cluster_id === selClusterId)
-            if (cluster && joint) {
-              const instMat = assemblyRenderer.getLiveTransform(selInstId)
-                ?? new THREE.Matrix4().fromArray(inst.transform.values).transpose()
-              const localOrigin = new THREE.Vector3(...joint.axis_origin)
-              const localAxis   = new THREE.Vector3(...joint.axis_direction).normalize()
-              const worldOrigin = localOrigin.clone().applyMatrix4(instMat)
-              const worldAxis   = localAxis.clone().transformDirection(instMat).normalize()
-              const raycaster   = new THREE.Raycaster()
-              const startHit    = ringPlaneHit(raycaster, e, camera, canvas, worldAxis, worldOrigin)
-              if (startHit) {
-                const refVec = makeRefVec(worldAxis)
-                const startTransforms = new Map()
-                for (const asmInst of (assembly?.instances ?? [])) {
-                  startTransforms.set(asmInst.id, new THREE.Matrix4().fromArray(asmInst.transform.values).transpose())
-                }
-                assemblyRenderer.captureInstanceClusterBase(selInstId, cluster)
-                controls.enabled  = false
-                _assemblyPtrDownAt = null
-                _assemblyPointer.beginPartJointDrag({
-                  instId: selInstId,
-                  inst,
-                  cluster,
-                  joint,
-                  assembly,
-                  localOrigin,
-                  localAxis,
-                  worldOrigin,
-                  worldAxis,
-                  refVec,
-                  raycaster,
-                  startAngle: angleInRing(startHit, worldOrigin, worldAxis, refVec),
-                  currentDelta: 0,
-                  currentWorldDelta: new THREE.Matrix4(),
-                  startTransforms,
-                })
-                return
-              }
-            }
-          }
-        }
-
-        const clusterHit = assemblyRenderer.pickInstanceCluster(_canvasNdc(e), camera)
-        const selectedPartJoint = _assemblySelectedPartJoint
-        const selectedJointMatchesCluster = selectedPartJoint &&
-          clusterHit?.inst?.id === selectedPartJoint.instanceId &&
-          clusterHit?.cluster?.id === selectedPartJoint.clusterId
-        if (clusterHit?.inst?.allow_part_joints && !clusterHit.inst.fixed && selectedJointMatchesCluster) {
-          const { inst, cluster } = clusterHit
-          const joint = clusterHit.design?.cluster_joints?.find(j => j.id === selectedPartJoint.jointId) ?? clusterHit.joint
-          store.setState({ activeInstanceId: inst.id })
-          controls.enabled = false
-
-          const instMat = assemblyRenderer.getLiveTransform(inst.id)
-            ?? new THREE.Matrix4().fromArray(inst.transform.values).transpose()
-          const localOrigin = new THREE.Vector3(...joint.axis_origin)
-          const localAxis = new THREE.Vector3(...joint.axis_direction).normalize()
-          const worldOrigin = localOrigin.clone().applyMatrix4(instMat)
-          const worldAxis = localAxis.clone().transformDirection(instMat).normalize()
-          const raycaster = new THREE.Raycaster()
-          const startHit = ringPlaneHit(raycaster, e, camera, canvas, worldAxis, worldOrigin)
-          if (startHit) {
-            const refVec = makeRefVec(worldAxis)
-            const assembly = store.getState().currentAssembly
-            const startTransforms = new Map()
-            for (const asmInst of (assembly?.instances ?? [])) {
-              startTransforms.set(asmInst.id, _effectiveInstanceMatrix(asmInst))
-            }
-            assemblyRenderer.captureInstanceClusterBase(inst.id, cluster)
-            _assemblyPointer.beginPartJointDrag({
-              instId: inst.id,
-              inst,
-              cluster,
-              joint,
-              assembly,
-              localOrigin,
-              localAxis,
-              worldOrigin,
-              worldAxis,
-              refVec,
-              raycaster,
-              startAngle: angleInRing(startHit, worldOrigin, worldAxis, refVec),
-              currentDelta: 0,
-              currentWorldDelta: new THREE.Matrix4(),
-              startTransforms,
-            })
-            return
-          }
-          controls.enabled = true
-        }
-
-      }
-
-      // Priority 2c: Ctrl/Meta + left-down on empty space or any instance →
-      // start a lasso. Disables OrbitControls for the drag duration so the
-      // user's drag doesn't fight the camera. Picking is suppressed; the
-      // pointerup finalizes the multi-select.
-      if (assemblyLasso.start(e)) return
-
-      // Priority 3: record for click-to-select
-      _assemblyPtrDownAt = { x: e.clientX, y: e.clientY }
-    } else if (e.button === 2) {
-      // Right-button down — record so the contextmenu handler can tell a
-      // plain right-click apart from a right-drag pan.
-      _assemblyRightDownAt = { x: e.clientX, y: e.clientY }
-    }
-  }
+  // Assembly canvas pointer-down + free/part-joint drag handlers lifted to
+  // scene/assembly_pointer.js (carve-up Tier 3, sub-part a). _onAssemblyPointerDown
+  // is now _assemblyPointer.onAssemblyPointerDown (wired below at the factory
+  // init); the drag move/up handlers + exit-cleanup live in the module.
 
   // Push the overhang-selection highlight rings to the renderer on change.
   store.subscribe((newState, prevState) => {
@@ -10885,14 +10726,21 @@ Typical debugging workflow for "reverts to 3D" bug:
     hideProgress:                _hideProgress,
     applyFKLive:                 _applyFKLive,
     applyClusterMateFKLive:      _applyClusterMateFKLive,
+    effectiveInstanceMatrix:     _effectiveInstanceMatrix,
     assemblyPendingPartJoints:   _assemblyPendingPartJoints,
+    polymerizePanel,
+    assemblyLasso,
     getAssemblyPtrDownAt:        () => _assemblyPtrDownAt,
     setAssemblyPtrDownAt:        (v) => { _assemblyPtrDownAt = v },
+    setAssemblyRightDownAt:      (v) => { _assemblyRightDownAt = v },
     getTranslateRotateActive:    () => _translateRotateActive,
+    getSelectedAssemblyCluster:  () => _selectedAssemblyCluster,
     setSelectedAssemblyCluster:  (v) => { _selectedAssemblyCluster = v },
+    getAssemblySelectedPartJoint:() => _assemblySelectedPartJoint,
     setAssemblySelectedPartJoint:(v) => { _assemblySelectedPartJoint = v },
   })
   const _onAssemblyClick = _assemblyPointer.onAssemblyClick
+  const _onAssemblyPointerDown = _assemblyPointer.onAssemblyPointerDown
 
   // Right-click menu for an assembly cross-part linker. Mirrors the per-design
   // linker menu's "Relax linker": the assembly relax rigid-places the free part

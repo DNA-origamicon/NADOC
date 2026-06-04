@@ -18,7 +18,7 @@
 import * as THREE from 'three'
 import { showToast } from '../ui/toast.js'
 import { resolveGroupClickThrough } from './assembly_groups_util.js'
-import { ringPlaneHit, angleInRing } from './assembly_revolute_math.js'
+import { ringPlaneHit, angleInRing, makeRefVec } from './assembly_revolute_math.js'
 import { rotationDeltaMatrix } from './gear_math.js'
 import { clusterTransformAfterJointDelta } from './cluster_joint_math.js'
 import { getRigidBodyGroup } from './assembly_constraint_graph.js'
@@ -46,12 +46,18 @@ export function initAssemblyPointer({
   // drag-mechanics deps (sub-part a)
   applyFKLive,
   applyClusterMateFKLive,
+  effectiveInstanceMatrix,
   assemblyPendingPartJoints,
+  polymerizePanel,
+  assemblyLasso,
   // shared mutable state (owned by main.js, also touched by sibling handlers)
   getAssemblyPtrDownAt,
   setAssemblyPtrDownAt,
+  setAssemblyRightDownAt,
   getTranslateRotateActive,
+  getSelectedAssemblyCluster,
   setSelectedAssemblyCluster,
+  getAssemblySelectedPartJoint,
   setAssemblySelectedPartJoint,
 }) {
   // ── Drag state (module-internal — only these handlers touch it) ───────────
@@ -200,13 +206,170 @@ export function initAssemblyPointer({
   }
 
   // Arm a part-joint cluster drag: store the drag descriptor and attach the
-  // move/up listeners. Called from the pointer-down handler (still in main.js
-  // until sub-part (a)'s second commit) so the descriptor it builds drives the
-  // module-internal drag state.
+  // move/up listeners. Called from onAssemblyPointerDown.
   function beginPartJointDrag(drag) {
     _partJointDrag = drag
     canvas.addEventListener('pointermove', onAssemblyDragMove)
     canvas.addEventListener('pointerup',   onAssemblyDragUp)
+  }
+
+  // ── Assembly canvas pointer-down (joint ring pick + part-joint drag arm) ──
+  function onAssemblyPointerDown(e) {
+    if (e.button === 0) {
+      // Belt-define / attach-to-belt modes run their own picking on separate
+      // handlers; suppress all other left-button assembly interactions while
+      // they own the canvas.
+      if (assemblyJointRenderer.isBeltMode() || assemblyJointRenderer.isAttachMode()) return
+      // Polymerize panel intercepts the click anywhere on the joint indicator
+      // (shaft / cone / ring) — using the whole-indicator picker since the ring
+      // alone is a narrow target. Selecting a mate this way doesn't start a
+      // revolute drag.
+      if (polymerizePanel.isOpen()) {
+        const anyJointId = assemblyJointRenderer.pickJointAny(e)
+        if (anyJointId) {
+          polymerizePanel.setSelectedJoint(anyJointId)
+          e.stopPropagation()
+          return
+        }
+      }
+
+      // Priority 1: joint ring drag
+      const jointId = assemblyJointRenderer.pickJointRing(e)
+      if (jointId) {
+        assemblyJointRenderer.beginRingDrag(jointId, e)
+        return
+      }
+
+      if (!getTranslateRotateActive() && !assemblyJointRenderer.isMateMode() && !assemblyJointRenderer.isBeltMode()) {
+        const partJointHit = assemblyRenderer.pickPartJoint?.(canvasNdc(e), camera)
+        if (partJointHit?.inst?.id === store.getState().activeInstanceId) {
+          setAssemblySelectedPartJoint({
+            instanceId: partJointHit.inst.id,
+            jointId: partJointHit.joint.id,
+            clusterId: partJointHit.cluster.id,
+          })
+          setAssemblyPtrDownAt(null)
+          e.stopPropagation()
+          return
+        }
+
+        // Priority 2b: cluster already selected (via panel/re-click) + allow_part_joints
+        // → drag rotates the cluster around its joint without requiring a prior ring click
+        const selectedAssemblyCluster = getSelectedAssemblyCluster()
+        if (selectedAssemblyCluster) {
+          const { instanceId: selInstId, clusterId: selClusterId } = selectedAssemblyCluster
+          const assembly = store.getState().currentAssembly
+          const inst = assembly?.instances?.find(i => i.id === selInstId)
+          const pickedInst = assemblyRenderer.pickInstance(canvasNdc(e), camera)
+          if (inst?.allow_part_joints && !inst.fixed && pickedInst?.id === selInstId) {
+            const design = assemblyRenderer.getInstanceDesign(selInstId)
+            const cluster = design?.cluster_transforms?.find(c => c.id === selClusterId)
+            const joint   = design?.cluster_joints?.find(j => j.cluster_id === selClusterId)
+            if (cluster && joint) {
+              const instMat = assemblyRenderer.getLiveTransform(selInstId)
+                ?? new THREE.Matrix4().fromArray(inst.transform.values).transpose()
+              const localOrigin = new THREE.Vector3(...joint.axis_origin)
+              const localAxis   = new THREE.Vector3(...joint.axis_direction).normalize()
+              const worldOrigin = localOrigin.clone().applyMatrix4(instMat)
+              const worldAxis   = localAxis.clone().transformDirection(instMat).normalize()
+              const raycaster   = new THREE.Raycaster()
+              const startHit    = ringPlaneHit(raycaster, e, camera, canvas, worldAxis, worldOrigin)
+              if (startHit) {
+                const refVec = makeRefVec(worldAxis)
+                const startTransforms = new Map()
+                for (const asmInst of (assembly?.instances ?? [])) {
+                  startTransforms.set(asmInst.id, new THREE.Matrix4().fromArray(asmInst.transform.values).transpose())
+                }
+                assemblyRenderer.captureInstanceClusterBase(selInstId, cluster)
+                controls.enabled  = false
+                setAssemblyPtrDownAt(null)
+                beginPartJointDrag({
+                  instId: selInstId,
+                  inst,
+                  cluster,
+                  joint,
+                  assembly,
+                  localOrigin,
+                  localAxis,
+                  worldOrigin,
+                  worldAxis,
+                  refVec,
+                  raycaster,
+                  startAngle: angleInRing(startHit, worldOrigin, worldAxis, refVec),
+                  currentDelta: 0,
+                  currentWorldDelta: new THREE.Matrix4(),
+                  startTransforms,
+                })
+                return
+              }
+            }
+          }
+        }
+
+        const clusterHit = assemblyRenderer.pickInstanceCluster(canvasNdc(e), camera)
+        const selectedPartJoint = getAssemblySelectedPartJoint()
+        const selectedJointMatchesCluster = selectedPartJoint &&
+          clusterHit?.inst?.id === selectedPartJoint.instanceId &&
+          clusterHit?.cluster?.id === selectedPartJoint.clusterId
+        if (clusterHit?.inst?.allow_part_joints && !clusterHit.inst.fixed && selectedJointMatchesCluster) {
+          const { inst, cluster } = clusterHit
+          const joint = clusterHit.design?.cluster_joints?.find(j => j.id === selectedPartJoint.jointId) ?? clusterHit.joint
+          store.setState({ activeInstanceId: inst.id })
+          controls.enabled = false
+
+          const instMat = assemblyRenderer.getLiveTransform(inst.id)
+            ?? new THREE.Matrix4().fromArray(inst.transform.values).transpose()
+          const localOrigin = new THREE.Vector3(...joint.axis_origin)
+          const localAxis = new THREE.Vector3(...joint.axis_direction).normalize()
+          const worldOrigin = localOrigin.clone().applyMatrix4(instMat)
+          const worldAxis = localAxis.clone().transformDirection(instMat).normalize()
+          const raycaster = new THREE.Raycaster()
+          const startHit = ringPlaneHit(raycaster, e, camera, canvas, worldAxis, worldOrigin)
+          if (startHit) {
+            const refVec = makeRefVec(worldAxis)
+            const assembly = store.getState().currentAssembly
+            const startTransforms = new Map()
+            for (const asmInst of (assembly?.instances ?? [])) {
+              startTransforms.set(asmInst.id, effectiveInstanceMatrix(asmInst))
+            }
+            assemblyRenderer.captureInstanceClusterBase(inst.id, cluster)
+            beginPartJointDrag({
+              instId: inst.id,
+              inst,
+              cluster,
+              joint,
+              assembly,
+              localOrigin,
+              localAxis,
+              worldOrigin,
+              worldAxis,
+              refVec,
+              raycaster,
+              startAngle: angleInRing(startHit, worldOrigin, worldAxis, refVec),
+              currentDelta: 0,
+              currentWorldDelta: new THREE.Matrix4(),
+              startTransforms,
+            })
+            return
+          }
+          controls.enabled = true
+        }
+
+      }
+
+      // Priority 2c: Ctrl/Meta + left-down on empty space or any instance →
+      // start a lasso. Disables OrbitControls for the drag duration so the
+      // user's drag doesn't fight the camera. Picking is suppressed; the
+      // pointerup finalizes the multi-select.
+      if (assemblyLasso.start(e)) return
+
+      // Priority 3: record for click-to-select
+      setAssemblyPtrDownAt({ x: e.clientX, y: e.clientY })
+    } else if (e.button === 2) {
+      // Right-button down — record so the contextmenu handler can tell a
+      // plain right-click apart from a right-drag pan.
+      setAssemblyRightDownAt({ x: e.clientX, y: e.clientY })
+    }
   }
 
   // Tear down any in-flight free/part-joint drag (assembly-mode exit cleanup).
@@ -369,5 +532,8 @@ export function initAssemblyPointer({
     }
   }
 
-  return { onAssemblyClick, onAssemblyDragMove, onAssemblyDragUp, beginPartJointDrag, cancelDrag }
+  return {
+    onAssemblyClick, onAssemblyPointerDown, onAssemblyDragMove, onAssemblyDragUp,
+    beginPartJointDrag, cancelDrag,
+  }
 }

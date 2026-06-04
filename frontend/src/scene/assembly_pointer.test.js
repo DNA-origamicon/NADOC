@@ -9,9 +9,10 @@ import { createMockStore } from '../test-helpers/mock_store.js'
 
 function setup(stateOverrides = {}, depOverrides = {}) {
   let ptrDownAt = { x: 10, y: 10 }   // default: a recorded click (not a drag)
+  let rightDownAt = null
   let translateActive = false
-  let selectedCluster = 'unset'
-  let selectedPartJoint = 'unset'
+  let selectedCluster = null
+  let selectedPartJoint = null
 
   const store = createMockStore({
     activeInstanceId: null,
@@ -31,14 +32,21 @@ function setup(stateOverrides = {}, depOverrides = {}) {
     api: { propagateFk: vi.fn(async () => {}) },
     applyFKLive: vi.fn(),
     applyClusterMateFKLive: vi.fn(),
+    effectiveInstanceMatrix: vi.fn(() => new THREE.Matrix4()),
     assemblyPendingPartJoints: pendingPartJoints,
+    polymerizePanel: { isOpen: () => false, setSelectedJoint: vi.fn() },
+    assemblyLasso: { start: vi.fn(() => false) },
     assemblyRenderer: {
       pickInstance: vi.fn(() => null),
       pickInstanceCluster: vi.fn(() => null),
+      pickPartJoint: vi.fn(() => null),
       getInstanceBackboneEntries: vi.fn(() => ({ entries: [], matrixWorld: new THREE.Matrix4() })),
       getInstanceDesign: vi.fn(() => ({})),
     },
-    assemblyJointRenderer: { isBeltMode: () => false, isAttachMode: () => false },
+    assemblyJointRenderer: {
+      isBeltMode: () => false, isAttachMode: () => false, isMateMode: () => false,
+      pickJointRing: vi.fn(() => null), pickJointAny: vi.fn(() => null), beginRingDrag: vi.fn(),
+    },
     instanceGizmo: { getActiveAxis: () => null, isDragging: () => false, detach: vi.fn() },
     clusterGlowLayer: { setEntries: vi.fn() },
     overhangHoverPicker: { nearestAt: vi.fn(() => null) },
@@ -53,8 +61,11 @@ function setup(stateOverrides = {}, depOverrides = {}) {
     hideProgress: vi.fn(),
     getAssemblyPtrDownAt: () => ptrDownAt,
     setAssemblyPtrDownAt: (v) => { ptrDownAt = v },
+    setAssemblyRightDownAt: (v) => { rightDownAt = v },
     getTranslateRotateActive: () => translateActive,
+    getSelectedAssemblyCluster: () => selectedCluster,
     setSelectedAssemblyCluster: (v) => { selectedCluster = v },
+    getAssemblySelectedPartJoint: () => selectedPartJoint,
     setAssemblySelectedPartJoint: (v) => { selectedPartJoint = v },
     ...depOverrides,
   }
@@ -63,7 +74,10 @@ function setup(stateOverrides = {}, depOverrides = {}) {
   return {
     ...ptr, deps, store, clusterPanel, setStateSpy, pendingPartJoints, canvas, controls,
     getPtrDownAt: () => ptrDownAt,
+    getRightDownAt: () => rightDownAt,
     setTranslateActive: (v) => { translateActive = v },
+    setSelectedCluster: (v) => { selectedCluster = v },
+    setSelectedPartJoint: (v) => { selectedPartJoint = v },
     getSelectedCluster: () => selectedCluster,
     getSelectedPartJoint: () => selectedPartJoint,
   }
@@ -226,5 +240,58 @@ describe('initAssemblyPointer · part-joint drag (sub-part a)', () => {
     t.onAssemblyDragMove({ clientX: 5, clientY: 5 })
     expect(t.deps.applyFKLive).not.toHaveBeenCalled()
     expect(t.deps.applyClusterMateFKLive).not.toHaveBeenCalled()
+  })
+})
+
+describe('initAssemblyPointer · onAssemblyPointerDown', () => {
+  const pd = (over = {}) => ({ button: 0, clientX: 40, clientY: 50, stopPropagation: vi.fn(), ...over })
+
+  it('belt mode owns the canvas — bails before any picking', () => {
+    const t = setup({}, { assemblyJointRenderer: {
+      isBeltMode: () => true, isAttachMode: () => false, isMateMode: () => false,
+      pickJointRing: vi.fn(), pickJointAny: vi.fn(), beginRingDrag: vi.fn(),
+    } })
+    t.onAssemblyPointerDown(pd())
+    expect(t.deps.assemblyRenderer.pickInstance).not.toHaveBeenCalled()
+  })
+
+  it('Priority 1: a joint-ring hit begins a ring drag and returns', () => {
+    const t = setup()
+    t.deps.assemblyJointRenderer.pickJointRing.mockReturnValue('joint-7')
+    t.onAssemblyPointerDown(pd())
+    expect(t.deps.assemblyJointRenderer.beginRingDrag).toHaveBeenCalledWith('joint-7', expect.anything())
+    expect(t.deps.assemblyRenderer.pickInstanceCluster).not.toHaveBeenCalled()
+  })
+
+  it('a plain left-down on empty space records the click position', () => {
+    const t = setup()                  // no joint, no cluster, lasso.start=false
+    t.onAssemblyPointerDown(pd({ clientX: 40, clientY: 50 }))
+    expect(t.getPtrDownAt()).toEqual({ x: 40, y: 50 })
+  })
+
+  it('a lasso start consumes the left-down (no click recorded)', () => {
+    const t = setup()
+    t.deps.setAssemblyPtrDownAt(null)
+    t.deps.assemblyLasso.start.mockReturnValue(true)
+    t.onAssemblyPointerDown(pd())
+    expect(t.getPtrDownAt()).toBeNull()
+  })
+
+  it('right-button down records the right-down position for the contextmenu', () => {
+    const t = setup()
+    t.onAssemblyPointerDown(pd({ button: 2, clientX: 7, clientY: 9 }))
+    expect(t.getRightDownAt()).toEqual({ x: 7, y: 9 })
+  })
+
+  it('clicking the active part-joint records the selected joint and suppresses the click', () => {
+    const t = setup({ activeInstanceId: 'inst-A' })
+    const e = pd()
+    t.deps.assemblyRenderer.pickPartJoint.mockReturnValue({
+      inst: { id: 'inst-A' }, joint: { id: 'j1' }, cluster: { id: 'cl-1' },
+    })
+    t.onAssemblyPointerDown(e)
+    expect(t.getSelectedPartJoint()).toEqual({ instanceId: 'inst-A', jointId: 'j1', clusterId: 'cl-1' })
+    expect(t.getPtrDownAt()).toBeNull()
+    expect(e.stopPropagation).toHaveBeenCalled()
   })
 })
