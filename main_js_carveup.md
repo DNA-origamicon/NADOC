@@ -55,26 +55,32 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 _Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **STRATEGY: hardest-first, multi-commit
 campaigns — the pure-core / narrow-sub-block well is dry.** ✅ **KEYSTONE DONE (#73/#74/#75, −255 ln).** ✅ **frontier #1
-sub-blocks all peeled:** response-delta → `scene/response_delta.js` (#76, −196); cluster-pick → `scene/joint_pick.js`
-(#77, −38); ✅ **`_mr*` PANEL SHELL DONE (commit cedbc83, log #78, −134 ln, main.js 8518→8384):** the whole Move/Rotate
-right-sidebar panel (12 DOM consts + 8 view setters + `_mrCommitInputs` + input/pivot/cluster listeners +
-`_mrPivotIsJoint`/`_mrAssemblyCtx` state) → `scene/move_rotate_panel.js` (`initMoveRotatePanel`, 15 vitest). **The
-"20+-sites lifecycle-spine" worry was OVERBLOWN for a verbatim lift** — keystone alias-consts (`const _mrSetX =
-_moveRotatePanel.setX`) kept every external call site byte-identical; only `_mrAssemblyCtx`'s 4 writes + group_gizmo's
-`getMrAssemblyCtx` re-pointed. `_flexRelax` + `_refreshClusterPivotForAttach` stay in main (tool-shared), injected._
+sub-blocks all peeled:** response-delta → `scene/response_delta.js` (#76); cluster-pick → `scene/joint_pick.js` (#77);
+`_mr*` panel shell → `scene/move_rotate_panel.js` (#78). ✅ **CHEAP FIRST CUT of the tool campaign DONE (commit 410a7c7,
+log #79, −19 ln, main.js 8384→8365):** the cluster-overlay refresh block (overhangLinkArcs / overhangLocations /
+overhangNameOverlay / loopSkipHighlight / unligatedCrossoverMarkers, each visibility-gated) was copied 4× (2 in the
+tool's commit, 2 inside response_delta) → consolidated into `_responseDelta.refreshClusterOverlays({withFlexibleArcs})`,
+single source of truth for that rendering invariant. Tool passes `false` (it historically skipped flexible arcs → kept
+verbatim); delta paths pass `true`. **NOTE for whoever finishes the tool: that `withFlexibleArcs:false` is a possible
+latent bug** — a cluster move with anchored ssDNA arcs arguably should rebuild them on commit like the delta paths do;
+flagged-not-fixed (verbatim rule). Ask the user before flipping it._
 
-**▶ NEXT — the Translate/Rotate TOOL gesture core (frontier #1 remainder, now the panel is a module dep).** What's LEFT
-under banner `// ── Joint arrow pick handler` (re-grep — line drifted) is the gesture/commit logic only:
-`_activateTranslateRotateTool` / `_confirmTranslateRotateTool` (~200-ln commit pipeline: edit-in-place cluster_op vs
-standard commit, both rebaking helix axes + refreshing overlays) / `_cancelTranslateRotateTool` (~386-ln span) /
+**▶ NEXT — the Translate/Rotate TOOL gesture core (frontier #1 remainder; the overlay-refresh de-dup is now done).** What's
+LEFT under banner `// ── Joint arrow pick handler` (re-grep — line drifted, was ~5102) is the gesture/commit logic only:
+`_activateTranslateRotateTool` / `_confirmTranslateRotateTool` (commit pipeline: edit-in-place cluster_op vs standard
+commit — both now call `_refreshClusterOverlays`, but still inline-rebake helix axes + commitClusterPositions + the
+`refreshBridges` try/catch, which is ALSO copied 3× and could be the next de-dup) / `_cancelTranslateRotateTool` /
 `_rotateJoint` / `_restoreTransformPreviewFromStore` / `_onToolPickPointerDown` + the `_confirmBtn` element +
 `_translateRotateActive`/`_clusterDirty` state. **Its deps are now mostly modules** — drive `_moveRotatePanel.{setX,
-getAssemblyCtx,setAssemblyCtx}`, `_jointPick.{canvasNdc,pickActiveClusterEntry}`, `_assemblyTransform.*`, `_flexRelax`,
-`_refreshClusterPivotForAttach` (still main). **WATCH OUT: `_translateRotateActive` is read/written from 22 sites**
-(lifecycle-spine-adjacent — `_resetForNewDesign`/assembly-exit/keyboard-shortcuts toggle it). Likely the FLAG stays a
-main `let` and the tool fns lift as a factory taking `getActive`/`setActive`; or stay inline (STOP-criterion — re-derive).
-The cheapest first cut: `_confirmTranslateRotateTool`'s commit pipeline shares the helix-rebake + overlay-refresh block
-VERBATIM with `_responseDelta` already — check whether that block can be de-duped into `scene/response_delta.js` first.
+getAssemblyCtx,setAssemblyCtx}`, `_jointPick.{canvasNdc,pickActiveClusterEntry}`, `_assemblyTransform.*`,
+`_responseDelta.{rebakeHelixAxesForClusterDelta,refreshClusterOverlays}`, `_flexRelax`, `_refreshClusterPivotForAttach`
+(still main). **WATCH OUT: `_translateRotateActive` is read/written from 22 sites** (lifecycle-spine-adjacent —
+`_resetForNewDesign`/assembly-exit/keyboard-shortcuts toggle it); `_clusterDirty` from 9 sites (set at the clusterGizmo
+onTransform ~4636), `_editContext` is SHARED with the deform editor (1276–1459). Likely the FLAG stays a main `let` and
+the tool fns lift as a factory taking `getActive`/`setActive`; or stay inline (STOP-criterion — re-derive). **Next cheap
+cut before the full lift:** de-dup the `refreshBridges` try/catch + the commitClusterPositions+rebake reconciliation tail
+(tool standard 5468–5500 ≈ tool edit-in-place ≈ response_delta `applyClusterUndoRedoDeltas` 154–157) into response_delta.
+The design-mode cluster-gizmo commit can't be hand-driven headlessly (LESSONS H7); response_delta e2e covers the shared helpers.
 
 **Why hardest-first now.** Every remaining frontier item is HARD (gesture-bound and/or shared-state coupled). Do each as a
 deliberate campaign: (1) map coupling with `rg` first; (2) lean on the EXISTING gesture gate (below), don't re-derive;
