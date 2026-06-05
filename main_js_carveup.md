@@ -53,36 +53,27 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Selection-filter +
-drill-lock state machine DRAINED (#61)** → `ui/selection_filter.js`. main.js 10370 → 10254 (−116).
-**CORRECTION (deep-scan 2026-06-05):** the loop is NOT near-complete. The Tier 1–6 *banner* list is drained,
-but a function-by-function scan found **~7 cohesive subsystems (~2,500–3,000 ln) the original tiers never
-covered** — they're in `## Tier 7` below, the real remaining backlog. The earlier "near-complete / STOP"
-claim was anchored on the banner tiers, not the actual function inventory; ignore it._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Routing-warning dialogs
+DELETED as dead code (#62, commit e947b42)** — not extracted. main.js 10254 → 10123 (−131). The loop is NOT
+near-complete: `## Tier 7` (the deep-scan backlog) still holds ~6 cohesive subsystems (~2,400 ln). Top of
+Tier 7's "clean dialogs/panels" band is now **CG Relax (mrdna) panel**._
 
-**This session (#61, user-picked):** the drill-lock state machine (`_manualFilters` Set + `_isManualSelect`/
-`_reflectDrillLevel`/`_reflectLockOnButtons`/`_resetToAutoBaseline`, ~727) + the `#select-filter .sf-btn` button
-row + 2 subscribers (~4852) — two textually-distant blocks, ONE subsystem — → `ui/selection_filter.js`
-`initSelectionFilter({store, getSelectionManager})→{isManualSelect, reflectDrillLevel, reflectLockOnButtons,
-resetToAutoBaseline, attachFilterButtons}` + pure `computeFilterToggle`. `isManualSelect`/`reflectDrillLevel`
-injected into initSelectionManager; `reflectLockOnButtons`/`resetToAutoBaseline` into initKeyboardShortcuts.
-`selectionManager` (created AFTER the factory — its init consumes the factory's callbacks) → lazy getter.
-`attachFilterButtons()` called at the original ~4852 spot to preserve store-subscription order. 17 vitest
-(687 total), smoke 23/23, real-app pin/un-pin exercise (zero console errors).
+**This session (#62, handoff-recommended):** the carve-up's "cleanest cut left" (Routing-warning dialogs,
+`_confirmCadnanoRoutingChange` + `_confirmFeatureOverride`, ~3987–4116) turned out to be **dead code**, not
+an extraction target. Git archaeology: both were promise-returning raw-DOM confirm modals introduced in
+1462c06 (FEM + cluster transforms) with two real call sites guarding auto-merge/prebreak routing ops; the
+cadnano overhaul (a6df304) removed every caller but left the bodies behind. Zero refs in src/ or e2e/ today.
+Want-it gate → user chose delete (mirrors #44/#45/#46). −131 ln. Gate: vitest 687 (unchanged — no test
+surface) + smoke 23/23. No app exercise (nothing to exercise — there were no callers).
 
 **Banked gotcha this session:**
-- **"HARD/gesture-bound" in the carve-up was wrong (6th mis-scope).** The map billed this region HARD,
-  needing a canvas-gesture e2e gate first. But the extracted surface is **pure DOM+store** — the actual
-  bead-click drill gesture lives in `selectionManager`, which *calls into* this module's `reflectDrillLevel`
-  (a DOM class-toggle). When a "gesture-bound" region only *reflects* gesture state onto DOM, the reflector
-  is jsdom-testable in isolation; the gesture stays in the module that owns it. Check WHERE the gesture
-  actually lives before assuming a region needs scene_harness.
-- **Lazy-getter for a forward dep that's ALSO your consumer.** `selectionManager` is created after this
-  factory AND its init consumes the factory's `isManualSelect`/`reflectDrillLevel`. Resolve the cycle by:
-  factory takes `getSelectionManager: () => selectionManager` (lazy), exposes the callbacks synchronously
-  (they don't touch selectionManager), and everything that *does* touch it (resetDrill/getDrillLock) only
-  fires on user action — so the getter always resolves post-init. Same shape as #52's late-dep placement,
-  but here driven by a construction-order cycle, not by dep location.
+- **Run the want-it gate on Tier 7 entries BEFORE re-deriving scope — the deep-scan tier was sized from
+  banner arithmetic and didn't check for callers.** The map billed this "LOW risk, cleanest cut left, mirrors
+  the modal lifts," but a 2-line `grep -rn _confirmCadnanoRoutingChange src/ e2e/` showed zero call sites —
+  it's orphaned, not liftable. `git log -S "<fn>()" --all` then pinned the exact commit that removed the
+  callers (a6df304) vs. introduced them (1462c06). **For any Tier-7 dialog/panel, grep its call sites first;
+  if it's wired from nowhere it's a deletion candidate, and deleting dead mass is the cheaper, correct win.**
+- Also corrected the map's dep guess: these were `document.createElement` modals, NOT `createModal`/`createButton`.
 
 **The goal is NOT a LOC number.** main.js is the app's composition root (wiring board): 146 imports + ~100
 module constructions + the lifecycle spine + thin per-action wiring are *irreducible* (~2,500–3,500 ln floor).
@@ -91,11 +82,13 @@ code worse. **Target instead: "the closure holds zero cohesive logic clusters."*
 function is either module construction/wiring or the spine. LOC lands ~3,000 as a *result*, not a target.
 
 **Recommended next region — START at the top of `## Tier 7` (the cleanest, lowest-risk first):**
-1. **Routing-warning dialogs** (`_confirmCadnanoRoutingChange` + `_confirmFeatureOverride`, banners ~3987/4049,
-   ~130 ln) → `ui/routing_warning_dialogs.js`. Two confirm-modals, mirrors the clean modal lifts (#42/#56/#57).
-   Lowest risk; good warm-up for a fresh session. **Verify want-it + re-derive scope first (the map mis-scopes).**
-2. Then the panels/dialogs in Tier 7 (Overhang-Orientation panel, CG-Relax, Autoscaffold picker) before the
-   HARD gesture/assembly-coupled ones (Translate/Rotate tool, repr switcher, assembly transform/FK).
+1. **CG Relax (mrdna) panel** (banner `// ── CG Relax (mrdna)` ~4178, ~96 ln) → `ui/cg_relax_panel.js`.
+   Self-contained-ish relax control (store/api/DOM). **GREP ITS CALL SITES + want-it gate FIRST** — this
+   session's #62 found the previous "cleanest cut" was dead code; verify the panel is wired & wanted, and
+   re-derive whether the cohesive block is already mostly in a physics module before investing.
+2. Then the other Tier-7 clean panels (Overhang-Orientation panel, Autoscaffold picker, Sequencing menu —
+   the last may be a thin-wiring scrap over scaffold_modal) before the HARD gesture/assembly-coupled ones
+   (Translate/Rotate tool, repr switcher, assembly transform/FK).
 
 **Do NOT bundle the micro-scraps** (Orbit submenu ~10 ln, Browser tab title ~5 ln, Coloring submenu ~20 ln
 w/ 7 external `_setColoringMode` callers, deform→selectableTypes subscriber ~28 ln). Six logged mis-scopes
@@ -572,10 +565,13 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
 
 ### Clean dialogs/panels (do first — mirror the #42/#56/#57 modal lifts)
 
-- [ ] **Routing-warning dialogs** — banners `// ── caDNAno routing-change warning dialog` (~3987) +
-  `// ── Routing feature-override warning` (~4049), ~130 ln. `_confirmCadnanoRoutingChange` +
-  `_confirmFeatureOverride` → `ui/routing_warning_dialogs.js`. Two `createModal`/`createButton` confirm-dialogs
-  returning a promise/bool. Deps: DOM + createModal/createButton + store. Risk: **LOW.** Cleanest cut left.
+- [x] **Routing-warning dialogs** — banners `// ── caDNAno routing-change warning dialog` (~3987) +
+  `// ── Routing feature-override warning` (~4049). **DELETED 2026-06-05 (commit e947b42), not extracted.**
+  Want-it gate: `_confirmCadnanoRoutingChange` + `_confirmFeatureOverride` were **dead code** — their two
+  call sites (auto-merge / prebreak routing guards from 1462c06) were removed by the cadnano overhaul
+  (a6df304), which left the function bodies orphaned. Zero callers in src/ or e2e/ since. User-confirmed
+  delete (mirrors #44/#45/#46). −131 ln off the closure. (Note: these were raw-DOM modals — `document.createElement`,
+  NOT `createModal`/`createButton` — the map's dep guess was wrong, but moot since deleted.)
 - [ ] **CG Relax (mrdna) panel** — banner `// ── CG Relax (mrdna)` (~4178–4273), ~96 ln. Self-contained-ish
   relax control. Deps: store, api, DOM. Risk: **LOW-MED.** Verify it isn't already mostly in a physics module.
 - [ ] **Overhang Orientation panel** — banners `// ── Overhang Orientation right-sidebar panel` (~5229) +
