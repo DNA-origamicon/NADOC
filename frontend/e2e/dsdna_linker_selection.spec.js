@@ -11,24 +11,37 @@ import { test, expect } from '@playwright/test'
 import path from 'node:path'
 
 const API = 'http://127.0.0.1:8000/api'
-const HINGE = path.resolve(import.meta.dirname, '../../workspace/hinge.nadoc')
+const HINGE = path.resolve(import.meta.dirname, '../../workspace/Hinge.nadoc')
 
 async function loadHinge(page) {
   const fileMenu = page.locator('.menu-item').filter({ hasText: 'File' }).first()
   await fileMenu.hover()
   await page.click('#menu-file-new')
   await page.fill('#new-design-name', 'dsdna-link-sel-test')
-  await page.click('#new-design-create')
-  await expect(page.locator('#welcome-screen')).toHaveClass(/hidden/, { timeout: 10_000 })
-  const r = await page.request.post(`${API}/design/load`, { data: { path: HINGE } })
-  expect(r.ok()).toBeTruthy()
-  await page.evaluate(async () => {
-    const apiMod = await import('/src/api/client.js')
-    await apiMod.getDesign()
-    // Geometry is on a separate endpoint; the linker arc renderer needs it
-    // to find the bridge boundary beads, so fetch it explicitly here.
-    await apiMod.getGeometry()
-  })
+  await page.getByRole('button', { name: 'Create', exact: true }).click()
+  await expect(page.locator('#welcome-screen')).not.toBeVisible({ timeout: 10_000 })
+  // Load into THIS tab's document: the in-tab api client auto-stamps
+  // X-NADOC-Doc, so the design lands in the doc the tab is reading. A
+  // default-doc `page.request.post` would load into a different document
+  // (multi-doc) and the tab would still see the empty New-Part design.
+  //
+  // Hinge.nadoc ships overhangs OH1/OH2 but NO linker (the fixture lost its
+  // bundled L1 ds linker), so build it in-tab to keep this spec
+  // self-contained. The connection auto-names itself L1 (first linker).
+  // _syncFromDesignResponse pulls the generated linker topology + geometry
+  // into the store so the arc renderer can build the bridge meshes.
+  await page.evaluate(async (hingePath) => {
+    const api = await import('/src/api/client.js')
+    await api.loadDesign(hingePath)
+    const { store } = await import('/src/state/store.js')
+    const oh = label => store.getState().currentDesign.overhangs.find(o => o.label === label)
+    const resp = await api._request('POST', '/design/overhang-connections', {
+      overhang_a_id: oh('OH1').id, overhang_a_attach: 'free_end',
+      overhang_b_id: oh('OH2').id, overhang_b_attach: 'free_end',
+      linker_type: 'ds', length_value: 7, length_unit: 'bp',
+    })
+    await api._syncFromDesignResponse(resp)
+  }, HINGE)
   await page.waitForFunction(() => {
     const arcs = window._nadocDebug?.overhangLinkArcs
     if (!arcs) return false
@@ -49,6 +62,7 @@ async function getLinkerStrandIds(page) {
 }
 
 test('dsDNA linker: selectStrand on one half selects only that strand', async ({ page }) => {
+  test.setTimeout(60_000)  // loadHinge builds the L1 linker in-tab; 30s is too tight under parallel workers
   await page.goto('/')
   await loadHinge(page)
   const { sidA, sidB } = await getLinkerStrandIds(page)
@@ -76,6 +90,7 @@ test('dsDNA linker: selectStrand on one half selects only that strand', async ({
 })
 
 test('dsDNA linker: each connector arc carries its own strandId in userData', async ({ page }) => {
+  test.setTimeout(60_000)  // loadHinge builds the L1 linker in-tab; 30s is too tight under parallel workers
   await page.goto('/')
   await loadHinge(page)
   const { sidA, sidB } = await getLinkerStrandIds(page)
@@ -98,6 +113,7 @@ test('dsDNA linker: each connector arc carries its own strandId in userData', as
 })
 
 test('dsDNA linker: highlight only colors arcs belonging to the selected strand', async ({ page }) => {
+  test.setTimeout(60_000)  // loadHinge builds the L1 linker in-tab; 30s is too tight under parallel workers
   await page.goto('/')
   await loadHinge(page)
   const { sidA, sidB } = await getLinkerStrandIds(page)

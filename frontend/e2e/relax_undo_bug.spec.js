@@ -28,22 +28,44 @@ async function loadHinge(page) {
   await fileMenu.hover()
   await page.click('#menu-file-new')
   await page.fill('#new-design-name', 'relax-undo-bug')
-  await page.click('#new-design-create')
-  await expect(page.locator('#welcome-screen')).toHaveClass(/hidden/, { timeout: 10_000 })
+  await page.getByRole('button', { name: 'Create', exact: true }).click()
+  await expect(page.locator('#welcome-screen')).not.toBeVisible({ timeout: 10_000 })
 
-  const r = await page.request.post(`${API}/design/load`, {
-    data: { path: HINGE_NADOC },
-  })
-  expect(r.ok()).toBeTruthy()
-
-  await page.evaluate(async () => {
-    const apiMod = await import('/src/api/client.js')
-    await apiMod.getDesign()
-  })
+  // Load into THIS tab's document: the in-tab api client auto-stamps
+  // X-NADOC-Doc, so the design lands in the doc the tab is reading. A
+  // default-doc `page.request.post` would load into a different document
+  // (multi-doc) and the tab would still see the empty New-Part design.
+  //
+  // Hinge.nadoc ships overhangs OH1/OH2 + a cluster joint but NO binding
+  // (the fixture lost its bundled OverhangBinding), so build one in-tab to
+  // keep this spec self-contained. Creating a binding requires the two
+  // sub-domains to be Watson-Crick complementary, so OH2's sub-domain gets
+  // OH1's reverse complement before the bind.
+  await page.evaluate(async (hingePath) => {
+    const api = await import('/src/api/client.js')
+    await api.loadDesign(hingePath)
+    const { store } = await import('/src/state/store.js')
+    const des = store.getState().currentDesign
+    const oh1 = des.overhangs.find(o => o.label === 'OH1')
+    const oh2 = des.overhangs.find(o => o.label === 'OH2')
+    const rc = s => s.split('').reverse()
+      .map(c => ({ A: 'T', T: 'A', G: 'C', C: 'G', N: 'N' }[c])).join('')
+    await api._request('PATCH',
+      `/design/overhang/${oh2.id}/sub-domains/${oh2.sub_domains[0].id}`,
+      { sequence_override: rc(oh1.sequence) })
+    const resp = await api._request('POST', '/design/overhang-bindings', {
+      sub_domain_a_id: oh1.sub_domains[0].id,
+      sub_domain_b_id: oh2.sub_domains[0].id,
+      target_joint_id: des.cluster_joints[0].id,
+    })
+    await api._syncFromDesignResponse(resp)
+  }, HINGE_NADOC)
 }
 
 test('undo after relax_bond returns beads to PRE position (no 2x rotation)', async ({ page }) => {
-  test.setTimeout(60_000)
+  // Generous: File>New + in-tab Hinge load + binding build + bind/relax/undo
+  // each round-trips the backend and the relax animates a cluster rotation.
+  test.setTimeout(120_000)
 
   const consoleLogs = []
   page.on('console', (msg) => {
@@ -75,21 +97,15 @@ test('undo after relax_bond returns beads to PRE position (no 2x rotation)', asy
     const xo = d2.crossovers.find(x => snapXoverIds.has(x.id))
     if (!xo) throw new Error('no OH→parent crossover found in snapshot')
 
-    const helixToCluster = new Map()
-    for (const ct of d2.cluster_transforms) {
-      for (const hid of ct.helix_ids ?? []) helixToCluster.set(hid, ct.id)
-    }
-    const ohById = new Map(d2.overhangs.map(o => [o.id, o]))
-    const drivenClusterId = helixToCluster.get(ohById.get(binding.driven_overhang_id).helix_id)
-    const driverClusterId = helixToCluster.get(ohById.get(binding.driver_overhang_id).helix_id)
-    const joint = d2.cluster_joints.find(j =>
-      j.cluster_id === drivenClusterId || j.cluster_id === driverClusterId,
-    )
-    if (!joint) throw new Error('no joint found on either side')
-    return { xoId: xo.id, jointId: joint.id, joinClusterId: joint.cluster_id }
+    // The binding carries its target joint directly (target_joint_id). The
+    // old driven_overhang_id/driver_overhang_id → cluster → joint walk used
+    // fields the binding model no longer exposes.
+    const jointId = binding.target_joint_id ?? d2.cluster_joints[0]?.id
+    if (!jointId) throw new Error('no joint on binding')
+    return { xoId: xo.id, jointId }
   })
 
-  console.log(`[probe] setup: xo=${setup.xoId.slice(0,8)} joint=${setup.jointId.slice(0,8)} cluster=${setup.joinClusterId.slice(0,8)}`)
+  console.log(`[probe] setup: xo=${setup.xoId.slice(0,8)} joint=${setup.jointId.slice(0,8)}`)
 
   // Snapshot PRE bead positions.
   const snapPre = await page.evaluate(() => {
