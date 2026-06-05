@@ -63,7 +63,6 @@ import { initPropertiesPanel } from './ui/properties_panel.js'
 import { createScriptRunner }  from './ui/script_runner.js'
 import { store, popGroupUndo } from './state/store.js'
 import * as api                from './api/client.js'
-import { initMrdnaRelaxClient } from './physics/mrdna_relax_client.js'
 import { initDeformationEditor, startTool, startToolAtBp, startToolForEdit as startDeformToolForEdit,
          isActive as isDeformActive,
          handlePointerMove as deformPointerMove,
@@ -4043,102 +4042,6 @@ async function main() {
     _flExpandDetails()
     if (_flActionsEl) _flActionsEl.style.display = 'flex'
   }
-
-  // ── CG Relax (mrdna) ──────────────────────────────────────────────────────
-  ;(() => {
-    const _heading     = document.getElementById('cgrelax-heading')
-    const _body        = document.getElementById('cgrelax-body')
-    const _arrow       = document.getElementById('cgrelax-arrow')
-    const _btnRun      = document.getElementById('btn-cgrelax-run')
-    const _statusText  = document.getElementById('cgrelax-status-text')
-    const _progressWrap= document.getElementById('cgrelax-progress-wrap')
-    const _progressFill= document.getElementById('cgrelax-progress-fill')
-    const _stageLabel  = document.getElementById('cgrelax-stage-label')
-    const _resultsDiv  = document.getElementById('cgrelax-results')
-    const _chkShape    = document.getElementById('cgrelax-show-shape')
-    const _statsDiv    = document.getElementById('cgrelax-stats')
-
-    _heading?.addEventListener('click', () => {
-      const open = _body.style.display !== 'none'
-      _body.style.display = open ? 'none' : 'block'
-      _arrow.textContent  = open ? '▶' : '▼'
-    })
-
-    function _setStatus(text, color) {
-      if (_statusText) { _statusText.textContent = text; _statusText.style.color = color }
-    }
-    function _showProgress(pct, stage) {
-      if (_progressWrap) _progressWrap.style.display = 'block'
-      if (_progressFill) _progressFill.style.width = `${Math.max(0, Math.min(100, pct))}%`
-      if (_stageLabel)   _stageLabel.textContent = stage.replace(/_/g, ' ')
-    }
-    function _hideProgress() {
-      if (_progressWrap) _progressWrap.style.display = 'none'
-    }
-
-    const cgRelaxClient = initMrdnaRelaxClient({
-      onProgress(stage, pct) {
-        _setStatus('Running…', '#388bfd')
-        _showProgress(pct, stage)
-      },
-      onResult(msg) {
-        store.setState({ cgRelaxPositions: msg.positions, cgRelaxStats: msg.stats })
-        _hideProgress()
-        _setStatus('Done', '#3fb950')
-        if (_resultsDiv) _resultsDiv.style.display = 'block'
-        if (_statsDiv) {
-          const s = msg.stats
-          _statsDiv.innerHTML =
-            `Nucleotides: ${s.n_nucleotides}<br>` +
-            `Sim time: ${s.sim_seconds}s`
-        }
-        if (_chkShape?.checked) _applyShape(msg.positions)
-      },
-      onError(message) {
-        store.setState({ cgRelaxPositions: null })
-        _hideProgress()
-        _setStatus('Error', '#f85149')
-        showToast('CG Relax failed: ' + message, { severity: 'error' })
-      },
-    })
-
-    function _applyShape(positions) {
-      if (!positions) { designRenderer.clearFemOverlay(); return }
-      designRenderer.applyFemPositions(positions)
-    }
-
-    _btnRun?.addEventListener('click', () => {
-      if (!store.getState().currentDesign?.helices?.length) {
-        showToast('No design loaded.', { severity: 'error' }); return
-      }
-      store.setState({ cgRelaxPositions: null })
-      if (_chkShape) _chkShape.checked = false
-      if (_resultsDiv) _resultsDiv.style.display = 'none'
-      _setStatus('Running…', '#388bfd')
-      _showProgress(0, 'building_model')
-      designRenderer.clearFemOverlay()
-      cgRelaxClient.run()
-    })
-
-    _chkShape?.addEventListener('change', () => {
-      const { cgRelaxPositions } = store.getState()
-      if (_chkShape.checked && cgRelaxPositions) {
-        _applyShape(cgRelaxPositions)
-      } else {
-        designRenderer.clearFemOverlay()
-      }
-    })
-
-    store.subscribe((newState, prevState) => {
-      if (newState.currentDesign === prevState.currentDesign) return
-      cgRelaxClient.cancel()
-      store.setState({ cgRelaxPositions: null, cgRelaxStats: null })
-      if (_chkShape) _chkShape.checked = false
-      if (_resultsDiv) _resultsDiv.style.display = 'none'
-      if (_progressWrap) _progressWrap.style.display = 'none'
-      _setStatus('Idle', '#8b949e')
-    })
-  })()
 
   // ── Routing: Autoscaffold (seamed / seamless picker) ──────────────────────
   ;(() => {
