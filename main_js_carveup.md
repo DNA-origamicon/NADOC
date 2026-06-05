@@ -52,53 +52,49 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **Connection monitor /
-autosave / SSE region FULLY DRAINED** — extracted the last sub-part (#55, autosave + SSE) → `app/lifecycle.js`
-`initAutosaveSync`. main.js 10857 → 10728 (−129 ln)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **This session took the
+cheap off-frontier pick — Assign Scaffold modal** (#56) → `ui/scaffold_modal.js` `initScaffoldModal` + pure
+`countScaffoldNt`. main.js 10728 → 10588 (−140 ln)._
 
-**This session (#55):** the HARD Tier-5 cut the prior two deferred — the **Auto-save subscribers + Library
-SSE handler** → `app/lifecycle.js` factory `initAutosaveSync`. The factory now OWNS the four
-loop-prevention flags (`_savingAssembly`/`_reloadingFromSSE`/`_selfSavedPaths`/`_lastSameDocActivityMs`),
-the four debounce timers, both `subscribeSlice` writers, and `_handleLibraryEvent` + the
-`api.subscribeLibraryEvents` registration. **`_selfSavedPaths` is exposed by reference** so the 3 distant
-mutation sites (save dispatch, part-save fast path, broadcast file-saved) keep mutating the same Set verbatim;
-the broadcast/conn-monitor flag *assignments* go through `setReloadingFromSSE`/`markSameDocActivity` shims on a
-forward-declared lazy `let _lifecycleSync`. Factory call placed at the ORIGINAL design-subscriber spot (after
-`_fileIo`) to preserve subscription order. 14 vitest + smoke 23/23 + real-app `__nadocSyncDebug.status()`
-lazy-wiring check. **`app/lifecycle.js` now = initConnectionMonitor + initAutosaveSync; the whole region is done.**
+**This session (#56):** the **Assign Scaffold Sequence dialog** (Tools→Sequencing menu item + scaffold
+right-click "Assign Scaffold for strand…") → `ui/scaffold_modal.js` factory `initScaffoldModal(deps)→{openModal}`.
+Cleanest cheap modal since #42: self-contained, only DOM + `createModal`/`createButton`/`showToast` (imported
+directly, not deps). Pure scaffold-nt counter (loop/skip-aware) lifted as `countScaffoldNt` into
+`scene/scaffold_assign.js` (next to `ascWarningText`). `_undefinedHighlightOn`/`_refreshUndefinedHighlight`
+(declared ~5000 ln below) injected as lazy getters — TDZ-safe (apply path runs only on user action). Factory
+`const` sits at its natural Sequencing banner; the one earlier caller (right-click @~2886) reads it from a
+post-boot handler closure → plain `const` works (no lazy-let, mirrors #38). `openModal(targetStrandId)` replaced
+the set-flag-then-call pattern. 18 vitest (8 pure + 10 factory) + smoke 23/23 + real-app exercise.
 
-**Recommended next region — Tier 5 has two picks left, both HIGH:**
-1. **Menu bar + multi-doc spawn** (banners `// ── Menu bar` + `// ── Multi-document: New / Open`, ~3840–4160
-   currently) → `ui/menu_bar.js`. HIGH (every menu action). **Re-read this session: it opens with the New-Part
-   `createModal` block (`_buildNewDesignModalOnce`/`_openNewDesignModal`/`_onCreateClicked`) — that modal IS a
-   candidate sub-cut BUT `_openNewDesignModal` calls the lifecycle spine (`_resetForNewDesign`, `_fileHandle`,
-   `workspace.show()`, `api.createDesign`) and the multi-doc spawn touches doc_id/broadcast — so NOT as clean as
-   #42 background_modal.** Likely splits: (a) New-Part modal sub-block (spine-coupled), (b) multi-doc New/Open
-   spawn. Read for the cohesive seam first.
+**Recommended next region — Tier 5 frontier (both HIGH), or the last trivial cheap pick:**
+1. **Menu bar + multi-doc spawn** (banners `// ── Menu bar` + `// ── Multi-document: New / Open`) →
+   `ui/menu_bar.js`. HIGH (every menu action). Opens with the New-Part `createModal` block
+   (`_buildNewDesignModalOnce`/`_openNewDesignModal`/`_onCreateClicked`) — a candidate sub-cut BUT
+   `_openNewDesignModal` calls the lifecycle spine (`_resetForNewDesign`, `_fileHandle`, `workspace.show()`,
+   `api.createDesign`) and the multi-doc spawn touches doc_id/broadcast → NOT as clean as #42. Likely splits:
+   (a) New-Part modal sub-block (spine-coupled), (b) multi-doc New/Open spawn. Read for the cohesive seam first.
 2. **Finish "File open / save"**: open-file orchestration (`_openPartFromServer`/`_openAssemblyFromServer`) +
    menu-bar save dispatchers (`_saveDispatch`/`_saveAsDispatch`/`_saveAssembly`/`_saveAssemblyAsGuarded`). They
    call `_fileIo.*` already; lifting needs lifecycle-spine deps (leave the spine inline). MED-HIGH.
 
-**Cheaper off-frontier alternatives if "keep it cheap" wins** (clean self-contained modals, mirror #42
-background_modal — verified live this session): **Assign Scaffold modal** (`_openScaffoldModal` +
-`_buildScaffoldModalOnce`/`_onAscApplyClicked` + state, ~150 ln, banner `// ── Assign Scaffold modal`; pure core
-`ascWarningText` already in `scene/scaffold_assign.js`; deps store/api/`_showProgress`/`_undefinedHighlightOn`;
-right-click path at ~2890 sets `_ascTargetStrandId` then opens → needs a lazy `_assignScaffold` ref) and
-**Paste Script modal** (~46 ln, banner `// ── Paste Script modal`, deps `runScript`/`showToast` only — trivial).
+**Cheapest remaining off-frontier pick (if "keep it cheap" wins again):** **Paste Script modal** (~46 ln,
+banner `// ── Paste Script modal`, deps `runScript`/`showToast` only — trivial; mirror #42/#56). Verify it's still
+wanted first (dev-tool-ish). NOTE the Assign Scaffold modal is now DONE (#56) — don't re-propose it.
 
 **Banked gotcha this session:**
-- **Flag-ownership inversion + the by-reference Set.** Region owns the flags; distant sites reach in. A *mutated
-  Set* exposes by reference (verbatim `.add`/`.delete` at the 3 sites + the `_assemblyRefresh` dep keep sharing the
-  exact instance); a *reassigned primitive* (`_reloadingFromSSE`, `_lastSameDocActivityMs`) can only be a setter
-  (`setReloadingFromSSE`/`markSameDocActivity`) — you can't alias a primitive. The Set is the lucky case.
-- **Subscription order, not late deps, was the placement constraint.** Unlike #52 (`initFileIo` forced past its
-  banner by late deps), `initAutosaveSync` registers `subscribeSlice('design')` on construction, so the `const`
-  HAS to sit at the original design-subscriber line. `_assemblyRefresh` (needed by the SSE handler) is wired just
-  below + injected lazily, and reciprocally takes `_lifecycleSync.selfSavedPaths` — no cycle, because the Set
-  exists the instant `initAutosaveSync` returns.
-- **Lazy `_lifecycleSync` is mandatory:** the conn monitor (created ABOVE) writes `_reloadingFromSSE` and
-  `__nadocSyncDebug` (defined ABOVE) reads all three flags → both must be `_lifecycleSync?.…` on a forward
-  `let`. Grep-confirmed no boot-synchronous caller.
+- **Cheap modals are real LOC payoff and the lowest-risk lift available.** #56 (−140 ln) beat several HIGH Tier-3
+  cuts on payoff-per-risk. The recipe: a `createModal`-based block whose only deps are DOM + a couple of pure
+  cores + 1–2 store/api calls. Pull the math out as a pure fn (here `countScaffoldNt`), stub createModal/
+  createButton/toast in the factory test (capture the Apply button's `onClick` via the createButton mock to
+  drive the apply path), and the factory falls out clean. `ui/background_modal.test.js` is the reference.
+- **Lazy-getter for a flag declared *below* the factory** (`_undefinedHighlightOn` at ~9892 vs init at ~4665):
+  inject `getUndefinedHighlightOn: () => _undefinedHighlightOn` + `refreshUndefinedHighlight: () => _refreshUndefinedHighlight()`.
+  TDZ-safe because the arrow body only runs at apply time (post-boot), and the `const` factory needs no
+  synchronous read of those late vars — so it stays at its natural banner, not forced down like #52's `initFileIo`.
+- **The earlier caller can be a plain `const` ref, not a lazy-let, when it's a deferred handler.** The scaffold
+  right-click listener (@~2886) is textually above the `const _scaffoldModal` (@~4665) but its body runs on click
+  (post-boot) → the closure resolves the binding fine. Grep-verify no boot-synchronous call before relying on this
+  (mirrors #38; contrast the lazy-let in #26/#32 where the ref was passed *into another init* at construction).
 
 **Deliberately deferred (still in main.js):** FK propagation (`_applyFKLive`); Polymerize-region sub-part
 `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound). `_setMenuToggle`
@@ -503,7 +499,8 @@ assembly_diff, design_queries (+flexibleRunForBead), cluster_joint_math, aksel_f
 assembly_groups_util, color_util (+hexFromInt, atomColorsFromLetters), fret_util, vec_math, motion_chip,
 scaffold_assign, atom_filter, selection_bbox, belt_rider, overhang_hover_picker, assembly_lasso,
 coloring_modes, assembly_layout, ndc, flex_tethers, cluster_entries, empty_space_menu, slice_plane,
-plate_view, kinematics_ticker, file_io, app/lifecycle (connection monitor + autosave/SSE).
+plate_view, kinematics_ticker, file_io, app/lifecycle (connection monitor + autosave/SSE),
+scaffold_modal (Assign Scaffold dialog + `countScaffoldNt` in scaffold_assign).
 
 ## Smaller leftovers (after the tiers above)
 
