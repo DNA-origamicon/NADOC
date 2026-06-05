@@ -37,29 +37,39 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **Tier 6 fully drained**
-this session (5 regions): deleted 3 dead console helpers + 3 dead Help-menu toggles, extracted `_nadocDebug`.
-main.js 12188 → 11196 (−992 ln)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **Tier 4 opportunistic block**
+this session: extracted Tool Filter toggles (#49). main.js 11196 → 11162 (−34 ln)._
 
-**TIER 6 IS DONE.** This session: (#44) `nadocLabelAudit` deleted, (#45) `__extDebug`/`__xbDebug`/`__arcDebug`
-block deleted, (#46) OH Roots + Domain Ends Help-menu glow toggles deleted, (#47) Linker Anchor Debug deleted
-(+ its module), (#48) `_nadocDebug` extracted to `scene/debug/devtools_helpers.js`. The want-it gate drove
-delete-vs-extract per region (4 of 6 candidates were dead; the user's "all dead" guess was wrong on
-`_nadocDebug`, caught by grepping `e2e`). **Next session: pick from Tier 5 (file/session infra — HIGH blast
-radius) or the "Smaller leftovers"** — there is no remaining Tier-6 work.
+**This session (#49):** extracted the **Tool Filter toggles** sub-block (`#view-tools .sf-btn[data-key]` +
+the toolFilters→renderer-visibility subscriber) → `ui/tool_filter_toggles.js` `initToolFilterToggles`. Clean,
+self-contained (8 deps; `overhangHoverPicker` lazy-getter because it's created later in init order). 11 vitest
++ smoke 21/21 + a real-app vt-filter-button exercise.
+
+**Recommended next region — one of two clean tracks:**
+1. **More Tier-4 opportunistic blocks** (lowest risk, modest payoff): the remaining View-toggles sub-blocks
+   (View-menu pill-state subscriber + the 3 `_sync*MenuVisibility/Enabled` helpers; deform→selectableTypes
+   save/restore subscriber; Browser tab title) — each small, several entangled with state owned by sibling
+   regions, so verify cohesion before lifting. The **Orbit submenu** (`_setOrbitMode`+2 handlers, ~10 ln,
+   self-contained) and **Loop/Skip + MD-Seg legends** (two ~40-ln overlay+toggle blocks) are also clean.
+2. **Tier 5 (file/session infra — HIGH blast radius):** `File open / save` (~340 ln, banner ~3580),
+   `Menu bar + multi-doc spawn` (~320 ln, ~3982), `Connection monitor / autosave / SSE` (~287 ln, ~7856).
+   These touch boot/lifecycle — split each across ≥2 commits, lean on smoke + a multi-doc-pinned app exercise.
 
 **Banked gotchas this session:**
-- **Grep `e2e` before deleting any `window.*` debug global** — `_nadocDebug` has zero `src` callers yet 3 e2e
-  specs + photo-mode depend on it. A `src`-only "is it dead?" check is insufficient for debug hooks.
-- **Some "Help-menu debug" regions aren't standalone subsystems** — OH Roots' `_ovhgRootMap`/`_buildOvhgMaps`
-  feed the live Overhang Orientation panel, so the region couldn't be factory-extracted; the right move was
-  deleting the dead toggles, which *simplified* the shared infra instead of coupling a factory to it.
-- **Stash-and-rerun to attribute e2e failures.** Three specs the carve-up named as the `_nadocDebug` gate are
-  red on master independent of any change — a verbatim lift can't be gated on already-red specs. Prove
-  non-regression by running them on the pre-change baseline + lean on smoke's console-error gate + vitest.
+- **Verify a dep's init-order position before passing it.** `overhangHoverPicker` is created at ~8942, far
+  *after* the Tool-Filter call site (~5343) — passing it directly would capture `undefined`. Inject as a lazy
+  getter `() => overhangHoverPicker` (it only fires in assembly mode, where it exists). Grep the dep's `=`
+  definition line vs. the region line before wiring.
+- **A button whose reaction lives in a sibling region still lifts cleanly.** The `bluntEnds` filter button is
+  in this block but its visibility reaction is in the assembly blunt-end-sync region (~6606). The button only
+  does `setState({toolFilters})`, so moving just the button (leaving the reaction inline) is verbatim.
+- **Subscription registration order preserved** by calling the factory at the original block's line — the
+  toolFilters subscriber isn't in the geometry/position-overlay critical chain anyway, so low risk.
 
 **Deliberately deferred (still in main.js):** FK propagation (`_applyFKLive`); Polymerize-region sub-part
-`scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound).
+`scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound). `_setMenuToggle`
+(43-use shared-util lift, separate from any feature factory). Selection Filter toggles (welded to the
+drill-lock state machine at ~717 — must move together).
 
 ---
 
@@ -314,10 +324,16 @@ The largest single blocks and the most coupling into assembly state. Each needs 
     - **Selection Filter toggles** (`#select-filter .sf-btn`) is entangled with the **drill-lock state
       machine** (`_manualFilters`/`_isManualSelect`/`_reflectDrillLevel`/`_resetToAutoBaseline`) owned by the
       `// ── Selection-filter mode` region (~717) — extract those together, not here.
+    - **Tool Filter toggles** (`#view-tools .sf-btn[data-key]`: blunt/crossover/overhang locations +
+      the toolFilters→renderer-visibility subscriber) → **DONE** `ui/tool_filter_toggles.js`
+      `initToolFilterToggles` (extraction #49, commit e514895; −34 ln; 11 vitest; smoke 21/21 + real-app
+      vt-filter-button exercise). Self-contained; `overhangHoverPicker` injected as a lazy getter
+      (created later in init order); the `bluntEnds` reaction stays in main.js (assembly blunt-end sync).
     - The **View-menu pill-state subscriber** + 3 visibility helpers (`_syncAssemblyMenuVisibility` /
-      `_syncImportMenuVisibility` / `_syncDeformMenuEnabled`), the **Tool Filter toggles** block, the
-      **deform→selectableTypes save/restore** subscriber, and **Browser tab title** are each small
-      independent blocks — pick off opportunistically, do not bundle.
+      `_syncImportMenuVisibility` / `_syncDeformMenuEnabled`), the **deform→selectableTypes save/restore**
+      subscriber, and **Browser tab title** are each small independent blocks — pick off opportunistically,
+      do not bundle. NOTE: `_setMenuToggle` (the pill toggler, 43 uses) is a shared-util lift, not a feature
+      factory member.
 - [~] **Coloring / orbit / tools submenus** — banners `// ── Tools menu (Bend / Twist)` (~5337) …
   `// ── Orbit mode submenu` (~5395) … `// ── Coloring submenu` (~5407–5618). **PREMISE MIS-SCOPED AGAIN
   (verified 2026-06-04, #42 — 5th time):** this is NOT one cohesive `ui/view_menus.js` subsystem; the banner
