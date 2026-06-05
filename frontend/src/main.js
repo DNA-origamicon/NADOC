@@ -48,6 +48,7 @@ import { initAssemblyLasso } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
 import { initScaffoldModal } from './ui/scaffold_modal.js'
+import { initAutoscaffoldPicker } from './ui/autoscaffold_picker.js'
 import { initNewDesignModal } from './ui/new_design_modal.js'
 import { filterAtomData } from './scene/atom_filter.js'
 import { initSliceHighlighter } from './scene/slice_highlighter.js'
@@ -4044,72 +4045,7 @@ async function main() {
   }
 
   // ── Routing: Autoscaffold (seamed / seamless picker) ──────────────────────
-  ;(() => {
-    const modal   = document.getElementById('autoscaffold-modal')
-    const btnRun  = document.getElementById('as-run')
-    const btnCancel = document.getElementById('as-cancel')
-
-    async function _runAutoscaffold() {
-      const { currentDesign } = store.getState()
-      if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
-      const mode = modal.querySelector('input[name="as-mode"]:checked')?.value || 'seamed'
-      modal.classList.remove('visible')
-      if (mode === 'seamless') {
-        _showProgress('Seamless Scaffold', 'Routing seamless scaffold strand…')
-        const ok = await api.autoScaffoldSeamless()
-        _hideProgress()
-        if (!ok) {
-          showToast('Seamless scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
-        } else {
-          _setRoutingCheck('scaffoldEnds', true)
-        }
-      } else if (mode === 'matched') {
-        _showProgress('Matched Ends', 'Routing scaffold with matched ends for end-to-end polymerization…')
-        const ok = await api.autoScaffoldMatched()
-        _hideProgress()
-        if (!ok) {
-          showToast('Matched-ends scaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
-        } else {
-          _setRoutingCheck('scaffoldEnds', true)
-        }
-      } else if (mode === 'advanced-seamed') {
-        _showProgress('Advanced Seam Routing', 'Routing scaffold with experimental seam planner…')
-        const ok = await api.autoScaffoldAdvancedSeamed()
-        _hideProgress()
-        if (!ok) {
-          showToast('Advanced seam routing failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
-        } else {
-          _setRoutingCheck('scaffoldEnds', true)
-        }
-      } else if (mode === 'advanced-seamless') {
-        _showProgress('Advanced Seamless Routing', 'Routing scaffold with experimental seamless planner…')
-        const ok = await api.autoScaffoldAdvancedSeamless()
-        _hideProgress()
-        if (!ok) {
-          showToast('Advanced seamless routing failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
-        } else {
-          _setRoutingCheck('scaffoldEnds', true)
-        }
-      } else {
-        _showProgress('Autoscaffold (Seamed)', 'Routing scaffold strand with seam crossovers…')
-        const ok = await api.autoScaffoldSeamed()
-        _hideProgress()
-        if (!ok) {
-          showToast('Seamed autoscaffold failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
-        } else {
-          _setRoutingCheck('scaffoldEnds', true)
-        }
-      }
-    }
-
-    document.getElementById('menu-routing-scaffold-ends')?.addEventListener('click', () => {
-      if (!store.getState().currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
-      modal.classList.add('visible')
-    })
-    btnRun?.addEventListener('click', _runAutoscaffold)
-    btnCancel?.addEventListener('click', () => modal.classList.remove('visible'))
-    modal?.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('visible') })
-  })()
+  initAutoscaffoldPicker({ store, api, setRoutingCheck: _setRoutingCheck })
 
   document.getElementById('menu-routing-auto-crossover')?.addEventListener('click', async () => {
     if (!store.getState().currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
