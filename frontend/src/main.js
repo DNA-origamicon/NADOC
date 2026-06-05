@@ -131,6 +131,7 @@ import { applyBeltRiders, beltCurvePoints, beltLoopLength } from './scene/belt_g
 import { initBeltPolymerize } from './scene/belt_polymerize.js'
 import { initAssemblyRefresh } from './scene/assembly_refresh.js'
 import { initConnectionMonitor, initAutosaveSync } from './app/lifecycle.js'
+import { initDocSpawn } from './app/doc_spawn.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
@@ -3840,31 +3841,10 @@ async function main() {
   // ── Menu bar ─────────────────────────────────────────────────────────────────
 
   // ── Multi-document: New / Open spawn a new tab unless this space is empty ────
-  // The backend keys state by document, and each tab owns a ?doc=<id>. Selecting
-  // New Part / New Assembly / Open File when this tab already holds content opens
-  // the new space in its OWN tab so the current work isn't replaced. A "completely
-  // empty" space (no helices/strands/instances and no feature-log entries) is
-  // reused in place.
-  function _spaceHasContent() {
-    const s = store.getState()
-    const d = s.currentDesign, a = s.currentAssembly
-    const dHas = !!d && (((d.helices?.length ?? 0) > 0) ||
-                         ((d.strands?.length ?? 0) > 0) ||
-                         ((d.feature_log?.length ?? 0) > 0))
-    const aHas = !!a && (((a.instances?.length ?? 0) > 0) ||
-                         ((a.feature_log?.length ?? 0) > 0))
-    return dHas || aHas
-  }
-
-  // If this tab has content, mint a doc id and open the requested action in a new
-  // tab; return true so the caller skips the in-place action. Empty → false.
-  async function _spawnDocTabIfBusy(actionQuery) {
-    if (!_spaceHasContent()) return false
-    const id = await mintDocId()
-    if (!id) return false
-    window.open(`/?doc=${encodeURIComponent(id)}&${actionQuery}`, 'nadoc-doc-' + id)
-    return true
-  }
+  // app/doc_spawn.js (extraction #58). Pure spaceHasContent + spawnDocTabIfBusy
+  // (mints a ?doc=<id> tab when this space already holds content). Used by
+  // file-new (via the injected dep below) / file-new-assembly / file-open.
+  const _docSpawn = initDocSpawn({ store, mintDocId })
 
   // New Part modal (File → New Part + boot-doc-action) → ui/new_design_modal.js.
   // The lifecycle spine + multi-doc spawn guard stay inline and are injected;
@@ -3877,7 +3857,7 @@ async function main() {
     setWorkspacePath: _setWorkspacePath,
     setFileHandle: (v) => { _fileHandle = v },
     getLibraryPanel: () => libraryPanel,
-    spawnDocTabIfBusy: _spawnDocTabIfBusy,
+    spawnDocTabIfBusy: _docSpawn.spawnDocTabIfBusy,
   })
 
   // Unified "Open File" — one picker shows both parts (.nadoc) and assemblies
@@ -3887,7 +3867,7 @@ async function main() {
     const result = await openFileBrowser({ title: 'Open File', mode: 'open', fileType: 'all', api })
     if (!result) return
     const isAssembly = /\.nass$/i.test(result.path || result.name || '')
-    if (_spaceHasContent()) {
+    if (_docSpawn.spaceHasContent()) {
       const id = await mintDocId()
       if (id) {
         const q = new URLSearchParams({
@@ -3939,7 +3919,7 @@ async function main() {
   document.getElementById('menu-file-save-as')?.addEventListener('click', _saveAsDispatch)
 
   document.getElementById('menu-file-new-assembly')?.addEventListener('click', async () => {
-    if (await _spawnDocTabIfBusy('new=assembly')) return
+    if (await _docSpawn.spawnDocTabIfBusy('new=assembly')) return
     const name = window.prompt('Assembly name:', 'Untitled')
     if (name === null) return   // user cancelled
     const trimmed = name.trim() || 'Untitled'
