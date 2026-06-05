@@ -22,7 +22,7 @@ import { initSelectionManager }      from './scene/selection_manager.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
 import { bundleMidOffset }           from './scene/bundle_geometry.js'
-import { quatToEulerDeg, eulerDegToQuat, extractJointAngleDeg, posEulerFromMatrix } from './scene/rotation_math.js'
+import { quatToEulerDeg, extractJointAngleDeg } from './scene/rotation_math.js'
 import { initMeasurementTool }       from './scene/measurement_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
 import { initCreateSeam } from './scene/create_seam.js'
@@ -151,6 +151,7 @@ import { exportVideo }          from './scene/export_video.js'
 import { initClusterGizmo, computeClusterPivotFromEntries, rebaseClusterTranslationForPivot } from './scene/cluster_gizmo.js'
 import { initSubDomainGizmo } from './scene/sub_domain_gizmo.js'
 import { initInstanceGizmo }       from './scene/instance_gizmo.js'
+import { initMoveRotatePanel }      from './scene/move_rotate_panel.js'
 import { initOverhangOrientationPanel } from './ui/overhang_orientation_panel.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
 import { showOpProgress, hideOpProgress }                from './ui/op_progress.js'
@@ -4769,196 +4770,6 @@ async function main() {
     getOvhgRootMap: () => _ovhgRootMap,
   })
 
-  // ── Move/Rotate right-sidebar panel ──────────────────────────────────────────
-  const _mrPanel         = document.getElementById('move-rotate-panel')
-  const _mrClusterSel    = document.getElementById('mr-cluster-sel')
-  const _mrTxInp         = document.getElementById('mr-tx')
-  const _mrTyInp         = document.getElementById('mr-ty')
-  const _mrTzInp         = document.getElementById('mr-tz')
-  const _mrRxInp         = document.getElementById('mr-rx')
-  const _mrRyInp         = document.getElementById('mr-ry')
-  const _mrRzInp         = document.getElementById('mr-rz')
-  const _mrJaInp         = document.getElementById('mr-ja')
-  const _mrPivotSel      = document.getElementById('mr-pivot-sel')
-  const _mrRotSection    = document.getElementById('mr-rotation-section')
-  const _mrJaSection     = document.getElementById('mr-joint-angle-section')
-  let   _mrPivotIsJoint  = false
-  let   _mrAssemblyCtx   = null
-
-
-  function _mrShowJointMode(on) {
-    _mrPivotIsJoint = on
-    if (_mrRotSection) _mrRotSection.style.display = on ? 'none' : ''
-    if (_mrJaSection)  _mrJaSection.style.display  = on ? '' : 'none'
-  }
-
-  function _mrSetTransformValues(tx, ty, tz, rx, ry, rz) {
-    if (_mrTxInp && document.activeElement !== _mrTxInp) _mrTxInp.value = tx.toFixed(3)
-    if (_mrTyInp && document.activeElement !== _mrTyInp) _mrTyInp.value = ty.toFixed(3)
-    if (_mrTzInp && document.activeElement !== _mrTzInp) _mrTzInp.value = tz.toFixed(3)
-    if (_mrRxInp && document.activeElement !== _mrRxInp) _mrRxInp.value = rx.toFixed(3)
-    if (_mrRyInp && document.activeElement !== _mrRyInp) _mrRyInp.value = ry.toFixed(3)
-    if (_mrRzInp && document.activeElement !== _mrRzInp) _mrRzInp.value = rz.toFixed(3)
-  }
-
-  function _mrSetTransformValuesFromMatrix(matrix4) {
-    if (!matrix4) return
-    const { pos, euler } = posEulerFromMatrix(matrix4)
-    _mrSetTransformValues(pos[0], pos[1], pos[2], euler[0], euler[1], euler[2])
-  }
-
-  function _mrSetJointAngle(deg) {
-    if (_mrJaInp && document.activeElement !== _mrJaInp) _mrJaInp.value = deg.toFixed(1)
-  }
-
-  // Flexible ssDNA-segment relax + "ssDNA constrained" pivot gating → scene/flex_relax.js.
-  const _flexRelax = initFlexRelax({
-    store, api, designRenderer, clusterGizmo,
-    isTranslateRotateActive: () => _translateRotateActive,
-  })
-
-  function _mrSetPivotOptions(joints, clusterId = null) {
-    if (!_mrPivotSel) return
-    while (_mrPivotSel.options.length > 1) _mrPivotSel.remove(1)
-    for (const j of (joints ?? [])) {
-      const opt = document.createElement('option')
-      opt.value = j.id
-      opt.textContent = `Joint: ${j.name}`
-      _mrPivotSel.appendChild(opt)
-    }
-    // "ssDNA constrained" — only when every inter-cluster connection from this
-    // cluster passes through a flexible segment (free-until-taut drag).
-    if (_flexRelax.hasGate(clusterId)) {
-      const opt = document.createElement('option')
-      opt.value = 'ssdna'
-      opt.textContent = 'ssDNA constrained'
-      _mrPivotSel.appendChild(opt)
-    }
-  }
-
-  function _mrSetSelectedPivot(id) {
-    if (_mrPivotSel) _mrPivotSel.value = id ?? 'centroid'
-    _mrShowJointMode(id !== 'centroid' && id != null)
-  }
-
-  function _mrSetClusterOptions(clusters, selectedId) {
-    if (!_mrClusterSel) return
-    _mrClusterSel.innerHTML = ''
-    for (const c of clusters) {
-      const opt = document.createElement('option')
-      opt.value = c.id
-      opt.textContent = c.name
-      _mrClusterSel.appendChild(opt)
-    }
-    _mrClusterSel.value = selectedId ?? clusters[clusters.length - 1]?.id ?? ''
-  }
-
-  function _mrSyncClusterDropdown(clusterId) {
-    if (_mrClusterSel) _mrClusterSel.value = clusterId
-  }
-
-  function _mrCommitInputs() {
-    if (store.getState().assemblyActive) {
-      if (!_mrAssemblyCtx) return
-      const tx = parseFloat(_mrTxInp?.value) || 0
-      const ty = parseFloat(_mrTyInp?.value) || 0
-      const tz = parseFloat(_mrTzInp?.value) || 0
-      const rx = parseFloat(_mrRxInp?.value) || 0
-      const ry = parseFloat(_mrRyInp?.value) || 0
-      const rz = parseFloat(_mrRzInp?.value) || 0
-      const q = eulerDegToQuat(rx, ry, rz)
-      const mat = new THREE.Matrix4().compose(
-        new THREE.Vector3(tx, ty, tz),
-        new THREE.Quaternion(q[0], q[1], q[2], q[3]),
-        new THREE.Vector3(1, 1, 1),
-      )
-      _applyAssemblyPrimaryLive(_mrAssemblyCtx, mat)
-      instanceGizmo.setMatrix(mat)
-      _queueAssemblyPrimaryCommit(_mrAssemblyCtx, mat)
-      return
-    }
-    if (_mrPivotIsJoint) {
-      if (!clusterGizmo.isActive()) return
-      const joint = clusterGizmo.getActiveJoint()
-      if (!joint) return
-      const deg = parseFloat(_mrJaInp?.value)
-      if (!isNaN(deg)) clusterGizmo.setJointRotation(joint, deg)
-      return
-    }
-    if (!clusterGizmo.isActive()) return
-    const tx = parseFloat(_mrTxInp?.value) || 0
-    const ty = parseFloat(_mrTyInp?.value) || 0
-    const tz = parseFloat(_mrTzInp?.value) || 0
-    const rx = parseFloat(_mrRxInp?.value) || 0
-    const ry = parseFloat(_mrRyInp?.value) || 0
-    const rz = parseFloat(_mrRzInp?.value) || 0
-    clusterGizmo.setTransform([tx, ty, tz], eulerDegToQuat(rx, ry, rz))
-  }
-
-  // Wire translation/rotation text inputs
-  for (const inp of [_mrTxInp, _mrTyInp, _mrTzInp, _mrRxInp, _mrRyInp, _mrRzInp].filter(Boolean)) {
-    inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); inp.blur(); _mrCommitInputs() } })
-    inp.addEventListener('change', _mrCommitInputs)
-  }
-  if (_mrJaInp) {
-    _mrJaInp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); _mrJaInp.blur(); _mrCommitInputs() } })
-    _mrJaInp.addEventListener('change', _mrCommitInputs)
-  }
-
-  // Pivot dropdown change
-  _mrPivotSel?.addEventListener('change', () => {
-    const val = _mrPivotSel.value
-    if (val === 'centroid') {
-      _mrShowJointMode(false)
-      clusterGizmo.setConstraint('centroid', null)
-    } else if (val === 'ssdna') {
-      _mrShowJointMode(false)
-      const clusterId = store.getState().activeClusterId
-      clusterGizmo.setConstraint('ssdna', _flexRelax.buildSsdnaPayload(clusterId))
-      showToast('ssDNA constrained: drag the arm — tethers won’t overstretch')
-    } else {
-      const joint = store.getState().currentDesign?.cluster_joints?.find(j => j.id === val)
-      if (joint) { _mrShowJointMode(true); clusterGizmo.setConstraint('joint', joint) }
-    }
-  })
-
-
-  async function _refreshClusterPivotForAttach(clusterId) {
-    if (clusterGizmo.hasPendingTransform?.(clusterId)) return
-    const { currentDesign } = store.getState()
-    const backboneEntries = designRenderer.getBackboneEntries?.() ?? []
-    if (!backboneEntries.length) return
-    const cluster = currentDesign?.cluster_transforms?.find(c => c.id === clusterId)
-    if (!cluster) return
-
-    const pivot = computeClusterPivotFromEntries(cluster, currentDesign, backboneEntries)
-    if (!pivot.every(Number.isFinite)) return
-
-    const translation = rebaseClusterTranslationForPivot(cluster, pivot)
-    if (vecClose(cluster.pivot, pivot) && vecClose(cluster.translation, translation)) return
-
-    clusterGizmo.setPendingTransform(clusterId, {
-      pivot,
-      translation,
-      rotation: cluster.rotation,
-    })
-  }
-
-  // Cluster dropdown change — switch gizmo to chosen cluster
-  _mrClusterSel?.addEventListener('change', async () => {
-    const clusterId = _mrClusterSel.value
-    if (!clusterId || !_translateRotateActive) return
-    if (clusterId === store.getState().activeClusterId) return
-    await _refreshClusterPivotForAttach(clusterId)
-    clusterGizmo.attach(clusterId, scene, camera, canvas)
-    // Repopulate pivot options (joints + ssDNA-constrained gate) for this cluster.
-    await _flexRelax.refreshFlexGates()
-    const joints = store.getState().currentDesign?.cluster_joints?.filter(j => j.cluster_id === clusterId) ?? []
-    _mrSetPivotOptions(joints, clusterId)
-    _mrSetSelectedPivot('centroid')
-    clusterGizmo.setConstraint('centroid', null)
-  })
-
   const instanceGizmo = initInstanceGizmo(store, controls)
   const assemblyJointRenderer = initAssemblyJointRenderer(scene, camera, canvas, store, api, controls)
 
@@ -4983,6 +4794,61 @@ async function main() {
   const _analyzeMotionConstraints       = _assemblyTransform.analyzeMotionConstraints
   const _setMotionChip                  = _assemblyTransform.setMotionChip
 
+  // ── Move/Rotate right-sidebar panel ──────────────────────────────────────────
+  // Flexible ssDNA-segment relax + "ssDNA constrained" pivot gating → scene/flex_relax.js.
+  // Kept in main (also used by the Translate/Rotate tool fns below) and injected
+  // into the panel + tool.
+  const _flexRelax = initFlexRelax({
+    store, api, designRenderer, clusterGizmo,
+    isTranslateRotateActive: () => _translateRotateActive,
+  })
+
+  // Recompute a cluster's pivot/translation from live bead positions before the
+  // gizmo attaches to it. Tool-shared (panel cluster-dropdown + the tool's
+  // gizmo-attach paths) so it stays in main and is injected into the panel.
+  async function _refreshClusterPivotForAttach(clusterId) {
+    if (clusterGizmo.hasPendingTransform?.(clusterId)) return
+    const { currentDesign } = store.getState()
+    const backboneEntries = designRenderer.getBackboneEntries?.() ?? []
+    if (!backboneEntries.length) return
+    const cluster = currentDesign?.cluster_transforms?.find(c => c.id === clusterId)
+    if (!cluster) return
+
+    const pivot = computeClusterPivotFromEntries(cluster, currentDesign, backboneEntries)
+    if (!pivot.every(Number.isFinite)) return
+
+    const translation = rebaseClusterTranslationForPivot(cluster, pivot)
+    if (vecClose(cluster.pivot, pivot) && vecClose(cluster.translation, translation)) return
+
+    clusterGizmo.setPendingTransform(clusterId, {
+      pivot,
+      translation,
+      rotation: cluster.rotation,
+    })
+  }
+
+  // Panel shell (numeric inputs + pivot/cluster dropdowns) → scene/move_rotate_panel.js.
+  // Alias-consts below keep the tool fns + external call sites verbatim — only the
+  // function bodies moved.
+  const _moveRotatePanel = initMoveRotatePanel({
+    store, scene, camera, canvas,
+    clusterGizmo, instanceGizmo, flexRelax: _flexRelax,
+    applyAssemblyPrimaryLive:     _applyAssemblyPrimaryLive,
+    queueAssemblyPrimaryCommit:   _queueAssemblyPrimaryCommit,
+    refreshClusterPivotForAttach: _refreshClusterPivotForAttach,
+    isTranslateRotateActive:      () => _translateRotateActive,
+  })
+  const _mrPanel                        = _moveRotatePanel.panel
+  const _mrClusterSel                   = _moveRotatePanel.clusterSel
+  const _mrPivotSel                     = _moveRotatePanel.pivotSel
+  const _mrSetTransformValues           = _moveRotatePanel.setTransformValues
+  const _mrSetTransformValuesFromMatrix = _moveRotatePanel.setTransformValuesFromMatrix
+  const _mrSetJointAngle                = _moveRotatePanel.setJointAngle
+  const _mrSetPivotOptions              = _moveRotatePanel.setPivotOptions
+  const _mrSetSelectedPivot             = _moveRotatePanel.setSelectedPivot
+  const _mrSetClusterOptions            = _moveRotatePanel.setClusterOptions
+  const _mrSyncClusterDropdown          = _moveRotatePanel.syncClusterDropdown
+
   // Group/instance gizmo subsystem (revolute-drag angle accumulator + gear/belt
   // live-coupling engine + single-instance gizmo attach). The shared helpers it
   // leans on (transform-context builder, Move/Rotate live-apply + commit-queue,
@@ -4996,7 +4862,7 @@ async function main() {
     createAssemblyTransformContext:  _createAssemblyTransformContext,
     applyAssemblyPrimaryLive:        _applyAssemblyPrimaryLive,
     queueAssemblyPrimaryCommit:      _queueAssemblyPrimaryCommit,
-    getMrAssemblyCtx:                () => _mrAssemblyCtx,
+    getMrAssemblyCtx:                () => _moveRotatePanel.getAssemblyCtx(),
     setMrTransformValuesFromMatrix:  _mrSetTransformValuesFromMatrix,
     effectiveInstanceMatrix:         _effectiveInstanceMatrix,
     updateAssemblyMultiBox:          () => _assemblyMultiBox.update(),
@@ -5303,7 +5169,7 @@ async function main() {
       }
       const ctx = _createAssemblyTransformContext(activeInstanceId)
       if (!ctx) return
-      _mrAssemblyCtx = ctx
+      _moveRotatePanel.setAssemblyCtx(ctx)
       _translateRotateActive = true
       store.setState({ translateRotateActive: true })
       document.getElementById('mode-indicator').textContent = 'MOVE — Tab: move/rotate · click elsewhere: commit · Esc: cancel'
@@ -5345,7 +5211,7 @@ async function main() {
     canvas.addEventListener('pointerdown', _onToolPickPointerDown)
 
     // Populate and show the right-sidebar move/rotate panel
-    _mrAssemblyCtx = null
+    _moveRotatePanel.setAssemblyCtx(null)
     if (_mrClusterSel) _mrClusterSel.disabled = false
     if (_mrPivotSel) _mrPivotSel.disabled = false
     _mrSetClusterOptions(clusters, first.id)
@@ -5489,7 +5355,7 @@ async function main() {
           _hideProgress()
         }
       }
-      _mrAssemblyCtx = null
+      _moveRotatePanel.setAssemblyCtx(null)
       if (_mrPanel) _mrPanel.style.display = 'none'
       document.getElementById('mode-indicator').textContent = 'ASSEMBLY MODE'
       return
@@ -5689,7 +5555,7 @@ async function main() {
       instanceGizmo.detach()
       _assemblyPendingTransforms.clear()
       _assemblyPendingPartJoints.clear()
-      _mrAssemblyCtx = null
+      _moveRotatePanel.setAssemblyCtx(null)
       if (_mrPanel) _mrPanel.style.display = 'none'
       const assembly = store.getState().currentAssembly
       if (assembly) {
