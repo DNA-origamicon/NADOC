@@ -156,6 +156,7 @@ import { initKeyboardShortcuts } from './ui/keyboard_shortcuts.js'
 import { initViewToolButtons } from './ui/view_tool_buttons.js'
 import { initToolFilterToggles } from './ui/tool_filter_toggles.js'
 import { initViewLegends } from './ui/view_legends.js'
+import { initViewMenuPills } from './ui/view_menu_pills.js'
 import { showConfirm }                         from './ui/primitives/confirm.js'
 import { createContextMenu }                   from './ui/primitives/context_menu.js'
 import { initSidebarResize }                   from './ui/sidebar_resize.js'
@@ -5192,51 +5193,11 @@ async function main() {
     document.getElementById(id)?.classList.toggle('is-on', on)
   }
 
-  function _syncAssemblyMenuVisibility(active) {
-    document.getElementById('menu-item-assembly').style.display  = active ? '' : 'none'
-    document.getElementById('menu-item-tools').style.display     = active ? 'none' : ''
-    for (const id of ['menu-view-slice', 'menu-view-unfold', 'menu-view-cadnano']) {
-      document.getElementById(id).style.display = active ? 'none' : ''
-    }
-  }
-
-  // Import caDNAno / scadnano are only shown on the welcome screen or in assembly mode.
-  function _syncImportMenuVisibility() {
-    const { currentDesign, assemblyActive } = store.getState()
-    const show = !currentDesign || assemblyActive
-    for (const id of ['menu-file-import-cadnano', 'menu-file-import-scadnano']) {
-      const el = document.getElementById(id)
-      if (el) el.style.display = show ? '' : 'none'
-    }
-  }
-
-  // Gray out the "Deformed View" menu item while cadnano or unfold is active.
-  // Both modes require deform to be off (straight geometry), so the toggle is
-  // disallowed from inside them; _toggleDeformView() also shows a toast.
-  function _syncDeformMenuEnabled() {
-    const s = store.getState()
-    const disabled = !!(s.cadnanoActive || s.unfoldActive)
-    document.getElementById('menu-view-deform')?.classList.toggle('disabled', disabled)
-  }
-
-  // Sync store-backed toggles reactively.
-  store.subscribe((newState, prevState) => {
-    if (newState.unfoldActive     !== prevState.unfoldActive)     { _setMenuToggle('menu-view-unfold',       newState.unfoldActive);  _syncDeformMenuEnabled() }
-    if (newState.cadnanoActive    !== prevState.cadnanoActive)    { _setMenuToggle('menu-view-cadnano',      newState.cadnanoActive); _syncDeformMenuEnabled() }
-    if (newState.assemblyActive   !== prevState.assemblyActive)   { _syncAssemblyMenuVisibility(newState.assemblyActive); _syncImportMenuVisibility() }
-    if (newState.currentDesign    !== prevState.currentDesign)    _syncImportMenuVisibility()
-    if (newState.deformVisuActive !== prevState.deformVisuActive) _setMenuToggle('menu-view-deform',       newState.deformVisuActive)
-    if (newState.showHelixLabels  !== prevState.showHelixLabels)  _setMenuToggle('menu-view-helix-labels', newState.showHelixLabels)
-    if (newState.showSequences    !== prevState.showSequences)    _setMenuToggle('menu-view-sequences',    newState.showSequences)
-    if (newState.staplesHidden    !== prevState.staplesHidden)    _setMenuToggle('menu-view-hide-staples', newState.staplesHidden)
-    // When unfold auto-deactivates on cadnano exit, update the mode indicator
-    // once the unfold animation finishes (cadnanoActive is already false by then).
-    if (newState.unfoldActive !== prevState.unfoldActive && !newState.unfoldActive && !newState.cadnanoActive) {
-      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
-    }
-  })
-
-  _syncImportMenuVisibility()
+  // Pill-state subscriber + the 3 menu-visibility helpers extracted to
+  // ui/view_menu_pills.js. `_setMenuToggle` (43-use shared util) stays here and is
+  // injected. The factory registers its store subscriber + runs the initial
+  // import-visibility sync at this exact point → subscription order preserved.
+  initViewMenuPills({ store, setMenuToggle: _setMenuToggle })
 
   // ── Browser tab title ────────────────────────────────────────────────────────
   store.subscribe((newState, prevState) => {

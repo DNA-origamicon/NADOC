@@ -38,35 +38,40 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 ## Next-session handoff
 
 _Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **Tier 4 opportunistic block**
-this session: extracted View legends (Loop/Skip + MD-Seg) (#50). main.js 11162 → 11086 (−76 ln)._
+this session: extracted View-menu pill-state subscriber + 3 visibility helpers (#51). main.js 11086 → 11047 (−39 ln)._
 
-**This session (#50):** extracted the **View legends** pair — the Loop/Skip + MD-Segmentation fixed-position
-legend overlays + their View-menu toggle handlers → `ui/view_legends.js` `initViewLegends`. Done as ONE
-cohesive region (they're a matched pair: both toggle a highlight/overlay module + show/hide a legend, and
-`_resetForNewDesign` hides both together → exposed as `reset()`). 4 deps (store, loopSkipHighlight,
-mdSegmentation, setMenuToggle); `computeSegments` imported directly (pure, co-located). 8 vitest factory +
-smoke 21/21 + a real-app View-menu toggle exercise (both legends on/off, MD detail line, zero console errors).
+**This session (#51):** extracted the **View-menu pill-state subscriber + 3 visibility helpers**
+(`_syncAssemblyMenuVisibility` / `_syncImportMenuVisibility` / `_syncDeformMenuEnabled` + the reactive
+`store.subscribe` pill-state subscriber + its initial `syncImportMenuVisibility()` call) → `ui/view_menu_pills.js`
+`initViewMenuPills({store, setMenuToggle})`. Self-contained: the 3 helpers had ZERO external callers (grep-verified
+— all calls were inside the region). `_setMenuToggle` (43-use shared util) stays in main.js, injected as
+`setMenuToggle`. Factory call placed at the subscriber's original line so subscription registration order is
+preserved. 11 vitest factory + smoke 21/21 + a real-app View→Sequences pill-flip exercise (is-on on/off, zero
+console errors). Per the handoff's "do not bundle" rule, kept it to the pill-state block — left Browser tab title
++ deform→selectableTypes as separate future picks.
 
 **Recommended next region — one of two clean tracks:**
 1. **More Tier-4 opportunistic blocks** (lowest risk, modest payoff): the **Orbit submenu** (`_setOrbitMode`+2
-   handlers, ~10 ln @ banner 5097, self-contained — clean but tiny payoff); the View-menu pill-state subscriber
-   + 3 `_sync*MenuVisibility/Enabled` helpers (banner 5265); deform→selectableTypes save/restore subscriber;
-   Browser tab title (banner 5317). The last few are small, several entangled with state owned by sibling
-   regions, so verify cohesion before lifting.
-2. **Tier 5 (file/session infra — HIGH blast radius):** `File open / save` (~340 ln, banner ~3581),
-   `Menu bar + multi-doc spawn` (~320 ln, ~3983), `Connection monitor / autosave / SSE` (~287 ln, ~7822).
+   handlers, ~10 ln @ banner 5094, self-contained — clean but tiny payoff); the remaining View-menu odds
+   (deform→selectableTypes save/restore subscriber @ banner ~5278; Browser tab title @ banner 5241 — a 5-ln
+   subscriber, too small to be worth its own module alone). The Coloring submenu (`_setColoringMode` + 6
+   handlers) has 6 external call sites → more coupling than its ~20 ln implies; defer or bundle with a
+   coloring-state lift.
+2. **Tier 5 (file/session infra — HIGH blast radius):** `File open / save` (~340 ln, banner ~3582),
+   `Menu bar + multi-doc spawn` (~320 ln, ~3980), `Connection monitor / autosave / SSE` (~287 ln, ~7746).
    These touch boot/lifecycle — split each across ≥2 commits, lean on smoke + a multi-doc-pinned app exercise.
 
 **Banked gotchas this session:**
-- **A region hidden by `_resetForNewDesign` lifts cleanly by exposing a `reset()` method.** Both legends were
-  also torn down by a 5-line block in `_resetForNewDesign` (~3626); the factory exposes `reset()` that runs
-  those exact 5 statements (order preserved) and main.js's reset block calls `viewLegends.reset()`. Verbatim.
-- **`_resetForNewDesign` calls are all deferred** (event handlers / `_openNewDesignModal` / close-session), so
-  a plain `const viewLegends` at the original block line (~5160) is TDZ-safe — no lazy getter (mirrors #38).
-  Verify by grepping every `_resetForNewDesign()` call site is inside a callback, not synchronous boot.
-- **A directly-imported pure helper need not be a dep.** `_computeMdSegments` was a one-use import alias in
-  main.js (`computeSegments as _computeMdSegments`); the module imports `computeSegments` directly and the
-  alias was dropped from main.js's import — leaving `initMdSegmentationOverlay` on that line.
+- **A region's apparent LOC ≠ its movable LOC when a shared util sits inside it.** `_setMenuToggle` is
+  physically between the banner and the helpers (line ~5191), but it's a 43-use shared util → leave it in
+  main.js (don't move it out of the region), inject it as a dep. Grep the call count BEFORE deciding what moves.
+- **Subscription-order preservation = place the factory call at the subscriber's original line.** The 3 helpers
+  were hoisted `function` decls earlier in the block, but only the `store.subscribe()` call has ordering
+  significance. Confirmed no other `store.subscribe` sits between the helpers' old location and the subscriber,
+  so the factory init slots in cleanly at the subscriber's position with order intact.
+- **No optional chaining → ids must exist.** `_syncAssemblyMenuVisibility` reads `.style.display` on
+  `menu-item-assembly`/`menu-item-tools`/slice/unfold/cadnano WITHOUT `?.` — the jsdom test must mount all of
+  them or the factory throws (in the app they always exist).
 
 **Deliberately deferred (still in main.js):** FK propagation (`_applyFKLive`); Polymerize-region sub-part
 `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound). `_setMenuToggle`
@@ -331,11 +336,14 @@ The largest single blocks and the most coupling into assembly state. Each needs 
       `initToolFilterToggles` (extraction #49, commit e514895; −34 ln; 11 vitest; smoke 21/21 + real-app
       vt-filter-button exercise). Self-contained; `overhangHoverPicker` injected as a lazy getter
       (created later in init order); the `bluntEnds` reaction stays in main.js (assembly blunt-end sync).
-    - The **View-menu pill-state subscriber** + 3 visibility helpers (`_syncAssemblyMenuVisibility` /
-      `_syncImportMenuVisibility` / `_syncDeformMenuEnabled`), the **deform→selectableTypes save/restore**
-      subscriber, and **Browser tab title** are each small independent blocks — pick off opportunistically,
-      do not bundle. NOTE: `_setMenuToggle` (the pill toggler, 43 uses) is a shared-util lift, not a feature
-      factory member.
+    - **View-menu pill-state subscriber** + 3 visibility helpers (`_syncAssemblyMenuVisibility` /
+      `_syncImportMenuVisibility` / `_syncDeformMenuEnabled`) → **DONE** `ui/view_menu_pills.js`
+      `initViewMenuPills` (extraction #51, commit pending; −39 ln; 11 vitest; smoke 21/21 + real-app
+      View→Sequences pill-flip exercise). `_setMenuToggle` stays in main.js (43-use shared util), injected
+      as `setMenuToggle` dep; the 3 helpers had zero external callers → fully self-contained lift.
+    - The **deform→selectableTypes save/restore** subscriber and **Browser tab title** are still small
+      independent blocks — pick off opportunistically, do not bundle. NOTE: `_setMenuToggle` (the pill
+      toggler, 43 uses) is a shared-util lift, not a feature factory member.
 - [~] **Coloring / orbit / tools submenus** — banners `// ── Tools menu (Bend / Twist)` (~5337) …
   `// ── Orbit mode submenu` (~5395) … `// ── Coloring submenu` (~5407–5618). **PREMISE MIS-SCOPED AGAIN
   (verified 2026-06-04, #42 — 5th time):** this is NOT one cohesive `ui/view_menus.js` subsystem; the banner
