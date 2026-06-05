@@ -37,39 +37,38 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after extraction #43 (Create Seam handler → `scene/create_seam.js`, −259 ln)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after DELETING two dead
+Tier-6 debug regions (terminus_audit −190 ln / extension_arc_debug −424 ln; main.js 12188 → 11575)._
 
-**Create Seam DONE (#43, −259 ln — the biggest single-region drain so far).** The `menu-create-seam` click
-handler lifted to `scene/create_seam.js`: pure `computeSeamPlacements(design)→placements[]` (the whole
-coverage→adjacency→Hamiltonian-path→junction pipeline) + 3 exported pure helpers (`isForward` /
-`scaffoldXoverNeighbor` / `nickBpForStrand`, the last two now take `isHC` instead of closing over it) + thin
-`initCreateSeam({store, api})`. Dropped dead local `helixByGridPos` (built, never read). 17 vitest (incl. a
-full-pipeline integration test on a synthetic SQ 4-helix column asserting exact bps 34/35). **App exercise
-was a real end-to-end win:** a doc-pinned click test (load 26hb → real menu click → place-batch POST with
-exactly 10 placements, zero console errors) — see the log for the multi-doc gotcha that made the first 3
-attempts return 0 placements. Gate: vitest 503 + smoke 21/21 + the doc-pinned click exercise.
+**Two dead Tier-6 debug helpers DELETED, not extracted (user-confirmed via want-it gate).** `nadocLabelAudit`
+(terminus audit, −190, commit 02f63c7) and the `__extDebug`/`__xbDebug`/`__arcDebug` DEV block (extension-arc
+snapshot/diff, −424, commit aacc2c2). Both were dev-only browser-console helpers with **zero code/e2e
+references** (console tools don't grep — the want-it gate is the only oracle; asked the user, all confirmed
+dead). The ext-arc delete also collapsed an orphaned `if (window.__extDebugWatch)` console-log wrapper in
+`unfold_view.js` to its bare `applyUnfoldOffsetsExtensions()` call (behavior-identical). Gate: vitest 503 +
+smoke 21/21 for each. **Deletion drains the closure faster than extraction (−614 ln, two commits, no test
+surface added) and is the right call for dead debug cruft.**
 
-**Note (stale index):** `MEMORY.md` references `project_create_seam.md` but no such file exists — the index
-entry is stale (pre-existing, not from this batch). The seam pipeline now has its own tested module instead.
+**KEY FINDING — the want-it gate caught a wrong premise.** The third helper the user marked dead,
+`_nadocDebug` (devtools_helpers, ~412 ln), is **NOT dead**: three e2e specs use it (`relax_undo_bug` →
+`snapPos`, `dsdna_linker_selection` → `overhangLinkArcs`, `representation_order_fkeys` → `refetch`) and
+photo-mode attaches `_nadocDebug.photoMaterials/…` at ~10275. **NOT deleted.** Marked `[!]` in Tier 6: if
+ever touched it's an *extraction* keeping the global, with those e2e specs as the gate — not a delete.
+**Lesson: always grep `src` AND `e2e` for the global before deleting a "dead" console helper — `_nadocDebug`
+is a shared debug namespace many modules extend.**
 
 **Next best targets:**
-- **Tier 6 dev-only warm-ups** (LOW risk, token-cheap, gated by `?debug`/DEV): `devtools_helpers` (~412 ln,
-  `window.__*`) / `extension_arc_debug` (~424 ln) / `terminus_audit` (~210 ln) / `help_menu_toggles` (~76 ln).
-- ~~**Smaller leftovers — Create Near/Far Ends**~~ **DELETED 2026-06-04** (not extracted). Audited as
-  superseded primitive scaffold routing: two Help-menu buttons, zero backend tests, frozen since intro
-  (commit `36fcb00`, 2026-04-29), and functionally embedded in the actively-developed Autoscaffold
-  seamed/seamless router (`seamed_router.py` emits the same `create_near_ends`/`create_far_ends` process-IDs).
-  Removed both menu buttons + main.js handlers (−399 ln) + the 2 api/client fns + the 2 crud endpoints +
-  request models. seamed_router only reuses the process-ID string, so it was untouched. User-confirmed delete.
+- **Tier 6 remaining (LOW risk, token-cheap):** `help_menu_toggles` (~76 ln, smallest) — but FIRST run the
+  want-it gate (it wires real Help-menu glow toggles, likely *wanted*, so extract not delete).
+  `devtools_helpers` (`_nadocDebug`, ~412 ln) is the only big Tier-6 item left but is **extract-only**
+  (e2e-depended) → 2-commit split, e2e specs as gate.
+- **Tier 5 file/session infra** (HIGH blast radius) once Tier-6 drains.
 - **Still-in-main, deliberately deferred:** FK propagation (`_applyFKLive`); Polymerize-region sub-part
   `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound).
 
-**Gotcha banked this batch (multi-doc app exercise):** a throwaway click-exercise spec that does
-`request.post('/api/design/load')` (default doc) then `page.goto('/')` will find `store.currentDesign === null`
-in the tab (the tab adopts its OWN doc), so the handler no-ops and you see no POST — looks like a broken lift
-but isn't. Fix: pin `?doc=<DOC>` on the goto AND stamp `X-NADOC-Doc:<DOC>` on the load, then nudge a rebuild
-via `new BroadcastChannel('nadoc-design').postMessage({type:'design-changed', docId:<DOC>})`. Also: GET
-`/api/design` returns `{design, validation, ...}` — the design is under `.design`, not the root.
+**Gotcha banked this batch:** for any "dead debug helper" deletion, grep BOTH `src` and `e2e` for the
+global name first — e2e specs reference `window.*` debug hooks that never appear in `src`. A console helper
+with no `src` callers can still be load-bearing for the test suite. (This is what saved `_nadocDebug`.)
 
 ---
 
@@ -368,12 +367,23 @@ These touch boot/lifecycle. High blast radius; do after the loop is well-grooved
 Gated by `?debug` / `import.meta.env.DEV`. Safe to move (smoke still applies); good "warm-up" targets
 for a fresh session.
 
-- [ ] **Extension arc debug tools** — banner `// ── Extension arc debug tools (dev only)`
-  (~14760–15184, ~424 ln) → `scene/debug/extension_arc_debug.js`. Dev-only. Risk: LOW.
-- [ ] **Browser dev-tools debug helpers** — banner `// ── Browser dev-tools debug helpers`
-  (~2950–3362, ~412 ln) → `scene/debug/devtools_helpers.js`. Dev-only (`window.__*`). Risk: LOW.
-- [ ] **Label / terminus audit** — banner `// ── Label / terminus audit` (~7356–7565, ~210 ln) →
-  `scene/debug/terminus_audit.js`. Debug. Risk: LOW.
+- [x] **Extension arc debug tools** — banner `// ── Extension arc debug tools (dev only)`.
+  **DELETED 2026-06-04 (commit aacc2c2), not extracted.** User-confirmed dead. The DEV-gated block
+  defined `__extDebug`/`__xbDebug`/`__arcDebug`/`__extDebugWatch` (snapshot/diff console tools, ~424 ln);
+  zero code or e2e references. `unfold_view.js` read `__extDebugWatch` only to wrap a console.log around
+  an `applyUnfoldOffsetsExtensions()` call that ran identically in the `else` branch → collapsed to the
+  bare call (behavior-identical) + dropped a stale `__arcDebug` doc comment. −424 ln off the closure.
+- [!] **Browser dev-tools debug helpers** — banner `// ── Browser dev-tools debug helpers` (~2553) →
+  `window._nadocDebug` IIFE (~412 ln: posTrace/snapPos/diffPos/storeTrace/subTrace/refetch/forceRebuild
+  + photo-mode-attached photoMaterials/ptSamples/…). **NOT DEAD — DO NOT DELETE (verified 2026-06-04).**
+  Three e2e specs depend on it: `relax_undo_bug.spec.js` (`snapPos`), `dsdna_linker_selection.spec.js`
+  (`overhangLinkArcs`), `representation_order_fkeys.spec.js` (`refetch`); photo-mode extends it at ~10275.
+  If touched at all, it's an *extraction* to `scene/debug/devtools_helpers.js` keeping the `window._nadocDebug`
+  global intact, NOT a deletion — and the e2e specs are the gate. Lower priority than other Tier-6 items.
+- [x] **Label / terminus audit** — banner `// ── Label / terminus audit` (~6213, ~190 ln) →
+  `window.nadocLabelAudit`. **DELETED 2026-06-04 (commit 02f63c7), not extracted.** User-confirmed dead;
+  no code or e2e references the post-caDNAno label/terminus audit. −190 ln off the closure. (The adjacent
+  `nadocAssemblyLabelTable` console helper at ~6194 was left in place — separate banner, not in scope.)
 - [ ] **Help-menu debug toggles** — under banner `// ── Help / Hotkeys modal` (~13195–13271, ~76 ln) →
   `scene/debug/help_menu_toggles.js`. The OH-roots / domain-ends / linker-anchor / FJC-sim menu wiring
   plus `_logOvhgMapReport` (the 4-map cross-validation console dump). Deps: designRenderer (glow),
