@@ -129,7 +129,7 @@ import { initKinematicsTicker }      from './scene/kinematics_ticker.js'
 import { applyBeltRiders, beltCurvePoints, beltLoopLength } from './scene/belt_geometry.js'
 import { initBeltPolymerize } from './scene/belt_polymerize.js'
 import { initAssemblyRefresh } from './scene/assembly_refresh.js'
-import { initConnectionMonitor } from './app/lifecycle.js'
+import { initConnectionMonitor, initAutosaveSync } from './app/lifecycle.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
@@ -3995,10 +3995,10 @@ async function main() {
       const path = _workspacePath
       _syncBadge.syncLog('info', 'SAVE', `explicit save → ${path}`)
       _syncBadge.setSyncStatus('yellow', 'saving…')
-      _selfSavedPaths.add(path)
+      _lifecycleSync.selfSavedPaths.add(path)
       await api.saveDesignToWorkspace(path)
       _syncBadge.setSyncStatus('green', 'saved')
-      setTimeout(() => _selfSavedPaths.delete(path), 5000)
+      setTimeout(() => _lifecycleSync.selfSavedPaths.delete(path), 5000)
       if (_fileHandle) await _fileIo.saveToHandle(_fileHandle)
     } else if (_fileHandle) {
       await _fileIo.saveToHandle(_fileHandle)
@@ -6834,8 +6834,8 @@ async function main() {
     const inst = store.getState().currentAssembly?.instances?.find(i => i.id === instanceId)
     const sourcePath = inst?.source?.type === 'file' ? inst.source.path : null
     if (sourcePath) {
-      _selfSavedPaths.add(sourcePath)
-      setTimeout(() => _selfSavedPaths.delete(sourcePath), 5000)
+      _lifecycleSync.selfSavedPaths.add(sourcePath)
+      setTimeout(() => _lifecycleSync.selfSavedPaths.delete(sourcePath), 5000)
     }
     const json = await api.seekInstanceFeatures(instanceId, position, subPosition)
     const geom = json?.geometry
@@ -7510,14 +7510,20 @@ async function main() {
   // __nadocSyncDebug helper below stays inline and drives the panel via show/hide.
   const _syncBadge = initSyncBadge()
 
+  // Auto-save + Library-SSE subsystem (app/lifecycle.js, extraction #55). It owns
+  // the loop-prevention flags; created at its natural design-subscriber spot in the
+  // autosave region below. Forward-declared here so the connection monitor and the
+  // sync-debug helper (both defined above the init) can reference it lazily.
+  let _lifecycleSync = null
+
   window.__nadocSyncDebug = {
     status() {
       return {
         workspacePath:         _workspacePath,
         assemblyWorkspacePath: _assemblyWorkspacePath,
-        selfSavedPaths:        [..._selfSavedPaths],
-        reloadingFromSSE:      _reloadingFromSSE,
-        savingAssembly:        _savingAssembly,
+        selfSavedPaths:        [...(_lifecycleSync?.selfSavedPaths ?? [])],
+        reloadingFromSSE:      _lifecycleSync?.getReloadingFromSSE() ?? false,
+        savingAssembly:        _lifecycleSync?.getSavingAssembly() ?? false,
         assemblyActive:        store.getState().assemblyActive,
       }
     },
@@ -7543,16 +7549,17 @@ async function main() {
   // ── Backend connection monitor: status badge + silent restart recovery ───────
   // Extracted to app/lifecycle.js (extraction #53). The factory starts the
   // /api/health poll and handles silent recovery on server restart. The
-  // `setReloadingFromSSE` shim writes the `_reloadingFromSSE` loop-prevention
-  // flag declared in the autosave region just below — the shim body runs only
-  // post-boot (on a real restart event), so the forward reference is TDZ-safe.
+  // `setReloadingFromSSE` shim drives the `_reloadingFromSSE` loop-prevention flag
+  // now owned by the autosave/SSE module (initAutosaveSync, #55) created below —
+  // the shim body runs only post-boot (on a real restart event), so the lazy
+  // `_lifecycleSync?.` reference is safe.
   initConnectionMonitor({
     api,
     store,
     assemblyRenderer,
     setSyncStatus: _syncBadge.setSyncStatus,
     syncLog: _syncBadge.syncLog,
-    setReloadingFromSSE: (v) => { _reloadingFromSSE = v },
+    setReloadingFromSSE: (v) => _lifecycleSync?.setReloadingFromSSE(v),
   })
 
   registerShortcut({
@@ -7563,31 +7570,6 @@ async function main() {
       _syncBadge.toggleDebugPanel()
     },
   })
-
-  // ── Auto-save: debounced write-back to workspace files ────────────────────────
-  // Loop-prevention flags:
-  //   _savingAssembly   — set while saveAssemblyToWorkspace is in-flight so its
-  //                       own store update doesn't re-trigger the subscriber
-  //   _reloadingFromSSE — set while reloading a design from an SSE event so the
-  //                       resulting store update doesn't re-trigger design auto-save
-  //   _selfSavedPaths   — paths saved by THIS tab; SSE echoes for these are skipped
-  let _savingAssembly   = false
-  let _reloadingFromSSE = false
-  const _selfSavedPaths = new Set()
-  // Timestamp of the last same-document activity (a sibling tab — e.g. the
-  // cadnano editor — broadcasting design-changed for OUR doc). While a sibling
-  // is live-editing this doc, an incoming file-changed for our open design is a
-  // self/sibling autosave echo, NOT an external edit — so we must NOT reload it
-  // into the backend (that reloads a STALE autosave snapshot and clobbers the
-  // in-progress edits, bumping the revision so the stale guard can't catch it).
-  // design-changed reliably precedes the autosave's SSE (both serialize on the
-  // editor's main thread, broadcast first), so this window is robust even when
-  // a heavy 2D re-render delays the file-saved broadcast.
-  let _lastSameDocActivityMs = 0
-  const _RELOAD_SUPPRESS_MS = 10000
-  let _designSaveTimer  = null
-  let _assemblySaveTimer = null
-  let _partSaveTimer = null
 
   // File-IO operations (extracted to ui/file_io.js, #52). Wired here — not at the
   // "File open / save" banner ~3580 — because its deps (_setSyncStatus / _syncLog /
@@ -7612,79 +7594,23 @@ async function main() {
     getPartEditContext: () => _partEditContext,
   })
 
-  store.subscribeSlice('design', (newState, prevState) => {
-    // Skip TRANSIENT deform mutations — a bend/twist live preview, param PATCH, or
-    // cancel-revert. They must NOT auto-save (→ file → SSE) or push the part to the
-    // assembly (→ part-design-updated): the assembly updates ONLY when the user
-    // commits via Apply (a non-preview add / editFeature), and does nothing if the
-    // edit was cancelled or unchanged. Read synchronously here (the flag is set
-    // during this very setState by _syncFromDesignResponse).
-    if (newState.currentDesign !== prevState.currentDesign && api.wasLastDesignSyncTransient()) return
-    if (_partEditContext) {
-      if (newState.currentDesign === prevState.currentDesign) return
-      _syncBadge.setSyncStatus('yellow', 'auto-saving…')
-      clearTimeout(_partSaveTimer)
-      _partSaveTimer = setTimeout(() => {
-        _fileIo.savePartToAssembly({ silent: true })
-      }, 900)
-      return
-    }
-    if (!_workspacePath || _reloadingFromSSE) return
-    if (newState.currentDesign === prevState.currentDesign) return
-    _syncBadge.setSyncStatus('yellow', 'saving…')
-    clearTimeout(_designSaveTimer)
-    _designSaveTimer = setTimeout(async () => {
-      const path = _workspacePath
-      if (!path) return
-      _syncBadge.syncLog('info', 'SAVE', `design → ${path}`)
-      _selfSavedPaths.add(path)
-      nadocBroadcast.emit('file-saved', { path })   // tell sibling tabs to skip the SSE reload echo
-      try {
-        await api.saveDesignToWorkspace(path)
-        _syncBadge.setSyncStatus('green', 'saved')
-        setTimeout(() => _selfSavedPaths.delete(path), 5000)
-      } catch (err) {
-        _syncBadge.setSyncStatus('red', 'save error')
-        _syncBadge.syncLog('err', 'SAVE', `failed: ${err?.message ?? err}`)
-        setTimeout(() => _selfSavedPaths.delete(path), 5000)
-      }
-    }, 1500)
+  // ── Auto-save + Library SSE (app/lifecycle.js, extraction #55) ────────────────
+  // Owns the four loop-prevention flags + the self-saved-path set; registers both
+  // autosave subscribers and the SSE handler on construction. Placed here so the
+  // design subscriber registers at its original point (subscription order matters).
+  // `_assemblyRefresh` is referenced lazily — it's wired just below — and in turn
+  // shares this module's `selfSavedPaths` Set by reference.
+  _lifecycleSync = initAutosaveSync({
+    store, api,
+    fileIo: _fileIo,
+    syncBadge: _syncBadge,
+    libraryPanel,
+    getAssemblyRefresh: () => _assemblyRefresh,
+    getPartEditContext: () => _partEditContext,
+    getWorkspacePath: () => _workspacePath,
+    getAssemblyWorkspacePath: () => _assemblyWorkspacePath,
+    setAssemblyWorkspacePath: _setAssemblyWorkspacePath,
   })
-
-  store.subscribeSlice('assembly', (newState, prevState) => {
-    if (!_assemblyWorkspacePath || _savingAssembly) return
-    if (newState.currentAssembly === prevState.currentAssembly) return
-    _syncBadge.setSyncStatus('yellow', 'saving…')
-    clearTimeout(_assemblySaveTimer)
-    _assemblySaveTimer = setTimeout(async () => {
-      if (!_assemblyWorkspacePath || _savingAssembly) return
-      _savingAssembly = true
-      // Mark the assembly file self-saved so its own watchdog `file-changed` echo
-      // (which fires after every part-edit-driven re-resolve) is skipped in
-      // `_handleLibraryEvent` instead of triggering a library refresh.
-      const _savedPaths = new Set([_assemblyWorkspacePath])
-      _selfSavedPaths.add(_assemblyWorkspacePath)
-      try {
-        const r = await api.saveAssemblyAs(_assemblyWorkspacePath)
-        if (r?.path) { _setAssemblyWorkspacePath(r.path); _selfSavedPaths.add(r.path); _savedPaths.add(r.path) }
-        _syncBadge.syncLog('info', 'SAVE', `assembly → ${r?.path}`)
-        _syncBadge.setSyncStatus('green', 'saved')
-      } catch (err) {
-        _syncBadge.setSyncStatus('red', 'save error')
-        _syncBadge.syncLog('err', 'SAVE', `assembly failed: ${err?.message ?? err}`)
-      } finally {
-        _savingAssembly = false
-        setTimeout(() => { for (const p of _savedPaths) _selfSavedPaths.delete(p) }, 5000)
-      }
-    }, 1500)
-  })
-
-  // ── Library SSE — live file-change events ────────────────────────────────────
-  let _libRefreshTimer = null
-  function _scheduleLibraryRefresh() {
-    clearTimeout(_libRefreshTimer)
-    _libRefreshTimer = setTimeout(() => libraryPanel.refresh(), 400)
-  }
 
   // Coalesced assembly part-refresh: a burst of part-edit broadcasts + watchdog
   // SSEs collapses to ONE getAssembly + rebuild. clusterPanel is wired ~1000 ln
@@ -7697,64 +7623,9 @@ async function main() {
     syncLog: _syncBadge.syncLog,
     setSyncStatus: _syncBadge.setSyncStatus,
     syncAssemblyBluntEnds: _syncAssemblyBluntEnds,
-    selfSavedPaths: _selfSavedPaths,
+    selfSavedPaths: _lifecycleSync.selfSavedPaths,
     getClusterPanel: () => clusterPanel,
   })
-
-	  function _handleLibraryEvent({ type, path, file_type }) {
-    if (type !== 'file-changed' && type !== 'file-deleted') return
-    _syncBadge.syncLog('info', 'SSE', `${type} ${file_type}:${path}`)
-
-    // Skip reacting to files we just saved ourselves (SSE echo). Do this BEFORE
-    // the library refresh: a self-save doesn't change the file LIST, and a part
-    // edit fires several self-save echoes (part file ×2 + the assembly autosave),
-    // each of which used to run a fresh GET /library/files — a flood that piled
-    // up to multi-second responses.
-    if (type === 'file-changed' && _selfSavedPaths.has(path)) {
-      _syncBadge.syncLog('info', 'SSE', `skipped (self-saved echo)`)
-      return
-    }
-    // A genuine external change → refresh the file list, debounced so a burst of
-    // distinct events collapses to one GET /library/files.
-    _scheduleLibraryRefresh()
-
-    if (file_type === 'part' && store.getState().assemblyActive) {
-      // Assembly tab: a part file changed (external edit, or — if the broadcast
-      // didn't beat the SSE — our own part-editor save). Route through the
-      // COALESCED refresh so this + the `part-design-updated` broadcast + any
-      // burst of saves collapse into ONE getAssembly + rebuild + getInstanceDesign
-      // instead of a per-instance, per-event flood. _assemblyRefresh
-      // invalidates every instance sharing this source and fetches the design once.
-      const assembly = store.getState().currentAssembly
-      const affected = (assembly?.instances ?? []).filter(
-        i => i.source?.type === 'file' && i.source.path === path,
-      )
-      if (affected.length) {
-        _syncBadge.syncLog('info', 'SSE', `${affected.length} instance(s) affected → coalesced refresh`)
-        _assemblyRefresh.requestRefresh(affected[0].id, 'sse')
-      }
-    } else if (file_type === 'part' && !store.getState().assemblyActive && _workspacePath === path) {
-      // Design tab: this is the file we have open. If a sibling tab is live-editing
-      // the SAME backend document (recent design-changed), this file-changed is a
-      // self/sibling autosave echo — reloading it would push a STALE snapshot into
-      // the backend and clobber the in-progress edits. Same-doc sync already
-      // happens via the design-changed broadcast, so skip the reload.
-      if (Date.now() - _lastSameDocActivityMs < _RELOAD_SUPPRESS_MS) {
-        _syncBadge.syncLog('info', 'SSE', `skipped reload of ${path} (live same-doc editing)`)
-        return
-      }
-      // Otherwise treat as a genuine external edit and reload.
-      _syncBadge.syncLog('info', 'SSE', `reloading design from ${path}`)
-      _syncBadge.setSyncStatus('yellow', 'syncing…')
-      _reloadingFromSSE = true
-      api.getLibraryFileContent(path)
-        .then(result => result?.content ? api.importDesign(result.content) : null)
-        .then(() => { _syncBadge.setSyncStatus('green', 'synced') })
-        .catch(err => { _syncBadge.setSyncStatus('red', 'sync error'); _syncBadge.syncLog('err', 'SSE', `reload failed: ${err?.message ?? err}`) })
-        .finally(() => { _reloadingFromSSE = false })
-    }
-	  }
-	  api.subscribeLibraryEvents(_handleLibraryEvent)
 
   /**
    * Show or hide ALL design-level scene geometry.
@@ -10551,8 +10422,8 @@ async function main() {
       // we'd reload the sibling's autosave (a stale snapshot) back into the
       // shared backend doc and clobber in-progress edits. 5s window covers SSE
       // latency; matches the self-save expiry.
-      _selfSavedPaths.add(data.path)
-      setTimeout(() => _selfSavedPaths.delete(data.path), 5000)
+      _lifecycleSync.selfSavedPaths.add(data.path)
+      setTimeout(() => _lifecycleSync.selfSavedPaths.delete(data.path), 5000)
       return
     }
     if (type === 'doc-presence-request') {
@@ -10573,7 +10444,7 @@ async function main() {
       if (!nadocBroadcast.isSameDoc(data)) return
       // Mark live same-doc editing so a following file-changed SSE (a sibling's
       // autosave echo) doesn't reload a stale file over the live edits.
-      _lastSameDocActivityMs = Date.now()
+      _lifecycleSync.markSameDocActivity()
       // Assembly windows ignore design-changed: their currentDesign is unused
       // while assemblyActive=true, and pulling it in can re-enter the auto-save /
       // overlay-rebuild chain with stale data. Part-edit / cadnano tabs still
@@ -10585,12 +10456,12 @@ async function main() {
       // _reloadingFromSSE suppresses the auto-save subscriber during this passive fetch
       // so a broadcast → getDesign → store-update → auto-save → SSE → broadcast loop
       // can't form.
-      _reloadingFromSSE = true
+      _lifecycleSync.setReloadingFromSSE(true)
       try {
         await api.getDesign()
         await api.getGeometry()
       } finally {
-        _reloadingFromSSE = false
+        _lifecycleSync.setReloadingFromSSE(false)
       }
     }
     if (type === 'selection-changed') {
