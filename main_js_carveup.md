@@ -741,7 +741,7 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
 - [x] **Translate/Rotate tool (hardest-first item 1, AFTER the keystone) — DONE.** Sub-blocks de-lumped:
   response-delta → `scene/response_delta.js` (#76, 8dbdbaf, −196); cluster-pick helpers → `scene/joint_pick.js`
   (#77, 9b06574, −38); the `_mr*` panel SHELL → `scene/move_rotate_panel.js` (#78, cedbc83, −134); de-dups (#79/#80).
-  **The tool GESTURE core → `scene/translate_rotate_tool.js` (#81, −353 ln, main.js 8355→8002, COMPLETES frontier #1).**
+  **The tool GESTURE core → `scene/translate_rotate_tool.js` (#81, dca2b18, −353 ln, main.js 8355→8002, COMPLETES frontier #1).**
   Factory `initTranslateRotateTool({~40 deps})→{activate,confirm,cancel,rotateJoint,removeToolPickListeners,hideConfirmBtn}`
   owns `_onToolPickPointerDown` + the `_confirmBtn` ✓ element + all 7 tool fns + the apply/cancel/menu/`t`-shortcut wiring.
   As predicted: `_translateRotateActive` (22 sites), `_clusterDirty`, deform-shared `_editContext` stay main `let`s via
