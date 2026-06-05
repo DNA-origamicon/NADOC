@@ -52,45 +52,44 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **First Tier-5 region**
-this session: extracted the file-IO operations sub-part of "File open / save" (#52). main.js 11047 → 10928 (−119 ln)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **Second Tier-5 region**
+this session: extracted the backend connection-monitor sub-part of "Connection monitor / autosave / SSE" (#53)
+→ seeded `app/lifecycle.js`. main.js 10928 → 10879 (−49 ln)._
 
-**This session (#52):** first cut into **Tier 5 (file/session infra)** — extracted the **file-IO operations**
-sub-part of the "File open / save" region → `ui/file_io.js` `initFileIo({deps})`. Six verbatim async ops:
-`getDesignContent` / `savePartToAssembly` / `saveToHandle` / `saveAs` / `saveAssemblyToHandle` / `saveAssemblyAs`.
-Dropped dead `_pickOpenFile` (zero callers here — cadnano editor has its own). **Deliberately LEFT in main.js**
-(the lifecycle spine + cross-cutting state, NOT file-IO): `_resetForNewDesign` / `_enterAssemblyMode` /
-`_exitAssemblyMode`, the 6 mutable file/path vars (`_fileHandle` / `_assemblyFileHandle` / `_assemblyName` /
-`_workspacePath` / `_assemblyWorkspacePath` / `_partEditContext`) + their setters, and `_updateAssemblyTitle`
-(called by the spine `_enterAssemblyMode`, so keeping it dodges a boot-ordering hazard). Those flow in as get/set
-shims + injected fns. 19 vitest factory + smoke 21/21 + a real-app **Save As** exercise (menu → `_fileIo.saveAs` →
-file-browser modal opens, zero console errors).
+**This session (#53):** cheap, bounded cut into **Tier 5** — extracted the **Backend connection monitor +
+restart recovery** sub-block → new `app/lifecycle.js` `initConnectionMonitor({deps})→{recoverAfterRestart}`.
+Verbatim move of `_restartHandling` + `_recoverAfterRestart` + `connectionMonitor.start({onChange})`. The
+autosave subscribers + Library-SSE handler stay inline (they share loop-prevention flags written in 3 distant
+places — a wide-shim lift for a dedicated batch). Only leaked flag (`_reloadingFromSSE`) injected as a
+`setReloadingFromSSE` shim, safe because its body runs only post-boot (TDZ-safe forward ref). Removed dead
+`connectionMonitor` import. 12 vitest + smoke 23/23. Restart-recovery gesture NOT hand-exercised (needs a live
+backend kill+restart) — branches unit-tested, boot/start path covered by smoke (#38/#32/#24 caveat).
 
 **Recommended next region — continue draining Tier 5:**
-1. **Finish "File open / save"** (the SECOND commit of this region, if you want it cohesive): the open-file
-   orchestration (`_openPartFromServer` / `_openAssemblyFromServer`, banner ~3580 region) + `_saveDispatch` /
-   `_saveAsDispatch` / `_saveAssembly` / `_saveAssemblyAsGuarded` (menu-bar save dispatchers, banner ~3980).
-   These call `_fileIo.*` already; lifting them needs the lifecycle-spine deps. MED-HIGH.
-2. **Connection monitor / autosave / SSE** → `app/lifecycle.js` (banner ~7707/7780/7872, ~287 ln). Cohesive
-   lifecycle subsystem (connection monitor + `_recoverAfterRestart`, the two autosave subscribers, the SSE
-   `_handleLibraryEvent`). Shares the same autosave flags (`_selfSavedPaths` / `_reloadingFromSSE` /
-   `_savingAssembly` / `_lastSameDocActivityMs`) → wide get/set-shim factory (keyboard-shortcuts pattern). The
-   `_fileIo` init now lives at the head of this region — lift it together or keep its const in place. HIGH.
-3. **Menu bar + multi-doc spawn** (banner ~3980, ~320 ln) → `ui/menu_bar.js`. HIGH (every menu action).
+1. **Finish "Connection monitor / autosave / SSE" → app/lifecycle.js** (the rest of this region, into the
+   module just seeded): the **Sync status badge** (`_setSyncStatus`/`_syncLog`/`__nadocSyncDebug`, ~7505),
+   the **Auto-save subscribers** (the two `subscribeSlice` writers + flags `_savingAssembly`/`_reloadingFromSSE`/
+   `_selfSavedPaths`/`_lastSameDocActivityMs` + 3 timers, ~7638), the **Library SSE** handler
+   (`_handleLibraryEvent`/`_scheduleLibraryRefresh`, ~7753). **The hard part is the flags** — they're written in
+   3 sites OUTSIDE the region (save dispatch ~3995, ~6836, broadcast handler ~10625-10682), so the module must
+   own them and EXPOSE get/setters + the `_selfSavedPaths` Set (by reference). `_fileIo` + `_assemblyRefresh`
+   (created here for their late deps) become deps of the lift, not residents. Move all flags in ONE commit —
+   splitting them risks save-loop/clobber bugs. HIGH. The biggest remaining Tier-5 payoff (~210 ln).
+2. **Menu bar + multi-doc spawn** (banner `// ── Menu bar` ~3839, `// ── Multi-document: New / Open` ~3898,
+   ~320 ln) → `ui/menu_bar.js`. HIGH (every menu action).
+3. **Finish "File open / save"**: open-file orchestration (`_openPartFromServer`/`_openAssemblyFromServer`,
+   ~3584) + menu-bar save dispatchers (`_saveDispatch`/`_saveAsDispatch`/`_saveAssembly`/`_saveAssemblyAsGuarded`,
+   ~3839). These call `_fileIo.*` already; lifting needs lifecycle-spine deps (probably leave the spine inline). MED-HIGH.
 
-**Banked gotchas this session:**
-- **Place a late-wired factory where its LATE deps exist, not at its banner.** `initFileIo` needs `_setSyncStatus`
-  / `_syncLog` / `libraryPanel` (all declared ~7500-7600, FAR below the "File open / save" banner ~3580). The
-  `const _fileIo = initFileIo({...})` lives at the head of the autosave region (~7660), and EVERY call site
-  (menu dispatchers ~4000, command-palette object ~5360, import-menu ~9710, the autosave subscriber ~7700)
-  executes lazily/post-init — verified no boot path *calls* a `_fileIo.*` method synchronously during `main()`.
-- **A reference captured BEFORE the const init needs a lazy wrapper; one captured after can be direct.** The
-  command palette (`savePartToAssembly:` @ ~5360, before init) got `(opts) => _fileIo.savePartToAssembly(opts)`;
-  the import menu (`saveAs:` @ ~9710, after init) got the direct `_fileIo.saveAs`. Function-bodies that *call*
-  the op (the menu dispatchers) reference `_fileIo.*` directly — their bodies only run on click, post-init.
-- **Keep the spine-adjacent helper, lift the op.** `_updateAssemblyTitle` is tiny and is invoked by
-  `_enterAssemblyMode` (which stays as the spine and is boot-callable). Leaving it in main.js (injected into the
-  factory as `updateAssemblyTitle`) removes any TDZ/boot-order hazard — the module never touches the live binding.
+**Banked gotcha this session:**
+- **A setter shim closing over a LATER-declared `let` is TDZ-safe IF the shim body only runs post-boot.**
+  `initConnectionMonitor`'s `setReloadingFromSSE: (v) => { _reloadingFromSSE = v }` references `_reloadingFromSSE`
+  declared ~80 ln below the factory call. Creating the arrow doesn't access the binding; only `recoverAfterRestart`
+  (invoked on a real restart event, long post-boot) does. So the factory can sit at its natural banner spot even
+  with a forward flag ref — no need to push it past the declaration like #52's `_fileIo` (whose deps were *read*
+  to build the factory, a stricter constraint). Grep-confirm the shim has no synchronous caller before committing.
+- **`connectionMonitor.start` is the imported poller** (`shared/connection_monitor.js`), not a closure symbol →
+  the module imports it directly (not a dep). The cadnano editor imports the same module; this lift left it alone.
 
 **Deliberately deferred (still in main.js):** FK propagation (`_applyFKLive`); Polymerize-region sub-part
 `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound). `_setMenuToggle`
@@ -407,9 +406,24 @@ These touch boot/lifecycle. High blast radius; do after the loop is well-grooved
     inline (called from 20+ sites).
 - [ ] **Menu bar + multi-document spawn** — banners `// ── Menu bar` + `// ── Multi-document: New / Open`
   (~4681–5004, ~320 ln) → `ui/menu_bar.js`. Deps: doc_id, broadcast, every menu action. Risk: HIGH.
-- [ ] **Connection monitor / autosave / SSE** — banners `// ── Backend connection monitor` …
-  `// ── Library SSE` (~9527–9814, ~287 ln) → `app/lifecycle.js`. Deps: api, /health, store, badges.
+- [~] **Connection monitor / autosave / SSE** — banners `// ── Backend connection monitor` …
+  `// ── Library SSE` (~7565–7828, ~263 ln) → `app/lifecycle.js`. Deps: api, /health, store, badges.
   Risk: HIGH (lifecycle).
+  - **Backend connection monitor + restart recovery — DONE** (extraction #53, commit 2346daf):
+    `_restartHandling` + `_recoverAfterRestart` + `connectionMonitor.start({onChange})` →
+    `app/lifecycle.js` `initConnectionMonitor({api, store, assemblyRenderer, setSyncStatus, syncLog,
+    setReloadingFromSSE})→{recoverAfterRestart}`. −49 ln. 12 vitest; smoke 23/23. Seeds the module.
+    The only leaked flag (`_reloadingFromSSE`) is injected as a `setReloadingFromSSE` shim. The Ctrl+Shift+D
+    sync-debug shortcut stays inline (debug-panel concern). Removed dead `connectionMonitor` import from main.js.
+  - **Remaining (NOT done):** the **Sync status badge + debug panel** (`_setSyncStatus`/`_syncLog`/
+    `__nadocSyncDebug`, ~7505–7563 — clean DOM helpers, but injected as deps into file_io/assembly_refresh/
+    import_menu so they must stay exported), the **Auto-save subscribers** (`_savingAssembly`/`_reloadingFromSSE`/
+    `_selfSavedPaths`/`_lastSameDocActivityMs` + 3 timers + the two `subscribeSlice` writers), and the
+    **Library SSE handler** (`_scheduleLibraryRefresh`/`_handleLibraryEvent`). These share loop-prevention
+    flags that are ALSO written in 3 distant sites (save dispatch ~3995, ~6836, broadcast handler ~10625-10682)
+    → a wide get/set-shim factory. Fold them into app/lifecycle.js together as ONE batch (don't split the flags
+    further). `_fileIo` + `_assemblyRefresh` consts (created in this region for their late deps) become deps of
+    that lift, not residents of it.
 
 ## Tier 6 — dev-only / debug (no user risk; extract anytime to de-bloat)
 
@@ -457,7 +471,7 @@ assembly_diff, design_queries (+flexibleRunForBead), cluster_joint_math, aksel_f
 assembly_groups_util, color_util (+hexFromInt, atomColorsFromLetters), fret_util, vec_math, motion_chip,
 scaffold_assign, atom_filter, selection_bbox, belt_rider, overhang_hover_picker, assembly_lasso,
 coloring_modes, assembly_layout, ndc, flex_tethers, cluster_entries, empty_space_menu, slice_plane,
-plate_view, kinematics_ticker, file_io.
+plate_view, kinematics_ticker, file_io, app/lifecycle (connection monitor).
 
 ## Smaller leftovers (after the tiers above)
 
