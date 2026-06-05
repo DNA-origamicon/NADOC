@@ -44,7 +44,7 @@ import { initAssemblyConfigAnimator } from './scene/assembly_config_animator.js'
 import { clientToNdc } from './scene/ndc.js'
 import { initFlexRelax } from './scene/flex_relax.js'
 import { initResponseDelta } from './scene/response_delta.js'
-import { clusterBackboneEntries } from './scene/cluster_entries.js'
+import { initJointPick } from './scene/joint_pick.js'
 import { initEmptySpaceMenu } from './scene/empty_space_menu.js'
 import { initAssemblyLasso } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
@@ -5106,51 +5106,13 @@ async function main() {
     }
   })
 
-  function _canvasNdc(e) {
-    return clientToNdc(e.clientX, e.clientY, canvas.getBoundingClientRect())
-  }
-
-  function _clusterBackboneEntries(cluster, design, backboneEntries = null) {
-    backboneEntries ??= designRenderer.getBackboneEntries?.() ?? []
-    return clusterBackboneEntries(cluster, design, backboneEntries)
-  }
-
-  const _clusterPickRaycaster = new THREE.Raycaster()
-  const _clusterPickNdc = new THREE.Vector2()
-
-  function _pickActiveClusterEntry(e) {
-    const { activeClusterId, currentDesign } = store.getState()
-    const cluster = currentDesign?.cluster_transforms?.find(c => c.id === activeClusterId)
-    if (!cluster) return null
-
-    const entries = _clusterBackboneEntries(cluster, currentDesign)
-    if (!entries.length) return null
-
-    const idsByMesh = new Map()
-    for (const entry of entries) {
-      if (!entry.instMesh) continue
-      let ids = idsByMesh.get(entry.instMesh)
-      if (!ids) {
-        ids = new Set()
-        idsByMesh.set(entry.instMesh, ids)
-      }
-      ids.add(entry.id)
-    }
-    const meshes = [...idsByMesh.keys()].filter(mesh => mesh?.visible !== false)
-    if (!meshes.length) return null
-
-    const ndc = _canvasNdc(e)
-    _clusterPickNdc.set(ndc.x, ndc.y)
-    _clusterPickRaycaster.setFromCamera(_clusterPickNdc, camera)
-
-    const hits = _clusterPickRaycaster.intersectObjects(meshes, false)
-    for (const hit of hits) {
-      if (idsByMesh.get(hit.object)?.has(hit.instanceId)) {
-        return entries.find(entry => entry.instMesh === hit.object && entry.id === hit.instanceId) ?? null
-      }
-    }
-    return null
-  }
+  // Active-cluster pick helpers → scene/joint_pick.js. Alias-consts keep every
+  // existing call site (`_canvasNdc` / `_clusterBackboneEntries` /
+  // `_pickActiveClusterEntry`) verbatim.
+  const _jointPick = initJointPick({ canvas, camera, store, designRenderer })
+  const _canvasNdc = _jointPick.canvasNdc
+  const _clusterBackboneEntries = _jointPick.clusterBackboneEntries
+  const _pickActiveClusterEntry = _jointPick.pickActiveClusterEntry
 
   // Compute a placement offset for Duplicate so the clone lands JUST OUTSIDE
   // the source's world-space bounding box along world +X.  Uses the bbox's
