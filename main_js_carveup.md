@@ -52,42 +52,40 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Cheapness relaxed — took a
-real frontier cut.** Extracted the **New Part modal** (#57, first spine-coupled modal) → `ui/new_design_modal.js`.
-main.js 10588 → 10511 (−77 net)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Cheap warm-up cut taken.**
+Extracted the **Multi-doc spawn** block (#58) → `app/doc_spawn.js`. main.js 10511 → 10491 (−20 net)._
 
-**This session (#57):** the **New Part dialog + create flow** (`_buildNewDesignModalOnce`/`_openNewDesignModal`/
-`_onCreateClicked` + `menu-file-new` listener) → `ui/new_design_modal.js` factory `initNewDesignModal(deps)→{openModal}`
-+ pure `sanitizeWorkspaceStem`. **First spine-coupled modal** (step up from #56's self-contained dialogs): the
-lifecycle spine (`_resetForNewDesign`/`_setFileName`/`_hideWelcome`/`_setWorkspacePath` + `_fileHandle` via a setter
-shim) and the multi-doc spawn guard (`_spawnDocTabIfBusy`) **stay inline + injected** (the #52 pattern). `libraryPanel`
-(below the init) via lazy `getLibraryPanel`. Boot-doc-action caller now `_newDesignModal.openModal()`. 14 vitest +
-smoke 23/23 — the smoke "File > New Part dialog" suite (9 tests, both lattices, Create→API) IS the app exercise.
+**This session (#58):** the **Multi-document spawn** block (`_spaceHasContent` + `_spawnDocTabIfBusy`) →
+`app/doc_spawn.js` pure `spaceHasContent(state)` + factory `initDocSpawn({store, mintDocId})→{spaceHasContent,
+spawnDocTabIfBusy}`. Verbatim move. All 3 call sites (file-new injected dep / file-new-assembly / file-open) sit
+AFTER the `const _docSpawn` init → plain const, no hoisting/lazy. `mintDocId` import stays in main.js (file-open
+handler still mints inline with its own URLSearchParams variant — not `spawnDocTabIfBusy`). 12 vitest (8 pure +
+4 factory, window.open spied); smoke 23/23 (New-Part Create flow exercises the injected `spawnDocTabIfBusy` dep
+through the real boot path; busy→new-tab gesture not hand-run — verbatim + unit-tested, per the standing caveat).
 
-**Recommended next region — pick by appetite (cheapness relaxed):**
-1. **Multi-doc spawn → `app/doc_spawn.js`** (banner `// ── Multi-document: New / Open`, ~20 ln, NOW directly below
-   the #57 init). Clean cohesive cut left behind by #57: pure `spaceHasContent(state)` + factory wrapping
-   `spawnDocTabIfBusy` (deps store + imported `mintDocId`). Used by file-new (now in the new module via the injected
-   dep) / file-new-assembly / file-open. LOW-MED, self-contained, sharpens the seam #57 opened. Good warm-up.
-2. **Finish "File open / save"** (Tier 5, MED-HIGH) — the open orchestration (`_openPartFromServer`/
+**Recommended next region — the frontier is now genuinely Tier 5 file/session infra:**
+1. **Finish "File open / save"** (Tier 5, MED-HIGH) — the open orchestration (`_openPartFromServer`/
    `_openAssemblyFromServer`) + the mode-routing save dispatchers (`_saveDispatch`/`_saveAsDispatch`/`_saveAssembly`/
-   `_saveAssemblyAsGuarded` + `menu-file-open` handler). They call the already-extracted `_fileIo.*`; lifting needs
-   spine deps (leave the spine inline). The meatier frontier cut.
+   `_saveAssemblyAsGuarded` + `menu-file-open` handler, banner `// ── File open / save` + the menu-bar save block
+   ~3906). They already call the extracted `_fileIo.*`; lifting needs lifecycle-spine deps (`_resetForNewDesign`/
+   `_enterAssemblyMode`/`_exitAssemblyMode` + the `_flAppendLog`/`_flSetProgress`/`_flShowError` progress callbacks +
+   `_assemblyLoadOnProgress`/`_assemblyLoadSettle`/`_setWorkspacePath`/`_revealWorkspaceForEmptyPart`). **Leave the
+   spine inline + inject it** (the #52/#57 recipe). The meatier cut — read `_openPartFromServer` first to size it.
+2. Tier-4 opportunistic scraps still uncut (Orbit submenu ~10 ln, Browser tab title ~5 ln, deform→selectableTypes
+   subscriber, Coloring submenu ~20 ln w/ 6 external `_setColoringMode` callers) — too small to each own a module;
+   bundle later or skip.
 
 **Banked gotcha this session:**
-- **Spine-coupled modal recipe (generalizes #52 to a dialog):** when a modal's create/apply path calls the
-  lifecycle spine (`_resetForNewDesign`/`_setFileName`/…), DON'T try to move the spine — inject each spine fn as a
-  dep and a `(v)=>{_var=v}` setter shim for any mutable closure `let` (here `_fileHandle`). The modal owns only the
-  dialog + its own flow; the spine stays the single inline owner (called from 20+ sites). −77 net even with the
-  injected-dep overhead, and zero boot-order risk because the factory reads none of those at construction.
-- **Function-declaration hoisting lets the init reference a helper textually below it.** `_spawnDocTabIfBusy` is a
-  `function` decl that sits a few lines *below* the `const _newDesignModal = initNewDesignModal({...})` line, yet
-  `spawnDocTabIfBusy: _spawnDocTabIfBusy` resolves fine — function decls hoist to the top of `main()`'s scope. (A
-  `const`/`let` dep in the same spot would NOT; that's the lazy-getter case, e.g. `libraryPanel`.)
-- **The smoke suite can BE the app exercise for a region it already covers.** No throwaway spec was needed for #57:
-  smoke's 9-test "New Part dialog" suite drives open/validation/both-lattices/Create→API through the new module —
-  a stronger, standing gate than a one-off. Check `e2e/smoke.spec.js` before writing a throwaway for any
-  menu/dialog region; it may already exercise it.
+- **When a region's helpers are referenced ONLY at sites textually below their definition, a `const` factory is a
+  drop-in for the old `function` decls** — no hoisting tax, no lazy-let. #58 was the easy inverse of #57's #41/#26
+  cases: #57 noted `_spawnDocTabIfBusy` (a hoisted `function`) was consumed at the `initNewDesignModal` line a few
+  lines *above* its def; but ALL the OTHER consumers (file-open ~3890, file-new-assembly ~3942) are below it, and
+  the modal now takes the dep from `_docSpawn` which is initialized first — so converting to `const _docSpawn`
+  needed zero shims. Grep the call sites' line numbers vs the init line before reaching for a lazy wrapper.
+- **`mintDocId` had a second, non-factory caller.** The file-open handler mints a doc id inline with a *different*
+  query (URLSearchParams over `doc/open/open-type/open-name`), so it's NOT `spawnDocTabIfBusy` and the `mintDocId`
+  import must stay in main.js. Only `_spaceHasContent` was shared into that handler. Don't blanket-remove an import
+  after an extraction — grep it.
 
 **Deliberately deferred (still in main.js):** FK propagation (`_applyFKLive`); Polymerize-region sub-part
 `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound). `_setMenuToggle`
@@ -410,9 +408,11 @@ These touch boot/lifecycle. High blast radius; do after the loop is well-grooved
       → **DONE** `ui/new_design_modal.js` `initNewDesignModal` + pure `sanitizeWorkspaceStem` (extraction #57,
       commit f9e7641; −77 ln; 14 vitest; smoke "New Part dialog" suite = the app exercise). First spine-coupled
       modal — spine + spawn-guard injected, libraryPanel lazy.
-    - **Multi-doc spawn** (`_spaceHasContent` + `_spawnDocTabIfBusy`, ~20 ln, used by file-new / file-new-assembly
-      / file-open) → STILL INLINE; clean next cut as `app/doc_spawn.js` with pure `spaceHasContent(state)` +
-      factory wrapping `spawnDocTabIfBusy` (deps store + `mintDocId`). LOW-MED, self-contained.
+    - **Multi-doc spawn** (`_spaceHasContent` + `_spawnDocTabIfBusy`) → **DONE** `app/doc_spawn.js` pure
+      `spaceHasContent(state)` + factory `initDocSpawn({store, mintDocId})→{spaceHasContent, spawnDocTabIfBusy}`
+      (extraction #58, commit 705f0a7; −20 net; 12 vitest; smoke 23/23). Verbatim move; all 3 call sites
+      (file-new injected dep / file-new-assembly / file-open) sit after the `const _docSpawn` init → no
+      hoisting/lazy needed. `mintDocId` import stays in main.js (still used inline by the file-open handler).
     - The **save/open dispatchers** (`_saveDispatch`/`_saveAsDispatch`/`_saveAssembly`/`_saveAssemblyAsGuarded` +
       the `menu-file-open` handler) — mode-routing over the already-extracted `_fileIo.*` + spine. Pairs with the
       Tier-5 "File open / save" remainder below, not a standalone lift.
@@ -508,7 +508,8 @@ scaffold_assign, atom_filter, selection_bbox, belt_rider, overhang_hover_picker,
 coloring_modes, assembly_layout, ndc, flex_tethers, cluster_entries, empty_space_menu, slice_plane,
 plate_view, kinematics_ticker, file_io, app/lifecycle (connection monitor + autosave/SSE),
 scaffold_modal (Assign Scaffold dialog + `countScaffoldNt` in scaffold_assign),
-new_design_modal (New Part dialog + `sanitizeWorkspaceStem`).
+new_design_modal (New Part dialog + `sanitizeWorkspaceStem`),
+app/doc_spawn (Multi-document spawn + pure `spaceHasContent`).
 
 ## Smaller leftovers (after the tiers above)
 
