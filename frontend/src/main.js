@@ -27,7 +27,7 @@ import { initMeasurementTool }       from './scene/measurement_tool.js'
 import { intersectCoverage, findHamiltonianPath } from './scene/scaffold_coverage.js'
 import { initCreateSeam } from './scene/create_seam.js'
 import { strandLengthNt } from './scene/strand_length.js'
-import { buildSpecMap, buildDomainMapFromDesign, buildDomainMapFromGeom, buildJunctionMapFromXovers, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
+import { buildSpecMap, buildDomainMapFromDesign, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
 import { initGroupGizmo } from './scene/group_gizmo.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, constraintRelevantChanged } from './scene/assembly_diff.js'
 import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
@@ -1840,27 +1840,17 @@ async function main() {
 
   // ── Overhang lookup table infrastructure ─────────────────────────────────────
   //
-  // Four maps built in dependency order on every geometry/design change.
-  // Two maps have a secondary construction path used for cross-validation.
+  // Four maps built in dependency order on every geometry/design change. Feeds the
+  // Overhang Orientation panel (junction bead positions via _ovhgRootMap).
   //
   //  Map 1  _ovhgSpecMap      id → OverhangSpec
   //  Map 2  _ovhgDomainMap    id → { strand, domIdx, domain }
   //  Map 3  _ovhgJunctionMap  id → { junctionBp, junctionDir }
   //  Map 4  _ovhgRootMap      id → { entry: BackboneEntry, pos: THREE.Vector3 }
   //
-  // Cross-validation maps (built alongside; compared in the debug report):
-  //  _xval_domainGeo    Map 2 built from nuc.domain_index instead of d.overhang_id scan
-  //  _xval_junctionXover  Map 3 built from design.crossovers (cross-validation; ambiguous for shared helix pairs)
-  //
   // FINDINGS recorded during construction:
   //  • d.overhang_id === spec.id is the safe domain match; d.helix_id is ambiguous when
   //    a strand visits the same helix twice (latent bug in original _findOvhgRootEntry)
-  //  • nuc.domain_index comes from the backend and is always correct — geometry path
-  //    uses it instead of findIndex so it is immune to the double-helix-visit problem
-  //  • design.crossovers contains crossovers for inline overhangs (from the original
-  //    cadnano import); autodetect_overhangs adds no crossovers but they already exist
-  //  • xo.half_*.strand and nuc.direction are both 'FORWARD'/'REVERSE' strings — match
-  //  • nuc.bp_index and HalfCrossover.index are both global bp indices — match
   //  • helixCtrl.lookupEntry("helix_id:bp_index:direction") is O(1) — preferred over
   //    backboneEntries.find() linear scan
 
@@ -1868,53 +1858,20 @@ async function main() {
   let _ovhgDomainMap       = new Map()
   let _ovhgJunctionMap     = new Map()
   let _ovhgRootMap         = new Map()
-  let _xval_domainGeo      = new Map()  // geometry-based domain map (cross-validation)
-  let _xval_junctionXover  = new Map()  // crossover-based junction map (cross-validation)
-  let _ohRootsGlowActive   = false
-  let _domainEndsGlowActive = false
-  let _domainEndEntries     = []
 
   // Master build — called on every geometry/design change.
-  // junctionMap uses domain endpoints as primary source; _xval_junctionXover is compared
-  // in the debug report to check agreement. Crossover path is ambiguous when multiple
-  // strands share the same parent↔overhang helix pair — it returns the first crossover.
-  function _buildOvhgMaps(design, backboneEntries) {
+  function _buildOvhgMaps(design) {
     const helixCtrl = designRenderer.getHelixCtrl()
     _ovhgSpecMap        = buildSpecMap(design)
     _ovhgDomainMap      = buildDomainMapFromDesign(design, _ovhgSpecMap)
     _ovhgJunctionMap    = buildJunctionMapFromDomains(_ovhgDomainMap)
     _ovhgRootMap        = buildRootMap(_ovhgSpecMap, _ovhgJunctionMap, helixCtrl)
-    _xval_domainGeo     = buildDomainMapFromGeom(design, backboneEntries)
-    _xval_junctionXover = buildJunctionMapFromXovers(design, _ovhgSpecMap, _ovhgDomainMap)
-    if (_ohRootsGlowActive) _applyOhRootsGlow()
-  }
-
-  function _applyOhRootsGlow() {
-    designRenderer.setGlowEntries([..._ovhgRootMap.values()].map(v => v.entry))
-  }
-
-  function _buildDomainEndEntries(backboneEntries) {
-    const helixCtrl = designRenderer.getHelixCtrl()
-    _domainEndEntries = []
-    for (const entry of backboneEntries) {
-      const { helix_id, bp_index, direction } = entry.nuc
-      const hasPlus  = !!helixCtrl?.lookupEntry(`${helix_id}:${bp_index + 1}:${direction}`)
-      const hasMinus = !!helixCtrl?.lookupEntry(`${helix_id}:${bp_index - 1}:${direction}`)
-      if (hasPlus !== hasMinus) _domainEndEntries.push(entry)
-    }
-  }
-
-  function _applyDomainEndsGlow() {
-    designRenderer.setGlowEntries(_domainEndEntries)
   }
 
   store.subscribe((newState, prevState) => {
     if (newState.currentGeometry === prevState.currentGeometry &&
         newState.currentDesign   === prevState.currentDesign) return
-    const _bbEntries = designRenderer.getBackboneEntries?.() ?? []
-    _buildOvhgMaps(newState.currentDesign, _bbEntries)
-    _buildDomainEndEntries(_bbEntries)
-    if (_domainEndsGlowActive) _applyDomainEndsGlow()
+    _buildOvhgMaps(newState.currentDesign)
   })
 
   // ── Cadnano-active watchdog ──────────────────────────────────────────────────
@@ -10758,72 +10715,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     () => window.open('/strand-anim.html', 'nadoc-strand-anim'))
   document.getElementById('help-modal-close')?.addEventListener('click', () => helpModal.classList.remove('visible'))
   helpModal?.addEventListener('click', e => { if (e.target === helpModal) helpModal.classList.remove('visible') })
-
-  function _logOvhgMapReport() {
-    const n = _ovhgSpecMap.size
-    console.group(`[OH roots] Lookup table report  (${n} overhangs)`)
-    console.log(`  1. specMap      ${n}/${n}`)
-
-    // Map 2 cross-validation
-    console.log(`  2. domainMap    ${_ovhgDomainMap.size}/${n}  (design path)  ` +
-      `geom path: ${_xval_domainGeo.size}`)
-    const dom2Fail = []
-    for (const [id, de] of _ovhgDomainMap) {
-      const ge = _xval_domainGeo.get(id)
-      if (!ge) { dom2Fail.push(`${id}: geom path missed it`); continue }
-      if (ge.domIdx !== de.domIdx) dom2Fail.push(`${id}: design domIdx=${de.domIdx} geom domIdx=${ge.domIdx}`)
-    }
-    for (const id of _xval_domainGeo.keys())
-      if (!_ovhgDomainMap.has(id)) dom2Fail.push(`${id}: only geom path found it`)
-    if (dom2Fail.length) console.warn('    domain xval mismatches:', dom2Fail)
-    else console.log('    domain xval: OK')
-
-    const missingDomain = [..._ovhgSpecMap.keys()].filter(id => !_ovhgDomainMap.has(id))
-    if (missingDomain.length)
-      console.warn(`    missing from domainMap (${missingDomain.length}):`, missingDomain)
-
-    // Map 3 cross-validation
-    console.log(`  3. junctionMap  ${_ovhgJunctionMap.size}/${n}  (domain-endpoint path)  ` +
-      `crossover path: ${_xval_junctionXover.size}`)
-    const jx3Fail = []
-    for (const [id, dv] of _ovhgJunctionMap) {
-      const xv = _xval_junctionXover.get(id)
-      if (!xv) { jx3Fail.push(`${id}: crossover path missed it`); continue }
-      if (xv.junctionBp !== dv.junctionBp || xv.junctionDir !== dv.junctionDir)
-        jx3Fail.push(`${id}: domain=(${dv.junctionBp},${dv.junctionDir}) xover=(${xv.junctionBp},${xv.junctionDir})`)
-    }
-    for (const [id, xv] of _xval_junctionXover)
-      if (!_ovhgJunctionMap.has(id))
-        jx3Fail.push(`${id}: only crossover path found it  (bp=${xv.junctionBp},dir=${xv.junctionDir})`)
-    if (jx3Fail.length) console.warn('    junction xval mismatches:', jx3Fail)
-    else console.log('    junction xval: OK')
-
-    const missingJunction = [..._ovhgDomainMap.keys()].filter(id => !_ovhgJunctionMap.has(id))
-    if (missingJunction.length)
-      console.warn(`    missing from junctionMap (${missingJunction.length}):`, missingJunction)
-
-    // Map 4
-    console.log(`  4. rootMap      ${_ovhgRootMap.size}/${n}`)
-    const missingRoot = [..._ovhgJunctionMap.keys()].filter(id => !_ovhgRootMap.has(id))
-    if (missingRoot.length)
-      console.warn(`    missing from rootMap (${missingRoot.length}):`, missingRoot)
-
-    console.groupEnd()
-  }
-
-  document.getElementById('menu-help-oh-roots')?.addEventListener('click', function () {
-    _ohRootsGlowActive = !_ohRootsGlowActive
-    this.textContent = _ohRootsGlowActive ? 'Hide OH Roots' : 'Show OH Roots'
-    if (_ohRootsGlowActive) { _applyOhRootsGlow(); _logOvhgMapReport() }
-    else designRenderer.clearGlow()
-  })
-
-  document.getElementById('menu-show-domain-ends')?.addEventListener('click', function () {
-    _domainEndsGlowActive = !_domainEndsGlowActive
-    this.textContent = _domainEndsGlowActive ? 'Hide Domain Ends' : 'Show Domain Ends'
-    if (_domainEndsGlowActive) _applyDomainEndsGlow()
-    else designRenderer.clearGlow()
-  })
 
   document.getElementById('menu-help-linker-debug')?.addEventListener('click', function () {
     const next = !linkerAnchorDebug.isVisible()
