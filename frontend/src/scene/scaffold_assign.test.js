@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ascWarningText, SCAFFOLD_LENGTHS } from './scaffold_assign.js'
+import { ascWarningText, SCAFFOLD_LENGTHS, countScaffoldNt } from './scaffold_assign.js'
 
 describe('SCAFFOLD_LENGTHS', () => {
   it('has the known scaffold lengths', () => {
@@ -28,5 +28,60 @@ describe('ascWarningText', () => {
   it('custom-seq branch ignores scaffold length', () => {
     // Custom present + long enough → null even though scaffold would otherwise warn.
     expect(ascWarningText({ customRaw: 'A'.repeat(9000), totalNt: 8000, scaffoldLen: 100 })).toBeNull()
+  })
+})
+
+describe('countScaffoldNt', () => {
+  it('returns 0 when there is no scaffold strand', () => {
+    expect(countScaffoldNt({ helices: [], strands: [{ strand_type: 'staple', domains: [] }] })).toBe(0)
+  })
+  it('returns 0 for null/empty design', () => {
+    expect(countScaffoldNt(null)).toBe(0)
+    expect(countScaffoldNt({})).toBe(0)
+  })
+  it('counts a plain forward domain (inclusive of both endpoints)', () => {
+    const design = {
+      helices: [],
+      strands: [{ strand_type: 'scaffold', domains: [{ helix_id: 0, direction: 'FORWARD', start_bp: 0, end_bp: 9 }] }],
+    }
+    expect(countScaffoldNt(design)).toBe(10) // 0..9 inclusive
+  })
+  it('counts a reverse domain by walking downward', () => {
+    const design = {
+      helices: [],
+      strands: [{ strand_type: 'scaffold', domains: [{ helix_id: 0, direction: 'REVERSE', start_bp: 9, end_bp: 0 }] }],
+    }
+    expect(countScaffoldNt(design)).toBe(10)
+  })
+  it('sums across multiple domains', () => {
+    const design = {
+      helices: [],
+      strands: [{ strand_type: 'scaffold', domains: [
+        { helix_id: 0, direction: 'FORWARD', start_bp: 0, end_bp: 4 },  // 5
+        { helix_id: 1, direction: 'FORWARD', start_bp: 0, end_bp: 2 },  // 3
+      ] }],
+    }
+    expect(countScaffoldNt(design)).toBe(8)
+  })
+  it('skips (delta=-1) contribute 0 nt; loops (delta=+1) contribute 2 nt', () => {
+    const design = {
+      helices: [{ id: 0, loop_skips: [
+        { bp_index: 2, delta: -1 },  // skip → 0 nt at bp 2
+        { bp_index: 4, delta: 1 },   // loop → 2 nt at bp 4
+      ] }],
+      strands: [{ strand_type: 'scaffold', domains: [{ helix_id: 0, direction: 'FORWARD', start_bp: 0, end_bp: 4 }] }],
+    }
+    // bp 0,1,3 → 1 nt each (3); bp 2 skip → 0; bp 4 loop → 2; total 5
+    expect(countScaffoldNt(design)).toBe(5)
+  })
+  it('loop_skips are keyed per-helix, not applied across helices', () => {
+    const design = {
+      helices: [{ id: 0, loop_skips: [{ bp_index: 1, delta: -1 }] }],
+      strands: [{ strand_type: 'scaffold', domains: [
+        { helix_id: 0, direction: 'FORWARD', start_bp: 0, end_bp: 2 },  // bp1 skipped → 2 nt
+        { helix_id: 1, direction: 'FORWARD', start_bp: 0, end_bp: 2 },  // no skips → 3 nt
+      ] }],
+    }
+    expect(countScaffoldNt(design)).toBe(5)
   })
 })

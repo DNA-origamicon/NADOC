@@ -47,7 +47,7 @@ import { initEmptySpaceMenu } from './scene/empty_space_menu.js'
 import { initAssemblyLasso } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
-import { ascWarningText, SCAFFOLD_LENGTHS } from './scene/scaffold_assign.js'
+import { initScaffoldModal } from './ui/scaffold_modal.js'
 import { filterAtomData } from './scene/atom_filter.js'
 import { initSliceHighlighter } from './scene/slice_highlighter.js'
 import { vecClose } from './scene/vec_math.js'
@@ -2887,8 +2887,7 @@ async function main() {
     const target = _scafSplitTarget
     _hideScaffoldSplitCtx()
     if (!target) return
-    _ascTargetStrandId = target.strandId
-    _openScaffoldModal()
+    _scaffoldModal.openModal(target.strandId)
   })
 
   document.getElementById('scaffold-delete-btn')?.addEventListener('click', async () => {
@@ -4661,155 +4660,16 @@ async function main() {
 
   // ── Sequencing ────────────────────────────────────────────────────────────
 
-  // Scaffold lengths for each option (must match SCAFFOLD_LIBRARY in sequences.py)
-
-  function _openScaffoldModal() {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
-
-    // Build (helixId + ':' + bpIndex) → delta map from helix loop_skips
-    const lsMap = new Map()
-    for (const helix of currentDesign.helices ?? []) {
-      for (const ls of helix.loop_skips ?? []) {
-        lsMap.set(`${helix.id}:${ls.bp_index}`, ls.delta)
-      }
-    }
-
-    // Count scaffold nucleotides, honouring skips (delta=-1 → 0 nt) and
-    // loops (delta=+1 → 2 nt), matching the backend _strand_nt_with_skips logic.
-    const scaffold = currentDesign.strands?.find(s => s.strand_type === 'scaffold')
-    let totalNt = 0
-    if (scaffold) {
-      for (const d of scaffold.domains) {
-        const isForward = d.direction === 'FORWARD'
-        const step = isForward ? 1 : -1
-        for (let bp = d.start_bp; isForward ? bp <= d.end_bp : bp >= d.end_bp; bp += step) {
-          const delta = lsMap.get(`${d.helix_id}:${bp}`) ?? 0
-          if (delta <= -1) continue
-          totalNt += delta + 1
-        }
-      }
-    }
-
-    _buildScaffoldModalOnce()
-    if (!_ascModalCtrl) return
-    const lengthEl     = _ascBody.querySelector('#asc-length-line')
-    const customSeqEl  = _ascBody.querySelector('#asc-custom-seq')
-    const charCountEl  = _ascBody.querySelector('#asc-custom-char-count')
-    const customErrEl  = _ascBody.querySelector('#asc-custom-error')
-
-    // Clear custom textarea and reset error state on (re)open
-    if (customSeqEl) { customSeqEl.value = ''; }
-    if (charCountEl) charCountEl.textContent = '0 nt'
-    if (customErrEl) { customErrEl.textContent = ''; customErrEl.style.display = 'none' }
-
-    lengthEl.textContent = `Scaffold length: ${totalNt} nt`
-    _ascTotalNt = totalNt   // remembered for the apply path's warning + 'N' fill
-    _ascUpdateWarning()
-    _ascModalCtrl.open()
-  }
-
-  // ── Assign Scaffold modal — lazy createModal-based migration ────────────────
-  let _ascModalCtrl       = null
-  let _ascBody            = null
-  let _ascTargetStrandId  = null   // strand id passed in from the right-click "Assign Scaffold for strand…" path
-  let _ascTotalNt         = 0      // scaffold length captured at open time
-
-  function _ascUpdateWarning() {
-    if (!_ascBody) return
-    const customSeqEl = _ascBody.querySelector('#asc-custom-seq')
-    const warnEl      = _ascBody.querySelector('#asc-warning')
-    if (!warnEl) return
-    const customRaw = customSeqEl?.value?.replace(/\s/g, '').toUpperCase() ?? ''
-    const scaffoldName = _ascBody.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
-    const text = ascWarningText({
-      customRaw, totalNt: _ascTotalNt, scaffoldName, scaffoldLen: SCAFFOLD_LENGTHS[scaffoldName] ?? 0,
-    })
-    if (text) { warnEl.textContent = text; warnEl.style.display = 'block' }
-    else warnEl.style.display = 'none'
-  }
-
-  function _buildScaffoldModalOnce() {
-    if (_ascModalCtrl) return
-    _ascBody = document.getElementById('assign-scaffold-modal-body')
-    if (!_ascBody) return
-    _ascBody.removeAttribute('hidden')
-
-    const cancelBtn = createButton({
-      label: 'Cancel',
-      variant: 'default',
-      onClick: () => { _ascTargetStrandId = null; _ascModalCtrl.close() },
-    })
-    const applyBtn = createButton({
-      label: 'Apply',
-      variant: 'primary',
-      onClick: _onAscApplyClicked,
-    })
-    _ascModalCtrl = createModal({
-      title: 'Assign Scaffold Sequence',
-      size: 'sm',
-      body: _ascBody,
-      actions: [cancelBtn, applyBtn],
-      onClose: () => { _ascTargetStrandId = null },
-    })
-
-    // Wire field events once.
-    _ascBody.querySelectorAll('input[name="asc-scaffold"]').forEach(r => r.addEventListener('change', _ascUpdateWarning))
-    const customSeqEl = _ascBody.querySelector('#asc-custom-seq')
-    customSeqEl?.addEventListener('input', () => {
-      const raw = customSeqEl.value.replace(/\s/g, '').toUpperCase()
-      const charCountEl = _ascBody.querySelector('#asc-custom-char-count')
-      const customErrEl = _ascBody.querySelector('#asc-custom-error')
-      if (charCountEl) charCountEl.textContent = `${raw.length} nt`
-      const bad = [...new Set(raw.replace(/[ATGCN]/g, ''))]
-      if (bad.length > 0) {
-        if (customErrEl) { customErrEl.textContent = `Invalid: ${bad.join(', ')}`; customErrEl.style.display = 'inline' }
-      } else {
-        if (customErrEl) { customErrEl.textContent = ''; customErrEl.style.display = 'none' }
-      }
-      _ascUpdateWarning()
-    })
-    // Enter on the custom textarea is intentionally a newline; Enter elsewhere
-    // commits via the modal's keydown handling.
-    _ascBody.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && e.target?.tagName !== 'TEXTAREA') {
-        e.preventDefault()
-        applyBtn.click()
-      }
-    })
-  }
-
-  document.getElementById('menu-seq-assign-scaffold')?.addEventListener('click', _openScaffoldModal)
-
-  async function _onAscApplyClicked() {
-    if (!_ascBody) return
-    const scaffoldName = _ascBody.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
-    const customRaw    = (_ascBody.querySelector('#asc-custom-seq')?.value ?? '').replace(/\s/g, '').toUpperCase()
-    const customErrEl  = _ascBody.querySelector('#asc-custom-error')
-    const targetStrandId = _ascTargetStrandId
-
-    // Block if custom sequence has invalid characters
-    if (customRaw && customErrEl?.textContent) return
-
-    _ascModalCtrl.close()
-    _ascTargetStrandId = null   // clear targeting after use
-
-    const label = customRaw ? `custom (${customRaw.length} nt)` : scaffoldName
-    _showProgress('Assign Scaffold Sequence', `Assigning ${label} sequence…`)
-    const json = await api.assignScaffoldSequence(scaffoldName, {
-      customSequence: customRaw || null,
-      strandId: targetStrandId,
-    })
-    _hideProgress()
-    if (!json) {
-      showToast('Assign scaffold sequence failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
-      return
-    }
-    await api.syncScaffoldSequenceResponse(json)
-    if (_undefinedHighlightOn) _refreshUndefinedHighlight()
-    const padMsg = json.padded_nt > 0 ? ` (${json.padded_nt} nt padded with N)` : ''
-    showToast(`${label} sequence assigned.${padMsg}`)
-  }
+  // Assign Scaffold Sequence modal (menu + scaffold right-click) → ui/scaffold_modal.js.
+  // _undefinedHighlightOn / _refreshUndefinedHighlight are declared later in main();
+  // injected as lazy getters since the apply path only runs on user action (post-boot).
+  const _scaffoldModal = initScaffoldModal({
+    store, api,
+    showProgress: _showProgress,
+    hideProgress: _hideProgress,
+    getUndefinedHighlightOn: () => _undefinedHighlightOn,
+    refreshUndefinedHighlight: () => _refreshUndefinedHighlight(),
+  })
 
   document.getElementById('menu-seq-assign-staples')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
