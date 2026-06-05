@@ -1366,37 +1366,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       }
 
       if (changed) {
-        if (window.__extDebugWatch) {
-          // Log: _extArcMap targets (just computed) and live entry.pos after application.
-          const mapTargets = new Map()
-          for (const [eid, bm] of _extArcMap) {
-            const sorted = [...bm.entries()].sort((a, b) => a[0] - b[0])
-            if (sorted.length) {
-              const [fi, fp] = sorted[0]; const [li, lp] = sorted[sorted.length - 1]
-              mapTargets.set(eid, { first: { bp: fi, x: fp.x, y: fp.y, z: fp.z }, last: { bp: li, x: lp.x, y: lp.y, z: lp.z } })
-            }
-          }
-          designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT, _straightPosMap)
-          const liveAfter = new Map()
-          for (const e of (designRenderer.getBackboneEntries?.() ?? [])) {
-            if (!e.nuc.helix_id?.startsWith('__ext_')) continue
-            if (!liveAfter.has(e.nuc.extension_id)) liveAfter.set(e.nuc.extension_id, [])
-            liveAfter.get(e.nuc.extension_id).push({ bp: e.nuc.bp_index, x: e.pos.x, y: e.pos.y, z: e.pos.z })
-          }
-          console.groupCollapsed(`[extDebug] applyClusterExtArcUpdate  t=${_currentT.toFixed(2)}`)
-          for (const [eid, beads] of liveAfter) {
-            beads.sort((a, b) => a.bp - b.bp)
-            const tgt = mapTargets.get(eid)
-            const f = beads[0], l = beads[beads.length - 1]
-            const fmt = v => `(${v.x.toFixed(3)}, ${v.y.toFixed(3)}, ${v.z.toFixed(3)})`
-            console.log(`  ${eid}`)
-            console.log(`    first  target=${fmt(tgt?.first ?? f)}  live=${fmt(f)}`)
-            console.log(`    last   target=${fmt(tgt?.last  ?? l)}  live=${fmt(l)}`)
-          }
-          console.groupEnd()
-        } else {
-          designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT, _straightPosMap)
-        }
+        designRenderer.applyUnfoldOffsetsExtensions(_extArcMap, _currentT, _straightPosMap)
       }
     },
 
@@ -1420,7 +1390,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
     /**
      * Read the rendered first+last vertex positions for each ext arc from the
-     * merged geometry buffer.  Used by __arcDebug.snapRendered() in main.js.
+     * merged geometry buffer.
      */
     getExtArcRenderedEndpoints() {
       const out = []
