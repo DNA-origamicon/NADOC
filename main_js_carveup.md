@@ -37,38 +37,29 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after DELETING two dead
-Tier-6 debug regions (terminus_audit −190 ln / extension_arc_debug −424 ln; main.js 12188 → 11575)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **Tier 6 fully drained**
+this session (5 regions): deleted 3 dead console helpers + 3 dead Help-menu toggles, extracted `_nadocDebug`.
+main.js 12188 → 11196 (−992 ln)._
 
-**Two dead Tier-6 debug helpers DELETED, not extracted (user-confirmed via want-it gate).** `nadocLabelAudit`
-(terminus audit, −190, commit 02f63c7) and the `__extDebug`/`__xbDebug`/`__arcDebug` DEV block (extension-arc
-snapshot/diff, −424, commit aacc2c2). Both were dev-only browser-console helpers with **zero code/e2e
-references** (console tools don't grep — the want-it gate is the only oracle; asked the user, all confirmed
-dead). The ext-arc delete also collapsed an orphaned `if (window.__extDebugWatch)` console-log wrapper in
-`unfold_view.js` to its bare `applyUnfoldOffsetsExtensions()` call (behavior-identical). Gate: vitest 503 +
-smoke 21/21 for each. **Deletion drains the closure faster than extraction (−614 ln, two commits, no test
-surface added) and is the right call for dead debug cruft.**
+**TIER 6 IS DONE.** This session: (#44) `nadocLabelAudit` deleted, (#45) `__extDebug`/`__xbDebug`/`__arcDebug`
+block deleted, (#46) OH Roots + Domain Ends Help-menu glow toggles deleted, (#47) Linker Anchor Debug deleted
+(+ its module), (#48) `_nadocDebug` extracted to `scene/debug/devtools_helpers.js`. The want-it gate drove
+delete-vs-extract per region (4 of 6 candidates were dead; the user's "all dead" guess was wrong on
+`_nadocDebug`, caught by grepping `e2e`). **Next session: pick from Tier 5 (file/session infra — HIGH blast
+radius) or the "Smaller leftovers"** — there is no remaining Tier-6 work.
 
-**KEY FINDING — the want-it gate caught a wrong premise.** The third helper the user marked dead,
-`_nadocDebug` (devtools_helpers, ~412 ln), is **NOT dead**: three e2e specs use it (`relax_undo_bug` →
-`snapPos`, `dsdna_linker_selection` → `overhangLinkArcs`, `representation_order_fkeys` → `refetch`) and
-photo-mode attaches `_nadocDebug.photoMaterials/…` at ~10275. **NOT deleted.** Marked `[!]` in Tier 6: if
-ever touched it's an *extraction* keeping the global, with those e2e specs as the gate — not a delete.
-**Lesson: always grep `src` AND `e2e` for the global before deleting a "dead" console helper — `_nadocDebug`
-is a shared debug namespace many modules extend.**
+**Banked gotchas this session:**
+- **Grep `e2e` before deleting any `window.*` debug global** — `_nadocDebug` has zero `src` callers yet 3 e2e
+  specs + photo-mode depend on it. A `src`-only "is it dead?" check is insufficient for debug hooks.
+- **Some "Help-menu debug" regions aren't standalone subsystems** — OH Roots' `_ovhgRootMap`/`_buildOvhgMaps`
+  feed the live Overhang Orientation panel, so the region couldn't be factory-extracted; the right move was
+  deleting the dead toggles, which *simplified* the shared infra instead of coupling a factory to it.
+- **Stash-and-rerun to attribute e2e failures.** Three specs the carve-up named as the `_nadocDebug` gate are
+  red on master independent of any change — a verbatim lift can't be gated on already-red specs. Prove
+  non-regression by running them on the pre-change baseline + lean on smoke's console-error gate + vitest.
 
-**Next best targets:**
-- **Tier 6 remaining (LOW risk, token-cheap):** `help_menu_toggles` (~76 ln, smallest) — but FIRST run the
-  want-it gate (it wires real Help-menu glow toggles, likely *wanted*, so extract not delete).
-  `devtools_helpers` (`_nadocDebug`, ~412 ln) is the only big Tier-6 item left but is **extract-only**
-  (e2e-depended) → 2-commit split, e2e specs as gate.
-- **Tier 5 file/session infra** (HIGH blast radius) once Tier-6 drains.
-- **Still-in-main, deliberately deferred:** FK propagation (`_applyFKLive`); Polymerize-region sub-part
-  `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound).
-
-**Gotcha banked this batch:** for any "dead debug helper" deletion, grep BOTH `src` and `e2e` for the
-global name first — e2e specs reference `window.*` debug hooks that never appear in `src`. A console helper
-with no `src` callers can still be load-bearing for the test suite. (This is what saved `_nadocDebug`.)
+**Deliberately deferred (still in main.js):** FK propagation (`_applyFKLive`); Polymerize-region sub-part
+`scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound).
 
 ---
 
@@ -373,23 +364,30 @@ for a fresh session.
   zero code or e2e references. `unfold_view.js` read `__extDebugWatch` only to wrap a console.log around
   an `applyUnfoldOffsetsExtensions()` call that ran identically in the `else` branch → collapsed to the
   bare call (behavior-identical) + dropped a stale `__arcDebug` doc comment. −424 ln off the closure.
-- [!] **Browser dev-tools debug helpers** — banner `// ── Browser dev-tools debug helpers` (~2553) →
-  `window._nadocDebug` IIFE (~412 ln: posTrace/snapPos/diffPos/storeTrace/subTrace/refetch/forceRebuild
-  + photo-mode-attached photoMaterials/ptSamples/…). **NOT DEAD — DO NOT DELETE (verified 2026-06-04).**
-  Three e2e specs depend on it: `relax_undo_bug.spec.js` (`snapPos`), `dsdna_linker_selection.spec.js`
-  (`overhangLinkArcs`), `representation_order_fkeys.spec.js` (`refetch`); photo-mode extends it at ~10275.
-  If touched at all, it's an *extraction* to `scene/debug/devtools_helpers.js` keeping the `window._nadocDebug`
-  global intact, NOT a deletion — and the e2e specs are the gate. Lower priority than other Tier-6 items.
+- [x] **Browser dev-tools debug helpers** — `window._nadocDebug`. **DONE 2026-06-04 (extraction #48, commit
+  5cffd9f).** The ~230-ln IIFE lifted verbatim into `scene/debug/devtools_helpers.js` factory
+  `initDevtoolsDebug({designRenderer, store, api, overhangLinkArcs, selectionManager, scene})`; main.js does
+  `window._nadocDebug = initDevtoolsDebug({...})`. Global kept intact, so photo-mode's `.photoMaterials`/etc
+  attachments (~10025) and the e2e specs that drive `.snapPos`/`.refetch`/`.overhangLinkArcs` still work.
+  13 vitest. −230 ln off the closure. **Gate caveat:** the 3 named e2e specs (`relax_undo_bug` /
+  `dsdna_linker_selection` / `representation_order_fkeys`) are RED on the pre-change baseline (pre-existing,
+  unrelated breakage — confirmed by stash-and-rerun), so they can't gate this; validated instead by smoke
+  21/21 (the console-error gate exercises `_nadocDebug` creation) + vitest 516 + the baseline-identical e2e.
 - [x] **Label / terminus audit** — banner `// ── Label / terminus audit` (~6213, ~190 ln) →
   `window.nadocLabelAudit`. **DELETED 2026-06-04 (commit 02f63c7), not extracted.** User-confirmed dead;
   no code or e2e references the post-caDNAno label/terminus audit. −190 ln off the closure. (The adjacent
   `nadocAssemblyLabelTable` console helper at ~6194 was left in place — separate banner, not in scope.)
-- [ ] **Help-menu debug toggles** — under banner `// ── Help / Hotkeys modal` (~13195–13271, ~76 ln) →
-  `scene/debug/help_menu_toggles.js`. The OH-roots / domain-ends / linker-anchor / FJC-sim menu wiring
-  plus `_logOvhgMapReport` (the 4-map cross-validation console dump). Deps: designRenderer (glow),
-  `_applyOhRootsGlow`/`_applyDomainEndsGlow`, linkerAnchorDebug, the `_ovhg*Map` lookup tables. Risk:
-  LOW-MED (the report reads several closure maps — pass them in or keep the report a thin closure shim).
-  Re-homed here from the mis-scoped Tier-1 "Help / Hotkeys modal" entry.
+- [x] **Help-menu debug toggles** — under banner `// ── Help / Hotkeys modal`. **RESOLVED BY DELETION
+  2026-06-04 (commits 52cc166 + d3f54cf), not a factory extraction.** Want-it gate: user keeps only **FJC
+  sim** (the read-only FJC linker-config modal — left inline, a 4-line lazy-import handler, not a factory
+  target). Deleted the other three as dead: **OH Roots** (glow + `_logOvhgMapReport` 4-map cross-validation
+  dump + the `_xval_*` cross-validation maps that only fed it), **Domain Ends** (glow + `_buildDomainEndEntries`),
+  **Linker Anchor Debug** (init + own subscriber + 4 gated rebuild calls + `scene/linker_anchor_debug.js`
+  module). **Why deletion not extraction:** the region was NOT a standalone subsystem — `_ovhgRootMap` /
+  `_buildOvhgMaps` feed the live **Overhang Orientation panel** (`_ooOpen`, junction bead positions) and the
+  glow-active state was read by an always-on subscriber, so a factory would have meant get/set shims across
+  three distant locations. Deleting the dead toggles instead *simplified* the surviving infra (`_buildOvhgMaps`
+  now builds just the 4 live maps). −133 ln off the closure. Gate: vitest 503 + smoke 21/21 (×2).
 
 ---
 
