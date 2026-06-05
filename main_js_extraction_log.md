@@ -454,8 +454,20 @@ gotcha worth remembering. The autonomous extraction loop writes here when it ski
   its console-error gate boots the app and would catch a throw in `window._nadocDebug = initDevtoolsDebug(...)`;
   (b) vitest 516 (+13 factory tests); (c) baseline-identical e2e (proves no regression). **Lesson: when a
   named e2e gate is already failing, don't assume your change caused it — stash and rerun to get the baseline,
-  and fall back to smoke + vitest + verbatim-move for confidence.** (These 3 stale specs are a separate cleanup
-  task, out of scope for the extraction.)
+  and fall back to smoke + vitest + verbatim-move for confidence.** **RESOLVED 2026-06-04 (commits 0838849,
+  933fd38):** all 3 specs repaired and green (7/7). They were stale on up to 4 axes, none related to
+  `_nadocDebug`: (1) the New-Part dialog migrated to a `createModal` modal so the hardcoded
+  `#new-design-create` button was gone; (2) the **multi-doc trap** — a bare `goto('/')` tab gets its OWN
+  random doc id (`doc_id.js`), but the specs created/loaded designs via default-doc `page.request.post`, so the
+  tab read an empty doc (fix: do it in-tab via `apiMod.loadDesign`/`createBundle`, which stamp `X-NADOC-Doc`);
+  (3) **stale fixtures** — `Hinge.nadoc` lost its bundled OverhangBinding + ds linker, so the specs now build
+  the feature in-tab (relax: set OH2 sub-domain = revcomp(OH1) then POST `/design/overhang-bindings`; dsdna:
+  POST `/design/overhang-connections` → auto-named L1); (4) stale model/timeouts (binding dropped
+  `driven/driver_overhang_id` → use `target_joint_id`; bump timeouts for the in-tab build). **Lesson: e2e
+  specs outside the `just smoke` gate bit-rot silently as infra (multi-doc, modal migrations, fixture
+  contents, model fields) evolves — and the failure surfaces far from the root cause (a Create-button timeout
+  masked a stale fixture three layers down). Prototype the real API payloads against a live backend before
+  rewriting spec setup.**
 - **`.bind()`-restore is not reference-restore (#48 oracle bug).** `storeTrace`/`posTrace` save the original as
   `fn.bind(obj)` and restore *that* — so post-restore the slot holds a functionally-equivalent bound copy, not
   the literal pre-patch reference. A `toBe(original)` oracle is wrong; assert functional restoration (the
