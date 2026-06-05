@@ -121,6 +121,7 @@ import { initLibraryPanel }         from './ui/library_panel.js'
 import { pickLattice }              from './ui/lattice_picker.js'
 import { openFileBrowser }          from './ui/file_browser.js'
 import { initFileIo }               from './ui/file_io.js'
+import { initSyncBadge }            from './ui/sync_badge.js'
 import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
 import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
@@ -3660,8 +3661,8 @@ async function main() {
   // The file-IO operations (getDesignContent / savePartToAssembly / saveToHandle /
   // saveAs / saveAssemblyToHandle / saveAssemblyAs) were extracted verbatim to
   // ui/file_io.js (extraction #52). The factory `_fileIo = initFileIo({...})` is
-  // wired below at the autosave region (its deps _setSyncStatus / _syncLog /
-  // libraryPanel are declared there). The mutable file/path state + setters +
+  // wired below at the autosave region (its deps _syncBadge.setSyncStatus /
+  // _syncBadge.syncLog / libraryPanel are declared there). The mutable file/path state + setters +
   // _updateAssemblyTitle + the lifecycle spine (_resetForNewDesign /
   // _enterAssemblyMode / _exitAssemblyMode) stay here.
 
@@ -3992,11 +3993,11 @@ async function main() {
     if (!currentDesign) { showToast('No design to save.', { severity: 'error' }); return }
     if (_workspacePath) {
       const path = _workspacePath
-      _syncLog('info', 'SAVE', `explicit save → ${path}`)
-      _setSyncStatus('yellow', 'saving…')
+      _syncBadge.syncLog('info', 'SAVE', `explicit save → ${path}`)
+      _syncBadge.setSyncStatus('yellow', 'saving…')
       _selfSavedPaths.add(path)
       await api.saveDesignToWorkspace(path)
-      _setSyncStatus('green', 'saved')
+      _syncBadge.setSyncStatus('green', 'saved')
       setTimeout(() => _selfSavedPaths.delete(path), 5000)
       if (_fileHandle) await _fileIo.saveToHandle(_fileHandle)
     } else if (_fileHandle) {
@@ -7503,34 +7504,11 @@ async function main() {
   }
 
   // ── Sync status badge + debug panel ──────────────────────────────────────────
-
-  const _syncStatusDot  = document.querySelector('#sync-status .sync-dot')
-  const _syncStatusText = document.getElementById('sync-status-text')
-  const _syncDebugPanel = document.getElementById('sync-debug-panel')
-  document.getElementById('sync-debug-close')?.addEventListener('click', () => {
-    _syncDebugPanel?.classList.remove('visible')
-  })
-
-  function _setSyncStatus(state, label) {
-    const ts = new Date().toLocaleTimeString('en-US', { hour12: false })
-    if (_syncStatusDot)  { _syncStatusDot.className = `sync-dot ${state}` }
-    if (_syncStatusText) { _syncStatusText.textContent = `${label} ${ts}` }
-  }
-
-  function _syncLog(level, tag, msg) {
-    const cls = level === 'err' ? 'error' : level === 'warn' ? 'warn' : 'log'
-    console[cls](`[SYNC][${tag}] ${msg}`)
-    const body = document.getElementById('sync-debug-body')
-    if (!body) return
-    const ts = new Date().toLocaleTimeString('en-US', { hour12: false })
-    const row  = document.createElement('div');  row.className  = 'sdp-row'
-    const tsEl = document.createElement('span'); tsEl.className = 'sdp-ts';         tsEl.textContent = ts
-    const tagEl= document.createElement('span'); tagEl.className= `sdp-type ${level==='err'?'err':level==='warn'?'warn':'info'}`; tagEl.textContent = tag
-    const msgEl= document.createElement('span'); msgEl.className= 'sdp-msg';        msgEl.textContent = msg
-    row.append(tsEl, tagEl, msgEl)
-    body.insertBefore(row, body.firstChild)
-    while (body.children.length > 150) body.removeChild(body.lastChild)
-  }
+  // Status dot + debug log panel extracted to ui/sync_badge.js. Pure DOM —
+  // setSyncStatus / syncLog are called by the auto-save subscribers, the
+  // connection monitor, the file-IO ops and the SSE handler. The flag-reading
+  // __nadocSyncDebug helper below stays inline and drives the panel via show/hide.
+  const _syncBadge = initSyncBadge()
 
   window.__nadocSyncDebug = {
     status() {
@@ -7544,22 +7522,22 @@ async function main() {
       }
     },
     forceResync() {
-      _syncLog('warn', 'FORCE', 'Manual force resync triggered')
+      _syncBadge.syncLog('warn', 'FORCE', 'Manual force resync triggered')
       if (store.getState().assemblyActive) {
         const asm = store.getState().currentAssembly
         ;(asm?.instances ?? []).forEach(i => {
           assemblyRenderer.invalidateInstance(i.id)
-          _syncLog('info', 'FORCE', `invalidated instance ${i.id} (${i.name})`)
+          _syncBadge.syncLog('info', 'FORCE', `invalidated instance ${i.id} (${i.name})`)
         })
         assemblyRenderer.rebuild(asm).then(() => assemblyRenderer.rebuildLinkers(asm))
-        _setSyncStatus('yellow', 'resyncing…')
+        _syncBadge.setSyncStatus('yellow', 'resyncing…')
       } else {
         api.getDesign().then(() => api.getGeometry())
-        _syncLog('info', 'FORCE', 'Re-fetched design+geometry')
+        _syncBadge.syncLog('info', 'FORCE', 'Re-fetched design+geometry')
       }
     },
-    show() { _syncDebugPanel?.classList.add('visible') },
-    hide() { _syncDebugPanel?.classList.remove('visible') },
+    show() { _syncBadge.showDebugPanel() },
+    hide() { _syncBadge.hideDebugPanel() },
   }
 
   // ── Backend connection monitor: status badge + silent restart recovery ───────
@@ -7572,8 +7550,8 @@ async function main() {
     api,
     store,
     assemblyRenderer,
-    setSyncStatus: _setSyncStatus,
-    syncLog: _syncLog,
+    setSyncStatus: _syncBadge.setSyncStatus,
+    syncLog: _syncBadge.syncLog,
     setReloadingFromSSE: (v) => { _reloadingFromSSE = v },
   })
 
@@ -7582,7 +7560,7 @@ async function main() {
     description: 'Toggle sync debug panel',
     handler(e) {
       e.preventDefault()
-      _syncDebugPanel?.classList.toggle('visible')
+      _syncBadge.toggleDebugPanel()
     },
   })
 
@@ -7618,8 +7596,8 @@ async function main() {
   // just below) executes lazily/post-init, so the late wiring is safe.
   const _fileIo = initFileIo({
     store, api,
-    setSyncStatus: _setSyncStatus,
-    syncLog: _syncLog,
+    setSyncStatus: _syncBadge.setSyncStatus,
+    syncLog: _syncBadge.syncLog,
     libraryPanel,
     updateAssemblyTitle: _updateAssemblyTitle,
     setWorkspacePath: _setWorkspacePath,
@@ -7644,7 +7622,7 @@ async function main() {
     if (newState.currentDesign !== prevState.currentDesign && api.wasLastDesignSyncTransient()) return
     if (_partEditContext) {
       if (newState.currentDesign === prevState.currentDesign) return
-      _setSyncStatus('yellow', 'auto-saving…')
+      _syncBadge.setSyncStatus('yellow', 'auto-saving…')
       clearTimeout(_partSaveTimer)
       _partSaveTimer = setTimeout(() => {
         _fileIo.savePartToAssembly({ silent: true })
@@ -7653,21 +7631,21 @@ async function main() {
     }
     if (!_workspacePath || _reloadingFromSSE) return
     if (newState.currentDesign === prevState.currentDesign) return
-    _setSyncStatus('yellow', 'saving…')
+    _syncBadge.setSyncStatus('yellow', 'saving…')
     clearTimeout(_designSaveTimer)
     _designSaveTimer = setTimeout(async () => {
       const path = _workspacePath
       if (!path) return
-      _syncLog('info', 'SAVE', `design → ${path}`)
+      _syncBadge.syncLog('info', 'SAVE', `design → ${path}`)
       _selfSavedPaths.add(path)
       nadocBroadcast.emit('file-saved', { path })   // tell sibling tabs to skip the SSE reload echo
       try {
         await api.saveDesignToWorkspace(path)
-        _setSyncStatus('green', 'saved')
+        _syncBadge.setSyncStatus('green', 'saved')
         setTimeout(() => _selfSavedPaths.delete(path), 5000)
       } catch (err) {
-        _setSyncStatus('red', 'save error')
-        _syncLog('err', 'SAVE', `failed: ${err?.message ?? err}`)
+        _syncBadge.setSyncStatus('red', 'save error')
+        _syncBadge.syncLog('err', 'SAVE', `failed: ${err?.message ?? err}`)
         setTimeout(() => _selfSavedPaths.delete(path), 5000)
       }
     }, 1500)
@@ -7676,7 +7654,7 @@ async function main() {
   store.subscribeSlice('assembly', (newState, prevState) => {
     if (!_assemblyWorkspacePath || _savingAssembly) return
     if (newState.currentAssembly === prevState.currentAssembly) return
-    _setSyncStatus('yellow', 'saving…')
+    _syncBadge.setSyncStatus('yellow', 'saving…')
     clearTimeout(_assemblySaveTimer)
     _assemblySaveTimer = setTimeout(async () => {
       if (!_assemblyWorkspacePath || _savingAssembly) return
@@ -7689,11 +7667,11 @@ async function main() {
       try {
         const r = await api.saveAssemblyAs(_assemblyWorkspacePath)
         if (r?.path) { _setAssemblyWorkspacePath(r.path); _selfSavedPaths.add(r.path); _savedPaths.add(r.path) }
-        _syncLog('info', 'SAVE', `assembly → ${r?.path}`)
-        _setSyncStatus('green', 'saved')
+        _syncBadge.syncLog('info', 'SAVE', `assembly → ${r?.path}`)
+        _syncBadge.setSyncStatus('green', 'saved')
       } catch (err) {
-        _setSyncStatus('red', 'save error')
-        _syncLog('err', 'SAVE', `assembly failed: ${err?.message ?? err}`)
+        _syncBadge.setSyncStatus('red', 'save error')
+        _syncBadge.syncLog('err', 'SAVE', `assembly failed: ${err?.message ?? err}`)
       } finally {
         _savingAssembly = false
         setTimeout(() => { for (const p of _savedPaths) _selfSavedPaths.delete(p) }, 5000)
@@ -7716,8 +7694,8 @@ async function main() {
     api,
     assemblyRenderer,
     assemblyJointRenderer,
-    syncLog: _syncLog,
-    setSyncStatus: _setSyncStatus,
+    syncLog: _syncBadge.syncLog,
+    setSyncStatus: _syncBadge.setSyncStatus,
     syncAssemblyBluntEnds: _syncAssemblyBluntEnds,
     selfSavedPaths: _selfSavedPaths,
     getClusterPanel: () => clusterPanel,
@@ -7725,7 +7703,7 @@ async function main() {
 
 	  function _handleLibraryEvent({ type, path, file_type }) {
     if (type !== 'file-changed' && type !== 'file-deleted') return
-    _syncLog('info', 'SSE', `${type} ${file_type}:${path}`)
+    _syncBadge.syncLog('info', 'SSE', `${type} ${file_type}:${path}`)
 
     // Skip reacting to files we just saved ourselves (SSE echo). Do this BEFORE
     // the library refresh: a self-save doesn't change the file LIST, and a part
@@ -7733,7 +7711,7 @@ async function main() {
     // each of which used to run a fresh GET /library/files — a flood that piled
     // up to multi-second responses.
     if (type === 'file-changed' && _selfSavedPaths.has(path)) {
-      _syncLog('info', 'SSE', `skipped (self-saved echo)`)
+      _syncBadge.syncLog('info', 'SSE', `skipped (self-saved echo)`)
       return
     }
     // A genuine external change → refresh the file list, debounced so a burst of
@@ -7752,7 +7730,7 @@ async function main() {
         i => i.source?.type === 'file' && i.source.path === path,
       )
       if (affected.length) {
-        _syncLog('info', 'SSE', `${affected.length} instance(s) affected → coalesced refresh`)
+        _syncBadge.syncLog('info', 'SSE', `${affected.length} instance(s) affected → coalesced refresh`)
         _assemblyRefresh.requestRefresh(affected[0].id, 'sse')
       }
     } else if (file_type === 'part' && !store.getState().assemblyActive && _workspacePath === path) {
@@ -7762,17 +7740,17 @@ async function main() {
       // the backend and clobber the in-progress edits. Same-doc sync already
       // happens via the design-changed broadcast, so skip the reload.
       if (Date.now() - _lastSameDocActivityMs < _RELOAD_SUPPRESS_MS) {
-        _syncLog('info', 'SSE', `skipped reload of ${path} (live same-doc editing)`)
+        _syncBadge.syncLog('info', 'SSE', `skipped reload of ${path} (live same-doc editing)`)
         return
       }
       // Otherwise treat as a genuine external edit and reload.
-      _syncLog('info', 'SSE', `reloading design from ${path}`)
-      _setSyncStatus('yellow', 'syncing…')
+      _syncBadge.syncLog('info', 'SSE', `reloading design from ${path}`)
+      _syncBadge.setSyncStatus('yellow', 'syncing…')
       _reloadingFromSSE = true
       api.getLibraryFileContent(path)
         .then(result => result?.content ? api.importDesign(result.content) : null)
-        .then(() => { _setSyncStatus('green', 'synced') })
-        .catch(err => { _setSyncStatus('red', 'sync error'); _syncLog('err', 'SSE', `reload failed: ${err?.message ?? err}`) })
+        .then(() => { _syncBadge.setSyncStatus('green', 'synced') })
+        .catch(err => { _syncBadge.setSyncStatus('red', 'sync error'); _syncBadge.syncLog('err', 'SSE', `reload failed: ${err?.message ?? err}`) })
         .finally(() => { _reloadingFromSSE = false })
     }
 	  }
@@ -9660,7 +9638,7 @@ async function main() {
     renderRecentMenu: _renderRecentMenu,
     setWorkspacePath: _setWorkspacePath,
     setFileName: _setFileName,
-    setSyncStatus: _setSyncStatus,
+    setSyncStatus: _syncBadge.setSyncStatus,
     saveAs: _fileIo.saveAs,
     setFileHandle: (v) => { _fileHandle = v },
   })
@@ -10630,7 +10608,7 @@ async function main() {
       _renderEditorDropdown()
     }
     if (type === 'part-design-updated') {
-      _syncLog('info', 'BC-RX', `part-design-updated id=${instanceId}`)
+      _syncBadge.syncLog('info', 'BC-RX', `part-design-updated id=${instanceId}`)
       // Coalesced: a burst of edits (slider drag) emits a burst of these; collapse
       // them into one refresh instead of one heavy rebuild per broadcast.
       _assemblyRefresh.requestRefresh(instanceId, 'broadcast')
