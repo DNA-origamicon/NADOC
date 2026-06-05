@@ -55,11 +55,12 @@ entry is stale (pre-existing, not from this batch). The seam pipeline now has it
 **Next best targets:**
 - **Tier 6 dev-only warm-ups** (LOW risk, token-cheap, gated by `?debug`/DEV): `devtools_helpers` (~412 ln,
   `window.__*`) / `extension_arc_debug` (~424 ln) / `terminus_audit` (~210 ln) / `help_menu_toggles` (~76 ln).
-- **Smaller leftovers — Create Near/Far Ends** (`menu-create-near-ends` / `-far-ends`, ~11293 onward, ~400 ln
-  for the pair) → `scene/near_far_ends.js`. **DEDUP OPPORTUNITY:** each handler currently redefines its OWN
-  verbatim copies of the 4 scaffold-crossover constants + `isForward`/`scaffoldXoverNeighbor`/`nickBpForStrand`
-  — now exported from `scene/create_seam.js`, so the lift can import them and collapse the triplication. Pairs
-  with `project_near_far_ends`. MED risk (topology-mutating; doc-pinned click test as the gate, mirror #43's).
+- ~~**Smaller leftovers — Create Near/Far Ends**~~ **DELETED 2026-06-04** (not extracted). Audited as
+  superseded primitive scaffold routing: two Help-menu buttons, zero backend tests, frozen since intro
+  (commit `36fcb00`, 2026-04-29), and functionally embedded in the actively-developed Autoscaffold
+  seamed/seamless router (`seamed_router.py` emits the same `create_near_ends`/`create_far_ends` process-IDs).
+  Removed both menu buttons + main.js handlers (−399 ln) + the 2 api/client fns + the 2 crud endpoints +
+  request models. seamed_router only reuses the process-ID string, so it was untouched. User-confirmed delete.
 - **Still-in-main, deliberately deferred:** FK propagation (`_applyFKLive`); Polymerize-region sub-part
   `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound).
 
@@ -395,8 +396,7 @@ plate_view, kinematics_ticker.
 ## Smaller leftovers (after the tiers above)
 
 Slice-plane wiring (`// ── Slice plane`, much already in `slice_plane.js`), Plates-and-tubes wiring
-(most in `plate_view.js`), context-menu blocks (scaffold/overhang/blunt — `~3548–3817`), Create Near/Far
-Ends (`~14139–14539`, ~400 ln — pairs with `project_near_far_ends`), Photo-mode/export-repr wiring
+(most in `plate_view.js`), context-menu blocks (scaffold/overhang/blunt — `~3548–3817`), Photo-mode/export-repr wiring
 (`~12214–12545`). Pick these up opportunistically once the tiers drain.
 
 **Create Seam handler** — `menu-create-seam` click handler. **DONE** (extraction #43, this batch) →
@@ -404,4 +404,5 @@ Ends (`~14139–14539`, ~400 ln — pairs with `project_near_far_ends`), Photo-m
 junction pipeline) + exported pure helpers `isForward`/`scaffoldXoverNeighbor`/`nickBpForStrand` (latter two
 parameterized on `isHC`) + thin `initCreateSeam({store, api})`. −259 ln off the closure. 17 vitest; smoke
 21/21 + doc-pinned 26hb click exercise (place-batch POST, 10 placements). Dropped dead `helixByGridPos`. The
-exported helpers + constants now let the **Create Near/Far Ends** lift dedup its triplicated copies.
+exported helpers + constants outlived the **Create Near/Far Ends** handlers (deleted 2026-06-04 as
+superseded primitive routing — see the handoff above); create_seam.js stands on its own.

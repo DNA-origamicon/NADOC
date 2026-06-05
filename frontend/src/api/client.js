@@ -920,40 +920,6 @@ export async function placeCrossoverBatch(placements) {
   return _syncFromDesignResponse(json)
 }
 
-export async function createNearEnds(placements) {
-  const json = await _request('POST', '/design/near-ends/create', {
-    crossovers: placements.map(p => ({
-      helix_id_a: p.helix_id_a,
-      helix_id_b: p.helix_id_b,
-      face_bp:    p.face_bp,
-      new_lo:     p.new_lo,
-      xover_bp:   p.xover_bp,
-      strand_a:   p.strand_a,
-      strand_b:   p.strand_b,
-      nick_bp_a:  p.nick_bp_a,
-      nick_bp_b:  p.nick_bp_b,
-    })),
-  })
-  return _syncFromDesignResponse(json)
-}
-
-export async function createFarEnds(placements) {
-  const json = await _request('POST', '/design/far-ends/create', {
-    crossovers: placements.map(p => ({
-      helix_id_a: p.helix_id_a,
-      helix_id_b: p.helix_id_b,
-      face_bp:    p.face_bp,
-      new_hi:     p.new_hi,
-      xover_bp:   p.xover_bp,
-      strand_a:   p.strand_a,
-      strand_b:   p.strand_b,
-      nick_bp_a:  p.nick_bp_a,
-      nick_bp_b:  p.nick_bp_b,
-    })),
-  })
-  return _syncFromDesignResponse(json)
-}
-
 export async function patchCrossoverExtraBases(crossoverId, sequence) {
   const json = await _request('PATCH', `/design/crossovers/${crossoverId}/extra-bases`, { sequence })
   return _syncFromDesignResponse(json)
