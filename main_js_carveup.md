@@ -1,6 +1,6 @@
 # main.js carve-up map — stateful-subsystem extraction backlog
 
-**Purpose.** main.js is one large `async function main()` closure (~9.2k lines as of 2026-06-05, down
+**Purpose.** main.js is one large `async function main()` closure (~8.75k lines as of 2026-06-05, down
 from ~16.5k). The pure-helper well is drained (see `main_js_extraction_log.md`) and — as of #61 — every
 Tier 1–5 *stateful subsystem* (panels, dialogs, menus, event-handler clusters) is extracted too. The loop
 is **near-complete**: the remaining mass is the lifecycle spine + thin per-action wiring that's correctly
@@ -53,33 +53,39 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **STRATEGY SHIFT: stop nibbling cheap
-pure cores — take the HARDEST regions head-on, in larger multi-commit campaigns, hardest-first.** The pure-core /
-narrow-sub-block well is effectively dry. What remains is four big coupled stateful regions; another ~50-ln pure peel
-leaves the real structural debt (the coupled assembly-transform subsystem) exactly as tangled. #72 (atomistic colour
-core → `computeAtomStrandColors`, −61 ln, main.js 9006) was the LAST cheap cut — see the log row for its detail._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **STRATEGY: hardest-first, multi-commit
+campaigns — the pure-core / narrow-sub-block well is dry.** ✅ **KEYSTONE DONE (commits f752255/46d66fe/e161a9f, log
+#73/#74/#75, −255 ln, main.js 9006→8751).** The assembly-transform subsystem is now `scene/assembly_transform.js`
+(`initAssemblyTransform`, 23 vitest): pending Maps + context/live/commit core (a) + FK propagation (b) + motion-constraint
+analyzer & chip (c). group_gizmo / the Move/Rotate `_mr*` shell / the Translate/Rotate tool now consume it as a dep
+instead of sharing closure state — **the three frontier regions below are unblocked.**_
 
-**Why hardest-first now.** Every remaining frontier item is HARD (gesture-bound and/or shared-state coupled), and the
-map's end-state ("the closure holds zero cohesive logic clusters") is gated *entirely* on these four. Do each as a
-deliberate campaign, not a one-commit nibble: (1) map the coupling with `rg` first; (2) build/extend the gesture gate
-ONCE up front; (3) split the lift across commits (the COMMIT rule already allows >~250 ln across commits); (4) lift
-verbatim. Budget a whole session per campaign — these are not "keep it cheap" sessions.
+**▶ NEXT — Translate/Rotate tool + the `_mr*` panel shell (frontier #1, now unblocked).** This is the BIGGEST single
+block (~700 ln). With the keystone a module, the shared-state-via-closure obstacle is gone: the tool/shell call
+`_assemblyTransform.{createAssemblyTransformContext,applyAssemblyPrimaryLive,queueAssemblyPrimaryCommit,commitAssemblyPending}`
+via the alias-consts at ~4970 — re-point those at the module dep when lifting. **WATCH OUT: `_translateRotateActive` + the
+`_mr*` panel fns are read/written from 20+ sites** (`_mrSetTransformValuesFromMatrix`/`_mrSetClusterOptions`/`_mrCommitInputs`/
+`_mrAssemblyCtx`…) — borderline lifecycle-spine. #71 already peeled the flex sub-block out; the prior handoff's "co-extract
+the whole shell" may be too big a bite (STOP-criterion smell — re-derive whether the shell wants its own factory or stays a
+thin caller). Span ≈ banner `// ── Joint arrow pick handler` (re-grep, was ~5252) through the cluster/instance gizmo attach.
+The `_mrCommitInputs` → `_queueAssemblyPrimaryCommit` path is the SAME one the move-tool gesture gate drives.
 
-**▶ THE KEYSTONE — assembly transform subsystem. DO THIS FIRST; it unblocks the other three.** The shared transform
-engine — `_createAssemblyTransformContext` (~6785) / `_applyAssemblyPrimaryLive` / `_queueAssemblyPrimaryCommit` /
-`_commitAssemblyPending` + the file-wide `_assemblyPendingTransforms` Maps, plus `_applyFKLive` (~6848) /
-`_applyClusterMateFKLive` / `_analyzeMotionConstraints` (~6996) / `_setMotionChip` (~7083). Banners `// ── Rigid-body
-group gizmo attachment` (~6773) / `// ── Forward kinematics` (~6840) / `// ── Motion-constraint analyzer` (~6996),
-~400 ln. **These are the closure state that group_gizmo (#36/#37, ALREADY injects them as deps), the Move/Rotate `_mr*`
-shell, AND the Translate/Rotate tool all share.** While they live in the closure, none of the three consumers can be
-lifted cleanly. Extract → `scene/assembly_transform.js` factory exposing the context/live/commit API + owning the
-pending Maps; the consumers then take it as a dep (group_gizmo already does — swap its injected fns for the module's).
-Multi-commit split: **(a)** pending Maps + context/live/commit core; **(b)** FK propagation
-(`_applyFKLive`/`_applyClusterMateFKLive` — was the standing "deferred" item, now part of this campaign); **(c)**
-motion-constraint analyzer + status chip. Gate: the panel-input commit path (below) + `assembly_move_tool.spec.js`.
-Re-derive exact spans with `rg` — the #36/#37 log already lists which helpers group_gizmo injects.
+**Why hardest-first now.** Every remaining frontier item is HARD (gesture-bound and/or shared-state coupled). Do each as a
+deliberate campaign: (1) map coupling with `rg` first; (2) lean on the EXISTING gesture gate (below), don't re-derive;
+(3) split the lift across commits (the alias-const pattern from #73 keeps call sites verbatim across the split); (4) lift
+verbatim. **Alias-const pattern (proven in the keystone): `const _x = _module.x` right after the factory init keeps EVERY
+existing call site untouched — only fn bodies relocate.** Budget a whole session per campaign.
 
-**Then, in dependency order (each easier once the keystone is a module — no more shared-state-via-closure):**
+**Then, in dependency order:**
+2. **Representation switcher** (~320 ln) — banners `// ── Unified representation radio` + `_setRepresentation` +
+   `// ── Function-key bindings: F1…F7` + the option sliders. Central mode-switch touching every renderer + the Coloring
+   submenu (`_setColoringMode`'s 7 callers live here). Map the renderer fan-out; multi-commit.
+3. **Atomistic/surface controllers (remainder)** — `_applyAtomisticMode`/`_applySurfaceMode`/`_refetchAtomistic`/
+   `_ensureAtomData` + region overlays. Pure colour cores already drained (#72). Interleaved with renderer
+   construction — first separate the controller fns from the init wiring, then lift the controllers as a factory.
+
+<details><summary>Prior detail on frontier #1 (kept for reference)</summary>
+
 1. **Translate/Rotate tool + the `_mr*` panel shell** — banner `// ── Joint arrow pick handler` (~5252) through the
    cluster/instance gizmo attach (~6770), the BIGGEST single block (~700 ln + the `_mr*` shell). `_activateTranslateRotateTool`
    …`_cancelTranslateRotateTool` + `_onToolPickPointerDown` + the cluster raycaster (→ `scene/joint_pick.js`) + the `_mr*`
@@ -92,6 +98,8 @@ Re-derive exact spans with `rg` — the #36/#37 log already lists which helpers 
 3. **Atomistic/surface controllers (remainder)** — `_applyAtomisticMode`/`_applySurfaceMode`/`_refetchAtomistic`/
    `_ensureAtomData` + region overlays (~1893–2418). Pure colour cores already drained (#72). Interleaved with renderer
    construction — first separate the controller fns from the init wiring, then lift the controllers as a factory.
+
+</details>
 
 **Gesture gate is UNBLOCKED (commit 8e050e4) — build on it, don't re-derive.** Drive transform commits via the
 Move/Rotate panel numeric inputs (`change` → `_mrCommitInputs` → `_queueAssemblyPrimaryCommit` → the SAME
