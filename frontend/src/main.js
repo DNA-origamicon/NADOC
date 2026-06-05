@@ -121,7 +121,7 @@ import { initAssemblyContextMenu }  from './ui/assembly_context_menu.js'
 import { initLibraryPanel }         from './ui/library_panel.js'
 import { pickLattice }              from './ui/lattice_picker.js'
 import { openFileBrowser }          from './ui/file_browser.js'
-import { initFileIo, initFileOpen } from './ui/file_io.js'
+import { initFileIo, initFileOpen, initFileSave } from './ui/file_io.js'
 import { initSyncBadge }            from './ui/sync_badge.js'
 import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
 import { initNavController }        from './scene/nav_controller.js'
@@ -3426,6 +3426,12 @@ async function main() {
   // All call sites invoke on user action / boot-action (post-init), so the bare
   // `let` resolves — no lazy `?.` wrapper needed (mirrors the deferred handlers).
   let _fileOpen           = null
+  // Save/Save-As dispatch factory (ui/file_io.js initFileSave, extraction #60).
+  // Forward-declared here because the menu-file-save listeners (~3924) and the
+  // keyboard-shortcuts injection (~5134) reference it textually ABOVE its real
+  // init (~8773, after `_exportRepActive`). All call sites invoke on user action
+  // (menu click / Ctrl+S) post-init, so wrapped as lazy arrows at those sites.
+  let _fileSave           = null
   // Doc-scoped so each tab's filename/path metadata is independent (and the
   // cadnano editor opened with the same ?doc= reads the matching values).
   const _FNAME_KEY = docKey('nadoc:design-filename')
@@ -3889,40 +3895,11 @@ async function main() {
     else            await _fileOpen.openPartFromServer(result.path, result.name)
   })
 
-  // "Save File" / "Save As" dispatch by mode: route to the assembly save
-  // helpers (_saveAssembly / _saveAssemblyAsGuarded) when assemblyActive, else
-  // the design save path. One Save File / Save As item serves both modes.
-  async function _saveDispatch() {
-    if (store.getState().assemblyActive) {
-      await _saveAssembly()
-      return
-    }
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { showToast('No design to save.', { severity: 'error' }); return }
-    if (_workspacePath) {
-      const path = _workspacePath
-      _syncBadge.syncLog('info', 'SAVE', `explicit save → ${path}`)
-      _syncBadge.setSyncStatus('yellow', 'saving…')
-      _lifecycleSync.selfSavedPaths.add(path)
-      await api.saveDesignToWorkspace(path)
-      _syncBadge.setSyncStatus('green', 'saved')
-      setTimeout(() => _lifecycleSync.selfSavedPaths.delete(path), 5000)
-      if (_fileHandle) await _fileIo.saveToHandle(_fileHandle)
-    } else if (_fileHandle) {
-      await _fileIo.saveToHandle(_fileHandle)
-    } else {
-      await _fileIo.saveAs()
-    }
-  }
-  async function _saveAsDispatch() {
-    if (store.getState().assemblyActive) {
-      await _saveAssemblyAsGuarded()
-      return
-    }
-    await _fileIo.saveAs()
-  }
-  document.getElementById('menu-file-save')?.addEventListener('click', _saveDispatch)
-  document.getElementById('menu-file-save-as')?.addEventListener('click', _saveAsDispatch)
+  // "Save File" / "Save As" dispatch by mode is provided by the ui/file_io.js
+  // `initFileSave` factory (extraction #60); `_fileSave` is initialized later
+  // (~8773, after `_exportRepActive`). Lazy arrows defer the deref to click time.
+  document.getElementById('menu-file-save')?.addEventListener('click', () => _fileSave.saveDispatch())
+  document.getElementById('menu-file-save-as')?.addEventListener('click', () => _fileSave.saveAsDispatch())
 
   document.getElementById('menu-file-new-assembly')?.addEventListener('click', async () => {
     if (await _docSpawn.spawnDocTabIfBusy('new=assembly')) return
@@ -3940,31 +3917,9 @@ async function main() {
     }
   })
 
-  // Assembly save helpers — invoked by the mode-aware Save File / Save As
-  // dispatchers and the Ctrl+Shift+S shortcut. The dedicated "Save Assembly" /
-  // "Save Assembly As…" / "Open Assembly" menu items were collapsed into the
-  // unified Save File / Save As / Open File entries.
-  async function _saveAssembly() {
-    const { currentAssembly } = store.getState()
-    if (!currentAssembly) { showToast('No assembly to save.', { severity: 'error' }); return }
-    if (_exportRepActive) { showToast('Export in progress — try saving again in a moment.', { severity: 'warning' }); return }
-    if (_assemblyWorkspacePath) {
-      const r = await api.saveAssemblyAs(_assemblyWorkspacePath)
-      if (r?.path) _setAssemblyWorkspacePath(r.path)
-      if (_assemblyFileHandle) await _fileIo.saveAssemblyToHandle(_assemblyFileHandle)
-    } else if (_assemblyFileHandle) {
-      await _fileIo.saveAssemblyToHandle(_assemblyFileHandle)
-    } else {
-      await _fileIo.saveAssemblyAs()
-    }
-  }
-
-  async function _saveAssemblyAsGuarded() {
-    const { currentAssembly } = store.getState()
-    if (!currentAssembly) { showToast('No assembly to save.', { severity: 'error' }); return }
-    if (_exportRepActive) { showToast('Export in progress — try saving again in a moment.', { severity: 'warning' }); return }
-    await _fileIo.saveAssemblyAs()
-  }
+  // Assembly save helpers (_saveAssembly / _saveAssemblyAsGuarded) moved into the
+  // ui/file_io.js `initFileSave` factory (extraction #60); reached via
+  // `_fileSave.*`. Ctrl+Shift+S calls them through a lazy injected wrapper.
 
   document.getElementById('menu-file-upload')?.addEventListener('click', () => {
     const input = document.createElement('input')
@@ -5131,7 +5086,7 @@ async function main() {
     toggleUnfold:             _toggleUnfold,
     toggleCadnano:            _toggleCadnano,
     savePartToAssembly:       (opts) => _fileIo.savePartToAssembly(opts),
-    saveAssemblyAsGuarded:    _saveAssemblyAsGuarded,
+    saveAssemblyAsGuarded:    () => _fileSave.saveAssemblyAsGuarded(),
     setAssemblyWorkspacePath: _setAssemblyWorkspacePath,
     showWelcome:              _showWelcome,
     ooClose:                  _ooClose,
@@ -8770,6 +8725,27 @@ async function main() {
   // detail. `_exportRepActive` guards saves so the temporary upgrade never hits
   // disk (restore in `finally` + the load-time auto-downgrade are the net).
   let _exportRepActive = false
+
+  // Save/Save-As dispatch factory (ui/file_io.js initFileSave, extraction #60).
+  // Placed here — not at the menu listeners (~3924) — because its deps span the
+  // file: `_fileIo`/`_syncBadge`/`_lifecycleSync` (~7200-7240) AND `_exportRepActive`
+  // (just above). Initializing after the last dep means every value is concrete at
+  // init time; the only forward references (`_fileSave` in the menu listeners +
+  // keyboard-shortcuts injection, both textually above) resolve via lazy arrows
+  // because they fire only on user action (post-init). `selfSavedPaths` flows in by
+  // reference so the 5s self-save suppression shares the autosave subscribers' Set.
+  _fileSave = initFileSave({
+    store, api,
+    fileIo:    _fileIo,
+    syncBadge: _syncBadge,
+    getWorkspacePath:          () => _workspacePath,
+    getFileHandle:             () => _fileHandle,
+    getAssemblyWorkspacePath:  () => _assemblyWorkspacePath,
+    getAssemblyFileHandle:     () => _assemblyFileHandle,
+    getExportRepActive:        () => _exportRepActive,
+    setAssemblyWorkspacePath:  _setAssemblyWorkspacePath,
+    selfSavedPaths:            _lifecycleSync.selfSavedPaths,
+  })
 
   /** Batch-patch all instances and resolve when the renderer finishes the
    *  rebuild the store subscriber kicks off. `onRebuildComplete` only appends

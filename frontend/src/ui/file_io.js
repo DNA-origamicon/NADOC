@@ -361,3 +361,98 @@ export function initFileOpen({
 
   return { openPartFromServer, openAssemblyFromServer }
 }
+
+// ── initFileSave (mode-aware Save / Save As dispatch, extraction #60) ─────────
+//
+// Thin dispatch layer OVER initFileIo: routes the unified "Save File" / "Save As"
+// items (and Ctrl+S / Ctrl+Shift+S) to the assembly or design save path by
+// `store.getState().assemblyActive`, reading the mutable file/path state
+// (workspace paths + File System Access handles) and the export-rep guard through
+// injected getters. A single Save / Save As entry serves both modes.
+//
+// Kept a SEPARATE factory from initFileIo (the underlying file-IO ops) because
+// this is the routing/policy layer that consumes `fileIo` as a dependency — and
+// because its deps land much later in main() (`_exportRepActive` ~8772), it is
+// initialized at a different point than initFileIo (~7216). `_lifecycleSync`'s
+// `selfSavedPaths` Set flows in by reference so the 5-second self-save suppression
+// shares the exact instance the autosave subscribers read.
+/**
+ * @param {object}   deps.store
+ * @param {object}   deps.api
+ * @param {object}   deps.fileIo                   initFileIo result (saveToHandle/saveAs/saveAssemblyToHandle/saveAssemblyAs)
+ * @param {object}   deps.syncBadge                initSyncBadge result (setSyncStatus/syncLog)
+ * @param {Function} deps.getWorkspacePath         () => _workspacePath
+ * @param {Function} deps.getFileHandle            () => _fileHandle
+ * @param {Function} deps.getAssemblyWorkspacePath () => _assemblyWorkspacePath
+ * @param {Function} deps.getAssemblyFileHandle    () => _assemblyFileHandle
+ * @param {Function} deps.getExportRepActive       () => _exportRepActive
+ * @param {Function} deps.setAssemblyWorkspacePath (path) => void
+ * @param {Set}      deps.selfSavedPaths           _lifecycleSync.selfSavedPaths (by reference)
+ */
+export function initFileSave({
+  store, api, fileIo, syncBadge,
+  getWorkspacePath, getFileHandle,
+  getAssemblyWorkspacePath, getAssemblyFileHandle,
+  getExportRepActive, setAssemblyWorkspacePath,
+  selfSavedPaths,
+}) {
+  // "Save File" dispatch by mode: route to the assembly save path when
+  // assemblyActive, else the design save path.
+  async function saveDispatch() {
+    if (store.getState().assemblyActive) {
+      await saveAssembly()
+      return
+    }
+    const { currentDesign } = store.getState()
+    if (!currentDesign) { showToast('No design to save.', { severity: 'error' }); return }
+    const path = getWorkspacePath()
+    const fileHandle = getFileHandle()
+    if (path) {
+      syncBadge.syncLog('info', 'SAVE', `explicit save → ${path}`)
+      syncBadge.setSyncStatus('yellow', 'saving…')
+      selfSavedPaths.add(path)
+      await api.saveDesignToWorkspace(path)
+      syncBadge.setSyncStatus('green', 'saved')
+      setTimeout(() => selfSavedPaths.delete(path), 5000)
+      if (fileHandle) await fileIo.saveToHandle(fileHandle)
+    } else if (fileHandle) {
+      await fileIo.saveToHandle(fileHandle)
+    } else {
+      await fileIo.saveAs()
+    }
+  }
+
+  async function saveAsDispatch() {
+    if (store.getState().assemblyActive) {
+      await saveAssemblyAsGuarded()
+      return
+    }
+    await fileIo.saveAs()
+  }
+
+  async function saveAssembly() {
+    const { currentAssembly } = store.getState()
+    if (!currentAssembly) { showToast('No assembly to save.', { severity: 'error' }); return }
+    if (getExportRepActive()) { showToast('Export in progress — try saving again in a moment.', { severity: 'warning' }); return }
+    const wsPath = getAssemblyWorkspacePath()
+    const fh = getAssemblyFileHandle()
+    if (wsPath) {
+      const r = await api.saveAssemblyAs(wsPath)
+      if (r?.path) setAssemblyWorkspacePath(r.path)
+      if (fh) await fileIo.saveAssemblyToHandle(fh)
+    } else if (fh) {
+      await fileIo.saveAssemblyToHandle(fh)
+    } else {
+      await fileIo.saveAssemblyAs()
+    }
+  }
+
+  async function saveAssemblyAsGuarded() {
+    const { currentAssembly } = store.getState()
+    if (!currentAssembly) { showToast('No assembly to save.', { severity: 'error' }); return }
+    if (getExportRepActive()) { showToast('Export in progress — try saving again in a moment.', { severity: 'warning' }); return }
+    await fileIo.saveAssemblyAs()
+  }
+
+  return { saveDispatch, saveAsDispatch, saveAssembly, saveAssemblyAsGuarded }
+}

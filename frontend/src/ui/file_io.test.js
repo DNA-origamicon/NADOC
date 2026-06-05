@@ -29,7 +29,7 @@ vi.mock('../shared/doc_id.js', () => ({
 import { showToast } from './toast.js'
 import { openFileBrowser } from './file_browser.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
-import { initFileIo, initFileOpen } from './file_io.js'
+import { initFileIo, initFileOpen, initFileSave } from './file_io.js'
 
 /** Build a factory with mutable backing state + recording shims. */
 function makeFactory(overrides = {}) {
@@ -403,5 +403,167 @@ describe('initFileOpen — openAssemblyFromServer', () => {
     expect(state.settle).toBe(null)
     expect(deps.enterAssemblyMode).toHaveBeenCalled()
     expect(deps.flShowSuccess).toHaveBeenCalledWith('Assembly loaded successfully')
+  })
+})
+
+// ── initFileSave (Save / Save As dispatch, extraction #60) ───────────────────
+
+/**
+ * Build the save-dispatch factory with recording shims over a mock fileIo /
+ * syncBadge and mutable file/path/export-rep state read through getters.
+ * `selfSavedPaths` is a real Set so the add/delete suppression is observable.
+ */
+function makeSaveFactory(overrides = {}) {
+  const state = {
+    workspacePath: null,
+    fileHandle: null,
+    assemblyWorkspacePath: null,
+    assemblyFileHandle: null,
+    exportRepActive: false,
+    ...overrides.state,
+  }
+  const store = createMockStore({
+    assemblyActive: false,
+    currentDesign: { metadata: { name: 'MyDesign' } },
+    currentAssembly: { metadata: { name: 'MyAssembly' } },
+    ...overrides.storeState,
+  })
+  const api = {
+    saveDesignToWorkspace: vi.fn(async () => ({ ok: true })),
+    saveAssemblyAs: vi.fn(async () => ({ path: 'a/saved.nass' })),
+    ...overrides.api,
+  }
+  const fileIo = {
+    saveToHandle: vi.fn(async () => true),
+    saveAs: vi.fn(async () => {}),
+    saveAssemblyToHandle: vi.fn(async () => true),
+    saveAssemblyAs: vi.fn(async () => {}),
+    ...overrides.fileIo,
+  }
+  const syncBadge = { setSyncStatus: vi.fn(), syncLog: vi.fn() }
+  const selfSavedPaths = new Set()
+  const deps = {
+    store, api, fileIo, syncBadge, selfSavedPaths,
+    getWorkspacePath:         () => state.workspacePath,
+    getFileHandle:            () => state.fileHandle,
+    getAssemblyWorkspacePath: () => state.assemblyWorkspacePath,
+    getAssemblyFileHandle:    () => state.assemblyFileHandle,
+    getExportRepActive:       () => state.exportRepActive,
+    setAssemblyWorkspacePath: vi.fn((v) => { state.assemblyWorkspacePath = v }),
+  }
+  return { fileSave: initFileSave(deps), deps, state, store, api, fileIo, syncBadge, selfSavedPaths }
+}
+
+describe('initFileSave — saveDispatch (design mode)', () => {
+  it('toasts and bails when there is no current design', async () => {
+    const { fileSave, fileIo } = makeSaveFactory({ storeState: { currentDesign: null } })
+    await fileSave.saveDispatch()
+    expect(showToast).toHaveBeenCalledWith('No design to save.', { severity: 'error' })
+    expect(fileIo.saveAs).not.toHaveBeenCalled()
+  })
+  it('with a workspace path: logs, sets status, self-marks (then clears after 5s), and saves', async () => {
+    vi.useFakeTimers()
+    const { fileSave, api, syncBadge, selfSavedPaths } = makeSaveFactory({ state: { workspacePath: 'w/d.nadoc' } })
+    await fileSave.saveDispatch()
+    expect(syncBadge.syncLog).toHaveBeenCalledWith('info', 'SAVE', 'explicit save → w/d.nadoc')
+    expect(syncBadge.setSyncStatus).toHaveBeenCalledWith('yellow', 'saving…')
+    expect(selfSavedPaths.has('w/d.nadoc')).toBe(true)
+    expect(api.saveDesignToWorkspace).toHaveBeenCalledWith('w/d.nadoc')
+    expect(syncBadge.setSyncStatus).toHaveBeenLastCalledWith('green', 'saved')
+    vi.advanceTimersByTime(5000)
+    expect(selfSavedPaths.has('w/d.nadoc')).toBe(false)
+  })
+  it('with a workspace path AND a file handle, also mirrors to the handle', async () => {
+    vi.useFakeTimers()
+    const { fileSave, fileIo } = makeSaveFactory({ state: { workspacePath: 'w/d.nadoc', fileHandle: 'H' } })
+    await fileSave.saveDispatch()
+    expect(fileIo.saveToHandle).toHaveBeenCalledWith('H')
+  })
+  it('with only a file handle (no workspace path), saves to the handle', async () => {
+    const { fileSave, fileIo, api } = makeSaveFactory({ state: { fileHandle: 'H' } })
+    await fileSave.saveDispatch()
+    expect(fileIo.saveToHandle).toHaveBeenCalledWith('H')
+    expect(api.saveDesignToWorkspace).not.toHaveBeenCalled()
+  })
+  it('with neither path nor handle, falls back to Save As', async () => {
+    const { fileSave, fileIo } = makeSaveFactory()
+    await fileSave.saveDispatch()
+    expect(fileIo.saveAs).toHaveBeenCalled()
+  })
+  it('routes to the assembly save path when assemblyActive', async () => {
+    const { fileSave, api } = makeSaveFactory({
+      storeState: { assemblyActive: true },
+      state: { assemblyWorkspacePath: 'a/x.nass' },
+    })
+    await fileSave.saveDispatch()
+    expect(api.saveAssemblyAs).toHaveBeenCalledWith('a/x.nass')
+  })
+})
+
+describe('initFileSave — saveAsDispatch', () => {
+  it('in design mode delegates straight to fileIo.saveAs', async () => {
+    const { fileSave, fileIo } = makeSaveFactory()
+    await fileSave.saveAsDispatch()
+    expect(fileIo.saveAs).toHaveBeenCalled()
+  })
+  it('in assembly mode routes to the guarded assembly Save As', async () => {
+    const { fileSave, fileIo } = makeSaveFactory({ storeState: { assemblyActive: true } })
+    await fileSave.saveAsDispatch()
+    expect(fileIo.saveAssemblyAs).toHaveBeenCalled()
+  })
+})
+
+describe('initFileSave — saveAssembly', () => {
+  it('toasts and bails when there is no current assembly', async () => {
+    const { fileSave, fileIo } = makeSaveFactory({ storeState: { currentAssembly: null } })
+    await fileSave.saveAssembly()
+    expect(showToast).toHaveBeenCalledWith('No assembly to save.', { severity: 'error' })
+    expect(fileIo.saveAssemblyAs).not.toHaveBeenCalled()
+  })
+  it('warns and bails while an export-rep upgrade is in flight', async () => {
+    const { fileSave, api } = makeSaveFactory({ state: { exportRepActive: true } })
+    await fileSave.saveAssembly()
+    expect(showToast).toHaveBeenCalledWith('Export in progress — try saving again in a moment.', { severity: 'warning' })
+    expect(api.saveAssemblyAs).not.toHaveBeenCalled()
+  })
+  it('with a workspace path: saves, persists the returned path, mirrors to the handle', async () => {
+    const { fileSave, api, fileIo, deps } = makeSaveFactory({
+      state: { assemblyWorkspacePath: 'a/x.nass', assemblyFileHandle: 'AH' },
+    })
+    await fileSave.saveAssembly()
+    expect(api.saveAssemblyAs).toHaveBeenCalledWith('a/x.nass')
+    expect(deps.setAssemblyWorkspacePath).toHaveBeenCalledWith('a/saved.nass')
+    expect(fileIo.saveAssemblyToHandle).toHaveBeenCalledWith('AH')
+  })
+  it('with only a handle (no workspace path), saves to the handle', async () => {
+    const { fileSave, fileIo, api } = makeSaveFactory({ state: { assemblyFileHandle: 'AH' } })
+    await fileSave.saveAssembly()
+    expect(fileIo.saveAssemblyToHandle).toHaveBeenCalledWith('AH')
+    expect(api.saveAssemblyAs).not.toHaveBeenCalled()
+  })
+  it('with neither path nor handle, falls back to assembly Save As', async () => {
+    const { fileSave, fileIo } = makeSaveFactory()
+    await fileSave.saveAssembly()
+    expect(fileIo.saveAssemblyAs).toHaveBeenCalled()
+  })
+})
+
+describe('initFileSave — saveAssemblyAsGuarded', () => {
+  it('toasts and bails with no assembly', async () => {
+    const { fileSave, fileIo } = makeSaveFactory({ storeState: { currentAssembly: null } })
+    await fileSave.saveAssemblyAsGuarded()
+    expect(showToast).toHaveBeenCalledWith('No assembly to save.', { severity: 'error' })
+    expect(fileIo.saveAssemblyAs).not.toHaveBeenCalled()
+  })
+  it('warns and bails during an export-rep upgrade', async () => {
+    const { fileSave, fileIo } = makeSaveFactory({ state: { exportRepActive: true } })
+    await fileSave.saveAssemblyAsGuarded()
+    expect(showToast).toHaveBeenCalledWith('Export in progress — try saving again in a moment.', { severity: 'warning' })
+    expect(fileIo.saveAssemblyAs).not.toHaveBeenCalled()
+  })
+  it('otherwise delegates to assembly Save As', async () => {
+    const { fileSave, fileIo } = makeSaveFactory()
+    await fileSave.saveAssemblyAsGuarded()
+    expect(fileIo.saveAssemblyAs).toHaveBeenCalled()
   })
 })
