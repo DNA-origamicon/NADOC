@@ -100,7 +100,6 @@ import { initOverhangBindingLines } from './scene/overhang_binding_lines.js'
 import { initOverhangUnzipOverlay } from './scene/overhang_unzip_overlay.js'
 import { initMultiOverhangStrandAnim } from './scene/overhang_strand_anim.js'
 import { initUnligatedCrossoverMarkers } from './scene/unligated_crossover_markers.js'
-import { initLinkerAnchorDebug }   from './scene/linker_anchor_debug.js'
 import { initOverhangNameOverlay } from './scene/overhang_name_overlay.js'
 import { initCrossSectionMinimap } from './scene/cross_section_minimap.js'
 import { initViewCube }            from './scene/view_cube.js'
@@ -1805,19 +1804,6 @@ async function main() {
     e.stopPropagation()
     _showBindingCtx(hit.bindingId, e.clientX, e.clientY)
   }, { capture: true })
-
-  // ── Linker anchor debug overlay (toggle via Help → Show Linker Anchor Debug) ─
-  const linkerAnchorDebug = initLinkerAnchorDebug(
-    scene,
-    () => store.getState().currentDesign,
-    () => store.getState().currentGeometry,
-    () => designRenderer.getHelixCtrl(),
-  )
-  store.subscribe((newState, prevState) => {
-    if (newState.currentGeometry === prevState.currentGeometry &&
-        newState.currentDesign   === prevState.currentDesign) return
-    if (linkerAnchorDebug.isVisible()) linkerAnchorDebug.rebuild()
-  })
 
   // ── Unligated crossover markers (⚠ at midpoint of would-circularize crossovers) ─
   const unligatedCrossoverMarkers = initUnligatedCrossoverMarkers(scene)
@@ -7293,7 +7279,6 @@ Typical debugging workflow for "reverts to 3D" bug:
         // rebuild(geometry, design) — arg order is reversed vs the others.
         if (overhangNameOverlay?.isVisible?.()) overhangNameOverlay.rebuild(cg, cd)
         if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
-        if (linkerAnchorDebug?.isVisible?.()) linkerAnchorDebug.rebuild()
         if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
       }
     }
@@ -7334,7 +7319,6 @@ Typical debugging workflow for "reverts to 3D" bug:
       // rebuild(geometry, design) — arg order is reversed vs the others.
       if (overhangNameOverlay?.isVisible?.()) overhangNameOverlay.rebuild(cg, cd)
       if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
-      if (linkerAnchorDebug?.isVisible?.()) linkerAnchorDebug.rebuild()
       if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
     }
   }
@@ -7571,7 +7555,6 @@ Typical debugging workflow for "reverts to 3D" bug:
                 // rebuild(geometry, design) — arg order is reversed vs the others.
                 if (overhangNameOverlay?.isVisible?.()) overhangNameOverlay.rebuild(cg, cd)
                 if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
-                if (linkerAnchorDebug?.isVisible?.()) linkerAnchorDebug.rebuild()
                 if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
               }
             }
@@ -7666,7 +7649,6 @@ Typical debugging workflow for "reverts to 3D" bug:
                 // rebuild(geometry, design) — arg order is reversed vs the others.
                 if (overhangNameOverlay?.isVisible?.()) overhangNameOverlay.rebuild(cg, cd)
                 if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
-                if (linkerAnchorDebug?.isVisible?.()) linkerAnchorDebug.rebuild()
                 if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
               }
             }
@@ -10715,12 +10697,6 @@ Typical debugging workflow for "reverts to 3D" bug:
     () => window.open('/strand-anim.html', 'nadoc-strand-anim'))
   document.getElementById('help-modal-close')?.addEventListener('click', () => helpModal.classList.remove('visible'))
   helpModal?.addEventListener('click', e => { if (e.target === helpModal) helpModal.classList.remove('visible') })
-
-  document.getElementById('menu-help-linker-debug')?.addEventListener('click', function () {
-    const next = !linkerAnchorDebug.isVisible()
-    linkerAnchorDebug.setVisible(next)
-    this.textContent = next ? 'Hide Linker Anchor Debug' : 'Show Linker Anchor Debug'
-  })
 
   document.getElementById('menu-help-fjc-sim')?.addEventListener('click', async () => {
     // Lazy-load the modal so the dev bundle stays slim until the user opens it.
