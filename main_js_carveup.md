@@ -53,35 +53,43 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Overhang Orientation panel
-EXTRACTED (#64, commit 009df61) → `ui/overhang_orientation_panel.js`, −245 ln. main.js 10026 → 9781.** First
-real LIFT in three sessions (#62/#63 were dead-code deletions). `## Tier 7` "clean dialogs/panels" band now
-tops out at **Autoscaffold picker** (next, below). The reachability gate WORKED — OO markup was in index.html
-and the feature is genuinely wired (right-click "Edit Orientation"), so it lifted cleanly._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Autoscaffold picker
+EXTRACTED (#65, commit 20f6d0f) → `ui/autoscaffold_picker.js`, −64 ln. main.js 9781 → 9717.** Clean second-
+in-a-row LIFT. The map's "~212 ln" Autoscaffold entry was banner-span arithmetic, not cohesion — the picker
+IIFE is only ~67 ln; the rest (Auto Crossover, Full Autostaple, and a ~119 ln **Autobreak/Aksel modal**) got
+re-homed (the Autobreak modal is now its own Tier-7 entry, next-cleanest pick). Reachability gate confirmed
+live._
 
-**This session (#64, handoff-recommended):** Overhang Orientation panel — a clean, on-the-nose lift after two
-dead-code sessions. Reachability gate FIRST (`rg -c "overhang-orient-panel|oo-rx" frontend/index.html` → 5,
-markup present) + want-it gate (3 live call paths: `_onEditFeature` overhang_rotation edit, the `Edit
-Orientation` context menu, keyboard Delete/Escape via `ooClose`). Cohesive block 5001–5257 (~256 ln) lifted
-verbatim to `initOverhangOrientationPanel({deps})→{open,close,getActiveIds}` + pure `buildOverhangRotationOps`.
-**Plain `const _orientPanel`** at the original spot (not lazy-let): every external ref fires post-boot →
-TDZ-safe. `overhangGizmo` had ZERO external references → constructed inside the factory (clean encapsulation).
-`_ovhgRootMap` (mutable, rebuilt ~1822) → getter dep. Removed 3 now-dead import names from main.js. 15 vitest
-(5 pure + 10 jsdom factory) green first run; smoke 23/23; real-app exercise on NS_trans_fix (50 overhangs,
-zero console errors). −245 ln.
+**This session (#65, handoff-recommended):** Autoscaffold picker. Reachability gate FIRST (`rg -c
+"autoscaffold-modal|menu-routing-scaffold-ends" frontend/index.html` → markup + menu item present) — live.
+Re-derived scope before investing: the banner-to-next-banner span is 4 separate blocks; extracted only the
+cohesive picker IIFE (4046–4112) and re-homed the other three. Lifted to `initAutoscaffoldPicker({store, api,
+setRoutingCheck})` + pure `autoscaffoldModeConfig` (mode→{title,message,apiMethod,failLabel} lookup table,
+verbatim-equivalent to the if/else chain, unknown→seamed). `_showProgress`/`_hideProgress` turned out to be
+mere aliases of imported `showOpProgress`/`hideOpProgress` → imported directly in the module; only
+`_setRoutingCheck` (mutates closure state) needed injection. Plain `const`-import call at the banner spot (no
+hoisting/lazy needed — deps far above, no synchronous boot call). 10 vitest green first run; smoke 23/23;
+real-app exercise on a scaffolded part (menu→modal→Run seamed→routing-check toggles, zero console errors).
 
 **Banked gotcha this session:**
-- **`grep` was silently emitting nothing in this WSL shell while `rg` worked** — wasted ~3 tool calls chasing
-  a phantom "the OO panel is already extracted" (every `grep` returned empty, including `grep -c`). If a `grep`
-  returns suspiciously empty on a string you can SEE in the file, switch to `rg` immediately; don't conclude
-  the code is gone.
-- **The reachability gate cuts BOTH ways and is cheap either way.** #62/#63 it found dead UI (delete); #64 it
-  confirmed live UI (lift). Run it first on every Tier-7 entry regardless — `rg -c "<id-prefix>"
-  frontend/index.html` for panels, call-site grep for fns/dialogs. The remaining Tier-7 entries below are NOT
-  yet reachability-checked — do that first, every time.
-- **`/api/design` wraps the design under a `design` key** (`{design, validation, unligated_crossover_ids,
-  revision}`), NOT at top level — a throwaway exercise reading `d.overhangs` silently saw 0. Use
-  `d.design.overhangs`.
+- **The "~212 ln" / "may interleave scaffold-router calls" / "MED risk" on this entry were ALL wrong** — it's
+  a plain store+api+DOM dialog (~67 ln cohesive), zero router coupling. The map's per-entry sizes/deps/risk
+  remain hints only; the banner-span LOC routinely bundles 2–4 unrelated blocks. Re-read, find the cohesive
+  end, re-home the rest — exactly as the ⚠ callout says.
+- **`just lint` is Python-only** (`ruff check backend/ tests/`) — it currently reports 38 PRE-EXISTING errors
+  (e.g. `tests/validate_phase3b.py`), none from frontend work. A frontend-only extraction has lint delta 0 by
+  construction; don't be alarmed by the red. (No eslint config exists for the frontend.)
+
+**Recommended next region — `## Tier 7` "clean dialogs/panels" band:**
+1. **Autobreak / Aksel modal** (re-homed from #65; the second IIFE under the old Autoscaffold banner, ~119 ln)
+   → likely `ui/autobreak_modal.js`. The cleanest pick: a self-contained `createModal` dialog (basic/aksel/
+   advanced picker + Score/Preview/Run), mirrors #42 background_modal. Pure core: `_readAkselOptions`
+   (DOM→clamped opts). `formatScoreSummary`/`formatGraphSummary` already in `scene/aksel_format.js`.
+   REACHABILITY GATE FIRST (`rg -c "autobreak-modal|menu-routing-autobreak|ab-min-nt" frontend/index.html`).
+2. Then **Sequencing menu** (banner `// ── Sequencing`, ~95 ln — likely thin wiring over scaffold_modal/
+   scaffold_assign, verify it's not a scrap) and **Highlight Undefined Bases** (~80 ln; MOVES ownership of
+   #41's `_undefinedHighlightOn` get/set shims — coordinate). Each reachability-gated first, before the HARD
+   gesture/assembly-coupled band (Move/Rotate panel, repr switcher, Translate/Rotate tool, assembly transform/FK).
 
 **The goal is NOT a LOC number.** main.js is the app's composition root (wiring board): 146 imports + ~100
 module constructions + the lifecycle spine + thin per-action wiring are *irreducible* (~2,500–3,500 ln floor).
@@ -545,7 +553,8 @@ app/lifecycle (connection monitor + autosave/SSE),
 scaffold_modal (Assign Scaffold dialog + `countScaffoldNt` in scaffold_assign),
 new_design_modal (New Part dialog + `sanitizeWorkspaceStem`),
 app/doc_spawn (Multi-document spawn + pure `spaceHasContent`),
-overhang_orientation_panel (Overhang Orientation panel + pure `buildOverhangRotationOps`; owns overhangGizmo).
+overhang_orientation_panel (Overhang Orientation panel + pure `buildOverhangRotationOps`; owns overhangGizmo),
+autoscaffold_picker (Autoscaffold picker dialog + pure `autoscaffoldModeConfig`).
 
 ## Smaller leftovers (after the tiers above)
 
@@ -615,8 +624,29 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   right-click→Edit-Orientation gesture NOT hand-driven** (needs picking one of 50 overhang beads) — the
   open/apply/reset/step/auto-close logic is covered by the 10 jsdom factory tests driving the REAL factory,
   per the #34/#32/#24 accepted caveat.
-- [ ] **Autoscaffold picker** — banner `// ── Routing: Autoscaffold (seamed / seamless picker)` (~4274–4485),
-  ~212 ln. A routing dialog. Deps: store, api, DOM. Risk: **MED** (re-derive — may interleave scaffold-router calls).
+- [x] **Autoscaffold picker** — banner `// ── Routing: Autoscaffold (seamed / seamless picker)`. **DONE
+  2026-06-05 (extraction #65, commit 20f6d0f)** → `ui/autoscaffold_picker.js` factory `initAutoscaffoldPicker
+  ({store, api, setRoutingCheck})` + pure `autoscaffoldModeConfig` (radio value → progress copy + api method +
+  fail label; lookup table verbatim-equivalent to the original if/else chain, unknown→seamed). **Re-derived
+  scope: the map's "~212 ln" was the whole banner-to-next-banner span, NOT one cohesive block** — it's the
+  picker IIFE (the cohesive ~67 ln, extracted) PLUS three unrelated handlers re-homed below: Auto Crossover
+  (~9 ln, thin), Full Autostaple (~13 ln, thin), and the **Autobreak/Aksel modal IIFE** (~119 ln, cohesive →
+  its own entry below). NO scaffold-router interleave (the map's MED-risk guess was wrong; it's a plain
+  store+api+DOM dialog). −64 ln off main.js (9781→9717). REACHABILITY GATE PASSED (`#autoscaffold-modal` markup
+  + `menu-routing-scaffold-ends` wired in index.html). `_showProgress`/`_hideProgress` were just aliases of
+  `showOpProgress`/`hideOpProgress` → imported directly in the module; `_setRoutingCheck` (mutates closure
+  `_routingChecks`) injected as `setRoutingCheck`. Plain `const`-import call at the original banner spot (deps
+  all defined far above; no boot path calls a method synchronously). 10 vitest (3 pure + 7 jsdom factory:
+  no-DOM / menu-guard+open / Run-no-design-guard / Run-dispatches+progress+routing-check / default-seamed /
+  fail-toast / Cancel+backdrop-close). Gate: vitest 712 + smoke 23/23 + real-app exercise (scaffolded part →
+  menu→modal→Run seamed→routing-check toggles on, zero console errors).
+- [ ] **Autobreak / Aksel modal** — the second IIFE under the Autoscaffold banner (`_runAutoBreak3d`/
+  `_scoreAksel3d`/`_previewAksel3d`/`_readAkselOptions`/`_setAkselReport`/`_buildOnce` + indeterminate-progress
+  animation + `menu-routing-autobreak`), ~119 ln. **Re-homed from the Autoscaffold entry (#65).** Cohesive
+  `createModal`-based dialog: basic/aksel/advanced algorithm picker + Score/Preview/Run. Deps: store, api,
+  `_showProgress`/`_hideProgress`, `formatScoreSummary`/`formatGraphSummary` (already in `scene/aksel_format.js`).
+  Likely `ui/autobreak_modal.js`. Risk: **LOW-MED** (plain store+api+DOM, mirrors #42 background_modal). Pure
+  core: `_readAkselOptions` (DOM→clamped opts). REACHABILITY GATE FIRST.
 - [ ] **Sequencing menu** — banner `// ── Sequencing` (~4486–4580), ~95 ln. Re-derive: may be thin wiring over
   already-extracted `scaffold_modal`/`scaffold_assign`. Risk: **LOW-MED**; could be a scrap (verify before investing).
 - [ ] **Highlight Undefined Bases** — banner `// ── Highlight Undefined Bases toggle` (~9417–9496), ~80 ln.
