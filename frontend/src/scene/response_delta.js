@@ -107,6 +107,27 @@ export function initResponseDelta({
   }
 
   /**
+   * Re-emit ds-linker bridge nucs for the moved clusters and patch them in
+   * place. Plan B skips backend geometry on a cluster move, so bridge midpoints
+   * (derived from live OH anchors via `_emit_bridge_nucs`) go stale — this asks
+   * the backend to re-emit just the affected bridges. Single source of truth
+   * for that round-trip, shared by both delta paths here AND the
+   * Translate/Rotate tool's two commit pipelines in main.js (via the returned
+   * API). A failure is swallowed (a tiny round-trip; it must not abort the
+   * commit).
+   */
+  async function reemitClusterBridges(clusterIds) {
+    const helixCtrl = designRenderer.getHelixCtrl()
+    if (!helixCtrl) return
+    try {
+      const bridgeNucs = await api.refreshBridges(clusterIds)
+      if (bridgeNucs.length) helixCtrl.applyBridgeNucsUpdate(bridgeNucs)
+    } catch (e) {
+      console.warn('[refreshBridges] failed:', e)
+    }
+  }
+
+  /**
    * Fast-path renderer update for an undo/redo whose only delta is cluster
    * transforms (signaled by `diff_kind: 'cluster_only'` in the response).
    * Mirrors the cluster-commit Plan B optimisation: avoids the backend full
@@ -182,13 +203,8 @@ export function initResponseDelta({
       if (anyAxisRebake) getJointRenderer()?.rebuildHulls(store.getState().currentDesign)
       // Re-emit ds-linker bridge nucs (Plan B doesn't refresh geometry on
       // undo/redo, so bridge midpoints would otherwise stay frozen at the
-      // pre-undo anchor positions).
-      try {
-        const bridgeNucs = await api.refreshBridges(clusterIds)
-        if (bridgeNucs.length) helixCtrl.applyBridgeNucsUpdate(bridgeNucs)
-      } catch (e) {
-        console.warn('[refreshBridges] failed:', e)
-      }
+      // pre-undo anchor positions). Shared helper — single source of truth.
+      await reemitClusterBridges(clusterIds)
       // Refresh overlays whose subscribers fired during the lean store
       // update (with currentGeometry's nuc.backbone_position still stale)
       // — same as the cluster-commit reconciliation in _confirmTranslateRotateTool.
@@ -248,6 +264,7 @@ export function initResponseDelta({
     applyClusterUndoRedoDeltas,
     applyPositionsOnlyDiff,
     refreshClusterOverlays,
+    reemitClusterBridges,
     rebakeHelixAxesForClusterDelta: rebakeFromStore,
   }
 }

@@ -5269,6 +5269,8 @@ async function main() {
   // Shared cluster-overlay refresh (single source of truth in response_delta.js).
   // The tool's commit historically did NOT rebuild flexible arcs → withFlexibleArcs:false.
   const _refreshClusterOverlays = _responseDelta.refreshClusterOverlays
+  // Shared ds-linker bridge re-emit (single source of truth in response_delta.js).
+  const _reemitClusterBridges = _responseDelta.reemitClusterBridges
 
   // The wrappers below remain for callers that need to await full completion
   // (e.g. the slider toast lifecycle waits for the full chain). Since the
@@ -5417,12 +5419,7 @@ async function main() {
               }
               jointRenderer.rebuildHulls(store.getState().currentDesign)
               // Same Plan B bridge refresh as the standard commit path.
-              try {
-                const bridgeNucs = await api.refreshBridges([editCtx.clusterId])
-                if (bridgeNucs.length) helixCtrl.applyBridgeNucsUpdate(bridgeNucs)
-              } catch (e) {
-                console.warn('[refreshBridges] failed:', e)
-              }
+              await _reemitClusterBridges([editCtx.clusterId])
               // Same overlay refresh as the standard commit path.
               _refreshClusterOverlays({ withFlexibleArcs: false })
             }
@@ -5490,18 +5487,11 @@ async function main() {
               // rigidly, but rebuilding from the now-fresh axes gives a
               // hull whose orientation also reflects any cluster rotation.
               jointRenderer.rebuildHulls(store.getState().currentDesign)
-              // Plan B has no backend geometry refresh, so ds-linker bridge
-              // nucs (positions derived from live OH anchors via
-              // _emit_bridge_nucs) go stale when one cluster moves. Ask the
-              // backend to re-emit just the affected bridges and patch them
-              // in-place. Fire-and-forget against rendering: it's a tiny
-              // round-trip but we want it before the overlay rebuilds below.
-              try {
-                const bridgeNucs = await api.refreshBridges(clusterIds)
-                if (bridgeNucs.length) helixCtrl.applyBridgeNucsUpdate(bridgeNucs)
-              } catch (e) {
-                console.warn('[refreshBridges] failed:', e)
-              }
+              // Re-emit ds-linker bridge nucs for the moved clusters (Plan B
+              // skips backend geometry, so bridge midpoints go stale). Shared
+              // single source of truth in response_delta.js. We want it before
+              // the overlay rebuilds below.
+              await _reemitClusterBridges(clusterIds)
               // Refresh overlays whose subscribers fired during patchCluster's
               // setState (with currentGeometry's nuc.backbone_position still
               // stale) and rebuilt themselves at pre-cluster-transform

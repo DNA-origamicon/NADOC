@@ -244,6 +244,39 @@ describe('initResponseDelta', () => {
     expect(deps.loopSkipHighlight.rebuild).not.toHaveBeenCalled()
   })
 
+  it('reemitClusterBridges is exposed and applies bridge nucs when the backend returns some', async () => {
+    const { deps, helixCtrl } = makeDeps(clusterState)
+    deps.api.refreshBridges = vi.fn().mockResolvedValue([{ id: 1 }, { id: 2 }])
+    const rd = initResponseDelta(deps)
+    expect(typeof rd.reemitClusterBridges).toBe('function')
+    await rd.reemitClusterBridges(['c1'])
+    expect(deps.api.refreshBridges).toHaveBeenCalledWith(['c1'])
+    expect(helixCtrl.applyBridgeNucsUpdate).toHaveBeenCalledWith([{ id: 1 }, { id: 2 }])
+  })
+
+  it('reemitClusterBridges skips applyBridgeNucsUpdate on empty result and no-ops without a helixCtrl', async () => {
+    const { deps, helixCtrl } = makeDeps(clusterState)
+    deps.api.refreshBridges = vi.fn().mockResolvedValue([])
+    await initResponseDelta(deps).reemitClusterBridges(['c1'])
+    expect(deps.api.refreshBridges).toHaveBeenCalledWith(['c1'])
+    expect(helixCtrl.applyBridgeNucsUpdate).not.toHaveBeenCalled()
+
+    const noCtrl = makeDeps(clusterState)
+    noCtrl.deps.designRenderer.getHelixCtrl = vi.fn(() => null)
+    await initResponseDelta(noCtrl.deps).reemitClusterBridges(['c1'])
+    expect(noCtrl.deps.api.refreshBridges).not.toHaveBeenCalled()
+  })
+
+  it('reemitClusterBridges swallows a backend error (warns, no throw)', async () => {
+    const { deps, helixCtrl } = makeDeps(clusterState)
+    deps.api.refreshBridges = vi.fn().mockRejectedValue(new Error('boom'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await expect(initResponseDelta(deps).reemitClusterBridges(['c1'])).resolves.toBeUndefined()
+    expect(helixCtrl.applyBridgeNucsUpdate).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
   it('rebakeHelixAxesForClusterDelta method reads store axes and mutates in place', () => {
     const { deps, store } = makeDeps({ currentHelixAxes: { h1: { start: [5, 0, 0] } } })
     const rd = initResponseDelta(deps)
