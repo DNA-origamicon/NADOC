@@ -54,9 +54,11 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 ## Next-session handoff
 
 _Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Selection-filter +
-drill-lock state machine DRAINED (#61)** → `ui/selection_filter.js`. main.js 10370 → 10254 (−116). The loop
-is now NEAR-COMPLETE — all Tier 1–5 cohesive subsystems are extracted; what remains is genuinely-small scraps
-+ deliberately-deferred coupled regions (see below)._
+drill-lock state machine DRAINED (#61)** → `ui/selection_filter.js`. main.js 10370 → 10254 (−116).
+**CORRECTION (deep-scan 2026-06-05):** the loop is NOT near-complete. The Tier 1–6 *banner* list is drained,
+but a function-by-function scan found **~7 cohesive subsystems (~2,500–3,000 ln) the original tiers never
+covered** — they're in `## Tier 7` below, the real remaining backlog. The earlier "near-complete / STOP"
+claim was anchored on the banner tiers, not the actual function inventory; ignore it._
 
 **This session (#61, user-picked):** the drill-lock state machine (`_manualFilters` Set + `_isManualSelect`/
 `_reflectDrillLevel`/`_reflectLockOnButtons`/`_resetToAutoBaseline`, ~727) + the `#select-filter .sf-btn` button
@@ -82,27 +84,28 @@ injected into initSelectionManager; `reflectLockOnButtons`/`resetToAutoBaseline`
   fires on user action — so the getter always resolves post-init. Same shape as #52's late-dep placement,
   but here driven by a construction-order cycle, not by dep location.
 
-**Recommended next — the loop is near-complete. Two honest options:**
-1. **STOP (recommended).** main.js is 10254 (down from 16530 — 38% drained). Every Tier 1–5 cohesive
-   subsystem is now a tested module. What's left is the **lifecycle spine** (`_resetForNewDesign` /
-   `_enterAssemblyMode` / `_exitAssemblyMode` / `_setMenuToggle` — called from 20–43 sites, correctly inline)
-   + thin per-action menu wiring + the deferred coupled regions below. Forcing more extractions risks making
-   main.js *worse* (the STOP criterion). Declare the carve-up substantially complete.
-2. **If continuing, the ONLY remaining non-trivial coupled regions** (NOT scraps): **FK propagation**
-   (`_applyFKLive`, deferred by design — assembly forward-kinematics) and the **Polymerize-region
-   `scene/joint_pick.js`** (`_onToolPickPointerDown` + cluster raycaster — genuinely HARD + gesture-bound,
-   needs the assembly-gesture harness). Both are real subsystems but high-cost. Verify want-it + build the
-   gate first.
+**The goal is NOT a LOC number.** main.js is the app's composition root (wiring board): 146 imports + ~100
+module constructions + the lifecycle spine + thin per-action wiring are *irreducible* (~2,500–3,500 ln floor).
+Chasing a lower number past that point means junk-drawer bundles or pass-through indirection — both make the
+code worse. **Target instead: "the closure holds zero cohesive logic clusters."** Done = every remaining
+function is either module construction/wiring or the spine. LOC lands ~3,000 as a *result*, not a target.
+
+**Recommended next region — START at the top of `## Tier 7` (the cleanest, lowest-risk first):**
+1. **Routing-warning dialogs** (`_confirmCadnanoRoutingChange` + `_confirmFeatureOverride`, banners ~3987/4049,
+   ~130 ln) → `ui/routing_warning_dialogs.js`. Two confirm-modals, mirrors the clean modal lifts (#42/#56/#57).
+   Lowest risk; good warm-up for a fresh session. **Verify want-it + re-derive scope first (the map mis-scopes).**
+2. Then the panels/dialogs in Tier 7 (Overhang-Orientation panel, CG-Relax, Autoscaffold picker) before the
+   HARD gesture/assembly-coupled ones (Translate/Rotate tool, repr switcher, assembly transform/FK).
 
 **Do NOT bundle the micro-scraps** (Orbit submenu ~10 ln, Browser tab title ~5 ln, Coloring submenu ~20 ln
 w/ 7 external `_setColoringMode` callers, deform→selectableTypes subscriber ~28 ln). Six logged mis-scopes
-say the map's adjacency ≠ cohesion; a `ui/menu_misc.js` junk drawer is the anti-pattern. Each is either too
-small to justify a module's indirection or too coupled for a clean lift (Coloring's 7 callers). They are
-correctly inline — leave them.
+say the map's adjacency ≠ cohesion; a `ui/menu_misc.js` junk drawer is the anti-pattern. They are correctly
+inline — leave them.
 
-**Deliberately deferred (still in main.js, by design):** FK propagation (`_applyFKLive`); Polymerize-region
-`scene/joint_pick.js` (HARD, gesture-bound); `_setMenuToggle` (43-use shared-util lift — its own mechanical
-import-swap, not a feature factory); the micro-scraps above (correctly inline).
+**Deliberately deferred (genuinely hard, do LAST or never):** FK propagation (`_applyFKLive` — shared with
+group_gizmo); Translate/Rotate tool + `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster —
+HARD, gesture-bound, needs the assembly-gesture harness); `_setMenuToggle` (43-use shared-util lift — its own
+mechanical import-swap, not a feature factory).
 
 ---
 
@@ -553,3 +556,72 @@ parameterized on `isHC`) + thin `initCreateSeam({store, api})`. −259 ln off th
 21/21 + doc-pinned 26hb click exercise (place-batch POST, 10 placements). Dropped dead `helixByGridPos`. The
 exported helpers + constants outlived the **Create Near/Far Ends** handlers (deleted 2026-06-04 as
 superseded primitive routing — see the handoff above); create_seam.js stands on its own.
+
+---
+
+## Tier 7 — re-discovered cohesive subsystems (deep function-scan, 2026-06-05)
+
+**Why this tier exists.** Tiers 1–6 were built from the `// ──` banner list. A 2026-06-05 function-by-function
+scan (`grep -nE "^  (async )?function _?[a-zA-Z]" main.js`) found ~168 functions still inside `main()`, of which
+the clusters below are **cohesive logic subsystems the banner tiers never named** — together ~2,500–3,000 ln of
+genuinely-extractable code. This is the real remaining backlog. The earlier "near-complete" handoff was wrong.
+
+**Same ⚠ rules apply (doubly here — these were sized from banner arithmetic, not read):** the line spans are
+banner-to-next-banner estimates, NOT verified cohesion. RE-READ each region, re-derive its real scope/deps/risk,
+run the want-it gate, and fix the entry on your way out. Ordered cleanest→hardest within each risk band.
+
+### Clean dialogs/panels (do first — mirror the #42/#56/#57 modal lifts)
+
+- [ ] **Routing-warning dialogs** — banners `// ── caDNAno routing-change warning dialog` (~3987) +
+  `// ── Routing feature-override warning` (~4049), ~130 ln. `_confirmCadnanoRoutingChange` +
+  `_confirmFeatureOverride` → `ui/routing_warning_dialogs.js`. Two `createModal`/`createButton` confirm-dialogs
+  returning a promise/bool. Deps: DOM + createModal/createButton + store. Risk: **LOW.** Cleanest cut left.
+- [ ] **CG Relax (mrdna) panel** — banner `// ── CG Relax (mrdna)` (~4178–4273), ~96 ln. Self-contained-ish
+  relax control. Deps: store, api, DOM. Risk: **LOW-MED.** Verify it isn't already mostly in a physics module.
+- [ ] **Overhang Orientation panel** — banners `// ── Overhang Orientation right-sidebar panel` (~5229) +
+  `// ── Overhang angle field wiring` (~5406) + `// ── Overhang gizmo (TransformControls)` (~5430), through
+  ~5486 (~258 ln). The `_oo*` cluster (`_ooOpen`/`_ooClose`/`_ooApply`/`_ooPreview*`/`_ooStepAxis`…) + angle
+  fields + a rotate-only TransformControls gizmo. Deps: store, api, designRenderer, overhang gizmo, DOM.
+  Risk: **MED** (gizmo is a TransformControls handle — but it's a *panel*, drive via the angle fields in jsdom;
+  `_ooClose` is already injected into keyboard_shortcuts as `ooClose`). Pure core candidate: angle math.
+- [ ] **Autoscaffold picker** — banner `// ── Routing: Autoscaffold (seamed / seamless picker)` (~4274–4485),
+  ~212 ln. A routing dialog. Deps: store, api, DOM. Risk: **MED** (re-derive — may interleave scaffold-router calls).
+- [ ] **Sequencing menu** — banner `// ── Sequencing` (~4486–4580), ~95 ln. Re-derive: may be thin wiring over
+  already-extracted `scaffold_modal`/`scaffold_assign`. Risk: **LOW-MED**; could be a scrap (verify before investing).
+- [ ] **Highlight Undefined Bases** — banner `// ── Highlight Undefined Bases toggle` (~9417–9496), ~80 ln.
+  `_refreshUndefinedHighlight` + the toggle. NOTE: `_undefinedHighlightOn` already has get/set shims (from #41,
+  view_tool_buttons) — extracting this MOVES ownership of that mutable here. Risk: **MED** (coordinate with #41's shims).
+- [ ] **Assembly context/linker menu + config animation** — banners `// ── Assembly linker menu` (~8027) +
+  `// ── Assembly context menu` (~8054) + `_animateAssemblyConfiguration` (~8218), to ~8201 (~175 ln, the anim
+  fn may extend further). Right-click assembly menu + camera/config animation. Deps: store, api, scene, camera,
+  assemblyRenderer. Risk: **MED-HARD** (assembly-coupled; config-anim touches camera).
+
+### HARD — gesture-bound or shared-state coupled (build the gate / map the coupling first)
+
+- [ ] **Move/Rotate right-sidebar panel** — banner `// ── Move/Rotate right-sidebar panel` (~5487–5871),
+  ~385 ln. The `_mr*` cluster + ssDNA/flex payload builders (`_buildSsdnaPayload`/`_buildRelaxPayload`/
+  `_relaxFlexible`/`_refreshFlexGates`). Deps: store, api, clusterGizmo, designRenderer, the assembly transform
+  context. Risk: **HARD** — shares `_createAssemblyTransformContext`/`_applyAssemblyPrimaryLive` with the group
+  gizmo (#36/#37) and the Translate/Rotate tool. Pure cores extractable (payload builders) before the stateful shell.
+- [ ] **Representation switcher** — banners `// ── Unified representation radio` (~9051) + `_setRepresentation`
+  (~9205) + `// ── Function-key bindings: F1…F7` (~9301) + `// ── Representation option sliders` (~9335), to
+  ~9370 (~320 ln). Plus `_updateReprRadio`/`_syncAssemblyReprMenu`/`_cycleColoringForRepr`/
+  `_updateColoringMenuAvailability`/`_reprOptionSliders` (~9089–9204). Risk: **HARD** — `_setRepresentation` is
+  a central mode-switch touching every renderer + the Coloring submenu (`_setColoringMode`'s 7 callers live here).
+  Map the coupling carefully; likely a multi-commit region.
+- [ ] **Atomistic / surface display controllers** — `_applyAtomisticMode`/`_refetchAtomistic`/`_getAtom*`/
+  `_ensureAtomData`/`_applySurfaceMode`/region overlays, scattered ~1893–2418 (interleaved with renderer init
+  banners ~1846/1957/2342). Risk: **HARD** — interleaved with renderer construction; re-derive the function set
+  vs the init wiring before lifting. Pure cores: `_getAtomStrandColors`/`_getAtomBaseColors` (color maps).
+- [ ] **Translate/Rotate tool** — `_activateTranslateRotateTool` … `_cancelTranslateRotateTool` + the joint-arrow
+  pick handler, banners `// ── Joint arrow pick handler` (~6103) through ~6805 (~700 ln, the BIGGEST remaining).
+  `_onToolPickPointerDown` + cluster raycaster (the carve-up's `scene/joint_pick.js`). Risk: **HARD** —
+  gesture-bound (canvas pointer pick), assembly+design dual-mode, owns the transform-preview/commit state.
+  Needs the assembly-gesture harness (see the #28/#30/#31 difficulties ledger). Do LAST or build the gate first.
+- [ ] **Assembly transform/commit/FK + motion constraints** — banners `// ── Rigid-body group gizmo` (~7624,
+  partly in group_gizmo.js already) + `// ── Forward kinematics` (~7691) + `// ── Motion-constraint analyzer`
+  (~7847) + status chip (~7934), to ~8026 (~400 ln). `_createAssemblyTransformContext`/`_applyAssemblyPrimaryLive`/
+  `_queueAssemblyPrimaryCommit`/`_commitAssemblyPending`/`_applyFKLive`/`_applyClusterMateFKLive`/
+  `_analyzeMotionConstraints`/`_setMotionChip`. Risk: **HARD** — these are the SHARED transform helpers injected
+  into group_gizmo (#36/#37) and consumed by Move/Rotate + Translate/Rotate; the file-wide pending-transform
+  Maps live here. FK was explicitly deferred. Extract the shared engine only after the consumers are stable.
