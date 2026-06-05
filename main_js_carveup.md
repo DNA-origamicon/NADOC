@@ -52,44 +52,48 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **Second Tier-5 region**
-this session: extracted the backend connection-monitor sub-part of "Connection monitor / autosave / SSE" (#53)
-→ seeded `app/lifecycle.js`. main.js 10928 → 10879 (−49 ln)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **Third Tier-5 cut**
+in the "Connection monitor / autosave / SSE" region: extracted the **Sync status badge** sub-part (#54)
+→ new `ui/sync_badge.js`. main.js 10879 → 10857 (−22 ln)._
 
-**This session (#53):** cheap, bounded cut into **Tier 5** — extracted the **Backend connection monitor +
-restart recovery** sub-block → new `app/lifecycle.js` `initConnectionMonitor({deps})→{recoverAfterRestart}`.
-Verbatim move of `_restartHandling` + `_recoverAfterRestart` + `connectionMonitor.start({onChange})`. The
-autosave subscribers + Library-SSE handler stay inline (they share loop-prevention flags written in 3 distant
-places — a wide-shim lift for a dedicated batch). Only leaked flag (`_reloadingFromSSE`) injected as a
-`setReloadingFromSSE` shim, safe because its body runs only post-boot (TDZ-safe forward ref). Removed dead
-`connectionMonitor` import. 12 vitest + smoke 23/23. Restart-recovery gesture NOT hand-exercised (needs a live
-backend kill+restart) — branches unit-tested, boot/start path covered by smoke (#38/#32/#24 caveat).
+**This session (#54):** cheap, bounded cut into **Tier 5** — extracted the **Sync status badge + debug
+log panel** primitives (`_setSyncStatus`/`_syncLog` + DOM refs + close-listener + show/hide/toggle) →
+new `ui/sync_badge.js` `initSyncBadge()→{setSyncStatus, syncLog, show/hide/toggleDebugPanel}`. Deliberately
+**NOT** in `app/lifecycle.js`: these are pure-DOM presentation helpers with ZERO flag coupling, so they
+belong in `ui/` and the lifecycle consumers (conn monitor #53, file_io #52, SSE handler, import_menu, the
+still-inline autosave subscribers) call them as injected deps. The flag-reading `window.__nadocSyncDebug`
+helper + the Ctrl+Shift+D toggle stay inline; the helper now drives the panel via `_syncBadge.show/hideDebugPanel()`.
+~20 call sites rewritten `_setSyncStatus(`→`_syncBadge.setSyncStatus(` etc (mechanical). 10 vitest + smoke
+23/23 + real-app Ctrl+Shift+D toggle. **Why this first:** it pre-extracts the badge primitives the hard
+autosave/SSE flag-batch would otherwise have had to own — that batch now just injects `_syncBadge.*`.
 
 **Recommended next region — continue draining Tier 5:**
-1. **Finish "Connection monitor / autosave / SSE" → app/lifecycle.js** (the rest of this region, into the
-   module just seeded): the **Sync status badge** (`_setSyncStatus`/`_syncLog`/`__nadocSyncDebug`, ~7505),
-   the **Auto-save subscribers** (the two `subscribeSlice` writers + flags `_savingAssembly`/`_reloadingFromSSE`/
-   `_selfSavedPaths`/`_lastSameDocActivityMs` + 3 timers, ~7638), the **Library SSE** handler
-   (`_handleLibraryEvent`/`_scheduleLibraryRefresh`, ~7753). **The hard part is the flags** — they're written in
-   3 sites OUTSIDE the region (save dispatch ~3995, ~6836, broadcast handler ~10625-10682), so the module must
-   own them and EXPOSE get/setters + the `_selfSavedPaths` Set (by reference). `_fileIo` + `_assemblyRefresh`
-   (created here for their late deps) become deps of the lift, not residents. Move all flags in ONE commit —
-   splitting them risks save-loop/clobber bugs. HIGH. The biggest remaining Tier-5 payoff (~210 ln).
-2. **Menu bar + multi-doc spawn** (banner `// ── Menu bar` ~3839, `// ── Multi-document: New / Open` ~3898,
-   ~320 ln) → `ui/menu_bar.js`. HIGH (every menu action).
+1. **Finish "Connection monitor / autosave / SSE" → app/lifecycle.js** — the LAST sub-part: the **Auto-save
+   subscribers** (`// ── Auto-save` ~7567, the two `subscribeSlice` writers + flags `_savingAssembly`/
+   `_reloadingFromSSE`/`_selfSavedPaths`/`_lastSameDocActivityMs` + 3 timers) + the **Library SSE handler**
+   (`// ── Library SSE` ~7682, `_handleLibraryEvent`/`_scheduleLibraryRefresh`). **The hard part is the flags**
+   — written in 3 sites OUTSIDE the region (save dispatch ~3995, ~6814, broadcast handler ~10603-10660), so the
+   module must own them and EXPOSE get/setters + the `_selfSavedPaths` Set by reference. `_fileIo` +
+   `_assemblyRefresh` + `_syncBadge` consts (created here for their late deps) become **deps** of the lift, not
+   residents. Move all flags in ONE commit — splitting risks save-loop/clobber bugs. HIGH. ~180 ln. The badge
+   primitives are now already a dep (`_syncBadge.setSyncStatus`/`syncLog`) → fold them in by injection.
+2. **Menu bar + multi-doc spawn** (banner `// ── Menu bar` ~3817, `// ── Multi-document: New / Open` ~3876,
+   ~320 ln) → `ui/menu_bar.js`. HIGH (every menu action). Independent of the flag tangle — a cleaner pick if
+   you want to avoid the autosave flags this batch.
 3. **Finish "File open / save"**: open-file orchestration (`_openPartFromServer`/`_openAssemblyFromServer`,
-   ~3584) + menu-bar save dispatchers (`_saveDispatch`/`_saveAsDispatch`/`_saveAssembly`/`_saveAssemblyAsGuarded`,
-   ~3839). These call `_fileIo.*` already; lifting needs lifecycle-spine deps (probably leave the spine inline). MED-HIGH.
+   ~3562) + menu-bar save dispatchers (`_saveDispatch`/`_saveAsDispatch`/`_saveAssembly`/`_saveAssemblyAsGuarded`).
+   These call `_fileIo.*` already; lifting needs lifecycle-spine deps (probably leave the spine inline). MED-HIGH.
 
 **Banked gotcha this session:**
-- **A setter shim closing over a LATER-declared `let` is TDZ-safe IF the shim body only runs post-boot.**
-  `initConnectionMonitor`'s `setReloadingFromSSE: (v) => { _reloadingFromSSE = v }` references `_reloadingFromSSE`
-  declared ~80 ln below the factory call. Creating the arrow doesn't access the binding; only `recoverAfterRestart`
-  (invoked on a real restart event, long post-boot) does. So the factory can sit at its natural banner spot even
-  with a forward flag ref — no need to push it past the declaration like #52's `_fileIo` (whose deps were *read*
-  to build the factory, a stricter constraint). Grep-confirm the shim has no synchronous caller before committing.
-- **`connectionMonitor.start` is the imported poller** (`shared/connection_monitor.js`), not a closure symbol →
-  the module imports it directly (not a dep). The cadnano editor imports the same module; this lift left it alone.
+- **Pure-DOM primitives that a flag-tangled region injects elsewhere are a CLEAN early sub-cut.** The carve-up
+  billed the whole conn/autosave/SSE region as one `app/lifecycle.js`, but `_setSyncStatus`/`_syncLog` read only
+  DOM (no `_savingAssembly`/`_reloadingFromSSE`/etc) — so they lift to a separate `ui/` module ahead of the flag
+  batch, shrinking that batch's surface. Splitting a region by *coupling* (flags vs pure DOM), not by banner, is
+  the move. The flag-reading `__nadocSyncDebug` debug helper stayed inline precisely because it DOES read the flags.
+- **Converting hoisted `function _setSyncStatus`/`_syncLog` into `const _syncBadge` methods is TDZ-safe** even
+  though call sites at ~3995 are textually ABOVE the `const` at ~7505 — those sites are inside the deferred
+  `_saveDispatch` async-fn body (run on user save, post-boot), so `_syncBadge` is assigned by call time. Grep
+  confirmed no boot-synchronous caller. (Same deferred-body principle as #53's flag shim.)
 
 **Deliberately deferred (still in main.js):** FK propagation (`_applyFKLive`); Polymerize-region sub-part
 `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound). `_setMenuToggle`
@@ -415,15 +419,22 @@ These touch boot/lifecycle. High blast radius; do after the loop is well-grooved
     setReloadingFromSSE})→{recoverAfterRestart}`. −49 ln. 12 vitest; smoke 23/23. Seeds the module.
     The only leaked flag (`_reloadingFromSSE`) is injected as a `setReloadingFromSSE` shim. The Ctrl+Shift+D
     sync-debug shortcut stays inline (debug-panel concern). Removed dead `connectionMonitor` import from main.js.
-  - **Remaining (NOT done):** the **Sync status badge + debug panel** (`_setSyncStatus`/`_syncLog`/
-    `__nadocSyncDebug`, ~7505–7563 — clean DOM helpers, but injected as deps into file_io/assembly_refresh/
-    import_menu so they must stay exported), the **Auto-save subscribers** (`_savingAssembly`/`_reloadingFromSSE`/
+  - **Sync status badge + debug panel — DONE** (extraction #54, commit 680f84f): `_setSyncStatus`/`_syncLog`
+    + their DOM refs + the `sync-debug-close` listener + show/hide/toggle → `ui/sync_badge.js`
+    `initSyncBadge()→{setSyncStatus, syncLog, show/hide/toggleDebugPanel}`. **NOT** part of `app/lifecycle.js`
+    — these are pure-DOM presentation primitives with zero flag coupling, so they live in `ui/`, and the
+    lifecycle consumers (conn monitor, autosave subscribers, file_io, SSE, import_menu) call them as deps.
+    The flag-reading `window.__nadocSyncDebug` helper + the Ctrl+Shift+D toggle stay inline; the helper drives
+    the panel via `_syncBadge.show/hideDebugPanel()`. −22 ln. 10 vitest; smoke 23/23 + real-app Ctrl+Shift+D.
+    **This pre-extracts the badge primitives the autosave/SSE batch would otherwise have had to own** — that
+    batch now just injects `_syncBadge.*`.
+  - **Remaining (NOT done):** the **Auto-save subscribers** (`_savingAssembly`/`_reloadingFromSSE`/
     `_selfSavedPaths`/`_lastSameDocActivityMs` + 3 timers + the two `subscribeSlice` writers), and the
     **Library SSE handler** (`_scheduleLibraryRefresh`/`_handleLibraryEvent`). These share loop-prevention
     flags that are ALSO written in 3 distant sites (save dispatch ~3995, ~6836, broadcast handler ~10625-10682)
     → a wide get/set-shim factory. Fold them into app/lifecycle.js together as ONE batch (don't split the flags
-    further). `_fileIo` + `_assemblyRefresh` consts (created in this region for their late deps) become deps of
-    that lift, not residents of it.
+    further). `_fileIo` + `_assemblyRefresh` + `_syncBadge` consts (created in this region for their late deps)
+    become deps of that lift, not residents of it.
 
 ## Tier 6 — dev-only / debug (no user risk; extract anytime to de-bloat)
 
