@@ -81,13 +81,28 @@ linker/belt loaded + a right-click on the exact 3D pick — multi-step setup, no
 tests driving the REAL factory through every route + smoke's assembly-exit gate (which registers/removes this
 `contextmenu` listener). `workspace/Belt_test1.nass` is the fixture if a future session wants the live exercise.
 
-**Recommended next region — re-derive scope first, with `rg`:** the assembly-pointer cluster is now fully drained.
-Frontier is **Tier 5 (file/session infra — HIGH blast radius)** + the **HARD gesture/assembly-coupled band**:
-1. **Move/Rotate right-sidebar panel** (~385 ln, banner `// ── Move/Rotate right-sidebar panel`) — has extractable
-   pure payload builders (`_buildSsdnaPayload`/`_buildRelaxPayload`) BEFORE the stateful shell; lift those first as a
-   smaller bite. Shares `_createAssemblyTransformContext`/`_applyAssemblyPrimaryLive` with group_gizmo + the
-   Translate/Rotate tool — map the coupling before the shell.
-2. **Tier 5 file/save/session** (`_openPartFromServer`/`_openAssemblyFromServer`, autosave, sync-status) — HIGH blast
+**GESTURE-HARNESS GAP NOW CLOSED (commit 8e050e4) — the HARD transform band is UNBLOCKED.** A scope check found
+the assembly-gesture harness was already ~90% built (instance pick, enter/exit/frame, cluster-joint ring drag all in
+`scene_harness.js` + `__nadocTest`, 5+ specs). The one missing piece for the transform band was an observable for the
+PRIMARY instance transform. Added: `__nadocTest.getAssemblyPendingTransforms()` + `activateAssemblyMoveTool()`;
+`scene_harness` `activateAssemblyMoveTool` + `moveActiveInstanceViaPanel`; `e2e/assembly_move_tool.spec.js` (select →
+activate tool → set Z via panel → pending recorded → empty-click commits). **KEY: do NOT drive the gizmo via a
+TransformControls handle drag (#36/#37 — handles unhittable at pixel precision). The Move/Rotate panel numeric inputs
+fire `change` → `_mrCommitInputs` → `_queueAssemblyPrimaryCommit` → the SAME `_assemblyPendingTransforms` map the
+gizmo onCommit feeds. The panel-input DOM path + capture-invoke gizmo callbacks are the established non-flaky patterns.**
+
+**Recommended next region — re-derive scope first, with `rg`:** the assembly-pointer cluster is fully drained; the
+transform band's gesture gate now exists. Frontier:
+1. **Move/Rotate right-sidebar panel** (~385 ln, banner `// ── Move/Rotate right-sidebar panel` ~4834). Pure payload
+   builders (`_buildSsdnaPayload`/`_buildRelaxPayload`) extract FIRST as a smaller bite. Then the `_mr*` panel shell as
+   a factory — its commit path (`_mrCommitInputs`) is now covered by `assembly_move_tool.spec.js`; extend that spec.
+   Shares `_createAssemblyTransformContext`/`_applyAssemblyPrimaryLive` with group_gizmo (#36/#37, already extracted) +
+   the Translate/Rotate tool — map the coupling before the shell.
+2. **Photo-mode / export-representation** (~348 ln @ banner `// ── Export representation` ~7838): `_photoModeEnter`/
+   `_photoModeExit`/`_withExportRepresentation`/`_withHighDetailGeometry`/`_applyRepAndAwaitRebuild`. Cohesive, NOT
+   gesture-bound (menu/programmatic) → no harness needed. `_highDetailGeometries` is impure (geometry cache) so it's a
+   stateful factory, not a pure lift. Biggest clean carve available without touching the shared transform engine.
+3. **Tier 5 file/save/session** (`_openPartFromServer`/`_openAssemblyFromServer`, autosave, sync-status) — HIGH blast
    radius; the #52 `initFileIo` placement pattern (place the `const` where deps exist, not at the banner) applies.
    BUT remember selection-filter (#61) was billed "gesture-bound" and was actually pure DOM+store (6th mis-scope):
    check WHERE the gesture lives before assuming a harness is needed.

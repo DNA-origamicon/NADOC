@@ -504,6 +504,22 @@ assertions are filled (verified end-to-end).
 Append-only. Record candidates that turned out NOT to be clean pure extractions, plus any
 gotcha worth remembering. The autonomous extraction loop writes here when it skips something.
 
+- **"Build the assembly-gesture harness first" was ~90% already done (2026-06-05).** Before sinking a session into
+  a gesture harness for the HARD transform band, a scope check found `scene_harness.js` + `__nadocTest` ALREADY had:
+  enter/exit/frame assembly mode, real-raycast instance picking (`assemblyInstanceCandidates`/`selectAssemblyInstance`),
+  empty-space click, and a full cluster-joint ring drag (`dragPartJointRing`, real mouse down/move/up). 5+ assembly
+  specs use it. The ONLY missing piece for the Move/Rotate + Translate/Rotate band was an observable for the PRIMARY
+  instance transform (there was only `getAssemblyPendingPartJoints`, the joint-rotation variant). Closed in commit
+  8e050e4 with `getAssemblyPendingTransforms()` + `activateAssemblyMoveTool()` hooks + `moveActiveInstanceViaPanel`
+  helper + `e2e/assembly_move_tool.spec.js`. **Lesson: survey the existing harness (`rg "assembly" e2e/helpers/
+  scene_harness.js` + the `__nadocTest` block ~8908) BEFORE assuming a gesture region needs new infra — most of it
+  exists.** **The transform-band gizmo does NOT need a real handle drag** (#36/#37: TransformControls handles are
+  unhittable at integer-pixel precision). `_assemblyPendingTransforms` is fed by BOTH the Move/Rotate panel numeric
+  inputs (DOM `change` → `_mrCommitInputs` → `_queueAssemblyPrimaryCommit`, line ~5074) AND the gizmo onCommit
+  callback — so drive the DOM panel path (fill `#mr-tx/ty/tz`, dispatch `change`) or capture-invoke the gizmo
+  callbacks; both hit the same observable. The empty-space click commits the pending transform (`onAssemblyClick`,
+  assembly_pointer.js ~525).
+
 - **jsdom does NOT reflect `style.display` set via a multi-prop `cssText`** (factory tier).
   Building `overlay.style.cssText = 'display:none;position:fixed;...'` leaves `overlay.style.display`
   as `''` under vitest/jsdom, so initial-hidden assertions fail. Fix: set `overlay.style.display`
