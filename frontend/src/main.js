@@ -5266,6 +5266,9 @@ async function main() {
   api.registerResponseDeltaHandler(_responseDelta.applyResponseDelta)
   // Alias-const keeps the tool's rebake call sites verbatim (only the body moved).
   const _rebakeHelixAxesForClusterDelta = _responseDelta.rebakeHelixAxesForClusterDelta
+  // Shared cluster-overlay refresh (single source of truth in response_delta.js).
+  // The tool's commit historically did NOT rebuild flexible arcs → withFlexibleArcs:false.
+  const _refreshClusterOverlays = _responseDelta.refreshClusterOverlays
 
   // The wrappers below remain for callers that need to await full completion
   // (e.g. the slider toast lifecycle waits for the full chain). Since the
@@ -5421,18 +5424,7 @@ async function main() {
                 console.warn('[refreshBridges] failed:', e)
               }
               // Same overlay refresh as the standard commit path.
-              const s = store.getState()
-              const cd = s.currentDesign
-              const cg = s.currentGeometry
-              const ca = s.currentHelixAxes
-              if (cd && cg) {
-                overhangLinkArcs?.rebuild?.(cd, cg)
-                if (overhangLocations?.isVisible?.()) overhangLocations.rebuild(cd, cg)
-                // rebuild(geometry, design) — arg order is reversed vs the others.
-                if (overhangNameOverlay?.isVisible?.()) overhangNameOverlay.rebuild(cg, cd)
-                if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
-                if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
-              }
+              _refreshClusterOverlays({ withFlexibleArcs: false })
             }
           }
         }
@@ -5515,18 +5507,7 @@ async function main() {
               // stale) and rebuilt themselves at pre-cluster-transform
               // positions. commitClusterPositions has now synced
               // backbone_position in-place, so re-rebuild explicitly here.
-              const s = store.getState()
-              const cd = s.currentDesign
-              const cg = s.currentGeometry
-              const ca = s.currentHelixAxes
-              if (cd && cg) {
-                overhangLinkArcs?.rebuild?.(cd, cg)
-                if (overhangLocations?.isVisible?.()) overhangLocations.rebuild(cd, cg)
-                // rebuild(geometry, design) — arg order is reversed vs the others.
-                if (overhangNameOverlay?.isVisible?.()) overhangNameOverlay.rebuild(cg, cd)
-                if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
-                if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
-              }
+              _refreshClusterOverlays({ withFlexibleArcs: false })
             }
           }
         }

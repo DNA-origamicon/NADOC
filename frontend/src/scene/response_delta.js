@@ -81,6 +81,32 @@ export function initResponseDelta({
     rebakeHelixAxesForClusterDelta(store.getState().currentHelixAxes, helixIds, oldCt, newCt)
 
   /**
+   * Re-rebuild the position-derived overlays after an in-place cluster/position
+   * mutation whose store update was lean (Plan B), so their currentDesign
+   * subscribers fired with stale backbone_position. Single source of truth for
+   * this rendering-invariant block, shared by both delta paths here AND the
+   * Translate/Rotate tool's commit pipeline in main.js (via the returned API).
+   *
+   * `withFlexibleArcs` gates the anchor-derived ssDNA-arc rebuild: the delta
+   * paths want it (a relax undo/redo must re-apply the arcs), the tool's commit
+   * historically did not — pass the caller's existing behavior to stay verbatim.
+   */
+  function refreshClusterOverlays({ withFlexibleArcs = true } = {}) {
+    const s = store.getState()
+    const cd = s.currentDesign
+    const cg = s.currentGeometry
+    const ca = s.currentHelixAxes
+    if (!cd || !cg) return
+    if (withFlexibleArcs) flexibleArcs?.rebuild?.(cd)
+    overhangLinkArcs?.rebuild?.(cd, cg)
+    if (overhangLocations?.isVisible?.()) overhangLocations.rebuild(cd, cg)
+    // rebuild(geometry, design) — arg order is reversed vs the others.
+    if (overhangNameOverlay?.isVisible?.()) overhangNameOverlay.rebuild(cg, cd)
+    if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
+    if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
+  }
+
+  /**
    * Fast-path renderer update for an undo/redo whose only delta is cluster
    * transforms (signaled by `diff_kind: 'cluster_only'` in the response).
    * Mirrors the cluster-commit Plan B optimisation: avoids the backend full
@@ -166,24 +192,11 @@ export function initResponseDelta({
       // Refresh overlays whose subscribers fired during the lean store
       // update (with currentGeometry's nuc.backbone_position still stale)
       // — same as the cluster-commit reconciliation in _confirmTranslateRotateTool.
-      const s = store.getState()
-      const cd = s.currentDesign
-      const cg = s.currentGeometry
-      const ca = s.currentHelixAxes
-      if (cd && cg) {
-        // Flexible ssDNA arcs are anchor-derived. The cluster delta moved the
-        // beads imperatively (Plan B skips geometry), and the currentDesign
-        // subscriber's rebuild already ran against the PRE-delta positions.
-        // Rebuild now from the post-delta anchors so undo/redo of a relax (or
-        // revert→undo) shows the arcs re-applied, not in the pre-undo shape.
-        flexibleArcs?.rebuild?.(cd)
-        overhangLinkArcs?.rebuild?.(cd, cg)
-        if (overhangLocations?.isVisible?.()) overhangLocations.rebuild(cd, cg)
-        // rebuild(geometry, design) — arg order is reversed vs the others.
-        if (overhangNameOverlay?.isVisible?.()) overhangNameOverlay.rebuild(cg, cd)
-        if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
-        if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
-      }
+      // Flexible ssDNA arcs are anchor-derived: the cluster delta moved the
+      // beads imperatively (Plan B skips geometry) and the currentDesign
+      // subscriber's rebuild already ran against the PRE-delta positions, so
+      // rebuild them too (undo/redo of a relax must re-apply the arc shape).
+      refreshClusterOverlays({ withFlexibleArcs: true })
     }
   }
 
@@ -203,10 +216,7 @@ export function initResponseDelta({
     // a seek we have to invoke them once with every potentially-affected
     // helix. Topology is unchanged so design.helices covers every real helix
     // (extension and __lnk__ ones inherit through the cluster-arc helpers).
-    const s = store.getState()
-    const cd = s.currentDesign
-    const cg = s.currentGeometry
-    const ca = s.currentHelixAxes
+    const cd = store.getState().currentDesign
     const allHelixIds = (cd?.helices ?? []).map(h => h.id)
     if (allHelixIds.length) {
       unfoldView?.applyClusterArcUpdate?.(allHelixIds)
@@ -214,16 +224,9 @@ export function initResponseDelta({
       designRenderer.applyClusterCrossoverUpdate(allHelixIds)
     }
     // Overlays that derive positions from currentDesign + currentGeometry
-    // need a refresh now that backbone_position has shifted.
-    if (cd && cg) {
-      flexibleArcs?.rebuild?.(cd)   // anchor-derived — refresh on any position delta
-      overhangLinkArcs?.rebuild?.(cd, cg)
-      if (overhangLocations?.isVisible?.()) overhangLocations.rebuild(cd, cg)
-      // rebuild(geometry, design) — arg order is reversed vs the others.
-      if (overhangNameOverlay?.isVisible?.()) overhangNameOverlay.rebuild(cg, cd)
-      if (loopSkipHighlight?.isVisible?.()) loopSkipHighlight.rebuild(cd, cg, ca)
-      if (unligatedCrossoverMarkers) unligatedCrossoverMarkers.rebuild(cd, cg, s.unligatedCrossoverIds)
-    }
+    // need a refresh now that backbone_position has shifted (incl. the
+    // anchor-derived flexible ssDNA arcs).
+    refreshClusterOverlays({ withFlexibleArcs: true })
   }
 
   /** Apply whichever delta path the response signals — registered with
@@ -244,6 +247,7 @@ export function initResponseDelta({
     applyResponseDelta,
     applyClusterUndoRedoDeltas,
     applyPositionsOnlyDiff,
+    refreshClusterOverlays,
     rebakeHelixAxesForClusterDelta: rebakeFromStore,
   }
 }

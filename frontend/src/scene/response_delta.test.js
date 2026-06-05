@@ -200,6 +200,50 @@ describe('initResponseDelta', () => {
     expect(() => rd.applyPositionsOnlyDiff({ positions_by_helix: {} })).not.toThrow()
   })
 
+  it('refreshClusterOverlays is exposed on the API', () => {
+    const { deps } = makeDeps()
+    expect(typeof initResponseDelta(deps).refreshClusterOverlays).toBe('function')
+  })
+
+  it('refreshClusterOverlays no-ops when design or geometry missing', () => {
+    const { deps } = makeDeps({ currentDesign: { helices: [] }, currentGeometry: null })
+    const rd = initResponseDelta(deps)
+    rd.refreshClusterOverlays({ withFlexibleArcs: true })
+    expect(deps.flexibleArcs.rebuild).not.toHaveBeenCalled()
+    expect(deps.overhangLinkArcs.rebuild).not.toHaveBeenCalled()
+  })
+
+  it('refreshClusterOverlays withFlexibleArcs:true rebuilds the anchor arcs; false skips them', () => {
+    const cd = { helices: [{ id: 'h1' }] }
+    const cg = [{}]
+    const onState = { currentDesign: cd, currentGeometry: cg, currentHelixAxes: {}, unligatedCrossoverIds: [7] }
+
+    const withFlex = makeDeps(onState)
+    initResponseDelta(withFlex.deps).refreshClusterOverlays({ withFlexibleArcs: true })
+    expect(withFlex.deps.flexibleArcs.rebuild).toHaveBeenCalledWith(cd)
+
+    const noFlex = makeDeps(onState)
+    initResponseDelta(noFlex.deps).refreshClusterOverlays({ withFlexibleArcs: false })
+    expect(noFlex.deps.flexibleArcs.rebuild).not.toHaveBeenCalled()
+    // The non-gated overlays still rebuild regardless of the flag.
+    expect(noFlex.deps.overhangLinkArcs.rebuild).toHaveBeenCalledWith(cd, cg)
+    expect(noFlex.deps.unligatedCrossoverMarkers.rebuild).toHaveBeenCalledWith(cd, cg, [7])
+  })
+
+  it('refreshClusterOverlays honors per-overlay visibility gating + reversed name-overlay arg order', () => {
+    const cd = { helices: [{ id: 'h1' }] }
+    const cg = [{}]
+    const ca = { h1: {} }
+    const { deps } = makeDeps({ currentDesign: cd, currentGeometry: cg, currentHelixAxes: ca, unligatedCrossoverIds: [] })
+    deps.overhangLocations.isVisible = () => true
+    deps.overhangNameOverlay.isVisible = () => true
+    deps.loopSkipHighlight.isVisible = () => false   // hidden → must NOT rebuild
+    initResponseDelta(deps).refreshClusterOverlays({ withFlexibleArcs: false })
+    expect(deps.overhangLocations.rebuild).toHaveBeenCalledWith(cd, cg)
+    expect(deps.overhangNameOverlay.rebuild).toHaveBeenCalledWith(cg, cd) // (geometry, design)
+    expect(deps.loopSkipHighlight.rebuild).not.toHaveBeenCalled()
+  })
+
   it('rebakeHelixAxesForClusterDelta method reads store axes and mutates in place', () => {
     const { deps, store } = makeDeps({ currentHelixAxes: { h1: { start: [5, 0, 0] } } })
     const rd = initResponseDelta(deps)
