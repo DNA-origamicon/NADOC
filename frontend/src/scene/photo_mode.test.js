@@ -22,11 +22,6 @@ vi.mock('../ui/photo_panel.js', () => ({
     return { applyActiveProfile: vi.fn(), syncToState: vi.fn() }
   },
 }))
-// Real shortcut registry would accumulate global state across tests; stub it.
-let shortcutCalls = []
-vi.mock('../input/shortcuts.js', () => ({
-  registerShortcut: (s) => shortcutCalls.push(s),
-}))
 
 describe('planExportRepUpgrade (pure)', () => {
   const insts = (reps) => reps.map((r, i) => ({ id: `i${i}`, representation: r }))
@@ -106,7 +101,7 @@ function makeDeps(initialState = {}) {
   return { store, api, sceneCtx, photoRenderer, assemblyRenderer, designRenderer, bluntEnds, assemblyJointRenderer, viewCube, player }
 }
 
-beforeEach(() => { clearDom(); panelCalls = []; shortcutCalls = [] })
+beforeEach(() => { clearDom(); panelCalls = [] })
 
 describe('initPhotoMode factory', () => {
   it('returns the expected API surface', () => {
@@ -117,12 +112,6 @@ describe('initPhotoMode factory', () => {
     expect(typeof m.getExportRepActive).toBe('function')
     expect(typeof m.withExportRepresentation).toBe('function')
     expect(m.getExportRepActive()).toBe(false)
-  })
-
-  it('registers the "p" toggle shortcut', () => {
-    mountIds(DOM)
-    initPhotoMode(makeDeps())
-    expect(shortcutCalls.some(s => s.key === 'p')).toBe(true)
   })
 
   it('enter() activates the renderer, lazily builds the panel, sets photoActive, suppresses overlays', () => {

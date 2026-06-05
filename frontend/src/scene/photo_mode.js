@@ -16,7 +16,6 @@ import * as THREE from 'three'
 import { BEAD_RADIUS } from './helix_renderer.js'
 import { SPHERE_GEO as ATOM_SPHERE_GEO, CYLINDER_GEO as BOND_CYL_GEO } from './atomistic_renderer/geometry_builder.js'
 import { exportPhotoVideo } from './export_video.js'
-import { registerShortcut } from '../input/shortcuts.js'
 import { initPhotoPanel } from '../ui/photo_panel.js'
 
 /**
@@ -243,15 +242,6 @@ export function initPhotoMode({
 
   document.getElementById('photo-tab-btn')?.addEventListener('click', () => {
     if (!photoRenderer.isActive()) _photoModeEnter()
-  })
-
-  registerShortcut({
-    key: 'p', ctrl: false, shift: false,
-    description: 'Toggle photo mode',
-    handler() {
-      if (photoRenderer.isActive()) _photoModeExit()
-      else _photoModeEnter()
-    },
   })
 
   // Expose photo debug helpers on the existing debug object.
