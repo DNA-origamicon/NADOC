@@ -53,29 +53,24 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Flexible-segment relax EXTRACTED
-→ `scene/flex_relax.js` (#71, commit 9c18c3d), −147 ln. main.js 9202 → 9067.** That was the handoff's smaller-bite
-inside option 1 (Move/Rotate panel). The `_mr*` panel SHELL remains inline (lifecycle-spine — likely stays). Remaining
-frontier: Tier 5 file/session infra (HIGH blast radius) + the Translate/Rotate tool (the BIGGEST remaining, gesture-bound)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Atomistic strand-colour PURE CORE
+EXTRACTED → `scene/color_util.js` `computeAtomStrandColors` (#72, commit a630efd), −61 ln. main.js 9067 → 9006.** Cheap
+de-risking first cut into the HARD Atomistic region (mirrors #35). Remaining frontier is ALL HARD: Translate/Rotate tool
+(BIGGEST, gesture-bound), Representation switcher (~320 ln central mode-switch), the rest of the Atomistic/surface
+controllers (stateful renderer-wiring), Assembly transform/FK engine._
 
-**This session (#71, handoff option 1 smaller bite):** the Move/Rotate "region" (banner ~4832) is NOT one cohesive
-block — `_translateRotateActive` + the `_mr*` panel fns are read/written from 20+ sites (spine territory). Took the
-narrow sub-block instead: the **ssDNA flexible-segment relax + "ssDNA constrained" pivot-gating** subsystem
-(`_flexGates`/`_flexConnections` state + `_refreshFlexGates`/`_buildSsdnaPayload`/`_clusterBeadCount`/`_buildRelaxPayload`/
-`_relaxFlexible`) → `initFlexRelax({store,api,designRenderer,clusterGizmo,isTranslateRotateActive})→{refreshFlexGates,
-hasGate,buildSsdnaPayload,relaxFlexible}` + 3 pure cores (`makeWorldPosResolver`/`buildTetherPayload`/`clusterBeadCount`,
-all take backboneEntries as an arg). 5 call sites rewired + `_mrSetPivotOptions` now reads `_flexRelax.hasGate(clusterId)`.
-16 vitest (8 pure + 8 factory); vitest 793; smoke 23/23.
+**This session (#72, cheap pure-core cut):** the prior handoff's two options (Translate/Rotate tool, Tier 5) are both HARD
+and the session brief said "keep it cheap" → peeled a pure core instead, mirroring #71's narrow-sub-block move. Lifted the
+colour-mapping body of `_getAtomStrandColors` (group/scaffold-blue/palette-fill/loop-red/cluster precedence) →
+`computeAtomStrandColors(state, staplePalette)` in `scene/color_util.js` (+`ATOM_STAPLE_PALETTE`). 9 vitest; vitest 802;
+smoke 23/23. main.js wrapper keeps the store read + builds the staple palette; 5 call sites unchanged.
 
-**Gotchas banked this session:** (1) the flex code is **NON-contiguous** — `_mrSetPivotOptions` (stays in main) is
-interleaved between `_refreshFlexGates` and `_buildSsdnaPayload`; extract the two flanking spans, leave the panel fn.
-(2) `_buildSsdnaPayload`/`_buildRelaxPayload` were **byte-identical resolver loops** → unified into one pure
-`buildTetherPayload` (the `flex_tethers.js` header already flagged the dedup). (3) **Placement: plain `const` at the
-flex-state spot (~4876), AFTER `clusterGizmo` (~4662).** `isTranslateRotateActive: () => _translateRotateActive` MUST be
-a lazy arrow (the flag is declared ~300 ln BELOW at 5445) — TDZ-safe since every flex method runs on user action
-post-boot. The earliest call site (`relaxFlexible` at ~808, inside the boot-built selectionManager init object but a
-right-click-only closure body) references the below-declared const directly — no lazy wrapper. (4) The now-dead
-`flexTetherConnections` import in main.js was REPLACED by the `initFlexRelax` import → net-zero import count.
+**Gotchas banked this session:** (1) the fn read `store.getState()` TWICE (2nd just for `loopStrandIds`) — passing ONE
+state snapshot to the pure fn is behavior-equivalent (immutable per render) and more correct. (2) Kept the pure fn
+import-free by passing `staplePalette` (the `buildStapleColorMap` Map, or null) as an ARG rather than importing
+helix_renderer into color_util — the `if (currentDesign && currentGeometry)` guard became `if (staplePalette)` (caller
+builds it only when both present). Mirrors #18 (wrapper keeps external read, core does mapping). (3) `_getAtomBaseColors`
+is already a 3-line pure-delegating wrapper over `atomColorsFromLetters` (#18) — NOT worth extracting; left inline.
 
 **Banked:** `just lint` is Python-only ruff (38 pre-existing backend-test errors, unrelated; no frontend eslint
 config) → frontend lint delta is 0 by construction. Still true: plain `grep` on main.js silently returns nothing
@@ -552,7 +547,7 @@ for a fresh session.
 See `main_js_extraction_log.md` for the full list. Modules under `scene/` and `ui/`: bundle_geometry,
 rotation_math, measurement_tool, scaffold_coverage, strand_length, overhang_maps, gear_math,
 assembly_diff, design_queries (+flexibleRunForBead), cluster_joint_math, aksel_format,
-assembly_groups_util, color_util (+hexFromInt, atomColorsFromLetters), fret_util, vec_math, motion_chip,
+assembly_groups_util, color_util (+hexFromInt, atomColorsFromLetters, computeAtomStrandColors), fret_util, vec_math, motion_chip,
 scaffold_assign, atom_filter, selection_bbox, belt_rider, overhang_hover_picker, assembly_lasso,
 coloring_modes, assembly_layout, ndc, flex_tethers, cluster_entries, empty_space_menu, slice_plane,
 plate_view, kinematics_ticker, file_io (initFileIo save-content ops + initFileOpen open-orchestration),
@@ -725,10 +720,15 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   `_updateColoringMenuAvailability`/`_reprOptionSliders` (~9089–9204). Risk: **HARD** — `_setRepresentation` is
   a central mode-switch touching every renderer + the Coloring submenu (`_setColoringMode`'s 7 callers live here).
   Map the coupling carefully; likely a multi-commit region.
-- [ ] **Atomistic / surface display controllers** — `_applyAtomisticMode`/`_refetchAtomistic`/`_getAtom*`/
+- [~] **Atomistic / surface display controllers** — `_applyAtomisticMode`/`_refetchAtomistic`/`_getAtom*`/
   `_ensureAtomData`/`_applySurfaceMode`/region overlays, scattered ~1893–2418 (interleaved with renderer init
   banners ~1846/1957/2342). Risk: **HARD** — interleaved with renderer construction; re-derive the function set
-  vs the init wiring before lifting. Pure cores: `_getAtomStrandColors`/`_getAtomBaseColors` (color maps).
+  vs the init wiring before lifting. **PURE CORE DRAINED (#72, commit a630efd):** `_getAtomStrandColors`'s
+  colour-mapping body → `computeAtomStrandColors(state, staplePalette)` in `scene/color_util.js` (+`ATOM_STAPLE_PALETTE`);
+  −61 ln; 9 vitest. `_getAtomBaseColors` left inline (already a 3-line pure-delegating wrapper over the
+  extracted `atomColorsFromLetters` — not worth a module). The remaining controllers are the HARD stateful
+  renderer-wiring (`_applyAtomisticMode`/`_applySurfaceMode`/`_refetchAtomistic`/`_ensureAtomData` + the region
+  overlays), still interleaved with renderer construction.
 - [ ] **Translate/Rotate tool** — `_activateTranslateRotateTool` … `_cancelTranslateRotateTool` + the joint-arrow
   pick handler, banners `// ── Joint arrow pick handler` (~6103) through ~6805 (~700 ln, the BIGGEST remaining).
   `_onToolPickPointerDown` + cluster raycaster (the carve-up's `scene/joint_pick.js`). Risk: **HARD** —
