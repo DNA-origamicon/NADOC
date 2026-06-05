@@ -1,6 +1,6 @@
 # main.js carve-up map — stateful-subsystem extraction backlog
 
-**Purpose.** main.js is one large `async function main()` closure (~9.78k lines as of 2026-06-05, down
+**Purpose.** main.js is one large `async function main()` closure (~9.2k lines as of 2026-06-05, down
 from ~16.5k). The pure-helper well is drained (see `main_js_extraction_log.md`) and — as of #61 — every
 Tier 1–5 *stateful subsystem* (panels, dialogs, menus, event-handler clusters) is extracted too. The loop
 is **near-complete**: the remaining mass is the lifecycle spine + thin per-action wiring that's correctly
@@ -53,56 +53,51 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Assembly right-click
-context-menu router FOLDED INTO `scene/assembly_pointer.js` (#69, commit cc2d610), −72 ln. main.js 9489 → 9417.**
-That finishes the "Assembly context/linker menu + config animation" region (config anim #68 + router #69 both done).
-Tier 5 file/session infra + the HARD gesture/assembly-coupled band are now the only frontier._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Photo-mode + export-representation
+EXTRACTED → `scene/photo_mode.js` (#70, commit 3865b97), −237 ln. main.js 9439 → 9202.** That was handoff option 2
+(the biggest clean non-gesture carve). Remaining frontier: the Move/Rotate panel (option 1, now top) + Tier 5
+file/session infra (HIGH blast radius)._
 
-**This session (#69, handoff-recommended):** folded `_onAssemblyContextMenu` + `_showAssemblyLinkerMenu` INTO
-`assembly_pointer.js` as sub-part (c) — NOT a standalone module, because the router reads/writes
-`_assemblyRightDownAt` + `_assemblySelectedPartJoint` which the pointer module ALREADY owns via get/set shims (a
-standalone would duplicate them). Verbatim move; added `onAssemblyContextMenu` to the factory's returned API and
-assigned `const _onAssemblyContextMenu = _assemblyPointer.onAssemblyContextMenu` next to the existing
-`_onAssemblyClick`/`_onAssemblyPointerDown` assigns (~7290) — the deferred `contextmenu` listener at ~6700 resolves
-it fine (it's inside the assembly-mode subscriber, fires long after main() boot). 4 new deps (`assemblyContextMenu`,
-`overhangLocations`, `attachPartToBelt`) + a `getAssemblyRightDownAt` shim (added beside the pre-existing
-`setAssemblyRightDownAt`); `createContextMenu` import MOVED from main.js into the module (it became dead in
-main.js → deleted). 9 vitest branch tests; vitest 762 (+9); smoke 23/23.
+**This session (#70, handoff option 2):** lifted the Photo-mode pane (`_photoModeEnter`/`_photoModeExit` overlay
+toggles + UI lockdown + photo-tab-btn listener + 'p' shortcut + `_nadocDebug.photo*` helpers) AND the export-only rep
+upgrade (`_withExportRepresentation`/`_withHighDetailGeometry`/`_applyRepAndAwaitRebuild`/`_highDetailGeometries`/
+`_exportRepActive`) into `initPhotoMode({...})→{enter,exit,getExportRepActive,withExportRepresentation}` + pure
+`planExportRepUpgrade(state)`. **The map's banner span was THREE concerns** — extracted only the cohesive
+Photo+Export-rep block (~7835–8102); LEFT inline: the `_fileSave = initFileSave(...)` init (separate factory, placed
+here only for dep order), the cluster/translate-rotate `store.subscribe` blocks (those belong to the Move/Rotate
+tool — option 1), and `createScriptRunner`. **`photoRenderer` stays a main.js var** (early lazy-arrow ref at ~505/541
+for `getFloorReach`); `createPhotoRenderer(sceneCtx)` kept in main, the object injected. 16 vitest (7 pure + 9
+factory); vitest 778; smoke 23/23; live 'p' toggle exercised (zero console errors).
 
-**Banked gotcha (NEW):** to assert a factory branch that calls an IMPORTED helper (here `createContextMenu`, not a
-DI dep), `vi.mock('../ui/primitives/context_menu.js', () => ({ createContextMenu: (o) => calls.push(o) }))` at the
-top of the test (hoisted) and push into a module-scope `calls` array reset in `beforeEach` — then the test can read
-`calls[0].items`, find a menu item by label, and invoke its `onClick` to drive the nested action (Relax → backend).
-Cleaner than threading the helper through DI just for testability. **Still true:** plain `grep` on main.js silently
-returns nothing (binary heuristic) — always `rg`.
+**Placement (clean, no lazy wrapper):** `const _photoMode = initPhotoMode(...)` created at the original photo banner
+spot (~7832) — crucially BEFORE `initFileSave`, which reads `getExportRepActive`. The 3 early references all sit inside
+post-boot functions → TDZ-safe forward-ref to the closure const: `_photoMode.exit()` in `_resetForNewDesign` (~3577) +
+`_enterAssemblyMode` (~3682), and `!_photoMode.getExportRepActive()` in the close-session save-guard (~3326). Mirrors
+the #64/#67 plain-const pattern. **Dead imports removed from main.js**: `initPhotoPanel`, `exportPhotoVideo` (kept
+sibling `exportVideo`), `ATOM_SPHERE_GEO`/`BOND_CYL_GEO` (whole line), `BEAD_RADIUS` (off the helix_renderer
+destructure) — now imported by the module.
 
-**Live-gesture caveat (accepted, per #64/#68/#34):** the live right-click router needs an assembly WITH a
-linker/belt loaded + a right-click on the exact 3D pick — multi-step setup, not hand-driven. Covered by the 9 branch
-tests driving the REAL factory through every route + smoke's assembly-exit gate (which registers/removes this
-`contextmenu` listener). `workspace/Belt_test1.nass` is the fixture if a future session wants the live exercise.
+**Banked:** `just lint` is Python-only ruff (38 pre-existing backend-test errors, unrelated; no frontend eslint
+config) → frontend lint delta is 0 by construction. Still true: plain `grep` on main.js silently returns nothing
+(binary heuristic) — always `rg`.
 
-**GESTURE-HARNESS GAP NOW CLOSED (commit 8e050e4) — the HARD transform band is UNBLOCKED.** A scope check found
-the assembly-gesture harness was already ~90% built (instance pick, enter/exit/frame, cluster-joint ring drag all in
-`scene_harness.js` + `__nadocTest`, 5+ specs). The one missing piece for the transform band was an observable for the
-PRIMARY instance transform. Added: `__nadocTest.getAssemblyPendingTransforms()` + `activateAssemblyMoveTool()`;
-`scene_harness` `activateAssemblyMoveTool` + `moveActiveInstanceViaPanel`; `e2e/assembly_move_tool.spec.js` (select →
-activate tool → set Z via panel → pending recorded → empty-click commits). **KEY: do NOT drive the gizmo via a
-TransformControls handle drag (#36/#37 — handles unhittable at pixel precision). The Move/Rotate panel numeric inputs
-fire `change` → `_mrCommitInputs` → `_queueAssemblyPrimaryCommit` → the SAME `_assemblyPendingTransforms` map the
-gizmo onCommit feeds. The panel-input DOM path + capture-invoke gizmo callbacks are the established non-flaky patterns.**
+**GESTURE-HARNESS GAP CLOSED (commit 8e050e4) — the HARD transform band is UNBLOCKED.** The assembly-gesture harness
+was already ~90% built (instance pick, enter/exit/frame, cluster-joint ring drag in `scene_harness.js` + `__nadocTest`,
+5+ specs). The missing piece for the transform band — an observable for the PRIMARY instance transform — was added:
+`__nadocTest.getAssemblyPendingTransforms()` + `activateAssemblyMoveTool()`; `scene_harness` `activateAssemblyMoveTool`
++ `moveActiveInstanceViaPanel`; `e2e/assembly_move_tool.spec.js`. **KEY: do NOT drive the gizmo via a TransformControls
+handle drag (#36/#37 — handles unhittable at pixel precision). The Move/Rotate panel numeric inputs fire `change` →
+`_mrCommitInputs` → `_queueAssemblyPrimaryCommit` → the SAME `_assemblyPendingTransforms` map the gizmo onCommit feeds.
+The panel-input DOM path + capture-invoke gizmo callbacks are the established non-flaky patterns.**
 
-**Recommended next region — re-derive scope first, with `rg`:** the assembly-pointer cluster is fully drained; the
-transform band's gesture gate now exists. Frontier:
-1. **Move/Rotate right-sidebar panel** (~385 ln, banner `// ── Move/Rotate right-sidebar panel` ~4834). Pure payload
+**Recommended next region — re-derive scope first, with `rg`:** Frontier (option 2 done this session):
+1. **Move/Rotate right-sidebar panel** (banner `// ── Move/Rotate right-sidebar panel` ~4834). Pure payload
    builders (`_buildSsdnaPayload`/`_buildRelaxPayload`) extract FIRST as a smaller bite. Then the `_mr*` panel shell as
    a factory — its commit path (`_mrCommitInputs`) is now covered by `assembly_move_tool.spec.js`; extend that spec.
    Shares `_createAssemblyTransformContext`/`_applyAssemblyPrimaryLive` with group_gizmo (#36/#37, already extracted) +
-   the Translate/Rotate tool — map the coupling before the shell.
-2. **Photo-mode / export-representation** (~348 ln @ banner `// ── Export representation` ~7838): `_photoModeEnter`/
-   `_photoModeExit`/`_withExportRepresentation`/`_withHighDetailGeometry`/`_applyRepAndAwaitRebuild`. Cohesive, NOT
-   gesture-bound (menu/programmatic) → no harness needed. `_highDetailGeometries` is impure (geometry cache) so it's a
-   stateful factory, not a pure lift. Biggest clean carve available without touching the shared transform engine.
-3. **Tier 5 file/save/session** (`_openPartFromServer`/`_openAssemblyFromServer`, autosave, sync-status) — HIGH blast
+   the Translate/Rotate tool — map the coupling before the shell. NOTE the 3 cluster/translate-rotate `store.subscribe`
+   blocks left inline by #70 (just above the old Paste-Script banner ~7867) belong to THIS tool — pull them in here.
+2. **Tier 5 file/save/session** (`_openPartFromServer`/`_openAssemblyFromServer`, autosave, sync-status) — HIGH blast
    radius; the #52 `initFileIo` placement pattern (place the `const` where deps exist, not at the banner) applies.
    BUT remember selection-filter (#61) was billed "gesture-bound" and was actually pure DOM+store (6th mis-scope):
    check WHERE the gesture lives before assuming a harness is needed.
