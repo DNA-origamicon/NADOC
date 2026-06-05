@@ -54,21 +54,26 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 ## Next-session handoff
 
 _Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **STRATEGY: hardest-first, multi-commit
-campaigns — the pure-core / narrow-sub-block well is dry.** ✅ **KEYSTONE DONE (commits f752255/46d66fe/e161a9f, log
-#73/#74/#75, −255 ln, main.js 9006→8751).** The assembly-transform subsystem is now `scene/assembly_transform.js`
-(`initAssemblyTransform`, 23 vitest): pending Maps + context/live/commit core (a) + FK propagation (b) + motion-constraint
-analyzer & chip (c). group_gizmo / the Move/Rotate `_mr*` shell / the Translate/Rotate tool now consume it as a dep
-instead of sharing closure state — **the three frontier regions below are unblocked.**_
+campaigns — the pure-core / narrow-sub-block well is dry.** ✅ **KEYSTONE DONE (#73/#74/#75, −255 ln).** ✅ **frontier #1
+DE-LUMPED (commit 8dbdbaf, log #76, −196 ln, main.js 8751→8556):** the response-delta application subsystem
+(`_applyClusterUndoRedoDeltas`/`_applyPositionsOnlyDiff`/`_applyResponseDelta` + shared pure `_rebakeHelixAxesForClusterDelta`)
+that was interleaved THROUGH THE MIDDLE of the Translate/Rotate tool banner span (old 5437–5693) is now
+`scene/response_delta.js` (`initResponseDelta`, 14 vitest). The tool region is now contiguous — only the actual tool + `_mr*`
+shell remain under the banner._
 
-**▶ NEXT — Translate/Rotate tool + the `_mr*` panel shell (frontier #1, now unblocked).** This is the BIGGEST single
-block (~700 ln). With the keystone a module, the shared-state-via-closure obstacle is gone: the tool/shell call
+**▶ NEXT — Translate/Rotate tool + the `_mr*` panel shell (frontier #1 core, now contiguous).** With the keystone a module
+AND the response-delta lump removed, the tool span is cleaner. The tool/shell call
 `_assemblyTransform.{createAssemblyTransformContext,applyAssemblyPrimaryLive,queueAssemblyPrimaryCommit,commitAssemblyPending}`
-via the alias-consts at ~4970 — re-point those at the module dep when lifting. **WATCH OUT: `_translateRotateActive` + the
+via alias-consts at ~4970 — re-point those at the module dep when lifting. **WATCH OUT: `_translateRotateActive` + the
 `_mr*` panel fns are read/written from 20+ sites** (`_mrSetTransformValuesFromMatrix`/`_mrSetClusterOptions`/`_mrCommitInputs`/
-`_mrAssemblyCtx`…) — borderline lifecycle-spine. #71 already peeled the flex sub-block out; the prior handoff's "co-extract
-the whole shell" may be too big a bite (STOP-criterion smell — re-derive whether the shell wants its own factory or stays a
-thin caller). Span ≈ banner `// ── Joint arrow pick handler` (re-grep, was ~5252) through the cluster/instance gizmo attach.
-The `_mrCommitInputs` → `_queueAssemblyPrimaryCommit` path is the SAME one the move-tool gesture gate drives.
+`_mrAssemblyCtx`…) — borderline lifecycle-spine. #71 peeled the flex sub-block out; #76 peeled the response-delta lump out;
+the prior handoff's "co-extract the whole shell" may STILL be too big a bite (STOP-criterion smell — re-derive whether the
+shell wants its own factory or stays a thin caller). **The big remaining cohesive fns:** `_cancelTranslateRotateTool` (~386 ln,
+huge), `_confirmTranslateRotateTool`, `_activateTranslateRotateTool`, `_onToolPickPointerDown`, `_rotateJoint`,
+`_restoreTransformPreviewFromStore`, + the cluster-pick raycast helpers (`_canvasNdc`/`_clusterBackboneEntries`/
+`_pickActiveClusterEntry` → handoff's `scene/joint_pick.js`, ~45 ln — a possible cheap first cut). Re-grep banner
+`// ── Joint arrow pick handler` (was ~5273). The `_mrCommitInputs` → `_queueAssemblyPrimaryCommit` path is the SAME one the
+move-tool gesture gate drives.
 
 **Why hardest-first now.** Every remaining frontier item is HARD (gesture-bound and/or shared-state coupled). Do each as a
 deliberate campaign: (1) map coupling with `rg` first; (2) lean on the EXISTING gesture gate (below), don't re-derive;
@@ -731,14 +736,17 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   extracted `atomColorsFromLetters` — not worth a module). The remaining controllers are the HARD stateful
   renderer-wiring (`_applyAtomisticMode`/`_applySurfaceMode`/`_refetchAtomistic`/`_ensureAtomData` + the region
   overlays), still interleaved with renderer construction.
-- [ ] **Translate/Rotate tool + `_mr*` panel shell (hardest-first item 1, AFTER the keystone).**
-  `_activateTranslateRotateTool` … `_cancelTranslateRotateTool` + the joint-arrow pick handler, banner
-  `// ── Joint arrow pick handler` (~5252) through the cluster/instance gizmo attach (~6770), ~700 ln + the `_mr*` shell.
+- [~] **Translate/Rotate tool + `_mr*` panel shell (hardest-first item 1, AFTER the keystone).**
+  **PARTIAL: response-delta lump REMOVED (#76, commit 8dbdbaf, −196 ln) — `_applyClusterUndoRedoDeltas`/`_applyPositionsOnlyDiff`/
+  `_applyResponseDelta` + pure `_rebakeHelixAxesForClusterDelta` (was interleaved mid-span at old 5437–5693) → `scene/response_delta.js`.
+  The tool span is now contiguous; the rebake is shared with the tool via one alias-const.** STILL INLINE — the tool core:
+  `_activateTranslateRotateTool` … `_cancelTranslateRotateTool` (~386 ln) + the joint-arrow pick handler, banner
+  `// ── Joint arrow pick handler` (re-grep, was ~5273) through the cluster/instance gizmo attach + the `_mr*` shell.
   `_onToolPickPointerDown` + cluster raycaster (the carve-up's `scene/joint_pick.js`) + the `_mr*` shell it owns
   (`_mrSetTransformValues`/`_mrCommitInputs`/… + `_translateRotateActive`, 20+ sites). Risk: **HARD** — gesture-bound
   (canvas pointer pick), assembly+design dual-mode. Gate is UNBLOCKED (commit 8e050e4 — drive via panel inputs, NOT
   handle drags; see the handoff). Much easier once the keystone engine is a module (no more shared-state-via-closure).
-- [ ] **▶ KEYSTONE — Assembly transform/commit/FK + motion constraints (DO THIS FIRST per the handoff).** Banners
+- [x] **▶ KEYSTONE — Assembly transform/commit/FK + motion constraints. DONE** (#73/#74/#75, commits f752255/46d66fe/e161a9f, −255 ln → `scene/assembly_transform.js`, 23 vitest). Banners
   `// ── Rigid-body group gizmo attachment` (~6773, attach itself partly in group_gizmo.js already) + `// ── Forward
   kinematics` (~6840) + `// ── Motion-constraint analyzer` (~6996) + status chip (~7083), ~400 ln.
   `_createAssemblyTransformContext` (~6785) / `_applyAssemblyPrimaryLive` / `_queueAssemblyPrimaryCommit` /
