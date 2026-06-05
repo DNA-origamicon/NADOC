@@ -33,7 +33,7 @@ import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange,
 import { surfaceSegments, flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
 import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './scene/assembly_groups_util.js'
 import { initAssemblyPointer } from './scene/assembly_pointer.js'
-import { hexFromInt, atomColorsFromLetters } from './scene/color_util.js'
+import { hexFromInt, atomColorsFromLetters, computeAtomStrandColors } from './scene/color_util.js'
 import { initFretChecker } from './scene/fret_checker.js'
 import { initUndefinedHighlight } from './scene/undefined_highlight.js'
 import { motionChipStyle } from './scene/motion_chip.js'
@@ -2102,75 +2102,14 @@ async function main() {
 
   // Atom colouring toggle
   // Backend-canonical staple palette (matches helix_renderer.STAPLE_PALETTE).
-  const _ATOM_STAPLE_PALETTE = [
-    0xff6b6b, 0xffd93d, 0x6bcb77, 0xf9844a, 0xa29bfe, 0xff9ff3,
-    0x00cec9, 0xe17055, 0x74b9ff, 0x55efc4, 0xfdcb6e, 0xd63031,
-  ]
+  // Pure colour-mapping core lives in scene/color_util.js (computeAtomStrandColors);
+  // this wrapper reads the store snapshot + builds the staple palette for it.
   function _getAtomStrandColors() {
-    const { strandColors, strandGroups, currentDesign, currentGeometry, coloringMode } = store.getState()
-    const effective = { ...strandColors }
-    for (const g of strandGroups ?? []) {
-      if (g.color) {
-        const hex = parseInt(g.color.replace('#', ''), 16)
-        for (const sid of g.strandIds) effective[sid] = hex
-      }
-    }
-    // scaffold gets cadnano blue
-    for (const s of currentDesign?.strands ?? []) {
-      if (s.strand_type === 'scaffold' && !(s.id in effective)) {
-        effective[s.id] = 0x0070bb
-      }
-    }
-    // Fill in palette-assigned colours for every staple strand so atomistic
-    // matches the bead view exactly (atoms whose strand is not in the map fall
-    // back to CPK in the renderer, which would mismatch the beads).
-    if (currentDesign && currentGeometry) {
-      const palette = buildStapleColorMap(currentGeometry, currentDesign)
-      for (const s of currentDesign.strands ?? []) {
-        if (!(s.id in effective)) {
-          const p = palette.get(s.id)
-          if (p != null) effective[s.id] = p
-        }
-      }
-    }
-    // Loop / circular-strand red highlight (matches helix_renderer.nucColor).
-    // Skip in cluster mode — cluster fill below should win on clustered strands.
-    const { loopStrandIds } = store.getState()
-    if (loopStrandIds?.length && coloringMode !== 'cluster') {
-      for (const sid of loopStrandIds) effective[sid] = 0xff3333
-    }
-    // 'cluster' coloring: replace each strand's color with its cluster's
-    // palette colour, keyed off the strand's first domain helix.
-    // 'base' is left as strand colour (atomistic lacks per-atom base mapping).
-    if (coloringMode === 'cluster' && currentDesign?.cluster_transforms?.length) {
-      const helixCluster = new Map()
-      const domainCluster = new Map()
-      const strandMap = new Map((currentDesign.strands ?? []).map(s => [s.id, s]))
-      currentDesign.cluster_transforms.forEach((c, i) => {
-        if (c.domain_ids?.length) {
-          const bridges = new Set()
-          for (const dr of c.domain_ids) {
-            domainCluster.set(`${dr.strand_id}:${dr.domain_index}`, i)
-            const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
-            if (dom) bridges.add(dom.helix_id)
-          }
-          for (const hid of (c.helix_ids ?? [])) if (!bridges.has(hid)) helixCluster.set(hid, i)
-        } else {
-          for (const hid of (c.helix_ids ?? [])) helixCluster.set(hid, i)
-        }
-      })
-      for (const s of currentDesign.strands ?? []) {
-        let ci = null
-        for (let di = 0; di < (s.domains ?? []).length; di++) {
-          const k = `${s.id}:${di}`
-          if (domainCluster.has(k)) { ci = domainCluster.get(k); break }
-          const hid = s.domains[di].helix_id
-          if (helixCluster.has(hid)) { ci = helixCluster.get(hid); break }
-        }
-        if (ci != null) effective[s.id] = _ATOM_STAPLE_PALETTE[ci % _ATOM_STAPLE_PALETTE.length]
-      }
-    }
-    return new Map(Object.entries(effective).map(([k, v]) => [k, typeof v === 'number' ? v : parseInt(v.replace('#',''), 16)]))
+    const state = store.getState()
+    const { currentDesign, currentGeometry } = state
+    const staplePalette = (currentDesign && currentGeometry)
+      ? buildStapleColorMap(currentGeometry, currentDesign) : null
+    return computeAtomStrandColors(state, staplePalette)
   }
 
   // Build per-atom base-letter colour map (key: "strand_id:bp_index:direction").
