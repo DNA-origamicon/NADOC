@@ -73,6 +73,33 @@ _(Between #15 and #16, several interactive batches ran post-autonomous-loop and 
 
 | 42 | 2026-06-04 | STATEFUL (Tier 4 — Background settings modal) | Background modal block (`_backgroundState` + `_applyBackgroundStyle`/`_formatAqueousBackground`/`_syncBackgroundModal`/`_buildBackgroundModalOnce` + colour/hex/image/fit listeners + `menu-view-background`/`background-modal-aqueous`) → `ui/background_modal.js` factory `initBackgroundModal()` + pure `computeBackgroundStyle(state)` | ~30 min | **−160 (inside closure)** | 12 (5 pure computeBackgroundStyle: solid-colour→size-null + image-cover + stretch→100%100% + image-without-url-falls-to-colour + aqueous-gradient/teal; 7 jsdom factory: default-style-on-init / colour-input→container+hex-mirror / hex-valid-only / aqueous-button→gradient / image-fit-reapplies-only-in-image-mode / menu-lazy-builds-modal-once+open / Reset-button-restores-defaults) | 1 (green first run) | ~1 (real-app throwaway: open modal → set colour → apply aqueous, container style + zero console errors, then deleted) | none — vitest 486, smoke 21/21, real-app zero-console-errors. **Cleanest factory in a while: zero store/scene/camera/designRenderer coupling** — only DOM + `createModal`/`createButton` (imported directly, not deps). Pure core preserves the verbatim quirk that solid-colour mode leaves `backgroundSize` untouched (`backgroundSize: null` → factory skips the assign). createModal/createButton stay imported in main.js (still used by the New-Part modal ~4294). **Mis-scope (5th time):** the carve-up's "Coloring submenu is the meaty sub-block" was wrong — Coloring is ~20 ln with 6 external `_setColoringMode` callers; the Background modal was the real ~160 ln cohesive payoff under that banner. jsdom `<select>` with no `<option>` ignores `.value` → the image-fit test appends an option first. |
 
+| 43 | 2026-06-04 | STATEFUL (Tier 1 leftover — Create Seam) | `menu-create-seam` click handler → `scene/create_seam.js`: pure `computeSeamPlacements(design)` + exported `isForward`/`scaffoldXoverNeighbor`/`nickBpForStrand` (parameterized on `isHC`) + thin `initCreateSeam({store, api})` | ~70 min | **−259 (inside closure; biggest single-region drain so far)** | 17 (2 isForward + 4 scaffoldXoverNeighbor HC/SQ/wrap/null + 3 nickBpForStrand bow-right/HC + 5 computeSeamPlacements: null→[]/`<4`-helices→[]/4-col-SQ→2-placements-exact-bp-34/35/staple-ignored + 3 factory: no-design/no-placement/posts-batch) | 2 (1 SQ bow-right oracle wrong — mod 2 ∉ SQ set, used mod 3) | ~10 (doc-pinned 26hb click exercise: real menu click → place-batch POST 10 placements, 0 console errors) | none — vitest 503, smoke 21/21, doc-pinned click exercise green |
+
+**Create Seam — pure-core-heavy lift + multi-doc app-exercise gotcha (#43, 2026-06-04).** The biggest single
+region drained (−259 ln). Almost all of it is a PURE core (`computeSeamPlacements`: coverage map → merge
+intervals → global adjacency via the HC/SQ scaffold-crossover lookup tables → connected components →
+Hamiltonian path (single-sig) or arm/core bridge-chain (dumbbell multi-sig) → one Holliday junction per merged
+intersection interval, nearest-to-midpoint consecutive bp pair). Only `store.getState()`, a `console.warn`, and
+`api.placeCrossoverBatch` are impure → `initCreateSeam` is ~6 lines. The two closure-captured helpers
+(`scaffoldXoverNeighbor`/`nickBpForStrand`) were parameterized on `isHC` to make them pure+exported (they derive
+`period`/`xoverMap`/`bowRightSet` internally). Dropped dead local `helixByGridPos` (built, never read — #9/#1
+dead-code precedent). **The Near/Far Ends handlers each redefine their OWN verbatim copies of these 4 constants +
+3 helpers** — they are NOT folded in (separate region, one-region-per-commit), but the now-exported helpers set
+up that dedup for the future Near/Far Ends lift.
+**Two app-exercise gotchas cost most of the wall-clock (bank these):**
+1. **Multi-doc no-op:** the obvious throwaway (`request.post('/api/design/load')` default-doc → `page.goto('/')`)
+   leaves the TAB's `store.currentDesign === null` (the tab adopts its own random doc), so the click handler
+   returns early and fires no POST — looks like a broken lift but is the multi-doc trap. The smoke
+   console-error gate gets away with it (it renders from the geometry round-trip), but a handler that reads
+   `store.currentDesign` does not. Fix = the harness's doc-pin: `?doc=<DOC>` on goto + `X-NADOC-Doc:<DOC>` on
+   the load + a `BroadcastChannel('nadoc-design')` `design-changed` nudge with `docId:<DOC>`. After that the
+   real click fired the place-batch POST with exactly 10 placements on 26hb.
+2. **GET `/api/design` wrapper:** the response is `{design, validation, nucleotides?, ...}` — the design object
+   is under `.design`. Feeding the raw response to `computeSeamPlacements` throws `design.strands is not
+   iterable`. (26hb_platform_v3 yields 10 placements; 18hb 12; U6hb 4 — all real-data probes.)
+The SQ bow-right oracle bit once: `SQ_SCAF_BOW_RIGHT = {0,3,5,8,...}` does NOT contain mod 2 (I assumed it
+did); switched the test to mod 3. Verify oracle values against the actual lookup SETS, not by analogy to HC.
+
 **View-toggles region was MIS-SCOPED (#41, 2026-06-04).** The carve-up lumped 5+ unrelated blocks under one
 "View menu toggles + selection/tool filters" entry by file adjacency: (1) the view-menu pill-state subscriber
 + 3 visibility helpers, (2) Browser tab title, (3) Tool Filter toggles, (4) deform→selectableTypes

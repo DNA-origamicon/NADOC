@@ -37,34 +37,38 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after extraction #42 (Background settings modal → `ui/background_modal.js`, −160 ln)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after extraction #43 (Create Seam handler → `scene/create_seam.js`, −259 ln)._
 
-**Background modal DONE (#42, −160 ln).** The Tier-4 "Coloring / orbit / tools submenus → one `ui/view_menus.js`"
-premise was MIS-SCOPED (5th time — see the Tier-4 entry). The banner lumps many tiny handlers around ONE big
-cohesive block, the **Background settings modal** — that's what got lifted (`initBackgroundModal()` + pure
-`computeBackgroundStyle`). Zero store/scene coupling, the cleanest factory in a while. The prior handoff's
-"Coloring submenu is the meaty sub-block" was wrong: it's ~20 ln AND `_setColoringMode` has 6 external callers.
+**Create Seam DONE (#43, −259 ln — the biggest single-region drain so far).** The `menu-create-seam` click
+handler lifted to `scene/create_seam.js`: pure `computeSeamPlacements(design)→placements[]` (the whole
+coverage→adjacency→Hamiltonian-path→junction pipeline) + 3 exported pure helpers (`isForward` /
+`scaffoldXoverNeighbor` / `nickBpForStrand`, the last two now take `isHC` instead of closing over it) + thin
+`initCreateSeam({store, api})`. Dropped dead local `helixByGridPos` (built, never read). 17 vitest (incl. a
+full-pipeline integration test on a synthetic SQ 4-helix column asserting exact bps 34/35). **App exercise
+was a real end-to-end win:** a doc-pinned click test (load 26hb → real menu click → place-batch POST with
+exactly 10 placements, zero console errors) — see the log for the multi-doc gotcha that made the first 3
+attempts return 0 placements. Gate: vitest 503 + smoke 21/21 + the doc-pinned click exercise.
 
-**Next best:** the Tier-4 region is nearly drained of cleanly-liftable blocks — what's left there (Coloring
-submenu, Orbit submenu, Tools Bend/Twist, scattered view toggles) is all small/coupled (see breakdown). Better
-targets now:
-- **Tier 1 leftover — Create Seam handler** (`menu-create-seam`, ~13273 onward under the Help/Hotkeys banner,
-  ~250 ln) → `scene/create_seam.js`. Has a pure core (HC/SQ scaffold-crossover lookup-table resolution); pairs
-  with `scaffold_coverage.js`'s `findHamiltonianPath`. jsdom-testable lookup core, MED risk. Token-meaty payoff.
-- **Tier 6 dev-only warm-ups** (LOW risk, token-cheap): `devtools_helpers` (~412 ln, `window.__*`) /
-  `extension_arc_debug` (~424 ln) / `terminus_audit` (~210 ln) / `help_menu_toggles` (~76 ln).
+**Note (stale index):** `MEMORY.md` references `project_create_seam.md` but no such file exists — the index
+entry is stale (pre-existing, not from this batch). The seam pipeline now has its own tested module instead.
 
-- **Lower-risk warm-ups (Tier 6 dev-only, gated by `?debug`/DEV, LOW risk, token-cheap):**
-  `devtools_helpers` (~412 ln, `window.__*`) / `extension_arc_debug` (~424 ln) / `terminus_audit` (~210 ln) /
-  `help_menu_toggles` (~76 ln). Or Tier 4 **Coloring/orbit/tools submenus** (~280 ln → `ui/view_menus.js`).
+**Next best targets:**
+- **Tier 6 dev-only warm-ups** (LOW risk, token-cheap, gated by `?debug`/DEV): `devtools_helpers` (~412 ln,
+  `window.__*`) / `extension_arc_debug` (~424 ln) / `terminus_audit` (~210 ln) / `help_menu_toggles` (~76 ln).
+- **Smaller leftovers — Create Near/Far Ends** (`menu-create-near-ends` / `-far-ends`, ~11293 onward, ~400 ln
+  for the pair) → `scene/near_far_ends.js`. **DEDUP OPPORTUNITY:** each handler currently redefines its OWN
+  verbatim copies of the 4 scaffold-crossover constants + `isForward`/`scaffoldXoverNeighbor`/`nickBpForStrand`
+  — now exported from `scene/create_seam.js`, so the lift can import them and collapse the triplication. Pairs
+  with `project_near_far_ends`. MED risk (topology-mutating; doc-pinned click test as the gate, mirror #43's).
 - **Still-in-main, deliberately deferred:** FK propagation (`_applyFKLive`); Polymerize-region sub-part
   `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound).
-- **Gotcha banked this batch:** when extracting many `registerShortcut` calls, the document `keydown`
-  listener can move into the factory cleanly (commit 2) — but it's then the SINGLE point of failure for ALL
-  shortcuts, and `just smoke` won't catch a missing listener (its Ctrl+K/Escape go through `initCommandPalette`,
-  not this registry). The app exercise MUST press one of THIS module's keys (e.g. `` ` `` → debug menu pill)
-  to prove the listener attached. Other `registerShortcut` call sites elsewhere in main.js are NOT part of
-  the region — scope by line range, not by symbol.
+
+**Gotcha banked this batch (multi-doc app exercise):** a throwaway click-exercise spec that does
+`request.post('/api/design/load')` (default doc) then `page.goto('/')` will find `store.currentDesign === null`
+in the tab (the tab adopts its OWN doc), so the handler no-ops and you see no POST — looks like a broken lift
+but isn't. Fix: pin `?doc=<DOC>` on the goto AND stamp `X-NADOC-Doc:<DOC>` on the load, then nudge a rebuild
+via `new BroadcastChannel('nadoc-design').postMessage({type:'design-changed', docId:<DOC>})`. Also: GET
+`/api/design` returns `{design, validation, ...}` — the design is under `.design`, not the root.
 
 ---
 
@@ -79,9 +83,8 @@ Self-contained feature blocks that map cleanly to a factory; lowest coupling, hi
   "the help modal":
     - Help-menu **debug toggles** (OH-roots / domain-ends / linker-debug / FJC-sim, incl. the
       `_logOvhgMapReport` cross-validation dump) → folded into Tier 6 as **Help-menu debug toggles**.
-    - The **Create Seam** handler (HC/SQ scaffold-crossover lookup tables + Hamiltonian path) → a
-      standalone region under "Smaller leftovers" (pairs with `scaffold_coverage.js`). Do NOT fold it
-      into any help-modal extraction.
+    - The **Create Seam** handler (HC/SQ scaffold-crossover lookup tables + Hamiltonian path) → **DONE**
+      `scene/create_seam.js` (extraction #43, −259 ln). See "Smaller leftovers" + the log.
 - [x] **Strand length histogram** — banner `// ── Strand length histogram` (~12614–12813, ~200 ln) →
   `ui/strand_length_histogram.js`. Deps: store (currentGeometry/Design), DOM canvas, api (delete-by-bin
   context menu). Has a pure core (bin counts) — extract + test that. Risk: LOW-MED.
@@ -396,8 +399,9 @@ Slice-plane wiring (`// ── Slice plane`, much already in `slice_plane.js`), 
 Ends (`~14139–14539`, ~400 ln — pairs with `project_near_far_ends`), Photo-mode/export-repr wiring
 (`~12214–12545`). Pick these up opportunistically once the tiers drain.
 
-**Create Seam handler** — `menu-create-seam` click handler under the `// ── Help / Hotkeys modal`
-banner (~13273 onward, ~250 ln). HC/SQ scaffold-crossover lookup tables + bow-direction sets + a
-Hamiltonian-path seam build → `scene/create_seam.js` (pairs with `scaffold_coverage.js`'s
-`findHamiltonianPath`; see `project_create_seam`). Has a pure core (the lookup-table-driven crossover
-resolution). Risk: MED. Re-homed from the mis-scoped "Help / Hotkeys modal" entry.
+**Create Seam handler** — `menu-create-seam` click handler. **DONE** (extraction #43, this batch) →
+`scene/create_seam.js`: pure `computeSeamPlacements(design)` (full coverage→adjacency→Hamiltonian-path→
+junction pipeline) + exported pure helpers `isForward`/`scaffoldXoverNeighbor`/`nickBpForStrand` (latter two
+parameterized on `isHC`) + thin `initCreateSeam({store, api})`. −259 ln off the closure. 17 vitest; smoke
+21/21 + doc-pinned 26hb click exercise (place-batch POST, 10 placements). Dropped dead `helixByGridPos`. The
+exported helpers + constants now let the **Create Near/Far Ends** lift dedup its triplicated copies.
