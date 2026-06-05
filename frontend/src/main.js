@@ -48,6 +48,7 @@ import { initAssemblyLasso } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
 import { initScaffoldModal } from './ui/scaffold_modal.js'
+import { initNewDesignModal } from './ui/new_design_modal.js'
 import { filterAtomData } from './scene/atom_filter.js'
 import { initSliceHighlighter } from './scene/slice_highlighter.js'
 import { vecClose } from './scene/vec_math.js'
@@ -3837,63 +3838,6 @@ async function main() {
   }
 
   // ── Menu bar ─────────────────────────────────────────────────────────────────
-  // New Part modal — built lazily on first open via createModal so it inherits
-  // the design tokens, focus trap, Escape/backdrop close, and footer button row.
-  let _newDesignModalCtrl = null   // { open, close, ... } from createModal
-  let _newDesignBody      = null   // detached body element with form fields
-
-  function _buildNewDesignModalOnce() {
-    if (_newDesignModalCtrl) return
-    _newDesignBody = document.getElementById('new-design-modal-body')
-    if (!_newDesignBody) return
-    _newDesignBody.removeAttribute('hidden')
-
-    const cancelBtn = createButton({
-      label: 'Cancel',
-      variant: 'default',
-      onClick: () => _newDesignModalCtrl.close(),
-    })
-    const createBtn = createButton({
-      label: 'Create',
-      variant: 'primary',
-      onClick: _onCreateClicked,
-    })
-
-    _newDesignModalCtrl = createModal({
-      title: 'New Part',
-      size: 'sm',
-      body: _newDesignBody,
-      actions: [cancelBtn, createBtn],
-    })
-
-    // Enter in the name input commits.
-    const nameInput = _newDesignBody.querySelector('#new-design-name')
-    nameInput?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); createBtn.click() }
-    })
-  }
-
-  function _openNewDesignModal() {
-    _buildNewDesignModalOnce()
-    if (!_newDesignModalCtrl) {
-      // HTML body not in the DOM (no template) — fast-create an Untitled part
-      // so the menu item never silently fails.
-      _resetForNewDesign(); _fileHandle = null; workspace.show()
-      api.createDesign('Untitled')
-      return
-    }
-    // Show unsaved-changes warning when a design with helices is already loaded
-    const hasDesign = !!(store.getState().currentDesign?.helices?.length)
-    const warn = _newDesignBody.querySelector('#new-design-unsaved-warn')
-    if (warn) warn.style.display = hasDesign ? 'block' : 'none'
-    // Clear name field and hide any previous error
-    const nameInput = _newDesignBody.querySelector('#new-design-name')
-    const nameError = _newDesignBody.querySelector('#new-design-name-error')
-    if (nameInput) { nameInput.value = ''; nameInput.style.borderColor = '' }
-    if (nameError) nameError.style.display = 'none'
-    _newDesignModalCtrl.open()
-    setTimeout(() => nameInput?.focus(), 50)
-  }
 
   // ── Multi-document: New / Open spawn a new tab unless this space is empty ────
   // The backend keys state by document, and each tab owns a ?doc=<id>. Selecting
@@ -3922,40 +3866,19 @@ async function main() {
     return true
   }
 
-  document.getElementById('menu-file-new')?.addEventListener('click', async () => {
-    if (await _spawnDocTabIfBusy('new=part')) return
-    _openNewDesignModal()
+  // New Part modal (File → New Part + boot-doc-action) → ui/new_design_modal.js.
+  // The lifecycle spine + multi-doc spawn guard stay inline and are injected;
+  // libraryPanel is wired later → lazy getter. Owns the menu-file-new listener.
+  const _newDesignModal = initNewDesignModal({
+    store, api, workspace,
+    resetForNewDesign: _resetForNewDesign,
+    setFileName: _setFileName,
+    hideWelcome: _hideWelcome,
+    setWorkspacePath: _setWorkspacePath,
+    setFileHandle: (v) => { _fileHandle = v },
+    getLibraryPanel: () => libraryPanel,
+    spawnDocTabIfBusy: _spawnDocTabIfBusy,
   })
-
-  async function _onCreateClicked() {
-    const nameInput = _newDesignBody.querySelector('#new-design-name')
-    const nameError = _newDesignBody.querySelector('#new-design-name-error')
-    const name      = nameInput?.value.trim() ?? ''
-    if (!name) {
-      if (nameInput) nameInput.style.borderColor = '#f85149'
-      if (nameError) nameError.style.display = 'block'
-      nameInput?.focus()
-      return
-    }
-    const checked = _newDesignBody.querySelector('input[name="new-lattice-type"]:checked')
-    const lattice = checked?.value ?? 'HONEYCOMB'
-    _newDesignModalCtrl.close()
-    _resetForNewDesign()
-    _fileHandle = null
-    _setFileName(name)
-    _hideWelcome()
-    workspace.show(lattice)
-    await api.createDesign(name, lattice)
-    // Save to workspace immediately so auto-save has a target path
-    const safeStem = name.replace(/[^a-zA-Z0-9-_ ]/g, '_').trim() || 'untitled'
-    const wsResult = await api.uploadLibraryFile(
-      JSON.stringify(store.getState().currentDesign), `${safeStem}.nadoc`,
-    )
-    if (wsResult?.path) {
-      _setWorkspacePath(wsResult.path)
-      libraryPanel?.refresh()
-    }
-  }
 
   // Unified "Open File" — one picker shows both parts (.nadoc) and assemblies
   // (.nass); route to the right loader by extension.  Pick in this tab, but open
@@ -10476,7 +10399,7 @@ async function main() {
     if (docId) history.replaceState({}, '', `/?doc=${encodeURIComponent(docId)}`)
     else        history.replaceState({}, '', '/')
     if (newKind === 'part') {
-      _openNewDesignModal()
+      _newDesignModal.openModal()
     } else if (newKind === 'assembly') {
       document.getElementById('menu-file-new-assembly')?.click()
     } else if (openPath) {
