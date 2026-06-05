@@ -17,7 +17,7 @@ import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
-import { buildNucLetterMap, buildStapleColorMap, BEAD_RADIUS } from './scene/helix_renderer.js'
+import { buildNucLetterMap, buildStapleColorMap } from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
@@ -111,9 +111,6 @@ import { initViewCube }            from './scene/view_cube.js'
 import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
 import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
-// Shared low-poly interactive geometries — used by reference to find atom/bond
-// InstancedMeshes for the export-only high-detail swap (see _withHighDetailGeometry).
-import { SPHERE_GEO as ATOM_SPHERE_GEO, CYLINDER_GEO as BOND_CYL_GEO } from './scene/atomistic_renderer/geometry_builder.js'
 import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { repColumnsByRep, overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './scene/representation_overrides.js'
 import { initSpreadsheet } from './ui/spreadsheet.js'
@@ -149,7 +146,7 @@ import { initAnimationPanel }                     from './ui/animation_panel.js'
 import { initFeatureLogPanel }                    from './ui/feature_log_panel.js'
 import { initAnimationPlayer }                    from './scene/animation_player.js'
 import { applyAnimationTextOverlay }              from './scene/animation_text_overlay.js'
-import { exportVideo, exportPhotoVideo }          from './scene/export_video.js'
+import { exportVideo }          from './scene/export_video.js'
 import { initClusterGizmo, computeClusterPivotFromEntries, rebaseClusterTranslationForPivot } from './scene/cluster_gizmo.js'
 import { initSubDomainGizmo } from './scene/sub_domain_gizmo.js'
 import { initInstanceGizmo }       from './scene/instance_gizmo.js'
@@ -179,7 +176,7 @@ import { initPeriodicMdOverlay }    from './scene/periodic_md_overlay.js'
 import { initPeriodicMdPanel }      from './ui/periodic_md_panel.js'
 import { initMdPanel }    from './ui/md_panel.js'
 import { createPhotoRenderer } from './scene/photo_renderer.js'
-import { initPhotoPanel }      from './ui/photo_panel.js'
+import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
 
@@ -3326,7 +3323,7 @@ async function main() {
       // Auto-save to workspace before clearing (skip while an export-rep upgrade
       // is in flight so the temporary high-detail reps aren't persisted).
       const hasInstances = (store.getState().currentAssembly?.instances?.length ?? 0) > 0
-      if (hasInstances && !_exportRepActive) {
+      if (hasInstances && !_photoMode.getExportRepActive()) {
         try { await (_assemblyWorkspacePath ? api.saveAssemblyAs(_assemblyWorkspacePath) : api.saveAssemblyToWorkspace()) } catch { /* best-effort */ }
       }
       _exitAssemblyMode()
@@ -3391,8 +3388,8 @@ async function main() {
   // Save/Save-As dispatch factory (ui/file_io.js initFileSave, extraction #60).
   // Forward-declared here because the menu-file-save listeners (~3924) and the
   // keyboard-shortcuts injection (~5134) reference it textually ABOVE its real
-  // init (~8773, after `_exportRepActive`). All call sites invoke on user action
-  // (menu click / Ctrl+S) post-init, so wrapped as lazy arrows at those sites.
+  // init (after `initPhotoMode`, whose getExportRepActive it reads). All call sites
+  // invoke on user action (menu click / Ctrl+S) post-init, so wrapped as lazy arrows.
   let _fileSave           = null
   // Doc-scoped so each tab's filename/path metadata is independent (and the
   // cadnano editor opened with the same ?doc= reads the matching values).
@@ -3577,7 +3574,7 @@ async function main() {
     // render override stays installed and the next loaded design comes up
     // "in photo mode" (no-op if not active). Runs first so deactivate() can
     // restore the live materials/lights while the meshes still exist.
-    _photoModeExit()
+    _photoMode.exit()
     _lastDetailLevel = -1     // force LOD re-evaluation on first tick after new design
     _clearScaffoldChecks()
     _clearStapleChecks()
@@ -3682,7 +3679,7 @@ async function main() {
       console.log('[restore] _enterAssemblyMode() — assemblyActive →', true)
     // A photo-mode session belongs to the design/assembly it was opened in;
     // entering an assembly (open/new) must drop it (no-op if not active).
-    _photoModeExit()
+    _photoMode.exit()
     _setDesignGeometryVisible(false)
     // The workspace plane-picker (XY/XZ/YZ grid at world origin) is a
     // new-design-only affordance; hide it whenever we enter assembly mode so
@@ -3859,7 +3856,8 @@ async function main() {
 
   // "Save File" / "Save As" dispatch by mode is provided by the ui/file_io.js
   // `initFileSave` factory (extraction #60); `_fileSave` is initialized later
-  // (~8773, after `_exportRepActive`). Lazy arrows defer the deref to click time.
+  // (after `initPhotoMode`, whose getExportRepActive it reads). Lazy arrows defer
+  // the deref to click time.
   document.getElementById('menu-file-save')?.addEventListener('click', () => _fileSave.saveDispatch())
   document.getElementById('menu-file-save-as')?.addEventListener('click', () => _fileSave.saveAsDispatch())
 
@@ -7831,22 +7829,24 @@ async function main() {
     }),
   })
 
-  // ── Photo mode ───────────────────────────────────────────────────────────────
+  // ── Photo mode + export representation → scene/photo_mode.js (#70) ───────────
   photoRenderer = createPhotoRenderer(sceneCtx)
-  let _photoPanelCtrl = null
-
-  // ── Export representation (final-render LOD) ───────────────────────────────
-  // The assembly's `export_representation` is applied to ALL instances only for
-  // the duration of a photo-mode PNG/video render, then the working reps are
-  // restored. Lets the user edit/preview at a fast LOD but export at high
-  // detail. `_exportRepActive` guards saves so the temporary upgrade never hits
-  // disk (restore in `finally` + the load-time auto-downgrade are the net).
-  let _exportRepActive = false
+  // The photo-mode pane + the export-only rep upgrade (every instance temporarily
+  // set to the assembly's export_representation at full geometric detail for the
+  // duration of a PNG/video render, then restored). `_photoMode.getExportRepActive()`
+  // gates the save path below so that temporary upgrade never hits disk. Created
+  // here — before `initFileSave`, which reads getExportRepActive. The lifecycle
+  // spine calls `_photoMode.exit()` (forward-refs this closure const; only invoked
+  // post-init, on file close/new/open / assembly-enter).
+  const _photoMode = initPhotoMode({
+    store, api, sceneCtx, photoRenderer, assemblyRenderer, designRenderer,
+    bluntEnds, assemblyJointRenderer, viewCube, player: animPlayer,
+  })
 
   // Save/Save-As dispatch factory (ui/file_io.js initFileSave, extraction #60).
   // Placed here — not at the menu listeners (~3924) — because its deps span the
-  // file: `_fileIo`/`_syncBadge`/`_lifecycleSync` (~7200-7240) AND `_exportRepActive`
-  // (just above). Initializing after the last dep means every value is concrete at
+  // file: `_fileIo`/`_syncBadge`/`_lifecycleSync` (~7200-7240) AND `_photoMode`
+  // (just above, for getExportRepActive). Initializing after the last dep means every value is concrete at
   // init time; the only forward references (`_fileSave` in the menu listeners +
   // keyboard-shortcuts injection, both textually above) resolve via lazy arrows
   // because they fire only on user action (post-init). `selfSavedPaths` flows in by
@@ -7859,247 +7859,10 @@ async function main() {
     getFileHandle:             () => _fileHandle,
     getAssemblyWorkspacePath:  () => _assemblyWorkspacePath,
     getAssemblyFileHandle:     () => _assemblyFileHandle,
-    getExportRepActive:        () => _exportRepActive,
+    getExportRepActive:        _photoMode.getExportRepActive,
     setAssemblyWorkspacePath:  _setAssemblyWorkspacePath,
     selfSavedPaths:            _lifecycleSync.selfSavedPaths,
   })
-
-  /** Batch-patch all instances and resolve when the renderer finishes the
-   *  rebuild the store subscriber kicks off. `onRebuildComplete` only appends
-   *  (no off-API), so guard a one-shot; a timeout surfaces a stuck rebuild. */
-  function _applyRepAndAwaitRebuild(patches) {
-    return new Promise((resolve, reject) => {
-      let done = false
-      const timer = setTimeout(() => {
-        if (!done) { done = true; reject(new Error('export rebuild timed out')) }
-      }, 120_000)
-      assemblyRenderer.onRebuildComplete(() => {
-        if (done) return
-        done = true; clearTimeout(timer); resolve()
-      })
-      api.batchPatchInstances(patches).catch(err => {
-        if (!done) { done = true; clearTimeout(timer); reject(err) }
-      })
-    })
-  }
-
-  /** Run `fn` (the actual export render) with every instance temporarily set to
-   *  the assembly's export representation, restoring the originals afterward.
-   *  ALSO suppresses the distance LOD demotion for the whole export so every
-   *  part renders at its rep's detail bucket (no far-away hull) → uniform
-   *  high-detail figures regardless of zoom.  The rep upgrade is a no-op when
-   *  not in assembly mode, no instances, 'working', or already matching; the
-   *  LOD suppression still applies whenever we're in an assembly. */
-  // High-segment geometry built once on first export, reused thereafter.  The
-  // interactive scene keeps its fast low-poly meshes; only the export render uses
-  // these.  Atoms/bonds are unit-sized (scaled per-instance); beads/fluorophores
-  // bake their radius (instances only translate), so the radius must match the
-  // low-poly source (GEO_SPHERE = BEAD_RADIUS, GEO_FLUORO_SPHERE = 0.25).
-  let _hdGeoCache = null
-  function _highDetailGeometries() {
-    if (_hdGeoCache) return _hdGeoCache
-    const W = 32, H = 24, RADIAL = 24   // sphere width/height segs; cylinder radial segs
-    _hdGeoCache = {
-      atom:   new THREE.SphereGeometry(1, W, H),
-      bond:   new THREE.CylinderGeometry(1, 1, 1, RADIAL, 1),
-      bead:   new THREE.SphereGeometry(BEAD_RADIUS, W, H),
-      fluoro: new THREE.SphereGeometry(0.25, W, H),
-    }
-    return _hdGeoCache
-  }
-
-  // Export-only: swap the low-poly interactive sphere/cylinder geometry on
-  // atom/bond/bead/fluorophore InstancedMeshes for smooth high-segment versions,
-  // run the export, then restore.  Atoms/bonds are matched by shared-geometry
-  // reference; CG beads/fluorophores by mesh name (and only when they're still
-  // real spheres — skip the opt-in impostor quads).  Swapping `mesh.geometry`
-  // leaves instanceMatrix/instanceColor untouched, so positions + colors hold.
-  async function _withHighDetailGeometry(fn) {
-    const hd = _highDetailGeometries()
-    const restore = []   // [mesh, originalGeometry]
-    scene.traverse(obj => {
-      if (!obj.isInstancedMesh) return
-      let hi = null
-      if      (obj.geometry === ATOM_SPHERE_GEO) hi = hd.atom
-      else if (obj.geometry === BOND_CYL_GEO)    hi = hd.bond
-      else if (obj.name === 'backboneSpheres'       && obj.geometry?.type === 'SphereGeometry') hi = hd.bead
-      else if (obj.name === 'extensionFluorophores' && obj.geometry?.type === 'SphereGeometry') hi = hd.fluoro
-      if (hi && obj.geometry !== hi) { restore.push([obj, obj.geometry]); obj.geometry = hi }
-    })
-    try { await fn() }
-    finally { for (const [mesh, geo] of restore) mesh.geometry = geo }
-  }
-
-  async function _withExportRepresentation(fn) {
-    // Always export at full geometric detail (smooth atoms/beads/bonds), restored
-    // after.  Wraps the actual render so both the rep-upgrade and no-upgrade paths
-    // get it; harmless when no atom/bead meshes are present.
-    const run = () => _withHighDetailGeometry(fn)
-    const st  = store.getState()
-    const asm = st.currentAssembly
-    const exportRep = asm?.export_representation ?? 'full'
-    const insts = asm?.instances ?? []
-    const inAssembly = !!st.assemblyActive && insts.length > 0
-    if (inAssembly) assemblyRenderer.setSuppressLodDemotion?.(true)
-
-    const needUpgrade = inAssembly && exportRep !== 'working'
-      && !insts.every(i => i.representation === exportRep)
-    if (!needUpgrade) {
-      try { await run() }
-      finally { if (inAssembly) assemblyRenderer.setSuppressLodDemotion?.(false) }
-      return
-    }
-
-    const snapshot = insts.map(i => ({ id: i.id, representation: i.representation }))
-    _exportRepActive = true
-    try {
-      await _applyRepAndAwaitRebuild(insts.map(i => ({ id: i.id, representation: exportRep })))
-      photoRenderer.resyncMaterials()
-      await run()
-    } finally {
-      try {
-        await _applyRepAndAwaitRebuild(snapshot)
-        photoRenderer.resyncMaterials()
-      } catch (err) {
-        console.error('[export-rep] restore failed:', err)
-      }
-      assemblyRenderer.setSuppressLodDemotion?.(false)
-      _exportRepActive = false
-    }
-  }
-
-  function _photoModeEnter() {
-    const leftPanel = document.getElementById('left-panel')
-
-    // Show photo pane directly — bypasses both the locked-hidden guard and the
-    // setActiveTab collapsed-toggle behaviour (clicking an active tab collapses;
-    // entering photo mode should always expand).
-    document.querySelectorAll('#left-panel .tab-content').forEach(el => {
-      el.hidden = el.id !== 'tab-content-photo'
-    })
-    if (leftPanel) {
-      leftPanel.classList.remove('hidden')
-      // Update tab button active states so the Photo button looks selected.
-      document.querySelectorAll('#left-tab-strip .left-tab-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.tab === 'photo')
-      })
-    }
-
-    if (!_photoPanelCtrl) {
-      _photoPanelCtrl = initPhotoPanel(photoRenderer, sceneCtx, {
-        onEnter: _photoModeEnter,
-        onExit:  _photoModeExit,
-        store,
-        player: animPlayer,
-        exportPhotoVideo,
-        withExportRepresentation: _withExportRepresentation,
-        setExportRepresentation: (rep) => api.setAssemblyExportRepresentation(rep),
-      })
-    }
-    photoRenderer.activate({})
-    // Apply the persisted active profile (if any) AFTER activate so material
-    // setters take effect immediately rather than queueing.
-    _photoPanelCtrl?.applyActiveProfile?.()
-    _photoPanelCtrl?.syncToState()
-
-    // Suppress annotation overlays that don't belong in publication renders.
-    // Design-mode renderer (no-op in assembly mode):
-    designRenderer.setAxisArrowsVisible(false)
-    bluntEnds?.setVisible(false)
-    // Assembly-mode counterparts: per-instance helix axis arrows + helix-id
-    // labels + overhang-name sprites + active-instance BoxHelper, plus the
-    // orange joint indicators and (mate-mode-only) blunt-end disks drawn by
-    // assemblyJointRenderer. setPhotoMode also flags the renderer so any
-    // rebuild WHILE photo mode is active (e.g. polymerize mid-photo) keeps
-    // the new instances clean too.
-    assemblyRenderer.setPhotoMode(true)
-    assemblyJointRenderer.setVisible(false)
-    // Partial UI lockdown for clean publication renders:
-    // hide the view cube + nav HUD; leave selection/orbit/zoom enabled so the
-    // user can still frame parts. Active gizmos remain visible (they self-hide
-    // when their owning panel exits transform mode).
-    viewCube.hide()
-    const modeIndicator = document.getElementById('mode-indicator')
-    if (modeIndicator) modeIndicator.style.display = 'none'
-    store.setState({ photoActive: true })
-  }
-
-  function _photoModeExit() {
-    // Idempotent: safe to call from any teardown path (file close/open/new,
-    // assembly enter) even when photo mode isn't active — just no-op.
-    if (!photoRenderer.isActive()) return
-    photoRenderer.deactivate()
-
-    // Restore annotation overlays to their pre-photo-mode state.
-    designRenderer.setAxisArrowsVisible(true)
-    const tf = store.getState().toolFilters
-    bluntEnds?.setVisible(tf?.bluntEnds ?? true)
-    assemblyRenderer.setPhotoMode(false)
-    assemblyJointRenderer.setVisible(true)
-    // Restore the partial-lockdown UI.
-    viewCube.show()
-    const modeIndicator = document.getElementById('mode-indicator')
-    if (modeIndicator) modeIndicator.style.display = ''
-    store.setState({ photoActive: false })
-
-    const leftPanel = document.getElementById('left-panel')
-    if (leftPanel?.classList.contains('locked-hidden')) {
-      // No design loaded — hide photo pane and the panel itself.
-      document.getElementById('tab-content-photo').hidden = true
-      leftPanel.classList.add('hidden')
-    } else {
-      // Design loaded — restore normal tab state via the sidebar controller.
-      window.__leftSidebar?.setActiveTab('feature-log')
-    }
-  }
-
-  document.getElementById('photo-tab-btn')?.addEventListener('click', () => {
-    if (!photoRenderer.isActive()) _photoModeEnter()
-  })
-
-  registerShortcut({
-    key: 'p', ctrl: false, shift: false,
-    description: 'Toggle photo mode',
-    handler() {
-      if (photoRenderer.isActive()) _photoModeExit()
-      else _photoModeEnter()
-    },
-  })
-
-  // Expose photo debug helpers on the existing debug object.
-  if (window._nadocDebug) {
-    window._nadocDebug.photoMaterials = function() {
-      const s = photoRenderer.getSettings()
-      console.group('[photo] active settings')
-      console.log('active:', photoRenderer.isActive())
-      console.log('lighting:', s.lighting)
-      console.log('background:', s.bgType, s.bgColor)
-      console.log('material presets:', { full: s.full, surface: s.surface, cylinders: s.cylinders, atomistic: s.atomistic })
-      console.log('ssao:', s.ssao, '| bloom:', s.bloom, s.bloomStrength)
-      console.log('pathTracing:', s.pathTracing, '| samples:', photoRenderer.getSampleCount())
-      console.groupEnd()
-      return s
-    }
-    window._nadocDebug.ptSamples = function() {
-      const n = photoRenderer.getSampleCount()
-      const building = photoRenderer.isPathTracingBuilding?.()
-      const enabled  = photoRenderer.isPathTracingEnabled?.()
-      console.log('[photo] path tracer — enabled:', enabled, '| building BVH:', building, '| samples:', n)
-      return n
-    }
-    window._nadocDebug.ssaoParams = function() {
-      const s = photoRenderer.getSettings()
-      console.log('[photo] SSAO enabled:', s.ssao, '— kernelRadius≈0.3 nm, kernelSize=32, minDist=0.002, maxDist=0.12')
-    }
-    window._nadocDebug.bloomParams = function() {
-      const s = photoRenderer.getSettings()
-      console.log('[photo] bloom enabled:', s.bloom, '| strength:', s.bloomStrength)
-    }
-    window._nadocDebug.renderTargetSize = function() {
-      const el = renderer.domElement
-      console.log('[photo] main canvas:', el.width, '×', el.height, '| devicePixelRatio:', window.devicePixelRatio)
-    }
-  }
 
   // Populate transform fields and pivot options when the active cluster changes.
   store.subscribe((newState, prevState) => {
