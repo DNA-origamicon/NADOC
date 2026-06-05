@@ -1,6 +1,6 @@
 # main.js carve-up map — stateful-subsystem extraction backlog
 
-**Purpose.** main.js is one large `async function main()` closure (~10.25k lines as of 2026-06-05, down
+**Purpose.** main.js is one large `async function main()` closure (~9.78k lines as of 2026-06-05, down
 from ~16.5k). The pure-helper well is drained (see `main_js_extraction_log.md`) and — as of #61 — every
 Tier 1–5 *stateful subsystem* (panels, dialogs, menus, event-handler clusters) is extracted too. The loop
 is **near-complete**: the remaining mass is the lifecycle spine + thin per-action wiring that's correctly
@@ -53,33 +53,35 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **CG Relax (mrdna) panel
-DELETED as dead/unreachable code (#63, commit 685c72e)** — not extracted. main.js 10123 → 10026 (−97). The
-loop is NOT near-complete: `## Tier 7` still holds ~5 cohesive subsystems (~2,300 ln). The "clean
-dialogs/panels" band's top is now **Overhang Orientation panel** (CG Relax + Routing-warning dialogs above
-it were both dead-code deletions, NOT lifts — two in a row, see the banked gotcha)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Overhang Orientation panel
+EXTRACTED (#64, commit pending) → `ui/overhang_orientation_panel.js`, −245 ln. main.js 10026 → 9781.** First
+real LIFT in three sessions (#62/#63 were dead-code deletions). `## Tier 7` "clean dialogs/panels" band now
+tops out at **Autoscaffold picker** (next, below). The reachability gate WORKED — OO markup was in index.html
+and the feature is genuinely wired (right-click "Edit Orientation"), so it lifted cleanly._
 
-**This session (#63, handoff-recommended):** the carve-up's recommended "cleanest cut" (CG Relax/mrdna panel,
-IIFE ~4047–4141) was **dead, unreachable code** — second deep-scan "cleanest cut" in a row that turned out
-deletable, not liftable. Git archaeology: the IIFE was added in 907769e but its `cgrelax-*` DOM markup was
-**never added to index.html in ANY commit** (verified `git log --all -S "btn-cgrelax-run"` → only the JS
-commit). So every `getElementById('cgrelax-…')` has returned null since day one; all click handlers are `?.`-
-guarded so none ever attached. Only inert code ran: `initMrdnaRelaxClient(...)` construction (no DOM) + a
-no-op `store.subscribe`. Backend `/ws/mrdna-relax` WS route + `physics/mrdna_relax_client.js` still work —
-the feature was half-built (working backend, never-wired frontend). Want-it gate → user chose delete (mirrors
-#62/#46). −97 ln. Gate: vitest 687 (unchanged) + smoke 23/23. No app exercise (nothing reachable to exercise).
-Left orphaned-but-inert: `store.js` `cgRelaxPositions`/`cgRelaxStats` + their `physics`-slice entry.
+**This session (#64, handoff-recommended):** Overhang Orientation panel — a clean, on-the-nose lift after two
+dead-code sessions. Reachability gate FIRST (`rg -c "overhang-orient-panel|oo-rx" frontend/index.html` → 5,
+markup present) + want-it gate (3 live call paths: `_onEditFeature` overhang_rotation edit, the `Edit
+Orientation` context menu, keyboard Delete/Escape via `ooClose`). Cohesive block 5001–5257 (~256 ln) lifted
+verbatim to `initOverhangOrientationPanel({deps})→{open,close,getActiveIds}` + pure `buildOverhangRotationOps`.
+**Plain `const _orientPanel`** at the original spot (not lazy-let): every external ref fires post-boot →
+TDZ-safe. `overhangGizmo` had ZERO external references → constructed inside the factory (clean encapsulation).
+`_ovhgRootMap` (mutable, rebuilt ~1822) → getter dep. Removed 3 now-dead import names from main.js. 15 vitest
+(5 pure + 10 jsdom factory) green first run; smoke 23/23; real-app exercise on NS_trans_fix (50 overhangs,
+zero console errors). −245 ln.
 
-**Banked gotcha this session (REINFORCES #62's):**
-- **The want-it gate for a Tier-7 *panel* is "does its DOM markup exist in index.html?", not just "does it have
-  callers."** A panel IIFE wires itself via `document.getElementById` at construction — if those ids aren't in
-  index.html, every handler silently no-ops and the panel is unreachable even though the JS "runs." First check
-  for a panel: `grep -c "<panel-id-prefix>" frontend/index.html`. Zero → it's dead UI, a deletion candidate.
-  `git log --all -S "<a-unique-button-id>"` confirms whether the markup was EVER committed.
-- **Two deep-scan "cleanest cuts" in a row (#62, #63) were dead code, not lifts.** Tier 7 was sized from banner
-  arithmetic with no reachability check. **Before re-deriving scope on ANY Tier-7 entry, run the reachability
-  gate** (markup-exists for panels, call-sites for fns/dialogs). The remaining Tier-7 entries below are NOT
+**Banked gotcha this session:**
+- **`grep` was silently emitting nothing in this WSL shell while `rg` worked** — wasted ~3 tool calls chasing
+  a phantom "the OO panel is already extracted" (every `grep` returned empty, including `grep -c`). If a `grep`
+  returns suspiciously empty on a string you can SEE in the file, switch to `rg` immediately; don't conclude
+  the code is gone.
+- **The reachability gate cuts BOTH ways and is cheap either way.** #62/#63 it found dead UI (delete); #64 it
+  confirmed live UI (lift). Run it first on every Tier-7 entry regardless — `rg -c "<id-prefix>"
+  frontend/index.html` for panels, call-site grep for fns/dialogs. The remaining Tier-7 entries below are NOT
   yet reachability-checked — do that first, every time.
+- **`/api/design` wraps the design under a `design` key** (`{design, validation, unligated_crossover_ids,
+  revision}`), NOT at top level — a throwaway exercise reading `d.overhangs` silently saw 0. Use
+  `d.design.overhangs`.
 
 **The goal is NOT a LOC number.** main.js is the app's composition root (wiring board): 146 imports + ~100
 module constructions + the lifecycle spine + thin per-action wiring are *irreducible* (~2,500–3,500 ln floor).
@@ -88,16 +90,15 @@ code worse. **Target instead: "the closure holds zero cohesive logic clusters."*
 function is either module construction/wiring or the spine. LOC lands ~3,000 as a *result*, not a target.
 
 **Recommended next region — `## Tier 7` "clean dialogs/panels" band (the cleanest, lowest-risk first):**
-1. **Overhang Orientation panel** (banners `// ── Overhang Orientation right-sidebar panel` ~5229 +
-   `// ── Overhang angle field wiring` + `// ── Overhang gizmo`, ~258 ln) → `ui/overhang_orientation_panel.js`.
-   The `_oo*` cluster + angle fields + a rotate-only TransformControls gizmo. **REACHABILITY GATE FIRST**
-   (`grep -c "overhang-orient" frontend/index.html` or whatever its panel-id prefix is — #62 AND #63 were both
-   dead UI whose markup was never in index.html). If reachable: `_ooClose` is already injected into
-   keyboard_shortcuts as `ooClose`, drive via angle fields in jsdom (skip the gizmo handle), pure-core candidate
-   = angle math. Re-derive scope: the map lumps 3 banners.
-2. Then the other Tier-7 entries — Autoscaffold picker (~212 ln, re-derive: may interleave scaffold-router),
-   Sequencing menu (~95 ln, may be a thin-wiring scrap over scaffold_modal) — each **reachability-gated first** —
-   before the HARD gesture/assembly-coupled ones (Translate/Rotate tool, repr switcher, assembly transform/FK).
+1. **Autoscaffold picker** (banner `// ── Routing: Autoscaffold (seamed / seamless picker)` ~4274, ~212 ln) →
+   likely `ui/autoscaffold_picker.js`. A routing dialog. **REACHABILITY GATE FIRST** (`rg -c "<its-dialog-id>"
+   frontend/index.html` + call-site grep — use `rg` not `grep`, see banked gotcha). Re-derive scope: the map
+   warns it **may interleave scaffold-router calls** — find where the cohesive dialog block actually ends before
+   investing; if it's thin wiring over the already-extracted scaffold_router/scaffold_modal, it may be a scrap.
+2. Then **Sequencing menu** (~95 ln, may be a thin-wiring scrap over `scaffold_modal`/`scaffold_assign` —
+   verify before investing) and **Highlight Undefined Bases** (~80 ln; coordinate with #41's `_undefinedHighlightOn`
+   get/set shims — extracting MOVES ownership of that mutable). Each **reachability-gated first** — before the
+   HARD gesture/assembly-coupled ones (Move/Rotate panel, repr switcher, Translate/Rotate tool, assembly transform/FK).
 
 **Do NOT bundle the micro-scraps** (Orbit submenu ~10 ln, Browser tab title ~5 ln, Coloring submenu ~20 ln
 w/ 7 external `_setColoringMode` callers, deform→selectableTypes subscriber ~28 ln). Six logged mis-scopes
@@ -543,7 +544,8 @@ plate_view, kinematics_ticker, file_io (initFileIo save-content ops + initFileOp
 app/lifecycle (connection monitor + autosave/SSE),
 scaffold_modal (Assign Scaffold dialog + `countScaffoldNt` in scaffold_assign),
 new_design_modal (New Part dialog + `sanitizeWorkspaceStem`),
-app/doc_spawn (Multi-document spawn + pure `spaceHasContent`).
+app/doc_spawn (Multi-document spawn + pure `spaceHasContent`),
+overhang_orientation_panel (Overhang Orientation panel + pure `buildOverhangRotationOps`; owns overhangGizmo).
 
 ## Smaller leftovers (after the tiers above)
 
@@ -591,12 +593,28 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   their entry in the `physics` slice Set — nothing reads or writes them now; harmless dead state, a future
   store-cleanup scrap (touching the slice Set risks subscription behavior → left out of this commit's scope).
   −97 ln. Gate: vitest 687 (unchanged) + smoke 23/23.
-- [ ] **Overhang Orientation panel** — banners `// ── Overhang Orientation right-sidebar panel` (~5229) +
-  `// ── Overhang angle field wiring` (~5406) + `// ── Overhang gizmo (TransformControls)` (~5430), through
-  ~5486 (~258 ln). The `_oo*` cluster (`_ooOpen`/`_ooClose`/`_ooApply`/`_ooPreview*`/`_ooStepAxis`…) + angle
-  fields + a rotate-only TransformControls gizmo. Deps: store, api, designRenderer, overhang gizmo, DOM.
-  Risk: **MED** (gizmo is a TransformControls handle — but it's a *panel*, drive via the angle fields in jsdom;
-  `_ooClose` is already injected into keyboard_shortcuts as `ooClose`). Pure core candidate: angle math.
+- [x] **Overhang Orientation panel** — the `_oo*` cluster (`_ooOpen`/`_ooClose`/`_ooApply`/`_ooPreview*`/
+  `_ooStepAxis`…) + angle fields + rotate-only TransformControls gizmo + the structural-change auto-close
+  subscriber → `ui/overhang_orientation_panel.js` factory `initOverhangOrientationPanel` + pure
+  `buildOverhangRotationOps` (delta-compose op builder). **DONE 2026-06-05 (extraction #64, commit pending).**
+  REACHABILITY GATE PASSED: markup IS in index.html (`#overhang-orient-panel` etc.) and the feature is
+  wanted (right-click overhang → "Edit Orientation"; feature-log edit of `overhang_rotation`; keyboard
+  Delete/Escape). Cohesive block was lines 5001–5257 (~256 ln, matched the ~258 estimate for once). −245 ln
+  off the closure. **Plain `const _orientPanel`** at the original spot (NOT lazy-let): all 4 external call
+  sites — `_onEditFeature` (~1390), the context menu (~2898), and the keyboard_shortcuts deps
+  `ooClose`/`getOoActiveIds` (~4748/4756) — fire post-boot, so they reference the const after its line runs
+  (TDZ-safe, mirrors #34/#38/#50). `overhangGizmo` is fully internal to the panel (no external refs) →
+  constructed inside the factory. `_ovhgRootMap` is mutable (rebuilt ~1822) → passed as `getOvhgRootMap`
+  getter. `ovhgDomainIds`/`isExtrudeOverhang`/`initOverhangGizmo` imported directly in the module (removed
+  now-dead from main.js — the `initOverhangGizmo` import line + 2 names off the design_queries destructure).
+  15 vitest (5 pure: identity/compose-90°-Z/skip-missing/empty/null-design; 10 jsdom factory: open-single-
+  label+attach / id-fallback+multi-count / close-hides+detach+clears / dirty-close-refetches-geometry /
+  Apply-composes-ops+closes / Reset-zeroes-all / step-button-accumulates / Apply-no-active-no-op / auto-
+  close-on-set-change / no-close-on-rotation-patch). Gate: vitest 702 + smoke 23/23 + real-app exercise
+  (loaded NS_trans_fix = 50 overhangs → factory+subscriber+gizmo construct, zero console errors). **Live
+  right-click→Edit-Orientation gesture NOT hand-driven** (needs picking one of 50 overhang beads) — the
+  open/apply/reset/step/auto-close logic is covered by the 10 jsdom factory tests driving the REAL factory,
+  per the #34/#32/#24 accepted caveat.
 - [ ] **Autoscaffold picker** — banner `// ── Routing: Autoscaffold (seamed / seamless picker)` (~4274–4485),
   ~212 ln. A routing dialog. Deps: store, api, DOM. Risk: **MED** (re-derive — may interleave scaffold-router calls).
 - [ ] **Sequencing menu** — banner `// ── Sequencing` (~4486–4580), ~95 ln. Re-derive: may be thin wiring over
