@@ -54,13 +54,11 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 ## Next-session handoff
 
 _Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **STRATEGY: hardest-first, multi-commit
-campaigns — the pure-core / narrow-sub-block well is dry.** ✅✅ **FRONTIER #1 IS COMPLETE.** The whole Translate/Rotate
-transform band is now modules: keystone (#73/#74/#75, −255 ln) + response-delta `scene/response_delta.js` (#76) +
-cluster-pick `scene/joint_pick.js` (#77) + `_mr*` panel shell `scene/move_rotate_panel.js` (#78) + the two de-dups
-(#79/#80) + **the TOOL gesture core `scene/translate_rotate_tool.js` (#81, −353 ln, main.js 8355→8002).** The handoff's
-"flag stays main, factory takes getActive/setActive" prediction was exactly right: `_translateRotateActive` (22 sites),
-`_clusterDirty`, and deform-shared `_editContext` stay main `let`s reached via get/set shims; `jointRenderer` injected
-lazily (declared after the factory). 19 factory tests + smoke 23/23 + assembly_move_tool/select 3/3._
+campaigns — the pure-core / narrow-sub-block well is dry.** ✅✅ **FRONTIER #1 (Translate/Rotate band) COMPLETE** (#73–81).
+**Frontier #2 (Representation switcher) STARTED — pure-core de-risk landed (#82):** `reprMenuState` + `coloringFallbackMode`
+→ `scene/coloring_modes.js` (−12 ln, main.js 8002→7990, +11 vitest → 899, smoke 23/23). main.js keeps all the DOM/renderer
+wiring; only the two menu decisions moved. This mirrors #35's de-risk into the highest-coupling region BEFORE the full
+factory._
 
 **STILL-OPEN latent-bug note (carried from #79/#80, now inside `translate_rotate_tool.js`):** the tool's two commit paths
 pass `_refreshClusterOverlays({ withFlexibleArcs: false })` — a cluster move with anchored ssDNA arcs arguably *should*
@@ -68,16 +66,22 @@ rebuild them like the response_delta paths do (which pass `true`). Flagged-not-f
 flipping it. Also untouched (genuinely not de-dupable): the `commitClusterPositions`+rebake reconciliation lead-in still
 differs across the standard-commit vs edit-in-place paths (oldCtById-loop vs single rebake) — different data sources.
 
-**▶ NEXT — Representation switcher (handoff option 2; ~320 ln, multi-commit).** Banners `// ── Unified representation
-radio` + `_setRepresentation` + `// ── Function-key bindings: F1…F7` + the option sliders. Central mode-switch touching
-every renderer + the Coloring submenu (`_setColoringMode`'s 7 callers live here). **First step: `rg` the renderer fan-out**
-(`_setRepresentation` writes to designRenderer/bluntEnds/unfoldView/hull/atomistic/surface) and re-derive the cohesive
-block boundary — the map has mis-scoped 6× (adjacency ≠ cohesion). Consider a pure-core de-risking first cut (mirror #72
-`computeAtomStrandColors` / #35 `revoluteCommitValue`) before the full factory. The `t`-shortcut/`registerShortcut` import
-pattern + the lazy-arrow boot-capture fix (this commit's #81 at sites 4509/4995) are the reference for any new tool-like
-wiring. Then **option 3: Atomistic/surface controllers remainder** (`_applyAtomisticMode`/`_applySurfaceMode`/
-`_refetchAtomistic`/`_ensureAtomData` + region overlays; interleaved with renderer construction — separate controllers
-from init wiring first).
+**▶ NEXT — Representation switcher FULL FACTORY (frontier #2, multi-commit).** The pure-core de-risk is DONE (#82,
+`reprMenuState` + `coloringFallbackMode` → `scene/coloring_modes.js`). The cohesive block is **banner `// ── Unified
+representation radio` (~6847) → end of `// ── Representation option sliders` (~7165)**, ~318 ln. `// ── Hide Staples toggle`
+(~7167) onward is SEPARATE — don't include it. Remaining mass to lift: `_updateReprRadio`/`_syncAssemblyReprMenu`/
+`_updateColoringMenuAvailability`/`_cycleColoringForRepr`/`_reprOptionSliders`/`_setRepresentation` + the `_ALL_REPRS` click
+loop + the F1–F7 `registerShortcut` loop + the 4 option-slider listeners. **The hard part (mapped, #82):** 4 shared closure
+`let`s — `_currentRepr`/`_lastDetailLevel`/`_lodMode`/`_currentBeadRadius` — are read from the render-loop LOD tick (~7455),
+`_resetForNewDesign` (~3520), and the hull-prism auto-switch (~4326). Keep them as main `let`s, give the factory get/set
+shims (keystone #81 pattern). `_setRepresentation` is called from 3 sites incl. lifecycle (reset-to-full @3549, hull-auto
+@4326) — alias-const `const _setRepresentation = _reprSwitcher.setRepresentation` keeps those verbatim; the @4326 forward-ref
+is a deferred edit handler (TDZ-safe). Inject `_setColoringMode`/`_applySurfaceMode`/`_applyAtomisticMode`/`_setCGVisible`/
+`_setAtomisticSlidersVisible`/`_setSurfacePanelVisible` (defined in the still-inline atomistic/surface region — option 3) as
+deps; `jointRenderer` lazy (`getJointRenderer`). ~20 deps total. **Want-it-first: YES, core feature (F1–F7 + View menu).**
+Then **option 3: Atomistic/surface controllers remainder** (`_applyAtomisticMode`/`_applySurfaceMode`/`_refetchAtomistic`/
+`_ensureAtomData` + region overlays; interleaved with renderer construction — separate controllers from init wiring first).
+Doing option 3 FIRST would shrink frontier #2's injected-dep list (those 3 `_apply*` fns become a module API).
 
 **Why hardest-first now.** Every remaining frontier item is HARD (gesture-bound and/or shared-state coupled). Do each as a
 deliberate campaign: (1) map coupling with `rg` first; (2) lean on the EXISTING gesture gate (below), don't re-derive;
@@ -723,12 +727,14 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   only `_mrAssemblyCtx`'s 4 writes + group_gizmo's `getMrAssemblyCtx` needed re-pointing. `_flexRelax` init +
   `_refreshClusterPivotForAttach` STAY in main (also used by the Translate/Rotate tool fns) and are injected. 15 vitest.
   **What's left of this region is the TOOL, not the panel** — see the Translate/Rotate tool entry below.
-- [ ] **Representation switcher (hardest-first item 2)** — banners `// ── Unified representation radio` (~7851) +
-  `_setRepresentation` + `// ── Function-key bindings: F1…F7` + `// ── Representation option sliders`, ~320 ln. Plus
-  `_updateReprRadio`/`_syncAssemblyReprMenu`/`_cycleColoringForRepr`/`_updateColoringMenuAvailability`/`_reprOptionSliders`.
-  Risk: **HARD** — `_setRepresentation` is a central mode-switch touching every renderer + the Coloring submenu
-  (`_setColoringMode`'s 7 callers live here). Map the renderer fan-out carefully; multi-commit. (Re-verify line numbers
-  with `rg` — these drifted −61 after #72.)
+- [~] **Representation switcher (frontier #2)** — cohesive block re-derived: banner `// ── Unified representation radio`
+  (~6847) → end of `// ── Representation option sliders` (~7165), ~318 ln; `// ── Hide Staples toggle` is SEPARATE. Plus
+  `_updateReprRadio`/`_syncAssemblyReprMenu`/`_cycleColoringForRepr`/`_updateColoringMenuAvailability`/`_reprOptionSliders`/
+  `_setRepresentation` + the `_ALL_REPRS` click loop + F1–F7 `registerShortcut` loop + 4 slider listeners. **PURE-CORE
+  DE-RISK DONE (#82, commit 796ae4e):** `reprMenuState` + `coloringFallbackMode` → `scene/coloring_modes.js`. Risk: **HARD**
+  — central mode-switch touching every renderer; 4 shared closure `let`s (`_currentRepr`/`_lastDetailLevel`/`_lodMode`/
+  `_currentBeadRadius`) read from the render-loop LOD tick + reset + hull-auto-switch → keep them main, get/set shims
+  (keystone #81). ~20 deps. See the handoff "▶ NEXT" block for the full lift plan. multi-commit.
 - [~] **Atomistic / surface display controllers (hardest-first item 3)** — `_applyAtomisticMode`/`_refetchAtomistic`/`_getAtom*`/
   `_ensureAtomData`/`_applySurfaceMode`/region overlays, scattered ~1893–2418 (interleaved with renderer init
   banners ~1846/1957/2342). Risk: **HARD** — interleaved with renderer construction; re-derive the function set
