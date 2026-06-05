@@ -40,6 +40,7 @@ import { motionChipStyle } from './scene/motion_chip.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { selectionBBox } from './scene/selection_bbox.js'
 import { initAssemblyMultiBox } from './scene/assembly_multi_box.js'
+import { initAssemblyConfigAnimator } from './scene/assembly_config_animator.js'
 import { clientToNdc } from './scene/ndc.js'
 import { flexTetherConnections } from './scene/flex_tethers.js'
 import { clusterBackboneEntries } from './scene/cluster_entries.js'
@@ -7562,59 +7563,16 @@ async function main() {
     onJointRotate: (joint) => _rotateJoint(joint),
   })
 
-  async function _animateAssemblyConfiguration(cfg) {
-    const assembly = store.getState().currentAssembly
-    if (!assembly || !cfg) return
-    if (_hasAssemblyPending()) await _commitAssemblyPending()
-
-    const stateById = new Map((cfg.instance_states ?? []).map(s => [s.instance_id, s]))
-    const animItems = []
-    for (const inst of assembly.instances ?? []) {
-      const state = stateById.get(inst.id)
-      if (!state?.transform?.values) continue
-      const startMat = assemblyRenderer.getLiveTransform(inst.id)
-        ?? new THREE.Matrix4().fromArray(inst.transform.values).transpose()
-      const endMat = new THREE.Matrix4().fromArray(state.transform.values).transpose()
-      const sp = new THREE.Vector3(), ss = new THREE.Vector3()
-      const sq = new THREE.Quaternion()
-      const ep = new THREE.Vector3(), es = new THREE.Vector3()
-      const eq = new THREE.Quaternion()
-      startMat.decompose(sp, sq, ss)
-      endMat.decompose(ep, eq, es)
-      animItems.push({ id: inst.id, sp, sq, ss, ep, eq, es })
-    }
-    if (!animItems.length) {
-      await api.restoreAssemblyConfiguration(cfg.id)
-      return
-    }
-
-    const duration = 650
-    const start = performance.now()
-    const mat = new THREE.Matrix4()
-    const pos = new THREE.Vector3()
-    const quat = new THREE.Quaternion()
-    const scale = new THREE.Vector3()
-    const ease = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
-
-    await new Promise(resolve => {
-      function frame(now) {
-        const t = Math.min(1, (now - start) / duration)
-        const k = ease(t)
-        for (const item of animItems) {
-          pos.copy(item.sp).lerp(item.ep, k)
-          quat.copy(item.sq).slerp(item.eq, k)
-          scale.copy(item.ss).lerp(item.es, k)
-          mat.compose(pos, quat, scale)
-          assemblyRenderer.setLiveTransform(item.id, mat)
-          assemblyJointRenderer.setLiveJointTransform(item.id, mat, assembly)
-        }
-        if (t < 1) requestAnimationFrame(frame)
-        else resolve()
-      }
-      requestAnimationFrame(frame)
-    })
-    await api.restoreAssemblyConfiguration(cfg.id)
-  }
+  // Animate the assembly into a saved configuration — factory in
+  // scene/assembly_config_animator.js (pure interpolation core unit-tested).
+  // Deferred callback (fires only on a Feature Log "animate to configuration"
+  // click), so the const is safe here even though its consumer is wired below.
+  const _configAnimator = initAssemblyConfigAnimator({
+    store, api, assemblyRenderer, assemblyJointRenderer,
+    hasAssemblyPending: _hasAssemblyPending,
+    commitAssemblyPending: _commitAssemblyPending,
+  })
+  const _animateAssemblyConfiguration = (cfg) => _configAnimator.animate(cfg)
 
   // ── Animation tab support panels ─────────────────────────────────────────────
   // (Assembly Configurations panel removed 2026-05-17 — now in Feature Log.)
