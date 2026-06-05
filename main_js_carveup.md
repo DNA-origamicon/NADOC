@@ -37,24 +37,22 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after extraction #41 (View tool buttons → `ui/view_tool_buttons.js`, −113 ln)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04, after extraction #42 (Background settings modal → `ui/background_modal.js`, −160 ln)._
 
-**View tool buttons DONE (#41, −113 ln).** The handoff's "View menu toggles + selection/tool filters →
-one `ui/view_toggles.js`, ~365 ln, MED" premise was MIS-SCOPED — it's ~5 adjacency-lumped blocks, not one
-subsystem (see the Tier-4 entry's breakdown). Extracted only the cleanly-cohesive `.vt-btn` row; `_setMenuToggle`
-is a 43-use shared util and the Selection-Filter block is welded to the drill-lock machine owned by region
-~717 — both logged as separate future lifts, NOT this region. Shared `_undefinedHighlightOn` (a `let`
-declared ~250 ln *after* the factory init) reached via get/set shim arrows — TDZ-safe because they're only
-invoked from deferred click handlers (same as the inline code).
+**Background modal DONE (#42, −160 ln).** The Tier-4 "Coloring / orbit / tools submenus → one `ui/view_menus.js`"
+premise was MIS-SCOPED (5th time — see the Tier-4 entry). The banner lumps many tiny handlers around ONE big
+cohesive block, the **Background settings modal** — that's what got lifted (`initBackgroundModal()` + pure
+`computeBackgroundStyle`). Zero store/scene coupling, the cleanest factory in a while. The prior handoff's
+"Coloring submenu is the meaty sub-block" was wrong: it's ~20 ln AND `_setColoringMode` has 6 external callers.
 
-**Next best (clean, well-bounded): Tier 4 — Coloring / orbit / tools submenus** — banners `// ── Tools menu
-(Bend / Twist)` (~5337) … `// ── Coloring submenu` (~5407–5618) → `ui/view_menus.js` (pairs with existing
-`scene/coloring_modes.js`). Deps: store, designRenderer, DOM. The Coloring submenu (Strand/Base/Cluster/
-Overhang/CPK) is the meaty cohesive sub-block. Risk MED. jsdom-testable, no GPU gesture. **VERIFY spans
-first** (#39/#40/#41 each taught this lesson — the map's "what it is" descriptions drift).
-- Alternative if you want a token-cheap warm-up: Tier 6 dev-only (`devtools_helpers` ~412 / `terminus_audit`
-  ~210 / `help_menu_toggles` ~76). Or the small independent blocks left in the View-toggles region
-  (Tool Filter toggles ~45 ln; the pill-state subscriber + 3 visibility helpers).
+**Next best:** the Tier-4 region is nearly drained of cleanly-liftable blocks — what's left there (Coloring
+submenu, Orbit submenu, Tools Bend/Twist, scattered view toggles) is all small/coupled (see breakdown). Better
+targets now:
+- **Tier 1 leftover — Create Seam handler** (`menu-create-seam`, ~13273 onward under the Help/Hotkeys banner,
+  ~250 ln) → `scene/create_seam.js`. Has a pure core (HC/SQ scaffold-crossover lookup-table resolution); pairs
+  with `scaffold_coverage.js`'s `findHamiltonianPath`. jsdom-testable lookup core, MED risk. Token-meaty payoff.
+- **Tier 6 dev-only warm-ups** (LOW risk, token-cheap): `devtools_helpers` (~412 ln, `window.__*`) /
+  `extension_arc_debug` (~424 ln) / `terminus_audit` (~210 ln) / `help_menu_toggles` (~76 ln).
 
 - **Lower-risk warm-ups (Tier 6 dev-only, gated by `?debug`/DEV, LOW risk, token-cheap):**
   `devtools_helpers` (~412 ln, `window.__*`) / `extension_arc_debug` (~424 ln) / `terminus_audit` (~210 ln) /
@@ -326,9 +324,27 @@ The largest single blocks and the most coupling into assembly state. Each needs 
       `_syncImportMenuVisibility` / `_syncDeformMenuEnabled`), the **Tool Filter toggles** block, the
       **deform→selectableTypes save/restore** subscriber, and **Browser tab title** are each small
       independent blocks — pick off opportunistically, do not bundle.
-- [ ] **Coloring / orbit / tools submenus** — banners `// ── Tools menu (Bend / Twist)` (~5337) …
-  `// ── Orbit mode submenu` (~5395) … `// ── Coloring submenu` (~5407–5618, ~280 ln) → `ui/view_menus.js`
-  (pairs with existing `scene/coloring_modes.js`). Deps: store, designRenderer, DOM. Risk: MED.
+- [~] **Coloring / orbit / tools submenus** — banners `// ── Tools menu (Bend / Twist)` (~5337) …
+  `// ── Orbit mode submenu` (~5395) … `// ── Coloring submenu` (~5407–5618). **PREMISE MIS-SCOPED AGAIN
+  (verified 2026-06-04, #42 — 5th time):** this is NOT one cohesive `ui/view_menus.js` subsystem; the banner
+  lumps many tiny adjacent handlers around ONE big cohesive block. Breakdown:
+    - **Background settings modal** (the meaty cohesive block, ~160 ln: `_backgroundState` +
+      `_applyBackgroundStyle`/`_formatAqueousBackground`/`_syncBackgroundModal`/`_buildBackgroundModalOnce` +
+      colour/hex/image/fit listeners + `menu-view-background`/`background-modal-aqueous`) → **DONE**
+      `ui/background_modal.js` factory `initBackgroundModal()` + pure `computeBackgroundStyle(state)`
+      (extraction #42, commit pending; −160 ln; 12 vitest; smoke 21/21 + real-app open/colour/aqueous
+      exercise). Fully self-contained — zero store/scene/camera/designRenderer; only DOM + `createModal`/
+      `createButton`. The handoff called the *Coloring submenu* "the meaty cohesive sub-block" — wrong, it's
+      ~20 ln. The Background modal was the real payoff.
+    - **Coloring submenu** (`_setColoringMode` + 6 click handlers, ~20 ln) — small AND `_setColoringMode` has
+      **6 external call sites** (2292, 8876, 10750, 10775, 10776) → extracting needs a returned fn + lazy
+      getters at those sites (more coupling than its 20 ln implies). Pairs with `scene/coloring_modes.js`. LOW
+      payoff; defer or bundle with a coloring-state lift.
+    - **Orbit submenu** (`_setOrbitMode` + 2 handlers, ~10 ln, self-contained) / **Tools Bend/Twist**
+      (`_clusterDeformGuard` + twist/bend menu + 2 overhangs-manager wirings + view-axes) / the assorted view
+      toggles (slice/unfold/cadnano/deform/loop-skip-legend/md-seg-legend/helix-labels/debug/sequences) — each
+      small independent blocks; pick off opportunistically, do NOT bundle into one module. Deps: store,
+      designRenderer, DOM. Risk: LOW-MED.
 
 ## Tier 5 — file / session infra (central — extract carefully, late)
 
