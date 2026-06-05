@@ -1,5 +1,13 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as THREE from 'three'
+
+// Capture the items passed to createContextMenu so the linker/belt menu
+// branches can be asserted (and their onClick callbacks invoked).
+const ctxMenuCalls = []
+vi.mock('../ui/primitives/context_menu.js', () => ({
+  createContextMenu: (opts) => { ctxMenuCalls.push(opts) },
+}))
+
 import { initAssemblyPointer } from './assembly_pointer.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
 
@@ -13,6 +21,8 @@ function setup(stateOverrides = {}, depOverrides = {}) {
   let translateActive = false
   let selectedCluster = null
   let selectedPartJoint = null
+  const assemblyContextMenu = { show: vi.fn(), hide: vi.fn() }
+  const attachPartToBelt = vi.fn()
 
   const store = createMockStore({
     activeInstanceId: null,
@@ -29,7 +39,11 @@ function setup(stateOverrides = {}, depOverrides = {}) {
     camera: {},
     canvas,
     controls,
-    api: { propagateFk: vi.fn(async () => {}) },
+    api: {
+      propagateFk: vi.fn(async () => {}),
+      getAssemblyOverhangConnectionRelaxStatus: vi.fn(async () => ({ available: true })),
+      relaxAssemblyOverhangConnection: vi.fn(async () => {}),
+    },
     applyFKLive: vi.fn(),
     applyClusterMateFKLive: vi.fn(),
     effectiveInstanceMatrix: vi.fn(() => new THREE.Matrix4()),
@@ -40,13 +54,18 @@ function setup(stateOverrides = {}, depOverrides = {}) {
       pickInstance: vi.fn(() => null),
       pickInstanceCluster: vi.fn(() => null),
       pickPartJoint: vi.fn(() => null),
+      pickLinker: vi.fn(() => null),
       getInstanceBackboneEntries: vi.fn(() => ({ entries: [], matrixWorld: new THREE.Matrix4() })),
       getInstanceDesign: vi.fn(() => ({})),
     },
     assemblyJointRenderer: {
       isBeltMode: () => false, isAttachMode: () => false, isMateMode: () => false,
       pickJointRing: vi.fn(() => null), pickJointAny: vi.fn(() => null), beginRingDrag: vi.fn(),
+      pickBeltAt: vi.fn(() => null),
     },
+    assemblyContextMenu,
+    overhangLocations: { isVisible: () => false, hitTest: vi.fn(() => false) },
+    attachPartToBelt,
     instanceGizmo: { getActiveAxis: () => null, isDragging: () => false, detach: vi.fn() },
     clusterGlowLayer: { setEntries: vi.fn() },
     overhangHoverPicker: { nearestAt: vi.fn(() => null) },
@@ -61,6 +80,7 @@ function setup(stateOverrides = {}, depOverrides = {}) {
     hideProgress: vi.fn(),
     getAssemblyPtrDownAt: () => ptrDownAt,
     setAssemblyPtrDownAt: (v) => { ptrDownAt = v },
+    getAssemblyRightDownAt: () => rightDownAt,
     setAssemblyRightDownAt: (v) => { rightDownAt = v },
     getTranslateRotateActive: () => translateActive,
     getSelectedAssemblyCluster: () => selectedCluster,
@@ -73,8 +93,10 @@ function setup(stateOverrides = {}, depOverrides = {}) {
   const setStateSpy = vi.spyOn(store, 'setState')
   return {
     ...ptr, deps, store, clusterPanel, setStateSpy, pendingPartJoints, canvas, controls,
+    assemblyContextMenu, attachPartToBelt,
     getPtrDownAt: () => ptrDownAt,
     getRightDownAt: () => rightDownAt,
+    setRightDownAt: (v) => { rightDownAt = v },
     setTranslateActive: (v) => { translateActive = v },
     setSelectedCluster: (v) => { selectedCluster = v },
     setSelectedPartJoint: (v) => { selectedPartJoint = v },
@@ -293,5 +315,100 @@ describe('initAssemblyPointer · onAssemblyPointerDown', () => {
     expect(t.getSelectedPartJoint()).toEqual({ instanceId: 'inst-A', jointId: 'j1', clusterId: 'cl-1' })
     expect(t.getPtrDownAt()).toBeNull()
     expect(e.stopPropagation).toHaveBeenCalled()
+  })
+})
+
+describe('initAssemblyPointer · onAssemblyContextMenu (sub-part c)', () => {
+  // Branch coverage for the right-click router. The real raycast picks
+  // (pickLinker / pickBeltAt / pickInstance) are mocked; we assert the routing
+  // decision + that the right menu / action fires.
+  const rc = (over = {}) => ({
+    button: 2, clientX: 100, clientY: 120,
+    preventDefault: vi.fn(), stopPropagation: vi.fn(), ...over,
+  })
+
+  beforeEach(() => { ctxMenuCalls.length = 0 })
+
+  it('always prevents the default browser menu and clears the right-down marker', async () => {
+    const t = setup()
+    t.setRightDownAt({ x: 100, y: 120 })   // a still right-click (no movement)
+    const e = rc()
+    await t.onAssemblyContextMenu(e)
+    expect(e.preventDefault).toHaveBeenCalled()
+    expect(e.stopPropagation).toHaveBeenCalled()
+    expect(t.getRightDownAt()).toBeNull()
+  })
+
+  it('a right-drag (pan) is suppressed — no menu, no pick', async () => {
+    const t = setup()
+    t.setRightDownAt({ x: 100, y: 120 })
+    await t.onAssemblyContextMenu(rc({ clientX: 130, clientY: 120 }))   // moved 30px > 5px threshold
+    expect(t.deps.assemblyRenderer.pickLinker).not.toHaveBeenCalled()
+    expect(t.assemblyContextMenu.show).not.toHaveBeenCalled()
+    expect(ctxMenuCalls).toHaveLength(0)
+  })
+
+  it('a right-click hitting an overhang arrow bails (overhang dialog owns it)', async () => {
+    const t = setup({}, { overhangLocations: { isVisible: () => true, hitTest: () => true } })
+    await t.onAssemblyContextMenu(rc())
+    expect(t.deps.assemblyRenderer.pickLinker).not.toHaveBeenCalled()
+    expect(t.assemblyContextMenu.show).not.toHaveBeenCalled()
+  })
+
+  it('a linker hit opens the Relax menu, and Relax calls the backend', async () => {
+    const t = setup({ currentAssembly: { instances: [], groups: [], overhang_connections: [{ id: 'L1', name: 'L1' }] } })
+    t.deps.assemblyRenderer.pickLinker.mockReturnValue('L1')
+    await t.onAssemblyContextMenu(rc())
+    expect(t.deps.api.getAssemblyOverhangConnectionRelaxStatus).toHaveBeenCalledWith('L1')
+    expect(ctxMenuCalls).toHaveLength(1)
+    const relaxItem = ctxMenuCalls[0].items.find(i => i.label === 'Relax linker')
+    expect(relaxItem.disabled).toBe(false)
+    await relaxItem.onClick()
+    expect(t.deps.api.relaxAssemblyOverhangConnection).toHaveBeenCalledWith('L1')
+    expect(t.assemblyContextMenu.show).not.toHaveBeenCalled()
+  })
+
+  it('linker Relax is disabled when the backend reports it unavailable', async () => {
+    const t = setup({ currentAssembly: { instances: [], groups: [], overhang_connections: [{ id: 'L1', name: 'L1' }] } })
+    t.deps.assemblyRenderer.pickLinker.mockReturnValue('L1')
+    t.deps.api.getAssemblyOverhangConnectionRelaxStatus.mockResolvedValue({ available: false, reason: 'ss linker' })
+    await t.onAssemblyContextMenu(rc())
+    const relaxItem = ctxMenuCalls[0].items.find(i => i.label === 'Relax linker')
+    expect(relaxItem.disabled).toBe(true)
+    expect(ctxMenuCalls[0].items.some(i => i.label === 'ss linker')).toBe(true)
+  })
+
+  it('a belt-path hit opens an "Attach part to belt" menu', async () => {
+    const t = setup()
+    t.deps.assemblyJointRenderer.pickBeltAt.mockReturnValue({ beltId: 'B1' })
+    await t.onAssemblyContextMenu(rc())
+    expect(ctxMenuCalls).toHaveLength(1)
+    const attachItem = ctxMenuCalls[0].items.find(i => i.label === 'Attach part to belt')
+    attachItem.onClick()
+    expect(t.attachPartToBelt).toHaveBeenCalledWith('B1')
+    expect(t.assemblyContextMenu.show).not.toHaveBeenCalled()
+  })
+
+  it('a part hit selects the instance and shows the part context menu', async () => {
+    const t = setup()
+    t.deps.assemblyRenderer.pickInstance.mockReturnValue({ id: 'inst-A' })
+    await t.onAssemblyContextMenu(rc())
+    expect(t.setStateSpy).toHaveBeenCalledWith({ activeInstanceId: 'inst-A' })
+    expect(t.assemblyContextMenu.show).toHaveBeenCalledWith({ id: 'inst-A' }, 100, 120)
+  })
+
+  it('switching to a new part with a pending transform commits it first', async () => {
+    const t = setup({ activeInstanceId: 'inst-OLD' }, { hasAssemblyPending: vi.fn(() => true) })
+    t.deps.assemblyRenderer.pickInstance.mockReturnValue({ id: 'inst-NEW' })
+    await t.onAssemblyContextMenu(rc())
+    expect(t.deps.commitAssemblyPending).toHaveBeenCalled()
+    expect(t.assemblyContextMenu.show).toHaveBeenCalledWith({ id: 'inst-NEW' }, 100, 120)
+  })
+
+  it('right-clicking empty space does nothing', async () => {
+    const t = setup()
+    await t.onAssemblyContextMenu(rc())
+    expect(ctxMenuCalls).toHaveLength(0)
+    expect(t.assemblyContextMenu.show).not.toHaveBeenCalled()
   })
 })

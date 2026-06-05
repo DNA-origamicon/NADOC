@@ -166,7 +166,6 @@ import { initToolFilterToggles } from './ui/tool_filter_toggles.js'
 import { initViewLegends } from './ui/view_legends.js'
 import { initViewMenuPills } from './ui/view_menu_pills.js'
 import { showConfirm }                         from './ui/primitives/confirm.js'
-import { createContextMenu }                   from './ui/primitives/context_menu.js'
 import { initSidebarResize }                   from './ui/sidebar_resize.js'
 import { initSceneInspector }                  from './scene/scene_inspector.js'
 import { createModal }                         from './ui/primitives/modal.js'
@@ -7341,6 +7340,8 @@ async function main() {
     store, camera, canvas, controls, api,
     assemblyRenderer, assemblyJointRenderer, instanceGizmo,
     clusterGlowLayer, overhangHoverPicker,
+    assemblyContextMenu, overhangLocations,
+    attachPartToBelt:            _attachPartToBelt,
     getClusterPanel:             () => clusterPanel,
     canvasNdc:                   _canvasNdc,
     clusterBackboneEntries:      _clusterBackboneEntries,
@@ -7358,6 +7359,7 @@ async function main() {
     assemblyLasso,
     getAssemblyPtrDownAt:        () => _assemblyPtrDownAt,
     setAssemblyPtrDownAt:        (v) => { _assemblyPtrDownAt = v },
+    getAssemblyRightDownAt:      () => _assemblyRightDownAt,
     setAssemblyRightDownAt:      (v) => { _assemblyRightDownAt = v },
     getTranslateRotateActive:    () => _translateRotateActive,
     getSelectedAssemblyCluster:  () => _selectedAssemblyCluster,
@@ -7367,84 +7369,10 @@ async function main() {
   })
   const _onAssemblyClick = _assemblyPointer.onAssemblyClick
   const _onAssemblyPointerDown = _assemblyPointer.onAssemblyPointerDown
-
-  // Right-click menu for an assembly cross-part linker. Mirrors the per-design
-  // linker menu's "Relax linker": the assembly relax rigid-places the free part
-  // into a coaxial native-length duplex. Relax availability is gated by the
-  // backend status (ds-only; needs a movable part).
-  async function _showAssemblyLinkerMenu(connId, x, y) {
-    const conn = store.getState().currentAssembly?.overhang_connections?.find(c => c.id === connId)
-    const name = conn?.name ?? 'linker'
-    let status = null
-    try { status = await api.getAssemblyOverhangConnectionRelaxStatus(connId) } catch { /* treat as available */ }
-    const available = status?.available !== false
-    createContextMenu({
-      x, y,
-      items: [
-        { type: 'header', label: `Linker · ${name}` },
-        {
-          label: 'Relax linker',
-          disabled: !available,
-          onClick: async () => {
-            try {
-              await api.relaxAssemblyOverhangConnection(connId)
-              showToast('Relaxed linker — free part moved into a coaxial native-length duplex.')
-            } catch (err) {
-              showToast(`Relax failed: ${err?.message ?? err}`, { severity: 'error' })
-            }
-          },
-        },
-        ...(available ? [] : [{ type: 'header', label: status?.reason ?? 'Relax unavailable' }]),
-      ],
-    })
-  }
-
-  async function _onAssemblyContextMenu(e) {
-    e.preventDefault()
-    e.stopPropagation()
-    // Right-drag pans the camera (OrbitControls); the browser still emits a
-    // contextmenu on release.  If the pointer moved since right-button-down it
-    // was a pan, not a click — suppress selection + menu (default is already
-    // prevented above, so no browser menu appears either).
-    const rightDown = _assemblyRightDownAt
-    _assemblyRightDownAt = null
-    if (rightDown) {
-      const rdx = e.clientX - rightDown.x, rdy = e.clientY - rightDown.y
-      if (rdx * rdx + rdy * rdy > 25) return   // pan-drag, not a right-click
-    }
-    // If the right-click hit an overhang arrow, selection_manager's
-    // contextmenu listener already routes it to the overhang length dialog.
-    // Skip the part context menu so it doesn't appear on top.
-    if (overhangLocations?.isVisible?.()) {
-      const rc = new THREE.Raycaster()
-      rc.setFromCamera(_canvasNdc(e), camera)
-      if (overhangLocations.hitTest(rc)) return
-    }
-    // Right-click on any part of a linker (complement/bridge beads or connector
-    // arc) → a Relax menu, mirroring the per-design linker right-click.
-    const linkerConnId = assemblyRenderer.pickLinker?.(_canvasNdc(e), camera)
-    if (linkerConnId) { _showAssemblyLinkerMenu(linkerConnId, e.clientX, e.clientY); return }
-
-    // Right-click on a belt path → "Attach part to belt" (uses the clicked point
-    // as the belt location; then pick the part's connector).
-    const beltHit = assemblyJointRenderer.pickBeltAt(e)
-    if (beltHit) {
-      createContextMenu({ x: e.clientX, y: e.clientY, items: [
-        { type: 'header', label: 'Belt path' },
-        { label: 'Attach part to belt', onClick: () => _attachPartToBelt(beltHit.beltId) },
-      ] })
-      return
-    }
-
-    const inst = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
-    if (!inst) return
-    if (inst.id !== store.getState().activeInstanceId && _hasAssemblyPending()) {
-      await _commitAssemblyPending()
-      _assemblySelectedPartJoint = null
-    }
-    store.setState({ activeInstanceId: inst.id })
-    assemblyContextMenu.show(inst, e.clientX, e.clientY)
-  }
+  // Right-click context-menu router (linker Relax / belt attach / part menu)
+  // lifted into scene/assembly_pointer.js (sub-part c). Registered as the
+  // canvas `contextmenu` listener in the assembly-mode subscriber above.
+  const _onAssemblyContextMenu = _assemblyPointer.onAssemblyContextMenu
 
   let clusterPanel = null
   clusterPanel = initClusterPanel(store, {
