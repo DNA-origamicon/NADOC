@@ -1,6 +1,6 @@
 # main.js carve-up map — stateful-subsystem extraction backlog
 
-**Purpose.** main.js is one large `async function main()` closure (~8.75k lines as of 2026-06-05, down
+**Purpose.** main.js is one large `async function main()` closure (~8.0k lines as of 2026-06-05, down
 from ~16.5k). The pure-helper well is drained (see `main_js_extraction_log.md`) and — as of #61 — every
 Tier 1–5 *stateful subsystem* (panels, dialogs, menus, event-handler clusters) is extracted too. The loop
 is **near-complete**: the remaining mass is the lifecycle spine + thin per-action wiring that's correctly
@@ -54,47 +54,38 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 ## Next-session handoff
 
 _Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **STRATEGY: hardest-first, multi-commit
-campaigns — the pure-core / narrow-sub-block well is dry.** ✅ **KEYSTONE DONE (#73/#74/#75, −255 ln).** ✅ **frontier #1
-sub-blocks all peeled:** response-delta → `scene/response_delta.js` (#76); cluster-pick → `scene/joint_pick.js` (#77);
-`_mr*` panel shell → `scene/move_rotate_panel.js` (#78). ✅ **BOTH cheap de-dup cuts of the tool campaign DONE:** #79
-(commit 410a7c7, −19 ln) folded the cluster-overlay refresh (5 visibility-gated overlays ± flexibleArcs, copied 4×) into
-`_responseDelta.refreshClusterOverlays({withFlexibleArcs})`; #80 (commit 11c3a0d, −10 ln, main.js 8365→8355) folded the
-ds-linker bridge re-emit try/catch (`await api.refreshBridges(ids)` → `applyBridgeNucsUpdate`, console.warn on throw,
-copied 3×) into `_responseDelta.reemitClusterBridges(clusterIds)`. Both are single-source-of-truth rendering invariants
-driven by response_delta e2e. **NOTE still open for whoever finishes the tool: the `withFlexibleArcs:false` the tool's
-commit passes is a possible latent bug** — a cluster move with anchored ssDNA arcs arguably should rebuild them like the
-delta paths do; flagged-not-fixed (verbatim rule). Ask the user before flipping it._
+campaigns — the pure-core / narrow-sub-block well is dry.** ✅✅ **FRONTIER #1 IS COMPLETE.** The whole Translate/Rotate
+transform band is now modules: keystone (#73/#74/#75, −255 ln) + response-delta `scene/response_delta.js` (#76) +
+cluster-pick `scene/joint_pick.js` (#77) + `_mr*` panel shell `scene/move_rotate_panel.js` (#78) + the two de-dups
+(#79/#80) + **the TOOL gesture core `scene/translate_rotate_tool.js` (#81, −353 ln, main.js 8355→8002).** The handoff's
+"flag stays main, factory takes getActive/setActive" prediction was exactly right: `_translateRotateActive` (22 sites),
+`_clusterDirty`, and deform-shared `_editContext` stay main `let`s reached via get/set shims; `jointRenderer` injected
+lazily (declared after the factory). 19 factory tests + smoke 23/23 + assembly_move_tool/select 3/3._
 
-**▶ NEXT — the Translate/Rotate TOOL gesture core (frontier #1 remainder; BOTH cheap de-dups are now done).** What's
-LEFT under banner `// ── Joint arrow pick handler` (re-grep — line drifted, was ~5102) is the gesture/commit logic only:
-`_activateTranslateRotateTool` / `_confirmTranslateRotateTool` (commit pipeline: edit-in-place cluster_op vs standard
-commit — both now call `_refreshClusterOverlays` + `_reemitClusterBridges`; what's still inline+duplicated is the
-`commitClusterPositions`+rebake reconciliation lead-in, but those 3 copies use genuinely-different rebake data sources
-(per-diff inline / oldCtById loop / single) and are NOT cleanly de-dupable verbatim — see #80's tail note; leave them) /
-`_cancelTranslateRotateTool` / `_rotateJoint` / `_restoreTransformPreviewFromStore` / `_onToolPickPointerDown` + the
-`_confirmBtn` element + `_translateRotateActive`/`_clusterDirty` state. **Its deps are now mostly modules** — drive
-`_moveRotatePanel.{setX,getAssemblyCtx,setAssemblyCtx}`, `_jointPick.{canvasNdc,pickActiveClusterEntry}`,
-`_assemblyTransform.*`, `_responseDelta.{rebakeHelixAxesForClusterDelta,refreshClusterOverlays,reemitClusterBridges}`,
-`_flexRelax`, `_refreshClusterPivotForAttach` (still main). **WATCH OUT: `_translateRotateActive` is read/written from 22
-sites** (lifecycle-spine-adjacent — `_resetForNewDesign`/assembly-exit/keyboard-shortcuts toggle it); `_clusterDirty`
-from 9 sites (set at the clusterGizmo onTransform ~4636), `_editContext` is SHARED with the deform editor (1276–1459).
-Likely the FLAG stays a main `let` and the tool fns lift as a factory taking `getActive`/`setActive`; or stay inline
-(STOP-criterion — re-derive). The design-mode cluster-gizmo commit can't be hand-driven headlessly (LESSONS H7);
-response_delta e2e covers the shared helpers, the tool callers are verbatim-equivalent.
+**STILL-OPEN latent-bug note (carried from #79/#80, now inside `translate_rotate_tool.js`):** the tool's two commit paths
+pass `_refreshClusterOverlays({ withFlexibleArcs: false })` — a cluster move with anchored ssDNA arcs arguably *should*
+rebuild them like the response_delta paths do (which pass `true`). Flagged-not-fixed (verbatim rule). Ask the user before
+flipping it. Also untouched (genuinely not de-dupable): the `commitClusterPositions`+rebake reconciliation lead-in still
+differs across the standard-commit vs edit-in-place paths (oldCtById-loop vs single rebake) — different data sources.
+
+**▶ NEXT — Representation switcher (handoff option 2; ~320 ln, multi-commit).** Banners `// ── Unified representation
+radio` + `_setRepresentation` + `// ── Function-key bindings: F1…F7` + the option sliders. Central mode-switch touching
+every renderer + the Coloring submenu (`_setColoringMode`'s 7 callers live here). **First step: `rg` the renderer fan-out**
+(`_setRepresentation` writes to designRenderer/bluntEnds/unfoldView/hull/atomistic/surface) and re-derive the cohesive
+block boundary — the map has mis-scoped 6× (adjacency ≠ cohesion). Consider a pure-core de-risking first cut (mirror #72
+`computeAtomStrandColors` / #35 `revoluteCommitValue`) before the full factory. The `t`-shortcut/`registerShortcut` import
+pattern + the lazy-arrow boot-capture fix (this commit's #81 at sites 4509/4995) are the reference for any new tool-like
+wiring. Then **option 3: Atomistic/surface controllers remainder** (`_applyAtomisticMode`/`_applySurfaceMode`/
+`_refetchAtomistic`/`_ensureAtomData` + region overlays; interleaved with renderer construction — separate controllers
+from init wiring first).
 
 **Why hardest-first now.** Every remaining frontier item is HARD (gesture-bound and/or shared-state coupled). Do each as a
 deliberate campaign: (1) map coupling with `rg` first; (2) lean on the EXISTING gesture gate (below), don't re-derive;
-(3) split the lift across commits (the alias-const pattern from #73 keeps call sites verbatim across the split); (4) lift
-verbatim. **Alias-const pattern (proven in the keystone): `const _x = _module.x` right after the factory init keeps EVERY
-existing call site untouched — only fn bodies relocate.** Budget a whole session per campaign.
-
-**Then, in dependency order:**
-2. **Representation switcher** (~320 ln) — banners `// ── Unified representation radio` + `_setRepresentation` +
-   `// ── Function-key bindings: F1…F7` + the option sliders. Central mode-switch touching every renderer + the Coloring
-   submenu (`_setColoringMode`'s 7 callers live here). Map the renderer fan-out; multi-commit.
-3. **Atomistic/surface controllers (remainder)** — `_applyAtomisticMode`/`_applySurfaceMode`/`_refetchAtomistic`/
-   `_ensureAtomData` + region overlays. Pure colour cores already drained (#72). Interleaved with renderer
-   construction — first separate the controller fns from the init wiring, then lift the controllers as a factory.
+(3) lift verbatim; (4) alias-consts keep call sites byte-identical. **Alias-const pattern (proven in the keystone + #81):
+`const _x = _module.x` right after the factory init keeps EVERY existing call site untouched — only fn bodies relocate.**
+**Boot-capture trap (banked from #81): a dep object built ABOVE the factory init that passes a tool fn *by value*
+(`onX: _toolFn`) hits TDZ on the forward alias-const → wrap as a lazy arrow `(...a) => _toolFn(...a)`.** Deferred-closure
+call sites (handler bodies, subscribers) can reference the forward const directly. Budget a whole session per campaign.
 
 <details><summary>Prior detail on frontier #1 (kept for reference)</summary>
 
@@ -747,21 +738,17 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   extracted `atomColorsFromLetters` — not worth a module). The remaining controllers are the HARD stateful
   renderer-wiring (`_applyAtomisticMode`/`_applySurfaceMode`/`_refetchAtomistic`/`_ensureAtomData` + the region
   overlays), still interleaved with renderer construction.
-- [~] **Translate/Rotate tool (hardest-first item 1, AFTER the keystone).** Sub-blocks de-lumped:
+- [x] **Translate/Rotate tool (hardest-first item 1, AFTER the keystone) — DONE.** Sub-blocks de-lumped:
   response-delta → `scene/response_delta.js` (#76, 8dbdbaf, −196); cluster-pick helpers → `scene/joint_pick.js`
-  (#77, 9b06574, −38); **the `_mr*` panel SHELL → `scene/move_rotate_panel.js` (#78, cedbc83, −134) — the tool now
-  drives the panel via the `_moveRotatePanel` API + alias-consts.** STILL INLINE — the tool GESTURE core only:
-  `_activateTranslateRotateTool` … `_cancelTranslateRotateTool` (~386 ln) + `_confirmTranslateRotateTool` +
-  `_rotateJoint` + `_restoreTransformPreviewFromStore` + `_onToolPickPointerDown` (the joint-arrow pick handler, banner
-  `// ── Joint arrow pick handler`, re-grep) + the `_confirmBtn` element + `_translateRotateActive`/`_clusterDirty`
-  state. Deps now mostly modules: `_jointPick.{canvasNdc,pickActiveClusterEntry}`, `_moveRotatePanel.set*`,
-  `_assemblyTransform.*`, `_flexRelax`, `_refreshClusterPivotForAttach` (still in main). Risk: **HARD** — gesture-bound
-  (canvas pointer pick), assembly+design dual-mode; `_confirmTranslateRotateTool` is a ~200-ln commit pipeline
-  (edit-in-place cluster_op vs standard commit, both with helix-axis rebake + overlay refresh). Gate UNBLOCKED
-  (8e050e4 — drive via panel inputs, NOT handle drags). The big remaining bites: `_confirmTranslateRotateTool` (commit
-  pipeline) and the `_activate`/`_cancel`/`_rotateJoint`/`_onToolPickPointerDown` gesture set + `_translateRotateActive`
-  (lifecycle-spine-adjacent, 22 sites — likely the flag stays a main `let`, the fns lift as a factory taking
-  `get/setActive`). Re-derive whether a tool factory is worth it vs leaving the gesture fns inline (STOP-criterion).
+  (#77, 9b06574, −38); the `_mr*` panel SHELL → `scene/move_rotate_panel.js` (#78, cedbc83, −134); de-dups (#79/#80).
+  **The tool GESTURE core → `scene/translate_rotate_tool.js` (#81, −353 ln, main.js 8355→8002, COMPLETES frontier #1).**
+  Factory `initTranslateRotateTool({~40 deps})→{activate,confirm,cancel,rotateJoint,removeToolPickListeners,hideConfirmBtn}`
+  owns `_onToolPickPointerDown` + the `_confirmBtn` ✓ element + all 7 tool fns + the apply/cancel/menu/`t`-shortcut wiring.
+  As predicted: `_translateRotateActive` (22 sites), `_clusterDirty`, deform-shared `_editContext` stay main `let`s via
+  `get/setActive`+`get/setClusterDirty`+`get/setEditContext` shims; `jointRenderer` injected lazily (declared after the
+  factory); alias-consts keep every call site verbatim; the 2 boot-time value-captures (keyboard-shortcuts ~4509,
+  assemblyContextMenu ~4995) wrapped as lazy arrows. 19 factory tests, smoke 23/23, assembly_move_tool/select 3/3.
+  Live design-mode 3D-drag commit NOT hand-driven (LESSONS H7) — factory branch tests cover it.
 - [x] **▶ KEYSTONE — Assembly transform/commit/FK + motion constraints. DONE** (#73/#74/#75, commits f752255/46d66fe/e161a9f, −255 ln → `scene/assembly_transform.js`, 23 vitest). Banners
   `// ── Rigid-body group gizmo attachment` (~6773, attach itself partly in group_gizmo.js already) + `// ── Forward
   kinematics` (~6840) + `// ── Motion-constraint analyzer` (~6996) + status chip (~7083), ~400 ln.
