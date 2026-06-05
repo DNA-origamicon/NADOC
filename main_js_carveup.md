@@ -54,7 +54,7 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 ## Next-session handoff
 
 _Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Overhang Orientation panel
-EXTRACTED (#64, commit pending) → `ui/overhang_orientation_panel.js`, −245 ln. main.js 10026 → 9781.** First
+EXTRACTED (#64, commit 009df61) → `ui/overhang_orientation_panel.js`, −245 ln. main.js 10026 → 9781.** First
 real LIFT in three sessions (#62/#63 were dead-code deletions). `## Tier 7` "clean dialogs/panels" band now
 tops out at **Autoscaffold picker** (next, below). The reachability gate WORKED — OO markup was in index.html
 and the feature is genuinely wired (right-click "Edit Orientation"), so it lifted cleanly._
@@ -596,7 +596,7 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
 - [x] **Overhang Orientation panel** — the `_oo*` cluster (`_ooOpen`/`_ooClose`/`_ooApply`/`_ooPreview*`/
   `_ooStepAxis`…) + angle fields + rotate-only TransformControls gizmo + the structural-change auto-close
   subscriber → `ui/overhang_orientation_panel.js` factory `initOverhangOrientationPanel` + pure
-  `buildOverhangRotationOps` (delta-compose op builder). **DONE 2026-06-05 (extraction #64, commit pending).**
+  `buildOverhangRotationOps` (delta-compose op builder). **DONE 2026-06-05 (extraction #64, commit 009df61).**
   REACHABILITY GATE PASSED: markup IS in index.html (`#overhang-orient-panel` etc.) and the feature is
   wanted (right-click overhang → "Edit Orientation"; feature-log edit of `overhang_rotation`; keyboard
   Delete/Escape). Cohesive block was lines 5001–5257 (~256 ln, matched the ~258 estimate for once). −245 ln
