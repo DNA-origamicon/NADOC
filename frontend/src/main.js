@@ -154,6 +154,7 @@ import { initExpandedSpacing }     from './scene/expanded_spacing.js'
 import { registerShortcut } from './input/shortcuts.js'
 import { initKeyboardShortcuts } from './ui/keyboard_shortcuts.js'
 import { initViewToolButtons } from './ui/view_tool_buttons.js'
+import { initToolFilterToggles } from './ui/tool_filter_toggles.js'
 import { showConfirm }                         from './ui/primitives/confirm.js'
 import { createContextMenu }                   from './ui/primitives/context_menu.js'
 import { initSidebarResize }                   from './ui/sidebar_resize.js'
@@ -5340,49 +5341,14 @@ async function main() {
   })
 
   // ── Tool Filter toggles — #view-tools .sf-btn[data-key] ─────────────────────
-  {
-    const _tfKeyMap = [
-      ['bluntEnds',          'blunt'],
-      ['crossoverLocations', 'xloc' ],
-      ['overhangLocations',  'ovhg' ],
-    ]
-    for (const [storeKey, dataKey] of _tfKeyMap) {
-      const btn = document.querySelector(`#view-tools .sf-btn[data-key="${dataKey}"]`)
-      if (!btn) continue
-      btn.addEventListener('click', () => {
-        const tf = store.getState().toolFilters
-        store.setState({ toolFilters: { ...tf, [storeKey]: !tf[storeKey] } })
-      })
-      store.subscribe(() => {
-        btn.classList.toggle('active', !!store.getState().toolFilters[storeKey])
-      })
-    }
-  }
-
-  // Sync toolFilters → tool visibility
-  store.subscribe((newState, prevState) => {
-    if (newState.toolFilters === prevState.toolFilters) return
-    const tf = newState.toolFilters
-    const prev = prevState.toolFilters ?? {}
-    if (tf.crossoverLocations !== prev.crossoverLocations) {
-      crossoverLocations.setVisible(tf.crossoverLocations)
-      if (tf.crossoverLocations) {
-        crossoverLocations.rebuild(store.getState().currentGeometry).then(() => {
-          if (cadnanoView.isActive()) cadnanoView.reapplyPositions()
-          else unfoldView.reapplyIfActive()
-        })
-      }
-    }
-    if (tf.overhangLocations !== prev.overhangLocations) {
-      overhangLocations.setVisible(tf.overhangLocations)
-      if (tf.overhangLocations) _rebuildOverhangLocations()
-      // Turning the overhang tool off in assembly mode drops any transient
-      // hover label (hover-reveal is gated on this tool — see overhangHoverPicker.onHoverMove).
-      else if (newState.assemblyActive) { overhangHoverPicker.reset() }
-    }
-    if (tf.extensionLocations !== prev.extensionLocations) {
-      designRenderer.setExtensionsVisible(tf.extensionLocations)
-    }
+  // Extracted to ui/tool_filter_toggles.js. The #view-tools button row + the
+  // toolFilters→renderer-visibility subscriber. overhangHoverPicker is created
+  // later (~init order), so it's reached via a lazy getter.
+  initToolFilterToggles({
+    store, crossoverLocations, overhangLocations, designRenderer,
+    cadnanoView, unfoldView,
+    rebuildOverhangLocations: _rebuildOverhangLocations,
+    getOverhangHoverPicker: () => overhangHoverPicker,
   })
 
   // Save/restore selectableTypes when deform tool activates/deactivates so that
