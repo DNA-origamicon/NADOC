@@ -53,27 +53,33 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Routing-warning dialogs
-DELETED as dead code (#62, commit e947b42)** — not extracted. main.js 10254 → 10123 (−131). The loop is NOT
-near-complete: `## Tier 7` (the deep-scan backlog) still holds ~6 cohesive subsystems (~2,400 ln). Top of
-Tier 7's "clean dialogs/panels" band is now **CG Relax (mrdna) panel**._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **CG Relax (mrdna) panel
+DELETED as dead/unreachable code (#63, commit 685c72e)** — not extracted. main.js 10123 → 10026 (−97). The
+loop is NOT near-complete: `## Tier 7` still holds ~5 cohesive subsystems (~2,300 ln). The "clean
+dialogs/panels" band's top is now **Overhang Orientation panel** (CG Relax + Routing-warning dialogs above
+it were both dead-code deletions, NOT lifts — two in a row, see the banked gotcha)._
 
-**This session (#62, handoff-recommended):** the carve-up's "cleanest cut left" (Routing-warning dialogs,
-`_confirmCadnanoRoutingChange` + `_confirmFeatureOverride`, ~3987–4116) turned out to be **dead code**, not
-an extraction target. Git archaeology: both were promise-returning raw-DOM confirm modals introduced in
-1462c06 (FEM + cluster transforms) with two real call sites guarding auto-merge/prebreak routing ops; the
-cadnano overhaul (a6df304) removed every caller but left the bodies behind. Zero refs in src/ or e2e/ today.
-Want-it gate → user chose delete (mirrors #44/#45/#46). −131 ln. Gate: vitest 687 (unchanged — no test
-surface) + smoke 23/23. No app exercise (nothing to exercise — there were no callers).
+**This session (#63, handoff-recommended):** the carve-up's recommended "cleanest cut" (CG Relax/mrdna panel,
+IIFE ~4047–4141) was **dead, unreachable code** — second deep-scan "cleanest cut" in a row that turned out
+deletable, not liftable. Git archaeology: the IIFE was added in 907769e but its `cgrelax-*` DOM markup was
+**never added to index.html in ANY commit** (verified `git log --all -S "btn-cgrelax-run"` → only the JS
+commit). So every `getElementById('cgrelax-…')` has returned null since day one; all click handlers are `?.`-
+guarded so none ever attached. Only inert code ran: `initMrdnaRelaxClient(...)` construction (no DOM) + a
+no-op `store.subscribe`. Backend `/ws/mrdna-relax` WS route + `physics/mrdna_relax_client.js` still work —
+the feature was half-built (working backend, never-wired frontend). Want-it gate → user chose delete (mirrors
+#62/#46). −97 ln. Gate: vitest 687 (unchanged) + smoke 23/23. No app exercise (nothing reachable to exercise).
+Left orphaned-but-inert: `store.js` `cgRelaxPositions`/`cgRelaxStats` + their `physics`-slice entry.
 
-**Banked gotcha this session:**
-- **Run the want-it gate on Tier 7 entries BEFORE re-deriving scope — the deep-scan tier was sized from
-  banner arithmetic and didn't check for callers.** The map billed this "LOW risk, cleanest cut left, mirrors
-  the modal lifts," but a 2-line `grep -rn _confirmCadnanoRoutingChange src/ e2e/` showed zero call sites —
-  it's orphaned, not liftable. `git log -S "<fn>()" --all` then pinned the exact commit that removed the
-  callers (a6df304) vs. introduced them (1462c06). **For any Tier-7 dialog/panel, grep its call sites first;
-  if it's wired from nowhere it's a deletion candidate, and deleting dead mass is the cheaper, correct win.**
-- Also corrected the map's dep guess: these were `document.createElement` modals, NOT `createModal`/`createButton`.
+**Banked gotcha this session (REINFORCES #62's):**
+- **The want-it gate for a Tier-7 *panel* is "does its DOM markup exist in index.html?", not just "does it have
+  callers."** A panel IIFE wires itself via `document.getElementById` at construction — if those ids aren't in
+  index.html, every handler silently no-ops and the panel is unreachable even though the JS "runs." First check
+  for a panel: `grep -c "<panel-id-prefix>" frontend/index.html`. Zero → it's dead UI, a deletion candidate.
+  `git log --all -S "<a-unique-button-id>"` confirms whether the markup was EVER committed.
+- **Two deep-scan "cleanest cuts" in a row (#62, #63) were dead code, not lifts.** Tier 7 was sized from banner
+  arithmetic with no reachability check. **Before re-deriving scope on ANY Tier-7 entry, run the reachability
+  gate** (markup-exists for panels, call-sites for fns/dialogs). The remaining Tier-7 entries below are NOT
+  yet reachability-checked — do that first, every time.
 
 **The goal is NOT a LOC number.** main.js is the app's composition root (wiring board): 146 imports + ~100
 module constructions + the lifecycle spine + thin per-action wiring are *irreducible* (~2,500–3,500 ln floor).
@@ -81,14 +87,17 @@ Chasing a lower number past that point means junk-drawer bundles or pass-through
 code worse. **Target instead: "the closure holds zero cohesive logic clusters."** Done = every remaining
 function is either module construction/wiring or the spine. LOC lands ~3,000 as a *result*, not a target.
 
-**Recommended next region — START at the top of `## Tier 7` (the cleanest, lowest-risk first):**
-1. **CG Relax (mrdna) panel** (banner `// ── CG Relax (mrdna)` ~4178, ~96 ln) → `ui/cg_relax_panel.js`.
-   Self-contained-ish relax control (store/api/DOM). **GREP ITS CALL SITES + want-it gate FIRST** — this
-   session's #62 found the previous "cleanest cut" was dead code; verify the panel is wired & wanted, and
-   re-derive whether the cohesive block is already mostly in a physics module before investing.
-2. Then the other Tier-7 clean panels (Overhang-Orientation panel, Autoscaffold picker, Sequencing menu —
-   the last may be a thin-wiring scrap over scaffold_modal) before the HARD gesture/assembly-coupled ones
-   (Translate/Rotate tool, repr switcher, assembly transform/FK).
+**Recommended next region — `## Tier 7` "clean dialogs/panels" band (the cleanest, lowest-risk first):**
+1. **Overhang Orientation panel** (banners `// ── Overhang Orientation right-sidebar panel` ~5229 +
+   `// ── Overhang angle field wiring` + `// ── Overhang gizmo`, ~258 ln) → `ui/overhang_orientation_panel.js`.
+   The `_oo*` cluster + angle fields + a rotate-only TransformControls gizmo. **REACHABILITY GATE FIRST**
+   (`grep -c "overhang-orient" frontend/index.html` or whatever its panel-id prefix is — #62 AND #63 were both
+   dead UI whose markup was never in index.html). If reachable: `_ooClose` is already injected into
+   keyboard_shortcuts as `ooClose`, drive via angle fields in jsdom (skip the gizmo handle), pure-core candidate
+   = angle math. Re-derive scope: the map lumps 3 banners.
+2. Then the other Tier-7 entries — Autoscaffold picker (~212 ln, re-derive: may interleave scaffold-router),
+   Sequencing menu (~95 ln, may be a thin-wiring scrap over scaffold_modal) — each **reachability-gated first** —
+   before the HARD gesture/assembly-coupled ones (Translate/Rotate tool, repr switcher, assembly transform/FK).
 
 **Do NOT bundle the micro-scraps** (Orbit submenu ~10 ln, Browser tab title ~5 ln, Coloring submenu ~20 ln
 w/ 7 external `_setColoringMode` callers, deform→selectableTypes subscriber ~28 ln). Six logged mis-scopes
@@ -572,8 +581,16 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   (a6df304), which left the function bodies orphaned. Zero callers in src/ or e2e/ since. User-confirmed
   delete (mirrors #44/#45/#46). −131 ln off the closure. (Note: these were raw-DOM modals — `document.createElement`,
   NOT `createModal`/`createButton` — the map's dep guess was wrong, but moot since deleted.)
-- [ ] **CG Relax (mrdna) panel** — banner `// ── CG Relax (mrdna)` (~4178–4273), ~96 ln. Self-contained-ish
-  relax control. Deps: store, api, DOM. Risk: **LOW-MED.** Verify it isn't already mostly in a physics module.
+- [x] **CG Relax (mrdna) panel** — banner `// ── CG Relax (mrdna)` (~4047–4141, ~97 ln). **DELETED
+  2026-06-05 (commit 685c72e), not extracted.** Want-it gate (#62/#46 pattern): the IIFE referenced
+  `cgrelax-*` DOM ids that were **never added to index.html in any commit** — added in 907769e, the panel
+  has been unreachable its entire life (every `getElementById` → null; all click handlers guarded with
+  `?.` so none attach). Only the inert `initMrdnaRelaxClient` construction + a no-op store subscriber ran.
+  User-confirmed delete; backend `/ws/mrdna-relax` route + `physics/mrdna_relax_client.js` left intact for
+  later re-wiring. **Now-orphaned (left, inert):** `store.js` `cgRelaxPositions`/`cgRelaxStats` fields +
+  their entry in the `physics` slice Set — nothing reads or writes them now; harmless dead state, a future
+  store-cleanup scrap (touching the slice Set risks subscription behavior → left out of this commit's scope).
+  −97 ln. Gate: vitest 687 (unchanged) + smoke 23/23.
 - [ ] **Overhang Orientation panel** — banners `// ── Overhang Orientation right-sidebar panel` (~5229) +
   `// ── Overhang angle field wiring` (~5406) + `// ── Overhang gizmo (TransformControls)` (~5430), through
   ~5486 (~258 ln). The `_oo*` cluster (`_ooOpen`/`_ooClose`/`_ooApply`/`_ooPreview*`/`_ooStepAxis`…) + angle
