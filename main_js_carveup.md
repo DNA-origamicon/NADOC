@@ -52,48 +52,53 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **Third Tier-5 cut**
-in the "Connection monitor / autosave / SSE" region: extracted the **Sync status badge** sub-part (#54)
-→ new `ui/sync_badge.js`. main.js 10879 → 10857 (−22 ln)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **Connection monitor /
+autosave / SSE region FULLY DRAINED** — extracted the last sub-part (#55, autosave + SSE) → `app/lifecycle.js`
+`initAutosaveSync`. main.js 10857 → 10728 (−129 ln)._
 
-**This session (#54):** cheap, bounded cut into **Tier 5** — extracted the **Sync status badge + debug
-log panel** primitives (`_setSyncStatus`/`_syncLog` + DOM refs + close-listener + show/hide/toggle) →
-new `ui/sync_badge.js` `initSyncBadge()→{setSyncStatus, syncLog, show/hide/toggleDebugPanel}`. Deliberately
-**NOT** in `app/lifecycle.js`: these are pure-DOM presentation helpers with ZERO flag coupling, so they
-belong in `ui/` and the lifecycle consumers (conn monitor #53, file_io #52, SSE handler, import_menu, the
-still-inline autosave subscribers) call them as injected deps. The flag-reading `window.__nadocSyncDebug`
-helper + the Ctrl+Shift+D toggle stay inline; the helper now drives the panel via `_syncBadge.show/hideDebugPanel()`.
-~20 call sites rewritten `_setSyncStatus(`→`_syncBadge.setSyncStatus(` etc (mechanical). 10 vitest + smoke
-23/23 + real-app Ctrl+Shift+D toggle. **Why this first:** it pre-extracts the badge primitives the hard
-autosave/SSE flag-batch would otherwise have had to own — that batch now just injects `_syncBadge.*`.
+**This session (#55):** the HARD Tier-5 cut the prior two deferred — the **Auto-save subscribers + Library
+SSE handler** → `app/lifecycle.js` factory `initAutosaveSync`. The factory now OWNS the four
+loop-prevention flags (`_savingAssembly`/`_reloadingFromSSE`/`_selfSavedPaths`/`_lastSameDocActivityMs`),
+the four debounce timers, both `subscribeSlice` writers, and `_handleLibraryEvent` + the
+`api.subscribeLibraryEvents` registration. **`_selfSavedPaths` is exposed by reference** so the 3 distant
+mutation sites (save dispatch, part-save fast path, broadcast file-saved) keep mutating the same Set verbatim;
+the broadcast/conn-monitor flag *assignments* go through `setReloadingFromSSE`/`markSameDocActivity` shims on a
+forward-declared lazy `let _lifecycleSync`. Factory call placed at the ORIGINAL design-subscriber spot (after
+`_fileIo`) to preserve subscription order. 14 vitest + smoke 23/23 + real-app `__nadocSyncDebug.status()`
+lazy-wiring check. **`app/lifecycle.js` now = initConnectionMonitor + initAutosaveSync; the whole region is done.**
 
-**Recommended next region — continue draining Tier 5:**
-1. **Finish "Connection monitor / autosave / SSE" → app/lifecycle.js** — the LAST sub-part: the **Auto-save
-   subscribers** (`// ── Auto-save` ~7567, the two `subscribeSlice` writers + flags `_savingAssembly`/
-   `_reloadingFromSSE`/`_selfSavedPaths`/`_lastSameDocActivityMs` + 3 timers) + the **Library SSE handler**
-   (`// ── Library SSE` ~7682, `_handleLibraryEvent`/`_scheduleLibraryRefresh`). **The hard part is the flags**
-   — written in 3 sites OUTSIDE the region (save dispatch ~3995, ~6814, broadcast handler ~10603-10660), so the
-   module must own them and EXPOSE get/setters + the `_selfSavedPaths` Set by reference. `_fileIo` +
-   `_assemblyRefresh` + `_syncBadge` consts (created here for their late deps) become **deps** of the lift, not
-   residents. Move all flags in ONE commit — splitting risks save-loop/clobber bugs. HIGH. ~180 ln. The badge
-   primitives are now already a dep (`_syncBadge.setSyncStatus`/`syncLog`) → fold them in by injection.
-2. **Menu bar + multi-doc spawn** (banner `// ── Menu bar` ~3817, `// ── Multi-document: New / Open` ~3876,
-   ~320 ln) → `ui/menu_bar.js`. HIGH (every menu action). Independent of the flag tangle — a cleaner pick if
-   you want to avoid the autosave flags this batch.
-3. **Finish "File open / save"**: open-file orchestration (`_openPartFromServer`/`_openAssemblyFromServer`,
-   ~3562) + menu-bar save dispatchers (`_saveDispatch`/`_saveAsDispatch`/`_saveAssembly`/`_saveAssemblyAsGuarded`).
-   These call `_fileIo.*` already; lifting needs lifecycle-spine deps (probably leave the spine inline). MED-HIGH.
+**Recommended next region — Tier 5 has two picks left, both HIGH:**
+1. **Menu bar + multi-doc spawn** (banners `// ── Menu bar` + `// ── Multi-document: New / Open`, ~3840–4160
+   currently) → `ui/menu_bar.js`. HIGH (every menu action). **Re-read this session: it opens with the New-Part
+   `createModal` block (`_buildNewDesignModalOnce`/`_openNewDesignModal`/`_onCreateClicked`) — that modal IS a
+   candidate sub-cut BUT `_openNewDesignModal` calls the lifecycle spine (`_resetForNewDesign`, `_fileHandle`,
+   `workspace.show()`, `api.createDesign`) and the multi-doc spawn touches doc_id/broadcast — so NOT as clean as
+   #42 background_modal.** Likely splits: (a) New-Part modal sub-block (spine-coupled), (b) multi-doc New/Open
+   spawn. Read for the cohesive seam first.
+2. **Finish "File open / save"**: open-file orchestration (`_openPartFromServer`/`_openAssemblyFromServer`) +
+   menu-bar save dispatchers (`_saveDispatch`/`_saveAsDispatch`/`_saveAssembly`/`_saveAssemblyAsGuarded`). They
+   call `_fileIo.*` already; lifting needs lifecycle-spine deps (leave the spine inline). MED-HIGH.
+
+**Cheaper off-frontier alternatives if "keep it cheap" wins** (clean self-contained modals, mirror #42
+background_modal — verified live this session): **Assign Scaffold modal** (`_openScaffoldModal` +
+`_buildScaffoldModalOnce`/`_onAscApplyClicked` + state, ~150 ln, banner `// ── Assign Scaffold modal`; pure core
+`ascWarningText` already in `scene/scaffold_assign.js`; deps store/api/`_showProgress`/`_undefinedHighlightOn`;
+right-click path at ~2890 sets `_ascTargetStrandId` then opens → needs a lazy `_assignScaffold` ref) and
+**Paste Script modal** (~46 ln, banner `// ── Paste Script modal`, deps `runScript`/`showToast` only — trivial).
 
 **Banked gotcha this session:**
-- **Pure-DOM primitives that a flag-tangled region injects elsewhere are a CLEAN early sub-cut.** The carve-up
-  billed the whole conn/autosave/SSE region as one `app/lifecycle.js`, but `_setSyncStatus`/`_syncLog` read only
-  DOM (no `_savingAssembly`/`_reloadingFromSSE`/etc) — so they lift to a separate `ui/` module ahead of the flag
-  batch, shrinking that batch's surface. Splitting a region by *coupling* (flags vs pure DOM), not by banner, is
-  the move. The flag-reading `__nadocSyncDebug` debug helper stayed inline precisely because it DOES read the flags.
-- **Converting hoisted `function _setSyncStatus`/`_syncLog` into `const _syncBadge` methods is TDZ-safe** even
-  though call sites at ~3995 are textually ABOVE the `const` at ~7505 — those sites are inside the deferred
-  `_saveDispatch` async-fn body (run on user save, post-boot), so `_syncBadge` is assigned by call time. Grep
-  confirmed no boot-synchronous caller. (Same deferred-body principle as #53's flag shim.)
+- **Flag-ownership inversion + the by-reference Set.** Region owns the flags; distant sites reach in. A *mutated
+  Set* exposes by reference (verbatim `.add`/`.delete` at the 3 sites + the `_assemblyRefresh` dep keep sharing the
+  exact instance); a *reassigned primitive* (`_reloadingFromSSE`, `_lastSameDocActivityMs`) can only be a setter
+  (`setReloadingFromSSE`/`markSameDocActivity`) — you can't alias a primitive. The Set is the lucky case.
+- **Subscription order, not late deps, was the placement constraint.** Unlike #52 (`initFileIo` forced past its
+  banner by late deps), `initAutosaveSync` registers `subscribeSlice('design')` on construction, so the `const`
+  HAS to sit at the original design-subscriber line. `_assemblyRefresh` (needed by the SSE handler) is wired just
+  below + injected lazily, and reciprocally takes `_lifecycleSync.selfSavedPaths` — no cycle, because the Set
+  exists the instant `initAutosaveSync` returns.
+- **Lazy `_lifecycleSync` is mandatory:** the conn monitor (created ABOVE) writes `_reloadingFromSSE` and
+  `__nadocSyncDebug` (defined ABOVE) reads all three flags → both must be `_lifecycleSync?.…` on a forward
+  `let`. Grep-confirmed no boot-synchronous caller.
 
 **Deliberately deferred (still in main.js):** FK propagation (`_applyFKLive`); Polymerize-region sub-part
 `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound). `_setMenuToggle`
@@ -410,9 +415,10 @@ These touch boot/lifecycle. High blast radius; do after the loop is well-grooved
     inline (called from 20+ sites).
 - [ ] **Menu bar + multi-document spawn** — banners `// ── Menu bar` + `// ── Multi-document: New / Open`
   (~4681–5004, ~320 ln) → `ui/menu_bar.js`. Deps: doc_id, broadcast, every menu action. Risk: HIGH.
-- [~] **Connection monitor / autosave / SSE** — banners `// ── Backend connection monitor` …
-  `// ── Library SSE` (~7565–7828, ~263 ln) → `app/lifecycle.js`. Deps: api, /health, store, badges.
-  Risk: HIGH (lifecycle).
+- [x] **Connection monitor / autosave / SSE** — banners `// ── Backend connection monitor` …
+  `// ── Library SSE` → `app/lifecycle.js`. Risk: HIGH (lifecycle). **FULLY DRAINED across #53/#54/#55**
+  (conn monitor → `initConnectionMonitor`; sync badge → `ui/sync_badge.js`; autosave + SSE →
+  `initAutosaveSync`). See the three sub-part entries below.
   - **Backend connection monitor + restart recovery — DONE** (extraction #53, commit 2346daf):
     `_restartHandling` + `_recoverAfterRestart` + `connectionMonitor.start({onChange})` →
     `app/lifecycle.js` `initConnectionMonitor({api, store, assemblyRenderer, setSyncStatus, syncLog,
@@ -428,13 +434,28 @@ These touch boot/lifecycle. High blast radius; do after the loop is well-grooved
     the panel via `_syncBadge.show/hideDebugPanel()`. −22 ln. 10 vitest; smoke 23/23 + real-app Ctrl+Shift+D.
     **This pre-extracts the badge primitives the autosave/SSE batch would otherwise have had to own** — that
     batch now just injects `_syncBadge.*`.
-  - **Remaining (NOT done):** the **Auto-save subscribers** (`_savingAssembly`/`_reloadingFromSSE`/
-    `_selfSavedPaths`/`_lastSameDocActivityMs` + 3 timers + the two `subscribeSlice` writers), and the
-    **Library SSE handler** (`_scheduleLibraryRefresh`/`_handleLibraryEvent`). These share loop-prevention
-    flags that are ALSO written in 3 distant sites (save dispatch ~3995, ~6836, broadcast handler ~10625-10682)
-    → a wide get/set-shim factory. Fold them into app/lifecycle.js together as ONE batch (don't split the flags
-    further). `_fileIo` + `_assemblyRefresh` + `_syncBadge` consts (created in this region for their late deps)
-    become deps of that lift, not residents of it.
+  - **Auto-save subscribers + Library SSE handler — DONE** (extraction #55, commit 55e25a7 + docs): both
+    `subscribeSlice` writers (design + assembly) + `_scheduleLibraryRefresh`/`_handleLibraryEvent` +
+    `api.subscribeLibraryEvents` → `app/lifecycle.js` factory `initAutosaveSync(deps)→{selfSavedPaths,
+    setReloadingFromSSE, getReloadingFromSSE, getSavingAssembly, markSameDocActivity, handleLibraryEvent}`.
+    The factory OWNS the four flags (`_savingAssembly`/`_reloadingFromSSE`/`_selfSavedPaths`/
+    `_lastSameDocActivityMs`) + the four debounce timers + `_RELOAD_SUPPRESS_MS`. **`_selfSavedPaths` exposed
+    by reference** so the 3 distant mutation sites keep mutating the SAME Set; the broadcast +
+    connection-monitor flag writes route through `setReloadingFromSSE`/`markSameDocActivity` shims on a lazy
+    `let _lifecycleSync` ref (forward-declared above the conn-monitor + `__nadocSyncDebug` so both reference it
+    lazily). `_fileIo`/`_syncBadge`/`libraryPanel` are deps; `_assemblyRefresh` injected lazily
+    (`getAssemblyRefresh: () => _assemblyRefresh`, wired just below) and in turn takes
+    `selfSavedPaths: _lifecycleSync.selfSavedPaths`. **Placement:** factory call at the original
+    design-subscriber spot (after `_fileIo`, ~7596) so subscription registration order is preserved.
+    −129 ln off main.js. 14 vitest (fake-timer debounce: transient-skip / SSE-suppressed / design-save+
+    broadcast+self-mark+5s-clear / part-edit→savePartToAssembly-900ms / assembly-save+latch / no-path-skip;
+    SSE handler: ignore-non-file / self-echo-skip / debounced-refresh / assembly→coalesced / design-external-
+    reload+flag-toggle / same-doc-window-suppress). vitest 601 + smoke 23/23 + running-app
+    `__nadocSyncDebug.status()` lazy-wiring check. **Live autosave write-back gesture NOT hand-exercised**
+    (needs a workspace-backed file + edit burst) — fake-timer units cover the debounce contract + the smoke
+    console-error/teardown gates fire the subscriber registration, per #53/#52's accepted caveat.
+    **This drains the Connection monitor / autosave / SSE region entirely → app/lifecycle.js now holds
+    initConnectionMonitor + initAutosaveSync.**
 
 ## Tier 6 — dev-only / debug (no user risk; extract anytime to de-bloat)
 
@@ -482,7 +503,7 @@ assembly_diff, design_queries (+flexibleRunForBead), cluster_joint_math, aksel_f
 assembly_groups_util, color_util (+hexFromInt, atomColorsFromLetters), fret_util, vec_math, motion_chip,
 scaffold_assign, atom_filter, selection_bbox, belt_rider, overhang_hover_picker, assembly_lasso,
 coloring_modes, assembly_layout, ndc, flex_tethers, cluster_entries, empty_space_menu, slice_plane,
-plate_view, kinematics_ticker, file_io, app/lifecycle (connection monitor).
+plate_view, kinematics_ticker, file_io, app/lifecycle (connection monitor + autosave/SSE).
 
 ## Smaller leftovers (after the tiers above)
 
