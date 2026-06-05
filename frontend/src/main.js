@@ -58,6 +58,7 @@ import { initCommandPalette }  from './ui/command_palette.js'
 import { initStrandLengthHistogram } from './ui/strand_length_histogram.js'
 import { initOverhangSequencesPanel } from './ui/overhang_sequences_panel.js'
 import { initStrandGroupsPanel } from './ui/strand_groups_panel.js'
+import { initSelectionFilter } from './ui/selection_filter.js'
 import { initPropertiesPanel } from './ui/properties_panel.js'
 import { createScriptRunner }  from './ui/script_runner.js'
 import { store, popGroupUndo } from './state/store.js'
@@ -725,57 +726,17 @@ async function main() {
   }
 
   // ── Selection-filter mode (auto-drill vs manual) ─────────────────────────────
-  // Empty _manualFilters ⇒ auto-drill: repeated clicks descend cluster → strand →
-  // domain → bead/xover and the matching filter button auto-lights. Once the user
-  // clicks a filter button it is "pinned" (red border) and traditional
-  // selectableTypes gating applies; Tab or un-pinning the last button restores
-  // auto-drill. dataKey strings (e.g. 'clust', 'line') match the .sf-btn[data-key].
-  const _manualFilters = new Set()
-  const _LEVEL_BTN = { cluster: 'clust', strand: 'strand', domain: 'line', bead: 'ends', xover: 'xover' }
-
-  function _isManualSelect() { return _manualFilters.size > 0 }
-
-  // Light the filter button matching the current drill level (display only —
-  // does NOT touch selectableTypes or _manualFilters). No-op in manual mode.
-  function _reflectDrillLevel(level) {
-    if (_isManualSelect()) return
-    const target = level ? (_LEVEL_BTN[level] ?? null) : null
-    for (const dk of Object.values(_LEVEL_BTN)) {
-      const b = document.querySelector(`#select-filter .sf-btn[data-key="${dk}"]`)
-      if (b) b.classList.toggle('active', dk === target)
-    }
-  }
-
-  // Red "pinned" border on the level button matching the active Tab drill-lock
-  // (level = 'cluster'|'strand'|'domain'|'bead'|'xover', or null to clear all).
-  function _reflectLockOnButtons(level) {
-    const pinnedKey = level ? _LEVEL_BTN[level] : null
-    for (const dk of Object.values(_LEVEL_BTN)) {
-      const b = document.querySelector(`#select-filter .sf-btn[data-key="${dk}"]`)
-      if (b) b.classList.toggle('sf-pinned', dk === pinnedKey)
-    }
-  }
-
-  // Clear all manual pins and restore the neutral auto-drill baseline (scaffold/
-  // staples/strands on, everything else off). Also fixes button .active classes
-  // so they don't show stale manual state.
-  function _resetToAutoBaseline() {
-    _manualFilters.clear()
-    document.querySelectorAll('#select-filter .sf-btn.sf-pinned').forEach(b => b.classList.remove('sf-pinned'))
-    store.setState({
-      selectableTypes: {
-        scaffold: true, staples: true,
-        clusters: false, strands: true, domains: false, ends: false, crossoverArcs: false,
-        loops: false, skips: false, extensions: false, overhangs: false,
-      },
-    })
-    const baseActive = { scaf: true, stap: true, strand: true, clust: false, line: false, ends: false, xover: false, skip: false, loop: false, ovhangs: false }
-    for (const [dk, on] of Object.entries(baseActive)) {
-      const b = document.querySelector(`#select-filter .sf-btn[data-key="${dk}"]`)
-      if (b) b.classList.toggle('active', on)
-    }
-    selectionManager?.resetDrill?.()
-  }
+  // The drill-lock state machine + the #select-filter button row are extracted to
+  // ui/selection_filter.js. `isManualSelect`/`reflectDrillLevel` are injected into
+  // initSelectionManager (below); `reflectLockOnButtons`/`resetToAutoBaseline` into
+  // initKeyboardShortcuts. `attachFilterButtons()` registers the button handlers +
+  // subscribers at the original ~4852 spot (subscription order preserved).
+  // selectionManager doesn't exist yet → reached via a lazy getter (all callers
+  // fire on user action, post-init).
+  const selectionFilter = initSelectionFilter({
+    store,
+    getSelectionManager: () => selectionManager,
+  })
 
   // ── Selection manager ───────────────────────────────────────────────────────
   const selectionManager = initSelectionManager(canvas, camera, designRenderer, {
@@ -785,8 +746,8 @@ async function main() {
     getRegionVdwRenderer:       () => regionVdwRenderer,
     getRegionBallstickRenderer: () => regionBallstickRenderer,
     getRegionSurfaceRenderer:   () => regionSurfaceRenderer,
-    isManualSelect: _isManualSelect,
-    onDrillLevel: _reflectDrillLevel,
+    isManualSelect: selectionFilter.isManualSelect,
+    onDrillLevel: selectionFilter.reflectDrillLevel,
     onNick: async ({ helixId, bpIndex, direction }) => {
       _clearStapleChecks()
       const result = await api.addNick({ helixId, bpIndex, direction })
@@ -4850,86 +4811,9 @@ async function main() {
   })
 
   // ── Selection Filter toggles — #select-filter .sf-btn[data-key] ──────────────
-  {
-    const _selKeyMap = [
-      ['scaffold',      'scaf'   ],
-      ['staples',       'stap'   ],
-      ['clusters',      'clust'  ],
-      ['strands',       'strand' ],
-      ['domains',       'line'   ],
-      ['ends',          'ends'   ],
-      ['crossoverArcs', 'xover'  ],
-      ['loops',         'loop'   ],
-      ['skips',         'skip'   ],
-      ['overhangs',     'ovhangs'],
-    ]
-    const _allSelKeys = _selKeyMap.map(([k]) => k)
-    const _selectFilter = document.getElementById('select-filter')
-    let _preLoopSkipSelectables = null
-
-    for (const [storeKey, dataKey] of _selKeyMap) {
-      const btn = document.querySelector(`#select-filter .sf-btn[data-key="${dataKey}"]`)
-      if (!btn) continue
-
-      btn.addEventListener('click', () => {
-        const { deformToolActive, translateRotateActive } = store.getState()
-        if (deformToolActive || translateRotateActive) return
-
-        // Manual filter pins and the Tab drill-lock are mutually exclusive — a
-        // manual click cancels any active drill-lock first.
-        if (selectionManager?.getDrillLock?.()) {
-          selectionManager.setDrillLock(null)
-          _reflectLockOnButtons(null)
-        }
-
-        // Clicking a filter button enters/adjusts manual mode: pin it (red border)
-        // and apply traditional gating. Un-pinning the last button restores auto-drill.
-        const wasPinned = _manualFilters.has(dataKey)
-        if (wasPinned) _manualFilters.delete(dataKey)
-        else           _manualFilters.add(dataKey)
-        btn.classList.toggle('sf-pinned', !wasPinned)
-
-        const st = store.getState().selectableTypes
-        if (storeKey === 'loops' || storeKey === 'skips' || storeKey === 'overhangs') {
-          if (!st[storeKey]) {
-            if (!st.loops && !st.skips && !st.overhangs) _preLoopSkipSelectables = { ...st }
-            const cleared = {}
-            for (const k of _allSelKeys) cleared[k] = false
-            store.setState({ selectableTypes: { ...cleared, [storeKey]: true } })
-          } else {
-            if (_preLoopSkipSelectables) {
-              store.setState({ selectableTypes: { ..._preLoopSkipSelectables } })
-              _preLoopSkipSelectables = null
-            } else {
-              store.setState({ selectableTypes: { ...st, [storeKey]: false } })
-            }
-          }
-        } else {
-          store.setState({ selectableTypes: { ...st, [storeKey]: !st[storeKey] } })
-        }
-
-        // Stop the auto-drill cursor from fighting the manual selection.
-        selectionManager?.resetDrill?.()
-        // No manual pins left → return to auto-drill with a clean baseline.
-        if (_manualFilters.size === 0) _resetToAutoBaseline()
-      })
-
-      store.subscribe(() => {
-        // In auto-drill mode the buttons are driven by _reflectDrillLevel; only
-        // sync .active from selectableTypes while a manual pin is active.
-        if (!_isManualSelect()) return
-        btn.classList.toggle('active', !!store.getState().selectableTypes[storeKey])
-      })
-    }
-
-    // Lock the selectable filter while a tool is active
-    store.subscribe((newState, prevState) => {
-      if (newState.deformToolActive === prevState.deformToolActive &&
-          newState.translateRotateActive === prevState.translateRotateActive) return
-      _selectFilter?.classList.toggle('filter-inactive',
-        !!(newState.deformToolActive || newState.translateRotateActive))
-    })
-  }
+  // Button handlers + 2 store subscribers extracted to ui/selection_filter.js.
+  // Called here (not at factory construction) to preserve store-subscription order.
+  selectionFilter.attachFilterButtons()
 
   // ── View tool buttons — length heatmap, seq, undef, grid, overhang names ──────
   // Extracted to ui/view_tool_buttons.js. Owns length-heatmap + grid state; the
@@ -5077,12 +4961,12 @@ async function main() {
     workspace, deformView, crossSectionMinimap, sliceHighlighter,
     isUnfoldActive:           _isUnfoldActive,
     isDeformActive,
-    isManualSelect:           _isManualSelect,
+    isManualSelect:           selectionFilter.isManualSelect,
     captureCurrentCamera,
     frameSelectionOrAll:      _frameSelectionOrAll,
     setMenuToggle:            _setMenuToggle,
-    reflectLockOnButtons:     _reflectLockOnButtons,
-    resetToAutoBaseline:      _resetToAutoBaseline,
+    reflectLockOnButtons:     selectionFilter.reflectLockOnButtons,
+    resetToAutoBaseline:      selectionFilter.resetToAutoBaseline,
     toggleUnfold:             _toggleUnfold,
     toggleCadnano:            _toggleCadnano,
     savePartToAssembly:       (opts) => _fileIo.savePartToAssembly(opts),
