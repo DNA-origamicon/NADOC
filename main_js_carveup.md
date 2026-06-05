@@ -38,33 +38,35 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 ## Next-session handoff
 
 _Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **Tier 4 opportunistic block**
-this session: extracted Tool Filter toggles (#49). main.js 11196 → 11162 (−34 ln)._
+this session: extracted View legends (Loop/Skip + MD-Seg) (#50). main.js 11162 → 11086 (−76 ln)._
 
-**This session (#49):** extracted the **Tool Filter toggles** sub-block (`#view-tools .sf-btn[data-key]` +
-the toolFilters→renderer-visibility subscriber) → `ui/tool_filter_toggles.js` `initToolFilterToggles`. Clean,
-self-contained (8 deps; `overhangHoverPicker` lazy-getter because it's created later in init order). 11 vitest
-+ smoke 21/21 + a real-app vt-filter-button exercise.
+**This session (#50):** extracted the **View legends** pair — the Loop/Skip + MD-Segmentation fixed-position
+legend overlays + their View-menu toggle handlers → `ui/view_legends.js` `initViewLegends`. Done as ONE
+cohesive region (they're a matched pair: both toggle a highlight/overlay module + show/hide a legend, and
+`_resetForNewDesign` hides both together → exposed as `reset()`). 4 deps (store, loopSkipHighlight,
+mdSegmentation, setMenuToggle); `computeSegments` imported directly (pure, co-located). 8 vitest factory +
+smoke 21/21 + a real-app View-menu toggle exercise (both legends on/off, MD detail line, zero console errors).
 
 **Recommended next region — one of two clean tracks:**
-1. **More Tier-4 opportunistic blocks** (lowest risk, modest payoff): the remaining View-toggles sub-blocks
-   (View-menu pill-state subscriber + the 3 `_sync*MenuVisibility/Enabled` helpers; deform→selectableTypes
-   save/restore subscriber; Browser tab title) — each small, several entangled with state owned by sibling
-   regions, so verify cohesion before lifting. The **Orbit submenu** (`_setOrbitMode`+2 handlers, ~10 ln,
-   self-contained) and **Loop/Skip + MD-Seg legends** (two ~40-ln overlay+toggle blocks) are also clean.
-2. **Tier 5 (file/session infra — HIGH blast radius):** `File open / save` (~340 ln, banner ~3580),
-   `Menu bar + multi-doc spawn` (~320 ln, ~3982), `Connection monitor / autosave / SSE` (~287 ln, ~7856).
+1. **More Tier-4 opportunistic blocks** (lowest risk, modest payoff): the **Orbit submenu** (`_setOrbitMode`+2
+   handlers, ~10 ln @ banner 5097, self-contained — clean but tiny payoff); the View-menu pill-state subscriber
+   + 3 `_sync*MenuVisibility/Enabled` helpers (banner 5265); deform→selectableTypes save/restore subscriber;
+   Browser tab title (banner 5317). The last few are small, several entangled with state owned by sibling
+   regions, so verify cohesion before lifting.
+2. **Tier 5 (file/session infra — HIGH blast radius):** `File open / save` (~340 ln, banner ~3581),
+   `Menu bar + multi-doc spawn` (~320 ln, ~3983), `Connection monitor / autosave / SSE` (~287 ln, ~7822).
    These touch boot/lifecycle — split each across ≥2 commits, lean on smoke + a multi-doc-pinned app exercise.
 
 **Banked gotchas this session:**
-- **Verify a dep's init-order position before passing it.** `overhangHoverPicker` is created at ~8942, far
-  *after* the Tool-Filter call site (~5343) — passing it directly would capture `undefined`. Inject as a lazy
-  getter `() => overhangHoverPicker` (it only fires in assembly mode, where it exists). Grep the dep's `=`
-  definition line vs. the region line before wiring.
-- **A button whose reaction lives in a sibling region still lifts cleanly.** The `bluntEnds` filter button is
-  in this block but its visibility reaction is in the assembly blunt-end-sync region (~6606). The button only
-  does `setState({toolFilters})`, so moving just the button (leaving the reaction inline) is verbatim.
-- **Subscription registration order preserved** by calling the factory at the original block's line — the
-  toolFilters subscriber isn't in the geometry/position-overlay critical chain anyway, so low risk.
+- **A region hidden by `_resetForNewDesign` lifts cleanly by exposing a `reset()` method.** Both legends were
+  also torn down by a 5-line block in `_resetForNewDesign` (~3626); the factory exposes `reset()` that runs
+  those exact 5 statements (order preserved) and main.js's reset block calls `viewLegends.reset()`. Verbatim.
+- **`_resetForNewDesign` calls are all deferred** (event handlers / `_openNewDesignModal` / close-session), so
+  a plain `const viewLegends` at the original block line (~5160) is TDZ-safe — no lazy getter (mirrors #38).
+  Verify by grepping every `_resetForNewDesign()` call site is inside a callback, not synchronous boot.
+- **A directly-imported pure helper need not be a dep.** `_computeMdSegments` was a one-use import alias in
+  main.js (`computeSegments as _computeMdSegments`); the module imports `computeSegments` directly and the
+  alias was dropped from main.js's import — leaving `initMdSegmentationOverlay` on that line.
 
 **Deliberately deferred (still in main.js):** FK propagation (`_applyFKLive`); Polymerize-region sub-part
 `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound). `_setMenuToggle`
@@ -350,11 +352,13 @@ The largest single blocks and the most coupling into assembly state. Each needs 
       **6 external call sites** (2292, 8876, 10750, 10775, 10776) → extracting needs a returned fn + lazy
       getters at those sites (more coupling than its 20 ln implies). Pairs with `scene/coloring_modes.js`. LOW
       payoff; defer or bundle with a coloring-state lift.
+    - **Loop/Skip + MD-Seg legends** → **DONE** `ui/view_legends.js` `initViewLegends` (extraction #50,
+      commit pending; −76 ln; 8 vitest; smoke 21/21 + real-app View-menu toggle exercise). One cohesive region
+      (matched legend pair, both hidden together by `_resetForNewDesign` → exposed as `reset()`).
     - **Orbit submenu** (`_setOrbitMode` + 2 handlers, ~10 ln, self-contained) / **Tools Bend/Twist**
       (`_clusterDeformGuard` + twist/bend menu + 2 overhangs-manager wirings + view-axes) / the assorted view
-      toggles (slice/unfold/cadnano/deform/loop-skip-legend/md-seg-legend/helix-labels/debug/sequences) — each
-      small independent blocks; pick off opportunistically, do NOT bundle into one module. Deps: store,
-      designRenderer, DOM. Risk: LOW-MED.
+      toggles (slice/unfold/cadnano/deform/helix-labels/debug/sequences) — each small independent blocks;
+      pick off opportunistically, do NOT bundle into one module. Deps: store, designRenderer, DOM. Risk: LOW-MED.
 
 ## Tier 5 — file / session infra (central — extract carefully, late)
 

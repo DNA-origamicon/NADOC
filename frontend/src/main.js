@@ -155,6 +155,7 @@ import { registerShortcut } from './input/shortcuts.js'
 import { initKeyboardShortcuts } from './ui/keyboard_shortcuts.js'
 import { initViewToolButtons } from './ui/view_tool_buttons.js'
 import { initToolFilterToggles } from './ui/tool_filter_toggles.js'
+import { initViewLegends } from './ui/view_legends.js'
 import { showConfirm }                         from './ui/primitives/confirm.js'
 import { createContextMenu }                   from './ui/primitives/context_menu.js'
 import { initSidebarResize }                   from './ui/sidebar_resize.js'
@@ -166,7 +167,7 @@ import { nadocBroadcast } from './shared/broadcast.js'
 import * as connectionMonitor from './shared/connection_monitor.js'
 import { getDocId, mintDocId, docHeaders, docHeadersFor, docKey } from './shared/doc_id.js'
 import { initMdOverlay }             from './scene/md_overlay.js'
-import { initMdSegmentationOverlay, computeSegments as _computeMdSegments } from './scene/md_segmentation_overlay.js'
+import { initMdSegmentationOverlay } from './scene/md_segmentation_overlay.js'
 import { initPeriodicMdOverlay }    from './scene/periodic_md_overlay.js'
 import { initPeriodicMdPanel }      from './ui/periodic_md_panel.js'
 import { initMdPanel }    from './ui/md_panel.js'
@@ -3623,11 +3624,7 @@ async function main() {
     bluntEnds.clear()
     _hideBluntPanel()
     _setMenuToggle('menu-view-slice', false)
-    _setMenuToggle('menu-view-loop-skip', false)
-    _loopSkipLegend.style.display = 'none'
-    mdSegmentation.hide()
-    _setMenuToggle('menu-view-md-segmentation', false)
-    _mdSegLegend.style.display = 'none'
+    viewLegends.reset()
     if (periodicMdOverlay.isApplied()) _setCGVisible(true)
     periodicMdOverlay.clear()
     // Reset representation to Full — deactivates atomistic/surface renderers,
@@ -5157,86 +5154,13 @@ async function main() {
 
   document.getElementById('menu-view-deform')?.addEventListener('click', _toggleDeformView)
 
-  // ── Loop/Skip legend ────────────────────────────────────────────────────────
-  // Anchored below the filter-view strip (menu-bar 29 px + strip ~24 px → ~58 px).
-  // Earlier `top: 44px` placed it inside the strip's vertical band, hiding the
-  // selectability/view toggles. `right: 308px` keeps it left of the 300 px
-  // right-panel.
-  const _loopSkipLegend = document.createElement('div')
-  _loopSkipLegend.style.cssText = `
-    position: fixed;
-    top: 64px;
-    right: 308px;
-    display: none;
-    background: rgba(8,16,26,0.90);
-    border: 1px solid #2a5a8a;
-    border-radius: 5px;
-    padding: 8px 12px;
-    font-family: var(--font-ui);
-    font-size: 12px;
-    color: #c8daf0;
-    line-height: 1.9;
-    z-index: 9000;
-    pointer-events: none;
-  `
-  _loopSkipLegend.innerHTML = `
-    <div style="color:#5bc8ff;font-weight:bold;letter-spacing:.04em;margin-bottom:3px">LOOP / SKIP</div>
-    <div><span style="display:inline-block;width:14px;height:14px;border-radius:50%;border:3px solid #ff8800;vertical-align:middle;margin-right:6px"></span>Loop &nbsp;(+1 bp)</div>
-    <div><span style="color:#ff2222;font-size:15px;font-weight:bold;vertical-align:middle;margin-right:6px;line-height:1">✕</span>Skip &nbsp;(−1 bp)</div>
-  `.trim()
-  document.body.appendChild(_loopSkipLegend)
-
-  document.getElementById('menu-view-loop-skip')?.addEventListener('click', () => {
-    const nowVisible = !loopSkipHighlight.isVisible()
-    loopSkipHighlight.setVisible(nowVisible)
-    _setMenuToggle('menu-view-loop-skip', nowVisible)
-    _loopSkipLegend.style.display = nowVisible ? 'block' : 'none'
-    if (nowVisible) {
-      const { currentDesign, currentGeometry, currentHelixAxes } = store.getState()
-      loopSkipHighlight.rebuild(currentDesign, currentGeometry, currentHelixAxes)
-    }
-  })
-
-  // ── MD Segmentation legend + toggle ─────────────────────────────────────────
-  const _mdSegLegend = document.createElement('div')
-  _mdSegLegend.style.cssText = `
-    position: fixed;
-    top: 64px;
-    right: 308px;
-    display: none;
-    background: rgba(8,16,26,0.92);
-    border: 1px solid #2a5a8a;
-    border-radius: 5px;
-    padding: 10px 14px;
-    font-family: var(--font-ui);
-    font-size: 12px;
-    color: #c8daf0;
-    line-height: 2.0;
-    z-index: 9000;
-    pointer-events: none;
-    min-width: 220px;
-  `
-  _mdSegLegend.innerHTML = `
-    <div style="color:#5bc8ff;font-weight:bold;letter-spacing:.04em;margin-bottom:5px">MD SEGMENTATION</div>
-    <div><span style="display:inline-block;width:14px;height:14px;background:#44cc66;opacity:0.85;vertical-align:middle;margin-right:7px;border-radius:2px"></span>Periodic &nbsp;— matches modal period</div>
-    <div><span style="display:inline-block;width:14px;height:14px;background:#ffdd00;opacity:0.85;vertical-align:middle;margin-right:7px;border-radius:2px"></span>Minor deviation &nbsp;(1–2 xovers)</div>
-    <div><span style="display:inline-block;width:14px;height:14px;background:#ff8800;opacity:0.85;vertical-align:middle;margin-right:7px;border-radius:2px"></span>Moderate deviation</div>
-    <div><span style="display:inline-block;width:14px;height:14px;background:#ff4444;opacity:0.85;vertical-align:middle;margin-right:7px;border-radius:2px"></span>High deviation / End region</div>
-    <div id="md-seg-legend-detail" style="margin-top:6px;font-size:10px;color:#8b949e;border-top:1px solid #21262d;padding-top:5px"></div>
-  `.trim()
-  document.body.appendChild(_mdSegLegend)
-
-  document.getElementById('menu-view-md-segmentation')?.addEventListener('click', () => {
-    const { currentDesign } = store.getState()
-    const nowVisible = mdSegmentation.toggle(currentDesign)
-    _setMenuToggle('menu-view-md-segmentation', nowVisible)
-    _mdSegLegend.style.display = nowVisible ? 'block' : 'none'
-    if (nowVisible && currentDesign) {
-      const { windows, modal } = _computeMdSegments(currentDesign)
-      const nPeriodic = windows.filter(w => w.category === 'periodic').length
-      const detail    = document.getElementById('md-seg-legend-detail')
-      if (detail) detail.textContent = `${nPeriodic} / ${windows.length} windows periodic  ·  modal = ${modal} xovers`
-    }
+  // ── View legends (Loop/Skip + MD Segmentation) ──────────────────────────────
+  // Extracted to ui/view_legends.js: the two fixed-position legend overlays + their
+  // View-menu toggle handlers. `_resetForNewDesign` hides both via `viewLegends.reset()`.
+  // `_setMenuToggle` is a hoisted fn decl (defined ~100 ln below) → safe to pass here.
+  const viewLegends = initViewLegends({
+    store, loopSkipHighlight, mdSegmentation,
+    setMenuToggle: _setMenuToggle,
   })
 
   document.getElementById('menu-view-helix-labels')?.addEventListener('click', () => {
