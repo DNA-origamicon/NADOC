@@ -53,40 +53,40 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Autobreak/Aksel modal
-EXTRACTED (#66, commit 2f816db) → `ui/autobreak_modal.js`, −117 ln. main.js 9717 → 9600.** Third clean LIFT
-in a row. The handoff's ~119 ln estimate was right for once (cohesive IIFE 4074–4192). Deps were only
-`store`+`api` — everything else (toast, op_progress, modal/button primitives, aksel_format) imported directly.
-Reachability gate live (hotkey `3` → `#menu-routing-autobreak`)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Highlight Undefined Bases
+EXTRACTED (#67, commit 7f8be3e) → `scene/undefined_highlight.js`, −69 ln. main.js 9600 → 9531.** Clean MED-risk
+ownership transfer that turned out to be a 1:1 shim swap. Also ASSESSED the Sequencing menu → **scrap, left inline**
+(4 thin api-call handlers + 1 subscriber, no pure core)._
 
-**This session (#66, handoff-recommended):** Autobreak/Aksel modal. Reachability gate FIRST — `#menu-routing-autobreak`
-+ `#autobreak-modal-body` markup live in index.html, hotkey `3` wired. Lifted to `initAutobreakModal({store, api})`
-+ pure `readAkselOptions(raw)` (raw input strings → clamped opts {21,60,3,0} defaults; verbatim-equivalent to the
-original `_readAkselOptions` DOM reader). `_showProgress`/`_hideProgress` were aliases of `showOpProgress`/
-`hideOpProgress` → imported directly (like #65); `showToast`/`createModal`/`createButton`/`formatScoreSummary`/
-`formatGraphSummary` imported directly too — only `store`+`api` injected. Plain `const`-call at the banner spot
-(deps far above; only the click listener attaches synchronously). Removed now-dead `aksel_format` import. 13 vitest
-green first run; smoke 23/23; real-app hotkey-3 exercise (modal opens → Run Autobreak basic → dispatches + closes,
-zero console errors).
+**This session (#67, handoff-recommended):** Highlight Undefined Bases toggle. Reachability gate FIRST
+(`rg -c menu-view-undefined-bases index.html`→1, `data-vt="undefinedBases"`→2). Pure `computeUndefinedEntries(design,
+backboneEntries)` (loop/skip-aware N detection + null-strand flag) + factory `initUndefinedHighlight({store,
+designRenderer, setMenuToggle})→{isOn,setOn,refresh}` owning the flag + menu button + design-change subscriber. The
+"MED-risk ownership transfer" was overstated: the flag was reached by #41 view_tool_buttons (get/set shims + direct
+`_refreshUndefinedHighlight` ref) and #56 scaffold_modal (lazy getters) — after the lift all three reach it as
+`_undefinedHighlight.isOn()/setOn(v)/refresh()` arrows (1:1 swap). Plain `const` at the original banner spot (~8770);
+both consumer inits are ~4000 ln above but invoke the arrows only on user action → TDZ-safe (verified `_syncVtButtons`
+is NOT called at view_tool_buttons init). Subscriber kept at the original spot for store-subscription order. 15 vitest
+(8 pure + 7 factory); smoke 23/23; real-app vt-btn + menu-pill toggle exercise, zero console errors.
 
-**Banked gotcha this session (IMPORTANT — bit me hard at the start):**
-- **`grep` treats `frontend/src/main.js` as a BINARY file and silently returns NO matches** (some byte trips its
-  binary heuristic even though `file` says valid UTF-8). Every plain `grep -n "foo" main.js` / `grep -c` came back
-  empty and I nearly concluded the autobreak code didn't exist. **Use `rg` (ripgrep) or `grep -a` on main.js** —
-  both find matches correctly. The carve-up's own gotcha already said "use `rg` not `grep`"; this is WHY.
-- The "~119 ln / LOW-MED / pure core `_readAkselOptions`" hints on this entry were all accurate (the re-home from
-  #65 had already been re-read). Don't over-trust that — it's the exception, not the rule.
+**Banked gotcha (still true, re-confirmed):** plain `grep`/`grep -c` on `frontend/src/main.js` SILENTLY returns no
+matches (binary heuristic trips). **Always `rg` on main.js.** No surprises this session — the handoff's
+`computeUndefinedEntries`/MED hints were accurate; treat that as the exception, re-read every region before investing.
 
-**Recommended next region — `## Tier 7` "clean dialogs/panels" band (both reachability-gate FIRST, with `rg`):**
-1. **Sequencing menu** (banner `// ── Sequencing` ~4194 now, after the autobreak init) — re-derive scope: likely
-   thin wiring over the already-extracted `scaffold_modal`/`scaffold_assign` (the Assign-Scaffold modal is already
-   `initScaffoldModal` right below the banner). **May be a scrap** (just `menu-seq-*` listeners over existing
-   modules + api) — verify before investing; if it's <40 ln of pass-through wiring, leave it inline and log why.
-2. **Highlight Undefined Bases** (banner `// ── Highlight Undefined Bases toggle`, ~80 ln) — `_refreshUndefinedHighlight`
-   + the toggle. **Extracting MOVES ownership of `_undefinedHighlightOn`**, which #41 (view_tool_buttons) currently
-   reaches via get/set shims — so this lift must take that mutable INTO the new module and flip #41 to call a
-   getter/setter the new module exposes. MED risk (coordinate the shim hand-off). Then the HARD gesture/assembly-
-   coupled band (Move/Rotate panel, repr switcher, Translate/Rotate tool, assembly transform/FK) — build the gate first.
+**Recommended next region — re-derive scope first, with `rg`:**
+1. **Assembly context/linker menu + config animation** (Tier 7, banners `// ── Assembly linker menu` + `// ── Assembly
+   context menu` + `_animateAssemblyConfiguration`, ~175 ln — VERIFY span, the anim fn may extend further). Right-click
+   assembly menu + camera/config animation. Deps: store, api, scene, camera, assemblyRenderer. **MED-HARD** (assembly-
+   coupled; config-anim touches camera). This is the cleanest Tier-7 entry left now that the easy dialog band is drained.
+2. Then the **HARD gesture/assembly-coupled band** (Move/Rotate right-sidebar panel ~385 ln — has extractable pure
+   payload builders before the stateful shell; Representation switcher; Translate/Rotate tool + `scene/joint_pick.js`;
+   FK propagation `_applyFKLive`). Build/confirm the assembly-gesture harness gate before the gesture-bound ones —
+   BUT remember selection-filter (#61) was billed "gesture-bound" and was actually pure DOM+store (6th mis-scope):
+   check WHERE the gesture lives before assuming a harness is needed.
+
+**Drained scraps to NOT bundle (logged, correctly inline):** Sequencing menu (#67 assessment), Orbit submenu ~10 ln,
+Browser tab title ~5 ln, Coloring submenu ~20 ln, deform→selectableTypes subscriber ~28 ln. A `ui/menu_misc.js` junk
+drawer is the anti-pattern.
 
 **The goal is NOT a LOC number.** main.js is the app's composition root (wiring board): 146 imports + ~100
 module constructions + the lifecycle spine + thin per-action wiring are *irreducible* (~2,500–3,500 ln floor).
@@ -642,11 +642,24 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   no-throw/design-guard/build-open-once/Score-dispatch+report/Score-fail-report/Preview-progress+dispatch/
   Run-basic→addAutoBreak+close/Run-aksel→addAutoRouteAksel+toast/Run-fail-toast). Gate: vitest 725 + smoke 23/23
   + real-app hotkey-3 exercise (modal opens → Run Autobreak dispatches, zero console errors).
-- [ ] **Sequencing menu** — banner `// ── Sequencing` (~4486–4580), ~95 ln. Re-derive: may be thin wiring over
-  already-extracted `scaffold_modal`/`scaffold_assign`. Risk: **LOW-MED**; could be a scrap (verify before investing).
-- [ ] **Highlight Undefined Bases** — banner `// ── Highlight Undefined Bases toggle` (~9417–9496), ~80 ln.
-  `_refreshUndefinedHighlight` + the toggle. NOTE: `_undefinedHighlightOn` already has get/set shims (from #41,
-  view_tool_buttons) — extracting this MOVES ownership of that mutable here. Risk: **MED** (coordinate with #41's shims).
+- [~] **Sequencing menu** — banner `// ── Sequencing` (~4077–4170), ~95 ln. **ASSESSED #67 (2026-06-05): LEAVE
+  INLINE — it's a scrap.** The cohesive block (after the already-extracted `initScaffoldModal` #56) is 4 independent
+  menu handlers (assign-staples / generate-overhangs / update-routing=Add-Loops/Skips / clear-all-loop-skips) +
+  1 subscriber that enables/disables the update-routing button. Each handler is pure pass-through: guard → showProgress
+  → `await api.X()` → toast. NO shared state, NO pure core, NO cohesive logic cluster — extracting to a factory of 4
+  thin api-call handlers would be the pass-through-indirection anti-pattern the handoff warns against. The ONLY
+  duplicated logic is the 3-line `hasCrossovers` computation (handler @~4124 + subscriber @~4166) — a candidate
+  micro-dedup as `designHasCrossovers(design)` in `scene/design_queries.js` if ever touched, not worth a dedicated
+  batch. Correctly inline; do not bundle.
+- [x] **Highlight Undefined Bases** — banner `// ── Highlight Undefined Bases toggle` → `scene/undefined_highlight.js`.
+  **DONE** (extraction #67, commit 7f8be3e) — pure `computeUndefinedEntries(design, backboneEntries)` (loop/skip-aware
+  N detection + null-strand flag) + factory `initUndefinedHighlight({store, designRenderer, setMenuToggle})→
+  {isOn,setOn,refresh}` owning the flag + menu button + design-change subscriber; −69 ln. The ownership transfer
+  was clean: the two cross-region consumers (view_tool_buttons #41, scaffold_modal #56) now reach the shared flag
+  via lazy arrows (`() => _undefinedHighlight.isOn()/refresh()/setOn(v)`), replacing the old get/set shims + direct
+  fn ref — all TDZ-safe (user-action only). 15 vitest (8 pure + 7 jsdom factory); smoke 23/23; real-app vt-btn +
+  menu-pill toggle exercise, zero console errors. **MED-risk "coordinate with #41's shims" overstated — the shims
+  just became `_undefinedHighlight.*` arrows, a 1:1 swap.**
 - [ ] **Assembly context/linker menu + config animation** — banners `// ── Assembly linker menu` (~8027) +
   `// ── Assembly context menu` (~8054) + `_animateAssemblyConfiguration` (~8218), to ~8201 (~175 ln, the anim
   fn may extend further). Right-click assembly menu + camera/config animation. Deps: store, api, scene, camera,
