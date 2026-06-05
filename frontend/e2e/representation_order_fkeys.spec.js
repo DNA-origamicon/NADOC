@@ -23,21 +23,25 @@ const API = 'http://localhost:8000/api'
 
 async function loadDesign(page) {
   // Small real design in backend memory; boot picks it up via GET /api/design.
-  const r = await page.request.post(`${API}/design/bundle`, {
-    data: { cells: [[0, 0], [0, 1]], length_bp: 42, name: 'repr-test', plane: 'XY' },
-  })
-  expect(r.ok()).toBeTruthy()
   await page.goto('/')
   await page.waitForSelector('#canvas')
   await page.evaluate(() => {
     const splash = document.getElementById('splash-screen')
     if (splash) splash.style.display = 'none'
   })
-  // Pull the just-created backend design into the frontend store so the
-  // representation menu's click handlers see a currentDesign.
   await page.waitForFunction(() => !!window._nadocDebug?.refetch, null, { timeout: 10_000 })
-  await page.evaluate(() => window._nadocDebug.refetch())
-  await page.waitForTimeout(500)
+  // Build the bundle IN THIS TAB's document: the in-tab api client stamps
+  // X-NADOC-Doc, so the design lands in the doc the tab reads. A default-doc
+  // page.request.post + refetch would leave currentDesign empty (the tab is on
+  // its own random doc), and the representation menu handlers would no-op.
+  await page.evaluate(async () => {
+    const apiMod = await import('/src/api/client.js')
+    await apiMod.createBundle({ cells: [[0, 0], [0, 1]], lengthBp: 42, name: 'repr-test', plane: 'XY' })
+  })
+  await page.waitForFunction(async () => {
+    const { store } = await import('/src/state/store.js')
+    return !!store.getState().currentDesign
+  }, null, { timeout: 10_000 })
 }
 
 test.describe('Representation menu order + F-key bindings', () => {
