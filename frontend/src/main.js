@@ -134,7 +134,7 @@ import { initAssemblyRefresh } from './scene/assembly_refresh.js'
 import { initConnectionMonitor, initAutosaveSync } from './app/lifecycle.js'
 import { initDocSpawn } from './app/doc_spawn.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
-import { getRigidBodyGroup, getKinematicChildren, computeFixedDepths } from './scene/assembly_constraint_graph.js'
+import { computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
 import { initPlateView }                           from './ui/plate_view.js'
 import { STAPLE_PALETTE as PLATE_STAPLE_PALETTE } from './scene/helix_renderer/palette.js'
@@ -4963,14 +4963,12 @@ async function main() {
   const assemblyJointRenderer = initAssemblyJointRenderer(scene, camera, canvas, store, api, controls)
 
   // Assembly transform engine (pending-transform Maps + transform-context builder
-  // + live-apply + commit-queue) — shared by group_gizmo, the Move/Rotate panel
-  // shell, and the Translate/Rotate tool. Lifted to scene/assembly_transform.js
-  // (carve-up keystone). `applyFKLive` is still a hoisted fn in main (FK lift is a
-  // later commit) so it's injected here. Alias-consts below keep every existing
-  // call site verbatim — only the function bodies moved.
+  // + live-apply + commit-queue + forward-kinematics live propagation) — shared by
+  // group_gizmo, the Move/Rotate panel shell, and the Translate/Rotate tool. Lifted
+  // to scene/assembly_transform.js (carve-up keystone). Alias-consts below keep
+  // every existing call site verbatim — only the function bodies moved.
   const _assemblyTransform = initAssemblyTransform({
     store, api, assemblyRenderer, assemblyJointRenderer,
-    applyFKLive: _applyFKLive,
   })
   const _assemblyPendingTransforms      = _assemblyTransform.pendingTransforms
   const _assemblyPendingPartJoints      = _assemblyTransform.pendingPartJoints
@@ -4980,6 +4978,8 @@ async function main() {
   const _queueAssemblyPrimaryCommit     = _assemblyTransform.queueAssemblyPrimaryCommit
   const _commitAssemblyPending          = _assemblyTransform.commitAssemblyPending
   const _hasAssemblyPending             = _assemblyTransform.hasAssemblyPending
+  const _applyFKLive                    = _assemblyTransform.applyFKLive
+  const _applyClusterMateFKLive         = _assemblyTransform.applyClusterMateFKLive
 
   // Group/instance gizmo subsystem (revolute-drag angle accumulator + gear/belt
   // live-coupling engine + single-instance gizmo attach). The shared helpers it
@@ -6799,123 +6799,10 @@ async function main() {
   // live-apply + commit-queue (_assemblyPendingTransforms/_assemblyPendingPartJoints/
   // _effectiveInstanceMatrix/_createAssemblyTransformContext/_applyAssemblyPrimaryLive/
   // _queueAssemblyPrimaryCommit/_commitAssemblyPending/_hasAssemblyPending) — moved to
-  // scene/assembly_transform.js (carve-up keystone). It's constructed above (right
-  // after assemblyJointRenderer) so group_gizmo + the Move/Rotate shell can take it
-  // as deps; the alias-consts there keep every call site below unchanged.
-
-  // ── Forward kinematics live visual propagation ───────────────────────────────
-  /**
-   * Apply a world-space delta to all kinematic descendants of rootIds.
-   * Reads committed transforms from assembly (store snapshot captured at drag-start).
-   * @param {Object}         assembly  - store's currentAssembly (captured at drag-start)
-   * @param {THREE.Matrix4}  delta     - world-space transform delta
-   * @param {string|string[]} rootIds  - instances already moved by caller (seed visited set)
-   */
-  function _applyFKLive(assembly, delta, rootIds) {
-    if (!assembly) return
-    const visited = new Set(Array.isArray(rootIds) ? rootIds : [rootIds])
-    const queue   = [...visited]
-    while (queue.length) {
-      const parentId = queue.shift()
-      for (const { childId } of getKinematicChildren(assembly, parentId)) {
-        if (visited.has(childId)) continue
-        const childInst = assembly.instances?.find(i => i.id === childId)
-        if (!childInst || childInst.fixed) continue
-        const childOld = new THREE.Matrix4().fromArray(childInst.transform.values).transpose()
-        const childLiveMat = delta.clone().multiply(childOld)
-        assemblyRenderer.setLiveTransform(childId, childLiveMat)
-        assemblyJointRenderer.setLiveJointTransform(childId, childLiveMat, assembly)
-        visited.add(childId)
-        // Expand child's rigid group so they all follow
-        for (const memberId of getRigidBodyGroup(assembly, childId)) {
-          if (visited.has(memberId)) continue
-          const m = assembly.instances?.find(i => i.id === memberId)
-          if (!m || m.fixed) continue
-          const memberLiveMat = delta.clone().multiply(new THREE.Matrix4().fromArray(m.transform.values).transpose())
-          assemblyRenderer.setLiveTransform(memberId, memberLiveMat)
-          assemblyJointRenderer.setLiveJointTransform(memberId, memberLiveMat, assembly)
-          visited.add(memberId)
-          queue.push(memberId)
-        }
-        queue.push(childId)
-      }
-    }
-  }
-
-  function _applyClusterMateFKLive(assembly, instanceId, clusterId, delta, startTransforms) {
-    if (!assembly) return
-    const visited = new Set([instanceId])
-    const queue = []
-
-    function _jointSideClusterIds(joint, side) {
-      const ids = new Set()
-      if (side === 'a') {
-        if (joint.cluster_id_a) ids.add(joint.cluster_id_a)
-        if (!joint.instance_a_id || !joint.connector_a_label) return ids
-        const inst = assembly.instances?.find(i => i.id === joint.instance_a_id)
-        const ipClusterId = inst?.interface_points?.find(p => p.label === joint.connector_a_label)?.cluster_id
-        if (ipClusterId) ids.add(ipClusterId)
-        for (const cid of assemblyRenderer.getConnectorClusterIds?.(joint.instance_a_id, joint.connector_a_label) ?? []) {
-          if (cid) ids.add(cid)
-        }
-        return ids
-      }
-      if (joint.cluster_id_b) ids.add(joint.cluster_id_b)
-      const inst = assembly.instances?.find(i => i.id === joint.instance_b_id)
-      const ipClusterId = inst?.interface_points?.find(p => p.label === joint.connector_b_label)?.cluster_id
-      if (ipClusterId) ids.add(ipClusterId)
-      for (const cid of assemblyRenderer.getConnectorClusterIds?.(joint.instance_b_id, joint.connector_b_label) ?? []) {
-        if (cid) ids.add(cid)
-      }
-      return ids
-    }
-
-    function _startMat(id) {
-      const inst = assembly.instances?.find(i => i.id === id)
-      return startTransforms.get(id) ?? (inst ? matrixFromInstance(inst) : null)
-    }
-
-    function _moveSeed(seedId) {
-      if (!seedId || visited.has(seedId)) return
-      const seedInst = assembly.instances?.find(i => i.id === seedId)
-      if (!seedInst || seedInst.fixed) return
-      const seedStart = _startMat(seedId)
-      if (!seedStart) return
-      const seedLiveMat = delta.clone().multiply(seedStart)
-      assemblyRenderer.setLiveTransform(seedId, seedLiveMat)
-      assemblyJointRenderer.setLiveJointTransform(seedId, seedLiveMat, assembly)
-      visited.add(seedId)
-      queue.push(seedId)
-
-      for (const memberId of getRigidBodyGroup(assembly, seedId)) {
-        if (visited.has(memberId)) continue
-        const memberInst = assembly.instances?.find(i => i.id === memberId)
-        if (!memberInst || memberInst.fixed) continue
-        const memberStart = _startMat(memberId)
-        if (!memberStart) continue
-        const memberLiveMat = delta.clone().multiply(memberStart)
-        assemblyRenderer.setLiveTransform(memberId, memberLiveMat)
-        assemblyJointRenderer.setLiveJointTransform(memberId, memberLiveMat, assembly)
-        visited.add(memberId)
-        queue.push(memberId)
-      }
-    }
-
-    for (const joint of assembly.joints ?? []) {
-      if (joint.instance_a_id === instanceId && _jointSideClusterIds(joint, 'a').has(clusterId)) {
-        _moveSeed(joint.instance_b_id)
-      } else if (joint.instance_b_id === instanceId && _jointSideClusterIds(joint, 'b').has(clusterId)) {
-        _moveSeed(joint.instance_a_id)
-      }
-    }
-
-    while (queue.length) {
-      const parentId = queue.shift()
-      for (const { childId } of getKinematicChildren(assembly, parentId)) {
-        _moveSeed(childId)
-      }
-    }
-  }
+  // scene/assembly_transform.js (carve-up keystone), along with forward-kinematics
+  // live propagation (_applyFKLive/_applyClusterMateFKLive). It's constructed above
+  // (right after assemblyJointRenderer) so group_gizmo + the Move/Rotate shell can
+  // take it as deps; the alias-consts there keep every call site below unchanged.
 
   // ── Camera-plane free drag (non-revolute parts) ──────────────────────────────
   let _assemblyPtrDownAt = null

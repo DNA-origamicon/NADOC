@@ -16,9 +16,8 @@ function setup({ assembly = null } = {}) {
     patchInstanceClusterTransform: vi.fn().mockResolvedValue(undefined),
     propagateFk: vi.fn().mockResolvedValue(undefined),
   }
-  const applyFKLive = vi.fn()
-  const t = initAssemblyTransform({ store, api, assemblyRenderer, assemblyJointRenderer, applyFKLive })
-  return { store, assemblyRenderer, assemblyJointRenderer, api, applyFKLive, t }
+  const t = initAssemblyTransform({ store, api, assemblyRenderer, assemblyJointRenderer })
+  return { store, assemblyRenderer, assemblyJointRenderer, api, t }
 }
 
 describe('effectiveInstanceMatrix', () => {
@@ -68,28 +67,31 @@ describe('createAssemblyTransformContext', () => {
 
 describe('applyAssemblyPrimaryLive', () => {
   it('no-ops on a null ctx or matrix', () => {
-    const { t, assemblyRenderer, applyFKLive } = setup()
+    const { t, assemblyRenderer } = setup()
     expect(t.applyAssemblyPrimaryLive(null, new THREE.Matrix4())).toBeUndefined()
     expect(t.applyAssemblyPrimaryLive({}, null)).toBeUndefined()
     expect(assemblyRenderer.setLiveTransform).not.toHaveBeenCalled()
-    expect(applyFKLive).not.toHaveBeenCalled()
   })
-  it('applies the delta to every group member and propagates via FK', () => {
+  it('applies the delta to every rigid-group member and runs internal FK propagation', () => {
+    // a & b are a rigid group; b also has a revolute child c → internal applyFKLive moves c.
     const assembly = {
-      instances: [inst('a', IDENTITY), inst('b', IDENTITY)],
-      joints: [{ joint_type: 'rigid', instance_a_id: 'a', instance_b_id: 'b' }],
+      instances: [inst('a', IDENTITY), inst('b', IDENTITY), inst('c', IDENTITY)],
+      joints: [
+        { joint_type: 'rigid', instance_a_id: 'a', instance_b_id: 'b' },
+        { joint_type: 'revolute', instance_a_id: 'b', instance_b_id: 'c' },
+      ],
     }
-    const { t, assemblyRenderer, assemblyJointRenderer, applyFKLive } = setup({ assembly })
+    const { t, assemblyRenderer, assemblyJointRenderer } = setup({ assembly })
     const ctx = t.createAssemblyTransformContext('a')
     // Move primary 'a' by (10,0,0); delta = same since starts are identity.
     const target = new THREE.Matrix4().makeTranslation(10, 0, 0)
     const delta = t.applyAssemblyPrimaryLive(ctx, target)
     const dp = new THREE.Vector3().applyMatrix4(delta)
     expect([dp.x, dp.y, dp.z]).toEqual([10, 0, 0])
-    expect(assemblyRenderer.setLiveTransform).toHaveBeenCalledTimes(2)   // a + b
-    expect(assemblyJointRenderer.setLiveJointTransform).toHaveBeenCalledTimes(2)
-    expect(applyFKLive).toHaveBeenCalledTimes(1)
-    expect(applyFKLive.mock.calls[0][2].sort()).toEqual(['a', 'b'])      // rootIds seed
+    // a + b (rigid group, in the live loop) + c (kinematic child, via internal FK).
+    const moved = assemblyRenderer.setLiveTransform.mock.calls.map(call => call[0]).sort()
+    expect(moved).toEqual(['a', 'b', 'c'])
+    expect(assemblyJointRenderer.setLiveJointTransform).toHaveBeenCalledTimes(3)
   })
 })
 
@@ -123,6 +125,64 @@ describe('commitAssemblyPending', () => {
     const arr = api.propagateFk.mock.calls[0][1]
     expect([arr[3], arr[7], arr[11]]).toEqual([1, 2, 3])
     expect(t.hasAssemblyPending()).toBe(false)
+  })
+})
+
+describe('applyFKLive', () => {
+  it('no-ops on a null assembly', () => {
+    const { t, assemblyRenderer } = setup()
+    t.applyFKLive(null, new THREE.Matrix4(), 'a')
+    expect(assemblyRenderer.setLiveTransform).not.toHaveBeenCalled()
+  })
+  it('propagates the delta to a non-rigid (revolute) kinematic child, skipping the seed root', () => {
+    const assembly = {
+      instances: [inst('a', IDENTITY), inst('b', translate(0, 0, 0))],
+      joints: [{ joint_type: 'revolute', instance_a_id: 'a', instance_b_id: 'b' }],
+    }
+    const { t, assemblyRenderer } = setup({ assembly })
+    const delta = new THREE.Matrix4().makeTranslation(3, 0, 0)
+    t.applyFKLive(assembly, delta, ['a']) // 'a' is the seed root → not re-moved
+    expect(assemblyRenderer.setLiveTransform).toHaveBeenCalledTimes(1)
+    const [movedId, mat] = assemblyRenderer.setLiveTransform.mock.calls[0]
+    expect(movedId).toBe('b')
+    const p = new THREE.Vector3().applyMatrix4(mat)
+    expect([p.x, p.y, p.z]).toEqual([3, 0, 0])
+  })
+  it('skips a fixed child', () => {
+    const assembly = {
+      instances: [inst('a', IDENTITY), inst('b', IDENTITY, { fixed: true })],
+      joints: [{ joint_type: 'revolute', instance_a_id: 'a', instance_b_id: 'b' }],
+    }
+    const { t, assemblyRenderer } = setup({ assembly })
+    t.applyFKLive(assembly, new THREE.Matrix4().makeTranslation(3, 0, 0), ['a'])
+    expect(assemblyRenderer.setLiveTransform).not.toHaveBeenCalled()
+  })
+})
+
+describe('applyClusterMateFKLive', () => {
+  it('moves the mate on the OTHER side of a cluster-matched joint', () => {
+    const assembly = {
+      instances: [inst('a', IDENTITY), inst('b', translate(0, 0, 0))],
+      joints: [{
+        joint_type: 'revolute', instance_a_id: 'a', instance_b_id: 'b',
+        cluster_id_a: 'c1',
+      }],
+    }
+    const { t, assemblyRenderer } = setup({ assembly })
+    const delta = new THREE.Matrix4().makeTranslation(0, 5, 0)
+    // Dragging instance 'a' by cluster 'c1' should drag mate 'b'.
+    t.applyClusterMateFKLive(assembly, 'a', 'c1', delta, new Map())
+    const moved = assemblyRenderer.setLiveTransform.mock.calls.map(c => c[0])
+    expect(moved).toContain('b')
+  })
+  it('does nothing when the clusterId matches no joint side', () => {
+    const assembly = {
+      instances: [inst('a', IDENTITY), inst('b', IDENTITY)],
+      joints: [{ joint_type: 'revolute', instance_a_id: 'a', instance_b_id: 'b', cluster_id_a: 'c1' }],
+    }
+    const { t, assemblyRenderer } = setup({ assembly })
+    t.applyClusterMateFKLive(assembly, 'a', 'NOPE', new THREE.Matrix4(), new Map())
+    expect(assemblyRenderer.setLiveTransform).not.toHaveBeenCalled()
   })
 })
 
