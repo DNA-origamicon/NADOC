@@ -34,3 +34,36 @@ export function nextColoringMode(modes, current) {
   const idx = modes.indexOf(current)
   return modes[(idx + 1) % modes.length]
 }
+
+/**
+ * Mixed-representation state of an assembly's instances, for the
+ * View → Representation menu. Pure decision (the DOM radio/dot sync stays in
+ * main.js):
+ *   • { kind: 'none' }              — no instances; leave menu to design-mode handling.
+ *   • { kind: 'single', repr }      — all instances agree → check that representation.
+ *   • { kind: 'mixed' }             — instances disagree → clear checks, light the dot.
+ * Instances with no `representation` default to 'full' (matches the renderer default).
+ */
+export function reprMenuState(instances) {
+  if (!instances || instances.length === 0) return { kind: 'none' }
+  const reps = new Set()
+  for (const inst of instances) reps.add(inst.representation ?? 'full')
+  if (reps.size === 1) return { kind: 'single', repr: [...reps][0] }
+  return { kind: 'mixed' }
+}
+
+/**
+ * When the current coloring mode is no longer supported by `activeRepr`, the
+ * mode to fall back to so the menu's checkmark always reflects an available
+ * item — null when `currentMode` is still supported (no change needed) or no
+ * fallback applies (e.g. Hull Prism, which supports nothing). Atomistic prefers
+ * CPK; everything else prefers strand.
+ */
+export function coloringFallbackMode(activeRepr, currentMode, assemblyActive = false) {
+  const supported = supportedColoringSet(activeRepr, assemblyActive)
+  if (supported.has(currentMode)) return null
+  const isAtom = activeRepr === 'vdw' || activeRepr === 'ballstick'
+  if (isAtom && supported.has('cpk')) return 'cpk'
+  if (supported.has('strand'))       return 'strand'
+  return null
+}

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { supportedColoringSet, nextColoringMode, COLORING_SUPPORT } from './coloring_modes.js'
+import {
+  supportedColoringSet, nextColoringMode, COLORING_SUPPORT,
+  reprMenuState, coloringFallbackMode,
+} from './coloring_modes.js'
 
 describe('supportedColoringSet', () => {
   it('uses the static table in design (non-assembly) mode', () => {
@@ -30,5 +33,52 @@ describe('nextColoringMode', () => {
   it('returns null when fewer than 2 options', () => {
     expect(nextColoringMode(['strand'], 'strand')).toBeNull()
     expect(nextColoringMode([], 'x')).toBeNull()
+  })
+})
+
+describe('reprMenuState', () => {
+  it('returns none for no instances (null/empty)', () => {
+    expect(reprMenuState(null)).toEqual({ kind: 'none' })
+    expect(reprMenuState([])).toEqual({ kind: 'none' })
+  })
+  it('returns single when all instances agree', () => {
+    expect(reprMenuState([{ representation: 'cylinders' }, { representation: 'cylinders' }]))
+      .toEqual({ kind: 'single', repr: 'cylinders' })
+  })
+  it('defaults a missing representation to full', () => {
+    expect(reprMenuState([{}, { representation: 'full' }]))
+      .toEqual({ kind: 'single', repr: 'full' })
+  })
+  it('returns mixed when instances disagree', () => {
+    expect(reprMenuState([{ representation: 'full' }, { representation: 'beads' }]))
+      .toEqual({ kind: 'mixed' })
+  })
+  it('treats a missing representation as full when computing mixed', () => {
+    // one explicit 'beads' + one defaulted 'full' → disagree
+    expect(reprMenuState([{ representation: 'beads' }, {}]))
+      .toEqual({ kind: 'mixed' })
+  })
+})
+
+describe('coloringFallbackMode', () => {
+  it('returns null when the current mode is still supported', () => {
+    expect(coloringFallbackMode('full', 'base', false)).toBeNull()
+    expect(coloringFallbackMode('cylinders', 'strand', false)).toBeNull()
+  })
+  it('falls back to strand when current is unsupported (non-atomistic)', () => {
+    // cylinders drops 'base' → base is unsupported → strand
+    expect(coloringFallbackMode('cylinders', 'base', false)).toBe('strand')
+  })
+  it('prefers cpk for atomistic reprs when current is unsupported', () => {
+    // vdw supports cpk; overhang-only is unsupported there → cpk
+    expect(coloringFallbackMode('vdw', 'overhang-only', false)).toBe('cpk')
+  })
+  it('returns null for hull-prism (supports nothing)', () => {
+    expect(coloringFallbackMode('hull-prism', 'strand', false)).toBeNull()
+  })
+  it('honors assembly-mode support sets', () => {
+    // surface in assembly mode adds 'source'; 'base' still unsupported → strand
+    expect(coloringFallbackMode('surface', 'base', true)).toBe('strand')
+    expect(coloringFallbackMode('surface', 'source', true)).toBeNull()
   })
 })

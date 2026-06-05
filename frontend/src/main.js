@@ -48,7 +48,7 @@ import { initJointPick } from './scene/joint_pick.js'
 import { initEmptySpaceMenu } from './scene/empty_space_menu.js'
 import { initAssemblyLasso } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
-import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
+import { supportedColoringSet, nextColoringMode, reprMenuState, coloringFallbackMode } from './scene/coloring_modes.js'
 import { initScaffoldModal } from './ui/scaffold_modal.js'
 import { initAutoscaffoldPicker } from './ui/autoscaffold_picker.js'
 import { initAutobreakModal } from './ui/autobreak_modal.js'
@@ -6902,16 +6902,13 @@ async function main() {
   //     state to design-mode handling.
   function _syncAssemblyReprMenu(assembly) {
     const dotEl = document.getElementById('menu-view-repr-mixed-dot')
-    const instances = assembly?.instances ?? []
-    if (instances.length === 0) {
+    const st = reprMenuState(assembly?.instances ?? [])
+    if (st.kind === 'none') {
       if (dotEl) dotEl.style.display = 'none'
       return
     }
-    const reps = new Set()
-    for (const inst of instances) reps.add(inst.representation ?? 'full')
-    if (reps.size === 1) {
-      const only = [...reps][0]
-      _updateReprRadio(only)
+    if (st.kind === 'single') {
+      _updateReprRadio(st.repr)
       if (dotEl) dotEl.style.display = 'none'
     } else {
       // Mixed: clear every is-checked so no representation looks selected.
@@ -6951,8 +6948,8 @@ async function main() {
   }
 
   function _updateColoringMenuAvailability(activeRepr) {
-    const isAtom = activeRepr === 'vdw' || activeRepr === 'ballstick'
-    const supported = supportedColoringSet(activeRepr, store.getState().assemblyActive)
+    const assemblyActive = store.getState().assemblyActive
+    const supported = supportedColoringSet(activeRepr, assemblyActive)
     const map = {
       strand:         'menu-view-coloring-strand',
       base:           'menu-view-coloring-base',
@@ -6967,13 +6964,10 @@ async function main() {
       el.disabled = !supported.has(mode)
     }
     // If the active mode is no longer supported, fall back to an enabled one so
-    // the menu's checkmark always reflects an available item. Atomistic prefers
-    // CPK; otherwise strand. Hull Prism supports nothing — leave it untouched.
-    const current = store.getState().coloringMode || 'strand'
-    if (!supported.has(current)) {
-      if (isAtom && supported.has('cpk')) _setColoringMode('cpk')
-      else if (supported.has('strand'))  _setColoringMode('strand')
-    }
+    // the menu's checkmark always reflects an available item.
+    const fallback = coloringFallbackMode(
+      activeRepr, store.getState().coloringMode || 'strand', assemblyActive)
+    if (fallback) _setColoringMode(fallback)
   }
 
   function _reprOptionSliders(repr) {
