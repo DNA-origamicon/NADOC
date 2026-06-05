@@ -31,7 +31,6 @@ import { buildSpecMap, buildDomainMapFromDesign, buildJunctionMapFromDomains, bu
 import { initGroupGizmo } from './scene/group_gizmo.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, constraintRelevantChanged } from './scene/assembly_diff.js'
 import { surfaceSegments, flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
-import { formatScoreSummary, formatGraphSummary } from './scene/aksel_format.js'
 import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './scene/assembly_groups_util.js'
 import { initAssemblyPointer } from './scene/assembly_pointer.js'
 import { hexFromInt, atomColorsFromLetters } from './scene/color_util.js'
@@ -49,6 +48,7 @@ import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { supportedColoringSet, nextColoringMode } from './scene/coloring_modes.js'
 import { initScaffoldModal } from './ui/scaffold_modal.js'
 import { initAutoscaffoldPicker } from './ui/autoscaffold_picker.js'
+import { initAutobreakModal } from './ui/autobreak_modal.js'
 import { initNewDesignModal } from './ui/new_design_modal.js'
 import { filterAtomData } from './scene/atom_filter.js'
 import { initSliceHighlighter } from './scene/slice_highlighter.js'
@@ -4071,125 +4071,8 @@ async function main() {
     showToast(`Full autostaple complete: ${full.aksel_break?.new_staple_count ?? 0} staples, ${removed} circularizing crossovers removed.`)
   })
 
-  ;(() => {
-    let _abModalCtrl = null
-    let _abBody      = null
-    let _abReport    = null
-
-    let _animTimer = null
-    function _startIndeterminate() {
-      const fill = document.getElementById('op-progress-fill')
-      if (!fill) return
-      let pct = 0
-      _animTimer = setInterval(() => {
-        pct = (pct + 7) % 90
-        fill.style.width = pct + '%'
-      }, 400)
-    }
-    function _stopIndeterminate() {
-      if (_animTimer) { clearInterval(_animTimer); _animTimer = null }
-      const fill = document.getElementById('op-progress-fill')
-      if (fill) fill.style.width = '100%'
-    }
-
-    function _readAkselOptions() {
-      const minNt = Number.parseInt(_abBody?.querySelector('#ab-min-nt')?.value ?? '21', 10)
-      const maxNt = Number.parseInt(_abBody?.querySelector('#ab-max-nt')?.value ?? '60', 10)
-      const kPaths = Number.parseInt(_abBody?.querySelector('#ab-k-paths')?.value ?? '3', 10)
-      const pathIndex = Number.parseInt(_abBody?.querySelector('#ab-path-index')?.value ?? '0', 10)
-      return {
-        min_staple_nt: Number.isFinite(minNt) ? minNt : 21,
-        max_staple_nt: Number.isFinite(maxNt) ? maxNt : 60,
-        k_paths: Number.isFinite(kPaths) ? kPaths : 3,
-        path_index: Number.isFinite(pathIndex) ? pathIndex : 0,
-      }
-    }
-
-    function _setAkselReport(lines, severity = 'normal') {
-      if (!_abReport) return
-      _abReport.style.display = 'block'
-      _abReport.style.color = severity === 'error'
-        ? 'var(--color-danger, #ff6b6b)'
-        : 'var(--color-text-muted)'
-      _abReport.textContent = lines.filter(Boolean).join('\n')
-    }
-
-    async function _scoreAksel3d() {
-      const opts = _readAkselOptions()
-      _setAkselReport(['Scoring current staples…'])
-      const report = await api.scoreStaples(opts)
-      if (!report) {
-        _setAkselReport(['Score failed: ' + (store.getState().lastError?.message ?? 'unknown error')], 'error')
-        return
-      }
-      _setAkselReport(['Current route', ...formatScoreSummary(report)])
-    }
-
-    async function _previewAksel3d() {
-      const opts = _readAkselOptions()
-      _setAkselReport(['Building precursor graph…'])
-      _showProgress('Aksel preview', 'Scoring candidate breaks…')
-      const report = await api.buildStaplePrecursorGraphs(opts)
-      _hideProgress()
-      if (!report) {
-        _setAkselReport(['Preview failed: ' + (store.getState().lastError?.message ?? 'unknown error')], 'error')
-        return
-      }
-      _setAkselReport(['Precursor graph', ...formatGraphSummary(report)])
-    }
-
-    async function _runAutoBreak3d() {
-      _abModalCtrl?.close()
-      const algo = _abBody?.querySelector('input[name="ab-algo"]:checked')?.value || 'basic'
-      const isAksel = algo === 'aksel' || algo === 'advanced'
-      _showProgress('Autobreak', isAksel ? 'Running Aksel optimizer…' : 'Running nick planner…')
-      if (isAksel) _startIndeterminate()
-      const result = isAksel
-        ? await api.addAutoRouteAksel(_readAkselOptions())
-        : await api.addAutoBreak({ algorithm: algo })
-      if (isAksel) _stopIndeterminate()
-      _hideProgress()
-      if (!result) {
-        showToast('Autobreak failed: ' + (store.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
-      } else {
-        const akselRoute = result.aksel_route
-        const aksel = akselRoute?.aksel_break ?? result.aksel_break
-        if (aksel) {
-          const placed = akselRoute?.auto_crossover?.placed
-          const prefix = placed == null ? 'Aksel autobreak' : `Aksel route (${placed} crossovers)`
-          showToast(`${prefix} complete: ${aksel.new_staple_count ?? 0} staples, ${aksel.length_violation_count ?? 0} length violations.`)
-        } else {
-          showToast('Autobreak complete.')
-        }
-      }
-    }
-
-    function _buildOnce() {
-      if (_abModalCtrl) return
-      _abBody = document.getElementById('autobreak-modal-body')
-      if (!_abBody) return
-      _abBody.removeAttribute('hidden')
-      _abReport = _abBody.querySelector('#ab-aksel-report')
-      const cancelBtn = createButton({ label: 'Cancel', variant: 'default', onClick: () => _abModalCtrl.close() })
-      const scoreBtn  = createButton({ label: 'Score', variant: 'default', onClick: _scoreAksel3d })
-      const graphBtn  = createButton({ label: 'Preview', variant: 'default', onClick: _previewAksel3d })
-      const runBtn    = createButton({ label: 'Run Autobreak', variant: 'primary', onClick: _runAutoBreak3d })
-      _abModalCtrl = createModal({
-        title: 'Autobreak — choose algorithm',
-        size: 'md',
-        body: _abBody,
-        actions: [cancelBtn, scoreBtn, graphBtn, runBtn],
-      })
-    }
-
-    document.getElementById('menu-routing-autobreak')?.addEventListener('click', () => {
-      if (!store.getState().currentDesign?.helices?.length) {
-        showToast('No design loaded.', { severity: 'error' }); return
-      }
-      _buildOnce()
-      _abModalCtrl?.open()
-    })
-  })()
+  // ── Routing: Autobreak modal → ui/autobreak_modal.js ──────────────────────
+  initAutobreakModal({ store, api })
 
   // ── Sequencing ────────────────────────────────────────────────────────────
 
