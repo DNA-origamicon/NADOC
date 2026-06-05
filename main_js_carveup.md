@@ -1,9 +1,10 @@
 # main.js carve-up map — stateful-subsystem extraction backlog
 
-**Purpose.** main.js is one large `async function main()` closure (~10.9k lines as of 2026-06-04, down
-from ~16.5k). The pure-helper well is drained (see `main_js_extraction_log.md`); the remaining mass is
-*stateful subsystems* — panels, dialogs, menus, and event-handler clusters. This file is the **prioritized
-backlog** for extracting them. Each session claims ONE region, factory-extracts it, and checks it off here.
+**Purpose.** main.js is one large `async function main()` closure (~10.25k lines as of 2026-06-05, down
+from ~16.5k). The pure-helper well is drained (see `main_js_extraction_log.md`) and — as of #61 — every
+Tier 1–5 *stateful subsystem* (panels, dialogs, menus, event-handler clusters) is extracted too. The loop
+is **near-complete**: the remaining mass is the lifecycle spine + thin per-action wiring that's correctly
+inline, plus a couple of deliberately-deferred coupled regions. See the handoff for the STOP rationale.
 
 > **⚠ THIS MAP IS SEQUENCING-ONLY. Its LOC counts, line numbers, and "what it is" descriptions are NOT
 > authoritative.** They are a one-time snapshot that has drifted under continuous refactoring and has been
@@ -52,48 +53,56 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Tier-5 "File open / save"
-region FULLY DRAINED (#52/#59/#60).** Extracted the **Save/Save-As dispatchers** (#60) → `ui/file_io.js` THIRD
-factory `initFileSave`. main.js 10394 → 10370 (−24)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Selection-filter +
+drill-lock state machine DRAINED (#61)** → `ui/selection_filter.js`. main.js 10370 → 10254 (−116). The loop
+is now NEAR-COMPLETE — all Tier 1–5 cohesive subsystems are extracted; what remains is genuinely-small scraps
++ deliberately-deferred coupled regions (see below)._
 
-**This session (#60):** `_saveDispatch` / `_saveAsDispatch` / `_saveAssembly` / `_saveAssemblyAsGuarded` →
-`ui/file_io.js` THIRD factory `initFileSave({…})→{saveDispatch, saveAsDispatch, saveAssembly,
-saveAssemblyAsGuarded}` (verbatim bodies, deps read through injected getters). A thin dispatch layer OVER the
-already-extracted `_fileIo` — routes by `assemblyActive`. Deps span the file: `_fileIo`/`_syncBadge`/
-`_lifecycleSync` (~7100-7195) AND `_exportRepActive` (~8727), so the init is placed AFTER the last dep (~8737);
-`_fileSave` forward-declared `let = null` at the file-state block (~3434). The 2 menu listeners (~3901) +
-the keyboard-shortcuts `saveAssemblyAsGuarded` injection (~5089) reference it via lazy arrows (`() => _fileSave.
-…()`) — all fire on user action (click / Ctrl+S) post-init. `selfSavedPaths` flows in by reference; file-path
-state + `_exportRepActive` via getters; `setAssemblyWorkspacePath` injected directly. 16 vitest (670 total).
-smoke 23/23 + menu-File>Save app exercise (zero console errors — proves `_fileSave` resolves at click time).
-
-**Recommended next region — Tier-5 is now thin; pick from these:**
-1. **Tier-4/5 opportunistic scraps** (each too small to own a module — BUNDLE 2-3 into one `ui/menu_misc.js`
-   cut): Orbit submenu (~10 ln), Browser tab title (~5 ln), deform→selectableTypes subscriber, Coloring submenu
-   (~20 ln w/ 6 external `_setColoringMode` callers). Low payoff individually; a bundle commit is the move.
-2. **Session-recovery / `.session` autosave wiring** if any remains — grep the boot region for un-lifted
-   lifecycle handlers. Verify against the carve-up Tier-5 list before investing (it's been wrong 5+ times).
-3. If nothing cohesive remains worth a module, consider the loop near-complete and STOP (per the spine-stays-
-   inline criterion). main.js is 10370 (down from 16530); the remaining mass is largely the lifecycle spine +
-   thin per-action wiring that's correctly inline.
+**This session (#61, user-picked):** the drill-lock state machine (`_manualFilters` Set + `_isManualSelect`/
+`_reflectDrillLevel`/`_reflectLockOnButtons`/`_resetToAutoBaseline`, ~727) + the `#select-filter .sf-btn` button
+row + 2 subscribers (~4852) — two textually-distant blocks, ONE subsystem — → `ui/selection_filter.js`
+`initSelectionFilter({store, getSelectionManager})→{isManualSelect, reflectDrillLevel, reflectLockOnButtons,
+resetToAutoBaseline, attachFilterButtons}` + pure `computeFilterToggle`. `isManualSelect`/`reflectDrillLevel`
+injected into initSelectionManager; `reflectLockOnButtons`/`resetToAutoBaseline` into initKeyboardShortcuts.
+`selectionManager` (created AFTER the factory — its init consumes the factory's callbacks) → lazy getter.
+`attachFilterButtons()` called at the original ~4852 spot to preserve store-subscription order. 17 vitest
+(687 total), smoke 23/23, real-app pin/un-pin exercise (zero console errors).
 
 **Banked gotcha this session:**
-- **A pure dispatch/routing layer is still worth its own factory even at small net LOC.** #60 netted only −24
-  (the multi-getter init block is verbose) but it lifts 4 functions + their `assemblyActive`-routing policy out
-  of the closure into a unit-testable surface. Don't skip a region because the net is small — testability is the
-  payoff, not line count. Keep it a SEPARATE factory from the ops it routes over (initFileSave consumes
-  `_fileIo` as a dep) — that's the clean dependency direction (policy depends on mechanism, not vice versa).
-- **When deps span the whole file, init goes after the LATEST dep, not at the cohesive block's location.** #60's
-  functions live at ~3895 but read `_exportRepActive` (~8727). The factory `_fileSave = initFileSave(...)` is
-  placed at ~8737 (after that `let`), and EVERY textually-earlier reference (menu listeners, kb-shortcuts
-  injection) is wrapped as a lazy arrow. Grep-verify no boot path *calls* a method synchronously — here all call
-  sites are user-action handlers, so the bare lazy arrows are safe (no `?.` needed). This is the #52/#59 pattern.
+- **"HARD/gesture-bound" in the carve-up was wrong (6th mis-scope).** The map billed this region HARD,
+  needing a canvas-gesture e2e gate first. But the extracted surface is **pure DOM+store** — the actual
+  bead-click drill gesture lives in `selectionManager`, which *calls into* this module's `reflectDrillLevel`
+  (a DOM class-toggle). When a "gesture-bound" region only *reflects* gesture state onto DOM, the reflector
+  is jsdom-testable in isolation; the gesture stays in the module that owns it. Check WHERE the gesture
+  actually lives before assuming a region needs scene_harness.
+- **Lazy-getter for a forward dep that's ALSO your consumer.** `selectionManager` is created after this
+  factory AND its init consumes the factory's `isManualSelect`/`reflectDrillLevel`. Resolve the cycle by:
+  factory takes `getSelectionManager: () => selectionManager` (lazy), exposes the callbacks synchronously
+  (they don't touch selectionManager), and everything that *does* touch it (resetDrill/getDrillLock) only
+  fires on user action — so the getter always resolves post-init. Same shape as #52's late-dep placement,
+  but here driven by a construction-order cycle, not by dep location.
 
-**Deliberately deferred (still in main.js):** FK propagation (`_applyFKLive`); Polymerize-region sub-part
-`scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound). `_setMenuToggle`
-(43-use shared-util lift, separate from any feature factory). Selection Filter toggles (welded to the
-drill-lock state machine at ~717 — must move together). Tier-4 opportunistic scraps (Orbit submenu ~10 ln,
-Browser tab title ~5 ln, deform→selectableTypes subscriber) — too small to each own a module; bundle later.
+**Recommended next — the loop is near-complete. Two honest options:**
+1. **STOP (recommended).** main.js is 10254 (down from 16530 — 38% drained). Every Tier 1–5 cohesive
+   subsystem is now a tested module. What's left is the **lifecycle spine** (`_resetForNewDesign` /
+   `_enterAssemblyMode` / `_exitAssemblyMode` / `_setMenuToggle` — called from 20–43 sites, correctly inline)
+   + thin per-action menu wiring + the deferred coupled regions below. Forcing more extractions risks making
+   main.js *worse* (the STOP criterion). Declare the carve-up substantially complete.
+2. **If continuing, the ONLY remaining non-trivial coupled regions** (NOT scraps): **FK propagation**
+   (`_applyFKLive`, deferred by design — assembly forward-kinematics) and the **Polymerize-region
+   `scene/joint_pick.js`** (`_onToolPickPointerDown` + cluster raycaster — genuinely HARD + gesture-bound,
+   needs the assembly-gesture harness). Both are real subsystems but high-cost. Verify want-it + build the
+   gate first.
+
+**Do NOT bundle the micro-scraps** (Orbit submenu ~10 ln, Browser tab title ~5 ln, Coloring submenu ~20 ln
+w/ 7 external `_setColoringMode` callers, deform→selectableTypes subscriber ~28 ln). Six logged mis-scopes
+say the map's adjacency ≠ cohesion; a `ui/menu_misc.js` junk drawer is the anti-pattern. Each is either too
+small to justify a module's indirection or too coupled for a clean lift (Coloring's 7 callers). They are
+correctly inline — leave them.
+
+**Deliberately deferred (still in main.js, by design):** FK propagation (`_applyFKLive`); Polymerize-region
+`scene/joint_pick.js` (HARD, gesture-bound); `_setMenuToggle` (43-use shared-util lift — its own mechanical
+import-swap, not a feature factory); the micro-scraps above (correctly inline).
 
 ---
 
@@ -345,9 +354,16 @@ The largest single blocks and the most coupling into assembly state. Each needs 
     - **`_setMenuToggle`** (the menu-pill toggler defined at the top of the region) is a **43-use shared
       util**, NOT a feature factory member — if extracted at all it belongs in its own `ui/menu_toggle.js`
       shared-util lift (mechanical 43-site import swap), separate from this region.
-    - **Selection Filter toggles** (`#select-filter .sf-btn`) is entangled with the **drill-lock state
-      machine** (`_manualFilters`/`_isManualSelect`/`_reflectDrillLevel`/`_resetToAutoBaseline`) owned by the
-      `// ── Selection-filter mode` region (~717) — extract those together, not here.
+    - **Selection Filter toggles** (`#select-filter .sf-btn`) + the **drill-lock state machine**
+      (`_manualFilters`/`_isManualSelect`/`_reflectDrillLevel`/`_reflectLockOnButtons`/`_resetToAutoBaseline`,
+      `// ── Selection-filter mode` ~727) → **DONE TOGETHER** `ui/selection_filter.js`
+      `initSelectionFilter({store, getSelectionManager})` + pure `computeFilterToggle` (extraction #61,
+      commit 5e41c6b; −116 ln; 17 vitest; smoke 23/23 + real-app pin/un-pin exercise). **Carve-up was wrong
+      that this is HARD/gesture-bound:** the extracted surface is pure DOM+store — the bead-click drill lives
+      in selectionManager, which CALLS this module's `reflectDrillLevel`, so there's no canvas gesture to
+      harness. `isManualSelect`/`reflectDrillLevel` injected into initSelectionManager;
+      `reflectLockOnButtons`/`resetToAutoBaseline` into initKeyboardShortcuts; `selectionManager` (created
+      AFTER the factory) reached via lazy getter; `attachFilterButtons()` keeps subscription order.
     - **Tool Filter toggles** (`#view-tools .sf-btn[data-key]`: blunt/crossover/overhang locations +
       the toolFilters→renderer-visibility subscriber) → **DONE** `ui/tool_filter_toggles.js`
       `initToolFilterToggles` (extraction #49, commit e514895; −34 ln; 11 vitest; smoke 21/21 + real-app
