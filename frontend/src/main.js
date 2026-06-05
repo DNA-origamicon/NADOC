@@ -29,6 +29,7 @@ import { initCreateSeam } from './scene/create_seam.js'
 import { strandLengthNt } from './scene/strand_length.js'
 import { buildSpecMap, buildDomainMapFromDesign, buildJunctionMapFromDomains, buildRootMap } from './scene/overhang_maps.js'
 import { initGroupGizmo } from './scene/group_gizmo.js'
+import { initAssemblyTransform } from './scene/assembly_transform.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, constraintRelevantChanged } from './scene/assembly_diff.js'
 import { surfaceSegments, flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
 import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './scene/assembly_groups_util.js'
@@ -133,7 +134,7 @@ import { initAssemblyRefresh } from './scene/assembly_refresh.js'
 import { initConnectionMonitor, initAutosaveSync } from './app/lifecycle.js'
 import { initDocSpawn } from './app/doc_spawn.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
-import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
+import { getRigidBodyGroup, getKinematicChildren, computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
 import { initPlateView }                           from './ui/plate_view.js'
 import { STAPLE_PALETTE as PLATE_STAPLE_PALETTE } from './scene/helix_renderer/palette.js'
@@ -4961,6 +4962,25 @@ async function main() {
   const instanceGizmo = initInstanceGizmo(store, controls)
   const assemblyJointRenderer = initAssemblyJointRenderer(scene, camera, canvas, store, api, controls)
 
+  // Assembly transform engine (pending-transform Maps + transform-context builder
+  // + live-apply + commit-queue) — shared by group_gizmo, the Move/Rotate panel
+  // shell, and the Translate/Rotate tool. Lifted to scene/assembly_transform.js
+  // (carve-up keystone). `applyFKLive` is still a hoisted fn in main (FK lift is a
+  // later commit) so it's injected here. Alias-consts below keep every existing
+  // call site verbatim — only the function bodies moved.
+  const _assemblyTransform = initAssemblyTransform({
+    store, api, assemblyRenderer, assemblyJointRenderer,
+    applyFKLive: _applyFKLive,
+  })
+  const _assemblyPendingTransforms      = _assemblyTransform.pendingTransforms
+  const _assemblyPendingPartJoints      = _assemblyTransform.pendingPartJoints
+  const _effectiveInstanceMatrix        = _assemblyTransform.effectiveInstanceMatrix
+  const _createAssemblyTransformContext = _assemblyTransform.createAssemblyTransformContext
+  const _applyAssemblyPrimaryLive       = _assemblyTransform.applyAssemblyPrimaryLive
+  const _queueAssemblyPrimaryCommit     = _assemblyTransform.queueAssemblyPrimaryCommit
+  const _commitAssemblyPending          = _assemblyTransform.commitAssemblyPending
+  const _hasAssemblyPending             = _assemblyTransform.hasAssemblyPending
+
   // Group/instance gizmo subsystem (revolute-drag angle accumulator + gear/belt
   // live-coupling engine + single-instance gizmo attach). The shared helpers it
   // leans on (transform-context builder, Move/Rotate live-apply + commit-queue,
@@ -6773,69 +6793,15 @@ async function main() {
   // ── Rigid-body group gizmo attachment ────────────────────────────────────────
   // The revolute-drag angle accumulator + gear/belt live-coupling engine + the
   // single-instance gizmo attach now live in scene/group_gizmo.js (initGroupGizmo,
-  // created below once its deps are available). The pending-transform Maps stay
-  // here — they're touched file-wide (dev hooks, exit-cleanup, keyboard-commit).
-  const _assemblyPendingTransforms = new Map()
-  const _assemblyPendingPartJoints = new Map()
-
-  function _effectiveInstanceMatrix(inst) {
-    return _assemblyPendingTransforms.get(inst.id)?.clone() ?? matrixFromInstance(inst)
-  }
-
-  function _createAssemblyTransformContext(instanceId) {
-    const assembly = store.getState().currentAssembly
-    if (!assembly) return null
-
-    const { anchored } = isGroupAnchored(assembly, instanceId)
-    if (anchored) return null
-
-    const groupIds = getRigidBodyGroup(assembly, instanceId)
-    const groupStartTransforms = new Map()
-    for (const id of groupIds) {
-      const gi = assembly.instances.find(i => i.id === id)
-      if (!gi) continue
-      groupStartTransforms.set(id, _effectiveInstanceMatrix(gi))
-    }
-    const primaryStart = groupStartTransforms.get(instanceId)
-    if (!primaryStart) return null
-    return { instanceId, assembly, groupStartTransforms, primaryStart }
-  }
-
-  function _applyAssemblyPrimaryLive(ctx, primaryMat4) {
-    if (!ctx || !primaryMat4) return
-    const delta = primaryMat4.clone().multiply(ctx.primaryStart.clone().invert())
-    const asm = store.getState().currentAssembly
-    for (const [id, startMat] of ctx.groupStartTransforms) {
-      const liveMat = delta.clone().multiply(startMat)
-      assemblyRenderer.setLiveTransform(id, liveMat)
-      assemblyJointRenderer.setLiveJointTransform(id, liveMat, asm)
-    }
-    _applyFKLive(asm, delta, [...ctx.groupStartTransforms.keys()])
-    return delta
-  }
-
-  function _queueAssemblyPrimaryCommit(ctx, primaryMat4) {
-    if (!ctx || !primaryMat4) return
-    _assemblyPendingTransforms.set(ctx.instanceId, primaryMat4.clone())
-  }
-
-  async function _commitAssemblyPending() {
-    const pendingPartJoints = [..._assemblyPendingPartJoints.values()]
-    _assemblyPendingPartJoints.clear()
-    for (const patch of pendingPartJoints) {
-      await api.patchInstanceClusterTransform(patch.instanceId, patch.body)
-    }
-
-    const pendingTransforms = [..._assemblyPendingTransforms.entries()]
-    _assemblyPendingTransforms.clear()
-    for (const [instanceId, mat] of pendingTransforms) {
-      await api.propagateFk(instanceId, mat.clone().transpose().toArray())
-    }
-  }
-
-  function _hasAssemblyPending() {
-    return _assemblyPendingTransforms.size > 0 || _assemblyPendingPartJoints.size > 0
-  }
+  // created below once its deps are available).
+  //
+  // The transform engine — pending-transform Maps + transform-context builder +
+  // live-apply + commit-queue (_assemblyPendingTransforms/_assemblyPendingPartJoints/
+  // _effectiveInstanceMatrix/_createAssemblyTransformContext/_applyAssemblyPrimaryLive/
+  // _queueAssemblyPrimaryCommit/_commitAssemblyPending/_hasAssemblyPending) — moved to
+  // scene/assembly_transform.js (carve-up keystone). It's constructed above (right
+  // after assemblyJointRenderer) so group_gizmo + the Move/Rotate shell can take it
+  // as deps; the alias-consts there keep every call site below unchanged.
 
   // ── Forward kinematics live visual propagation ───────────────────────────────
   /**
