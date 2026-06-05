@@ -52,49 +52,42 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **This session took the
-cheap off-frontier pick — Assign Scaffold modal** (#56) → `ui/scaffold_modal.js` `initScaffoldModal` + pure
-`countScaffoldNt`. main.js 10728 → 10588 (−140 ln)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Cheapness relaxed — took a
+real frontier cut.** Extracted the **New Part modal** (#57, first spine-coupled modal) → `ui/new_design_modal.js`.
+main.js 10588 → 10511 (−77 net)._
 
-**This session (#56):** the **Assign Scaffold Sequence dialog** (Tools→Sequencing menu item + scaffold
-right-click "Assign Scaffold for strand…") → `ui/scaffold_modal.js` factory `initScaffoldModal(deps)→{openModal}`.
-Cleanest cheap modal since #42: self-contained, only DOM + `createModal`/`createButton`/`showToast` (imported
-directly, not deps). Pure scaffold-nt counter (loop/skip-aware) lifted as `countScaffoldNt` into
-`scene/scaffold_assign.js` (next to `ascWarningText`). `_undefinedHighlightOn`/`_refreshUndefinedHighlight`
-(declared ~5000 ln below) injected as lazy getters — TDZ-safe (apply path runs only on user action). Factory
-`const` sits at its natural Sequencing banner; the one earlier caller (right-click @~2886) reads it from a
-post-boot handler closure → plain `const` works (no lazy-let, mirrors #38). `openModal(targetStrandId)` replaced
-the set-flag-then-call pattern. 18 vitest (8 pure + 10 factory) + smoke 23/23 + real-app exercise.
+**This session (#57):** the **New Part dialog + create flow** (`_buildNewDesignModalOnce`/`_openNewDesignModal`/
+`_onCreateClicked` + `menu-file-new` listener) → `ui/new_design_modal.js` factory `initNewDesignModal(deps)→{openModal}`
++ pure `sanitizeWorkspaceStem`. **First spine-coupled modal** (step up from #56's self-contained dialogs): the
+lifecycle spine (`_resetForNewDesign`/`_setFileName`/`_hideWelcome`/`_setWorkspacePath` + `_fileHandle` via a setter
+shim) and the multi-doc spawn guard (`_spawnDocTabIfBusy`) **stay inline + injected** (the #52 pattern). `libraryPanel`
+(below the init) via lazy `getLibraryPanel`. Boot-doc-action caller now `_newDesignModal.openModal()`. 14 vitest +
+smoke 23/23 — the smoke "File > New Part dialog" suite (9 tests, both lattices, Create→API) IS the app exercise.
 
-**Recommended next region — Tier 5 frontier (both HIGH), or the last trivial cheap pick:**
-1. **Menu bar + multi-doc spawn** (banners `// ── Menu bar` + `// ── Multi-document: New / Open`) →
-   `ui/menu_bar.js`. HIGH (every menu action). Opens with the New-Part `createModal` block
-   (`_buildNewDesignModalOnce`/`_openNewDesignModal`/`_onCreateClicked`) — a candidate sub-cut BUT
-   `_openNewDesignModal` calls the lifecycle spine (`_resetForNewDesign`, `_fileHandle`, `workspace.show()`,
-   `api.createDesign`) and the multi-doc spawn touches doc_id/broadcast → NOT as clean as #42. Likely splits:
-   (a) New-Part modal sub-block (spine-coupled), (b) multi-doc New/Open spawn. Read for the cohesive seam first.
-2. **Finish "File open / save"**: open-file orchestration (`_openPartFromServer`/`_openAssemblyFromServer`) +
-   menu-bar save dispatchers (`_saveDispatch`/`_saveAsDispatch`/`_saveAssembly`/`_saveAssemblyAsGuarded`). They
-   call `_fileIo.*` already; lifting needs lifecycle-spine deps (leave the spine inline). MED-HIGH.
-
-**Cheapest remaining off-frontier pick (if "keep it cheap" wins again):** **Paste Script modal** (~46 ln,
-banner `// ── Paste Script modal`, deps `runScript`/`showToast` only — trivial; mirror #42/#56). Verify it's still
-wanted first (dev-tool-ish). NOTE the Assign Scaffold modal is now DONE (#56) — don't re-propose it.
+**Recommended next region — pick by appetite (cheapness relaxed):**
+1. **Multi-doc spawn → `app/doc_spawn.js`** (banner `// ── Multi-document: New / Open`, ~20 ln, NOW directly below
+   the #57 init). Clean cohesive cut left behind by #57: pure `spaceHasContent(state)` + factory wrapping
+   `spawnDocTabIfBusy` (deps store + imported `mintDocId`). Used by file-new (now in the new module via the injected
+   dep) / file-new-assembly / file-open. LOW-MED, self-contained, sharpens the seam #57 opened. Good warm-up.
+2. **Finish "File open / save"** (Tier 5, MED-HIGH) — the open orchestration (`_openPartFromServer`/
+   `_openAssemblyFromServer`) + the mode-routing save dispatchers (`_saveDispatch`/`_saveAsDispatch`/`_saveAssembly`/
+   `_saveAssemblyAsGuarded` + `menu-file-open` handler). They call the already-extracted `_fileIo.*`; lifting needs
+   spine deps (leave the spine inline). The meatier frontier cut.
 
 **Banked gotcha this session:**
-- **Cheap modals are real LOC payoff and the lowest-risk lift available.** #56 (−140 ln) beat several HIGH Tier-3
-  cuts on payoff-per-risk. The recipe: a `createModal`-based block whose only deps are DOM + a couple of pure
-  cores + 1–2 store/api calls. Pull the math out as a pure fn (here `countScaffoldNt`), stub createModal/
-  createButton/toast in the factory test (capture the Apply button's `onClick` via the createButton mock to
-  drive the apply path), and the factory falls out clean. `ui/background_modal.test.js` is the reference.
-- **Lazy-getter for a flag declared *below* the factory** (`_undefinedHighlightOn` at ~9892 vs init at ~4665):
-  inject `getUndefinedHighlightOn: () => _undefinedHighlightOn` + `refreshUndefinedHighlight: () => _refreshUndefinedHighlight()`.
-  TDZ-safe because the arrow body only runs at apply time (post-boot), and the `const` factory needs no
-  synchronous read of those late vars — so it stays at its natural banner, not forced down like #52's `initFileIo`.
-- **The earlier caller can be a plain `const` ref, not a lazy-let, when it's a deferred handler.** The scaffold
-  right-click listener (@~2886) is textually above the `const _scaffoldModal` (@~4665) but its body runs on click
-  (post-boot) → the closure resolves the binding fine. Grep-verify no boot-synchronous call before relying on this
-  (mirrors #38; contrast the lazy-let in #26/#32 where the ref was passed *into another init* at construction).
+- **Spine-coupled modal recipe (generalizes #52 to a dialog):** when a modal's create/apply path calls the
+  lifecycle spine (`_resetForNewDesign`/`_setFileName`/…), DON'T try to move the spine — inject each spine fn as a
+  dep and a `(v)=>{_var=v}` setter shim for any mutable closure `let` (here `_fileHandle`). The modal owns only the
+  dialog + its own flow; the spine stays the single inline owner (called from 20+ sites). −77 net even with the
+  injected-dep overhead, and zero boot-order risk because the factory reads none of those at construction.
+- **Function-declaration hoisting lets the init reference a helper textually below it.** `_spawnDocTabIfBusy` is a
+  `function` decl that sits a few lines *below* the `const _newDesignModal = initNewDesignModal({...})` line, yet
+  `spawnDocTabIfBusy: _spawnDocTabIfBusy` resolves fine — function decls hoist to the top of `main()`'s scope. (A
+  `const`/`let` dep in the same spot would NOT; that's the lazy-getter case, e.g. `libraryPanel`.)
+- **The smoke suite can BE the app exercise for a region it already covers.** No throwaway spec was needed for #57:
+  smoke's 9-test "New Part dialog" suite drives open/validation/both-lattices/Create→API through the new module —
+  a stronger, standing gate than a one-off. Check `e2e/smoke.spec.js` before writing a throwaway for any
+  menu/dialog region; it may already exercise it.
 
 **Deliberately deferred (still in main.js):** FK propagation (`_applyFKLive`); Polymerize-region sub-part
 `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound). `_setMenuToggle`
@@ -409,8 +402,22 @@ These touch boot/lifecycle. High blast radius; do after the loop is well-grooved
     `_saveAssemblyAsGuarded`, banner ~3980). They call `_fileIo.*` already; lifting needs lifecycle-spine deps.
     The spine itself (`_resetForNewDesign` / `_enterAssemblyMode` / `_exitAssemblyMode`) is probably best left
     inline (called from 20+ sites).
-- [ ] **Menu bar + multi-document spawn** — banners `// ── Menu bar` + `// ── Multi-document: New / Open`
-  (~4681–5004, ~320 ln) → `ui/menu_bar.js`. Deps: doc_id, broadcast, every menu action. Risk: HIGH.
+- [~] **Menu bar + multi-document spawn** — banners `// ── Menu bar` + `// ── Multi-document: New / Open`.
+  **PARTIALLY DRAINED (2026-06-05). NOT one `ui/menu_bar.js` module** — it's the "every menu action" wiring
+  region: mostly thin 1–3 ln handlers over already-extracted modules + spine, with a couple of genuinely
+  cohesive non-trivial blocks. Breakdown:
+    - **New Part modal** (`_buildNewDesignModalOnce`/`_openNewDesignModal`/`_onCreateClicked` + `menu-file-new`)
+      → **DONE** `ui/new_design_modal.js` `initNewDesignModal` + pure `sanitizeWorkspaceStem` (extraction #57,
+      commit f9e7641; −77 ln; 14 vitest; smoke "New Part dialog" suite = the app exercise). First spine-coupled
+      modal — spine + spawn-guard injected, libraryPanel lazy.
+    - **Multi-doc spawn** (`_spaceHasContent` + `_spawnDocTabIfBusy`, ~20 ln, used by file-new / file-new-assembly
+      / file-open) → STILL INLINE; clean next cut as `app/doc_spawn.js` with pure `spaceHasContent(state)` +
+      factory wrapping `spawnDocTabIfBusy` (deps store + `mintDocId`). LOW-MED, self-contained.
+    - The **save/open dispatchers** (`_saveDispatch`/`_saveAsDispatch`/`_saveAssembly`/`_saveAssemblyAsGuarded` +
+      the `menu-file-open` handler) — mode-routing over the already-extracted `_fileIo.*` + spine. Pairs with the
+      Tier-5 "File open / save" remainder below, not a standalone lift.
+    - The rest (assembly-menu handlers, edit undo/redo, upload/download) are thin wiring over panels/api — low
+      payoff, leave inline or bundle opportunistically.
 - [x] **Connection monitor / autosave / SSE** — banners `// ── Backend connection monitor` …
   `// ── Library SSE` → `app/lifecycle.js`. Risk: HIGH (lifecycle). **FULLY DRAINED across #53/#54/#55**
   (conn monitor → `initConnectionMonitor`; sync badge → `ui/sync_badge.js`; autosave + SSE →
@@ -500,7 +507,8 @@ assembly_groups_util, color_util (+hexFromInt, atomColorsFromLetters), fret_util
 scaffold_assign, atom_filter, selection_bbox, belt_rider, overhang_hover_picker, assembly_lasso,
 coloring_modes, assembly_layout, ndc, flex_tethers, cluster_entries, empty_space_menu, slice_plane,
 plate_view, kinematics_ticker, file_io, app/lifecycle (connection monitor + autosave/SSE),
-scaffold_modal (Assign Scaffold dialog + `countScaffoldNt` in scaffold_assign).
+scaffold_modal (Assign Scaffold dialog + `countScaffoldNt` in scaffold_assign),
+new_design_modal (New Part dialog + `sanitizeWorkspaceStem`).
 
 ## Smaller leftovers (after the tiers above)
 
