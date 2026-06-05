@@ -128,6 +128,7 @@ import { initKinematicsTicker }      from './scene/kinematics_ticker.js'
 import { applyBeltRiders, beltCurvePoints, beltLoopLength } from './scene/belt_geometry.js'
 import { initBeltPolymerize } from './scene/belt_polymerize.js'
 import { initAssemblyRefresh } from './scene/assembly_refresh.js'
+import { initConnectionMonitor } from './app/lifecycle.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { getRigidBodyGroup, getKinematicChildren, isGroupAnchored, computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
@@ -166,7 +167,6 @@ import { createModal }                         from './ui/primitives/modal.js'
 import { createButton }                        from './ui/primitives/button.js'
 import { initBackgroundModal }                 from './ui/background_modal.js'
 import { nadocBroadcast } from './shared/broadcast.js'
-import * as connectionMonitor from './shared/connection_monitor.js'
 import { getDocId, mintDocId, docHeaders, docHeadersFor, docKey } from './shared/doc_id.js'
 import { initMdOverlay }             from './scene/md_overlay.js'
 import { initMdSegmentationOverlay } from './scene/md_segmentation_overlay.js'
@@ -7563,68 +7563,19 @@ async function main() {
   }
 
   // ── Backend connection monitor: status badge + silent restart recovery ───────
-  // Polls /api/health. On disconnect, the badge goes red; on a server restart
-  // (new server_instance_id) the backend's session-cache has already restored
-  // the live document — we just re-pull it. If the backend came back empty but
-  // this tab still holds the design in localStorage, offer to restore from here.
-  let _restartHandling = false
-
-  async function _recoverAfterRestart(health) {
-    // The backend's per-session revision resets low after a restart; clear the
-    // stale-response watermark so the re-pulled design isn't dropped as "older".
-    api.resetRevisionWatermark?.()
-    const assemblyMode = store.getState().assemblyActive
-    if (assemblyMode) {
-      // Assemblies are recovered server-side (session-cache). Re-pull + rebuild.
-      await api.getAssembly()
-      const asm = store.getState().currentAssembly
-      if (asm) {
-        ;(asm.instances ?? []).forEach(i => assemblyRenderer.invalidateInstance(i.id))
-        await assemblyRenderer.rebuild(asm)
-        await assemblyRenderer.rebuildLinkers(asm)
-      }
-      return
-    }
-    if (health?.design_loaded) {
-      // Server-side recovery worked — passively re-pull design + geometry.
-      _reloadingFromSSE = true
-      try { await api.getDesign(); await api.getGeometry() }
-      finally { _reloadingFromSSE = false }
-      return
-    }
-    // Backend came back with no design. Offer to restore from this tab's cache.
-    const cached = api.getPersistedDesign()
-    if (cached && window.confirm(
-        'The backend restarted and no longer has your design loaded.\n\n' +
-        'Restore your work from this browser tab?')) {
-      await api.importDesign(JSON.stringify(cached))
-      await api.getGeometry()
-    }
-  }
-
-  connectionMonitor.start({ onChange: async (evt) => {
-    if (evt.type === 'disconnected') {
-      _setSyncStatus('red', 'reconnecting…')
-      _syncLog('warn', 'CONN', 'backend unreachable — reconnecting')
-    } else if (evt.type === 'reconnected') {
-      _setSyncStatus('green', 'reconnected')
-      _syncLog('info', 'CONN', 'backend reachable again')
-    } else if (evt.type === 'restarted') {
-      _syncLog('warn', 'CONN', 'backend restarted (new instance) — re-syncing')
-      _setSyncStatus('yellow', 'backend restarted — re-syncing…')
-      if (_restartHandling) return
-      _restartHandling = true
-      try {
-        await _recoverAfterRestart(evt.health)
-        _setSyncStatus('green', 'synced')
-      } catch (err) {
-        _setSyncStatus('red', 'recovery error')
-        _syncLog('err', 'CONN', `recovery failed: ${err?.message ?? err}`)
-      } finally {
-        _restartHandling = false
-      }
-    }
-  } })
+  // Extracted to app/lifecycle.js (extraction #53). The factory starts the
+  // /api/health poll and handles silent recovery on server restart. The
+  // `setReloadingFromSSE` shim writes the `_reloadingFromSSE` loop-prevention
+  // flag declared in the autosave region just below — the shim body runs only
+  // post-boot (on a real restart event), so the forward reference is TDZ-safe.
+  initConnectionMonitor({
+    api,
+    store,
+    assemblyRenderer,
+    setSyncStatus: _setSyncStatus,
+    syncLog: _syncLog,
+    setReloadingFromSSE: (v) => { _reloadingFromSSE = v },
+  })
 
   registerShortcut({
     key: 'd', ctrl: true, shift: true,
