@@ -32,12 +32,11 @@ import { initGroupGizmo } from './scene/group_gizmo.js'
 import { initAssemblyTransform } from './scene/assembly_transform.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, constraintRelevantChanged } from './scene/assembly_diff.js'
 import { surfaceSegments, flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
-import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './scene/assembly_groups_util.js'
+import { computeGroupHiddenInstanceIds } from './scene/assembly_groups_util.js'
 import { initAssemblyPointer } from './scene/assembly_pointer.js'
 import { hexFromInt, atomColorsFromLetters, computeAtomStrandColors } from './scene/color_util.js'
 import { initFretChecker } from './scene/fret_checker.js'
 import { initUndefinedHighlight } from './scene/undefined_highlight.js'
-import { motionChipStyle } from './scene/motion_chip.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { selectionBBox } from './scene/selection_bbox.js'
 import { initAssemblyMultiBox } from './scene/assembly_multi_box.js'
@@ -4980,6 +4979,8 @@ async function main() {
   const _hasAssemblyPending             = _assemblyTransform.hasAssemblyPending
   const _applyFKLive                    = _assemblyTransform.applyFKLive
   const _applyClusterMateFKLive         = _assemblyTransform.applyClusterMateFKLive
+  const _analyzeMotionConstraints       = _assemblyTransform.analyzeMotionConstraints
+  const _setMotionChip                  = _assemblyTransform.setMotionChip
 
   // Group/instance gizmo subsystem (revolute-drag angle accumulator + gear/belt
   // live-coupling engine + single-instance gizmo attach). The shared helpers it
@@ -6845,118 +6846,9 @@ async function main() {
 
   // ── PartGroup helpers (id walks; mirror backend/core/assembly_groups.py) ────
 
-
-  // ── Motion-constraint analyzer ─────────────────────────────────────────────
-  // Inspect the joint graph from a moving body (instance or group) to the
-  // "anchored network" (instances with `fixed=true` + everything rigidly
-  // transitive). Returns the available DOF so the gizmo can expose only the
-  // joint's allowed motion instead of a misleading 6-DOF widget.
-  //
-  // Classification:
-  //   { dof: 'free' }                                              — no anchored mates
-  //   { dof: 'anchored', anchorId, reason }                         — 0 DOF
-  //   { dof: 'revolute',  origin, axis, jointId, name, limits }     — 1 DOF rotation
-  //   { dof: 'prismatic', origin, axis, jointId, name, limits }     — 1 DOF translation
-  //   { dof: 'spherical', origin, jointId, name }                   — 3 DOF rotation
-  //   { dof: 'over-constrained', count, reason }                    — conservatively 0
-  function _analyzeMotionConstraints(target) {
-    const assembly = store.getState().currentAssembly
-    if (!assembly || !target?.id) return { dof: 'free' }
-    const movingIds = new Set(
-      target.kind === 'group'
-        ? collectGroupMemberInstanceIds(assembly, target.id)
-        : [target.id],
-    )
-    if (movingIds.size === 0) return { dof: 'free' }
-
-    // Anchored = fixed=true seeds + rigid-joint transitive closure. Spherical
-    // doesn't propagate position-fixedness; it pins the joint origin but
-    // lets the other body rotate around it freely.
-    const anchored = new Set()
-    for (const inst of (assembly.instances ?? [])) {
-      if (inst.fixed) anchored.add(inst.id)
-    }
-    let changed = true
-    while (changed) {
-      changed = false
-      for (const j of (assembly.joints ?? [])) {
-        if (j.joint_type !== 'rigid') continue
-        const a = j.instance_a_id, b = j.instance_b_id
-        if (!a || !b) continue
-        if (anchored.has(a) && !anchored.has(b)) { anchored.add(b); changed = true }
-        if (anchored.has(b) && !anchored.has(a)) { anchored.add(a); changed = true }
-      }
-    }
-
-    // If any member of the moving body is itself anchored → can't move.
-    for (const id of movingIds) {
-      if (anchored.has(id)) return { dof: 'anchored', anchorId: id, reason: 'Part is rigidly anchored.' }
-    }
-
-    // External mates: joints whose ONE endpoint is in movingIds and the OTHER
-    // is in anchored (or world via instance_a_id === null).
-    const externals = []
-    for (const j of (assembly.joints ?? [])) {
-      const a = j.instance_a_id, b = j.instance_b_id
-      const aIn = !!(a && movingIds.has(a))
-      const bIn = !!(b && movingIds.has(b))
-      if (aIn === bIn) continue
-      const otherId = aIn ? b : a
-      const externalAnchored = (otherId == null) || anchored.has(otherId)
-      if (!externalAnchored) continue
-      externals.push(j)
-    }
-    if (externals.length === 0) return { dof: 'free' }
-    if (externals.length > 1) {
-      return {
-        dof: 'over-constrained',
-        count: externals.length,
-        reason: `${externals.length} mates to anchored parts — use joint sliders instead.`,
-      }
-    }
-
-    const j = externals[0]
-    const origin = new THREE.Vector3(...(j.axis_origin ?? [0, 0, 0]))
-    const axis   = new THREE.Vector3(...(j.axis_direction ?? [0, 0, 1])).normalize()
-    const limits = {
-      min: j.min_limit ?? null,
-      max: j.max_limit ?? null,
-      current: j.current_value ?? 0,
-    }
-    if (j.joint_type === 'rigid') {
-      return { dof: 'anchored', anchorId: j.instance_a_id ?? j.instance_b_id,
-               reason: 'Rigidly mated to an anchored part.' }
-    }
-    if (j.joint_type === 'revolute')  return { dof: 'revolute',  origin, axis, jointId: j.id, name: j.name, limits }
-    if (j.joint_type === 'prismatic') return { dof: 'prismatic', origin, axis, jointId: j.id, name: j.name, limits }
-    if (j.joint_type === 'spherical') return { dof: 'spherical', origin, jointId: j.id, name: j.name }
-    return { dof: 'free' }
-  }
-
-  // ── Motion-constraint status chip ──────────────────────────────────────────
-  // Lightweight overlay so the user sees WHY their gizmo looks the way it does
-  // (or why no gizmo appeared). One persistent element above the canvas; the
-  // text + colour swap based on the analyzer's verdict.
-  const _motionChip = document.createElement('div')
-  _motionChip.id = 'assembly-motion-chip'
-  _motionChip.style.cssText = [
-    'position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:30',
-    'padding:4px 10px;border-radius:12px;border:1px solid #30363d',
-    'font-size:11px;font-weight:500;pointer-events:none;user-select:none',
-    'background:#161b22;color:#8b949e;display:none',
-    'box-shadow:0 2px 6px rgba(0,0,0,0.4)',
-  ].join(';')
-  document.body.appendChild(_motionChip)
-
-  function _setMotionChip(text, severity = 'info') {
-    if (!text) { _motionChip.style.display = 'none'; return }
-    _motionChip.textContent = text
-    _motionChip.style.display = ''
-    const c = motionChipStyle(severity)
-    _motionChip.style.color = c.fg
-    _motionChip.style.borderColor = c.bd
-    _motionChip.style.background = c.bg
-  }
+  // Motion-constraint analyzer (_analyzeMotionConstraints) + status chip
+  // (_setMotionChip + the chip DOM element) moved to scene/assembly_transform.js
+  // (carve-up keystone, commit c); reached via the alias-consts above.
 
   // Multi-select union BoxHelper lifted to scene/assembly_multi_box.js
   // (carve-up Tier 3). `_assemblyMultiBox` is initialized earlier (before the

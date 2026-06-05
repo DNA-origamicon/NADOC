@@ -1,7 +1,11 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as THREE from 'three'
 import { initAssemblyTransform } from './assembly_transform.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
+
+// Each initAssemblyTransform() appends a #assembly-motion-chip to document.body;
+// reset between tests so the chip queries below are deterministic.
+beforeEach(() => { document.body.innerHTML = '' })
 
 const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
 // Row-major translation by (x,y,z) — matrixFromInstance transposes from row-major.
@@ -183,6 +187,76 @@ describe('applyClusterMateFKLive', () => {
     const { t, assemblyRenderer } = setup({ assembly })
     t.applyClusterMateFKLive(assembly, 'a', 'NOPE', new THREE.Matrix4(), new Map())
     expect(assemblyRenderer.setLiveTransform).not.toHaveBeenCalled()
+  })
+})
+
+describe('analyzeMotionConstraints', () => {
+  it('returns free when there is no assembly or no target', () => {
+    expect(setup().t.analyzeMotionConstraints({ id: 'a' })).toEqual({ dof: 'free' })
+    const { t } = setup({ assembly: { instances: [inst('a', IDENTITY)], joints: [] } })
+    expect(t.analyzeMotionConstraints(null)).toEqual({ dof: 'free' })
+  })
+  it('returns free when the part has no anchored mates', () => {
+    const assembly = { instances: [inst('a', IDENTITY), inst('b', IDENTITY)], joints: [] }
+    expect(setup({ assembly }).t.analyzeMotionConstraints({ id: 'a' }).dof).toBe('free')
+  })
+  it('returns anchored when the moving part is rigidly mated to a fixed part', () => {
+    const assembly = {
+      instances: [inst('a', IDENTITY), inst('f', IDENTITY, { fixed: true })],
+      joints: [{ joint_type: 'rigid', instance_a_id: 'a', instance_b_id: 'f' }],
+    }
+    expect(setup({ assembly }).t.analyzeMotionConstraints({ id: 'a' }).dof).toBe('anchored')
+  })
+  it('returns revolute (1 DOF) for a single revolute mate to an anchored part', () => {
+    const assembly = {
+      instances: [inst('a', IDENTITY), inst('f', IDENTITY, { fixed: true })],
+      joints: [{
+        id: 'j1', name: 'hinge', joint_type: 'revolute',
+        instance_a_id: 'a', instance_b_id: 'f',
+        axis_origin: [1, 2, 3], axis_direction: [0, 1, 0],
+        min_limit: -90, max_limit: 90, current_value: 10,
+      }],
+    }
+    const r = setup({ assembly }).t.analyzeMotionConstraints({ id: 'a' })
+    expect(r.dof).toBe('revolute')
+    expect(r.jointId).toBe('j1')
+    expect(r.limits).toEqual({ min: -90, max: 90, current: 10 })
+    expect([r.origin.x, r.origin.y, r.origin.z]).toEqual([1, 2, 3])
+  })
+  it('returns over-constrained for two external mates to anchored parts', () => {
+    const assembly = {
+      instances: [
+        inst('a', IDENTITY), inst('f1', IDENTITY, { fixed: true }), inst('f2', IDENTITY, { fixed: true }),
+      ],
+      joints: [
+        { id: 'j1', joint_type: 'revolute', instance_a_id: 'a', instance_b_id: 'f1' },
+        { id: 'j2', joint_type: 'revolute', instance_a_id: 'a', instance_b_id: 'f2' },
+      ],
+    }
+    const r = setup({ assembly }).t.analyzeMotionConstraints({ id: 'a' })
+    expect(r.dof).toBe('over-constrained')
+    expect(r.count).toBe(2)
+  })
+})
+
+describe('setMotionChip', () => {
+  const lastChip = () => [...document.querySelectorAll('#assembly-motion-chip')].pop()
+  it('appends the chip element to the document on init', () => {
+    setup()
+    // (jsdom drops display:none from the cssText round-trip; the show/hide
+    // behaviour is asserted via the direct style sets in the next test.)
+    expect(lastChip()).toBeTruthy()
+    expect(lastChip().id).toBe('assembly-motion-chip')
+  })
+  it('shows the chip with text + severity colours, hides on empty text', () => {
+    const { t } = setup()
+    t.setMotionChip('1 DOF — revolute', 'warn')
+    const chip = lastChip()
+    expect(chip.style.display).toBe('')
+    expect(chip.textContent).toBe('1 DOF — revolute')
+    expect(chip.style.color).toBeTruthy()
+    t.setMotionChip(null)
+    expect(lastChip().style.display).toBe('none')
   })
 })
 
