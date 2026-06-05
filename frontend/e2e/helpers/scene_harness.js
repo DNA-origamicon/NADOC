@@ -404,3 +404,39 @@ export async function dragPartJointRing(page, { instanceId, clusterId }) {
   }
   return page.evaluate(() => window.__nadocTest.getAssemblyPendingPartJoints())
 }
+
+// ── Move/Rotate tool gesture (primary instance transform) ──────────────────
+// The cluster-joint ring drag above rotates a part ABOUT a joint. The
+// Move/Rotate tool instead translates/rotates the whole selected instance and
+// records a PRIMARY transform in `_assemblyPendingTransforms`. Per the #36/#37
+// ledger lesson, the gizmo's TransformControls handles are too small to drag at
+// integer-pixel precision — so we drive the non-flaky DOM path instead: the
+// Move/Rotate right-sidebar panel's numeric inputs fire a `change` →
+// `_mrCommitInputs` → `_queueAssemblyPrimaryCommit`, the same map the gizmo
+// onCommit feeds. This is the template the Move/Rotate panel extraction extends.
+
+/**
+ * Activate the Move/Rotate tool on the active instance (real entry point) and
+ * wait for the panel to appear. Requires an instance already selected (call
+ * selectAssemblyInstance first). Returns the translateRotateActive flag.
+ */
+export async function activateAssemblyMoveTool(page) {
+  const active = await page.evaluate(() => window.__nadocTest.activateAssemblyMoveTool())
+  await page.locator('#move-rotate-panel').waitFor({ state: 'visible', timeout: 4000 }).catch(() => {})
+  return active
+}
+
+/**
+ * Set a translation on the selected instance via the Move/Rotate panel's numeric
+ * inputs (the real, non-flaky DOM commit path) and return the pending primary
+ * transforms it recorded. Fills the X/Y/Z nm fields, fires `change` on the last
+ * one (the listener reads all three), and reads back `_assemblyPendingTransforms`.
+ */
+export async function moveActiveInstanceViaPanel(page, { tx = 0, ty = 0, tz = 0 } = {}) {
+  await page.locator('#mr-tx').fill(String(tx))
+  await page.locator('#mr-ty').fill(String(ty))
+  await page.locator('#mr-tz').fill(String(tz))
+  await page.locator('#mr-tz').dispatchEvent('change')
+  await page.waitForTimeout(150)
+  return page.evaluate(() => window.__nadocTest.getAssemblyPendingTransforms())
+}

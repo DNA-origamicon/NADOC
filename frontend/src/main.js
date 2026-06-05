@@ -9020,6 +9020,28 @@ async function main() {
           key, jointValue: v?.body?.joint_value ?? null,
         }))
       },
+      /** Pending (uncommitted) PRIMARY instance transforms recorded by the
+       *  Move/Rotate tool — both the panel-input path (_mrCommitInputs →
+       *  _queueAssemblyPrimaryCommit) and the gizmo onCommit callback feed the
+       *  same `_assemblyPendingTransforms` map. The observable the move-tool
+       *  gate asserts against: one entry per moved instance, with the matrix's
+       *  translation column so a test can check the move actually landed.
+       *  Distinct from getAssemblyPendingPartJoints (which is joint rotation). */
+      getAssemblyPendingTransforms() {
+        return [..._assemblyPendingTransforms.entries()].map(([instanceId, mat]) => ({
+          instanceId,
+          translation: mat ? [mat.elements[12], mat.elements[13], mat.elements[14]] : null,
+        }))
+      },
+      /** Activate the assembly Move/Rotate tool on the currently-active instance
+       *  (the real entry point — same fn the right-click "Move/Rotate" menu item
+       *  and the toolbar button call). Requires an instance already selected.
+       *  Returns the resulting translateRotateActive flag so the gate can assert
+       *  the tool armed. Async — the gizmo attach awaits a pivot refresh. */
+      async activateAssemblyMoveTool() {
+        await _activateTranslateRotateTool()
+        return !!store.getState().translateRotateActive
+      },
       /** Enter assembly mode on the doc's current server assembly. The 'a'
        *  toggle was removed (real entry is opening/creating a .nass); this
        *  mirrors that path's two steps — fetch into currentAssembly, then
