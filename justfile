@@ -31,11 +31,12 @@ test-all:
     cd frontend && npm test
 
 # Commit gate for main.js refactor work: the full smoke suite — app boot, the
-# File>New dialog flow, command palette, API, and the console-error gate that
-# loads a real design and asserts the scene renders with nothing thrown (~1 min,
-# NOT per-iteration).
+# File>New dialog flow, command palette, API, the console-error render gate, and
+# the teardown gate (design close-session in smoke.spec.js + assembly-mode exit
+# in assembly_exit_cleanup.spec.js — teardown is where #34's const-reassignment
+# bug escaped, so it's now in the gate) (~1.5 min, NOT per-iteration).
 smoke:
-    cd frontend && npx playwright test smoke.spec.js
+    cd frontend && npx playwright test smoke.spec.js assembly_exit_cleanup.spec.js
 
 # Start Vite frontend dev server (requires FastAPI running separately)
 frontend:

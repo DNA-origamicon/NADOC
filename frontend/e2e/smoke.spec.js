@@ -8,6 +8,7 @@
 
 import { test, expect } from '@playwright/test'
 import path from 'node:path'
+import { trackConsoleErrors, loadScaffoldedPart } from './helpers/scene_harness.js'
 
 // Representative design loaded by the console-error gate below. teeth.nadoc (the
 // CLAUDE.md example) does not exist in Examples/; 26hb_platform_v3 is a real
@@ -285,5 +286,47 @@ test.describe('Console-error gate', () => {
 
     expect(pageErrors, `uncaught exceptions during load/render:\n${pageErrors.join('\n')}`).toEqual([])
     expect(consoleErrors, `console errors during load/render:\n${consoleErrors.join('\n')}`).toEqual([])
+  })
+})
+
+// ── Teardown gate (close-session / reset) ─────────────────────────────────────
+//
+// Teardown is the gate's structural blind spot. The console-error gate above
+// boots + renders but never TEARS DOWN, so a broken disposal escapes it — exactly
+// how #34's `_assemblyMultiBox = null`-on-a-const TypeError shipped and threw on
+// every assembly exit. This leg drives the design close-session path
+// (`_closeSession` → `_resetForNewDesign` → `api.closeSession`), which disposes
+// ~20 scene modules (photo mode, cadnano, deform, slice plane, blunt ends, legends,
+// representation reset, store-clear) and is otherwise never exercised by the suite.
+//
+// The sibling assembly-exit teardown (the #34 path itself) is covered by
+// `assembly_exit_cleanup.spec.js`, which `just smoke` now also runs — kept as a
+// separate file because building a 2-part assembly is heavier and reuses the
+// scene_harness assembly builder. Both teardown paths are now IN the commit gate
+// so neither can bit-rot out of CI the way out-of-gate specs do (#48).
+
+test.describe('Teardown gate', () => {
+  // Same benign-noise filter as the console-error gate (env noise, not regressions).
+  const BENIGN = ['favicon.ico', 'WebSocket', 'Failed to load resource']
+  const realErrors = (errs) => errs.filter((t) => !BENIGN.some((b) => t.includes(b)))
+
+  test('Close Session from a loaded design tears down cleanly', async ({ page }) => {
+    const errors = trackConsoleErrors(page)
+
+    // A real loaded design in THIS tab's doc (a bare goto boots to welcome with an
+    // empty random doc, which would take close-session's no-design short path and
+    // skip `_resetForNewDesign`). loadScaffoldedPart goes through File>New in a
+    // pinned doc, so `currentDesign` is set and the full teardown runs.
+    await loadScaffoldedPart(page, { doc: 'smoke-close', name: 'close' })
+
+    // File → Close Session.
+    await openDropdownAndClick(page, 'File', 'menu-file-close-session')
+
+    // Returns to the welcome screen with the workspace mode indicator.
+    await expect(page.locator('#mode-indicator')).toHaveText('NADOC · WORKSPACE', { timeout: 10_000 })
+    await expect(page.locator('#welcome-screen')).toBeVisible()
+
+    const real = realErrors(errors)
+    expect(real, `console/page errors during close-session teardown:\n${real.join('\n')}`).toEqual([])
   })
 })

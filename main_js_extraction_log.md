@@ -262,6 +262,38 @@ the var's global footprint.
 
 **Tier-3 note (#27):** first cut into the HIGHEST-coupling region (Assembly canvas pointer handler, ~340 ln across `_onAssemblyPointerDown` + `_onAssemblyClick` + drag-move/up). Only sub-part (c) is cleanly pure — it's a store-state decision given the picked instance. Lifted it to the module where `findOwningGroupId` already lives (which is now no longer imported in main.js). (a) joint-ring pick and (b) instance select remain — both entangled with `_partJointDrag`/drag-move-up/`ringPlaneHit`/`instanceGizmo`/`_commitAssemblyPending` and need the gesture e2e (built grouped assembly) when (b) lands. Lesson: in a HIGH-coupling handler, the pure *decision* branches lift out cleanly first and de-risk the stateful remainder.
 
+## Teardown gate (2026-06-04) — closed the one structural blind spot
+
+The console-error gate boots + renders but never TEARS DOWN, so a broken disposal escaped it — that's
+exactly how #34's `_assemblyMultiBox = null`-on-a-`const` `TypeError` shipped and threw on every assembly
+exit. Closed the gap by putting both teardown paths in `just smoke`:
+- **Design close-session** → new `Teardown gate` leg in `smoke.spec.js`: `loadScaffoldedPart` (so the tab
+  actually holds a design — a bare `goto` boots to an empty random-doc welcome and would take close-session's
+  no-design short path), then File→Close Session → asserts welcome + WORKSPACE + zero console/page errors.
+  Exercises `_closeSession` → `_resetForNewDesign` (disposes ~20 scene modules: photo/cadnano/deform/slice/
+  blunt-ends/legends/representation-reset/store-clear).
+- **Assembly-mode exit** → `just smoke` now ALSO runs the existing `assembly_exit_cleanup.spec.js` (the #34
+  regression guard) instead of leaving it out-of-gate to bit-rot (#48). Reused the standalone (building a
+  2-part assembly is heavier + uses the scene_harness assembly builder) rather than duplicating it into
+  smoke.spec.js.
+
+**Audit of impacted sections (which extracted teardown APIs the gate now covers):**
+- `viewLegends.reset()` (#50) — called in `_resetForNewDesign` → **now gate-covered** (was unit-test only).
+- `_assemblyMultiBox.dispose()` (#34) — called in the assembly-exit subscriber → **now gate-covered**; the
+  escape that motivated this is permanently guarded.
+- `_assemblyRefresh.dispose()/flush()` (#38) — STILL unit-test only: additive, never wired into exit cleanup.
+  A pending timer surviving exit no-ops via the `assemblyActive` guard, so it's not a correctness risk — left
+  as-is (don't wire it just to test it; that would change exit behavior).
+- **#34-class scan clean:** grepped every extracted factory `const` for a `= null` reassignment — only
+  `let _beltPolymerize = null` (a lazy-init declaration, not a teardown) matches. No factory `const` is poked
+  by a teardown site. Green smoke through these paths now proves it: a lurking const-reassignment/raw-object
+  poke in `_resetForNewDesign`/`_exitAssemblyMode` would surface as a red gate.
+
+**Known still-uncovered teardown (acceptable):** the COMBINED assembly-then-design close-session path
+(`_closeSession`'s `assemblyActive` branch: save → `_exitAssemblyMode` → `_resetForNewDesign` → `api.closeSession`)
+is only covered piecewise (exit via the hook; design-reset via the new leg), not as one sequence. Low risk —
+both halves are individually green. Fold into the gate if a regression ever surfaces there.
+
 **Metric definitions** — `wall-clock`: rough session minutes (target EASY <15, MEDIUM <30, HARD <90).
 `main.js LOC Δ`: lines removed from `main()` body (imports stay, so total drops less). `tests added /
 pure fns`: must be ≥1.0. `edits-to-green`: vitest runs until pass (lower = pattern internalized).
@@ -455,6 +487,10 @@ gotcha worth remembering. The autonomous extraction loop writes here when it ski
   tear-down; verified it fails pre-fix, passes post-fix). **Lesson: when an extraction converts a raw
   scene-object closure var into a `const` factory, grep every site that reassigned or poked `.geometry`/
   `.material`/`scene.remove` on it — those break silently if they're outside the boot/smoke path.**
+  **UPDATE 2026-06-04: this exit path is now IN `just smoke`** — the assembly-exit teardown
+  (`assembly_exit_cleanup.spec.js`) and the design close-session teardown (`smoke.spec.js` Teardown gate) both
+  run in the commit gate, so a future #34-class teardown bug surfaces red instead of escaping. See the
+  "Teardown gate" section above.
 - **Dead-debug-helper deletion: grep `e2e` too, not just `src` (#44/#45, 2026-06-04).** The want-it gate
   flagged three Tier-6 dev-only console helpers as "dead" → 2 were (`nadocLabelAudit` #44, `__extDebug`-block
   #45, deleted), but the 3rd, **`_nadocDebug`, is NOT dead and was NOT deleted.** It has zero `src` callers
