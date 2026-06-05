@@ -1,9 +1,22 @@
 # main.js carve-up map — stateful-subsystem extraction backlog
 
-**Purpose.** main.js is one ~15.6k-line `async function main()` closure. The pure-helper well is
-drained (see `main_js_extraction_log.md`); the remaining mass is *stateful subsystems* — panels,
-dialogs, menus, and event-handler clusters. This file is the **prioritized backlog** for extracting
-them. Each session claims ONE region, factory-extracts it, and checks it off here.
+**Purpose.** main.js is one large `async function main()` closure (~10.9k lines as of 2026-06-04, down
+from ~16.5k). The pure-helper well is drained (see `main_js_extraction_log.md`); the remaining mass is
+*stateful subsystems* — panels, dialogs, menus, and event-handler clusters. This file is the **prioritized
+backlog** for extracting them. Each session claims ONE region, factory-extracts it, and checks it off here.
+
+> **⚠ THIS MAP IS SEQUENCING-ONLY. Its LOC counts, line numbers, and "what it is" descriptions are NOT
+> authoritative.** They are a one-time snapshot that has drifted under continuous refactoring and has been
+> wrong about a region's *scope or cohesion* at least five times (#20 banner-overshoot, #39/#40 stale
+> "giant keydown handler", #41 + #42 "this is one subsystem" when it was 5 adjacency-lumped blocks, the
+> already-extracted library panel). **Trust only two things here:** (a) the `// ──` **banner text** as a
+> locator, and (b) the **tier ordering** as a rough priority. Everything else — line numbers, LOC
+> estimates, dep lists, "it's basically X" — is a *hint to verify*, never a fact to act on. Before
+> claiming any region: READ it, find where the *cohesive* block actually ends (the map groups by banner
+> adjacency, which ≠ cohesion), and re-derive its real size / deps / risk. If the "region" turns out to be
+> several lumped blocks, extract the ONE cohesive sub-block and re-home the rest as separate entries. Fix
+> the entry you touched on your way out (mark it `[~]`, correct the description) so the next session pays
+> less of this tax than you did.
 
 **How to use this map (per session — ideally a FRESH session to keep token cost low):**
 1. Read this file + `main_js_extraction_log.md` (conventions + difficulties ledger) +
@@ -24,11 +37,13 @@ them. Each session claims ONE region, factory-extracts it, and checks it off her
    build first, the split plan, and any gotcha this batch uncovered. It's a *living pointer* — replace it,
    don't append. A cold next session reads it first and starts there without re-deriving the priority.
 
-**Line numbers drift** as the file shrinks — they are a 2026-06-03 snapshot at main.js = 15,614 LOC.
-**Anchor by the `// ──` banner text** (stable) when locating a region, not the line number.
+**Line numbers are decorative** — they were a 2026-06-03 snapshot (main.js was 15,614 LOC then; it's
+~10.9k now) and every extraction shifts them. **Always locate a region by its `// ──` banner text**
+(`grep -n "// ──" main.js`), never by the line number printed here.
 
-**Dependency surface** below is a rough pre-read estimate — VERIFY by reading the region when you
-claim it. The map's job is sequencing + module naming + risk tiering, not exact deps.
+**Dependency surface + LOC + "what it is"** below are rough pre-read guesses — RE-DERIVE by reading the
+region when you claim it (see the ⚠ callout above). The map's only reliable jobs are sequencing, module
+naming, and coarse risk tiering — not exact deps, sizes, or scope.
 
 **Don't:** parallelize edits to main.js (worktrees collide on the shared import block + closure —
 serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or rendering invariants.
