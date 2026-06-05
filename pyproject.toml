@@ -42,6 +42,36 @@ markers = [
     "integration: marks tests requiring external files at /tmp",
 ]
 
+[tool.ruff]
+target-version = "py312"
+
+# Ruff's default lint set is E4/E7/E9 + F. We keep all of F (pyflakes — the rules
+# that catch REAL problems: unused imports/variables, undefined names, bad
+# f-strings) and the load-bearing E checks, but silence the pycodestyle *style*
+# rules that clash with this codebase's deliberate conventions. Without this, ~300
+# cosmetic findings bury the handful of real ones and `just lint` is noise.
+[tool.ruff.lint]
+ignore = [
+    "E701",  # `if x: return` one-liners — intentional compact style throughout
+    "E702",  # `a; b` one-liners — same
+    "E741",  # ambiguous names l/I/O — used deliberately in math/index code
+    "E731",  # assigning a lambda to a name — used deliberately
+    "E401",  # multiple imports on one line — stylistic
+    "E402",  # import not at top of file — intentional lazy/conditional (optional deps)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# These modules annotate parameters with forward-reference type names that are
+# imported lazily inside a function (or resolved only by a type-checker), e.g.
+# `design: 'Optional[Design]'`. The annotation strings are never evaluated at
+# runtime, so F821 here is a type-checker concern, not a runtime bug. Scoped to
+# these files so F821 still catches genuine undefined-name typos everywhere else.
+"backend/api/assembly.py" = ["F821"]
+"backend/api/crud.py" = ["F821"]
+"backend/core/pdb_export.py" = ["F821"]
+"backend/core/atomistic_to_nadoc.py" = ["F821"]
+"backend/parameterization/validation_stub.py" = ["F821"]
+
 [dependency-groups]
 dev = [
     "pytest-cov>=7.1.0",

@@ -30,7 +30,6 @@ from backend.core.lattice import (
     _find_overhang_domain,
     _is_comp_first,
     _length_value_to_bp,
-    _make_complement_domain,
     _opposite_direction,
 )
 from backend.core.linker_relax import bridge_axis_geometry

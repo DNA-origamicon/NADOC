@@ -19,10 +19,6 @@ from fastapi.testclient import TestClient
 from backend.api import assembly_state
 from backend.api.main import app
 from backend.core.assembly_groups import (
-    apply_group_transform,
-    apply_group_translation,
-    clone_group_subtree,
-    collect_group_instance_ids,
     collect_group_member_ids,
     transitive_rigidly_attached,
 )

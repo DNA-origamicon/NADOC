@@ -718,7 +718,6 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
 
             def _extract():
                 import sys
-                import numpy as np
                 sys.path.insert(0, "/tmp/mrdna-tool")
                 from backend.core.mrdna_bridge import nuc_pos_override_from_mrdna_coarse
                 from backend.core.geometry import nucleotide_positions

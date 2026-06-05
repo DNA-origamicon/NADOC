@@ -73,7 +73,7 @@ if active_dirs:
 # Kept run dirs
 _, kept = _find_active_dirs()
 if kept:
-    print(f"\nKept run dirs:")
+    print("\nKept run dirs:")
     for kd in kept:
         p = Path(kd)
         em_log = p / "em.log"
@@ -85,7 +85,7 @@ if kept:
         else:
             print(f"  {p.name}: (no em.log yet)")
 
-print(f"\nFull log tail:")
+print("\nFull log tail:")
 log = Path("/tmp/phase3b_validation.log")
 if log.exists():
     lines = log.read_text(errors='replace').splitlines()

@@ -2873,13 +2873,13 @@ def patch_assembly_overhang_connection(connection_id: str, body: PatchAssemblyOv
 
     # Validate enum-like values when present.
     if fields.get("overhang_a_attach") not in (None, "root", "free_end"):
-        raise HTTPException(400, detail=f"overhang_a_attach must be 'root' or 'free_end'.")
+        raise HTTPException(400, detail="overhang_a_attach must be 'root' or 'free_end'.")
     if fields.get("overhang_b_attach") not in (None, "root", "free_end"):
-        raise HTTPException(400, detail=f"overhang_b_attach must be 'root' or 'free_end'.")
+        raise HTTPException(400, detail="overhang_b_attach must be 'root' or 'free_end'.")
     if fields.get("linker_type") not in (None, "ss", "ds"):
-        raise HTTPException(400, detail=f"linker_type must be 'ss' or 'ds'.")
+        raise HTTPException(400, detail="linker_type must be 'ss' or 'ds'.")
     if fields.get("length_unit") not in (None, "bp", "nm"):
-        raise HTTPException(400, detail=f"length_unit must be 'bp' or 'nm'.")
+        raise HTTPException(400, detail="length_unit must be 'bp' or 'nm'.")
     if "length_value" in fields and fields["length_value"] is not None and fields["length_value"] < 0:
         raise HTTPException(400, detail="length_value must be non-negative.")
 
@@ -4008,7 +4008,7 @@ def duplicate_group(group_id: str, body: DuplicateGroupRequest = DuplicateGroupR
     _apply_assembly_mutation_with_feature_log(
         mutated,
         op_kind="assembly-duplicate-group",
-        label=f"Duplicate group",
+        label="Duplicate group",
         params={
             "source_group_id": group_id,
             "new_group_id":    root_id,

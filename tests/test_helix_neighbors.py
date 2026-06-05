@@ -223,7 +223,7 @@ def test_honeycomb_no_helix_exceeds_3_neighbours(design_18hb):
         if len(nbrs) > 3:
             violations.append(f"  {h.id}: {len(nbrs)} neighbours")
     assert not violations, (
-        f"Helices with more than 3 nearest neighbours:\n" + "\n".join(violations)
+        "Helices with more than 3 nearest neighbours:\n" + "\n".join(violations)
     )
 
 
@@ -284,7 +284,7 @@ def test_honeycomb_angular_gaps_are_120_degrees(design_18hb):
                     f"(neighbours={nbrs}, angles={[f'{a:.1f}' for a in angles]})"
                 )
     assert not failures, (
-        f"Interior helices with non-120° gaps:\n" + "\n".join(failures)
+        "Interior helices with non-120° gaps:\n" + "\n".join(failures)
     )
 
 

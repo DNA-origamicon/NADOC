@@ -29,8 +29,8 @@ two clusters are connected by exactly one joint.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
 import numpy as np
 from fastapi import HTTPException
@@ -44,7 +44,6 @@ from backend.core.models import (
     Design,
     Direction,
     Domain,
-    HalfCrossover,
     Helix,
     OverhangBinding,
     Strand,

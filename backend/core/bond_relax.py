@@ -31,7 +31,6 @@ from scipy.optimize import minimize
 
 from backend.core.linker_relax import (
     _composed_transform,
-    _optimize_angle,
     _rot_axis_angle,
     _THETA_REG_LAMBDA,
 )

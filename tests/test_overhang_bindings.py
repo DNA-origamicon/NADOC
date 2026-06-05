@@ -589,7 +589,7 @@ def test_bind_preserves_driven_helix_when_other_overhang_shares_it():
     deleted helix — which made the neighbour render as if it were ALSO
     bound to the driver.
     """
-    from backend.core.models import Domain, Direction, OverhangSpec, SubDomain, Strand, StrandType, Vec3
+    from backend.core.models import Domain, Direction, OverhangSpec, SubDomain, Strand, StrandType
     base = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
     # Add a SECOND overhang sharing oh_helix_b at a different bp range.
     # oh_b_5p (the existing OH on oh_helix_b) occupies bp [0, 3]. Add

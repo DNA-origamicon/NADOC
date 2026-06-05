@@ -33,7 +33,6 @@ from backend.core.models import (
     Assembly,
     AssemblyJoint,
     Design,
-    GearRelation,
     Mat4x4,
     PartGroup,
     PartInstance,

@@ -10662,7 +10662,6 @@ def patch_overhang_binding(binding_id: str, body: OverhangBindingPatchRequest) -
         BindTopology,
         apply_bind_topology,
         compute_bind_topology,
-        compute_locked_angle,
         revert_bind_topology,
     )
 

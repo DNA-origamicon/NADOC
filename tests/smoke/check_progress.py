@@ -72,10 +72,10 @@ def main() -> None:
                 for line in mdp.read_text().splitlines():
                     if line.strip().startswith("nsteps"):
                         try: nsteps = int(line.split("=")[1].split(";")[0])
-                        except: pass
+                        except Exception: pass
                     if line.strip().startswith("nstxout-compressed"):
                         try: nstxout = int(line.split("=")[1].split(";")[0])
-                        except: pass
+                        except Exception: pass
             total_frames = nsteps // nstxout
             pct = 100 * frames / total_frames if total_frames else 0
             status = f"RUNNING — {frames}/{total_frames} frames ({pct:.0f}%)"

@@ -1146,7 +1146,7 @@ def test_resolve_follows_cluster_change_for_blunt_label():
     # bp 0 of h_B = (0,0,0) in instance-local → world (0,0,10) after T_inst.
     # blunt:h_A:end is at bp 31 of h_A. Both helices have axis end at z=10.
     # Even though ip.position is stale (z=999/-999), live lookup wins.
-    frames = client.get(f"/api/assembly/connector-frames").json()
+    frames = client.get("/api/assembly/connector-frames").json()
     # connector A: helix h_A's "end" — at axis_end = (0,0,10) in local; T_a
     # is identity so world (0,0,10).
     a_pos = np.array(frames["inst-A"]["blunt:h_A:end"]["pos"])
@@ -1258,8 +1258,6 @@ def test_seek_instance_features_no_cluster_change_skips_auto_resolve():
     """
     # Set up: a part with NO feature log on disk, so any seek is a no-op
     # that doesn't change clusters.
-    import tempfile, os
-    from pathlib import Path
     from backend.api.assembly import _WORKSPACE_DIR
 
     design = Design(metadata=DesignMetadata(name="test_part"))
@@ -1298,7 +1296,6 @@ def test_resolve_re_snaps_rigid_mate_after_instance_drift():
     pose, simulating "instance B was moved/dragged after the mate". Resolve
     should bring B back so the connectors coincide.
     """
-    import numpy as np
     client.post("/api/assembly")
 
     inst_a = PartInstance(
@@ -1557,7 +1554,6 @@ def test_resolve_solve_status_satisfied_for_aligned_rigid_mate():
 def test_assembly_geometry_distinct_sources_when_designs_differ():
     """Two instances with different inline designs each get their own
     source entry."""
-    from backend.core.models import LatticeType
     client.post("/api/assembly")
     src1 = _inline_source_dict()
     # Build a different inline source by tweaking the design.

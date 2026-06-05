@@ -18,13 +18,11 @@ from fastapi.testclient import TestClient
 
 from backend.api import assembly_state
 from backend.api.main import app
-from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
     Assembly,
     AssemblyJoint,
     ConnectionType,
     Design,
-    Direction,
     InterfacePoint,
     Mat4x4,
     PartInstance,

@@ -40,8 +40,6 @@ from __future__ import annotations
 
 import dataclasses
 import io
-import math
-import os
 import random
 import re
 import shutil
@@ -234,7 +232,6 @@ def _gmx_solvate_periodic(
 
     Returns (waters, (bx, by, bz)) — same type as _gmx_solvate.
     """
-    import numpy as np
     gmx = _find_gmx()
 
     (tmpdir / "dry.pdb").write_text(pdb_text)

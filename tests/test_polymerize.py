@@ -601,7 +601,6 @@ def test_load_auto_downgrades_when_too_many_full_instances(tmp_path):
     RAM to render every part at full detail. The notice is surfaced in
     the response so the frontend can toast it.
     """
-    from backend.api import assembly_state
     design = _rod_design()
     # 8 instances at 'full' → above the 6-instance threshold.
     insts = []

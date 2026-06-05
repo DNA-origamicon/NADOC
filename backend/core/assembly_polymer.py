@@ -22,7 +22,7 @@ exactly between the two new instances it bridges. No FastAPI imports here
 
 from __future__ import annotations
 
-from typing import Literal, Optional, Tuple
+from typing import Literal, Tuple
 
 import numpy as np
 

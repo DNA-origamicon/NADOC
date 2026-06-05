@@ -21,7 +21,6 @@ from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
     Assembly,
     AssemblyOverhangBinding,
-    AssemblyOverhangConnection,
     Design,
     Direction,
     Domain,

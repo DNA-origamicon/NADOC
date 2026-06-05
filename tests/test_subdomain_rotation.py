@@ -21,7 +21,6 @@ All tests reuse the same 6HB + overhang fixture used by
 
 from __future__ import annotations
 
-import math
 
 import numpy as np
 import pytest

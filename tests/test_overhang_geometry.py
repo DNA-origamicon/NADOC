@@ -731,7 +731,7 @@ def test_make_nick_propagates_overhang_to_terminal():
     result = make_nick(d, "hA", 15, Direction.FORWARD)
 
     left = next(st for st in result.strands if st.id == "test_strand")
-    right_id = f"test_strand_hA_15_r"
+    right_id = "test_strand_hA_15_r"
     right = next(st for st in result.strands if st.id == right_id)
 
     # The right fragment's first domain (formerly last domain's right half)

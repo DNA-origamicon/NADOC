@@ -64,7 +64,6 @@ from backend.core.namd_solvate import (
     _find_last_atom_serial,
     _gmx_solvate_periodic,
     _ion_counts,
-    _parse_gro,
     _place_ions,
     _render_periodic_benchmark_conf,
     _render_periodic_locked_nvt_conf,

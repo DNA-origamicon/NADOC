@@ -227,8 +227,11 @@ def build_patched_model(
 
     try:
         from mrdna.readers.segmentmodel_from_lists import model_from_basepair_stack_3prime
-        from mrdna.segmentmodel import SegmentModel
-        from mrdna.arbdmodel.interactions import HarmonicBond, HarmonicDihedral
+        # These three are imported to probe mrdna availability (the except below
+        # turns a missing install into a clear error); they document the symbols the
+        # downstream code path needs even though they aren't referenced here.
+        from mrdna.segmentmodel import SegmentModel  # noqa: F401
+        from mrdna.arbdmodel.interactions import HarmonicBond, HarmonicDihedral  # noqa: F401
     except ImportError as exc:
         raise ImportError("mrdna not found.  See docs/mrdna_setup.md.") from exc
 

@@ -165,7 +165,7 @@ def validate_design(design: Design) -> ValidationReport:
     if loop_ids:
         report.results.append(ValidationResult(
             False,
-            f"Circular staple strand(s) detected (no free 5′/3′ ends): "
+            "Circular staple strand(s) detected (no free 5′/3′ ends): "
             + ", ".join(repr(sid) for sid in loop_ids),
         ))
     # No "pass" entry when there are no loops — avoids noise in the report.
