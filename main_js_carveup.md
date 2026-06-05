@@ -52,47 +52,42 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Meatier Tier-5 cut taken.**
-Extracted the **File-open orchestration** (#59) → `ui/file_io.js` second factory `initFileOpen`. main.js
-10491 → 10394 (−97)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Tier-5 "File open / save"
+region FULLY DRAINED (#52/#59/#60).** Extracted the **Save/Save-As dispatchers** (#60) → `ui/file_io.js` THIRD
+factory `initFileSave`. main.js 10394 → 10370 (−24)._
 
-**This session (#59):** `_openPartFromServer` / `_openAssemblyFromServer` → `ui/file_io.js` SECOND factory
-`initFileOpen({…})→{openPartFromServer, openAssemblyFromServer}` (verbatim bodies). Kept SEPARATE from initFileIo
-(save-content ops) — disjoint deps (file-load overlay `_fl*` helpers + lifecycle spine + assembly-load stash
-setters); a second factory keeps each test surface small AND dodges reordering the locked initFileIo init (7342)
-vs the stash vars (7412). `_fileOpen` forward-declared at the file-state block (~3428), assigned after the
-assembly-load stash vars (~7421). All 4 call sites invoke post-init → bare `let` resolves, no lazy `?.`. 10 vitest
-(part: no-content/success-identity+reveal+frame/name-fallback/import-fail→welcome/fetch-exception; assembly:
-no-content/import-fail-clears-stash/visible-success-stash+enter+identity/onProgress-drives-overlay/empty-self-
-resolves). smoke 23/23 + library-row open exercise (Bundle_12 → openPartFromServer, welcome hidden, zero console
-errors — proves the forward-declared `_fileOpen` resolves through the real boot order).
+**This session (#60):** `_saveDispatch` / `_saveAsDispatch` / `_saveAssembly` / `_saveAssemblyAsGuarded` →
+`ui/file_io.js` THIRD factory `initFileSave({…})→{saveDispatch, saveAsDispatch, saveAssembly,
+saveAssemblyAsGuarded}` (verbatim bodies, deps read through injected getters). A thin dispatch layer OVER the
+already-extracted `_fileIo` — routes by `assemblyActive`. Deps span the file: `_fileIo`/`_syncBadge`/
+`_lifecycleSync` (~7100-7195) AND `_exportRepActive` (~8727), so the init is placed AFTER the last dep (~8737);
+`_fileSave` forward-declared `let = null` at the file-state block (~3434). The 2 menu listeners (~3901) +
+the keyboard-shortcuts `saveAssemblyAsGuarded` injection (~5089) reference it via lazy arrows (`() => _fileSave.
+…()`) — all fire on user action (click / Ctrl+S) post-init. `selfSavedPaths` flows in by reference; file-path
+state + `_exportRepActive` via getters; `setAssemblyWorkspacePath` injected directly. 16 vitest (670 total).
+smoke 23/23 + menu-File>Save app exercise (zero console errors — proves `_fileSave` resolves at click time).
 
-**Recommended next region — finish the Tier-5 "File open / save" remainder:**
-1. **Save dispatchers** (Tier 5, MED) — `_saveDispatch` / `_saveAsDispatch` / `_saveAssembly` /
-   `_saveAssemblyAsGuarded` (~3889–3961, ~80 ln cohesive). They route by `store.getState().assemblyActive` over
-   the already-extracted `_fileIo.*` (saveToHandle/saveAs/saveAssemblyToHandle/saveAssemblyAs) + read mutable
-   file/path state (`_workspacePath`/`_fileHandle`/`_assemblyWorkspacePath`/`_assemblyFileHandle`) + `_syncBadge.*`
-   + `_lifecycleSync.selfSavedPaths` + `_exportRepActive`. Could be a THIRD factory in file_io.js (`initFileSave`)
-   or fold into a thin dispatch layer — read first. Wired to `menu-file-save`/`menu-file-save-as` + Ctrl+S/Ctrl+
-   Shift+S (the keyboard shortcuts module ALREADY calls `_saveDispatch`/`saveAssemblyAsGuarded` via injected refs
-   — grep before moving). The `_saveDispatch` body has the explicit-save selfSavedPaths/setSyncStatus dance inline.
-2. Tier-4 opportunistic scraps still uncut (Orbit submenu ~10 ln, Browser tab title ~5 ln, deform→selectableTypes
-   subscriber, Coloring submenu ~20 ln w/ 6 external `_setColoringMode` callers) — too small to each own a module.
+**Recommended next region — Tier-5 is now thin; pick from these:**
+1. **Tier-4/5 opportunistic scraps** (each too small to own a module — BUNDLE 2-3 into one `ui/menu_misc.js`
+   cut): Orbit submenu (~10 ln), Browser tab title (~5 ln), deform→selectableTypes subscriber, Coloring submenu
+   (~20 ln w/ 6 external `_setColoringMode` callers). Low payoff individually; a bundle commit is the move.
+2. **Session-recovery / `.session` autosave wiring** if any remains — grep the boot region for un-lifted
+   lifecycle handlers. Verify against the carve-up Tier-5 list before investing (it's been wrong 5+ times).
+3. If nothing cohesive remains worth a module, consider the loop near-complete and STOP (per the spine-stays-
+   inline criterion). main.js is 10370 (down from 16530); the remaining mass is largely the lifecycle spine +
+   thin per-action wiring that's correctly inline.
 
 **Banked gotcha this session:**
-- **A factory whose deps are split across the file (some early, some late) goes to the LATE deps, not the banner.**
-  #59's open fns sat at the "Library panel" banner (~7089) but write the assembly-load stash vars declared at
-  ~7412 (consumed by the assembly rebuild subscriber). Placing the init after 7412 (not at the banner) means every
-  dep is a plain value at init time; the only forward-reference is `_fileOpen` itself (used by the file-open menu
-  handler ~3866, textually above), solved with one early `let _fileOpen = null`. The locked initFileIo init (7342,
-  pinned there because initAutosaveSync depends on it) can't be moved down past the stash vars — so a SECOND
-  factory placed independently beats forcing the open ops into initFileIo (which would have demanded moving the
-  stash vars up above 7342). When two cohesive blocks share a file but have disjoint dep timing, two factories > one.
-- **The cross-subscriber stash (`_assemblyLoadOnProgress`/`_assemblyLoadSettle`) is a hand-off, not state the
-  factory owns.** The open-assembly fn creates the `built` promise locally, stashes its resolve/reject for the
-  assembly rebuild subscriber to call, then awaits. Injected as set-shims (the vars stay in main.js next to the
-  subscriber that reads them). In tests, simulate the subscriber by having the `enterAssemblyMode` mock resolve the
-  captured settle — otherwise the success path hangs awaiting `built`.
+- **A pure dispatch/routing layer is still worth its own factory even at small net LOC.** #60 netted only −24
+  (the multi-getter init block is verbose) but it lifts 4 functions + their `assemblyActive`-routing policy out
+  of the closure into a unit-testable surface. Don't skip a region because the net is small — testability is the
+  payoff, not line count. Keep it a SEPARATE factory from the ops it routes over (initFileSave consumes
+  `_fileIo` as a dep) — that's the clean dependency direction (policy depends on mechanism, not vice versa).
+- **When deps span the whole file, init goes after the LATEST dep, not at the cohesive block's location.** #60's
+  functions live at ~3895 but read `_exportRepActive` (~8727). The factory `_fileSave = initFileSave(...)` is
+  placed at ~8737 (after that `let`), and EVERY textually-earlier reference (menu listeners, kb-shortcuts
+  injection) is wrapped as a lazy arrow. Grep-verify no boot path *calls* a method synchronously — here all call
+  sites are user-action handlers, so the bare lazy arrows are safe (no `?.` needed). This is the #52/#59 pattern.
 
 **Deliberately deferred (still in main.js):** FK propagation (`_applyFKLive`); Polymerize-region sub-part
 `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound). `_setMenuToggle`
@@ -394,9 +389,9 @@ The largest single blocks and the most coupling into assembly state. Each needs 
 
 These touch boot/lifecycle. High blast radius; do after the loop is well-grooved.
 
-- [~] **File open / save + assembly save** — banners `// ── File open / save` +
+- [x] **File open / save + assembly save** — banners `// ── File open / save` +
   `// ── Assembly file save helpers` (~3583–3815, ~340 ln) → `ui/file_io.js`. Deps: api, store,
-  file overlay, multi-doc. Risk: HIGH.
+  file overlay, multi-doc. Risk: HIGH. **FULLY DRAINED across #52/#59/#60.**
   - **file-IO operations — DONE** (extraction #52, this batch): `getDesignContent` / `savePartToAssembly` /
     `saveToHandle` / `saveAs` / `saveAssemblyToHandle` / `saveAssemblyAs` → `ui/file_io.js`
     `initFileIo({deps})`. −119 ln. Dropped dead `_pickOpenFile`. 19 vitest + smoke 21/21 + real-app Save-As
@@ -409,10 +404,14 @@ These touch boot/lifecycle. High blast radius; do after the loop is well-grooved
     `_fileOpen` forward-declared at the file-state block, assigned after the assembly-load stash vars (~7420).
     Verbatim bodies; spine + overlay helpers + assembly state injected; the 2 stash vars
     (`_assemblyLoadOnProgress`/`_assemblyLoadSettle`, read by the assembly rebuild subscriber) set via setter shims.
-  - **Remaining (NOT done):** the menu-bar save dispatchers (`_saveDispatch` / `_saveAsDispatch` /
-    `_saveAssembly` / `_saveAssemblyAsGuarded`, ~3889–3961). They route by `assemblyActive` over the already-
-    extracted `_fileIo.*` + read mutable file/path state; ~80 ln cohesive block. The spine itself
-    (`_resetForNewDesign` / `_enterAssemblyMode` / `_exitAssemblyMode`) is probably best left inline (20+ sites).
+  - **save dispatchers — DONE** (extraction #60): `_saveDispatch` / `_saveAsDispatch` / `_saveAssembly` /
+    `_saveAssemblyAsGuarded` → `ui/file_io.js` THIRD factory `initFileSave({…})→{saveDispatch, saveAsDispatch,
+    saveAssembly, saveAssemblyAsGuarded}` (commit b6ea41d; −24 net; 16 vitest, 670 total; smoke 23/23 +
+    menu-Save app exercise). Thin dispatch layer OVER `_fileIo`; routes by `assemblyActive`. Init placed after
+    the last dep (`_exportRepActive` ~8727), `_fileSave` forward-declared `let = null`; the 2 menu listeners +
+    the keyboard-shortcuts `saveAssemblyAsGuarded` injection reference it via lazy arrows (user-action only).
+    `selfSavedPaths` by reference, `_exportRepActive`/file-path state via getters. The spine
+    (`_resetForNewDesign` / `_enterAssemblyMode` / `_exitAssemblyMode`) stays inline (20+ sites).
 - [~] **Menu bar + multi-document spawn** — banners `// ── Menu bar` + `// ── Multi-document: New / Open`.
   **PARTIALLY DRAINED (2026-06-05). NOT one `ui/menu_bar.js` module** — it's the "every menu action" wiring
   region: mostly thin 1–3 ln handlers over already-extracted modules + spine, with a couple of genuinely
@@ -426,10 +425,9 @@ These touch boot/lifecycle. High blast radius; do after the loop is well-grooved
       (extraction #58, commit 705f0a7; −20 net; 12 vitest; smoke 23/23). Verbatim move; all 3 call sites
       (file-new injected dep / file-new-assembly / file-open) sit after the `const _docSpawn` init → no
       hoisting/lazy needed. `mintDocId` import stays in main.js (still used inline by the file-open handler).
-    - The **save dispatchers** (`_saveDispatch`/`_saveAsDispatch`/`_saveAssembly`/`_saveAssemblyAsGuarded`) —
-      mode-routing over the already-extracted `_fileIo.*` + spine; the open orchestration was extracted #59
-      (`initFileOpen`) and the `menu-file-open` handler now calls `_fileOpen.*`. The save dispatchers are the
-      Tier-5 "File open / save" remainder (see that entry), the recommended next cut.
+    - The **save dispatchers** (`_saveDispatch`/`_saveAsDispatch`/`_saveAssembly`/`_saveAssemblyAsGuarded`) →
+      **DONE** `ui/file_io.js` `initFileSave` (extraction #60, commit b6ea41d) — see the Tier-5 "File open /
+      save" entry. The `menu-file-save`/`menu-file-save-as` listeners now call `_fileSave.*` via lazy arrows.
     - The rest (assembly-menu handlers, edit undo/redo, upload/download) are thin wiring over panels/api — low
       payoff, leave inline or bundle opportunistically.
 - [x] **Connection monitor / autosave / SSE** — banners `// ── Backend connection monitor` …
