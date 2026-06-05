@@ -42,7 +42,7 @@ import { selectionBBox } from './scene/selection_bbox.js'
 import { initAssemblyMultiBox } from './scene/assembly_multi_box.js'
 import { initAssemblyConfigAnimator } from './scene/assembly_config_animator.js'
 import { clientToNdc } from './scene/ndc.js'
-import { flexTetherConnections } from './scene/flex_tethers.js'
+import { initFlexRelax } from './scene/flex_relax.js'
 import { clusterBackboneEntries } from './scene/cluster_entries.js'
 import { initEmptySpaceMenu } from './scene/empty_space_menu.js'
 import { initAssemblyLasso } from './scene/assembly_lasso.js'
@@ -805,12 +805,12 @@ async function main() {
           showToast('Cleared all flexible segments')
           return
         }
-        if (action === 'relax_all') { await _relaxFlexible('all'); return }
+        if (action === 'relax_all') { await _flexRelax.relaxFlexible('all'); return }
         if (action === 'relax_one') {
           let connId = extra
           if (!connId && nuc) connId = connIdForBead(nuc, store.getState().currentDesign)
           if (!connId) { showToast('No flexible connection here', { severity: 'error' }); return }
-          await _relaxFlexible('one', connId)
+          await _flexRelax.relaxFlexible('one', connId)
           return
         }
         if (action === 'unmark_connection') {
@@ -4871,17 +4871,11 @@ async function main() {
     if (_mrJaInp && document.activeElement !== _mrJaInp) _mrJaInp.value = deg.toFixed(1)
   }
 
-  // Flexible-segment gate cache (refreshed when the move/rotate tool opens /
-  // switches cluster). Drives the "ssDNA constrained" dropdown option.
-  let _flexGates = {}
-  let _flexConnections = []
-  async function _refreshFlexGates() {
-    try {
-      const info = await api.getFlexibleConnections()
-      _flexGates = info?.gates ?? {}
-      _flexConnections = info?.connections ?? []
-    } catch { _flexGates = {}; _flexConnections = [] }
-  }
+  // Flexible ssDNA-segment relax + "ssDNA constrained" pivot gating → scene/flex_relax.js.
+  const _flexRelax = initFlexRelax({
+    store, api, designRenderer, clusterGizmo,
+    isTranslateRotateActive: () => _translateRotateActive,
+  })
 
   function _mrSetPivotOptions(joints, clusterId = null) {
     if (!_mrPivotSel) return
@@ -4894,141 +4888,12 @@ async function main() {
     }
     // "ssDNA constrained" — only when every inter-cluster connection from this
     // cluster passes through a flexible segment (free-until-taut drag).
-    if (clusterId && _flexGates[clusterId]?.gate) {
+    if (_flexRelax.hasGate(clusterId)) {
       const opt = document.createElement('option')
       opt.value = 'ssdna'
       opt.textContent = 'ssDNA constrained'
       _mrPivotSel.appendChild(opt)
     }
-  }
-
-  /** Resolve a flexible anchor (FlexibleAnchor) → 'helix:bp:DIR' key. */
-  /** Build the gizmo ssDNA-constraint payload for a cluster: per-tether moving/
-   *  fixed anchor keys + a live world-position resolver from backboneEntries. */
-  function _buildSsdnaPayload(clusterId) {
-    const design = store.getState().currentDesign
-    const connections = flexTetherConnections(_flexConnections, clusterId, design)
-    const resolveWorldPos = (key) => {
-      const [h, bp, dir] = key.split(':')
-      const bpN = Number(bp)
-      for (const e of (designRenderer.getBackboneEntries?.() ?? [])) {
-        const n = e.nuc
-        if (n && n.helix_id === h && n.bp_index === bpN && n.direction === dir) return e.pos
-      }
-      return null
-    }
-    return { connections, resolveWorldPos }
-  }
-
-  /** Bead count of a cluster (its "size") — used to pick the smaller cluster to move. */
-  function _clusterBeadCount(clusterId, design) {
-    const ct = design?.cluster_transforms?.find(c => c.id === clusterId)
-    if (!ct) return 0
-    const hids = new Set(ct.helix_ids ?? [])
-    let n = 0
-    for (const e of (designRenderer.getBackboneEntries?.() ?? [])) {
-      if (hids.has(e.nuc?.helix_id)) n++
-    }
-    return n
-  }
-
-  /** Per-tether {movingKey, fixedKey, contour} for the given moving cluster over a
-   *  specific subset of connections, plus a live world-position resolver. */
-  function _buildRelaxPayload(movingId, conns, design) {
-    const connections = flexTetherConnections(conns, movingId, design)
-    const resolveWorldPos = (key) => {
-      const [h, bp, dir] = key.split(':')
-      const bpN = Number(bp)
-      for (const e of (designRenderer.getBackboneEntries?.() ?? [])) {
-        const n = e.nuc
-        if (n && n.helix_id === h && n.bp_index === bpN && n.direction === dir) return e.pos
-      }
-      return null
-    }
-    return { connections, resolveWorldPos }
-  }
-
-  // Relax overstretched flexible ssDNA segments: move the smaller cluster of each
-  // flexible-connected pair so no tether exceeds its contour length (= taut at the
-  // ssDNA per-base rise). A pair joined by a single flexible region translates only;
-  // multiple regions translate + rotate (emergent from the PBD solve). scope='one'
-  // relaxes just the clicked connection's pair; 'all' sweeps every pair to settle.
-  const _SS_RELAX_TOL = 0.05  // nm — overstretch beyond contour that counts as "needs relax"
-  async function _relaxFlexible(scope, connId = null) {
-    if (store.getState().assemblyActive) return
-    if (_translateRotateActive) { showToast('Finish the current move first', { severity: 'error' }); return }
-    const allConns = store.getState().currentDesign?.flexible_connections ?? []
-    if (!allConns.length) { showToast('No flexible segments to relax'); return }
-
-    const pairKey = (a, b) => [a, b].sort().join(' ')
-    let pairs
-    if (scope === 'one') {
-      const conn = allConns.find(c => c.id === connId)
-      if (!conn) { showToast('Flexible connection not found', { severity: 'error' }); return }
-      pairs = [pairKey(conn.cluster_a_id, conn.cluster_b_id)]
-    } else {
-      pairs = [...new Set(allConns.map(c => pairKey(c.cluster_a_id, c.cluster_b_id)))]
-    }
-
-    // Solve headlessly: accumulate one net pending transform per moved cluster
-    // (the gizmo's pending map overwrites per cluster, so sweeps never double-count).
-    clusterGizmo.discardPendingTransforms?.()
-    const maxSweeps = scope === 'all' ? 8 : 2
-    let residualRemains = false
-    for (let sweep = 0; sweep < maxSweeps; sweep++) {
-      let progressed = false
-      for (const pk of pairs) {
-        const design = store.getState().currentDesign
-        const conns = (design?.flexible_connections ?? [])
-          .filter(c => pairKey(c.cluster_a_id, c.cluster_b_id) === pk)
-        if (!conns.length) continue
-        const [ca, cb] = pk.split(' ')
-        const movingId = (_clusterBeadCount(ca, design) <= _clusterBeadCount(cb, design)) ? ca : cb
-        const translateOnly = conns.length === 1
-        const payload = _buildRelaxPayload(movingId, conns, design)
-        if (!payload.connections.length) continue
-        // Skip if nothing in this pair is overstretched.
-        const overstretched = payload.connections.some(c => {
-          const pM = payload.resolveWorldPos(c.movingKey), pF = payload.resolveWorldPos(c.fixedKey)
-          return pM && pF && pM.distanceTo(pF) > c.contour + _SS_RELAX_TOL
-        })
-        if (!overstretched) continue
-
-        const res = clusterGizmo.relaxClusterHeadless(movingId, { ...payload, translateOnly })
-        if (res.moved) progressed = true
-        if (res.residual > _SS_RELAX_TOL) residualRemains = true
-      }
-      if (!progressed) break
-    }
-
-    const pending = clusterGizmo.getAllPendingTransforms?.() ?? []
-    if (!pending.length) {
-      clusterGizmo.discardPendingTransforms?.()
-      clusterGizmo.detach()
-      showToast('Flexible segments already relaxed')
-      return
-    }
-
-    // Commit all moved clusters atomically — ONE feature-log entry (revertable +
-    // deletable), ONE undo step, for both 'relax one' and 'relax all'.
-    _showProgress('Relaxing', 'Settling flexible segments…', { indeterminate: true })
-    try {
-      const label = scope === 'all' ? 'Relax all flexible segments' : 'Relax flexible segment'
-      await api.relaxFlexibleSegments(
-        pending.map(p => ({ cluster_id: p.clusterId, pivot: p.pivot, translation: p.translation, rotation: p.rotation })),
-        label,
-      )
-    } catch (err) {
-      showToast(err?.message || String(err), { severity: 'error' })
-      return
-    } finally {
-      clusterGizmo.discardPendingTransforms?.()
-      clusterGizmo.detach()
-      _hideProgress()
-    }
-
-    if (residualRemains) showToast('Relaxed — some tethers still overstretched; try Relax all again', { severity: 'warning' })
-    else showToast('Relaxed flexible segments')
   }
 
   function _mrSetSelectedPivot(id) {
@@ -5109,7 +4974,7 @@ async function main() {
     } else if (val === 'ssdna') {
       _mrShowJointMode(false)
       const clusterId = store.getState().activeClusterId
-      clusterGizmo.setConstraint('ssdna', _buildSsdnaPayload(clusterId))
+      clusterGizmo.setConstraint('ssdna', _flexRelax.buildSsdnaPayload(clusterId))
       showToast('ssDNA constrained: drag the arm — tethers won’t overstretch')
     } else {
       const joint = store.getState().currentDesign?.cluster_joints?.find(j => j.id === val)
@@ -5147,7 +5012,7 @@ async function main() {
     await _refreshClusterPivotForAttach(clusterId)
     clusterGizmo.attach(clusterId, scene, camera, canvas)
     // Repopulate pivot options (joints + ssDNA-constrained gate) for this cluster.
-    await _refreshFlexGates()
+    await _flexRelax.refreshFlexGates()
     const joints = store.getState().currentDesign?.cluster_joints?.filter(j => j.cluster_id === clusterId) ?? []
     _mrSetPivotOptions(joints, clusterId)
     _mrSetSelectedPivot('centroid')
@@ -5561,7 +5426,7 @@ async function main() {
     if (_mrClusterSel) _mrClusterSel.disabled = false
     if (_mrPivotSel) _mrPivotSel.disabled = false
     _mrSetClusterOptions(clusters, first.id)
-    await _refreshFlexGates()
+    await _flexRelax.refreshFlexGates()
     const initJoints = store.getState().currentDesign?.cluster_joints?.filter(j => j.cluster_id === first.id) ?? []
     _mrSetPivotOptions(initJoints, first.id)
     _mrSetSelectedPivot('centroid')
