@@ -212,16 +212,18 @@ def test_score_workspace_18hb_validates_scaffold_mapping_and_precursor_status():
 
 
 def test_precursor_graph_workspace_18hb_enforces_honeycomb_segment_minimums():
-    fixture = Path(__file__).resolve().parents[1] / "workspace" / "18hb.nadoc"
+    # Tracked fixture (committed under tests/fixtures/) so this runs on CI instead
+    # of skipping; the old path pointed at the gitignored workspace/18hb.nadoc.
+    fixture = Path(__file__).resolve().parent / "fixtures" / "18hb_fixture.nadoc"
     if not fixture.exists():
-        pytest.skip("workspace/18hb.nadoc not available")
+        pytest.skip("tests/fixtures/18hb_fixture.nadoc not available")
 
     design = Design.model_validate_json(fixture.read_text())
     design, total_nt, padded_nt = assign_scaffold_sequence(design, "M13mp18")
 
     report = build_precursor_graphs(design, k_paths=3)
 
-    assert total_nt == 7188
+    assert total_nt == 388
     assert padded_nt == 0
     assert report["summary"]["precursor_count"] > 0
     assert report["min_segment_nt"] == 7

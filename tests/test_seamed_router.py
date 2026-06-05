@@ -206,9 +206,15 @@ def test_advanced_seamed_warns_when_hinge3_cannot_consolidate_fixed_edges():
 
 
 def test_advanced_seamed_clears_existing_auto_route_before_teeth_reroute():
-    fixture = Path(__file__).resolve().parents[1] / "workspace" / "teeth.nadoc"
+    # Tracked UNROUTED teeth fixture (0 crossovers) so this runs on CI instead of
+    # skipping. The old path pointed at the gitignored workspace/teeth.nadoc, which
+    # drifts when re-saved through the app. NB: tests/fixtures/teeth.nadoc is a
+    # DIFFERENT (pre-routed, 34-xover) design owned by test_seamless_router's
+    # closing-zig test — this reroute test needs the unrouted variant so the
+    # seamless pre-route + advanced-seamed clear/reroute path is exercised.
+    fixture = Path(__file__).resolve().parent / "fixtures" / "teeth_unrouted.nadoc"
     if not fixture.exists():
-        pytest.skip("workspace/teeth.nadoc not available")
+        pytest.skip("tests/fixtures/teeth_unrouted.nadoc not available")
 
     design = Design.model_validate_json(fixture.read_text())
     assert not design.forced_ligations
