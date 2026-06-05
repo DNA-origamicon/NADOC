@@ -53,42 +53,42 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Config-restore animation
-EXTRACTED (#68, commit df158db) → `scene/assembly_config_animator.js`, −42 ln. main.js 9531 → 9489.** The
-handoff-named "Assembly context/linker menu + config animation" region was actually THREE non-contiguous pieces;
-extracted the clean one (config anim), re-homed the router as its own entry._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Assembly right-click
+context-menu router FOLDED INTO `scene/assembly_pointer.js` (#69, commit cc2d610), −72 ln. main.js 9489 → 9417.**
+That finishes the "Assembly context/linker menu + config animation" region (config anim #68 + router #69 both done).
+Tier 5 file/session infra + the HARD gesture/assembly-coupled band are now the only frontier._
 
-**This session (#68, handoff-recommended):** the recommended "Assembly context/linker menu + config animation"
-was NOT one block — `_showAssemblyLinkerMenu` + `_onAssemblyContextMenu` (the right-click router) sit ~150 ln
-ABOVE `_animateAssemblyConfiguration`, split by the clusterPanel + joints-panel inits. Took the CLEAN sub-block
-(config anim) per the "extract the ONE cohesive block, re-home the rest" rule. Pure `easeInOutQuad` +
-`buildConfigAnimItems(assembly, cfg, getLiveTransform)` (start/end matrix decompose, real-THREE tested) + factory
-`initAssemblyConfigAnimator({store, api, assemblyRenderer, assemblyJointRenderer, hasAssemblyPending,
-commitAssemblyPending})→{animate}`. **Map was WRONG that "config-anim touches camera"** — it only writes
-`assemblyRenderer.setLiveTransform` + `assemblyJointRenderer.setLiveJointTransform` (no camera, no scene). Plain
-`const` at the original spot — both pending deps defined ~540 ln above (7020/7034), lone consumer
-(initFeatureLogPanel `onAnimateConfiguration`) is a deferred user-action callback → TDZ-safe. 13 vitest (3 ease +
-6 builder + 4 factory incl. a full fake-clock tween: stub `performance.now`+`requestAnimationFrame` advancing the
-clock per frame so t→1 on frame 2). vitest 753 (+13); smoke 23/23 incl. assembly-exit teardown gate.
+**This session (#69, handoff-recommended):** folded `_onAssemblyContextMenu` + `_showAssemblyLinkerMenu` INTO
+`assembly_pointer.js` as sub-part (c) — NOT a standalone module, because the router reads/writes
+`_assemblyRightDownAt` + `_assemblySelectedPartJoint` which the pointer module ALREADY owns via get/set shims (a
+standalone would duplicate them). Verbatim move; added `onAssemblyContextMenu` to the factory's returned API and
+assigned `const _onAssemblyContextMenu = _assemblyPointer.onAssemblyContextMenu` next to the existing
+`_onAssemblyClick`/`_onAssemblyPointerDown` assigns (~7290) — the deferred `contextmenu` listener at ~6700 resolves
+it fine (it's inside the assembly-mode subscriber, fires long after main() boot). 4 new deps (`assemblyContextMenu`,
+`overhangLocations`, `attachPartToBelt`) + a `getAssemblyRightDownAt` shim (added beside the pre-existing
+`setAssemblyRightDownAt`); `createContextMenu` import MOVED from main.js into the module (it became dead in
+main.js → deleted). 9 vitest branch tests; vitest 762 (+9); smoke 23/23.
 
-**Banked gotcha (NEW):** a fake-clock rAF test infinite-loops → OOM if the stubbed clock doesn't advance (the
-tween reschedules while `t<1` forever). Stub `requestAnimationFrame` to BUMP the clock each call
-(`clock += 400; queueMicrotask(() => cb(clock))`) so two frames reach the 650 ms duration. **Still true:** plain
-`grep` on main.js silently returns nothing (binary heuristic) — always `rg`.
+**Banked gotcha (NEW):** to assert a factory branch that calls an IMPORTED helper (here `createContextMenu`, not a
+DI dep), `vi.mock('../ui/primitives/context_menu.js', () => ({ createContextMenu: (o) => calls.push(o) }))` at the
+top of the test (hoisted) and push into a module-scope `calls` array reset in `beforeEach` — then the test can read
+`calls[0].items`, find a menu item by label, and invoke its `onClick` to drive the nested action (Relax → backend).
+Cleaner than threading the helper through DI just for testability. **Still true:** plain `grep` on main.js silently
+returns nothing (binary heuristic) — always `rg`.
 
-**Live-gesture caveat (accepted, per #64/#34/#24):** the "animate to configuration" click needs an assembly WITH
-a saved feature-log configuration — multi-step setup, not hand-driven this session. The full tween path is covered
-by the 4 factory tests driving the REAL factory (incl. the fake-clock frame loop); smoke covers assembly boot+teardown.
+**Live-gesture caveat (accepted, per #64/#68/#34):** the live right-click router needs an assembly WITH a
+linker/belt loaded + a right-click on the exact 3D pick — multi-step setup, not hand-driven. Covered by the 9 branch
+tests driving the REAL factory through every route + smoke's assembly-exit gate (which registers/removes this
+`contextmenu` listener). `workspace/Belt_test1.nass` is the fixture if a future session wants the live exercise.
 
-**Recommended next region — re-derive scope first, with `rg`:**
-1. **Assembly right-click context-menu router** (the re-homed leftover from this session's region) —
-   `_showAssemblyLinkerMenu` + `_onAssemblyContextMenu` (~7374–7446, ~73 ln, registered as the canvas `contextmenu`
-   listener ~6700). **MED-HARD:** ~13 deps incl. mutable `_assemblyRightDownAt`/`_assemblySelectedPartJoint` ALREADY
-   shared with `assembly_pointer.js` via get/set shims → fold INTO assembly_pointer.js, do NOT make a new standalone
-   module (would duplicate the shared-state shims). The linker sub-menu alone is clean if you want a smaller bite.
-2. Then the **HARD gesture/assembly-coupled band** (Move/Rotate right-sidebar panel ~385 ln — has extractable pure
-   payload builders before the stateful shell; Representation switcher; Translate/Rotate tool + `scene/joint_pick.js`;
-   FK propagation `_applyFKLive`). Build/confirm the assembly-gesture harness gate before the gesture-bound ones —
+**Recommended next region — re-derive scope first, with `rg`:** the assembly-pointer cluster is now fully drained.
+Frontier is **Tier 5 (file/session infra — HIGH blast radius)** + the **HARD gesture/assembly-coupled band**:
+1. **Move/Rotate right-sidebar panel** (~385 ln, banner `// ── Move/Rotate right-sidebar panel`) — has extractable
+   pure payload builders (`_buildSsdnaPayload`/`_buildRelaxPayload`) BEFORE the stateful shell; lift those first as a
+   smaller bite. Shares `_createAssemblyTransformContext`/`_applyAssemblyPrimaryLive` with group_gizmo + the
+   Translate/Rotate tool — map the coupling before the shell.
+2. **Tier 5 file/save/session** (`_openPartFromServer`/`_openAssemblyFromServer`, autosave, sync-status) — HIGH blast
+   radius; the #52 `initFileIo` placement pattern (place the `const` where deps exist, not at the banner) applies.
    BUT remember selection-filter (#61) was billed "gesture-bound" and was actually pure DOM+store (6th mis-scope):
    check WHERE the gesture lives before assuming a harness is needed.
 
@@ -668,8 +668,8 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   fn ref — all TDZ-safe (user-action only). 15 vitest (8 pure + 7 jsdom factory); smoke 23/23; real-app vt-btn +
   menu-pill toggle exercise, zero console errors. **MED-risk "coordinate with #41's shims" overstated — the shims
   just became `_undefinedHighlight.*` arrows, a 1:1 swap.**
-- [~] **Assembly context/linker menu + config animation** — RE-DERIVED #68 (2026-06-05): the "region" is
-  THREE non-contiguous pieces, NOT one block — `_showAssemblyLinkerMenu` + `_onAssemblyContextMenu` (the
+- [x] **Assembly context/linker menu + config animation** — FULLY RESOLVED (config anim #68 + router #69).
+  RE-DERIVED #68 (2026-06-05): the "region" is THREE non-contiguous pieces, NOT one block — `_showAssemblyLinkerMenu` + `_onAssemblyContextMenu` (the
   right-click router) sit ~150 ln ABOVE `_animateAssemblyConfiguration`, separated by the clusterPanel +
   joints-panel inits. **Config animation EXTRACTED (#68, commit df158db)** → `scene/assembly_config_animator.js`
   (`initAssemblyConfigAnimator` + pure `easeInOutQuad`/`buildConfigAnimItems`), −42 ln, 13 tests. The map's
@@ -680,14 +680,20 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   router has ~13 deps incl. mutable state (`_assemblyRightDownAt`, `_assemblySelectedPartJoint`) ALREADY shared
   with `initAssemblyPointer` (#? assembly_pointer.js) via get/set shims — extract it WITH or INTO assembly_pointer,
   not standalone.
-- [ ] **Assembly right-click context-menu router** — `_showAssemblyLinkerMenu` (~7374) + `_onAssemblyContextMenu`
-  (~7401), ~73 ln, registered as the canvas `contextmenu` listener (~6700). Routes a right-click to: overhang-length
-  dialog / linker Relax menu / belt "Attach part" menu / the already-extracted `assemblyContextMenu.show(inst)`.
-  Deps: store, api, camera, `_canvasNdc`, overhangLocations, assemblyRenderer (pickLinker/pickInstance),
-  assemblyJointRenderer (pickBeltAt), `assemblyContextMenu`, `_attachPartToBelt`, `_hasAssemblyPending`/
-  `_commitAssemblyPending`, + mutable `_assemblyRightDownAt`/`_assemblySelectedPartJoint` (shared with
-  `assembly_pointer.js`). Risk: **MED-HARD** — the shared mutable state argues for folding into `assembly_pointer.js`
-  rather than a new standalone module (the pointer module already owns those vars' shims). Want-it gate: live feature.
+- [x] **Assembly right-click context-menu router** — **DONE #69 (commit cc2d610, 2026-06-05):** folded
+  `_showAssemblyLinkerMenu` + `_onAssemblyContextMenu` INTO `scene/assembly_pointer.js` as sub-part (c)
+  (`onAssemblyContextMenu` + `showAssemblyLinkerMenu` internal fns; `onAssemblyContextMenu` added to the
+  returned API; `const _onAssemblyContextMenu = _assemblyPointer.onAssemblyContextMenu` near the existing
+  `_onAssemblyClick`/`_onAssemblyPointerDown` assigns, ~7290, so the deferred `contextmenu` listener at ~6700
+  resolves it fine). 4 new deps (`assemblyContextMenu`, `overhangLocations`, `attachPartToBelt`,
+  `getAssemblyRightDownAt`) + a `getAssemblyRightDownAt` shim alongside the existing `setAssemblyRightDownAt`;
+  `createContextMenu` import MOVED into the module (was dead in main.js after, deleted). VERBATIM move,
+  −72 ln (main.js 9489 → 9417). The folding-in (vs standalone) was right — reuses the pointer module's
+  existing `_assemblyRightDownAt`/`_assemblySelectedPartJoint` shims, zero duplication. 9 new vitest branch
+  tests (pan-suppress / overhang-bail / linker-relax+disabled / belt-attach / part-select / pending-commit /
+  empty) via `vi.mock('../ui/primitives/context_menu.js')` to capture menu items + invoke onClick; vitest 762
+  (+9); smoke 23/23. Live right-click NOT hand-driven (assembly+linker/belt multi-step setup) — accepted
+  caveat per #64/#68, covered by the 9 branch tests + smoke assembly-exit listener teardown.
 
 ### HARD — gesture-bound or shared-state coupled (build the gate / map the coupling first)
 
