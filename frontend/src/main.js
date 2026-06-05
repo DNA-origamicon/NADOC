@@ -35,6 +35,7 @@ import { computeGroupHiddenInstanceIds, collectGroupMemberInstanceIds } from './
 import { initAssemblyPointer } from './scene/assembly_pointer.js'
 import { hexFromInt, atomColorsFromLetters } from './scene/color_util.js'
 import { initFretChecker } from './scene/fret_checker.js'
+import { initUndefinedHighlight } from './scene/undefined_highlight.js'
 import { motionChipStyle } from './scene/motion_chip.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
 import { selectionBBox } from './scene/selection_bbox.js'
@@ -4077,14 +4078,14 @@ async function main() {
   // ── Sequencing ────────────────────────────────────────────────────────────
 
   // Assign Scaffold Sequence modal (menu + scaffold right-click) → ui/scaffold_modal.js.
-  // _undefinedHighlightOn / _refreshUndefinedHighlight are declared later in main();
-  // injected as lazy getters since the apply path only runs on user action (post-boot).
+  // The undefined-highlight module (_undefinedHighlight) is constructed later in main();
+  // injected as lazy arrows since the apply path only runs on user action (post-boot).
   const _scaffoldModal = initScaffoldModal({
     store, api,
     showProgress: _showProgress,
     hideProgress: _hideProgress,
-    getUndefinedHighlightOn: () => _undefinedHighlightOn,
-    refreshUndefinedHighlight: () => _refreshUndefinedHighlight(),
+    getUndefinedHighlightOn: () => _undefinedHighlight.isOn(),
+    refreshUndefinedHighlight: () => _undefinedHighlight.refresh(),
   })
 
   document.getElementById('menu-seq-assign-staples')?.addEventListener('click', async () => {
@@ -4408,14 +4409,14 @@ async function main() {
 
   // ── View tool buttons — length heatmap, seq, undef, grid, overhang names ──────
   // Extracted to ui/view_tool_buttons.js. Owns length-heatmap + grid state; the
-  // shared _undefinedHighlightOn mutable (declared in the Highlight Undefined
-  // Bases region below) is reached via get/set shims.
+  // shared undefined-highlight flag lives in scene/undefined_highlight.js
+  // (_undefinedHighlight, constructed below) and is reached via lazy arrows.
   initViewToolButtons({
     store, scene, designRenderer, expandedSpacing,
     setMenuToggle: _setMenuToggle,
-    refreshUndefinedHighlight: _refreshUndefinedHighlight,
-    getUndefinedHighlightOn: () => _undefinedHighlightOn,
-    setUndefinedHighlightOn: (v) => { _undefinedHighlightOn = v },
+    refreshUndefinedHighlight: () => _undefinedHighlight.refresh(),
+    getUndefinedHighlightOn: () => _undefinedHighlight.isOn(),
+    setUndefinedHighlightOn: (v) => _undefinedHighlight.setOn(v),
     toggleDeformView: () => _toggleDeformView(),
     toggleUnfold: () => _toggleUnfold(),
     toggleCadnano: () => _toggleCadnano(),
@@ -8760,84 +8761,14 @@ async function main() {
     }
   })
 
-  // ── Highlight Undefined Bases toggle ─────────────────────────────────────────
-  let _undefinedHighlightOn = false
-
-  function _refreshUndefinedHighlight() {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { designRenderer.clearUndefinedHighlight(); return }
-
-    // Build loop/skip map: "helixId:bp" → delta
-    const lsMap = new Map()
-    for (const helix of currentDesign.helices ?? []) {
-      for (const ls of helix.loop_skips ?? []) {
-        lsMap.set(`${helix.id}:${ls.bp_index}`, ls.delta)
-      }
-    }
-
-    // Build a set of strand IDs with no sequence, and a set of "helixId:bp" keys
-    // where the assigned character is 'N' (skip/loop-aware).
-    const nullStrandIds = new Set()
-    const nPosKeys      = new Set()
-
-    for (const strand of currentDesign.strands ?? []) {
-      if (!strand.sequence) {
-        nullStrandIds.add(strand.id)
-      } else {
-        let seqIdx = 0
-        for (const domain of strand.domains ?? []) {
-          // Overhang domains: sequence is from overhang spec, not helix bp positions.
-          // Advance seqIdx by domain length and skip position-level checking.
-          if (domain.overhang_id != null) {
-            seqIdx += Math.abs(domain.end_bp - domain.start_bp) + 1
-            continue
-          }
-          const isForward = domain.direction === 'FORWARD'
-          const step      = isForward ? 1 : -1
-          const endBp     = domain.end_bp + step   // exclusive sentinel
-          for (let bp = domain.start_bp; bp !== endBp; bp += step) {
-            const delta = lsMap.get(`${domain.helix_id}:${bp}`) ?? 0
-            if (delta <= -1) continue   // skip — no nucleotide in sequence
-            const nCopies = delta + 1   // 1 for normal bp, 2 for loop (+1)
-            let isN = false
-            for (let c = 0; c < nCopies; c++) {
-              if (strand.sequence[seqIdx] === 'N') isN = true
-              seqIdx++
-            }
-            if (isN) nPosKeys.add(`${domain.helix_id}:${bp}`)
-          }
-        }
-      }
-    }
-
-    const entries = designRenderer.getBackboneEntries().filter(entry => {
-      if (nullStrandIds.has(entry.nuc?.strand_id)) return true
-      if (nPosKeys.has(`${entry.nuc?.helix_id}:${entry.nuc?.bp_index}`)) return true
-      return false
-    })
-
-    if (entries.length > 0) {
-      designRenderer.setUndefinedHighlight(entries)
-    } else {
-      designRenderer.clearUndefinedHighlight()
-    }
-  }
-
-  document.getElementById('menu-view-undefined-bases')?.addEventListener('click', () => {
-    _undefinedHighlightOn = !_undefinedHighlightOn
-    _setMenuToggle('menu-view-undefined-bases', _undefinedHighlightOn)
-    if (_undefinedHighlightOn) {
-      _refreshUndefinedHighlight()
-    } else {
-      designRenderer.clearUndefinedHighlight()
-    }
-  })
-
-  // Refresh undefined highlight whenever the design changes (if toggle is on).
-  store.subscribe((newState, prevState) => {
-    if (_undefinedHighlightOn && newState.currentDesign !== prevState.currentDesign) {
-      _refreshUndefinedHighlight()
-    }
+  // ── Highlight Undefined Bases toggle → scene/undefined_highlight.js ──────────
+  // Owns the on/off flag, the View-menu button, and the design-change re-highlight
+  // subscriber. The shared flag is reached from the View-tool-buttons vt-btn (#41)
+  // and the scaffold-assign modal (#56) via lazy dep arrows wired at their factory
+  // inits above (isOn/setOn/refresh) — TDZ-safe since those fire only on user action.
+  // Subscriber registers HERE (original spot) to preserve store-subscription order.
+  const _undefinedHighlight = initUndefinedHighlight({
+    store, designRenderer, setMenuToggle: _setMenuToggle,
   })
 
   // ── Fluorescence + FRET Checker ──────────────────────────────────────────────
