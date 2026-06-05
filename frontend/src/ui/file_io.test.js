@@ -29,7 +29,7 @@ vi.mock('../shared/doc_id.js', () => ({
 import { showToast } from './toast.js'
 import { openFileBrowser } from './file_browser.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
-import { initFileIo } from './file_io.js'
+import { initFileIo, initFileOpen } from './file_io.js'
 
 /** Build a factory with mutable backing state + recording shims. */
 function makeFactory(overrides = {}) {
@@ -259,5 +259,149 @@ describe('savePartToAssembly', () => {
     })
     await fileIo.savePartToAssembly({ silent: true })
     expect(deps.setSyncStatus).toHaveBeenCalledWith('red', 'save error')
+  })
+})
+
+// ── initFileOpen (open-orchestration, extraction #59) ────────────────────────
+
+/**
+ * Build the open-orchestration factory with recording shims. `enterAssemblyMode`
+ * resolves the stashed build promise (simulating the assembly subscriber that
+ * normally settles it) so the success path doesn't hang awaiting `built`.
+ */
+function makeOpenFactory(overrides = {}) {
+  const state = {
+    assemblyName: null, assemblyFileHandle: 'OLD_H', assemblyWorkspacePath: null,
+    onProgress: undefined, settle: undefined,
+  }
+  const store = createMockStore({
+    lastError: null,
+    currentAssembly: { instances: [{ id: 'a', visible: true }] },
+    ...overrides.storeState,
+  })
+  const api = {
+    getLibraryFileContent: vi.fn(async () => ({ content: '{"x":1}' })),
+    importDesign: vi.fn(async () => true),
+    importAssembly: vi.fn(async () => true),
+    ...overrides.api,
+  }
+  const deps = {
+    store, api,
+    showFileLoad: vi.fn(),
+    flAppendLog: vi.fn(),
+    flSetProgress: vi.fn(),
+    flShowError: vi.fn(),
+    flShowSuccess: vi.fn(async () => {}),
+    resetForNewDesign: vi.fn(),
+    setFileName: vi.fn(),
+    setWorkspacePath: vi.fn(),
+    hideWelcome: vi.fn(),
+    showWelcome: vi.fn(),
+    revealWorkspaceForEmptyPart: vi.fn(),
+    fitToView: vi.fn(),
+    enterAssemblyMode: vi.fn(() => { state.settle?.resolve() }),
+    setAssemblyWorkspacePath: vi.fn((v) => { state.assemblyWorkspacePath = v }),
+    setAssemblyName: vi.fn((v) => { state.assemblyName = v }),
+    setAssemblyFileHandle: vi.fn((v) => { state.assemblyFileHandle = v }),
+    setAssemblyLoadOnProgress: vi.fn((v) => { state.onProgress = v }),
+    setAssemblyLoadSettle: vi.fn((v) => { state.settle = v }),
+    ...overrides.deps,
+  }
+  return { fileOpen: initFileOpen(deps), deps, state, store, api }
+}
+
+describe('initFileOpen — openPartFromServer', () => {
+  it('aborts with an error overlay when the server returns no content', async () => {
+    const { fileOpen, deps } = makeOpenFactory({ api: { getLibraryFileContent: vi.fn(async () => ({ content: null })) } })
+    await fileOpen.openPartFromServer('p/x.nadoc', 'x')
+    expect(deps.flShowError).toHaveBeenCalledWith('Could not load part.')
+    expect(deps.resetForNewDesign).not.toHaveBeenCalled()
+    expect(deps.api.importDesign).not.toHaveBeenCalled()
+  })
+  it('on a successful import sets identity, reveals the workspace, and frames', async () => {
+    const { fileOpen, deps } = makeOpenFactory()
+    await fileOpen.openPartFromServer('p/x.nadoc', 'NiceName')
+    expect(deps.resetForNewDesign).toHaveBeenCalled()
+    expect(deps.api.importDesign).toHaveBeenCalledWith('{"x":1}')
+    expect(deps.setFileName).toHaveBeenCalledWith('NiceName')
+    expect(deps.setWorkspacePath).toHaveBeenCalledWith('p/x.nadoc')
+    expect(deps.hideWelcome).toHaveBeenCalled()
+    expect(deps.revealWorkspaceForEmptyPart).toHaveBeenCalled()
+    expect(deps.fitToView).toHaveBeenCalled()
+    expect(deps.flShowSuccess).toHaveBeenCalledWith('Part loaded successfully')
+    expect(deps.showWelcome).not.toHaveBeenCalled()
+  })
+  it('falls back to the path as the filename when no name is given', async () => {
+    const { fileOpen, deps } = makeOpenFactory()
+    await fileOpen.openPartFromServer('p/x.nadoc')
+    expect(deps.setFileName).toHaveBeenCalledWith('p/x.nadoc')
+  })
+  it('on import failure shows the error and returns to the welcome screen', async () => {
+    const { fileOpen, deps } = makeOpenFactory({
+      api: { importDesign: vi.fn(async () => false) },
+      storeState: { lastError: { message: 'bad json' } },
+    })
+    await fileOpen.openPartFromServer('p/x.nadoc', 'x')
+    expect(deps.flShowError).toHaveBeenCalledWith('Failed to import part.')
+    expect(deps.showWelcome).toHaveBeenCalled()
+    expect(deps.fitToView).not.toHaveBeenCalled()
+  })
+  it('catches a fetch exception and surfaces the load error', async () => {
+    const { fileOpen, deps } = makeOpenFactory({
+      api: { getLibraryFileContent: vi.fn(async () => { throw new Error('network') }) },
+    })
+    await fileOpen.openPartFromServer('p/x.nadoc', 'x')
+    expect(deps.flShowError).toHaveBeenCalledWith('Could not load part.')
+  })
+})
+
+describe('initFileOpen — openAssemblyFromServer', () => {
+  it('aborts with an error overlay when the server returns no content', async () => {
+    const { fileOpen, deps } = makeOpenFactory({ api: { getLibraryFileContent: vi.fn(async () => ({ content: null })) } })
+    await fileOpen.openAssemblyFromServer('p/a.nass')
+    expect(deps.flShowError).toHaveBeenCalledWith('Could not load assembly.')
+    expect(deps.enterAssemblyMode).not.toHaveBeenCalled()
+  })
+  it('clears the stash and shows the error when the import fails', async () => {
+    const { fileOpen, deps } = makeOpenFactory({
+      api: { importAssembly: vi.fn(async () => false) },
+      storeState: { lastError: { message: 'corrupt' } },
+    })
+    await fileOpen.openAssemblyFromServer('p/a.nass')
+    expect(deps.setAssemblyLoadOnProgress).toHaveBeenLastCalledWith(null)
+    expect(deps.setAssemblyLoadSettle).toHaveBeenLastCalledWith(null)
+    expect(deps.flShowError).toHaveBeenCalledWith('Failed to import assembly.')
+    expect(deps.enterAssemblyMode).not.toHaveBeenCalled()
+  })
+  it('on a visible-instance load stashes progress, sets identity, enters mode, and succeeds', async () => {
+    const { fileOpen, deps, state } = makeOpenFactory()
+    await fileOpen.openAssemblyFromServer('p/a.nass')
+    // stash was armed with a real progress callback before the import
+    expect(typeof state.onProgress).toBe('function')
+    expect(state.assemblyName).toBe('p/a')          // .nass stripped
+    expect(state.assemblyFileHandle).toBe(null)
+    expect(deps.setAssemblyWorkspacePath).toHaveBeenCalledWith('p/a.nass')
+    expect(deps.enterAssemblyMode).toHaveBeenCalled()
+    expect(deps.flShowSuccess).toHaveBeenCalledWith('Assembly loaded successfully')
+  })
+  it('the stashed onProgress callback drives the overlay per build stage', async () => {
+    const { fileOpen, deps, state } = makeOpenFactory()
+    await fileOpen.openAssemblyFromServer('p/a.nass')
+    deps.flAppendLog.mockClear()
+    deps.flSetProgress.mockClear()
+    state.onProgress({ stage: 'instance_built', done: 1, total: 2, name: 'PartA' })
+    expect(deps.flSetProgress).toHaveBeenCalledWith(78, 'Part 1 / 2')   // 55 + round(1/2*45)
+    expect(deps.flAppendLog).toHaveBeenCalledWith('  ✓ PartA', 'success')
+  })
+  it('an empty assembly resolves immediately without awaiting the subscriber', async () => {
+    const { fileOpen, deps, state } = makeOpenFactory({
+      storeState: { currentAssembly: { instances: [] } },
+    })
+    await fileOpen.openAssemblyFromServer('p/empty.nass')
+    // stash released before mode-enter; build promise self-resolved
+    expect(deps.setAssemblyLoadSettle).toHaveBeenLastCalledWith(null)
+    expect(state.settle).toBe(null)
+    expect(deps.enterAssemblyMode).toHaveBeenCalled()
+    expect(deps.flShowSuccess).toHaveBeenCalledWith('Assembly loaded successfully')
   })
 })

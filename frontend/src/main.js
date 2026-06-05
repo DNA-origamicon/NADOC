@@ -121,7 +121,7 @@ import { initAssemblyContextMenu }  from './ui/assembly_context_menu.js'
 import { initLibraryPanel }         from './ui/library_panel.js'
 import { pickLattice }              from './ui/lattice_picker.js'
 import { openFileBrowser }          from './ui/file_browser.js'
-import { initFileIo }               from './ui/file_io.js'
+import { initFileIo, initFileOpen } from './ui/file_io.js'
 import { initSyncBadge }            from './ui/sync_badge.js'
 import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
 import { initNavController }        from './scene/nav_controller.js'
@@ -3420,6 +3420,12 @@ async function main() {
   let _assemblyFileHandle = null
   let _assemblyName       = null
   let _partEditContext    = null  // { instanceId, name } when editing a part
+  // Open-orchestration factory (ui/file_io.js initFileOpen, extraction #59).
+  // Forward-declared here because the file-open menu handler (~3866) references
+  // it textually ABOVE its real init (~7540, after the assembly-load stash vars).
+  // All call sites invoke on user action / boot-action (post-init), so the bare
+  // `let` resolves — no lazy `?.` wrapper needed (mirrors the deferred handlers).
+  let _fileOpen           = null
   // Doc-scoped so each tab's filename/path metadata is independent (and the
   // cadnano editor opened with the same ?doc= reads the matching values).
   const _FNAME_KEY = docKey('nadoc:design-filename')
@@ -3879,8 +3885,8 @@ async function main() {
         return
       }
     }
-    if (isAssembly) await _openAssemblyFromServer(result.path)
-    else            await _openPartFromServer(result.path, result.name)
+    if (isAssembly) await _fileOpen.openAssemblyFromServer(result.path)
+    else            await _fileOpen.openPartFromServer(result.path, result.name)
   })
 
   // "Save File" / "Save As" dispatch by mode: route to the assembly save
@@ -7080,143 +7086,11 @@ async function main() {
 
   // ── Library panel (welcome screen) ───────────────────────────────────────────
 
-  async function _openPartFromServer(path, name) {
-    _showFileLoad('Opening Part')
-    _flAppendLog(`Path: ${path}`)
-    try {
-      _flSetProgress(0, 'Fetching file…')
-      const result = await api.getLibraryFileContent(path)
-      if (!result?.content) {
-        _flAppendLog('Server returned no content.', 'error')
-        _flShowError('Could not load part.')
-        return
-      }
-      _flAppendLog(`File fetched — ${Math.round(result.content.length / 1024)} KB`)
-      _flSetProgress(50, 'Importing design…')
-      _flAppendLog('Parsing and validating design…')
-      _resetForNewDesign()
-      const ok = await api.importDesign(result.content)
-      if (ok) {
-        _flAppendLog('Design imported successfully.', 'success')
-        _setFileName(name ?? path)
-        _setWorkspacePath(path)
-        _hideWelcome()
-        _revealWorkspaceForEmptyPart()
-        _fitToView()
-        await _flShowSuccess('Part loaded successfully')
-      } else {
-        const err = store.getState().lastError
-        _flAppendLog(`Import failed: ${err?.message ?? 'unknown error'}`, 'error')
-        _flShowError('Failed to import part.')
-        _showWelcome()
-      }
-    } catch (e) {
-      _flAppendLog(`Exception: ${e?.message ?? String(e)}`, 'error')
-      _flShowError('Could not load part.')
-    }
-  }
-
-  async function _openAssemblyFromServer(path) {
-    _showFileLoad('Opening Assembly')
-    _flAppendLog(`Path: ${path}`)
-    let _hasInstanceErrors = false
-    try {
-      _flSetProgress(0, 'Fetching file…')
-      const result = await api.getLibraryFileContent(path)
-      if (!result?.content) {
-        _flAppendLog('Server returned no content.', 'error')
-        _flShowError('Could not load assembly.')
-        return
-      }
-      _flAppendLog(`File fetched — ${Math.round(result.content.length / 1024)} KB`)
-      _flSetProgress(25, 'Importing assembly…')
-      _flAppendLog('Parsing and validating assembly…')
-
-      // The geometry build is owned by the assembly subscriber (mode-enter for a
-      // fresh open, the assemblyChanged branch for a reload while already in
-      // assembly mode).  Stash a one-shot progress callback + completion promise
-      // BEFORE importing so whichever branch fires drives THIS dialog and the
-      // build happens exactly once — at cylinders, never the saved representation.
-      // (Previously we ALSO built explicitly here, then the subscriber rebuilt
-      // again: a full throwaway build at the saved rep — ~24 s for surface.)
-      let _resolveBuilt, _rejectBuilt
-      const built = new Promise((res, rej) => { _resolveBuilt = res; _rejectBuilt = rej })
-      _assemblyLoadOnProgress = ({ stage, done, total, name, error }) => {
-        if (stage === 'fetched') {
-          _flAppendLog('Geometry received from server')
-          _flSetProgress(55, 'Building parts…')
-        } else if (stage === 'fetch_error') {
-          _flAppendLog('Geometry fetch failed — trying per-part fallback…', 'warn')
-        } else if (stage === 'instance_built') {
-          const pct = 55 + Math.round((done / total) * 45)
-          _flSetProgress(pct, `Part ${done} / ${total}`)
-          _flAppendLog(`  ✓ ${name ?? `Part ${done}`}`, 'success')
-        } else if (stage === 'instance_error') {
-          const pct = 55 + Math.round((done / total) * 45)
-          _flSetProgress(pct, `Part ${done} / ${total}`)
-          _flAppendLog(`  ✗ ${name ?? `Part ${done}`}: ${error}`, 'error')
-          _hasInstanceErrors = true
-        }
-      }
-      _assemblyLoadSettle = { resolve: _resolveBuilt, reject: _rejectBuilt }
-
-      const ok = await api.importAssembly(result.content)
-      if (!ok) {
-        _assemblyLoadOnProgress = null
-        _assemblyLoadSettle = null
-        const err = store.getState().lastError
-        _flAppendLog(`Import failed: ${err?.message ?? 'unknown error'}`, 'error')
-        _flShowError('Failed to import assembly.')
-        return
-      }
-
-      const assembly = store.getState().currentAssembly
-      const instances = assembly?.instances ?? []
-      const visible   = instances.filter(i => i.visible !== false)
-      _flAppendLog(`Assembly parsed — ${visible.length} part${visible.length !== 1 ? 's' : ''}`, 'success')
-      _flSetProgress(40, `Loading ${visible.length} part${visible.length !== 1 ? 's' : ''}…`)
-
-      _assemblyName = path.replace(/\.nass$/i, '')
-      _assemblyFileHandle = null
-      _setAssemblyWorkspacePath(path)
-
-      if (visible.length > 0) {
-        _flAppendLog('Fetching part geometry…')
-      } else {
-        // Nothing to build — release the stash so the subscriber's empty rebuild
-        // doesn't leave us awaiting a promise nothing settles.
-        _assemblyLoadOnProgress = null
-        _assemblyLoadSettle = null
-        _resolveBuilt()
-      }
-
-      // Enter assembly mode.  Fresh open: this flips assemblyActive → the
-      // mode-enter branch builds (consuming the stash + framing the camera).
-      // Reload while already in assembly mode: the build already fired from the
-      // import above; this is a no-op for the build.
-      _enterAssemblyMode()
-
-      try {
-        await built
-      } catch (e) {
-        _hasInstanceErrors = true
-        _flAppendLog(`Build failed: ${e?.message ?? String(e)}`, 'error')
-      }
-
-      if (_hasInstanceErrors) {
-        _flAppendLog('Assembly loaded with errors.', 'warn')
-        _flShowError('Some parts failed to load.')
-      } else {
-        _flAppendLog('All parts loaded successfully.', 'success')
-        await _flShowSuccess('Assembly loaded successfully')
-      }
-    } catch (e) {
-      _assemblyLoadOnProgress = null
-      _assemblyLoadSettle = null
-      _flAppendLog(`Exception: ${e?.message ?? String(e)}`, 'error')
-      _flShowError('Could not load assembly.')
-    }
-  }
+  // Open-orchestration (_openPartFromServer / _openAssemblyFromServer) extracted
+  // to ui/file_io.js `initFileOpen` (extraction #59). The factory is initialized
+  // at ~7540 (after the assembly-load stash vars its setters write); `_fileOpen`
+  // is forward-declared near the file-state block so the file-open menu handler
+  // and these libraryPanel callbacks can reference it.
 
   // Assigned later (the import-menu region near the bottom of main()); the
   // library panel only *invokes* these on user click, so a lazy wrapper is safe.
@@ -7251,8 +7125,8 @@ async function main() {
       libraryPanel?.refresh()
       _enterAssemblyMode()
     },
-    onOpenPart:     (path, name) => _openPartFromServer(path, name),
-    onOpenAssembly: (path) => _openAssemblyFromServer(path),
+    onOpenPart:     (path, name) => _fileOpen.openPartFromServer(path, name),
+    onOpenAssembly: (path) => _fileOpen.openAssemblyFromServer(path),
   })
 
   // Deferred welcome refresh — called here because libraryPanel wasn't available
@@ -7529,7 +7403,8 @@ async function main() {
     }
   }
 
-  // One-shot disk-load stash, set by _openAssemblyFromServer and consumed by
+  // One-shot disk-load stash, set by initFileOpen.openAssemblyFromServer (via the
+  // setter shims passed below) and consumed by
   // whichever subscriber branch performs the build (mode-enter for a fresh open,
   // assemblyChanged for a reload while already in assembly mode).  `onProgress`
   // drives the file-load dialog; `settle` resolves the caller's await once the
@@ -7537,6 +7412,34 @@ async function main() {
   // edits never pick them up.
   let _assemblyLoadOnProgress = null
   let _assemblyLoadSettle     = null
+
+  // File-open orchestration (ui/file_io.js initFileOpen, extraction #59). Placed
+  // HERE — after the assembly-load stash vars its setters mutate — not at the
+  // "File open / save" banner. The spine + file-load overlay helpers + the stash
+  // setters flow in; the lifted bodies are verbatim. All call sites (file-open
+  // menu handler ~3866, libraryPanel onOpen* callbacks ~7090, boot action ~10300)
+  // invoke post-init, so the forward-declared `let _fileOpen` resolves directly.
+  _fileOpen = initFileOpen({
+    store, api,
+    showFileLoad: _showFileLoad,
+    flAppendLog: _flAppendLog,
+    flSetProgress: _flSetProgress,
+    flShowError: _flShowError,
+    flShowSuccess: _flShowSuccess,
+    resetForNewDesign: _resetForNewDesign,
+    setFileName: _setFileName,
+    setWorkspacePath: _setWorkspacePath,
+    hideWelcome: _hideWelcome,
+    showWelcome: _showWelcome,
+    revealWorkspaceForEmptyPart: _revealWorkspaceForEmptyPart,
+    fitToView: _fitToView,
+    enterAssemblyMode: _enterAssemblyMode,
+    setAssemblyWorkspacePath: _setAssemblyWorkspacePath,
+    setAssemblyName: (v) => { _assemblyName = v },
+    setAssemblyFileHandle: (v) => { _assemblyFileHandle = v },
+    setAssemblyLoadOnProgress: (v) => { _assemblyLoadOnProgress = v },
+    setAssemblyLoadSettle: (v) => { _assemblyLoadSettle = v },
+  })
 
   // Shared rebuild wiring for the assembly subscriber.  Routing both build
   // branches through here keeps the heavy geometry build in exactly ONE place.
@@ -10383,8 +10286,8 @@ async function main() {
     } else if (newKind === 'assembly') {
       document.getElementById('menu-file-new-assembly')?.click()
     } else if (openPath) {
-      if (openType === 'assembly') await _openAssemblyFromServer(openPath)
-      else                         await _openPartFromServer(openPath, openName || undefined)
+      if (openType === 'assembly') await _fileOpen.openAssemblyFromServer(openPath)
+      else                         await _fileOpen.openPartFromServer(openPath, openName || undefined)
     }
   }
 

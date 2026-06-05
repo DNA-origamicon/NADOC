@@ -171,3 +171,193 @@ export function initFileIo({
 
   return { getDesignContent, savePartToAssembly, saveToHandle, saveAs, saveAssemblyToHandle, saveAssemblyAs }
 }
+
+/**
+ * Open-orchestration: load a part (.nadoc) or assembly (.nass) from the server
+ * into the editor, driving the file-load overlay dialog through the fetch →
+ * import → build pipeline.
+ *
+ * Extracted verbatim from main.js's "Library panel" region (the two
+ * `_openPartFromServer` / `_openAssemblyFromServer` functions — Tier-5 carve-up,
+ * extraction #59). Kept a SEPARATE factory from initFileIo (above) because the
+ * open path's dependency surface is disjoint: it needs the file-load overlay
+ * helpers, the lifecycle spine, and the one-shot assembly-load stash setters,
+ * none of which the save-content ops touch. A second focused factory keeps each
+ * test surface small and dodges reordering the locked initFileIo init.
+ *
+ * The lifecycle spine (resetForNewDesign / enterAssemblyMode), the file-load
+ * overlay helpers (showFileLoad / flAppendLog / flSetProgress / flShowError /
+ * flShowSuccess), and the mutable file/assembly state stay in main.js and flow
+ * in as injected fns + setters so the lifted bodies stay verbatim.
+ *
+ * @param {object} deps
+ * @param {object}   deps.store
+ * @param {object}   deps.api
+ * @param {Function} deps.showFileLoad     (header)
+ * @param {Function} deps.flAppendLog      (msg, type?)
+ * @param {Function} deps.flSetProgress    (pct, msg)
+ * @param {Function} deps.flShowError      (msg)
+ * @param {Function} deps.flShowSuccess    (msg) → Promise
+ * @param {Function} deps.resetForNewDesign
+ * @param {Function} deps.setFileName
+ * @param {Function} deps.setWorkspacePath
+ * @param {Function} deps.hideWelcome
+ * @param {Function} deps.showWelcome
+ * @param {Function} deps.revealWorkspaceForEmptyPart
+ * @param {Function} deps.fitToView
+ * @param {Function} deps.enterAssemblyMode
+ * @param {Function} deps.setAssemblyWorkspacePath
+ * @param {Function} deps.setAssemblyName
+ * @param {Function} deps.setAssemblyFileHandle
+ * @param {Function} deps.setAssemblyLoadOnProgress  (cb|null) — stash read by the assembly rebuild subscriber
+ * @param {Function} deps.setAssemblyLoadSettle      ({resolve,reject}|null)
+ * @returns {{openPartFromServer, openAssemblyFromServer}}
+ */
+export function initFileOpen({
+  store, api,
+  showFileLoad, flAppendLog, flSetProgress, flShowError, flShowSuccess,
+  resetForNewDesign, setFileName, setWorkspacePath, hideWelcome, showWelcome,
+  revealWorkspaceForEmptyPart, fitToView, enterAssemblyMode,
+  setAssemblyWorkspacePath, setAssemblyName, setAssemblyFileHandle,
+  setAssemblyLoadOnProgress, setAssemblyLoadSettle,
+}) {
+  async function openPartFromServer(path, name) {
+    showFileLoad('Opening Part')
+    flAppendLog(`Path: ${path}`)
+    try {
+      flSetProgress(0, 'Fetching file…')
+      const result = await api.getLibraryFileContent(path)
+      if (!result?.content) {
+        flAppendLog('Server returned no content.', 'error')
+        flShowError('Could not load part.')
+        return
+      }
+      flAppendLog(`File fetched — ${Math.round(result.content.length / 1024)} KB`)
+      flSetProgress(50, 'Importing design…')
+      flAppendLog('Parsing and validating design…')
+      resetForNewDesign()
+      const ok = await api.importDesign(result.content)
+      if (ok) {
+        flAppendLog('Design imported successfully.', 'success')
+        setFileName(name ?? path)
+        setWorkspacePath(path)
+        hideWelcome()
+        revealWorkspaceForEmptyPart()
+        fitToView()
+        await flShowSuccess('Part loaded successfully')
+      } else {
+        const err = store.getState().lastError
+        flAppendLog(`Import failed: ${err?.message ?? 'unknown error'}`, 'error')
+        flShowError('Failed to import part.')
+        showWelcome()
+      }
+    } catch (e) {
+      flAppendLog(`Exception: ${e?.message ?? String(e)}`, 'error')
+      flShowError('Could not load part.')
+    }
+  }
+
+  async function openAssemblyFromServer(path) {
+    showFileLoad('Opening Assembly')
+    flAppendLog(`Path: ${path}`)
+    let _hasInstanceErrors = false
+    try {
+      flSetProgress(0, 'Fetching file…')
+      const result = await api.getLibraryFileContent(path)
+      if (!result?.content) {
+        flAppendLog('Server returned no content.', 'error')
+        flShowError('Could not load assembly.')
+        return
+      }
+      flAppendLog(`File fetched — ${Math.round(result.content.length / 1024)} KB`)
+      flSetProgress(25, 'Importing assembly…')
+      flAppendLog('Parsing and validating assembly…')
+
+      // The geometry build is owned by the assembly subscriber (mode-enter for a
+      // fresh open, the assemblyChanged branch for a reload while already in
+      // assembly mode).  Stash a one-shot progress callback + completion promise
+      // BEFORE importing so whichever branch fires drives THIS dialog and the
+      // build happens exactly once — at cylinders, never the saved representation.
+      // (Previously we ALSO built explicitly here, then the subscriber rebuilt
+      // again: a full throwaway build at the saved rep — ~24 s for surface.)
+      let _resolveBuilt, _rejectBuilt
+      const built = new Promise((res, rej) => { _resolveBuilt = res; _rejectBuilt = rej })
+      setAssemblyLoadOnProgress(({ stage, done, total, name, error }) => {
+        if (stage === 'fetched') {
+          flAppendLog('Geometry received from server')
+          flSetProgress(55, 'Building parts…')
+        } else if (stage === 'fetch_error') {
+          flAppendLog('Geometry fetch failed — trying per-part fallback…', 'warn')
+        } else if (stage === 'instance_built') {
+          const pct = 55 + Math.round((done / total) * 45)
+          flSetProgress(pct, `Part ${done} / ${total}`)
+          flAppendLog(`  ✓ ${name ?? `Part ${done}`}`, 'success')
+        } else if (stage === 'instance_error') {
+          const pct = 55 + Math.round((done / total) * 45)
+          flSetProgress(pct, `Part ${done} / ${total}`)
+          flAppendLog(`  ✗ ${name ?? `Part ${done}`}: ${error}`, 'error')
+          _hasInstanceErrors = true
+        }
+      })
+      setAssemblyLoadSettle({ resolve: _resolveBuilt, reject: _rejectBuilt })
+
+      const ok = await api.importAssembly(result.content)
+      if (!ok) {
+        setAssemblyLoadOnProgress(null)
+        setAssemblyLoadSettle(null)
+        const err = store.getState().lastError
+        flAppendLog(`Import failed: ${err?.message ?? 'unknown error'}`, 'error')
+        flShowError('Failed to import assembly.')
+        return
+      }
+
+      const assembly = store.getState().currentAssembly
+      const instances = assembly?.instances ?? []
+      const visible   = instances.filter(i => i.visible !== false)
+      flAppendLog(`Assembly parsed — ${visible.length} part${visible.length !== 1 ? 's' : ''}`, 'success')
+      flSetProgress(40, `Loading ${visible.length} part${visible.length !== 1 ? 's' : ''}…`)
+
+      setAssemblyName(path.replace(/\.nass$/i, ''))
+      setAssemblyFileHandle(null)
+      setAssemblyWorkspacePath(path)
+
+      if (visible.length > 0) {
+        flAppendLog('Fetching part geometry…')
+      } else {
+        // Nothing to build — release the stash so the subscriber's empty rebuild
+        // doesn't leave us awaiting a promise nothing settles.
+        setAssemblyLoadOnProgress(null)
+        setAssemblyLoadSettle(null)
+        _resolveBuilt()
+      }
+
+      // Enter assembly mode.  Fresh open: this flips assemblyActive → the
+      // mode-enter branch builds (consuming the stash + framing the camera).
+      // Reload while already in assembly mode: the build already fired from the
+      // import above; this is a no-op for the build.
+      enterAssemblyMode()
+
+      try {
+        await built
+      } catch (e) {
+        _hasInstanceErrors = true
+        flAppendLog(`Build failed: ${e?.message ?? String(e)}`, 'error')
+      }
+
+      if (_hasInstanceErrors) {
+        flAppendLog('Assembly loaded with errors.', 'warn')
+        flShowError('Some parts failed to load.')
+      } else {
+        flAppendLog('All parts loaded successfully.', 'success')
+        await flShowSuccess('Assembly loaded successfully')
+      }
+    } catch (e) {
+      setAssemblyLoadOnProgress(null)
+      setAssemblyLoadSettle(null)
+      flAppendLog(`Exception: ${e?.message ?? String(e)}`, 'error')
+      flShowError('Could not load assembly.')
+    }
+  }
+
+  return { openPartFromServer, openAssemblyFromServer }
+}
