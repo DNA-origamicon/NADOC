@@ -53,72 +53,66 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Atomistic strand-colour PURE CORE
-EXTRACTED → `scene/color_util.js` `computeAtomStrandColors` (#72, commit a630efd), −61 ln. main.js 9067 → 9006.** Cheap
-de-risking first cut into the HARD Atomistic region (mirrors #35). Remaining frontier is ALL HARD: Translate/Rotate tool
-(BIGGEST, gesture-bound), Representation switcher (~320 ln central mode-switch), the rest of the Atomistic/surface
-controllers (stateful renderer-wiring), Assembly transform/FK engine._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **STRATEGY SHIFT: stop nibbling cheap
+pure cores — take the HARDEST regions head-on, in larger multi-commit campaigns, hardest-first.** The pure-core /
+narrow-sub-block well is effectively dry. What remains is four big coupled stateful regions; another ~50-ln pure peel
+leaves the real structural debt (the coupled assembly-transform subsystem) exactly as tangled. #72 (atomistic colour
+core → `computeAtomStrandColors`, −61 ln, main.js 9006) was the LAST cheap cut — see the log row for its detail._
 
-**This session (#72, cheap pure-core cut):** the prior handoff's two options (Translate/Rotate tool, Tier 5) are both HARD
-and the session brief said "keep it cheap" → peeled a pure core instead, mirroring #71's narrow-sub-block move. Lifted the
-colour-mapping body of `_getAtomStrandColors` (group/scaffold-blue/palette-fill/loop-red/cluster precedence) →
-`computeAtomStrandColors(state, staplePalette)` in `scene/color_util.js` (+`ATOM_STAPLE_PALETTE`). 9 vitest; vitest 802;
-smoke 23/23. main.js wrapper keeps the store read + builds the staple palette; 5 call sites unchanged.
+**Why hardest-first now.** Every remaining frontier item is HARD (gesture-bound and/or shared-state coupled), and the
+map's end-state ("the closure holds zero cohesive logic clusters") is gated *entirely* on these four. Do each as a
+deliberate campaign, not a one-commit nibble: (1) map the coupling with `rg` first; (2) build/extend the gesture gate
+ONCE up front; (3) split the lift across commits (the COMMIT rule already allows >~250 ln across commits); (4) lift
+verbatim. Budget a whole session per campaign — these are not "keep it cheap" sessions.
 
-**Gotchas banked this session:** (1) the fn read `store.getState()` TWICE (2nd just for `loopStrandIds`) — passing ONE
-state snapshot to the pure fn is behavior-equivalent (immutable per render) and more correct. (2) Kept the pure fn
-import-free by passing `staplePalette` (the `buildStapleColorMap` Map, or null) as an ARG rather than importing
-helix_renderer into color_util — the `if (currentDesign && currentGeometry)` guard became `if (staplePalette)` (caller
-builds it only when both present). Mirrors #18 (wrapper keeps external read, core does mapping). (3) `_getAtomBaseColors`
-is already a 3-line pure-delegating wrapper over `atomColorsFromLetters` (#18) — NOT worth extracting; left inline.
+**▶ THE KEYSTONE — assembly transform subsystem. DO THIS FIRST; it unblocks the other three.** The shared transform
+engine — `_createAssemblyTransformContext` (~6785) / `_applyAssemblyPrimaryLive` / `_queueAssemblyPrimaryCommit` /
+`_commitAssemblyPending` + the file-wide `_assemblyPendingTransforms` Maps, plus `_applyFKLive` (~6848) /
+`_applyClusterMateFKLive` / `_analyzeMotionConstraints` (~6996) / `_setMotionChip` (~7083). Banners `// ── Rigid-body
+group gizmo attachment` (~6773) / `// ── Forward kinematics` (~6840) / `// ── Motion-constraint analyzer` (~6996),
+~400 ln. **These are the closure state that group_gizmo (#36/#37, ALREADY injects them as deps), the Move/Rotate `_mr*`
+shell, AND the Translate/Rotate tool all share.** While they live in the closure, none of the three consumers can be
+lifted cleanly. Extract → `scene/assembly_transform.js` factory exposing the context/live/commit API + owning the
+pending Maps; the consumers then take it as a dep (group_gizmo already does — swap its injected fns for the module's).
+Multi-commit split: **(a)** pending Maps + context/live/commit core; **(b)** FK propagation
+(`_applyFKLive`/`_applyClusterMateFKLive` — was the standing "deferred" item, now part of this campaign); **(c)**
+motion-constraint analyzer + status chip. Gate: the panel-input commit path (below) + `assembly_move_tool.spec.js`.
+Re-derive exact spans with `rg` — the #36/#37 log already lists which helpers group_gizmo injects.
 
-**Banked:** `just lint` is Python-only ruff (38 pre-existing backend-test errors, unrelated; no frontend eslint
-config) → frontend lint delta is 0 by construction. Still true: plain `grep` on main.js silently returns nothing
-(binary heuristic) — always `rg`.
+**Then, in dependency order (each easier once the keystone is a module — no more shared-state-via-closure):**
+1. **Translate/Rotate tool + the `_mr*` panel shell** — banner `// ── Joint arrow pick handler` (~5252) through the
+   cluster/instance gizmo attach (~6770), the BIGGEST single block (~700 ln + the `_mr*` shell). `_activateTranslateRotateTool`
+   …`_cancelTranslateRotateTool` + `_onToolPickPointerDown` + the cluster raycaster (→ `scene/joint_pick.js`) + the `_mr*`
+   shell it owns (`_mrSetTransformValues`/`_mrSetClusterOptions`/`_mrCommitInputs`/… + `_translateRotateActive`,
+   read/written from 20+ sites). **Co-extract the shell here** — it's the natural pairing (Move/Rotate's flex sub-block
+   already left in #71). Gesture-bound, assembly+design dual-mode. Much easier AFTER the keystone.
+2. **Representation switcher** (~320 ln) — banners `// ── Unified representation radio` (~7851) + `_setRepresentation` +
+   `// ── Function-key bindings: F1…F7` + the option sliders. Central mode-switch touching every renderer + the Coloring
+   submenu (`_setColoringMode`'s 7 callers live here). Map the renderer fan-out; multi-commit.
+3. **Atomistic/surface controllers (remainder)** — `_applyAtomisticMode`/`_applySurfaceMode`/`_refetchAtomistic`/
+   `_ensureAtomData` + region overlays (~1893–2418). Pure colour cores already drained (#72). Interleaved with renderer
+   construction — first separate the controller fns from the init wiring, then lift the controllers as a factory.
 
-**GESTURE-HARNESS GAP CLOSED (commit 8e050e4) — the HARD transform band is UNBLOCKED.** The assembly-gesture harness
-was already ~90% built (instance pick, enter/exit/frame, cluster-joint ring drag in `scene_harness.js` + `__nadocTest`,
-5+ specs). The missing piece for the transform band — an observable for the PRIMARY instance transform — was added:
-`__nadocTest.getAssemblyPendingTransforms()` + `activateAssemblyMoveTool()`; `scene_harness` `activateAssemblyMoveTool`
-+ `moveActiveInstanceViaPanel`; `e2e/assembly_move_tool.spec.js`. **KEY: do NOT drive the gizmo via a TransformControls
-handle drag (#36/#37 — handles unhittable at pixel precision). The Move/Rotate panel numeric inputs fire `change` →
-`_mrCommitInputs` → `_queueAssemblyPrimaryCommit` → the SAME `_assemblyPendingTransforms` map the gizmo onCommit feeds.
-The panel-input DOM path + capture-invoke gizmo callbacks are the established non-flaky patterns.**
+**Gesture gate is UNBLOCKED (commit 8e050e4) — build on it, don't re-derive.** Drive transform commits via the
+Move/Rotate panel numeric inputs (`change` → `_mrCommitInputs` → `_queueAssemblyPrimaryCommit` → the SAME
+`_assemblyPendingTransforms` map the gizmo onCommit feeds), NEVER a TransformControls handle drag (#36/#37 — handles
+unhittable at pixel precision). Observables: `__nadocTest.getAssemblyPendingTransforms()` / `activateAssemblyMoveTool()`;
+harness `scene_harness.activateAssemblyMoveTool` / `moveActiveInstanceViaPanel`; spec `e2e/assembly_move_tool.spec.js`.
 
-**Recommended next region — re-derive scope first, with `rg`:** Move/Rotate's flex sub-block done this session; the
-`_mr*` SHELL that remains is spine-coupled (20+ sites, shared transform helpers) → leave it OR co-extract with the
-Translate/Rotate tool. Frontier:
-1. **Translate/Rotate tool** (banner `// ── Joint arrow pick handler` ~5448 through the cluster/instance gizmo attach
-   ~6150, the BIGGEST remaining ~700 ln). `_activateTranslateRotateTool`…`_cancelTranslateRotateTool` + the canvas
-   pointer pick. Owns `_translateRotateActive` + the `_mr*` panel callers, so co-extracting the `_mr*` shell here is the
-   natural pairing. Risk: **HARD** — gesture-bound (canvas pointer pick), assembly+design dual-mode. The assembly-gesture
-   harness is now UNBLOCKED (commit 8e050e4): drive commits via the Move/Rotate panel numeric inputs (`change` →
-   `_mrCommitInputs` → `_queueAssemblyPrimaryCommit`), NOT TransformControls handle drags (#36/#37 — unhittable at pixel
-   precision). `assembly_move_tool.spec.js` + `scene_harness.activateAssemblyMoveTool`/`moveActiveInstanceViaPanel` exist.
-2. **Tier 5 file/save/session** (`_openPartFromServer`/`_openAssemblyFromServer`, autosave, sync-status) — HIGH blast
-   radius; the #52 `initFileIo` placement pattern (place the `const` where deps exist, not at the banner) applies.
-   BUT remember selection-filter (#61) was billed "gesture-bound" and was actually pure DOM+store (6th mis-scope):
-   check WHERE the gesture lives before assuming a harness is needed.
+**Banked:** `just lint` is Python-only ruff (38 pre-existing backend-test errors, unrelated; no frontend eslint config)
+→ frontend lint delta is 0 by construction. Plain `grep` on main.js silently returns nothing (binary heuristic) — always
+`rg`. Factory-init placement patterns (#52 deps-below-banner, #26/#32 lazy-let) are in `.claude/rules/main-init.md`.
 
-**Drained scraps to NOT bundle (logged, correctly inline):** Sequencing menu (#67 assessment), Orbit submenu ~10 ln,
-Browser tab title ~5 ln, Coloring submenu ~20 ln, deform→selectableTypes subscriber ~28 ln. A `ui/menu_misc.js` junk
-drawer is the anti-pattern.
+**Deprioritized — do NOT spend a hardest-first session on these:** Tier 5 file/save is FULLY DRAINED (#52/#59/#60); the
+menu-bar leftover is thin per-action wiring. The micro-scraps (Orbit submenu ~10 ln, Browser tab title ~5 ln, Coloring
+submenu ~20 ln w/ 7 `_setColoringMode` callers, deform→selectableTypes ~28 ln, Sequencing menu #67) are correctly
+inline — six logged mis-scopes prove the map's adjacency ≠ cohesion; a `ui/menu_misc.js` junk drawer is the anti-pattern.
 
-**The goal is NOT a LOC number.** main.js is the app's composition root (wiring board): 146 imports + ~100
-module constructions + the lifecycle spine + thin per-action wiring are *irreducible* (~2,500–3,500 ln floor).
-Chasing a lower number past that point means junk-drawer bundles or pass-through indirection — both make the
-code worse. **Target instead: "the closure holds zero cohesive logic clusters."** Done = every remaining
-function is either module construction/wiring or the spine. LOC lands ~3,000 as a *result*, not a target.
-
-**Do NOT bundle the micro-scraps** (Orbit submenu ~10 ln, Browser tab title ~5 ln, Coloring submenu ~20 ln
-w/ 7 external `_setColoringMode` callers, deform→selectableTypes subscriber ~28 ln). Six logged mis-scopes
-say the map's adjacency ≠ cohesion; a `ui/menu_misc.js` junk drawer is the anti-pattern. They are correctly
-inline — leave them.
-
-**Deliberately deferred (genuinely hard, do LAST or never):** FK propagation (`_applyFKLive` — shared with
-group_gizmo); Translate/Rotate tool + `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster —
-HARD, gesture-bound, needs the assembly-gesture harness); `_setMenuToggle` (43-use shared-util lift — its own
-mechanical import-swap, not a feature factory).
+**The goal is NOT a LOC number.** main.js is the composition root: 146 imports + ~100 module constructions + the
+lifecycle spine + thin per-action wiring are *irreducible* (~2,500–3,500 ln floor). **Target: "the closure holds zero
+cohesive logic clusters."** The four campaigns above ARE the remaining clusters — clear them and that target is met;
+LOC lands ~3,000 as a *result*. Genuinely-permanent inline: `_setMenuToggle` (43-use shared util — a mechanical
+import-swap, not a feature factory) and the lifecycle spine (`_resetForNewDesign`/`_enterAssemblyMode`/`_exitAssemblyMode`).
 
 ---
 
@@ -714,13 +708,13 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   Risk on the shell: **HARD/lifecycle-spine** — the `_mr*` fns + `_translateRotateActive` are read/written from 20+
   sites and share `_createAssemblyTransformContext`/`_applyAssemblyPrimaryLive` with the group gizmo (#36/#37) + the
   Translate/Rotate tool. **Likely best LEFT inline** (STOP-criterion) unless co-extracted WITH the Translate/Rotate tool.
-- [ ] **Representation switcher** — banners `// ── Unified representation radio` (~9051) + `_setRepresentation`
-  (~9205) + `// ── Function-key bindings: F1…F7` (~9301) + `// ── Representation option sliders` (~9335), to
-  ~9370 (~320 ln). Plus `_updateReprRadio`/`_syncAssemblyReprMenu`/`_cycleColoringForRepr`/
-  `_updateColoringMenuAvailability`/`_reprOptionSliders` (~9089–9204). Risk: **HARD** — `_setRepresentation` is
-  a central mode-switch touching every renderer + the Coloring submenu (`_setColoringMode`'s 7 callers live here).
-  Map the coupling carefully; likely a multi-commit region.
-- [~] **Atomistic / surface display controllers** — `_applyAtomisticMode`/`_refetchAtomistic`/`_getAtom*`/
+- [ ] **Representation switcher (hardest-first item 2)** — banners `// ── Unified representation radio` (~7851) +
+  `_setRepresentation` + `// ── Function-key bindings: F1…F7` + `// ── Representation option sliders`, ~320 ln. Plus
+  `_updateReprRadio`/`_syncAssemblyReprMenu`/`_cycleColoringForRepr`/`_updateColoringMenuAvailability`/`_reprOptionSliders`.
+  Risk: **HARD** — `_setRepresentation` is a central mode-switch touching every renderer + the Coloring submenu
+  (`_setColoringMode`'s 7 callers live here). Map the renderer fan-out carefully; multi-commit. (Re-verify line numbers
+  with `rg` — these drifted −61 after #72.)
+- [~] **Atomistic / surface display controllers (hardest-first item 3)** — `_applyAtomisticMode`/`_refetchAtomistic`/`_getAtom*`/
   `_ensureAtomData`/`_applySurfaceMode`/region overlays, scattered ~1893–2418 (interleaved with renderer init
   banners ~1846/1957/2342). Risk: **HARD** — interleaved with renderer construction; re-derive the function set
   vs the init wiring before lifting. **PURE CORE DRAINED (#72, commit a630efd):** `_getAtomStrandColors`'s
@@ -729,15 +723,22 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   extracted `atomColorsFromLetters` — not worth a module). The remaining controllers are the HARD stateful
   renderer-wiring (`_applyAtomisticMode`/`_applySurfaceMode`/`_refetchAtomistic`/`_ensureAtomData` + the region
   overlays), still interleaved with renderer construction.
-- [ ] **Translate/Rotate tool** — `_activateTranslateRotateTool` … `_cancelTranslateRotateTool` + the joint-arrow
-  pick handler, banners `// ── Joint arrow pick handler` (~6103) through ~6805 (~700 ln, the BIGGEST remaining).
-  `_onToolPickPointerDown` + cluster raycaster (the carve-up's `scene/joint_pick.js`). Risk: **HARD** —
-  gesture-bound (canvas pointer pick), assembly+design dual-mode, owns the transform-preview/commit state.
-  Needs the assembly-gesture harness (see the #28/#30/#31 difficulties ledger). Do LAST or build the gate first.
-- [ ] **Assembly transform/commit/FK + motion constraints** — banners `// ── Rigid-body group gizmo` (~7624,
-  partly in group_gizmo.js already) + `// ── Forward kinematics` (~7691) + `// ── Motion-constraint analyzer`
-  (~7847) + status chip (~7934), to ~8026 (~400 ln). `_createAssemblyTransformContext`/`_applyAssemblyPrimaryLive`/
-  `_queueAssemblyPrimaryCommit`/`_commitAssemblyPending`/`_applyFKLive`/`_applyClusterMateFKLive`/
-  `_analyzeMotionConstraints`/`_setMotionChip`. Risk: **HARD** — these are the SHARED transform helpers injected
-  into group_gizmo (#36/#37) and consumed by Move/Rotate + Translate/Rotate; the file-wide pending-transform
-  Maps live here. FK was explicitly deferred. Extract the shared engine only after the consumers are stable.
+- [ ] **Translate/Rotate tool + `_mr*` panel shell (hardest-first item 1, AFTER the keystone).**
+  `_activateTranslateRotateTool` … `_cancelTranslateRotateTool` + the joint-arrow pick handler, banner
+  `// ── Joint arrow pick handler` (~5252) through the cluster/instance gizmo attach (~6770), ~700 ln + the `_mr*` shell.
+  `_onToolPickPointerDown` + cluster raycaster (the carve-up's `scene/joint_pick.js`) + the `_mr*` shell it owns
+  (`_mrSetTransformValues`/`_mrCommitInputs`/… + `_translateRotateActive`, 20+ sites). Risk: **HARD** — gesture-bound
+  (canvas pointer pick), assembly+design dual-mode. Gate is UNBLOCKED (commit 8e050e4 — drive via panel inputs, NOT
+  handle drags; see the handoff). Much easier once the keystone engine is a module (no more shared-state-via-closure).
+- [ ] **▶ KEYSTONE — Assembly transform/commit/FK + motion constraints (DO THIS FIRST per the handoff).** Banners
+  `// ── Rigid-body group gizmo attachment` (~6773, attach itself partly in group_gizmo.js already) + `// ── Forward
+  kinematics` (~6840) + `// ── Motion-constraint analyzer` (~6996) + status chip (~7083), ~400 ln.
+  `_createAssemblyTransformContext` (~6785) / `_applyAssemblyPrimaryLive` / `_queueAssemblyPrimaryCommit` /
+  `_commitAssemblyPending` + the file-wide `_assemblyPendingTransforms` Maps / `_applyFKLive` (~6848) /
+  `_applyClusterMateFKLive` / `_analyzeMotionConstraints` / `_setMotionChip`. Risk: **HARD** — these are the SHARED
+  transform engine that group_gizmo (#36/#37, **already injects them as deps**), the Move/Rotate `_mr*` shell, AND the
+  Translate/Rotate tool all share via the closure. **REVISED ORDERING (was "extract only after consumers stable" — that
+  was backwards):** extract the engine FIRST → `scene/assembly_transform.js` factory (owns the pending Maps, exposes
+  context/live/commit). Once it's a module the three consumers stop sharing closure state and each becomes independently
+  liftable. Multi-commit: (a) pending Maps + context/live/commit core; (b) FK propagation (no longer "deferred" — part of
+  this campaign); (c) motion-constraint analyzer + chip. See the handoff for the full plan + gesture gate.
