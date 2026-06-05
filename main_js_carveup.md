@@ -53,29 +53,29 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Photo-mode + export-representation
-EXTRACTED → `scene/photo_mode.js` (#70, commit 3865b97), −237 ln. main.js 9439 → 9202.** That was handoff option 2
-(the biggest clean non-gesture carve). Remaining frontier: the Move/Rotate panel (option 1, now top) + Tier 5
-file/session infra (HIGH blast radius)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Flexible-segment relax EXTRACTED
+→ `scene/flex_relax.js` (#71, commit 9c18c3d), −147 ln. main.js 9202 → 9067.** That was the handoff's smaller-bite
+inside option 1 (Move/Rotate panel). The `_mr*` panel SHELL remains inline (lifecycle-spine — likely stays). Remaining
+frontier: Tier 5 file/session infra (HIGH blast radius) + the Translate/Rotate tool (the BIGGEST remaining, gesture-bound)._
 
-**This session (#70, handoff option 2):** lifted the Photo-mode pane (`_photoModeEnter`/`_photoModeExit` overlay
-toggles + UI lockdown + photo-tab-btn listener + 'p' shortcut + `_nadocDebug.photo*` helpers) AND the export-only rep
-upgrade (`_withExportRepresentation`/`_withHighDetailGeometry`/`_applyRepAndAwaitRebuild`/`_highDetailGeometries`/
-`_exportRepActive`) into `initPhotoMode({...})→{enter,exit,getExportRepActive,withExportRepresentation}` + pure
-`planExportRepUpgrade(state)`. **The map's banner span was THREE concerns** — extracted only the cohesive
-Photo+Export-rep block (~7835–8102); LEFT inline: the `_fileSave = initFileSave(...)` init (separate factory, placed
-here only for dep order), the cluster/translate-rotate `store.subscribe` blocks (those belong to the Move/Rotate
-tool — option 1), and `createScriptRunner`. **`photoRenderer` stays a main.js var** (early lazy-arrow ref at ~505/541
-for `getFloorReach`); `createPhotoRenderer(sceneCtx)` kept in main, the object injected. 16 vitest (7 pure + 9
-factory); vitest 778; smoke 23/23; live 'p' toggle exercised (zero console errors).
+**This session (#71, handoff option 1 smaller bite):** the Move/Rotate "region" (banner ~4832) is NOT one cohesive
+block — `_translateRotateActive` + the `_mr*` panel fns are read/written from 20+ sites (spine territory). Took the
+narrow sub-block instead: the **ssDNA flexible-segment relax + "ssDNA constrained" pivot-gating** subsystem
+(`_flexGates`/`_flexConnections` state + `_refreshFlexGates`/`_buildSsdnaPayload`/`_clusterBeadCount`/`_buildRelaxPayload`/
+`_relaxFlexible`) → `initFlexRelax({store,api,designRenderer,clusterGizmo,isTranslateRotateActive})→{refreshFlexGates,
+hasGate,buildSsdnaPayload,relaxFlexible}` + 3 pure cores (`makeWorldPosResolver`/`buildTetherPayload`/`clusterBeadCount`,
+all take backboneEntries as an arg). 5 call sites rewired + `_mrSetPivotOptions` now reads `_flexRelax.hasGate(clusterId)`.
+16 vitest (8 pure + 8 factory); vitest 793; smoke 23/23.
 
-**Placement (clean, no lazy wrapper):** `const _photoMode = initPhotoMode(...)` created at the original photo banner
-spot (~7832) — crucially BEFORE `initFileSave`, which reads `getExportRepActive`. The 3 early references all sit inside
-post-boot functions → TDZ-safe forward-ref to the closure const: `_photoMode.exit()` in `_resetForNewDesign` (~3577) +
-`_enterAssemblyMode` (~3682), and `!_photoMode.getExportRepActive()` in the close-session save-guard (~3326). Mirrors
-the #64/#67 plain-const pattern. **Dead imports removed from main.js**: `initPhotoPanel`, `exportPhotoVideo` (kept
-sibling `exportVideo`), `ATOM_SPHERE_GEO`/`BOND_CYL_GEO` (whole line), `BEAD_RADIUS` (off the helix_renderer
-destructure) — now imported by the module.
+**Gotchas banked this session:** (1) the flex code is **NON-contiguous** — `_mrSetPivotOptions` (stays in main) is
+interleaved between `_refreshFlexGates` and `_buildSsdnaPayload`; extract the two flanking spans, leave the panel fn.
+(2) `_buildSsdnaPayload`/`_buildRelaxPayload` were **byte-identical resolver loops** → unified into one pure
+`buildTetherPayload` (the `flex_tethers.js` header already flagged the dedup). (3) **Placement: plain `const` at the
+flex-state spot (~4876), AFTER `clusterGizmo` (~4662).** `isTranslateRotateActive: () => _translateRotateActive` MUST be
+a lazy arrow (the flag is declared ~300 ln BELOW at 5445) — TDZ-safe since every flex method runs on user action
+post-boot. The earliest call site (`relaxFlexible` at ~808, inside the boot-built selectionManager init object but a
+right-click-only closure body) references the below-declared const directly — no lazy wrapper. (4) The now-dead
+`flexTetherConnections` import in main.js was REPLACED by the `initFlexRelax` import → net-zero import count.
 
 **Banked:** `just lint` is Python-only ruff (38 pre-existing backend-test errors, unrelated; no frontend eslint
 config) → frontend lint delta is 0 by construction. Still true: plain `grep` on main.js silently returns nothing
@@ -90,13 +90,16 @@ handle drag (#36/#37 — handles unhittable at pixel precision). The Move/Rotate
 `_mrCommitInputs` → `_queueAssemblyPrimaryCommit` → the SAME `_assemblyPendingTransforms` map the gizmo onCommit feeds.
 The panel-input DOM path + capture-invoke gizmo callbacks are the established non-flaky patterns.**
 
-**Recommended next region — re-derive scope first, with `rg`:** Frontier (option 2 done this session):
-1. **Move/Rotate right-sidebar panel** (banner `// ── Move/Rotate right-sidebar panel` ~4834). Pure payload
-   builders (`_buildSsdnaPayload`/`_buildRelaxPayload`) extract FIRST as a smaller bite. Then the `_mr*` panel shell as
-   a factory — its commit path (`_mrCommitInputs`) is now covered by `assembly_move_tool.spec.js`; extend that spec.
-   Shares `_createAssemblyTransformContext`/`_applyAssemblyPrimaryLive` with group_gizmo (#36/#37, already extracted) +
-   the Translate/Rotate tool — map the coupling before the shell. NOTE the 3 cluster/translate-rotate `store.subscribe`
-   blocks left inline by #70 (just above the old Paste-Script banner ~7867) belong to THIS tool — pull them in here.
+**Recommended next region — re-derive scope first, with `rg`:** Move/Rotate's flex sub-block done this session; the
+`_mr*` SHELL that remains is spine-coupled (20+ sites, shared transform helpers) → leave it OR co-extract with the
+Translate/Rotate tool. Frontier:
+1. **Translate/Rotate tool** (banner `// ── Joint arrow pick handler` ~5448 through the cluster/instance gizmo attach
+   ~6150, the BIGGEST remaining ~700 ln). `_activateTranslateRotateTool`…`_cancelTranslateRotateTool` + the canvas
+   pointer pick. Owns `_translateRotateActive` + the `_mr*` panel callers, so co-extracting the `_mr*` shell here is the
+   natural pairing. Risk: **HARD** — gesture-bound (canvas pointer pick), assembly+design dual-mode. The assembly-gesture
+   harness is now UNBLOCKED (commit 8e050e4): drive commits via the Move/Rotate panel numeric inputs (`change` →
+   `_mrCommitInputs` → `_queueAssemblyPrimaryCommit`), NOT TransformControls handle drags (#36/#37 — unhittable at pixel
+   precision). `assembly_move_tool.spec.js` + `scene_harness.activateAssemblyMoveTool`/`moveActiveInstanceViaPanel` exist.
 2. **Tier 5 file/save/session** (`_openPartFromServer`/`_openAssemblyFromServer`, autosave, sync-status) — HIGH blast
    radius; the #52 `initFileIo` placement pattern (place the `const` where deps exist, not at the banner) applies.
    BUT remember selection-filter (#61) was billed "gesture-bound" and was actually pure DOM+store (6th mis-scope):
@@ -707,11 +710,15 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
 
 ### HARD — gesture-bound or shared-state coupled (build the gate / map the coupling first)
 
-- [ ] **Move/Rotate right-sidebar panel** — banner `// ── Move/Rotate right-sidebar panel` (~5487–5871),
-  ~385 ln. The `_mr*` cluster + ssDNA/flex payload builders (`_buildSsdnaPayload`/`_buildRelaxPayload`/
-  `_relaxFlexible`/`_refreshFlexGates`). Deps: store, api, clusterGizmo, designRenderer, the assembly transform
-  context. Risk: **HARD** — shares `_createAssemblyTransformContext`/`_applyAssemblyPrimaryLive` with the group
-  gizmo (#36/#37) and the Translate/Rotate tool. Pure cores extractable (payload builders) before the stateful shell.
+- [~] **Move/Rotate right-sidebar panel** — banner `// ── Move/Rotate right-sidebar panel` (~4832).
+  **PARTIAL: flexible-relax sub-block EXTRACTED → `scene/flex_relax.js` (#71, commit 9c18c3d), −147 ln**
+  (`_flexGates`/`_flexConnections`/`_refreshFlexGates`/`_buildSsdnaPayload`/`_clusterBeadCount`/`_buildRelaxPayload`/
+  `_relaxFlexible`; `_mrSetPivotOptions` now calls `_flexRelax.hasGate`). **STILL INLINE — the `_mr*` panel SHELL**
+  (`_mrSetTransformValues`/`_mrSetClusterOptions`/`_mrSetPivotOptions`/`_mrSetSelectedPivot`/`_mrSyncClusterDropdown`/
+  `_mrShowJointMode`/`_mrCommitInputs`/`_refreshClusterPivotForAttach` + the input/dropdown listeners + `_mrAssemblyCtx`).
+  Risk on the shell: **HARD/lifecycle-spine** — the `_mr*` fns + `_translateRotateActive` are read/written from 20+
+  sites and share `_createAssemblyTransformContext`/`_applyAssemblyPrimaryLive` with the group gizmo (#36/#37) + the
+  Translate/Rotate tool. **Likely best LEFT inline** (STOP-criterion) unless co-extracted WITH the Translate/Rotate tool.
 - [ ] **Representation switcher** — banners `// ── Unified representation radio` (~9051) + `_setRepresentation`
   (~9205) + `// ── Function-key bindings: F1…F7` (~9301) + `// ── Representation option sliders` (~9335), to
   ~9370 (~320 ln). Plus `_updateReprRadio`/`_syncAssemblyReprMenu`/`_cycleColoringForRepr`/
