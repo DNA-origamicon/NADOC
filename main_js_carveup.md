@@ -53,60 +53,46 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Autoscaffold picker
-EXTRACTED (#65, commit 20f6d0f) → `ui/autoscaffold_picker.js`, −64 ln. main.js 9781 → 9717.** Clean second-
-in-a-row LIFT. The map's "~212 ln" Autoscaffold entry was banner-span arithmetic, not cohesion — the picker
-IIFE is only ~67 ln; the rest (Auto Crossover, Full Autostaple, and a ~119 ln **Autobreak/Aksel modal**) got
-re-homed (the Autobreak modal is now its own Tier-7 entry, next-cleanest pick). Reachability gate confirmed
-live._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **Autobreak/Aksel modal
+EXTRACTED (#66, commit 2f816db) → `ui/autobreak_modal.js`, −117 ln. main.js 9717 → 9600.** Third clean LIFT
+in a row. The handoff's ~119 ln estimate was right for once (cohesive IIFE 4074–4192). Deps were only
+`store`+`api` — everything else (toast, op_progress, modal/button primitives, aksel_format) imported directly.
+Reachability gate live (hotkey `3` → `#menu-routing-autobreak`)._
 
-**This session (#65, handoff-recommended):** Autoscaffold picker. Reachability gate FIRST (`rg -c
-"autoscaffold-modal|menu-routing-scaffold-ends" frontend/index.html` → markup + menu item present) — live.
-Re-derived scope before investing: the banner-to-next-banner span is 4 separate blocks; extracted only the
-cohesive picker IIFE (4046–4112) and re-homed the other three. Lifted to `initAutoscaffoldPicker({store, api,
-setRoutingCheck})` + pure `autoscaffoldModeConfig` (mode→{title,message,apiMethod,failLabel} lookup table,
-verbatim-equivalent to the if/else chain, unknown→seamed). `_showProgress`/`_hideProgress` turned out to be
-mere aliases of imported `showOpProgress`/`hideOpProgress` → imported directly in the module; only
-`_setRoutingCheck` (mutates closure state) needed injection. Plain `const`-import call at the banner spot (no
-hoisting/lazy needed — deps far above, no synchronous boot call). 10 vitest green first run; smoke 23/23;
-real-app exercise on a scaffolded part (menu→modal→Run seamed→routing-check toggles, zero console errors).
+**This session (#66, handoff-recommended):** Autobreak/Aksel modal. Reachability gate FIRST — `#menu-routing-autobreak`
++ `#autobreak-modal-body` markup live in index.html, hotkey `3` wired. Lifted to `initAutobreakModal({store, api})`
++ pure `readAkselOptions(raw)` (raw input strings → clamped opts {21,60,3,0} defaults; verbatim-equivalent to the
+original `_readAkselOptions` DOM reader). `_showProgress`/`_hideProgress` were aliases of `showOpProgress`/
+`hideOpProgress` → imported directly (like #65); `showToast`/`createModal`/`createButton`/`formatScoreSummary`/
+`formatGraphSummary` imported directly too — only `store`+`api` injected. Plain `const`-call at the banner spot
+(deps far above; only the click listener attaches synchronously). Removed now-dead `aksel_format` import. 13 vitest
+green first run; smoke 23/23; real-app hotkey-3 exercise (modal opens → Run Autobreak basic → dispatches + closes,
+zero console errors).
 
-**Banked gotcha this session:**
-- **The "~212 ln" / "may interleave scaffold-router calls" / "MED risk" on this entry were ALL wrong** — it's
-  a plain store+api+DOM dialog (~67 ln cohesive), zero router coupling. The map's per-entry sizes/deps/risk
-  remain hints only; the banner-span LOC routinely bundles 2–4 unrelated blocks. Re-read, find the cohesive
-  end, re-home the rest — exactly as the ⚠ callout says.
-- **`just lint` is Python-only** (`ruff check backend/ tests/`) — it currently reports 38 PRE-EXISTING errors
-  (e.g. `tests/validate_phase3b.py`), none from frontend work. A frontend-only extraction has lint delta 0 by
-  construction; don't be alarmed by the red. (No eslint config exists for the frontend.)
+**Banked gotcha this session (IMPORTANT — bit me hard at the start):**
+- **`grep` treats `frontend/src/main.js` as a BINARY file and silently returns NO matches** (some byte trips its
+  binary heuristic even though `file` says valid UTF-8). Every plain `grep -n "foo" main.js` / `grep -c` came back
+  empty and I nearly concluded the autobreak code didn't exist. **Use `rg` (ripgrep) or `grep -a` on main.js** —
+  both find matches correctly. The carve-up's own gotcha already said "use `rg` not `grep`"; this is WHY.
+- The "~119 ln / LOW-MED / pure core `_readAkselOptions`" hints on this entry were all accurate (the re-home from
+  #65 had already been re-read). Don't over-trust that — it's the exception, not the rule.
 
-**Recommended next region — `## Tier 7` "clean dialogs/panels" band:**
-1. **Autobreak / Aksel modal** (re-homed from #65; the second IIFE under the old Autoscaffold banner, ~119 ln)
-   → likely `ui/autobreak_modal.js`. The cleanest pick: a self-contained `createModal` dialog (basic/aksel/
-   advanced picker + Score/Preview/Run), mirrors #42 background_modal. Pure core: `_readAkselOptions`
-   (DOM→clamped opts). `formatScoreSummary`/`formatGraphSummary` already in `scene/aksel_format.js`.
-   REACHABILITY GATE FIRST (`rg -c "autobreak-modal|menu-routing-autobreak|ab-min-nt" frontend/index.html`).
-2. Then **Sequencing menu** (banner `// ── Sequencing`, ~95 ln — likely thin wiring over scaffold_modal/
-   scaffold_assign, verify it's not a scrap) and **Highlight Undefined Bases** (~80 ln; MOVES ownership of
-   #41's `_undefinedHighlightOn` get/set shims — coordinate). Each reachability-gated first, before the HARD
-   gesture/assembly-coupled band (Move/Rotate panel, repr switcher, Translate/Rotate tool, assembly transform/FK).
+**Recommended next region — `## Tier 7` "clean dialogs/panels" band (both reachability-gate FIRST, with `rg`):**
+1. **Sequencing menu** (banner `// ── Sequencing` ~4194 now, after the autobreak init) — re-derive scope: likely
+   thin wiring over the already-extracted `scaffold_modal`/`scaffold_assign` (the Assign-Scaffold modal is already
+   `initScaffoldModal` right below the banner). **May be a scrap** (just `menu-seq-*` listeners over existing
+   modules + api) — verify before investing; if it's <40 ln of pass-through wiring, leave it inline and log why.
+2. **Highlight Undefined Bases** (banner `// ── Highlight Undefined Bases toggle`, ~80 ln) — `_refreshUndefinedHighlight`
+   + the toggle. **Extracting MOVES ownership of `_undefinedHighlightOn`**, which #41 (view_tool_buttons) currently
+   reaches via get/set shims — so this lift must take that mutable INTO the new module and flip #41 to call a
+   getter/setter the new module exposes. MED risk (coordinate the shim hand-off). Then the HARD gesture/assembly-
+   coupled band (Move/Rotate panel, repr switcher, Translate/Rotate tool, assembly transform/FK) — build the gate first.
 
 **The goal is NOT a LOC number.** main.js is the app's composition root (wiring board): 146 imports + ~100
 module constructions + the lifecycle spine + thin per-action wiring are *irreducible* (~2,500–3,500 ln floor).
 Chasing a lower number past that point means junk-drawer bundles or pass-through indirection — both make the
 code worse. **Target instead: "the closure holds zero cohesive logic clusters."** Done = every remaining
 function is either module construction/wiring or the spine. LOC lands ~3,000 as a *result*, not a target.
-
-**Recommended next region — `## Tier 7` "clean dialogs/panels" band (the cleanest, lowest-risk first):**
-1. **Autoscaffold picker** (banner `// ── Routing: Autoscaffold (seamed / seamless picker)` ~4274, ~212 ln) →
-   likely `ui/autoscaffold_picker.js`. A routing dialog. **REACHABILITY GATE FIRST** (`rg -c "<its-dialog-id>"
-   frontend/index.html` + call-site grep — use `rg` not `grep`, see banked gotcha). Re-derive scope: the map
-   warns it **may interleave scaffold-router calls** — find where the cohesive dialog block actually ends before
-   investing; if it's thin wiring over the already-extracted scaffold_router/scaffold_modal, it may be a scrap.
-2. Then **Sequencing menu** (~95 ln, may be a thin-wiring scrap over `scaffold_modal`/`scaffold_assign` —
-   verify before investing) and **Highlight Undefined Bases** (~80 ln; coordinate with #41's `_undefinedHighlightOn`
-   get/set shims — extracting MOVES ownership of that mutable). Each **reachability-gated first** — before the
-   HARD gesture/assembly-coupled ones (Move/Rotate panel, repr switcher, Translate/Rotate tool, assembly transform/FK).
 
 **Do NOT bundle the micro-scraps** (Orbit submenu ~10 ln, Browser tab title ~5 ln, Coloring submenu ~20 ln
 w/ 7 external `_setColoringMode` callers, deform→selectableTypes subscriber ~28 ln). Six logged mis-scopes
@@ -554,7 +540,8 @@ scaffold_modal (Assign Scaffold dialog + `countScaffoldNt` in scaffold_assign),
 new_design_modal (New Part dialog + `sanitizeWorkspaceStem`),
 app/doc_spawn (Multi-document spawn + pure `spaceHasContent`),
 overhang_orientation_panel (Overhang Orientation panel + pure `buildOverhangRotationOps`; owns overhangGizmo),
-autoscaffold_picker (Autoscaffold picker dialog + pure `autoscaffoldModeConfig`).
+autoscaffold_picker (Autoscaffold picker dialog + pure `autoscaffoldModeConfig`),
+autobreak_modal (Autobreak/Aksel routing dialog + pure `readAkselOptions`).
 
 ## Smaller leftovers (after the tiers above)
 
@@ -640,13 +627,21 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   no-DOM / menu-guard+open / Run-no-design-guard / Run-dispatches+progress+routing-check / default-seamed /
   fail-toast / Cancel+backdrop-close). Gate: vitest 712 + smoke 23/23 + real-app exercise (scaffolded part →
   menu→modal→Run seamed→routing-check toggles on, zero console errors).
-- [ ] **Autobreak / Aksel modal** — the second IIFE under the Autoscaffold banner (`_runAutoBreak3d`/
+- [x] **Autobreak / Aksel modal** — the second IIFE under the Autoscaffold banner (`_runAutoBreak3d`/
   `_scoreAksel3d`/`_previewAksel3d`/`_readAkselOptions`/`_setAkselReport`/`_buildOnce` + indeterminate-progress
-  animation + `menu-routing-autobreak`), ~119 ln. **Re-homed from the Autoscaffold entry (#65).** Cohesive
-  `createModal`-based dialog: basic/aksel/advanced algorithm picker + Score/Preview/Run. Deps: store, api,
-  `_showProgress`/`_hideProgress`, `formatScoreSummary`/`formatGraphSummary` (already in `scene/aksel_format.js`).
-  Likely `ui/autobreak_modal.js`. Risk: **LOW-MED** (plain store+api+DOM, mirrors #42 background_modal). Pure
-  core: `_readAkselOptions` (DOM→clamped opts). REACHABILITY GATE FIRST.
+  animation + `menu-routing-autobreak`). **DONE 2026-06-05 (extraction #66, commit 2f816db)** →
+  `ui/autobreak_modal.js` factory `initAutobreakModal({store, api})` + pure `readAkselOptions(raw)` (raw input
+  strings → clamped backend opts; verbatim-equivalent to the original `_readAkselOptions` DOM reader: missing/
+  non-finite → 21/60/3/0). Cohesive block was 4074–4192 (~119 ln, matched the estimate). −117 ln off main.js
+  (9717→9600). REACHABILITY GATE PASSED (`#menu-routing-autobreak` + `#autobreak-modal-body` markup live in
+  index.html; core routing feature, hotkey `3`). **Deps were only `store`+`api`** — `_showProgress`/`_hideProgress`
+  were aliases of `showOpProgress`/`hideOpProgress` (imported directly, like #65); `showToast`/`createModal`/
+  `createButton`/`formatScoreSummary`/`formatGraphSummary` imported directly too. Removed now-dead `aksel_format`
+  import from main.js. Plain `const`-call at the original banner spot (deps far above; only the click listener
+  attaches synchronously). 13 vitest (4 pure: defaults/parse/empty-fallback/mixed-clamp + 9 jsdom factory:
+  no-throw/design-guard/build-open-once/Score-dispatch+report/Score-fail-report/Preview-progress+dispatch/
+  Run-basic→addAutoBreak+close/Run-aksel→addAutoRouteAksel+toast/Run-fail-toast). Gate: vitest 725 + smoke 23/23
+  + real-app hotkey-3 exercise (modal opens → Run Autobreak dispatches, zero console errors).
 - [ ] **Sequencing menu** — banner `// ── Sequencing` (~4486–4580), ~95 ln. Re-derive: may be thin wiring over
   already-extracted `scaffold_modal`/`scaffold_assign`. Risk: **LOW-MED**; could be a scrap (verify before investing).
 - [ ] **Highlight Undefined Bases** — banner `// ── Highlight Undefined Bases toggle` (~9417–9496), ~80 ln.
