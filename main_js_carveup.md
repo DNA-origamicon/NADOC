@@ -37,46 +37,51 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **Tier 4 opportunistic block**
-this session: extracted View-menu pill-state subscriber + 3 visibility helpers (#51). main.js 11086 → 11047 (−39 ln)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-04. **First Tier-5 region**
+this session: extracted the file-IO operations sub-part of "File open / save" (#52). main.js 11047 → 10928 (−119 ln)._
 
-**This session (#51):** extracted the **View-menu pill-state subscriber + 3 visibility helpers**
-(`_syncAssemblyMenuVisibility` / `_syncImportMenuVisibility` / `_syncDeformMenuEnabled` + the reactive
-`store.subscribe` pill-state subscriber + its initial `syncImportMenuVisibility()` call) → `ui/view_menu_pills.js`
-`initViewMenuPills({store, setMenuToggle})`. Self-contained: the 3 helpers had ZERO external callers (grep-verified
-— all calls were inside the region). `_setMenuToggle` (43-use shared util) stays in main.js, injected as
-`setMenuToggle`. Factory call placed at the subscriber's original line so subscription registration order is
-preserved. 11 vitest factory + smoke 21/21 + a real-app View→Sequences pill-flip exercise (is-on on/off, zero
-console errors). Per the handoff's "do not bundle" rule, kept it to the pill-state block — left Browser tab title
-+ deform→selectableTypes as separate future picks.
+**This session (#52):** first cut into **Tier 5 (file/session infra)** — extracted the **file-IO operations**
+sub-part of the "File open / save" region → `ui/file_io.js` `initFileIo({deps})`. Six verbatim async ops:
+`getDesignContent` / `savePartToAssembly` / `saveToHandle` / `saveAs` / `saveAssemblyToHandle` / `saveAssemblyAs`.
+Dropped dead `_pickOpenFile` (zero callers here — cadnano editor has its own). **Deliberately LEFT in main.js**
+(the lifecycle spine + cross-cutting state, NOT file-IO): `_resetForNewDesign` / `_enterAssemblyMode` /
+`_exitAssemblyMode`, the 6 mutable file/path vars (`_fileHandle` / `_assemblyFileHandle` / `_assemblyName` /
+`_workspacePath` / `_assemblyWorkspacePath` / `_partEditContext`) + their setters, and `_updateAssemblyTitle`
+(called by the spine `_enterAssemblyMode`, so keeping it dodges a boot-ordering hazard). Those flow in as get/set
+shims + injected fns. 19 vitest factory + smoke 21/21 + a real-app **Save As** exercise (menu → `_fileIo.saveAs` →
+file-browser modal opens, zero console errors).
 
-**Recommended next region — one of two clean tracks:**
-1. **More Tier-4 opportunistic blocks** (lowest risk, modest payoff): the **Orbit submenu** (`_setOrbitMode`+2
-   handlers, ~10 ln @ banner 5094, self-contained — clean but tiny payoff); the remaining View-menu odds
-   (deform→selectableTypes save/restore subscriber @ banner ~5278; Browser tab title @ banner 5241 — a 5-ln
-   subscriber, too small to be worth its own module alone). The Coloring submenu (`_setColoringMode` + 6
-   handlers) has 6 external call sites → more coupling than its ~20 ln implies; defer or bundle with a
-   coloring-state lift.
-2. **Tier 5 (file/session infra — HIGH blast radius):** `File open / save` (~340 ln, banner ~3582),
-   `Menu bar + multi-doc spawn` (~320 ln, ~3980), `Connection monitor / autosave / SSE` (~287 ln, ~7746).
-   These touch boot/lifecycle — split each across ≥2 commits, lean on smoke + a multi-doc-pinned app exercise.
+**Recommended next region — continue draining Tier 5:**
+1. **Finish "File open / save"** (the SECOND commit of this region, if you want it cohesive): the open-file
+   orchestration (`_openPartFromServer` / `_openAssemblyFromServer`, banner ~3580 region) + `_saveDispatch` /
+   `_saveAsDispatch` / `_saveAssembly` / `_saveAssemblyAsGuarded` (menu-bar save dispatchers, banner ~3980).
+   These call `_fileIo.*` already; lifting them needs the lifecycle-spine deps. MED-HIGH.
+2. **Connection monitor / autosave / SSE** → `app/lifecycle.js` (banner ~7707/7780/7872, ~287 ln). Cohesive
+   lifecycle subsystem (connection monitor + `_recoverAfterRestart`, the two autosave subscribers, the SSE
+   `_handleLibraryEvent`). Shares the same autosave flags (`_selfSavedPaths` / `_reloadingFromSSE` /
+   `_savingAssembly` / `_lastSameDocActivityMs`) → wide get/set-shim factory (keyboard-shortcuts pattern). The
+   `_fileIo` init now lives at the head of this region — lift it together or keep its const in place. HIGH.
+3. **Menu bar + multi-doc spawn** (banner ~3980, ~320 ln) → `ui/menu_bar.js`. HIGH (every menu action).
 
 **Banked gotchas this session:**
-- **A region's apparent LOC ≠ its movable LOC when a shared util sits inside it.** `_setMenuToggle` is
-  physically between the banner and the helpers (line ~5191), but it's a 43-use shared util → leave it in
-  main.js (don't move it out of the region), inject it as a dep. Grep the call count BEFORE deciding what moves.
-- **Subscription-order preservation = place the factory call at the subscriber's original line.** The 3 helpers
-  were hoisted `function` decls earlier in the block, but only the `store.subscribe()` call has ordering
-  significance. Confirmed no other `store.subscribe` sits between the helpers' old location and the subscriber,
-  so the factory init slots in cleanly at the subscriber's position with order intact.
-- **No optional chaining → ids must exist.** `_syncAssemblyMenuVisibility` reads `.style.display` on
-  `menu-item-assembly`/`menu-item-tools`/slice/unfold/cadnano WITHOUT `?.` — the jsdom test must mount all of
-  them or the factory throws (in the app they always exist).
+- **Place a late-wired factory where its LATE deps exist, not at its banner.** `initFileIo` needs `_setSyncStatus`
+  / `_syncLog` / `libraryPanel` (all declared ~7500-7600, FAR below the "File open / save" banner ~3580). The
+  `const _fileIo = initFileIo({...})` lives at the head of the autosave region (~7660), and EVERY call site
+  (menu dispatchers ~4000, command-palette object ~5360, import-menu ~9710, the autosave subscriber ~7700)
+  executes lazily/post-init — verified no boot path *calls* a `_fileIo.*` method synchronously during `main()`.
+- **A reference captured BEFORE the const init needs a lazy wrapper; one captured after can be direct.** The
+  command palette (`savePartToAssembly:` @ ~5360, before init) got `(opts) => _fileIo.savePartToAssembly(opts)`;
+  the import menu (`saveAs:` @ ~9710, after init) got the direct `_fileIo.saveAs`. Function-bodies that *call*
+  the op (the menu dispatchers) reference `_fileIo.*` directly — their bodies only run on click, post-init.
+- **Keep the spine-adjacent helper, lift the op.** `_updateAssemblyTitle` is tiny and is invoked by
+  `_enterAssemblyMode` (which stays as the spine and is boot-callable). Leaving it in main.js (injected into the
+  factory as `updateAssemblyTitle`) removes any TDZ/boot-order hazard — the module never touches the live binding.
 
 **Deliberately deferred (still in main.js):** FK propagation (`_applyFKLive`); Polymerize-region sub-part
 `scene/joint_pick.js` (`_onToolPickPointerDown` + cluster raycaster — HARD, gesture-bound). `_setMenuToggle`
 (43-use shared-util lift, separate from any feature factory). Selection Filter toggles (welded to the
-drill-lock state machine at ~717 — must move together).
+drill-lock state machine at ~717 — must move together). Tier-4 opportunistic scraps (Orbit submenu ~10 ln,
+Browser tab title ~5 ln, deform→selectableTypes subscriber) — too small to each own a module; bundle later.
 
 ---
 
@@ -372,9 +377,19 @@ The largest single blocks and the most coupling into assembly state. Each needs 
 
 These touch boot/lifecycle. High blast radius; do after the loop is well-grooved.
 
-- [ ] **File open / save + assembly save** — banners `// ── File open / save` +
-  `// ── Assembly file save helpers` (~4279–4620, ~340 ln) → `ui/file_io.js`. Deps: api, store,
+- [~] **File open / save + assembly save** — banners `// ── File open / save` +
+  `// ── Assembly file save helpers` (~3583–3815, ~340 ln) → `ui/file_io.js`. Deps: api, store,
   file overlay, multi-doc. Risk: HIGH.
+  - **file-IO operations — DONE** (extraction #52, this batch): `getDesignContent` / `savePartToAssembly` /
+    `saveToHandle` / `saveAs` / `saveAssemblyToHandle` / `saveAssemblyAs` → `ui/file_io.js`
+    `initFileIo({deps})`. −119 ln. Dropped dead `_pickOpenFile`. 19 vitest + smoke 21/21 + real-app Save-As
+    exercise. Mutable file/path state + setters + `_updateAssemblyTitle` + the lifecycle spine STAY in main.js
+    (get/set shims). Factory init placed at the autosave region head (~7660) where its late deps exist.
+  - **Remaining (NOT done):** the open-file orchestration (`_openPartFromServer` / `_openAssemblyFromServer`)
+    + the menu-bar save dispatchers (`_saveDispatch` / `_saveAsDispatch` / `_saveAssembly` /
+    `_saveAssemblyAsGuarded`, banner ~3980). They call `_fileIo.*` already; lifting needs lifecycle-spine deps.
+    The spine itself (`_resetForNewDesign` / `_enterAssemblyMode` / `_exitAssemblyMode`) is probably best left
+    inline (called from 20+ sites).
 - [ ] **Menu bar + multi-document spawn** — banners `// ── Menu bar` + `// ── Multi-document: New / Open`
   (~4681–5004, ~320 ln) → `ui/menu_bar.js`. Deps: doc_id, broadcast, every menu action. Risk: HIGH.
 - [ ] **Connection monitor / autosave / SSE** — banners `// ── Backend connection monitor` …
@@ -427,7 +442,7 @@ assembly_diff, design_queries (+flexibleRunForBead), cluster_joint_math, aksel_f
 assembly_groups_util, color_util (+hexFromInt, atomColorsFromLetters), fret_util, vec_math, motion_chip,
 scaffold_assign, atom_filter, selection_bbox, belt_rider, overhang_hover_picker, assembly_lasso,
 coloring_modes, assembly_layout, ndc, flex_tethers, cluster_entries, empty_space_menu, slice_plane,
-plate_view, kinematics_ticker.
+plate_view, kinematics_ticker, file_io.
 
 ## Smaller leftovers (after the tiers above)
 

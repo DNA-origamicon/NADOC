@@ -120,6 +120,7 @@ import { initAssemblyContextMenu }  from './ui/assembly_context_menu.js'
 import { initLibraryPanel }         from './ui/library_panel.js'
 import { pickLattice }              from './ui/lattice_picker.js'
 import { openFileBrowser }          from './ui/file_browser.js'
+import { initFileIo }               from './ui/file_io.js'
 import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
 import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
@@ -3656,158 +3657,15 @@ async function main() {
     _setWorkspacePath(null)
   }
 
-  /** Read raw .nadoc JSON content from the user's file system.
-   *  Uses the File System Access API if available (Chrome/Edge) so the handle
-   *  can be kept for in-place saves; falls back to a plain <input type="file">.
-   *  Returns { content, handle } or null if the user cancelled. */
-  async function _pickOpenFile() {
-    if ('showOpenFilePicker' in window) {
-      let handles
-      try {
-        handles = await window.showOpenFilePicker({
-          types: [{ description: 'NADOC Design', accept: { 'application/json': ['.nadoc'] } }],
-          multiple: false,
-        })
-      } catch (e) {
-        if (e.name === 'AbortError') return null
-        throw e
-      }
-      const handle = handles[0]
-      const file = await handle.getFile()
-      return { content: await file.text(), handle, name: handle.name.replace(/\.nadoc$/i, '') }
-    }
-    // Fallback: hidden file input
-    return new Promise(resolve => {
-      const input = document.createElement('input')
-      input.type = 'file'
-      input.accept = '.nadoc,application/json'
-      input.onchange = async () => {
-        const file = input.files[0]
-        if (!file) { resolve(null); return }
-        resolve({ content: await file.text(), handle: null, name: file.name.replace(/\.nadoc$/i, '') })
-      }
-      input.oncancel = () => resolve(null)
-      input.click()
-    })
-  }
-
-  /** Fetch the active design's .nadoc JSON from the server. */
-  async function _getDesignContent() {
-    const r = await fetch('/api/design/export', { headers: docHeaders() })
-    if (!r.ok) return null
-    return r.text()
-  }
-
-  /** Save this tab's design back to the assembly instance, then notify the assembly tab. */
-  async function _savePartToAssembly({ silent = false } = {}) {
-    if (!_partEditContext) return null
-    const content = await _getDesignContent()
-    if (!content) {
-      if (!silent) showToast('Failed to read design.', { severity: 'error' })
-      return null
-    }
-    // Save-back targets the ASSEMBLY's doc (this tab edits on its own isolated doc).
-    const result = await api.patchInstanceDesign(_partEditContext.instanceId, content, { docId: _partEditContext.assemblyDoc })
-    if (result) {
-      _syncLog('info', 'BC-TX', `part-design-updated id=${_partEditContext.instanceId}`)
-      _setSyncStatus('green', silent ? 'auto-saved to assembly' : 'saved to assembly')
-      nadocBroadcast.emit('part-design-updated', { instanceId: _partEditContext.instanceId })
-      if (!silent) {
-        const modeEl = document.getElementById('mode-indicator')
-        modeEl.textContent = `PART EDIT — ${_partEditContext.name} ✓ saved`
-        setTimeout(() => { modeEl.textContent = `PART EDIT — ${_partEditContext.name}` }, 2000)
-      }
-    } else {
-      _setSyncStatus('red', 'save error')
-      _syncLog('err', 'BC-TX', `patchInstanceDesign failed for id=${_partEditContext.instanceId}`)
-      if (!silent) showToast('Save to assembly failed — assembly session may have expired.', { severity: 'error' })
-    }
-    return result
-  }
-
-  /** Save design to an existing file handle (in-place overwrite). */
-  async function _saveToHandle(handle) {
-    const content = await _getDesignContent()
-    if (!content) { showToast('Failed to read design from server.', { severity: 'error' }); return false }
-    try {
-      const writable = await handle.createWritable()
-      await writable.write(content)
-      await writable.close()
-    } catch (e) {
-      showToast(`Save failed: ${e.message}`, { severity: 'error' })
-      return false
-    }
-    return true
-  }
-
-  /** Save As — server-side only.  Updates session identity to the chosen path. */
-  async function _saveAs() {
-    const { currentDesign } = store.getState()
-    if (!currentDesign) { showToast('No design to save.', { severity: 'error' }); return }
-    const stem = _workspacePath
-      ? _workspacePath.replace(/\.nadoc$/i, '').split('/').pop()
-      : (currentDesign.metadata?.name ?? 'design')
-    const result = await openFileBrowser({
-      title: 'Save Part As',
-      mode: 'save',
-      fileType: 'part',
-      suggestedName: stem,
-      suggestedExt: '.nadoc',
-      api,
-    })
-    if (!result) return
-    _setSyncStatus('yellow', 'saving…')
-    const r = await api.saveDesignAs(result.path, result.overwrite ?? false)
-    if (r) {
-      _fileHandle = null
-      _setWorkspacePath(result.path)
-      _setFileName(result.name)
-      _setSyncStatus('green', 'saved')
-      libraryPanel?.refresh()
-    } else {
-      _setSyncStatus('red', 'save error')
-    }
-  }
+  // The file-IO operations (getDesignContent / savePartToAssembly / saveToHandle /
+  // saveAs / saveAssemblyToHandle / saveAssemblyAs) were extracted verbatim to
+  // ui/file_io.js (extraction #52). The factory `_fileIo = initFileIo({...})` is
+  // wired below at the autosave region (its deps _setSyncStatus / _syncLog /
+  // libraryPanel are declared there). The mutable file/path state + setters +
+  // _updateAssemblyTitle + the lifecycle spine (_resetForNewDesign /
+  // _enterAssemblyMode / _exitAssemblyMode) stay here.
 
   // ── Assembly file save helpers ────────────────────────────────────────────────
-
-  async function _saveAssemblyToHandle(handle) {
-    const content = await api.getAssemblyContent()
-    if (!content) { showToast('Failed to read assembly from server.', { severity: 'error' }); return false }
-    try {
-      const writable = await handle.createWritable()
-      await writable.write(content)
-      await writable.close()
-    } catch (e) {
-      showToast(`Save failed: ${e.message}`, { severity: 'error' })
-      return false
-    }
-    return true
-  }
-
-  async function _saveAssemblyAs() {
-    const { currentAssembly } = store.getState()
-    const stem = _assemblyWorkspacePath
-      ? _assemblyWorkspacePath.replace(/\.nass$/i, '').split('/').pop()
-      : (_assemblyName ?? currentAssembly?.metadata?.name ?? 'assembly')
-    const result = await openFileBrowser({
-      title: 'Save Assembly As',
-      mode: 'save',
-      fileType: 'assembly',
-      suggestedName: stem,
-      suggestedExt: '.nass',
-      api,
-    })
-    if (!result) return
-    const r = await api.saveAssemblyAs(result.path, result.overwrite ?? false)
-    if (r) {
-      _assemblyFileHandle = null
-      _assemblyName = result.name
-      _setAssemblyWorkspacePath(result.path)
-      _updateAssemblyTitle()
-      libraryPanel?.refresh()
-    }
-  }
 
   function _updateAssemblyTitle() {
     const name = _assemblyName ?? store.getState().currentAssembly?.metadata?.name ?? 'Untitled'
@@ -4140,11 +3998,11 @@ async function main() {
       await api.saveDesignToWorkspace(path)
       _setSyncStatus('green', 'saved')
       setTimeout(() => _selfSavedPaths.delete(path), 5000)
-      if (_fileHandle) await _saveToHandle(_fileHandle)
+      if (_fileHandle) await _fileIo.saveToHandle(_fileHandle)
     } else if (_fileHandle) {
-      await _saveToHandle(_fileHandle)
+      await _fileIo.saveToHandle(_fileHandle)
     } else {
-      await _saveAs()
+      await _fileIo.saveAs()
     }
   }
   async function _saveAsDispatch() {
@@ -4152,7 +4010,7 @@ async function main() {
       await _saveAssemblyAsGuarded()
       return
     }
-    await _saveAs()
+    await _fileIo.saveAs()
   }
   document.getElementById('menu-file-save')?.addEventListener('click', _saveDispatch)
   document.getElementById('menu-file-save-as')?.addEventListener('click', _saveAsDispatch)
@@ -4184,11 +4042,11 @@ async function main() {
     if (_assemblyWorkspacePath) {
       const r = await api.saveAssemblyAs(_assemblyWorkspacePath)
       if (r?.path) _setAssemblyWorkspacePath(r.path)
-      if (_assemblyFileHandle) await _saveAssemblyToHandle(_assemblyFileHandle)
+      if (_assemblyFileHandle) await _fileIo.saveAssemblyToHandle(_assemblyFileHandle)
     } else if (_assemblyFileHandle) {
-      await _saveAssemblyToHandle(_assemblyFileHandle)
+      await _fileIo.saveAssemblyToHandle(_assemblyFileHandle)
     } else {
-      await _saveAssemblyAs()
+      await _fileIo.saveAssemblyAs()
     }
   }
 
@@ -4196,7 +4054,7 @@ async function main() {
     const { currentAssembly } = store.getState()
     if (!currentAssembly) { showToast('No assembly to save.', { severity: 'error' }); return }
     if (_exportRepActive) { showToast('Export in progress — try saving again in a moment.', { severity: 'warning' }); return }
-    await _saveAssemblyAs()
+    await _fileIo.saveAssemblyAs()
   }
 
   document.getElementById('menu-file-upload')?.addEventListener('click', () => {
@@ -5502,7 +5360,7 @@ async function main() {
     resetToAutoBaseline:      _resetToAutoBaseline,
     toggleUnfold:             _toggleUnfold,
     toggleCadnano:            _toggleCadnano,
-    savePartToAssembly:       _savePartToAssembly,
+    savePartToAssembly:       (opts) => _fileIo.savePartToAssembly(opts),
     saveAssemblyAsGuarded:    _saveAssemblyAsGuarded,
     setAssemblyWorkspacePath: _setAssemblyWorkspacePath,
     showWelcome:              _showWelcome,
@@ -7802,6 +7660,29 @@ async function main() {
   let _assemblySaveTimer = null
   let _partSaveTimer = null
 
+  // File-IO operations (extracted to ui/file_io.js, #52). Wired here — not at the
+  // "File open / save" banner ~3580 — because its deps (_setSyncStatus / _syncLog /
+  // libraryPanel) are declared above this autosave region. Every call site
+  // (menu dispatchers, command palette, import menu, the autosave subscriber
+  // just below) executes lazily/post-init, so the late wiring is safe.
+  const _fileIo = initFileIo({
+    store, api,
+    setSyncStatus: _setSyncStatus,
+    syncLog: _syncLog,
+    libraryPanel,
+    updateAssemblyTitle: _updateAssemblyTitle,
+    setWorkspacePath: _setWorkspacePath,
+    setFileName: _setFileName,
+    setAssemblyWorkspacePath: _setAssemblyWorkspacePath,
+    setFileHandle: (v) => { _fileHandle = v },
+    setAssemblyFileHandle: (v) => { _assemblyFileHandle = v },
+    setAssemblyName: (v) => { _assemblyName = v },
+    getWorkspacePath: () => _workspacePath,
+    getAssemblyWorkspacePath: () => _assemblyWorkspacePath,
+    getAssemblyName: () => _assemblyName,
+    getPartEditContext: () => _partEditContext,
+  })
+
   store.subscribeSlice('design', (newState, prevState) => {
     // Skip TRANSIENT deform mutations — a bend/twist live preview, param PATCH, or
     // cancel-revert. They must NOT auto-save (→ file → SSE) or push the part to the
@@ -7815,7 +7696,7 @@ async function main() {
       _setSyncStatus('yellow', 'auto-saving…')
       clearTimeout(_partSaveTimer)
       _partSaveTimer = setTimeout(() => {
-        _savePartToAssembly({ silent: true })
+        _fileIo.savePartToAssembly({ silent: true })
       }, 900)
       return
     }
@@ -9829,7 +9710,7 @@ async function main() {
     setWorkspacePath: _setWorkspacePath,
     setFileName: _setFileName,
     setSyncStatus: _setSyncStatus,
-    saveAs: _saveAs,
+    saveAs: _fileIo.saveAs,
     setFileHandle: (v) => { _fileHandle = v },
   })
 
