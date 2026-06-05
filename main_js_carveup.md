@@ -55,24 +55,23 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 _Living pointer — each session overwrites this (step 7). Last updated 2026-06-05. **STRATEGY: hardest-first, multi-commit
 campaigns — the pure-core / narrow-sub-block well is dry.** ✅ **KEYSTONE DONE (#73/#74/#75, −255 ln).** ✅ **frontier #1
-DE-LUMPED (commit 8dbdbaf, log #76, −196 ln, main.js 8751→8556):** the response-delta application subsystem
-(`_applyClusterUndoRedoDeltas`/`_applyPositionsOnlyDiff`/`_applyResponseDelta` + shared pure `_rebakeHelixAxesForClusterDelta`)
-that was interleaved THROUGH THE MIDDLE of the Translate/Rotate tool banner span (old 5437–5693) is now
-`scene/response_delta.js` (`initResponseDelta`, 14 vitest). The tool region is now contiguous — only the actual tool + `_mr*`
-shell remain under the banner._
+DE-LUMPED (#76, −196 ln):** response-delta subsystem → `scene/response_delta.js`. ✅ **CHEAP FIRST CUT DONE (commit 9b06574,
+log #77, −38 ln, main.js 8556→8518):** the active-cluster pick helpers (`_canvasNdc`/`_clusterBackboneEntries`/
+`_pickActiveClusterEntry` + raycaster) → `scene/joint_pick.js` (`initJointPick`, 9 vitest incl. a real-THREE raycast hit).
+Alias-consts kept all 7 call sites verbatim. The tool region is now contiguous AND its pick helpers are a module dep._
 
-**▶ NEXT — Translate/Rotate tool + the `_mr*` panel shell (frontier #1 core, now contiguous).** With the keystone a module
-AND the response-delta lump removed, the tool span is cleaner. The tool/shell call
+**▶ NEXT — Translate/Rotate tool + the `_mr*` panel shell (frontier #1 core, now contiguous).** With the keystone, the
+response-delta lump, AND the pick helpers all modules, the tool span is at its cleanest. The tool/shell call
 `_assemblyTransform.{createAssemblyTransformContext,applyAssemblyPrimaryLive,queueAssemblyPrimaryCommit,commitAssemblyPending}`
-via alias-consts at ~4970 — re-point those at the module dep when lifting. **WATCH OUT: `_translateRotateActive` + the
-`_mr*` panel fns are read/written from 20+ sites** (`_mrSetTransformValuesFromMatrix`/`_mrSetClusterOptions`/`_mrCommitInputs`/
-`_mrAssemblyCtx`…) — borderline lifecycle-spine. #71 peeled the flex sub-block out; #76 peeled the response-delta lump out;
-the prior handoff's "co-extract the whole shell" may STILL be too big a bite (STOP-criterion smell — re-derive whether the
-shell wants its own factory or stays a thin caller). **The big remaining cohesive fns:** `_cancelTranslateRotateTool` (~386 ln,
-huge), `_confirmTranslateRotateTool`, `_activateTranslateRotateTool`, `_onToolPickPointerDown`, `_rotateJoint`,
-`_restoreTransformPreviewFromStore`, + the cluster-pick raycast helpers (`_canvasNdc`/`_clusterBackboneEntries`/
-`_pickActiveClusterEntry` → handoff's `scene/joint_pick.js`, ~45 ln — a possible cheap first cut). Re-grep banner
-`// ── Joint arrow pick handler` (was ~5273). The `_mrCommitInputs` → `_queueAssemblyPrimaryCommit` path is the SAME one the
+via alias-consts at ~4970, and now `_jointPick.{canvasNdc,pickActiveClusterEntry}` via the #77 alias-consts at ~5112 —
+re-point both at the module deps when lifting. **WATCH OUT: `_translateRotateActive` + the `_mr*` panel fns are read/written
+from 20+ sites** (`_mrSetTransformValuesFromMatrix`/`_mrSetClusterOptions`/`_mrCommitInputs`/`_mrAssemblyCtx`…) — borderline
+lifecycle-spine. #71/#76/#77 each peeled a sub-block out; the "co-extract the whole shell" may STILL be too big a bite
+(STOP-criterion smell — re-derive whether the shell wants its own factory or stays a thin caller). **The big remaining
+cohesive fns:** `_cancelTranslateRotateTool` (~386 ln, huge), `_confirmTranslateRotateTool`, `_activateTranslateRotateTool`,
+`_onToolPickPointerDown` (the gesture handler that consumes `_pickActiveClusterEntry` — gesture-bound to
+clusterGizmo/jointRenderer/ring-pick), `_rotateJoint`, `_restoreTransformPreviewFromStore`. Re-grep banner
+`// ── Joint arrow pick handler` (was ~5236). The `_mrCommitInputs` → `_queueAssemblyPrimaryCommit` path is the SAME one the
 move-tool gesture gate drives.
 
 **Why hardest-first now.** Every remaining frontier item is HARD (gesture-bound and/or shared-state coupled). Do each as a
@@ -302,8 +301,11 @@ The largest single blocks and the most coupling into assembly state. Each needs 
     the "Kinematics ticker" banner; they now have their own `// ── Assembly blunt-end sync + cluster pick
     helpers` banner. 3 vitest (first coverage for this module: empty-dump / joint-summary-subset /
     log-tag+return). Gate: vitest 396 + smoke 21/21.
-  - **Remaining sub-parts (NOT done):** `scene/joint_pick.js` (`_onToolPickPointerDown`
-    + `_pickActiveClusterEntry` + cluster raycaster — HARD, gesture-bound to clusterGizmo/jointRenderer).
+  - **Cluster-pick helpers DONE** (#77, commit 9b06574, −38 ln): `_canvasNdc`/`_clusterBackboneEntries`/
+    `_pickActiveClusterEntry` + the raycaster/ndc THREE objects → `scene/joint_pick.js` `initJointPick`,
+    9 vitest (incl. real-THREE raycast hit). Alias-consts keep all 7 call sites verbatim. **Still NOT done:**
+    `_onToolPickPointerDown` (the gesture handler that *consumes* `_pickActiveClusterEntry` — HARD,
+    gesture-bound to clusterGizmo/jointRenderer/ring-pick).
     NOTE: the region as read is interleaved with `assemblyContextMenu` / `_defineAssemblyMate` /
     `_activateTranslateRotateTool` (a giant fn) — those are NOT part of this region; scope each sub-part
     to its cohesive block. The blunt-end-sync + cluster-pick block now has its own banner (above).
