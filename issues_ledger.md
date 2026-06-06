@@ -82,7 +82,7 @@ design decisions + research (so early sessions build the loop's muscle on tracta
 |-------|-------|------|------|--------------------|
 | 1 | ~~**ISSUE-3** Assembly Ctrl-click multi-select~~ ✅ DONE 2026-06-05 | functional bug | small, bounded | no |
 | 2 | ~~**ISSUE-2** Cross-tab sync delay + console clutter~~ ✅ DONE 2026-06-05 (propagation fix + silent-logging C + badge co-editing B all shipped) | functional bug (data-integrity) | medium | no |
-| **→ NEXT** | **ISSUE-4** Drill-selection overhaul — Phase 1 ✅ + Phase 2 ✅ + Phase 3-preview ✅ + Phase 3-xover ✅ + **Phase 3-filter-audit-lasso ✅ DONE 2026-06-06** (drill-v2 lasso now respects the engaged `_selLevel` via pure `lassoCaptureType`; flip-flag-ON + delete-legacy #4/#5/#6 DEFERRED pending a human v2 eyeball). **Phase 3 remaining = eyeball v2 on multi-helix → flip flag default → delete legacy, assembly unification (decision G).** All behind `NADOC_DRILL_V2`. | UX redesign | large, multi-phase | spec done |
+| **→ NEXT** | **ISSUE-4** Drill-selection overhaul — Phases 1/2/3-preview/3-xover/3-filter-audit-lasso ✅ + **2026-06-06 v2-eyeball feedback batch ✅**: (A) default 2nd-click KEEPS the leaf, (B) crossover selection highlight is now a green glow TUBE, (C) **drill-v2 is the DEFAULT** — filter-row gutted to "no button = drill ladder / button = fixed level", `strand` is a distinct level, Tab cycle cluster→strand→domain→end→xover→none, red `sf-pinned` box removed. **Phase 3 remaining = physically delete the 87 dead legacy sites (cleanup, deferred), multi-helix eyeball of the new behaviors, assembly unification (decision G).** | UX redesign | large, multi-phase | spec done |
 | later | **ISSUE-1** Context-menu proliferation — Phase 1 ✅ + Phase 2a-binding ✅ + Phase 2a-orientation ✅ DONE 2026-06-05; Phase 2a-blunt / 2b–2e + Phase 3+ open (deferred behind ISSUE-4) | UX + tech-debt | large, multi-phase | yes (done) |
 
 This order is a recommendation; the user may name a different issue. **2026-06-05: user diverted the loop to
@@ -272,8 +272,12 @@ context-menu migration phases (which stay queued and resume after ISSUE-4's firs
   DONE 2026-06-05** (crossover ARCS now hoverable=red / clickable=green crossover in drill-v2 — the thin
   inter-helix arc was never in the bead/cone pick set; `_arcHitPx` 12→18; `_v2HandleArc`/`_selectCrossoverV2`
   in `selection_manager.js` + `hoverPreviewTarget` 'arc' kind); **3-filter-audit-lasso `[x]` DONE 2026-06-06**
-  (lasso v2-aware; flip-flag + delete-legacy DEFERRED pending v2 eyeball); breadcrumb-text / flip-default /
-  delete-legacy / assembly-unification `[ ]` still open.
+  (lasso v2-aware). **v2-eyeball feedback batch `[x]` DONE 2026-06-06** — user verified v2 then directed:
+  (A) default 2nd-click KEEPS the leaf (no toggle-clear); (B) crossover selection highlight unified to a green
+  glow TUBE; (C) **drill-v2 flipped to DEFAULT** + filter-row gutted (no button = drill ladder, button = fixed
+  level, `strand` a distinct level, Tab cycle cluster→strand→domain→end→xover→none, red `sf-pinned` removed).
+  **STILL OPEN:** physically delete the 87 dead legacy sites (cleanup), multi-helix eyeball of the new
+  behaviors, assembly-unification `[ ]`.
 
 ### Phase 3-filter-audit — lasso `[x]` DONE 2026-06-06; per-mechanism decisions banked (flip+delete pending v2 eyeball)
 
@@ -521,41 +525,38 @@ ladder used it to cap depth).
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. Last updated 2026-06-06 (Phase 3-filter-audit-lasso shipped; flip-flag-default + delete-legacy DEFERRED pending a human v2 eyeball — user's explicit choice)._
+_Living pointer — each session overwrites this. Last updated 2026-06-06 (user eyeballed v2 + gave a feedback batch: A/B/C all shipped, drill-v2 is now the DEFAULT; remaining = physically delete the 87 dead legacy sites + multi-helix eyeball of the NEW behaviors)._
 
-**NEXT PICK: ISSUE-4 — Phase 3 flip-flag-default ON + delete legacy #4/#5/#6 — GATED on the v2 eyeball USER
-TODO below.** The lasso bug is FIXED (commit `28cfacd`, `lassoCaptureType`). The remaining work is the big one:
-flip `NADOC_DRILL_V2` default ON, then delete the legacy auto-drill ladder / manual filter pins / Tab drill-lock
-(**87 entangled reference sites**: `selection_manager.js` ~53, `selection_filter.js` ~26, `keyboard_shortcuts.js`
-~8). The user chose to **eyeball v2 first** before flipping the default + removing the fallback — do NOT flip/delete
-until the USER TODO below is signed off. Flip + deletion as SEPARATE commits.
+**NEXT PICK: ISSUE-4 — physically delete the 87 dead legacy selection sites (#4/#5/#6).** Drill-v2 is now the
+DEFAULT (`isDrillV2()` returns true unless `NADOC_DRILL_V2='false'`/`?drillv2=0`), the filter row is gutted to
+the new model, and the legacy auto-drill ladder / manual filter pins / Tab drill-lock are DEAD by default but
+still PRESENT (deletion deferred per user choice). This phase = remove them: `_autoDrill*`, `_drillLock`/
+`_TAB_LOCKS`, `_drillSeq`/`_drillLevel`/`_drillAnchor`/`_drillClusterId`, `setDrillLock`/`getDrillLock`/
+`_resetDrill`, `_manualFilters`/`isManualSelect`/`reflectLockOnButtons`/`resetToAutoBaseline`, and the legacy
+branches in `selection_manager.js` (~53 sites) / `selection_filter.js` (~26) / `keyboard_shortcuts.js` (~8).
+Pure cleanup, NO behavior change. **Watch:** the legacy-path unit tests are pinned with `drillV2: false`
+(`selection_filter.test.js` `make`, `keyboard_shortcuts.test.js` legacy Tab) — they delete WITH the legacy code.
+Once `isDrillV2()` can't be false-forced anymore, drop the opt-out too (or keep `?drillv2=0` as a kill-switch —
+ask). Gate: vitest green + smoke + the design-selection e2e (drill_v2 + bead_select).
 
-> **USER TODO — eyeball drill-v2 before the flip/delete phase** (Tier-3 visual, not automatable here):
-> 1. Run `just frontend`; open `http://localhost:5173/?drillv2=1`.
-> 2. Load `Examples/26hb_platform_v3.nadoc` (multi-helix, has crossovers + clusters).
-> 3. **Default click ladder:** 1st-click a strand → green selection glow on the whole strand. 2nd-click a bead on
->    it → just that nucleotide. 2nd-click again same bead → clears. Confirm it feels right.
-> 4. **Hover preview colour:** with a strand selected, hover its beads/cones → the would-be leaf reads **RED**
->    (distinct from the green selection). Hover a crossover **arc** → red glow **tube** along the whole arc; click
->    → crossover selects **green**. Confirm red is not muddy/yellow over the green strand.
-> 5. **Filter row + Tab:** click the clust/strand/line/ends/xover buttons → engaged level paints; Tab cycles
->    cluster→domain→end→xover; Esc → back to default. Confirm the pinned-paint reads cleanly (no "red means two
->    things").
-> 6. **The lasso fix (this session):** Tab to `ends`, Ctrl-drag a lasso over several strands → it captures the
->    **5′/3′ end beads** (gold), NOT whole strands/clusters. Repeat at `cluster`/`domain`/`xover` levels → each
->    captures its level's element.
-> 7. Report anything that looks wrong (colour knobs: `_previewGlowLayer` scale/opacity + `PREVIEW_ARC_RADIUS`
->    0.3 nm / opacity 0.55 in `design_renderer.js`; `_arcHitPx` 18 in `selection_manager.js`). If it all looks
->    good → next session flips the flag default ON + deletes legacy #4/#5/#6.
+> **USER TODO — eyeball the NEW behaviors on a multi-helix design** (Tier-3 visual, not automatable here):
+> 1. `just frontend`; open `http://localhost:5173/` (no flag needed — v2 is now default). Load
+>    `Examples/26hb_platform_v3.nadoc`.
+> 2. **2nd-click keeps (A):** 1st-click a strand, 2nd-click a bead → that nucleotide; click the SAME bead again →
+>    it STAYS selected (no longer clears).
+> 3. **Crossover green TUBE (B):** select a crossover (xover level, or default-mode 2nd-click a crossover arc) →
+>    the highlight is a GREEN glow tube along the arc (matching the red preview tube), not endpoint spheres.
+> 4. **Filter row / Tab (C):** with NO button lit, clicking drills (strand→leaf). Toggle the `strand` button →
+>    every click selects the whole strand. Tab cycles cluster→strand→domain→end→xover→none(no button)→cluster.
+>    Confirm NO red box on the buttons (only the `.active` highlight).
+> 5. Report anything off. If good → proceed to the legacy-deletion cleanup.
 
-**STILL OPEN (Phase 3 polish):**
-1. **Flip flag default ON + delete legacy #4/#5/#6** — gated on the eyeball above. Flip + delete as separate commits.
-2. **(Optional) text level-breadcrumb (the ORIGINAL decision-E idea)** — only if the user still wants a
-   persistent `Strand ▸ End` text trail in ADDITION to the glow. The glow covered the user's actual need;
-   confirm before building. Would route through `selection_filter.js` (owns `getSelectionManager` +
-   `reflectDrillLevel`), composing a new `ui/selection_breadcrumb.js` — zero main.js delta.
-3. **Assembly unification (decision G)** — assembly adopts the same 1st-click-part / 2nd-click-subelement
-   shape. Net-new (no assembly drill exists); a Phase-3 design detail.
+**STILL OPEN (Phase 3):**
+1. **Delete the 87 dead legacy sites** — the NEXT PICK above. Pure cleanup.
+2. **(Optional) text level-breadcrumb (decision-E)** — only if the user still wants a persistent `Strand ▸ End`
+   text trail in ADDITION to the glow + filter-row highlight. Confirm before building.
+3. **Assembly unification (decision G)** — assembly adopts the same 1st-click-part / 2nd-click-subelement shape.
+   Net-new (no assembly drill exists); a Phase-3 design detail.
 4. **Visibility-gate ↔ level split (decision F) — CONFIRMED 2026-06-06** (mechanism #7 KEEP): the 5 level
    buttons drive `_selLevel`; scaf/stap/loop/skip/ovhangs stay visibility toggles and do NOT drive lasso
    capture in v2. (Mechanism #9 overhang/loop/skip lasso-capture in v2 DEFERRED.)
