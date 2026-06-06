@@ -2264,7 +2264,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _strandId    = null
     _crossoverId = null
     _resetDrill()
-    _emitDrillLevel(null)
+    // Drill-v2: deselecting (empty-space / toggle-off click) keeps the engaged
+    // level — the filter button stays lit until Tab cycles away or it is re-clicked
+    // (user feedback 2026-06-06). `_selLevel` itself was never reset here; emit it
+    // (not null) so the row paint persists. Legacy still clears the lock highlight.
+    _emitDrillLevel(_drillV2 ? _selLevel : null)
     store.setState({ selectedObject: null })
     _clearMultiLoopSkips()
     _clearMultiDomainSelection()

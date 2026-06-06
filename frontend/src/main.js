@@ -7366,6 +7366,8 @@ async function main() {
       getCtrlBeadCount: () => selectionManager.getCtrlBeads?.().length ?? 0,
       /** Current single-selection ({type,id,...}) or null. */
       getSelectedObject: () => store.getState().selectedObject ?? null,
+      /** Drill-v2 engaged selection level ('default'|'cluster'|'strand'|'domain'|'end'|'xover'). */
+      getSelectionLevel: () => selectionManager.getSelectionLevel?.() ?? 'default',
 
       // ── Robust gesture harness (MapGrab-style controller) ──────────────────
       // pickBeadAt runs the REAL raycast (same camera + bead meshes the selection

@@ -50,6 +50,47 @@ test.describe('Drill v2 — default-level click ladder', () => {
     expect(sel3?.type, '3rd click on the same leaf keeps the nucleotide selected').toBe('nucleotide')
   })
 
+  // An engaged level must PERSIST across an empty-space (deselect) click — the
+  // filter button stays lit until Tab cycles away or it is re-clicked (user
+  // feedback 2026-06-06). Before the fix, _clearAll emitted null → the button
+  // un-highlighted on every empty click.
+  test('an engaged level survives an empty-space click (button stays lit)', async ({ page }) => {
+    await loadScaffoldedPart(page, { doc: 'e2e-drillv2lvl', name: 'drillv2lvl', extraQuery: '&drillv2=1' })
+
+    // Engage the cluster level via its filter button.
+    const clustBtn = '#select-filter .sf-btn[data-key="clust"]'
+    await page.click(clustBtn)
+    expect(await page.evaluate(() => window.__nadocTest.getSelectionLevel()), 'cluster engaged').toBe('cluster')
+    expect(await page.locator(clustBtn).evaluate(b => b.classList.contains('active')), 'button lit').toBe(true)
+
+    // Click a genuinely empty canvas point (raycast hits nothing, not under a panel).
+    const box = await page.locator('#canvas').boundingBox()
+    const rects = []
+    for (const sel of ['#menu-bar', '#left-panel', '#right-panel']) {
+      const b = await page.locator(sel).boundingBox().catch(() => null)
+      if (b) rects.push(b)
+    }
+    const empty = await page.evaluate(({ box, rects }) => {
+      const covered = (x, y) => rects.some(r => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height)
+      for (let fy = 0.15; fy <= 0.85; fy += 0.08) {
+        for (let fx = 0.12; fx <= 0.88; fx += 0.08) {
+          const x = box.x + box.width * fx, y = box.y + box.height * fy
+          if (covered(x, y)) continue
+          if (window.__nadocTest.pickBeadAt(x, y)) continue
+          return { x, y }
+        }
+      }
+      return null
+    }, { box, rects })
+    expect(empty, 'found an empty canvas point').not.toBeNull()
+    await page.mouse.click(empty.x, empty.y)
+    await page.waitForTimeout(120)
+
+    // The level + button highlight must persist (the fix).
+    expect(await page.evaluate(() => window.__nadocTest.getSelectionLevel()), 'level persists after empty click').toBe('cluster')
+    expect(await page.locator(clustBtn).evaluate(b => b.classList.contains('active')), 'button stays lit').toBe(true)
+  })
+
   // ISSUE-4 Phase 3 — the would-be-selected leaf gets a RED PREVIEW GLOW on hover.
   // Discriminator vs the Phase-2 scale-pop: the named 'previewGlow' layer is empty
   // (count 0) under the old behaviour and non-empty once a candidate is hovered.
