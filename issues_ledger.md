@@ -271,8 +271,52 @@ context-menu migration phases (which stay queued and resume after ISSUE-4's firs
   `NADOC_DRILL_V2` flag). Phase 3 `[~]` polish — **3-preview `[x]`** (red hover-preview glow) + **3-xover `[x]`
   DONE 2026-06-05** (crossover ARCS now hoverable=red / clickable=green crossover in drill-v2 — the thin
   inter-helix arc was never in the bead/cone pick set; `_arcHitPx` 12→18; `_v2HandleArc`/`_selectCrossoverV2`
-  in `selection_manager.js` + `hoverPreviewTarget` 'arc' kind); breadcrumb-text / flip-default /
-  assembly-unification `[ ]` still open.
+  in `selection_manager.js` + `hoverPreviewTarget` 'arc' kind); **3-filter-audit `[ ]` ← NEXT (user-directed
+  2026-06-05)**; breadcrumb-text / flip-default / assembly-unification `[ ]` still open.
+
+### Phase 3-filter-audit — QUEUED NEXT (user directive 2026-06-05): audit every selection-filter changing mechanism, ask keep/clean/delete per mechanism
+
+**User report + directive (2026-06-05):** "Get rid of the selection-filter PINNING system — it interferes with
+UX. If the user Tabs to `ends` then lassos, the lasso selects a CLUSTER (wrong). Set the next loop to ask about
+EACH selection-filter changing process and clarify if it should be KEPT, CLEANED UP, or DELETED." So the next
+session's protocol is: present the inventory below, AskUserQuestion **keep / clean-up / delete for each
+mechanism**, THEN implement one phase. Do NOT bulk-delete without the per-mechanism ask.
+
+**ROOT CAUSE (verified by code read 2026-06-05) — two parallel "what am I selecting" truths:** drill-v2 unified
+the **click** paths under `_selLevel` (`setSelectionLevel`), but **lasso + the other multi-selects never learned
+about it.** `_finalizeLasso` (selection_manager.js ~2740) decides what to capture from `_currentDrillType()`
+(which returns `_drillSeq[_drillLevel]` from the LEGACY auto-drill state, and is `null` unless `_autoDrill()`)
+falling back to `selectableTypes`. Neither consults `_selLevel`. So in v2, Tab→`end` sets `_selLevel='end'` but
+the lasso reads the stale `selectableTypes`/legacy-drillType → captures strands/clusters. **The lasso is not
+v2-aware** — that IS the bug.
+
+**INVENTORY — every selection-filter / selection-level changing mechanism (verified, ask keep/clean/delete each):**
+| # | Mechanism | Where | Drives | v2-aware? |
+|---|-----------|-------|--------|-----------|
+| 1 | v2 level buttons (clust/strand/line/ends/xover) | `selection_filter.js` attachFilterButtons | `setSelectionLevel` (`_selLevel`) | yes |
+| 2 | v2 Tab cycle (cluster→domain→end→xover) | `keyboard_shortcuts.js` | `setSelectionLevel` | yes |
+| 3 | v2 Esc → default | `keyboard_shortcuts.js` | `setSelectionLevel('default')` | yes |
+| 4 | Legacy manual filter PINS (`_manualFilters` Set + red `sf-pinned`) | `selection_filter.js` | `selectableTypes` gating, disables auto-drill | no (legacy) |
+| 5 | Legacy Tab DRILL-LOCK (`_drillLock`/`_TAB_LOCKS`) | `selection_manager.js`+`keyboard_shortcuts.js` | fixed-level clicks; paints `sf-pinned` | no (legacy) |
+| 6 | Legacy AUTO-DRILL ladder (`_drillSeq`/`_drillLevel`/`_autoDrill`) | `selection_manager.js` | per-strand repeat-click descent | no (legacy) |
+| 7 | Visibility gates (scaf/stap/loop/skip/ovhangs) | `selection_filter.js` | plain-toggle `selectableTypes` ("what's pickable/visible") | shared |
+| 8 | **The LASSO** (`_finalizeLasso`) | `selection_manager.js` ~2740 | reads `_currentDrillType()`+`selectableTypes`, NOT `_selLevel` | **NO — the bug** |
+| 9 | Multi-crossover-arc / multi-domain / multi-overhang selects | `selection_manager.js` ~2523+ | key off `selectableTypes`/drillType | no |
+
+**Decisions the next-session ask must resolve (per the user's keep/clean/delete framing):**
+- **#8 lasso (the motivating bug):** should multi-select respect `_selLevel` in v2 (Tab→ends → lasso captures
+  ENDS)? Almost certainly KEEP-but-FIX: teach the lasso (`_currentDrillType`/the `useStrands/useEnds/...` block)
+  to read `_selLevel` when `_drillV2`. Testable kernel: extract a pure `lassoCaptureType({drillV2, selLevel,
+  drillType, selectableTypes})`.
+- **#4/#5/#6 legacy pinning + drill-lock + auto-drill:** DELETE (this also discharges the planned "flip flag
+  default ON → delete legacy" Phase-3 step). Confirm the flag flip happens first / together.
+- **#7 visibility gates:** KEEP as a separate "what's pickable" concern (decision F) — confirm.
+- **#9 other multi-selects:** keep/clean — make them v2-aware alongside the lasso, or defer.
+
+**Repro to pin next session:** drillv2 on, load a multi-helix design, Tab to `end` (or `cluster`), Ctrl-drag a
+lasso → assert it captures the engaged level's element type (today: captures the legacy `selectableTypes` type).
+Gesture e2e OR unit-test the extracted `lassoCaptureType`. (BANKED gotcha: the single-helix `loadScaffoldedPart`
+fixture has no crossovers and limited clusters — may need a richer fixture or the unit-kernel route.)
 
 ### Phase 3-preview OUTPUT — red hover-preview glow (shipped 2026-06-05, flag-gated)
 
@@ -460,34 +504,39 @@ ladder used it to cap depth).
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-4 Phase 3-xover done — crossover ARCS now hoverable/clickable in drill-v2, on top of Phase 3-preview's red hover-glow)._
+_Living pointer — each session overwrites this. Last updated 2026-06-05 (user directed the NEXT loop to audit the selection-filter PINNING system — see ISSUE-4 "Phase 3-filter-audit" dossier)._
 
-**NEXT PICK: ISSUE-4 — Drill-selection overhaul, remaining Phase 3.** Phase 2 = `selectionLevel` model;
-Phase 3-preview = red hover-preview glow on beads/cones; Phase 3-xover = crossover ARCS hoverable (red) +
-clickable (green crossover). All behind `NADOC_DRILL_V2` (`localStorage` or `?drillv2=1`, OFF by default).
-Key files: pure gate `hoverPreviewTarget` (bead/cone/arc) in `scene/selection_level.js`; red layer
-`_previewGlowLayer` in `scene/design_renderer.js`; `_v2HandleArc`/`_selectCrossoverV2`/`_findStrandArcAt` +
-`_arcHitPx=18` in `scene/selection_manager.js`. Public API on selectionManager:
-`setSelectionLevel`/`getSelectionLevel`/`isDrillV2`. Remaining Phase 3 work, in order:
-1. **HUMAN-EYEBALL on a MULTI-HELIX design (the part not automated — needs crossovers the single-helix e2e
-   fixture lacks).** Turn on `?drillv2=1`, load `Examples/26hb_platform_v3.nadoc`, 1st-click a strand, then:
-   (a) hover its beads/cones → would-be leaf reads RED (vs green selection); (b) **hover a crossover ARC of
-   that strand → red glow TUBE traced along the whole arc; click it → the crossover selects (green glow)**.
-   The red is additive over the green strand, so if it looks muddy/yellow tune `_previewGlowLayer` scale/opacity
-   in `design_renderer.js`; the arc tube is `PREVIEW_ARC_RADIUS` (0.3 nm) / opacity 0.55 there. If the 18px arc
-   grab feels too tight/loose, tune `_arcHitPx` in `selection_manager.js`. Also eyeball the Phase-2 cosmetics (filter-row pinned paint, Tab toast,
-   Esc→default).
+**NEXT PICK: ISSUE-4 — Phase 3-filter-audit (user directive 2026-06-05).** Read the **ISSUE-4
+"Phase 3-filter-audit" dossier block above** — it has the verified ROOT CAUSE, the full INVENTORY table of all
+9 selection-filter/level changing mechanisms, and the decisions to resolve. **PROTOCOL the user explicitly set:**
+present the inventory, then **AskUserQuestion keep / clean-up / delete for EACH mechanism** (do NOT bulk-delete
+without the per-mechanism ask), THEN implement ONE phase.
+- **Motivating bug (the repro to pin first):** drill-v2 on, Tab to `ends`, Ctrl-drag a lasso → it selects a
+  CLUSTER, not ends. Root cause verified: `_finalizeLasso` keys off `_currentDrillType()` (legacy auto-drill
+  state, `null` in v2) + `selectableTypes`, NEVER `_selLevel`. The lasso + the other multi-selects are not
+  v2-aware. Likely fix = teach the lasso to read `_selLevel` when `_drillV2`; extract a pure
+  `lassoCaptureType({drillV2, selLevel, drillType, selectableTypes})` to unit-pin it (the single-helix e2e
+  fixture can't easily drive a multi-element lasso).
+- This phase also subsumes the previously-planned "flip the flag default ON → delete legacy auto-drill /
+  manual-pin / Tab-lock" step (mechanisms #4/#5/#6 in the inventory) — but gated behind the per-mechanism ask.
+
+**STILL OPEN (after the filter-audit): the Phase 3 polish that was queued before this redirect:**
+1. **HUMAN-EYEBALL on a MULTI-HELIX design** (`?drillv2=1`, `Examples/26hb_platform_v3.nadoc`): 1st-click a
+   strand, then (a) hover beads/cones → would-be leaf reads RED; (b) hover a crossover ARC → red glow TUBE along
+   the whole arc, click → crossover selects (green). Tune knobs if needed: `_previewGlowLayer` scale/opacity +
+   `PREVIEW_ARC_RADIUS` (0.3 nm)/opacity 0.55 in `design_renderer.js`; `_arcHitPx` (18) in `selection_manager.js`.
+   Also eyeball the Phase-2 cosmetics (filter-row pinned paint, Tab toast, Esc→default).
 2. **(Optional) text level-breadcrumb (the ORIGINAL decision-E idea)** — only if the user still wants a
    persistent `Strand ▸ End` text trail in ADDITION to the glow. The glow covered the user's actual need;
    confirm before building. Would route through `selection_filter.js` (owns `getSelectionManager` +
    `reflectDrillLevel`), composing a new `ui/selection_breadcrumb.js` — zero main.js delta.
-3. **Flip the flag default to ON, then delete the legacy paths** (`_autoDrillBead`/`_autoDrillCone`/
-   `_drillLock` + `_manualFilters` + `_TAB_LOCKS`) once v2 is trusted in the app. Do the flip + the deletion
-   as SEPARATE commits.
+3. **Flip the flag default to ON + delete the legacy paths** (`_autoDrillBead`/`_autoDrillCone`/`_drillLock`
+   + `_manualFilters` + `_TAB_LOCKS`) — NOW FOLDED INTO the Phase 3-filter-audit (mechanisms #4/#5/#6), behind
+   the per-mechanism ask. Flip + deletion as SEPARATE commits.
 4. **Assembly unification (decision G)** — assembly adopts the same 1st-click-part / 2nd-click-subelement
    shape. Net-new (no assembly drill exists); a Phase-3 design detail.
-5. **Confirm the exact visibility-gate ↔ level split (decision F)** with the user — Phase 2 made the 5 level
-   buttons drive level and left scaf/stap/loop/skip/ovhangs as visibility toggles; verify that's intended.
+5. **Confirm the exact visibility-gate ↔ level split (decision F)** — also part of the filter-audit (mechanism
+   #7): Phase 2 made the 5 level buttons drive level and left scaf/stap/loop/skip/ovhangs as visibility toggles.
 
 Full spec + the target state-machine diagram + scope/decision notes (A–G) are in the **ISSUE-4 dossier** above.
 
