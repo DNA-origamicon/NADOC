@@ -82,12 +82,12 @@ design decisions + research (so early sessions build the loop's muscle on tracta
 |-------|-------|------|------|--------------------|
 | 1 | ~~**ISSUE-3** Assembly Ctrl-click multi-select~~ ✅ DONE 2026-06-05 | functional bug | small, bounded | no |
 | 2 | ~~**ISSUE-2** Cross-tab sync delay + console clutter~~ ✅ DONE 2026-06-05 (propagation fix + silent-logging C + badge co-editing B all shipped) | functional bug (data-integrity) | medium | no |
-| 3 | **ISSUE-1** Context-menu proliferation — Phase 1 ✅ + Phase 2a-binding ✅ + Phase 2a-orientation ✅ DONE 2026-06-05; Phase 2a-blunt / 2b–2e + Phase 3+ open | UX + tech-debt | large, multi-phase | yes (done) |
-| 4 | **ISSUE-4** Drill-selection overhaul | UX redesign | large, multi-phase | yes (most) |
+| **→ NEXT** | **ISSUE-4** Drill-selection overhaul — Phase 1 ✅ DONE 2026-06-05 (map + spec banked; user decisions taken). **Phase 2 next = rebuild the state machine to the agreed `selectionLevel` model (CODE).** | UX redesign | large, multi-phase | spec done |
+| later | **ISSUE-1** Context-menu proliferation — Phase 1 ✅ + Phase 2a-binding ✅ + Phase 2a-orientation ✅ DONE 2026-06-05; Phase 2a-blunt / 2b–2e + Phase 3+ open (deferred behind ISSUE-4) | UX + tech-debt | large, multi-phase | yes (done) |
 
-This order is a recommendation; the user may name a different issue. ISSUE-2 overlaps the autosave
-validation backlog (see `main_js_extraction_log.md` #55 + the validation TODOs) — doing it also discharges
-that debt.
+This order is a recommendation; the user may name a different issue. **2026-06-05: user diverted the loop to
+ISSUE-4 next** — the drill-selection UX is actively in the way, so it jumps ahead of the remaining ISSUE-1
+context-menu migration phases (which stay queued and resume after ISSUE-4's first phase or two).
 
 ---
 
@@ -266,7 +266,93 @@ that debt.
 
 ## ISSUE-4 — Drill selection UX overhaul (UX redesign)
 
-- **Status:** `[ ]` not started.
+- **Status:** Phase 1 `[x]` DONE 2026-06-05 (current-state map + friction catalogue + target interaction
+  spec; NO code — survey + AskUserQuestion). Phase 2 `[ ]` rebuild the state machine; Phase 3 `[ ]` polish.
+
+### Phase 1 OUTPUT — current-state map + target interaction spec (banked 2026-06-05)
+
+**Scope of the drill (verified by code read):** the drill is **design-editor ONLY**. `scene/assembly_pointer.js`
+/ `scene/assembly_lasso.js` contain NO drill code — assembly selection is flat part-pick (the thing ISSUE-3
+fixed). Three modules own the design drill: `scene/selection_manager.js` (auto-drill state machine
+`_drillAnchor`/`_drillLevel`/`_drillSeq`/`_drillLock` + `setDrillLock`/`getDrillLock`/`_resetDrill`, the
+`_autoDrillBead`/`_autoDrillCone` ladders ~1649–1771), `ui/selection_filter.js` (manual pins +
+`reflectDrillLevel`/`reflectLockOnButtons`/`resetToAutoBaseline`, carve-up #61), `ui/keyboard_shortcuts.js`
+(Tab cycle-lock ~247 + Escape pop ~574).
+
+**Current model = three overlapping mechanisms on one `#select-filter` button row** (the root problem):
+1. **Auto-drill** — repeat-click descends a rep-aware ladder keyed PER-STRAND (`${strandId}:bead|cone`):
+   full/vdw/ballstick `cluster→strand→domain→bead`, cylinders `→domain`, surface `→strand`; a cone gives
+   `cluster→strand→xover`. Cycles back to cluster one click past the leaf. Matching sf-btn `.active`-lights.
+2. **Manual filter pins** — clicking an sf-btn pins it (red `sf-pinned`), switches to `selectableTypes`
+   gating, and DISABLES drilling. Un-pinning the last restores auto-drill.
+3. **Tab drill-lock** — Tab cycles `null→cluster→strand→domain→bead→xover→null`, pins clicks to a fixed
+   level, and paints the SAME red `sf-pinned` border as a manual pin (but means something different).
+
+**Friction (the confirmed repro — survey-style, USER TODO walkthrough):** red border means two different
+things (selectability gate vs drill-depth lock); no persistent "what level am I on" signal in plain
+auto-drill; clicking a different strand resets depth to cluster (per-strand anchor); the ladder cycles
+back to the whole cluster one click past the leaf; three different exit paths (Esc / un-pin / click-other);
+hidden modal state (`_drillLevel`/`_drillLock`/`_manualFilters` invisible).
+
+**TARGET SPEC (user AskUserQuestion decisions, 2026-06-05 — these gate Phases 2–3):**
+
+A. **Collapse to ONE concept: an active `selectionLevel` ∈ `{ default, cluster, domain, end, xover }`.**
+   Merge the manual-pin and Tab-lock mechanisms into a single level state. Kills the "red means two things"
+   ambiguity — there is exactly one engaged level at a time.
+
+B. **Default click behavior (`selectionLevel = default`) — the common case (user: "almost always trying to
+   select a strand, an end, or a crossover"):**
+   - 1st click on any part element → select the **STRAND**.
+   - 2nd click on the already-selected strand → select the **leaf UNDER THE CURSOR**: a **bead/end** if
+     hovering a bead, a **crossover** if hovering a cone. Leaf is hover-determined, NOT a fixed sequence slot.
+   - **Hover-preview affordance:** while a strand is selected, the element under the cursor (bead or xover)
+     is highlighted *distinctly* to preview what a further click would select.
+   - Strand is the ONLY thing reachable by plain click; **cluster & domain are NOT in the click path**.
+
+C. **Cluster + domain levels reachable ONLY via the selection filters (or Tab)** — never via click-drill.
+   When a level is engaged, every click selects at that fixed level.
+
+D. **Tab cycles `<anywhere> → cluster → domain → end → xover → cluster → …`** (user-specified). NOTE this
+   DIFFERS from today: strand and the `null`/auto state are NOT in the cycle — only the 4 filter levels.
+   **Escape → return to `default`** (strand-default click). Tab and the filter buttons drive the SAME
+   `selectionLevel`.
+
+E. **Persistent breadcrumb** of the current level (e.g. `Strand ▸ End` in default mode with a leaf hovered,
+   or the engaged level highlighted), clickable to change level. Replaces the invisible internal state.
+
+F. **Filter row redesigned together** (decision "redesign together"): the cluster/strand/domain/ends/xover
+   buttons become the `selectionLevel` selector (one coherent surface, no overloaded red). The orthogonal
+   type-visibility gates (scaffold/staples/loops/skips/overhangs) stay a separate "what's pickable" concern
+   — confirm the exact split in Phase 2.
+
+G. **Unify assembly** (decision "design drill + unify assembly"): assembly adopts the same shape — 1st click
+   = part (the strand-analog), 2nd click = sub-element under hover, breadcrumb `Part ▸ …`. Exact assembly
+   sub-levels are a Phase-2 design detail (no assembly drill exists yet — it's net-new there).
+
+**Target state machine:**
+```
+selectionLevel ∈ { default, cluster, domain, end, xover }
+
+[default]                              (Esc lands here; the common case)
+  click empty             → clear
+  click element           → SELECT STRAND
+  click selected strand   → SELECT leaf-under-cursor   (bead → end | cone → xover)
+  hover (strand selected) → preview-highlight the would-be leaf
+  Tab                     → [cluster]
+
+[cluster | domain | end | xover]       (engaged via filter button or Tab)
+  click element           → SELECT at this fixed level
+  Tab                     → next in  cluster → domain → end → xover → cluster
+  Esc  /  filter-off      → [default]
+  click matching filter   → toggle (on = engage, re-click = off → default)
+```
+
+**Rep-awareness caveat (carry to Phase 2):** in `cylinders`/`surface` columns there is no pickable bead, so
+the default-mode 2nd-click leaf may be unavailable — decide whether the 2nd click is a no-op or falls back to
+domain/strand. `designRenderer.columnRepAt(helix_id, bp_index)` already exposes the per-column rep (the old
+ladder used it to cap depth).
+
+### Original dossier (pre-Phase-1 leads — superseded by the spec above)
 - **Symptom (user):** the drill-down selection (click into nested levels: assembly → part → cluster →
   strand → bead, or the design-side filter drill) has become a "terrible UX." Needs a from-scratch
   redesign, not a patch.
@@ -300,39 +386,45 @@ that debt.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-1 Phase 2a-orientation done — overhang-orientation menu migrated)._
+_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-4 Phase 1 done — drill-selection map + target spec banked; user decisions taken)._
 
-**ISSUE-2 + ISSUE-3 closed. ISSUE-1 Phase 1 + Phase 2a-binding + Phase 2a-orientation done.** 2a-orientation
-migrated the overhang-orientation menu onto `createContextMenu` (`ui/overhang_orientation_menu.js`, main.js
-−83 LOC, 16 tests) and extended the primitive with a reusable `{ type:'custom', el }` HTMLElement passthrough
-(the only way to embed the rep hover-flyout). Recommended next pick, in cost order:
+**NEXT PICK: ISSUE-4 — Drill-selection overhaul, Phase 2 (CODE — rebuild the state machine).** Phase 1 is
+done: the full current-state map, friction catalogue, and the user's target spec are banked in the **ISSUE-4
+dossier above** (read "Phase 1 OUTPUT" before touching code). The decisions are already made — DO NOT re-ask;
+implement to the spec. The target model in one line: collapse the three overlapping mechanisms (auto-drill /
+manual pins / Tab-lock) into a single `selectionLevel ∈ {default, cluster, domain, end, xover}` and a
+breadcrumb.
 
-- **ISSUE-1 Phase 2a-blunt (next; biggest/riskiest of 2a).** The blunt-end menu is NOT a builder — it's a
-  **static HTML element** `#blunt-end-ctx-menu` (index.html) shown/hidden by `_showBluntCtx`/`_hideBluntCtx`
-  (`main.js:~2735` after this commit) with three heavy pre-wired ctx-button handlers
-  (`blunt-extrude/bend/twist-btn-ctx`, bodies launch slice-plane / deform tool / set mode-indicator).
-  Migrating → dynamic `createContextMenu` means moving those 3 handler bodies into the module AND deleting the
-  static element from index.html. Own phase. The `danger` flag + `{type:'custom'}` passthrough are both
-  available now if needed. ⚠ note the handler bodies call closure helpers (`_hideBluntPanel`, `startToolAtBp`,
-  `slicePlane`, `deformView`, `_clusterDeformGuard`, `expandedSpacing`) — pass them as deps / lazy getters.
-- **ISSUE-1 Phase 2b–2e (spreadsheet ×4 / empty-space / assembly / cadnano ×3).** Remaining bespoke menus.
-  2b (spreadsheet) is self-contained in `ui/spreadsheet.js`; 2d (assembly) also discharges the carve-up
-  extraction debt. Pick any — each is its own cheap phase.
-- **ISSUE-4 — Drill-selection overhaul (alternative, no-code Phase 1).** Map every drill transition + the
-  state it mutates (`ui/selection_filter.js` drill-lock machine #61 + `scene/selection_manager.js`), propose
-  2-3 interaction models, ASK the user to pick. Cheap cold-session starter if you'd rather not start code.
+**Phase 2 build (route through the modules, NOT main.js — `selection_manager.js` + `selection_filter.js` +
+`keyboard_shortcuts.js` already own this; main.js LOC Δ ≤ 0):**
+1. **Default click (selectionLevel=default):** 1st click → STRAND; 2nd click on the selected strand →
+   leaf-under-cursor (bead→end | cone→xover, hover-determined, NOT a fixed `_drillSeq` slot). Replaces the
+   `_autoDrillBead`/`_autoDrillCone` ladders (~1649–1771 in `selection_manager.js`). Drop cluster/domain from
+   the click path entirely.
+2. **Merge manual-pin + Tab-lock into one `selectionLevel` state.** Filter buttons (cluster/strand/domain/
+   ends/xover) and Tab both set it. Tab cycle = `<anywhere>→cluster→domain→end→xover→cluster→…` (strand and
+   null are OUT of the cycle — update `_TAB_LOCKS` in `keyboard_shortcuts.js:42`). **Escape → default.**
+   This deletes the `_manualFilters`-vs-`_drillLock` split + the "red means two things" ambiguity.
+3. **Hover-preview affordance:** while a strand is selected, distinctly highlight the bead/xover under the
+   cursor (the would-be next pick). New hover path in `selection_manager.js`.
+4. **Rep caveat:** in cylinders/surface columns there's no pickable bead — decide 2nd-click = no-op or fall
+   back (use `designRenderer.columnRepAt`). Spec'd in the dossier's caveat.
+5. **Gate:** extend `e2e/assembly_select.spec.js` / a selection e2e for the click→strand→leaf path +
+   `selection_filter.test.js` / `keyboard_shortcuts.test.js` for the new Tab cycle + level merge. Build behind
+   a flag if the rewrite feels risky. Phase 3 = breadcrumb UI + visual polish + the assembly unification
+   (decision G — assembly adopts the same shape; no assembly drill exists yet, so it's net-new).
 
-**Primitive now supports:** `danger` (`{ label, onClick, danger: true }` → red `.context-menu__item--danger`)
-AND `{ type:'custom', el }` (caller-owned HTMLElement passthrough — for flyouts/widgets the flat-item model
-can't express; clicks inside it do NOT auto-dismiss, wire that in the el). Reuse both in remaining migrations.
+Full spec + the target state-machine diagram + scope/decision notes (A–G) are in the **ISSUE-4 dossier** above.
 
-**App-validation gap banked for 2a-orientation:** the live right-click-on-an-overhang gesture is a **USER TODO**
-(numbered steps in the fix-log row) — driving a WebGL raycast right-click on a rendered overhang sprite isn't
-automatable here. The boot/wiring path IS exercised by `just smoke`'s console-error gate (loads a real design
-with the changed main.js, zero errors); the rendered items / single-vs-multi gating / danger / rep-flyout
-passthrough / api-wiring are pinned by the 16 vitest tests. **Pure migration — zero intended behavior change**
-(same items, same actions; only positioning/dismissal/z-index now come from the shared primitive, which ALSO
-adds Escape + scroll dismissal that the bespoke menu lacked).
+**Deferred behind ISSUE-4 (resume after its Phase 1-2): ISSUE-1 context-menu migration.** Remaining phases —
+2a-blunt (the `#blunt-end-ctx-menu` static element + 3 heavy ctx-button handlers → dynamic `createContextMenu`;
+biggest/riskiest of 2a), 2b–2e (spreadsheet ×4 / empty-space / assembly / cadnano ×3), Phase 3+ content
+cleanup. The primitive now supports `danger` AND `{ type:'custom', el }` (HTMLElement passthrough — for
+flyouts/widgets the flat-item model can't express; clicks inside don't auto-dismiss, wire that in the el);
+reuse both. `selection_manager.js:420` uses the same rep hover-flyout `{type:'custom'}` covers, so it's a cheap
+future migration. (NOTE: ISSUE-4 and ISSUE-1 2b/2d/Phase-3 both touch `selection_manager.js` — sequencing
+ISSUE-4 first avoids extracting/migrating a drill region that's about to be rewritten; same interleave rule as
+ISSUE-1↔assembly carve-up.)
 
 **ISSUE-1 spec recap (banked from the user, so Phase 2/3 don't re-ask):** fewer-but-still-multiple (not
 one-menu-per-type); primitive-first then content; editors stay distinct (accept design↔cadnano duplication);
