@@ -296,7 +296,7 @@ function _showRelaxJointPicker(connId, availableJointIds) {
 
 const raycaster  = new THREE.Raycaster()
 const _ndc       = new THREE.Vector2()
-const _arcHitPx  = 12   // screen-space proximity threshold for arc midpoint hits
+const _arcHitPx  = 18   // screen-space proximity threshold for crossover-arc hits (thin lines need a forgiving grab)
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
@@ -1590,6 +1590,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // the cursor previews the leaf a 2nd click would select.
   let _hoverBead = null
   let _hoverCone = null
+  let _hoverArc  = null
 
   function _autoDrill() { return !isManualSelect?.() }
 
@@ -1929,17 +1930,88 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _emitDrillLevel('default')
   }
 
+  // Select the crossover object behind a hovered/clicked arc (green selection glow).
+  // The thin inter-helix arc carries the crossover_id; a 2nd click on the same
+  // crossover toggles it off. Returns false (caller falls back to strand) when the
+  // arc has no resolvable crossover/forced-ligation.
+  function _selectCrossoverV2(arcHit) {
+    if (!arcHit.crossover_id) return false
+    const design = store.getState().currentDesign
+    const xo = design?.crossovers?.find(x => x.id === arcHit.crossover_id)
+    const fl = xo ? null : design?.forced_ligations?.find(f => f.id === arcHit.crossover_id)
+    const target = xo ?? fl
+    if (!target) return false
+    if (_mode === 'crossover' && _crossoverId === target.id) { _clearAll(); return true }  // toggle off
+    _restoreStrand()
+    _mode = 'crossover'; _crossoverId = target.id; _strandId = arcHit.strandId
+    _setSelectionGlow(designRenderer.getCrossoverGlowEntries(target))
+    store.setState({
+      selectedObject: { type: xo ? 'crossover' : 'forced_ligation', id: target.id, data: target },
+    })
+    return true
+  }
+
+  // Drill-v2 crossover-arc dispatch — mirror of _v2HandleCone for the thin inter-helix
+  // arc (its cone is hidden, so the arc IS the only pickable crossover target).
+  function _v2HandleArc(arcHit, backboneEntries, coneEntries) {
+    const hitStrandId = arcHit.strandId
+    _clearHoverPreview()
+    if (_selLevel === 'cluster') {
+      const repNuc = arcHit.fromNuc ?? arcHit.toNuc
+      if (!(repNuc && _selectClusterV2(repNuc, hitStrandId, backboneEntries))) {
+        _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
+      }
+      _emitDrillLevel('cluster'); return
+    }
+    if (_selLevel === 'xover') {
+      if (!_selectCrossoverV2(arcHit)) _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
+      _emitDrillLevel('xover'); return
+    }
+    if (_selLevel === 'domain' || _selLevel === 'end') {
+      // No domain/end leaf on a crossover arc — soft-fall to strand.
+      _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
+      _emitDrillLevel(_selLevel); return
+    }
+    // default: strand-first, then the crossover under the cursor.
+    const onSameStrand = (_mode === 'strand' || _mode === 'cone' || _mode === 'crossover') && _strandId === hitStrandId
+    if (!onSameStrand) {
+      _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
+    } else if (!_selectCrossoverV2(arcHit)) {
+      _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
+    }
+    _emitDrillLevel('default')
+  }
+
   // ── Drill-v2 hover preview ─────────────────────────────────────────────────
   // Lightweight raycast (default level + a selected strand only) that paints a RED
   // glow on the bead/cone under the cursor — the leaf a 2nd click would select —
   // distinct from the GREEN selection glow. Clicking it makes the selection (green).
 
   function _clearHoverPreview() {
-    if (_hoverBead || _hoverCone) {
+    if (_hoverBead || _hoverCone || _hoverArc) {
       _hoverBead = null
       _hoverCone = null
+      _hoverArc  = null
       designRenderer.clearPreviewGlow()
     }
+  }
+
+  // Nearest crossover-arc of the SELECTED strand within _arcHitPx of (sx, sy)
+  // (canvas-relative). Reuses the already-computed _strandArcEntries so a pointermove
+  // doesn't project every arc in the design — only the selected strand's. Arc lines
+  // are pick-by-proximity (thin), not raycast.
+  function _findStrandArcAt(sx, sy) {
+    let best = null, bestDist = _arcHitPx
+    for (const e of _strandArcEntries) {
+      const pts = e.getPositions?.() ?? [e.getMidWorld?.()]
+      for (const pt of pts) {
+        if (!pt) continue
+        const sp = _toScreen(pt)
+        const d  = Math.hypot(sp.x - sx, sp.y - sy)
+        if (d < bestDist) { bestDist = d; best = e }
+      }
+    }
+    return best
   }
 
   function _pickNearestBeadCone(clientX, clientY) {
@@ -1965,19 +2037,29 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   function _updateHoverPreview(clientX, clientY) {
     if (!_drillV2 || _selLevel !== 'default' || _mode !== 'strand') { _clearHoverPreview(); return }
     if (clientX > window.innerWidth - 300) { _clearHoverPreview(); return }
+    const opts = { drillV2: _drillV2, selLevel: _selLevel, mode: _mode, strandId: _strandId }
     const hit = _pickNearestBeadCone(clientX, clientY)
-    const target = hoverPreviewTarget({
-      drillV2: _drillV2, selLevel: _selLevel, mode: _mode, strandId: _strandId, hit,
-    })
+    let target = hoverPreviewTarget({ ...opts, hit })
+    if (!target) {
+      // No bead/cone leaf — the thin crossover arc is the only target there (its
+      // cone is hidden). Pick it by proximity (18px) among the selected strand's arcs.
+      const rect = canvas.getBoundingClientRect()
+      const arc = _findStrandArcAt(clientX - rect.left, clientY - rect.top)
+      if (arc) target = hoverPreviewTarget({ ...opts, hit: { kind: 'arc', arc } })
+    }
     if (!target) { _clearHoverPreview(); return }
     if (target.kind === 'bead') {
       if (_hoverBead === target.entry) return
-      _hoverBead = target.entry; _hoverCone = null
+      _hoverBead = target.entry; _hoverCone = null; _hoverArc = null
       designRenderer.setPreviewGlow([{ pos: target.entry.pos }])
-    } else {
+    } else if (target.kind === 'cone') {
       if (_hoverCone === target.cone) return
-      _hoverCone = target.cone; _hoverBead = null
+      _hoverCone = target.cone; _hoverBead = null; _hoverArc = null
       designRenderer.setPreviewGlow([{ pos: target.cone.midPos }])
+    } else {
+      if (_hoverArc === target.arc) return
+      _hoverArc = target.arc; _hoverBead = null; _hoverCone = null
+      designRenderer.setPreviewGlow([{ pos: target.arc.getMidWorld() }])
     }
   }
 
@@ -2103,10 +2185,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _domainIndex       = null
     _beadEntry         = null
     _coneEntry         = null
-    // Hover-preview bead/cone live on the selected strand; drop the pointers and
+    // Hover-preview bead/cone/arc live on the selected strand; drop the pointers and
     // remove the red preview glow (a separate layer the scale-reset above misses).
     _hoverBead = null
     _hoverCone = null
+    _hoverArc  = null
     designRenderer.clearPreviewGlow?.()
   }
 
@@ -3251,6 +3334,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       // and the hit arc has a crossover_id, select the crossover object.
       const rect2 = canvas.getBoundingClientRect()
       const arcHit = _findArcAt(e.clientX - rect2.left, e.clientY - rect2.top)
+      // Drill-v2: the crossover arc is part of the strand→crossover click ladder
+      // (strand-first, then the crossover under the cursor — green selection glow).
+      if (_drillV2) {
+        if (arcHit) { _v2HandleArc(arcHit, backboneEntries, coneEntries); return }
+        _clearAll(); return
+      }
       if (!arcHit) { _clearAll(); return }
 
       // Crossover-object selection (when crossoverArcs filter is active)

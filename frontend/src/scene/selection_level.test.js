@@ -88,6 +88,7 @@ describe('isDrillV2 — feature flag', () => {
 describe('hoverPreviewTarget — red-glow leaf preview gate', () => {
   const beadHit = (sid) => ({ kind: 'bead', entry: { nuc: { strand_id: sid } } })
   const coneHit = (sid) => ({ kind: 'cone', cone: { strandId: sid } })
+  const arcHit  = (sid) => ({ kind: 'arc',  arc:  { strandId: sid } })
   const base = { drillV2: true, selLevel: 'default', mode: 'strand', strandId: 'S1' }
 
   it('previews the hovered bead when it belongs to the selected strand', () => {
@@ -98,9 +99,14 @@ describe('hoverPreviewTarget — red-glow leaf preview gate', () => {
     const hit = coneHit('S1')
     expect(hoverPreviewTarget({ ...base, hit })).toEqual({ kind: 'cone', cone: hit.cone })
   })
+  it('previews the hovered crossover arc when it belongs to the selected strand', () => {
+    const hit = arcHit('S1')
+    expect(hoverPreviewTarget({ ...base, hit })).toEqual({ kind: 'arc', arc: hit.arc })
+  })
   it('no preview when the hovered element is on a DIFFERENT strand', () => {
     expect(hoverPreviewTarget({ ...base, hit: beadHit('S2') })).toBeNull()
     expect(hoverPreviewTarget({ ...base, hit: coneHit('S2') })).toBeNull()
+    expect(hoverPreviewTarget({ ...base, hit: arcHit('S2')  })).toBeNull()
   })
   it('no preview unless drill-v2 is on', () => {
     expect(hoverPreviewTarget({ ...base, drillV2: false, hit: beadHit('S1') })).toBeNull()

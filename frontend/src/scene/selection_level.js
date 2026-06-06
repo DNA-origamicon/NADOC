@@ -64,10 +64,12 @@ export function toggleLevel(cur, level) {
  * Preview ONLY when: drill-v2 is on, the active level is `default`, a STRAND is
  * selected (mode 'strand' — not yet drilled to a leaf), and the hovered element
  * belongs to THAT selected strand. A bead previews the would-be end/nucleotide; a
- * cone previews the would-be crossover.
+ * cone previews the would-be crossover; an arc previews the would-be crossover for
+ * the thin inter-helix crossover line (whose cone is hidden, so the arc is the only
+ * pickable target).
  *
  * @param {{drillV2:boolean, selLevel:string, mode:string, strandId:*, hit:object|null}} o
- * @returns {{kind:'bead', entry:object} | {kind:'cone', cone:object} | null}
+ * @returns {{kind:'bead', entry:object} | {kind:'cone', cone:object} | {kind:'arc', arc:object} | null}
  */
 export function hoverPreviewTarget({ drillV2, selLevel, mode, strandId, hit }) {
   if (!drillV2 || selLevel !== 'default' || mode !== 'strand' || !hit) return null
@@ -76,6 +78,9 @@ export function hoverPreviewTarget({ drillV2, selLevel, mode, strandId, hit }) {
   }
   if (hit.kind === 'cone') {
     return hit.cone?.strandId === strandId ? { kind: 'cone', cone: hit.cone } : null
+  }
+  if (hit.kind === 'arc') {
+    return hit.arc?.strandId === strandId ? { kind: 'arc', arc: hit.arc } : null
   }
   return null
 }
