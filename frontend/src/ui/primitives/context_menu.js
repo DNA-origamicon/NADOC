@@ -9,6 +9,11 @@
  * Items can be:
  *   { type: 'header', label }                — non-clickable section title
  *   { type: 'separator' }                    — horizontal divider
+ *   { type: 'custom', el }                   — caller-owned HTMLElement passthrough
+ *                                              (e.g. a hover-flyout submenu the
+ *                                              primitive can't express); the menu
+ *                                              does NOT auto-dismiss on clicks
+ *                                              inside it — wire that in the el.
  *   { label, onClick, disabled?, danger?, icon?, shortcut? }
  *
  * Closes on:
@@ -50,6 +55,10 @@ export function createContextMenu(opts = {}) {
         className: 'context-menu__header',
         text: item.label,
       }))
+      continue
+    }
+    if (item.type === 'custom') {
+      if (item.el) menuEl.appendChild(item.el)
       continue
     }
 

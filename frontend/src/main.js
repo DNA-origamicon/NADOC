@@ -65,6 +65,7 @@ import { initStrandGroupsPanel } from './ui/strand_groups_panel.js'
 import { initSelectionFilter } from './ui/selection_filter.js'
 import { initPropertiesPanel } from './ui/properties_panel.js'
 import { initOverhangBindingMenu } from './ui/overhang_binding_menu.js'
+import { initOverhangOrientationMenu } from './ui/overhang_orientation_menu.js'
 import { createScriptRunner }  from './ui/script_runner.js'
 import { store, popGroupUndo } from './state/store.js'
 import * as api                from './api/client.js'
@@ -854,7 +855,7 @@ async function main() {
       }
     },
     onOverhangRightClick: (ovhgIds, clientX, clientY) => {
-      _showOverhangOrientMenu(ovhgIds, clientX, clientY)
+      _orientMenu.show(ovhgIds, clientX, clientY)
     },
     onOpenOverhangsManager: (ovhgIds) => {
       const { currentDesign } = store.getState()
@@ -2721,97 +2722,13 @@ async function main() {
   })
 
   // ── Overhang orientation context menu ────────────────────────────────────────
-
-  let _ovhgCtxMenu = null   // currently visible menu element
-
-  function _dismissOvhgMenu() {
-    _ovhgCtxMenu?.remove()
-    _ovhgCtxMenu = null
-  }
-
-  function _showOverhangOrientMenu(ovhgIds, clientX, clientY) {
-    _dismissOvhgMenu()
-
-    const menu = document.createElement('div')
-    menu.style.cssText = `
-      position: fixed; left: ${clientX}px; top: ${clientY}px;
-      background: #1e2a3a; border: 1px solid #3a4a5a; border-radius: 6px;
-      padding: 4px 0; min-width: 160px; z-index: 9999;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.5); font-family: var(--font-ui); font-size: 12px;
-    `
-
-    function _mItem(label, action, danger = false) {
-      const el = document.createElement('div')
-      el.textContent = label
-      el.style.cssText = `padding: 6px 14px; color: ${danger ? '#ff7070' : '#eef'}; cursor: pointer;`
-      el.addEventListener('mouseenter', () => { el.style.background = danger ? '#2d1515' : '#2a3a4a' })
-      el.addEventListener('mouseleave', () => { el.style.background = 'transparent' })
-      el.addEventListener('click', e => { e.stopPropagation(); _dismissOvhgMenu(); action() })
-      return el
-    }
-
-    function _mSep() {
-      const hr = document.createElement('div')
-      hr.style.cssText = 'border-top: 1px solid #3a4a5a; margin: 4px 0;'
-      return hr
-    }
-
-    menu.appendChild(_mItem('Edit Orientation', () => _orientPanel.open(ovhgIds)))
-    menu.appendChild(_mItem('Reset Orientation', async () => {
-      await api.patchOverhangRotationsBatch(ovhgIds.map(id => ({ overhang_id: id, rotation: [0, 0, 0, 1] })))
-      if (store.getState().assemblyActive) {
-        const { activeInstanceId, currentAssembly } = store.getState()
-        if (activeInstanceId) assemblyRenderer.invalidateInstance(activeInstanceId)
-        await assemblyRenderer.rebuild(currentAssembly)
-      }
-    }))
-    if (ovhgIds.length === 1) {
-      menu.appendChild(_mSep())
-      menu.appendChild(_mItem('Set Label…', () => {
-        const existing = store.getState().currentDesign?.overhangs?.find(o => o.id === ovhgIds[0])?.label ?? ''
-        const name = prompt('Overhang label:', existing)
-        if (name === null) return
-        api.patchOverhang(ovhgIds[0], { label: name.trim() || null })
-      }))
-      menu.appendChild(_mItem('Generate OH binding strand', async () => {
-        try { await api.generateBinderForOverhang(ovhgIds[0]) } catch { /* lastError */ }
-      }))
-    }
-    // Representation override for the overhang region(s).
-    menu.appendChild(_mSep())
-    menu.appendChild(createRepresentationMenuItem({
-      dismiss: _dismissOvhgMenu,
-      apply: (rep) => {
-        const design = store.getState().currentDesign
-        const segs = overhangsToSegments(design, ovhgIds)
-        const next = editOverridesForSegments(design?.representation_overrides ?? [], segs, rep)
-        api.saveRepresentationOverrides(next)
-      },
-    }))
-
-    // Always-available entry into the manager — passes whichever overhang(s)
-    // were right-clicked through as the prepopulation.
-    menu.appendChild(_mSep())
-    menu.appendChild(_mItem('Open Overhangs Manager…', () => {
-      if (!store.getState().currentDesign?.helices?.length) return
-      openOverhangsManager(ovhgIds)
-    }))
-    menu.appendChild(_mSep())
-    menu.appendChild(_mItem('Clear All Overhangs', () => api.clearOverhangs(), true))
-
-    document.body.appendChild(menu)
-    _ovhgCtxMenu = menu
-
-    setTimeout(() => {
-      const dismiss = e => {
-        if (!menu.contains(e.target)) {
-          _dismissOvhgMenu()
-          document.removeEventListener('pointerdown', dismiss)
-        }
-      }
-      document.addEventListener('pointerdown', dismiss)
-    }, 0)
-  }
+  // Builder lives in ui/overhang_orientation_menu.js (ISSUE-1 Phase 2a-orientation).
+  // _orientPanel is created later in main(), so it's passed via a lazy getter.
+  const _orientMenu = initOverhangOrientationMenu({
+    api, store, assemblyRenderer, openOverhangsManager,
+    getOrientPanel: () => _orientPanel,
+    overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem,
+  })
 
   // ── Blunt end right-click context menu ──────────────────────────────────────
   const _bluntCtx = document.getElementById('blunt-end-ctx-menu')
