@@ -6,7 +6,8 @@
  *
  *   1st click on a bead          → STRAND          (decision B: strand-first)
  *   2nd click on the same bead   → that nucleotide (the leaf under the cursor)
- *   3rd click on the same bead   → cleared         (toggle off)
+ *   3rd click on the same bead   → STAYS the nucleotide (repeat click keeps the
+ *                                  leaf selected — no toggle-clear, user feedback 2026-06-06)
  *
  * This is the discriminator vs legacy auto-drill (which would give cluster→strand
  * →domain→bead). Same robust pattern as bead_select.spec.js: pick a real bead via
@@ -16,7 +17,7 @@ import { test, expect } from '@playwright/test'
 import { loadScaffoldedPart, beadCandidates } from './helpers/scene_harness.js'
 
 test.describe('Drill v2 — default-level click ladder', () => {
-  test('1st click → strand, 2nd → nucleotide, 3rd → clear', async ({ page }) => {
+  test('1st click → strand, 2nd → nucleotide, 3rd → keeps the nucleotide', async ({ page }) => {
     await loadScaffoldedPart(page, { doc: 'e2e-drillv2', name: 'drillv2', extraQuery: '&drillv2=1' })
 
     // Sanity: the flag is actually on for this boot.
@@ -42,11 +43,11 @@ test.describe('Drill v2 — default-level click ladder', () => {
     const sel2 = await page.evaluate(() => window.__nadocTest.getSelectedObject())
     expect(sel2?.type, '2nd click → leaf nucleotide').toBe('nucleotide')
 
-    // 3rd click on the same leaf → toggle clear.
+    // 3rd click on the same leaf → KEEPS the nucleotide selected (no toggle-clear).
     await page.mouse.click(landed.x, landed.y)
     await page.waitForTimeout(120)
     const sel3 = await page.evaluate(() => window.__nadocTest.getSelectedObject())
-    expect(sel3, '3rd click on the same leaf clears the selection').toBeNull()
+    expect(sel3?.type, '3rd click on the same leaf keeps the nucleotide selected').toBe('nucleotide')
   })
 
   // ISSUE-4 Phase 3 — the would-be-selected leaf gets a RED PREVIEW GLOW on hover.

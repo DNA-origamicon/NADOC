@@ -1853,13 +1853,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     })
   }
 
-  function _sameBead(a, b) {
-    return a && b &&
-      a.nuc.helix_id  === b.nuc.helix_id &&
-      a.nuc.bp_index  === b.nuc.bp_index &&
-      a.nuc.direction === b.nuc.direction
-  }
-
   // Drill-v2 bead-hit dispatch — fixed-level select, or strand→leaf-under-cursor
   // in default level. The leaf is the actually-clicked bead (an "end"); in
   // cylinders/surface columns there is no pickable bead, so the leaf falls back to
@@ -1886,13 +1879,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _selectStrandV2(hitStrandId, hitEntry, backboneEntries, coneEntries)
       _emitDrillLevel('xover'); return
     }
-    // default: strand-first, then the leaf under the cursor.
+    // default: strand-first, then the leaf under the cursor. A repeat click on the
+    // already-selected leaf KEEPS it selected (no toggle-clear) — user feedback 2026-06-06.
     const onSameStrand = (_mode === 'strand' || _mode === 'bead') && _strandId === hitStrandId
     if (!onSameStrand) {
       _selectStrandV2(hitStrandId, hitEntry, backboneEntries, coneEntries)
-    } else if (_mode === 'bead' && _sameBead(_beadEntry, hitEntry)) {
-      _clearAll()   // 2nd click on the same leaf → toggle clear
-      return
     } else {
       const rep = designRenderer.columnRepAt?.(hitEntry.nuc.helix_id, hitEntry.nuc.bp_index)
       if (rep === 'cylinders' || rep === 'surface') {
