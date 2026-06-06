@@ -82,7 +82,7 @@ design decisions + research (so early sessions build the loop's muscle on tracta
 |-------|-------|------|------|--------------------|
 | 1 | ~~**ISSUE-3** Assembly Ctrl-click multi-select~~ ✅ DONE 2026-06-05 | functional bug | small, bounded | no |
 | 2 | ~~**ISSUE-2** Cross-tab sync delay + console clutter~~ ✅ DONE 2026-06-05 (propagation fix + silent-logging C + badge co-editing B all shipped) | functional bug (data-integrity) | medium | no |
-| 3 | **ISSUE-1** Context-menu proliferation | UX + tech-debt | large, multi-phase | yes |
+| 3 | **ISSUE-1** Context-menu proliferation — Phase 1 ✅ DONE 2026-06-05 (inventory + spec banked); Phase 2+ open | UX + tech-debt | large, multi-phase | yes (done) |
 | 4 | **ISSUE-4** Drill-selection overhaul | UX redesign | large, multi-phase | yes (most) |
 
 This order is a recommendation; the user may name a different issue. ISSUE-2 overlaps the autosave
@@ -93,7 +93,46 @@ that debt.
 
 ## ISSUE-1 — Too many context menus (UX + tech debt)
 
-- **Status:** `[ ]` not started.
+- **Status:** Phase 1 `[x]` DONE 2026-06-05 (inventory + spec). Phase 2 `[ ]` (primitive migration). Phase 3+ `[ ]` (content cleanup).
+
+### Phase 1 OUTPUT — inventory + target spec (banked 2026-06-05)
+
+**Inventory (18 builders, 3 editors; only 3 use the shared `createContextMenu` primitive):**
+
+| Target | File | Primitive? | Editor | Items |
+|--------|------|-----------|--------|-------|
+| Assembly part instance | `ui/assembly_context_menu.js:52` | bespoke | Assembly | Repr, Move/Rotate, Define Connector, Fixed, Allow Part Joints, Show/Hide, Edit Part, Duplicate, Polymerize, Group, Ungroup, Delete |
+| Assembly linker | `scene/assembly_pointer.js:554` | ✅ shared | Assembly | (header), Relax linker |
+| Assembly belt path | `scene/assembly_pointer.js:605` | ✅ shared | Assembly | (header), Attach part to belt |
+| Blunt end ring | `main.js:2897` | bespoke | Design | Extrude, Bend, Twist |
+| Overhang orientation | `main.js:2813` | bespoke | Design | Edit/Reset Orientation, Set Label, Generate OH binding strand, Representation ▸, Open Overhangs Manager, Clear All Overhangs |
+| Overhang binding | `main.js:1688` | bespoke | Design | (header), Bind/Unbind, Delete binding |
+| Spreadsheet strand row | `ui/spreadsheet.js:362` | bespoke | Design | Go to strand |
+| Spreadsheet 5′ cell | `ui/spreadsheet.js:633` | bespoke | Design | Go to strand, Clear sequence |
+| Spreadsheet seq cell | `ui/spreadsheet.js:664` | bespoke | Design | Go to strand, Set binder sequence, Clear sequence |
+| Spreadsheet 3′ cell | `ui/spreadsheet.js:699` | bespoke | Design | Go to strand, Clear sequence |
+| cadnano strand | `cadnano-editor/main.js:1597` | bespoke | Cadnano | Make Active/Reference, Convert to OH binding strand, Convert to scaffold, Edit extensions |
+| cadnano crossover/ligation | `cadnano-editor/main.js:1847` | bespoke | Cadnano | Add/Edit extra bases, Delete |
+| cadnano overhang | `cadnano-editor/main.js:1488` | bespoke | Cadnano | Set name, Generate binding strand |
+| Empty 3D space | `scene/empty_space_menu.js:13` | bespoke | Design | Extrude |
+| Plate / pathview / sliceview canvases | `ui/plate_view.js` / `ui/overhang_pathview.js` / `cadnano-editor/sliceview.js` | bespoke | both | (contextmenu *suppressed* via preventDefault only — no menu) |
+
+> ⚠ Locations grepped via Explore 2026-06-05; verify each line before editing (they drift). cadnano `pathview.js:4681` is a *router* that dispatches to the three cadnano builders above — not a 4th menu.
+
+**Duplicates / dead items found:** cross-editor doubles (strand→reference, overhang labeling, generate-binding-strand — design vs cadnano, implemented twice w/ different UX); "Go to strand" ×4 + "Clear sequence" ×3 in spreadsheet; global/bulk actions ("Open Overhangs Manager", "Clear All Overhangs") hanging off a single-overhang menu; z-index sprawl (1000→9999→10000); 3 different dismissal mechanisms.
+
+**TARGET SPEC (user AskUserQuestion decisions, 2026-06-05 — these gate Phases 2–3):**
+1. **Shape = fewer-but-still-multiple.** NOT one-unified-menu-per-type. Goal is to cut redundant menus + dead items and make the surviving menus consistent — not to collapse everything into a single per-type menu.
+2. **Primitive first (Phase 2 = pure migration, NO behavior change).** Migrate all 15 bespoke menus onto `createContextMenu` → one positioning/dismissal/z-index/keyboard impl. ≥1 factory test per migrated builder. Kills the z-index sprawl + 3 dismissal mechanisms. This phase ALSO discharges the inline Assembly-menu carve-up extraction debt (satisfies the interleave rule — `assembly_context_menu.js` is already its own module, so migrating it IS the unification).
+3. **Editors stay DISTINCT.** Design vs cadnano keep separate builders; clean up within each editor. Accept the design↔cadnano duplication (strand→reference, overhang labeling, generate-binding-strand stay doubled) — do NOT build a shared cross-editor builder.
+4. **Global/bulk actions stay in-menu but in a separated section.** Don't move them to a sidebar. Put global actions (e.g. overhang menu's "Open Overhangs Manager" + "Clear All Overhangs") in a clearly-separated bottom section using the primitive's `separator`/`header`, visually distinct from per-object actions.
+
+**Refined phase plan (post-spec):**
+- **Phase 1** ✅ inventory + spec (this).
+- **Phase 2 — primitive migration.** All 15 bespoke menus → `createContextMenu`, pure consolidation, ≥1 test each. LARGE — recommend splitting per file-group to keep each session cheap & reviewable: **2a** design-editor main.js menus (blunt-end / overhang-orientation / overhang-binding), **2b** spreadsheet (×4 menus), **2c** `empty_space_menu.js`, **2d** `assembly_context_menu.js` (= the carve-up extraction), **2e** cadnano-editor menus (×3). Each sub-phase: migrate verbatim → factory test → smoke → app exercise. main.js LOC Δ ≤ 0 (menus 2a move OUT of main.js into a module as part of migrating).
+- **Phase 3+ — content cleanup (one target-type per phase).** Apply the spec: separate the global section in the overhang menu (decision 4), normalize "Go to strand"/"Clear sequence" labels+ordering in spreadsheet, remove any dead/unguarded items (e.g. cadnano "Generate binding strand" already-bound guard), consistent ordering (primary top / destructive bottom). Factory test per revised menu.
+
+### Original dossier (pre-Phase-1 — leads, superseded by the inventory above)
 - **Symptom (user):** for any right-clickable location there are often multiple/overlapping context-menu
   items; the UX is confusing. Needs unification + revision.
 - **Repro (to pin):** right-click each target type (bead/strand, overhang, blunt end, empty space,
@@ -257,21 +296,29 @@ that debt.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-2 fully closed — sub-phase B shipped)._
+_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-1 Phase 1 done — inventory + spec banked)._
 
-**ISSUE-2 is now FULLY CLOSED** (all three sub-phases shipped — see the dossier + fix-log rows 2/3/4).
-ISSUE-3 also closed. The two remaining open issues are both large + UX-research-heavy; their **Phase 1 is
-inventory/survey + an `AskUserQuestion`, NO code** — cheap, good cold-session starters:
+**ISSUE-2 + ISSUE-3 closed. ISSUE-1 Phase 1 done** (inventory + target spec banked in the ISSUE-1 dossier).
+The recommended next pick is **ISSUE-1 Phase 2a** — the first real-code phase, and the spec already removed
+the UX guesswork:
 
-- **ISSUE-1 — Context-menu proliferation (recommended next).** Phase 1 = build the full right-click →
-  menu(s) → items inventory table across all ≥12 menu builders, identify duplicates/conflicts, then ASK
-  the user the consolidation questions (which menus merge, what's dead, what moves to a sidebar). Output is
-  a target menu spec — no code this phase. ⚠ INTERLEAVE: ISSUE-1's later unification phase IS the carve-up
-  extraction of the still-inline Assembly context-menu region — don't extract that region separately; let
-  the unification be that extraction (banked in the carve-up interleave rule).
-- **ISSUE-4 — Drill-selection overhaul.** Phase 1 = map every drill transition + the state it mutates
-  (`ui/selection_filter.js` drill-lock machine #61 + `scene/selection_manager.js`), propose 2-3 interaction
-  models, ASK the user to pick. Also no code in Phase 1.
+- **ISSUE-1 Phase 2 — primitive migration (recommended next; start with 2a).** Pure consolidation: migrate
+  bespoke menus onto `createContextMenu`, NO behavior change, ≥1 factory test per builder. Split per
+  file-group (see the dossier's refined phase plan) — **2a = the 3 design-editor menus still inline in
+  main.js** (blunt-end `main.js:2897`, overhang-orientation `main.js:2813`, overhang-binding `main.js:1688`).
+  These are INLINE in the closure → extract-then-migrate (move into a module + use the primitive), so main.js
+  LOC Δ is NEGATIVE. Repro/pin = a factory test per migrated menu (drive a synthetic contextmenu, assert the
+  rendered items + that dismissal/positioning come from the shared primitive). Verify line numbers first
+  (they drift). ⚠ INTERLEAVE still applies but is now FOLDED IN: Phase 2d migrates `assembly_context_menu.js`
+  and that IS the carve-up extraction of the assembly menu — don't do it twice.
+- **ISSUE-4 — Drill-selection overhaul (alternative, no-code Phase 1).** Map every drill transition + the
+  state it mutates (`ui/selection_filter.js` drill-lock machine #61 + `scene/selection_manager.js`), propose
+  2-3 interaction models, ASK the user to pick. Cheap cold-session starter if you'd rather not start code.
+
+**ISSUE-1 spec recap (banked from the user, so Phase 2/3 don't re-ask):** fewer-but-still-multiple (not
+one-menu-per-type); primitive-first then content; editors stay distinct (accept design↔cadnano duplication);
+global/bulk actions stay in-menu in a separated bottom section (not moved to a sidebar). Full spec + inventory
+table + refined phase plan are in the ISSUE-1 dossier above.
 
 **Sub-phase B notes for whoever audits the badge next:** `ui/sync_badge.js` now composes TWO orthogonal
 signals via `_render()` — the base sync status (`setSyncStatus`) and a co-editing sibling count
