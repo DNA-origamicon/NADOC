@@ -574,6 +574,14 @@
   color: var(--color-text-primary);
 }
 
+.context-menu__item--danger {
+  color: var(--color-danger);
+}
+
+.context-menu__item--danger:hover {
+  color: var(--color-danger);
+}
+
 .context-menu__separator {
   height: 1px;
   background: var(--color-border-default);

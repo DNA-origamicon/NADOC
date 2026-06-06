@@ -93,7 +93,7 @@ that debt.
 
 ## ISSUE-1 — Too many context menus (UX + tech debt)
 
-- **Status:** Phase 1 `[x]` DONE 2026-06-05 (inventory + spec). Phase 2 `[ ]` (primitive migration). Phase 3+ `[ ]` (content cleanup).
+- **Status:** Phase 1 `[x]` DONE 2026-06-05 (inventory + spec). Phase 2 `[~]` IN PROGRESS — **2a-binding `[x]` DONE 2026-06-05** (overhang-binding menu migrated); 2a-orientation `[ ]`, 2a-blunt `[ ]`, 2b–2e `[ ]`. Phase 3+ `[ ]` (content cleanup).
 
 ### Phase 1 OUTPUT — inventory + target spec (banked 2026-06-05)
 
@@ -130,6 +130,10 @@ that debt.
 **Refined phase plan (post-spec):**
 - **Phase 1** ✅ inventory + spec (this).
 - **Phase 2 — primitive migration.** All 15 bespoke menus → `createContextMenu`, pure consolidation, ≥1 test each. LARGE — recommend splitting per file-group to keep each session cheap & reviewable: **2a** design-editor main.js menus (blunt-end / overhang-orientation / overhang-binding), **2b** spreadsheet (×4 menus), **2c** `empty_space_menu.js`, **2d** `assembly_context_menu.js` (= the carve-up extraction), **2e** cadnano-editor menus (×3). Each sub-phase: migrate verbatim → factory test → smoke → app exercise. main.js LOC Δ ≤ 0 (menus 2a move OUT of main.js into a module as part of migrating).
+  - **2a is itself split (the 3 menus differ a LOT in migration cost — verified 2026-06-05):**
+    - **2a-binding `[x]` DONE 2026-06-05** — overhang-binding menu → `ui/overhang_binding_menu.js` (clean dynamic builder, header + Bind/Unbind + Delete). Required a tiny reusable `danger` flag on the primitive (`context-menu__item--danger` + CSS). main.js −81 LOC. 9 vitest tests.
+    - **2a-orientation `[ ]`** — overhang-orientation menu (`main.js:~2803`). ⚠ Uses a hover-**flyout submenu** via `createRepresentationMenuItem` (also used by `selection_manager.js:420`). `createContextMenu` has NO submenu/custom-item support → migrating needs FIRST extending the primitive with a `{ type:'custom', el }` (HTMLElement passthrough) item type. Medium; touches the shared primitive + indirectly the selection_manager rep helper. The `danger` flag (now shipped) covers its "Clear All Overhangs".
+    - **2a-blunt `[ ]`** — blunt-end menu is NOT a builder: a **static HTML element** `#blunt-end-ctx-menu` (index.html) with three heavy pre-wired handlers (`blunt-extrude/bend/twist-btn-ctx` at `main.js:~2974`, bodies launch slice-plane / deform tool / set mode-indicator). Converting → dynamic `createContextMenu` means moving those 3 handler bodies + deleting the static element. Largest & riskiest of the 3 — do it as its own phase.
 - **Phase 3+ — content cleanup (one target-type per phase).** Apply the spec: separate the global section in the overhang menu (decision 4), normalize "Go to strand"/"Clear sequence" labels+ordering in spreadsheet, remove any dead/unguarded items (e.g. cadnano "Generate binding strand" already-bound guard), consistent ordering (primary top / destructive bottom). Factory test per revised menu.
 
 ### Original dossier (pre-Phase-1 — leads, superseded by the inventory above)
@@ -296,24 +300,35 @@ that debt.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-1 Phase 1 done — inventory + spec banked)._
+_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-1 Phase 2a-binding done — overhang-binding menu migrated)._
 
-**ISSUE-2 + ISSUE-3 closed. ISSUE-1 Phase 1 done** (inventory + target spec banked in the ISSUE-1 dossier).
-The recommended next pick is **ISSUE-1 Phase 2a** — the first real-code phase, and the spec already removed
-the UX guesswork:
+**ISSUE-2 + ISSUE-3 closed. ISSUE-1 Phase 1 + Phase 2a-binding done.** 2a-binding migrated the overhang-binding
+menu onto `createContextMenu` (`ui/overhang_binding_menu.js`, main.js −81 LOC, 9 tests) and shipped a reusable
+`danger` flag on the primitive. **The handoff's "2a = 3 menus in one phase" was WRONG** — verified the 3 menus
+differ a lot in cost (see the 2a split in the dossier). Recommended next pick, in cost order:
 
-- **ISSUE-1 Phase 2 — primitive migration (recommended next; start with 2a).** Pure consolidation: migrate
-  bespoke menus onto `createContextMenu`, NO behavior change, ≥1 factory test per builder. Split per
-  file-group (see the dossier's refined phase plan) — **2a = the 3 design-editor menus still inline in
-  main.js** (blunt-end `main.js:2897`, overhang-orientation `main.js:2813`, overhang-binding `main.js:1688`).
-  These are INLINE in the closure → extract-then-migrate (move into a module + use the primitive), so main.js
-  LOC Δ is NEGATIVE. Repro/pin = a factory test per migrated menu (drive a synthetic contextmenu, assert the
-  rendered items + that dismissal/positioning come from the shared primitive). Verify line numbers first
-  (they drift). ⚠ INTERLEAVE still applies but is now FOLDED IN: Phase 2d migrates `assembly_context_menu.js`
-  and that IS the carve-up extraction of the assembly menu — don't do it twice.
+- **ISSUE-1 Phase 2a-orientation (next; recommended).** Migrate the overhang-orientation menu (`main.js:~2803`,
+  `_showOverhangOrientMenu`). ⚠ FIRST extend `createContextMenu` with a `{ type:'custom', el }` item type (the
+  menu embeds a hover-**flyout submenu** via `createRepresentationMenuItem`, which the primitive can't express).
+  That extension is reusable — `selection_manager.js:420` uses the same flyout and is a future migration too.
+  Then move the builder into a module (extend `ui/overhang_binding_menu.js` → rename to a shared
+  `ui/design_context_menus.js`, OR a sibling module) + factory test. main.js LOC Δ negative. Deps the builder
+  needs: `_orientPanel`, `api`, `store`, `assemblyRenderer`, `openOverhangsManager`, `overhangsToSegments`,
+  `editOverridesForSegments`, `createRepresentationMenuItem`.
+- **ISSUE-1 Phase 2a-blunt (after orientation; biggest/riskiest).** The `#blunt-end-ctx-menu` static element +
+  its 3 heavy ctx-button handlers (`main.js:~2974`) → dynamic `createContextMenu`. Own phase.
 - **ISSUE-4 — Drill-selection overhaul (alternative, no-code Phase 1).** Map every drill transition + the
   state it mutates (`ui/selection_filter.js` drill-lock machine #61 + `scene/selection_manager.js`), propose
   2-3 interaction models, ASK the user to pick. Cheap cold-session starter if you'd rather not start code.
+
+**Primitive now supports `danger`** (`{ label, onClick, danger: true }` → `.context-menu__item--danger`, red).
+Reuse it for destructive items in the remaining migrations instead of hand-rolling a danger colour.
+
+**App-validation gap banked for 2a-binding:** no workspace fixture has a non-empty `overhang_bindings`, so the
+live right-click-on-a-binding-line gesture is a **USER TODO** (numbered steps in the fix-log row). The boot/
+wiring path IS exercised by `just smoke`'s console-error gate (loads a real design with the changed main.js,
+zero errors); the rendered items/danger/dismissal/api-wiring are pinned by the 9 vitest tests. If you build a
+binding fixture, drop it in `workspace/` and note it here so future menu phases can app-verify.
 
 **ISSUE-1 spec recap (banked from the user, so Phase 2/3 don't re-ask):** fewer-but-still-multiple (not
 one-menu-per-type); primitive-first then content; editors stay distinct (accept design↔cadnano duplication);

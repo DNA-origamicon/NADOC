@@ -64,6 +64,7 @@ import { initOverhangSequencesPanel } from './ui/overhang_sequences_panel.js'
 import { initStrandGroupsPanel } from './ui/strand_groups_panel.js'
 import { initSelectionFilter } from './ui/selection_filter.js'
 import { initPropertiesPanel } from './ui/properties_panel.js'
+import { initOverhangBindingMenu } from './ui/overhang_binding_menu.js'
 import { createScriptRunner }  from './ui/script_runner.js'
 import { store, popGroupUndo } from './state/store.js'
 import * as api                from './api/client.js'
@@ -1676,88 +1677,7 @@ async function main() {
   // handler (which would otherwise interpret the click as "no hit, dismiss").
   // If we don't hit a binding line we don't preventDefault — the existing
   // handlers run as usual.
-  let _bindingCtxEl = null
-  function _hideBindingCtx() {
-    if (_bindingCtxEl) { _bindingCtxEl.remove(); _bindingCtxEl = null }
-  }
-  function _showBindingCtx(bindingId, clientX, clientY) {
-    _hideBindingCtx()
-    const design = store.getState().currentDesign
-    const binding = design?.overhang_bindings?.find(b => b.id === bindingId)
-    if (!binding) return
-    const el = document.createElement('div')
-    el.style.cssText = [
-      'position:fixed', `left:${clientX}px`, `top:${clientY}px`,
-      'z-index:var(--z-context-menu)',
-      'background:var(--color-bg-surface)', 'color:var(--color-text-primary)',
-      'border:1px solid var(--color-border-default)',
-      'border-radius:var(--radius-md)', 'box-shadow:var(--shadow-md)',
-      'padding:4px 0', 'min-width:180px', 'font-size:var(--text-xs)',
-      'font-family:var(--font-ui)',
-    ].join(';')
-
-    const hdr = document.createElement('div')
-    hdr.textContent = binding.name || 'Binding'
-    hdr.style.cssText = 'padding:5px 12px 4px;font-weight:600;color:var(--color-text-muted);user-select:none'
-    el.appendChild(hdr)
-
-    const hr = document.createElement('div')
-    hr.style.cssText = 'border-top:1px solid var(--color-border-muted);margin:3px 0'
-    el.appendChild(hr)
-
-    function _mkItem(label, opts = {}) {
-      const it = document.createElement('div')
-      it.textContent = label
-      const color = opts.danger ? 'var(--color-danger)' : 'var(--color-text-primary)'
-      it.style.cssText = `padding:5px 12px;cursor:pointer;user-select:none;color:${color}`
-      it.addEventListener('pointerenter', () => { it.style.background = 'var(--color-bg-raised)' })
-      it.addEventListener('pointerleave', () => { it.style.background = '' })
-      it.addEventListener('click', () => { _hideBindingCtx(); opts.onClick?.() })
-      return it
-    }
-
-    el.appendChild(_mkItem(binding.bound ? 'Unbind' : 'Bind', {
-      onClick: async () => {
-        try { await api.patchOverhangBinding(bindingId, { bound: !binding.bound }) }
-        catch (err) { showToast(err?.message || String(err), { severity: 'error' }) }
-      },
-    }))
-    el.appendChild(_mkItem('Delete binding', {
-      danger: true,
-      onClick: async () => {
-        const ok = await showConfirm({
-          title: `Delete ${binding.name || 'binding'}`,
-          message: 'Delete this overhang binding? The associated cluster pose lock will release.',
-          danger: true,
-          confirmLabel: 'Delete',
-        })
-        if (!ok) return
-        try { await api.deleteOverhangBinding(bindingId) }
-        catch (err) { showToast(err?.message || String(err), { severity: 'error' }) }
-      },
-    }))
-
-    document.body.appendChild(el)
-    _bindingCtxEl = el
-    const rect = el.getBoundingClientRect()
-    if (clientX + rect.width  > window.innerWidth)  el.style.left = `${clientX - rect.width}px`
-    if (clientY + rect.height > window.innerHeight) el.style.top  = `${clientY - rect.height}px`
-
-    const onOutside = (ev) => { if (!el.contains(ev.target)) _hideBindingCtx() }
-    const onKey = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); _hideBindingCtx() } }
-    setTimeout(() => {
-      document.addEventListener('pointerdown', onOutside, true)
-      document.addEventListener('keydown', onKey, true)
-    }, 0)
-    // Clean up listeners when the menu is removed.
-    const origHide = _hideBindingCtx
-    _hideBindingCtx = () => {
-      origHide()
-      document.removeEventListener('pointerdown', onOutside, true)
-      document.removeEventListener('keydown', onKey, true)
-      _hideBindingCtx = origHide
-    }
-  }
+  const _bindingMenu = initOverhangBindingMenu({ store, api, showToast, showConfirm })
   canvas.addEventListener('contextmenu', (e) => {
     if (store.getState().assemblyActive) return  // per-part bindings only
     if (!overhangBindingLines.isVisible()) return
@@ -1772,7 +1692,7 @@ async function main() {
     if (!hit) return
     e.preventDefault()
     e.stopPropagation()
-    _showBindingCtx(hit.bindingId, e.clientX, e.clientY)
+    _bindingMenu.show(hit.bindingId, e.clientX, e.clientY)
   }, { capture: true })
 
   // ── Unligated crossover markers (⚠ at midpoint of would-circularize crossovers) ─

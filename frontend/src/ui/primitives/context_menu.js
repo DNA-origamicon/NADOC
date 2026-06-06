@@ -9,7 +9,7 @@
  * Items can be:
  *   { type: 'header', label }                — non-clickable section title
  *   { type: 'separator' }                    — horizontal divider
- *   { label, onClick, disabled?, icon?, shortcut? }
+ *   { label, onClick, disabled?, danger?, icon?, shortcut? }
  *
  * Closes on:
  *   - selection (clicking an item)
@@ -64,7 +64,9 @@ export function createContextMenu(opts = {}) {
     }
 
     const itemEl = el('div', {
-      className: 'context-menu__item' + (item.disabled ? ' context-menu__item--disabled' : ''),
+      className: 'context-menu__item'
+        + (item.disabled ? ' context-menu__item--disabled' : '')
+        + (item.danger ? ' context-menu__item--danger' : ''),
       attrs: { role: 'menuitem' },
       children,
       on: !item.disabled ? {
