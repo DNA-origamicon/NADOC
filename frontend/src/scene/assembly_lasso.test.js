@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import * as THREE from 'three'
-import { instancesInRect, initAssemblyLasso } from './assembly_lasso.js'
+import { instancesInRect, initAssemblyLasso, toggleInstanceSelection } from './assembly_lasso.js'
 
 function camera() {
   const cam = new THREE.PerspectiveCamera(50, 1, 0.1, 100)
@@ -23,6 +23,28 @@ describe('instancesInRect', () => {
   it('skips parts with no size and parts behind the camera', () => {
     expect(instancesInRect([{ id: 'a', center: { x: 0, y: 0, z: 0 } }], camera(), size, 0, 0, 200, 200)).toEqual([])
     expect(instancesInRect([at('z', [0, 0, 100])], camera(), size, 0, 0, 200, 200)).toEqual([]) // behind cam
+  })
+})
+
+describe('toggleInstanceSelection (Ctrl+click semantics — ISSUE-3)', () => {
+  it('adds a pick to an empty selection (3a)', () => {
+    expect(toggleInstanceSelection([], null, 'a')).toEqual(['a'])
+    expect(toggleInstanceSelection(undefined, undefined, 'a')).toEqual(['a'])
+  })
+  it('folds the prior single (active) pick in so a 2nd Ctrl+click selects BOTH (decision 1 / 3c)', () => {
+    expect(toggleInstanceSelection([], 'a', 'b').sort()).toEqual(['a', 'b'])
+  })
+  it('removes a part already in the multi-set (decision 2)', () => {
+    expect(toggleInstanceSelection(['a', 'b'], null, 'b')).toEqual(['a'])
+  })
+  it('Ctrl+click the only (active) selected part toggles it off → empty (3b)', () => {
+    expect(toggleInstanceSelection([], 'a', 'a')).toEqual([])
+  })
+  it('removing the active part when others are multi-selected keeps the rest', () => {
+    expect(toggleInstanceSelection(['b'], 'a', 'a')).toEqual(['b'])
+  })
+  it('does not duplicate when the active part is also in the multi-set', () => {
+    expect(toggleInstanceSelection(['a'], 'a', 'b').sort()).toEqual(['a', 'b'])
   })
 })
 

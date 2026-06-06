@@ -46,7 +46,7 @@ import { initFlexRelax } from './scene/flex_relax.js'
 import { initResponseDelta } from './scene/response_delta.js'
 import { initJointPick } from './scene/joint_pick.js'
 import { initEmptySpaceMenu } from './scene/empty_space_menu.js'
-import { initAssemblyLasso } from './scene/assembly_lasso.js'
+import { initAssemblyLasso, toggleInstanceSelection } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { supportedColoringSet, nextColoringMode, reprMenuState, coloringFallbackMode } from './scene/coloring_modes.js'
 import { initScaffoldModal } from './ui/scaffold_modal.js'
@@ -6089,8 +6089,8 @@ async function main() {
     onClick: (e) => {
       const hit = assemblyRenderer.pickInstance(_canvasNdc(e), camera)
       if (!hit) return
-      const cur = store.getState().multiSelectedInstanceIds ?? []
-      const next = cur.includes(hit.id) ? cur.filter(id => id !== hit.id) : [...cur, hit.id]
+      const s = store.getState()
+      const next = toggleInstanceSelection(s.multiSelectedInstanceIds, s.activeInstanceId, hit.id)
       store.setState({ multiSelectedInstanceIds: next, activeInstanceId: null, activeGroupId: null })
     },
   })
@@ -7559,6 +7559,7 @@ async function main() {
       },
       /** Selection-state oracles the retry loops assert against. */
       getActiveInstanceId: () => store.getState().activeInstanceId ?? null,
+      getMultiSelectedInstanceIds: () => store.getState().multiSelectedInstanceIds ?? [],
       getActiveGroupId:    () => store.getState().activeGroupId ?? null,
       isAssemblyActive:    () => !!store.getState().assemblyActive,
       /** Arm the part-joint cluster drag (Priority 2b in _onAssemblyPointerDown):

@@ -37,6 +37,27 @@ export function instancesInRect(centers, camera, { width, height }, cx1, cy1, cx
 }
 
 /**
+ * Toggle `hitId` in/out of the assembly multi-select set (Ctrl+click semantics).
+ * The current logical selection is the UNION of the existing multi-set and any
+ * single active instance — so a Ctrl+click after a plain single-click ADDS the
+ * new part rather than discarding the prior pick (ISSUE-3 decision 1). A
+ * Ctrl+click on a part already in the set removes just that part (decision 2).
+ * Returns the new id list; the caller is expected to clear activeInstanceId,
+ * leaving this set as the sole selection carrier. Pure — unit-tested.
+ * @param {string[]|null|undefined} multiIds  current multiSelectedInstanceIds
+ * @param {string|null|undefined} activeId    current single active instance
+ * @param {string} hitId                       the Ctrl-clicked instance id
+ * @returns {string[]}
+ */
+export function toggleInstanceSelection(multiIds, activeId, hitId) {
+  const sel = new Set(multiIds ?? [])
+  if (activeId) sel.add(activeId)
+  if (sel.has(hitId)) sel.delete(hitId)
+  else sel.add(hitId)
+  return [...sel]
+}
+
+/**
  * @param {object} deps
  * @param {HTMLElement} deps.canvas
  * @param {THREE.Camera} deps.camera

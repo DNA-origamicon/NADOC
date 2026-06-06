@@ -44,13 +44,15 @@ describe('initAssemblyMultiBox', () => {
     expect(scene.objs).toHaveLength(0)
   })
 
-  it('suppresses the box for a single-part multi-select (no active group)', () => {
+  it('draws a WHITE box for a single-part multi-select (ISSUE-3a — immediate feedback)', () => {
     const { scene, box } = setup(
       { multiSelectedInstanceIds: ['a'] },
       [center('a', [0, 0, 0])],
     )
     box.update()
-    expect(scene.objs).toHaveLength(0)
+    expect(scene.objs).toHaveLength(1)
+    expect(scene.objs[0]).toBeInstanceOf(THREE.Box3Helper)
+    expect(scene.objs[0].material.color.getHex()).toBe(0xffffff)
   })
 
   it('draws one purple Box3Helper for a ≥2-part multi-select', () => {
@@ -62,6 +64,7 @@ describe('initAssemblyMultiBox', () => {
     expect(scene.objs).toHaveLength(1)
     const helper = scene.objs[0]
     expect(helper).toBeInstanceOf(THREE.Box3Helper)
+    expect(helper.material.color.getHex()).toBe(0x8b5cf6)
     expect(helper.material.depthTest).toBe(false)
     expect(helper.renderOrder).toBe(1001)
   })
@@ -108,14 +111,28 @@ describe('initAssemblyMultiBox', () => {
     expect(disposeSpy).toHaveBeenCalled()     // old one's geometry freed
   })
 
-  it('clears the box when the selection drops below 2 (e.g. deselect)', () => {
+  it('recolors purple→white when a 2-part selection drops to one (deselect)', () => {
     const { scene, store, box } = setup(
       { multiSelectedInstanceIds: ['a', 'b'] },
       [center('a', [0, 0, 0]), center('b', [10, 0, 0])],
     )
     box.update()
     expect(scene.objs).toHaveLength(1)
+    expect(scene.objs[0].material.color.getHex()).toBe(0x8b5cf6)
     store.setState({ multiSelectedInstanceIds: ['a'] })
+    box.update()
+    expect(scene.objs).toHaveLength(1)
+    expect(scene.objs[0].material.color.getHex()).toBe(0xffffff)
+  })
+
+  it('clears the box only when the selection empties', () => {
+    const { scene, store, box } = setup(
+      { multiSelectedInstanceIds: ['a'] },
+      [center('a', [0, 0, 0])],
+    )
+    box.update()
+    expect(scene.objs).toHaveLength(1)
+    store.setState({ multiSelectedInstanceIds: [] })
     box.update()
     expect(scene.objs).toHaveLength(0)
   })
