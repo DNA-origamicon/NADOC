@@ -54,11 +54,62 @@ export function resetRevisionWatermark() {
   _lastAppliedRevision = -1
 }
 
+// ── Recovery-cache quota management ──────────────────────────────────────────
+// The full design/assembly JSON is cached per-document for server-restart
+// recovery. Each independently-opened tab mints a STICKY doc id (doc_id.js) that
+// lives in sessionStorage — so when the tab closes, the id is gone but its
+// localStorage snapshot (`nadoc:design:<id>` / `nadoc:assembly:<id>`) leaks. Over
+// many sessions these orphans exhaust the ~5 MB quota and every setItem starts
+// throwing (the user-visible "exceeded the quota" on opening a part). We don't
+// track which other doc ids are still alive, so we only evict UNDER pressure:
+// when our own write fails, drop every OTHER document's snapshots and retry once.
+// A still-open sibling re-persists on its next edit, so the loss is best-effort.
+const _SNAPSHOT_BASES = ['nadoc:design', 'nadoc:assembly']
+
+/** Remove other documents' recovery snapshots (the large per-doc JSON). Returns
+ *  the count removed. Keeps THIS tab's own keys (bare default-doc key or the
+ *  ':<docId>'-suffixed one). */
+export function evictOtherDocRecoverySnapshots() {
+  // docKey('') is '' on the default doc, ':<id>' on an explicit doc — exactly the
+  // suffix our own snapshot keys carry, so we keep keys whose suffix matches.
+  const mySuffix = docKey('')
+  const drop = []
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (!key) continue
+      for (const base of _SNAPSHOT_BASES) {
+        if (key === base) break                       // bare default-doc snapshot
+        if (key.startsWith(base + ':')) {
+          const suffix = key.slice(base.length)       // ':<id>'
+          if (suffix !== mySuffix) drop.push(key)     // a different document's leaked cache
+          break
+        }
+      }
+    }
+    for (const k of drop) localStorage.removeItem(k)
+  } catch { /* private mode / enumeration failure — best effort */ }
+  return drop.length
+}
+
+/** setItem that, on quota failure, frees space by evicting other docs' snapshots
+ *  and retries once. Always swallows the final failure (recovery cache is
+ *  best-effort — never let it surface as an exception to the user). */
+function _setItemWithEvict(key, value) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    if (evictOtherDocRecoverySnapshots() > 0) {
+      try { localStorage.setItem(key, value) } catch { /* still full — give up silently */ }
+    }
+  }
+}
+
 /** Persist the current design topology to localStorage for session recovery. */
 export function persistDesign() {
   const design = store.getState().currentDesign
   if (!design) return
-  try { localStorage.setItem(LS_DESIGN_KEY(), JSON.stringify(design)) } catch { /* quota exceeded — ignore */ }
+  _setItemWithEvict(LS_DESIGN_KEY(), JSON.stringify(design))
 }
 
 /** Read the persisted design from localStorage (parsed JSON or null). */
@@ -77,7 +128,7 @@ export function clearPersistedDesign() {
 export function persistAssembly() {
   const assembly = store.getState().currentAssembly
   if (!assembly) return
-  try { localStorage.setItem(LS_ASSEMBLY_KEY(), JSON.stringify(assembly)) } catch { /* quota exceeded — ignore */ }
+  _setItemWithEvict(LS_ASSEMBLY_KEY(), JSON.stringify(assembly))
 }
 
 // docId reads ANOTHER doc's cache (e.g. a part-editor tab restoring the assembly

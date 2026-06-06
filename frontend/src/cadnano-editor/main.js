@@ -81,8 +81,11 @@ const _WS_PATH_KEY = docKey('nadoc:workspace-path')
 let _workspacePath = localStorage.getItem(_WS_PATH_KEY) || null
 function _setWorkspacePath(path) {
   _workspacePath = path
-  if (path) localStorage.setItem(_WS_PATH_KEY, path)
-  else      localStorage.removeItem(_WS_PATH_KEY)
+  // Best-effort: a full localStorage quota must never throw on open.
+  try {
+    if (path) localStorage.setItem(_WS_PATH_KEY, path)
+    else      localStorage.removeItem(_WS_PATH_KEY)
+  } catch { /* quota / private mode — ignore */ }
 }
 
 // The 3D view is the authoritative source of the design filename.

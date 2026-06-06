@@ -3258,8 +3258,12 @@ async function main() {
   const _FNAME_KEY = docKey('nadoc:design-filename')
   function _setFileName(name) {
     _fileName = name
-    if (name) localStorage.setItem(_FNAME_KEY, name)
-    else      localStorage.removeItem(_FNAME_KEY)
+    // Best-effort: never let a full-quota localStorage surface as an exception on
+    // open (the recovery cache evicts under pressure in api/client.js).
+    try {
+      if (name) localStorage.setItem(_FNAME_KEY, name)
+      else      localStorage.removeItem(_FNAME_KEY)
+    } catch { /* quota / private mode — ignore */ }
   }
 
   // Workspace paths — set when a file is opened from or saved to the workspace.
@@ -3270,8 +3274,10 @@ async function main() {
   let _assemblyWorkspacePath = localStorage.getItem(_ASM_PATH_KEY) || null
   function _setWorkspacePath(path) {
     _workspacePath = path
-    if (path) localStorage.setItem(_WS_PATH_KEY, path)
-    else      localStorage.removeItem(_WS_PATH_KEY)
+    try {
+      if (path) localStorage.setItem(_WS_PATH_KEY, path)
+      else      localStorage.removeItem(_WS_PATH_KEY)
+    } catch { /* quota / private mode — ignore */ }
     // Our file changed → tell siblings (so they can detect co-editing) and
     // recompute our own badge. Both are hoisted fn decls, only called post-init.
     _announceDocPresence?.()
@@ -3279,8 +3285,10 @@ async function main() {
   }
   function _setAssemblyWorkspacePath(path) {
     _assemblyWorkspacePath = path
-    if (path) localStorage.setItem(_ASM_PATH_KEY, path)
-    else      localStorage.removeItem(_ASM_PATH_KEY)
+    try {
+      if (path) localStorage.setItem(_ASM_PATH_KEY, path)
+      else      localStorage.removeItem(_ASM_PATH_KEY)
+    } catch { /* quota / private mode — ignore */ }
   }
 
   // ── Session persistence — always show welcome screen on page load ────────────
