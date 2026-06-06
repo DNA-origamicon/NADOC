@@ -21,6 +21,7 @@ regress anything).
 | # | Date | Issue / phase | What changed (module) | Repro pinned by | Wall-clock | main.js LOC Δ | tests added | edits-to-green | app-validated | regression caught |
 |---|------|---------------|------------------------|-----------------|-----------|---------------|-------------|----------------|---------------|-------------------|
 | 1 | 2026-06-05 | ISSUE-3 (single phase) — Ctrl+click multi-select feedback + toggle semantics | `scene/assembly_lasso.js` (new pure `toggleInstanceSelection`), `scene/assembly_multi_box.js` (white-for-1 / purple-for-2+, relaxed ≥2 gate), main.js `onClick` re-wired to the helper | vitest (`toggleInstanceSelection` ×6, `assembly_multi_box` color cases) + e2e `assembly_select.spec.js` ISSUE-3b (real raycast, discriminating) | ~1 session | **+1** (dev-only `getMultiSelectedInstanceIds` oracle; onClick body net 0) | 6 unit + 1 e2e (+2 updated multi-box tests, +1 e2e helper) | clean (vitest 906 green first pass; e2e 3a/3c reframed once after discovering empty-centers fixture + gizmo occlusion) | yes — real `Belt_test1.nass` on shared renderer: white box (1 part) → purple (2 parts), `getInstanceCenters`=62 | n/a (no prior phase) |
+| 2 | 2026-06-05 | ISSUE-2 (Phase 1 repro+ask + propagation fix) — different-doc same-file tabs didn't cross-sync | `app/lifecycle.js` (new `registerSiblingSave(path, sameDoc)` — doc-scoped echo guard), main.js `file-saved` handler re-wired to it | vitest `app/lifecycle.test.js` ×3 (same-doc suppresses; **different-doc reloads = repro**; 5 s clear) + USER TODO two-real-tab app check | ~1 session | **−4** (9-line inline echo block → 1 call) | 3 unit | clean (vitest 909 green first pass; smoke 23/23) | **USER TODO** — two-real-tab gesture (BroadcastChannel can't cross Playwright contexts; see difficulties) | n/a |
 
 **Column notes:**
 - **Repro pinned by** — the failing-then-passing test that defines "fixed": `vitest` / `e2e (scene_harness)` /
@@ -46,6 +47,19 @@ it off cleanly" case is both e2e-drivable AND discriminating (pre-fix left a pha
 Lesson: for assembly visual/center-dependent behavior, app-verify on a REAL `.nass` via
 `__NADOC_DBG__.{store,assemblyRenderer}` + `importAssembly` (centers ARE populated there — 62 for
 Belt_test1); the inline e2e fixture is only good for pick/selection-STATE wiring.
+
+**ISSUE-2 (2026-06-05) — the obvious repro (2-context Playwright) cannot reproduce the bug; root cause was a doc-id split, not the suppression-window the dossier suspected.**
+The ledger's hypothesis pointed at `_RELOAD_SUPPRESS_MS = 10000` (the `markSameDocActivity` window). That
+was wrong: that window is only armed by a *same-doc* `design-changed`, which the two failing tabs (different
+sticky doc ids) never exchange. The real defeater was the `file-saved` cross-tab echo guard in `main.js`
+adding the path to `selfSavedPaths` with NO doc check — so a different-doc sibling's genuine save was
+treated as a self-echo and its SSE `file-changed` reload was dropped. Also: the handoff's suggested
+acceptance test (two `browser.newContext()` on the same `?doc`) can't reproduce it — `BroadcastChannel`
+does not cross Playwright contexts, so tab B never gets the `file-saved` echo and the reload fires even on
+the buggy code. The bug needs two REAL same-browser tabs (shared BroadcastChannel) with DIFFERENT doc ids.
+Pinned the logic with `registerSiblingSave` unit tests instead; app-verification is a two-real-tab USER TODO.
+Lesson: trace the doc-id/broadcast/SSE interplay before trusting a suppression-window hypothesis, and check
+whether your repro harness even shares the channel the bug rides.
 
 **Loop conventions banked at creation (2026-06-05):**
 - **Repro before fix, ask before implement.** The two non-negotiables. A bug without a reproducing test

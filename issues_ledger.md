@@ -81,7 +81,7 @@ design decisions + research (so early sessions build the loop's muscle on tracta
 | Order | Issue | Type | Size | Needs UX research? |
 |-------|-------|------|------|--------------------|
 | 1 | ~~**ISSUE-3** Assembly Ctrl-click multi-select~~ ✅ DONE 2026-06-05 | functional bug | small, bounded | no |
-| 2 | **ISSUE-2** Cross-tab sync delay + console clutter | functional bug (data-integrity) | medium | no |
+| 2 | **ISSUE-2** Cross-tab sync delay + console clutter — propagation fix ✅ DONE 2026-06-05; badge + logging sub-phases remain | functional bug (data-integrity) | medium | no |
 | 3 | **ISSUE-1** Context-menu proliferation | UX + tech-debt | large, multi-phase | yes |
 | 4 | **ISSUE-4** Drill-selection overhaul | UX redesign | large, multi-phase | yes (most) |
 
@@ -127,7 +127,25 @@ that debt.
 
 ## ISSUE-2 — Cross-tab sync claims saved but doesn't sync (functional, data-integrity)
 
-- **Status:** `[ ]` not started.
+- **Status:** propagation fix `[x]` DONE 2026-06-05. Two remaining sub-phases (user-approved):
+  badge stale-sibling indicator `[ ]`, silent-by-default sync logging `[ ]`.
+- **ROOT CAUSE (confirmed by code trace, 2026-06-05):** two independently-opened tabs get
+  *different* sticky doc ids (`doc_id.js` mints one per tab in `sessionStorage`). So the fast path
+  (`design-changed` BroadcastChannel) is doc-scoped out (`isSameDoc` false → `main.js` ignores it),
+  AND the fallback (SSE `file-changed` → reload) was suppressed because `main.js`'s `file-saved`
+  broadcast handler added the path to `selfSavedPaths` **regardless of doc**. Each save re-armed the
+  5 s self-echo window just before its own SSE, so a sibling's genuine edit was swallowed for minutes.
+  The `markSameDocActivity` 10 s window is NOT the culprit (only set on a same-doc `design-changed`).
+- **FIX (decision: auto-sync B→A ~1s):** doc-scoped the echo guard. New
+  `initAutosaveSync.registerSiblingSave(path, sameDoc)` in `app/lifecycle.js` suppresses ONLY a
+  same-doc sibling's save (stale echo we already sync via design-changed); a different-doc sibling's
+  `file-saved` is left un-suppressed so the SSE `file-changed` reloads it. `main.js` `file-saved`
+  handler now calls it with `nadocBroadcast.isSameDoc(data)` (−4 main.js LOC). Pinned by 3 vitest
+  tests in `app/lifecycle.test.js` (same-doc suppresses; different-doc reloads = the repro; 5 s clear).
+- **User decisions banked (2026-06-05 AskUserQuestion):** (1) same-file tabs auto-sync ~1s [DONE];
+  (2) the "saved" badge SHOULD distinguish disk-saved from siblings-in-sync (flag stale siblings)
+  [sub-phase, not built]; (3) sync console logging silent by default, verbose only behind
+  Ctrl+Shift+D / `__nadocSyncDebug` [sub-phase, not built].
 - **Symptom (user):** multiple tabs with the same part open both show "saved" but don't actually sync to
   each other for several minutes. Console debug clutter makes it hard to diagnose.
 - **Repro (to pin):** open the same workspace-backed part in two tabs (the app spawns a new tab per
@@ -224,22 +242,33 @@ that debt.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-3 shipped)._
+_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-2 propagation fix shipped)._
 
-**Recommended next: ISSUE-2 (Cross-tab sync delay + console clutter) — Phase 1 (instrument + repro).**
-It's the next priority (medium, functional, no UX research) and overlaps the autosave-validation backlog
-(`main_js_extraction_log.md` #55), so doing it discharges that debt too.
+**Recommended next: ISSUE-2 sub-phase B — "saved" badge stale-sibling indicator.** The core
+propagation fix shipped (different-doc same-file tabs now auto-sync via the un-suppressed SSE reload;
+see the ISSUE-2 dossier + fix-log row). User approved two follow-ups:
 
-**Do FIRST (Phase 1):** open the same workspace-backed doc in two browser contexts on the same `?doc`
-(the app spawns a tab per doc — `shared/doc_id.js`), edit in tab A, measure how long until tab B reflects
-it (expected ~1 s; observed minutes). A two-`browser.newContext()` Playwright spec is the acceptance test —
-assert tab B's design version updates within N seconds. Capture the console noise. Suspected owner:
-`app/lifecycle.js` `initAutosaveSync` (note `_RELOAD_SUPPRESS_MS = 10000`, the 900 ms save debounce, the
-`_selfSavedPaths` 5 s self-echo clear, and the SSE-refreshes-library-list-not-open-design / BroadcastChannel
-split — `shared/broadcast.js`). **Then ASK** the Phase-1 questions in the ISSUE-2 dossier (target latency?
-should the "saved" badge distinguish disk-saved vs siblings-in-sync? default console verbosity?).
+- **Sub-phase B (badge honesty, user-approved "flag stale siblings"):** the green "saved" badge must
+  not imply siblings-in-sync. Needs a way to know a sibling holds a divergent copy. Leads: the existing
+  `doc-presence` broadcast (`main.js` ~7701, `_otherTabDocs`) already tracks other tabs' docs; extend it
+  to compare open-file path + design version, and add a distinct badge state in `ui/sync_badge.js`
+  (e.g. "saved · sibling out of sync"). Repro-pin with a `sync_badge` factory test. ASK how loud the
+  signal should be (passive badge tint vs an explicit toast) only if the visual treatment is unclear.
+- **Sub-phase C (silent logging, user-approved):** gate the default-on `syncLog` SSE/SAVE/BC output
+  behind the existing Ctrl+Shift+D / `__nadocSyncDebug` flag (`ui/sync_badge.js`). Small; pin with a
+  test asserting `syncLog` no-ops unless the debug flag is set.
+
+Either is bounded and frontend-only. B is higher user value; C is the cheaper warm-up.
 
 **Gotchas banked:**
+- **Two-context Playwright canNOT reproduce ISSUE-2.** `BroadcastChannel` does NOT cross Playwright
+  browser contexts, so tab B never receives tab A's `file-saved` echo → `selfSavedPaths` never gets the
+  path → the SSE reload fires even on the OLD code. The bug only manifests between two REAL same-browser
+  tabs (shared BroadcastChannel) that hold DIFFERENT sticky doc ids. Pin the logic with the
+  `registerSiblingSave` unit tests; app-verify with the two-real-tab USER TODO in the ISSUE-2 dossier.
+- **doc-id model:** independently-opened main-app tabs each mint a sticky per-tab id (`doc_id.js`), so
+  "same file in two tabs" ⇒ two different backend docs. Same-doc only happens for child windows opened
+  with an inherited `?doc=` (cadnano editor, part editor).
 - `grep` treats `frontend/src/main.js` as binary and silently returns no matches — use `rg` or `grep -a`.
 - **`getInstanceCenters()` IS populated on the shared (default) renderer for a real loaded `.nass`** (62
   for Belt_test1) — the `scene_harness.js` comment "empty on the shared path" only holds for freshly-built

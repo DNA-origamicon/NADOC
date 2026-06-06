@@ -383,6 +383,40 @@ describe('initAutosaveSync', () => {
     expect(sync.getReloadingFromSSE()).toBe(false)  // cleared in finally
   })
 
+  // ── ISSUE-2: doc-scoped cross-tab sibling-save echo guard ──
+  it('registerSiblingSave: a SAME-doc sibling save suppresses the SSE reload (stale echo)', async () => {
+    const { deps } = makeAutosaveDeps({ deps: { getWorkspacePath: () => '/ws/open.nadoc' } })
+    const sync = initAutosaveSync(deps)
+    sync.registerSiblingSave('/ws/open.nadoc', true)   // sibling shares our doc
+    sync.handleLibraryEvent({ type: 'file-changed', path: '/ws/open.nadoc', file_type: 'part' })
+    await vi.advanceTimersByTimeAsync(0)
+    await Promise.resolve()
+    expect(deps.api.getLibraryFileContent).not.toHaveBeenCalled()
+  })
+
+  it('registerSiblingSave: a DIFFERENT-doc sibling save does NOT suppress — the SSE reload fires', async () => {
+    // The repro for ISSUE-2: two tabs with the same file but different doc ids.
+    // The cross-tab file-saved must NOT be treated as a self-echo, so the genuine
+    // external edit reloads (~1s) instead of being swallowed for minutes.
+    const { deps } = makeAutosaveDeps({ deps: { getWorkspacePath: () => '/ws/open.nadoc' } })
+    const sync = initAutosaveSync(deps)
+    sync.registerSiblingSave('/ws/open.nadoc', false)  // sibling owns a different doc
+    expect(sync.selfSavedPaths.has('/ws/open.nadoc')).toBe(false)
+    sync.handleLibraryEvent({ type: 'file-changed', path: '/ws/open.nadoc', file_type: 'part' })
+    await vi.advanceTimersByTimeAsync(0)
+    await Promise.resolve()
+    expect(deps.api.getLibraryFileContent).toHaveBeenCalledWith('/ws/open.nadoc')
+  })
+
+  it('registerSiblingSave: the same-doc self-save marker clears after 5s', async () => {
+    const { deps } = makeAutosaveDeps()
+    const sync = initAutosaveSync(deps)
+    sync.registerSiblingSave('/ws/open.nadoc', true)
+    expect(sync.selfSavedPaths.has('/ws/open.nadoc')).toBe(true)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(sync.selfSavedPaths.has('/ws/open.nadoc')).toBe(false)
+  })
+
   it('design tab: reload is suppressed within the live same-doc activity window', async () => {
     const { deps } = makeAutosaveDeps({ deps: { getWorkspacePath: () => '/ws/open.nadoc' } })
     const sync = initAutosaveSync(deps)

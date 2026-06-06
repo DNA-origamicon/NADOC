@@ -7686,13 +7686,9 @@ async function main() {
   nadocBroadcast.onMessage(async (data) => {
     const { type, strandIds, source, windowName, designName, instanceId, designId, docName, docAssembly } = data
     if (type === 'file-saved' && data.path) {
-      // A sibling tab (e.g. the cadnano editor) just autosaved this file. Treat
-      // it like our own save so the SSE file-changed echo is skipped — otherwise
-      // we'd reload the sibling's autosave (a stale snapshot) back into the
-      // shared backend doc and clobber in-progress edits. 5s window covers SSE
-      // latency; matches the self-save expiry.
-      _lifecycleSync.selfSavedPaths.add(data.path)
-      setTimeout(() => _lifecycleSync.selfSavedPaths.delete(data.path), 5000)
+      // A sibling tab autosaved this file. Suppress the SSE echo only if it shares
+      // OUR doc (else it's a genuine cross-tab edit that must reload — ISSUE-2).
+      _lifecycleSync.registerSiblingSave(data.path, nadocBroadcast.isSameDoc(data))
       return
     }
     if (type === 'doc-presence-request') {

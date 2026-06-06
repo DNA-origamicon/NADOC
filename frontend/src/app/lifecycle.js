@@ -238,6 +238,20 @@ export function initAutosaveSync({
     _libRefreshTimer = setTimeout(() => libraryPanel.refresh(), 400)
   }
 
+  // A sibling tab broadcast `file-saved` for a path. Suppress the resulting SSE
+  // file-changed echo ONLY when the sibling shares OUR backend document: a
+  // same-doc sibling's autosave is a stale snapshot we already sync via the
+  // doc-scoped design-changed broadcast, so reloading it would clobber live
+  // edits. A DIFFERENT-doc sibling editing the same workspace file is a GENUINE
+  // external change — its edits do NOT ride our design-changed (isSameDoc=false),
+  // so the SSE file-changed is the only sync channel and must NOT be suppressed.
+  // (ISSUE-2: doc-agnostic suppression here swallowed cross-tab edits for minutes.)
+  function registerSiblingSave(path, sameDoc) {
+    if (!path || !sameDoc) return
+    _selfSavedPaths.add(path)
+    setTimeout(() => _selfSavedPaths.delete(path), 5000)
+  }
+
   function handleLibraryEvent({ type, path, file_type }) {
     if (type !== 'file-changed' && type !== 'file-deleted') return
     syncBadge.syncLog('info', 'SSE', `${type} ${file_type}:${path}`)
@@ -299,6 +313,7 @@ export function initAutosaveSync({
     getReloadingFromSSE: () => _reloadingFromSSE,
     getSavingAssembly: () => _savingAssembly,
     markSameDocActivity: () => { _lastSameDocActivityMs = Date.now() },
+    registerSiblingSave,
     handleLibraryEvent,
   }
 }
