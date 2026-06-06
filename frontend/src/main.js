@@ -180,6 +180,7 @@ import { initMdSegmentationOverlay } from './scene/md_segmentation_overlay.js'
 import { initPeriodicMdOverlay }    from './scene/periodic_md_overlay.js'
 import { initPeriodicMdPanel }      from './ui/periodic_md_panel.js'
 import { initMdPanel }    from './ui/md_panel.js'
+import { initReprOptionSliders } from './ui/repr_option_sliders.js'
 import { createPhotoRenderer } from './scene/photo_renderer.js'
 import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
@@ -1885,7 +1886,6 @@ async function main() {
   let _surfaceDataCache   = null   // cached API response; null = needs re-fetch
   let _surfaceProbeRadius = 0.28   // current probe radius for SES (nm)
   let _surfaceMode        = 'off'  // mirrors store.surfaceMode
-  let _currentBeadRadius  = 0.10   // current bead radius (nm); matches sl-bead-radius default
 
   function _setSurfacePanelVisible(visible) {
     const el = document.getElementById('surface-options-panel')
@@ -6816,27 +6816,6 @@ async function main() {
     if (fallback) _setColoringMode(fallback)
   }
 
-  function _reprOptionSliders(repr) {
-    document.getElementById('repr-bead-radius-row')?.style.setProperty(
-      'display', (repr === 'full' || repr === 'beads') ? '' : 'none')
-    document.getElementById('repr-cyl-radius-row')?.style.setProperty(
-      'display', repr === 'cylinders' ? '' : 'none')
-    document.getElementById('repr-hull-margin-row')?.style.setProperty(
-      'display', repr === 'hull-prism' ? '' : 'none')
-    document.getElementById('repr-hull-curve-row')?.style.setProperty(
-      'display', repr === 'hull-prism' ? '' : 'none')
-    if (repr === 'hull-prism') {
-      // Sync the slider to the per-lattice default (7 square / 8 honeycomb).
-      const lat = store.getState().currentDesign?.lattice_type
-      const tick = lat === 'HONEYCOMB' ? 8 : 7
-      const sl = document.getElementById('sl-hull-margin')
-      const sv = document.getElementById('sv-hull-margin')
-      if (sl) sl.value = String(tick)
-      if (sv) sv.textContent = String(tick)
-    }
-    _setAtomisticSlidersVisible(repr === 'vdw' || repr === 'ballstick')
-    _setSurfacePanelVisible(repr === 'surface')
-  }
 
   async function _setRepresentation(repr) {
     _currentRepr = repr
@@ -6968,41 +6947,20 @@ async function main() {
   // Initial availability (default repr = 'full' per HTML is-checked).
   _updateColoringMenuAvailability('full')
 
-  // ── Representation option sliders ─────────────────────────────────────────────
-  const _slBeadRadius = document.getElementById('sl-bead-radius')
-  const _svBeadRadius = document.getElementById('sv-bead-radius')
-  _slBeadRadius?.addEventListener('input', () => {
-    const r = parseFloat(_slBeadRadius.value)
-    _currentBeadRadius = r
-    if (_svBeadRadius) _svBeadRadius.textContent = r.toFixed(2)
-    if (_lodMode === 'full' || _lodMode === 'beads') designRenderer.setBeadRadius(r)
+  // ── Representation option sliders → ui/repr_option_sliders.js ─────────────────
+  // Owns the four tuning sliders + the per-repr row-visibility (`updateForRepr`,
+  // aliased so _setRepresentation's call site stays verbatim). The alias-const
+  // resolves before any deferred caller fires (_setRepresentation only runs from
+  // post-boot handlers / the lifecycle spine), so no lazy-let is needed.
+  const _reprOptionSlidersCtrl = initReprOptionSliders({
+    store,
+    designRenderer,
+    getJointRenderer: () => jointRenderer,
+    getLodMode: () => _lodMode,
+    setAtomisticSlidersVisible: _setAtomisticSlidersVisible,
+    setSurfacePanelVisible: _setSurfacePanelVisible,
   })
-
-  const _slCylRadius = document.getElementById('sl-cyl-radius')
-  const _svCylRadius = document.getElementById('sv-cyl-radius')
-  _slCylRadius?.addEventListener('input', () => {
-    const r = parseFloat(_slCylRadius.value)
-    if (_svCylRadius) _svCylRadius.textContent = r.toFixed(2)
-    if (_lodMode === 'cylinders') designRenderer.setCylinderRadius(r)
-  })
-
-  // Hull-prism cross-section margin (bp) — granularity of the extrusion scan.
-  const _slHullMargin = document.getElementById('sl-hull-margin')
-  const _svHullMargin = document.getElementById('sv-hull-margin')
-  _slHullMargin?.addEventListener('input', () => {
-    const bp = parseInt(_slHullMargin.value, 10)
-    if (_svHullMargin) _svHullMargin.textContent = String(bp)
-    jointRenderer?.setHullScanTick(bp)
-  })
-
-  // Curved-hull facet detail (nm deviation tolerance): lower = smoother/more facets.
-  const _slHullCurve = document.getElementById('sl-hull-curve')
-  const _svHullCurve = document.getElementById('sv-hull-curve')
-  _slHullCurve?.addEventListener('input', () => {
-    const nm = parseFloat(_slHullCurve.value)
-    if (_svHullCurve) _svHullCurve.textContent = nm.toFixed(2)
-    jointRenderer?.setHullCurveDetail(nm)
-  })
+  const _reprOptionSliders = _reprOptionSlidersCtrl.updateForRepr
 
   // ── Hide Staples toggle ────────────────────────────────────────────────────────
   document.getElementById('menu-view-hide-staples')?.addEventListener('click', () => {
