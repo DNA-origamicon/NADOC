@@ -37,7 +37,7 @@ import { ensureLoaded as _ensureFjcLookup } from './ssdna_fjc.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
 import { clusterMemberFilter } from './cluster_gizmo.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
-import { isDrillV2, normalizeLevel, hoverPreviewTarget, lassoCaptureType } from './selection_level.js'
+import { normalizeLevel, hoverPreviewTarget, lassoCaptureType } from './selection_level.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -1548,7 +1548,7 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldRightClick?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionSurfaceRenderer, isManualSelect, onDrillLevel, drillV2 = isDrillV2() } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionSurfaceRenderer, onDrillLevel } = opts
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -1566,47 +1566,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   let _cylStrandId       = null   // strand selected via cylinder LOD hit
   let _crossoverId       = null   // crossover id when in 'crossover' selection mode
 
-  // ── Auto-drill state ───────────────────────────────────────────────────────
-  // Repeated clicks on the same "section" descend cluster → strand → domain →
-  // bead (or → xover for a cone), then cycle back to cluster. Active only in
-  // auto-drill mode (isManualSelect() === false). _drillAnchor identifies the
-  // section as `${strandId}:${kind}` where kind is 'bead' or 'cone'; a click on
-  // a different anchor restarts the drill at the cluster level.
-  let _drillAnchor    = null
-  let _drillLevel     = 0
-  let _drillSeq       = []
+  // ── Selection level (ISSUE-4 drill v2) ─────────────────────────────────────
+  // One unified `selectionLevel` is the whole selection model — see
+  // scene/selection_level.js. The cluster a click landed on (so the cluster
+  // right-click menu + post-rebuild highlight can find it).
   let _drillClusterId = null
-  // Tab drill-lock: when set ('cluster'|'strand'|'domain'|'bead'|'xover'), the
-  // auto-drill stops cycling and every click selects at this FIXED level instead.
-  // null = normal descend-on-repeat-click behaviour.
-  let _drillLock      = null
-
-  // ── Drill v2 (ISSUE-4 Phase 2) ─────────────────────────────────────────────
-  // One unified `selectionLevel` replaces the auto-drill ladder + manual pins +
-  // Tab-lock when the NADOC_DRILL_V2 flag is on. See scene/selection_level.js.
-  const _drillV2 = !!drillV2
-  let _selLevel  = 'default'   // 'default' | 'cluster' | 'domain' | 'end' | 'xover'
+  let _selLevel  = 'default'   // 'default' | 'cluster' | 'strand' | 'domain' | 'end' | 'xover'
   // Hover-preview affordance (default level, strand selected): the bead/cone under
   // the cursor previews the leaf a 2nd click would select.
   let _hoverBead = null
   let _hoverCone = null
   let _hoverArc  = null
 
-  function _autoDrill() { return !isManualSelect?.() }
-
-  function _resetDrill() {
-    _drillAnchor    = null
-    _drillLevel     = 0
-    _drillSeq       = []
-    _drillClusterId = null
-  }
-
   function _emitDrillLevel(level) { onDrillLevel?.(level) }
-
-  function _currentDrillType() {
-    if (!_autoDrill() || !_drillSeq.length) return null
-    return _drillSeq[_drillLevel]
-  }
 
   // Smallest non-default cluster containing the nuc; falls back to the default
   // (all-helices) cluster, then any containing cluster. Mirrors the bridge/
@@ -1658,133 +1630,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _drillClusterId = clusterId
   }
 
-  // Bead-hit auto-drill: cluster → strand → domain → bead, cycling. The clicked
-  // bead's domain/identity drives the deeper levels; the cluster level uses the
-  // smallest cluster that contains the bead.
-  function _autoDrillBead(hitEntry, hitStrandId, backboneEntries, coneEntries) {
-    const design = store.getState().currentDesign
-    const anchor = `${hitStrandId}:bead`
-    // Cap the drill by what this column actually renders as: cylinders → domain
-    // (no visible bead); surface → strand (no per-bp attribution); full/vdw/ballstick
-    // → down to the nucleotide (beads or atoms are visible there).
-    const _rep = designRenderer.columnRepAt?.(hitEntry.nuc.helix_id, hitEntry.nuc.bp_index)
-    _drillSeq = _rep === 'cylinders' ? ['cluster', 'strand', 'domain']
-              : _rep === 'surface'   ? ['cluster', 'strand']
-              : ['cluster', 'strand', 'domain', 'bead']
-    if (_drillLock) {
-      const i = _drillSeq.indexOf(_drillLock)
-      _drillLevel = i >= 0 ? i : 1   // a lock not on this sequence (xover) → strand
-      _drillAnchor = anchor
-    } else if (_drillAnchor === anchor) {
-      _drillLevel = (_drillLevel + 1) % _drillSeq.length
-    } else {
-      _drillAnchor = anchor; _drillLevel = 0
-    }
-    let level = _drillSeq[_drillLevel]
-
-    if (level === 'cluster') {
-      const cid = _resolveClusterId(hitEntry.nuc, design)
-      if (cid) {
-        _mode = 'cluster'; _strandId = hitStrandId
-        _highlightCluster(cid, backboneEntries)
-        store.setState({ selectedObject: _clusterSelection(cid) })
-        _emitDrillLevel('cluster')
-        return
-      }
-      // No cluster contains this bead → skip straight to strand.
-      _drillLevel = 1; level = 'strand'
-    }
-
-    if (level === 'strand') {
-      _mode = 'strand'; _strandId = hitStrandId; _coneEntry = null
-      _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-      store.setState({ selectedObject: _strandSelection(hitStrandId, { helix_id: hitEntry.nuc.helix_id }) })
-    } else if (level === 'domain') {
-      const domainIdx = hitEntry.nuc.domain_index ?? 0
-      _mode = 'domain'; _strandId = hitStrandId
-      _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-      _highlightDomain(domainIdx)
-      const domainObj = design?.strands?.find(s => s.id === hitStrandId)?.domains?.[domainIdx]
-      store.setState({
-        selectedObject: {
-          type: 'domain',
-          id:   `${hitStrandId}:${domainIdx}`,
-          data: {
-            strand_id:    hitStrandId,
-            domain_index: domainIdx,
-            helix_id:     domainObj?.helix_id    ?? hitEntry.nuc.helix_id,
-            direction:    domainObj?.direction   ?? hitEntry.nuc.direction,
-            overhang_id:  domainObj?.overhang_id ?? null,
-          },
-        },
-      })
-    } else {  // 'bead'
-      _mode = 'bead'; _strandId = hitStrandId
-      _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-      _highlightBead(hitEntry)
-      store.setState({
-        selectedObject: {
-          type: 'nucleotide',
-          id:   `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`,
-          data: hitEntry.nuc,
-        },
-      })
-    }
-    _emitDrillLevel(level)
-  }
-
-  // Cone-hit auto-drill: cluster → strand → xover (the cone is the leaf).
-  function _autoDrillCone(hitCone, hitStrandId, backboneEntries, coneEntries) {
-    const design = store.getState().currentDesign
-    const anchor = `${hitStrandId}:cone`
-    _drillSeq = ['cluster', 'strand', 'xover']
-    if (_drillLock) {
-      const i = _drillSeq.indexOf(_drillLock)
-      _drillLevel = i >= 0 ? i : 1   // a lock not on this sequence (domain/bead) → strand
-      _drillAnchor = anchor
-    } else if (_drillAnchor === anchor) {
-      _drillLevel = (_drillLevel + 1) % _drillSeq.length
-    } else {
-      _drillAnchor = anchor; _drillLevel = 0
-    }
-    let level = _drillSeq[_drillLevel]
-
-    if (level === 'cluster') {
-      const repNuc = hitCone.fromNuc ?? hitCone.toNuc
-      const cid = repNuc ? _resolveClusterId(repNuc, design) : null
-      if (cid) {
-        _mode = 'cluster'; _strandId = hitStrandId
-        _highlightCluster(cid, backboneEntries)
-        store.setState({ selectedObject: _clusterSelection(cid) })
-        _emitDrillLevel('cluster')
-        return
-      }
-      _drillLevel = 1; level = 'strand'
-    }
-
-    if (level === 'strand') {
-      _mode = 'strand'; _strandId = hitStrandId
-      _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-      store.setState({ selectedObject: _strandSelection(hitStrandId) })
-    } else {  // 'xover'
-      _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-      _mode = 'cone'; _strandId = hitStrandId
-      _highlightCone(hitCone)
-      const { fromNuc, toNuc } = hitCone
-      store.setState({
-        selectedObject: {
-          type: 'cone',
-          id:   `${fromNuc.helix_id}:${fromNuc.bp_index}:${fromNuc.direction}→${toNuc.helix_id}:${toNuc.bp_index}:${toNuc.direction}`,
-          data: { fromNuc, toNuc, strand_id: hitStrandId },
-        },
-      })
-    }
-    _emitDrillLevel(level)
-  }
-
-  // ── Drill v2 select primitives ─────────────────────────────────────────────
-  // Small reusable selectors keyed by level; mirror the bodies inside the legacy
-  // _autoDrill* functions but driven by the single _selLevel instead of a ladder.
+  // ── Selection-level select primitives ──────────────────────────────────────
+  // Small reusable selectors keyed by level, driven by the single _selLevel.
 
   function _selectStrandV2(hitStrandId, hitEntry, backboneEntries, coneEntries) {
     _mode = 'strand'; _strandId = hitStrandId; _coneEntry = null
@@ -2033,9 +1880,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   function _updateHoverPreview(clientX, clientY) {
-    if (!_drillV2 || _selLevel !== 'default' || _mode !== 'strand') { _clearHoverPreview(); return }
+    if (_selLevel !== 'default' || _mode !== 'strand') { _clearHoverPreview(); return }
     if (clientX > window.innerWidth - 300) { _clearHoverPreview(); return }
-    const opts = { drillV2: _drillV2, selLevel: _selLevel, mode: _mode, strandId: _strandId }
+    const opts = { selLevel: _selLevel, mode: _mode, strandId: _strandId }
     const hit = _pickNearestBeadCone(clientX, clientY)
     let target = hoverPreviewTarget({ ...opts, hit })
     if (!target) {
@@ -2066,75 +1913,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   // Unified backbone-bead-level hit handler — used by a real bead hit AND by the
-  // region overlays (atom / surface / cylinder, via a representative entry). Honours
-  // the SAME rules: auto-drill (with the Tab drill-lock) when in auto mode, else the
-  // manual selectableTypes granularity. The auto-drill cap is rep-aware (cylinders →
-  // domain, surface → strand) via columnRepAt inside _autoDrillBead.
-  function _handleBeadHit(hitEntry, backboneEntries, coneEntries, prevOverhangId = null) {
-    const hitStrandId = hitEntry.nuc.strand_id
-    if (_drillV2) { _v2HandleBead(hitEntry, backboneEntries, coneEntries); return }
-    if (_autoDrill()) { _autoDrillBead(hitEntry, hitStrandId, backboneEntries, coneEntries); return }
-
-    const { selectableTypes } = store.getState()
-    // Overhang filter → overhang granularity.
-    if (selectableTypes.overhangs && hitEntry.nuc.overhang_id) {
-      const ovhgId = hitEntry.nuc.overhang_id
-      if (prevOverhangId !== ovhgId) {
-        _applyMultiOverhangHighlight([ovhgId])
-        store.setState({ multiSelectedOverhangIds: [ovhgId] })
-      }
-      return
-    }
-    // Domain filter → domain granularity.
-    if (selectableTypes.domains) {
-      const domainIdx = hitEntry.nuc.domain_index ?? 0
-      if (_mode === 'domain' && _strandId === hitStrandId && _domainIndex === domainIdx) {
-        _clearAll()
-      } else {
-        _restoreStrand()
-        _mode = 'domain'; _strandId = hitStrandId
-        _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-        _highlightDomain(domainIdx)
-        const design = store.getState().currentDesign
-        const domainObj = design?.strands?.find(s => s.id === hitStrandId)?.domains?.[domainIdx]
-        store.setState({
-          selectedObject: {
-            type: 'domain',
-            id:   `${hitStrandId}:${domainIdx}`,
-            data: {
-              strand_id:    hitStrandId,
-              domain_index: domainIdx,
-              helix_id:     domainObj?.helix_id    ?? hitEntry.nuc.helix_id,
-              direction:    domainObj?.direction   ?? hitEntry.nuc.direction,
-              overhang_id:  domainObj?.overhang_id ?? null,
-            },
-          },
-        })
-      }
-      return
-    }
-    // Default manual: strand, then nucleotide on repeat clicks.
-    if (_mode === 'none' || hitStrandId !== _strandId) {
-      _mode = 'strand'; _strandId = hitStrandId; _coneEntry = null
-      _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-      store.setState({
-        selectedObject: _strandSelection(
-          hitStrandId ?? `unassigned:${hitEntry.nuc.helix_id}:${hitEntry.nuc.direction}`,
-          { helix_id: hitEntry.nuc.helix_id },
-        ),
-      })
-    } else if (_mode === 'strand') {
-      _mode = 'bead'; _highlightBead(hitEntry)
-      store.setState({ selectedObject: { type: 'nucleotide', id: `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`, data: hitEntry.nuc } })
-    } else if (_mode === 'bead' && _beadEntry &&
-               _beadEntry.nuc.helix_id  === hitEntry.nuc.helix_id &&
-               _beadEntry.nuc.bp_index  === hitEntry.nuc.bp_index &&
-               _beadEntry.nuc.direction === hitEntry.nuc.direction) {
-      _clearAll()
-    } else {
-      _mode = 'bead'; _highlightBead(hitEntry)
-      store.setState({ selectedObject: { type: 'nucleotide', id: `${hitEntry.nuc.helix_id}:${hitEntry.nuc.bp_index}:${hitEntry.nuc.direction}`, data: hitEntry.nuc } })
-    }
+  // region overlays (atom / surface / cylinder, via a representative entry). Routes
+  // to the selection-level dispatch (fixed level, or default strand→leaf-under-cursor;
+  // rep-aware cap — cylinders → domain, surface → strand — inside _v2HandleBead).
+  function _handleBeadHit(hitEntry, backboneEntries, coneEntries) {
+    _v2HandleBead(hitEntry, backboneEntries, coneEntries)
   }
 
   // Find a representative backbone entry for a strand (optionally constrained to a
@@ -2263,12 +2046,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _mode        = 'none'
     _strandId    = null
     _crossoverId = null
-    _resetDrill()
-    // Drill-v2: deselecting (empty-space / toggle-off click) keeps the engaged
-    // level — the filter button stays lit until Tab cycles away or it is re-clicked
-    // (user feedback 2026-06-06). `_selLevel` itself was never reset here; emit it
-    // (not null) so the row paint persists. Legacy still clears the lock highlight.
-    _emitDrillLevel(_drillV2 ? _selLevel : null)
+    _drillClusterId = null
+    // Deselecting (empty-space / toggle-off click) KEEPS the engaged level — the
+    // filter button stays lit until Tab cycles away or it is re-clicked (user
+    // feedback 2026-06-06). `_selLevel` is not reset here; emit it (not null) so the
+    // row paint persists.
+    _emitDrillLevel(_selLevel)
     store.setState({ selectedObject: null })
     _clearMultiLoopSkips()
     _clearMultiDomainSelection()
@@ -2679,66 +2462,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
   }
 
-  // Ctrl+click (no drag) in auto-drill mode → additive pick locked to the
-  // current drill level. In manual mode (or with no active drill) this is a
-  // no-op, preserving the legacy "Ctrl reserved for lasso" behavior.
-  function _handleCtrlTypeLockClick(e) {
-    if (e.clientX > window.innerWidth - 300) return
-    const lvl = _currentDrillType()
-    if (lvl === null) return
-
-    if (lvl === 'bead') { _handleCtrlClickNuc(e); return }
-
-    if (lvl === 'xover') {
-      const rect = canvas.getBoundingClientRect()
-      const arcHit = _findArcAt(e.clientX - rect.left, e.clientY - rect.top)
-      if (arcHit?.crossover_id) {
-        const idx = _multiCrossoverArcs.findIndex(a => a.crossover_id === arcHit.crossover_id)
-        if (idx >= 0) { _multiCrossoverArcs[idx].setColor(_multiCrossoverArcs[idx].defaultColor); _multiCrossoverArcs.splice(idx, 1) }
-        else { arcHit.setColor(C_MULTI_XOVER_ARC); _multiCrossoverArcs.push(arcHit) }
-        getUnfoldView?.()?.updateArcGlow(_multiCrossoverArcs)
-      }
-      return
-    }
-
-    // strand / domain / cluster all resolve from a backbone bead under the cursor.
-    _setNdc(e.clientX, e.clientY)
-    raycaster.setFromCamera(_ndc, _cam())
-    const backboneEntries = designRenderer.getBackboneEntries()
-    const beadMeshes = [...new Set(backboneEntries.map(b => b.instMesh))].filter(m => m.visible)
-    const hits = beadMeshes.length ? raycaster.intersectObjects(beadMeshes) : []
-    if (!hits.length) return
-    const entry = backboneEntries.find(b => b.instMesh === hits[0].object && b.id === hits[0].instanceId)
-    if (!entry?.nuc?.strand_id) return
-
-    if (lvl === 'strand') {
-      _handleShiftAdditivePick(e)   // toggles the hit strand in/out of _multiStrandIds
-    } else if (lvl === 'domain') {
-      const strandId = entry.nuc.strand_id
-      const domainIndex = entry.nuc.domain_index ?? 0
-      const key = `${strandId}:${domainIndex}`
-      const present = _multiDomainIds.some(d => `${d.strandId}:${d.domainIndex}` === key)
-      const next = present
-        ? _multiDomainIds.filter(d => `${d.strandId}:${d.domainIndex}` !== key)
-        : [..._multiDomainIds, { strandId, domainIndex }]
-      if (next.length === 0) _clearMultiDomainSelection()
-      else { _applyMultiDomainHighlight(next); store.setState({ multiSelectedDomainIds: next }) }
-    } else if (lvl === 'cluster') {
-      const design = store.getState().currentDesign
-      const cid = _resolveClusterId(entry.nuc, design)
-      if (!cid) return
-      const f = clusterMemberFilter(design.cluster_transforms.find(c => c.id === cid), design)
-      if (!f) return
-      const ids = [...new Set(backboneEntries.filter(b => f(b.nuc)).map(b => b.nuc.strand_id).filter(Boolean))]
-      const allPresent = ids.length > 0 && ids.every(id => _multiStrandIds.includes(id))
-      const next = allPresent
-        ? _multiStrandIds.filter(id => !ids.includes(id))
-        : [...new Set([..._multiStrandIds, ...ids])]
-      if (next.length === 0) _clearMultiSelection()
-      else { _applyMultiHighlight(next); store.setState({ multiSelectedStrandIds: next }) }
-    }
-  }
-
   function _finalizeLasso(endX, endY) {
     _inLassoMode = false
     canvas.style.cursor = ''
@@ -2768,16 +2491,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     const st = store.getState().selectableTypes
     // What the lasso captures (single source of truth, unit-tested in
-    // selection_level.js). In drill-v2 the engaged `_selLevel` decides — the
-    // lasso captures the SAME element a click at that level would (ISSUE-4
-    // filter-audit fix for "Tab to ends, lasso grabs a cluster"). In legacy, an
-    // active auto-drill type-locks to its level; otherwise selectableTypes gates.
-    const cap = lassoCaptureType({
-      drillV2:         _drillV2,
-      selLevel:        _selLevel,
-      drillType:       _currentDrillType(),
-      selectableTypes: st,
-    })
+    // selection_level.js): the engaged `_selLevel` decides — the lasso captures the
+    // SAME element a click at that level would (ISSUE-4 filter-audit fix for "Tab to
+    // ends, lasso grabs a cluster"). scaffold/staple gates are applied in the loop below.
+    const cap = lassoCaptureType({ selLevel: _selLevel })
     const beadLevelLasso = cap.beadLevel
     const useStrands  = cap.strands
     const useDomains  = cap.domains
@@ -3058,9 +2775,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   })
 
   canvas.addEventListener('pointermove', e => {
-    // Drill-v2 hover preview (default level + strand selected) — pops the bead/cone
-    // under the cursor. Skipped during a ctrl/lasso drag.
-    if (_drillV2 && !_ctrlDownPos && !_inLassoMode && !isDisabled?.()) _updateHoverPreview(e.clientX, e.clientY)
+    // Hover preview (default level + strand selected) — pops the bead/cone under
+    // the cursor. Skipped during a ctrl/lasso drag.
+    if (!_ctrlDownPos && !_inLassoMode && !isDisabled?.()) _updateHoverPreview(e.clientX, e.clientY)
     // If ctrl is held and we haven't yet started a lasso, check if the drag threshold is exceeded.
     if (_ctrlDownPos && !_inLassoMode) {
       if (Math.hypot(e.clientX - _ctrlDownPos.x, e.clientY - _ctrlDownPos.y) > 4) {
@@ -3113,13 +2830,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
 
-    // Ctrl+left click (no drag): in auto-drill mode, additive pick locked to the
-    // current drill level (cluster/strand/domain/bead/xover). In manual mode it
-    // stays a no-op — Ctrl+drag is the lasso; bead/arc toggles are Alt/Shift.
+    // Ctrl+left click (no drag) is a no-op — Ctrl+drag is the lasso; bead/arc
+    // toggles are Alt/Shift.
     if (_ctrlDownPos) {
-      const moved = Math.hypot(e.clientX - _ctrlDownPos.x, e.clientY - _ctrlDownPos.y)
       _ctrlDownPos = null
-      if (moved <= 4) _handleCtrlTypeLockClick(e)
       return
     }
 
@@ -3127,10 +2841,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (e.clientX > window.innerWidth - 300) return
 
     _dismissMenu()
-
-    // Save the single-selected overhang ID before clearing it — used below to detect
-    // a second click on the same overhang (toggle-off).
-    const _prevOverhangId = _multiOverhangIds.length === 1 ? _multiOverhangIds[0] : null
 
     // Regular left click — clear any active multi-selection
     if (_multiStrandIds.length > 0)   _clearMultiSelection()
@@ -3237,7 +2947,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const a = _atomHit.atom
       const hitEntry = backboneEntries.find(e =>
         e.nuc.helix_id === a.helix_id && e.nuc.bp_index === a.bp_index && e.nuc.direction === a.direction)
-      if (hitEntry) { _handleBeadHit(hitEntry, backboneEntries, coneEntries, _prevOverhangId); return }
+      if (hitEntry) { _handleBeadHit(hitEntry, backboneEntries, coneEntries); return }
       if (a.strand_id) {
         _restoreStrand()
         _mode = 'strand'; _strandId = a.strand_id
@@ -3254,7 +2964,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const strandId = getRegionSurfaceRenderer().strandIdAt(_surfHit.face)
       if (strandId) {
         const rep = _repEntryFor(backboneEntries, strandId, { rep: 'surface' })
-        if (rep) { _handleBeadHit(rep, backboneEntries, coneEntries, _prevOverhangId); return }
+        if (rep) { _handleBeadHit(rep, backboneEntries, coneEntries); return }
         _restoreStrand()   // arc-rendered region (no beads) → strand select
         _mode = 'strand'; _strandId = strandId
         _highlightStrand(backboneEntries, coneEntries, strandId)
@@ -3283,7 +2993,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
               const rep = backboneEntries.find(e =>
                 e.nuc.strand_id === br.strandId && e.nuc.helix_id === br.bridgeHelixId)
                 ?? _repEntryFor(backboneEntries, br.strandId)
-              if (rep) { _handleBeadHit(rep, backboneEntries, coneEntries, _prevOverhangId); return }
+              if (rep) { _handleBeadHit(rep, backboneEntries, coneEntries); return }
               _restoreStrand()
               _mode = 'strand'; _strandId = br.strandId
               _highlightStrand(backboneEntries, coneEntries, br.strandId)
@@ -3303,7 +3013,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
               // Route a domain representative through the unified handler — auto-drill
               // caps at domain (columnRepAt==='cylinders'), manual/Tab rules apply.
               const rep = _repEntryFor(backboneEntries, dom.strandId, { domainIndex: dom.domainIndex })
-              if (rep) { _handleBeadHit(rep, backboneEntries, coneEntries, _prevOverhangId); return }
+              if (rep) { _handleBeadHit(rep, backboneEntries, coneEntries); return }
             }
           }
         }
@@ -3349,57 +3059,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       // and the hit arc has a crossover_id, select the crossover object.
       const rect2 = canvas.getBoundingClientRect()
       const arcHit = _findArcAt(e.clientX - rect2.left, e.clientY - rect2.top)
-      // Drill-v2: the crossover arc is part of the strand→crossover click ladder
-      // (strand-first, then the crossover under the cursor — green selection glow).
-      if (_drillV2) {
-        if (arcHit) { _v2HandleArc(arcHit, backboneEntries, coneEntries); return }
-        _clearAll(); return
-      }
-      if (!arcHit) { _clearAll(); return }
-
-      // Crossover-object selection (when crossoverArcs filter is active)
-      if (selectableTypes.crossoverArcs && arcHit.crossover_id) {
-        const design = store.getState().currentDesign
-        const xo = design?.crossovers?.find(x => x.id === arcHit.crossover_id)
-        const fl = xo ? null : design?.forced_ligations?.find(f => f.id === arcHit.crossover_id)
-        const target = xo ?? fl
-        if (target) {
-          if (_mode === 'crossover' && _crossoverId === target.id) {
-            _clearAll(); return   // toggle off
-          }
-          _restoreStrand()
-          _mode = 'crossover'
-          _crossoverId = target.id
-          _strandId = null
-          // Green glow TUBE along the arc (unified with the red preview tube).
-          designRenderer.setSelectionArc(arcHit.getPositions?.() ?? [])
-          store.setState({
-            selectedObject: { type: xo ? 'crossover' : 'forced_ligation', id: target.id, data: target },
-          })
-          return
-        }
-      }
-
-      if (!arcHit.strandId) { _clearAll(); return }
-      const hitStrandId = arcHit.strandId
-      if (_mode === 'none' || hitStrandId !== _strandId) {
-        _mode     = 'strand'
-        _strandId = hitStrandId
-        _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-        store.setState({ selectedObject: _strandSelection(hitStrandId) })
-      } else {
-        // Second click on same strand arc → select as cone-equivalent
-        _mode = 'cone'
-        const { fromNuc, toNuc } = arcHit
-        store.setState({
-          selectedObject: {
-            type: 'cone',
-            id:   `${fromNuc.helix_id}:${fromNuc.bp_index}:${fromNuc.direction}→${toNuc.helix_id}:${toNuc.bp_index}:${toNuc.direction}`,
-            data: { fromNuc, toNuc, strand_id: hitStrandId },
-          },
-        })
-      }
-      return
+      // The crossover arc is part of the strand→crossover click ladder (strand-first,
+      // then the crossover under the cursor — green selection glow).
+      if (arcHit) { _v2HandleArc(arcHit, backboneEntries, coneEntries); return }
+      _clearAll(); return
     }
 
     if (coneDist < beadDist) {
@@ -3407,33 +3070,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const hitCone = selCones.find(e => e.instMesh === coneHit0.object && e.id === coneHit0.instanceId)
       if (!hitCone) return
       const hitStrandId = hitCone.strandId
-
-      if (_drillV2) { _v2HandleCone(hitCone, hitStrandId, backboneEntries, coneEntries); return }
-      if (_autoDrill()) { _autoDrillCone(hitCone, hitStrandId, backboneEntries, coneEntries); return }
-
-      if (_mode === 'none' || hitStrandId !== _strandId) {
-        _mode     = 'strand'
-        _strandId = hitStrandId
-        _highlightStrand(backboneEntries, coneEntries, hitStrandId)
-        store.setState({ selectedObject: _strandSelection(hitStrandId) })
-      } else {
-        // Second click within same strand → select this cone
-        _mode = 'cone'
-        _highlightCone(hitCone)
-        const { fromNuc, toNuc } = hitCone
-        store.setState({
-          selectedObject: {
-            type: 'cone',
-            id:   `${fromNuc.helix_id}:${fromNuc.bp_index}:${fromNuc.direction}→${toNuc.helix_id}:${toNuc.bp_index}:${toNuc.direction}`,
-            data: { fromNuc, toNuc, strand_id: hitStrandId },
-          },
-        })
-      }
+      _v2HandleCone(hitCone, hitStrandId, backboneEntries, coneEntries)
     } else {
       // ── Bead hit ────────────────────────────────────────────────────────
       const hitEntry = selBackbone.find(e => e.instMesh === beadHit0.object && e.id === beadHit0.instanceId)
       if (!hitEntry) return
-      _handleBeadHit(hitEntry, backboneEntries, coneEntries, _prevOverhangId)
+      _handleBeadHit(hitEntry, backboneEntries, coneEntries)
     }
   })
 
@@ -3789,27 +3431,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       })
     },
 
-    /** Reset the auto-drill cursor (level + anchor). Called when the user pins a
-     *  manual filter or presses Tab so the auto-state stops fighting the manual
-     *  selection. Does not clear the current highlight. */
-    resetDrill() { _resetDrill(); _emitDrillLevel(null) },
-
-    /** Tab drill-lock: pin the auto-drill to a fixed level so every click selects
-     *  at that level (no descent). Pass null to return to normal auto-drill.
-     *  Emits the level so the matching filter button reflects the lock. */
-    setDrillLock(level) {
-      _drillLock = level || null
-      _resetDrill()
-      _emitDrillLevel(_drillLock)
-    },
-    /** The active Tab drill-lock level, or null when in normal auto-drill. */
-    getDrillLock() { return _drillLock },
-
-    /** Drill-v2: is the unified selectionLevel model active (NADOC_DRILL_V2)? */
-    isDrillV2() { return _drillV2 },
-    /** Drill-v2: the active selectionLevel ('default'|'cluster'|'domain'|'end'|'xover'). */
+    /** The active selectionLevel ('default'|'cluster'|'strand'|'domain'|'end'|'xover'). */
     getSelectionLevel() { return _selLevel },
-    /** Drill-v2: set the active selectionLevel; emits it so the filter row reflects.
+    /** Set the active selectionLevel; emits it so the filter row reflects.
      *  Returning to 'default' drops any hover preview. */
     setSelectionLevel(level) {
       _selLevel = normalizeLevel(level)

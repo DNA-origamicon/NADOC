@@ -23,9 +23,9 @@
  * @param {Object} deps.measurementTool / deps.selectionManager
  * @param {Object} deps.workspace / deps.deformView
  * @param {Object} deps.crossSectionMinimap / deps.sliceHighlighter
- * @param {Function} deps.isUnfoldActive / deps.isDeformActive / deps.isManualSelect
+ * @param {Function} deps.isUnfoldActive / deps.isDeformActive
  * @param {Function} deps.captureCurrentCamera / deps.frameSelectionOrAll
- * @param {Function} deps.setMenuToggle / deps.reflectLockOnButtons / deps.resetToAutoBaseline
+ * @param {Function} deps.setMenuToggle
  * @param {Function} deps.toggleUnfold / deps.toggleCadnano
  * @param {Function} deps.savePartToAssembly / deps.saveAssemblyAsGuarded / deps.setAssemblyWorkspacePath
  * @param {Function} deps.showWelcome / deps.ooClose / deps.cancelTranslateRotateTool
@@ -37,28 +37,22 @@
  */
 import { registerShortcut, dispatchKeyEvent } from '../input/shortcuts.js'
 import { showToast } from './toast.js'
-import { isDrillV2, nextTabLevel } from '../scene/selection_level.js'
-
-// Tab cycle-lock drill levels (region-local consts, moved with the Tab handler).
-const _TAB_LOCKS  = [null, 'cluster', 'strand', 'domain', 'bead', 'xover']
-const _LOCK_LABEL = { cluster: 'cluster', strand: 'strand', domain: 'domain', bead: 'ends', xover: 'crossover' }
+import { nextTabLevel } from '../scene/selection_level.js'
 
 export function initKeyboardShortcuts(deps) {
   const {
     store, api,
     slicePlane, expandedSpacing, debugOverlay, measurementTool, selectionManager,
     workspace, deformView, crossSectionMinimap, sliceHighlighter,
-    isUnfoldActive, isDeformActive, isManualSelect,
+    isUnfoldActive, isDeformActive,
     captureCurrentCamera, frameSelectionOrAll,
-    setMenuToggle, reflectLockOnButtons, resetToAutoBaseline,
+    setMenuToggle,
     toggleUnfold, toggleCadnano,
     savePartToAssembly, saveAssemblyAsGuarded, setAssemblyWorkspacePath,
     showWelcome, ooClose, cancelTranslateRotateTool,
     watchDeformState, deformEscape, popGroupUndo,
     isTranslateRotateActive, getPartEditContext, getAssemblyWorkspacePath, getOoActiveIds,
-    drillV2 = isDrillV2(),
   } = deps
-  const _v2 = !!drillV2
 
   // ── File / edit (Ctrl-modifier) ──────────────────────────────────────────
 
@@ -241,35 +235,21 @@ export function initKeyboardShortcuts(deps) {
     handler() { toggleCadnano() },
   })
 
-  // Tab — cycle-lock the selection DRILL LEVEL: auto-drill → cluster → strand →
-  // domain → ends(bead) → crossover → auto-drill. The lock pins the auto-drill to
-  // a fixed level (every click selects at that level, no descent on repeat clicks),
-  // reflected as a pinned highlight on the matching filter button. Escape (or
-  // cycling past crossover) returns to auto-drill.
+  // Tab — cycle the unified selectionLevel: cluster → strand → domain → end →
+  // xover → none(default) → cluster. `default` = no button engaged = the drill
+  // ladder. The filter row reflects it via the emitted level.
   // Skipped when the move/rotate gizmo is active (cluster_gizmo.js owns Tab there).
   registerShortcut({
     key: 'Tab', ctrl: false,
-    description: 'Cycle selection lock (cluster → strand → domain → ends → crossover)',
+    description: 'Cycle selection level (cluster → strand → domain → end → xover → drill)',
     blockedInInput: true,
     blockedWhen: () => isTranslateRotateActive(),
     handler(e) {
       e.preventDefault()
-      // Drill-v2: Tab cycles the unified selectionLevel cluster → strand → domain →
-      // end → xover → none(default) → cluster. `default` = no button = drill ladder.
-      // The filter row reflects it via the emitted level.
-      if (_v2) {
-        const cur  = selectionManager.getSelectionLevel?.() ?? 'default'
-        const next = nextTabLevel(cur)
-        selectionManager.setSelectionLevel?.(next)
-        showToast(next === 'default' ? 'Selection level: drill (default)' : `Selection level: ${next}`)
-        return
-      }
-      const cur  = selectionManager.getDrillLock?.() ?? null
-      const next = _TAB_LOCKS[(_TAB_LOCKS.indexOf(cur) + 1) % _TAB_LOCKS.length]
-      resetToAutoBaseline()                  // clear manual pins + restore baseline selectability
-      selectionManager.setDrillLock?.(next)  // null = back to normal auto-drill
-      reflectLockOnButtons(next)
-      showToast(next ? `Selection locked: ${_LOCK_LABEL[next]}` : 'Selection: auto-drill')
+      const cur  = selectionManager.getSelectionLevel?.() ?? 'default'
+      const next = nextTabLevel(cur)
+      selectionManager.setSelectionLevel?.(next)
+      showToast(next === 'default' ? 'Selection level: drill (default)' : `Selection level: ${next}`)
     },
   })
 
@@ -584,19 +564,10 @@ export function initKeyboardShortcuts(deps) {
         sliceHighlighter.clear()
         setMenuToggle('menu-view-slice', false)
         document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
-      } else if (_v2 && (selectionManager.getSelectionLevel?.() ?? 'default') !== 'default') {
-        // Drill-v2: Escape returns the selectionLevel to default (strand-first click).
+      } else if ((selectionManager.getSelectionLevel?.() ?? 'default') !== 'default') {
+        // Escape returns the selectionLevel to default (strand-first click).
         selectionManager.setSelectionLevel('default')
         showToast('Selection level: default')
-      } else if (selectionManager.getDrillLock?.()) {
-        // No active tool/popup — a Tab drill-lock returns to auto-drill.
-        selectionManager.setDrillLock(null)
-        reflectLockOnButtons(null)
-        showToast('Selection: auto-drill')
-      } else if (isManualSelect()) {
-        // A manually-pinned selection filter returns to auto-drill.
-        resetToAutoBaseline()
-        showToast('Selection: auto-drill')
       }
     },
   })

@@ -1,28 +1,24 @@
 /**
- * ISSUE-4 Phase 2 — drill-v2 (unified selectionLevel) gesture validation.
+ * ISSUE-4 — selection-level (unified selectionLevel) gesture validation.
  *
- * Boots the app with the NADOC_DRILL_V2 flag on (?drillv2=1) and exercises the
- * default-level click ladder through the REAL raycast on a real scaffolded part:
+ * The selection-level model is the only model now (the legacy auto-drill/pin/lock
+ * paths were physically deleted 2026-06-06). Exercises the default-level click
+ * ladder through the REAL raycast on a real scaffolded part:
  *
  *   1st click on a bead          → STRAND          (decision B: strand-first)
  *   2nd click on the same bead   → that nucleotide (the leaf under the cursor)
  *   3rd click on the same bead   → STAYS the nucleotide (repeat click keeps the
  *                                  leaf selected — no toggle-clear, user feedback 2026-06-06)
  *
- * This is the discriminator vs legacy auto-drill (which would give cluster→strand
- * →domain→bead). Same robust pattern as bead_select.spec.js: pick a real bead via
- * pickBeadAt, click it, assert on exposed state, retry candidates on a miss.
+ * Same robust pattern as bead_select.spec.js: pick a real bead via pickBeadAt,
+ * click it, assert on exposed state, retry candidates on a miss.
  */
 import { test, expect } from '@playwright/test'
 import { loadScaffoldedPart, beadCandidates } from './helpers/scene_harness.js'
 
 test.describe('Drill v2 — default-level click ladder', () => {
   test('1st click → strand, 2nd → nucleotide, 3rd → keeps the nucleotide', async ({ page }) => {
-    await loadScaffoldedPart(page, { doc: 'e2e-drillv2', name: 'drillv2', extraQuery: '&drillv2=1' })
-
-    // Sanity: the flag is actually on for this boot.
-    const v2on = await page.evaluate(() => new URLSearchParams(location.search).get('drillv2') === '1')
-    expect(v2on, 'booted with drillv2=1').toBe(true)
+    await loadScaffoldedPart(page, { doc: 'e2e-drillv2', name: 'drillv2' })
 
     // Find a bead the real raycast resolves, then drive the ladder on that point.
     const cands = await beadCandidates(page)
@@ -55,7 +51,7 @@ test.describe('Drill v2 — default-level click ladder', () => {
   // feedback 2026-06-06). Before the fix, _clearAll emitted null → the button
   // un-highlighted on every empty click.
   test('an engaged level survives an empty-space click (button stays lit)', async ({ page }) => {
-    await loadScaffoldedPart(page, { doc: 'e2e-drillv2lvl', name: 'drillv2lvl', extraQuery: '&drillv2=1' })
+    await loadScaffoldedPart(page, { doc: 'e2e-drillv2lvl', name: 'drillv2lvl' })
 
     // Engage the cluster level via its filter button.
     const clustBtn = '#select-filter .sf-btn[data-key="clust"]'
@@ -95,7 +91,7 @@ test.describe('Drill v2 — default-level click ladder', () => {
   // Discriminator vs the Phase-2 scale-pop: the named 'previewGlow' layer is empty
   // (count 0) under the old behaviour and non-empty once a candidate is hovered.
   test('hover over a selected strand pops the red preview glow', async ({ page }) => {
-    await loadScaffoldedPart(page, { doc: 'e2e-drillv2hov', name: 'drillv2hov', extraQuery: '&drillv2=1' })
+    await loadScaffoldedPart(page, { doc: 'e2e-drillv2hov', name: 'drillv2hov' })
 
     const previewCount = () => page.evaluate(() => {
       let n = 0

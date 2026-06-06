@@ -728,11 +728,10 @@ async function main() {
     _ovhgGhost = mesh
   }
 
-  // ── Selection-filter mode (auto-drill vs manual) ─────────────────────────────
-  // The drill-lock state machine + the #select-filter button row are extracted to
-  // ui/selection_filter.js. `isManualSelect`/`reflectDrillLevel` are injected into
-  // initSelectionManager (below); `reflectLockOnButtons`/`resetToAutoBaseline` into
-  // initKeyboardShortcuts. `attachFilterButtons()` registers the button handlers +
+  // ── Selection-filter row ─────────────────────────────────────────────────────
+  // The #select-filter button row is extracted to ui/selection_filter.js.
+  // `reflectDrillLevel` is injected into initSelectionManager (below) as
+  // `onDrillLevel`. `attachFilterButtons()` registers the button handlers +
   // subscribers at the original ~4852 spot (subscription order preserved).
   // selectionManager doesn't exist yet → reached via a lazy getter (all callers
   // fire on user action, post-init).
@@ -749,7 +748,6 @@ async function main() {
     getRegionVdwRenderer:       () => regionVdwRenderer,
     getRegionBallstickRenderer: () => regionBallstickRenderer,
     getRegionSurfaceRenderer:   () => regionSurfaceRenderer,
-    isManualSelect: selectionFilter.isManualSelect,
     onDrillLevel: selectionFilter.reflectDrillLevel,
     onNick: async ({ helixId, bpIndex, direction }) => {
       _clearStapleChecks()
@@ -4344,12 +4342,9 @@ async function main() {
     workspace, deformView, crossSectionMinimap, sliceHighlighter,
     isUnfoldActive:           _isUnfoldActive,
     isDeformActive,
-    isManualSelect:           selectionFilter.isManualSelect,
     captureCurrentCamera,
     frameSelectionOrAll:      _frameSelectionOrAll,
     setMenuToggle:            _setMenuToggle,
-    reflectLockOnButtons:     selectionFilter.reflectLockOnButtons,
-    resetToAutoBaseline:      selectionFilter.resetToAutoBaseline,
     toggleUnfold:             _toggleUnfold,
     toggleCadnano:            _toggleCadnano,
     savePartToAssembly:       (opts) => _fileIo.savePartToAssembly(opts),

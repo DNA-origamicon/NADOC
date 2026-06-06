@@ -51,8 +51,8 @@ function makeDeps(overrides = {}) {
     debugOverlay: { toggle: vi.fn(), isActive: vi.fn(() => true) },
     measurementTool: { isActive: vi.fn(() => false), clear: vi.fn(), show: vi.fn() },
     selectionManager: {
-      getDrillLock: vi.fn(() => null),
-      setDrillLock: vi.fn(),
+      getSelectionLevel: vi.fn(() => 'default'),
+      setSelectionLevel: vi.fn(),
       getCtrlBeads: vi.fn(() => []),
       getCtrlBeadPos: vi.fn(() => [0, 0, 0]),
       clearCtrlBeads: vi.fn(),
@@ -66,12 +66,9 @@ function makeDeps(overrides = {}) {
     sliceHighlighter: { clear: vi.fn() },
     isUnfoldActive: vi.fn(() => false),
     isDeformActive: vi.fn(() => false),
-    isManualSelect: vi.fn(() => false),
     captureCurrentCamera: vi.fn(() => ({ pos: [1, 2, 3] })),
     frameSelectionOrAll: vi.fn(),
     setMenuToggle: vi.fn(),
-    reflectLockOnButtons: vi.fn(),
-    resetToAutoBaseline: vi.fn(),
     toggleUnfold: vi.fn(),
     toggleCadnano: vi.fn(),
     savePartToAssembly: vi.fn(),
@@ -123,28 +120,12 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     expect(d.toggleUnfold).not.toHaveBeenCalled()
   })
 
-  it("Tab cycles the drill lock null→cluster and toasts; blocked when translate/rotate active", async () => {
-    const d = makeDeps({ drillV2: false })   // legacy drill-lock path (v2 is now the default)
-    initKeyboardShortcuts(d)
-    const e = await press('Tab')
-    expect(e.preventDefault).toHaveBeenCalled()
-    expect(d.resetToAutoBaseline).toHaveBeenCalled()
-    expect(d.selectionManager.setDrillLock).toHaveBeenCalledWith('cluster')
-    expect(d.reflectLockOnButtons).toHaveBeenCalledWith('cluster')
-
-    // Now block it.
-    d.selectionManager.setDrillLock.mockClear()
+  it("Tab is blocked when translate/rotate is active", async () => {
+    const d = makeDeps()
     d.isTranslateRotateActive.mockReturnValue(true)
-    await press('Tab')
-    expect(d.selectionManager.setDrillLock).not.toHaveBeenCalled()
-  })
-
-  it("Tab wraps from the last lock (xover) back to null/auto-drill", async () => {
-    const d = makeDeps({ drillV2: false })   // legacy drill-lock path
-    d.selectionManager.getDrillLock.mockReturnValue('xover')
     initKeyboardShortcuts(d)
     await press('Tab')
-    expect(d.selectionManager.setDrillLock).toHaveBeenCalledWith(null)
+    expect(d.selectionManager.setSelectionLevel).not.toHaveBeenCalled()
   })
 
   it("'q' toggles expanded spacing only when a design is loaded and unfold/slice are off", async () => {
@@ -403,7 +384,7 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
     expect(d.api.addNick).not.toHaveBeenCalled()
   })
 
-  it('Escape cancels in priority order: oo edit → ctrl-beads → translate/rotate → deform → slice → drill-lock', async () => {
+  it('Escape cancels in priority order: oo edit → ctrl-beads → translate/rotate → deform → slice', async () => {
     // oo edit set active
     let d = makeDeps({ getOoActiveIds: vi.fn(() => ['oh']) })
     initKeyboardShortcuts(d)
@@ -442,15 +423,6 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
     expect(d.slicePlane.hide).toHaveBeenCalled()
     expect(d.crossSectionMinimap.hide).toHaveBeenCalled()
     expect(d.setMenuToggle).toHaveBeenCalledWith('menu-view-slice', false)
-
-    // drill lock set → back to auto-drill
-    clearShortcuts()
-    d = makeDeps()
-    d.selectionManager.getDrillLock.mockReturnValue('cluster')
-    initKeyboardShortcuts(d)
-    await press('Escape')
-    expect(d.selectionManager.setDrillLock).toHaveBeenCalledWith(null)
-    expect(d.reflectLockOnButtons).toHaveBeenCalledWith(null)
   })
 })
 
@@ -458,19 +430,17 @@ describe('initKeyboardShortcuts — drill v2 (selectionLevel) Tab/Escape', () =>
   beforeEach(() => { clearShortcuts(); clearDom(); mountIds({ 'mode-indicator': 'div' }) })
 
   const makeV2Deps = (level = 'default') => {
-    const d = makeDeps({ drillV2: true })
+    const d = makeDeps()
     d.selectionManager.getSelectionLevel = vi.fn(() => level)
     d.selectionManager.setSelectionLevel = vi.fn()
     return d
   }
 
-  it('Tab cycles the unified selectionLevel default→cluster→strand→…, NOT the legacy drill-lock', async () => {
+  it('Tab cycles the unified selectionLevel default→cluster→strand→…', async () => {
     const d = makeV2Deps('default')
     initKeyboardShortcuts(d)
     await press('Tab')
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('cluster')
-    expect(d.selectionManager.setDrillLock).not.toHaveBeenCalled()
-    expect(d.resetToAutoBaseline).not.toHaveBeenCalled()
   })
 
   it('Tab cluster→strand (strand is now in the cycle)', async () => {

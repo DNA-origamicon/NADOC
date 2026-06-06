@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   LEVELS, TAB_CYCLE, BTN_LEVEL, LEVEL_BTN,
-  isDrillV2, normalizeLevel, nextTabLevel, toggleLevel, hoverPreviewTarget,
+  normalizeLevel, nextTabLevel, toggleLevel, hoverPreviewTarget,
   lassoCaptureType,
 } from './selection_level.js'
 
@@ -69,30 +69,11 @@ describe('toggleLevel — filter-button toggle', () => {
   })
 })
 
-describe('isDrillV2 — feature flag', () => {
-  afterEach(() => {
-    try { localStorage.removeItem('NADOC_DRILL_V2') } catch { /* ignore */ }
-  })
-  it('ON by default (flipped 2026-06-06)', () => {
-    expect(isDrillV2()).toBe(true)
-  })
-  it('opt OUT when localStorage NADOC_DRILL_V2 === "false"', () => {
-    localStorage.setItem('NADOC_DRILL_V2', 'false')
-    expect(isDrillV2()).toBe(false)
-  })
-  it('stays ON for any non-"false" localStorage value', () => {
-    localStorage.setItem('NADOC_DRILL_V2', '1')
-    expect(isDrillV2()).toBe(true)
-    localStorage.setItem('NADOC_DRILL_V2', 'true')
-    expect(isDrillV2()).toBe(true)
-  })
-})
-
 describe('hoverPreviewTarget — red-glow leaf preview gate', () => {
   const beadHit = (sid) => ({ kind: 'bead', entry: { nuc: { strand_id: sid } } })
   const coneHit = (sid) => ({ kind: 'cone', cone: { strandId: sid } })
   const arcHit  = (sid) => ({ kind: 'arc',  arc:  { strandId: sid } })
-  const base = { drillV2: true, selLevel: 'default', mode: 'strand', strandId: 'S1' }
+  const base = { selLevel: 'default', mode: 'strand', strandId: 'S1' }
 
   it('previews the hovered bead when it belongs to the selected strand', () => {
     const hit = beadHit('S1')
@@ -111,9 +92,6 @@ describe('hoverPreviewTarget — red-glow leaf preview gate', () => {
     expect(hoverPreviewTarget({ ...base, hit: coneHit('S2') })).toBeNull()
     expect(hoverPreviewTarget({ ...base, hit: arcHit('S2')  })).toBeNull()
   })
-  it('no preview unless drill-v2 is on', () => {
-    expect(hoverPreviewTarget({ ...base, drillV2: false, hit: beadHit('S1') })).toBeNull()
-  })
   it('no preview outside the default level (fixed levels select on every click)', () => {
     for (const lv of ['cluster', 'domain', 'end', 'xover']) {
       expect(hoverPreviewTarget({ ...base, selLevel: lv, hit: beadHit('S1') })).toBeNull()
@@ -129,48 +107,13 @@ describe('hoverPreviewTarget — red-glow leaf preview gate', () => {
   })
 })
 
-describe('lassoCaptureType — legacy (drillV2 off)', () => {
-  const ST = { strands: true, domains: false, ends: false, overhangs: false,
-               loops: false, skips: false, crossoverArcs: false }
-
-  it('no auto-drill → selectableTypes gates decide', () => {
-    const r = lassoCaptureType({ drillV2: false, selLevel: 'default', drillType: null, selectableTypes: ST })
-    expect(r.strands).toBe(true)
-    expect(r.ends).toBe(false)
-    expect(r.cluster).toBe(false)
-  })
-
-  it('auto-drill type-locks: cluster level → cluster capture only', () => {
-    const r = lassoCaptureType({ drillV2: false, selLevel: 'default', drillType: 'cluster', selectableTypes: ST })
-    expect(r.cluster).toBe(true)
-    expect(r.strands).toBe(false)
-  })
-
-  it('auto-drill bead level → every bead (beadLevel) + ends', () => {
-    const r = lassoCaptureType({ drillV2: false, selLevel: 'default', drillType: 'bead', selectableTypes: ST })
-    expect(r.ends).toBe(true)
-    expect(r.beadLevel).toBe(true)
-    expect(r.strands).toBe(false)
-  })
-
-  it('selectableTypes overhangs/loops/skips honored only when no drill active', () => {
-    const st = { ...ST, overhangs: true, loops: true, skips: true }
-    expect(lassoCaptureType({ drillV2: false, drillType: null, selectableTypes: st }))
-      .toMatchObject({ overhangs: true, loops: true, skips: true })
-    expect(lassoCaptureType({ drillV2: false, drillType: 'strand', selectableTypes: st }))
-      .toMatchObject({ overhangs: false, loops: false, skips: false })
-  })
-})
-
-describe('lassoCaptureType — drill-v2 honors the engaged selLevel (ISSUE-4 filter-audit)', () => {
-  // The motivating bug: Tab to a level in v2, lasso should capture THAT level —
-  // not the stale selectableTypes default. selectableTypes here is the default
-  // (strands on) to prove the level overrides it.
-  const ST = { strands: true, domains: false, ends: false, overhangs: false,
-               loops: false, skips: false, crossoverArcs: false }
+describe('lassoCaptureType — the engaged selLevel is the single source of truth', () => {
+  // The motivating bug: Tab to a level, the lasso should capture THAT level's
+  // element type (ISSUE-4 filter-audit). selectableTypes is no longer consulted —
+  // scaffold/staple gating is applied separately in the lasso loop.
 
   it('end level → ends (5′/3′ termini only, beadLevel false), NOT strands (the reported bug)', () => {
-    const r = lassoCaptureType({ drillV2: true, selLevel: 'end', drillType: null, selectableTypes: ST })
+    const r = lassoCaptureType({ selLevel: 'end' })
     expect(r.ends).toBe(true)
     expect(r.beadLevel).toBe(false)   // user decision: termini only, not every nucleotide
     expect(r.strands).toBe(false)
@@ -178,40 +121,39 @@ describe('lassoCaptureType — drill-v2 honors the engaged selLevel (ISSUE-4 fil
   })
 
   it('cluster level → cluster, NOT strands', () => {
-    const r = lassoCaptureType({ drillV2: true, selLevel: 'cluster', drillType: null, selectableTypes: ST })
+    const r = lassoCaptureType({ selLevel: 'cluster' })
     expect(r.cluster).toBe(true)
     expect(r.strands).toBe(false)
   })
 
   it('domain level → domains only', () => {
-    const r = lassoCaptureType({ drillV2: true, selLevel: 'domain', drillType: null, selectableTypes: ST })
+    const r = lassoCaptureType({ selLevel: 'domain' })
     expect(r.domains).toBe(true)
     expect(r.strands).toBe(false)
   })
 
   it('xover level → crossovers only', () => {
-    const r = lassoCaptureType({ drillV2: true, selLevel: 'xover', drillType: null, selectableTypes: ST })
+    const r = lassoCaptureType({ selLevel: 'xover' })
     expect(r.xover).toBe(true)
     expect(r.strands).toBe(false)
   })
 
   it('default level → strands (strand-first model)', () => {
-    const r = lassoCaptureType({ drillV2: true, selLevel: 'default', drillType: null, selectableTypes: ST })
+    const r = lassoCaptureType({ selLevel: 'default' })
     expect(r.strands).toBe(true)
     expect(r.ends).toBe(false)
     expect(r.cluster).toBe(false)
   })
 
   it('strand level → strands (the distinct fixed strand level captures whole strands)', () => {
-    const r = lassoCaptureType({ drillV2: true, selLevel: 'strand', drillType: null, selectableTypes: ST })
+    const r = lassoCaptureType({ selLevel: 'strand' })
     expect(r.strands).toBe(true)
     expect(r.domains).toBe(false)
     expect(r.ends).toBe(false)
   })
 
-  it('overhangs/loops/skips are NOT lasso-capturable in v2 (they are visibility gates, not levels)', () => {
-    const st = { ...ST, overhangs: true, loops: true, skips: true }
-    const r = lassoCaptureType({ drillV2: true, selLevel: 'default', drillType: null, selectableTypes: st })
+  it('overhangs/loops/skips are NOT lasso-capturable (they are visibility gates, not levels)', () => {
+    const r = lassoCaptureType({ selLevel: 'default' })
     expect(r.overhangs).toBe(false)
     expect(r.loops).toBe(false)
     expect(r.skips).toBe(false)

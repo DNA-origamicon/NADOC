@@ -85,138 +85,18 @@ describe('computeFilterToggle (pure)', () => {
   })
 })
 
-describe('initSelectionFilter (factory)', () => {
-  let store, sm
-  beforeEach(() => {
-    mountSelectFilter()
-    store = createMockStore({ selectableTypes: { ...FULL_SELECTABLE }, deformToolActive: false, translateRotateActive: false })
-    sm = { resetDrill: vi.fn(), getDrillLock: vi.fn(() => null), setDrillLock: vi.fn() }
-  })
-
-  // The legacy auto-drill/manual-pin path (drill-v2 is now the default, so pin it OFF
-  // explicitly until the legacy code is physically deleted in the deferred cleanup).
-  const make = () => initSelectionFilter({ store, getSelectionManager: () => sm, drillV2: false })
-
-  it('isManualSelect is false until a button is pinned, true after', () => {
-    const f = make()
-    f.attachFilterButtons()
-    expect(f.isManualSelect()).toBe(false)
-    document.querySelector('.sf-btn[data-key="clust"]').click()
-    expect(f.isManualSelect()).toBe(true)
-  })
-
-  it('reflectDrillLevel lights only the matching level button (and is a no-op in manual mode)', () => {
-    const f = make()
-    f.reflectDrillLevel('cluster')
-    expect(document.querySelector('.sf-btn[data-key="clust"]').classList.contains('active')).toBe(true)
-    expect(document.querySelector('.sf-btn[data-key="strand"]').classList.contains('active')).toBe(false)
-    // null clears all
-    f.reflectDrillLevel(null)
-    expect(document.querySelector('.sf-btn[data-key="clust"]').classList.contains('active')).toBe(false)
-    // manual mode → no-op (pin a button first)
-    f.attachFilterButtons()
-    document.querySelector('.sf-btn[data-key="ends"]').click()
-    f.reflectDrillLevel('cluster')
-    expect(document.querySelector('.sf-btn[data-key="clust"]').classList.contains('active')).toBe(false)
-  })
-
-  it('reflectLockOnButtons toggles sf-pinned on the matching level button; null clears', () => {
-    const f = make()
-    f.reflectLockOnButtons('domain') // → 'line'
-    expect(document.querySelector('.sf-btn[data-key="line"]').classList.contains('sf-pinned')).toBe(true)
-    f.reflectLockOnButtons(null)
-    expect(document.querySelector('.sf-btn[data-key="line"]').classList.contains('sf-pinned')).toBe(false)
-  })
-
-  it('resetToAutoBaseline clears pins, writes baseline selectableTypes, sets button .active, resets drill', () => {
-    const f = make()
-    // pin something first so there is state to clear
-    document.querySelector('.sf-btn[data-key="clust"]').classList.add('sf-pinned')
-    f.resetToAutoBaseline()
-    expect(document.querySelectorAll('.sf-btn.sf-pinned').length).toBe(0)
-    const st = store.getState().selectableTypes
-    expect(st.scaffold).toBe(true)
-    expect(st.staples).toBe(true)
-    expect(st.strands).toBe(true)
-    expect(st.clusters).toBe(false)
-    expect(document.querySelector('.sf-btn[data-key="scaf"]').classList.contains('active')).toBe(true)
-    expect(document.querySelector('.sf-btn[data-key="clust"]').classList.contains('active')).toBe(false)
-    expect(sm.resetDrill).toHaveBeenCalled()
-  })
-
-  it('clicking a filter button pins it, writes selectableTypes, and resets drill', () => {
-    const f = make()
-    f.attachFilterButtons()
-    const btn = document.querySelector('.sf-btn[data-key="clust"]')
-    btn.click()
-    expect(btn.classList.contains('sf-pinned')).toBe(true)
-    expect(store.getState().selectableTypes.clusters).toBe(true)
-    expect(sm.resetDrill).toHaveBeenCalled()
-  })
-
-  it('click is suppressed while a tool is active', () => {
-    store.setState({ deformToolActive: true })
-    const f = make()
-    f.attachFilterButtons()
-    const before = store.getState().selectableTypes
-    document.querySelector('.sf-btn[data-key="clust"]').click()
-    expect(store.getState().selectableTypes).toBe(before) // unchanged
-    expect(f.isManualSelect()).toBe(false)
-  })
-
-  it('clicking clears an active drill-lock first', () => {
-    sm.getDrillLock = vi.fn(() => 'cluster')
-    const f = make()
-    f.attachFilterButtons()
-    document.querySelector('.sf-btn[data-key="strand"]').click()
-    expect(sm.setDrillLock).toHaveBeenCalledWith(null)
-  })
-
-  it('un-pinning the last pinned button restores the auto baseline', () => {
-    const f = make()
-    f.attachFilterButtons()
-    const btn = document.querySelector('.sf-btn[data-key="clust"]')
-    btn.click()                       // pin → manual
-    expect(f.isManualSelect()).toBe(true)
-    btn.click()                       // un-pin → empty → resetToAutoBaseline
-    expect(f.isManualSelect()).toBe(false)
-    expect(store.getState().selectableTypes.strands).toBe(true) // baseline applied
-  })
-
-  it('manual-mode subscriber syncs button .active from selectableTypes', () => {
-    const f = make()
-    f.attachFilterButtons()
-    document.querySelector('.sf-btn[data-key="clust"]').click() // enter manual mode
-    // now flip a store field and confirm the subscriber reflects it
-    store.setState({ selectableTypes: { ...store.getState().selectableTypes, ends: true } })
-    expect(document.querySelector('.sf-btn[data-key="ends"]').classList.contains('active')).toBe(true)
-  })
-
-  it('filter-inactive class follows deform/translate tool activation', () => {
-    const f = make()
-    f.attachFilterButtons()
-    store.setState({ deformToolActive: true })
-    expect(document.getElementById('select-filter').classList.contains('filter-inactive')).toBe(true)
-    store.setState({ deformToolActive: false })
-    expect(document.getElementById('select-filter').classList.contains('filter-inactive')).toBe(false)
-  })
-
-  afterEach(() => clearDom())
-})
-
-describe('initSelectionFilter — drill v2 (selectionLevel)', () => {
+describe('initSelectionFilter — selectionLevel + visibility gates', () => {
   let store, sm, level
   beforeEach(() => {
     mountSelectFilter()
     store = createMockStore({ selectableTypes: { ...FULL_SELECTABLE }, deformToolActive: false, translateRotateActive: false })
     level = 'default'
     sm = {
-      resetDrill: vi.fn(),
       getSelectionLevel: vi.fn(() => level),
       setSelectionLevel: vi.fn((l) => { level = l }),
     }
   })
-  const makeV2 = () => initSelectionFilter({ store, getSelectionManager: () => sm, drillV2: true })
+  const makeV2 = () => initSelectionFilter({ store, getSelectionManager: () => sm })
 
   it('clicking a level button sets the mapped selectionLevel (not selectableTypes)', () => {
     const f = makeV2(); f.attachFilterButtons()
@@ -224,7 +104,29 @@ describe('initSelectionFilter — drill v2 (selectionLevel)', () => {
     document.querySelector('.sf-btn[data-key="line"]').click()   // line → domain
     expect(sm.setSelectionLevel).toHaveBeenCalledWith('domain')
     expect(store.getState().selectableTypes).toBe(before)        // level buttons no longer pin types
-    expect(f.isManualSelect()).toBe(false)
+  })
+
+  it('clicking a tool while active suppresses the click', () => {
+    store.setState({ deformToolActive: true })
+    const f = makeV2(); f.attachFilterButtons()
+    const before = store.getState().selectableTypes
+    document.querySelector('.sf-btn[data-key="clust"]').click()
+    expect(sm.setSelectionLevel).not.toHaveBeenCalled()
+    expect(store.getState().selectableTypes).toBe(before)
+  })
+
+  it('filter-inactive class follows deform/translate tool activation', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    store.setState({ deformToolActive: true })
+    expect(document.getElementById('select-filter').classList.contains('filter-inactive')).toBe(true)
+    store.setState({ deformToolActive: false })
+    expect(document.getElementById('select-filter').classList.contains('filter-inactive')).toBe(false)
+  })
+
+  it('a visibility-gate subscriber syncs button .active from selectableTypes', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    store.setState({ selectableTypes: { ...store.getState().selectableTypes, loops: true } })
+    expect(document.querySelector('.sf-btn[data-key="loop"]').classList.contains('active')).toBe(true)
   })
 
   it('clicking the engaged level button toggles back to default', () => {
