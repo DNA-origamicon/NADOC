@@ -45,6 +45,14 @@ export function initDesignRenderer(scene, storeRef) {
   // selection glow). Larger than the green so its halo reads red over a selected
   // (green-glowing) strand. Named so gesture e2e can detect it.
   const _previewGlowLayer = createGlowLayer(scene, 0xff2a2a, 4.2, 'previewGlow')
+  // Drill-v2 hover preview for a crossover ARC: a red additive glow TUBE traced
+  // along the arc polyline (the arc is a thin line — a midpoint sphere reads wrong).
+  const PREVIEW_ARC_RADIUS = 0.3   // nm — tube radius
+  let _previewArcTube = null
+  const _previewArcMat = new THREE.MeshBasicMaterial({
+    color: 0xff2a2a, transparent: true, opacity: 0.55,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  })
   // Fluorescence-mode: per-fluorophore emission color glow
   const _fluoroGlowLayer = createMultiColorGlowLayer(scene)
 
@@ -272,6 +280,7 @@ export function initDesignRenderer(scene, storeRef) {
     _glowLayer.clear()          // stale entries after rebuild; selection_manager re-applies if needed
     _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
     _previewGlowLayer.clear()   // hover preview is transient; never survives a rebuild
+    if (_previewArcTube) _previewArcTube.visible = false
     _fluoroGlowLayer.clear()    // caller must re-apply fluorescence glow after rebuild
 
     // Clear stale xover refs — the old meshes were children of oldRoot, already disposed above.
@@ -630,6 +639,25 @@ export function initDesignRenderer(scene, storeRef) {
     // Drill-v2 hover preview (red glow on the would-be-selected leaf).
     setPreviewGlow(entries)  { _previewGlowLayer.setEntries(entries) },
     clearPreviewGlow()       { _previewGlowLayer.clear() },
+
+    // Red glow tube traced through a crossover arc's polyline (world-space points).
+    setPreviewArc(points) {
+      if (!points || points.length < 2) return
+      const curve = new THREE.CatmullRomCurve3(points)
+      const geo   = new THREE.TubeGeometry(curve, Math.max(8, points.length * 2), PREVIEW_ARC_RADIUS, 6, false)
+      if (_previewArcTube) {
+        _previewArcTube.geometry.dispose()
+        _previewArcTube.geometry = geo
+        _previewArcTube.visible  = true
+      } else {
+        _previewArcTube = new THREE.Mesh(geo, _previewArcMat)
+        _previewArcTube.renderOrder   = 1
+        _previewArcTube.frustumCulled = false
+        _previewArcTube.name          = 'previewArcTube'
+        scene.add(_previewArcTube)
+      }
+    },
+    clearPreviewArc() { if (_previewArcTube) _previewArcTube.visible = false },
 
     /** Show red oversized glow over backbone entries with undefined sequence. */
     setUndefinedHighlight(entries) { _undefinedGlowLayer.setEntries(entries) },

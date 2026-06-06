@@ -472,10 +472,10 @@ Key files: pure gate `hoverPreviewTarget` (bead/cone/arc) in `scene/selection_le
 1. **HUMAN-EYEBALL on a MULTI-HELIX design (the part not automated — needs crossovers the single-helix e2e
    fixture lacks).** Turn on `?drillv2=1`, load `Examples/26hb_platform_v3.nadoc`, 1st-click a strand, then:
    (a) hover its beads/cones → would-be leaf reads RED (vs green selection); (b) **hover a crossover ARC of
-   that strand → red glow at the arc midpoint; click it → the crossover selects (green glow)**. The red is an
-   additive glow over the green strand, so if it looks muddy/yellow, tune `_previewGlowLayer` scale/opacity in
-   `design_renderer.js` (currently 4.2 / 0.45). If the 18px arc grab feels too tight/loose, tune `_arcHitPx`
-   in `selection_manager.js`. Also eyeball the Phase-2 cosmetics (filter-row pinned paint, Tab toast,
+   that strand → red glow TUBE traced along the whole arc; click it → the crossover selects (green glow)**.
+   The red is additive over the green strand, so if it looks muddy/yellow tune `_previewGlowLayer` scale/opacity
+   in `design_renderer.js`; the arc tube is `PREVIEW_ARC_RADIUS` (0.3 nm) / opacity 0.55 there. If the 18px arc
+   grab feels too tight/loose, tune `_arcHitPx` in `selection_manager.js`. Also eyeball the Phase-2 cosmetics (filter-row pinned paint, Tab toast,
    Esc→default).
 2. **(Optional) text level-breadcrumb (the ORIGINAL decision-E idea)** — only if the user still wants a
    persistent `Strand ▸ End` text trail in ADDITION to the glow. The glow covered the user's actual need;

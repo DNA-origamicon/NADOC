@@ -1993,6 +1993,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _hoverCone = null
       _hoverArc  = null
       designRenderer.clearPreviewGlow()
+      designRenderer.clearPreviewArc?.()
     }
   }
 
@@ -2051,15 +2052,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (target.kind === 'bead') {
       if (_hoverBead === target.entry) return
       _hoverBead = target.entry; _hoverCone = null; _hoverArc = null
+      designRenderer.clearPreviewArc?.()
       designRenderer.setPreviewGlow([{ pos: target.entry.pos }])
     } else if (target.kind === 'cone') {
       if (_hoverCone === target.cone) return
       _hoverCone = target.cone; _hoverBead = null; _hoverArc = null
+      designRenderer.clearPreviewArc?.()
       designRenderer.setPreviewGlow([{ pos: target.cone.midPos }])
     } else {
+      // Crossover arc → a red glow TUBE traced along the arc's polyline.
       if (_hoverArc === target.arc) return
       _hoverArc = target.arc; _hoverBead = null; _hoverCone = null
-      designRenderer.setPreviewGlow([{ pos: target.arc.getMidWorld() }])
+      designRenderer.clearPreviewGlow()
+      designRenderer.setPreviewArc(target.arc.getPositions?.() ?? [])
     }
   }
 
@@ -2191,6 +2196,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _hoverCone = null
     _hoverArc  = null
     designRenderer.clearPreviewGlow?.()
+    designRenderer.clearPreviewArc?.()
   }
 
   function _highlightStrand(backboneEntries, coneEntries, strandId) {
