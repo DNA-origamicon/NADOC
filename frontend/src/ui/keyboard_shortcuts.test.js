@@ -453,3 +453,44 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
     expect(d.reflectLockOnButtons).toHaveBeenCalledWith(null)
   })
 })
+
+describe('initKeyboardShortcuts — drill v2 (selectionLevel) Tab/Escape', () => {
+  beforeEach(() => { clearShortcuts(); clearDom(); mountIds({ 'mode-indicator': 'div' }) })
+
+  const makeV2Deps = (level = 'default') => {
+    const d = makeDeps({ drillV2: true })
+    d.selectionManager.getSelectionLevel = vi.fn(() => level)
+    d.selectionManager.setSelectionLevel = vi.fn()
+    return d
+  }
+
+  it('Tab cycles the unified selectionLevel cluster→domain→…, NOT the legacy drill-lock', async () => {
+    const d = makeV2Deps('default')
+    initKeyboardShortcuts(d)
+    await press('Tab')
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('cluster')
+    expect(d.selectionManager.setDrillLock).not.toHaveBeenCalled()
+    expect(d.resetToAutoBaseline).not.toHaveBeenCalled()
+  })
+
+  it('Tab wraps xover→cluster', async () => {
+    const d = makeV2Deps('xover')
+    initKeyboardShortcuts(d)
+    await press('Tab')
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('cluster')
+  })
+
+  it('Escape returns the selectionLevel to default when engaged', async () => {
+    const d = makeV2Deps('domain')
+    initKeyboardShortcuts(d)
+    await press('Escape')
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('default')
+  })
+
+  it('Escape at default level does NOT set the level (falls through the chain)', async () => {
+    const d = makeV2Deps('default')
+    initKeyboardShortcuts(d)
+    await press('Escape')
+    expect(d.selectionManager.setSelectionLevel).not.toHaveBeenCalled()
+  })
+})

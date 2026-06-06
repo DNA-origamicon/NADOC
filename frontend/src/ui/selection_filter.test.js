@@ -201,3 +201,63 @@ describe('initSelectionFilter (factory)', () => {
 
   afterEach(() => clearDom())
 })
+
+describe('initSelectionFilter — drill v2 (selectionLevel)', () => {
+  let store, sm, level
+  beforeEach(() => {
+    mountSelectFilter()
+    store = createMockStore({ selectableTypes: { ...FULL_SELECTABLE }, deformToolActive: false, translateRotateActive: false })
+    level = 'default'
+    sm = {
+      resetDrill: vi.fn(),
+      getSelectionLevel: vi.fn(() => level),
+      setSelectionLevel: vi.fn((l) => { level = l }),
+    }
+  })
+  const makeV2 = () => initSelectionFilter({ store, getSelectionManager: () => sm, drillV2: true })
+
+  it('clicking a level button sets the mapped selectionLevel (not selectableTypes)', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    const before = store.getState().selectableTypes
+    document.querySelector('.sf-btn[data-key="line"]').click()   // line → domain
+    expect(sm.setSelectionLevel).toHaveBeenCalledWith('domain')
+    expect(store.getState().selectableTypes).toBe(before)        // level buttons no longer pin types
+    expect(f.isManualSelect()).toBe(false)
+  })
+
+  it('clicking the engaged level button toggles back to default', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    level = 'cluster'
+    document.querySelector('.sf-btn[data-key="clust"]').click()  // re-click engaged → default
+    expect(sm.setSelectionLevel).toHaveBeenCalledWith('default')
+  })
+
+  it('the strand button maps to default', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    level = 'cluster'
+    document.querySelector('.sf-btn[data-key="strand"]').click()
+    expect(sm.setSelectionLevel).toHaveBeenCalledWith('default')
+  })
+
+  it('reflectDrillLevel paints active+sf-pinned on the engaged level (default→strand)', () => {
+    const f = makeV2()
+    f.reflectDrillLevel('xover')
+    const xb = document.querySelector('.sf-btn[data-key="xover"]')
+    expect(xb.classList.contains('active')).toBe(true)
+    expect(xb.classList.contains('sf-pinned')).toBe(true)
+    expect(document.querySelector('.sf-btn[data-key="clust"]').classList.contains('sf-pinned')).toBe(false)
+    // default lights the strand button
+    f.reflectDrillLevel('default')
+    expect(document.querySelector('.sf-btn[data-key="strand"]').classList.contains('active')).toBe(true)
+    expect(document.querySelector('.sf-btn[data-key="xover"]').classList.contains('active')).toBe(false)
+  })
+
+  it('a type-visibility button (loops) still plain-toggles selectableTypes in v2', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    document.querySelector('.sf-btn[data-key="loop"]').click()
+    expect(store.getState().selectableTypes.loops).toBe(true)
+    expect(sm.setSelectionLevel).not.toHaveBeenCalled()
+  })
+
+  afterEach(() => clearDom())
+})

@@ -82,7 +82,7 @@ design decisions + research (so early sessions build the loop's muscle on tracta
 |-------|-------|------|------|--------------------|
 | 1 | ~~**ISSUE-3** Assembly Ctrl-click multi-select~~ ✅ DONE 2026-06-05 | functional bug | small, bounded | no |
 | 2 | ~~**ISSUE-2** Cross-tab sync delay + console clutter~~ ✅ DONE 2026-06-05 (propagation fix + silent-logging C + badge co-editing B all shipped) | functional bug (data-integrity) | medium | no |
-| **→ NEXT** | **ISSUE-4** Drill-selection overhaul — Phase 1 ✅ DONE 2026-06-05 (map + spec banked; user decisions taken). **Phase 2 next = rebuild the state machine to the agreed `selectionLevel` model (CODE).** | UX redesign | large, multi-phase | spec done |
+| **→ NEXT** | **ISSUE-4** Drill-selection overhaul — Phase 1 ✅ + **Phase 2 ✅ DONE 2026-06-05** (unified `selectionLevel` state machine shipped behind the `NADOC_DRILL_V2` flag — default strand→leaf click, filter-row level selector, Tab cycle, Esc→default, hover preview). **Phase 3 next = breadcrumb UI + visual polish + flip the flag default + assembly unification (decision G).** | UX redesign | large, multi-phase | spec done |
 | later | **ISSUE-1** Context-menu proliferation — Phase 1 ✅ + Phase 2a-binding ✅ + Phase 2a-orientation ✅ DONE 2026-06-05; Phase 2a-blunt / 2b–2e + Phase 3+ open (deferred behind ISSUE-4) | UX + tech-debt | large, multi-phase | yes (done) |
 
 This order is a recommendation; the user may name a different issue. **2026-06-05: user diverted the loop to
@@ -267,7 +267,45 @@ context-menu migration phases (which stay queued and resume after ISSUE-4's firs
 ## ISSUE-4 — Drill selection UX overhaul (UX redesign)
 
 - **Status:** Phase 1 `[x]` DONE 2026-06-05 (current-state map + friction catalogue + target interaction
-  spec; NO code — survey + AskUserQuestion). Phase 2 `[ ]` rebuild the state machine; Phase 3 `[ ]` polish.
+  spec; NO code — survey + AskUserQuestion). Phase 2 `[x]` DONE 2026-06-05 (state-machine rebuild, behind the
+  `NADOC_DRILL_V2` flag). Phase 3 `[ ]` polish (breadcrumb + flip-default + assembly unification).
+
+### Phase 2 OUTPUT — unified selectionLevel state machine (shipped 2026-06-05, flag-gated)
+
+**User scope decision (AskUserQuestion 2026-06-05):** "Full Phase 2 now" — the entire banked spec
+(default-click + level merge + hover preview + rep caveat) in one batch, behind a flag. (NOT the cheaper
+slices.) Breadcrumb UI + flipping the flag default + assembly unification stay Phase 3.
+
+**Flag:** `NADOC_DRILL_V2` — `localStorage.setItem('NADOC_DRILL_V2','true')` OR `?drillv2=1`. OFF by default,
+so the legacy auto-drill / manual-pin / Tab-lock paths are 100% untouched (smoke confirms the off-path).
+
+**What shipped (route: 3 modules + 1 new, main.js LOC Δ = 0):**
+- **`scene/selection_level.js` (NEW, pure):** the model — `LEVELS {default,cluster,domain,end,xover}`,
+  `TAB_CYCLE [cluster,domain,end,xover]`, `BTN_LEVEL`/`LEVEL_BTN` (strand button ↔ default), `isDrillV2()`,
+  `normalizeLevel`, `nextTabLevel`, `toggleLevel`. 14 vitest.
+- **`scene/selection_manager.js`:** `_drillV2`+`_selLevel` state; `_v2HandleBead`/`_v2HandleCone` gate ahead
+  of the legacy `_autoDrill*` calls; reusable `_select{Strand,Cluster,Domain,Bead,Cone}V2` primitives;
+  hover-preview (`_updateHoverPreview`/`_clearHoverPreview`/`_pickNearestBeadCone`) on pointermove (default
+  level + strand selected only); rep caveat (cylinders/surface 2nd-click → domain, no bead); public
+  `setSelectionLevel`/`getSelectionLevel`/`isDrillV2`. Default ladder: 1st click→STRAND, 2nd→leaf-under-cursor
+  (bead→nucleotide | cone→xover), 3rd same leaf→clear.
+- **`ui/selection_filter.js`:** in v2 the 5 level buttons (clust/strand/line/ends/xover) drive
+  `setSelectionLevel` (toggle off→default) instead of pinning `selectableTypes`; the visibility gates
+  (scaf/stap/loop/skip/ovhangs) keep plain-toggle. `reflectDrillLevel` paints active+sf-pinned on the
+  engaged level (default→strand). 6 vitest.
+- **`ui/keyboard_shortcuts.js`:** in v2 Tab cycles `nextTabLevel` via `setSelectionLevel` (NOT the legacy
+  drill-lock); Escape → `setSelectionLevel('default')` (inserted ahead of the drill-lock branch). 4 vitest.
+
+**Pinned by:** 24 vitest (14+6+4) + `e2e/drill_v2_select.spec.js` (real-raycast: 1st→strand, 2nd→nucleotide,
+3rd→clear, discriminating vs legacy). App-exercised via that e2e (flag on, real scaffolded part).
+
+**NOT eyeballed (cosmetic / unit-covered, carry to Phase 3):** hover-preview pop and the filter-row pinned
+paint weren't visually inspected; Tab toast + level switching are unit-tested but not human-verified.
+
+**Phase 3 leads:** (1) breadcrumb UI (decision E) replacing the invisible level state; (2) flip the flag
+default to ON + delete the legacy auto-drill/manual-pin/Tab-lock code once v2 is trusted; (3) assembly
+adopts the same shape (decision G — net-new, no assembly drill exists). Confirm the exact
+visibility-gate ↔ level split (decision F) with the user when wiring the breadcrumb.
 
 ### Phase 1 OUTPUT — current-state map + target interaction spec (banked 2026-06-05)
 
@@ -386,33 +424,28 @@ ladder used it to cap depth).
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-4 Phase 1 done — drill-selection map + target spec banked; user decisions taken)._
+_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-4 Phase 2 done — unified `selectionLevel` state machine shipped behind the `NADOC_DRILL_V2` flag)._
 
-**NEXT PICK: ISSUE-4 — Drill-selection overhaul, Phase 2 (CODE — rebuild the state machine).** Phase 1 is
-done: the full current-state map, friction catalogue, and the user's target spec are banked in the **ISSUE-4
-dossier above** (read "Phase 1 OUTPUT" before touching code). The decisions are already made — DO NOT re-ask;
-implement to the spec. The target model in one line: collapse the three overlapping mechanisms (auto-drill /
-manual pins / Tab-lock) into a single `selectionLevel ∈ {default, cluster, domain, end, xover}` and a
-breadcrumb.
-
-**Phase 2 build (route through the modules, NOT main.js — `selection_manager.js` + `selection_filter.js` +
-`keyboard_shortcuts.js` already own this; main.js LOC Δ ≤ 0):**
-1. **Default click (selectionLevel=default):** 1st click → STRAND; 2nd click on the selected strand →
-   leaf-under-cursor (bead→end | cone→xover, hover-determined, NOT a fixed `_drillSeq` slot). Replaces the
-   `_autoDrillBead`/`_autoDrillCone` ladders (~1649–1771 in `selection_manager.js`). Drop cluster/domain from
-   the click path entirely.
-2. **Merge manual-pin + Tab-lock into one `selectionLevel` state.** Filter buttons (cluster/strand/domain/
-   ends/xover) and Tab both set it. Tab cycle = `<anywhere>→cluster→domain→end→xover→cluster→…` (strand and
-   null are OUT of the cycle — update `_TAB_LOCKS` in `keyboard_shortcuts.js:42`). **Escape → default.**
-   This deletes the `_manualFilters`-vs-`_drillLock` split + the "red means two things" ambiguity.
-3. **Hover-preview affordance:** while a strand is selected, distinctly highlight the bead/xover under the
-   cursor (the would-be next pick). New hover path in `selection_manager.js`.
-4. **Rep caveat:** in cylinders/surface columns there's no pickable bead — decide 2nd-click = no-op or fall
-   back (use `designRenderer.columnRepAt`). Spec'd in the dossier's caveat.
-5. **Gate:** extend `e2e/assembly_select.spec.js` / a selection e2e for the click→strand→leaf path +
-   `selection_filter.test.js` / `keyboard_shortcuts.test.js` for the new Tab cycle + level merge. Build behind
-   a flag if the rewrite feels risky. Phase 3 = breadcrumb UI + visual polish + the assembly unification
-   (decision G — assembly adopts the same shape; no assembly drill exists yet, so it's net-new).
+**NEXT PICK: ISSUE-4 — Drill-selection overhaul, Phase 3 (polish + roll out).** Phase 2 shipped the full
+`selectionLevel` model behind `NADOC_DRILL_V2` (`localStorage` or `?drillv2=1`, OFF by default). Read the
+**ISSUE-4 "Phase 2 OUTPUT" block above** before touching code — it names every file + the public API
+(`setSelectionLevel`/`getSelectionLevel`/`isDrillV2` on selectionManager; `scene/selection_level.js` is the
+pure model). Phase 3 work, in order:
+1. **Breadcrumb UI (decision E)** — surface the current level (e.g. `Strand ▸ End` with a hovered leaf, or
+   the engaged level) replacing the invisible `_selLevel`. Clickable to change level (calls
+   `setSelectionManager().setSelectionLevel`). This is the main user-visible polish the flag is missing.
+2. **Human-verify the cosmetics not eyeballed in Phase 2** — turn on `?drillv2=1`, load
+   `Examples/26hb_platform_v3.nadoc`, confirm: hover-preview pop (default level, strand selected), the
+   filter-row pinned paint, the Tab cycle toast, Esc→default. (Phase 2 pinned these with unit + one gesture
+   e2e but did NOT eyeball them.)
+3. **Flip the flag default to ON, then delete the legacy paths** (`_autoDrillBead`/`_autoDrillCone`/
+   `_drillLock` + `_manualFilters` + `_TAB_LOCKS`) once v2 is trusted in the app. Do the flip + the deletion
+   as SEPARATE commits.
+4. **Assembly unification (decision G)** — assembly adopts the same 1st-click-part / 2nd-click-subelement
+   shape. Net-new (no assembly drill exists); a Phase-3 design detail.
+5. **Confirm the exact visibility-gate ↔ level split (decision F)** with the user when wiring the breadcrumb —
+   Phase 2 made the 5 level buttons drive level and left scaf/stap/loop/skip/ovhangs as visibility toggles;
+   verify that's the intended split.
 
 Full spec + the target state-machine diagram + scope/decision notes (A–G) are in the **ISSUE-4 dossier** above.
 

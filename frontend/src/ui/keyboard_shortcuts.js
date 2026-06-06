@@ -37,6 +37,7 @@
  */
 import { registerShortcut, dispatchKeyEvent } from '../input/shortcuts.js'
 import { showToast } from './toast.js'
+import { isDrillV2, nextTabLevel } from '../scene/selection_level.js'
 
 // Tab cycle-lock drill levels (region-local consts, moved with the Tab handler).
 const _TAB_LOCKS  = [null, 'cluster', 'strand', 'domain', 'bead', 'xover']
@@ -55,7 +56,9 @@ export function initKeyboardShortcuts(deps) {
     showWelcome, ooClose, cancelTranslateRotateTool,
     watchDeformState, deformEscape, popGroupUndo,
     isTranslateRotateActive, getPartEditContext, getAssemblyWorkspacePath, getOoActiveIds,
+    drillV2 = isDrillV2(),
   } = deps
+  const _v2 = !!drillV2
 
   // ── File / edit (Ctrl-modifier) ──────────────────────────────────────────
 
@@ -251,6 +254,16 @@ export function initKeyboardShortcuts(deps) {
     blockedWhen: () => isTranslateRotateActive(),
     handler(e) {
       e.preventDefault()
+      // Drill-v2: Tab cycles the unified selectionLevel cluster → domain → end →
+      // xover → cluster (strand/default are out of the cycle). The filter row
+      // reflects it via the emitted level.
+      if (_v2) {
+        const cur  = selectionManager.getSelectionLevel?.() ?? 'default'
+        const next = nextTabLevel(cur)
+        selectionManager.setSelectionLevel?.(next)
+        showToast(`Selection level: ${next}`)
+        return
+      }
       const cur  = selectionManager.getDrillLock?.() ?? null
       const next = _TAB_LOCKS[(_TAB_LOCKS.indexOf(cur) + 1) % _TAB_LOCKS.length]
       resetToAutoBaseline()                  // clear manual pins + restore baseline selectability
@@ -571,6 +584,10 @@ export function initKeyboardShortcuts(deps) {
         sliceHighlighter.clear()
         setMenuToggle('menu-view-slice', false)
         document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      } else if (_v2 && (selectionManager.getSelectionLevel?.() ?? 'default') !== 'default') {
+        // Drill-v2: Escape returns the selectionLevel to default (strand-first click).
+        selectionManager.setSelectionLevel('default')
+        showToast('Selection level: default')
       } else if (selectionManager.getDrillLock?.()) {
         // No active tool/popup — a Tab drill-lock returns to auto-drill.
         selectionManager.setDrillLock(null)

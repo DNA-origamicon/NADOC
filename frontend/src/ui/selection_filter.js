@@ -22,7 +22,12 @@
 // `attachFilterButtons()` registers the button handlers + subscribers and is
 // called at the original ~4852 spot to preserve store-subscription order.
 
+import { isDrillV2, BTN_LEVEL, LEVEL_BTN as LEVEL_BTN_V2, toggleLevel } from '../scene/selection_level.js'
+
 const LEVEL_BTN = { cluster: 'clust', strand: 'strand', domain: 'line', bead: 'ends', xover: 'xover' }
+
+// The five dataKeys that act as selectionLevel buttons in drill-v2.
+const V2_LEVEL_KEYS = new Set(Object.keys(BTN_LEVEL))   // clust/strand/line/ends/xover
 
 const SEL_KEY_MAP = [
   ['scaffold',      'scaf'   ],
@@ -66,15 +71,27 @@ export function computeFilterToggle({ selectableTypes, storeKey, allKeys, preLoo
   return { selectableTypes: { ...st, [storeKey]: !st[storeKey] }, preLoopSkip }
 }
 
-export function initSelectionFilter({ store, getSelectionManager }) {
+export function initSelectionFilter({ store, getSelectionManager, drillV2 = isDrillV2() }) {
   const _manualFilters = new Set()
   let _preLoopSkipSelectables = null
+  const _v2 = !!drillV2
 
   function isManualSelect() { return _manualFilters.size > 0 }
 
   // Light the filter button matching the current drill level (display only —
   // does NOT touch selectableTypes or _manualFilters). No-op in manual mode.
   function reflectDrillLevel(level) {
+    // Drill-v2: the level buttons ARE the selectionLevel selector — paint the
+    // engaged level with both .active and the .sf-pinned border (one coherent
+    // surface, no overloaded red). 'default' lights the strand button.
+    if (_v2) {
+      const target = LEVEL_BTN_V2[level ?? 'default'] ?? 'strand'
+      for (const dk of Object.values(LEVEL_BTN_V2)) {
+        const b = document.querySelector(`#select-filter .sf-btn[data-key="${dk}"]`)
+        if (b) { b.classList.toggle('active', dk === target); b.classList.toggle('sf-pinned', dk === target) }
+      }
+      return
+    }
     if (isManualSelect()) return
     const target = level ? (LEVEL_BTN[level] ?? null) : null
     for (const dk of Object.values(LEVEL_BTN)) {
@@ -127,6 +144,17 @@ export function initSelectionFilter({ store, getSelectionManager }) {
       btn.addEventListener('click', () => {
         const { deformToolActive, translateRotateActive } = store.getState()
         if (deformToolActive || translateRotateActive) return
+
+        // Drill-v2: the cluster/strand/domain/ends/xover buttons set the unified
+        // selectionLevel (toggle off → default). They no longer pin selectableTypes;
+        // the type-visibility gates (scaffold/staples/loops/skips/overhangs) keep
+        // their plain-toggle behaviour below. reflectDrillLevel paints the row.
+        if (_v2 && V2_LEVEL_KEYS.has(dataKey)) {
+          const sm  = getSelectionManager()
+          const cur = sm?.getSelectionLevel?.() ?? 'default'
+          sm?.setSelectionLevel?.(toggleLevel(cur, BTN_LEVEL[dataKey]))
+          return
+        }
 
         // Manual filter pins and the Tab drill-lock are mutually exclusive — a
         // manual click cancels any active drill-lock first.
