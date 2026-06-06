@@ -53,6 +53,14 @@ export function initDesignRenderer(scene, storeRef) {
     color: 0xff2a2a, transparent: true, opacity: 0.55,
     blending: THREE.AdditiveBlending, depthWrite: false,
   })
+  // Crossover SELECTION highlight: a green glow TUBE traced along the arc polyline,
+  // unifying it with the red preview tube (user feedback 2026-06-06 — the old
+  // endpoint-sphere glow read inconsistently for the thin inter-helix arc).
+  let _selectionArcTube = null
+  const _selectionArcMat = new THREE.MeshBasicMaterial({
+    color: 0x3fb950, transparent: true, opacity: 0.75,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  })
   // Fluorescence-mode: per-fluorophore emission color glow
   const _fluoroGlowLayer = createMultiColorGlowLayer(scene)
 
@@ -281,6 +289,7 @@ export function initDesignRenderer(scene, storeRef) {
     _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
     _previewGlowLayer.clear()   // hover preview is transient; never survives a rebuild
     if (_previewArcTube) _previewArcTube.visible = false
+    if (_selectionArcTube) _selectionArcTube.visible = false
     _fluoroGlowLayer.clear()    // caller must re-apply fluorescence glow after rebuild
 
     // Clear stale xover refs — the old meshes were children of oldRoot, already disposed above.
@@ -659,6 +668,25 @@ export function initDesignRenderer(scene, storeRef) {
     },
     clearPreviewArc() { if (_previewArcTube) _previewArcTube.visible = false },
 
+    // Green selection glow tube along a crossover arc's polyline (world-space points).
+    setSelectionArc(points) {
+      if (!points || points.length < 2) return
+      const curve = new THREE.CatmullRomCurve3(points)
+      const geo   = new THREE.TubeGeometry(curve, Math.max(8, points.length * 2), PREVIEW_ARC_RADIUS, 6, false)
+      if (_selectionArcTube) {
+        _selectionArcTube.geometry.dispose()
+        _selectionArcTube.geometry = geo
+        _selectionArcTube.visible  = true
+      } else {
+        _selectionArcTube = new THREE.Mesh(geo, _selectionArcMat)
+        _selectionArcTube.renderOrder   = 1
+        _selectionArcTube.frustumCulled = false
+        _selectionArcTube.name          = 'selectionArcTube'
+        scene.add(_selectionArcTube)
+      }
+    },
+    clearSelectionArc() { if (_selectionArcTube) _selectionArcTube.visible = false },
+
     /** Show red oversized glow over backbone entries with undefined sequence. */
     setUndefinedHighlight(entries) { _undefinedGlowLayer.setEntries(entries) },
     clearUndefinedHighlight()      { _undefinedGlowLayer.clear() },
@@ -927,62 +955,6 @@ export function initDesignRenderer(scene, storeRef) {
         if (d < bestDist) { bestDist = d; best = xo }
       }
       return best
-    },
-
-    /**
-     * Generate glow entries (sampled positions) along a crossover path.
-     * Returns an array of { pos: THREE.Vector3 } compatible with the glow layer.
-     */
-    getCrossoverGlowEntries(xo) {
-      const geo = storeRef.getState().currentGeometry
-      if (!geo?.length) return []
-
-      const nucMap = new Map()
-      for (const nuc of geo) {
-        nucMap.set(`${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`, nuc)
-      }
-
-      // Support both Crossover (half_a/half_b) and ForcedLigation (three_prime_*/five_prime_*)
-      const isFl = !!xo.three_prime_helix_id
-      const keyA = isFl
-        ? `${xo.three_prime_helix_id}:${xo.three_prime_bp}:${xo.three_prime_direction}`
-        : `${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`
-      const keyB = isFl
-        ? `${xo.five_prime_helix_id}:${xo.five_prime_bp}:${xo.five_prime_direction}`
-        : `${xo.half_b.helix_id}:${xo.half_b.index}:${xo.half_b.strand}`
-      const nucA = nucMap.get(keyA)
-      const nucB = nucMap.get(keyB)
-      if (!nucA || !nucB) return []
-
-      const posA = new THREE.Vector3(...nucA.backbone_position)
-      const posB = new THREE.Vector3(...nucB.backbone_position)
-      const entries = []
-
-      if (xo.extra_bases?.length > 0) {
-        // Arc crossover — sample 10 points along the Bezier
-        const ctrl = new THREE.Vector3()
-        arcControlPoint(posA, posB, nucA, nucB, ctrl)
-        const N = 10
-        const pt = new THREE.Vector3()
-        for (let i = 0; i <= N; i++) {
-          bezierAt(posA, ctrl, posB, i / N, pt)
-          entries.push({ pos: pt.clone() })
-        }
-      } else {
-        // Straight crossover — sample 6 points along the line
-        const N = 5
-        for (let i = 0; i <= N; i++) {
-          const t = i / N
-          entries.push({
-            pos: new THREE.Vector3(
-              posA.x + (posB.x - posA.x) * t,
-              posA.y + (posB.y - posA.y) * t,
-              posA.z + (posB.z - posA.z) * t,
-            ),
-          })
-        }
-      }
-      return entries
     },
 
     /**

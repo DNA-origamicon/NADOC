@@ -1935,7 +1935,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (_mode === 'crossover' && _crossoverId === target.id) { _clearAll(); return true }  // toggle off
     _restoreStrand()
     _mode = 'crossover'; _crossoverId = target.id; _strandId = arcHit.strandId
-    _setSelectionGlow(designRenderer.getCrossoverGlowEntries(target))
+    // Green glow TUBE along the arc — unified with the red preview tube (user
+    // feedback 2026-06-06), replacing the old endpoint-sphere glow.
+    designRenderer.setSelectionArc(arcHit.getPositions?.() ?? [])
     store.setState({
       selectedObject: { type: xo ? 'crossover' : 'forced_ligation', id: target.id, data: target },
     })
@@ -2188,6 +2190,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _hoverArc  = null
     designRenderer.clearPreviewGlow?.()
     designRenderer.clearPreviewArc?.()
+    designRenderer.clearSelectionArc?.()   // green crossover-selection tube
   }
 
   function _highlightStrand(backboneEntries, coneEntries, strandId) {
@@ -3360,8 +3363,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
           _mode = 'crossover'
           _crossoverId = target.id
           _strandId = null
-          const glowEntries = designRenderer.getCrossoverGlowEntries(target)
-          _setSelectionGlow(glowEntries)
+          // Green glow TUBE along the arc (unified with the red preview tube).
+          designRenderer.setSelectionArc(arcHit.getPositions?.() ?? [])
           store.setState({
             selectedObject: { type: xo ? 'crossover' : 'forced_ligation', id: target.id, data: target },
           })
