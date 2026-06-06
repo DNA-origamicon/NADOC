@@ -37,7 +37,7 @@ import { ensureLoaded as _ensureFjcLookup } from './ssdna_fjc.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
 import { clusterMemberFilter } from './cluster_gizmo.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
-import { isDrillV2, normalizeLevel } from './selection_level.js'
+import { isDrillV2, normalizeLevel, hoverPreviewTarget } from './selection_level.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -1930,18 +1930,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   // ── Drill-v2 hover preview ─────────────────────────────────────────────────
-  // Lightweight raycast (default level + a selected strand only) that pops the
-  // bead/cone under the cursor so the user sees what a 2nd click would pick.
+  // Lightweight raycast (default level + a selected strand only) that paints a RED
+  // glow on the bead/cone under the cursor — the leaf a 2nd click would select —
+  // distinct from the GREEN selection glow. Clicking it makes the selection (green).
 
   function _clearHoverPreview() {
-    if (_hoverBead) {
-      const isEnd = _hoverBead.nuc.is_five_prime || _hoverBead.nuc.is_three_prime
-      designRenderer.setBeadScale(_hoverBead, isEnd ? 2.0 : 1.3)
+    if (_hoverBead || _hoverCone) {
       _hoverBead = null
-    }
-    if (_hoverCone) {
-      designRenderer.setConeXZScale(_hoverCone, _hoverCone.coneRadius)
       _hoverCone = null
+      designRenderer.clearPreviewGlow()
     }
   }
 
@@ -1969,19 +1966,18 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (!_drillV2 || _selLevel !== 'default' || _mode !== 'strand') { _clearHoverPreview(); return }
     if (clientX > window.innerWidth - 300) { _clearHoverPreview(); return }
     const hit = _pickNearestBeadCone(clientX, clientY)
-    if (!hit) { _clearHoverPreview(); return }
-    if (hit.kind === 'bead') {
-      if (hit.entry.nuc.strand_id !== _strandId) { _clearHoverPreview(); return }
-      if (_hoverBead === hit.entry) return
-      _clearHoverPreview()
-      _hoverBead = hit.entry
-      designRenderer.setBeadScale(_hoverBead, 2.4)
+    const target = hoverPreviewTarget({
+      drillV2: _drillV2, selLevel: _selLevel, mode: _mode, strandId: _strandId, hit,
+    })
+    if (!target) { _clearHoverPreview(); return }
+    if (target.kind === 'bead') {
+      if (_hoverBead === target.entry) return
+      _hoverBead = target.entry; _hoverCone = null
+      designRenderer.setPreviewGlow([{ pos: target.entry.pos }])
     } else {
-      if (hit.cone.strandId !== _strandId) { _clearHoverPreview(); return }
-      if (_hoverCone === hit.cone) return
-      _clearHoverPreview()
-      _hoverCone = hit.cone
-      designRenderer.setConeXZScale(_hoverCone, 0.10)
+      if (_hoverCone === target.cone) return
+      _hoverCone = target.cone; _hoverBead = null
+      designRenderer.setPreviewGlow([{ pos: target.cone.midPos }])
     }
   }
 
@@ -2107,10 +2103,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _domainIndex       = null
     _beadEntry         = null
     _coneEntry         = null
-    // Hover-preview bead/cone live on the selected strand and were just reset to
-    // baseline above; drop the stale pointers so a later clear doesn't re-touch.
+    // Hover-preview bead/cone live on the selected strand; drop the pointers and
+    // remove the red preview glow (a separate layer the scale-reset above misses).
     _hoverBead = null
     _hoverCone = null
+    designRenderer.clearPreviewGlow?.()
   }
 
   function _highlightStrand(backboneEntries, coneEntries, strandId) {

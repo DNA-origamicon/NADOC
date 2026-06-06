@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import {
   LEVELS, TAB_CYCLE, BTN_LEVEL, LEVEL_BTN,
-  isDrillV2, normalizeLevel, nextTabLevel, toggleLevel,
+  isDrillV2, normalizeLevel, nextTabLevel, toggleLevel, hoverPreviewTarget,
 } from './selection_level.js'
 
 describe('selection_level — constants & maps', () => {
@@ -82,5 +82,40 @@ describe('isDrillV2 — feature flag', () => {
   it('stays off for any other localStorage value', () => {
     localStorage.setItem('NADOC_DRILL_V2', '1')
     expect(isDrillV2()).toBe(false)
+  })
+})
+
+describe('hoverPreviewTarget — red-glow leaf preview gate', () => {
+  const beadHit = (sid) => ({ kind: 'bead', entry: { nuc: { strand_id: sid } } })
+  const coneHit = (sid) => ({ kind: 'cone', cone: { strandId: sid } })
+  const base = { drillV2: true, selLevel: 'default', mode: 'strand', strandId: 'S1' }
+
+  it('previews the hovered bead when it belongs to the selected strand', () => {
+    const hit = beadHit('S1')
+    expect(hoverPreviewTarget({ ...base, hit })).toEqual({ kind: 'bead', entry: hit.entry })
+  })
+  it('previews the hovered cone when it belongs to the selected strand', () => {
+    const hit = coneHit('S1')
+    expect(hoverPreviewTarget({ ...base, hit })).toEqual({ kind: 'cone', cone: hit.cone })
+  })
+  it('no preview when the hovered element is on a DIFFERENT strand', () => {
+    expect(hoverPreviewTarget({ ...base, hit: beadHit('S2') })).toBeNull()
+    expect(hoverPreviewTarget({ ...base, hit: coneHit('S2') })).toBeNull()
+  })
+  it('no preview unless drill-v2 is on', () => {
+    expect(hoverPreviewTarget({ ...base, drillV2: false, hit: beadHit('S1') })).toBeNull()
+  })
+  it('no preview outside the default level (fixed levels select on every click)', () => {
+    for (const lv of ['cluster', 'domain', 'end', 'xover']) {
+      expect(hoverPreviewTarget({ ...base, selLevel: lv, hit: beadHit('S1') })).toBeNull()
+    }
+  })
+  it('no preview until a strand is selected (mode must be "strand")', () => {
+    for (const m of ['none', 'bead', 'cone', 'cluster', 'domain']) {
+      expect(hoverPreviewTarget({ ...base, mode: m, hit: beadHit('S1') })).toBeNull()
+    }
+  })
+  it('no preview when nothing is under the cursor', () => {
+    expect(hoverPreviewTarget({ ...base, hit: null })).toBeNull()
   })
 })

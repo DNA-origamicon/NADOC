@@ -115,7 +115,7 @@ export function createMultiColorGlowLayer(scene) {
   }
 }
 
-export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE) {
+export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE, name = '') {
   const mat = new THREE.MeshBasicMaterial({
     color,
     transparent: true,
@@ -125,6 +125,7 @@ export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE) {
   })
   let mesh = new THREE.InstancedMesh(_geo, mat, 1)
   mesh.count       = 0
+  mesh.name        = name   // optional tag so gesture e2e can find a specific glow layer
   mesh.renderOrder = 1   // draw after the main geometry so additive blending composites correctly
   mesh.frustumCulled = false
   scene.add(mesh)
@@ -136,6 +137,7 @@ export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE) {
     scene.remove(mesh)
     mesh = new THREE.InstancedMesh(_geo, mat, needed)
     mesh.count       = 0
+    mesh.name        = name
     mesh.renderOrder = 1
     mesh.frustumCulled = false
     scene.add(mesh)
@@ -173,6 +175,9 @@ export function createGlowLayer(scene, color = 0x3fb950, scale = GLOW_SCALE) {
       mesh.count = 0
       mesh.instanceMatrix.needsUpdate = true
     },
+
+    /** Number of active glow spheres (used by gesture e2e to detect the preview). */
+    count() { return mesh.count },
 
     dispose() {
       scene.remove(mesh)

@@ -82,7 +82,7 @@ design decisions + research (so early sessions build the loop's muscle on tracta
 |-------|-------|------|------|--------------------|
 | 1 | ~~**ISSUE-3** Assembly Ctrl-click multi-select~~ ✅ DONE 2026-06-05 | functional bug | small, bounded | no |
 | 2 | ~~**ISSUE-2** Cross-tab sync delay + console clutter~~ ✅ DONE 2026-06-05 (propagation fix + silent-logging C + badge co-editing B all shipped) | functional bug (data-integrity) | medium | no |
-| **→ NEXT** | **ISSUE-4** Drill-selection overhaul — Phase 1 ✅ + **Phase 2 ✅ DONE 2026-06-05** (unified `selectionLevel` state machine shipped behind the `NADOC_DRILL_V2` flag — default strand→leaf click, filter-row level selector, Tab cycle, Esc→default, hover preview). **Phase 3 next = breadcrumb UI + visual polish + flip the flag default + assembly unification (decision G).** | UX redesign | large, multi-phase | spec done |
+| **→ NEXT** | **ISSUE-4** Drill-selection overhaul — Phase 1 ✅ + Phase 2 ✅ + **Phase 3-preview ✅ DONE 2026-06-05** (red hover-preview glow on the would-be-selected leaf, replacing Phase 2's un-eyeballed scale-pop; "breadcrumb" was a naming mismatch — user wanted this glow, not a text trail). **Phase 3 remaining = human-eyeball the red/green colour, flip the flag default, assembly unification (decision G).** All behind `NADOC_DRILL_V2`. | UX redesign | large, multi-phase | spec done |
 | later | **ISSUE-1** Context-menu proliferation — Phase 1 ✅ + Phase 2a-binding ✅ + Phase 2a-orientation ✅ DONE 2026-06-05; Phase 2a-blunt / 2b–2e + Phase 3+ open (deferred behind ISSUE-4) | UX + tech-debt | large, multi-phase | yes (done) |
 
 This order is a recommendation; the user may name a different issue. **2026-06-05: user diverted the loop to
@@ -268,7 +268,40 @@ context-menu migration phases (which stay queued and resume after ISSUE-4's firs
 
 - **Status:** Phase 1 `[x]` DONE 2026-06-05 (current-state map + friction catalogue + target interaction
   spec; NO code — survey + AskUserQuestion). Phase 2 `[x]` DONE 2026-06-05 (state-machine rebuild, behind the
-  `NADOC_DRILL_V2` flag). Phase 3 `[ ]` polish (breadcrumb + flip-default + assembly unification).
+  `NADOC_DRILL_V2` flag). Phase 3 `[~]` polish — **3-preview `[x]` DONE 2026-06-05** (red hover-preview glow —
+  see below); breadcrumb-text / flip-default / assembly-unification `[ ]` still open.
+
+### Phase 3-preview OUTPUT — red hover-preview glow (shipped 2026-06-05, flag-gated)
+
+**⚠ "Breadcrumb" was a naming mismatch.** The handoff's decision-E "breadcrumb" meant a TEXT level-trail
+(`Strand ▸ End`). When asked the form, the user clarified they did NOT want a text widget — they meant the
+**hover-preview affordance**: with a strand selected (default level), the leaf a further click WOULD select
+(bead → end/nucleotide | cone → crossover) gets a **RED glow**, distinct from the GREEN selection glow;
+clicking it selects it (green). Phase 2 had shipped this as an un-eyeballed *scale-pop*; this sub-phase
+replaces the scale-pop with the red glow the user actually wanted.
+
+**What shipped (route: 3 modules, main.js LOC Δ = 0):**
+- **`scene/selection_level.js`:** new pure `hoverPreviewTarget({drillV2,selLevel,mode,strandId,hit})` — the
+  gate: preview ONLY in default level + mode 'strand' + hit on the selected strand; returns `{kind,entry|cone}`
+  or null. 7 vitest.
+- **`scene/glow_layer.js`:** `createGlowLayer` gained an optional `name` (tags the InstancedMesh) + a
+  `count()` accessor — so the gesture e2e can find/measure a specific glow layer.
+- **`scene/design_renderer.js`:** new red `_previewGlowLayer = createGlowLayer(scene, 0xff2a2a, 4.2,
+  'previewGlow')` (larger than the green 2.8 so its halo reads red over a green-glowing strand) +
+  `setPreviewGlow`/`clearPreviewGlow`; cleared on rebuild + refreshed in `refreshAllGlow`.
+- **`scene/selection_manager.js`:** `_updateHoverPreview`/`_clearHoverPreview` rewritten — scale-pop →
+  `setPreviewGlow([{pos}])` (bead `entry.pos` / cone `midPos`) via the pure gate; `_restoreStrand` now also
+  `clearPreviewGlow()` (separate layer the scale-reset missed).
+
+**Pinned by:** 7 vitest (`selection_level.test.js` hoverPreviewTarget) + e2e `drill_v2_select.spec.js` new
+test (real raycast: select strand → hover → named `previewGlow` layer count goes 0 → >0; discriminates the
+glow from the old scale-pop). vitest 987 green, smoke 23/23, both drill e2e green.
+
+**NOT eyeballed (carry):** the RED-over-GREEN *colour* is a Tier-3 aesthetic check (golden-image, not
+automated). Additive blend means the hovered bead's centre composites green+red → yellowish; the larger red
+halo is meant to read red. If it looks muddy, tune `_previewGlowLayer` scale/opacity, or exclude the hovered
+bead from the green selection glow for a pure red. USER TODO below. Crossover *arc* preview not added — the
+click path reaches beads + cones only; arc-raycast is a possible follow-up.
 
 ### Phase 2 OUTPUT — unified selectionLevel state machine (shipped 2026-06-05, flag-gated)
 
@@ -424,28 +457,33 @@ ladder used it to cap depth).
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-4 Phase 2 done — unified `selectionLevel` state machine shipped behind the `NADOC_DRILL_V2` flag)._
+_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-4 Phase 3-preview done — red hover-preview glow shipped behind `NADOC_DRILL_V2`; "breadcrumb" was a naming mismatch, user wanted this glow)._
 
-**NEXT PICK: ISSUE-4 — Drill-selection overhaul, Phase 3 (polish + roll out).** Phase 2 shipped the full
-`selectionLevel` model behind `NADOC_DRILL_V2` (`localStorage` or `?drillv2=1`, OFF by default). Read the
-**ISSUE-4 "Phase 2 OUTPUT" block above** before touching code — it names every file + the public API
-(`setSelectionLevel`/`getSelectionLevel`/`isDrillV2` on selectionManager; `scene/selection_level.js` is the
-pure model). Phase 3 work, in order:
-1. **Breadcrumb UI (decision E)** — surface the current level (e.g. `Strand ▸ End` with a hovered leaf, or
-   the engaged level) replacing the invisible `_selLevel`. Clickable to change level (calls
-   `setSelectionManager().setSelectionLevel`). This is the main user-visible polish the flag is missing.
-2. **Human-verify the cosmetics not eyeballed in Phase 2** — turn on `?drillv2=1`, load
-   `Examples/26hb_platform_v3.nadoc`, confirm: hover-preview pop (default level, strand selected), the
-   filter-row pinned paint, the Tab cycle toast, Esc→default. (Phase 2 pinned these with unit + one gesture
-   e2e but did NOT eyeball them.)
+**NEXT PICK: ISSUE-4 — Drill-selection overhaul, remaining Phase 3.** Phase 2 shipped the `selectionLevel`
+model + Phase 3-preview just shipped the RED hover-preview glow (read the **ISSUE-4 "Phase 3-preview OUTPUT"
+block above** — it names the files + the naming-mismatch story; the pure gate is
+`hoverPreviewTarget` in `scene/selection_level.js`, the red layer is `_previewGlowLayer` in
+`scene/design_renderer.js` via `setPreviewGlow`/`clearPreviewGlow`). All behind `NADOC_DRILL_V2`
+(`localStorage` or `?drillv2=1`, OFF by default). Public API on selectionManager:
+`setSelectionLevel`/`getSelectionLevel`/`isDrillV2`. Remaining Phase 3 work, in order:
+1. **HUMAN-EYEBALL the red/green colour (the one thing not automated this session).** Turn on `?drillv2=1`,
+   load `Examples/26hb_platform_v3.nadoc`, 1st-click a strand, then hover its beads/cones — confirm the
+   would-be-selected leaf reads RED (vs the green selection). It's an additive glow over the green strand, so
+   if it looks muddy/yellow, tune `_previewGlowLayer` scale/opacity in `design_renderer.js` (currently 4.2 /
+   0.45), or exclude the hovered bead from the green `_setSelectionGlow` for a pure red. See the USER TODO in
+   `issues_fix_log.md`. Also eyeball the still-uneyeballed Phase-2 cosmetics (filter-row pinned paint, Tab
+   toast, Esc→default).
+2. **(Optional) text level-breadcrumb (the ORIGINAL decision-E idea)** — only if the user still wants a
+   persistent `Strand ▸ End` text trail in ADDITION to the glow. The glow covered the user's actual need;
+   confirm before building. Would route through `selection_filter.js` (owns `getSelectionManager` +
+   `reflectDrillLevel`), composing a new `ui/selection_breadcrumb.js` — zero main.js delta.
 3. **Flip the flag default to ON, then delete the legacy paths** (`_autoDrillBead`/`_autoDrillCone`/
    `_drillLock` + `_manualFilters` + `_TAB_LOCKS`) once v2 is trusted in the app. Do the flip + the deletion
    as SEPARATE commits.
 4. **Assembly unification (decision G)** — assembly adopts the same 1st-click-part / 2nd-click-subelement
    shape. Net-new (no assembly drill exists); a Phase-3 design detail.
-5. **Confirm the exact visibility-gate ↔ level split (decision F)** with the user when wiring the breadcrumb —
-   Phase 2 made the 5 level buttons drive level and left scaf/stap/loop/skip/ovhangs as visibility toggles;
-   verify that's the intended split.
+5. **Confirm the exact visibility-gate ↔ level split (decision F)** with the user — Phase 2 made the 5 level
+   buttons drive level and left scaf/stap/loop/skip/ovhangs as visibility toggles; verify that's intended.
 
 Full spec + the target state-machine diagram + scope/decision notes (A–G) are in the **ISSUE-4 dossier** above.
 

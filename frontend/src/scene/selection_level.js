@@ -55,3 +55,27 @@ export function toggleLevel(cur, level) {
   const lv = normalizeLevel(level)
   return cur === lv ? 'default' : lv
 }
+
+/**
+ * Decide the hover-preview target — the leaf a further click WOULD select, shown
+ * with a red preview glow (vs the green selection glow). Pure gate so it unit-tests
+ * without the scene/raycast.
+ *
+ * Preview ONLY when: drill-v2 is on, the active level is `default`, a STRAND is
+ * selected (mode 'strand' — not yet drilled to a leaf), and the hovered element
+ * belongs to THAT selected strand. A bead previews the would-be end/nucleotide; a
+ * cone previews the would-be crossover.
+ *
+ * @param {{drillV2:boolean, selLevel:string, mode:string, strandId:*, hit:object|null}} o
+ * @returns {{kind:'bead', entry:object} | {kind:'cone', cone:object} | null}
+ */
+export function hoverPreviewTarget({ drillV2, selLevel, mode, strandId, hit }) {
+  if (!drillV2 || selLevel !== 'default' || mode !== 'strand' || !hit) return null
+  if (hit.kind === 'bead') {
+    return hit.entry?.nuc?.strand_id === strandId ? { kind: 'bead', entry: hit.entry } : null
+  }
+  if (hit.kind === 'cone') {
+    return hit.cone?.strandId === strandId ? { kind: 'cone', cone: hit.cone } : null
+  }
+  return null
+}

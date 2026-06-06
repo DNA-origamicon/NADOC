@@ -41,6 +41,10 @@ export function initDesignRenderer(scene, storeRef) {
   const _glowLayer         = createGlowLayer(scene)
   // Undefined-bases highlight: red, ~2× the selection glow size
   const _undefinedGlowLayer = createGlowLayer(scene, 0xff3030, 5.6)
+  // Drill-v2 hover preview: red glow on the would-be-selected leaf (vs the green
+  // selection glow). Larger than the green so its halo reads red over a selected
+  // (green-glowing) strand. Named so gesture e2e can detect it.
+  const _previewGlowLayer = createGlowLayer(scene, 0xff2a2a, 4.2, 'previewGlow')
   // Fluorescence-mode: per-fluorophore emission color glow
   const _fluoroGlowLayer = createMultiColorGlowLayer(scene)
 
@@ -267,6 +271,7 @@ export function initDesignRenderer(scene, storeRef) {
 
     _glowLayer.clear()          // stale entries after rebuild; selection_manager re-applies if needed
     _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
+    _previewGlowLayer.clear()   // hover preview is transient; never survives a rebuild
     _fluoroGlowLayer.clear()    // caller must re-apply fluorescence glow after rebuild
 
     // Clear stale xover refs — the old meshes were children of oldRoot, already disposed above.
@@ -622,6 +627,10 @@ export function initDesignRenderer(scene, storeRef) {
     setGlowEntries(entries) { _glowLayer.setEntries(entries) },
     clearGlow()              { _glowLayer.clear() },
 
+    // Drill-v2 hover preview (red glow on the would-be-selected leaf).
+    setPreviewGlow(entries)  { _previewGlowLayer.setEntries(entries) },
+    clearPreviewGlow()       { _previewGlowLayer.clear() },
+
     /** Show red oversized glow over backbone entries with undefined sequence. */
     setUndefinedHighlight(entries) { _undefinedGlowLayer.setEntries(entries) },
     clearUndefinedHighlight()      { _undefinedGlowLayer.clear() },
@@ -640,6 +649,7 @@ export function initDesignRenderer(scene, storeRef) {
     refreshAllGlow() {
       _glowLayer.refresh()
       _undefinedGlowLayer.refresh()
+      _previewGlowLayer.refresh()
       _fluoroGlowLayer.refresh()
     },
 
