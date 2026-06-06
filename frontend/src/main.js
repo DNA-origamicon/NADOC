@@ -123,7 +123,7 @@ import { initLibraryPanel }         from './ui/library_panel.js'
 import { pickLattice }              from './ui/lattice_picker.js'
 import { openFileBrowser }          from './ui/file_browser.js'
 import { initFileIo, initFileOpen, initFileSave } from './ui/file_io.js'
-import { initSyncBadge }            from './ui/sync_badge.js'
+import { initSyncBadge, countCoeditingSiblings } from './ui/sync_badge.js'
 import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
 import { initNavController }        from './scene/nav_controller.js'
 import { initAssemblyJointRenderer } from './scene/assembly_joint_renderer.js'
@@ -3352,6 +3352,10 @@ async function main() {
     _workspacePath = path
     if (path) localStorage.setItem(_WS_PATH_KEY, path)
     else      localStorage.removeItem(_WS_PATH_KEY)
+    // Our file changed → tell siblings (so they can detect co-editing) and
+    // recompute our own badge. Both are hoisted fn decls, only called post-init.
+    _announceDocPresence?.()
+    _refreshCoediting?.()
   }
   function _setAssemblyWorkspacePath(path) {
     _assemblyWorkspacePath = path
@@ -3494,6 +3498,8 @@ async function main() {
     // A part-editor tab has no assembly in its own doc (the assembly lives in the
     // assembly tab's doc); skip so we don't write an empty/foreign assembly cache.
     if (!_partEditContext) api.persistAssembly()   // no-op if no assembly is loaded
+    // Tell siblings we're gone so their co-editing badge count drops (ISSUE-2 sub-phase B).
+    try { nadocBroadcast.emit('doc-goodbye') } catch { /* best-effort */ }
   })
 
   // ── File open / save ─────────────────────────────────────────────────────────
@@ -7694,8 +7700,13 @@ async function main() {
     if (type === 'doc-presence-request') {
       _announceDocPresence()
     }
+    if (type === 'doc-goodbye') {
+      _otherTabDocs.delete(source)   // tab closed → drop it so the co-edit count stays honest
+      _refreshCoediting()
+    }
     if (type === 'doc-presence') {
-      _otherTabDocs.set(source, { designId, docName, docAssembly })
+      _otherTabDocs.set(source, { designId, docName, docAssembly, workspacePath: data.workspacePath ?? null, docId: data.docId ?? null })
+      _refreshCoediting()   // a same-file sibling may have just appeared
       // Only a real clobber risk when the other tab shares THIS tab's backend
       // document. Under multi-document (Phase 2) every tab — including each part
       // editor — owns its own doc, so different-design tabs are NOT contending.
@@ -7838,10 +7849,19 @@ async function main() {
     const id = s.currentDesign?.id ?? null
     if (!id) return
     nadocBroadcast.emit('doc-presence', {
-      designId:    id,
-      docName:     s.currentDesign?.metadata?.name ?? null,
-      docAssembly: !!s.assemblyActive,
+      designId:      id,
+      docName:       s.currentDesign?.metadata?.name ?? null,
+      docAssembly:   !!s.assemblyActive,
+      workspacePath: _workspacePath,   // lets siblings detect same-file co-editing (ISSUE-2 sub-phase B)
     })
+  }
+
+  // Feed the "saved" badge an honest co-editing count: how many OTHER tabs hold
+  // our workspace file in a different backend doc (a save-clobber risk, not synced).
+  function _refreshCoediting() {
+    _syncBadge.setSiblingCoediting(
+      countCoeditingSiblings(_workspacePath, getDocId(), [..._otherTabDocs.values()]),
+    )
   }
 
   function _maybeWarnDocClobber(otherId, otherName, otherAssembly) {

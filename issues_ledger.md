@@ -81,7 +81,7 @@ design decisions + research (so early sessions build the loop's muscle on tracta
 | Order | Issue | Type | Size | Needs UX research? |
 |-------|-------|------|------|--------------------|
 | 1 | ~~**ISSUE-3** Assembly Ctrl-click multi-select~~ ✅ DONE 2026-06-05 | functional bug | small, bounded | no |
-| 2 | **ISSUE-2** Cross-tab sync delay + console clutter — propagation fix ✅ DONE 2026-06-05; badge + logging sub-phases remain | functional bug (data-integrity) | medium | no |
+| 2 | ~~**ISSUE-2** Cross-tab sync delay + console clutter~~ ✅ DONE 2026-06-05 (propagation fix + silent-logging C + badge co-editing B all shipped) | functional bug (data-integrity) | medium | no |
 | 3 | **ISSUE-1** Context-menu proliferation | UX + tech-debt | large, multi-phase | yes |
 | 4 | **ISSUE-4** Drill-selection overhaul | UX redesign | large, multi-phase | yes (most) |
 
@@ -127,10 +127,23 @@ that debt.
 
 ## ISSUE-2 — Cross-tab sync claims saved but doesn't sync (functional, data-integrity)
 
-- **Status:** propagation fix `[x]` DONE 2026-06-05. Sub-phases: badge stale-sibling indicator `[ ]`;
-  silent-by-default sync logging `[x]` DONE 2026-06-05 (console mirror in `ui/sync_badge.js` `syncLog`
-  now gated on the debug panel being open — Ctrl+Shift+D / `__nadocSyncDebug.show()` enables it,
-  close/hide silences; rolling in-panel log still records every event).
+- **Status:** ✅ FULLY CLOSED 2026-06-05. Propagation fix `[x]`; silent-by-default sync logging `[x]`
+  (console mirror in `ui/sync_badge.js` `syncLog` gated on the debug panel being open — Ctrl+Shift+D /
+  `__nadocSyncDebug.show()` enables it, close/hide silences; rolling in-panel log still records every
+  event); badge co-editing (stale-sibling) indicator `[x]` DONE 2026-06-05.
+- **Sub-phase B (badge co-editing indicator) — SHIPPED 2026-06-05.** User-chosen scope (AskUserQuestion):
+  trigger = **co-editing PRESENCE** (no content-version counter exists, so flag whenever another tab holds
+  the SAME workspace file in a DIFFERENT backend doc — the real save-clobber risk); visual = **distinct
+  dot + label** (a blue `coedit` dot + `saved · N tab(s) editing this file`, only at the resting green
+  "saved" state — an active save/error keeps its own colour). Implementation: `ui/sync_badge.js` composes
+  base status + a sibling count via a new `setSiblingCoediting(count)` + `_render()`, plus a pure exported
+  `countCoeditingSiblings(myPath, myDocId, others)` (excludes same-docId child windows = genuinely in-sync).
+  main.js wiring: `doc-presence` broadcast now carries `workspacePath` (+ stores sibling `docId`);
+  `_refreshCoediting()` recomputes the count on presence/goodbye/own-path-change; new `doc-goodbye` emit on
+  `beforeunload` keeps the count honest when a sibling closes; `_setWorkspacePath` re-announces + refreshes.
+  Pinned by 13 vitest tests (`ui/sync_badge.test.js`: 7 badge-render + 6 detector). App-validation =
+  two-real-tab USER TODO (BroadcastChannel can't cross Playwright contexts — same constraint as the
+  propagation fix). main.js LOC Δ +~22 (thin wiring across existing blocks, not a new cohesive subsystem).
 - **ROOT CAUSE (confirmed by code trace, 2026-06-05):** two independently-opened tabs get
   *different* sticky doc ids (`doc_id.js` mints one per tab in `sessionStorage`). So the fast path
   (`design-changed` BroadcastChannel) is doc-scoped out (`isSameDoc` false → `main.js` ignores it),
@@ -244,25 +257,28 @@ that debt.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-2 sub-phase C shipped)._
+_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-2 fully closed — sub-phase B shipped)._
 
-**Recommended next: ISSUE-2 sub-phase B — "saved" badge stale-sibling indicator.** This is now the
-LAST remaining ISSUE-2 sub-phase (propagation fix + sub-phase C silent-logging both shipped — see the
-ISSUE-2 dossier + fix-log rows 2 & 3). User-approved scope:
+**ISSUE-2 is now FULLY CLOSED** (all three sub-phases shipped — see the dossier + fix-log rows 2/3/4).
+ISSUE-3 also closed. The two remaining open issues are both large + UX-research-heavy; their **Phase 1 is
+inventory/survey + an `AskUserQuestion`, NO code** — cheap, good cold-session starters:
 
-- **Sub-phase B (badge honesty, user-approved "flag stale siblings"):** the green "saved" badge must
-  not imply siblings-in-sync. Needs a way to know a sibling holds a divergent copy. Leads: the existing
-  `doc-presence` broadcast (`main.js` ~7701, `_otherTabDocs`) already tracks other tabs' docs; extend it
-  to compare open-file path + design version, and add a distinct badge state in `ui/sync_badge.js`
-  (e.g. "saved · sibling out of sync"). Repro-pin with a `sync_badge` factory test. ASK how loud the
-  signal should be (passive badge tint vs an explicit toast) only if the visual treatment is unclear.
+- **ISSUE-1 — Context-menu proliferation (recommended next).** Phase 1 = build the full right-click →
+  menu(s) → items inventory table across all ≥12 menu builders, identify duplicates/conflicts, then ASK
+  the user the consolidation questions (which menus merge, what's dead, what moves to a sidebar). Output is
+  a target menu spec — no code this phase. ⚠ INTERLEAVE: ISSUE-1's later unification phase IS the carve-up
+  extraction of the still-inline Assembly context-menu region — don't extract that region separately; let
+  the unification be that extraction (banked in the carve-up interleave rule).
+- **ISSUE-4 — Drill-selection overhaul.** Phase 1 = map every drill transition + the state it mutates
+  (`ui/selection_filter.js` drill-lock machine #61 + `scene/selection_manager.js`), propose 2-3 interaction
+  models, ASK the user to pick. Also no code in Phase 1.
 
-Bounded and frontend-only. After B, ISSUE-2 is fully closed — move to ISSUE-1 (context menus) or
-ISSUE-4 (drill selection), both large/UX-research-heavy (Phase 1 = inventory + ask, no code).
-
-**Sub-phase C note for B:** `ui/sync_badge.js` now carries a `debugLogging` flag (tied to panel
-visibility) — if B adds a new badge state, don't disturb that gate; the console mirror must stay silent
-unless the panel is open.
+**Sub-phase B notes for whoever audits the badge next:** `ui/sync_badge.js` now composes TWO orthogonal
+signals via `_render()` — the base sync status (`setSyncStatus`) and a co-editing sibling count
+(`setSiblingCoediting`); the co-edit annotation only paints over the resting green "saved" state, so don't
+assume `dot.className` is `sync-dot <state>` anymore (it can be `sync-dot coedit`). The `debugLogging`
+gate (sub-phase C) is untouched and must stay panel-tied. The pure `countCoeditingSiblings` deliberately
+EXCLUDES same-docId siblings (cadnano child windows share our backend doc = genuinely in-sync).
 
 **Gotchas banked:**
 - **Two-context Playwright canNOT reproduce ISSUE-2.** `BroadcastChannel` does NOT cross Playwright
