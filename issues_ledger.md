@@ -268,8 +268,11 @@ context-menu migration phases (which stay queued and resume after ISSUE-4's firs
 
 - **Status:** Phase 1 `[x]` DONE 2026-06-05 (current-state map + friction catalogue + target interaction
   spec; NO code — survey + AskUserQuestion). Phase 2 `[x]` DONE 2026-06-05 (state-machine rebuild, behind the
-  `NADOC_DRILL_V2` flag). Phase 3 `[~]` polish — **3-preview `[x]` DONE 2026-06-05** (red hover-preview glow —
-  see below); breadcrumb-text / flip-default / assembly-unification `[ ]` still open.
+  `NADOC_DRILL_V2` flag). Phase 3 `[~]` polish — **3-preview `[x]`** (red hover-preview glow) + **3-xover `[x]`
+  DONE 2026-06-05** (crossover ARCS now hoverable=red / clickable=green crossover in drill-v2 — the thin
+  inter-helix arc was never in the bead/cone pick set; `_arcHitPx` 12→18; `_v2HandleArc`/`_selectCrossoverV2`
+  in `selection_manager.js` + `hoverPreviewTarget` 'arc' kind); breadcrumb-text / flip-default /
+  assembly-unification `[ ]` still open.
 
 ### Phase 3-preview OUTPUT — red hover-preview glow (shipped 2026-06-05, flag-gated)
 
@@ -457,22 +460,23 @@ ladder used it to cap depth).
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-4 Phase 3-preview done — red hover-preview glow shipped behind `NADOC_DRILL_V2`; "breadcrumb" was a naming mismatch, user wanted this glow)._
+_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-4 Phase 3-xover done — crossover ARCS now hoverable/clickable in drill-v2, on top of Phase 3-preview's red hover-glow)._
 
-**NEXT PICK: ISSUE-4 — Drill-selection overhaul, remaining Phase 3.** Phase 2 shipped the `selectionLevel`
-model + Phase 3-preview just shipped the RED hover-preview glow (read the **ISSUE-4 "Phase 3-preview OUTPUT"
-block above** — it names the files + the naming-mismatch story; the pure gate is
-`hoverPreviewTarget` in `scene/selection_level.js`, the red layer is `_previewGlowLayer` in
-`scene/design_renderer.js` via `setPreviewGlow`/`clearPreviewGlow`). All behind `NADOC_DRILL_V2`
-(`localStorage` or `?drillv2=1`, OFF by default). Public API on selectionManager:
+**NEXT PICK: ISSUE-4 — Drill-selection overhaul, remaining Phase 3.** Phase 2 = `selectionLevel` model;
+Phase 3-preview = red hover-preview glow on beads/cones; Phase 3-xover = crossover ARCS hoverable (red) +
+clickable (green crossover). All behind `NADOC_DRILL_V2` (`localStorage` or `?drillv2=1`, OFF by default).
+Key files: pure gate `hoverPreviewTarget` (bead/cone/arc) in `scene/selection_level.js`; red layer
+`_previewGlowLayer` in `scene/design_renderer.js`; `_v2HandleArc`/`_selectCrossoverV2`/`_findStrandArcAt` +
+`_arcHitPx=18` in `scene/selection_manager.js`. Public API on selectionManager:
 `setSelectionLevel`/`getSelectionLevel`/`isDrillV2`. Remaining Phase 3 work, in order:
-1. **HUMAN-EYEBALL the red/green colour (the one thing not automated this session).** Turn on `?drillv2=1`,
-   load `Examples/26hb_platform_v3.nadoc`, 1st-click a strand, then hover its beads/cones — confirm the
-   would-be-selected leaf reads RED (vs the green selection). It's an additive glow over the green strand, so
-   if it looks muddy/yellow, tune `_previewGlowLayer` scale/opacity in `design_renderer.js` (currently 4.2 /
-   0.45), or exclude the hovered bead from the green `_setSelectionGlow` for a pure red. See the USER TODO in
-   `issues_fix_log.md`. Also eyeball the still-uneyeballed Phase-2 cosmetics (filter-row pinned paint, Tab
-   toast, Esc→default).
+1. **HUMAN-EYEBALL on a MULTI-HELIX design (the part not automated — needs crossovers the single-helix e2e
+   fixture lacks).** Turn on `?drillv2=1`, load `Examples/26hb_platform_v3.nadoc`, 1st-click a strand, then:
+   (a) hover its beads/cones → would-be leaf reads RED (vs green selection); (b) **hover a crossover ARC of
+   that strand → red glow at the arc midpoint; click it → the crossover selects (green glow)**. The red is an
+   additive glow over the green strand, so if it looks muddy/yellow, tune `_previewGlowLayer` scale/opacity in
+   `design_renderer.js` (currently 4.2 / 0.45). If the 18px arc grab feels too tight/loose, tune `_arcHitPx`
+   in `selection_manager.js`. Also eyeball the Phase-2 cosmetics (filter-row pinned paint, Tab toast,
+   Esc→default).
 2. **(Optional) text level-breadcrumb (the ORIGINAL decision-E idea)** — only if the user still wants a
    persistent `Strand ▸ End` text trail in ADDITION to the glow. The glow covered the user's actual need;
    confirm before building. Would route through `selection_filter.js` (owns `getSelectionManager` +
