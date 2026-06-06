@@ -5,38 +5,50 @@
 // `selectionLevel`. There is exactly one engaged level at a time, so the old
 // "red border means two different things" ambiguity disappears.
 //
-//   default → 1st click selects the STRAND; 2nd click on the selected strand
-//             selects the leaf UNDER THE CURSOR (bead → end | cone → xover).
-//             Cluster & domain are NOT in the click path.
+//   default → no button engaged. 1st click selects the STRAND; 2nd click on the
+//             selected strand selects the leaf UNDER THE CURSOR (bead → end |
+//             cone/arc → xover); a repeat click KEEPS it. Drill ladder.
+//   strand → every click selects the whole clicked strand (no leaf drill).
 //   cluster | domain | end | xover → every click selects at that FIXED level.
 //
-// Tab cycles cluster → domain → end → xover → cluster (strand/default are OUT of
-// the cycle). Escape returns to `default`. The #select-filter level buttons drive
-// the SAME state (clust/strand/line/ends/xover).
+// Tab cycles cluster → strand → domain → end → xover → none(default) → cluster.
+// Escape returns to `default`. The #select-filter level buttons drive the SAME
+// state (clust/strand/line/ends/xover); no button lit = `default`.
 //
-// This whole model is behind the `NADOC_DRILL_V2` flag (localStorage or
-// `?drillv2=1`); when off the legacy auto-drill/lock paths run unchanged.
+// Drill-v2 is now the DEFAULT (flipped 2026-06-06); opt out via
+// `localStorage NADOC_DRILL_V2='false'` or `?drillv2=0`. The legacy auto-drill/
+// pin/lock paths still exist behind the opt-out but are dead by default (their
+// physical deletion is a deferred cleanup pass).
 //
 // Everything here is pure (no DOM / scene / store) so it unit-tests directly.
 
-export const LEVELS    = ['default', 'cluster', 'domain', 'end', 'xover']
-// Tab cycles only the four engaged levels — never strand/default.
-export const TAB_CYCLE = ['cluster', 'domain', 'end', 'xover']
+export const LEVELS    = ['default', 'cluster', 'strand', 'domain', 'end', 'xover']
+// Tab cycles cluster → strand → domain → end → xover → none(default) → cluster.
+// `default` = no button engaged = the drill ladder (user model 2026-06-06).
+export const TAB_CYCLE = ['cluster', 'strand', 'domain', 'end', 'xover', 'default']
 
-// Filter-button dataKey ↔ selectionLevel. The `strand` button maps to `default`
-// (the strand-first click), so the row reads as one coherent level selector.
-export const BTN_LEVEL = { clust: 'cluster', strand: 'default', line: 'domain', ends: 'end', xover: 'xover' }
-export const LEVEL_BTN = { default: 'strand', cluster: 'clust', domain: 'line', end: 'ends', xover: 'xover' }
+// Filter-button dataKey ↔ selectionLevel. `strand` is now a DISTINCT fixed level
+// (every click → whole strand), separate from `default` (no button = drill ladder).
+// `default` has NO button — it is the neutral no-button state.
+export const BTN_LEVEL = { clust: 'cluster', strand: 'strand', line: 'domain', ends: 'end', xover: 'xover' }
+export const LEVEL_BTN = { cluster: 'clust', strand: 'strand', domain: 'line', end: 'ends', xover: 'xover' }
 
-/** Read the drill-v2 feature flag (localStorage `NADOC_DRILL_V2`='true' or `?drillv2=1`). */
+/**
+ * Read the drill-v2 feature flag. Drill-v2 is now the DEFAULT (flipped 2026-06-06);
+ * opt OUT via `localStorage NADOC_DRILL_V2='false'` or `?drillv2=0`.
+ */
 export function isDrillV2() {
   try {
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('NADOC_DRILL_V2') === 'true') return true
+    if (typeof localStorage !== 'undefined') {
+      const v = localStorage.getItem('NADOC_DRILL_V2')
+      if (v === 'false') return false
+      if (v === 'true')  return true
+    }
   } catch { /* localStorage may be unavailable */ }
   try {
-    if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('drillv2') === '1') return true
+    if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('drillv2') === '0') return false
   } catch { /* no location in some test envs */ }
-  return false
+  return true
 }
 
 /** Coerce any value to a valid level, defaulting unknowns to `default`. */
@@ -96,7 +108,7 @@ export function lassoCaptureType({ drillV2, selLevel, drillType, selectableTypes
   if (drillV2) {
     const lv = normalizeLevel(selLevel)
     return {
-      strands:   lv === 'default',
+      strands:   lv === 'default' || lv === 'strand',
       domains:   lv === 'domain',
       ends:      lv === 'end',
       beadLevel: false,            // v2 'end' captures 5'/3' termini only (user decision)

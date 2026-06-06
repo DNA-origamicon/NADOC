@@ -81,14 +81,15 @@ export function initSelectionFilter({ store, getSelectionManager, drillV2 = isDr
   // Light the filter button matching the current drill level (display only —
   // does NOT touch selectableTypes or _manualFilters). No-op in manual mode.
   function reflectDrillLevel(level) {
-    // Drill-v2: the level buttons ARE the selectionLevel selector — paint the
-    // engaged level with both .active and the .sf-pinned border (one coherent
-    // surface, no overloaded red). 'default' lights the strand button.
+    // Drill-v2: the level buttons ARE the selectionLevel selector. Paint ONLY the
+    // engaged level with .active — no red `sf-pinned` border (user feedback
+    // 2026-06-06: the red box meant two things and felt unintuitive). `default`
+    // (no engaged level) lights NO button → the drill ladder is active.
     if (_v2) {
-      const target = LEVEL_BTN_V2[level ?? 'default'] ?? 'strand'
+      const target = LEVEL_BTN_V2[level] ?? null
       for (const dk of Object.values(LEVEL_BTN_V2)) {
         const b = document.querySelector(`#select-filter .sf-btn[data-key="${dk}"]`)
-        if (b) { b.classList.toggle('active', dk === target); b.classList.toggle('sf-pinned', dk === target) }
+        if (b) { b.classList.toggle('active', dk === target); b.classList.remove('sf-pinned') }
       }
       return
     }

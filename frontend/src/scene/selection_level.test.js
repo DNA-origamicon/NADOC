@@ -6,22 +6,21 @@ import {
 } from './selection_level.js'
 
 describe('selection_level — constants & maps', () => {
-  it('LEVELS is the five-state set', () => {
-    expect(LEVELS).toEqual(['default', 'cluster', 'domain', 'end', 'xover'])
+  it('LEVELS is the six-state set (strand is a distinct level)', () => {
+    expect(LEVELS).toEqual(['default', 'cluster', 'strand', 'domain', 'end', 'xover'])
   })
 
-  it('Tab cycle excludes strand/default', () => {
-    expect(TAB_CYCLE).toEqual(['cluster', 'domain', 'end', 'xover'])
-    expect(TAB_CYCLE).not.toContain('default')
-    expect(TAB_CYCLE).not.toContain('strand')
+  it('Tab cycle is cluster → strand → domain → end → xover → none(default)', () => {
+    expect(TAB_CYCLE).toEqual(['cluster', 'strand', 'domain', 'end', 'xover', 'default'])
   })
 
-  it('BTN_LEVEL and LEVEL_BTN round-trip (strand ↔ default)', () => {
+  it('BTN_LEVEL and LEVEL_BTN round-trip; strand is its own level, default has no button', () => {
     for (const [dk, lvl] of Object.entries(BTN_LEVEL)) {
       expect(LEVEL_BTN[lvl]).toBe(dk)
     }
-    expect(BTN_LEVEL.strand).toBe('default')
-    expect(LEVEL_BTN.default).toBe('strand')
+    expect(BTN_LEVEL.strand).toBe('strand')
+    expect(LEVEL_BTN.strand).toBe('strand')
+    expect(LEVEL_BTN.default).toBeUndefined()   // default = no button engaged
   })
 })
 
@@ -38,16 +37,17 @@ describe('normalizeLevel', () => {
 })
 
 describe('nextTabLevel — Tab cycle', () => {
-  it('from default/anywhere lands on cluster', () => {
-    expect(nextTabLevel('default')).toBe('cluster')
-    expect(nextTabLevel(null)).toBe('cluster')
-    expect(nextTabLevel('strand')).toBe('cluster')   // not in cycle → start
+  it('from default/none → cluster; unknown → cluster', () => {
+    expect(nextTabLevel('default')).toBe('cluster')   // none → first
+    expect(nextTabLevel(null)).toBe('cluster')        // not in cycle → start
   })
-  it('walks cluster → domain → end → xover → cluster', () => {
-    expect(nextTabLevel('cluster')).toBe('domain')
+  it('walks cluster → strand → domain → end → xover → none(default) → cluster', () => {
+    expect(nextTabLevel('cluster')).toBe('strand')
+    expect(nextTabLevel('strand')).toBe('domain')
     expect(nextTabLevel('domain')).toBe('end')
     expect(nextTabLevel('end')).toBe('xover')
-    expect(nextTabLevel('xover')).toBe('cluster')   // wraps
+    expect(nextTabLevel('xover')).toBe('default')   // → none
+    expect(nextTabLevel('default')).toBe('cluster') // wraps
   })
 })
 
@@ -73,16 +73,18 @@ describe('isDrillV2 — feature flag', () => {
   afterEach(() => {
     try { localStorage.removeItem('NADOC_DRILL_V2') } catch { /* ignore */ }
   })
-  it('off by default', () => {
-    expect(isDrillV2()).toBe(false)
-  })
-  it('on when localStorage NADOC_DRILL_V2 === "true"', () => {
-    localStorage.setItem('NADOC_DRILL_V2', 'true')
+  it('ON by default (flipped 2026-06-06)', () => {
     expect(isDrillV2()).toBe(true)
   })
-  it('stays off for any other localStorage value', () => {
-    localStorage.setItem('NADOC_DRILL_V2', '1')
+  it('opt OUT when localStorage NADOC_DRILL_V2 === "false"', () => {
+    localStorage.setItem('NADOC_DRILL_V2', 'false')
     expect(isDrillV2()).toBe(false)
+  })
+  it('stays ON for any non-"false" localStorage value', () => {
+    localStorage.setItem('NADOC_DRILL_V2', '1')
+    expect(isDrillV2()).toBe(true)
+    localStorage.setItem('NADOC_DRILL_V2', 'true')
+    expect(isDrillV2()).toBe(true)
   })
 })
 
@@ -198,6 +200,13 @@ describe('lassoCaptureType — drill-v2 honors the engaged selLevel (ISSUE-4 fil
     expect(r.strands).toBe(true)
     expect(r.ends).toBe(false)
     expect(r.cluster).toBe(false)
+  })
+
+  it('strand level → strands (the distinct fixed strand level captures whole strands)', () => {
+    const r = lassoCaptureType({ drillV2: true, selLevel: 'strand', drillType: null, selectableTypes: ST })
+    expect(r.strands).toBe(true)
+    expect(r.domains).toBe(false)
+    expect(r.ends).toBe(false)
   })
 
   it('overhangs/loops/skips are NOT lasso-capturable in v2 (they are visibility gates, not levels)', () => {

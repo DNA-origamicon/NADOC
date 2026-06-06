@@ -1866,6 +1866,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       }
       _emitDrillLevel('cluster'); return
     }
+    if (_selLevel === 'strand') {
+      _selectStrandV2(hitStrandId, hitEntry, backboneEntries, coneEntries)
+      _emitDrillLevel('strand'); return
+    }
     if (_selLevel === 'domain') {
       _selectDomainV2(hitEntry, hitStrandId, backboneEntries, coneEntries)
       _emitDrillLevel('domain'); return
@@ -1909,8 +1913,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _selectConeV2(hitCone, hitStrandId, backboneEntries, coneEntries)
       _emitDrillLevel('xover'); return
     }
-    if (_selLevel === 'domain' || _selLevel === 'end') {
-      // No domain/end leaf on a cone — soft-fall to strand.
+    if (_selLevel === 'strand' || _selLevel === 'domain' || _selLevel === 'end') {
+      // strand level → the whole strand; domain/end have no leaf on a cone → strand.
       _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
       _emitDrillLevel(_selLevel); return
     }
@@ -1960,8 +1964,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (!_selectCrossoverV2(arcHit)) _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
       _emitDrillLevel('xover'); return
     }
-    if (_selLevel === 'domain' || _selLevel === 'end') {
-      // No domain/end leaf on a crossover arc — soft-fall to strand.
+    if (_selLevel === 'strand' || _selLevel === 'domain' || _selLevel === 'end') {
+      // strand level → the whole strand; domain/end have no leaf on an arc → strand.
       _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
       _emitDrillLevel(_selLevel); return
     }

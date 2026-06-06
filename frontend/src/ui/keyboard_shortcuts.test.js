@@ -124,7 +124,7 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
   })
 
   it("Tab cycles the drill lock null→cluster and toasts; blocked when translate/rotate active", async () => {
-    const d = makeDeps()
+    const d = makeDeps({ drillV2: false })   // legacy drill-lock path (v2 is now the default)
     initKeyboardShortcuts(d)
     const e = await press('Tab')
     expect(e.preventDefault).toHaveBeenCalled()
@@ -140,7 +140,7 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
   })
 
   it("Tab wraps from the last lock (xover) back to null/auto-drill", async () => {
-    const d = makeDeps()
+    const d = makeDeps({ drillV2: false })   // legacy drill-lock path
     d.selectionManager.getDrillLock.mockReturnValue('xover')
     initKeyboardShortcuts(d)
     await press('Tab')
@@ -464,7 +464,7 @@ describe('initKeyboardShortcuts — drill v2 (selectionLevel) Tab/Escape', () =>
     return d
   }
 
-  it('Tab cycles the unified selectionLevel cluster→domain→…, NOT the legacy drill-lock', async () => {
+  it('Tab cycles the unified selectionLevel default→cluster→strand→…, NOT the legacy drill-lock', async () => {
     const d = makeV2Deps('default')
     initKeyboardShortcuts(d)
     await press('Tab')
@@ -473,11 +473,18 @@ describe('initKeyboardShortcuts — drill v2 (selectionLevel) Tab/Escape', () =>
     expect(d.resetToAutoBaseline).not.toHaveBeenCalled()
   })
 
-  it('Tab wraps xover→cluster', async () => {
+  it('Tab cluster→strand (strand is now in the cycle)', async () => {
+    const d = makeV2Deps('cluster')
+    initKeyboardShortcuts(d)
+    await press('Tab')
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('strand')
+  })
+
+  it('Tab wraps xover→none(default), then default→cluster', async () => {
     const d = makeV2Deps('xover')
     initKeyboardShortcuts(d)
     await press('Tab')
-    expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('cluster')
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('default')
   })
 
   it('Escape returns the selectionLevel to default when engaged', async () => {

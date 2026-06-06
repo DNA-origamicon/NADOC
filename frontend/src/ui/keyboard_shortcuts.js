@@ -254,14 +254,14 @@ export function initKeyboardShortcuts(deps) {
     blockedWhen: () => isTranslateRotateActive(),
     handler(e) {
       e.preventDefault()
-      // Drill-v2: Tab cycles the unified selectionLevel cluster → domain → end →
-      // xover → cluster (strand/default are out of the cycle). The filter row
-      // reflects it via the emitted level.
+      // Drill-v2: Tab cycles the unified selectionLevel cluster → strand → domain →
+      // end → xover → none(default) → cluster. `default` = no button = drill ladder.
+      // The filter row reflects it via the emitted level.
       if (_v2) {
         const cur  = selectionManager.getSelectionLevel?.() ?? 'default'
         const next = nextTabLevel(cur)
         selectionManager.setSelectionLevel?.(next)
-        showToast(`Selection level: ${next}`)
+        showToast(next === 'default' ? 'Selection level: drill (default)' : `Selection level: ${next}`)
         return
       }
       const cur  = selectionManager.getDrillLock?.() ?? null

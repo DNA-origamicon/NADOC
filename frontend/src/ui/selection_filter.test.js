@@ -93,7 +93,9 @@ describe('initSelectionFilter (factory)', () => {
     sm = { resetDrill: vi.fn(), getDrillLock: vi.fn(() => null), setDrillLock: vi.fn() }
   })
 
-  const make = () => initSelectionFilter({ store, getSelectionManager: () => sm })
+  // The legacy auto-drill/manual-pin path (drill-v2 is now the default, so pin it OFF
+  // explicitly until the legacy code is physically deleted in the deferred cleanup).
+  const make = () => initSelectionFilter({ store, getSelectionManager: () => sm, drillV2: false })
 
   it('isManualSelect is false until a button is pinned, true after', () => {
     const f = make()
@@ -232,24 +234,28 @@ describe('initSelectionFilter — drill v2 (selectionLevel)', () => {
     expect(sm.setSelectionLevel).toHaveBeenCalledWith('default')
   })
 
-  it('the strand button maps to default', () => {
+  it('the strand button maps to the distinct strand level (not default)', () => {
     const f = makeV2(); f.attachFilterButtons()
     level = 'cluster'
     document.querySelector('.sf-btn[data-key="strand"]').click()
-    expect(sm.setSelectionLevel).toHaveBeenCalledWith('default')
+    expect(sm.setSelectionLevel).toHaveBeenCalledWith('strand')
   })
 
-  it('reflectDrillLevel paints active+sf-pinned on the engaged level (default→strand)', () => {
+  it('reflectDrillLevel paints ONLY .active (no red sf-pinned); default lights no button', () => {
     const f = makeV2()
     f.reflectDrillLevel('xover')
     const xb = document.querySelector('.sf-btn[data-key="xover"]')
     expect(xb.classList.contains('active')).toBe(true)
-    expect(xb.classList.contains('sf-pinned')).toBe(true)
-    expect(document.querySelector('.sf-btn[data-key="clust"]').classList.contains('sf-pinned')).toBe(false)
-    // default lights the strand button
-    f.reflectDrillLevel('default')
+    expect(xb.classList.contains('sf-pinned')).toBe(false)   // red box removed
+    expect(document.querySelector('.sf-btn[data-key="clust"]').classList.contains('active')).toBe(false)
+    // strand level lights the strand button
+    f.reflectDrillLevel('strand')
     expect(document.querySelector('.sf-btn[data-key="strand"]').classList.contains('active')).toBe(true)
     expect(document.querySelector('.sf-btn[data-key="xover"]').classList.contains('active')).toBe(false)
+    // default (no engaged level) lights NO level button
+    f.reflectDrillLevel('default')
+    expect(document.querySelector('.sf-btn[data-key="strand"]').classList.contains('active')).toBe(false)
+    expect(document.querySelector('.sf-btn[data-key="clust"]').classList.contains('active')).toBe(false)
   })
 
   it('a type-visibility button (loops) still plain-toggles selectableTypes in v2', () => {
