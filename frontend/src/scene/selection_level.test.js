@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import {
   LEVELS, TAB_CYCLE, BTN_LEVEL, LEVEL_BTN,
   isDrillV2, normalizeLevel, nextTabLevel, toggleLevel, hoverPreviewTarget,
+  lassoCaptureType,
 } from './selection_level.js'
 
 describe('selection_level — constants & maps', () => {
@@ -123,5 +124,87 @@ describe('hoverPreviewTarget — red-glow leaf preview gate', () => {
   })
   it('no preview when nothing is under the cursor', () => {
     expect(hoverPreviewTarget({ ...base, hit: null })).toBeNull()
+  })
+})
+
+describe('lassoCaptureType — legacy (drillV2 off)', () => {
+  const ST = { strands: true, domains: false, ends: false, overhangs: false,
+               loops: false, skips: false, crossoverArcs: false }
+
+  it('no auto-drill → selectableTypes gates decide', () => {
+    const r = lassoCaptureType({ drillV2: false, selLevel: 'default', drillType: null, selectableTypes: ST })
+    expect(r.strands).toBe(true)
+    expect(r.ends).toBe(false)
+    expect(r.cluster).toBe(false)
+  })
+
+  it('auto-drill type-locks: cluster level → cluster capture only', () => {
+    const r = lassoCaptureType({ drillV2: false, selLevel: 'default', drillType: 'cluster', selectableTypes: ST })
+    expect(r.cluster).toBe(true)
+    expect(r.strands).toBe(false)
+  })
+
+  it('auto-drill bead level → every bead (beadLevel) + ends', () => {
+    const r = lassoCaptureType({ drillV2: false, selLevel: 'default', drillType: 'bead', selectableTypes: ST })
+    expect(r.ends).toBe(true)
+    expect(r.beadLevel).toBe(true)
+    expect(r.strands).toBe(false)
+  })
+
+  it('selectableTypes overhangs/loops/skips honored only when no drill active', () => {
+    const st = { ...ST, overhangs: true, loops: true, skips: true }
+    expect(lassoCaptureType({ drillV2: false, drillType: null, selectableTypes: st }))
+      .toMatchObject({ overhangs: true, loops: true, skips: true })
+    expect(lassoCaptureType({ drillV2: false, drillType: 'strand', selectableTypes: st }))
+      .toMatchObject({ overhangs: false, loops: false, skips: false })
+  })
+})
+
+describe('lassoCaptureType — drill-v2 honors the engaged selLevel (ISSUE-4 filter-audit)', () => {
+  // The motivating bug: Tab to a level in v2, lasso should capture THAT level —
+  // not the stale selectableTypes default. selectableTypes here is the default
+  // (strands on) to prove the level overrides it.
+  const ST = { strands: true, domains: false, ends: false, overhangs: false,
+               loops: false, skips: false, crossoverArcs: false }
+
+  it('end level → ends (5′/3′ termini only, beadLevel false), NOT strands (the reported bug)', () => {
+    const r = lassoCaptureType({ drillV2: true, selLevel: 'end', drillType: null, selectableTypes: ST })
+    expect(r.ends).toBe(true)
+    expect(r.beadLevel).toBe(false)   // user decision: termini only, not every nucleotide
+    expect(r.strands).toBe(false)
+    expect(r.cluster).toBe(false)
+  })
+
+  it('cluster level → cluster, NOT strands', () => {
+    const r = lassoCaptureType({ drillV2: true, selLevel: 'cluster', drillType: null, selectableTypes: ST })
+    expect(r.cluster).toBe(true)
+    expect(r.strands).toBe(false)
+  })
+
+  it('domain level → domains only', () => {
+    const r = lassoCaptureType({ drillV2: true, selLevel: 'domain', drillType: null, selectableTypes: ST })
+    expect(r.domains).toBe(true)
+    expect(r.strands).toBe(false)
+  })
+
+  it('xover level → crossovers only', () => {
+    const r = lassoCaptureType({ drillV2: true, selLevel: 'xover', drillType: null, selectableTypes: ST })
+    expect(r.xover).toBe(true)
+    expect(r.strands).toBe(false)
+  })
+
+  it('default level → strands (strand-first model)', () => {
+    const r = lassoCaptureType({ drillV2: true, selLevel: 'default', drillType: null, selectableTypes: ST })
+    expect(r.strands).toBe(true)
+    expect(r.ends).toBe(false)
+    expect(r.cluster).toBe(false)
+  })
+
+  it('overhangs/loops/skips are NOT lasso-capturable in v2 (they are visibility gates, not levels)', () => {
+    const st = { ...ST, overhangs: true, loops: true, skips: true }
+    const r = lassoCaptureType({ drillV2: true, selLevel: 'default', drillType: null, selectableTypes: st })
+    expect(r.overhangs).toBe(false)
+    expect(r.loops).toBe(false)
+    expect(r.skips).toBe(false)
   })
 })

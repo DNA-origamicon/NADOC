@@ -71,6 +71,55 @@ export function toggleLevel(cur, level) {
  * @param {{drillV2:boolean, selLevel:string, mode:string, strandId:*, hit:object|null}} o
  * @returns {{kind:'bead', entry:object} | {kind:'cone', cone:object} | {kind:'arc', arc:object} | null}
  */
+/**
+ * Decide WHAT element type a Ctrl-drag lasso captures.
+ *
+ * Pure resolver shared by `_finalizeLasso` so the lasso's "what am I selecting"
+ * truth is testable without the scene. Returns a flag bag the lasso loop reads:
+ *   { strands, domains, ends, beadLevel, cluster, xover, overhangs, loops, skips }
+ * (`beadLevel` = capture EVERY bead in the rect, not just 5'/3' termini.)
+ *
+ * Legacy (drillV2 false): an active auto-drill `drillType` type-locks the capture
+ * to that level's element; otherwise the `selectableTypes` gates decide.
+ *
+ * Drill-v2 (drillV2 true): the engaged `selLevel` is the single source of truth —
+ * the lasso captures the SAME element type a click at that level would select
+ * (default→strand, cluster→cluster, domain→domain, end→bead, xover→crossover).
+ * This is the fix for the "Tab to ends, lasso grabs a cluster" bug — see ISSUE-4
+ * Phase 3-filter-audit. Overhangs/loops/skips are visibility gates, not levels, so
+ * they are not lasso-capturable in v2.
+ *
+ * @param {{drillV2:boolean, selLevel:string, drillType:string|null, selectableTypes:object}} o
+ */
+export function lassoCaptureType({ drillV2, selLevel, drillType, selectableTypes }) {
+  const st = selectableTypes ?? {}
+  if (drillV2) {
+    const lv = normalizeLevel(selLevel)
+    return {
+      strands:   lv === 'default',
+      domains:   lv === 'domain',
+      ends:      lv === 'end',
+      beadLevel: false,            // v2 'end' captures 5'/3' termini only (user decision)
+      cluster:   lv === 'cluster',
+      xover:     lv === 'xover',
+      overhangs: false,            // visibility gates, not levels — not lasso-capturable in v2
+      loops:     false,
+      skips:     false,
+    }
+  }
+  return {
+    strands:   drillType ? drillType === 'strand' : !!st.strands,
+    domains:   drillType ? drillType === 'domain' : !!st.domains,
+    ends:      drillType ? drillType === 'bead'   : !!st.ends,
+    beadLevel: drillType === 'bead',
+    cluster:   drillType === 'cluster',
+    xover:     drillType ? drillType === 'xover'  : !!st.crossoverArcs,
+    overhangs: drillType ? false : !!st.overhangs,
+    loops:     drillType ? false : !!st.loops,
+    skips:     drillType ? false : !!st.skips,
+  }
+}
+
 export function hoverPreviewTarget({ drillV2, selLevel, mode, strandId, hit }) {
   if (!drillV2 || selLevel !== 'default' || mode !== 'strand' || !hit) return null
   if (hit.kind === 'bead') {

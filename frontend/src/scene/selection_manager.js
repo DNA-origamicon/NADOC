@@ -37,7 +37,7 @@ import { ensureLoaded as _ensureFjcLookup } from './ssdna_fjc.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
 import { clusterMemberFilter } from './cluster_gizmo.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
-import { isDrillV2, normalizeLevel, hoverPreviewTarget } from './selection_level.js'
+import { isDrillV2, normalizeLevel, hoverPreviewTarget, lassoCaptureType } from './selection_level.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -2765,19 +2765,26 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const clusterHitNucs = []  // nucs of in-rect beads, when drilling at cluster level
 
     const st = store.getState().selectableTypes
-    // Auto-drill type-lock: when a drill is active, the lasso captures only the
-    // current level's element type. In manual mode (drillType === null) the
-    // legacy selectableTypes gating applies.
-    const drillType   = _currentDrillType()
-    const beadLevelLasso = drillType === 'bead'
-    const useStrands  = drillType ? drillType === 'strand' : st.strands
-    const useDomains  = drillType ? drillType === 'domain' : st.domains
-    const useEnds     = drillType ? drillType === 'bead'   : st.ends
-    const useOvhg     = drillType ? false                  : st.overhangs
-    const useLoops    = drillType ? false                  : st.loops
-    const useSkips    = drillType ? false                  : st.skips
-    const useXover    = drillType ? drillType === 'xover'  : st.crossoverArcs
-    const useCluster  = drillType === 'cluster'
+    // What the lasso captures (single source of truth, unit-tested in
+    // selection_level.js). In drill-v2 the engaged `_selLevel` decides — the
+    // lasso captures the SAME element a click at that level would (ISSUE-4
+    // filter-audit fix for "Tab to ends, lasso grabs a cluster"). In legacy, an
+    // active auto-drill type-locks to its level; otherwise selectableTypes gates.
+    const cap = lassoCaptureType({
+      drillV2:         _drillV2,
+      selLevel:        _selLevel,
+      drillType:       _currentDrillType(),
+      selectableTypes: st,
+    })
+    const beadLevelLasso = cap.beadLevel
+    const useStrands  = cap.strands
+    const useDomains  = cap.domains
+    const useEnds     = cap.ends
+    const useOvhg     = cap.overhangs
+    const useLoops    = cap.loops
+    const useSkips    = cap.skips
+    const useXover    = cap.xover
+    const useCluster  = cap.cluster
     const cylMesh = designRenderer.getCylinderMesh()
     // Global LOD level, not mesh .visible — mixed-rep makes cylinders visible at full LOD.
     const inCylinderLOD = (designRenderer.getDetailLevel?.() ?? 0) === 2
