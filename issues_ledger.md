@@ -276,6 +276,8 @@ context-menu migration phases (which stay queued and resume after ISSUE-4's firs
   (A) default 2nd-click KEEPS the leaf (no toggle-clear); (B) crossover selection highlight unified to a green
   glow TUBE; (C) **drill-v2 flipped to DEFAULT** + filter-row gutted (no button = drill ladder, button = fixed
   level, `strand` a distinct level, Tab cycle cluster→strand→domain→end→xover→none, red `sf-pinned` removed).
+  **+ level-persistence `[x]` DONE 2026-06-06** — an engaged level now survives an empty-space/toggle-off click
+  (lit filter button stays lit until Tab/re-click; `_clearAll` emits the persisted `_selLevel` in v2).
   **STILL OPEN:** physically delete the 87 dead legacy sites (cleanup), multi-helix eyeball of the new
   behaviors, assembly-unification `[ ]`.
 
@@ -549,7 +551,9 @@ ask). Gate: vitest green + smoke + the design-selection e2e (drill_v2 + bead_sel
 > 4. **Filter row / Tab (C):** with NO button lit, clicking drills (strand→leaf). Toggle the `strand` button →
 >    every click selects the whole strand. Tab cycles cluster→strand→domain→end→xover→none(no button)→cluster.
 >    Confirm NO red box on the buttons (only the `.active` highlight).
-> 5. Report anything off. If good → proceed to the legacy-deletion cleanup.
+> 5. **Level persistence:** toggle a level (e.g. cluster), then click empty space → the button STAYS lit and the
+>    level stays engaged. It only clears when you Tab away or re-click the button.
+> 6. Report anything off. If good → proceed to the legacy-deletion cleanup.
 
 **STILL OPEN (Phase 3):**
 1. **Delete the 87 dead legacy sites** — the NEXT PICK above. Pure cleanup.
