@@ -49,6 +49,7 @@ describe('initSyncBadge', () => {
     it('prepends a row and mirrors to the matching console method', () => {
       const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
       const badge = initSyncBadge()
+      badge.showDebugPanel() // console mirror is gated on the panel being open
       badge.syncLog('info', 'SAVE', 'wrote file')
       const body = document.getElementById('sync-debug-body')
       expect(body.children.length).toBe(1)
@@ -72,6 +73,7 @@ describe('initSyncBadge', () => {
       const errSpy  = vi.spyOn(console, 'error').mockImplementation(() => {})
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       const badge = initSyncBadge()
+      badge.showDebugPanel() // console mirror is gated on the panel being open
       badge.syncLog('err', 'X', 'boom')
       badge.syncLog('warn', 'Y', 'careful')
       const body = document.getElementById('sync-debug-body')
@@ -93,12 +95,60 @@ describe('initSyncBadge', () => {
       expect(body.lastChild.querySelector('.sdp-msg').textContent).toBe('m5')
     })
 
-    it('still console-logs when the debug body is absent', () => {
+    it('still console-logs when the debug body is absent (panel open)', () => {
       document.getElementById('sync-debug-body').remove()
       const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
       const badge = initSyncBadge()
+      badge.showDebugPanel() // console mirror is gated on the panel being open
       expect(() => badge.syncLog('info', 'T', 'no body')).not.toThrow()
       expect(spy).toHaveBeenCalledWith('[SYNC][T] no body')
+    })
+  })
+
+  // ISSUE-2 sub-phase C: console output is silent by default (user-approved).
+  // The rolling panel log still accumulates so opening the panel shows history;
+  // only the console[cls] mirror is gated behind the debug flag.
+  describe('silent-by-default console (ISSUE-2 sub-phase C)', () => {
+    it('does NOT mirror to console when debug logging is off (the default)', () => {
+      const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const badge = initSyncBadge()
+      badge.syncLog('info', 'SAVE', 'wrote file')
+      expect(spy).not.toHaveBeenCalled()
+    })
+
+    it('still records the row in the panel log while silent', () => {
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+      const badge = initSyncBadge()
+      badge.syncLog('info', 'SAVE', 'wrote file')
+      const body = document.getElementById('sync-debug-body')
+      expect(body.children.length).toBe(1)
+      expect(body.firstChild.querySelector('.sdp-msg').textContent).toBe('wrote file')
+    })
+
+    it('mirrors to console once the debug panel is shown', () => {
+      const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const badge = initSyncBadge()
+      badge.showDebugPanel()
+      badge.syncLog('info', 'SAVE', 'wrote file')
+      expect(spy).toHaveBeenCalledWith('[SYNC][SAVE] wrote file')
+    })
+
+    it('falls silent again when the debug panel is hidden', () => {
+      const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const badge = initSyncBadge()
+      badge.showDebugPanel()
+      badge.hideDebugPanel()
+      badge.syncLog('info', 'SAVE', 'wrote file')
+      expect(spy).not.toHaveBeenCalled()
+    })
+
+    it('the close button also silences the console mirror', () => {
+      const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const badge = initSyncBadge()
+      badge.showDebugPanel()
+      document.getElementById('sync-debug-close').click()
+      badge.syncLog('info', 'SAVE', 'wrote file')
+      expect(spy).not.toHaveBeenCalled()
     })
   })
 

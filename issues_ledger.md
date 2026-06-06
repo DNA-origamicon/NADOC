@@ -127,8 +127,10 @@ that debt.
 
 ## ISSUE-2 — Cross-tab sync claims saved but doesn't sync (functional, data-integrity)
 
-- **Status:** propagation fix `[x]` DONE 2026-06-05. Two remaining sub-phases (user-approved):
-  badge stale-sibling indicator `[ ]`, silent-by-default sync logging `[ ]`.
+- **Status:** propagation fix `[x]` DONE 2026-06-05. Sub-phases: badge stale-sibling indicator `[ ]`;
+  silent-by-default sync logging `[x]` DONE 2026-06-05 (console mirror in `ui/sync_badge.js` `syncLog`
+  now gated on the debug panel being open — Ctrl+Shift+D / `__nadocSyncDebug.show()` enables it,
+  close/hide silences; rolling in-panel log still records every event).
 - **ROOT CAUSE (confirmed by code trace, 2026-06-05):** two independently-opened tabs get
   *different* sticky doc ids (`doc_id.js` mints one per tab in `sessionStorage`). So the fast path
   (`design-changed` BroadcastChannel) is doc-scoped out (`isSameDoc` false → `main.js` ignores it),
@@ -242,11 +244,11 @@ that debt.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-2 propagation fix shipped)._
+_Living pointer — each session overwrites this. Last updated 2026-06-05 (ISSUE-2 sub-phase C shipped)._
 
-**Recommended next: ISSUE-2 sub-phase B — "saved" badge stale-sibling indicator.** The core
-propagation fix shipped (different-doc same-file tabs now auto-sync via the un-suppressed SSE reload;
-see the ISSUE-2 dossier + fix-log row). User approved two follow-ups:
+**Recommended next: ISSUE-2 sub-phase B — "saved" badge stale-sibling indicator.** This is now the
+LAST remaining ISSUE-2 sub-phase (propagation fix + sub-phase C silent-logging both shipped — see the
+ISSUE-2 dossier + fix-log rows 2 & 3). User-approved scope:
 
 - **Sub-phase B (badge honesty, user-approved "flag stale siblings"):** the green "saved" badge must
   not imply siblings-in-sync. Needs a way to know a sibling holds a divergent copy. Leads: the existing
@@ -254,11 +256,13 @@ see the ISSUE-2 dossier + fix-log row). User approved two follow-ups:
   to compare open-file path + design version, and add a distinct badge state in `ui/sync_badge.js`
   (e.g. "saved · sibling out of sync"). Repro-pin with a `sync_badge` factory test. ASK how loud the
   signal should be (passive badge tint vs an explicit toast) only if the visual treatment is unclear.
-- **Sub-phase C (silent logging, user-approved):** gate the default-on `syncLog` SSE/SAVE/BC output
-  behind the existing Ctrl+Shift+D / `__nadocSyncDebug` flag (`ui/sync_badge.js`). Small; pin with a
-  test asserting `syncLog` no-ops unless the debug flag is set.
 
-Either is bounded and frontend-only. B is higher user value; C is the cheaper warm-up.
+Bounded and frontend-only. After B, ISSUE-2 is fully closed — move to ISSUE-1 (context menus) or
+ISSUE-4 (drill selection), both large/UX-research-heavy (Phase 1 = inventory + ask, no code).
+
+**Sub-phase C note for B:** `ui/sync_badge.js` now carries a `debugLogging` flag (tied to panel
+visibility) — if B adds a new badge state, don't disturb that gate; the console mirror must stay silent
+unless the panel is open.
 
 **Gotchas banked:**
 - **Two-context Playwright canNOT reproduce ISSUE-2.** `BroadcastChannel` does NOT cross Playwright
