@@ -48,7 +48,6 @@ import { initJointPick } from './scene/joint_pick.js'
 import { initEmptySpaceMenu } from './scene/empty_space_menu.js'
 import { initAssemblyLasso, toggleInstanceSelection } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
-import { supportedColoringSet, nextColoringMode, reprMenuState, coloringFallbackMode } from './scene/coloring_modes.js'
 import { initScaffoldModal } from './ui/scaffold_modal.js'
 import { initAutoscaffoldPicker } from './ui/autoscaffold_picker.js'
 import { initAutobreakModal } from './ui/autobreak_modal.js'
@@ -181,6 +180,7 @@ import { initPeriodicMdOverlay }    from './scene/periodic_md_overlay.js'
 import { initPeriodicMdPanel }      from './ui/periodic_md_panel.js'
 import { initMdPanel }    from './ui/md_panel.js'
 import { initReprOptionSliders } from './ui/repr_option_sliders.js'
+import { initRepresentationSwitcher } from './ui/representation_switcher.js'
 import { createPhotoRenderer } from './scene/photo_renderer.js'
 import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
@@ -6690,263 +6690,6 @@ async function main() {
   // ── Export menu (File → Export submenu) ──────────────────────────────────────
   initExportMenu({ store, api })
 
-  // ── Unified representation radio ──────────────────────────────────────────────
-  // All seven representations are mutually exclusive.  Exactly one is active at
-  // a time; switching to any one deactivates all others.
-  //
-  // Ordered least → most compute-intensive.  This is also the order shown in the
-  // View → Representation menu and the order the F1…F7 hotkeys bind to (the
-  // F-key registration loop below iterates this array, so the two stay in sync).
-  //
-  //  'hull-prism' — per-part grey boxes, aggressive culling (F1, cheapest)
-  //  'cylinders'  — domain cylinders (LOD 2)            (F2)
-  //  'beads'      — CG beads only    (LOD 1)            (F3)
-  //  'full'       — CG beads + slabs (LOD 0)            (F4)
-  //  'surface'    — molecular surface mesh              (F5)
-  //  'vdw'        — atomistic VDW space-fill            (F6)
-  //  'ballstick'  — atomistic ball-and-stick            (F7, heaviest)
-
-  const _ALL_REPRS = [
-    { id: 'menu-view-hull-prism',         repr: 'hull-prism' },
-    { id: 'menu-view-detail-cylinders',   repr: 'cylinders' },
-    { id: 'menu-view-detail-beads',       repr: 'beads'     },
-    { id: 'menu-view-detail-full',        repr: 'full'      },
-    { id: 'menu-view-surface',            repr: 'surface'    },
-    { id: 'menu-view-atomistic-vdw',      repr: 'vdw'       },
-    { id: 'menu-view-atomistic-ballstick',repr: 'ballstick' },
-  ]
-
-  // Friendly labels for the F-key shortcut descriptions (command palette / help).
-  const _REPR_LABELS = {
-    'hull-prism': 'Hull Prism',
-    cylinders:    'Cylinders',
-    beads:        'Beads',
-    full:         'Full',
-    surface:      'Surface',
-    vdw:          'VDW / Space-fill',
-    ballstick:    'Ball & Stick',
-  }
-
-  // Keep a forward-compat alias so any remaining call sites still work.
-  function _updateAtomisticRadio() {}  // no-op — superseded by _updateReprRadio
-
-  function _updateReprRadio(activeRepr) {
-    for (const { id, repr } of _ALL_REPRS) {
-      document.getElementById(id)?.classList.toggle('is-checked', repr === activeRepr)
-    }
-    _updateColoringMenuAvailability(activeRepr)
-  }
-
-  // Sync the View → Representation menu state with the current assembly's
-  // per-part representations.  Three states:
-  //   • All parts agree on a single representation → normal radio check
-  //     on that representation, no mixed-state dot.
-  //   • Parts disagree → no representation is checked AND the green dot
-  //     next to "Representation" lights up so the user knows the menu
-  //     selection is ambiguous.
-  //   • No assembly / no instances → hide the dot and leave the menu
-  //     state to design-mode handling.
-  function _syncAssemblyReprMenu(assembly) {
-    const dotEl = document.getElementById('menu-view-repr-mixed-dot')
-    const st = reprMenuState(assembly?.instances ?? [])
-    if (st.kind === 'none') {
-      if (dotEl) dotEl.style.display = 'none'
-      return
-    }
-    if (st.kind === 'single') {
-      _updateReprRadio(st.repr)
-      if (dotEl) dotEl.style.display = 'none'
-    } else {
-      // Mixed: clear every is-checked so no representation looks selected.
-      for (const { id } of _ALL_REPRS) {
-        document.getElementById(id)?.classList.remove('is-checked')
-      }
-      if (dotEl) dotEl.style.display = ''
-    }
-  }
-
-  // Per-representation support matrix for the View → Coloring submenu.
-  // Cylinders span multiple bps so 'base' is meaningless there; CPK is only
-  // meaningful on atomistic; Hull Prism has no per-strand colour at all.
-  // Surface vertices are keyed by strand_id only (no per-bp letter), so 'base'
-  // is unsupported there; 'cluster' rides on the strand→cluster colour map.
-  // Friendly labels for coloring modes — used for the toast shown when an
-  // F-key cycles coloring (the menu is closed, so the toast is the feedback).
-  const _COLORING_LABELS = {
-    strand:          'Strand color',
-    base:            'Base color',
-    cluster:         'Cluster color',
-    'overhang-only': 'Overhang highlight',
-    cpk:             'Atomic (CPK)',
-    source:          'By part / source',
-  }
-
-  // Cycle to the next coloring mode supported by `repr` (supportedColoringSet +
-  // nextColoringMode live in scene/coloring_modes.js). Invoked when an F-key is
-  // pressed again while its representation is already active. No-op for reprs
-  // with <2 options (Hull Prism has none).
-  function _cycleColoringForRepr(repr) {
-    const modes = [...supportedColoringSet(repr, store.getState().assemblyActive)]
-    const next = nextColoringMode(modes, store.getState().coloringMode || 'strand')
-    if (!next) return
-    _setColoringMode(next)
-    showToast(`Coloring: ${_COLORING_LABELS[next] ?? next}`)
-  }
-
-  function _updateColoringMenuAvailability(activeRepr) {
-    const assemblyActive = store.getState().assemblyActive
-    const supported = supportedColoringSet(activeRepr, assemblyActive)
-    const map = {
-      strand:         'menu-view-coloring-strand',
-      base:           'menu-view-coloring-base',
-      cluster:        'menu-view-coloring-cluster',
-      'overhang-only':'menu-view-coloring-overhang-only',
-      cpk:            'menu-view-coloring-cpk',
-      source:         'menu-view-coloring-source',
-    }
-    for (const [mode, id] of Object.entries(map)) {
-      const el = document.getElementById(id)
-      if (!el) continue
-      el.disabled = !supported.has(mode)
-    }
-    // If the active mode is no longer supported, fall back to an enabled one so
-    // the menu's checkmark always reflects an available item.
-    const fallback = coloringFallbackMode(
-      activeRepr, store.getState().coloringMode || 'strand', assemblyActive)
-    if (fallback) _setColoringMode(fallback)
-  }
-
-
-  async function _setRepresentation(repr) {
-    _currentRepr = repr
-    // ── Deactivate any currently active exclusive mode ────────────────────────
-    if (repr !== 'vdw' && repr !== 'ballstick' && atomisticRenderer.getMode() !== 'off') {
-      atomisticRenderer.setMode('off')
-      store.setState({ atomisticMode: 'off' })
-    }
-    if (repr !== 'surface' && _surfaceMode !== 'off') {
-      _applySurfaceMode('off')
-      store.setState({ surfaceMode: 'off' })
-    }
-    if (repr !== 'hull-prism') {
-      jointRenderer?.setHullRepr(false)
-    }
-
-    // ── Activate the new representation ──────────────────────────────────────
-    if (repr === 'full' || repr === 'beads' || repr === 'cylinders') {
-      _setCGVisible(true)
-      const lvl = { full: 0, beads: 1, cylinders: 2 }[repr]
-      overhangLinkArcs?.setRepresentation?.(repr)
-      if (lvl !== _lastDetailLevel) {
-        _lastDetailLevel = lvl
-        _lodMode = repr
-        designRenderer.setDetailLevel(lvl)
-        unfoldView?.refreshArcVisibility()
-      }
-    } else if (repr === 'vdw' || repr === 'ballstick') {
-      await _applyAtomisticMode(repr)
-      store.setState({ atomisticMode: repr })
-    } else if (repr === 'surface') {
-      await _applySurfaceMode('on')
-      store.setState({ surfaceMode: 'on' })
-    } else if (repr === 'hull-prism') {
-      _setCGVisible(false)
-      // Per-lattice default scan margin: 7 bp square / 8 bp honeycomb. Set
-      // before activating the hull so the first build uses it (no rebuild yet —
-      // hull repr isn't active until setHullRepr below).
-      const lat = store.getState().currentDesign?.lattice_type
-      jointRenderer?.setHullScanTick(lat === 'HONEYCOMB' ? 8 : 7)
-      jointRenderer?.setHullRepr(true)
-    }
-
-    _updateReprRadio(repr)
-    _reprOptionSliders(repr)
-  }
-
-  for (const { id, repr } of _ALL_REPRS) {
-    document.getElementById(id)?.addEventListener('click', async () => {
-      const { currentDesign, assemblyActive, currentAssembly } = store.getState()
-
-      // ── Assembly mode: apply repr to all instances ───────────────────────────
-      if (assemblyActive) {
-        const instances = currentAssembly?.instances ?? []
-        if (!instances.length) return
-
-        if (repr === 'vdw' || repr === 'ballstick' || repr === 'surface') {
-          const ok = await showConfirm({
-            title: repr === 'surface' ? 'Apply surface to assembly' : 'Apply atomistic to assembly',
-            message: (repr === 'surface'
-              ? 'A molecular surface will be computed for every part'
-              : 'Atomistic rendering will be computed for every part')
-              + ' in the assembly and can be slow for large designs.\n\nApply anyway?',
-            confirmLabel: 'Apply',
-          })
-          if (!ok) return
-        }
-
-        _updateReprRadio(repr)
-        _updateColoringMenuAvailability(repr)   // atomistic-in-assembly → cpk/strand/cluster/source
-        // Batch into a single PATCH so the renderer rebuilds once instead
-        // of once per instance. With 20 heavy origamis at 'cylinders' →
-        // 'full', the previous Promise.all-of-individual-PATCHes path took
-        // ~1.5 min as the renderer rebuilt each instance from a fresh
-        // network round-trip. The batched endpoint applies the rep change
-        // atomically and the renderer does an in-place LOD swap per entry
-        // (no fetch, no labels/arcs/xovers rebuild — see
-        // assembly_renderer._inPlaceHelixLodRebuild).
-        await api.batchPatchInstances(
-          instances.map(inst => ({ id: inst.id, representation: repr })),
-        )
-        return
-      }
-
-      // ── Design mode: existing single-design behaviour ────────────────────────
-      if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
-      // Choosing a global representation (View → Representation menu or an F-key) is
-      // a master reset: it clears any per-region representation overrides so the new
-      // global wins everywhere. Internal _setRepresentation calls (reset-to-full,
-      // hull-prism auto-switch on edit) bypass this handler and leave overrides intact.
-      if (currentDesign.representation_overrides?.length) {
-        await api.clearRepresentationOverrides()
-      }
-      await _setRepresentation(repr)
-    })
-  }
-
-  // ── Function-key bindings: F1…F7 → representations ────────────────────────────
-  // Bound in the same least→most compute-intensive order as _ALL_REPRS / the
-  // View → Representation menu.  First press switches to the representation;
-  // pressing the SAME key again (while that representation is already active)
-  // cycles through its available coloring modes (_COLORING_SUPPORT[repr]).
-  // The switch delegates to the menu button's click handler so the
-  // assembly-mode, confirm-dialog and disabled logic above is shared (same
-  // delegate-to-.click() pattern as the 1–6 routing hotkeys).
-  // preventDefault() suppresses the browser's default F-key actions (e.g. F1 help).
-  _ALL_REPRS.forEach(({ id, repr }, i) => {
-    registerShortcut({
-      key: `F${i + 1}`, ctrl: false, shift: false, alt: false,
-      description: `Representation: ${_REPR_LABELS[repr] ?? repr} (repeat-press cycles coloring)`,
-      blockedInInput: true, noRepeat: true,
-      handler(e) {
-        e.preventDefault()
-        const btn = document.getElementById(id)
-        if (!btn || btn.disabled) return
-        // is-checked means this representation is already the active GLOBAL one →
-        // repeat press cycles its coloring. EXCEPT when per-region representation
-        // overrides are active: the displayed structure then diverges from the
-        // nominal global rep, so the press should reset to the clean global rep
-        // (btn.click() clears overrides) rather than cycle coloring.
-        const _hasRepOverrides =
-          (store.getState().currentDesign?.representation_overrides?.length ?? 0) > 0
-        if (btn.classList.contains('is-checked') && !_hasRepOverrides) _cycleColoringForRepr(repr)
-        else                                                           btn.click()
-      },
-    })
-  })
-
-  // Initial availability (default repr = 'full' per HTML is-checked).
-  _updateColoringMenuAvailability('full')
-
   // ── Representation option sliders → ui/repr_option_sliders.js ─────────────────
   // Owns the four tuning sliders + the per-repr row-visibility (`updateForRepr`,
   // aliased so _setRepresentation's call site stays verbatim). The alias-const
@@ -6961,6 +6704,40 @@ async function main() {
     setSurfacePanelVisible: _setSurfacePanelVisible,
   })
   const _reprOptionSliders = _reprOptionSlidersCtrl.updateForRepr
+
+  // ── Unified representation switcher → ui/representation_switcher.js ────────────
+  // Owns the seven-representation radio, the Coloring-menu availability matrix,
+  // the F1…F7 hotkeys, and `_setRepresentation`. Inits AFTER `_reprOptionSliders`
+  // (its tail drives the sliders). The three aliased fns are referenced by
+  // deferred callers ABOVE this point (reset @_resetForNewDesign, hull-auto
+  // subscriber, assembly-load defaults, assembly-rebuild settle) — TDZ-safe
+  // because none fire during boot before this init (proven: `_setRepresentation`
+  // already internally calls the `_reprOptionSliders` const declared just above,
+  // so a boot-time call would already have thrown). `_currentRepr`/`_lodMode`/
+  // `_lastDetailLevel` stay main `let`s (read by the render-loop LOD tick +
+  // hull-auto) and are reached via the get/set shims below.
+  const _reprSwitcher = initRepresentationSwitcher({
+    store,
+    api,
+    atomisticRenderer,
+    designRenderer,
+    overhangLinkArcs,
+    unfoldView,
+    getJointRenderer: () => jointRenderer,
+    getSurfaceMode: () => _surfaceMode,
+    applySurfaceMode: _applySurfaceMode,
+    applyAtomisticMode: _applyAtomisticMode,
+    setCGVisible: _setCGVisible,
+    setColoringMode: _setColoringMode,
+    reprOptionSliders: _reprOptionSliders,
+    getLastDetailLevel: () => _lastDetailLevel,
+    setLastDetailLevel: (v) => { _lastDetailLevel = v },
+    setLodMode: (v) => { _lodMode = v },
+    setCurrentRepr: (v) => { _currentRepr = v },
+  })
+  const _setRepresentation    = _reprSwitcher.setRepresentation
+  const _updateReprRadio      = _reprSwitcher.updateReprRadio
+  const _syncAssemblyReprMenu = _reprSwitcher.syncAssemblyReprMenu
 
   // ── Hide Staples toggle ────────────────────────────────────────────────────────
   document.getElementById('menu-view-hide-staples')?.addEventListener('click', () => {
