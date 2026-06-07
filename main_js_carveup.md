@@ -30,7 +30,12 @@ inline, plus a couple of deliberately-deferred coupled regions. See the handoff 
    Pure cores (math, data shaping) come out as separately-tested pure functions.
 5. **Gate:** `just test-frontend` green (≥1 test per pure fn; factory tests via jsdom + mock store).
    Interactive (canvas-gesture) regions: add/extend a gesture e2e using `e2e/helpers/scene_harness.js`.
-   ALL stateful regions: one app exercise + `just smoke` before commit.
+   ALL stateful regions: one app exercise + `just smoke` before commit. **Verbatim lift → a green
+   first-run test is sufficient (the move IS the proof). ADAPTED code (shims / alias rewiring / lazy
+   arrows / any non-byte-identical change) → "green first run" is NOT proof: green-in-place-first then
+   move, or stash-rerun the new test against the old code once; note which in the log row** (main-init.md
+   step 4 has the mechanics). **"Done" = one reason to change + small dep surface (coupling/cohesion), NOT
+   a LOC drop.**
 6. One region per commit. Update this map (check the box, note the commit) + add a metrics row to the
    log. If a region turns out coupled/unsafe, log it in the difficulties ledger and move on.
 6b. **Route what you found into the right loop (do NOT let it die in the difficulties ledger):**
@@ -147,6 +152,14 @@ lifecycle spine + thin per-action wiring are *irreducible* (~2,500–3,500 ln fl
 cohesive logic clusters."** The four campaigns above ARE the remaining clusters — clear them and that target is met;
 LOC lands ~3,000 as a *result*. Genuinely-permanent inline: `_setMenuToggle` (43-use shared util — a mechanical
 import-swap, not a feature factory) and the lifecycle spine (`_resetForNewDesign`/`_enterAssemblyMode`/`_exitAssemblyMode`).
+
+**Terminal state = a composition root, and KEEPING it one is the next job.** Once the closure holds zero cohesive
+clusters, the carve-up is *done* — the residual is glue you're no longer touching, and further splitting just adds
+indirection (don't chase it; that's the diminishing-returns tail). But "done" is only stable if feature work doesn't
+re-grow the file. **Before adding any new feature, read [FEATURE_DEVELOPMENT.md](FEATURE_DEVELOPMENT.md)** — the
+module-first guardrails (Feathers' Sprout Method: new cohesive logic lands in a NEW tested module + a one-line factory
+init in main.js, never a new block in the closure). The carve-up loop and the feature loop share the same law: main.js
+only ever gains imports + factory inits + thin wiring.
 
 ---
 

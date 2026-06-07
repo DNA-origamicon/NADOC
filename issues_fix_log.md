@@ -47,6 +47,31 @@ regress anything).
   (rare: a one-line wiring tweak) or refactor. Prefer routing the fix through an extracted module.
 - **app-validated** — minutes of manual app exercise, or "USER TODO" if handed to the user.
 
+## Root-cause log (DoD field — fill one row per fixed bug)
+
+Every fix records **why the bug existed** and, if you chased a wrong fix first, **the failed hypothesis**.
+This is a DoD line in `issues_ledger.md`, not optional — it's the cheapest defense against shallow fixes
+(which show up later as reopens) and it feeds `memory/LESSONS.md` *systematically* instead of ad hoc.
+Use one 5-Whys chain, but distrust a single causal thread — three-layer/topology bugs are usually
+multi-factor (CLAUDE.md's own warning). If the bug is a *class*, add a `LESSONS.md` entry and link it here.
+
+| Issue | Root cause (5-Whys, one line) | Failed hypothesis (the "obvious fix" that was wrong, if any) | → LESSONS.md |
+|-------|-------------------------------|-------------------------------------------------------------|--------------|
+| ISSUE-3 | multi-box BoxHelper gated at ≥2 selections by design → single Ctrl-select had no visual; toggle re-clicked the active pick into a phantom size-1 set | — (root cause found on first read) | — |
+| ISSUE-2 | `file-saved` cross-tab echo guard added the path to `selfSavedPaths` with NO doc check → a different-doc sibling's genuine save read as a self-echo, reload dropped | the `_RELOAD_SUPPRESS_MS` suppression window (it only arms on *same-doc* design-changed; the failing tabs never exchanged that) | difficulties ledger (doc-id/broadcast/SSE interplay) |
+| ISSUE-5 | `properties_panel._render` had no `protein` branch → a `{type:'protein'}` selection fell through to `_renderNucleotide`, which reads nucleotide-shaped fields | — (pre-existing; surfaced by the #85 live exercise) | carve-up difficulties ledger (#85) |
+
+## Reopen tracking (the headline effectiveness metric)
+
+A reopened "fixed" bug is the direct signal that step-1 (repro-first) or the root-cause depth above was
+insufficient. Track it: when a closed issue comes back, add a line here and bump the counter.
+
+- Fully-closed issues to date: **4** (ISSUE-2/3/4/5; ISSUE-1 is multi-phase, still partial → not counted yet)
+- Reopened: **0**
+- **Reopen rate: 0 / 4 = 0%** _(target < ~10%; a rising rate means root-cause analysis is too shallow — deepen the 5-Whys before fixing)_
+
+_Reopen log (id · what came back · why the first fix was incomplete):_ _(none yet)_
+
 ## Difficulties ledger
 
 _Append a dated entry whenever a phase hits a dead-end, a surprising root cause, a flaky repro, or a

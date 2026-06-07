@@ -13,10 +13,16 @@ files carry all the state a cold session needs.
    confirms. The repro is the acceptance test.
 2. **THEN ask the user what behavior they want** (`AskUserQuestion`) — do NOT assume the fix. Several of
    these are UX-design calls, not mechanical bugs; the wrong "obvious" fix wastes a session. Ask after you
-   can demonstrate the current behavior, so the question is concrete.
+   can demonstrate the current behavior, so the question is concrete. **Capture the user's answer AS the
+   test** where you can — the agreed Given/When/Then *is* the repro from step 1 (specification by example),
+   so "what they wanted" and "what now can't regress" can't drift apart.
 3. **Implement ONE phase**, gated like the carve-up (vitest green → smoke → app exercise).
 4. **Update this ledger + the fix log** on the way out (check the phase box, correct stale notes,
-   overwrite the handoff, add a metrics row).
+   overwrite the handoff, add a metrics row). **DoD — record the root cause** (one 5-Whys line) **and the
+   failed hypothesis** if you chased a wrong fix first, in the fix-log's Root-cause log; if the bug is a
+   *class*, add a `LESSONS.md` entry. **On any reopen, log it + bump the reopen counter** — reopen rate is
+   the metric that tells you whether your repro + root-cause depth are actually working (a rising rate =
+   too-shallow 5-Whys). Distrust a single causal thread: three-layer/topology bugs are usually multi-factor.
 
 > ⚠ **Same map-trust rule as the carve-up:** the "suspected locations" under each issue are *leads to
 > verify*, not facts. Read the code and re-derive the real surface before investing. Locations were
@@ -44,7 +50,8 @@ PROTOCOL (do not skip step 1-repro or step 2-ask):
    (ui/ scene/ app/), NEVER back into the main() closure — see "Don't grow main.js" below.
 4. GATE: just test-frontend green (≥1 test pinning the fix) → just smoke → one app exercise.
 5. Update issues_ledger.md (check the phase box, fix stale notes, overwrite the handoff) +
-   add a row to issues_fix_log.md.
+   add a row to issues_fix_log.md. Record the root cause (5-Whys) + any failed hypothesis in the
+   fix-log's Root-cause log; on a reopen, bump the reopen counter. Class-of-bug → LESSONS.md.
 
 HARD RULES: git pull --rebase origin master before starting; don't push/amend; one phase per
 commit; don't touch _PHASE_*, backend topology invariants, or rendering invariants without
@@ -56,7 +63,10 @@ asking. Use `rg` not `grep` on main.js (grep treats it as binary — silently re
 ## Don't grow main.js (the prime directive of this loop)
 
 main.js is the worst structural debt in the repo and the carve-up loop is actively shrinking it
-(16.5k → 9.6k LOC). A bug-fix session must NOT undo that. Rules:
+(16.5k → ~7.5k LOC). A bug-fix session must NOT undo that. This is one instance of the project-wide
+**module-first law** that also governs feature work — see [FEATURE_DEVELOPMENT.md](FEATURE_DEVELOPMENT.md)
+(the general statement: `main.js` only ever gains imports + factory inits + thin wiring; a fix/feature
+commit leaves its LOC flat or lower). Rules:
 
 - **Fix in the module that owns the code, not in main.js.** Most of these subsystems are already
   extracted (`ui/selection_filter.js`, `scene/assembly_pointer.js`, `app/lifecycle.js`,

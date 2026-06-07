@@ -15,6 +15,20 @@ GO/NO-GO call on scaling before grinding through the whole file.
 - vitest spec count: 4 (`src/**/*.test.js`); none cover main.js
 - Backend test count: 1786
 
+## Conventions — how to read two columns (adopted 2026-06-06)
+
+- **"edits-to-green" / "green first run" is a non-signal for ADAPTED code.** A test written against the
+  *moved* code that passes first-run only proves a **verbatim** lift (byte-identical body — the cut-paste
+  is itself the proof). For **adapted** code (get/set shims, alias rewiring, lazy-arrow wrapping, anything
+  not byte-identical) "green first run" proves nothing — the test may just pin the new behavior. Prove the
+  pin: green-against-the-symbol-in-place **then** move test+code, or stash-rerun the new test against the
+  old code once. **In the row, say which** (e.g. "verbatim → green-first-run sufficient" or "adapted shim
+  → stash-reran vs old code"). *(Periodic Stryker mutation run over `src/scene`+`ui` is the objective
+  audit that a pin actually asserts behavior — out-of-band, not per-commit.)*
+- **"main.js LOC Δ" is narrative, NOT the pass criterion.** An extraction is *done* when the new module
+  has **one reason to change** + a **small, countable dep surface** (the dep list in the row) — judge by
+  coupling/cohesion. A big LOC drop with coupling unchanged only relocated the problem; report it as story.
+
 ## Metrics per extraction
 
 | # | Date | Tier | What (fn/cluster → module) | Wall-clock | main.js LOC Δ | vitest tests added | edits-to-green | manual app min | regression caught by |
