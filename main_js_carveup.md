@@ -69,18 +69,25 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-06. **STRATEGY: hardest-first, multi-commit
-campaigns — the pure-core / narrow-sub-block well is dry.** ✅✅ **FRONTIER #1 (Translate/Rotate band) COMPLETE** (#73–81).
-✅✅ **FRONTIER #2 (Representation switcher) COMPLETE** (#82–84). ✅ **#85 (this session, "keep it cheap"): Protein
-subsystem → `scene/protein_subsystem.js`** (`initProteinSubsystem({scene,store,controls,camera,canvas})→{renderer,gizmo,
-refresh,syncSelectionVisual}` — dedicated atomistic renderer + protein gizmo + coalesced `_refreshProteins` + the
-currentDesign/selectedObject subscribers + `__NADOC_DBG__` hooks). Verbatim; alias-consts keep the 3 external call sites
-(746 lazy `getProteinRenderer`, 3382 reset detach, 6687 modal `onChanged`) byte-identical; subscribers moved up to the
-init point but cross ZERO other `store.subscribe` (order preserved). main.js 7590→7518 (−72), +8 vitest → 1037, smoke
-23/23, real-app import-pdb→render-vdw→select→gizmo-attach exercise. **Found a PRE-EXISTING bug (NOT fixed, ask first):
-selecting a `{type:'protein'}` throws in `properties_panel.js` `_render`→`_renderNucleotide` (no protein branch;
-byte-identical on master).** Taken instead of the atomistic/surface CORE because the session said keep-it-cheap AND it
-de-interleaves the harder campaign below (one fewer renderer + 2 fewer subscribers in the 1768–2280 band)._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-06. **STOP CRITERION LIKELY REACHED — all
+four named hard clusters + the protein cluster are now drained.** ✅✅ FRONTIER #1 Translate/Rotate (#73–81).
+✅✅ FRONTIER #2 Representation switcher (#82–84). ✅ Protein subsystem (#85). ✅✅ **THIS SESSION #86: Atomistic/surface
+display controllers — the LAST named hard cluster — → `scene/atom_surface_display.js`** (`initAtomSurfaceDisplay({deps})`
++ pure `regionSurfaceSignature`; the global atomistic + global surface + per-region mixed-rep overlays as ONE cohesive
+factory — shared atom-data cache, strand→colour map, CG-visibility toggle, 7 subscribers, 3 region renderers; verbatim
+bodies, alias-consts keep switcher/sliders/reset byte-identical, boot-capture forward-`let` for animation+periodic-MD).
+main.js **7518→7165 (−353)**, +18 vitest → 1059, smoke 23/23, real-app F6→F5→F4 exercise zero console errors._
+
+**▶ NEXT — VERIFY TERMINAL STATE, don't assume a region.** With #86 the closure should now hold zero cohesive logic
+clusters — only the composition root (imports + ~100 factory inits + the lifecycle spine `_resetForNewDesign`/
+`_enterAssemblyMode`/`_exitAssemblyMode` + `_setMenuToggle` 43-use util + thin per-action wiring). **First job of the next
+session: PROVE that** — run the function-by-function scan that built Tier 7 (`grep -nE "^  (async )?function _?[a-zA-Z]"
+frontend/src/main.js`) and eyeball each remaining `function` for a *cohesive multi-fn block with owned state + subscribers*.
+If you find one, that's the next region (re-derive scope per the ⚠ rules). If you DON'T (expected), the carve-up is **DONE** —
+update CLAUDE.md / main-init.md to flip the phase from "stateful-subsystem extraction" to "composition-root maintenance"
+and stop. Do NOT chase LOC by splitting the lifecycle spine or `_setMenuToggle` (logged-permanent inline). The micro-scraps
+(Orbit submenu, Coloring submenu w/ 6 `_setColoringMode` callers, Browser tab title, deform→selectableTypes, Sequencing
+menu #67) are correctly inline — a `ui/menu_misc.js` junk drawer is the anti-pattern (six logged mis-scopes prove it).
 
 **STILL-OPEN latent-bug note (carried from #79/#80, now inside `translate_rotate_tool.js`):** the tool's two commit paths
 pass `_refreshClusterOverlays({ withFlexibleArcs: false })` — a cluster move with anchored ssDNA arcs arguably *should*
@@ -88,32 +95,18 @@ rebuild them like the response_delta paths do (which pass `true`). Flagged-not-f
 flipping it. Also untouched (genuinely not de-dupable): the `commitClusterPositions`+rebake reconciliation lead-in still
 differs across the standard-commit vs edit-in-place paths (oldCtById-loop vs single rebake) — different data sources.
 
-**▶ NEXT — Atomistic/surface controllers (the only remaining named cluster).** Banner `// ── Surface renderer (VdW / SES)`
-(now @1806; lines shifted −72 after #85 removed the protein block) + the atomistic controller fns interleaved ~1786–2205:
-`_applySurfaceMode`(@1823)/`_setSurfacePanelVisible`(@1818)/`_refetchAtomistic`/`_setAtomisticSlidersVisible`(@2049)/
-`_setCGVisible`(@2056)/`_ensureAtomData`(@2074)/`_applyAtomisticMode`(@2082) + `_applyRegionAtomisticOverlays`(@2137)/
-`_applyRegionSurfaceOverlay`(@2175) + the surface/atom slider listeners + the `_surfaceMode`/`_surfaceDataCache`/
-`_surfaceProbeRadius` state. **The hard part — INTERLEAVING:** these fns sit between renderer `init*` constructions
-(atomisticRenderer @1768, region vdw/ballstick @~1779, MD overlay @1787, surfaceRenderer @1807) and the store **subscribers**
-(surface cache-invalidation @~1867, live-options @~1878, atom cache-invalidation @~2105, region-overlay @~2188) whose
-*registration order matters* (CRITICAL subscription-order rule in main-init.md). **#85 already de-interleaved the protein
-renderer + its 2 subscribers out of this band — one less tangle.** So: first SEPARATE the controller fns from the
-renderer-init + subscriber wiring (leave subscribers registered at their current line), then lift ONLY the controllers as a
-factory. They're already injected into the switcher (#84) as `applyAtomisticMode`/`applySurfaceMode`/`setCGVisible`/
-`getSurfaceMode` + into repr_option_sliders (#83) as `setAtomisticSlidersVisible`/`setSurfacePanelVisible` — so the factory
-must expose exactly those as its API (keystone alias-const keeps the switcher's dep wiring byte-identical). `_setCGVisible`
-is also called by periodic-MD (@~1793) + reset (~@3322). **Want-it-first: YES** (Surface/VDW reprs are live F5/F6). Pure
-colour cores already drained (#72). Multi-commit; budget a whole session. **This is genuinely harder than #84/#85**
-(subscription-order + renderer-init interleaving) — consider it the last hard cluster before the STOP criterion. **#85's
-protein lift is the proof-of-pattern for the clean controller seam: alias-const the public fns, leave subscribers in place.**
+**OTHER STILL-OPEN flag-not-fixed (carried from #85, NOT this session's):** selecting a `{type:'protein'}` object throws
+in `properties_panel.js` `_render`→`_renderNucleotide` (no protein branch; byte-identical on master — a real user-facing
+bug, route to `issues_ledger.md` if not already). Independent of the atomistic/surface work.
 
-**Why hardest-first now.** Every remaining frontier item is HARD (gesture-bound and/or shared-state coupled). Do each as a
-deliberate campaign: (1) map coupling with `rg` first; (2) lean on the EXISTING gesture gate (below), don't re-derive;
-(3) lift verbatim; (4) alias-consts keep call sites byte-identical. **Alias-const pattern (proven in the keystone + #81):
-`const _x = _module.x` right after the factory init keeps EVERY existing call site untouched — only fn bodies relocate.**
-**Boot-capture trap (banked from #81): a dep object built ABOVE the factory init that passes a tool fn *by value*
-(`onX: _toolFn`) hits TDZ on the forward alias-const → wrap as a lazy arrow `(...a) => _toolFn(...a)`.** Deferred-closure
-call sites (handler bodies, subscribers) can reference the forward const directly. Budget a whole session per campaign.
+**Reusable extraction patterns (banked, proven through #86 — keep for any residual lift the scan turns up).** (1) **Alias-const:**
+`const _x = _module.x` right after the factory init keeps EVERY existing call site byte-identical — only fn bodies relocate.
+(2) **Boot-capture trap (#81/#86):** a dep object built ABOVE the factory init that passes a fn *by value* (`onX: _toolFn`)
+hits TDZ on a forward alias-const → wrap as a lazy arrow `(...a) => _module.x(...a)`, or reference a forward `let _module = null`
+inside deferred callbacks. (3) **Subscribers move WITH the factory** and register at its init point — fine as long as they don't
+leapfrog a *foreign* subscriber that co-fires on the same store key (verify with the registration-order analysis, #86 did this
+for Phase 3d-A). (4) **Done = coupling+cohesion, not LOC** — one reason to change + a small dep surface; a big shared-state block
+(shared cache / shared helper) is ONE module even if >250 ln (splitting fragments the shared state, #86).
 
 <details><summary>Prior detail on frontier #1 (kept for reference)</summary>
 
@@ -771,15 +764,21 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   by #83); shared lets `_currentRepr`/`_lastDetailLevel`/`_lodMode` stay main + get/set shims; atomistic/surface `_apply*` +
   `_setColoringMode` injected directly (hoisted decls above the init point — the "option-3-first shrinks deps" prediction
   proved unnecessary). Dropped the dead `coloring_modes` import + the dead `_updateAtomisticRadio` no-op.
-- [~] **Atomistic / surface display controllers (hardest-first item 3)** — `_applyAtomisticMode`/`_refetchAtomistic`/`_getAtom*`/
-  `_ensureAtomData`/`_applySurfaceMode`/region overlays, scattered ~1893–2418 (interleaved with renderer init
-  banners ~1846/1957/2342). Risk: **HARD** — interleaved with renderer construction; re-derive the function set
-  vs the init wiring before lifting. **PURE CORE DRAINED (#72, commit a630efd):** `_getAtomStrandColors`'s
-  colour-mapping body → `computeAtomStrandColors(state, staplePalette)` in `scene/color_util.js` (+`ATOM_STAPLE_PALETTE`);
-  −61 ln; 9 vitest. `_getAtomBaseColors` left inline (already a 3-line pure-delegating wrapper over the
-  extracted `atomColorsFromLetters` — not worth a module). The remaining controllers are the HARD stateful
-  renderer-wiring (`_applyAtomisticMode`/`_applySurfaceMode`/`_refetchAtomistic`/`_ensureAtomData` + the region
-  overlays), still interleaved with renderer construction.
+- [x] **Atomistic / surface display controllers (hardest-first item 3) — DONE 2026-06-06 (#86, commit 43f191b).**
+  The whole atomistic (Phase AA) + VdW/SES surface + per-region mixed-rep overlay subsystem → `scene/atom_surface_display.js`
+  factory `initAtomSurfaceDisplay({scene,store,api,designRenderer,atomisticRenderer,surfaceRenderer,unfoldView,
+  overhangLinkArcs,setColoringMode})` + pure export `regionSurfaceSignature`. main.js 7518→7165 (**−353**), +18 vitest
+  → 1059, smoke 23/23, real-app F6 VDW→F5 Surface→F4 Full exercise zero console errors. Verbatim bodies; the
+  INTERLEAVING worry resolved by keeping `atomisticRenderer`+`surfaceRenderer` in main (shared with animation/MD/switcher,
+  injected) and moving the 3 region-overlay renderers + all 7 subscribers into the factory at the original spot
+  (registration order preserved; the only crossed foreign sub is Phase 3d-A, order-invariant — co-fires only with the
+  strand-colour sub that stays ahead of it). Alias-consts keep the switcher #84 / repr_option_sliders #83 / reset-spine
+  call sites byte-identical; boot-capture (#81) handled the animation player + periodic-MD via a forward `let _atomSurface`.
+  Pure colour core was already drained in #72. **The handoff's prior "separate the controller fns from the renderer-init
+  + subscriber wiring first, then lift only the controllers" plan was over-cautious** — a single verbatim factory lift
+  (state+fns+subscribers together) was cleaner because the shared atom-data cache + `_getAtomStrandColors` + `_setCGVisible`
+  make global-atomistic / global-surface / region-overlays ONE cohesive subsystem; splitting them would have fragmented
+  the cache. See log row #86 for the full dep + ordering proof.
 - [x] **Translate/Rotate tool (hardest-first item 1, AFTER the keystone) — DONE.** Sub-blocks de-lumped:
   response-delta → `scene/response_delta.js` (#76, 8dbdbaf, −196); cluster-pick helpers → `scene/joint_pick.js`
   (#77, 9b06574, −38); the `_mr*` panel SHELL → `scene/move_rotate_panel.js` (#78, cedbc83, −134); de-dups (#79/#80).
