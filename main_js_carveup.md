@@ -69,30 +69,33 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-06. **TERMINAL-STATE SCAN RUN — NOT yet
-reached; small residual cohesive scraps remain.** The four named hard clusters + protein + atomistic/surface are ALL
-drained (#73–86). This session ran the function-by-function scan (`grep -nE "^  (async )?function _?[a-zA-Z]"`) the
-prior handoff asked for and found the closure is NOT pure composition-root yet — a few small *cohesive multi-fn blocks*
-survive. Took the cheapest one. ✅ **THIS SESSION #87: file-load progress overlay → `ui/file_load_dialog.js`**
-(`initFileLoadDialog()→{show,hide,setProgress,appendLog,expandDetails,showSuccess,showError}`; 8 DOM refs + `_flLogOpen`
-+ details-toggle listener + 7 fns; VERBATIM, ZERO store/api/scene deps — only DOM + setTimeout; alias-consts keep boot
-+ file-open call sites byte-identical; `_flMenuBtn`→welcome bridge stays inline). main.js **7165→7105 (−60)**, +8 vitest
-→ 1067, smoke 23/23._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-06. **TERMINAL-STATE SCAN — one residual
+cohesive scrap left (co-editing); after it, re-scan and likely flip to composition-root maintenance.** The four named
+hard clusters + protein + atomistic/surface are ALL drained (#73–86). ✅ **THIS SESSION #88: blunt-end panel + ctx menus
+→ `ui/blunt_end_menus.js`** (`initBluntEndMenus({store, api, slicePlane, expandedSpacing, deformView, clusterDeformGuard})
+→{showPanel, hidePanel, showCtx, hideCtx}`; the sidebar action panel + right-click ctx menu sharing the Extrude/Bend/Twist
+action set over a captured domain-end info object — the candidate-2 scrap, CONFIRMED cohesive). VERBATIM handler bodies
+(clusterDeformGuard aliased to the hoisted `_clusterDeformGuard`); 3 external call sites rewired (2 initDomainEnds
+callbacks + `_resetForNewDesign` teardown); the interleaved scaffold-split ctx + overhang-orientation init stayed inline
+(separate concerns — the "3 independent panel pairs" worry was right for THOSE two, wrong for the blunt pair which is one
+subsystem). Dropped dead `startToolAtBp` import. main.js **7105→6965 (−140)**, +15 vitest → 1082, smoke 23/23 (teardown
+gate drives hidePanel). Live domain-end click gesture not hand-driven → MV row._
 
-**▶ NEXT — two residual cohesive scraps the scan surfaced (pick the cheaper; both are real, NOT the spine):**
-1. **Co-editing / doc-presence cluster** (~6940–7045, Tier 5 session infra) — `_editorRegistry` Map + `_renderEditorDropdown`
-   + the `_otherTabDocs`/`_lastAnnouncedDesignId`/`_docClobberWarned` state + `_announceDocPresence`/`_refreshCoediting`/
-   `_maybeWarnDocClobber` + a `store.subscribe` + several `nadocBroadcast` emits/handlers. A genuine cohesive subsystem
-   (multi-doc clobber-warning + editor-tab registry). **HIGH blast radius** (BroadcastChannel handlers may be registered
-   ELSEWHERE — grep `nadocBroadcast.on` for all `editor-*`/`doc-presence*` listeners before lifting; the emits here pair
-   with handlers that must move or stay consistent). Factory `initCoediting({store, getDocId, getWorkspacePath, syncBadge})`.
-   Re-derive scope (⚠) — the BroadcastChannel wiring is the trap.
-2. **Blunt-end / extrude context menus** (~2239–2470) — `_showBluntPanel`/`_hideBluntPanel`/`_showScaffoldSplitCtx`/
-   `_hideScaffoldSplitCtx`/`_showBluntCtx`/`_hideBluntCtx`/`_bluntExtrude` + their DOM refs. Mostly DOM show/hide + one
-   async extrude action; verify cohesion (do they share state, or are they 3 independent panel pairs? — if independent,
-   that's a junk-drawer trap, leave inline). Cheaper if cohesive.
+**▶ NEXT — ONE residual cohesive scrap remains (the candidate-1 the scan surfaced; NOT the spine):**
+1. **Co-editing / doc-presence cluster** (banners `// ── Editor tab registry` + `// ── Interim multi-document guard`,
+   ~6885–6985 now) — `_editorRegistry` Map + `_renderEditorDropdown` + the `_otherTabDocs`/`_lastAnnouncedDesignId`/
+   `_docClobberWarned` state + `_announceDocPresence`/`_refreshCoediting`/`_maybeWarnDocClobber` + a `store.subscribe` +
+   several `nadocBroadcast.emit`. A genuine cohesive subsystem (multi-doc clobber-warning + editor-tab registry).
+   **HIGH blast radius / THE TRAP (verified this session):** the co-edit *handlers* are NOT separate `nadocBroadcast.on`
+   listeners — they're `if (type === 'doc-presence'…)` branches interleaved inside ONE giant `nadocBroadcast.subscribe`
+   type-dispatch (~6785–6883) that ALSO handles file-saved / design-changed / selection-changed / part-design-updated /
+   session-closed (all non-coediting). To extract cleanly you must EITHER split that dispatcher (move the ~6 co-edit
+   branches into the module + have it register its own subscribe, preserving order) OR expose the module's handlers and
+   call them from the branches (thinner, keeps the dispatcher). The emits (`editor-list-request`/`doc-presence-request`/
+   `doc-presence`/`doc-goodbye`) + the `store.subscribe` that re-announces on design change move WITH the module.
+   Factory `initCoediting({store, getDocId, getWorkspacePath, syncBadge})→{handleMessage, announce, …}`. Re-derive scope (⚠).
 
-After those two, re-run the scan; if nothing cohesive remains, THEN flip the phase to "composition-root maintenance"
+After it, re-run the scan; if nothing cohesive remains, THEN flip the phase to "composition-root maintenance"
 (CLAUDE.md / main-init.md) and stop. Do NOT split the lifecycle spine (`_resetForNewDesign`/`_enterAssemblyMode`/
 `_exitAssemblyMode`/`_setMenuToggle`) or build a `ui/menu_misc.js` junk drawer (six logged mis-scopes prove it).
 
