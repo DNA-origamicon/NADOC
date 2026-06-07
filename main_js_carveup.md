@@ -55,13 +55,16 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 _Living pointer — each session overwrites this (step 7). Last updated 2026-06-06. **STRATEGY: hardest-first, multi-commit
 campaigns — the pure-core / narrow-sub-block well is dry.** ✅✅ **FRONTIER #1 (Translate/Rotate band) COMPLETE** (#73–81).
-✅✅ **FRONTIER #2 (Representation switcher) COMPLETE** (#82–84). #84 (commit 195259b) lifted the switcher CORE →
-`ui/representation_switcher.js` (`initRepresentationSwitcher` — the seven-repr radio, Coloring-menu availability matrix,
-F1–F7 hotkeys, `_setRepresentation`; −258/+35 main.js 7813→7590, +24 vitest → 1029, smoke 23/23, real-app F2→F3→F1→F4
-switch exercise). The three aliased fns (`_setRepresentation`/`_updateReprRadio`/`_syncAssemblyReprMenu`) are forward
-consts; shared lets `_currentRepr`/`_lodMode`/`_lastDetailLevel` stay main + get/set shims; atomistic/surface `_apply*`
-+ `_setColoringMode` injected. The predicted "option 3 first shrinks deps" turned out UNNECESSARY — the `_apply*` fns are
-hoisted decls already above the init point, so they inject directly without needing the controllers modularized first._
+✅✅ **FRONTIER #2 (Representation switcher) COMPLETE** (#82–84). ✅ **#85 (this session, "keep it cheap"): Protein
+subsystem → `scene/protein_subsystem.js`** (`initProteinSubsystem({scene,store,controls,camera,canvas})→{renderer,gizmo,
+refresh,syncSelectionVisual}` — dedicated atomistic renderer + protein gizmo + coalesced `_refreshProteins` + the
+currentDesign/selectedObject subscribers + `__NADOC_DBG__` hooks). Verbatim; alias-consts keep the 3 external call sites
+(746 lazy `getProteinRenderer`, 3382 reset detach, 6687 modal `onChanged`) byte-identical; subscribers moved up to the
+init point but cross ZERO other `store.subscribe` (order preserved). main.js 7590→7518 (−72), +8 vitest → 1037, smoke
+23/23, real-app import-pdb→render-vdw→select→gizmo-attach exercise. **Found a PRE-EXISTING bug (NOT fixed, ask first):
+selecting a `{type:'protein'}` throws in `properties_panel.js` `_render`→`_renderNucleotide` (no protein branch;
+byte-identical on master).** Taken instead of the atomistic/surface CORE because the session said keep-it-cheap AND it
+de-interleaves the harder campaign below (one fewer renderer + 2 fewer subscribers in the 1768–2280 band)._
 
 **STILL-OPEN latent-bug note (carried from #79/#80, now inside `translate_rotate_tool.js`):** the tool's two commit paths
 pass `_refreshClusterOverlays({ withFlexibleArcs: false })` — a cluster move with anchored ssDNA arcs arguably *should*
@@ -69,20 +72,24 @@ rebuild them like the response_delta paths do (which pass `true`). Flagged-not-f
 flipping it. Also untouched (genuinely not de-dupable): the `commitClusterPositions`+rebake reconciliation lead-in still
 differs across the standard-commit vs edit-in-place paths (oldCtById-loop vs single rebake) — different data sources.
 
-**▶ NEXT — Atomistic/surface controllers (the only remaining named cluster).** Banners `// ── Surface renderer (VdW / SES)`
-(~1878) + the atomistic controller fns interleaved 1858–2280: `_applySurfaceMode`/`_setSurfacePanelVisible`/`_refetchAtomistic`/
-`_setAtomisticSlidersVisible`/`_setCGVisible`/`_ensureAtomData`/`_applyAtomisticMode` + `_applyRegionAtomisticOverlays`/
-`_applyRegionSurfaceOverlay` + the surface/atom slider listeners + the `_surfaceMode`/`_surfaceDataCache`/`_surfaceProbeRadius`
-state. **The hard part — INTERLEAVING:** these fns sit between renderer `init*` constructions (atomisticRenderer @1768, MD
-overlay @1859, surfaceRenderer @1879) and ~4 store **subscribers** (surface cache-invalidation @1939, live-options @1950,
-slice/blunt below) whose *registration order matters* (CRITICAL subscription-order rule in main-init.md). So: first SEPARATE
-the controller fns from the renderer-init + subscriber wiring (leave subscribers registered at their current line), then lift
-ONLY the controllers as a factory. They're now injected into the switcher (#84) as `applyAtomisticMode`/`applySurfaceMode`/
-`setCGVisible`/`getSurfaceMode` + into repr_option_sliders (#83) as `setAtomisticSlidersVisible`/`setSurfacePanelVisible` —
-so the factory must expose exactly those as its API (keystone alias-const keeps the switcher's dep wiring byte-identical).
-`_setCGVisible` is also called by periodic-MD (@1865, @3394) + reset (@3394). **Want-it-first: YES** (Surface/VDW reprs are
-live F5/F6). Pure colour cores already drained (#72). Multi-commit; budget a whole session. **This is genuinely harder than
-#84** (subscription-order + renderer-init interleaving) — consider it the last hard cluster before the STOP criterion.
+**▶ NEXT — Atomistic/surface controllers (the only remaining named cluster).** Banner `// ── Surface renderer (VdW / SES)`
+(now @1806; lines shifted −72 after #85 removed the protein block) + the atomistic controller fns interleaved ~1786–2205:
+`_applySurfaceMode`(@1823)/`_setSurfacePanelVisible`(@1818)/`_refetchAtomistic`/`_setAtomisticSlidersVisible`(@2049)/
+`_setCGVisible`(@2056)/`_ensureAtomData`(@2074)/`_applyAtomisticMode`(@2082) + `_applyRegionAtomisticOverlays`(@2137)/
+`_applyRegionSurfaceOverlay`(@2175) + the surface/atom slider listeners + the `_surfaceMode`/`_surfaceDataCache`/
+`_surfaceProbeRadius` state. **The hard part — INTERLEAVING:** these fns sit between renderer `init*` constructions
+(atomisticRenderer @1768, region vdw/ballstick @~1779, MD overlay @1787, surfaceRenderer @1807) and the store **subscribers**
+(surface cache-invalidation @~1867, live-options @~1878, atom cache-invalidation @~2105, region-overlay @~2188) whose
+*registration order matters* (CRITICAL subscription-order rule in main-init.md). **#85 already de-interleaved the protein
+renderer + its 2 subscribers out of this band — one less tangle.** So: first SEPARATE the controller fns from the
+renderer-init + subscriber wiring (leave subscribers registered at their current line), then lift ONLY the controllers as a
+factory. They're already injected into the switcher (#84) as `applyAtomisticMode`/`applySurfaceMode`/`setCGVisible`/
+`getSurfaceMode` + into repr_option_sliders (#83) as `setAtomisticSlidersVisible`/`setSurfacePanelVisible` — so the factory
+must expose exactly those as its API (keystone alias-const keeps the switcher's dep wiring byte-identical). `_setCGVisible`
+is also called by periodic-MD (@~1793) + reset (~@3322). **Want-it-first: YES** (Surface/VDW reprs are live F5/F6). Pure
+colour cores already drained (#72). Multi-commit; budget a whole session. **This is genuinely harder than #84/#85**
+(subscription-order + renderer-init interleaving) — consider it the last hard cluster before the STOP criterion. **#85's
+protein lift is the proof-of-pattern for the clean controller seam: alias-const the public fns, leave subscribers in place.**
 
 **Why hardest-first now.** Every remaining frontier item is HARD (gesture-bound and/or shared-state coupled). Do each as a
 deliberate campaign: (1) map coupling with `rg` first; (2) lean on the EXISTING gesture gate (below), don't re-derive;
