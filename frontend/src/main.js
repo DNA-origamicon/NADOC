@@ -64,10 +64,11 @@ import { initSelectionFilter } from './ui/selection_filter.js'
 import { initPropertiesPanel } from './ui/properties_panel.js'
 import { initOverhangBindingMenu } from './ui/overhang_binding_menu.js'
 import { initOverhangOrientationMenu } from './ui/overhang_orientation_menu.js'
+import { initBluntEndMenus } from './ui/blunt_end_menus.js'
 import { createScriptRunner }  from './ui/script_runner.js'
 import { store, popGroupUndo } from './state/store.js'
 import * as api                from './api/client.js'
-import { initDeformationEditor, startTool, startToolAtBp, startToolForEdit as startDeformToolForEdit,
+import { initDeformationEditor, startTool, startToolForEdit as startDeformToolForEdit,
          isActive as isDeformActive,
          handlePointerMove as deformPointerMove,
          handlePointerDown as deformPointerDown,
@@ -2231,23 +2232,11 @@ async function main() {
       'SLICE PLANE — drag handle to reposition · Esc to close'
   }
 
-  // ── Blunt end sidebar panel ──────────────────────────────────────────────────
-  const _bluntPanel        = document.getElementById('blunt-panel-actions')
-  const _bluntPanelEmpty   = document.getElementById('blunt-panel-empty')
-  const _bluntPanelInfo    = document.getElementById('blunt-panel-info')
-  let   _domainEndInfo     = null  // { helixId, bp, diskBp, openSide, plane, offsetNm, hasDeformations }
-
-  function _showBluntPanel(info) {
-    _domainEndInfo = info
-    if (_bluntPanelEmpty)  _bluntPanelEmpty.style.display  = 'none'
-    if (_bluntPanelInfo)   _bluntPanelInfo.textContent = `helix ${info.helixId}  bp ${info.bp}`
-    if (_bluntPanel)       _bluntPanel.style.display = 'block'
-  }
-  function _hideBluntPanel() {
-    _domainEndInfo = null
-    if (_bluntPanel)      _bluntPanel.style.display      = 'none'
-    if (_bluntPanelEmpty) _bluntPanelEmpty.style.display = ''
-  }
+  // ── Blunt end menus (sidebar panel + right-click ctx) → ui/blunt_end_menus.js (#88)
+  const _bluntMenus = initBluntEndMenus({
+    store, api, slicePlane, expandedSpacing, deformView,
+    clusterDeformGuard: _clusterDeformGuard,
+  })
 
   // ── Scaffold strand right-click context menu ────────────────────────────────
   const _scafSplitCtx  = document.getElementById('scaffold-split-ctx-menu')
@@ -2304,142 +2293,13 @@ async function main() {
     overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem,
   })
 
-  // ── Blunt end right-click context menu ──────────────────────────────────────
-  const _bluntCtx = document.getElementById('blunt-end-ctx-menu')
-  let _domainEndCtxInfo = null  // { helixId, bp, diskBp, openSide, plane, offsetNm, hasDeformations }
-
-  function _showBluntCtx(x, y, info) {
-    _domainEndCtxInfo = info
-    if (_bluntCtx) {
-      _bluntCtx.style.left = `${x}px`
-      _bluntCtx.style.top  = `${y}px`
-      _bluntCtx.style.display = 'block'
-    }
-  }
-  function _hideBluntCtx() {
-    if (_bluntCtx) _bluntCtx.style.display = 'none'
-    _domainEndCtxInfo = null
-  }
-
-  document.addEventListener('pointerdown', e => {
-    if (_bluntCtx?.style.display !== 'none' && !_bluntCtx.contains(e.target)) _hideBluntCtx()
-  })
-
-  async function _bluntExtrude() {
-    const info = _domainEndInfo   // capture before _hideBluntPanel nulls it
-    _hideBluntPanel()
-    if (!info) return
-    const { plane, helixId, hasDeformations } = info
-    // Anchor the continuation on the helix's axis endpoint, not the between-index
-    // disk slot.  axis_end sits one rise PAST the last bp (so far end: diskBp=bp+1),
-    // but axis_start sits AT the first bp (so near end must use bp, not bp-1).
-    //   near (openSide -1) → bp        far (openSide +1) → bp+1 (= diskBp)
-    // Default the ±dir to "away from the body" (openSide): minus for near, plus for far.
-    const continuationBp = info.bp + Math.max(0, info.openSide)
-    store.setState({ currentPlane: plane })
-    expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
-    const { deformVisuActive } = store.getState()
-    if (hasDeformations && deformVisuActive) {
-      const frame = await api.getDeformedFrame(continuationBp, helixId)
-      if (frame) {
-        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId, defaultDirSign: info.openSide })
-        document.getElementById('mode-indicator').textContent =
-          'DEFORMED CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
-        return
-      }
-    }
-    slicePlane.showAtEnd(helixId, continuationBp, true, { defaultDirSign: info.openSide })
-    document.getElementById('mode-indicator').textContent =
-      'CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
-  }
-
-  document.getElementById('blunt-extrude-btn')?.addEventListener('click', _bluntExtrude)
-  document.getElementById('blunt-bend-btn')?.addEventListener('click', () => {
-    const info = _domainEndInfo
-    _hideBluntPanel()
-    if (!info) return
-    if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
-      showToast('Switch back to deformed view (View → Deformed View) before adding further deformations.', { severity: 'error' })
-      return
-    }
-    if (!_clusterDeformGuard()) return
-    startToolAtBp('bend', info.helixId, info.bp, info.openSide)
-    document.getElementById('mode-indicator').textContent =
-      'BEND — drag planes to adjust segment · apply in popup · Esc to cancel'
-  })
-  document.getElementById('blunt-twist-btn')?.addEventListener('click', () => {
-    const info = _domainEndInfo
-    _hideBluntPanel()
-    if (!info) return
-    if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
-      showToast('Switch back to deformed view (View → Deformed View) before adding further deformations.', { severity: 'error' })
-      return
-    }
-    if (!_clusterDeformGuard()) return
-    startToolAtBp('twist', info.helixId, info.bp, info.openSide)
-    document.getElementById('mode-indicator').textContent =
-      'TWIST — drag planes to adjust segment · apply in popup · Esc to cancel'
-  })
-
-  // ── Context menu button wiring (right-click blunt end) ────────────────────
-  document.getElementById('blunt-extrude-btn-ctx')?.addEventListener('click', async () => {
-    const info = _domainEndCtxInfo
-    _hideBluntCtx()
-    if (!info) return
-    const { plane, helixId, hasDeformations } = info
-    // See _bluntExtrude: anchor on the axis endpoint (near→bp, far→bp+1) and default
-    // the ±dir to "away from the body" (openSide).
-    const continuationBp = info.bp + Math.max(0, info.openSide)
-    store.setState({ currentPlane: plane })
-    expandedSpacing.forceOff()   // expanded spacing off while slice plane is active
-    const { deformVisuActive } = store.getState()
-    if (hasDeformations && deformVisuActive) {
-      const frame = await api.getDeformedFrame(continuationBp, helixId)
-      if (frame) {
-        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId, defaultDirSign: info.openSide })
-        document.getElementById('mode-indicator').textContent =
-          'DEFORMED CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
-        return
-      }
-    }
-    slicePlane.showAtEnd(helixId, continuationBp, true, { defaultDirSign: info.openSide })
-    document.getElementById('mode-indicator').textContent =
-      'CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
-  })
-  document.getElementById('blunt-bend-btn-ctx')?.addEventListener('click', () => {
-    const info = _domainEndCtxInfo
-    _hideBluntCtx()
-    if (!info) return
-    if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
-      showToast('Switch back to deformed view (View → Deformed View) before adding further deformations.', { severity: 'error' })
-      return
-    }
-    if (!_clusterDeformGuard()) return
-    startToolAtBp('bend', info.helixId, info.bp, info.openSide)
-    document.getElementById('mode-indicator').textContent =
-      'BEND — drag planes to adjust segment · apply in popup · Esc to cancel'
-  })
-  document.getElementById('blunt-twist-btn-ctx')?.addEventListener('click', () => {
-    const info = _domainEndCtxInfo
-    _hideBluntCtx()
-    if (!info) return
-    if (!deformView.isActive() && store.getState().currentDesign?.deformations?.length) {
-      showToast('Switch back to deformed view (View → Deformed View) before adding further deformations.', { severity: 'error' })
-      return
-    }
-    if (!_clusterDeformGuard()) return
-    startToolAtBp('twist', info.helixId, info.bp, info.openSide)
-    document.getElementById('mode-indicator').textContent =
-      'TWIST — drag planes to adjust segment · apply in popup · Esc to cancel'
-  })
-
   // ── Blunt end indicators ─────────────────────────────────────────────────────
   const bluntEnds = initDomainEnds(scene, camera, canvas, {
     onDomainEndClick: (info) => {
-      _showBluntPanel(info)
+      _bluntMenus.showPanel(info)
     },
     onDomainEndRightClick: ({ clientX, clientY, ...info }) => {
-      _showBluntCtx(clientX, clientY, info)
+      _bluntMenus.showCtx(clientX, clientY, info)
     },
     // Block blunt-end picking whenever a gizmo or modal tool is in front of
     // the user. Deform / cluster-gizmo / unfold all paint geometry that the
@@ -2955,7 +2815,7 @@ async function main() {
     crossSectionMinimap.hide()
     sliceHighlighter.clear()
     bluntEnds.clear()
-    _hideBluntPanel()
+    _bluntMenus.hidePanel()
     _setMenuToggle('menu-view-slice', false)
     viewLegends.reset()
     if (periodicMdOverlay.isApplied()) _setCGVisible(true)
