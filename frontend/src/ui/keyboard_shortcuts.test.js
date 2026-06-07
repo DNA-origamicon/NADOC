@@ -436,21 +436,21 @@ describe('initKeyboardShortcuts — drill v2 (selectionLevel) Tab/Escape', () =>
     return d
   }
 
-  it('Tab cycles the unified selectionLevel default→cluster→strand→…', async () => {
+  it('Tab cycles the unified selectionLevel default→strand→domain→… (cluster excluded)', async () => {
     const d = makeV2Deps('default')
     initKeyboardShortcuts(d)
     await press('Tab')
-    expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('cluster')
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('strand')
   })
 
-  it('Tab cluster→strand (strand is now in the cycle)', async () => {
+  it('Tab from cluster restarts at strand (cluster is button-only, not in the cycle)', async () => {
     const d = makeV2Deps('cluster')
     initKeyboardShortcuts(d)
     await press('Tab')
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('strand')
   })
 
-  it('Tab wraps xover→none(default), then default→cluster', async () => {
+  it('Tab wraps xover→none(default), then default→strand', async () => {
     const d = makeV2Deps('xover')
     initKeyboardShortcuts(d)
     await press('Tab')

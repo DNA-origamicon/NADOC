@@ -11,9 +11,11 @@
 //   strand → every click selects the whole clicked strand (no leaf drill).
 //   cluster | domain | end | xover → every click selects at that FIXED level.
 //
-// Tab cycles cluster → strand → domain → end → xover → none(default) → cluster.
-// Escape returns to `default`. The #select-filter level buttons drive the SAME
-// state (clust/strand/line/ends/xover); no button lit = `default`.
+// Tab cycles strand → domain → end → xover → none(default) → strand. Escape returns
+// to `default`. The #select-filter level buttons drive the SAME state
+// (clust/strand/line/ends/xover); no button lit = `default`. CLUSTER is reached via
+// its button ONLY — removed from the Tab cycle 2026-06-07 (rarely used: only for
+// repositioning in dynamic parts, after staple routing is mostly done).
 //
 // This is the only selection model — the legacy auto-drill ladder / manual filter
 // pins / Tab drill-lock were physically deleted 2026-06-06 (there is no flag any
@@ -22,9 +24,10 @@
 // Everything here is pure (no DOM / scene / store) so it unit-tests directly.
 
 export const LEVELS    = ['default', 'cluster', 'strand', 'domain', 'end', 'xover']
-// Tab cycles cluster → strand → domain → end → xover → none(default) → cluster.
-// `default` = no button engaged = the drill ladder (user model 2026-06-06).
-export const TAB_CYCLE = ['cluster', 'strand', 'domain', 'end', 'xover', 'default']
+// Tab cycles strand → domain → end → xover → none(default) → strand. Cluster is NOT
+// in the cycle (button-only access, 2026-06-07). `default` = no button engaged = the
+// drill ladder (user model 2026-06-06).
+export const TAB_CYCLE = ['strand', 'domain', 'end', 'xover', 'default']
 
 // Filter-button dataKey ↔ selectionLevel. `strand` is now a DISTINCT fixed level
 // (every click → whole strand), separate from `default` (no button = drill ladder).

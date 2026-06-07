@@ -276,6 +276,10 @@ async function main() {
       designRenderer,
       get unfoldView() { return unfoldView },
 
+      // Crossover-tube validation metric — select a crossover, then call this to read
+      // the LIVE tube geometry (sides / completeness / NaN). See getSelectionArcTubeStats.
+      tubeStats: () => designRenderer.getSelectionArcTubeStats(),
+
       /**
        * Track-B diagnostic. Pre-conditions:
        *   1. window.NADOC_DBG_RENDER_TRACE = true   (BEFORE the assembly built)

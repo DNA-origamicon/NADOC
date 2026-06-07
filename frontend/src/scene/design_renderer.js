@@ -41,25 +41,38 @@ export function initDesignRenderer(scene, storeRef) {
   const _glowLayer         = createGlowLayer(scene)
   // Undefined-bases highlight: red, ~2× the selection glow size
   const _undefinedGlowLayer = createGlowLayer(scene, 0xff3030, 5.6)
-  // Drill-v2 hover preview: red glow on the would-be-selected leaf (vs the green
-  // selection glow). Larger than the green so its halo reads red over a selected
+  // Drill-v2 hover preview: yellow glow on the would-be-selected leaf (vs the green
+  // selection glow). Larger than the green so its halo reads yellow over a selected
   // (green-glowing) strand. Named so gesture e2e can detect it.
-  const _previewGlowLayer = createGlowLayer(scene, 0xff2a2a, 4.2, 'previewGlow')
-  // Drill-v2 hover preview for a crossover ARC: a red additive glow TUBE traced
+  const _previewGlowLayer = createGlowLayer(scene, 0xffe000, 4.2, 'previewGlow')   // yellow hover preview
+  // Drill-v2 hover preview for a crossover ARC: a yellow additive glow TUBE traced
   // along the arc polyline (the arc is a thin line — a midpoint sphere reads wrong).
-  const PREVIEW_ARC_RADIUS = 0.3   // nm — tube radius
+  const PREVIEW_ARC_RADIUS = 0.147  // nm — tube radius (0.21 then −30% again, 2026-06-07)
+  const SELECTION_ARC_RADIUS = PREVIEW_ARC_RADIUS   // green selection tube matches the yellow preview
+  // Tube tessellation, doubled 2026-06-07 (user: "twice the polygons/resolution")
+  // so the crossover tube reads as a smooth full cylinder, not a low-poly hex prism.
+  const ARC_TUBE_RADIAL = 12                          // radial segments (was 6)
+  const _arcTubeSegs = (n) => Math.max(16, n * 4)     // tubular segments (was max(8, n*2))
   let _previewArcTube = null
+  // depthTest:false so the whole tube draws on top — otherwise segments behind the
+  // DNA beads/slabs are occluded and the tube looks broken from some angles.
   const _previewArcMat = new THREE.MeshBasicMaterial({
-    color: 0xff2a2a, transparent: true, opacity: 0.55,
-    blending: THREE.AdditiveBlending, depthWrite: false,
+    color: 0xffe000, transparent: true, opacity: 0.6,   // yellow hover preview
+    blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
+    side: THREE.DoubleSide,   // render the far wall too — FrontSide-only read as a hollow/partial tube
   })
   // Crossover SELECTION highlight: a green glow TUBE traced along the arc polyline,
-  // unifying it with the red preview tube (user feedback 2026-06-06 — the old
+  // unifying it with the yellow preview tube (user feedback 2026-06-06 — the old
   // endpoint-sphere glow read inconsistently for the thin inter-helix arc).
   let _selectionArcTube = null
+  // Lasso / additive multi-crossover selection: a POOL of the same green tubes
+  // (user feedback 2026-06-07 — multi-select now matches the single-click form
+  // instead of the old cyan arc recolor + glow spheres).
+  let _selectionArcTubes = []
   const _selectionArcMat = new THREE.MeshBasicMaterial({
     color: 0x3fb950, transparent: true, opacity: 0.75,
-    blending: THREE.AdditiveBlending, depthWrite: false,
+    blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
+    side: THREE.DoubleSide,   // render the far wall too — FrontSide-only read as a hollow/partial tube
   })
   // Fluorescence-mode: per-fluorophore emission color glow
   const _fluoroGlowLayer = createMultiColorGlowLayer(scene)
@@ -290,6 +303,8 @@ export function initDesignRenderer(scene, storeRef) {
     _previewGlowLayer.clear()   // hover preview is transient; never survives a rebuild
     if (_previewArcTube) _previewArcTube.visible = false
     if (_selectionArcTube) _selectionArcTube.visible = false
+    for (const t of _selectionArcTubes) { t.geometry.dispose(); scene.remove(t) }
+    _selectionArcTubes = []   // multi-select tubes are children of the scene, not oldRoot
     _fluoroGlowLayer.clear()    // caller must re-apply fluorescence glow after rebuild
 
     // Clear stale xover refs — the old meshes were children of oldRoot, already disposed above.
@@ -645,15 +660,15 @@ export function initDesignRenderer(scene, storeRef) {
     setGlowEntries(entries) { _glowLayer.setEntries(entries) },
     clearGlow()              { _glowLayer.clear() },
 
-    // Drill-v2 hover preview (red glow on the would-be-selected leaf).
+    // Drill-v2 hover preview (yellow glow on the would-be-selected leaf).
     setPreviewGlow(entries)  { _previewGlowLayer.setEntries(entries) },
     clearPreviewGlow()       { _previewGlowLayer.clear() },
 
-    // Red glow tube traced through a crossover arc's polyline (world-space points).
+    // Yellow glow tube traced through a crossover arc's polyline (world-space points).
     setPreviewArc(points) {
       if (!points || points.length < 2) return
       const curve = new THREE.CatmullRomCurve3(points)
-      const geo   = new THREE.TubeGeometry(curve, Math.max(8, points.length * 2), PREVIEW_ARC_RADIUS, 6, false)
+      const geo   = new THREE.TubeGeometry(curve, _arcTubeSegs(points.length), PREVIEW_ARC_RADIUS, ARC_TUBE_RADIAL, false)
       if (_previewArcTube) {
         _previewArcTube.geometry.dispose()
         _previewArcTube.geometry = geo
@@ -672,7 +687,7 @@ export function initDesignRenderer(scene, storeRef) {
     setSelectionArc(points) {
       if (!points || points.length < 2) return
       const curve = new THREE.CatmullRomCurve3(points)
-      const geo   = new THREE.TubeGeometry(curve, Math.max(8, points.length * 2), PREVIEW_ARC_RADIUS, 6, false)
+      const geo   = new THREE.TubeGeometry(curve, _arcTubeSegs(points.length), SELECTION_ARC_RADIUS, ARC_TUBE_RADIAL, false)
       if (_selectionArcTube) {
         _selectionArcTube.geometry.dispose()
         _selectionArcTube.geometry = geo
@@ -686,6 +701,68 @@ export function initDesignRenderer(scene, storeRef) {
       }
     },
     clearSelectionArc() { if (_selectionArcTube) _selectionArcTube.visible = false },
+
+    // Green selection glow tubes for MULTIPLE crossover arcs (lasso / additive
+    // multi-select). Mirrors setSelectionArc but pools one tube mesh per arc,
+    // reusing the same green material so multi-select reads identically to a
+    // single click (user feedback 2026-06-07). Pass [] to clear.
+    setSelectionArcs(arcsPoints) {
+      for (const t of _selectionArcTubes) { t.geometry.dispose(); scene.remove(t) }
+      _selectionArcTubes = []
+      for (const points of arcsPoints ?? []) {
+        if (!points || points.length < 2) continue
+        const curve = new THREE.CatmullRomCurve3(points)
+        const geo   = new THREE.TubeGeometry(curve, _arcTubeSegs(points.length), SELECTION_ARC_RADIUS, ARC_TUBE_RADIAL, false)
+        const tube  = new THREE.Mesh(geo, _selectionArcMat)
+        tube.renderOrder   = 1
+        tube.frustumCulled = false
+        tube.name          = 'selectionArcTubeMulti'
+        scene.add(tube)
+        _selectionArcTubes.push(tube)
+      }
+    },
+    clearSelectionArcs() {
+      for (const t of _selectionArcTubes) { t.geometry.dispose(); scene.remove(t) }
+      _selectionArcTubes = []
+    },
+
+    // DEBUG metric — inspect the LIVE crossover tubes' actual rendered geometry so
+    // "how many sides / is it complete" is measurable, not eyeballed. Reachable via
+    // window.__NADOC_DBG__.tubeStats() after selecting a crossover.
+    getSelectionArcTubeStats() {
+      const inspect = (mesh, label) => {
+        if (!mesh) return null
+        const g = mesh.geometry
+        const pos = g.attributes?.position
+        let nan = 0
+        for (let i = 0; pos && i < pos.count; i++) {
+          if (!Number.isFinite(pos.getX(i)) || !Number.isFinite(pos.getY(i)) || !Number.isFinite(pos.getZ(i))) nan++
+        }
+        g.computeBoundingBox()
+        const size = g.boundingBox && !g.boundingBox.isEmpty()
+          ? g.boundingBox.getSize(new THREE.Vector3()).toArray().map(v => +v.toFixed(3))
+          : [0, 0, 0]
+        const p = g.parameters ?? {}
+        return {
+          label,
+          visible: mesh.visible,
+          sides: p.radialSegments,            // ← the "number of sides" validation metric
+          tubularSegments: p.tubularSegments,
+          radius: p.radius,
+          doubleSided: mesh.material?.side === THREE.DoubleSide,
+          vertexCount: pos?.count ?? 0,
+          triangleCount: g.index ? g.index.count / 3 : 0,
+          nanVertices: nan,
+          bboxSize: size,
+          complete: nan === 0 && size.every(v => v > 0),
+        }
+      }
+      return [
+        inspect(_selectionArcTube, 'single'),
+        ..._selectionArcTubes.map((t, i) => inspect(t, `multi[${i}]`)),
+        inspect(_previewArcTube, 'preview'),
+      ].filter(Boolean)
+    },
 
     /** Show red oversized glow over backbone entries with undefined sequence. */
     setUndefinedHighlight(entries) { _undefinedGlowLayer.setEntries(entries) },

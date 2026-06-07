@@ -62,10 +62,10 @@ pass over GENERATED → VALIDATED happens as the user actually executes them.
 ## Register state
 
 - Total items: **18**
-- PENDING (no manual ops yet): **16**
+- PENDING (no manual ops yet): **15**
 - GENERATED (ready to run): **2** — MV-1, MV-2
-- VALIDATED: **0**
-- REGRESSION FOUND: **0**
+- VALIDATED: **1** — MV-3 (selection-rules UX, 2026-06-07)
+- REGRESSION FOUND: **0** (MV-3's two regressions were fixed + re-validated same session)
 
 ---
 
@@ -78,8 +78,8 @@ Core editing + default-selection UX first; niche/visual last.
 |---|----|----------------------------|-----------|--------------|--------------|
 | — | **MV-1** | *(processing — see GENERATED)* design-mode cluster **Move / Rotate** tool: right-click cluster → gizmo/panel → ✓ commit | #71 #78 #79 #80 #81 | a cluster-bearing design (e.g. `Examples/26hb_platform_v3.nadoc`) | 3D pointer-pick on a cluster + gizmo-handle drag not drivable at pixel precision (LESSONS H7) |
 | — | **MV-2** | *(generated — see GENERATED)* **Overhang Orientation** panel: right-click a rendered overhang → Edit Orientation → step/apply/reset/auto-close; also the migrated context menu | #64, fix #7 | `Examples/NS_trans_fix.nadoc` (51 overhangs) ✓ + `workspace/OH6hb_test.nadoc` (2) ✓ | WebGL raycast on 1 of N overhang beads not drivable |
-| ▶ HEAD | **MV-3** | **Drill-v2 selection** on a multi-helix design: strand level, Tab cycle, crossover-arc hover(red)/click(green) tube, no red sf-pinned box, multi-element lasso respects engaged level | fixes #10 #11 #12 #14 #15 | a multi-helix design WITH crossovers (harness fixture is single-helix → no xovers) | thin-arc gesture + Tier-3 colour + multi-element lasso need a real multi-helix design |
-| | **MV-4** | Assembly **multi-select purple union BoxHelper**: Ctrl-lasso ≥2 instances → purple box around the union; drops below 2 → clears | #34 | `workspace/Belt_test1.nass` (parts+groups) or any ≥2-part `.nass` | needs a built ≥2-part assembly + Ctrl-lasso multi-select |
+| — | **MV-3** | ✅ **VALIDATED 2026-06-07** (see VALIDATED) — **selection-rules UX** (drill levels, crossover tube, yellow hover+snap, Ctrl+click, cluster Tab removal) | fixes #10 #11 #12 #14 #15 | `Examples/6hb_test.nadoc` ✓ + `Examples/2hb_xover_val.nadoc` ✓ | — |
+| ▶ HEAD | **MV-4** | Assembly **multi-select purple union BoxHelper**: Ctrl-lasso ≥2 instances → purple box around the union; drops below 2 → clears | #34 | `workspace/Belt_test1.nass` (parts+groups) or any ≥2-part `.nass` | needs a built ≥2-part assembly + Ctrl-lasso multi-select |
 | | **MV-5** | Assembly **right-click context menu**: right-click a part → linker-relax (enabled/disabled), attach-to-belt, select; pan-suppress | #69 | `workspace/Linker_Assem_test.nass` / `Belt_test1.nass` | assembly + linker/belt multi-step setup; right-click router |
 | | **MV-6** | **Belt polymerize**: built belt assembly → Polymerize along belt → evenly-spaced copies | #32 | `workspace/Belt_test1.nass` / `belt_test.nass` | needs a built belt assembly |
 | | **MV-7** | **Coalesced assembly part-refresh**: edit a part in part-context + save burst → shared instances refresh once (not per-instance) | #38 | a multi-part assembly with ≥2 instances of one source part | needs multi-part assembly + part-editor save burst |
@@ -295,27 +295,184 @@ Selection level is set by the `#select-filter` row buttons or **Tab**; **Esc** �
 
 ---
 
+### MV-3 — Drill-v2 selection on a multi-helix design (with crossovers)
+*Discharges fixes #10 #11 #12 #14 #15 — the unified `selectionLevel` model that
+replaced the legacy auto-drill ladder / manual filter pins / Tab drill-lock (those
+were physically deleted 2026-06-06). Pure model in `scene/selection_level.js`; click
+paths are `_v2HandleBead` / `_v2HandleCone` / `_v2HandleArc` in `selection_manager.js`.*
+
+**Why this needs a human.** Every automated test runs against a **single-helix**
+harness fixture — so it has **no crossovers**, and the three things that only exist
+on a real multi-helix design with inter-helix crossovers are entirely un-exercised:
+(1) the thin crossover **arc** as a pick target (its cone is hidden, so the arc is
+picked by 18-px screen proximity, not raycast), (2) the **red hover tube → green
+selection tube** colour transition on that arc, and (3) a multi-element **Ctrl-lasso
+that respects the engaged level** across more than one helix. The pure model is
+unit-pinned (`selection_level.test.js`); the live gesture is not.
+
+**FIXTURE** — you need a multi-helix design that *actually has crossover arcs*.
+Verified counts (probed from the files):
+- **`Examples/6hb_test.nadoc`** ✓ — **6 helices, 2 crossovers**. **Primary** — true
+  multi-helix, and it has arcs to hover/click.
+- `Examples/2hb_xover_val.nadoc` ✓ — 2 helices, **4 crossovers** (denser arcs, easier
+  to land an arc click) but only 2 helices — use as the **arc-specific backup**.
+- ⚠️ **Do NOT use `Examples/26hb_platform_v3.nadoc` for the arc steps** — it has 26
+  helices but **0 explicit crossovers**, so there are no arcs to pick. (Fine only for
+  the level-button / Tab / lasso steps that don't need an arc.)
+
+**SETUP**
+1. Start both servers (`just dev` + `just frontend`), open `http://localhost:5173`,
+   keep devtools console open.
+2. Load **`Examples/6hb_test.nadoc`**. Zoom in past cylinder-LOD so individual beads,
+   cones, and the thin crossover arcs between helices render.
+3. The selection level is driven by the **`#select-filter`** button row (buttons:
+   **clust / strand / line(=domain) / ends / xover**) and by **Tab**; **Esc** → default.
+   "No button lit" = the **default** drill level.
+
+**MAIN CASES**
+1. **Default drill ladder.** With no filter button lit: 1st click on a strand →
+   the whole **strand** highlights green. 2nd click *on that same strand*, **on a
+   backbone bead** → drills to the **end/nucleotide under the cursor**; 2nd click **on
+   a cone** → the **crossover**. A repeat click keeps the leaf. Clicking a *different*
+   strand restarts at strand level.
+2. **`strand` fixed level.** Click the **strand** filter button (or Tab to it). Now
+   *every* click selects the whole clicked strand — no leaf drill on a 2nd click.
+3. **`domain` (line) fixed level.** Click **line**. Every click → the clicked
+   **domain** only (not the whole strand, not a single bead).
+4. **`end` fixed level.** Click **ends**. Clicking a terminus selects the **5'/3' end
+   bead** (gold measurement-bead style), not the strand.
+5. **`xover` fixed level — arc click → GREEN TUBE.** Click **xover**, then click
+   directly on a thin **crossover arc** between two helices. Expect: a **green glow
+   tube traced along the arc polyline** (not an endpoint sphere), and the Properties/
+   selection reads a **crossover** object. Click the **same** arc again → it **toggles
+   off** (deselects). (Use `2hb_xover_val.nadoc` if the 6hb arcs are hard to hit.)
+6. **Default-level arc hover preview → RED TUBE.** Back at **default** level, select a
+   strand that *carries* a crossover (so `mode = strand`). Hover the cursor over that
+   strand's crossover arc **without clicking**. Expect: a **red glow tube** along the
+   arc (the "a click here would select this crossover" preview). Click it → the red
+   preview becomes the **green** selection tube (case 5's result).
+7. **Tab cycles the level.** Press **Tab** repeatedly with the canvas focused. Expect
+   the engaged filter button to advance **cluster → strand → domain(line) → end(ends)
+   → xover → none(default) → cluster …**, the lit button mirroring each step.
+8. **Esc → default.** From any engaged level press **Esc**. Expect: all filter buttons
+   unlight (back to the drill ladder) and the current selection clears.
+
+**EDGE CASES**
+1. **Engaged level survives an empty-space click.** Engage e.g. **domain**, click empty
+   background (deselects the object). The **domain** button must **stay lit** — an
+   empty click clears the *selection*, not the *level*. (This is the ISSUE-4 fix: the
+   old model would silently drop back to a different level.)
+2. **Multi-element Ctrl-lasso respects the engaged level.** This is the core
+   `lassoCaptureType` fix (#14/#15). Ctrl-drag a rectangle over a region spanning
+   **≥2 helices** and check WHAT it captures at each level:
+   - default / **strand** → whole **strands** in the rect.
+   - **domain (line)** → **domains** in the rect (white domain highlight), not strands.
+   - **end** → only the **5'/3' termini** beads in the rect (not every bead).
+   - **xover** → the **crossovers** whose arcs fall in the rect.
+   The old "Tab to ends, lasso grabs a cluster" bug is the regression to watch for.
+3. **No legacy red sf-pinned BoxHelper.** Through ALL of the above, confirm there is
+   **never** a stray **red wireframe selection box** drawn around a strand/region.
+   That red "selection-filter-pinned" BoxHelper was part of the deleted legacy model;
+   the only red you should ever see now is the **arc hover tube** (case 6). Green =
+   selection (glow / arc tube), red = hover-preview arc only.
+4. **Filter button toggles off to default.** Click an already-lit level button (e.g.
+   **xover** when xover is lit). Expect it to turn off → back to **default** (not stay
+   stuck lit).
+5. **Hover preview is scoped.** The red arc/bead hover preview should appear **only**
+   at default level **with a strand already selected**, and **only** for elements on
+   *that* strand — hovering a different strand's arc shows nothing. Also: it must
+   **not** appear when the cursor is over the right ~300 px (the sidebar panel zone).
+
+**PASS CRITERIA**
+- Each level (default ladder / strand / domain / end / xover) selects exactly the
+  element type described; the `#select-filter` lit button always matches the engaged
+  level, and Tab/Esc move it as specified.
+- Crossover **arc**: hover = red tube, click = green tube + crossover selected, 2nd
+  click toggles off. (At least on `2hb_xover_val.nadoc` if 6hb arcs are too thin.)
+- Ctrl-lasso captures the SAME element type the engaged level's click would — verified
+  across ≥2 helices for at least strand / domain / end.
+- An empty-space click clears the selection but **keeps** the engaged level lit.
+- **No red wireframe selection BoxHelper appears anywhere.**
+- No console errors at any step.
+
+**WATCH FOR (suspect behaviors — confirm or deny)**
+- **Arc pickability at distance / odd camera angles.** The arc is picked by 18-px
+  *screen-space proximity* to its projected polyline (`_findStrandArcAt`), not by a
+  3D raycast. On a steeply foreshortened arc or when two arcs overlap on screen,
+  confirm the *intended* arc is the one that lights — a wrong-arc pick or a dead zone
+  is the likely silent break.
+- **Tab swallowed by a gizmo.** Tab is owned by `cluster_gizmo` / `instance_gizmo`
+  while a Move/Rotate gizmo is active. Confirm Tab cycles selection levels **only**
+  when no transform gizmo is up (it should be skipped, not double-fire, when one is).
+- **xover toggle vs. unresolvable arc.** When you click an arc whose crossover can't be
+  resolved (forced-ligation edge case) **at xover level**, the handler now **selects
+  nothing** (keeps the current selection) — the old strand fallback was removed
+  2026-06-07 (see REGRESSION FOUND below). Confirm it does NOT select the strand.
+
+---
+
 ## VALIDATED (user-confirmed pass)
 
-_(none yet)_
+### MV-3 — Drill-v2 selection, part-3D editor ✅ VALIDATED 2026-06-07
+Discharges fixes #10 #11 #12 #14 #15. Confirmed live by the user across an extended
+selection-rules UX session (the original block + a large follow-on overhaul). **The
+part-3D-editor selection-rules UX is now validated & finished.** What's in place:
+
+- **Fixed levels select only their own type** — domain/end/xover/cluster no longer
+  soft-fall to a whole-strand selection; a mismatched click is a no-op. End level
+  selects only 5′/3′ termini.
+- **Crossovers are arc-only, rendered as a glow TUBE** — single-click, lasso/additive
+  multi-select, and Ctrl+click toggle all use the same green tube (full, double-sided,
+  12 radial segments, depthTest-off, r = 0.147 nm). Cones never participate in crossover
+  selection; the invisible cross-helix "cones" that FEED the arc pipeline are excluded
+  from picking so they can't be selected or flash visible.
+- **Ctrl+click** toggles a crossover in/out of the multi-set; **plain click** single-
+  selects; lasso respects the engaged level.
+- **Generic yellow hover preview** at every filter level (cluster/strand/domain/end/
+  xover): hovering shows — in yellow — exactly what a click will select (same FORM as
+  the green selection), with snap-to-nearest within 80 px. The already-selected element
+  stays green (no yellow on it); other elements preview yellow.
+- **Cluster** removed from the Tab cycle (button-only) and its button moved to the gate
+  group (skip/loop/ovhg) — a late-stage, occasional tool.
+- No legacy red sf-pinned BoxHelper anywhere.
+
+1087 frontend tests green; served `dist/` rebuilt. Tube geometry pinned by
+`frontend/src/scene/arc_tube_geometry.test.js` (never NaNs). The earlier MV-3
+REGRESSION-FOUND items (below) are resolved by the above.
 
 ## REGRESSION FOUND (user-confirmed fail → fix opened)
 
-_(none yet)_
+### MV-3 (2026-06-07) — two issues found running the block → **FIXED + re-validated same session** (see VALIDATED)
+1. **Fixed levels still let a single click select a strand.** In domain / end / xover
+   (and cluster) level, a click on an element that wasn't that type "soft-fell" to
+   selecting the whole strand. Fixed: each fixed level now selects ONLY its own type;
+   a mismatched click is a **no-op** (current selection kept). `selection_manager.js`
+   `_v2HandleBead` / `_v2HandleCone` / `_v2HandleArc` — removed every `_selectStrandV2`
+   fallback (cluster/domain/end/xover). `strand` level still selects the strand (its job).
+2. **Lasso crossover highlight ≠ single-click highlight.** Lasso/additive multi-select
+   drew a cyan arc-line recolor + green glow spheres; single-click draws a green glow
+   tube. Fixed: multi-select now renders the **same green glow tubes**
+   (`design_renderer.setSelectionArcs` / `clearSelectionArcs`, a pooled mirror of
+   `setSelectionArc`); `_applyMultiCrossoverHighlight` + the shift-click arc toggle both
+   route through it. The old `unfold_view.updateArcGlow` + `_arcGlow*` path is now
+   unused (harmless early-out).
+   - *Re-test:* lasso ≥2 crossovers at xover level → each is a green tube identical to a
+     single-click selection; shift-click toggles individual arcs in/out as green tubes.
+
+## RE-TEST NEEDED (fix shipped, user not yet re-confirmed)
+
+_(none — MV-3 re-validated 2026-06-07; see VALIDATED)_
 
 ---
 
 ## Next loop
 
-**▶ Process MV-3 — Drill-v2 selection on a multi-helix design** (discharges fixes
-#10 #11 #12 #14 #15). Dig: the selection-level model (`scene/selection_level.js` +
-the `_v2Handle{Bead,Cone,Arc}` paths in `selection_manager.js`), the `#select-filter`
-level buttons + **Tab** cycle + **Esc**→default, the crossover-arc hover(red)/click
-→ green tube rendering, the absence of the legacy red sf-pinned BoxHelper, and that a
-multi-element Ctrl-lasso respects the engaged level + an engaged level survives an
-empty-space click. **Fixture caveat from the table:** the harness fixture is
-single-helix (no crossovers) — you need a **multi-helix design WITH crossovers**;
-candidates: `Examples/26hb_platform_v3.nadoc`, `Examples/multi_domain_test*.nadoc`,
-`Examples/2hb_xover_val.nadoc` — verify one actually has crossover arcs before
-writing the block (per the selection.md rule the click descriptions there predate
-the v2 model, so trust `selection_level.js` + `_v2Handle*` for current behavior).
+**▶ Process MV-4 — Assembly multi-select purple union BoxHelper** (discharges #34).
+Dig: the assembly multi-select path (`scene/assembly_multi_box.js` +
+`updateAssemblyMultiBox`, `assembly_pointer.js` Ctrl-lasso union, `group_gizmo.js`
+live re-fit), how a Ctrl-lasso of ≥2 instances draws a **purple** BoxHelper around
+the union and how it **clears** when the selection drops below 2. **Fixture:**
+`workspace/Belt_test1.nass` (parts+groups, the reference assembly fixture) or any
+built ≥2-part `.nass`; verify it has ≥2 selectable instances. This is an
+**assembly-mode** block — SETUP must enter assembly mode (open the `.nass`), not the
+design editor.

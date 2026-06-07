@@ -1577,6 +1577,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   let _hoverBead = null
   let _hoverCone = null
   let _hoverArc  = null
+  let _hoverKey  = null   // dedup key for the generic strand/domain/cluster preview
 
   function _emitDrillLevel(level) { onDrillLevel?.(level) }
 
@@ -1708,9 +1709,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const hitStrandId = hitEntry.nuc.strand_id
     _clearHoverPreview()
     if (_selLevel === 'cluster') {
-      if (!_selectClusterV2(hitEntry.nuc, hitStrandId, backboneEntries)) {
-        _selectStrandV2(hitStrandId, hitEntry, backboneEntries, coneEntries)
-      }
+      // Fixed level: a bead in no cluster selects nothing (no strand fallback).
+      _selectClusterV2(hitEntry.nuc, hitStrandId, backboneEntries)
       _emitDrillLevel('cluster'); return
     }
     if (_selLevel === 'strand') {
@@ -1722,12 +1722,14 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _emitDrillLevel('domain'); return
     }
     if (_selLevel === 'end') {
-      _selectBeadV2(hitEntry, hitStrandId, backboneEntries, coneEntries)
+      // Fixed level: select ONLY a 5′/3′ terminus bead; a mid-strand bead is a no-op.
+      if (hitEntry.nuc.is_five_prime || hitEntry.nuc.is_three_prime) {
+        _selectBeadV2(hitEntry, hitStrandId, backboneEntries, coneEntries)
+      }
       _emitDrillLevel('end'); return
     }
     if (_selLevel === 'xover') {
-      // A plain bead carries no crossover — soft-fall to strand for feedback.
-      _selectStrandV2(hitStrandId, hitEntry, backboneEntries, coneEntries)
+      // Fixed level: a plain bead carries no crossover — select nothing.
       _emitDrillLevel('xover'); return
     }
     // default: strand-first, then the leaf under the cursor. A repeat click on the
@@ -1750,19 +1752,23 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   function _v2HandleCone(hitCone, hitStrandId, backboneEntries, coneEntries) {
     _clearHoverPreview()
     if (_selLevel === 'cluster') {
+      // Fixed level: a cone in no cluster selects nothing (no strand fallback).
       const repNuc = hitCone.fromNuc ?? hitCone.toNuc
-      if (!(repNuc && _selectClusterV2(repNuc, hitStrandId, backboneEntries))) {
-        _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
-      }
+      if (repNuc) _selectClusterV2(repNuc, hitStrandId, backboneEntries)
       _emitDrillLevel('cluster'); return
     }
     if (_selLevel === 'xover') {
-      _selectConeV2(hitCone, hitStrandId, backboneEntries, coneEntries)
+      // Fixed level: a crossover is selected via its ARC (tube), not the cone — the
+      // cone path highlights the whole strand + renders a sphere. The generous arc
+      // hover-snap covers the cone's location, so a bare cone hit selects nothing.
       _emitDrillLevel('xover'); return
     }
-    if (_selLevel === 'strand' || _selLevel === 'domain' || _selLevel === 'end') {
-      // strand level → the whole strand; domain/end have no leaf on a cone → strand.
+    if (_selLevel === 'strand') {
       _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
+      _emitDrillLevel('strand'); return
+    }
+    if (_selLevel === 'domain' || _selLevel === 'end') {
+      // Fixed level: a cone is neither a domain nor an end — select nothing.
       _emitDrillLevel(_selLevel); return
     }
     // default: strand-first, then the cone (xover) under the cursor.
@@ -1786,7 +1792,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (_mode === 'crossover' && _crossoverId === target.id) { _clearAll(); return true }  // toggle off
     _restoreStrand()
     _mode = 'crossover'; _crossoverId = target.id; _strandId = arcHit.strandId
-    // Green glow TUBE along the arc — unified with the red preview tube (user
+    // Green glow TUBE along the arc — unified with the yellow preview tube (user
     // feedback 2026-06-06), replacing the old endpoint-sphere glow.
     designRenderer.setSelectionArc(arcHit.getPositions?.() ?? [])
     store.setState({
@@ -1801,19 +1807,22 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const hitStrandId = arcHit.strandId
     _clearHoverPreview()
     if (_selLevel === 'cluster') {
+      // Fixed level: an arc in no cluster selects nothing (no strand fallback).
       const repNuc = arcHit.fromNuc ?? arcHit.toNuc
-      if (!(repNuc && _selectClusterV2(repNuc, hitStrandId, backboneEntries))) {
-        _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
-      }
+      if (repNuc) _selectClusterV2(repNuc, hitStrandId, backboneEntries)
       _emitDrillLevel('cluster'); return
     }
     if (_selLevel === 'xover') {
-      if (!_selectCrossoverV2(arcHit)) _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
+      // Fixed level: an unresolvable arc selects nothing (no strand fallback).
+      _selectCrossoverV2(arcHit)
       _emitDrillLevel('xover'); return
     }
-    if (_selLevel === 'strand' || _selLevel === 'domain' || _selLevel === 'end') {
-      // strand level → the whole strand; domain/end have no leaf on an arc → strand.
+    if (_selLevel === 'strand') {
       _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
+      _emitDrillLevel('strand'); return
+    }
+    if (_selLevel === 'domain' || _selLevel === 'end') {
+      // Fixed level: an arc is neither a domain nor an end — select nothing.
       _emitDrillLevel(_selLevel); return
     }
     // default: strand-first, then the crossover under the cursor.
@@ -1827,15 +1836,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   // ── Drill-v2 hover preview ─────────────────────────────────────────────────
-  // Lightweight raycast (default level + a selected strand only) that paints a RED
+  // Lightweight raycast (default level + a selected strand only) that paints a YELLOW
   // glow on the bead/cone under the cursor — the leaf a 2nd click would select —
   // distinct from the GREEN selection glow. Clicking it makes the selection (green).
 
   function _clearHoverPreview() {
-    if (_hoverBead || _hoverCone || _hoverArc) {
+    if (_hoverBead || _hoverCone || _hoverArc || _hoverKey) {
       _hoverBead = null
       _hoverCone = null
       _hoverArc  = null
+      _hoverKey  = null
       designRenderer.clearPreviewGlow()
       designRenderer.clearPreviewArc?.()
     }
@@ -1873,15 +1883,167 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (bd === Infinity && cd === Infinity) return null
     if (cd < bd) {
       const cone = coneEntries.find(e => e.instMesh === c0.object && e.id === c0.instanceId)
-      return cone ? { kind: 'cone', cone } : null
+      // Cross-helix cones are invisible crossover connectors — never a hover target.
+      if (cone && !cone.isCrossHelix) return { kind: 'cone', cone }
     }
-    const entry = backboneEntries.find(e => e.instMesh === b0.object && e.id === b0.instanceId)
-    return entry ? { kind: 'bead', entry } : null
+    if (b0) {
+      const entry = backboneEntries.find(e => e.instMesh === b0.object && e.id === b0.instanceId)
+      return entry ? { kind: 'bead', entry } : null
+    }
+    return null
+  }
+
+  // Generous screen-space snap radius for the end/xover hover preview — "large but
+  // non-infinite" (user 2026-06-07). The nearest end/crossover within this radius is
+  // previewed (red) so the user sees the target before clicking; a click commits it.
+  const _NEAR_HOVER_PX = 80
+  const _hoverMat = new THREE.Matrix4()
+  const _hoverPos = new THREE.Vector3()
+  const _instWorld = (instMesh, id, out) => {
+    instMesh.getMatrixAt(id, _hoverMat)
+    return out.setFromMatrixPosition(_hoverMat)
+  }
+
+  // Nearest selectable 5′/3′ terminus within _NEAR_HOVER_PX of canvas-relative (sx,sy).
+  function _nearestEndEntry(sx, sy) {
+    const { selectableTypes } = store.getState()
+    let best = null, bestD = _NEAR_HOVER_PX
+    for (const e of designRenderer.getBackboneEntries()) {
+      if (!(e.nuc.is_five_prime || e.nuc.is_three_prime) || !e.instMesh.visible) continue
+      const isScaf = e.nuc.strand_type === 'scaffold'
+      if (!(isScaf ? selectableTypes.scaffold : selectableTypes.staples)) continue
+      const sp = _toScreen(_instWorld(e.instMesh, e.id, _hoverPos))
+      const d  = Math.hypot(sp.x - sx, sp.y - sy)
+      if (d < bestD) { bestD = d; best = e }
+    }
+    return best
+  }
+
+  // Nearest selectable backbone bead within _NEAR_HOVER_PX of canvas-relative (sx,sy).
+  // Alloc-free projection (reuses scratch); respects scaffold/staple gates (overhang
+  // beads always pickable). Drives the snap preview/commit for strand/domain/cluster.
+  function _nearestBead(sx, sy) {
+    const { selectableTypes } = store.getState()
+    const rect = canvas.getBoundingClientRect()
+    const cam  = _cam()
+    let best = null, bestD = _NEAR_HOVER_PX
+    for (const e of designRenderer.getBackboneEntries()) {
+      if (!e.instMesh.visible) continue
+      if (!e.nuc.overhang_id) {
+        const isScaf = e.nuc.strand_type === 'scaffold'
+        if (!(isScaf ? selectableTypes.scaffold : selectableTypes.staples)) continue
+      }
+      _instWorld(e.instMesh, e.id, _hoverPos).project(cam)
+      if (_hoverPos.z > 1) continue   // behind the camera
+      const px = (_hoverPos.x *  0.5 + 0.5) * rect.width
+      const py = (_hoverPos.y * -0.5 + 0.5) * rect.height
+      const d  = Math.hypot(px - sx, py - sy)
+      if (d < bestD) { bestD = d; best = e }
+    }
+    return best
+  }
+
+  // Nearest crossover ARC within _NEAR_HOVER_PX of (sx,sy). At xover level a crossover
+  // is ALWAYS represented by its arc → the tube highlight (yellow preview / green select),
+  // never the cone (whose selection highlights the whole strand and renders a sphere).
+  // Returns the arc entry | null.
+  function _nearestXover(sx, sy) {
+    let best = null, bestD = _NEAR_HOVER_PX
+    for (const a of (getUnfoldView?.()?.getArcEntries() ?? [])) {
+      if (!a.crossover_id) continue
+      const mid = a.getMidWorld?.()                 // midpoint proxy — cheap (1 alloc/arc)
+      if (!mid) continue
+      const sp = _toScreen(mid)
+      const d  = Math.hypot(sp.x - sx, sp.y - sy)
+      if (d < bestD) { bestD = d; best = a }
+    }
+    return best
+  }
+
+  // Key (in _previewSetForLevel's space) of the CURRENTLY-SELECTED element, when it
+  // matches the active level — used to skip the yellow hover on the already-green item.
+  function _selectedLevelKey() {
+    if (_mode === 'strand')  return `strand:${_strandId}`
+    if (_mode === 'domain')  return `domain:${_strandId}:${_domainIndex}`
+    if (_mode === 'cluster') return `cluster:${_drillClusterId}`
+    return null
+  }
+
+  // The bead set + a dedup key for what a click WOULD select at strand/domain/cluster
+  // level, given the bead under the cursor — drives the generic red hover preview.
+  function _previewSetForLevel(entry) {
+    const bb  = designRenderer.getBackboneEntries()
+    const sid = entry.nuc.strand_id
+    if (_selLevel === 'strand') {
+      return { key: `strand:${sid}`, beads: bb.filter(e => e.nuc.strand_id === sid) }
+    }
+    if (_selLevel === 'domain') {
+      const di = entry.nuc.domain_index ?? 0
+      return { key: `domain:${sid}:${di}`,
+               beads: bb.filter(e => e.nuc.strand_id === sid && (e.nuc.domain_index ?? 0) === di) }
+    }
+    // cluster
+    const design = store.getState().currentDesign
+    const cid = _resolveClusterId(entry.nuc, design)
+    if (!cid) return null
+    const f = clusterMemberFilter(design?.cluster_transforms?.find(c => c.id === cid), design)
+    if (!f) return null
+    return { key: `cluster:${cid}`, beads: bb.filter(e => f(e.nuc)) }
   }
 
   function _updateHoverPreview(clientX, clientY) {
-    if (_selLevel !== 'default' || _mode !== 'strand') { _clearHoverPreview(); return }
     if (clientX > window.innerWidth - 300) { _clearHoverPreview(); return }
+    const _r = canvas.getBoundingClientRect()
+    const _sx = clientX - _r.left, _sy = clientY - _r.top
+
+    // End level: preview (yellow glow) the nearest selectable 5′/3′ terminus.
+    if (_selLevel === 'end') {
+      const e = _nearestEndEntry(_sx, _sy)
+      if (!e) { _clearHoverPreview(); return }
+      if (_mode === 'bead' && _beadEntry === e) { _clearHoverPreview(); return }  // already selected → stays green
+      if (_hoverBead !== e) {
+        _hoverBead = e; _hoverCone = null; _hoverArc = null; _hoverKey = null
+        designRenderer.clearPreviewArc?.()
+        designRenderer.setPreviewGlow([{ pos: _instWorld(e.instMesh, e.id, new THREE.Vector3()) }])
+      }
+      return
+    }
+
+    // Xover level: preview the nearest crossover as the yellow TUBE (same form as the
+    // V2-drill arc preview and the green selection tube) — never a sphere.
+    if (_selLevel === 'xover') {
+      const arc = _nearestXover(_sx, _sy)
+      if (!arc) { _clearHoverPreview(); return }
+      if (_mode === 'crossover' && _crossoverId === arc.crossover_id) { _clearHoverPreview(); return }  // already selected → stays green
+      if (_hoverArc !== arc) {
+        _hoverArc = arc; _hoverBead = null; _hoverCone = null; _hoverKey = null
+        designRenderer.clearPreviewGlow()
+        designRenderer.setPreviewArc(arc.getPositions?.() ?? [])
+      }
+      return
+    }
+
+    // Strand / domain / cluster level: preview (yellow glow) the exact bead set a
+    // click would select — same form as the green selection, in the hover color.
+    // Raycast-first (exact bead under cursor), else snap to the nearest bead within
+    // _NEAR_HOVER_PX so the preview/click works without pixel-precise aiming.
+    if (_selLevel === 'strand' || _selLevel === 'domain' || _selLevel === 'cluster') {
+      const hit = _pickNearestBeadCone(clientX, clientY)
+      const entry = (hit?.kind === 'bead' ? hit.entry : null) ?? _nearestBead(_sx, _sy)
+      if (!entry) { _clearHoverPreview(); return }
+      const pv = _previewSetForLevel(entry)
+      if (!pv) { _clearHoverPreview(); return }
+      if (pv.key === _selectedLevelKey()) { _clearHoverPreview(); return }  // already selected → stays green
+      if (pv.key !== _hoverKey) {
+        _hoverKey = pv.key; _hoverBead = entry; _hoverCone = null; _hoverArc = null
+        designRenderer.clearPreviewArc?.()
+        designRenderer.setPreviewGlow(pv.beads.map(e => ({ pos: _instWorld(e.instMesh, e.id, new THREE.Vector3()) })))
+      }
+      return
+    }
+
+    // Default level, after a strand is selected: drill preview of the leaf under the cursor.
+    if (_selLevel !== 'default' || _mode !== 'strand') { _clearHoverPreview(); return }
     const opts = { selLevel: _selLevel, mode: _mode, strandId: _strandId }
     const hit = _pickNearestBeadCone(clientX, clientY)
     let target = hoverPreviewTarget({ ...opts, hit })
@@ -1895,18 +2057,18 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (!target) { _clearHoverPreview(); return }
     if (target.kind === 'bead') {
       if (_hoverBead === target.entry) return
-      _hoverBead = target.entry; _hoverCone = null; _hoverArc = null
+      _hoverBead = target.entry; _hoverCone = null; _hoverArc = null; _hoverKey = null
       designRenderer.clearPreviewArc?.()
       designRenderer.setPreviewGlow([{ pos: target.entry.pos }])
     } else if (target.kind === 'cone') {
       if (_hoverCone === target.cone) return
-      _hoverCone = target.cone; _hoverBead = null; _hoverArc = null
+      _hoverCone = target.cone; _hoverBead = null; _hoverArc = null; _hoverKey = null
       designRenderer.clearPreviewArc?.()
       designRenderer.setPreviewGlow([{ pos: target.cone.midPos }])
     } else {
-      // Crossover arc → a red glow TUBE traced along the arc's polyline.
+      // Crossover arc → a yellow glow TUBE traced along the arc's polyline.
       if (_hoverArc === target.arc) return
-      _hoverArc = target.arc; _hoverBead = null; _hoverCone = null
+      _hoverArc = target.arc; _hoverBead = null; _hoverCone = null; _hoverKey = null
       designRenderer.clearPreviewGlow()
       designRenderer.setPreviewArc(target.arc.getPositions?.() ?? [])
     }
@@ -1971,10 +2133,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _beadEntry         = null
     _coneEntry         = null
     // Hover-preview bead/cone/arc live on the selected strand; drop the pointers and
-    // remove the red preview glow (a separate layer the scale-reset above misses).
+    // remove the yellow preview glow (a separate layer the scale-reset above misses).
     _hoverBead = null
     _hoverCone = null
     _hoverArc  = null
+    _hoverKey  = null
     designRenderer.clearPreviewGlow?.()
     designRenderer.clearPreviewArc?.()
     designRenderer.clearSelectionArc?.()   // green crossover-selection tube
@@ -2308,22 +2471,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // ── Multi-crossover arc selection (Ctrl+click / lasso) ──────────────────
   // Each entry is an arc wrapper from getUnfoldView().getArcEntries().
 
-  const C_MULTI_XOVER_ARC = 0x00e5ff   // cyan — matches ctrl-bead color
-
   let _multiCrossoverArcs = []   // arc wrapper objects currently multi-selected
 
+  // Render the multi-crossover pool as GREEN glow tubes — the same form a single
+  // click produces (user feedback 2026-06-07), replacing the old cyan arc-line
+  // recolor + glow-sphere highlight so single- and multi-select look identical.
   function _applyMultiCrossoverHighlight(arcs) {
-    // Restore any previous multi-xover highlight.
-    for (const a of _multiCrossoverArcs) a.setColor(a.defaultColor)
     _multiCrossoverArcs = arcs
-    for (const a of _multiCrossoverArcs) a.setColor(C_MULTI_XOVER_ARC)
-    getUnfoldView?.()?.updateArcGlow(_multiCrossoverArcs)
+    designRenderer.setSelectionArcs?.(_multiCrossoverArcs.map(a => a.getPositions?.() ?? []))
   }
 
   function _clearMultiCrossoverArcs() {
-    for (const a of _multiCrossoverArcs) a.setColor(a.defaultColor)
     _multiCrossoverArcs = []
-    getUnfoldView?.()?.updateArcGlow([])
+    designRenderer.clearSelectionArcs?.()
   }
 
   function _handleCtrlClickNuc(e) {
@@ -2419,19 +2579,34 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const rect = canvas.getBoundingClientRect()
       const arcHit = _findArcAt(e.clientX - rect.left, e.clientY - rect.top)
       if (arcHit?.crossover_id) {
-        const idx = _multiCrossoverArcs.findIndex(a => a.crossover_id === arcHit.crossover_id)
-        if (idx >= 0) {
-          _multiCrossoverArcs[idx].setColor(_multiCrossoverArcs[idx].defaultColor)
-          _multiCrossoverArcs.splice(idx, 1)
-        } else {
-          arcHit.setColor(C_MULTI_XOVER_ARC)
-          _multiCrossoverArcs.push(arcHit)
-        }
-        getUnfoldView?.()?.updateArcGlow(_multiCrossoverArcs)
+        const idx  = _multiCrossoverArcs.findIndex(a => a.crossover_id === arcHit.crossover_id)
+        const next = idx >= 0
+          ? _multiCrossoverArcs.filter((_, i) => i !== idx)
+          : [..._multiCrossoverArcs, arcHit]
+        _applyMultiCrossoverHighlight(next)   // green tubes, matching single-click
         return
       }
     }
     _handleShiftAdditivePick(e)
+  }
+
+  // Ctrl+left-click (no drag) → toggle the nearest crossover in/out of the
+  // multi-crossover selection (select / deselect). Uses the generous hover-snap
+  // radius at xover level, else the precise arc-hit when the crossoverArcs filter
+  // is on. Renders as the green tube, same as every other crossover highlight.
+  function _handleCtrlClick(e) {
+    if (e.clientX > window.innerWidth - 300) return
+    const rect = canvas.getBoundingClientRect()
+    const sx = e.clientX - rect.left, sy = e.clientY - rect.top
+    const arc = _selLevel === 'xover'
+      ? _nearestXover(sx, sy)
+      : (store.getState().selectableTypes.crossoverArcs ? _findArcAt(sx, sy) : null)
+    if (!arc?.crossover_id) return
+    const idx  = _multiCrossoverArcs.findIndex(a => a.crossover_id === arc.crossover_id)
+    const next = idx >= 0
+      ? _multiCrossoverArcs.filter((_, i) => i !== idx)   // deselect
+      : [..._multiCrossoverArcs, arc]                     // select
+    _applyMultiCrossoverHighlight(next)
   }
 
   // Shift-click additive strand pick. Toggles the hit strand in _multiStrandIds
@@ -2830,10 +3005,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
 
-    // Ctrl+left click (no drag) is a no-op — Ctrl+drag is the lasso; bead/arc
-    // toggles are Alt/Shift.
+    // Ctrl+left click (no drag) → toggle the nearest crossover in/out of the
+    // multi-crossover selection. Ctrl+drag is the lasso (finalized above).
     if (_ctrlDownPos) {
+      const moved = Math.hypot(e.clientX - _ctrlDownPos.x, e.clientY - _ctrlDownPos.y)
       _ctrlDownPos = null
+      if (moved <= 4) _handleCtrlClick(e)
       return
     }
 
@@ -2859,6 +3036,18 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const backboneEntries = designRenderer.getBackboneEntries()
     const coneEntries     = designRenderer.getConeEntries()
 
+    // Fixed filter levels: the nearest-element hover preview decides the click
+    // target — clicking commits whatever is previewed (within _NEAR_HOVER_PX), so the
+    // user selects what they saw highlighted without pixel-precise aiming. No active
+    // preview (cursor beyond the snap radius) → fall through to the exact pick below.
+    if (_hoverBead && (_selLevel === 'end' || _selLevel === 'strand'
+                       || _selLevel === 'domain' || _selLevel === 'cluster')) {
+      _v2HandleBead(_hoverBead, backboneEntries, coneEntries); return
+    }
+    if (_selLevel === 'xover' && _hoverArc) {
+      _v2HandleArc(_hoverArc, backboneEntries, coneEntries); return
+    }
+
     // Respect selection filter
     const selBackbone = backboneEntries.filter(e => {
       if (selectableTypes.overhangs && e.nuc.overhang_id) return true
@@ -2869,6 +3058,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return selectableTypes.strands || selectableTypes.domains
     })
     const selCones = coneEntries.filter(e => {
+      // Cross-helix "cones" are the invisible (radius-0) crossover connectors that
+      // FEED the arc pipeline — a crossover is selected via its arc, never its cone.
+      // Excluding them here is what stops an invisible cone being raycast-selected
+      // and then rendered visible by _highlightCone's 0.12 scale ("a cone appears").
+      if (e.isCrossHelix) return false
       if (!selectableTypes.strands) return false
       const isScaf = e.fromNuc?.strand_type === 'scaffold'
       return isScaf ? selectableTypes.scaffold : selectableTypes.staples
@@ -3021,8 +3215,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
 
     if (beadDist === Infinity && coneDist === Infinity) {
-      // No bead or cone hit — if zoom scope has a pre-hovered strand, use it.
-      const hoverEntry = getHoverEntry?.()
+      // No bead or cone hit — if zoom scope has a pre-hovered strand, use it. Only at
+      // default/strand levels — a fixed level (cluster/domain/end/xover) must not fall
+      // back to a whole-strand selection.
+      const _strandSelOk = _selLevel === 'default' || _selLevel === 'strand'
+      const hoverEntry = _strandSelOk ? getHoverEntry?.() : null
       if (hoverEntry) {
         const hitStrandId = hoverEntry.nuc.strand_id
         if (_mode === 'none' || hitStrandId !== _strandId) {
@@ -3034,7 +3231,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         return
       }
 
-      const ssLinkHit = selectableTypes.strands
+      const ssLinkHit = (selectableTypes.strands && _strandSelOk)
         ? getOverhangLinkArcs?.()?.hitTest?.(e.clientX, e.clientY, _cam(), canvas)
         : null
       if (ssLinkHit?.strandId) {

@@ -10,8 +10,9 @@ describe('selection_level — constants & maps', () => {
     expect(LEVELS).toEqual(['default', 'cluster', 'strand', 'domain', 'end', 'xover'])
   })
 
-  it('Tab cycle is cluster → strand → domain → end → xover → none(default)', () => {
-    expect(TAB_CYCLE).toEqual(['cluster', 'strand', 'domain', 'end', 'xover', 'default'])
+  it('Tab cycle is strand → domain → end → xover → none(default) — cluster excluded (button-only)', () => {
+    expect(TAB_CYCLE).toEqual(['strand', 'domain', 'end', 'xover', 'default'])
+    expect(TAB_CYCLE).not.toContain('cluster')
   })
 
   it('BTN_LEVEL and LEVEL_BTN round-trip; strand is its own level, default has no button', () => {
@@ -37,17 +38,19 @@ describe('normalizeLevel', () => {
 })
 
 describe('nextTabLevel — Tab cycle', () => {
-  it('from default/none → cluster; unknown → cluster', () => {
-    expect(nextTabLevel('default')).toBe('cluster')   // none → first
-    expect(nextTabLevel(null)).toBe('cluster')        // not in cycle → start
+  it('from default/none → strand; unknown → strand', () => {
+    expect(nextTabLevel('default')).toBe('strand')   // none → first
+    expect(nextTabLevel(null)).toBe('strand')         // not in cycle → start
   })
-  it('walks cluster → strand → domain → end → xover → none(default) → cluster', () => {
-    expect(nextTabLevel('cluster')).toBe('strand')
+  it('cluster is not in the cycle → Tab from cluster restarts at strand', () => {
+    expect(nextTabLevel('cluster')).toBe('strand')   // cluster excluded → first
+  })
+  it('walks strand → domain → end → xover → none(default) → strand', () => {
     expect(nextTabLevel('strand')).toBe('domain')
     expect(nextTabLevel('domain')).toBe('end')
     expect(nextTabLevel('end')).toBe('xover')
     expect(nextTabLevel('xover')).toBe('default')   // → none
-    expect(nextTabLevel('default')).toBe('cluster') // wraps
+    expect(nextTabLevel('default')).toBe('strand')  // wraps
   })
 })
 
