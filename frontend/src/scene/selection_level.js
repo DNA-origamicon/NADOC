@@ -79,13 +79,24 @@ export function toggleLevel(cur, level) {
  * SAME element type a click at that level would select (default/strand→strand,
  * cluster→cluster, domain→domain, end→bead, xover→crossover). This is the fix for
  * the "Tab to ends, lasso grabs a cluster" bug (ISSUE-4 Phase 3-filter-audit).
- * Overhangs/loops/skips are visibility gates, not levels, so they are not
- * lasso-capturable. The scaffold/staple gates are applied separately in the lasso
- * loop, NOT here.
  *
- * @param {{selLevel:string}} o
+ * EXCEPTION — the overhang filter (`overhangFilter`, i.e. `selectableTypes.overhangs`):
+ * when it is on, the lasso captures OVERHANGS ONLY, taking precedence over the engaged
+ * level — the same precedence a plain click and a Ctrl+click already give the overhang
+ * filter (2026-06-07). loops/skips remain non-lasso-capturable visibility gates. The
+ * scaffold/staple gates are applied separately in the lasso loop, NOT here.
+ *
+ * @param {{selLevel:string, overhangFilter?:boolean}} o
  */
-export function lassoCaptureType({ selLevel }) {
+export function lassoCaptureType({ selLevel, overhangFilter = false }) {
+  // Overhang filter active → overhangs only (exclusive mode, not a level), matching
+  // the plain-click / Ctrl+click precedence.
+  if (overhangFilter) {
+    return {
+      strands: false, domains: false, ends: false, beadLevel: false,
+      cluster: false, xover: false, overhangs: true, loops: false, skips: false,
+    }
+  }
   const lv = normalizeLevel(selLevel)
   return {
     strands:   lv === 'default' || lv === 'strand',
@@ -94,7 +105,7 @@ export function lassoCaptureType({ selLevel }) {
     beadLevel: false,            // 'end' captures 5'/3' termini only (user decision)
     cluster:   lv === 'cluster',
     xover:     lv === 'xover',
-    overhangs: false,            // visibility gates, not levels — not lasso-capturable
+    overhangs: false,            // gate, not a level — capturable only via overhangFilter
     loops:     false,
     skips:     false,
   }

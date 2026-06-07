@@ -155,10 +155,22 @@ describe('lassoCaptureType — the engaged selLevel is the single source of trut
     expect(r.ends).toBe(false)
   })
 
-  it('overhangs/loops/skips are NOT lasso-capturable (they are visibility gates, not levels)', () => {
+  it('overhangs/loops/skips are NOT lasso-capturable by default (they are visibility gates, not levels)', () => {
     const r = lassoCaptureType({ selLevel: 'default' })
     expect(r.overhangs).toBe(false)
     expect(r.loops).toBe(false)
     expect(r.skips).toBe(false)
+  })
+
+  it('overhang filter active → overhangs ONLY, taking precedence over the engaged level', () => {
+    // Even if a fixed level is engaged, the overhang filter wins (same precedence as
+    // a plain click / Ctrl+click give it).
+    const r = lassoCaptureType({ selLevel: 'strand', overhangFilter: true })
+    expect(r.overhangs).toBe(true)
+    expect(r.strands).toBe(false)
+    expect(r.domains).toBe(false)
+    expect(r.ends).toBe(false)
+    expect(r.xover).toBe(false)
+    expect(r.cluster).toBe(false)
   })
 })

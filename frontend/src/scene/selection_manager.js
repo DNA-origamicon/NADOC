@@ -1943,6 +1943,26 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     return best
   }
 
+  // Nearest selectable OVERHANG bead (any bead carrying an overhang_id) within
+  // _NEAR_HOVER_PX of canvas-relative (sx,sy). Drives the overhang-filter hover
+  // preview + click commit. Independent of the scaffold/staple gates — overhangs are
+  // their own exclusive filter, always pickable when that filter is on.
+  function _nearestOverhangBead(sx, sy) {
+    const rect = canvas.getBoundingClientRect()
+    const cam  = _cam()
+    let best = null, bestD = _NEAR_HOVER_PX
+    for (const e of designRenderer.getBackboneEntries()) {
+      if (!e.instMesh.visible || !e.nuc.overhang_id) continue
+      _instWorld(e.instMesh, e.id, _hoverPos).project(cam)
+      if (_hoverPos.z > 1) continue   // behind the camera
+      const px = (_hoverPos.x *  0.5 + 0.5) * rect.width
+      const py = (_hoverPos.y * -0.5 + 0.5) * rect.height
+      const d  = Math.hypot(px - sx, py - sy)
+      if (d < bestD) { bestD = d; best = e }
+    }
+    return best
+  }
+
   // Nearest crossover ARC within _NEAR_HOVER_PX of (sx,sy). At xover level a crossover
   // is ALWAYS represented by its arc → the tube highlight (yellow preview / green select),
   // never the cone (whose selection highlights the whole strand and renders a sphere).
@@ -1995,6 +2015,25 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (clientX > window.innerWidth - 300) { _clearHoverPreview(); return }
     const _r = canvas.getBoundingClientRect()
     const _sx = clientX - _r.left, _sy = clientY - _r.top
+
+    // Overhang filter active: preview the nearest overhang's FULL domain bead set
+    // in yellow (same form as the green overhang selection). Takes precedence over
+    // the selectionLevel branches below — the overhang filter is its own exclusive
+    // mode (snap-to-nearest overhang, click commits the overhang domain).
+    if (store.getState().selectableTypes.overhangs) {
+      const oe = _nearestOverhangBead(_sx, _sy)
+      if (!oe) { _clearHoverPreview(); return }
+      const ovhgId = oe.nuc.overhang_id
+      if (_multiOverhangIds.includes(ovhgId)) { _clearHoverPreview(); return }  // already selected → stays green
+      const key = `overhang:${ovhgId}`
+      if (key !== _hoverKey) {
+        _hoverKey = key; _hoverBead = oe; _hoverCone = null; _hoverArc = null
+        designRenderer.clearPreviewArc?.()
+        const beads = designRenderer.getBackboneEntries().filter(b => b.nuc.overhang_id === ovhgId)
+        designRenderer.setPreviewGlow(beads.map(b => ({ pos: _instWorld(b.instMesh, b.id, new THREE.Vector3()) })))
+      }
+      return
+    }
 
     // End level: preview (yellow glow) the nearest selectable 5′/3′ terminus.
     if (_selLevel === 'end') {
@@ -2364,6 +2403,37 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     store.setState({ multiSelectedOverhangIds: [] })
   }
 
+  // Select just the OVERHANG DOMAIN — highlight only the beads carrying this
+  // overhang_id (color + 1.3× + glow), leaving the rest of the parent strand
+  // untouched (same visual as clicking the overhang directly in 3D). selectedObject
+  // is set to the matching domain so the sidebar row + properties panel reflect it.
+  // Shared by the public selectOverhang() API and the overhang-filter click path.
+  function _selectOverhangDomain(overhangId) {
+    _clearAll()
+    _applyMultiOverhangHighlight([overhangId])
+    store.setState({ multiSelectedOverhangIds: [overhangId] })
+    const design    = store.getState().currentDesign
+    const ovhg      = design?.overhangs?.find(o => o.id === overhangId)
+    const strand    = design?.strands?.find(s => s.id === ovhg?.strand_id)
+    const domainIdx = strand?.domains?.findIndex(d => d.overhang_id === overhangId) ?? -1
+    if (strand && domainIdx >= 0) {
+      const domainObj = strand.domains[domainIdx]
+      store.setState({
+        selectedObject: {
+          type: 'domain',
+          id:   `${strand.id}:${domainIdx}`,
+          data: {
+            strand_id:    strand.id,
+            domain_index: domainIdx,
+            helix_id:     domainObj?.helix_id  ?? null,
+            direction:    domainObj?.direction ?? null,
+            overhang_id:  overhangId,
+          },
+        },
+      })
+    }
+  }
+
   // ── Multi-domain right-click menu (representation override) ──────────────
 
   function _showMultiDomainMenu(x, y, domainRefs, _designRenderer) {
@@ -2569,73 +2639,142 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _handleCtrlClickNuc(e)
   }
 
-  // Shift+left-click (no drag) → additive selection:
-  //   - over a crossover arc:  toggle that arc in the multi-crossover-arc set
-  //   - over a strand bead:    toggle that strand in the multi-strand set
-  // (Was Ctrl-click before the 2026-05-17 modifier remap.)
-  function _handleShiftClick(e) {
-    const st = store.getState().selectableTypes
-    if (st.crossoverArcs) {
-      const rect = canvas.getBoundingClientRect()
-      const arcHit = _findArcAt(e.clientX - rect.left, e.clientY - rect.top)
-      if (arcHit?.crossover_id) {
-        const idx  = _multiCrossoverArcs.findIndex(a => a.crossover_id === arcHit.crossover_id)
-        const next = idx >= 0
-          ? _multiCrossoverArcs.filter((_, i) => i !== idx)
-          : [..._multiCrossoverArcs, arcHit]
-        _applyMultiCrossoverHighlight(next)   // green tubes, matching single-click
-        return
-      }
-    }
-    _handleShiftAdditivePick(e)
+  // ── Unified Ctrl/Shift+click multi-select toggle ─────────────────────────
+  // ONE rule for every element type: Ctrl+click (and its Shift+click alias) adds the
+  // clicked element to the multi-selection if it isn't already in it, and removes it
+  // if it is — at the ACTIVE selection level, so it toggles the SAME element a plain
+  // click would select (snap-to-nearest, same radius as the hover preview). This
+  // replaced the old split (Ctrl=crossover only, Shift=strand only, Alt=overhang).
+  // Ctrl+drag is still the lasso; Alt+click is still the measurement-bead picker.
+
+  function _toggleStrand(strandId) {
+    if (!strandId) return
+    const next = _multiStrandIds.includes(strandId)
+      ? _multiStrandIds.filter(id => id !== strandId)
+      : [..._multiStrandIds, strandId]
+    if (next.length === 0) _clearMultiSelection()
+    else { _applyMultiHighlight(next); store.setState({ multiSelectedStrandIds: next }) }
   }
 
-  // Ctrl+left-click (no drag) → toggle the nearest crossover in/out of the
-  // multi-crossover selection (select / deselect). Uses the generous hover-snap
-  // radius at xover level, else the precise arc-hit when the crossoverArcs filter
-  // is on. Renders as the green tube, same as every other crossover highlight.
-  function _handleCtrlClick(e) {
-    if (e.clientX > window.innerWidth - 300) return
-    const rect = canvas.getBoundingClientRect()
-    const sx = e.clientX - rect.left, sy = e.clientY - rect.top
-    const arc = _selLevel === 'xover'
-      ? _nearestXover(sx, sy)
-      : (store.getState().selectableTypes.crossoverArcs ? _findArcAt(sx, sy) : null)
+  function _toggleDomain(nuc) {
+    const strandId = nuc.strand_id
+    if (!strandId) return
+    const domainIndex = nuc.domain_index ?? 0
+    const key = `${strandId}:${domainIndex}`
+    const present = _multiDomainIds.some(d => `${d.strandId}:${d.domainIndex}` === key)
+    const next = present
+      ? _multiDomainIds.filter(d => `${d.strandId}:${d.domainIndex}` !== key)
+      : [..._multiDomainIds, { strandId, domainIndex }]
+    if (next.length === 0) _clearMultiDomainSelection()
+    else { _applyMultiDomainHighlight(next); store.setState({ multiSelectedDomainIds: next }) }
+  }
+
+  function _toggleOverhang(ovhgId) {
+    if (!ovhgId) return
+    const next = _multiOverhangIds.includes(ovhgId)
+      ? _multiOverhangIds.filter(id => id !== ovhgId)
+      : [..._multiOverhangIds, ovhgId]
+    if (next.length === 0) _clearMultiOverhangSelection()
+    else { _applyMultiOverhangHighlight(next); store.setState({ multiSelectedOverhangIds: next }) }
+  }
+
+  function _toggleCrossover(arc) {
     if (!arc?.crossover_id) return
     const idx  = _multiCrossoverArcs.findIndex(a => a.crossover_id === arc.crossover_id)
     const next = idx >= 0
       ? _multiCrossoverArcs.filter((_, i) => i !== idx)   // deselect
       : [..._multiCrossoverArcs, arc]                     // select
-    _applyMultiCrossoverHighlight(next)
+    _applyMultiCrossoverHighlight(next)                   // green tubes, matching single-click
   }
 
-  // Shift-click additive strand pick. Toggles the hit strand in _multiStrandIds
-  // and pushes the updated set to the store. Keeps existing multi-selection
-  // intact (the regular non-modifier click is the one that clears it).
-  function _handleShiftAdditivePick(e) {
-    if (e.clientX > window.innerWidth - 300) return
-    _setNdc(e.clientX, e.clientY)
-    raycaster.setFromCamera(_ndc, _cam())
-    const backboneEntries = designRenderer.getBackboneEntries()
-    const beadMeshes = [...new Set(backboneEntries.map(be => be.instMesh))].filter(m => m.visible)
-    if (!beadMeshes.length) return
-    const hits = raycaster.intersectObjects(beadMeshes)
-    if (!hits.length) return
-    const entry = backboneEntries.find(be =>
-      be.instMesh === hits[0].object && be.id === hits[0].instanceId
-    )
-    const strandId = entry?.nuc?.strand_id
-    if (!strandId) return
-    const present = _multiStrandIds.includes(strandId)
-    const next = present
-      ? _multiStrandIds.filter(id => id !== strandId)
-      : [..._multiStrandIds, strandId]
-    if (next.length === 0) _clearMultiSelection()
-    else {
-      _applyMultiHighlight(next)
-      store.setState({ multiSelectedStrandIds: next })
+  function _toggleEndBead(entry) {
+    const idx = _ctrlBeads.findIndex(b =>
+      b.nuc.helix_id  === entry.nuc.helix_id &&
+      b.nuc.bp_index  === entry.nuc.bp_index &&
+      b.nuc.direction === entry.nuc.direction)
+    if (idx >= 0) {
+      const e = _ctrlBeads[idx].entry
+      designRenderer.setEntryColor(e, e.defaultColor)
+      designRenderer.setBeadScale(e, 1.0)
+      if (e.instMesh.instanceColor)  e.instMesh.instanceColor.needsUpdate  = true
+      if (e.instMesh.instanceMatrix) e.instMesh.instanceMatrix.needsUpdate = true
+      _ctrlBeads.splice(idx, 1)
+    } else {
+      designRenderer.setEntryColor(entry, C_CTRL_BEAD)
+      designRenderer.setBeadScale(entry, 1.6)
+      if (entry.instMesh.instanceColor)  entry.instMesh.instanceColor.needsUpdate  = true
+      if (entry.instMesh.instanceMatrix) entry.instMesh.instanceMatrix.needsUpdate = true
+      _ctrlBeads.push({ entry, nuc: entry.nuc })
     }
+    _refreshCtrlGlow()
+    _notifyCtrlBeadsChange()
   }
+
+  // Cluster toggle: a cluster's multi-selection is its member strands (mirrors the
+  // lasso-at-cluster-level expansion). Toggle = remove all members if every one is
+  // already selected, else add them all.
+  function _toggleCluster(nuc) {
+    const design = store.getState().currentDesign
+    const cid = _resolveClusterId(nuc, design)
+    if (!cid) return
+    const f = clusterMemberFilter(design?.cluster_transforms?.find(c => c.id === cid), design)
+    if (!f) return
+    const members = new Set()
+    for (const e of designRenderer.getBackboneEntries()) {
+      if (f(e.nuc) && e.nuc.strand_id) members.add(e.nuc.strand_id)
+    }
+    if (members.size === 0) return
+    const allPresent = [...members].every(id => _multiStrandIds.includes(id))
+    const next = allPresent
+      ? _multiStrandIds.filter(id => !members.has(id))
+      : [...new Set([..._multiStrandIds, ...members])]
+    if (next.length === 0) _clearMultiSelection()
+    else { _applyMultiHighlight(next); store.setState({ multiSelectedStrandIds: next }) }
+  }
+
+  // Dispatch a Ctrl/Shift+click to the right toggle for the active selection level —
+  // the same element type a plain click selects at that level (overhang filter wins,
+  // like a plain click). Snap-to-nearest within _NEAR_HOVER_PX so it matches the
+  // hover preview the user sees.
+  function _toggleAtLevel(e) {
+    if (e.clientX > window.innerWidth - 300) return
+    const rect = canvas.getBoundingClientRect()
+    const sx = e.clientX - rect.left, sy = e.clientY - rect.top
+    const st = store.getState().selectableTypes
+
+    // Overhang filter active → toggle the nearest overhang (precedence, like plain click).
+    if (st.overhangs) {
+      const oe = _nearestOverhangBead(sx, sy)
+      if (oe?.nuc?.overhang_id) _toggleOverhang(oe.nuc.overhang_id)
+      return
+    }
+
+    // Crossover level → toggle the nearest crossover arc.
+    if (_selLevel === 'xover' || st.crossoverArcs) {
+      const arc = _selLevel === 'xover' ? _nearestXover(sx, sy) : _findArcAt(sx, sy)
+      _toggleCrossover(arc)
+      return
+    }
+
+    // End level → toggle the nearest 5′/3′ terminus (gold ctrl-bead set, same as lasso).
+    if (_selLevel === 'end') {
+      const ee = _nearestEndEntry(sx, sy)
+      if (ee) _toggleEndBead(ee)
+      return
+    }
+
+    // Strand / domain / cluster → resolve the nearest bead, toggle at that grain.
+    const hit = _pickNearestBeadCone(e.clientX, e.clientY)
+    const entry = (hit?.kind === 'bead' ? hit.entry : null) ?? _nearestBead(sx, sy)
+    if (!entry) return
+    if (_selLevel === 'domain')  { _toggleDomain(entry.nuc);  return }
+    if (_selLevel === 'cluster') { _toggleCluster(entry.nuc); return }
+    _toggleStrand(entry.nuc.strand_id)   // 'strand' or 'default'
+  }
+
+  // Ctrl+left-click (no drag) and its Shift+click alias both run the unified toggle.
+  function _handleCtrlClick(e)  { _toggleAtLevel(e) }
+  function _handleShiftClick(e) { _toggleAtLevel(e) }
 
   function _finalizeLasso(endX, endY) {
     _inLassoMode = false
@@ -2669,7 +2808,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // selection_level.js): the engaged `_selLevel` decides — the lasso captures the
     // SAME element a click at that level would (ISSUE-4 filter-audit fix for "Tab to
     // ends, lasso grabs a cluster"). scaffold/staple gates are applied in the loop below.
-    const cap = lassoCaptureType({ selLevel: _selLevel })
+    const cap = lassoCaptureType({ selLevel: _selLevel, overhangFilter: st.overhangs })
     const beadLevelLasso = cap.beadLevel
     const useStrands  = cap.strands
     const useDomains  = cap.domains
@@ -2899,9 +3038,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }, { capture: true })
 
   let _downPos     = null
-  let _ctrlDownPos = null   // pending Ctrl+left-down — Ctrl-drag = lasso; bare click is a no-op now
+  let _ctrlDownPos = null   // pending Ctrl+left-down — Ctrl-drag = lasso; bare click = unified toggle
   let _altDownPos  = null   // pending Alt+left-down — release without drag = measurement bead
-  let _shiftDownPos = null  // pending Shift+left-down — release without drag = additive multi-select
+  let _shiftDownPos = null  // pending Shift+left-down — bare click = unified toggle (Ctrl alias)
 
   canvas.addEventListener('pointerdown', e => {
     if (e.button !== 0) return
@@ -2909,8 +3048,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     // Modifier precedence: Alt > Shift > Ctrl. They never combine meaningfully
     // here, so the first match wins. Alt-down records position for measurement
-    // bead pick; Shift-down for additive multi-select; Ctrl-down for the lasso
-    // (drag detected on move).
+    // bead pick; Shift-down and Ctrl-down both record for the unified multi-select
+    // toggle on release, and a Ctrl-drag becomes the lasso (drag detected on move).
     if (e.altKey) {
       _altDownPos = { x: e.clientX, y: e.clientY }
       return
@@ -2951,8 +3090,16 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   canvas.addEventListener('pointermove', e => {
     // Hover preview (default level + strand selected) — pops the bead/cone under
-    // the cursor. Skipped during a ctrl/lasso drag.
-    if (!_ctrlDownPos && !_inLassoMode && !isDisabled?.()) _updateHoverPreview(e.clientX, e.clientY)
+    // the cursor. Suspended while ANY mouse button is held (e.buttons !== 0): a
+    // button-down drag is an orbit (left) or pan (right/middle), and a moving camera
+    // would flicker the snap target under a stationary cursor. Wheel ZOOM holds no
+    // button, so hover keeps working while zooming (as desired). Also skipped during
+    // a ctrl/lasso drag or while disabled.
+    if (e.buttons !== 0) {
+      _clearHoverPreview()
+    } else if (!_ctrlDownPos && !_inLassoMode && !isDisabled?.()) {
+      _updateHoverPreview(e.clientX, e.clientY)
+    }
     // If ctrl is held and we haven't yet started a lasso, check if the drag threshold is exceeded.
     if (_ctrlDownPos && !_inLassoMode) {
       if (Math.hypot(e.clientX - _ctrlDownPos.x, e.clientY - _ctrlDownPos.y) > 4) {
@@ -3035,6 +3182,18 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     const backboneEntries = designRenderer.getBackboneEntries()
     const coneEntries     = designRenderer.getConeEntries()
+
+    // Overhang filter active: a click selects the nearest overhang's DOMAIN (within
+    // _NEAR_HOVER_PX) — same snap-to-nearest commit as the fixed levels, and the same
+    // overhang-domain highlight the sidebar list uses. The overhang filter fully owns
+    // the click: nothing nearby → deselect (never falls through to strand select).
+    if (selectableTypes.overhangs) {
+      const _rect = canvas.getBoundingClientRect()
+      const oe = _nearestOverhangBead(e.clientX - _rect.left, e.clientY - _rect.top)
+      if (oe) _selectOverhangDomain(oe.nuc.overhang_id)
+      else    _clearAll()
+      return
+    }
 
     // Fixed filter levels: the nearest-element hover preview decides the click
     // target — clicking commits whatever is previewed (within _NEAR_HOVER_PX), so the
@@ -3627,6 +3786,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         },
       })
     },
+
+    /** Programmatically select just the OVERHANG DOMAIN — highlights only the
+     *  beads carrying this overhang_id (color + 1.3× scale + glow), leaving the
+     *  rest of the parent strand untouched. Same visual as clicking the overhang
+     *  directly in 3D. Used by the sidebar overhang list so picking an overhang
+     *  scopes the highlight to the overhang, not the whole strand.
+     *  selectedObject is set to the matching domain so the sidebar row + the
+     *  properties panel reflect it. */
+    selectOverhang(overhangId) { _selectOverhangDomain(overhangId) },
 
     /** The active selectionLevel ('default'|'cluster'|'strand'|'domain'|'end'|'xover'). */
     getSelectionLevel() { return _selLevel },

@@ -16,7 +16,7 @@
  *
  * @param {object} deps
  * @param {object} deps.store              — Zustand-style store (getState/setState/subscribe)
- * @param {object} deps.selectionManager   — needs selectStrand(id)
+ * @param {object} deps.selectionManager   — needs selectOverhang(overhangId)
  * @param {object} deps.api                — needs generateOverhangRandomSequence/patchOverhang/patchOverhangBinding
  * @param {object} deps.overhangNameOverlay — needs setScale(s)
  * @returns {{ rebuild: Function }}
@@ -147,10 +147,11 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
       row.style.cursor = 'pointer'
 
       // Row click selects this overhang (so the Strand Animation section can
-      // bind to it). Clicks on the inputs/buttons keep their own behavior.
+      // bind to it) and highlights ONLY the overhang domain in 3D — not the
+      // whole strand. Clicks on the inputs/buttons keep their own behavior.
       row.addEventListener('click', (e) => {
         if (e.target.closest('input,button')) return
-        store.setState({ multiSelectedOverhangIds: [ovhg.id] })
+        selectionManager.selectOverhang(ovhg.id)
       })
 
       // Register for highlight tracking
@@ -172,7 +173,7 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
 
       for (const inp of [nameInput, seqInput]) {
         inp.addEventListener('keydown', e => e.stopPropagation())
-        inp.addEventListener('focus', () => selectionManager.selectStrand(ovhg.strand_id))
+        inp.addEventListener('focus', () => selectionManager.selectOverhang(ovhg.id))
       }
 
       const genBtn = document.createElement('button')

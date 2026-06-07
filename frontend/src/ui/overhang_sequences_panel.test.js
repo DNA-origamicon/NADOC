@@ -136,7 +136,7 @@ function makeDeps(design) {
     multiSelectedDomainIds: [],
     multiSelectedOverhangIds: [],
   })
-  const selectionManager = { selectStrand: vi.fn() }
+  const selectionManager = { selectStrand: vi.fn(), selectOverhang: vi.fn() }
   const api = {
     generateOverhangRandomSequence: vi.fn(() => Promise.resolve()),
     patchOverhang: vi.fn(() => Promise.resolve()),
@@ -261,14 +261,15 @@ describe('initOverhangSequencesPanel', () => {
     expect(deps.api.patchOverhangBinding).toHaveBeenCalledWith('b1', { bound: true })
   })
 
-  it('row click selects the overhang via store.setState', () => {
+  it('row click selects only the overhang domain via selectionManager.selectOverhang', () => {
     mountDom()
     const deps = makeDeps(DESIGN)
     initOverhangSequencesPanel(deps)
     document.getElementById('overhang-panel-heading').click()
     const row = [...document.getElementById('overhang-list').children].find(c => c.dataset.strandId === 's1')
     row.click()
-    expect(deps.store.getState().multiSelectedOverhangIds).toEqual(['o1'])
+    expect(deps.selectionManager.selectOverhang).toHaveBeenCalledWith('o1')
+    expect(deps.selectionManager.selectStrand).not.toHaveBeenCalled()
   })
 
   it('highlights rows whose strand is selected when selection changes', () => {
