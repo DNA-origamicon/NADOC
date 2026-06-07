@@ -62,8 +62,8 @@ pass over GENERATED → VALIDATED happens as the user actually executes them.
 ## Register state
 
 - Total items: **18**
-- PENDING (no manual ops yet): **15**
-- GENERATED (ready to run): **2** — MV-1, MV-2
+- PENDING (no manual ops yet): **14**
+- GENERATED (ready to run): **3** — MV-1, MV-2, MV-4
 - VALIDATED: **1** — MV-3 (selection-rules UX, 2026-06-07)
 - REGRESSION FOUND: **0** (MV-3's two regressions were fixed + re-validated same session)
 
@@ -79,8 +79,8 @@ Core editing + default-selection UX first; niche/visual last.
 | — | **MV-1** | *(processing — see GENERATED)* design-mode cluster **Move / Rotate** tool: right-click cluster → gizmo/panel → ✓ commit | #71 #78 #79 #80 #81 | a cluster-bearing design (e.g. `Examples/26hb_platform_v3.nadoc`) | 3D pointer-pick on a cluster + gizmo-handle drag not drivable at pixel precision (LESSONS H7) |
 | — | **MV-2** | *(generated — see GENERATED)* **Overhang Orientation** panel: right-click a rendered overhang → Edit Orientation → step/apply/reset/auto-close; also the migrated context menu | #64, fix #7 | `Examples/NS_trans_fix.nadoc` (51 overhangs) ✓ + `workspace/OH6hb_test.nadoc` (2) ✓ | WebGL raycast on 1 of N overhang beads not drivable |
 | — | **MV-3** | ✅ **VALIDATED 2026-06-07** (see VALIDATED) — **selection-rules UX** (drill levels, crossover tube, yellow hover+snap, Ctrl+click, cluster Tab removal) | fixes #10 #11 #12 #14 #15 | `Examples/6hb_test.nadoc` ✓ + `Examples/2hb_xover_val.nadoc` ✓ | — |
-| ▶ HEAD | **MV-4** | Assembly **multi-select purple union BoxHelper**: Ctrl-lasso ≥2 instances → purple box around the union; drops below 2 → clears | #34 | `workspace/Belt_test1.nass` (parts+groups) or any ≥2-part `.nass` | needs a built ≥2-part assembly + Ctrl-lasso multi-select |
-| | **MV-5** | Assembly **right-click context menu**: right-click a part → linker-relax (enabled/disabled), attach-to-belt, select; pan-suppress | #69 | `workspace/Linker_Assem_test.nass` / `Belt_test1.nass` | assembly + linker/belt multi-step setup; right-click router |
+| — | **MV-4** | *(generated — see GENERATED)* Assembly **multi-select purple union BoxHelper**: Ctrl-lasso ≥2 instances → purple box around the union; drops below 2 → clears | #34 | `workspace/Belt_test1.nass` (parts+groups) or any ≥2-part `.nass` | needs a built ≥2-part assembly + Ctrl-lasso multi-select |
+| ▶ HEAD | **MV-5** | Assembly **right-click context menu**: right-click a part → linker-relax (enabled/disabled), attach-to-belt, select; pan-suppress | #69 | `workspace/Linker_Assem_test.nass` / `Belt_test1.nass` | assembly + linker/belt multi-step setup; right-click router |
 | | **MV-6** | **Belt polymerize**: built belt assembly → Polymerize along belt → evenly-spaced copies | #32 | `workspace/Belt_test1.nass` / `belt_test.nass` | needs a built belt assembly |
 | | **MV-7** | **Coalesced assembly part-refresh**: edit a part in part-context + save burst → shared instances refresh once (not per-instance) | #38 | a multi-part assembly with ≥2 instances of one source part | needs multi-part assembly + part-editor save burst |
 | | **MV-8** | Assembly **config animation**: assembly with a saved feature-log configuration → "animate to configuration" tweens instances | #68 | an assembly that has ≥1 saved configuration (may need to create one) | needs assembly WITH a saved configuration |
@@ -440,6 +440,120 @@ part-3D-editor selection-rules UX is now validated & finished.** What's in place
 `frontend/src/scene/arc_tube_geometry.test.js` (never NaNs). The earlier MV-3
 REGRESSION-FOUND items (below) are resolved by the above.
 
+### MV-4 — Assembly multi-select purple union BoxHelper
+*Discharges extraction #34 (the multi-select union box lifted out of main.js →
+`scene/assembly_multi_box.js`, factory `initAssemblyMultiBox`). The pure union math
+(`selection_bbox.js` `instanceUnionBox`) is unit-pinned and the factory has jsdom
+coverage, but the **live Ctrl-lasso over real instances → purple box around the
+union → clears when the set empties** gesture is the never-hand-driven part. #34 is
+also the extraction that caused the assembly-exit `const`-reassignment TypeError the
+smoke teardown gate was added for, so a teardown spot-check belongs here too.*
+
+**Why this needs a human.** Every automated gate runs the *math* (union of N centers)
+and the *factory* (does it add/remove a `Box3Helper`), but nothing exercises the real
+chain: a Ctrl-drag rectangle in the assembly viewport → `assembly_lasso` projects each
+instance center → `multiSelectedInstanceIds` → the RAF-coalesced subscriber calls
+`_assemblyMultiBox.update()` → a `Box3Helper` appears at the right extent. The colour
+rule (1 part = WHITE, ≥2 parts or any group = PURPLE) and the live re-fit during a
+group-gizmo drag are also human-eye-only.
+
+**Routing facts (so you know where to click):**
+- Ctrl(or ⌘)-**drag** a rectangle = lasso → instances whose projected center falls in
+  the rect populate `multiSelectedInstanceIds` (`main.js:5304` `initAssemblyLasso`
+  `onSelect`). A plain (non-additive) lasso *replaces* the set; lasso while already
+  multi-selected is **additive** (unions in the new hits).
+- Ctrl-**click** (no drag) on a part = toggles that one instance in/out of the set
+  (`onClick` → `toggleInstanceSelection`, `main.js:5314`).
+- **Plain** (non-Ctrl) click anywhere collapses the whole multi-select back to a single
+  select / empty (`assembly_pointer.js:456-465`).
+- Colour: `MULTI_BOX_COLOR = 0x8b5cf6` (violet) when `size ≥ 2` OR a group is active;
+  `SINGLE_BOX_COLOR = 0xffffff` (white) for exactly one Ctrl-selected part
+  (`assembly_multi_box.js:26,62`). The box reads ONLY `multiSelectedInstanceIds` +
+  `activeGroupId`, never `activeInstanceId`, so a plain single-click (which the renderer
+  already outlines white per-instance) does **not** draw a second box here.
+- A **group select** (first click on a grouped part → `selectGroup`) folds every
+  transitive group member into the union and draws it PURPLE
+  (`assembly_multi_box.js:50-54`).
+
+**SETUP**
+1. Start both servers (`just dev` + `just frontend`), open `http://localhost:5173`,
+   keep devtools console open.
+2. **Open an assembly** (this is an assembly-mode block, not the design editor): File →
+   Open → `workspace/Belt_test1.nass`. *(Verified: 62 part instances + 2 groups + 1
+   belt — plenty of selectable instances.)* Wait for the parts to render; zoom/orbit so
+   a cluster of ≥3 distinct instances is comfortably in view.
+
+**MAIN CASES**
+1. **Ctrl-lasso ≥2 instances → PURPLE union box.** Hold Ctrl (⌘ on macOS) and drag a
+   rectangle enclosing **≥2** part instances. Expect: on pointer-up, a single **violet
+   (purple) wireframe box** appears tightly enclosing the *union* of all captured
+   instances (not one box per part). The box should sit on top of the geometry
+   (depthTest off — visible even through parts).
+2. **Ctrl-lasso exactly 1 instance → WHITE box.** Ctrl-drag a rectangle that catches
+   **exactly one** instance. Expect: the box is **white**, not purple (single-part
+   case, ISSUE-3a immediate-feedback).
+3. **Additive lasso grows the union.** With ≥2 already selected (purple box up),
+   Ctrl-drag a *second* rectangle over a different instance. Expect: the new instance is
+   **added** (not replaced) and the purple box **grows** to enclose the larger union.
+4. **Ctrl-click toggles one in/out.** Ctrl-click an unselected part → it joins the set
+   and the box re-fits. Ctrl-click an already-selected part → it leaves the set and the
+   box shrinks. When the count crosses 2→1 the box should turn **white**; 1→0 it should
+   **vanish**.
+5. **Group select draws a purple union.** Click a part that belongs to a **group**
+   (Belt_test1 has 2 groups). Expect: the whole group selects (group gizmo at centroid)
+   AND a **purple** union box wraps every member of the group.
+6. **Plain click clears it.** With a multi-select (or group) active, do a plain
+   (non-Ctrl) **left-click on a single part** or on empty space. Expect: the purple/white
+   union box **disappears**; you get a fresh single-select (click on a part) or nothing
+   (click on empty space).
+
+**EDGE CASES**
+1. **Drops below 2 → colour/clear transition.** From a 3-part purple selection, Ctrl-
+   click to remove parts one at a time. Expect the exact ladder: 3→2 stays **purple**,
+   2→1 turns **white**, 1→0 the box is **removed entirely** (not a zero-size box, not a
+   lingering purple frame).
+2. **Live re-fit during a group-gizmo drag.** Select a group (purple box up), grab the
+   group gizmo and **drag/rotate** it. Expect: the purple box **re-fits every frame** to
+   follow the moving members (RAF-coalesced; `group_gizmo.js:389-395`) — it must not lag
+   a full gesture behind or stay frozen at the start pose.
+3. **Box survives a member move/rotate commit.** After moving the group (case 2), release
+   and confirm the box is still correctly fitted to the *new* extent (the subscriber re-
+   runs on `assemblyChanged`, `main.js:5143-5148`).
+4. **Empty-rect lasso is a no-op.** Ctrl-drag a rectangle over **empty space** (no
+   instances). Expect: no box, no error, existing selection cleared/replaced per the
+   non-additive rule (empty replace → empty set → no box).
+5. **Assembly-exit teardown (the #34 smoke-gate bug).** With a multi-select box up, exit
+   the assembly (close the doc / return to main menu / open a design). Expect: **no
+   console error** (the original #34 bug was a `const`-reassignment TypeError on assembly
+   exit) and no orphaned box left in the next scene.
+
+**PASS CRITERIA**
+- Ctrl-lasso of ≥2 instances draws exactly **one** violet union box tightly enclosing
+  the union; exactly 1 instance draws a **white** box; 0 draws none.
+- Additive lasso + Ctrl-click toggle grow/shrink the box; the 2→1 (purple→white) and
+  1→0 (→removed) transitions are crisp.
+- A group select draws a purple box around all members; plain click clears any box.
+- The box re-fits live during a group drag and stays correct after the commit.
+- Exiting the assembly with a box up throws **no console error** and leaves no orphan.
+- No console errors at any step.
+
+**WATCH FOR (suspect behaviors — confirm or deny)**
+- **The "drops below 2 → clears" phrasing is imprecise — confirm the real rule.** The
+  ledger one-liner says the box "clears when the selection drops below 2," but the code
+  draws a **white** box at exactly 1 and only removes it at **0**. Confirm you see
+  white-at-1 (not a disappearance at 1). If the box vanishes at 1, *that* would be the
+  regression.
+- **Double box.** Because the union box ignores `activeInstanceId`, a *plain* single-
+  click (renderer's own white per-instance outline) must NOT also spawn a union box —
+  watch for two overlapping white boxes on a plain single select.
+- **Stale box after group move.** Confirm the box doesn't lag one full drag behind the
+  members or freeze at the pre-drag pose (the RAF coalescing in `group_gizmo.js` is the
+  suspect — it batches re-fits to one per frame).
+- **Lasso vs. orbit.** A Ctrl-drag must lasso, not orbit the camera. Confirm OrbitControls
+  doesn't also spin during the rectangle drag (the lasso should suppress it).
+
+---
+
 ## REGRESSION FOUND (user-confirmed fail → fix opened)
 
 ### MV-3 (2026-06-07) — two issues found running the block → **FIXED + re-validated same session** (see VALIDATED)
@@ -467,12 +581,11 @@ _(none — MV-3 re-validated 2026-06-07; see VALIDATED)_
 
 ## Next loop
 
-**▶ Process MV-4 — Assembly multi-select purple union BoxHelper** (discharges #34).
-Dig: the assembly multi-select path (`scene/assembly_multi_box.js` +
-`updateAssemblyMultiBox`, `assembly_pointer.js` Ctrl-lasso union, `group_gizmo.js`
-live re-fit), how a Ctrl-lasso of ≥2 instances draws a **purple** BoxHelper around
-the union and how it **clears** when the selection drops below 2. **Fixture:**
-`workspace/Belt_test1.nass` (parts+groups, the reference assembly fixture) or any
-built ≥2-part `.nass`; verify it has ≥2 selectable instances. This is an
-**assembly-mode** block — SETUP must enter assembly mode (open the `.nass`), not the
-design editor.
+**▶ Process MV-5 — Assembly right-click context menu** (discharges #69).
+Dig: the assembly right-click router (`assembly_pointer.js` right-click handler →
+context-menu builder), the menu items (linker-relax enabled/disabled, attach-to-belt,
+select) and the pan-suppress behavior (right-drag must orbit/pan, not fire the menu).
+**Fixture:** `workspace/Linker_Assem_test.nass` (cross-part linker, for the relax
+enabled/disabled gating) and/or `workspace/Belt_test1.nass` (belt, for attach-to-belt);
+verify each has the relevant feature. This is an **assembly-mode** block — SETUP opens
+the `.nass`. Right-click on a part on a WebGL canvas is the never-driven gesture.
