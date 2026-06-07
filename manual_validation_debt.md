@@ -55,8 +55,8 @@ pass over GENERATED → VALIDATED happens as the user actually executes them.
 ## Register state
 
 - Total items: **14**
-- PENDING (no manual ops yet): **13**
-- GENERATED (ready to run): **1** — MV-1
+- PENDING (no manual ops yet): **12**
+- GENERATED (ready to run): **2** — MV-1, MV-2
 - VALIDATED: **0**
 - REGRESSION FOUND: **0**
 
@@ -70,8 +70,8 @@ Core editing + default-selection UX first; niche/visual last.
 | # | id | feature / manual operation | discharges | fixture hint | why deferred |
 |---|----|----------------------------|-----------|--------------|--------------|
 | — | **MV-1** | *(processing — see GENERATED)* design-mode cluster **Move / Rotate** tool: right-click cluster → gizmo/panel → ✓ commit | #71 #78 #79 #80 #81 | a cluster-bearing design (e.g. `Examples/26hb_platform_v3.nadoc`) | 3D pointer-pick on a cluster + gizmo-handle drag not drivable at pixel precision (LESSONS H7) |
-| ▶ HEAD | **MV-2** | **Overhang Orientation** panel: right-click a rendered overhang → Edit Orientation → step/apply/reset/auto-close; also the migrated context menu | #64, fix #7 | a design with overhangs (mem: `NS_trans_fix` ≈ 50 overhangs — verify it exists) | WebGL raycast on 1 of N overhang beads not drivable |
-| | **MV-3** | **Drill-v2 selection** on a multi-helix design: strand level, Tab cycle, crossover-arc hover(red)/click(green) tube, no red sf-pinned box, multi-element lasso respects engaged level | fixes #10 #11 #12 #14 #15 | a multi-helix design WITH crossovers (harness fixture is single-helix → no xovers) | thin-arc gesture + Tier-3 colour + multi-element lasso need a real multi-helix design |
+| — | **MV-2** | *(generated — see GENERATED)* **Overhang Orientation** panel: right-click a rendered overhang → Edit Orientation → step/apply/reset/auto-close; also the migrated context menu | #64, fix #7 | `Examples/NS_trans_fix.nadoc` (51 overhangs) ✓ + `workspace/OH6hb_test.nadoc` (2) ✓ | WebGL raycast on 1 of N overhang beads not drivable |
+| ▶ HEAD | **MV-3** | **Drill-v2 selection** on a multi-helix design: strand level, Tab cycle, crossover-arc hover(red)/click(green) tube, no red sf-pinned box, multi-element lasso respects engaged level | fixes #10 #11 #12 #14 #15 | a multi-helix design WITH crossovers (harness fixture is single-helix → no xovers) | thin-arc gesture + Tier-3 colour + multi-element lasso need a real multi-helix design |
 | | **MV-4** | Assembly **multi-select purple union BoxHelper**: Ctrl-lasso ≥2 instances → purple box around the union; drops below 2 → clears | #34 | `workspace/Belt_test1.nass` (parts+groups) or any ≥2-part `.nass` | needs a built ≥2-part assembly + Ctrl-lasso multi-select |
 | | **MV-5** | Assembly **right-click context menu**: right-click a part → linker-relax (enabled/disabled), attach-to-belt, select; pan-suppress | #69 | `workspace/Linker_Assem_test.nass` / `Belt_test1.nass` | assembly + linker/belt multi-step setup; right-click router |
 | | **MV-6** | **Belt polymerize**: built belt assembly → Polymerize along belt → evenly-spaced copies | #32 | `workspace/Belt_test1.nass` / `belt_test.nass` | needs a built belt assembly |
@@ -164,6 +164,126 @@ factory tests. A break here corrupts edits silently.
 
 ---
 
+### MV-2 — Overhang Orientation panel + migrated context menu
+*Discharges extraction #64 (the orientation panel lifted out of main.js —
+`ui/overhang_orientation_panel.js`, factory `initOverhangOrientationPanel`) and fix
+#7 (the right-click menu migrated onto the shared `createContextMenu` primitive —
+`ui/overhang_orientation_menu.js`). Both have jsdom/vitest coverage
+(`overhang_orientation_panel.test.js`, `overhang_orientation_menu.test.js`) but the
+**live WebGL raycast onto 1 overhang of N + the gizmo drag + the instant client-side
+preview** are the never-hand-driven parts.*
+
+**Why this needs a human.** The unit tests pin the menu item set, the single-vs-multi
+gating, and `buildOverhangRotationOps` (the delta-compose math). What they cannot
+touch: the raycast that decides *which* overhang you right-clicked (domain bead, cone
+over an overhang domain, or a Ctrl-lasso union), the rotate-only TransformControls
+gizmo, and the no-server preview that only commits on **Apply**. A break in any of
+those passes every automated gate.
+
+**Routing facts (so you know where to click):** the right-click menu fires via
+`selection_manager.js` → `onOverhangRightClick` → `_orientMenu.show` (main.js:857).
+A **single** overhang menu is reached by right-clicking an overhang in **domain**
+selection level (or a strand cone that sits on an overhang domain). A **multi**
+overhang menu is reached by **Ctrl-lasso** over ≥2 overhang domains, then right-click.
+Selection level is set by the `#select-filter` row buttons or **Tab**; **Esc** → default.
+
+**SETUP**
+1. Start both servers (`just dev` + `just frontend`), open `http://localhost:5173`,
+   keep devtools console open.
+2. Load `Examples/NS_trans_fix.nadoc` (51 overhangs — dense, the canonical overhang
+   fixture). For the single-vs-multi gating checks, `workspace/OH6hb_test.nadoc`
+   (exactly 2 overhangs) is smaller and easier to aim at — use whichever lets you
+   land a clean right-click.
+3. Make overhangs visible/selectable: zoom in past cylinder-LOD so individual beads
+   render; set the selection level to **domain** (Tab or the `#select-filter` row) so
+   a right-click resolves to an overhang domain rather than a whole strand.
+
+**MAIN CASES**
+1. **Open the context menu on one overhang.** Right-click directly on a rendered
+   overhang (its domain bead or terminal cone). Expect a `.context-menu` with exactly:
+   **Edit Orientation · Reset Orientation · Set Label… · Generate OH binding strand ·
+   Open Overhangs Manager… · Clear All Overhangs** (last one red/danger), plus a
+   **Representation** flyout. Set Label / Generate appear **only** for a single
+   overhang.
+2. **Edit Orientation opens the panel + gizmo.** Click **Edit Orientation**. Expect:
+   the right-sidebar **Overhang Orientation** section (`#overhang-orient-panel`)
+   un-hides showing the overhang's label/id, three axis rows each with **−45 / value /
+   +45** controls (`oo-rx/ry/rz`), and **Reset / Cancel / Apply** buttons; a
+   **rotate-only** TransformControls gizmo attaches at the overhang's junction
+   (root-bead) pivot — three rotation rings, no translate arrows.
+3. **Step buttons preview live.** Click **+45** on X (`oo-rx-inc`). Expect: the
+   overhang visibly rotates 45° about its junction *instantly* (no server round-trip /
+   no spinner), and the X field reads `45`. Click it again → `90`, etc. (accumulates).
+4. **Gizmo drag previews live.** Drag a rotation ring. Expect: the overhang follows
+   the drag in real time and the angle fields update to match the accumulated delta.
+5. **Typed absolute angle previews.** Type a value into the X field and press
+   **Enter**. Expect: the overhang snaps to that absolute angle (delta computed from
+   the current accumulated rotation), previewed client-side.
+6. **Apply commits.** Click **Apply**. Expect: the rotation persists (the panel closes,
+   gizmo detaches), an **`overhang_rotation` entry appears in the Feature Log**, and
+   the geometry stays exactly where it was previewed — no snap-back, no jump. The
+   committed rotation is the *delta composed onto the existing* rotation
+   (`patchOverhangRotationsBatch`), so applying twice stacks.
+
+**EDGE CASES**
+1. **Cancel reverts the preview.** Edit Orientation → step/drag to a clearly different
+   pose → click **Cancel**. Expect: the overhang snaps **back** to its pre-edit pose
+   (panel re-fetches server geometry) and **no** Feature Log entry is added.
+2. **Reset zeroes the orientation.** With an overhang that already carries a rotation,
+   Edit Orientation → **Reset**. Expect: the overhang returns to identity orientation
+   `[0,0,0,1]` (this *does* hit the server — `patchOverhangRotationsBatch` with
+   identity) and the gizmo re-attaches at zero. (Note: the **Reset Orientation** menu
+   item — without opening the panel — does the same identity-batch for every clicked
+   overhang. Verify both the menu item and the in-panel button.)
+3. **Multi-overhang selection gates the menu.** Ctrl-lasso ≥2 overhang domains →
+   right-click. Expect: the menu **omits** Set Label… and Generate OH binding strand
+   (single-only), still shows Edit Orientation / Reset / Open Manager / Clear All.
+   Edit Orientation on the multi-selection rotates **all** selected overhangs about
+   **each one's own** junction pivot (the gizmo centers on the right-clicked anchor).
+4. **Auto-close on structural change.** With the panel open on an overhang, trigger a
+   change to the overhang *set* — e.g. **Clear All Overhangs**, or delete/add an
+   overhang elsewhere. Expect: the panel **auto-closes** (the subscriber fires only
+   when the overhang id-set changes, not on a rotation patch). A plain rotation Apply
+   must **not** close it via this path (it closes via its own Apply→close).
+5. **Set Label round-trips.** Single overhang → **Set Label…** → type a label → it
+   shows on the overhang / in the panel header; **Cancel** at the prompt must not patch.
+6. **Single-overhang special: Generate OH binding strand.** Fire it on one overhang;
+   expect a binder strand generated for that overhang id (no error). (Lower priority —
+   binder generation is separately covered; just confirm the menu wiring fires the
+   right call.)
+
+**PASS CRITERIA**
+- Right-click resolves to the *correct* overhang (the one under the cursor), with the
+  expected item set + single/multi gating.
+- Edit → step/drag/type previews instantly with **no server round-trip**; angle fields
+  always mirror the current accumulated delta.
+- **Apply** persists exactly one `overhang_rotation` Feature Log entry per commit, in
+  the previewed pose; **Cancel** reverts with no entry; **Reset** returns to identity.
+- Panel auto-closes when the overhang set changes; stays open across a rotation patch.
+- No console errors at any step.
+
+**WATCH FOR (suspect behaviors — confirm or deny)**
+- **Pivot correctness on multi-select.** The gizmo centers on the right-clicked
+  anchor's pivot, but each overhang rotates about **its own** junction
+  (`_ooPivotPositions[id]`). On a Ctrl-lasso of overhangs that are far apart, confirm
+  each one pivots about its *own* root bead — not all about the anchor's pivot (that
+  would be a regression and would visibly fling distant overhangs).
+- **Preview-vs-commit drift.** Because Apply commits the *delta* composed onto the
+  existing rotation, watch for a one-step double-apply or off-by-one (e.g. the pose
+  jumping further than previewed the instant you click Apply). The preview should be
+  pixel-identical to the committed result.
+- **Stale gizmo after Apply.** After Apply the panel closes and the gizmo detaches;
+  confirm no orphaned rotation rings linger in the scene, and re-opening Edit
+  Orientation on the same overhang starts from a fresh zero delta (fields read 0),
+  not the previously-applied angle.
+- **Extrude overhangs.** `NS_trans_fix` may contain extrude-type overhangs
+  (independent helix). For those the preview also re-poses the helix axes +
+  overhang-location sprites (`isExtrudeOverhang` branch). Right-click an extrude
+  overhang and confirm the whole stub (axis + label sprite) rotates coherently, not
+  just the beads.
+
+---
+
 ## VALIDATED (user-confirmed pass)
 
 _(none yet)_
@@ -176,12 +296,15 @@ _(none yet)_
 
 ## Next loop
 
-**▶ Process MV-2 — Overhang Orientation panel.** Dig: exact right-click→"Edit
-Orientation" entry, the `#overhang-orient-panel` field ids + step/apply/reset
-buttons, the rotate-only TransformControls gizmo, and the structural-change
-auto-close subscriber (extraction #64) + the migrated context menu (fix #7). Verify
-the overhang fixture exists (`NS_trans_fix` ≈ 50 overhangs per memory — `ls
-workspace/`); if absent, name the closest design with runtime overhangs or flag that
-one must be built. Edge cases to cover: single vs multi-overhang selection (Set
-Label / Generate gating), Apply composing delta ops, Reset zeroing, step-button
-accumulation, Delete/Escape, and auto-close when the structure changes underneath.
+**▶ Process MV-3 — Drill-v2 selection on a multi-helix design** (discharges fixes
+#10 #11 #12 #14 #15). Dig: the selection-level model (`scene/selection_level.js` +
+the `_v2Handle{Bead,Cone,Arc}` paths in `selection_manager.js`), the `#select-filter`
+level buttons + **Tab** cycle + **Esc**→default, the crossover-arc hover(red)/click
+→ green tube rendering, the absence of the legacy red sf-pinned BoxHelper, and that a
+multi-element Ctrl-lasso respects the engaged level + an engaged level survives an
+empty-space click. **Fixture caveat from the table:** the harness fixture is
+single-helix (no crossovers) — you need a **multi-helix design WITH crossovers**;
+candidates: `Examples/26hb_platform_v3.nadoc`, `Examples/multi_domain_test*.nadoc`,
+`Examples/2hb_xover_val.nadoc` — verify one actually has crossover arcs before
+writing the block (per the selection.md rule the click descriptions there predate
+the v2 model, so trust `selection_level.js` + `_v2Handle*` for current behavior).
