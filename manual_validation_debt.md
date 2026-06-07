@@ -8,6 +8,13 @@ hand-exercised` / `NOT hand-driven` / `not visually confirmed` rows) and the USE
 TODO column of `issues_fix_log.md`. These are real validation debt: a silent
 behavior break would pass every automated gate we have.
 
+**Intake (push, not just mining).** The initial PENDING queue was *mined* from those
+two logs, but new items should be **pushed here directly** by the loop that creates
+the debt: a carve-up extraction session (`main_js_carveup.md` step 6b) or a fix
+session (`issues_ledger.md`) that ships a stateful/gesture region without hand-checking
+its live gesture/visual appends a PENDING `MV-N` row itself — manual op + which
+extractions/fixes it discharges + a fixture hint. Don't wait for a future re-mine.
+
 **Why a shift register.** The debt is large and each item needs its own
 context-dig (exact menu path, element ids, fixture, edge cases) to turn into
 runnable manual steps. Doing them all at once is expensive and produces a wall of
@@ -54,8 +61,8 @@ pass over GENERATED → VALIDATED happens as the user actually executes them.
 
 ## Register state
 
-- Total items: **14**
-- PENDING (no manual ops yet): **12**
+- Total items: **15**
+- PENDING (no manual ops yet): **13**
 - GENERATED (ready to run): **2** — MV-1, MV-2
 - VALIDATED: **0**
 - REGRESSION FOUND: **0**
@@ -83,6 +90,7 @@ Core editing + default-selection UX first; niche/visual last.
 | | **MV-12** | **Overhang-binding context menu**: right-click an overhang-binding line → Bind/Unbind/Delete | fix #6 | a design with non-empty `overhang_bindings` (none known — may need to build) | no fixture has bindings; WebGL right-click |
 | | **MV-13** | **FRET / fluorescence glow**: fluorophore-labeled design → View menu Fluorescence / FRET toggles → emitters glow, FRET quench scaling | #24 | a design with fluorophore-modified strands (none known — may need to build) | scaffold-only parts have no fluorophores; glow logic unit-tested only |
 | | **MV-14** | **Representation option sliders** real mouse-drag (not JS-dispatch): expand the Representation sidebar section, drag each slider | #83 (partial) | any scaffolded part | panel section collapsed by default → `.fill()` needed visibility; drove via JS-dispatch instead |
+| | **MV-15** | **Properties panel for an overhang-/assembly-anchored protein**: select a protein attached to an overhang (and one in an assembly) → panel shows the overhang id + attach-end / part-instance anchor, not just the free case | fix #18 (ISSUE-5) | needs a design with a protein attached to an overhang (none known — build via `/design/protein/attachments`) + an assembly with a protein | only the FREE-anchor branch was eyeballed live; overhang/assembly anchor branches are unit-tested only (no fixture) |
 
 ---
 

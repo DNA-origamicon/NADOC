@@ -33,6 +33,17 @@ inline, plus a couple of deliberately-deferred coupled regions. See the handoff 
    ALL stateful regions: one app exercise + `just smoke` before commit.
 6. One region per commit. Update this map (check the box, note the commit) + add a metrics row to the
    log. If a region turns out coupled/unsafe, log it in the difficulties ledger and move on.
+6b. **Route what you found into the right loop (do NOT let it die in the difficulties ledger):**
+   - **Found a bug** (in the region or adjacent — e.g. the #85 `properties_panel` protein-throw)? Add it
+     to **`issues_ledger.md`** as a new `ISSUE-N` dossier (symptom + repro + suspected location), even if
+     you fixed it the same session — and if you fixed it, also add a row to **`issues_fix_log.md`** and
+     mark the issue `[x]` DONE. A bug logged only in the carve-up difficulties ledger is invisible to the
+     fix loop. The difficulties ledger is for *extraction* dead-ends, not user-facing bugs.
+   - **Shipped a stateful/gesture region whose live gesture or visual was NOT hand-checked** (the "NOT
+     hand-driven" / "not visually confirmed" caveat in your metrics row)? Append a PENDING row to
+     **`manual_validation_debt.md`** (id `MV-N`, the manual operation, which extractions it discharges,
+     a fixture hint) so the validation loop will generate runnable steps later. Don't rely on it being
+     mined back out of the log — push it.
 7. **Before finishing, overwrite the `## Next-session handoff` block below** with a short addendum (≤8
    lines): the single recommended next region (+ one-line why), the fixture to load, the gesture gate to
    build first, the split plan, and any gotcha this batch uncovered. It's a *living pointer* — replace it,

@@ -73,6 +73,22 @@ main.js is the worst structural debt in the repo and the carve-up loop is active
 
 ---
 
+## Intake — where issues come from
+
+Two sources feed this ledger:
+1. **Direct triage** — the user reports a UX bug / tech-debt smell; it gets a dossier here.
+2. **Push from the sibling loops (the carve-up + manual-validation loops).** When a carve-up extraction
+   session (`main_js_carveup.md`) trips over a bug — in the region it's lifting or adjacent to it — that
+   session adds a new `ISSUE-N` dossier here (symptom + repro + suspected location), **even if it fixed
+   the bug the same session** (then it also marks the issue `[x]` DONE and adds an `issues_fix_log.md`
+   row). This keeps every user-facing bug visible to the fix loop instead of dying in the carve-up's
+   *extraction difficulties ledger* (which is for extraction dead-ends only). Likewise a regression the
+   manual-validation loop surfaces (`manual_validation_debt.md` → REGRESSION FOUND) opens an issue here.
+
+A bug pushed in already-fixed still earns a dossier + fix-log row — the record is the point.
+
+---
+
 ## Priority / sequencing
 
 Ordered for the loop. Functional bugs with a bounded surface come before big UX overhauls that need
@@ -527,6 +543,32 @@ ladder used it to cap depth).
 - **Open questions (ask in Phase 1):** what does "drill" need to reach (which levels, in which editor)?
   Is the current *filter* UI (pin a type) part of the problem or separate? Preferred mental model from the
   three above?
+
+---
+
+## ISSUE-5 — Selecting an imported protein threw in the properties panel (functional bug)
+
+- **Status:** `[x]` DONE 2026-06-06 (single phase). **Pushed in from the carve-up loop** — found while
+  extracting the protein subsystem (`scene/protein_subsystem.js`, extraction #85) and fixed the same
+  session. Fix in `ui/properties_panel.js` (new `_renderProtein` + `protein` dispatch branch). See
+  `issues_fix_log.md` row + the carve-up difficulties-ledger entry. Commit `c119e32`.
+- **Symptom (user-facing):** clicking/selecting an imported protein in the 3D view threw a console error
+  (`Cannot read properties of undefined`) and rendered no panel — the right-panel "Properties" tab broke.
+- **Root cause:** `selection_manager.js` sets `selectedObject = {type:'protein', id, data:{attachment_id}}`,
+  but `properties_panel.js` `_render` had no `protein` branch → fell through the final `else` to
+  `_renderNucleotide`, which reads nucleotide-shaped fields (`nuc.data.helix_id`, `_fmt(nuc.<pos>.map…)`).
+  Confirmed byte-identical on master (pre-existing, unrelated to the extraction).
+- **Repro (pinned):** `ui/properties_panel.test.js` (first test for that file; 5 cases incl. the
+  no-throw regression + free/overhang anchors + missing-attachment fallback + hidden flag) + a live
+  exercise (import `mini_protein.pdb` via `/design/import/pdb-auto` → select → panel renders, zero
+  console errors).
+- **Fix behavior:** `_renderProtein` shows asset name/source, anchor (free / overhang+attach-end /
+  assembly instance), atom/residue/chain counts, conjugation atom, handle duplex, hidden flag — all from
+  `design.protein_attachments`/`protein_assets`; graceful fallback when the attachment isn't in the
+  design. Built to extend as more PDB-import paths land (user: "we want to eventually handle any PDB
+  import"). **Follow-up validation debt:** the overhang/assembly anchor branches are unit-tested only,
+  not eyeballed (no overhang-protein / assembly-protein fixture) → logged as `MV-15` in
+  `manual_validation_debt.md`.
 
 ---
 
