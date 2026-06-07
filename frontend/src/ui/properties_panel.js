@@ -3,11 +3,14 @@
  *
  * Subscribes to store.selectedObject and renders into #properties-content.
  *
- * Four display modes:
+ * Display modes (by selectedObject.type):
  *   strand     — per-strand summary (length nt, domains, helix coverage)
  *   domain     — per-domain detail (helix, range, direction, overhang flag)
  *   nucleotide — per-bead detail (helix, bp, backbone/base positions)
  *   cone       — connector between two nucleotides
+ *   crossover  — half-A/half-B + extra bases
+ *   cluster    — helix count + default/sub-cluster
+ *   protein    — imported-protein attachment (asset name, anchor, atom/residue/chain counts)
  */
 
 import { store } from '../state/store.js'
@@ -297,6 +300,74 @@ export function initPropertiesPanel() {
     `
   }
 
+  function _renderProtein(selectedObject) {
+    const design = store.getState().currentDesign
+    const attId  = selectedObject.id ?? selectedObject.data?.attachment_id
+    const att    = design?.protein_attachments?.find(a => a.id === attId)
+    if (!att) {
+      content.innerHTML = `<span class="dim">Protein selected.</span>`
+      return
+    }
+    const asset = design?.protein_assets?.find(a => a.id === att.asset_id)
+    const name  = asset?.name || 'Protein'
+    const meta  = asset?.metadata ?? {}
+    const atomCount = asset?.atoms?.length ?? 0
+    const resCount  = meta.residue_count ?? 0
+    const chains    = (meta.chain_ids ?? []).join(', ') || '—'
+
+    // Anchor target — free / overhang / assembly part instance.
+    const kind = att.target?.kind ?? 'free'
+    const anchor = kind === 'overhang'
+      ? `overhang <span class="prop-val mono" style="font-size:var(--text-xs)">${att.target.overhang_id}</span> (${att.target.attach_end})`
+      : kind === 'assembly'
+        ? `part instance <span class="prop-val mono" style="font-size:var(--text-xs)">${att.target.instance_id}</span>`
+        : 'free (PDB coordinates)'
+
+    const handleNote = att.handle_complement_bp || att.handle_spacer_nt
+      ? `<div class="prop-row">
+          <span class="prop-label">handle</span>
+          <span class="prop-val">${att.handle_complement_bp} bp duplex${att.handle_spacer_nt ? ` · ${att.handle_spacer_nt} nt spacer` : ''}</span>
+        </div>`
+      : ''
+
+    content.innerHTML = `
+      <div class="prop-row">
+        <span class="prop-label">protein</span>
+        <span class="prop-val">${name}</span>
+        ${att.visible === false ? '<span class="tag tag-warn">hidden</span>' : ''}
+      </div>
+      ${asset?.source_filename ? `
+      <div class="prop-row">
+        <span class="prop-label">source</span>
+        <span class="prop-val mono" style="font-size:var(--text-xs)">${asset.source_filename}</span>
+      </div>` : ''}
+      <div class="prop-row">
+        <span class="prop-label">anchor</span>
+        <span class="prop-val">${anchor}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">atoms</span>
+        <span class="prop-val">${atomCount}</span>
+        <span class="prop-label" style="margin-left:8px">residues</span>
+        <span class="prop-val">${resCount}</span>
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">chains</span>
+        <span class="prop-val">${chains}</span>
+      </div>
+      ${att.conjugation_atom_serial != null ? `
+      <div class="prop-row">
+        <span class="prop-label">conj atom</span>
+        <span class="prop-val">serial ${att.conjugation_atom_serial}</span>
+      </div>` : ''}
+      ${handleNote}
+      <div class="prop-row" style="margin-top:4px">
+        <span class="prop-label">attach id</span>
+        <span class="prop-val mono" style="font-size:var(--text-xs)">${att.id}</span>
+      </div>
+    `
+  }
+
   function _render(selectedObject) {
     if (!selectedObject) {
       content.innerHTML = '<span class="dim">Click a backbone bead to select.</span>'
@@ -319,6 +390,8 @@ export function initPropertiesPanel() {
       _renderCrossover(selectedObject)
     } else if (selectedObject.type === 'cluster') {
       _renderCluster(selectedObject)
+    } else if (selectedObject.type === 'protein') {
+      _renderProtein(selectedObject)
     } else {
       _renderNucleotide(selectedObject)
     }
