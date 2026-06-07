@@ -17,7 +17,7 @@ import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
-import { buildNucLetterMap, buildStapleColorMap } from './scene/helix_renderer.js'
+import { buildStapleColorMap } from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
@@ -31,10 +31,10 @@ import { buildSpecMap, buildDomainMapFromDesign, buildJunctionMapFromDomains, bu
 import { initGroupGizmo } from './scene/group_gizmo.js'
 import { initAssemblyTransform } from './scene/assembly_transform.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, constraintRelevantChanged } from './scene/assembly_diff.js'
-import { surfaceSegments, flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
+import { flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
 import { computeGroupHiddenInstanceIds } from './scene/assembly_groups_util.js'
 import { initAssemblyPointer } from './scene/assembly_pointer.js'
-import { hexFromInt, atomColorsFromLetters, computeAtomStrandColors } from './scene/color_util.js'
+import { hexFromInt } from './scene/color_util.js'
 import { initFretChecker } from './scene/fret_checker.js'
 import { initUndefinedHighlight } from './scene/undefined_highlight.js'
 import { assemblyDuplicateOffset } from './scene/assembly_layout.js'
@@ -52,7 +52,6 @@ import { initScaffoldModal } from './ui/scaffold_modal.js'
 import { initAutoscaffoldPicker } from './ui/autoscaffold_picker.js'
 import { initAutobreakModal } from './ui/autobreak_modal.js'
 import { initNewDesignModal } from './ui/new_design_modal.js'
-import { filterAtomData } from './scene/atom_filter.js'
 import { initSliceHighlighter } from './scene/slice_highlighter.js'
 import { vecClose } from './scene/vec_math.js'
 import { initDomainEnds }            from './scene/domain_ends.js'
@@ -114,7 +113,8 @@ import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
 import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
 import { initSurfaceRenderer }     from './scene/surface_renderer.js'
-import { repColumnsByRep, overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './scene/representation_overrides.js'
+import { initAtomSurfaceDisplay }  from './scene/atom_surface_display.js'
+import { overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './scene/representation_overrides.js'
 import { initSpreadsheet } from './ui/spreadsheet.js'
 import { initExportMenu }          from './ui/export_menu.js'
 import { initImportMenu }          from './ui/import_menu.js'
@@ -742,13 +742,18 @@ async function main() {
   })
 
   // ── Selection manager ───────────────────────────────────────────────────────
+  // Forward ref to the atomistic/surface display subsystem (initialized after
+  // surfaceRenderer is built, ~1000 ln below). Lazy callers (selection picking,
+  // animation player onEvent/onFetchSurfaceBatch, periodic-MD) only fire post-boot,
+  // so this resolves by then (boot-capture pattern, #81).
+  let _atomSurface = null
   const selectionManager = initSelectionManager(canvas, camera, designRenderer, {
     getProteinRenderer: () => proteinRenderer,
     // Per-region overlay renderers (mixed rep) — lazy getters resolve after they're
     // created below; used for atom/surface picking in atomistic/surface regions.
-    getRegionVdwRenderer:       () => regionVdwRenderer,
-    getRegionBallstickRenderer: () => regionBallstickRenderer,
-    getRegionSurfaceRenderer:   () => regionSurfaceRenderer,
+    getRegionVdwRenderer:       () => _atomSurface.getRegionVdwRenderer(),
+    getRegionBallstickRenderer: () => _atomSurface.getRegionBallstickRenderer(),
+    getRegionSurfaceRenderer:   () => _atomSurface.getRegionSurfaceRenderer(),
     onDrillLevel: selectionFilter.reflectDrillLevel,
     onNick: async ({ helixId, bpIndex, direction }) => {
       _clearStapleChecks()
@@ -1519,7 +1524,7 @@ async function main() {
     getAtomisticRenderer:   () => atomisticRenderer,
     onFetchSurfaceBatch: (positions, opts) => {
       const { surfaceColorMode } = store.getState()
-      return api.getSurfaceBatch(positions, surfaceColorMode, _surfaceProbeRadius, undefined, opts)
+      return api.getSurfaceBatch(positions, surfaceColorMode, _atomSurface.getSurfaceProbeRadius(), undefined, opts)
     },
     getSurfaceRenderer: () => surfaceRenderer,
     onTextOverlayUpdate: (state) => {
@@ -1531,12 +1536,12 @@ async function main() {
       // the live (deformed) design state rather than holding the last lerped frame.
       if (evt.type === 'stopped' || evt.type === 'finished') {
         if (atomisticRenderer.getMode() !== 'off') {
-          _atomDataCache = null
-          _applyAtomisticMode(atomisticRenderer.getMode())
+          _atomSurface.invalidateAtomCache()
+          _atomSurface.applyAtomisticMode(atomisticRenderer.getMode())
         }
-        if (_surfaceMode !== 'off') {
-          _surfaceDataCache = null
-          _applySurfaceMode(_surfaceMode)
+        if (_atomSurface.getSurfaceMode() !== 'off') {
+          _atomSurface.invalidateSurfaceCache()
+          _atomSurface.applySurfaceMode(_atomSurface.getSurfaceMode())
         }
       }
     },
@@ -1775,14 +1780,6 @@ async function main() {
   const proteinGizmo = proteinSubsystem.gizmo
   const _refreshProteins = proteinSubsystem.refresh
 
-  // ── Per-region overlay renderers (mixed representation) ─────────────────────
-  // A focal domain/strand/cluster can be pinned to surface / vdw / ballstick; the
-  // helix renderer auto-hides the CG beads/cylinders at those columns and these
-  // overlays draw the region. Two atomistic instances because vdw and ballstick
-  // are distinct geometry and each renderer holds a single mode.
-  const regionVdwRenderer       = initAtomisticRenderer(scene)
-  const regionBallstickRenderer = initAtomisticRenderer(scene)
-
   // ── MD overlay + panel ───────────────────────────────────────────────────────
   const mdOverlay         = initMdOverlay(scene)
   initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
@@ -1790,7 +1787,7 @@ async function main() {
   const periodicMdOverlay = initPeriodicMdOverlay(scene)
   initPeriodicMdPanel(store, {
     periodicMdOverlay,
-    setCGVisible: _setCGVisible,
+    setCGVisible: (...a) => _atomSurface.setCGVisible(...a),
     getDesign:   () => store.getState().currentDesign,
   })
 
@@ -1805,210 +1802,26 @@ async function main() {
 
   // ── Surface renderer (VdW / SES) ─────────────────────────────────────────────
   const surfaceRenderer = initSurfaceRenderer(scene)
-  const regionSurfaceRenderer = initSurfaceRenderer(scene)   // per-region SURFACE overlay
-  if (window.__NADOC_DBG__) {
-    window.__NADOC_DBG__.regionVdwRenderer       = regionVdwRenderer
-    window.__NADOC_DBG__.regionBallstickRenderer = regionBallstickRenderer
-    window.__NADOC_DBG__.regionSurfaceRenderer   = regionSurfaceRenderer
-  }
-  let _surfaceDataCache   = null   // cached API response; null = needs re-fetch
-  let _surfaceProbeRadius = 0.28   // current probe radius for SES (nm)
-  let _surfaceMode        = 'off'  // mirrors store.surfaceMode
-
-  function _setSurfacePanelVisible(visible) {
-    const el = document.getElementById('surface-options-panel')
-    if (el) el.style.display = visible ? '' : 'none'
-  }
-
-  async function _applySurfaceMode(mode) {
-    _surfaceMode = mode
-    if (mode === 'off') {
-      surfaceRenderer.dispose()
-      _surfaceDataCache = null
-      // Only restore CG if atomistic overlay is also off
-      if (atomisticRenderer.getMode() === 'off') _setCGVisible(true)
-      _setSurfacePanelVisible(false)
-      return
-    }
-    // Hide CG model and any active atomistic overlay
-    _setCGVisible(false)
-    if (atomisticRenderer.getMode() !== 'off') {
-      atomisticRenderer.setMode('off')
-      store.setState({ atomisticMode: 'off' })
-    }
-    _setSurfacePanelVisible(true)
-    if (!_surfaceDataCache) {
-      showPersistentToast('Computing surface…')
-      try {
-        const { surfaceColorMode } = store.getState()
-        const url = `/api/design/surface?color_mode=${surfaceColorMode}&probe_radius=${_surfaceProbeRadius}`
-        const resp = await fetch(url, { headers: docHeaders() })
-        if (!resp.ok) {
-          dismissToast()
-          console.error('Surface fetch failed:', resp.status)
-          return
-        }
-        _surfaceDataCache = await resp.json()
-        console.debug(`Surface computed: ${_surfaceDataCache.stats?.n_verts} verts, ${_surfaceDataCache.stats?.n_faces} faces, ${_surfaceDataCache.stats?.compute_ms} ms`)
-      } catch (e) {
-        dismissToast()
-        console.error('Surface fetch error:', e)
-        return
-      }
-      dismissToast()
-    }
-    const { surfaceColorMode, surfaceOpacity } = store.getState()
-    surfaceRenderer.update(_surfaceDataCache, surfaceColorMode)
-    surfaceRenderer.applyStrandColors(_getAtomStrandColors())
-    surfaceRenderer.setOpacity(surfaceOpacity)
-  }
-
-  // Invalidate surface cache on design/geometry change
-  store.subscribe((newState, prevState) => {
-    const designChanged   = newState.currentDesign   !== prevState.currentDesign
-    const geometryChanged = newState.currentGeometry !== prevState.currentGeometry ||
-                            newState.currentHelixAxes !== prevState.currentHelixAxes
-    if (designChanged || geometryChanged) {
-      _surfaceDataCache = null
-      if (_surfaceMode !== 'off') _applySurfaceMode(_surfaceMode)
-    }
+  // ── Atomistic + surface display controllers → scene/atom_surface_display.js (#86)
+  // Owns the atomistic (Phase AA) + VdW/SES surface + per-region mixed-rep
+  // overlays: their shared atom-data cache, strand->colour map, CG-visibility
+  // toggle, the surface/atom slider listeners, and the 7 store subscribers (which
+  // register HERE, at the original spot, so atom-cache-invalidate stays ordered
+  // before region-overlay re-apply). atomisticRenderer + surfaceRenderer stay in
+  // main (shared with the animation player / MD panel / repr switcher) and are
+  // injected; the 3 region-overlay renderers are owned by the module. Alias-consts
+  // below keep every external call site (repr_option_sliders #83, switcher #84,
+  // reset spine, periodic-MD) byte-identical.
+  _atomSurface = initAtomSurfaceDisplay({
+    scene, store, api, designRenderer, atomisticRenderer, surfaceRenderer,
+    unfoldView, overhangLinkArcs,
+    setColoringMode: (m) => _setColoringMode(m),
   })
-
-  // Live surface option updates
-  store.subscribe((newState, prevState) => {
-    if (newState.surfaceColorMode !== prevState.surfaceColorMode) {
-      if (_surfaceMode !== 'off') {
-        if (newState.surfaceColorMode === 'uniform' || _surfaceDataCache?.vertex_colors) {
-          // Switch colour in-place — no re-fetch needed
-          surfaceRenderer.setColorMode(newState.surfaceColorMode)
-        } else {
-          // Need vertex colours but cache lacks them — re-fetch with new color_mode
-          _surfaceDataCache = null
-          _applySurfaceMode(_surfaceMode)
-        }
-      }
-    }
-    if (newState.surfaceOpacity !== prevState.surfaceOpacity) {
-      surfaceRenderer.setOpacity(newState.surfaceOpacity)
-    }
-  })
-
-  // Surface opacity slider
-  const _slSurfaceOpacity = document.getElementById('sl-surface-opacity')
-  const _svSurfaceOpacity = document.getElementById('sv-surface-opacity')
-  _slSurfaceOpacity?.addEventListener('input', () => {
-    const val = parseFloat(_slSurfaceOpacity.value)
-    if (_svSurfaceOpacity) _svSurfaceOpacity.textContent = val.toFixed(2)
-    store.setState({ surfaceOpacity: val })
-  })
-
-  // Surface probe radius slider (SES only)
-  const _slSurfaceProbe = document.getElementById('sl-surface-probe')
-  const _svSurfaceProbe = document.getElementById('sv-surface-probe')
-  _slSurfaceProbe?.addEventListener('input', () => {
-    _surfaceProbeRadius = parseFloat(_slSurfaceProbe.value)
-    if (_svSurfaceProbe) _svSurfaceProbe.textContent = _surfaceProbeRadius.toFixed(2)
-    if (_surfaceMode !== 'off') {
-      _surfaceDataCache = null
-      _applySurfaceMode('on')
-    }
-  })
-
-  // Surface colour-mode toggle buttons
-  document.getElementById('surface-color-strand')?.addEventListener('click', () => {
-    document.getElementById('surface-color-strand')?.classList.add('active')
-    document.getElementById('surface-color-uniform')?.classList.remove('active')
-    store.setState({ surfaceColorMode: 'strand' })
-  })
-  document.getElementById('surface-color-uniform')?.addEventListener('click', () => {
-    document.getElementById('surface-color-uniform')?.classList.add('active')
-    document.getElementById('surface-color-strand')?.classList.remove('active')
-    store.setState({ surfaceColorMode: 'uniform' })
-  })
-
-  // Atom radius scale slider
-  const _slAtomVdwScale = document.getElementById('sl-atom-vdw-scale')
-  const _svAtomVdwScale = document.getElementById('sv-atom-vdw-scale')
-  _slAtomVdwScale?.addEventListener('input', () => {
-    const scale = parseFloat(_slAtomVdwScale.value)
-    if (_svAtomVdwScale) _svAtomVdwScale.textContent = scale.toFixed(2)
-    atomisticRenderer.setVdwScale(scale)
-  })
-
-  async function _refetchAtomistic() {
-    if (atomisticRenderer.getMode() === 'off') return
-    try {
-      const resp = await fetch(_atomisticUrl(), { headers: docHeaders() })
-      if (!resp.ok) { console.error('Atomistic refetch failed:', resp.status); return }
-      _atomDataCache = await resp.json()
-      atomisticRenderer.update(_atomDataCache)
-      _refreshAtomColors()
-      const { selectedObject, multiSelectedStrandIds } = store.getState()
-      atomisticRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
-    } catch (e) {
-      console.error('Atomistic refetch error:', e)
-    }
-  }
-
-  // Atom colouring toggle
-  // Backend-canonical staple palette (matches helix_renderer.STAPLE_PALETTE).
-  // Pure colour-mapping core lives in scene/color_util.js (computeAtomStrandColors);
-  // this wrapper reads the store snapshot + builds the staple palette for it.
-  function _getAtomStrandColors() {
-    const state = store.getState()
-    const { currentDesign, currentGeometry } = state
-    const staplePalette = (currentDesign && currentGeometry)
-      ? buildStapleColorMap(currentGeometry, currentDesign) : null
-    return computeAtomStrandColors(state, staplePalette)
-  }
-
-  // Build per-atom base-letter colour map (key: "strand_id:bp_index:direction").
-  // The store/geometry read lives here; the pure mapping is atomColorsFromLetters.
-  function _getAtomBaseColors() {
-    const { currentDesign, currentGeometry } = store.getState()
-    if (!currentDesign || !currentGeometry) return new Map()
-    return atomColorsFromLetters(buildNucLetterMap(currentDesign, currentGeometry))
-  }
-
-  // Dispatch atomistic colouring based on the global coloringMode.
-  // Extra-base atoms always use the strand colour map (handled inside
-  // atomistic_renderer); the strand map we send mirrors coloringMode
-  // ('strand' uses palette/groups, 'cluster' uses cluster-mapped colours).
-  function _refreshAtomColors() {
-    const { coloringMode } = store.getState()
-    const strandMap = _getAtomStrandColors()
-    if (coloringMode === 'base') {
-      atomisticRenderer.setColorMode('base', strandMap, _getAtomBaseColors())
-    } else if (coloringMode === 'cpk') {
-      atomisticRenderer.setColorMode('cpk', strandMap)
-    } else {
-      // 'strand' or 'cluster' → strand-color path; map already reflects mode.
-      atomisticRenderer.setColorMode('strand', strandMap)
-    }
-  }
-
-  // Side-panel atomistic colour buttons — quick CPK ↔ Strand toggle that drives
-  // the global coloringMode (so both menu and panel stay in sync).
-  document.getElementById('atom-color-cpk')?.addEventListener('click', () => {
-    _setColoringMode('cpk')
-  })
-  document.getElementById('atom-color-strand')?.addEventListener('click', () => {
-    _setColoringMode('strand')
-  })
-
-  // Keep atom + surface strand colours in sync when groups/colors change.
-  // Always refresh regardless of CPK/strand mode so extra-base coloring stays current.
-  store.subscribe((newState, prevState) => {
-    if (newState.strandColors === prevState.strandColors
-        && newState.strandGroups === prevState.strandGroups
-        && newState.coloringMode === prevState.coloringMode
-        && newState.loopStrandIds === prevState.loopStrandIds) return
-    if (atomisticRenderer.getMode() !== 'off') _refreshAtomColors()
-    if (_surfaceMode !== 'off') {
-      surfaceRenderer.applyStrandColors(_getAtomStrandColors())
-    }
-  })
-
+  const _applySurfaceMode           = _atomSurface.applySurfaceMode
+  const _applyAtomisticMode         = _atomSurface.applyAtomisticMode
+  const _setCGVisible               = _atomSurface.setCGVisible
+  const _setSurfacePanelVisible     = _atomSurface.setSurfacePanelVisible
+  const _setAtomisticSlidersVisible = _atomSurface.setAtomisticSlidersVisible
   // ── Phase 3d-A: live strand-color updates on the shared assembly renderer.
   // designRenderer.setStrandColor (called from selection_manager + spreadsheet)
   // pushes the new hex into store.strandColors AND into the design's helixCtrl.
@@ -2036,172 +1849,6 @@ async function main() {
       // current source customColors entry intact. A full assembly rebuild
       // (e.g. design reload) will reset it anyway.
     }
-  })
-
-  // Fetch + load atom data whenever mode switches from off → non-off.
-  let _atomDataCache  = null
-
-  // Atomistic-only option rows (shown only while atomistic mode is active)
-  const _atomisticSliderRowIds = [
-    'repr-atom-radius-row',
-    'repr-atom-color-row',
-  ]
-  function _setAtomisticSlidersVisible(visible) {
-    for (const id of _atomisticSliderRowIds) {
-      const el = document.getElementById(id)
-      if (el) el.style.display = visible ? '' : 'none'
-    }
-  }
-
-  function _setCGVisible(visible) {
-    const root = designRenderer.getHelixCtrl()?.root
-    if (root) root.visible = visible   // extra-base beads/slabs are children of root
-    // Arc lines track design visibility; the coarse cylinders/sticks LOD no longer
-    // hides the whole group — instead each arc is collapsed per-region by the
-    // mixed-representation rep gate (unfold_view._arcRepHidden), so a region pinned
-    // to full still shows its crossovers under a global cylinder LOD.
-    unfoldView?.setArcsVisible(visible)
-    unfoldView?.refreshArcVisibility()
-    overhangLinkArcs?.setVisible?.(visible)
-  }
-
-  function _atomisticUrl() {
-    return '/api/design/atomistic'
-  }
-
-  // Lazily fetch + cache the all-atom model. Shared by the global atomistic mode
-  // and the per-region atomistic overlays.
-  async function _ensureAtomData() {
-    if (_atomDataCache) return _atomDataCache
-    const resp = await fetch(_atomisticUrl(), { headers: docHeaders() })
-    if (!resp.ok) { console.error('Atomistic fetch failed:', resp.status); return null }
-    _atomDataCache = await resp.json()
-    return _atomDataCache
-  }
-
-  async function _applyAtomisticMode(mode) {
-    atomisticRenderer.setMode(mode)
-    // Hide CG model when any atomistic mode is active; restore when off
-    _setCGVisible(mode === 'off')
-    _setAtomisticSlidersVisible(mode !== 'off')
-    if (mode !== 'off' && !_atomDataCache) {
-      showPersistentToast('Loading atomistic model…')
-      try {
-        const data = await _ensureAtomData()
-        if (data) {
-          atomisticRenderer.update(data)
-          _refreshAtomColors()
-          const { selectedObject, multiSelectedStrandIds } = store.getState()
-          atomisticRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
-        }
-      } catch (e) {
-        console.error('Atomistic fetch error:', e)
-      } finally {
-        dismissToast()
-      }
-    }
-  }
-
-  // Invalidate atom cache on design change; re-hide CG root after any geometry rebuild.
-  store.subscribe((newState, prevState) => {
-    const designChanged   = newState.currentDesign   !== prevState.currentDesign
-    const geometryChanged = newState.currentGeometry !== prevState.currentGeometry ||
-                            newState.currentHelixAxes !== prevState.currentHelixAxes
-    if (designChanged) _atomDataCache = null
-    if ((designChanged || geometryChanged) && atomisticRenderer.getMode() !== 'off') {
-      // The renderer just created a fresh root with visible=true — re-hide it.
-      _setCGVisible(false)
-      if (designChanged) _applyAtomisticMode(atomisticRenderer.getMode())
-    }
-  })
-
-  // Keep highlight in sync with selection changes.
-  store.subscribe((newState, prevState) => {
-    if (newState.selectedObject         === prevState.selectedObject &&
-        newState.multiSelectedStrandIds === prevState.multiSelectedStrandIds) return
-    if (atomisticRenderer.getMode() === 'off') return
-    atomisticRenderer.highlight(
-      newState.selectedObject,
-      newState.multiSelectedStrandIds ?? [],
-    )
-  })
-
-  // ── Per-region overlay coordinators (mixed representation) ──────────────────
-  // Drive the surface / vdw / ballstick overlays from the design's representation
-  // overrides. The helix renderer auto-hides CG at those columns; these draw them.
-
-  // Filter the cached all-atom model to a set of columns ("helix:bp"). Keeps each
-  // atom's original `serial` so ballstick bonds (serial pairs) resolve without
-  // renumbering — bonds are filtered to pairs whose both endpoints survive.
-
-  async function _applyRegionAtomisticOverlays(design) {
-    const { vdw, ballstick } = repColumnsByRep(design)
-    if (!vdw.size && !ballstick.size) {
-      regionVdwRenderer.dispose()
-      regionBallstickRenderer.dispose()
-      return
-    }
-    const data = await _ensureAtomData()
-    if (!data) return
-    // Always dispose-then-update — update() does not pre-clear element meshes.
-    regionVdwRenderer.dispose()
-    if (vdw.size) { regionVdwRenderer.update(filterAtomData(_atomDataCache, vdw, false)); regionVdwRenderer.setMode('vdw') }
-    regionBallstickRenderer.dispose()
-    if (ballstick.size) { regionBallstickRenderer.update(filterAtomData(_atomDataCache, ballstick, true)); regionBallstickRenderer.setMode('ballstick') }
-    const { selectedObject, multiSelectedStrandIds } = store.getState()
-    regionVdwRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
-    regionBallstickRenderer.highlight(selectedObject, multiSelectedStrandIds ?? [])
-  }
-
-  // Surface overlay — debounced + signature-cached (surface compute is slow).
-  let _regionSurfaceSig   = null
-  let _regionSurfaceTimer = null
-  async function _recomputeRegionSurface(design) {
-    const segs = surfaceSegments(design)
-    if (!segs.length) { regionSurfaceRenderer.dispose(); return }
-    showPersistentToast('Computing region surface…')
-    try {
-      const colorMode = store.getState().surfaceColorMode
-      const mesh = await api.getRegionSurface(segs, { colorMode })
-      regionSurfaceRenderer.update(mesh, colorMode, 'dna-surface-region')
-      regionSurfaceRenderer.applyStrandColors(_getAtomStrandColors())
-      regionSurfaceRenderer.setOpacity(store.getState().surfaceOpacity)
-    } catch (e) {
-      console.error('Region surface error:', e)
-    } finally {
-      dismissToast()
-    }
-  }
-  function _applyRegionSurfaceOverlay(design, force = false) {
-    const sig = surfaceSegments(design)
-      .map(s => `${s.helix_id}:${s.bp_start}-${s.bp_end}`).sort().join('|')
-    if (!force && sig === _regionSurfaceSig) return
-    _regionSurfaceSig = sig
-    if (_regionSurfaceTimer) clearTimeout(_regionSurfaceTimer)
-    _regionSurfaceTimer = setTimeout(() => _recomputeRegionSurface(design), 400)
-  }
-
-  // Override change OR geometry/design rebuild → re-apply overlays. (Registered
-  // AFTER the atomistic cache-invalidation sub so `_atomDataCache` is null'd first
-  // on a design change, forcing a re-fetch.) Surface recompute is forced when the
-  // geometry moved; otherwise the signature-cache skips unchanged columns.
-  store.subscribe((n, p) => {
-    const designChanged = n.currentDesign   !== p.currentDesign
-    const geoChanged    = n.currentGeometry !== p.currentGeometry ||
-                          n.currentHelixAxes !== p.currentHelixAxes
-    if (!designChanged && !geoChanged) return
-    _applyRegionAtomisticOverlays(n.currentDesign)
-    _applyRegionSurfaceOverlay(n.currentDesign, geoChanged)
-  })
-
-  // Selection change → atomistic highlight + surface strand recolor (no recompute).
-  store.subscribe((n, p) => {
-    if (n.selectedObject === p.selectedObject &&
-        n.multiSelectedStrandIds === p.multiSelectedStrandIds) return
-    const sel = n.selectedObject, multi = n.multiSelectedStrandIds ?? []
-    if (regionVdwRenderer.getMode() !== 'off')       regionVdwRenderer.highlight(sel, multi)
-    if (regionBallstickRenderer.getMode() !== 'off') regionBallstickRenderer.highlight(sel, multi)
-    if (regionSurfaceRenderer.getMode() === 'on')    regionSurfaceRenderer.applyStrandColors(_getAtomStrandColors())
   })
 
   // ── Overhang sequences panel ─────────────────────────────────────────────────
@@ -6652,7 +6299,7 @@ async function main() {
     overhangLinkArcs,
     unfoldView,
     getJointRenderer: () => jointRenderer,
-    getSurfaceMode: () => _surfaceMode,
+    getSurfaceMode: () => _atomSurface.getSurfaceMode(),
     applySurfaceMode: _applySurfaceMode,
     applyAtomisticMode: _applyAtomisticMode,
     setCGVisible: _setCGVisible,
