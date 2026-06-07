@@ -172,6 +172,7 @@ import { initSceneInspector }                  from './scene/scene_inspector.js'
 import { createModal }                         from './ui/primitives/modal.js'
 import { createButton }                        from './ui/primitives/button.js'
 import { initBackgroundModal }                 from './ui/background_modal.js'
+import { initFileLoadDialog }                  from './ui/file_load_dialog.js'
 import { nadocBroadcast } from './shared/broadcast.js'
 import { getDocId, mintDocId, docHeaders, docHeadersFor, docKey } from './shared/doc_id.js'
 import { initMdOverlay }             from './scene/md_overlay.js'
@@ -2813,25 +2814,16 @@ async function main() {
     return null
   })()
 
-  // ── File-load overlay DOM refs + event wiring (used by part-edit init below) ─
-  const _flProgress   = document.getElementById('file-load-progress')
-  const _flFillEl     = document.getElementById('flp-fill')
-  const _flStatusEl   = document.getElementById('flp-status')
-  const _flHeaderEl   = document.getElementById('flp-header')
-  const _flLogEl      = document.getElementById('flp-log')
-  const _flLogWrapEl  = document.getElementById('flp-log-wrap')
-  const _flToggleBtn  = document.getElementById('flp-details-toggle')
-  const _flActionsEl  = document.getElementById('flp-actions')
+  // ── File-load overlay (factory) — used by part-edit init below ───────────────
+  const _fileLoad      = initFileLoadDialog()
+  const _showFileLoad  = _fileLoad.show
+  const _hideFileLoad  = _fileLoad.hide
+  const _flSetProgress = _fileLoad.setProgress
+  const _flAppendLog   = _fileLoad.appendLog
+  const _flShowSuccess = _fileLoad.showSuccess
+  const _flShowError   = _fileLoad.showError
+
   const _flMenuBtn    = document.getElementById('flp-main-menu-btn')
-
-  let _flLogOpen = false
-
-  _flToggleBtn?.addEventListener('click', () => {
-    _flLogOpen = !_flLogOpen
-    _flLogWrapEl.style.display  = _flLogOpen ? 'block' : 'none'
-    _flToggleBtn.textContent    = (_flLogOpen ? '▾' : '▸') + ' Details'
-  })
-
   _flMenuBtn?.addEventListener('click', () => {
     _hideFileLoad()
     _showWelcome()
@@ -3356,58 +3348,6 @@ async function main() {
   // progress (showProgress here) hides correctly when both finish.
   const _showProgress = showOpProgress
   const _hideProgress = hideOpProgress
-
-  // ── File-load overlay helpers ──────────────────────────────────────────────
-  function _showFileLoad(header) {
-    _flLogOpen = false
-    if (_flLogEl)     _flLogEl.innerHTML             = ''
-    if (_flLogWrapEl) _flLogWrapEl.style.display     = 'none'
-    if (_flToggleBtn) _flToggleBtn.textContent       = '▸ Details'
-    if (_flActionsEl) _flActionsEl.style.display     = 'none'
-    if (_flHeaderEl)  _flHeaderEl.textContent        = header
-    if (_flFillEl)    { _flFillEl.style.background   = '#3ddc84'; _flFillEl.style.width = '0%' }
-    if (_flStatusEl)  { _flStatusEl.textContent      = ''; _flStatusEl.style.color = '#c9d1d9' }
-    _flProgress?.classList.add('visible')
-  }
-
-  function _hideFileLoad() {
-    _flProgress?.classList.remove('visible')
-  }
-
-  function _flSetProgress(pct, msg) {
-    if (_flFillEl)   _flFillEl.style.width    = pct + '%'
-    if (_flStatusEl) _flStatusEl.textContent  = msg ?? ''
-  }
-
-  function _flAppendLog(msg, type = 'info') {
-    if (!_flLogEl) return
-    const colors = { info: '#8b949e', warn: '#d29922', error: '#f85149', success: '#3fb950' }
-    const line = document.createElement('div')
-    line.style.color  = colors[type] ?? colors.info
-    line.textContent  = msg
-    _flLogEl.appendChild(line)
-    _flLogEl.scrollTop = _flLogEl.scrollHeight
-  }
-
-  function _flExpandDetails() {
-    _flLogOpen = true
-    if (_flLogWrapEl) _flLogWrapEl.style.display = 'block'
-    if (_flToggleBtn) _flToggleBtn.textContent   = '▾ Details'
-  }
-
-  async function _flShowSuccess(msg) {
-    if (_flFillEl)   { _flFillEl.style.width = '100%'; _flFillEl.style.background = '#3fb950' }
-    if (_flStatusEl) { _flStatusEl.textContent = msg; _flStatusEl.style.color = '#3fb950' }
-    await new Promise(r => setTimeout(r, 1500))
-    _hideFileLoad()
-  }
-
-  function _flShowError(msg) {
-    if (_flFillEl)   { _flFillEl.style.width = '100%'; _flFillEl.style.background = '#f85149' }
-    if (_flStatusEl) { _flStatusEl.textContent = msg; _flStatusEl.style.color = '#f85149' }
-    _flExpandDetails()
-    if (_flActionsEl) _flActionsEl.style.display = 'flex'
-  }
 
   // ── Routing: Autoscaffold (seamed / seamless picker) ──────────────────────
   initAutoscaffoldPicker({ store, api, setRoutingCheck: _setRoutingCheck })

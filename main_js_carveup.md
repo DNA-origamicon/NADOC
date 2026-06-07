@@ -69,35 +69,38 @@ serial is correct for one god-file). Don't touch `_PHASE_*`, backend, or renderi
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 7). Last updated 2026-06-06. **STOP CRITERION LIKELY REACHED — all
-four named hard clusters + the protein cluster are now drained.** ✅✅ FRONTIER #1 Translate/Rotate (#73–81).
-✅✅ FRONTIER #2 Representation switcher (#82–84). ✅ Protein subsystem (#85). ✅✅ **THIS SESSION #86: Atomistic/surface
-display controllers — the LAST named hard cluster — → `scene/atom_surface_display.js`** (`initAtomSurfaceDisplay({deps})`
-+ pure `regionSurfaceSignature`; the global atomistic + global surface + per-region mixed-rep overlays as ONE cohesive
-factory — shared atom-data cache, strand→colour map, CG-visibility toggle, 7 subscribers, 3 region renderers; verbatim
-bodies, alias-consts keep switcher/sliders/reset byte-identical, boot-capture forward-`let` for animation+periodic-MD).
-main.js **7518→7165 (−353)**, +18 vitest → 1059, smoke 23/23, real-app F6→F5→F4 exercise zero console errors._
+_Living pointer — each session overwrites this (step 7). Last updated 2026-06-06. **TERMINAL-STATE SCAN RUN — NOT yet
+reached; small residual cohesive scraps remain.** The four named hard clusters + protein + atomistic/surface are ALL
+drained (#73–86). This session ran the function-by-function scan (`grep -nE "^  (async )?function _?[a-zA-Z]"`) the
+prior handoff asked for and found the closure is NOT pure composition-root yet — a few small *cohesive multi-fn blocks*
+survive. Took the cheapest one. ✅ **THIS SESSION #87: file-load progress overlay → `ui/file_load_dialog.js`**
+(`initFileLoadDialog()→{show,hide,setProgress,appendLog,expandDetails,showSuccess,showError}`; 8 DOM refs + `_flLogOpen`
++ details-toggle listener + 7 fns; VERBATIM, ZERO store/api/scene deps — only DOM + setTimeout; alias-consts keep boot
++ file-open call sites byte-identical; `_flMenuBtn`→welcome bridge stays inline). main.js **7165→7105 (−60)**, +8 vitest
+→ 1067, smoke 23/23._
 
-**▶ NEXT — VERIFY TERMINAL STATE, don't assume a region.** With #86 the closure should now hold zero cohesive logic
-clusters — only the composition root (imports + ~100 factory inits + the lifecycle spine `_resetForNewDesign`/
-`_enterAssemblyMode`/`_exitAssemblyMode` + `_setMenuToggle` 43-use util + thin per-action wiring). **First job of the next
-session: PROVE that** — run the function-by-function scan that built Tier 7 (`grep -nE "^  (async )?function _?[a-zA-Z]"
-frontend/src/main.js`) and eyeball each remaining `function` for a *cohesive multi-fn block with owned state + subscribers*.
-If you find one, that's the next region (re-derive scope per the ⚠ rules). If you DON'T (expected), the carve-up is **DONE** —
-update CLAUDE.md / main-init.md to flip the phase from "stateful-subsystem extraction" to "composition-root maintenance"
-and stop. Do NOT chase LOC by splitting the lifecycle spine or `_setMenuToggle` (logged-permanent inline). The micro-scraps
-(Orbit submenu, Coloring submenu w/ 6 `_setColoringMode` callers, Browser tab title, deform→selectableTypes, Sequencing
-menu #67) are correctly inline — a `ui/menu_misc.js` junk drawer is the anti-pattern (six logged mis-scopes prove it).
+**▶ NEXT — two residual cohesive scraps the scan surfaced (pick the cheaper; both are real, NOT the spine):**
+1. **Co-editing / doc-presence cluster** (~6940–7045, Tier 5 session infra) — `_editorRegistry` Map + `_renderEditorDropdown`
+   + the `_otherTabDocs`/`_lastAnnouncedDesignId`/`_docClobberWarned` state + `_announceDocPresence`/`_refreshCoediting`/
+   `_maybeWarnDocClobber` + a `store.subscribe` + several `nadocBroadcast` emits/handlers. A genuine cohesive subsystem
+   (multi-doc clobber-warning + editor-tab registry). **HIGH blast radius** (BroadcastChannel handlers may be registered
+   ELSEWHERE — grep `nadocBroadcast.on` for all `editor-*`/`doc-presence*` listeners before lifting; the emits here pair
+   with handlers that must move or stay consistent). Factory `initCoediting({store, getDocId, getWorkspacePath, syncBadge})`.
+   Re-derive scope (⚠) — the BroadcastChannel wiring is the trap.
+2. **Blunt-end / extrude context menus** (~2239–2470) — `_showBluntPanel`/`_hideBluntPanel`/`_showScaffoldSplitCtx`/
+   `_hideScaffoldSplitCtx`/`_showBluntCtx`/`_hideBluntCtx`/`_bluntExtrude` + their DOM refs. Mostly DOM show/hide + one
+   async extrude action; verify cohesion (do they share state, or are they 3 independent panel pairs? — if independent,
+   that's a junk-drawer trap, leave inline). Cheaper if cohesive.
 
-**STILL-OPEN latent-bug note (carried from #79/#80, now inside `translate_rotate_tool.js`):** the tool's two commit paths
+After those two, re-run the scan; if nothing cohesive remains, THEN flip the phase to "composition-root maintenance"
+(CLAUDE.md / main-init.md) and stop. Do NOT split the lifecycle spine (`_resetForNewDesign`/`_enterAssemblyMode`/
+`_exitAssemblyMode`/`_setMenuToggle`) or build a `ui/menu_misc.js` junk drawer (six logged mis-scopes prove it).
+
+**STILL-OPEN latent-bug note (carried from #79/#80, inside `translate_rotate_tool.js`):** the tool's two commit paths
 pass `_refreshClusterOverlays({ withFlexibleArcs: false })` — a cluster move with anchored ssDNA arcs arguably *should*
 rebuild them like the response_delta paths do (which pass `true`). Flagged-not-fixed (verbatim rule). Ask the user before
 flipping it. Also untouched (genuinely not de-dupable): the `commitClusterPositions`+rebake reconciliation lead-in still
 differs across the standard-commit vs edit-in-place paths (oldCtById-loop vs single rebake) — different data sources.
-
-**OTHER STILL-OPEN flag-not-fixed (carried from #85, NOT this session's):** selecting a `{type:'protein'}` object throws
-in `properties_panel.js` `_render`→`_renderNucleotide` (no protein branch; byte-identical on master — a real user-facing
-bug, route to `issues_ledger.md` if not already). Independent of the atomistic/surface work.
 
 **Reusable extraction patterns (banked, proven through #86 — keep for any residual lift the scan turns up).** (1) **Alias-const:**
 `const _x = _module.x` right after the factory init keeps EVERY existing call site byte-identical — only fn bodies relocate.
@@ -481,6 +484,16 @@ These touch boot/lifecycle. High blast radius; do after the loop is well-grooved
     the keyboard-shortcuts `saveAssemblyAsGuarded` injection reference it via lazy arrows (user-action only).
     `selfSavedPaths` by reference, `_exportRepActive`/file-path state via getters. The spine
     (`_resetForNewDesign` / `_enterAssemblyMode` / `_exitAssemblyMode`) stays inline (20+ sites).
+  - **file-load progress overlay — DONE** (extraction #87, this batch): the `flp-*` overlay shown during
+    a part/design fetch+import (`_showFileLoad`/`_hideFileLoad`/`_flSetProgress`/`_flAppendLog`/
+    `_flExpandDetails`/`_flShowSuccess`/`_flShowError` + the 8 DOM refs + `_flLogOpen` + details-toggle
+    listener) → `ui/file_load_dialog.js` `initFileLoadDialog()→{show,hide,setProgress,appendLog,
+    expandDetails,showSuccess,showError}`. **−60 ln; verbatim; ZERO store/api/scene deps** (only DOM +
+    setTimeout). 8 vitest (1067 total); smoke 23/23. This overlay was a DEP *injected into* `initFileOpen`
+    (#59) / the part-edit boot block all along — now it owns itself. Alias-consts keep boot call sites
+    (~2850) + the file-open deps (~5105) byte-identical; factory inits at the original DOM-refs spot (~2816,
+    BEFORE the synchronous `?part-instance=` boot use). `_flMenuBtn` listener stays inline (bridges to the
+    welcome screen). **Live `?part-instance=` overlay visual NOT hand-driven** → MV row appended.
 - [~] **Menu bar + multi-document spawn** — banners `// ── Menu bar` + `// ── Multi-document: New / Open`.
   **PARTIALLY DRAINED (2026-06-05). NOT one `ui/menu_bar.js` module** — it's the "every menu action" wiring
   region: mostly thin 1–3 ln handlers over already-extracted modules + spine, with a couple of genuinely

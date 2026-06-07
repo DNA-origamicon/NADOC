@@ -61,8 +61,8 @@ pass over GENERATED → VALIDATED happens as the user actually executes them.
 
 ## Register state
 
-- Total items: **16**
-- PENDING (no manual ops yet): **14**
+- Total items: **17**
+- PENDING (no manual ops yet): **15**
 - GENERATED (ready to run): **2** — MV-1, MV-2
 - VALIDATED: **0**
 - REGRESSION FOUND: **0**
@@ -91,6 +91,7 @@ Core editing + default-selection UX first; niche/visual last.
 | | **MV-13** | **FRET / fluorescence glow**: fluorophore-labeled design → View menu Fluorescence / FRET toggles → emitters glow, FRET quench scaling | #24 | a design with fluorophore-modified strands (none known — may need to build) | scaffold-only parts have no fluorophores; glow logic unit-tested only |
 | | **MV-14** | **Representation option sliders** real mouse-drag (not JS-dispatch): expand the Representation sidebar section, drag each slider | #83 (partial) | any scaffolded part | panel section collapsed by default → `.fill()` needed visibility; drove via JS-dispatch instead |
 | | **MV-15** | **Properties panel for an overhang-/assembly-anchored protein**: select a protein attached to an overhang (and one in an assembly) → panel shows the overhang id + attach-end / part-instance anchor, not just the free case | fix #18 (ISSUE-5) | needs a design with a protein attached to an overhang (none known — build via `/design/protein/attachments`) + an assembly with a protein | only the FREE-anchor branch was eyeballed live; overhang/assembly anchor branches are unit-tested only (no fixture) |
+| | **MV-17** | **File-load progress overlay**: open this tab as a part editor (`?part-instance=<id>&assembly-doc=<docId>` — i.e. dive into a part from a live assembly) → the `#file-load-progress` overlay appears ("Opening Part"), the progress bar fills, the log lines append, "▸/▾ Details" toggles the log pane, and it auto-hides green on success (or turns red + shows the actions row + main-menu button on failure) | #87 | a live assembly with ≥1 part instance (e.g. `workspace/Belt_test1.nass`), then dive into a part | only fires on the `?part-instance=` part-editor boot path — needs a spawned part tab off a live assembly; boot console-error gate constructs the factory but never SHOWS the overlay |
 | | **MV-16** | **Atomistic / surface representation VISUAL**: load a design → F6 VDW (space-fill atoms render, CG hidden) / F7 Ball & Stick (bonds render) / F5 Surface (molecular SES/VdW *mesh* appears, correct shape, opacity + probe-radius sliders + strand/uniform colour buttons affect it) / per-region overlay (pin a strand→VDW/surface while base stays full — overlay coexists with CG, no z-fight); F4 restores. Confirm the actual rendered geometry *looks right*, not just the panel toggles. | #86 | a representative `.nadoc` (e.g. `Examples/26hb_platform_v3.nadoc`); per-region needs a design with `representation_overrides` (mixed_representation work) | Tier-3 golden-image "does it look right" check (deliberately NOT automated — needs a pinned rasterizer); the F6/F5/F4 panel-toggle + zero-console path IS covered by the #86 exercise, but the mesh/atom *appearance* is human-eye only |
 
 ---
