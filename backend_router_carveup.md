@@ -140,11 +140,12 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-08 after Refactor #8
-(Pure assembly-validation report → `backend/core/assembly_validate.py::validate_assembly_report` — SERVICE
-push, **B=0**, `_validate_assembly` body moved byte-identical + 8 direct unit tests; the `GET /assembly/validate`
-handler shrank ~84→4 ln; assembly.py 7160→7084 LOC, routes unchanged at 92; 1782 passed / 0 failed = 1774 + 8
-new. The validation logic was pure all along — only delegated to `assembly_flatten` (core→core), zero api deps)._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-08 after Refactor #19
+(Joint region **frame-inspection half** → `routes_assembly_frames.py` — ROUTER lift, **B=6, bespoke-B=0** per L19:
+all six back-imports are the shared read-kernel infra trio + lookups + converter; `_cluster_se3` moved IN (pure,
+not L4-blocked); frame math imported from `backend/core` (#7/#12). 3 read-only routes moved; assembly.py 61→58
+routes, −203 ln (5023→4820), 1852 passed / 0 failed unchanged. Verbatim lift — `test_joints.py` covers. Orphaned
+`_build_world_connector_frames` core import cleaned. NOT committed (awaiting user)._
 
 **▶ NEXT — crud.py:** **Flexible ssDNA segments** (banner `# ── Flexible ssDNA segments`, find via
 `grep -n "# ── Flexible ssDNA" backend/api/crud.py`, ~13200s after #3's −315 ln drift) →
@@ -174,23 +175,28 @@ cross-test state leak — it was hash-seed-dependent nondeterminism in the share
 topological event instead of a brittle strand count. **Full-suite green is now 1753 passed / 0 failed.**
 See ISSUE-6 in `issues_ledger.md`.
 
-**▶ NEXT — assembly.py:** Validation service push done (#8). Cleanest next move:
-**(A) Flatten + validation router** (`# ── Flatten to Design` ~7085 + the now-thin `# ── Assembly validation`
-~6998) → `routes_assembly_validation.py`. **Probed B=1** (`crud._design_response`, on `/assembly/flatten/load-as-design`
-only; validate is now B=0 since #8). 4 cohesive read-only "inspect/derive the assembly" routes
-(`GET /assembly/validate`, `GET /assembly/flatten`, `POST /assembly/flatten/load-as-design` + the thin
-validate handler). Verbatim router lift, mirror `routes_assembly_animations.py`; mount in main.py. Don't pull
-Debug endpoints in — they probe **B=4** (`_apply_revolute_joint`/`_find_joint`/`_find_instance`/`_mat4_from_model`).
-**Alt — (B) Workspace library** (`# ── Workspace library` ~6463, ~250 ln file CRUD) → `routes_workspace.py`.
-**Probed B=4** (`_assembly_response` + bespoke `_dedup_filename`/`_patch_references`/`_safe_workspace_path`);
-the L14 move is to **co-extract those 3 to a `backend/core/workspace.py` service first** (pure path/file logic
-wearing an api hat — `_safe_workspace_path` raises `HTTPException`, so swap that for `ValueError` like #3's
-`parse_deformation_params` did), THEN lift the router at B≤1. **(C) Connector-resolution service push** — the
-~565 ln of the FK banner #7 left behind: blocked by `_mat4_from_model` (PURE — move it too, trivial) and
-`_design_with_instance_overrides` (api file-IO — pass the resolved `design` in as a plain arg). Bigger job;
-high testability payoff. **AVOID still:** Gear relations, Belt paths, PartGroup routes — all probed **B=4–5**
-(revolute-drive helper web: `_apply_assembly_mutation_with_feature_log`, `_resolve_gear_endpoint`,
-`_propagate_gear_relations_from`, `_sync_revolute_values_*`); need a `backend/core` service push of those FIRST.
+**▶ NEXT — assembly.py:** Joint region frame-inspection half is DONE in #19. Topmost recommended next: the
+**Joint-CRUD mutator half** (the rest of `# ── Joint routes`, banner via
+`grep -n "# ── Joint routes" backend/api/assembly.py`, now ~3182 → `# ── Gear/belt endpoint resolution` ~3674
+after #19's −173 drift) → `routes_assembly_joints.py`. **5 routes: add_joint / create_mate / patch_joint
+(POST/PATCH /assembly/joints[/...], includes the `# ── Endpoint-aware revolute drive` sub-banner) +
+refresh-mate + delete_joint.** Move region-local `_compose_add_joint` IN. **Probed B≈9–11, ALL exempt
+(bespoke-B=0 expected per L19)**: kernel `_assembly_response`/`_apply_assembly_mutation_with_feature_log`;
+lookups `_find_joint`/`_find_instance`; converters `_mat4_from_model`/`_mat4_to_model`; shared infra
+`_design_with_instance_overrides`/`_assembly_source_path`/`_propagate_fk_inplace`/`_apply_prismatic_joint`;
+and `_infer_cluster_ids_for_connector_label` (arrives via `_compose_add_joint`, used cross-region at the
+`_joint_side_cluster_ids` web ~407, L4-blocked → class L13-exempt, import back). Drive math already in core
+(#15). Verbatim lift; preserve the silent-vs-undo contract per L6 (`set_assembly_silent` on patch's
+gear-resync vs `_apply_assembly_mutation_with_feature_log` on add/delete). This is the densest exempt cord
+in the file (L11) — ship on bespoke-B=0, state the exempt headcount in the row. Alt next: **Polymerize
+Origami** (`# ── Polymerize Origami`) → `routes_assembly_polymerize.py` + dedup the replication math against
+`assembly_polymer.py`/`periodic_polymer.py`. **Still L4-blocked, leave:** the cluster-inference trio
+(`_infer_cluster_ids_for_connector_label`→`_design_with_instance_overrides` file-IO, `_joint_side_cluster_ids`,
+`_propagate_cluster_delta_to_mates`). NOTE: `_apply_prismatic_joint` + `_mat4_from_model`/`_mat4_to_model` stay
+in assembly.py (26+ unrelated callers; not a gear dep) — don't chase them.
+GOTCHA banked (#19): the prior handoff lumped `_cluster_se3` with the L4-blocked cluster trio — **wrong**, it's
+pure (numpy/scipy + model fields, no file-IO) with a single in-region caller, so it moved IN cleanly. Always
+read a helper's BODY before trusting a prior session's L4 classification.
 
 **Gotcha banked (assembly.py, #4):** the assembly-side shared kernel helper is **`_assembly_response`** (the twin
 of crud's `_design_response`) — it stays in assembly.py, counts toward B, never blocks. Animation keyframe-patch
@@ -287,15 +293,68 @@ Tiers are priority hints, not gospel.
   `_propagate_cluster_delta_to_mates`) helpers depend on api-layer `_design_with_instance_overrides`
   (→ `_load_design_from_source`, file IO + `HTTPException`) and `_mat4_from_model` — can't go to core
   without inverting the arrow. assembly.py 7243→7160 LOC; routes unchanged (92, no routes moved).
-- [ ] **Joint routes** — `# ── Joint routes` (~4183–5244, ~1060 ln incl. the revolute-drive logic) →
-  `routes_assembly_joints.py` + push the endpoint-aware revolute drive (~4477) into
-  `backend/core/assembly_polymer.py` or a new service. Biggest single assembly cluster; split.
-- [ ] **PartGroup routes** — `# ── PartGroup routes` (~3863–4183) → `routes_assembly_groups.py`. Self-contained
+- [x] **Connector-frame resolution kernel → `backend/core/assembly_connectors.py`** — the read-only geometry
+  half of #7's "~565 ln left behind" (Refactor #12, 2026-06-08). **Service push, B=0.** Moved the 10 pure
+  label→SE3-frame helpers (`_build_frame_from_normal`, `_resolve_{blunt,seam,live}_label_local`,
+  `_get_connector_world{,_frame}`, `_local_frame_for_label`, `_build{,_world}_connector_frames`,
+  `_refresh_connector_frames_for_instance`) verbatim; the ONLY edit was `_mat4_from_model(x)`→`x.to_array()`
+  (byte-identical — `Mat4x4.to_array` already existed, so the api free fn dropped out of core entirely).
+  17 unit tests (`test_assembly_connectors_core.py`). **5 of the 10 became module-private in core** (only the
+  5 public resolvers import back — L17). assembly.py −386 LOC, 79 routes unchanged, 1818 passed. **STILL behind
+  (L4-blocked / file-IO, correctly left):** `_infer_cluster_ids_for_connector_label`
+  (→`_design_with_instance_overrides` file-IO), `_joint_side_cluster_ids`, `_propagate_cluster_delta_to_mates`,
+  `_cluster_se3`.
+- [x] **Connector-coincidence enforcement → `backend/core/assembly_connectors.py`** (Refactor #13, 2026-06-08).
+  **Service push, B=0.** Moved `_enforce_connector_coincidence` (the write-side twin of #12's resolvers — re-docks
+  a constrained child whose mated connector drifted, then propagates the snap down its rigid subtree) verbatim
+  except `_mat4_from_model(x)`→`x.to_array()` (byte-identical, same as #12). Pure graph-mutation: back-imports
+  NOTHING from assembly.py (calls the module-local `_get_connector_world` + the `assembly_fk` FK helpers). 7 new
+  unit tests (24 total in the file); its 7 call sites import it back. assembly.py −50 LOC, 79 routes unchanged,
+  1825 passed. The cluster-inference trio + `_cluster_se3` stay (L4-blocked, file-IO).
+- [x] **Revolute-drive + gear/belt coupling kinematics kernel** → `backend/core/assembly_kinematics.py`
+  (Refactor #15, 2026-06-08). **Service push, B=0** (imports only numpy/scipy + `Mat4x4`/`GearRelation` +
+  the already-extracted `assembly_fk`/`assembly_connectors`). 10 fns moved verbatim (two byte-identical
+  `Mat4x4` converter swaps the only adaptation); 6 imported back, 4 module-private (L17); 27 unit tests
+  (`test_assembly_kinematics_core.py`). Dead `_gear_endpoint_seed` removed. assembly.py −418 ln, routes
+  unchanged (77). **This unblocks the Gear/Belt/PartGroup/Joint routers** (L18) — the drive math is now in core.
+- [~] **Joint routes** — `# ── Joint routes` (~665 ln, 3182–3846) → splitting by cohesion (handoff "split if
+  cohesion divides"). **Frame-inspection half DONE** (Refactor #19, 2026-06-08): the 3 read-only routes
+  (`GET /assembly/connector-frames`, joint `debug-frames`, joint `connector-frames`) →
+  `routes_assembly_frames.py` at **B=6, bespoke-B=0** (all shared read-kernel infra; `_cluster_se3` moved IN —
+  it's pure, not L4-blocked as the old handoff claimed). 61→58 routes, −203 LOC. **Joint-CRUD mutator half
+  STILL OPEN**: add_joint / create_mate / patch_joint / refresh_mate / delete_joint (5 routes) +
+  region-local `_compose_add_joint` → `routes_assembly_joints.py`. Re-probe on the live range: expect B≈9–11
+  all-exempt (kernel `_assembly_response`/`_apply_assembly_mutation_with_feature_log`; lookups
+  `_find_joint`/`_find_instance`; converters `_mat4_from_model`/`_mat4_to_model`; shared infra
+  `_design_with_instance_overrides`/`_assembly_source_path`/`_propagate_fk_inplace`/`_apply_prismatic_joint`;
+  L4-blocked cross-region `_infer_cluster_ids_for_connector_label` arriving via `_compose_add_joint`). bespoke-B
+  should be 0 if `_infer_cluster_ids_for_connector_label` is classed L13-exempt (shared cross-region +
+  L4-blocked). The drive math is already in core (#15). Verbatim lift; `test_joints.py` covers.
+- [x] **PartGroup routes** — `# ── PartGroup routes` → `routes_assembly_groups.py` (Refactor #18, 2026-06-08).
+  **B=3** — all shared kernel/infra, **bespoke-B=0** (L19): `_assembly_response` + `_apply_assembly_mutation_with_feature_log`
+  (kernel) + `resolve_assembly` (the kernel joint-solver ROUTE, called inside `transform_group` to re-snap
+  externally-mated partners — shared infra, stays in assembly.py). 6 routes (create/ungroup/patch/duplicate/
+  cascade-delete/transform) + 4 request models + the 2 group-only helpers (`_find_group`, `_autogen_group_name`)
+  moved IN. The grouping math was already in `backend/core/assembly_groups.py` (#groups feature) and the gear-sync
+  in `backend/core/assembly_kinematics.py` (#15) — the router imports both from core directly, NOT back from the
+  god-file. Orphaned `PartGroup` `core.models` import cleaned. assembly.py 67→61 routes, −321 LOC. Self-contained
   (PowerPoint-style grouping). See `memory/project_assembly_groups.md`.
-- [ ] **Gear relations** — `# ── Gear relations` (~5244–5414) → `routes_assembly_gears.py`. Small, cohesive.
-  See `memory/project_gear_relations.md`.
-- [ ] **Belt paths + riders + polymerize** — `# ── Belt paths` (~5414–5612) + `# ── Belt riders` (~5542) +
-  `# ── Polymerize along a belt` (~5612) → `routes_assembly_belts.py`. See `memory/project_belt_paths.md`.
+- [x] **Gear relations** — `# ── Gear relations` → `routes_assembly_gears.py` (Refactor #16, 2026-06-08).
+  **B=3** (`_assembly_response` + `_apply_assembly_mutation_with_feature_log` + `_resolve_gear_endpoint`). 4 routes
+  (create/patch/delete/resolve) + 2 request models + region-local `_find_gear_relation` moved in. The drive math
+  (`_build_inst_by_id`/`_gear_endpoint_side`/`_apply_revolute_value_to_gear_endpoint`) is imported from
+  `backend/core` directly (#15), not back from the god-file. **`_resolve_gear_endpoint` STAYED in assembly.py**
+  (L13: shared cross-region with Belt's `_resolve_belt_pulley`, raises `HTTPException` so L4-blocked from core) —
+  imported back, the only bespoke back-import. Orphaned `GearRelation`/`_gear_endpoint_side` imports cleaned.
+  assembly.py 77→73 routes.
+- [x] **Belt paths + riders + polymerize** — `# ── Belt paths` + `# ── Belt riders` +
+  `# ── Polymerize along a belt` → `routes_assembly_belts.py` (Refactor #17, 2026-06-08). **B=4** — all four
+  shared kernel/infra, ZERO bespoke: `_assembly_response` + `_apply_assembly_mutation_with_feature_log`
+  (kernel) + `_find_instance` (54-caller lookup) + `_resolve_gear_endpoint` (L13 shared gear+belt, L4-blocked).
+  6 routes + 6 request models + region-local `_find_belt_path`/`_resolve_belt_pulley` moved IN. Belt→gear-edge
+  math (`_belt_to_relation`) already in core (#15). High-B-playbook option-2: every back-import is the
+  accepted shared kernel, so B=4 is not bespoke entanglement. assembly.py 73→67 routes. `tests/test_belt_paths.py`
+  covers (verbatim lift).
 - [ ] **Polymerize Origami** — `# ── Polymerize Origami` (~5679–6357) → `routes_assembly_polymerize.py` +
   push the replication/pattern-mate math (~5805–6293) into `backend/core/` (much of it may already be in
   `assembly_polymer.py` / `periodic_polymer.py` — dedup, don't duplicate). See `memory/project_polymerize_origami.md`.
@@ -327,13 +386,27 @@ Tiers are priority hints, not gospel.
   only `Assembly` + delegates to `assembly_flatten`). Moved the pure `_validate_assembly` body **byte-identical**
   → `validate_assembly_report` + 8 direct unit tests (`test_assembly_validate_core.py`). The `GET
   /assembly/validate` handler shrank ~84→4 ln (parse→delegate→respond). Routes unchanged (92). assembly.py −76 LOC.
-- [ ] **Instance / connector / library / flatten / debug** — the remaining banners
-  (`# ── Instance routes` ~1286, `# ── Instance connectors` ~6249, `# ── Workspace library` ~6463,
-  `# ── Flatten to Design` ~7085, `# ── Debug endpoints` ~7121). Pick off
-  the cohesive ones; the core-assembly routes (`GET/POST /assembly`, undo/redo) are the kernel that stays.
-  **Flatten to Design** (3 routes, ~7085–7118) is the cleanest router lift left: probed **B=1**
-  (`crud._design_response`, on `load-as-design` only — shared kernel) — fold validate+flatten into a
-  `routes_assembly_validation.py` now that the validation logic is in core.
+- [x] **Validation + Flatten to Design** — `# ── Assembly validation` + `# ── Flatten to Design`
+  → `routes_assembly_validation.py` (Refactor #9, 2026-06-08). **B=1** (`crud._design_response`, function-local
+  on `load-as-design` only; from assembly.py's own helpers B=0). 3 cohesive read-only "inspect/derive the
+  assembly" routes moved verbatim (`GET /assembly/validate`, `GET /assembly/flatten`,
+  `POST /assembly/flatten/load-as-design`). Debug endpoints correctly left behind (probe B=4:
+  `_find_joint`/`_find_instance`/`_mat4_from_model`/`_apply_revolute_joint`). assembly.py 92→89 routes, −46 LOC.
+- [~] **Instance / connector / library / debug** — the remaining banners
+  (`# ── Instance routes` ~1286, `# ── Workspace library` ~6463, `# ── Debug endpoints` ~7044).
+  Pick off the cohesive ones; the core-assembly routes
+  (`GET/POST /assembly`, undo/redo) are the kernel that stays. **Instance connectors router DONE**
+  (Refactor #14, 2026-06-08): `# ── Instance connectors (InterfacePoints)` (2 routes, add/delete) →
+  `routes_assembly_connectors.py` at **B=3** (all shared infra: `_assembly_response` +
+  `_apply_assembly_mutation_with_feature_log` + `_find_instance`); 79→77 routes, −68 LOC, 1825 green.
+  **Workspace library service push DONE**
+  (Refactor #10, 2026-06-08): the 3 bespoke helpers (`_dedup_filename`/`_patch_references`/`_safe_workspace_path`)
+  are now `backend/core/workspace.py` (B=0, 19 unit tests). **Router half DONE (Refactor #11, 2026-06-08):**
+  `# ── Workspace library` (10 routes) → `routes_assembly_workspace.py` at **B=2** — the router calls the core
+  fns directly (`dedup_filename`/`patch_nass_files`/`patch_assembly_instances`), back-imports only
+  `_safe_workspace_path` (shared api wrapper, L13) + `_assembly_response` (kernel), and moved the workspace-only
+  `_patch_references` in. `# ── Part library (legacy)` (~6357 now) is a SEPARATE concern (scans `parts-library/`,
+  uses `_sha256_file`/`_LIBRARY_DIR`) — left behind. assembly.py 89→79 routes. See L16 (monkeypatch-fidelity).
 
 ### Stays in assembly.py (kernel)
 - Core assembly routes (`# ── Core assembly routes` ~1289), undo/redo, the geometry cache, and the shared
