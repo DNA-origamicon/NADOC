@@ -475,7 +475,6 @@ class SeamedResult:
     seam_xovers: int = 0
     near_end_xovers: int = 0
     far_end_xovers: int = 0
-    advanced_bridge_xovers: int = 0
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
@@ -805,6 +804,13 @@ def _auto_scaffold_seamed_impl(
                 xover_bp = near_list[idx] + P
                 if _scaf_nb(current, rowA, colA, xover_bp) != tuple(hB.grid_pos):
                     # Translate unexpectedly invalid → fall back to a local search.
+                    # Flag it: the far face is no longer an exact translate of the
+                    # near face here, so ends are not cleanly matched (the seamed
+                    # default reads this to fall back to classic routing).
+                    result.warnings.append(
+                        f"[MatchedEnds] {ha_id}↔{hb_id}: translate near+P="
+                        f"{near_list[idx] + P} off-lattice; used local far search."
+                    )
                     xover_bp = next(
                         (bp for bp in range(hi + 3, hi + period + 1)
                          if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)),
@@ -880,16 +886,105 @@ def _auto_scaffold_seamed_impl(
             mid_bp = (dom.start_bp + dom.end_bp) // 2
             current = _nick_if_needed(current, dom.helix_id, mid_bp, dom.direction)
 
+    append_single_strand_warning(current, result)
     return current, result
 
 
-def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
-    """Classic seamed scaffold pipeline (Seam → Near Ends → Far Ends).
-
-    The far face skips the lowest-helix pair to park the scaffold's open 5'/3'
-    terminus; the two ends are routed independently.
+def scaffold_strand_clusters(design: Design) -> list[set[str]]:
+    """Connected components of scaffold helices under valid scaffold-crossover
+    adjacency — the 'separate cluster' definition (helix groups that share no
+    valid scaffold crossover site).  Each connected cluster should route to a
+    single scaffold strand; genuinely disconnected clusters route to one strand
+    each.
     """
-    return _auto_scaffold_seamed_impl(design, matched_ends=False)
+    coverage = _scaffold_coverage(design)
+    adj = _build_adj(design, coverage)
+    visited: set[str] = set()
+    comps: list[set[str]] = []
+    for hid in adj:
+        if hid in visited:
+            continue
+        comp: set[str] = set()
+        stack = [hid]
+        while stack:
+            n = stack.pop()
+            if n in visited:
+                continue
+            visited.add(n)
+            comp.add(n)
+            stack.extend(adj[n] - visited)
+        comps.append(comp)
+    return comps
+
+
+def append_single_strand_warning(design: Design, result) -> None:
+    """Warn when a connected cluster fragmented into more than one scaffold strand.
+
+    A single connected cluster should route to one scaffold strand.  Automatic
+    consolidation of irregular multi-section designs into one strand is not yet
+    implemented: adding crossovers at valid mid-strand sites re-partitions the
+    linear pieces (proven: a single crossover splits, a double crossover swaps —
+    neither merges), so merging needs end-joining / 2-opt cycle reconnection.
+    This surfaces the gap instead of silently shipping fragments.  ``result``
+    is any router result object exposing a ``warnings`` list.
+    """
+    clusters = scaffold_strand_clusters(design)
+    scaf = [
+        s for s in design.strands
+        if s.is_scaffold and not getattr(s, "is_reference", False)
+    ]
+    if len(scaf) > len(clusters):
+        result.warnings.append(
+            f"Scaffold routed into {len(scaf)} strands across {len(clusters)} "
+            f"connected cluster(s); each connected cluster should be a single "
+            f"strand.  Automatic single-strand consolidation for irregular "
+            f"multi-section designs is not yet implemented — join the extra "
+            f"pieces manually (forced ligation) or re-route."
+        )
+
+
+def _matched_ends_feasible(result: SeamedResult) -> bool:
+    """True when a matched-ends run produced a clean, fully-matched far face.
+
+    Matched ends require every far crossover to be an exact one-period translate
+    of its near partner.  The matched pipeline emits a ``[MatchedEnds]`` warning
+    whenever it cannot do that for a pair (no near crossovers to mirror, count
+    mismatch, or an off-lattice translate that fell back to a local search), so
+    the absence of any such warning — with far ends actually placed — means the
+    geometry admitted clean matched ends.
+    """
+    if result.far_end_xovers <= 0:
+        return False
+    return not any(w.startswith("[MatchedEnds]") for w in result.warnings)
+
+
+def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
+    """Seamed scaffold pipeline (Seam → Near Ends → Far Ends).
+
+    Produces **matched ends by default**: the far (+hi) face is routed as an
+    exact translate of the near (−lo) face so identical copies stack blunt-end
+    end-to-end (the same routing as ``auto_scaffold_matched``).  When the
+    geometry cannot be cleanly matched (non-uniform helix spans, dumbbells,
+    multi-section designs), this falls back to the classic seamed route, which
+    skips the lowest-helix far pair to park the scaffold's open 5'/3' terminus
+    and routes the two ends independently.
+
+    Each attempt runs on its own deep copy so the discarded matched attempt can
+    never leak crossovers into the classic fallback.
+    """
+    matched_design, matched_result = _auto_scaffold_seamed_impl(
+        design.model_copy(deep=True), matched_ends=True
+    )
+    if _matched_ends_feasible(matched_result):
+        return matched_design, matched_result
+
+    classic_design, classic_result = _auto_scaffold_seamed_impl(
+        design.model_copy(deep=True), matched_ends=False
+    )
+    classic_result.warnings.insert(
+        0, "Matched ends not feasible for this geometry; used classic seamed routing."
+    )
+    return classic_design, classic_result
 
 
 def auto_scaffold_matched(design: Design) -> tuple[Design, SeamedResult]:
@@ -913,426 +1008,6 @@ def auto_scaffold_matched(design: Design) -> tuple[Design, SeamedResult]:
     result.near_end_xovers += matched.near_end_xovers
     result.far_end_xovers += matched.far_end_xovers
     return current, result
-
-
-def _strand_nt(strand) -> int:
-    return sum(abs(dom.end_bp - dom.start_bp) + 1 for dom in strand.domains)
-
-
-def _can_extend_three_prime(dom: Domain, bp: int) -> bool:
-    return bp >= dom.end_bp if dom.direction == Direction.FORWARD else bp <= dom.end_bp
-
-
-def _can_extend_five_prime(dom: Domain, bp: int) -> bool:
-    return bp <= dom.start_bp if dom.direction == Direction.FORWARD else bp >= dom.start_bp
-
-
-def _terminal_extension_cost(dom: Domain, bp: int, end: str) -> int:
-    ref = dom.end_bp if end == "three" else dom.start_bp
-    return abs(bp - ref)
-
-
-def _advanced_bridge_edge(
-    design: Design,
-    helix_by_id: dict,
-    strand_from,
-    strand_to,
-    search_bp: int = 80,
-) -> dict | None:
-    """Find the cheapest legal 3′→5′ scaffold bridge between two strand blocks."""
-    if not strand_from.domains or not strand_to.domains:
-        return None
-    src = strand_from.domains[-1]
-    dst = strand_to.domains[0]
-    h_src = helix_by_id.get(src.helix_id)
-    h_dst = helix_by_id.get(dst.helix_id)
-    if h_src is None or h_dst is None or h_src.grid_pos is None or h_dst.grid_pos is None:
-        return None
-
-    lo = min(src.end_bp, dst.start_bp) - search_bp
-    hi = max(src.end_bp, dst.start_bp) + search_bp
-    best: dict | None = None
-    for bp in range(lo, hi + 1):
-        if not _can_extend_three_prime(src, bp):
-            continue
-        if not _can_extend_five_prime(dst, bp):
-            continue
-        if _scaf_nb(design, h_src.grid_pos[0], h_src.grid_pos[1], bp) != tuple(h_dst.grid_pos):
-            continue
-        cost = (
-            _terminal_extension_cost(src, bp, "three")
-            + _terminal_extension_cost(dst, bp, "five")
-        )
-        candidate = {
-            "from_id": strand_from.id,
-            "to_id": strand_to.id,
-            "bp": bp,
-            "cost": cost,
-        }
-        if best is None or (cost, bp) < (best["cost"], best["bp"]):
-            best = candidate
-    return best
-
-
-def _advanced_bridge_graph(design: Design) -> dict[str, list[dict]]:
-    helix_by_id = {h.id: h for h in design.helices}
-    scaffolds = _active_scaffolds(design)
-    graph: dict[str, list[dict]] = {s.id: [] for s in scaffolds}
-    for strand_from in scaffolds:
-        for strand_to in scaffolds:
-            if strand_from.id == strand_to.id:
-                continue
-            edge = _advanced_bridge_edge(design, helix_by_id, strand_from, strand_to)
-            if edge is not None:
-                graph[strand_from.id].append(edge)
-    for edges in graph.values():
-        edges.sort(key=lambda e: (e["cost"], e["bp"], e["to_id"]))
-    return graph
-
-
-def _advanced_hamiltonian_path(design: Design, graph: dict[str, list[dict]]) -> list[str] | None:
-    scaffolds = _active_scaffolds(design)
-    strand_by_id = {s.id: s for s in scaffolds}
-    n = len(scaffolds)
-    if n <= 1:
-        return [s.id for s in scaffolds]
-
-    incoming: dict[str, int] = {s.id: 0 for s in scaffolds}
-    for edges in graph.values():
-        for edge in edges:
-            incoming[edge["to_id"]] += 1
-
-    starts = sorted(
-        (s.id for s in scaffolds),
-        key=lambda sid: (
-            incoming[sid],
-            len(graph.get(sid, [])),
-            -_strand_nt(strand_by_id[sid]),
-            sid,
-        ),
-    )
-
-    budget = [_HAM_PATH_BUDGET]
-
-    def dfs(path: list[str], used: set[str]) -> list[str] | None:
-        budget[0] -= 1
-        if budget[0] <= 0:
-            return None  # give up rather than hang on a hopeless search tree
-        if len(path) == n:
-            return path
-        current = path[-1]
-
-        def edge_key(edge: dict) -> tuple[int, int, int, str]:
-            next_id = edge["to_id"]
-            onward = sum(1 for e in graph.get(next_id, []) if e["to_id"] not in used)
-            return (onward, edge["cost"], -_strand_nt(strand_by_id[next_id]), next_id)
-
-        for edge in sorted(graph.get(current, []), key=edge_key):
-            next_id = edge["to_id"]
-            if next_id in used:
-                continue
-            if budget[0] <= 0:
-                return None
-            found = dfs(path + [next_id], used | {next_id})
-            if found is not None:
-                return found
-        return None
-
-    for start in starts:
-        if budget[0] <= 0:
-            break
-        found = dfs([start], {start})
-        if found is not None:
-            return found
-    return None
-
-
-def _find_scaffold_strand(design: Design, strand_id: str):
-    for strand in design.strands:
-        if strand.id == strand_id and strand.is_scaffold and not strand.is_reference:
-            return strand
-    return None
-
-
-def _extend_terminal_domain(
-    design: Design,
-    helix_by_id: dict,
-    strand_id: str,
-    end: str,
-    bp: int,
-) -> Design:
-    strand = _find_scaffold_strand(design, strand_id)
-    if strand is None or not strand.domains:
-        return design
-    dom_index = 0 if end == "five" else len(strand.domains) - 1
-    dom = strand.domains[dom_index]
-
-    helix = helix_by_id.get(dom.helix_id)
-    if helix is not None:
-        hi = helix.bp_start + helix.length_bp - 1
-        if bp < helix.bp_start:
-            design = _extend_helix_lo(design, helix_by_id, dom.helix_id, bp)
-        elif bp > hi:
-            design = _extend_helix_hi(design, helix_by_id, dom.helix_id, bp)
-
-    strand = _find_scaffold_strand(design, strand_id)
-    if strand is None or not strand.domains:
-        return design
-    dom = strand.domains[dom_index]
-    if end == "five":
-        if not _can_extend_five_prime(dom, bp):
-            return design
-        new_dom = dom.model_copy(update={"start_bp": bp})
-    else:
-        if not _can_extend_three_prime(dom, bp):
-            return design
-        new_dom = dom.model_copy(update={"end_bp": bp})
-
-    new_domains = list(strand.domains)
-    new_domains[dom_index] = new_dom
-    new_strand = strand.model_copy(update={"domains": new_domains, "sequence": None})
-    return design.copy_with(
-        strands=[new_strand if s.id == strand_id else s for s in design.strands]
-    )
-
-
-def _advanced_connect_scaffold_blocks(
-    design: Design,
-    path: list[str],
-    result: SeamedResult,
-) -> Design:
-    current = design
-    helix_by_id = {h.id: h for h in current.helices}
-    if len(path) <= 1:
-        return current
-
-    head_id = path[0]
-    for next_id in path[1:]:
-        head = _find_scaffold_strand(current, head_id)
-        nxt = _find_scaffold_strand(current, next_id)
-        if head is None or nxt is None:
-            result.warnings.append(
-                f"[AdvancedSeamed] Missing scaffold block while connecting {head_id}→{next_id}."
-            )
-            continue
-        edge = _advanced_bridge_edge(current, helix_by_id, head, nxt)
-        if edge is None:
-            result.warnings.append(
-                f"[AdvancedSeamed] No legal bridge found for {head.id}→{nxt.id}; routing incomplete."
-            )
-            continue
-
-        bp = edge["bp"]
-        current = _extend_terminal_domain(current, helix_by_id, head.id, "three", bp)
-        current = _extend_terminal_domain(current, helix_by_id, nxt.id, "five", bp)
-        head = _find_scaffold_strand(current, head_id)
-        nxt = _find_scaffold_strand(current, next_id)
-        if head is None or nxt is None:
-            continue
-        src = head.domains[-1]
-        dst = nxt.domains[0]
-        ha = HalfCrossover(helix_id=src.helix_id, index=bp, strand=src.direction)
-        hb = HalfCrossover(helix_id=dst.helix_id, index=bp, strand=dst.direction)
-        current, xo = _place_xover(
-            current,
-            ha,
-            hb,
-            bp,
-            bp,
-            "auto_scaffold_advanced_seamed:bridge",
-            result.warnings,
-        )
-        if xo is not None:
-            result.advanced_bridge_xovers += 1
-        else:
-            result.warnings.append(
-                f"[AdvancedSeamed] Bridge validation failed for {head.id}→{nxt.id} at bp={bp}."
-            )
-    return current
-
-
-def _advanced_scaffold_strands(design: Design) -> list:
-    return _active_scaffolds(design)
-
-
-def _advanced_seam_candidates(
-    design: Design,
-    reference_coverage: dict[str, list[dict]],
-) -> list[dict]:
-    """Return true Holliday-junction seam candidates near original domain middles."""
-    candidates: list[dict] = []
-    helices = [
-        h for h in design.helices
-        if h.id in reference_coverage and h.grid_pos is not None
-    ]
-    for i, h_a in enumerate(helices):
-        row_a, col_a = h_a.grid_pos
-        fwd = _is_forward(row_a, col_a)
-        strand_a = Direction.FORWARD if fwd else Direction.REVERSE
-        strand_b = Direction.REVERSE if fwd else Direction.FORWARD
-        for h_b in helices[i + 1:]:
-            if h_b.grid_pos is None:
-                continue
-            if not any(
-                _scaf_nb(design, row_a, col_a, bp) == tuple(h_b.grid_pos)
-                for iv in _intersect(
-                    reference_coverage.get(h_a.id, []),
-                    reference_coverage.get(h_b.id, []),
-                )
-                for bp in range(iv["lo"], iv["hi"] + 1)
-            ):
-                continue
-            for iv in _intersect(
-                reference_coverage.get(h_a.id, []),
-                reference_coverage.get(h_b.id, []),
-            ):
-                lo, hi = iv["lo"], iv["hi"]
-                mid = (lo + hi) / 2
-                valid_bps = [
-                    bp for bp in range(lo, hi + 1)
-                    if _scaf_nb(design, row_a, col_a, bp) == tuple(h_b.grid_pos)
-                ]
-                for bp_a, bp_b in zip(valid_bps, valid_bps[1:]):
-                    if bp_b != bp_a + 1:
-                        continue
-                    candidates.append({
-                        "hA_id": h_a.id,
-                        "hB_id": h_b.id,
-                        "bp_a": bp_a,
-                        "bp_b": bp_b,
-                        "strand_a": strand_a,
-                        "strand_b": strand_b,
-                        "mid_distance": abs(((bp_a + bp_b) / 2) - mid),
-                        "interval_len": hi - lo + 1,
-                    })
-    candidates.sort(
-        key=lambda c: (
-            c["mid_distance"],
-            -c["interval_len"],
-            c["bp_a"],
-            c["hA_id"],
-            c["hB_id"],
-        )
-    )
-    return candidates
-
-
-def _advanced_place_seam_pair(
-    design: Design,
-    candidate: dict,
-    warnings: list[str],
-) -> tuple[Design, int]:
-    is_hc = design.lattice_type == LatticeType.HONEYCOMB
-    period = HC_CROSSOVER_PERIOD if is_hc else SQ_CROSSOVER_PERIOD
-    bow_right = _HC_SCAF_BOW_RIGHT if is_hc else _SQ_SCAF_BOW_RIGHT
-    current = design
-    placed = 0
-    for bp in (candidate["bp_a"], candidate["bp_b"]):
-        ha = HalfCrossover(
-            helix_id=candidate["hA_id"],
-            index=bp,
-            strand=candidate["strand_a"],
-        )
-        hb = HalfCrossover(
-            helix_id=candidate["hB_id"],
-            index=bp,
-            strand=candidate["strand_b"],
-        )
-        nick_a = _nick_bp(bp, candidate["strand_a"], period, bow_right)
-        nick_b = _nick_bp(bp, candidate["strand_b"], period, bow_right)
-        current, xo = _place_xover(
-            current,
-            ha,
-            hb,
-            nick_a,
-            nick_b,
-            "auto_scaffold_advanced_seamed:seam",
-            warnings,
-        )
-        if xo is not None:
-            placed += 1
-    return current, placed
-
-
-def _advanced_rejoin_scaffold_pieces(
-    design: Design,
-    result: SeamedResult,
-    *,
-    search_bp: int = 300,
-) -> Design | None:
-    scaffolds = _advanced_scaffold_strands(design)
-    if len(scaffolds) != 2:
-        return design if len(scaffolds) == 1 else None
-
-    helix_by_id = {h.id: h for h in design.helices}
-    edges: list[tuple[int, str, str, dict]] = []
-    for a in scaffolds:
-        for b in scaffolds:
-            if a.id == b.id:
-                continue
-            edge = _advanced_bridge_edge(design, helix_by_id, a, b, search_bp=search_bp)
-            if edge is not None:
-                edges.append((edge["cost"], a.id, b.id, edge))
-    if not edges:
-        return None
-
-    _, from_id, to_id, edge = min(edges, key=lambda e: (e[0], e[1], e[2], e[3]["bp"]))
-    bp = edge["bp"]
-    current = _extend_terminal_domain(design, helix_by_id, from_id, "three", bp)
-    current = _extend_terminal_domain(current, helix_by_id, to_id, "five", bp)
-    strand_from = _find_scaffold_strand(current, from_id)
-    strand_to = _find_scaffold_strand(current, to_id)
-    if strand_from is None or strand_to is None:
-        return None
-
-    src = strand_from.domains[-1]
-    dst = strand_to.domains[0]
-    ha = HalfCrossover(helix_id=src.helix_id, index=bp, strand=src.direction)
-    hb = HalfCrossover(helix_id=dst.helix_id, index=bp, strand=dst.direction)
-    current, xo = _place_xover(
-        current,
-        ha,
-        hb,
-        bp,
-        bp,
-        "auto_scaffold_advanced_seamed:bridge",
-        result.warnings,
-    )
-    if xo is None:
-        return None
-    result.advanced_bridge_xovers += 1
-    return current
-
-
-def _advanced_add_holliday_seam(
-    design: Design,
-    reference_coverage: dict[str, list[dict]],
-    result: SeamedResult,
-) -> Design:
-    if len(_advanced_scaffold_strands(design)) != 1:
-        result.warnings.append(
-            "[AdvancedSeamed] Skipped seam placement because the scaffold route is incomplete."
-        )
-        return design
-
-    for candidate in _advanced_seam_candidates(design, reference_coverage):
-        local_warnings: list[str] = []
-        with_seam, placed = _advanced_place_seam_pair(design, candidate, local_warnings)
-        if placed != 2:
-            continue
-        trial_result = SeamedResult()
-        rejoined = _advanced_rejoin_scaffold_pieces(with_seam, trial_result)
-        if rejoined is None or len(_advanced_scaffold_strands(rejoined)) != 1:
-            continue
-        result.advanced_bridge_xovers += trial_result.advanced_bridge_xovers
-        result.seam_xovers += placed
-        return rejoined
-
-    result.warnings.append(
-        "[AdvancedSeamed] Could not place a complete Holliday-junction seam pair "
-        "and rejoin the scaffold route."
-    )
-    return design
 
 
 def _auto_scaffold_process_id(process_id: str | None) -> bool:
@@ -1390,29 +1065,3 @@ def _clear_auto_scaffold_route_for_seamed(design: Design, result: SeamedResult) 
         "advanced seam rerouting."
     )
     return design.copy_with(strands=new_strands, crossovers=kept_xovers)
-
-
-def auto_scaffold_advanced_seamed(design: Design) -> tuple[Design, SeamedResult]:
-    """Experimental seamed router with incomplete-route warnings.
-
-    This branch prioritizes true seamed topology: central Holliday-junction
-    seam pairs plus mirrored end crossovers. Manual scaffold crossovers are
-    treated as fixed constraints; when those constraints prevent one-strand
-    consolidation the best seamed route is returned with a warning.
-    """
-    result = SeamedResult()
-    seed = _clear_auto_scaffold_route_for_seamed(design, result)
-    current, seamed_result = auto_scaffold_seamed(seed)
-    result.warnings.extend(seamed_result.warnings)
-    result.seam_xovers += seamed_result.seam_xovers
-    result.near_end_xovers += seamed_result.near_end_xovers
-    result.far_end_xovers += seamed_result.far_end_xovers
-
-    scaffolds = _active_scaffolds(current)
-    if len(scaffolds) != 1:
-        result.warnings.append(
-            "Advanced seam routing incomplete: fixed/manual route constraints or "
-            f"missing legal scaffold crossover sites left {len(scaffolds)} scaffold "
-            "strand(s). The best valid seamed route was applied."
-        )
-    return current, result

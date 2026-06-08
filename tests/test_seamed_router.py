@@ -14,7 +14,6 @@ from backend.core.seamed_router import (
     _HC_SCAF_BOW_RIGHT,
     _active_scaffolds,
     _forced_scaffold_strand_ids,
-    auto_scaffold_advanced_seamed,
     auto_scaffold_matched,
     auto_scaffold_seamed,
 )
@@ -162,86 +161,3 @@ def test_seamed_autoscaffold_does_not_place_hinge_xovers_on_manual_anchor_strand
         }
         assert scaffold_ids
         assert scaffold_ids.isdisjoint(protected)
-
-
-def test_advanced_seamed_warns_when_hinge3_cannot_consolidate_fixed_edges():
-    fixture = Path(__file__).resolve().parents[1] / "workspace" / "Hinge3.nadoc"
-    if not fixture.exists():
-        pytest.skip("workspace/Hinge3.nadoc not available")
-
-    design = Design.model_validate_json(fixture.read_text())
-    original_xover_ids = {x.id for x in design.crossovers}
-
-    updated, result = auto_scaffold_advanced_seamed(design)
-
-    scaffolds = [s for s in updated.strands if s.strand_type == StrandType.SCAFFOLD]
-    assert len(scaffolds) > 1
-    assert result.seam_xovers > 0
-    assert result.near_end_xovers > 0
-    assert result.far_end_xovers > 0
-    assert any("routing incomplete" in warning for warning in result.warnings)
-    assert all(_scaffold_forced_ligation_edges(updated).values())
-
-    seam_xovers = [
-        x for x in updated.crossovers
-        if x.process_id == "auto_scaffold_seamed:seam"
-    ]
-    assert len(seam_xovers) >= 2
-
-    helix_by_id = {h.id: h for h in updated.helices}
-    for xover in updated.crossovers:
-        if xover.id in original_xover_ids:
-            continue
-        h_a = helix_by_id[xover.half_a.helix_id]
-        h_b = helix_by_id[xover.half_b.helix_id]
-        assert h_a.grid_pos is not None
-        assert h_b.grid_pos is not None
-        assert crossover_neighbor(
-            updated.lattice_type,
-            h_a.grid_pos[0],
-            h_a.grid_pos[1],
-            xover.half_a.index,
-            is_scaffold=True,
-        ) == tuple(h_b.grid_pos)
-
-
-def test_advanced_seamed_clears_existing_auto_route_before_teeth_reroute():
-    # Tracked UNROUTED teeth fixture (0 crossovers) so this runs on CI instead of
-    # skipping. The old path pointed at the gitignored workspace/teeth.nadoc, which
-    # drifts when re-saved through the app. NB: tests/fixtures/teeth.nadoc is a
-    # DIFFERENT (pre-routed, 34-xover) design owned by test_seamless_router's
-    # closing-zig test — this reroute test needs the unrouted variant so the
-    # seamless pre-route + advanced-seamed clear/reroute path is exercised.
-    fixture = Path(__file__).resolve().parent / "fixtures" / "teeth_unrouted.nadoc"
-    if not fixture.exists():
-        pytest.skip("tests/fixtures/teeth_unrouted.nadoc not available")
-
-    design = Design.model_validate_json(fixture.read_text())
-    assert not design.forced_ligations
-
-    # Pre-route with the seamless router so there is an existing auto-route for
-    # the advanced seamed router to clear. Without this step there's nothing
-    # to clear and the "Cleared ... auto scaffold crossover(s)" warning never
-    # fires — the test would never exercise the clearing path it's named for.
-    pre_routed, _ = auto_scaffold_seamless(design)
-    pre_process_ids = {x.process_id for x in pre_routed.crossovers}
-    assert "auto_scaffold_seamless:bridge" in pre_process_ids
-
-    advanced, advanced_result = auto_scaffold_advanced_seamed(pre_routed)
-
-    advanced_scaffolds = [
-        s for s in advanced.strands if s.strand_type == StrandType.SCAFFOLD
-    ]
-    assert len(advanced_scaffolds) > 1
-    assert advanced_result.seam_xovers > 0
-    assert advanced_result.near_end_xovers > 0
-    assert advanced_result.far_end_xovers > 0
-    assert any("Cleared" in warning for warning in advanced_result.warnings)
-    assert any("routing incomplete" in warning for warning in advanced_result.warnings)
-
-    process_ids = {x.process_id for x in advanced.crossovers}
-    assert "auto_scaffold_seamless:bridge" not in process_ids
-    assert "auto_scaffold_seamless:zig" not in process_ids
-    assert "auto_scaffold_seamed:seam" in process_ids
-    assert "create_near_ends" in process_ids
-    assert "create_far_ends" in process_ids

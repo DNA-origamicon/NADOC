@@ -2338,7 +2338,7 @@
           <input type="radio" name="as-mode" value="seamed" checked>
           <div>
             <div class="as-label">Seamed</div>
-            <div class="as-desc">Scaffold strand has a nick (seam) at the start helix.</div>
+            <div class="as-desc">Seam crossovers at interior pairs. Produces matched (blunt, stackable) ends when the geometry allows, else a classic parked terminus.</div>
           </div>
         </label>
         <label class="as-option">
@@ -2346,27 +2346,6 @@
           <div>
             <div class="as-label">Seamless</div>
             <div class="as-desc">Scaffold strand is routed as a single continuous loop with no nick.</div>
-          </div>
-        </label>
-        <label class="as-option">
-          <input type="radio" name="as-mode" value="matched">
-          <div>
-            <div class="as-label">Matched Ends</div>
-            <div class="as-desc">Far end routed as an exact translate of the near end so identical copies stack end-to-end (blunt-end polymers).</div>
-          </div>
-        </label>
-        <label class="as-option">
-          <input type="radio" name="as-mode" value="advanced-seamed">
-          <div>
-            <div class="as-label">Advanced Seam Routing</div>
-            <div class="as-desc">Experimental seam planner that preserves manual scaffold anchors.</div>
-          </div>
-        </label>
-        <label class="as-option">
-          <input type="radio" name="as-mode" value="advanced-seamless">
-          <div>
-            <div class="as-label">Advanced Seamless Routing</div>
-            <div class="as-desc">Experimental seamless planner branch for advanced routing tests.</div>
           </div>
         </label>
       </div>

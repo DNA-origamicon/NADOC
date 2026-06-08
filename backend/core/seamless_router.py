@@ -30,6 +30,7 @@ from backend.core.seamed_router import (
     _HC_SCAF_BOW_RIGHT,
     _SQ_SCAF_BOW_RIGHT,
     _HAM_PATH_BUDGET,
+    append_single_strand_warning,
     _build_adj,
     _extend_helix_hi,
     _extend_helix_lo,
@@ -410,4 +411,5 @@ def auto_scaffold_seamless(design: Design) -> tuple[Design, SeamlessResult]:
     from backend.core.lattice import retry_all_pending_ligations
     current = retry_all_pending_ligations(current)
 
+    append_single_strand_warning(current, result)
     return current, result

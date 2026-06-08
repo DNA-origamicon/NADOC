@@ -7291,13 +7291,6 @@ class _FullAutostapleBody(_AkselBreakBody):
     strand_id: Optional[str] = None
 
 
-class _AutoScaffoldBody(BaseModel):
-    seam_tol: int = 5
-    end_tol: int = 5
-    preserve_manual: bool = True
-    max_backtracks: int = 100_000
-
-
 def _run_auto_scaffold_with_feature_log(
     op_kind: str,
     label: str,
@@ -7328,38 +7321,6 @@ def _run_auto_scaffold_with_feature_log(
         op_kind=op_kind, label=label, params=params, fn=_fn,
     )
     return updated, report, holder['result']
-
-
-@router.post("/design/auto-scaffold", status_code=200)
-def auto_scaffold_endpoint(body: _AutoScaffoldBody = _AutoScaffoldBody()) -> dict:
-    """Route scaffold through all helices using constraint-satisfaction search.
-
-    Finds a Hamiltonian path through all scaffold domains with alternating
-    seam/end crossovers.  Returns the updated design and a list of warnings.
-
-    Body fields:
-    - ``seam_tol``: bp tolerance for seam classification (default 5).
-    - ``end_tol``: bp tolerance for end classification (default 5).
-    - ``preserve_manual``: prefer existing scaffold crossovers (default true).
-    - ``max_backtracks``: CSP search budget (default 100 000).
-    """
-    from backend.core.scaffold_router import auto_scaffold
-
-    updated, report, result = _run_auto_scaffold_with_feature_log(
-        op_kind='auto-scaffold',
-        label='Auto-scaffold',
-        params=body.model_dump(),
-        runner=lambda d: auto_scaffold(
-            d,
-            seam_tol=body.seam_tol,
-            end_tol=body.end_tol,
-            preserve_manual=body.preserve_manual,
-            max_backtracks=body.max_backtracks,
-        ),
-    )
-    resp = _design_response(updated, report)
-    resp["warnings"] = result.warnings
-    return resp
 
 
 @router.post("/design/auto-scaffold-seamed", status_code=200)
@@ -7412,27 +7373,6 @@ def auto_scaffold_matched_endpoint() -> dict:
     return resp
 
 
-@router.post("/design/auto-scaffold-advanced-seamed", status_code=200)
-def auto_scaffold_advanced_seamed_endpoint() -> dict:
-    """Experimental seamed scaffold routing with manual scaffold anchors."""
-    from backend.core.seamed_router import auto_scaffold_advanced_seamed
-
-    updated, report, result = _run_auto_scaffold_with_feature_log(
-        op_kind='auto-scaffold-seamed',
-        label='Auto-scaffold (advanced seamed)',
-        params={'advanced': True},
-        runner=lambda d: auto_scaffold_advanced_seamed(d),
-    )
-    resp = _design_response_with_geometry(updated, report)
-    resp["warnings"]         = result.warnings
-    resp["seam_xovers"]      = result.seam_xovers
-    resp["near_end_xovers"]  = result.near_end_xovers
-    resp["far_end_xovers"]   = result.far_end_xovers
-    resp["advanced_bridge_xovers"] = result.advanced_bridge_xovers
-    resp["advanced"]         = True
-    return resp
-
-
 @router.post("/design/auto-scaffold-seamless", status_code=200)
 def auto_scaffold_seamless_endpoint() -> dict:
     """Seamless scaffold routing: one end crossover per helix pair (zig-zag).
@@ -7454,29 +7394,6 @@ def auto_scaffold_seamless_endpoint() -> dict:
     resp["warnings"]      = result.warnings
     resp["end_xovers"]    = result.end_xovers
     resp["bridge_xovers"] = result.bridge_xovers
-    return resp
-
-
-@router.post("/design/auto-scaffold-advanced-seamless", status_code=200)
-def auto_scaffold_advanced_seamless_endpoint() -> dict:
-    """Experimental seamless scaffold routing entry point.
-
-    Currently delegates to the production seamless router so advanced UI flows
-    can be tested before the experimental planner lands.
-    """
-    from backend.core.seamless_router import auto_scaffold_seamless
-
-    updated, report, result = _run_auto_scaffold_with_feature_log(
-        op_kind='auto-scaffold-seamless',
-        label='Auto-scaffold (advanced seamless)',
-        params={'advanced': True},
-        runner=lambda d: auto_scaffold_seamless(d),
-    )
-    resp = _design_response_with_geometry(updated, report)
-    resp["warnings"]      = result.warnings
-    resp["end_xovers"]    = result.end_xovers
-    resp["bridge_xovers"] = result.bridge_xovers
-    resp["advanced"]      = True
     return resp
 
 

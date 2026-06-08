@@ -171,7 +171,12 @@ def test_teeth_closing_zig():
     design = design.copy_with(crossovers=[])
     updated, result = auto_scaffold_seamless(design)
 
-    assert not result.warnings, result.warnings
+    # teeth is ONE connected cluster but routes to 5 pieces (single-strand
+    # consolidation for irregular multi-section designs is not yet automatic),
+    # so the router emits the fragmentation warning and no other warning.
+    assert len(result.warnings) == 1 and "should be a single strand" in result.warnings[0], (
+        result.warnings
+    )
     assert result.bridge_xovers == 6, f"Expected 6 bridge xovers, got {result.bridge_xovers}"
 
     # The closing zig across the tooth tips must be placed.
@@ -180,3 +185,26 @@ def test_teeth_closing_zig():
         if {xo.half_a.helix_id, xo.half_b.helix_id} == {"h_XY_2_2", "h_XY_2_3"}
     ]
     assert closing_zig, "Expected a closing-zig crossover across tooth tips h_XY_2_2 ↔ h_XY_2_3"
+
+    # Determinism guard.  The Hamiltonian path that drives this route is now
+    # fully tiebroken (seamed_router `(len(adj[n]), n)` key), so the route — and
+    # therefore the leftover scaffold-piece count and the crossover set — is
+    # identical run-to-run.  Before the tiebreaker fix this count flapped 4↔5
+    # across PYTHONHASHSEED (the old known-flake).  Pinning it here makes any
+    # reintroduced set-iteration nondeterminism fail across CI hash seeds again.
+    # NOTE: 5 is the current routed-but-unligated intermediate; when single-strand
+    # consolidation for irregular multi-section designs lands this becomes 1.
+    scaffold = [s for s in updated.strands if s.strand_type == StrandType.SCAFFOLD]
+    assert len(scaffold) == 5, f"Expected 5 scaffold pieces (deterministic), got {len(scaffold)}"
+
+    def _xover_sig(d):
+        return sorted(
+            tuple(sorted([(x.half_a.helix_id, x.half_a.index),
+                          (x.half_b.helix_id, x.half_b.index)]))
+            for x in d.crossovers
+        )
+
+    rerun_design = Design.model_validate_json((FIXTURES / "teeth.nadoc").read_text())
+    rerun_design = rerun_design.copy_with(crossovers=[])
+    rerun_updated, _ = auto_scaffold_seamless(rerun_design)
+    assert _xover_sig(updated) == _xover_sig(rerun_updated), "seamless route is not deterministic"

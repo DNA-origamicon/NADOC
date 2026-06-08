@@ -14,27 +14,9 @@ export const AUTOSCAFFOLD_MODES = {
     apiMethod: 'autoScaffoldSeamless',
     failLabel: 'Seamless scaffold failed',
   },
-  matched: {
-    title: 'Matched Ends',
-    message: 'Routing scaffold with matched ends for end-to-end polymerization…',
-    apiMethod: 'autoScaffoldMatched',
-    failLabel: 'Matched-ends scaffold failed',
-  },
-  'advanced-seamed': {
-    title: 'Advanced Seam Routing',
-    message: 'Routing scaffold with experimental seam planner…',
-    apiMethod: 'autoScaffoldAdvancedSeamed',
-    failLabel: 'Advanced seam routing failed',
-  },
-  'advanced-seamless': {
-    title: 'Advanced Seamless Routing',
-    message: 'Routing scaffold with experimental seamless planner…',
-    apiMethod: 'autoScaffoldAdvancedSeamless',
-    failLabel: 'Advanced seamless routing failed',
-  },
   seamed: {
     title: 'Autoscaffold (Seamed)',
-    message: 'Routing scaffold strand with seam crossovers…',
+    message: 'Routing scaffold with seam crossovers (matched ends when feasible)…',
     apiMethod: 'autoScaffoldSeamed',
     failLabel: 'Seamed autoscaffold failed',
   },

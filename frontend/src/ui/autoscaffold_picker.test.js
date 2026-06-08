@@ -31,9 +31,6 @@ const tick = () => new Promise(r => setTimeout(r, 0))
 describe('autoscaffoldModeConfig', () => {
   it('maps each known mode to its own config object', () => {
     expect(autoscaffoldModeConfig('seamless').apiMethod).toBe('autoScaffoldSeamless')
-    expect(autoscaffoldModeConfig('matched').apiMethod).toBe('autoScaffoldMatched')
-    expect(autoscaffoldModeConfig('advanced-seamed').apiMethod).toBe('autoScaffoldAdvancedSeamed')
-    expect(autoscaffoldModeConfig('advanced-seamless').apiMethod).toBe('autoScaffoldAdvancedSeamless')
     expect(autoscaffoldModeConfig('seamed').apiMethod).toBe('autoScaffoldSeamed')
   })
   it('falls back to the seamed config for an unknown mode (the original else branch)', () => {
@@ -42,9 +39,6 @@ describe('autoscaffoldModeConfig', () => {
   })
   it('carries the verbatim fail labels', () => {
     expect(autoscaffoldModeConfig('seamless').failLabel).toBe('Seamless scaffold failed')
-    expect(autoscaffoldModeConfig('matched').failLabel).toBe('Matched-ends scaffold failed')
-    expect(autoscaffoldModeConfig('advanced-seamed').failLabel).toBe('Advanced seam routing failed')
-    expect(autoscaffoldModeConfig('advanced-seamless').failLabel).toBe('Advanced seamless routing failed')
     expect(autoscaffoldModeConfig('seamed').failLabel).toBe('Seamed autoscaffold failed')
   })
 })
@@ -104,9 +98,9 @@ describe('initAutoscaffoldPicker', () => {
   })
 
   it('Run dispatches the picked mode + shows/hides progress + ticks the routing check on success', async () => {
-    const els = mountPicker('advanced-seamless')
+    const els = mountPicker('seamless')
     els['autoscaffold-modal'].classList.add('visible')
-    const api = { autoScaffoldAdvancedSeamless: vi.fn().mockResolvedValue(true) }
+    const api = { autoScaffoldSeamless: vi.fn().mockResolvedValue(true) }
     const setRoutingCheck = vi.fn()
     const store = createMockStore({ currentDesign: {} })
     initAutoscaffoldPicker({ store, api, setRoutingCheck })
@@ -114,8 +108,8 @@ describe('initAutoscaffoldPicker', () => {
     els['as-run'].click()
     await tick()
     expect(els['autoscaffold-modal'].classList.contains('visible')).toBe(false)
-    expect(showOpProgress).toHaveBeenCalledWith('Advanced Seamless Routing', 'Routing scaffold with experimental seamless planner…')
-    expect(api.autoScaffoldAdvancedSeamless).toHaveBeenCalledTimes(1)
+    expect(showOpProgress).toHaveBeenCalledWith('Seamless Scaffold', 'Routing seamless scaffold strand…')
+    expect(api.autoScaffoldSeamless).toHaveBeenCalledTimes(1)
     expect(hideOpProgress).toHaveBeenCalledTimes(1)
     expect(setRoutingCheck).toHaveBeenCalledWith('scaffoldEnds', true)
   })

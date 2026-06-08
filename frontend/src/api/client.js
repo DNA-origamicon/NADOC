@@ -215,7 +215,6 @@ function _busyHeaderForPath(method, path) {
   if (path.startsWith('/design/overhang-connections/') && path.endsWith('/relax')) return 'Relaxing Linker'
   if (path.startsWith('/design/cluster/') && method === 'PATCH')   return 'Applying Transform'
   if (path === '/design/auto-scaffold-matched')                    return 'Auto Scaffold (Matched Ends)'
-  if (path === '/design/auto-scaffold')                            return 'Auto Scaffold'
   if (path.startsWith('/design/auto-staple'))                      return 'Auto Staple'
   if (path === '/design/auto-break')                               return 'Auto Break'
   if (path === '/design/auto-break-aksel')                         return 'Aksel Autobreak'
@@ -1030,14 +1029,6 @@ export async function addAutoMerge() {
   return _syncFromDesignResponse(json)
 }
 
-export async function autoScaffold(opts = {}) {
-  const { minStapleMargin = 3 } = opts
-  const json = await _request('POST', '/design/auto-scaffold', {
-    min_staple_margin: minStapleMargin,
-  })
-  return _syncFromDesignResponse(json)
-}
-
 export async function autoScaffoldSeamed() {
   const json = await _request('POST', '/design/auto-scaffold-seamed')
   if (json?.warnings?.length) console.warn('[AutoScaffoldSeamed] warnings:', json.warnings)
@@ -1050,24 +1041,6 @@ export async function autoScaffoldMatched() {
   return _syncFromDesignResponse(json)
 }
 
-export async function autoScaffoldAdvancedSeamed() {
-  const json = await _request('POST', '/design/auto-scaffold-advanced-seamed')
-  if (json?.warnings?.length) console.warn('[AutoScaffoldAdvancedSeamed] warnings:', json.warnings)
-  return _syncFromDesignResponse(json)
-}
-
-
-// ── Scaffold end-loop operations ──────────────────────────────────────────
-
-export async function scaffoldExtrudeNear(lengthBp = 10) {
-  const json = await _request('POST', '/design/scaffold-extrude-near', { length_bp: lengthBp })
-  return _syncFromDesignResponse(json)
-}
-
-export async function scaffoldExtrudeFar(lengthBp = 10) {
-  const json = await _request('POST', '/design/scaffold-extrude-far', { length_bp: lengthBp })
-  return _syncFromDesignResponse(json)
-}
 
 // ── Sequence assignment ────────────────────────────────────────────────────
 
@@ -1085,38 +1058,6 @@ export async function autoScaffoldSeamless(opts = {}) {
   const { nickHelixId = null, nickOffset = 7, minEndMargin = 9 } = opts
   const json = await _request('POST', '/design/auto-scaffold-seamless', {
     nick_helix_id: nickHelixId,
-    nick_offset: nickOffset,
-    min_end_margin: minEndMargin,
-  })
-  return _syncFromDesignResponse(json)
-}
-
-export async function autoScaffoldAdvancedSeamless(opts = {}) {
-  const { nickHelixId = null, nickOffset = 7, minEndMargin = 9 } = opts
-  const json = await _request('POST', '/design/auto-scaffold-advanced-seamless', {
-    nick_helix_id: nickHelixId,
-    nick_offset: nickOffset,
-    min_end_margin: minEndMargin,
-  })
-  if (json?.warnings?.length) console.warn('[AutoScaffoldAdvancedSeamless] warnings:', json.warnings)
-  return _syncFromDesignResponse(json)
-}
-
-export async function partitionScaffold(helixGroups, opts = {}) {
-  const { mode = 'end_to_end', nickOffset = 7, minEndMargin = 9 } = opts
-  const json = await _request('POST', '/design/partition-scaffold', {
-    helix_groups: helixGroups,
-    mode,
-    nick_offset: nickOffset,
-    min_end_margin: minEndMargin,
-  })
-  return _syncFromDesignResponse(json)
-}
-
-export async function jointedScaffold(opts = {}) {
-  const { mode = 'end_to_end', nickOffset = 7, minEndMargin = 9 } = opts
-  const json = await _request('POST', '/design/jointed-scaffold', {
-    mode,
     nick_offset: nickOffset,
     min_end_margin: minEndMargin,
   })

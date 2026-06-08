@@ -188,15 +188,7 @@ export async function extendHelixBounds(helixId, loBp, hiBp) {
   )
 }
 
-/** Auto-scaffold the design. */
-export async function autoScaffold(opts = {}) {
-  const { minStapleMargin = 3 } = opts
-  return mutate(req => req('POST', '/design/auto-scaffold', {
-    min_staple_margin: minStapleMargin,
-  }))
-}
-
-/** Route a seamed scaffold. */
+/** Route a seamed scaffold (matched ends when feasible). */
 export async function autoScaffoldSeamed() {
   return mutate(req => req('POST', '/design/auto-scaffold-seamed'))
 }
@@ -204,11 +196,6 @@ export async function autoScaffoldSeamed() {
 /** Route a matched-ends scaffold (far face = translate of near face) for blunt-end polymers. */
 export async function autoScaffoldMatched() {
   return mutate(req => req('POST', '/design/auto-scaffold-matched'))
-}
-
-/** Route an experimental seamed scaffold. */
-export async function autoScaffoldAdvancedSeamed() {
-  return mutate(req => req('POST', '/design/auto-scaffold-advanced-seamed'))
 }
 
 /**
@@ -620,37 +607,11 @@ export async function addAutoMerge() {
   return mutate(req => req('POST', '/design/auto-merge'))
 }
 
-/** Extend the near scaffold end by lengthBp. */
-export async function scaffoldExtrudeNear(lengthBp = 10) {
-  return mutate(req => req('POST', '/design/scaffold-extrude-near', { length_bp: lengthBp }))
-}
-
-/** Extend the far scaffold end by lengthBp. */
-export async function scaffoldExtrudeFar(lengthBp = 10) {
-  return mutate(req => req('POST', '/design/scaffold-extrude-far', { length_bp: lengthBp }))
-}
-
 /** Route a seamless (looped) scaffold. */
 export async function autoScaffoldSeamless(opts = {}) {
   const { nickHelixId = null, nickOffset = 7, minEndMargin = 9 } = opts
   return mutate(req => req('POST', '/design/auto-scaffold-seamless', {
     nick_helix_id: nickHelixId, nick_offset: nickOffset, min_end_margin: minEndMargin,
-  }))
-}
-
-/** Route an experimental seamless scaffold. */
-export async function autoScaffoldAdvancedSeamless(opts = {}) {
-  const { nickHelixId = null, nickOffset = 7, minEndMargin = 9 } = opts
-  return mutate(req => req('POST', '/design/auto-scaffold-advanced-seamless', {
-    nick_helix_id: nickHelixId, nick_offset: nickOffset, min_end_margin: minEndMargin,
-  }))
-}
-
-/** Route a jointed scaffold. */
-export async function jointedScaffold(opts = {}) {
-  const { mode = 'end_to_end', nickOffset = 7, minEndMargin = 9 } = opts
-  return mutate(req => req('POST', '/design/jointed-scaffold', {
-    mode, nick_offset: nickOffset, min_end_margin: minEndMargin,
   }))
 }
 
