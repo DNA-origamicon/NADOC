@@ -420,17 +420,6 @@ export function initKeyboardShortcuts(deps) {
   })
 
   registerShortcut({
-    key: 'c', ctrl: false, shift: false,
-    description: 'Toggle manual crossover markers',
-    blockedInInput: true, noRepeat: true,
-    handler(e) {
-      e.preventDefault()
-      const tf = store.getState().toolFilters
-      store.setState({ toolFilters: { ...tf, crossoverLocations: !tf.crossoverLocations } })
-    },
-  })
-
-  registerShortcut({
     key: 'o', ctrl: false, alt: false, shift: false,
     description: 'Toggle overhang location markers',
     blockedInInput: true, noRepeat: true,

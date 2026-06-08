@@ -51,6 +51,10 @@ const _initialState = {
   /** True while the Translate/Rotate tool is active. */
   translateRotateActive: false,
 
+  /** True while the 3D Force-Crossover (forced-ligation) tool is active. Disables
+   *  the selection manager (lasso/multi-select/click) so the tool owns the gesture. */
+  forceXoverActive: false,
+
   /** The current ValidationReport from the API, or null. */
   validationReport: null,
 

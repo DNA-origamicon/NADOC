@@ -981,6 +981,22 @@ export async function patchForcedLigationExtraBases(flId, sequence) {
   return _syncFromDesignResponse(json)
 }
 
+/**
+ * Forced ligation: join the 3' end of one strand to the 5' end of another,
+ * merging the two strands into one (the 5' strand's domains are appended onto
+ * the 3' strand). Drives the 3D Force-Crossover tool — same endpoint the cadnano
+ * editor's pencil-tool forced ligation uses. Records a ForcedLigation (not a
+ * canonical Crossover). `is_periodic_seam` is false for direct 3D edits.
+ */
+export async function forcedLigation(threePrimeStrandId, fivePrimeStrandId, isPeriodicSeam = false) {
+  const json = await _request('POST', '/design/forced-ligation', {
+    three_prime_strand_id: threePrimeStrandId,
+    five_prime_strand_id:  fivePrimeStrandId,
+    is_periodic_seam:      isPeriodicSeam,
+  })
+  return _syncFromDesignResponse(json)
+}
+
 export async function addAutoBreak(opts = {}) {
   const json = await _request('POST', '/design/auto-break', opts)
   return _syncFromDesignResponse(json)

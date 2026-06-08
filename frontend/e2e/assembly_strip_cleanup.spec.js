@@ -38,7 +38,7 @@ const HIDE = [
   '#select-filter',                            // whole Selectable section (no selectable button)
   '#view-tools > .sf-divider:first-child',     // leading divider before Tools:
   '#view-tools [data-key="blunt"]',
-  '#view-tools [data-key="xloc"]',
+  '#view-tools [data-key="fxover"]',
   '#view-tools [data-vt="lengthHeatmap"]',
   '#view-tools [data-vt="undefinedBases"]',
   '#view-tools [data-vt="deform"]',

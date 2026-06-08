@@ -155,6 +155,7 @@ import { initSubDomainGizmo } from './scene/sub_domain_gizmo.js'
 import { initInstanceGizmo }       from './scene/instance_gizmo.js'
 import { initMoveRotatePanel }      from './scene/move_rotate_panel.js'
 import { initTranslateRotateTool }  from './scene/translate_rotate_tool.js'
+import { initForceCrossoverTool }   from './scene/force_crossover_tool.js'
 import { initOverhangOrientationPanel } from './ui/overhang_orientation_panel.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
 import { showOpProgress, hideOpProgress }                from './ui/op_progress.js'
@@ -895,7 +896,7 @@ async function main() {
     controls,
     getHoverEntry: () => zoomScope.getHoverEntry(),
     getCamera:     () => sceneCtx.getRenderCamera(),
-    isDisabled:    () => slicePlane?.isContinuation(),
+    isDisabled:    () => slicePlane?.isContinuation() || store.getState().forceXoverActive,
   })
 
   // ── End extrusion arrows ──────────────────────────────────────────────────────
@@ -1574,14 +1575,6 @@ async function main() {
       loopSkipHighlight.rebuild(newState.currentDesign, newState.currentGeometry, newState.currentHelixAxes)
     }
   })
-
-  // ── Crossover Locations overlay (stub — 3D sprite module not yet rebuilt) ───
-  const crossoverLocations = {
-    setVisible: () => {},
-    rebuild: () => Promise.resolve(),
-    isVisible: () => false,
-    dispose: () => {},
-  }
 
   // ── Overhang Locations overlay ───────────────────────────────────────────────
   const overhangLocations = initOverhangLocations(scene)
@@ -2874,7 +2867,7 @@ async function main() {
 
   // IDs of right-panel sections that are design-only (hidden in assembly mode)
   const _DESIGN_PANEL_IDS = [
-    'sel-row-bluntEnds', 'sel-row-crossoverLocations',
+    'sel-row-bluntEnds',
     'selection-filter-section', 'properties-section',
     'blunt-panel', 'deform-panel', 'strand-hist-section',
     'groups-panel', 'overhang-panel',
@@ -2892,7 +2885,7 @@ async function main() {
     '#select-filter',                            // entire Selectable section
     '#view-tools > .sf-divider:first-child',     // now-leading divider before Tools:
     '#view-tools [data-key="blunt"]',
-    '#view-tools [data-key="xloc"]',
+    '#view-tools [data-key="fxover"]',
     '#view-tools [data-vt="lengthHeatmap"]',
     '#view-tools [data-vt="undefinedBases"]',
     '#view-tools [data-vt="deform"]',
@@ -3539,10 +3532,17 @@ async function main() {
   // toolFilters→renderer-visibility subscriber. overhangHoverPicker is created
   // later (~init order), so it's reached via a lazy getter.
   initToolFilterToggles({
-    store, crossoverLocations, overhangLocations, designRenderer,
-    cadnanoView, unfoldView,
+    store, overhangLocations, designRenderer,
     rebuildOverhangLocations: _rebuildOverhangLocations,
     getOverhangHoverPicker: () => overhangHoverPicker,
+  })
+
+  // ── Force-Crossover tool — #view-tools [data-key="fxover"] ──────────────────
+  // 3D forced ligation: click two matching strand ends to ligate them into one.
+  // Owns its own button wiring + capture-phase gesture; main.js only constructs it.
+  const forceCrossoverTool = initForceCrossoverTool({
+    store, canvas, camera, designRenderer, selectionManager, api,
+    getCamera: () => sceneCtx.getRenderCamera(),
   })
 
   // Save/restore selectableTypes when deform tool activates/deactivates so that
@@ -6638,6 +6638,9 @@ async function main() {
         return true
       },
     }
+    // Force-Crossover tool gesture hook (activate / pickEnd / state) — see
+    // scene/force_crossover_tool.js. Lets e2e drive a forced ligation by strand id.
+    window.__nadocForceXover = forceCrossoverTool.testApi
   }
 
   // ── Cadnano editor sync ───────────────────────────────────────────────────────

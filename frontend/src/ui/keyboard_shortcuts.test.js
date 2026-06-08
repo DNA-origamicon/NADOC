@@ -28,7 +28,7 @@ function makeDeps(overrides = {}) {
     currentDesign: { helices: [{}], camera_poses: [] },
     unfoldActive: false,
     assemblyActive: false,
-    toolFilters: { bluntEnds: false, crossoverLocations: false, overhangLocations: false },
+    toolFilters: { bluntEnds: false, overhangLocations: false },
     selectedObject: null,
     multiSelectedStrandIds: [],
     multiSelectedOverhangIds: [],
@@ -223,13 +223,11 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     expect(document.getElementById('mode-indicator').textContent).toMatch(/not available/i)
   })
 
-  it("'b'/'c'/'o' flip their toolFilters flags; key-repeat is ignored (noRepeat)", async () => {
+  it("'b'/'o' flip their toolFilters flags; key-repeat is ignored (noRepeat)", async () => {
     const d = makeDeps()
     initKeyboardShortcuts(d)
     await press('b')
     expect(d.store.getState().toolFilters.bluntEnds).toBe(true)
-    await press('c')
-    expect(d.store.getState().toolFilters.crossoverLocations).toBe(true)
     await press('o')
     expect(d.store.getState().toolFilters.overhangLocations).toBe(true)
 

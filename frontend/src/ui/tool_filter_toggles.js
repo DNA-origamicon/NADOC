@@ -1,13 +1,14 @@
 // Tool Filter toggles — the `#view-tools .sf-btn[data-key]` button row (blunt
-// ends / crossover locations / overhang locations) plus the single
-// `toolFilters` → renderer-visibility subscriber.
+// ends / overhang locations) plus the single `toolFilters` →
+// renderer-visibility subscriber.
 //
 // Extracted verbatim from main.js (banner `// ── Tool Filter toggles`). The
 // buttons only flip `store.toolFilters[key]`; the reactions live in subscribers.
-// This module owns the co-located visibility subscriber (crossover / overhang /
-// extension locations). The `bluntEnds` reaction is NOT here — it lives in the
-// assembly blunt-end sync region (main.js) and stays put; the button just sets
-// state, so behaviour is preserved.
+// This module owns the co-located visibility subscriber (overhang / extension
+// locations). The `bluntEnds` reaction is NOT here — it lives in the assembly
+// blunt-end sync region (main.js) and stays put; the button just sets state, so
+// behaviour is preserved. (The old `xloc` crossover-locations stub was removed
+// when the `fxover` Force-Crossover tool replaced that button — 2026-06-07.)
 //
 // `overhangHoverPicker` is created later in main()'s init order than the call
 // site, so it's injected as a lazy getter (mirrors the existing lazy-getter
@@ -15,17 +16,13 @@
 
 export function initToolFilterToggles({
   store,
-  crossoverLocations,
   overhangLocations,
   designRenderer,
-  cadnanoView,
-  unfoldView,
   rebuildOverhangLocations,
   getOverhangHoverPicker,
 }) {
   const _tfKeyMap = [
     ['bluntEnds',          'blunt'],
-    ['crossoverLocations', 'xloc' ],
     ['overhangLocations',  'ovhg' ],
   ]
   for (const [storeKey, dataKey] of _tfKeyMap) {
@@ -45,15 +42,6 @@ export function initToolFilterToggles({
     if (newState.toolFilters === prevState.toolFilters) return
     const tf = newState.toolFilters
     const prev = prevState.toolFilters ?? {}
-    if (tf.crossoverLocations !== prev.crossoverLocations) {
-      crossoverLocations.setVisible(tf.crossoverLocations)
-      if (tf.crossoverLocations) {
-        crossoverLocations.rebuild(store.getState().currentGeometry).then(() => {
-          if (cadnanoView.isActive()) cadnanoView.reapplyPositions()
-          else unfoldView.reapplyIfActive()
-        })
-      }
-    }
     if (tf.overhangLocations !== prev.overhangLocations) {
       overhangLocations.setVisible(tf.overhangLocations)
       if (tf.overhangLocations) rebuildOverhangLocations()

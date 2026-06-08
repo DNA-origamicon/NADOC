@@ -8,7 +8,6 @@ import { initToolFilterToggles } from './tool_filter_toggles.js'
 
 const KEYS = [
   ['bluntEnds',          'blunt'],
-  ['crossoverLocations', 'xloc' ],
   ['overhangLocations',  'ovhg' ],
 ]
 
@@ -38,11 +37,8 @@ function makeDeps(initialState = {}) {
   const overhangHoverPicker = { reset: vi.fn() }
   const deps = {
     store,
-    crossoverLocations: { setVisible: vi.fn(), rebuild: vi.fn(() => Promise.resolve()) },
     overhangLocations: { setVisible: vi.fn() },
     designRenderer: { setExtensionsVisible: vi.fn() },
-    cadnanoView: { isActive: vi.fn(() => false), reapplyPositions: vi.fn() },
-    unfoldView: { reapplyIfActive: vi.fn() },
     rebuildOverhangLocations: vi.fn(),
     getOverhangHoverPicker: () => overhangHoverPicker,
   }
@@ -62,10 +58,10 @@ describe('initToolFilterToggles — buttons', () => {
     const { store, deps } = makeDeps()
     initToolFilterToggles(deps)
 
-    buttons.xloc.click()
-    expect(store.getState().toolFilters.crossoverLocations).toBe(true)
-    buttons.xloc.click()
-    expect(store.getState().toolFilters.crossoverLocations).toBe(false)
+    buttons.ovhg.click()
+    expect(store.getState().toolFilters.overhangLocations).toBe(true)
+    buttons.ovhg.click()
+    expect(store.getState().toolFilters.overhangLocations).toBe(false)
   })
 
   it('a button reflects its store key via the .active class on state change', () => {
@@ -87,43 +83,7 @@ describe('initToolFilterToggles — visibility subscriber', () => {
     initToolFilterToggles(deps)
 
     store.setState({ assemblyActive: true }) // toolFilters ref untouched
-    expect(deps.crossoverLocations.setVisible).not.toHaveBeenCalled()
     expect(deps.overhangLocations.setVisible).not.toHaveBeenCalled()
-  })
-
-  it('crossover ON → setVisible(true) + rebuild + unfold reapply (cadnano inactive)', async () => {
-    mountDom()
-    const { store, deps } = makeDeps()
-    initToolFilterToggles(deps)
-
-    store.setState({ toolFilters: { crossoverLocations: true } })
-    expect(deps.crossoverLocations.setVisible).toHaveBeenCalledWith(true)
-    expect(deps.crossoverLocations.rebuild).toHaveBeenCalledWith(store.getState().currentGeometry)
-    await Promise.resolve()
-    expect(deps.unfoldView.reapplyIfActive).toHaveBeenCalled()
-    expect(deps.cadnanoView.reapplyPositions).not.toHaveBeenCalled()
-  })
-
-  it('crossover ON → cadnano reapply when cadnano is active', async () => {
-    mountDom()
-    const { store, deps } = makeDeps()
-    deps.cadnanoView.isActive = vi.fn(() => true)
-    initToolFilterToggles(deps)
-
-    store.setState({ toolFilters: { crossoverLocations: true } })
-    await Promise.resolve()
-    expect(deps.cadnanoView.reapplyPositions).toHaveBeenCalled()
-    expect(deps.unfoldView.reapplyIfActive).not.toHaveBeenCalled()
-  })
-
-  it('crossover OFF → setVisible(false), no rebuild', () => {
-    mountDom()
-    const { store, deps } = makeDeps({ toolFilters: { crossoverLocations: true } })
-    initToolFilterToggles(deps)
-
-    store.setState({ toolFilters: { crossoverLocations: false } })
-    expect(deps.crossoverLocations.setVisible).toHaveBeenCalledWith(false)
-    expect(deps.crossoverLocations.rebuild).not.toHaveBeenCalled()
   })
 
   it('overhang ON → setVisible(true) + rebuildOverhangLocations', () => {
