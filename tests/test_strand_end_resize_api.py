@@ -53,3 +53,23 @@ def test_strand_end_resize_route_returns_geometry_and_axes():
     assert body["helix_axes"]
     staple = next(s for s in body["design"]["strands"] if s["id"] == "stap")
     assert staple["domains"][-1]["end_bp"] == 45
+
+
+def test_strand_end_resize_returns_partial_geometry_for_changed_helix_only():
+    """Resize must ship only the touched helix's geometry + axes (perf path),
+    not recompute the whole design — a full recompute is several seconds on large
+    designs. Regressing to the full path would drop these flags."""
+    design_state.set_design(_single_helix_design())
+
+    body = strand_end_resize(StrandEndResizeRequest(entries=[
+        StrandEndResizeEntry(strand_id="stap", helix_id="h0", end="3p", delta_bp=4),
+    ]))
+
+    # Partial-geometry contract.
+    assert body["partial_geometry"] is True
+    assert body["changed_helix_ids"] == ["h0"]
+    # Every returned nucleotide is on the changed helix only.
+    assert body["nucleotides"]
+    assert {n["helix_id"] for n in body["nucleotides"]} == {"h0"}
+    # Axes are shipped (resize grows/shrinks the axis) and only for the changed helix.
+    assert [ax["helix_id"] for ax in body["helix_axes"]] == ["h0"]

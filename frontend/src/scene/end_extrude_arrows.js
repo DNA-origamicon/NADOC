@@ -42,6 +42,45 @@ const _Y = new THREE.Vector3(0, 1, 0)   // CylinderGeometry / ConeGeometry defau
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * bp length the terminal end may be trimmed *through* in a single drag — the
+ * shorten budget (the drag clamp keeps ≥ 1 bp by using `runLength - 1`).
+ *
+ * Normally this is just the terminal domain's own length. BUT when that terminal
+ * domain is an **inline overhang** (a staple tail past the scaffold, tagged
+ * `ovhg_inline_…`), the backend resize *merges it back* into the adjacent
+ * same-helix scaffold domain on commit. That means the free end can be dragged
+ * straight *through* the scaffold boundary — dissolving the overhang entirely —
+ * exactly like resizing in the cadnano editor. To allow that, count the whole
+ * contiguous same-helix run (overhang + its scaffold-covered neighbour), not
+ * just the overhang domain, so the 3D drag isn't hard-stopped at the boundary.
+ *
+ * The `ovhg_inline_` prefix + same-helix-neighbour gate mirror the backend's
+ * merge condition exactly (`_reconcile_inline_overhangs`): a non-inline overhang
+ * id, or a crossover tail whose neighbour is on a *different* helix, does NOT
+ * merge, so for those we keep the single-domain limit.
+ *
+ * @param {object}  strand       a design strand ({ domains: [...] })
+ * @param {boolean} isFivePrime  true = 5′ terminal (domains[0]); false = 3′
+ * @returns {number} run length in bp (≥ 1)
+ */
+export function terminalRunLength(strand, isFivePrime) {
+  const domains = strand?.domains
+  if (!domains?.length) return 1
+  const td = isFivePrime ? domains[0] : domains[domains.length - 1]
+  if (!td) return 1
+  let len = Math.abs(td.end_bp - td.start_bp) + 1
+  if (typeof td.overhang_id === 'string' && td.overhang_id.startsWith('ovhg_inline_')) {
+    const adj = isFivePrime ? domains[1] : domains[domains.length - 2]
+    if (adj && adj.helix_id === td.helix_id) {
+      len += Math.abs(adj.end_bp - adj.start_bp) + 1
+    }
+  }
+  return len
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
  * @param {THREE.Scene}         scene
  * @param {THREE.Camera}        camera
  * @param {HTMLCanvasElement}   canvas
@@ -305,13 +344,12 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
         outward = nearStart ? axisDir.clone().negate() : axisDir.clone()
       }
 
-      // ── Terminal domain length (for shorten limit) ───────────────────────
+      // ── Terminal run length (for shorten limit) ──────────────────────────
+      // Spans the whole contiguous same-helix run when the terminal domain is an
+      // inline overhang, so the end can be dragged through the scaffold boundary
+      // (dissolving the overhang) — see terminalRunLength.
       const strand = strandById.get(nuc.strand_id)
-      let terminalLen = 1
-      if (strand) {
-        const td = nuc.is_five_prime ? strand.domains[0] : strand.domains[strand.domains.length - 1]
-        if (td) terminalLen = Math.abs(td.end_bp - td.start_bp) + 1
-      }
+      const terminalLen = strand ? terminalRunLength(strand, nuc.is_five_prime) : 1
 
       // sOrigin = distance along axis (nm) from aStart to bead position
       const sOrigin = beadPos.clone().sub(aStart).dot(axisDir)

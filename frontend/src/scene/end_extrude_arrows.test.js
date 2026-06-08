@@ -27,7 +27,7 @@ vi.mock('../api/client.js', () => ({
 }))
 
 import { store } from '../state/store.js'
-import { initEndExtrudeArrows } from './end_extrude_arrows.js'
+import { initEndExtrudeArrows, terminalRunLength } from './end_extrude_arrows.js'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -341,6 +341,58 @@ describe('reactivity', () => {
     )
 
     expect(rootGroup.children).toHaveLength(1)
+  })
+})
+
+// ── terminalRunLength (shorten-limit budget) ───────────────────────────────────
+
+describe('terminalRunLength', () => {
+  it('returns the terminal domain length for a plain (non-overhang) end', () => {
+    const strand = { domains: [{ helix_id: 'h0', start_bp: 5, end_bp: 35, direction: 'FORWARD' }] }
+    expect(terminalRunLength(strand, true)).toBe(31)   // 35-5+1
+    expect(terminalRunLength(strand, false)).toBe(31)
+  })
+
+  it('spans the whole run for an inline overhang at the 3-prime end', () => {
+    // [scaf_part 5..41] + [inline overhang 42..45] on the SAME helix.
+    // The free 3′ end may be dragged through the boundary → run = 5..45 = 41 bp,
+    // not just the 4-bp overhang domain.
+    const strand = { domains: [
+      { helix_id: 'h0', start_bp: 5,  end_bp: 41, direction: 'FORWARD' },
+      { helix_id: 'h0', start_bp: 42, end_bp: 45, direction: 'FORWARD', overhang_id: 'ovhg_inline_stap_3p' },
+    ] }
+    expect(terminalRunLength(strand, false)).toBe(41)   // (41-5+1) + (45-42+1)
+  })
+
+  it('spans the whole run for an inline overhang at the 5-prime end', () => {
+    const strand = { domains: [
+      { helix_id: 'h0', start_bp: 0,  end_bp: 3,  direction: 'FORWARD', overhang_id: 'ovhg_inline_stap_5p' },
+      { helix_id: 'h0', start_bp: 4,  end_bp: 40, direction: 'FORWARD' },
+    ] }
+    expect(terminalRunLength(strand, true)).toBe(41)    // (3-0+1) + (40-4+1)
+  })
+
+  it('does NOT extend when the overhang neighbour is on a different helix (crossover tail)', () => {
+    // A whole-domain overhang whose adjacent domain crossed over to another helix
+    // cannot merge across a scaffold boundary — keep the single-domain limit.
+    const strand = { domains: [
+      { helix_id: 'h1', start_bp: 10, end_bp: 30, direction: 'FORWARD' },
+      { helix_id: 'h0', start_bp: 42, end_bp: 45, direction: 'FORWARD', overhang_id: 'ovhg_inline_stap_3p' },
+    ] }
+    expect(terminalRunLength(strand, false)).toBe(4)    // 45-42+1, neighbour ignored
+  })
+
+  it('does NOT extend for a non-inline overhang tag', () => {
+    const strand = { domains: [
+      { helix_id: 'h0', start_bp: 5,  end_bp: 41, direction: 'FORWARD' },
+      { helix_id: 'h0', start_bp: 42, end_bp: 45, direction: 'FORWARD', overhang_id: 'user_overhang_7' },
+    ] }
+    expect(terminalRunLength(strand, false)).toBe(4)
+  })
+
+  it('returns 1 for empty / missing strands', () => {
+    expect(terminalRunLength(null, true)).toBe(1)
+    expect(terminalRunLength({ domains: [] }, false)).toBe(1)
   })
 })
 
