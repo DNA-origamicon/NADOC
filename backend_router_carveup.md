@@ -140,26 +140,33 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-08 after Refactor #2
-(Strand extensions → routes_extensions.py shipped, B=1, 1752 passed / 1 PRE-EXISTING failure unrelated)._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-08 after Refactor #8
+(Pure assembly-validation report → `backend/core/assembly_validate.py::validate_assembly_report` — SERVICE
+push, **B=0**, `_validate_assembly` body moved byte-identical + 8 direct unit tests; the `GET /assembly/validate`
+handler shrank ~84→4 ln; assembly.py 7160→7084 LOC, routes unchanged at 92; 1782 passed / 0 failed = 1774 + 8
+new. The validation logic was pure all along — only delegated to `assembly_flatten` (core→core), zero api deps)._
 
-**▶ NEXT — crud.py:** **Deformation endpoints + debug** (banners `# ── Deformation endpoints` +
-`# ── Deformation debug`, find via `grep -n "# ── Deformation" backend/api/crud.py`, ~12688–13136, ~450 ln) →
-`routes_deformation.py`. **Bootstrap-probed B=1** (`_design_response`, ×3) — re-run the probe on the live
-range (line numbers drifted ~−400 after #1+#2). Bend/twist op CRUD (`POST/PATCH/DELETE /design/deformation`)
-+ the `GET /design/deformation/debug`-style summary route. **Confirm the debug route isn't dead first**
-(`rg "deformation/debug\|deformation\b" frontend/src/api/client.js`) — it may be View>Debug-only; if dead,
-propose deleting rather than moving it. Mirror `routes_extensions.py` verbatim, mount in main.py.
-Alt clean B=1 warm-up: **Flexible ssDNA segments** (`# ── Flexible ssDNA segments`, B=1 on
-`_design_response_with_geometry`; read `memory/project_ssdna_ball_joints.md` first).
+**▶ NEXT — crud.py:** **Flexible ssDNA segments** (banner `# ── Flexible ssDNA segments`, find via
+`grep -n "# ── Flexible ssDNA" backend/api/crud.py`, ~13200s after #3's −315 ln drift) →
+`routes_flexible_segments.py`. **Probed B=1** (`_design_response_with_geometry`). **Read
+`memory/project_ssdna_ball_joints.md` first.** Re-run the probe on the live range AND — per the new L10
+gotcha — `grep -rn "_helpername" backend/api/` (the WHOLE api dir, not just crud.py) for every helper the
+region defines, to catch cross-file back-imports like the one #3 hit. Mirror `routes_deformation.py`,
+mount in main.py. Alt: **Cluster rigid transforms** (`# ── Cluster rigid transforms`) — probe first,
+cluster helpers may pull more than the response helper.
 
 **Gotchas banked (cumulative):** (1) **Adjacency ≠ cohesion** — #2's `# ── Strand extensions` banner secretly
-contained 4 plate-layout / representation-override routes between the extension handlers; READ the whole
+contained 4 plate-layout / representation-override routes; #3's `# ── Deformation endpoints` banner held
+`_rollback_last_feature` (feature-log revert, NOT a deformation route — left in crud.py). READ the whole
 banner-to-banner span and cut on *concept*, not the banner label. (2) Before deleting a moved block, grep each
 request `BaseModel` across the WHOLE god-file (`grep -rn ClassName backend/`) — #1's block held
 `BindingDisplayPoseBody` used by 2 non-animation handlers. (3) After moving, ruff F401 will flag now-orphaned
-`backend.core.models` imports in crud.py's import block — remove them (#2 dropped `StrandExtension`,
-`VALID_MODIFICATIONS`; #1 dropped `DesignAnimation`/`AnimationKeyframe`).
+`backend.core.models` imports in crud.py's import block — remove them (#3 dropped `BendParams`,
+`DeformationOp`, `TwistParams`; #2 dropped `StrandExtension`, `VALID_MODIFICATIONS`). (4) **NEW (L10):
+region-internal helpers can be imported CROSS-FILE.** #3's `_parse_params`/`_resolve_cluster_scope` were
+imported by `routes_loop_skip.py`'s `/design/deformation/validate` route — a grep scoped to crud.py missed it
+and the full suite caught it (`ImportError`). Always `grep -rn` the whole `backend/` for every helper you move
+or delete; if 2+ callers, do a **service push to `backend/core` first** (which is exactly what made #3's B=1).
 
 **✅ RESOLVED (2026-06-08, ISSUE-6):** `tests/test_seamless_router.py::test_teeth_closing_zig` was NOT a
 cross-test state leak — it was hash-seed-dependent nondeterminism in the shared `_hamiltonian_path`
@@ -167,11 +174,29 @@ cross-test state leak — it was hash-seed-dependent nondeterminism in the share
 topological event instead of a brittle strand count. **Full-suite green is now 1753 passed / 0 failed.**
 See ISSUE-6 in `issues_ledger.md`.
 
-**▶ NEXT — assembly.py:** **Forward-kinematics helpers** (banner `# ── Forward kinematics helpers`,
-~446–1106, ~660 ln) is the highest-value *service* extraction — pure FK math marooned in the api file →
-`backend/core/assembly_fk.py` with direct unit tests (no router involved). But if you want a clean *router*
-warm-up first, **Gear relations** (banner `# ── Gear relations`, ~5244–5414) or **Belt paths**
-(~5414–5612) are small self-contained route clusters — probe B before committing.
+**▶ NEXT — assembly.py:** Validation service push done (#8). Cleanest next move:
+**(A) Flatten + validation router** (`# ── Flatten to Design` ~7085 + the now-thin `# ── Assembly validation`
+~6998) → `routes_assembly_validation.py`. **Probed B=1** (`crud._design_response`, on `/assembly/flatten/load-as-design`
+only; validate is now B=0 since #8). 4 cohesive read-only "inspect/derive the assembly" routes
+(`GET /assembly/validate`, `GET /assembly/flatten`, `POST /assembly/flatten/load-as-design` + the thin
+validate handler). Verbatim router lift, mirror `routes_assembly_animations.py`; mount in main.py. Don't pull
+Debug endpoints in — they probe **B=4** (`_apply_revolute_joint`/`_find_joint`/`_find_instance`/`_mat4_from_model`).
+**Alt — (B) Workspace library** (`# ── Workspace library` ~6463, ~250 ln file CRUD) → `routes_workspace.py`.
+**Probed B=4** (`_assembly_response` + bespoke `_dedup_filename`/`_patch_references`/`_safe_workspace_path`);
+the L14 move is to **co-extract those 3 to a `backend/core/workspace.py` service first** (pure path/file logic
+wearing an api hat — `_safe_workspace_path` raises `HTTPException`, so swap that for `ValueError` like #3's
+`parse_deformation_params` did), THEN lift the router at B≤1. **(C) Connector-resolution service push** — the
+~565 ln of the FK banner #7 left behind: blocked by `_mat4_from_model` (PURE — move it too, trivial) and
+`_design_with_instance_overrides` (api file-IO — pass the resolved `design` in as a plain arg). Bigger job;
+high testability payoff. **AVOID still:** Gear relations, Belt paths, PartGroup routes — all probed **B=4–5**
+(revolute-drive helper web: `_apply_assembly_mutation_with_feature_log`, `_resolve_gear_endpoint`,
+`_propagate_gear_relations_from`, `_sync_revolute_values_*`); need a `backend/core` service push of those FIRST.
+
+**Gotcha banked (assembly.py, #4):** the assembly-side shared kernel helper is **`_assembly_response`** (the twin
+of crud's `_design_response`) — it stays in assembly.py, counts toward B, never blocks. Animation keyframe-patch
+uses `assembly_state.set_assembly_silent` (no undo) while the other 6 use `set_assembly` — preserve which one
+each handler calls (L6 mutation contract). assembly.py's private helpers are NOT prefixed-probe-clean like crud's:
+the gear/belt/group cluster shares a dense helper web, so probe B on the LIVE range before every assembly pick.
 
 **Gotcha banked from bootstrap:** crud.py defines **131** module-level private helpers; most candidate
 clusters touch only `_design_response` / `_design_response_with_geometry`. The high-B clusters are the ones
@@ -195,9 +220,14 @@ Tiers are priority hints, not gospel.
   Dead `_EXT_SEQ_RE` regex dropped. **Banner was NOT cohesive** — it interleaved 4 *non-extension* routes
   (`/design/plate-layout` ×2, `/design/representation-overrides` ×2); those stayed in crud.py under a retitled
   banner and are a future candidate. crud.py 183→178 routes.
-- [ ] **Deformation endpoints + debug** — `# ── Deformation endpoints` + `# ── Deformation debug`
-  (~12690–13139) → `routes_deformation.py`. **Probed B=1** (`_design_response`). Bend/twist op CRUD +
-  the debug summary route. (Confirm the debug route isn't dead before moving — it may be `View>Debug`-only.)
+- [x] **Deformation endpoints + debug** — `# ── Deformation endpoints` + `# ── Deformation debug`
+  → `routes_deformation.py` (Refactor #3, 2026-06-08). **B=1** (`_design_response`). 4 routes moved
+  (add/update/delete deformation + debug). **Service push first:** the shared `_parse_params` +
+  `_resolve_cluster_scope` were lifted to `backend/core/deformation.py` as `parse_deformation_params`
+  (ValueError variant) + `resolve_cluster_scope` (+9 unit tests) because they were imported by THREE
+  callers (deformation routes, crud's edit-feature branch, AND `routes_loop_skip.py`'s validate route —
+  a *cross-file* back-import the in-file grep missed). `_rollback_last_feature` left in crud.py (used only
+  by the feature-log revert path, not by any deformation route — adjacency, not cohesion). crud.py 178→174 routes.
 - [ ] **Flexible ssDNA segments** — `# ── Flexible ssDNA segments` (~13521–13723) →
   `routes_flexible_segments.py`. **Probed B=1** (`_design_response_with_geometry`). See
   `memory/project_ssdna_ball_joints.md` before touching.
@@ -245,9 +275,18 @@ Tiers are priority hints, not gospel.
 
 ## assembly.py backlog
 
-- [ ] **Forward-kinematics helpers → `backend/core/assembly_fk.py`** — `# ── Forward kinematics helpers`
-  (~446–1106, ~660 ln). **Service extraction, highest value** — pure FK transform math in the api file.
-  Direct unit tests. See `memory/project_path_to_thousands.md` (O(N) backend) before touching.
+- [x] **Forward-kinematics helpers → `backend/core/assembly_fk.py`** — `# ── Forward kinematics helpers`
+  (Refactor #7, 2026-06-08). **Service extraction, B=0** (the new core module imports nothing from
+  `backend.api` — only numpy + `Mat4x4`). Moved the **pure FK graph-propagation kernel** (5 helpers:
+  `_fk_apply_to_joint`, `_build_inst_by_id`, `_fk_expand_rigid_group`, `_fk_propagate`,
+  `_move_instance_with_fk_delta`) **verbatim** → `backend/core/assembly_fk.py` + 12 direct unit tests
+  (`test_assembly_fk_core.py`). assembly.py imports them back under their original names (~50 call sites
+  unchanged). **The other ~565 ln of the banner stayed (L4-blocked):** the connector-resolution
+  (`_get_connector_world*`, `_build_*connector_frames`, `_resolve_*_label_local`) + cluster-mate
+  inference (`_infer_cluster_ids_for_connector_label`, `_joint_side_cluster_ids`,
+  `_propagate_cluster_delta_to_mates`) helpers depend on api-layer `_design_with_instance_overrides`
+  (→ `_load_design_from_source`, file IO + `HTTPException`) and `_mat4_from_model` — can't go to core
+  without inverting the arrow. assembly.py 7243→7160 LOC; routes unchanged (92, no routes moved).
 - [ ] **Joint routes** — `# ── Joint routes` (~4183–5244, ~1060 ln incl. the revolute-drive logic) →
   `routes_assembly_joints.py` + push the endpoint-aware revolute drive (~4477) into
   `backend/core/assembly_polymer.py` or a new service. Biggest single assembly cluster; split.
@@ -264,15 +303,37 @@ Tiers are priority hints, not gospel.
   connections` (~2695–3863) → `routes_assembly_overhangs.py`. Larger; the cross-part linker logic is partly
   in `assembly_linker.py` / `assembly_linker_relax.py` already — probe what's still inline. See
   `memory/project_assembly_overhang_bindings.md` + `project_assembly_linker_relax.md`.
-- [ ] **Configurations + camera poses** — `# ── Assembly configurations` (~6461) + `# ── Assembly camera poses`
-  (~6636) → `routes_assembly_configs.py`. See `memory/project_assembly_configurations.md`.
-- [ ] **Linker helices/strands/geometry** — `# ── Linker helices` (~6693) + `# ── Linker strands` (~6729) +
-  `# ── Linker geometry` (~6785–6913) → `routes_assembly_linkers.py`.
-- [ ] **Animation CRUD** — `# ── Animation CRUD` (~7462–7660) → `routes_assembly_animations.py`.
-- [ ] **Instance / connector / library / validation / flatten / debug** — the remaining banners
-  (`# ── Instance routes` ~1394, `# ── Instance connectors` ~6357, `# ── Workspace library` ~6927,
-  `# ── Assembly validation` ~7660, `# ── Flatten to Design` ~7747, `# ── Debug endpoints` ~7783). Pick off
+- [x] **Configurations + camera poses** — `# ── Assembly configurations` + `# ── Assembly camera poses`
+  → `routes_assembly_configs.py` (Refactor #5, 2026-06-08). **B=1** (`_assembly_response`). 8 routes moved
+  (4 config CRUD + 4 camera-pose CRUD/reorder) + their 5 request models + region-internal
+  `_capture_assembly_configuration`. Both probed B=1 independently; folded per the handoff. silent-vs-undo
+  contract preserved (restore + patch use `set_assembly_silent`). 5 orphaned `core.models` imports cleaned.
+  assembly.py 105→97 routes, −268 LOC. See `memory/project_assembly_configurations.md`.
+- [x] **Linker helices/strands/geometry** — `# ── Linker helices`/`# ── Linker strands`/`# ── Linker geometry`
+  → `routes_assembly_linkers.py` (Refactor #6, 2026-06-08). **B=2** (`_assembly_response` +
+  `_linker_geometry_for_assembly`). 5 routes moved (helix/strand CRUD + GET linker-geometry) + their 2 request
+  models. The compute helper `_linker_geometry_for_assembly` + `assembly_connector_arc_lengths` **stayed in
+  assembly.py** — the former depends on api-layer `crud._geometry_for_design` (can't go to `backend/core`
+  without inverting the api→core arrow) AND is called from the overhang-connections region (lines ~3022/3057)
+  + the relax test suite; moving it would create 3+ reverse imports, so importing the one helper back is
+  strictly less coupling. Orphaned `Helix`/`Strand` `core.models` imports cleaned. assembly.py 97→92 routes.
+- [x] **Animation CRUD** — `# ── Animation CRUD` → `routes_assembly_animations.py` (Refactor #4, 2026-06-08).
+  **B=1** (`_assembly_response`). 7 routes moved (animation + keyframe CRUD + reorder) + their 5 request models
+  + region-internal `_find_animation`. Orphaned `DesignAnimation` / `AnimationKeyframe` `core.models` imports
+  cleaned from assembly.py. First assembly.py extraction; mirrors the crud.py exemplars exactly. assembly.py
+  −200 LOC.
+- [x] **Assembly validation** — `# ── Assembly validation` → `backend/core/assembly_validate.py`
+  (Refactor #8, 2026-06-08). **Service push, B=0** (the new core module imports nothing from `backend.api` —
+  only `Assembly` + delegates to `assembly_flatten`). Moved the pure `_validate_assembly` body **byte-identical**
+  → `validate_assembly_report` + 8 direct unit tests (`test_assembly_validate_core.py`). The `GET
+  /assembly/validate` handler shrank ~84→4 ln (parse→delegate→respond). Routes unchanged (92). assembly.py −76 LOC.
+- [ ] **Instance / connector / library / flatten / debug** — the remaining banners
+  (`# ── Instance routes` ~1286, `# ── Instance connectors` ~6249, `# ── Workspace library` ~6463,
+  `# ── Flatten to Design` ~7085, `# ── Debug endpoints` ~7121). Pick off
   the cohesive ones; the core-assembly routes (`GET/POST /assembly`, undo/redo) are the kernel that stays.
+  **Flatten to Design** (3 routes, ~7085–7118) is the cleanest router lift left: probed **B=1**
+  (`crud._design_response`, on `load-as-design` only — shared kernel) — fold validate+flatten into a
+  `routes_assembly_validation.py` now that the validation logic is in core.
 
 ### Stays in assembly.py (kernel)
 - Core assembly routes (`# ── Core assembly routes` ~1289), undo/redo, the geometry cache, and the shared

@@ -68,30 +68,21 @@ from backend.api import assembly_state
 from backend.api import state as design_state
 from backend.core.models import (
     Assembly,
-    AssemblyConfigurationSnapshot,
-    AssemblyGearRelationConfigState,
-    AssemblyInstanceConfigState,
-    AssemblyJointConfigState,
-    AnimationKeyframe,
     AssemblyJoint,
     BeltPath,
     BeltPulley,
     BeltRider,
-    CameraPose,
     ClusterRigidTransform,
     ConnectionType,
-    DesignAnimation,
     DesignMetadata,
     Direction,
     GearRelation,
-    Helix,
     InterfacePoint,
     Mat4x4,
     PartGroup,
     PartInstance,
     PartLibraryEntry,
     PartSourceFile,
-    Strand,
     Vec3,
 )
 from backend.core import assembly_groups as _ag
@@ -444,101 +435,18 @@ def _mat4_from_model(m: Mat4x4) -> np.ndarray:
 
 
 # ── Forward kinematics helpers ────────────────────────────────────────────────
-
-def _fk_apply_to_joint(joint, delta: np.ndarray) -> None:
-    """Apply a world-space delta to a joint's axis_origin and axis_direction."""
-    o = np.append(joint.axis_origin, 1.0)
-    joint.axis_origin = (delta @ o)[:3].tolist()
-    d = np.append(joint.axis_direction, 0.0)
-    d_new = (delta @ d)[:3]
-    norm = np.linalg.norm(d_new)
-    joint.axis_direction = (d_new / norm if norm > 1e-9 else d_new).tolist()
-
-
-def _build_inst_by_id(assembly) -> dict:
-    """Build an id→PartInstance dict for O(1) lookups in FK propagation.
-
-    With hundreds-to-thousands of instances, repeated linear scans
-    (``next(i for i in assembly.instances if i.id == cid)``) dominate
-    FK / resolve cost. Build this once at the top of each entry point and
-    thread it through the BFS helpers.
-    """
-    return {i.id: i for i in assembly.instances}
-
-
-def _fk_expand_rigid_group(assembly, instance_id: str, delta: np.ndarray,
-                            visited: set, queue: list,
-                            inst_by_id: dict | None = None) -> None:
-    """BFS over rigid joints (bidirectional); apply delta to each new member."""
-    if inst_by_id is None:
-        inst_by_id = _build_inst_by_id(assembly)
-    bfs = [instance_id]
-    while bfs:
-        cur = bfs.pop(0)
-        for j in assembly.joints:
-            if j.joint_type != 'rigid' or not j.instance_a_id or not j.instance_b_id:
-                continue
-            if j.instance_a_id == cur:
-                nxt = j.instance_b_id
-            elif j.instance_b_id == cur:
-                nxt = j.instance_a_id
-            else:
-                continue
-            if nxt in visited:
-                continue
-            m = inst_by_id.get(nxt)
-            if not m or m.fixed:
-                continue
-            m.transform = Mat4x4.from_array(delta @ m.transform.to_array())
-            if m.base_transform:
-                m.base_transform = Mat4x4.from_array(delta @ m.base_transform.to_array())
-            visited.add(nxt)
-            queue.append(nxt)
-            bfs.append(nxt)
-
-
-def _fk_propagate(assembly, parent_ids: set, delta: np.ndarray, visited: set,
-                   inst_by_id: dict | None = None) -> None:
-    """BFS FK propagation from parent_ids through all non-rigid kinematic children."""
-    if inst_by_id is None:
-        inst_by_id = _build_inst_by_id(assembly)
-    queue = list(parent_ids)
-    while queue:
-        pid = queue.pop(0)
-        for j in assembly.joints:
-            if j.instance_a_id != pid or j.joint_type == 'rigid':
-                continue
-            cid = j.instance_b_id
-            if not cid or cid in visited:
-                continue
-            child = inst_by_id.get(cid)
-            if not child or child.fixed:
-                # Fixed child: do NOT update axis_origin — it must remain anchored at the
-                # fixed child's connector, not drift with the parent's motion.
-                continue
-            _fk_apply_to_joint(j, delta)
-            child.transform = Mat4x4.from_array(delta @ child.transform.to_array())
-            if child.base_transform:
-                child.base_transform = Mat4x4.from_array(delta @ child.base_transform.to_array())
-            visited.add(cid)
-            _fk_expand_rigid_group(assembly, cid, delta, visited, queue, inst_by_id)
-            queue.append(cid)
-
-
-def _move_instance_with_fk_delta(assembly, instance_id: str, delta: np.ndarray, visited: set,
-                                   inst_by_id: dict | None = None) -> bool:
-    if inst_by_id is None:
-        inst_by_id = _build_inst_by_id(assembly)
-    inst = inst_by_id.get(instance_id)
-    if not inst or inst.fixed or instance_id in visited:
-        return False
-    inst.transform = Mat4x4.from_array(delta @ inst.transform.to_array())
-    if inst.base_transform:
-        inst.base_transform = Mat4x4.from_array(delta @ inst.base_transform.to_array())
-    visited.add(instance_id)
-    _fk_expand_rigid_group(assembly, instance_id, delta, visited, [], inst_by_id)
-    _fk_propagate(assembly, {instance_id}, delta, visited, inst_by_id)
-    return True
+# The pure FK graph-propagation kernel (apply an SE3 ``delta`` through the joint
+# graph, mutating PartInstance transforms in place) lives in
+# ``backend/core/assembly_fk.py`` — no api dependency, directly unit-tested
+# (tests/test_assembly_fk_core.py). Imported back here under their original
+# names so the ~50 call sites below are unchanged.
+from backend.core.assembly_fk import (  # noqa: E402
+    _fk_apply_to_joint,
+    _build_inst_by_id,
+    _fk_expand_rigid_group,
+    _fk_propagate,
+    _move_instance_with_fk_delta,
+)
 
 
 def _infer_cluster_ids_for_connector_label(inst: PartInstance, label: str | None) -> list[str]:
@@ -1201,22 +1109,6 @@ class PatchJointRequest(BaseModel):
     # is the joint's parent (e.g. a pulley whose fixed axle is authored as the
     # child) so we rotate the pulley, not the fixed axle.
     endpoint_side: Optional[Literal["a", "b"]] = None
-
-
-class AddLinkerHelixRequest(BaseModel):
-    axis_start: list[float]         # [x, y, z] nm
-    axis_end:   list[float]         # [x, y, z] nm
-    length_bp:  int
-    phase_offset: float = 0.0
-    id: Optional[str] = None        # auto-generated if omitted
-
-
-class AddLinkerStrandRequest(BaseModel):
-    id: Optional[str] = None        # prefix with "__vsc__" for virtual scaffold connections
-    strand_type: str = "staple"
-    domains: list[dict] = []
-    color: Optional[str] = None
-    notes: Optional[str] = None     # JSON string; VSC metadata stored here
 
 
 class AssemblyLoadRequest(BaseModel):
@@ -6363,37 +6255,6 @@ class AddConnectorRequest(BaseModel):
     cluster_id: Optional[str] = None
 
 
-class CreateAssemblyConfigurationBody(BaseModel):
-    name: Optional[str] = None
-
-
-class PatchAssemblyConfigurationBody(BaseModel):
-    name: Optional[str] = None
-    overwrite_current: Optional[bool] = None
-
-
-class CreateAssemblyCameraPoseBody(BaseModel):
-    name: str = "Camera Pose"
-    position: list[float]
-    target: list[float]
-    up: list[float]
-    fov: float = 55.0
-    orbit_mode: str = "trackball"
-
-
-class PatchAssemblyCameraPoseBody(BaseModel):
-    name: Optional[str] = None
-    position: Optional[list[float]] = None
-    target: Optional[list[float]] = None
-    up: Optional[list[float]] = None
-    fov: Optional[float] = None
-    orbit_mode: Optional[str] = None
-
-
-class ReorderAssemblyCameraPosesBody(BaseModel):
-    ordered_ids: list[str]
-
-
 @router.post("/assembly/instances/{instance_id}/connectors", status_code=201)
 def add_connector(instance_id: str, body: AddConnectorRequest) -> dict:
     """Append an InterfacePoint (connector) to a PartInstance."""
@@ -6458,331 +6319,13 @@ def delete_connector(instance_id: str, label: str) -> dict:
     return _assembly_response(assembly_state.get_or_404())
 
 
-# ── Assembly configurations ──────────────────────────────────────────────────
-
-def _capture_assembly_configuration(assembly: Assembly, name: str) -> AssemblyConfigurationSnapshot:
-    return AssemblyConfigurationSnapshot(
-        name=name,
-        instance_states=[
-            AssemblyInstanceConfigState(
-                instance_id=inst.id,
-                name=inst.name,
-                transform=inst.transform,
-                base_transform=inst.base_transform,
-                joint_states=dict(inst.joint_states),
-                cluster_transform_overrides=list(inst.cluster_transform_overrides),
-            )
-            for inst in assembly.instances
-        ],
-        joint_states=[
-            AssemblyJointConfigState(
-                joint_id=j.id,
-                current_value=j.current_value,
-                axis_origin=list(j.axis_origin),
-                axis_direction=list(j.axis_direction),
-                angular_velocity_rpm=j.angular_velocity_rpm,
-                spin_paused=j.spin_paused,
-            )
-            for j in assembly.joints
-        ],
-        gear_relation_states=[
-            AssemblyGearRelationConfigState(
-                relation_id=g.id,
-                ratio=g.ratio,
-                invert=g.invert,
-                joint_a_anchor=g.joint_a_anchor,
-                joint_b_anchor=g.joint_b_anchor,
-                endpoint_a_instance_id=g.endpoint_a_instance_id,
-                endpoint_b_instance_id=g.endpoint_b_instance_id,
-                endpoint_a_side=g.endpoint_a_side,
-                endpoint_b_side=g.endpoint_b_side,
-            )
-            for g in assembly.gear_relations
-        ],
-    )
-
-
-@router.post("/assembly/configurations", status_code=200)
-def create_assembly_configuration(body: CreateAssemblyConfigurationBody = None) -> dict:
-    """Capture current assembly instance/joint state as a named configuration."""
-    assembly = assembly_state.get_or_create()
-    idx = len(assembly.configurations) + 1
-    cfg = _capture_assembly_configuration(assembly, (body.name if body and body.name else f"Config {idx}"))
-    updated = assembly.model_copy(
-        update={
-            "configurations": [*assembly.configurations, cfg],
-            "configuration_cursor": cfg.id,
-        },
-        deep=True,
-    )
-    assembly_state.set_assembly(updated)
-    return _assembly_response(updated)
-
-
-@router.post("/assembly/configurations/{config_id}/restore", status_code=200)
-def restore_assembly_configuration(config_id: str) -> dict:
-    """Restore saved positions for instances present in the configuration.
-
-    Instances and joints added after the configuration was captured are left as-is.
-    """
-    assembly = assembly_state.get_or_404()
-    cfg = next((c for c in assembly.configurations if c.id == config_id), None)
-    if cfg is None:
-        raise HTTPException(404, detail=f"Configuration {config_id!r} not found.")
-
-    state_by_id = {s.instance_id: s for s in cfg.instance_states}
-    joint_by_id = {s.joint_id: s for s in cfg.joint_states}
-
-    new_instances = []
-    for inst in assembly.instances:
-        state = state_by_id.get(inst.id)
-        if state is None:
-            new_instances.append(inst)
-            continue
-        new_instances.append(inst.model_copy(update={
-            "transform": state.transform,
-            "base_transform": state.base_transform,
-            "joint_states": dict(state.joint_states),
-            "cluster_transform_overrides": list(state.cluster_transform_overrides),
-        }, deep=True))
-
-    new_joints = []
-    for joint in assembly.joints:
-        state = joint_by_id.get(joint.id)
-        if state is None:
-            new_joints.append(joint)
-            continue
-        new_joints.append(joint.model_copy(update={
-            "current_value": state.current_value,
-            "axis_origin": list(state.axis_origin),
-            "axis_direction": list(state.axis_direction),
-            "angular_velocity_rpm": state.angular_velocity_rpm,
-            "spin_paused": state.spin_paused,
-        }, deep=True))
-
-    gear_state_by_id = {s.relation_id: s for s in cfg.gear_relation_states}
-    new_gears = []
-    for rel in assembly.gear_relations:
-        gs = gear_state_by_id.get(rel.id)
-        if gs is None:
-            new_gears.append(rel)
-            continue
-        new_gears.append(rel.model_copy(update={
-            "ratio": gs.ratio,
-            "invert": gs.invert,
-            "joint_a_anchor": gs.joint_a_anchor,
-            "joint_b_anchor": gs.joint_b_anchor,
-            "endpoint_a_instance_id": gs.endpoint_a_instance_id,
-            "endpoint_b_instance_id": gs.endpoint_b_instance_id,
-            "endpoint_a_side": gs.endpoint_a_side,
-            "endpoint_b_side": gs.endpoint_b_side,
-        }, deep=True))
-
-    updated = assembly.model_copy(update={
-        "instances": new_instances,
-        "joints": new_joints,
-        "gear_relations": new_gears,
-        "configuration_cursor": cfg.id,
-    }, deep=True)
-    assembly_state.set_assembly_silent(updated)
-    return _assembly_response(updated)
-
-
-@router.patch("/assembly/configurations/{config_id}", status_code=200)
-def update_assembly_configuration(config_id: str, body: PatchAssemblyConfigurationBody) -> dict:
-    """Rename a configuration or overwrite it with the current assembly state."""
-    assembly = assembly_state.get_or_404()
-    configs = list(assembly.configurations)
-    idx = next((i for i, c in enumerate(configs) if c.id == config_id), None)
-    if idx is None:
-        raise HTTPException(404, detail=f"Configuration {config_id!r} not found.")
-
-    current = configs[idx]
-    if body.overwrite_current:
-        replacement = _capture_assembly_configuration(assembly, body.name or current.name)
-        replacement = replacement.model_copy(update={"id": current.id})
-    else:
-        patch = {}
-        if body.name is not None:
-            patch["name"] = body.name
-        replacement = current.model_copy(update=patch)
-    configs[idx] = replacement
-
-    updated = assembly.model_copy(update={
-        "configurations": configs,
-        "configuration_cursor": replacement.id if body.overwrite_current else assembly.configuration_cursor,
-    }, deep=True)
-    assembly_state.set_assembly_silent(updated)
-    return _assembly_response(updated)
-
-
-@router.delete("/assembly/configurations/{config_id}", status_code=200)
-def delete_assembly_configuration(config_id: str) -> dict:
-    assembly = assembly_state.get_or_404()
-    configs = [c for c in assembly.configurations if c.id != config_id]
-    if len(configs) == len(assembly.configurations):
-        raise HTTPException(404, detail=f"Configuration {config_id!r} not found.")
-    cursor = assembly.configuration_cursor
-    if cursor == config_id:
-        cursor = configs[-1].id if configs else None
-    updated = assembly.model_copy(update={
-        "configurations": configs,
-        "configuration_cursor": cursor,
-    }, deep=True)
-    assembly_state.set_assembly(updated)
-    return _assembly_response(updated)
-
-
-# ── Assembly camera poses ────────────────────────────────────────────────────
-
-@router.post("/assembly/camera-poses", status_code=200)
-def create_assembly_camera_pose(body: CreateAssemblyCameraPoseBody) -> dict:
-    assembly = assembly_state.get_or_create()
-    pose = CameraPose(
-        name=body.name,
-        position=body.position,
-        target=body.target,
-        up=body.up,
-        fov=body.fov,
-        orbit_mode=body.orbit_mode,
-    )
-    updated = assembly.model_copy(update={"camera_poses": [*assembly.camera_poses, pose]}, deep=True)
-    assembly_state.set_assembly(updated)
-    return _assembly_response(updated)
-
-
-@router.patch("/assembly/camera-poses/{pose_id}", status_code=200)
-def update_assembly_camera_pose(pose_id: str, body: PatchAssemblyCameraPoseBody) -> dict:
-    assembly = assembly_state.get_or_create()
-    poses = list(assembly.camera_poses)
-    idx = next((i for i, p in enumerate(poses) if p.id == pose_id), None)
-    if idx is None:
-        raise HTTPException(404, detail=f"Camera pose {pose_id!r} not found.")
-    poses[idx] = poses[idx].model_copy(update=body.model_dump(exclude_none=True))
-    updated = assembly.model_copy(update={"camera_poses": poses}, deep=True)
-    assembly_state.set_assembly_silent(updated)
-    return _assembly_response(updated)
-
-
-@router.delete("/assembly/camera-poses/{pose_id}", status_code=200)
-def delete_assembly_camera_pose(pose_id: str) -> dict:
-    assembly = assembly_state.get_or_create()
-    poses = [p for p in assembly.camera_poses if p.id != pose_id]
-    if len(poses) == len(assembly.camera_poses):
-        raise HTTPException(404, detail=f"Camera pose {pose_id!r} not found.")
-    updated = assembly.model_copy(update={"camera_poses": poses}, deep=True)
-    assembly_state.set_assembly(updated)
-    return _assembly_response(updated)
-
-
-@router.put("/assembly/camera-poses/reorder", status_code=200)
-def reorder_assembly_camera_poses(body: ReorderAssemblyCameraPosesBody) -> dict:
-    assembly = assembly_state.get_or_create()
-    pose_map = {p.id: p for p in assembly.camera_poses}
-    missing = [pid for pid in body.ordered_ids if pid not in pose_map]
-    if missing:
-        raise HTTPException(400, detail=f"Unknown pose IDs: {missing}")
-    listed = set(body.ordered_ids)
-    poses = [pose_map[pid] for pid in body.ordered_ids]
-    poses += [p for p in assembly.camera_poses if p.id not in listed]
-    updated = assembly.model_copy(update={"camera_poses": poses}, deep=True)
-    assembly_state.set_assembly(updated)
-    return _assembly_response(updated)
-
-
-# ── Linker helices ────────────────────────────────────────────────────────────
-
-@router.post("/assembly/linker-helices", status_code=201)
-def add_linker_helix(body: AddLinkerHelixRequest) -> dict:
-    """Append a linker Helix to assembly.assembly_helices."""
-    import uuid as _uuid
-    assembly = assembly_state.get_or_404()
-    helix = Helix(
-        id=body.id or str(_uuid.uuid4()),
-        axis_start=Vec3(x=body.axis_start[0], y=body.axis_start[1], z=body.axis_start[2]),
-        axis_end=Vec3(x=body.axis_end[0], y=body.axis_end[1], z=body.axis_end[2]),
-        length_bp=body.length_bp,
-        phase_offset=body.phase_offset,
-    )
-    new_helices = list(assembly.assembly_helices) + [helix]
-    assembly_state.snapshot()
-    assembly_state.set_assembly_silent(
-        assembly.model_copy(update={"assembly_helices": new_helices})
-    )
-    return _assembly_response(assembly_state.get_or_404())
-
-
-@router.delete("/assembly/linker-helices/{helix_id}", status_code=200)
-def delete_linker_helix(helix_id: str) -> dict:
-    """Remove a linker helix by id."""
-    assembly = assembly_state.get_or_404()
-    new_helices = [h for h in assembly.assembly_helices if h.id != helix_id]
-    if len(new_helices) == len(assembly.assembly_helices):
-        raise HTTPException(404, detail=f"Linker helix {helix_id!r} not found.")
-    assembly_state.snapshot()
-    assembly_state.set_assembly_silent(
-        assembly.model_copy(update={"assembly_helices": new_helices})
-    )
-    return _assembly_response(assembly_state.get_or_404())
-
-
-# ── Linker strands ────────────────────────────────────────────────────────────
-
-@router.post("/assembly/linker-strands", status_code=201)
-def add_linker_strand(body: AddLinkerStrandRequest) -> dict:
-    """
-    Append a linker Strand to assembly.assembly_strands.
-
-    Virtual scaffold connections use ids prefixed with '__vsc__' and encode
-    endpoint metadata in the notes field as a JSON string.
-    """
-    import uuid as _uuid
-    from backend.core.models import Domain, StrandType
-    assembly = assembly_state.get_or_404()
-
-    strand_id = body.id or str(_uuid.uuid4())
-    try:
-        stype = StrandType(body.strand_type)
-    except ValueError:
-        stype = StrandType.STAPLE
-
-    domains = []
-    for d in (body.domains or []):
-        try:
-            domains.append(Domain(**d))
-        except Exception:
-            pass
-
-    strand = Strand(
-        id=strand_id,
-        strand_type=stype,
-        domains=domains,
-        color=body.color,
-        notes=body.notes,
-    )
-    new_strands = list(assembly.assembly_strands) + [strand]
-    assembly_state.snapshot()
-    assembly_state.set_assembly_silent(
-        assembly.model_copy(update={"assembly_strands": new_strands})
-    )
-    return _assembly_response(assembly_state.get_or_404())
-
-
-@router.delete("/assembly/linker-strands/{strand_id}", status_code=200)
-def delete_linker_strand(strand_id: str) -> dict:
-    """Remove a linker strand by id."""
-    assembly = assembly_state.get_or_404()
-    new_strands = [s for s in assembly.assembly_strands if s.id != strand_id]
-    if len(new_strands) == len(assembly.assembly_strands):
-        raise HTTPException(404, detail=f"Linker strand {strand_id!r} not found.")
-    assembly_state.snapshot()
-    assembly_state.set_assembly_silent(
-        assembly.model_copy(update={"assembly_strands": new_strands})
-    )
-    return _assembly_response(assembly_state.get_or_404())
-
-
 # ── Linker geometry ───────────────────────────────────────────────────────────
+# NOTE: the linker-helix / linker-strand CRUD routes and the
+# GET /assembly/linker-geometry route now live in routes_assembly_linkers.py.
+# The compute helper below stays here: it depends on the api-layer
+# crud._geometry_for_design (cannot move to backend/core without inverting the
+# api→core arrow) and is also called from the overhang-connections region +
+# the relax test suite. routes_assembly_linkers.py imports it back.
 
 def _linker_geometry_for_assembly(assembly) -> dict:
     """Compute nucleotide geometry for *assembly*'s linker helices and strands.
@@ -6874,13 +6417,6 @@ def _linker_geometry_for_assembly(assembly) -> dict:
         "helix_axes":      deformed_helix_axes(synthetic),
         "aliased_helices": [h.model_dump(mode="json") for h in aliased],
     }
-
-
-@router.get("/assembly/linker-geometry", status_code=200)
-def get_linker_geometry() -> dict:
-    """Linker nucleotide geometry for the live assembly (see
-    :func:`_linker_geometry_for_assembly`)."""
-    return _linker_geometry_for_assembly(assembly_state.get_or_404())
 
 
 def assembly_connector_arc_lengths(assembly) -> dict[str, dict[str, float]]:
@@ -7193,7 +6729,7 @@ def get_library() -> dict:
             sha = _sha256_file(p)
             ipts: list = []
             try:
-                design = Design.from_json(p.read_text(encoding="utf-8"))
+                Design.from_json(p.read_text(encoding="utf-8"))
                 # Interface points may be stored on a Part wrapper or on the design itself
                 # For now we return an empty list — Part wrapper not required
             except Exception:
@@ -7459,289 +6995,14 @@ def get_assembly_geometry() -> dict:
     return {"sources": sources, "instances": instance_to_src, "errors": errors}
 
 
-# ── Animation CRUD ───────────────────────────────────────────────────────────
-
-class CreateAssemblyAnimationBody(BaseModel):
-    name: str = "Animation"
-    fps: int = 30
-    loop: bool = False
-
-
-class PatchAssemblyAnimationBody(BaseModel):
-    name: Optional[str] = None
-    fps: Optional[int] = None
-    loop: Optional[bool] = None
-
-
-class CreateAssemblyKeyframeBody(BaseModel):
-    name: str = ""
-    camera_pose_id: Optional[str] = None
-    configuration_id: Optional[str] = None
-    hold_duration_s: float = 1.0
-    transition_duration_s: float = 0.5
-    easing: str = "ease-in-out"
-    spin_axis: Optional[str] = None
-    spin_rotations: float = 0.0
-    spin_invert: bool = False
-    text: str = ""
-    text_font_family: str = "sans-serif"
-    text_font_size_px: int = 24
-    text_color: str = "#ffffff"
-    text_bold: bool = False
-    text_italic: bool = False
-    text_align: str = "center"
-
-
-class PatchAssemblyKeyframeBody(BaseModel):
-    name: Optional[str] = None
-    camera_pose_id: Optional[str] = None
-    configuration_id: Optional[str] = None
-    hold_duration_s: Optional[float] = None
-    transition_duration_s: Optional[float] = None
-    easing: Optional[str] = None
-    spin_axis: Optional[str] = None
-    spin_rotations: Optional[float] = None
-    spin_invert: Optional[bool] = None
-    joint_values: Optional[dict] = None
-    text: Optional[str] = None
-    text_font_family: Optional[str] = None
-    text_font_size_px: Optional[int] = None
-    text_color: Optional[str] = None
-    text_bold: Optional[bool] = None
-    text_italic: Optional[bool] = None
-    text_align: Optional[str] = None
-
-
-class ReorderAssemblyKeyframesBody(BaseModel):
-    ordered_ids: list[str]
-
-
-def _find_animation(assembly: Assembly, anim_id: str) -> DesignAnimation:
-    anim = next((a for a in assembly.animations if a.id == anim_id), None)
-    if anim is None:
-        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-    return anim
-
-
-@router.post("/assembly/animations", status_code=200)
-def create_assembly_animation(body: CreateAssemblyAnimationBody) -> dict:
-    """Create a new named animation on the assembly."""
-    assembly = assembly_state.get_or_create()
-    anim     = DesignAnimation(name=body.name, fps=body.fps, loop=body.loop)
-    updated  = assembly.model_copy(
-        update={"animations": list(assembly.animations) + [anim]}, deep=True,
-    )
-    assembly_state.set_assembly(updated)
-    return _assembly_response(updated)
-
-
-@router.patch("/assembly/animations/{anim_id}", status_code=200)
-def update_assembly_animation(anim_id: str, body: PatchAssemblyAnimationBody) -> dict:
-    """Update animation metadata (name / fps / loop)."""
-    assembly = assembly_state.get_or_create()
-    anims    = list(assembly.animations)
-    idx      = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
-    if idx is None:
-        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-    patch    = body.model_dump(include=body.model_fields_set)
-    anims[idx] = anims[idx].model_copy(update=patch)
-    updated  = assembly.model_copy(update={"animations": anims}, deep=True)
-    assembly_state.set_assembly(updated)
-    return _assembly_response(updated)
-
-
-@router.delete("/assembly/animations/{anim_id}", status_code=200)
-def delete_assembly_animation(anim_id: str) -> dict:
-    """Remove an animation from the assembly."""
-    assembly = assembly_state.get_or_create()
-    anims    = [a for a in assembly.animations if a.id != anim_id]
-    if len(anims) == len(assembly.animations):
-        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-    updated  = assembly.model_copy(update={"animations": anims}, deep=True)
-    assembly_state.set_assembly(updated)
-    return _assembly_response(updated)
-
-
-@router.post("/assembly/animations/{anim_id}/keyframes", status_code=200)
-def create_assembly_keyframe(anim_id: str, body: CreateAssemblyKeyframeBody) -> dict:
-    """
-    Append a keyframe to an assembly animation.
-    Automatically captures all assembly joint current_values into joint_values.
-    """
-    assembly = assembly_state.get_or_create()
-    anims    = list(assembly.animations)
-    idx      = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
-    if idx is None:
-        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-
-    # Auto-capture current joint values
-    joint_values = {j.id: j.current_value for j in assembly.joints}
-
-    kf = AnimationKeyframe(
-        name=body.name,
-        camera_pose_id=body.camera_pose_id,
-        configuration_id=body.configuration_id,
-        hold_duration_s=body.hold_duration_s,
-        transition_duration_s=body.transition_duration_s,
-        easing=body.easing,
-        spin_axis=body.spin_axis,
-        spin_rotations=body.spin_rotations,
-        spin_invert=body.spin_invert,
-        joint_values=joint_values,
-        text=body.text,
-        text_font_family=body.text_font_family,
-        text_font_size_px=body.text_font_size_px,
-        text_color=body.text_color,
-        text_bold=body.text_bold,
-        text_italic=body.text_italic,
-        text_align=body.text_align,
-    )
-    anims[idx] = anims[idx].model_copy(
-        update={"keyframes": list(anims[idx].keyframes) + [kf]}, deep=True,
-    )
-    updated = assembly.model_copy(update={"animations": anims}, deep=True)
-    assembly_state.set_assembly(updated)
-    return _assembly_response(updated)
-
-
-@router.patch("/assembly/animations/{anim_id}/keyframes/{kf_id}", status_code=200)
-def update_assembly_keyframe(anim_id: str, kf_id: str, body: PatchAssemblyKeyframeBody) -> dict:
-    """Update a keyframe's properties (silent — no undo push for playback frames)."""
-    assembly = assembly_state.get_or_create()
-    anims    = list(assembly.animations)
-    anim_idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
-    if anim_idx is None:
-        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-    kfs      = list(anims[anim_idx].keyframes)
-    kf_idx   = next((i for i, k in enumerate(kfs) if k.id == kf_id), None)
-    if kf_idx is None:
-        raise HTTPException(404, detail=f"Keyframe {kf_id!r} not found.")
-    patch    = body.model_dump(include=body.model_fields_set)
-    kfs[kf_idx] = kfs[kf_idx].model_copy(update=patch)
-    anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": kfs}, deep=True)
-    updated  = assembly.model_copy(update={"animations": anims}, deep=True)
-    assembly_state.set_assembly_silent(updated)
-    return _assembly_response(updated)
-
-
-@router.delete("/assembly/animations/{anim_id}/keyframes/{kf_id}", status_code=200)
-def delete_assembly_keyframe(anim_id: str, kf_id: str) -> dict:
-    """Remove a keyframe from an assembly animation."""
-    assembly = assembly_state.get_or_create()
-    anims    = list(assembly.animations)
-    anim_idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
-    if anim_idx is None:
-        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-    kfs = [k for k in anims[anim_idx].keyframes if k.id != kf_id]
-    if len(kfs) == len(anims[anim_idx].keyframes):
-        raise HTTPException(404, detail=f"Keyframe {kf_id!r} not found.")
-    anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": kfs}, deep=True)
-    updated  = assembly.model_copy(update={"animations": anims}, deep=True)
-    assembly_state.set_assembly(updated)
-    return _assembly_response(updated)
-
-
-@router.put("/assembly/animations/{anim_id}/keyframes/reorder", status_code=200)
-def reorder_assembly_keyframes(anim_id: str, body: ReorderAssemblyKeyframesBody) -> dict:
-    """Reorder keyframes by supplying a new ordered list of IDs."""
-    assembly = assembly_state.get_or_create()
-    anims    = list(assembly.animations)
-    anim_idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
-    if anim_idx is None:
-        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-    kf_map   = {k.id: k for k in anims[anim_idx].keyframes}
-    reordered = [kf_map[id] for id in body.ordered_ids if id in kf_map]
-    anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": reordered}, deep=True)
-    updated  = assembly.model_copy(update={"animations": anims}, deep=True)
-    assembly_state.set_assembly(updated)
-    return _assembly_response(updated)
-
-
 # ── Assembly validation ───────────────────────────────────────────────────────
-
-def _validate_assembly(assembly: "Assembly") -> dict:
-    """
-    Run all validation checks on an assembly and return a structured report.
-    """
-    from backend.core.assembly_flatten import flatten_assembly, _load_design
-
-    results = []
-
-    # 1. File sources exist
-    for inst in assembly.instances:
-        if hasattr(inst.source, "path"):
-            try:
-                _load_design(inst.source)
-                results.append({"check": "file_sources_exist", "ok": True})
-            except FileNotFoundError:
-                results.append({
-                    "check": "file_sources_exist",
-                    "ok": False,
-                    "message": f"{inst.source.path!r} not found",
-                })
-        else:
-            results.append({"check": "file_sources_exist", "ok": True})
-
-    # 2. Joint instance refs valid
-    inst_ids = {i.id for i in assembly.instances}
-    for joint in assembly.joints:
-        ok = joint.instance_b_id in inst_ids
-        entry: dict = {"check": "joint_instance_refs_valid", "ok": ok}
-        if not ok:
-            entry["message"] = f"Joint {joint.name!r}: instance_b_id {joint.instance_b_id!r} not found"
-        results.append(entry)
-
-    # 3. Joint limits not exceeded
-    for joint in assembly.joints:
-        exceeded = False
-        msg = ""
-        if joint.min_limit is not None and joint.current_value < joint.min_limit:
-            exceeded = True
-            msg = f"Joint {joint.name!r}: current_value {joint.current_value} < min_limit {joint.min_limit}"
-        elif joint.max_limit is not None and joint.current_value > joint.max_limit:
-            exceeded = True
-            msg = f"Joint {joint.name!r}: current_value {joint.current_value} > max_limit {joint.max_limit}"
-        entry = {"check": "joint_limits_not_exceeded", "ok": not exceeded}
-        if exceeded:
-            entry["message"] = msg
-        results.append(entry)
-
-    # 4. Instance IDs unique
-    all_inst_ids = [i.id for i in assembly.instances]
-    ids_unique = len(all_inst_ids) == len(set(all_inst_ids))
-    results.append({"check": "instance_ids_unique", "ok": ids_unique})
-
-    # 5. Flattened IDs unique
-    try:
-        flatten_assembly(assembly)
-        results.append({"check": "flattened_ids_unique", "ok": True})
-    except ValueError as exc:
-        results.append({"check": "flattened_ids_unique", "ok": False, "message": str(exc)})
-    except FileNotFoundError:
-        # Missing file already caught above
-        results.append({"check": "flattened_ids_unique", "ok": True})
-
-    # Deduplicate results with the same check name + ok=True (collapse multiple instances)
-    seen_ok: dict[str, bool] = {}
-    deduped = []
-    for r in results:
-        key = r["check"]
-        if not r["ok"]:
-            deduped.append(r)
-            seen_ok[key] = False
-        elif key not in seen_ok:
-            deduped.append(r)
-            seen_ok[key] = True
-
-    passed = all(r["ok"] for r in deduped)
-    return {"passed": passed, "results": deduped}
-
 
 @router.get("/assembly/validate", status_code=200)
 def validate_assembly() -> dict:
     """Validate the active assembly and return a structured report."""
+    from backend.core.assembly_validate import validate_assembly_report
     assembly = assembly_state.get_or_create()
-    return _validate_assembly(assembly)
+    return validate_assembly_report(assembly)
 
 
 # ── Flatten to Design ────────────────────────────────────────────────────────

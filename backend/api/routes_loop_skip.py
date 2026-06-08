@@ -250,17 +250,23 @@ def validate_deformation(body: DeformationValidateRequest) -> dict:
     raise here so the frontend can poll this live as the user drags sliders.
     The hard 422 stays at realize time (apply-deformations / loop-skip/{twist,bend}).
     """
-    from backend.api.crud import _parse_params, _resolve_cluster_scope
-    from backend.core.deformation import helices_crossing_planes
+    from backend.core.deformation import (
+        helices_crossing_planes,
+        parse_deformation_params,
+        resolve_cluster_scope,
+    )
     from backend.core.loop_skip_calculator import classify_deformation
 
     design = design_state.get_or_404()
-    params = _parse_params(body.type, body.params)
+    try:
+        params = parse_deformation_params(body.type, body.params)
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
 
     helix_ids = body.helix_ids or helices_crossing_planes(
         design, body.plane_a_bp, body.plane_b_bp
     )
-    helix_ids = _resolve_cluster_scope(design, body.cluster_ids, helix_ids)["helix_ids"]
+    helix_ids = resolve_cluster_scope(design, body.cluster_ids, helix_ids)["helix_ids"]
 
     h_map = {h.id: h for h in design.helices}
     segment_helices = [h_map[hid] for hid in helix_ids if hid in h_map]

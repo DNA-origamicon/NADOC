@@ -2496,3 +2496,40 @@ def helices_crossing_planes(design: "Design", plane_a_bp: int, plane_b_bp: int) 
         h.id for h in design.helices
         if h.bp_start <= hi and h.bp_start + h.length_bp - 1 >= lo
     ]
+
+
+def parse_deformation_params(op_type: str, params_dict: dict):
+    """Validate a raw deformation ``params`` dict into TwistParams | BendParams.
+
+    Raises ``ValueError`` for an unknown ``op_type`` (the api layer translates
+    this to a 400). The ``kind`` discriminator key, if present, is stripped
+    before construction.
+    """
+    if op_type == 'twist':
+        return TwistParams(**{k: v for k, v in params_dict.items() if k != 'kind'})
+    elif op_type == 'bend':
+        return BendParams(**{k: v for k, v in params_dict.items() if k != 'kind'})
+    raise ValueError(f"Unknown deformation type {op_type!r}")
+
+
+def resolve_cluster_scope(
+    design: "Design", cluster_ids: list[str], helix_ids: list[str]
+) -> dict:
+    """Filter *helix_ids* to the union of the named clusters' helix_ids.
+
+    Drops cluster ids that don't exist in the design. Returns
+    ``{"cluster_ids": [...], "helix_ids": [...]}``. When the resolved cluster
+    list is empty (none provided, or all missing), helix_ids is returned
+    unchanged — the deformation is unscoped.
+    """
+    by_id = {c.id: c for c in design.cluster_transforms}
+    resolved = [cid for cid in (cluster_ids or []) if cid in by_id]
+    if not resolved:
+        return {"cluster_ids": [], "helix_ids": helix_ids}
+    allowed: set[str] = set()
+    for cid in resolved:
+        allowed.update(by_id[cid].helix_ids)
+    return {
+        "cluster_ids": resolved,
+        "helix_ids":   [h for h in helix_ids if h in allowed],
+    }
