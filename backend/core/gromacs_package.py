@@ -240,7 +240,6 @@ def _build_gromacs_input_pdb(design: "Design", ff: str, box_margin_nm: float = 2
 
     # ── Per chain: traverse residues in 5'→3' order ────────────────────────
     # Result: list of (new_seq_num, Atom) in output order.
-    ordered_output: list[tuple[int, object]] = []
     chain_output: dict[str, list[tuple[int, object]]] = defaultdict(list)
 
     for chain_id in chain_order:

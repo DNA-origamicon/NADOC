@@ -325,8 +325,6 @@ def test_auto_scaffold_alternation():
 
     # Validate alternation by checking crossovers on the same helix
     # (A helix should have at most one seam and one end crossover)
-    helix_xover_tags: dict[str, list[str]] = {}
-
     # We can't directly inspect the routing object from auto_scaffold return,
     # but we can check that no helix has two seam crossovers or two end crossovers
     # by inspecting the crossover bp positions vs helix midpoints.
@@ -356,7 +354,7 @@ def test_apply_routing_replaces_scaffold():
     """apply_routing_to_design replaces scaffold strands for routed helices."""
     design = make_bundle_design(CELLS_2HB, length_bp=21)
     domains, domain_by_id = extract_router_domains(design)
-    candidates = build_candidate_graph(domains, design, seam_tol=5, end_tol=5)
+    build_candidate_graph(domains, design, seam_tol=5, end_tol=5)
 
     # Build a minimal routing manually (just path with no crossovers for single domain)
     # For real routing test, use auto_scaffold
@@ -531,14 +529,6 @@ def test_crossover_topology_3p_to_5p():
     updated, result = auto_scaffold(design, seam_tol=5, end_tol=5)
     if not result.valid and result.errors:
         pytest.skip(f"Routing failed: {result.errors}")
-
-    # Build a map from (helix_id, crossover_bp) to the domains that reference it
-    scaffold_doms = {
-        (dom.helix_id, bp): dom
-        for s in _scaffold_strands(updated)
-        for dom in s.domains
-        for bp in (dom.start_bp, dom.end_bp)
-    }
 
     for xover in updated.crossovers:
         bp = xover.half_a.index

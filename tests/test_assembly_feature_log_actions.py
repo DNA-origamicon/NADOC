@@ -401,8 +401,6 @@ def test_add_instance_appears_in_feature_log():
 def test_delete_instance_appears_in_feature_log_and_replays():
     """`assembly-delete-instance` is logged and surgically replayable."""
     _seed()
-    asm = assembly_state.get_or_404()
-    initial_log_len = len(asm.feature_log)
 
     r = client.delete("/api/assembly/instances/inst-B")
     assert r.status_code == 200, r.text
@@ -433,7 +431,6 @@ def test_add_connector_appears_in_feature_log():
 def test_add_joint_appears_in_feature_log():
     """The 'Define Mate' menu item ends up here — it must produce a log entry."""
     _seed()
-    initial_len = len(assembly_state.get_or_404().feature_log)
     # Build a second joint between the existing instances.
     r = client.post("/api/assembly/joints", json={
         "name":              "AB2",

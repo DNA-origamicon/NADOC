@@ -489,9 +489,6 @@ def _existing_scaffold_xover_set(design: Design) -> set[tuple[str, str, int]]:
     Used to tag which crossovers are already present so the router can try to
     preserve them.
     """
-    scaffold_strand_ids: set[str] = {
-        s.id for s in design.strands if s.is_scaffold and not s.is_reference
-    }
     # Map (helix_id, index, direction) → strand_id for scaffold half-crossovers
     slot_to_strand: dict[tuple[str, int, str], str] = {}
     for strand in design.strands:
@@ -541,7 +538,6 @@ def build_helix_adjacency_graph(
             if xover.id in seen:
                 continue
             seen.add(xover.id)
-            da_id, db_id = xover.dom_a_id, xover.dom_b_id
             # Need to go from domain id to helix id
             pass  # We'll add edges below
 
@@ -1093,7 +1089,6 @@ def _build_crossover_objects(
     Each CandidateXover in the routing becomes a Crossover record.
     The half_a/half_b strand directions are derived from the domain directions.
     """
-    path = routing.path_order
     crossovers: list[Crossover] = []
 
     for i, xover in enumerate(routing.xovers):

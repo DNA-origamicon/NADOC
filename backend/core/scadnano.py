@@ -224,8 +224,6 @@ def import_scadnano(data: dict) -> Tuple[Design, List[str]]:
     for hi, h in enumerate(sc_helices):
         idx        = h.get("idx", hi)
         col, row   = h["grid_position"]   # scadnano grid_position = [col, row]
-        min_offset = h.get("min_offset", 0)
-        max_offset = h["max_offset"]
 
         x, y = _scadnano_xy(row, col, min_row, min_col, max_row, max_y_cad, lattice)
 

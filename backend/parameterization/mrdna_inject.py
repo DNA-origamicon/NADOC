@@ -421,7 +421,6 @@ def mrdna_model_from_nadoc_parameterized(
     import mrdna.segmentmodel as _sm_module
 
     original_cls = _sm_module.SegmentModel
-    factory = PatchedSegmentModel(override)
     model_params_with_hj = {
         **model_params,
         "hj_equilibrium_angle": override.hj_equilibrium_angle_deg,

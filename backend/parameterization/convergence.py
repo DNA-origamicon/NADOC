@@ -271,7 +271,6 @@ def plot_diagnostics(
     out_dir.mkdir(parents=True, exist_ok=True)
     Q = np.asarray(q_series)
     n = len(Q)
-    frames = np.arange(n)
 
     # Running mean
     cp, rm = _running_mean(Q)

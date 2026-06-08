@@ -13,8 +13,6 @@ Covers:
 
 from __future__ import annotations
 
-import time
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -301,7 +299,6 @@ def test_driver_semantics_latest_wins_then_revert():
     # Need a SECOND distinct sub-domain pair to create Y. Add another pair by
     # splitting sd_a in two and matching with two sub-domains on sd_b.
     # Easier: directly mutate the design to add fresh OHs + sub-domains for Y.
-    d = design_state.get_or_404()
     # Add second sub-domain on each overhang by splitting (we'll just append
     # bookkeeping at the model level for the test — easiest to construct
     # extra OHs + sub-domains via copy_with).
@@ -314,19 +311,6 @@ def test_driver_semantics_latest_wins_then_revert():
     # Easiest path: directly stage two bindings in-memory and confirm the
     # driver selector picks the later one.
     from backend.api.crud import _select_driver_for_joint as _sel
-    from backend.core.models import OverhangBinding as _OB
-    # First binding (= X) is already there; manufacture Y with later created_at.
-    y = _OB(
-        name="B2",
-        created_at=time.time() + 1.0,
-        sub_domain_a_id="sd_a",
-        sub_domain_b_id="sd_b",
-        overhang_a_id="oh_a_5p",
-        overhang_b_id="oh_b_5p",
-        bound=True,
-        target_joint_id="joint_a",
-        locked_angle_deg=15.0,
-    )
     # Patch in-memory (cross-validator forbids duplicate pair — skip cross-model
     # checks by bypassing Design construction). For test purposes, mutate
     # the existing binding's locked_angle_deg directly to simulate the later

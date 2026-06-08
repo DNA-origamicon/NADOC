@@ -229,8 +229,6 @@ def test_honeycomb_no_helix_exceeds_3_neighbours(design_18hb):
 
 def test_honeycomb_interior_helices_have_3_neighbours(design_18hb):
     """Helices fully surrounded by design cells must have exactly 3 neighbours."""
-    xy      = _xy(design_18hb)
-    cell_set = set(CELLS_18HB)
     results  = _assert_neighbour_geometry(
         design_18hb,
         HONEYCOMB_HELIX_SPACING,

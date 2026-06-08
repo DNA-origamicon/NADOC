@@ -333,7 +333,6 @@ def nuc_pos_override_from_mrdna_coarse(
     best_proj = proj[np.arange(n_dna), best_j]
 
     # bp_idx: coarse bead represents center of a 5-bp window
-    bp_per_bead = 5
     bp_idx_arr = np.zeros(n_dna, dtype=int)
     for i in range(n_dna):
         j = best_j[i]
@@ -719,7 +718,6 @@ def _build_nt_arrays(
     nt_key     : dict (h_id, bp_idx, dir_str, k) → index  (only if return_nt_key=True)
     """
     ls_map = _build_loop_skip_map(design)
-    helix_by_id = {h.id: h for h in design.helices}
 
     # Pre-compute per-helix axis geometry once.
     helix_geom: Dict[str, tuple] = {}

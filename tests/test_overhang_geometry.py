@@ -388,10 +388,8 @@ def test_patch_overhang_resizes_helix(design_native):
     ovhg_id = next(h.id for h in d8.helices if h.id not in orig_ids)
 
     # Simulate PATCH sequence → 12 nt (same as patch_overhang endpoint logic)
-    from backend.core.models import Vec3 as V3
     import numpy as _np
 
-    spec = next(o for o in d8.overhangs if o.helix_id == ovhg_id)
     new_seq = "ACGTACGTACGT"   # 12 nt
     new_length_bp = len(new_seq)
 
@@ -410,7 +408,6 @@ def test_patch_overhang_resizes_helix(design_native):
         helix.axis_start.y,
         helix.axis_start.z,
     ]) + unit * new_len_nm
-    new_end = V3(x=float(new_end_arr[0]), y=float(new_end_arr[1]), z=float(new_end_arr[2]))
 
     # Check: new axis length ≈ new_len_nm
     new_ax_len = float(_np.linalg.norm(new_end_arr - _np.array([
@@ -1140,7 +1137,6 @@ def test_shared_helix_extends_backward():
     helix_after_first = next(h for h in d1.helices if h.id not in orig_ids)
     first_bp_start = helix_after_first.bp_start
     first_axis_start_z = helix_after_first.axis_start.z
-    first_phase = helix_after_first.phase_offset
 
     # Compute nucleotide positions BEFORE the second extrusion
     from backend.core.geometry import nucleotide_positions as nuc_pos

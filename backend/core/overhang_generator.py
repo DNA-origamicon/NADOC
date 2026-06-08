@@ -31,7 +31,6 @@ def _count_occurrences(query: str, text: str) -> int:
     """Count overlapping occurrences of *query* in *text*."""
     count = 0
     start = 0
-    qlen = len(query)
     while True:
         pos = text.find(query, start)
         if pos == -1:

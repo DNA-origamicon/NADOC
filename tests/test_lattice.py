@@ -742,8 +742,6 @@ def test_resize_strand_ends_grow_helix_forward():
     # Force delta such that new_bp > helix_end_bp
     delta = (helix_end_bp - term_dom.end_bp) + 5   # 5 bp past the helix end
 
-    orig_axis_end_z = helix.axis_end.z
-
     result = resize_strand_ends(design, [{
         "strand_id": staple.id,
         "helix_id":  helix.id,

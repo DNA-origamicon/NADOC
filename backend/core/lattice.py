@@ -3965,14 +3965,12 @@ def generate_linker_topology(design: Design, conn) -> Design:  # OverhangConnect
         """
         L = linker_bp
         if side == "a":
-            target_bp = 0
             if comp_first:
                 # bridge 5' (= start_bp) at bp=0  →  FORWARD 0 → L−1
                 return Domain(helix_id=bridge_helix_id, start_bp=0, end_bp=L - 1, direction=Direction.FORWARD)
             # bridge 3' (= end_bp) at bp=0  →  REVERSE L−1 → 0
             return Domain(helix_id=bridge_helix_id, start_bp=L - 1, end_bp=0, direction=Direction.REVERSE)
         # side b
-        target_bp = L - 1
         if comp_first:
             # bridge 5' (= start_bp) at bp=L−1  →  REVERSE L−1 → 0
             return Domain(helix_id=bridge_helix_id, start_bp=L - 1, end_bp=0, direction=Direction.REVERSE)

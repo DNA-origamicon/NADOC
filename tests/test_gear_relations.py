@@ -201,8 +201,8 @@ class TestGearViaPatchJoint:
     ])
     def test_driven_follows_via_patch_joint(self, ratio, invert, angle):
         meta, _aid = _two_revolute_two_instance_assembly()
-        rel_id = _create_gear_relation(meta["joint_ab"], meta["joint_cd"],
-                                       ratio=ratio, invert=invert)
+        _create_gear_relation(meta["joint_ab"], meta["joint_cd"],
+                              ratio=ratio, invert=invert)
 
         r = client.patch(f"/api/assembly/joints/{meta['joint_ab']}", json={
             "current_value": angle,

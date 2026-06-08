@@ -51,7 +51,6 @@ def _complete_psf_from_stub(stub: str) -> str:
     n_atoms = 0
     # map 1-based serial → index (0-based)
     serial_to_idx: dict[int, int] = {}
-    in_atom = False
     atom_lines: list[str] = []
     bond_lines_raw: list[str] = []
     header_lines: list[str] = []
@@ -62,12 +61,10 @@ def _complete_psf_from_stub(stub: str) -> str:
         if "!NATOM" in line:
             m = re.search(r"(\d+)\s+!NATOM", line)
             n_atoms = int(m.group(1)) if m else 0
-            in_atom = True
             collecting = "atom"
             header_lines.append(line)
             continue
         if "!NBOND" in line:
-            in_atom = False
             collecting = "bond"
             # We'll rebuild the bonds section ourselves — skip this header
             continue

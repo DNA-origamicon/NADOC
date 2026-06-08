@@ -128,7 +128,6 @@ def _run_em_only(run_dir: Path, design: Design,
         log_txt = em_log.read_text(errors='replace')
 
         # Step count — last "Step=" or "Step " line
-        step_matches = re.findall(r'Step=\s*(\d+)|^\s*(\d+)\s+[-\d]', log_txt, re.MULTILINE)
         last_steps = re.findall(r'^\s*(\d+)\s+[-\d.e+]', log_txt, re.MULTILINE)
         if last_steps:
             steps_done = int(last_steps[-1])
@@ -140,9 +139,6 @@ def _run_em_only(run_dir: Path, design: Design,
             if 'LJ (SR)' in line and li + 1 < len(lines):
                 # Find position of "LJ (SR)" in the header and extract the
                 # corresponding column value from the next line.
-                col = line.index('LJ (SR)')
-                nums = re.findall(r'[-+]?\d+\.\d+e[+-]\d+', lines[li + 1])
-                hdr_nums = re.findall(r'[-+]?\d+\.\d+e[+-]\d+|\S+', line)
                 # Count which column index LJ (SR) is in the header
                 hdr_fields = line.split()
                 lj_col = next(
