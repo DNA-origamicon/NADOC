@@ -61,7 +61,7 @@ function makeDeps(overrides = {}) {
     instanceGizmo: { detach: vi.fn() },
     assemblyRenderer: { rebuild: vi.fn(async () => {}), rebuildLinkers: vi.fn() },
     assemblyJointRenderer: { rebuild: vi.fn() },
-    api: { skipNextResponseDelta: vi.fn(), editFeature: vi.fn(async () => {}) },
+    api: { skipNextResponseDelta: vi.fn(), editFeature: vi.fn(async () => {}), seekFeatures: vi.fn(async () => {}) },
     moveRotatePanel: { setAssemblyCtx: vi.fn() },
     mrPanel: document.getElementById('__mrPanel'),
     mrClusterSel: document.getElementById('__mrClusterSel'),
@@ -276,6 +276,32 @@ describe('initTranslateRotateTool — confirm', () => {
     expect(ctx.clusterGizmo.clearPendingTransform).toHaveBeenCalledWith('C1')
     expect(ctx.clusterGizmo.commitPendingTransforms).not.toHaveBeenCalled()
     expect(ctx.editCtx).toBe(null)
+    // Latest-op edit: no seek-back (live pose already == this op).
+    expect(ctx.deps.api.seekFeatures).not.toHaveBeenCalled()
+  })
+
+  it('cluster_op edit of an EARLIER op → editFeature + seek back to restore cursor, skips in-place reconcile', async () => {
+    const ctx = makeDeps({
+      state: { currentDesign: { cluster_transforms: [
+        { id: 'C1', pivot: [0, 0, 0], translation: [0, 0, 0], rotation: [0, 0, 0, 1], helix_ids: [7] },
+      ], cluster_joints: [] } },
+      editContext: { editingFeatureType: 'cluster_op', featureIndex: 0, clusterId: 'C1', seekRestoreCursor: -1 },
+    })
+    ctx.deps.setActive(true)
+    ctx.deps.setClusterDirty(true)
+    const t = initTranslateRotateTool(ctx.deps)
+    await t.confirm()
+    // Rewrites just this step's pose...
+    expect(ctx.deps.api.skipNextResponseDelta).toHaveBeenCalled()
+    expect(ctx.deps.api.editFeature).toHaveBeenCalledWith(0, expect.anything())
+    expect(ctx.clusterGizmo.clearPendingTransform).toHaveBeenCalledWith('C1')
+    // ...then seeks back to the latest pose (the cursor we left).
+    expect(ctx.deps.api.seekFeatures).toHaveBeenCalledWith(-1)
+    // In-place reconcile (latest-op path) is skipped — the seek re-renders.
+    expect(ctx.deps.rebakeHelixAxesForClusterDelta).not.toHaveBeenCalled()
+    expect(ctx.helixCtrl.commitClusterPositions).not.toHaveBeenCalled()
+    expect(ctx.clusterGizmo.detach).toHaveBeenCalled()
+    expect(ctx.editCtx).toBe(null)
   })
 })
 
@@ -297,6 +323,19 @@ describe('initTranslateRotateTool — cancel', () => {
     expect(ctx.clusterGizmo.discardPendingTransforms).toHaveBeenCalled()
     expect(ctx.clusterGizmo.detach).toHaveBeenCalled()
     expect(ctx.jointRenderer.rebuild).toHaveBeenCalled()
+  })
+
+  it('earlier-op edit cancelled → seeks back to the restore cursor', async () => {
+    const ctx = makeDeps({
+      state: { currentGeometry: [{}], currentHelixAxes: { a: 1 } },
+      editContext: { editingFeatureType: 'cluster_op', featureIndex: 0, clusterId: 'C1', seekRestoreCursor: -1 },
+    })
+    ctx.deps.setActive(true)
+    ctx.deps.setClusterDirty(true)
+    const t = initTranslateRotateTool(ctx.deps)
+    await t.cancel()
+    expect(ctx.deps.api.seekFeatures).toHaveBeenCalledWith(-1)
+    expect(ctx.editCtx).toBe(null)
   })
 
   it('assembly → clears pending maps + rebuilds renderers', async () => {

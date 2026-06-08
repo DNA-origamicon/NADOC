@@ -1642,14 +1642,24 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     })
   }
 
+  // Shared cluster-selection commit — used by the 3D cluster-filter click
+  // (_selectClusterV2) AND the sidebar "Movable clusters" row (exported
+  // selectCluster), so both produce the identical green-glow + 1.3× bead-scale +
+  // cluster `selectedObject` state. Re-selecting the active cluster toggles it off.
+  function _applyClusterSelection(cid, { toggle = false } = {}) {
+    if (toggle && _mode === 'cluster' && _drillClusterId === cid) { _clearAll(); return true }
+    const backboneEntries = designRenderer.getBackboneEntries()
+    _mode = 'cluster'; _strandId = null
+    _highlightCluster(cid, backboneEntries)   // restores prior selection, green glow + _drillClusterId
+    store.setState({ selectedObject: _clusterSelection(cid) })
+    return true
+  }
+
   function _selectClusterV2(nuc, hitStrandId, backboneEntries) {
     const design = store.getState().currentDesign
     const cid = _resolveClusterId(nuc, design)
     if (!cid) return false
-    _mode = 'cluster'; _strandId = hitStrandId
-    _highlightCluster(cid, backboneEntries)
-    store.setState({ selectedObject: _clusterSelection(cid) })
-    return true
+    return _applyClusterSelection(cid, { toggle: true })
   }
 
   function _selectDomainV2(hitEntry, hitStrandId, backboneEntries, coneEntries) {
@@ -3795,6 +3805,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
      *  selectedObject is set to the matching domain so the sidebar row + the
      *  properties panel reflect it. */
     selectOverhang(overhangId) { _selectOverhangDomain(overhangId) },
+
+    /** Programmatically select a cluster by ID — same green-glow + 1.3× bead-scale
+     *  + cluster `selectedObject` as clicking it in 3D at cluster filter level. Used
+     *  by the sidebar "Movable clusters" list so the two paths share one selected
+     *  state. Re-selecting the active cluster toggles it off. */
+    selectCluster(clusterId) { _applyClusterSelection(clusterId, { toggle: true }) },
 
     /** The active selectionLevel ('default'|'cluster'|'strand'|'domain'|'end'|'xover'). */
     getSelectionLevel() { return _selLevel },

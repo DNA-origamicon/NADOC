@@ -63,9 +63,9 @@ pass over GENERATED → VALIDATED happens as the user actually executes them.
 
 - Total items: **18**
 - PENDING (no manual ops yet): **14**
-- GENERATED (ready to run): **3** — MV-1, MV-2, MV-4
-- VALIDATED: **1** — MV-3 (selection-rules UX, 2026-06-07)
-- REGRESSION FOUND: **0** (MV-3's two regressions were fixed + re-validated same session)
+- GENERATED (ready to run): **2** — MV-2, MV-4
+- VALIDATED: **2** — MV-1 (cluster Move/Rotate, 2026-06-07), MV-3 (selection-rules UX, 2026-06-07)
+- REGRESSION FOUND: **0** (MV-1 + MV-3 enhancements found during validation were shipped same session)
 
 ---
 
@@ -76,7 +76,7 @@ Core editing + default-selection UX first; niche/visual last.
 
 | # | id | feature / manual operation | discharges | fixture hint | why deferred |
 |---|----|----------------------------|-----------|--------------|--------------|
-| — | **MV-1** | *(processing — see GENERATED)* design-mode cluster **Move / Rotate** tool: right-click cluster → gizmo/panel → ✓ commit | #71 #78 #79 #80 #81 | a cluster-bearing design (e.g. `Examples/26hb_platform_v3.nadoc`) | 3D pointer-pick on a cluster + gizmo-handle drag not drivable at pixel precision (LESSONS H7) |
+| — | **MV-1** | ✅ **VALIDATED 2026-06-07** (see VALIDATED) — design-mode cluster **Move / Rotate** tool: right-click cluster → gizmo/panel → ✓ commit | #71 #78 #79 #80 #81 | a cluster-bearing design (e.g. `Examples/26hb_platform_v3.nadoc`) | 3D pointer-pick on a cluster + gizmo-handle drag not drivable at pixel precision (LESSONS H7) |
 | — | **MV-2** | *(generated — see GENERATED)* **Overhang Orientation** panel: right-click a rendered overhang → Edit Orientation → step/apply/reset/auto-close; also the migrated context menu | #64, fix #7 | `Examples/NS_trans_fix.nadoc` (51 overhangs) ✓ + `workspace/OH6hb_test.nadoc` (2) ✓ | WebGL raycast on 1 of N overhang beads not drivable |
 | — | **MV-3** | ✅ **VALIDATED 2026-06-07** (see VALIDATED) — **selection-rules UX** (drill levels, crossover tube, yellow hover+snap, Ctrl+click, cluster Tab removal) | fixes #10 #11 #12 #14 #15 | `Examples/6hb_test.nadoc` ✓ + `Examples/2hb_xover_val.nadoc` ✓ | — |
 | — | **MV-4** | *(generated — see GENERATED)* Assembly **multi-select purple union BoxHelper**: Ctrl-lasso ≥2 instances → purple box around the union; drops below 2 → clears | #34 | `workspace/Belt_test1.nass` (parts+groups) or any ≥2-part `.nass` | needs a built ≥2-part assembly + Ctrl-lasso multi-select |
@@ -412,6 +412,38 @@ Verified counts (probed from the files):
 ---
 
 ## VALIDATED (user-confirmed pass)
+
+### MV-1 — Design-mode cluster Move / Rotate tool ✅ VALIDATED 2026-06-07
+Discharges extractions #71 #78 #79 #80 #81 (the LESSONS H7 "cluster-gizmo 3D-drag
+commit not hand-driven" caveat for the whole design-mode Translate/Rotate band).
+Confirmed live by the user across all MAIN + EDGE cases in the GENERATED block:
+activate via right-click, gizmo translate/rotate, ✓ commit (drag and panel-input),
+Escape-reverts, pivot selection, re-edit-in-place, stale-op guard, and the
+Three-Layer spot-check.
+
+Two UX gaps were found *during* validation and shipped the same session:
+
+1. **Unified cluster selection** — clicking a cluster with the cluster selection
+   filter active and clicking its row in the **Dynamics → Movable clusters** list now
+   drive ONE selected-cluster state: same green glow (`0x3fb950`) + 1.3× bead scale +
+   cluster `selectedObject` + sidebar row highlight. selection_manager owns the commit
+   (`_applyClusterSelection` + exported `selectCluster`); a thin main.js subscriber
+   mirrors the cluster `selectedObject` onto `activeClusterId`. The blue
+   `clusterGlowLayer` is now reserved for the Move/Rotate tool's active cluster.
+2. **Earlier Move/Rotate ops are independently editable** — the old "Edit blocked: a
+   later move/rotate exists" guard (frontend toast + backend 409) was removed. Each
+   `cluster_op` stores the cluster's ABSOLUTE pose after that step and the live pose is
+   the LAST op for that cluster, so editing an earlier op (A1→A2) rewrites only that
+   step's seek/scrub frame while the latest op keeps defining the final pose (B1).
+   Editing an earlier op seeks the feature log to it (shows that step's pose); commit
+   and cancel seek back to the latest pose. Backend: `_edit_cluster_op_feature`
+   recomputes the live transform from the last op. (Use case: tweaking one cluster
+   position in a scrubbed series without redoing the rest.)
+
+Backend `just test` 1747 passed (2 new cluster_op-edit pins); frontend
+`just test-frontend` 1090 passed (2 new tool pins + the selection-unify wiring);
+`just smoke` 23/23. Live-exercised: sidebar↔3D selection parity, and edit-earlier-op
+→ seek-to-step → cancel → seek-back-to-latest, all zero console errors.
 
 ### MV-3 — Drill-v2 selection, part-3D editor ✅ VALIDATED 2026-06-07
 Discharges fixes #10 #11 #12 #14 #15. Confirmed live by the user across an extended

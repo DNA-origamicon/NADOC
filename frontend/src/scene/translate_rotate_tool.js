@@ -266,12 +266,23 @@ export function initTranslateRotateTool(deps) {
     // calling _applyResponseDelta.
     const editCtx = getEditContext()
     if (getClusterDirty() && editCtx?.editingFeatureType === 'cluster_op') {
+      // null = editing the LATEST op (in-place path); a number = editing an
+      // EARLIER op, restore the cursor to this position (the latest pose) after.
+      const restoreCursor = editCtx.seekRestoreCursor ?? null
       setEditContext(null)
       _showProgress('Applying Change', 'Updating transformed geometry…', { indeterminate: true })
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
       try {
         const pending = clusterGizmo.getPendingTransform(editCtx.clusterId)
-        if (pending) {
+        if (pending && restoreCursor !== null) {
+          // Earlier-op edit: rewrite just this step's stored pose, then (after
+          // the gizmo tears down in `finally`) seek back to the latest pose. The
+          // seek — same path as the feature-log slider — re-derives + renders the
+          // final state, so the in-place post-processing below is skipped.
+          api.skipNextResponseDelta()
+          await api.editFeature(editCtx.featureIndex, pending)
+          clusterGizmo.clearPendingTransform(editCtx.clusterId)
+        } else if (pending) {
           // Snapshot pre-edit transform so we can rebake helix axes after
           // commit (matches the standard commit path).
           const preDesign = store.getState().currentDesign
@@ -318,6 +329,9 @@ export function initTranslateRotateTool(deps) {
         _removeToolPickListeners()
         document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       }
+      // Earlier-op edit: now that the gizmo is detached, seek back to the cursor
+      // we left (the latest pose) so the scene returns from this step to "now".
+      if (restoreCursor !== null) await api.seekFeatures(restoreCursor)
       return
     }
 
@@ -404,8 +418,13 @@ export function initTranslateRotateTool(deps) {
     _confirmBtn.style.display = 'none'
     if (_mrPanel) _mrPanel.style.display = 'none'
     // Drop any cluster_op edit context so the next gizmo session takes the
-    // standard "append a new cluster_op" path.
-    if (getEditContext()?.editingFeatureType === 'cluster_op') setEditContext(null)
+    // standard "append a new cluster_op" path. Capture the earlier-op seek-back
+    // cursor first (null = latest-op edit / no seek to undo).
+    const _editCtx = getEditContext()
+    const cancelRestoreCursor = _editCtx?.editingFeatureType === 'cluster_op'
+      ? (_editCtx.seekRestoreCursor ?? null)
+      : null
+    if (_editCtx?.editingFeatureType === 'cluster_op') setEditContext(null)
 
     if (store.getState().assemblyActive) {
       instanceGizmo.detach()
@@ -439,6 +458,9 @@ export function initTranslateRotateTool(deps) {
         _hideProgress()
       }
     }
+    // Earlier-op edit cancelled: the log entry is untouched; seek back to the
+    // cursor we left so the scene returns from this step to the latest pose.
+    if (cancelRestoreCursor !== null) await api.seekFeatures(cancelRestoreCursor)
   }
 
   _confirmBtn.addEventListener('click', _confirmTranslateRotateTool)

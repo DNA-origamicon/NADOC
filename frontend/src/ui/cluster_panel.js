@@ -119,7 +119,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
       row.style.cssText = [
         'display:flex;align-items:center;gap:6px;padding:5px 6px',
         'border-radius:4px;cursor:pointer',
-        `background:${isActive ? '#1e3a5f' : 'transparent'}`,
+        `background:${isActive ? '#1c3a2a' : 'transparent'}`,
         'transition:background 0.1s',
       ].join(';')
 
@@ -131,14 +131,14 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
       })
       row.addEventListener('mouseleave', () => {
         row.style.background = cluster.id === store.getState().activeClusterId
-          ? '#1e3a5f' : 'transparent'
+          ? '#1c3a2a' : 'transparent'
       })
 
-      // Gizmo indicator dot
+      // Selected-cluster indicator dot — green, matching the 3D selection glow.
       const dot = document.createElement('span')
       dot.style.cssText = `
         width:8px;height:8px;border-radius:50%;flex-shrink:0;
-        background:${isActive ? '#58a6ff' : '#3a4a5a'};
+        background:${isActive ? '#3fb950' : '#3a4a5a'};
         transition:background 0.15s;
       `
       dot.title = isActive ? 'Selected — click to deselect' : 'Click to select'

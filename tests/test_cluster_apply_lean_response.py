@@ -331,3 +331,71 @@ def test_seek_topology_change_embeds_full_geometry(cluster_id):
     any_dir   = next(iter(any_helix.values()))
     assert "bp" in any_dir and "bb" in any_dir
     assert len(any_dir["bp"]) == len(any_dir["bb"])
+
+
+# ── Editing an EARLIER cluster_op preserves the latest pose (MV-1 follow-on) ───
+#
+# Each cluster_op stores the cluster's absolute pose AFTER that step; the live
+# transform is the LAST op for that cluster. So editing op0 (A1→A2) while op1
+# (B1) exists must rewrite ONLY op0's stored pose — the final pose stays B1.
+# The old endpoint refused this with a 409; the guard was removed.
+
+def _commit_cluster(cid, translation):
+    r = client.patch(
+        f"/api/design/cluster/{cid}",
+        json={
+            "translation": translation,
+            "rotation":    [0.0, 0.0, 0.0, 1.0],
+            "pivot":       [0.0, 0.0, 0.0],
+            "commit": True, "log": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    return r
+
+
+def test_edit_earlier_cluster_op_preserves_latest_pose(cluster_id):
+    _commit_cluster(cluster_id, [1.0, 0.0, 0.0])   # op0 = A1
+    _commit_cluster(cluster_id, [5.0, 0.0, 0.0])   # op1 = B1 (latest)
+
+    # Edit the EARLIER op (index 0) A1 -> A2. No 409.
+    r = client.post("/api/design/features/0/edit", json={"params": {
+        "translation": [9.0, 0.0, 0.0],
+        "rotation":    [0.0, 0.0, 0.0, 1.0],
+        "pivot":       [0.0, 0.0, 0.0],
+    }})
+    assert r.status_code == 200, r.text
+
+    design = design_state.get_or_404()
+    log = design.feature_log
+    # op0's stored pose is rewritten to A2; op1 (B1) is untouched.
+    assert log[0].translation == pytest.approx([9.0, 0.0, 0.0])
+    assert log[1].translation == pytest.approx([5.0, 0.0, 0.0])
+    # Live pose stays the LATEST op (B1), not the edited earlier op.
+    ct = next(c for c in design.cluster_transforms if c.id == cluster_id)
+    assert ct.translation == pytest.approx([5.0, 0.0, 0.0])
+
+    # Seeking to op0 now shows the edited A2 pose (the rewritten scrub frame).
+    r = client.post("/api/design/features/seek", json={"position": 0})
+    assert r.status_code == 200, r.text
+    design = design_state.get_or_404()
+    ct = next(c for c in design.cluster_transforms if c.id == cluster_id)
+    assert ct.translation == pytest.approx([9.0, 0.0, 0.0])
+
+
+def test_edit_latest_cluster_op_still_updates_live_pose(cluster_id):
+    _commit_cluster(cluster_id, [1.0, 0.0, 0.0])   # op0
+    _commit_cluster(cluster_id, [5.0, 0.0, 0.0])   # op1 (latest)
+
+    # Editing the LATEST op updates the live pose (unchanged behavior).
+    r = client.post("/api/design/features/1/edit", json={"params": {
+        "translation": [7.0, 0.0, 0.0],
+        "rotation":    [0.0, 0.0, 0.0, 1.0],
+        "pivot":       [0.0, 0.0, 0.0],
+    }})
+    assert r.status_code == 200, r.text
+    design = design_state.get_or_404()
+    ct = next(c for c in design.cluster_transforms if c.id == cluster_id)
+    assert ct.translation == pytest.approx([7.0, 0.0, 0.0])
+    assert design.feature_log[1].translation == pytest.approx([7.0, 0.0, 0.0])
+    assert design.feature_log[0].translation == pytest.approx([1.0, 0.0, 0.0])

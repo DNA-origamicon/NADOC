@@ -11708,42 +11708,25 @@ def _edit_cluster_op_feature(
     """Edit branch for ``edit_feature`` when the target is a ClusterOpLogEntry.
 
     ``body.params`` accepts ``translation``, ``rotation``, ``pivot`` — the
-    new ABSOLUTE transform for ``entry.cluster_id``. Updates both the
-    ClusterTransform record in ``design.cluster_transforms`` AND the log
-    entry's stored fields, so the seek-replay reproduces the new transform.
+    new ABSOLUTE transform stored on THIS op. Updates the log entry's fields
+    (so seek-replay reproduces the new pose at that step) and recomputes the
+    live ClusterTransform in ``design.cluster_transforms``.
 
-    Editing is only meaningful for the LAST cluster_op of a given cluster
-    (otherwise the cumulative effect of later cluster_ops would be ambiguous).
-    The endpoint enforces this — earlier entries return 409.
+    ANY cluster_op of a given cluster is editable, not just the latest. Each
+    cluster_op records the cluster's absolute pose AFTER that step, and the
+    cluster's live transform is the LAST op for that cluster — so editing an
+    earlier op only rewrites that step's seek/scrub frame, while the latest op
+    keeps defining the final pose. (manual_validation_debt MV-1 follow-on.)
     """
     p = body.params or {}
     for f in ('translation', 'rotation', 'pivot'):
         if f not in p:
             raise HTTPException(400, detail=f"cluster_op edit requires '{f}'.")
 
-    later = [
-        e for e in log[index + 1:]
-        if e.feature_type == 'cluster_op' and e.cluster_id == entry.cluster_id
-    ]
-    if later:
-        raise HTTPException(
-            409,
-            detail=(
-                f"Cannot edit cluster_op {index}: {len(later)} later cluster_op "
-                f"entries exist for cluster {entry.cluster_id!r}. Edit the latest "
-                "one instead."
-            ),
-        )
-
     cts = list(design.cluster_transforms)
     ct_idx = next((i for i, c in enumerate(cts) if c.id == entry.cluster_id), None)
     if ct_idx is None:
         raise HTTPException(404, detail=f"Cluster {entry.cluster_id!r} no longer exists.")
-    cts[ct_idx] = cts[ct_idx].model_copy(update={
-        'translation': list(p['translation']),
-        'rotation':    list(p['rotation']),
-        'pivot':       list(p['pivot']),
-    })
 
     new_log = list(log)
     new_log[index] = entry.model_copy(update={
@@ -11751,6 +11734,21 @@ def _edit_cluster_op_feature(
         'rotation':    list(p['rotation']),
         'pivot':       list(p['pivot']),
     })
+
+    # Live pose = the LAST cluster_op for this cluster across the full (edited)
+    # log. That's this op when it's the latest, else a later op that must keep
+    # winning — so editing an earlier op leaves the final pose untouched.
+    last_op = next(
+        (e for e in reversed(new_log)
+         if e.feature_type == 'cluster_op' and e.cluster_id == entry.cluster_id),
+        None,
+    )
+    if last_op is not None:
+        cts[ct_idx] = cts[ct_idx].model_copy(update={
+            'translation': list(last_op.translation),
+            'rotation':    list(last_op.rotation),
+            'pivot':       list(last_op.pivot),
+        })
 
     from backend.core.validator import validate_design as _validate_design
     updated = design.copy_with(cluster_transforms=cts, feature_log=new_log)

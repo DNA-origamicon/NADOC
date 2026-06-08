@@ -1409,15 +1409,19 @@ async function main() {
     if (entry.feature_type === 'cluster_op') {
       const clusterId = entry.cluster_id
       if (!clusterId) return
-      // Refuse if a later cluster_op exists for this cluster — editing an
-      // earlier one would have ambiguous cumulative semantics. The backend
-      // also enforces this on edit_feature.
+      // Editing an EARLIER op (a later cluster_op for this cluster exists): seek
+      // the feature log to this op first so the cluster shows THIS step's pose
+      // while you adjust it; commit/cancel seeks back to where the cursor was
+      // (the latest pose). Only this step's pose is rewritten — the latest op
+      // keeps defining the final pose. Editing the latest op needs no seek (the
+      // live pose already == that op), preserving the in-place edit path.
       const log = store.getState().currentDesign?.feature_log ?? []
       const hasLater = log.slice(featureIndex + 1).some(e =>
         e.feature_type === 'cluster_op' && e.cluster_id === clusterId)
+      let seekRestoreCursor = null
       if (hasLater) {
-        showToast(`Edit blocked: a later move/rotate exists for this cluster. Edit the latest one.`, 5000)
-        return
+        seekRestoreCursor = store.getState().currentDesign?.feature_log_cursor ?? -1
+        await api.seekFeatures(featureIndex)
       }
       store.setState({ activeClusterId: clusterId })
       await _activateTranslateRotateTool()
@@ -1428,6 +1432,7 @@ async function main() {
         editingFeatureType: 'cluster_op',
         featureIndex,
         clusterId,
+        seekRestoreCursor,
       }
       return
     }
@@ -5421,9 +5426,11 @@ async function main() {
     },
     onClusterClick: async (clusterId) => {
       if (!_translateRotateActive) {
-        // Simple highlight toggle — no gizmo, no API calls.
-        const current = store.getState().activeClusterId
-        store.setState({ activeClusterId: current === clusterId ? null : clusterId })
+        // Unify with the 3D cluster-filter click: same green glow + bead scale +
+        // cluster selectedObject. The selectedObject→activeClusterId sync below
+        // mirrors it onto activeClusterId, which lights this sidebar row. Re-click
+        // toggles off. No gizmo, no API calls.
+        selectionManager.selectCluster(clusterId)
         return
       }
       // Tool active: switch gizmo to the clicked cluster.
@@ -5948,17 +5955,38 @@ async function main() {
     }
   })
 
-  // Cluster highlight — cyan glow on the active cluster's backbone beads.
-  // Re-applies after every geometry rebuild so glow entries stay in sync.
+  // Unify sidebar + 3D cluster selection into ONE state. selection_manager sets a
+  // cluster `selectedObject` (from either the 3D cluster-filter click or the
+  // sidebar row via selectCluster) with the green glow + bead scale; here we mirror
+  // it onto `activeClusterId` so the sidebar "Movable clusters" row highlights too.
+  // Non-tool only — the Move/Rotate tool owns activeClusterId via the gizmo.
   store.subscribe((newState, prevState) => {
+    if (newState.translateRotateActive) return
+    if (newState.selectedObject === prevState.selectedObject) return
+    const cid = newState.selectedObject?.type === 'cluster'
+      ? newState.selectedObject.data?.cluster_id ?? null
+      : null
+    if (newState.activeClusterId !== cid) store.setState({ activeClusterId: cid })
+  })
+
+  // Move/Rotate tool: the blue clusterGlowLayer marks the gizmo's active cluster.
+  // (Plain design-mode cluster SELECTION now glows green via selection_manager —
+  // see the selectedObject→activeClusterId sync above — so this layer is reserved
+  // for the tool to avoid a double halo.) Re-applies after geometry rebuilds.
+  store.subscribe((newState, prevState) => {
+    if (!newState.translateRotateActive) {
+      if (prevState.translateRotateActive) clusterGlowLayer.clear()
+      return
+    }
     const activeId = newState.activeClusterId
     if (!activeId) {
       if (prevState.activeClusterId) clusterGlowLayer.clear()
       return
     }
-    // Update when active cluster changes or geometry rebuilds (new bead entries).
+    // Update when active cluster changes, geometry rebuilds, or the tool just turned on.
     if (activeId === prevState.activeClusterId &&
-        newState.currentGeometry === prevState.currentGeometry) return
+        newState.currentGeometry === prevState.currentGeometry &&
+        prevState.translateRotateActive) return
     const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === activeId)
     if (!cluster) { clusterGlowLayer.clear(); return }
     const entries = _clusterBackboneEntries(cluster, newState.currentDesign)
