@@ -3481,17 +3481,28 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       ? (backboneEntries.find(b => b.instMesh === beadHits[0].object && b.id === beadHits[0].instanceId) ?? null)
       : null
 
+    // Whether the frontmost hit is a bead (vs a terminal cone sitting behind it).
+    const _beadFrontmost = hitBead && (!coneHits.length || beadHits[0].distance <= coneHits[0].distance)
+
     // Multi-selection right-click — dispatch to the appropriate menu.
     if (_multiLoopSkipEntries.length > 0) {
       _showMultiLoopSkipMenu(e.clientX, e.clientY)
       return
     }
-    // Multi-overhang divert — UNLESS the click hits a strand cone, in which
-    // case the strand menu wins (and gets an "Open Overhangs Manager" entry
-    // injected via _ovhgMultiIds below).
-    if (_multiOverhangIds.length > 0 && onOverhangRightClick && !hitCone) {
-      onOverhangRightClick(_multiOverhangIds, e.clientX, e.clientY)
-      return
+    // Multi-overhang divert — when an overhang multi-selection is active, a
+    // right-click ON an overhang (its terminal cone OR its frontmost bead) acts on
+    // the WHOLE selected set, so the menu's single-vs-multi gating ("Set Label…"
+    // omitted) and Edit Orientation don't depend on whether the cursor lands on the
+    // bead or the cone. Only a right-click on a NON-overhang strand cone falls
+    // through to the strand menu (which injects "Open Overhangs Manager" via
+    // _ovhgMultiIds below).
+    if (_multiOverhangIds.length > 0 && onOverhangRightClick) {
+      const _coneOvhgId = hitCone ? (hitCone.fromNuc?.overhang_id ?? hitCone.toNuc?.overhang_id ?? null) : null
+      const _beadOvhgId = (_beadFrontmost && hitBead?.nuc?.overhang_id != null) ? hitBead.nuc.overhang_id : null
+      if (!hitCone || _coneOvhgId != null || _beadOvhgId != null) {
+        onOverhangRightClick(_multiOverhangIds, e.clientX, e.clientY)
+        return
+      }
     }
     if (_multiDomainIds.length > 0) {
       // Capture refs BEFORE any teardown; the menu's apply() rebuilds the scene
@@ -3516,9 +3527,17 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // flexible tether). Fires when the click lands directly on an unpaired bead
     // that is frontmost over any terminal cone, and the bead's strand isn't a
     // virtual linker. Falls through to the existing flows otherwise.
-    const _beadFrontmost = hitBead && (!coneHits.length || beadHits[0].distance <= coneHits[0].distance)
     if (_beadFrontmost && hitBead.nuc?.is_unpaired && onFlexibleSegmentRightClick
         && !linkerConnectionForStrandId(hitBead.nuc.strand_id)) {
+      // An overhang's free tip is also "unpaired", but marking it flexible is
+      // inert (a flexible segment only forms when an unpaired run bridges two
+      // clusters — a dangling overhang never does). Route an overhang-bead
+      // right-click to the overhang orientation menu instead of the short
+      // flexible-segment menu, matching the cone-on-overhang dispatch below.
+      if (hitBead.nuc.overhang_id != null && onOverhangRightClick) {
+        onOverhangRightClick([hitBead.nuc.overhang_id], e.clientX, e.clientY)
+        return
+      }
       _showFlexibleSegmentMenu(e.clientX, e.clientY, hitBead.nuc, onFlexibleSegmentRightClick)
       return
     }

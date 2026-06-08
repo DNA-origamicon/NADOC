@@ -112,12 +112,10 @@ from backend.core.deformation import (
     helices_crossing_planes,
 )
 from backend.core.models import (
-    AnimationKeyframe,
     BendParams,
     ClusterJoint,
     ClusterOpLogEntry,
     Crossover,
-    DesignAnimation,
     DeformationLogEntry,
     DeformationOp,
     Design,
@@ -135,12 +133,10 @@ from backend.core.models import (
     RepresentationOverride,
     RepresentationSegment,
     Strand,
-    StrandExtension,
     StrandType,
     TubeAssignment,
     WellAssignment,
     TwistParams,
-    VALID_MODIFICATIONS,
     Vec3,
 )
 from backend.core.constants import STAPLE_PALETTE
@@ -1657,34 +1653,7 @@ class StrandRequest(BaseModel):
     sequence: Optional[str] = None
 
 
-class StrandExtensionRequest(BaseModel):
-    strand_id: str
-    end: Literal["five_prime", "three_prime"]
-    sequence: Optional[str] = None
-    modification: Optional[str] = None
-    label: Optional[str] = None
-
-
-class StrandExtensionUpdateRequest(BaseModel):
-    sequence: Optional[str] = None
-    modification: Optional[str] = None
-    label: Optional[str] = None
-
-
-class StrandExtensionBatchItem(BaseModel):
-    strand_id: str
-    end: Literal["five_prime", "three_prime"]
-    sequence: Optional[str] = None
-    modification: Optional[str] = None
-    label: Optional[str] = None
-
-
-class StrandExtensionBatchRequest(BaseModel):
-    items: List[StrandExtensionBatchItem]
-
-
-class StrandExtensionBatchDeleteRequest(BaseModel):
-    ext_ids: List[str]
+# StrandExtension* request models moved to backend/api/routes_extensions.py.
 
 
 class PlateWellItem(BaseModel):
@@ -2344,10 +2313,15 @@ def _design_replace_response(
         # Tag with the rejecting field so the frontend perf log shows
         # why positions_only didn't fire (e.g. path:full_geometry_strands).
         trace._steps.append((f"path:full_geometry_{diff_field}", 0.0))
-    if diff_field == "flexible_segment_marks":
-        # The compact deformed arrays omit per-nuc metadata, but the per-bead
-        # `is_flexible_segment` flag MUST refresh so beads re-classify (rigid vs.
-        # bowed arc) on undo/redo/seek. Ship the per-nuc form so it's included.
+    if diff_field == "flexible_segment_marks" or design.flexible_connections:
+        # The compact deformed arrays omit per-nuc metadata (see
+        # _compact_geometry_from_nucleotides — no `is_flexible_segment` key), but
+        # that per-bead flag MUST ride along so beads re-classify (rigid vs. bowed
+        # arc) on undo/redo/seek. Ship the per-nuc form whenever the diff changed
+        # the marks OR the target design currently has flexible connections — the
+        # latter covers ANY other topology-changing replace (e.g. adding/removing
+        # an OH-binder strand, whose undo would otherwise drop the flag and
+        # silently re-rigidify a flexible scaffold run).
         return _design_response_with_geometry(
             design, report, embed_straight=True, compact_deformed=False,
         )
@@ -13137,39 +13111,12 @@ def deformation_debug() -> dict:
 
 
 # ── Animations ───────────────────────────────────────────────────────────────
-
-
-class CreateAnimationBody(BaseModel):
-    name: str = "Animation"
-    fps: int = 30
-    loop: bool = False
-
-
-class PatchAnimationBody(BaseModel):
-    name: Optional[str] = None
-    fps: Optional[int] = None
-    loop: Optional[bool] = None
-
-
-class CreateKeyframeBody(BaseModel):
-    name: str = ""
-    camera_pose_id: Optional[str] = None
-    feature_log_index: Optional[int] = None
-    hold_duration_s: float = 1.0
-    transition_duration_s: float = 0.5
-    easing: str = "ease-in-out"
-    spin_axis: Optional[str] = None
-    spin_rotations: float = 0.0
-    spin_invert: bool = False
-    text: str = ""
-    text_font_family: str = "sans-serif"
-    text_font_size_px: int = 24
-    text_color: str = "#ffffff"
-    text_bold: bool = False
-    text_italic: bool = False
-    text_align: str = "center"
-    binding_states: dict[str, float] = Field(default_factory=dict)  # binding id → φ
-    strand_anim_phi: dict[str, float] = Field(default_factory=dict)  # overhang id → φ
+# Animation + keyframe route handlers were extracted to ``routes_animations.py``
+# (same pattern as 13-B camera poses / 10-F loop-skip extraction).
+#
+# ``BindingDisplayPoseBody`` is retained here, NOT in the animations router,
+# because it is the request model for two non-animation handlers that stay in
+# this file: ``patch_connection_display_pose`` and ``patch_binding_display_pose``.
 
 
 class BindingDisplayPoseBody(BaseModel):
@@ -13180,199 +13127,6 @@ class BindingDisplayPoseBody(BaseModel):
     """
     unbound_angle_deg: Optional[float] = None
     bound_angle_deg: Optional[float] = None
-
-
-class PatchKeyframeBody(BaseModel):
-    name: Optional[str] = None
-    camera_pose_id: Optional[str] = None
-    feature_log_index: Optional[int] = None
-    hold_duration_s: Optional[float] = None
-    transition_duration_s: Optional[float] = None
-    easing: Optional[str] = None
-    spin_axis: Optional[str] = None
-    spin_rotations: Optional[float] = None
-    spin_invert: Optional[bool] = None
-    text: Optional[str] = None
-    text_font_family: Optional[str] = None
-    text_font_size_px: Optional[int] = None
-    text_color: Optional[str] = None
-    text_bold: Optional[bool] = None
-    text_italic: Optional[bool] = None
-    text_align: Optional[str] = None
-    binding_states: Optional[dict[str, float]] = None  # binding id → φ
-    strand_anim_phi: Optional[dict[str, float]] = None  # overhang id → φ
-
-
-class ReorderKeyframesBody(BaseModel):
-    ordered_ids: List[str]
-
-
-@router.post("/design/animations", status_code=200)
-def create_animation(body: CreateAnimationBody) -> dict:
-    """Create a new named animation. Pushes to the undo stack."""
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    anim = DesignAnimation(name=body.name, fps=body.fps, loop=body.loop)
-    updated = design.model_copy(
-        update={"animations": list(design.animations) + [anim]}, deep=True
-    )
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-@router.patch("/design/animations/{anim_id}", status_code=200)
-def update_animation(anim_id: str, body: PatchAnimationBody) -> dict:
-    """Update animation metadata (name/fps/loop). Pushes to undo."""
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    anims = list(design.animations)
-    idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
-    if idx is None:
-        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-
-    patch = body.model_dump(exclude_none=True)
-    anims[idx] = anims[idx].model_copy(update=patch)
-    updated = design.model_copy(update={"animations": anims}, deep=True)
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-@router.delete("/design/animations/{anim_id}", status_code=200)
-def delete_animation(anim_id: str) -> dict:
-    """Remove an animation. Pushes to undo."""
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    anims = [a for a in design.animations if a.id != anim_id]
-    if len(anims) == len(design.animations):
-        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-
-    updated = design.model_copy(update={"animations": anims}, deep=True)
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-@router.post("/design/animations/{anim_id}/keyframes", status_code=200)
-def create_keyframe(anim_id: str, body: CreateKeyframeBody) -> dict:
-    """Append a keyframe to an animation. Pushes to undo."""
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    anims = list(design.animations)
-    idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
-    if idx is None:
-        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-
-    kf = AnimationKeyframe(
-        name=body.name,
-        camera_pose_id=body.camera_pose_id,
-        feature_log_index=body.feature_log_index,
-        hold_duration_s=body.hold_duration_s,
-        transition_duration_s=body.transition_duration_s,
-        easing=body.easing,
-        spin_axis=body.spin_axis,
-        spin_rotations=body.spin_rotations,
-        spin_invert=body.spin_invert,
-        text=body.text,
-        text_font_family=body.text_font_family,
-        text_font_size_px=body.text_font_size_px,
-        text_color=body.text_color,
-        text_bold=body.text_bold,
-        text_italic=body.text_italic,
-        text_align=body.text_align,
-        binding_states=body.binding_states,
-        strand_anim_phi=body.strand_anim_phi,
-    )
-    updated_anim = anims[idx].model_copy(
-        update={"keyframes": list(anims[idx].keyframes) + [kf]}, deep=True
-    )
-    anims[idx] = updated_anim
-    updated = design.model_copy(update={"animations": anims}, deep=True)
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-@router.patch("/design/animations/{anim_id}/keyframes/{kf_id}", status_code=200)
-def update_keyframe(anim_id: str, kf_id: str, body: PatchKeyframeBody) -> dict:
-    """Update a keyframe's properties (silent — no undo push)."""
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    anims = list(design.animations)
-    anim_idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
-    if anim_idx is None:
-        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-
-    kfs = list(anims[anim_idx].keyframes)
-    kf_idx = next((i for i, k in enumerate(kfs) if k.id == kf_id), None)
-    if kf_idx is None:
-        raise HTTPException(404, detail=f"Keyframe {kf_id!r} not found.")
-
-    # Use model_fields_set so explicit nulls (e.g. spin_axis=null when clearing
-    # spin) propagate. Skipping None values would make the field un-clearable
-    # via the API once set — same convention as update_assembly_keyframe.
-    patch = body.model_dump(include=body.model_fields_set)
-    kfs[kf_idx] = kfs[kf_idx].model_copy(update=patch)
-    anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": kfs}, deep=True)
-    updated = design.model_copy(update={"animations": anims}, deep=True)
-    design_state.set_design_silent(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-@router.delete("/design/animations/{anim_id}/keyframes/{kf_id}", status_code=200)
-def delete_keyframe(anim_id: str, kf_id: str) -> dict:
-    """Remove a keyframe from an animation. Pushes to undo."""
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    anims = list(design.animations)
-    anim_idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
-    if anim_idx is None:
-        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-
-    kfs = [k for k in anims[anim_idx].keyframes if k.id != kf_id]
-    if len(kfs) == len(anims[anim_idx].keyframes):
-        raise HTTPException(404, detail=f"Keyframe {kf_id!r} not found.")
-
-    anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": kfs}, deep=True)
-    updated = design.model_copy(update={"animations": anims}, deep=True)
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
-
-
-@router.put("/design/animations/{anim_id}/keyframes/reorder", status_code=200)
-def reorder_keyframes(anim_id: str, body: ReorderKeyframesBody) -> dict:
-    """Reorder keyframes within an animation. Pushes to undo."""
-    from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    anims = list(design.animations)
-    anim_idx = next((i for i, a in enumerate(anims) if a.id == anim_id), None)
-    if anim_idx is None:
-        raise HTTPException(404, detail=f"Animation {anim_id!r} not found.")
-
-    kf_map = {k.id: k for k in anims[anim_idx].keyframes}
-    missing = [kid for kid in body.ordered_ids if kid not in kf_map]
-    if missing:
-        raise HTTPException(400, detail=f"Unknown keyframe IDs: {missing}")
-
-    reordered = [kf_map[kid] for kid in body.ordered_ids]
-    listed = set(body.ordered_ids)
-    reordered += [k for k in anims[anim_idx].keyframes if k.id not in listed]
-
-    anims[anim_idx] = anims[anim_idx].model_copy(update={"keyframes": reordered}, deep=True)
-    updated = design.model_copy(update={"animations": anims}, deep=True)
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
 
 
 # ── Cluster rigid transforms ──────────────────────────────────────────────────
@@ -14170,84 +13924,8 @@ def apply_loop_skips_from_deformations() -> dict:
 
 
 
-# ── Strand extensions ─────────────────────────────────────────────────────────
-# NOTE: batch endpoints (/design/extensions/batch) MUST be registered before the
-# parameterised single-item endpoints (/design/extensions/{ext_id}) so that
-# FastAPI/Starlette does not swallow the literal segment "batch" as an ext_id.
-
-
-_EXT_SEQ_RE = __import__("re").compile(r"^[ACGTNacgtn]+$")
-
-
-@router.post("/design/extensions/batch", status_code=200)
-def upsert_strand_extensions_batch(body: StrandExtensionBatchRequest) -> dict:
-    """Upsert (create or update) multiple strand extensions in one operation.
-
-    Each item is matched by (strand_id, end): if an extension already exists for
-    that terminus it is updated in-place; otherwise a new one is appended.
-    All mutations happen inside a single mutate_and_validate call.
-    """
-    import re as _re
-
-    design = design_state.get_or_404()
-    strand_map = {s.id: s for s in design.strands}
-
-    # Validate all items before mutating anything.
-    for item in body.items:
-        strand = strand_map.get(item.strand_id)
-        if strand is None:
-            raise HTTPException(404, detail=f"Strand {item.strand_id!r} not found.")
-        if item.sequence is None and item.modification is None:
-            raise HTTPException(400, detail=f"Strand {item.strand_id!r}: at least one of sequence or modification must be provided.")
-        if item.sequence and not _re.match(r"^[ACGTNacgtn]+$", item.sequence):
-            raise HTTPException(400, detail=f"Strand {item.strand_id!r}: sequence must contain only ACGTN characters.")
-        if item.modification and item.modification not in VALID_MODIFICATIONS:
-            raise HTTPException(400, detail=f"Unknown modification {item.modification!r}. Valid: {sorted(VALID_MODIFICATIONS)}")
-
-    def _apply(d: Design) -> None:
-        # Build a mutable index: (strand_id, end) → list position
-        ext_index: dict[tuple[str, str], int] = {
-            (e.strand_id, e.end): i for i, e in enumerate(d.extensions)
-        }
-        for item in body.items:
-            seq = item.sequence.upper() if item.sequence else None
-            key = (item.strand_id, item.end)
-            if key in ext_index:
-                i = ext_index[key]
-                d.extensions[i] = d.extensions[i].model_copy(update={
-                    "sequence":     seq,
-                    "modification": item.modification,
-                    "label":        item.label,
-                })
-            else:
-                new_ext = StrandExtension(
-                    strand_id=item.strand_id,
-                    end=item.end,
-                    sequence=seq,
-                    modification=item.modification,
-                    label=item.label,
-                )
-                ext_index[key] = len(d.extensions)
-                d.extensions.append(new_ext)
-
-    design, report = design_state.mutate_with_reconcile(_apply)
-    return _design_response(design, report)
-
-
-@router.delete("/design/extensions/batch", status_code=200)
-def delete_strand_extensions_batch(body: StrandExtensionBatchDeleteRequest) -> dict:
-    """Delete multiple strand extensions by ID in one operation."""
-    design = design_state.get_or_404()
-    id_set = set(body.ext_ids)
-    missing = id_set - {e.id for e in design.extensions}
-    if missing:
-        raise HTTPException(404, detail=f"Extension ID(s) not found: {sorted(missing)}")
-
-    def _apply(d: Design) -> None:
-        d.extensions = [e for e in d.extensions if e.id not in id_set]
-
-    design, report = design_state.mutate_with_reconcile(_apply)
-    return _design_response(design, report)
+# ── Plate layout + representation overrides (display-only metadata) ────────────
+# (Strand-extension CRUD lifted to backend/api/routes_extensions.py.)
 
 
 @router.put("/design/plate-layout", status_code=200)
@@ -14325,110 +14003,6 @@ def clear_representation_overrides() -> dict:
         d.representation_overrides = []
 
     design, report = design_state.mutate_and_validate(_apply)
-    return _design_response(design, report)
-
-
-@router.post("/design/extensions", status_code=201)
-def add_strand_extension(body: StrandExtensionRequest) -> dict:
-    """Add a terminal extension (sequence and/or modification) to a strand's 5′ or 3′ end."""
-    import re
-
-    design = design_state.get_or_404()
-
-    strand = design.find_strand(body.strand_id)
-    if strand is None:
-        raise HTTPException(404, detail=f"Strand {body.strand_id!r} not found.")
-    if body.sequence is None and body.modification is None:
-        raise HTTPException(400, detail="At least one of sequence or modification must be provided.")
-
-    if body.sequence is not None:
-        if not body.sequence or not re.match(r"^[ACGTNacgtn]+$", body.sequence):
-            raise HTTPException(400, detail="sequence must contain only ACGTN characters.")
-
-    if body.modification is not None:
-        if body.modification not in VALID_MODIFICATIONS:
-            raise HTTPException(
-                400,
-                detail=f"Unknown modification {body.modification!r}. "
-                       f"Valid values: {sorted(VALID_MODIFICATIONS)}",
-            )
-
-    if any(x.strand_id == body.strand_id and x.end == body.end for x in design.extensions):
-        raise HTTPException(
-            400,
-            detail=f"Strand {body.strand_id!r} already has a {body.end} extension.",
-        )
-
-    new_ext = StrandExtension(
-        strand_id=body.strand_id,
-        end=body.end,
-        sequence=body.sequence.upper() if body.sequence else None,
-        modification=body.modification,
-        label=body.label,
-    )
-
-    design, report = design_state.mutate_with_reconcile(
-        lambda d: d.extensions.append(new_ext)
-    )
-    return {"extension": new_ext.model_dump(), **_design_response(design, report)}
-
-
-@router.put("/design/extensions/{ext_id}")
-def update_strand_extension(ext_id: str, body: StrandExtensionUpdateRequest) -> dict:
-    """Update the sequence, modification, or label of an existing strand extension."""
-    import re
-
-    design = design_state.get_or_404()
-    ext = next((x for x in design.extensions if x.id == ext_id), None)
-    if ext is None:
-        raise HTTPException(404, detail=f"StrandExtension {ext_id!r} not found.")
-
-    new_seq = body.sequence if body.sequence is not None else ext.sequence
-    new_mod = body.modification if body.modification is not None else ext.modification
-    new_lbl = body.label if body.label is not None else ext.label
-
-    # Allow explicit None to clear a field: treat empty string as clear.
-    if body.sequence == "":
-        new_seq = None
-    if body.modification == "":
-        new_mod = None
-
-    if new_seq is None and new_mod is None:
-        raise HTTPException(400, detail="At least one of sequence or modification must be set.")
-
-    if new_seq is not None:
-        if not re.match(r"^[ACGTNacgtn]+$", new_seq):
-            raise HTTPException(400, detail="sequence must contain only ACGTN characters.")
-        new_seq = new_seq.upper()
-
-    if new_mod is not None and new_mod not in VALID_MODIFICATIONS:
-        raise HTTPException(
-            400,
-            detail=f"Unknown modification {new_mod!r}. "
-                   f"Valid values: {sorted(VALID_MODIFICATIONS)}",
-        )
-
-    def _apply(d: Design) -> None:
-        target = next(x for x in d.extensions if x.id == ext_id)
-        target.sequence = new_seq
-        target.modification = new_mod
-        target.label = new_lbl
-
-    design, report = design_state.mutate_with_reconcile(_apply)
-    updated = next(x for x in design.extensions if x.id == ext_id)
-    return {"extension": updated.model_dump(), **_design_response(design, report)}
-
-
-@router.delete("/design/extensions/{ext_id}")
-def delete_strand_extension(ext_id: str) -> dict:
-    """Remove a strand extension."""
-    design = design_state.get_or_404()
-    if not any(x.id == ext_id for x in design.extensions):
-        raise HTTPException(404, detail=f"StrandExtension {ext_id!r} not found.")
-
-    design, report = design_state.mutate_with_reconcile(
-        lambda d: setattr(d, "extensions", [x for x in d.extensions if x.id != ext_id])
-    )
     return _design_response(design, report)
 
 

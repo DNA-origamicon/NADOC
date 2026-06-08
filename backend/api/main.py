@@ -24,7 +24,9 @@ from backend.api.crud import router as crud_router
 from backend.api.doc_context import DocContextMiddleware
 from backend.api.documents import router as documents_router
 from backend.api.routes import router
+from backend.api.routes_animations import router as animations_router
 from backend.api.routes_camera_poses import router as camera_poses_router
+from backend.api.routes_extensions import router as extensions_router
 from backend.api.routes_loop_skip import router as loop_skip_router
 from backend.api.ws import router as ws_router
 
@@ -71,6 +73,8 @@ app.include_router(documents_router,   prefix="/api")
 app.include_router(crud_router,        prefix="/api")
 app.include_router(loop_skip_router,   prefix="/api")
 app.include_router(camera_poses_router, prefix="/api")
+app.include_router(animations_router,  prefix="/api")
+app.include_router(extensions_router,  prefix="/api")
 app.include_router(assembly_router,    prefix="/api")
 app.include_router(ws_router)          # WebSocket routes have no /api prefix
 

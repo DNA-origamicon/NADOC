@@ -103,6 +103,23 @@ describe('buildOverhangRotationOps (pure)', () => {
   it('null currentDesign → []', () => {
     expect(buildOverhangRotationOps(['a'], null, new THREE.Quaternion())).toEqual([])
   })
+
+  it('baseRotations overrides the stored rotation per-id (Reset path)', () => {
+    // A design where the stored rotation is non-identity, but the Reset baseline is
+    // identity — an identity delta must yield identity ops, not the stored rotation.
+    const dz = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2)
+    const rotated = { overhangs: [{ id: 'a', rotation: [dz.x, dz.y, dz.z, dz.w] }] }
+    const ops = buildOverhangRotationOps(['a'], rotated, new THREE.Quaternion(), { a: [0, 0, 0, 1] })
+    expect(ops[0].rotation[0]).toBeCloseTo(0, 6)
+    expect(ops[0].rotation[1]).toBeCloseTo(0, 6)
+    expect(ops[0].rotation[2]).toBeCloseTo(0, 6)
+    expect(ops[0].rotation[3]).toBeCloseTo(1, 6)
+  })
+
+  it('falls back to the stored rotation when baseRotations lacks the id', () => {
+    const ops = buildOverhangRotationOps(['a'], design, new THREE.Quaternion(), { other: [0, 0, 0, 1] })
+    expect(ops[0].rotation).toEqual([0, 0, 0, 1])
+  })
 })
 
 describe('initOverhangOrientationPanel (factory)', () => {
@@ -166,13 +183,46 @@ describe('initOverhangOrientationPanel (factory)', () => {
     expect(panel.getActiveIds()).toEqual([])   // closed
   })
 
-  it('Reset patches every active overhang back to identity', async () => {
+  it('Reset previews to identity client-side — no server patch (commits only on Apply)', async () => {
+    mountIds(OO_IDS)
+    const { deps, helixCtrl } = makeDeps()
+    const panel = panelWith(deps)
+    panel.open(['a', 'b'])
+    gizmo.attach.mockClear()
+    document.getElementById('oo-reset-btn').click()
+    await Promise.resolve(); await Promise.resolve()
+    // No server round-trip on Reset itself.
+    expect(deps.api.patchOverhangRotationsBatch).not.toHaveBeenCalled()
+    // Previewed client-side (per-overhang transform applied).
+    expect(helixCtrl.applyClusterTransform).toHaveBeenCalled()
+    // Gizmo re-attached at the cached junction pivot (bug 1: must pass the pivot,
+    // not fall back to [0,0,0]).
+    expect(gizmo.attach).toHaveBeenCalledWith('a', ['a', 'b'], expect.any(Object), expect.any(THREE.Vector3))
+  })
+
+  it('Reset then Cancel adds NO feature-log entry (no patch) and reverts the preview', async () => {
     mountIds(OO_IDS)
     const { deps } = makeDeps()
     const panel = panelWith(deps)
     panel.open(['a', 'b'])
     document.getElementById('oo-reset-btn').click()
     await Promise.resolve(); await Promise.resolve()
+    document.getElementById('oo-cancel-btn').click()
+    expect(deps.api.patchOverhangRotationsBatch).not.toHaveBeenCalled()
+    expect(deps.api.getGeometry).toHaveBeenCalledTimes(1)   // preview reverted
+    expect(panel.getActiveIds()).toEqual([])                // closed
+  })
+
+  it('Reset then Apply commits identity for every active overhang', async () => {
+    mountIds(OO_IDS)
+    const { deps } = makeDeps()
+    const panel = panelWith(deps)
+    panel.open(['a', 'b'])
+    document.getElementById('oo-reset-btn').click()
+    await Promise.resolve(); await Promise.resolve()
+    document.getElementById('oo-apply-btn').click()
+    await Promise.resolve(); await Promise.resolve()
+    expect(deps.api.patchOverhangRotationsBatch).toHaveBeenCalledTimes(1)
     const ops = deps.api.patchOverhangRotationsBatch.mock.calls[0][0]
     expect(ops).toEqual([
       { overhang_id: 'a', rotation: [0, 0, 0, 1] },

@@ -5099,12 +5099,26 @@ async function main() {
           const _prevById = new Map(
             (prevState.currentAssembly?.instances ?? []).map(i => [i.id, i]),
           )
+          let _anyMoved = false
           for (const inst of newState.currentAssembly.instances) {
             const prev = _prevById.get(inst.id)
             if (prev && sameInstanceTransform(prev, inst)) continue
             assemblyRenderer.setLiveTransform(inst.id, matrixFromInstance(inst))
+            _anyMoved = true
           }
           assemblyJointRenderer.rebuild(newState.currentAssembly)
+          // Cross-part linkers are world-space geometry DERIVED from the part
+          // transforms (binding-domain complements + connector arcs + ds bridge),
+          // not GPU-instanced — so the setLiveTransform fast path moves the parts
+          // but leaves every linker stale. If a part moved and the assembly
+          // carries linkers, refetch + redraw them so the binding domains and
+          // arcs track the new poses. Covers the indirect-linker relax (a
+          // transform-only change) AND any plain part move that drags a linker —
+          // and rebuilds ALL linkers, so others sharing the moved parts update too.
+          if (_anyMoved && ((newState.currentAssembly?.assembly_strands?.length ?? 0) > 0
+                            || (newState.currentAssembly?.overhang_connections?.length ?? 0) > 0)) {
+            assemblyRenderer.rebuildLinkers?.(newState.currentAssembly)
+          }
           // Re-apply the group visibility overlay — a transform-only patch
           // could have changed a group's `visible` flag without touching any
           // instance's `visible`. Cheap O(N) walk; no-op when no group is hidden.

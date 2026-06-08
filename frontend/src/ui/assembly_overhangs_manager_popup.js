@@ -676,7 +676,7 @@ function _connectionRowHtml(assembly, c) {
     <td>${seq}</td>
     <td style="color:#6e7681">—</td>
     <td style="text-align:right;white-space:nowrap">
-      ${c.linker_type === 'ds' ? `<button class="aohc-relax-conn" data-id="${c.id}" title="Relax linker (rigid-place the free part into a coaxial native-length duplex)"
+      ${(c.linker_type === 'ds' || (c.linker_type === 'ss' && Number(c.length_value) === 0)) ? `<button class="aohc-relax-conn" data-id="${c.id}" title="Relax linker (rigid-place the free part to close the connector arc)"
               style="background:#152d1c;border:1px solid #3ca35a;color:#3ca35a;border-radius:3px;font-size:11px;cursor:pointer;padding:2px 7px;margin-right:4px">Relax</button>` : ''}
       <button class="aohc-del-conn" data-id="${c.id}" title="Delete linker"
               style="background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;font-size:11px;cursor:pointer;padding:2px 7px">×</button>
@@ -808,7 +808,7 @@ async function _onRelaxConnection(btn) {
   btn.disabled = true
   try {
     await api.relaxAssemblyOverhangConnection(id)
-    _setStatus('Relaxed linker — free part moved into a coaxial native-length duplex.')
+    _setStatus('Relaxed linker — free part moved to close the connector arc.')
   } catch (err) {
     _setStatus(`Relax failed: ${err?.message ?? err}`)
     btn.disabled = false

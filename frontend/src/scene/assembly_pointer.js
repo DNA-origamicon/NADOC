@@ -561,13 +561,29 @@ export function initAssemblyPointer({
           onClick: async () => {
             try {
               await api.relaxAssemblyOverhangConnection(connId)
-              showToast('Relaxed linker — free part moved into a coaxial native-length duplex.')
+              showToast('Relaxed linker — free part moved to close the connector arc.')
             } catch (err) {
               showToast(`Relax failed: ${err?.message ?? err}`, { severity: 'error' })
             }
           },
         },
         ...(available ? [] : [{ type: 'header', label: status?.reason ?? 'Relax unavailable' }]),
+        { type: 'separator' },
+        {
+          label: 'Delete linker',
+          danger: true,
+          onClick: async () => {
+            try {
+              // DELETE syncs the assembly into the store (_syncFromAssemblyResponse),
+              // which cascades to the spreadsheet, the 3D renderer (linker beads/arc
+              // vanish), and the Overhangs Manager listing — all subscribe to it.
+              await api.deleteAssemblyOverhangConnection(connId)
+              showToast(`Deleted linker · ${name}.`)
+            } catch (err) {
+              showToast(`Delete failed: ${err?.message ?? err}`, { severity: 'error' })
+            }
+          },
+        },
       ],
     })
   }

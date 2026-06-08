@@ -18,9 +18,17 @@ the fixed overhang (it is NO LONGER auto-centered between the two parts). Since
 the moved part is translated only, every overhang's binding domain (its
 complement) stays fixed relative to that overhang.
 
+A **zero-length indirect ss linker** has no bridge — just a single strand
+binding both overhangs back-to-back (``[comp_a, comp_b]``) with ONE
+complement↔complement connector arc. Its relax is a **single translation** of
+the moved part that lands its complement endpoint on the fixed part's
+complement endpoint, collapsing that one arc (see
+:func:`relax_assembly_indirect_linker`). length>0 ss (with a bridge) is still
+deferred — use ds for those.
+
 *v1 limitation*: satisfies the ONE connection being relaxed. If the moving part
 carries other linkers, relaxing one may disturb them — same one-at-a-time model
-as per-design relax. ds only; ss/FJC deferred.
+as per-design relax.
 """
 
 from __future__ import annotations
@@ -50,11 +58,20 @@ def assembly_relax_status(assembly, conn, inst_a, inst_b) -> dict[str, Any]:
         "fixed_instance_id": None,
         "linker_type": conn.linker_type,
     }
-    if conn.linker_type != "ds":
-        out["reason"] = "ss linker relax is not supported yet (ds only)."
-        return out
-    if conn.length_value == 0:
-        out["reason"] = "Indirect linker has no materialized bridge to relax."
+    lt = conn.linker_type
+    if lt == "ss":
+        # Only the zero-length INDIRECT ss linker is relaxable: it has a single
+        # complement↔complement arc, collapsed by one part translation. A
+        # length>0 ss linker (with a bridge) is deferred — use ds for those.
+        if conn.length_value != 0:
+            out["reason"] = "ss linker relax is only supported for zero-length (indirect) linkers."
+            return out
+    elif lt == "ds":
+        if conn.length_value == 0:
+            out["reason"] = "A zero-length (indirect) linker must be ss."
+            return out
+    else:
+        out["reason"] = f"Unsupported linker type {lt!r}."
         return out
     if inst_a.id == inst_b.id:
         out["reason"] = "Both overhangs are on the same part instance; moving it can't relax the linker."
@@ -241,3 +258,80 @@ def relax_assembly_linker(
         "pre_arc_moved_nm": float(np.linalg.norm(bead_m - anchor_m)),
     }
     return [float(v) for v in T_new.flatten()], [float(v) for v in t1], info
+
+
+# ── Indirect (zero-length ss) relax — single complement↔complement arc ─────────
+def _indirect_arc_endpoints(nucs: list, strands: list, conn) -> Optional[dict[str, np.ndarray]]:
+    """``{instance_id: endpoint}`` for a zero-length indirect ss linker.
+
+    The single ``__lnk__<id>__s`` strand has domains ``[comp_a, comp_b]`` (no
+    bridge). The two ends of its connector arc are the ``comp_a → comp_b``
+    backbone-jump beads: ``comp_a``'s 3' end (``domain[0].end_bp``) and
+    ``comp_b``'s 5' start (``domain[1].start_bp``). Each bead is mapped to its
+    owning part via the namespaced complement helix id (``<inst>::<helix>``), so
+    the caller knows which endpoint moves. ``None`` if the strand isn't the
+    two-domain zero-bridge form or its beads aren't both emitted.
+    """
+    from backend.core.assembly_linker import parse_namespaced_helix_id
+
+    sid = f"__lnk__{conn.id}__s"
+    strand = next((s for s in strands if s.id == sid), None)
+    if strand is None:
+        return None
+    domains = strand.domains or []
+    if len(domains) != 2:
+        return None   # not the zero-bridge indirect form
+
+    pos: dict = {}
+    for n in nucs:
+        nsid, hid, bp = n.get("strand_id"), n.get("helix_id"), n.get("bp_index")
+        p = n.get("backbone_position") or n.get("base_position")
+        if nsid == sid and hid is not None and bp is not None and p is not None:
+            pos[(hid, int(bp))] = np.asarray(p, dtype=float)
+
+    d0, d1 = domains[0], domains[1]
+    p0 = pos.get((d0.helix_id, int(d0.end_bp)))
+    p1 = pos.get((d1.helix_id, int(d1.start_bp)))
+    if p0 is None or p1 is None:
+        return None
+    ns0 = parse_namespaced_helix_id(d0.helix_id)
+    ns1 = parse_namespaced_helix_id(d1.helix_id)
+    if ns0 is None or ns1 is None:
+        return None
+    return {ns0[0]: p0, ns1[0]: p1}
+
+
+def relax_assembly_indirect_linker(
+    conn, nucs: list, strands: list, inst_moved,
+    *, movable_instance_id: str, fixed_instance_id: str,
+) -> Tuple[list[float], dict[str, Any]]:
+    """Single-translation relax for a zero-length indirect ss linker.
+
+    Collapses the lone complement↔complement connector arc by translating the
+    moved part so its binding-domain endpoint lands exactly on the fixed part's
+    binding-domain endpoint. No bridge, no rotation; the indirect strand's
+    topology is unchanged (its complement beads follow the moved part on
+    re-emission).
+
+    Returns ``(moved_transform_values, info)`` — the movable part's 16-float
+    world transform (a pure translation of its current one).
+    """
+    ends = _indirect_arc_endpoints(nucs, strands, conn)
+    if not ends or movable_instance_id not in ends or fixed_instance_id not in ends:
+        raise ValueError("Could not resolve the indirect linker's binding-domain beads from emitted geometry.")
+    p_fixed = ends[fixed_instance_id]
+    p_moved = ends[movable_instance_id]
+
+    t = p_fixed - p_moved
+    D = np.eye(4); D[:3, 3] = t
+    T_new = D @ inst_moved.transform.to_array()
+
+    info = {
+        "moved_instance_id": movable_instance_id,
+        "fixed_instance_id": fixed_instance_id,
+        "part_translation_nm": [float(v) for v in t],
+        # The single arc length this move is closing (actual emitted-bead dist).
+        "pre_arc_nm": float(np.linalg.norm(p_fixed - p_moved)),
+        "linker_type": "ss-indirect",
+    }
+    return [float(v) for v in T_new.flatten()], info

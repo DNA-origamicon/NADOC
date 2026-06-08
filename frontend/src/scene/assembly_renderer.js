@@ -75,6 +75,7 @@ import { C, STAPLE_PALETTE, buildClusterLookup } from './helix_renderer/palette.
 import { buildCrossoverConnections, arcControlPoint, updateExtraBaseInstances } from './crossover_connections.js'
 import { initAtomisticRenderer } from './atomistic_renderer.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
+import { assemblyConnectorArcEndpoints } from './assembly_connector_arcs.js'
 import {
   buildBundleGeometry, buildPrismGeometry, buildPanelSurface,
   buildSpineSections, buildSweptHullGeometry, buildHullMeshPhong,
@@ -1020,38 +1021,22 @@ function _lnkConnectorArc(a, b, color) {
   return mesh
 }
 
-// One connector arc per ds linker side strand, at its complement↔bridge domain
-// junction. `nucs` are world-space (from /assembly/linker-geometry).
+// Connector arcs for every cross-part linker strand, at each backbone jump
+// between domains on different helices: the complement↔bridge junction of a ds
+// (`__a`/`__b`) or length>0 ss (`__s`) linker, AND the direct complement↔
+// complement jump of a zero-length indirect ss linker. The endpoint math lives
+// in the pure, unit-tested `assemblyConnectorArcEndpoints`; here we just turn
+// each endpoint pair into a tube mesh tagged with its connection id (for
+// right-click → relax/delete picking). `nucs` are world-space (from
+// /assembly/linker-geometry).
 function _buildAssemblyConnectorArcs(linkerStrands, nucs) {
-  const posByKey = new Map()
-  for (const n of nucs ?? []) {
-    if (!n.strand_id) continue
-    posByKey.set(`${n.strand_id}|${n.helix_id}|${n.bp_index}`, n.backbone_position ?? n.base_position)
-  }
   const arcs = []
-  for (const strand of linkerStrands ?? []) {
-    const m = /^(__lnk__.+)__(a|b)$/.exec(strand.id ?? '')   // ds side strands only
-    if (!m) continue
-    const bridgeHelixId = m[1]
-    const connId = bridgeHelixId.replace(/^__lnk__/, '')   // for right-click → relax
-    const domains = strand.domains ?? []
-    const color = _lnkCssToHex(strand.color) ?? 0xffffff
-    for (let i = 0; i + 1 < domains.length; i++) {
-      const d0 = domains[i], d1 = domains[i + 1]
-      // Exactly one of the adjacent domains is the bridge → this is the
-      // complement↔bridge junction (the gap the arc fills).
-      if ((d0.helix_id === bridgeHelixId) === (d1.helix_id === bridgeHelixId)) continue
-      const p0 = posByKey.get(`${strand.id}|${d0.helix_id}|${d0.end_bp}`)
-      const p1 = posByKey.get(`${strand.id}|${d1.helix_id}|${d1.start_bp}`)
-      if (!p0 || !p1) continue
-      const a = new THREE.Vector3(p0[0], p0[1], p0[2])
-      const b = new THREE.Vector3(p1[0], p1[1], p1[2])
-      if (a.distanceTo(b) > 1e-3) {
-        const arc = _lnkConnectorArc(a, b, color)
-        arc.userData.connId = connId
-        arcs.push(arc)
-      }
-    }
+  for (const e of assemblyConnectorArcEndpoints(linkerStrands, nucs)) {
+    const a = new THREE.Vector3(e.a[0], e.a[1], e.a[2])
+    const b = new THREE.Vector3(e.b[0], e.b[1], e.b[2])
+    const arc = _lnkConnectorArc(a, b, _lnkCssToHex(e.colorCss) ?? 0xffffff)
+    arc.userData.connId = e.connId
+    arcs.push(arc)
   }
   return arcs
 }
@@ -5709,7 +5694,8 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   _ovhgSelGroup.renderOrder = 20
   scene.add(_ovhgSelGroup)
 
-  let _ovhgAnchors = []          // [{instanceId, overhangId, label, world: Vector3}]
+  let _ovhgAnchors = []          // [{instanceId, overhangId, label, local: Vector3, world: Vector3}]
+  let _ovhgAnchorsByInstance = new Map()   // instanceId -> anchor[] (live-drag reposition index)
   let _ovhgSelList = []          // selected [{instanceId, overhangId}]
   let _ovhgHover   = null        // hovered {instanceId, overhangId} | null
   let _ovhgRingTex = null
@@ -5752,6 +5738,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   // visible instance. Cheap data only; recomputed on geometry rebuild.
   function _computeOverhangAnchors() {
     _ovhgAnchors = []
+    _ovhgAnchorsByInstance = new Map()
     const assembly = store.getState().currentAssembly
     if (!assembly) return
     const mat = new THREE.Matrix4()
@@ -5764,11 +5751,41 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         if (!inst || inst.visible === false) continue
         const off = i * 16
         for (let k = 0; k < 16; k++) mat.elements[k] = srcEntry.xformData[off + k]
+        const instanceId = srcEntry.instanceIds[i]
         for (const a of locals) {
-          const world = new THREE.Vector3(a.x, a.y, a.z).applyMatrix4(mat)
-          _ovhgAnchors.push({ instanceId: srcEntry.instanceIds[i], overhangId: a.overhangId, label: a.label, world })
+          // Keep the design-LOCAL anchor so a live gizmo drag can re-derive the
+          // world position without a full rebuild (see _liveMoveOverhangOverlays).
+          const local = new THREE.Vector3(a.x, a.y, a.z)
+          const world = local.clone().applyMatrix4(mat)
+          const anchor = { instanceId, overhangId: a.overhangId, label: a.label, local, world }
+          _ovhgAnchors.push(anchor)
+          if (!_ovhgAnchorsByInstance.has(instanceId)) _ovhgAnchorsByInstance.set(instanceId, [])
+          _ovhgAnchorsByInstance.get(instanceId).push(anchor)
         }
       }
+    }
+  }
+
+  // Live-drag: reposition this instance's overhang overlay sprites (labels +
+  // selection rings) to follow its new matrix.  The shared path keeps these
+  // sprites in WORLD space in scene-level groups (no per-instance Three.js
+  // group), so unlike geometry — which the GPU xform texture moves for free —
+  // a gizmo move must re-derive their anchors here.  Cheap: only labeled /
+  // selected overhangs on the dragged instance are touched.
+  function _liveMoveOverhangOverlays(instanceId, matrix4) {
+    const anchors = _ovhgAnchorsByInstance.get(instanceId)
+    if (!anchors?.length) return
+    for (const a of anchors) a.world.copy(a.local).applyMatrix4(matrix4)
+    const byOverhang = new Map(anchors.map(a => [a.overhangId, a.world]))
+    for (const sp of _ovhgLabelGroup.children) {
+      if (sp.userData?.instanceId !== instanceId) continue
+      const w = byOverhang.get(sp.userData.overhangId)
+      if (w) sp.position.copy(w)
+    }
+    for (const ring of _ovhgSelGroup.children) {
+      if (ring.userData?.instanceId !== instanceId) continue
+      const w = byOverhang.get(ring.userData.overhangId)
+      if (w) ring.position.copy(w)
     }
   }
 
@@ -5808,6 +5825,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
       ring.position.copy(a.world)
       ring.scale.setScalar(2.4)
       ring.renderOrder = 20
+      ring.userData = { instanceId: sel.instanceId, overhangId: sel.overhangId }
       _ovhgSelGroup.add(ring)
     }
   }
@@ -6084,6 +6102,8 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     srcEntry.xformTex.needsUpdate = true
     // Keep the selection outline glued to the part as it drags.
     if (instanceId === _activeInstanceId) _refreshActiveBox()
+    // Overhang label/ring sprites live in world space — drag them along too.
+    _liveMoveOverhangOverlays(instanceId, matrix4)
   }
 
   function getLiveTransform(instanceId) {

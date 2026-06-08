@@ -526,6 +526,40 @@ def test_post_overhang_connection_generates_ss_linker_topology():
     assert len(strand_s["domains"]) == 3
 
 
+def test_post_indirect_zero_length_generates_binding_strand_no_bridge():
+    _seed_real_two_part_assembly()
+    # Indirect linker = zero-length ss: a single strand binds both overhangs
+    # back-to-back ([comp_a, comp_b]) with NO bridge helix/domain. The
+    # comp_a→comp_b backbone jump renders as the connector arc.
+    r = client.post("/api/assembly/overhang-connections",
+                    json=_conn_payload_real(linker_type="ss",
+                                            attach_a="free_end", attach_b="free_end",
+                                            length_value=0))
+    assert r.status_code == 200, r.text
+    asm = r.json()["assembly"]
+    cid = asm["overhang_connections"][0]["id"]
+    # The ss binding strand exists...
+    strand_ids = [s["id"] for s in asm["assembly_strands"]]
+    assert strand_ids.count(f"__lnk__{cid}__s") == 1
+    strand_s = next(s for s in asm["assembly_strands"] if s["id"] == f"__lnk__{cid}__s")
+    # ...with exactly the two complement binding domains and NO bridge domain.
+    helix_ids_in_s = [d["helix_id"] for d in strand_s["domains"]]
+    assert len(strand_s["domains"]) == 2
+    assert all("::" in hid for hid in helix_ids_in_s)          # both namespaced complements
+    assert not any(hid.startswith("__lnk__") for hid in helix_ids_in_s)
+    # No virtual bridge helix is emitted for a zero-length linker.
+    assert not any(h["id"].startswith(f"__lnk__{cid}") for h in asm["assembly_helices"])
+    # End-to-end: the geometry pipeline emits world-space beads for BOTH
+    # complement binding domains (so the frontend renders the binding domains
+    # and the connecting arc between them).
+    geo = client.get("/api/assembly/linker-geometry")
+    assert geo.status_code == 200, geo.text
+    s_nucs = [n for n in geo.json()["nucleotides"] if n.get("strand_id") == f"__lnk__{cid}__s"]
+    comp_helices = {n["helix_id"] for n in s_nucs}
+    assert len(comp_helices) == 2
+    assert all("::" in hid for hid in comp_helices)
+
+
 def test_delete_overhang_connection_removes_linker_topology():
     _seed_real_two_part_assembly()
     r = client.post("/api/assembly/overhang-connections",

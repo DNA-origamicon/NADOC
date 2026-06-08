@@ -192,6 +192,34 @@ def test_undo_mark_restores_rigid_beads():
     assert design_state.get_or_404().flexible_segment_marks == []
 
 
+def test_topology_change_replace_keeps_flexible_flag():
+    """A non-marks topology change (e.g. add/remove an OH-binder strand) on a design
+    WITH flexible connections must ship per-nuc geometry on undo/redo/seek. The
+    compact_deformed arrays drop is_flexible_segment, which silently re-rigidifies a
+    bowed scaffold run — the 'generate OH binder → undo → flexible region renders
+    rigid' bug. The flag must survive any replace whose target still has connections."""
+    from backend.api.crud import _design_replace_response
+    from backend.core.validator import validate_design
+
+    d_marked = apply_marks(_mark_run(_hinge_design()))
+    assert d_marked.flexible_connections  # the run formed a connection
+
+    # Simulate the topology change whose UNDO triggered the bug: a binder strand was
+    # added; undo restores `d_marked` (no binder), which still carries connections.
+    binder = Strand(
+        id="ohbind_x", strand_type=StrandType.OH_BINDER,
+        domains=[Domain(helix_id="h_a", start_bp=_SS_A[0], end_bp=_SS_A[1],
+                        direction=Direction.REVERSE)],
+    )
+    d_with_binder = d_marked.copy_with(strands=[*d_marked.strands, binder])
+
+    # prev = post-change (binder present), target = restored marked design.
+    resp = _design_replace_response(d_with_binder, d_marked, validate_design(d_marked))
+    assert "nucleotides_compact" not in resp  # NOT the flag-dropping compact path
+    nucs = resp.get("nucleotides") or []
+    assert nucs and any(n.get("is_flexible_segment") for n in nucs)
+
+
 def test_old_file_without_fields_loads_empty():
     raw = _demo_design().model_dump()
     raw.pop("flexible_segment_marks", None)

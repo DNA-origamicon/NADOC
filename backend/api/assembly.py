@@ -3017,6 +3017,37 @@ def relax_assembly_overhang_connection(
     if not status["available"]:
         raise HTTPException(400, detail=status["reason"])
 
+    moved_id   = status["movable_instance_id"]
+    inst_moved = inst_a if moved_id == inst_a.id else inst_b
+
+    # Zero-length INDIRECT ss linker: no bridge — a single complement↔complement
+    # arc. Collapse it with ONE translation of the moved part. The indirect
+    # strand topology is unchanged (its complement beads follow the moved part on
+    # re-emission), so we only move the part and commit.
+    if conn.length_value == 0:
+        from backend.core.assembly_linker_relax import relax_assembly_indirect_linker
+        nucs = _linker_geometry_for_assembly(assembly).get("nucleotides", [])
+        try:
+            new_T, info = relax_assembly_indirect_linker(
+                conn, nucs, assembly.assembly_strands, inst_moved,
+                movable_instance_id=moved_id,
+                fixed_instance_id=status["fixed_instance_id"],
+            )
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        working = assembly.model_copy(deep=True)
+        inst_by_id = _build_inst_by_id(working)
+        _propagate_fk_inplace(working, moved_id, new_T, inst_by_id)
+        updated = _apply_assembly_mutation_with_feature_log(
+            working,
+            op_kind="assembly-overhang-connection-relax",
+            label=f"{conn.name}: relax linker",
+            params={"connection_id": connection_id, **info},
+        )
+        payload = _assembly_response(updated)
+        payload["relax_info"] = info
+        return payload
+
     bridge_helix_id = f"__lnk__{conn.id}"
 
     # Generate a fresh bridge from the CURRENT anchors and EMIT it (same pipeline

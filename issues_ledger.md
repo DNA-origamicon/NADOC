@@ -582,6 +582,28 @@ ladder used it to cap depth).
 
 ---
 
+## ISSUE-6 — `test_teeth_closing_zig` fails in the full suite (test-isolation / global-state leak)
+
+- **Status:** `[ ]` OPEN. **Pushed in from the backend router carve-up loop** (Refactor #2, 2026-06-08) —
+  surfaced when `just test` after a *verbatim* router lift showed 1 failure; stash-and-rerun on clean HEAD
+  `250f91e` reproduced it, proving it pre-dates the carve-up (NOT caused by the extraction).
+- **Symptom:** `tests/test_seamless_router.py::test_teeth_closing_zig` **fails inside the full `just test`
+  run** but **passes when its file is run alone** (`just test-file tests/test_seamless_router.py`). So full-
+  suite green is **1752 passed / 1 failed**, not 1753. Order-dependent.
+- **Assertion that trips:** `Expected 4 scaffold strands, got 5` (`tests/test_seamless_router.py:168`).
+  `bridge_xovers == 6` still holds; only the scaffold-strand *count* is off by one — a stray
+  `scaf_XY_1_2_h_XY_3_0_61_r`-style fragment survives that an earlier test's state apparently left behind.
+- **Diagnosis lead:** classic shared-mutable-state leak — a test that runs *before* it (alphabetical /
+  collection order) mutates a module-level singleton (likely `backend/api/state` `_active_design`, or a
+  seamless-router module cache) without resetting, so `test_teeth_closing_zig` builds on residue. Confirmed
+  by: passes first when run alone; fails when run after the rest. **Repro for the fixer:**
+  `python -m pytest tests/test_seamless_router.py::test_teeth_closing_zig tests/test_seamless_router.py -p no:randomly -q` → fails (running the target FIRST then the file re-imports/re-runs and leaves it red), vs the
+  file alone → green.
+- **Fix direction (unconfirmed — follow the carve-up's "repro-with-a-test FIRST then ask" discipline):**
+  add an autouse fixture that resets the design/router singleton between tests, OR make the seamless-router
+  builder not retain cross-call state. Do NOT touch the `_PHASE_*` constants. Decide with the user whether
+  the leak is in the test harness (fixture) or a real router statefulness bug before patching.
+
 ## Next-session handoff
 
 _Living pointer — each session overwrites this. Last updated 2026-06-06 (ISSUE-4 legacy-deletion shipped: the

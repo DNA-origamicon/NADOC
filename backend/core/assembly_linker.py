@@ -286,12 +286,34 @@ def generate_assembly_linker_topology(
     ``assembly.assembly_helices`` / ``assembly.assembly_strands`` inside a
     single ``model_copy(update=...)`` so the mutation is atomic.
 
-    A zero-length linker (``length_value == 0`` — used by 'indirect'
-    variants in the frontend) generates no topology; the connection is
-    still recorded as metadata on the assembly.
+    A zero-length linker (``length_value == 0`` — the 'indirect' variants in
+    the frontend) has ZERO bridge bases: a single ss strand binds both
+    overhangs back-to-back (``[comp_a, comp_b]``, sequence
+    ``RC(OH_A) + RC(OH_B)``). Each overhang gets its complement binding
+    domain and the ``comp_a → comp_b`` backbone jump renders as the connector
+    arc. No ``__lnk__`` bridge helix is emitted — the geometry pass
+    synthesises world-space alias helices for the two namespaced complement
+    domains. (Mirrors the length>0 ss strand below, minus its bridge domain.)
     """
     if conn.length_value == 0:
-        return [], []
+        oh_a_dom = _find_overhang_domain(design_a, conn.overhang_a_id)
+        oh_b_dom = _find_overhang_domain(design_b, conn.overhang_b_id)
+        comp_a = _build_complement_namespaced(oh_a_dom, inst_a.id) if oh_a_dom is not None else None
+        comp_b = _build_complement_namespaced(oh_b_dom, inst_b.id) if oh_b_dom is not None else None
+        domains = [d for d in (comp_a, comp_b) if d is not None]
+        if not domains:
+            return [], []
+        oh_a_seq = _oh_sequence_for_domain(design_a, conn.overhang_a_id, oh_a_dom)
+        oh_b_seq = _oh_sequence_for_domain(design_b, conn.overhang_b_id, oh_b_dom)
+        seq = _compose_ss_strand_sequence(oh_a_seq=oh_a_seq, oh_b_seq=oh_b_seq, bridge_seq="")
+        strand = Strand(
+            id=f"{_LINKER_HELIX_PREFIX}{conn.id}__s",
+            domains=domains,
+            strand_type=StrandType.LINKER,
+            color=_LINKER_DEFAULT_COLOR,
+            sequence=seq,
+        )
+        return [], [strand]
 
     linker_bp = _length_value_to_bp(conn.length_value, conn.length_unit)
     bridge_helix_id = f"{_LINKER_HELIX_PREFIX}{conn.id}"

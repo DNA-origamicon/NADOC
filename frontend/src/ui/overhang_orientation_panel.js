@@ -4,10 +4,11 @@
  * Lets the user rotate one or more overhangs about their junction (root-bead) pivot:
  * a rotate-only TransformControls gizmo + ±45° step buttons + absolute XYZ-degree
  * fields, with instant client-side preview (no server round-trip until Apply). Apply
- * commits a *delta* rotation composed onto each overhang's existing rotation via
- * `api.patchOverhangRotationsBatch`; Reset zeroes them; Cancel reverts the preview by
- * re-fetching server geometry. The panel auto-closes when overhangs are structurally
- * added/removed (not on a rotation patch).
+ * commits a *delta* rotation composed onto each overhang's Apply baseline via
+ * `api.patchOverhangRotationsBatch`; Reset previews each overhang back to identity
+ * (client-side only, baseline → identity, committed only on the following Apply);
+ * Cancel reverts the preview by re-fetching server geometry. The panel auto-closes
+ * when overhangs are structurally added/removed (not on a rotation patch).
  *
  * Factory `initOverhangOrientationPanel({deps})→{open, close, getActiveIds}`.
  * Pure core `buildOverhangRotationOps` (delta-compose op builder) is unit-tested.
@@ -18,16 +19,20 @@ import { isExtrudeOverhang, ovhgDomainIds } from '../scene/design_queries.js'
 
 /**
  * Build the rotation patch ops for `activeIds`: compose the world-space delta
- * `R_delta` (THREE.Quaternion) onto each overhang's existing rotation. Pure —
- * THREE-only, no DOM/store/scene access.
+ * `R_delta` (THREE.Quaternion) onto each overhang's Apply baseline. The baseline
+ * defaults to the overhang's stored `rotation`, but `baseRotations` (a
+ * `{id: [qx,qy,qz,qw]}` map) overrides it per-id — Reset sets the baseline to
+ * identity so a subsequent Apply commits identity composed with any further
+ * gizmo delta. Pure — THREE-only, no DOM/store/scene access.
  * @returns {{overhang_id: string, rotation: [number,number,number,number]}[]}
  */
-export function buildOverhangRotationOps(activeIds, currentDesign, R_delta) {
+export function buildOverhangRotationOps(activeIds, currentDesign, R_delta, baseRotations = null) {
   const ops = []
   for (const id of activeIds) {
     const o = currentDesign?.overhangs?.find(x => x.id === id)
     if (!o) continue
-    const R_existing = new THREE.Quaternion(o.rotation[0], o.rotation[1], o.rotation[2], o.rotation[3])
+    const base = baseRotations?.[id] ?? o.rotation
+    const R_existing = new THREE.Quaternion(base[0], base[1], base[2], base[3])
     const R_new = R_delta.clone().multiply(R_existing)
     ops.push({ overhang_id: id, rotation: [R_new.x, R_new.y, R_new.z, R_new.w] })
   }
@@ -50,6 +55,7 @@ export function initOverhangOrientationPanel({
   let   _ooActiveIds          = []    // overhang_id strings currently being edited
   let   _ooRightClickedId     = null  // anchor ID — gizmo centres on this overhang's pivot
   let   _ooOriginalRotations  = {}    // {id: [qx,qy,qz,qw]} captured on open, used by Cancel
+  let   _ooBaseRotations      = {}    // {id: [qx,qy,qz,qw]} Apply baseline (Reset sets → identity)
   let   _ooPivotPositions     = {}    // {id: THREE.Vector3} junction bead positions in world space
   let   _ooDirtyPreview       = false // true once any drag-preview frame has fired
 
@@ -57,13 +63,14 @@ export function initOverhangOrientationPanel({
     _ooActiveIds         = ovhgIds
     _ooRightClickedId    = rightClickedId ?? ovhgIds[0]
     _ooOriginalRotations = {}
+    _ooBaseRotations     = {}
     _ooPivotPositions    = {}
     _ooDirtyPreview      = false
 
     const { currentDesign } = store.getState()
     for (const id of ovhgIds) {
       const o = currentDesign?.overhangs?.find(x => x.id === id)
-      if (o) _ooOriginalRotations[id] = [...o.rotation]
+      if (o) { _ooOriginalRotations[id] = [...o.rotation]; _ooBaseRotations[id] = [...o.rotation] }
       const root = getOvhgRootMap().get(id)
       if (root) _ooPivotPositions[id] = root.pos
     }
@@ -91,6 +98,7 @@ export function initOverhangOrientationPanel({
     _ooActiveIds        = []
     _ooRightClickedId   = null
     _ooOriginalRotations = {}
+    _ooBaseRotations    = {}
     if (_ooPanel) _ooPanel.style.display = 'none'
     overhangGizmo.detach()
     if (_ooDirtyPreview) {
@@ -110,7 +118,7 @@ export function initOverhangOrientationPanel({
   async function _ooApplyDelta(R_delta) {
     if (!_ooActiveIds.length) return
     const { currentDesign } = store.getState()
-    const ops = buildOverhangRotationOps(_ooActiveIds, currentDesign, R_delta)
+    const ops = buildOverhangRotationOps(_ooActiveIds, currentDesign, R_delta, _ooBaseRotations)
     if (ops.length) await api.patchOverhangRotationsBatch(ops)
     if (store.getState().assemblyActive) {
       const { activeInstanceId, currentAssembly } = store.getState()
@@ -119,7 +127,8 @@ export function initOverhangOrientationPanel({
     }
     _ooDirtyPreview = false
     const { currentDesign: updated } = store.getState()
-    overhangGizmo.attach(_ooRightClickedId, _ooActiveIds, updated)
+    const anchorPivot = _ooPivotPositions[_ooRightClickedId] ?? null
+    overhangGizmo.attach(_ooRightClickedId, _ooActiveIds, updated, anchorPivot)
     _ooUpdateAngleFields(new THREE.Quaternion())
   }
 
@@ -172,6 +181,58 @@ export function initOverhangOrientationPanel({
     _ooUpdateAngleFields(overhangGizmo.getCurrentRDelta())
   }
 
+  // Reset every active overhang back to identity orientation — CLIENT-SIDE PREVIEW
+  // only (no server round-trip; the zeroing commits on the following Apply). Unlike
+  // the gizmo/step previews, "identity" is absolute, not a session delta, and each
+  // overhang carries its own current orientation, so we apply a PER-OVERHANG world
+  // delta that cancels (currentGizmoDelta · baselineᵢ). Setting each baseline to
+  // identity makes Apply send identity (composed with any later gizmo delta), and
+  // marks the panel dirty so Cancel reverts it via getGeometry.
+  function _ooResetPreview() {
+    if (!_ooActiveIds.length) return
+    const { currentDesign } = store.getState()
+    const helixCtrl = designRenderer.getHelixCtrl()
+    const R_curInv = overhangGizmo.getCurrentRDelta().invert()  // undo the uniform gizmo delta
+
+    // Capture the current rendered geometry as the base (same set as the preview path).
+    const helixIds = [], allDomainIds = [], extrudeHelixIds = []
+    for (const id of _ooActiveIds) {
+      const o = currentDesign?.overhangs?.find(x => x.id === id)
+      if (!o) continue
+      helixIds.push(o.helix_id)
+      const domIds = ovhgDomainIds(id, currentDesign)
+      if (domIds) allDomainIds.push(...domIds)
+      if (isExtrudeOverhang(id, currentDesign)) extrudeHelixIds.push(o.helix_id)
+    }
+    helixCtrl?.captureClusterBase(helixIds, allDomainIds.length ? allDomainIds : null)
+    bluntEnds?.captureClusterBase(new Set(_ooActiveIds))
+    if (extrudeHelixIds.length) {
+      helixCtrl?.captureClusterBase(extrudeHelixIds, null, true, { forceAxes: true })
+      overhangLocations?.captureClusterBase(extrudeHelixIds)
+    }
+
+    _ooDirtyPreview = true
+    for (const id of _ooActiveIds) {
+      const o = currentDesign?.overhangs?.find(x => x.id === id)
+      if (!o) continue
+      // current rendered orientation = R_cur · baselineᵢ; incremental world delta to
+      // reach identity = baselineᵢ⁻¹ · R_cur⁻¹.
+      const base = _ooBaseRotations[id] ?? [0, 0, 0, 1]
+      const inc = new THREE.Quaternion(base[0], base[1], base[2], base[3]).invert().multiply(R_curInv)
+      const pivot = _ooPivotPositions[id]
+        ?? new THREE.Vector3(o.pivot[0], o.pivot[1], o.pivot[2])
+      const domIds = ovhgDomainIds(id, currentDesign)
+      const isExtrude = isExtrudeOverhang(id, currentDesign)
+      helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, inc, domIds,
+        isExtrude ? { forceAxes: true } : undefined)
+      bluntEnds?.applyClusterTransform([id], pivot, pivot, inc)
+      if (isExtrude) {
+        overhangLocations?.applyClusterTransform([o.helix_id], pivot, pivot, inc)
+      }
+      _ooBaseRotations[id] = [0, 0, 0, 1]
+    }
+  }
+
   // Preview the absolute Euler angles typed into the fields by computing the delta
   // from the current accumulated rotation to the target, then applying it incrementally.
   function _ooPreviewFromFields() {
@@ -193,18 +254,15 @@ export function initOverhangOrientationPanel({
   if (_ooApplyBtn)  _ooApplyBtn.addEventListener('click', _ooApply)
   if (_ooCancelBtn) _ooCancelBtn.addEventListener('click', _ooClose)
 
-  if (_ooResetBtn) _ooResetBtn.addEventListener('click', async () => {
+  if (_ooResetBtn) _ooResetBtn.addEventListener('click', () => {
     if (!_ooActiveIds.length) return
-    const ops = _ooActiveIds.map(id => ({ overhang_id: id, rotation: [0, 0, 0, 1] }))
-    await api.patchOverhangRotationsBatch(ops)
-    if (store.getState().assemblyActive) {
-      const { activeInstanceId, currentAssembly } = store.getState()
-      if (activeInstanceId) assemblyRenderer.invalidateInstance(activeInstanceId)
-      await assemblyRenderer.rebuild(currentAssembly)
-    }
-    _ooDirtyPreview = false
+    _ooResetPreview()   // client-side preview to identity; commits only on the next Apply
+    // Re-attach the gizmo at the (unchanged) junction pivot so it stays centred on the
+    // right-clicked overhang — passing the cached pivot avoids the [0,0,0] fallback for
+    // inline overhangs — and reset its accumulated delta to identity.
     const { currentDesign } = store.getState()
-    overhangGizmo.attach(_ooRightClickedId, _ooActiveIds, currentDesign)
+    const anchorPivot = _ooPivotPositions[_ooRightClickedId] ?? null
+    overhangGizmo.attach(_ooRightClickedId, _ooActiveIds, currentDesign, anchorPivot)
     _ooUpdateAngleFields(new THREE.Quaternion())
   })
 

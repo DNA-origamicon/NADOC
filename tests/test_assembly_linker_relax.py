@@ -205,6 +205,69 @@ def test_relax_unavailable_for_ss_linker():
     assert "ss" in st["reason"].lower()
 
 
+def _indirect_arc_len(cid: str) -> float:
+    """The single complement↔complement arc length of a zero-length indirect ss
+    linker, on the ACTUAL emitted backbone beads (what the relax drives to 0)."""
+    from backend.api.assembly import _linker_geometry_for_assembly
+    from backend.core.assembly_linker_relax import _indirect_arc_endpoints
+    asm  = assembly_state.get_or_404()
+    conn = next(c for c in asm.overhang_connections if c.id == cid)
+    nucs = _linker_geometry_for_assembly(asm).get("nucleotides", [])
+    ends = _indirect_arc_endpoints(nucs, asm.assembly_strands, conn)
+    pa, pb = list(ends.values())
+    return float(np.linalg.norm(pa - pb))
+
+
+def test_indirect_zero_length_relax_status_available():
+    _seed()
+    r = client.post("/api/assembly/overhang-connections",
+                    json=_conn(linker_type="ss", attach_a="free_end", attach_b="free_end", length_value=0))
+    cid = r.json()["assembly"]["overhang_connections"][0]["id"]
+    st = client.get(f"/api/assembly/overhang-connections/{cid}/relax-status").json()
+    assert st["available"] is True
+    assert st["movable_instance_id"] == "inst-B"
+    assert st["fixed_instance_id"] == "inst-A"
+
+
+def test_indirect_zero_length_relax_collapses_arc_translation_only():
+    """A zero-length indirect ss linker relaxes by ONE pure translation of the
+    moved part, collapsing its single complement↔complement arc to ~0."""
+    _seed()                       # parts offset +10 nm → a real arc gap exists
+    r = client.post("/api/assembly/overhang-connections",
+                    json=_conn(linker_type="ss", attach_a="free_end", attach_b="free_end", length_value=0))
+    cid = r.json()["assembly"]["overhang_connections"][0]["id"]
+
+    pre = _indirect_arc_len(cid)
+    assert pre > 0.1, f"expected a pre-relax gap, got {pre}"
+    T_before = np.array(assembly_state.get_or_404().instances[1].transform.values).reshape(4, 4)
+
+    r2 = client.post(f"/api/assembly/overhang-connections/{cid}/relax")
+    assert r2.status_code == 200, r2.text
+
+    post = _indirect_arc_len(cid)
+    assert post == pytest.approx(0.0, abs=1e-6), f"indirect arc not closed: {post}"
+
+    T_after = np.array(assembly_state.get_or_404().instances[1].transform.values).reshape(4, 4)
+    assert T_after[:3, :3] == pytest.approx(T_before[:3, :3], abs=1e-9)   # no rotation
+    assert not np.allclose(T_after[:3, 3], T_before[:3, 3])               # B actually moved
+
+
+def test_indirect_zero_length_relax_holds_fixed_part():
+    _seed(b_fixed=True)           # B fixed → A must move
+    r = client.post("/api/assembly/overhang-connections",
+                    json=_conn(linker_type="ss", attach_a="free_end", attach_b="free_end", length_value=0))
+    cid = r.json()["assembly"]["overhang_connections"][0]["id"]
+    st = client.get(f"/api/assembly/overhang-connections/{cid}/relax-status").json()
+    assert st["movable_instance_id"] == "inst-A" and st["fixed_instance_id"] == "inst-B"
+
+    before_b = list(assembly_state.get_or_404().instances[1].transform.values)
+    r2 = client.post(f"/api/assembly/overhang-connections/{cid}/relax")
+    assert r2.status_code == 200, r2.text
+    after_b = list(assembly_state.get_or_404().instances[1].transform.values)
+    assert after_b == pytest.approx(before_b)                            # fixed part B unmoved
+    assert _indirect_arc_len(cid) == pytest.approx(0.0, abs=1e-6)
+
+
 def test_relax_logs_one_entry_and_undo_restores_pose():
     _seed()
     cid = _create_ds()
