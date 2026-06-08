@@ -288,20 +288,17 @@ def _hamiltonian_path(
     Budgeted + pruned (see `_ham_path_search`): returns ``None`` instead of
     hanging when the graph admits no Hamiltonian path.
     """
-    # FIXME(advanced-routing-nondeterminism): these degree-only sort keys have no
-    # lexicographic tiebreaker, so equal-degree nodes keep their set-derived (hash-
-    # seed-dependent) order → non-deterministic Hamiltonian path → the seamless /
-    # advanced-seamed routers emit a different scaffold-strand count run-to-run.
-    # seamless_router._ham_path_ending deliberately uses `(len(adj[n]), n)` to avoid
-    # exactly this; routing it through this shared search (2026-06-01) lost the tie-
-    # breaker. Repro: tests/test_seamless_router.py::test_teeth_closing_zig is flaky
-    # ~50% across random PYTHONHASHSEED. Fix = add a secondary `n` key here AND in the
-    # neighbor key passed to _ham_path_search, then verify teeth routing is unchanged.
-    # See memory tech-debt ledger + project_seamless_router. TOPOLOGY-SENSITIVE.
-    ordered = sorted(ids, key=lambda n: len(adj[n]))
+    # Degree-ascending order with a lexicographic `n` tiebreaker so that
+    # equal-degree nodes have a stable order independent of set-iteration
+    # (hash-seed) order — otherwise the Hamiltonian path, and therefore the
+    # emitted scaffold-strand count, varies run-to-run.  Mirrors the
+    # `(len(adj[n]), n)` key in seamless_router._ham_path_ending.  Must be
+    # applied to BOTH the starter sort and the neighbor key.  TOPOLOGY-SENSITIVE.
+    key = lambda n: (len(adj[n]), n)  # noqa: E731
+    ordered = sorted(ids, key=key)
     starters = ([start_from] + [n for n in ordered if n != start_from]
                 if start_from is not None else ordered)
-    return _ham_path_search(ids, adj, lambda n: len(adj[n]), starters)
+    return _ham_path_search(ids, adj, key, starters)
 
 
 def _nick_if_needed(

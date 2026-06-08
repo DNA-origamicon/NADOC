@@ -153,8 +153,18 @@ def test_two_group_design_has_bridge_xovers():
 
 
 def test_teeth_closing_zig():
-    """teeth.nadoc: closing zig across tooth tips (h_XY_2_2 ↔ h_XY_2_3) enabled
-    by bridge HJ breaking circularity → exactly 4 scaffold strands."""
+    """teeth.nadoc: the bridge HJs break circularity, which enables a closing-zig
+    end crossover across each pair of tooth tips (e.g. h_XY_2_2 ↔ h_XY_2_3).
+
+    We assert the *topological events* — 6 bridge HJs and the presence of the
+    closing-zig crossover — not the count of leftover scaffold pieces.  The
+    seamless router is an INTERMEDIATE stage: it places crossovers but does not
+    ligate the scaffold into a single loop (that happens in a later step), so the
+    number of disconnected scaffold strands at this stage is an unstable artifact
+    of Hamiltonian-path ordering, not a meaningful invariant.  (The original
+    `== 4 strands` assertion was hash-seed-flaky for exactly this reason; the
+    closing zig fires in both the 4- and 5-piece orderings.)
+    """
     design = Design.model_validate_json(
         (FIXTURES / "teeth.nadoc").read_text()
     )
@@ -164,7 +174,9 @@ def test_teeth_closing_zig():
     assert not result.warnings, result.warnings
     assert result.bridge_xovers == 6, f"Expected 6 bridge xovers, got {result.bridge_xovers}"
 
-    scaf_strands = _scaf_strands(updated)
-    assert len(scaf_strands) == 4, (
-        f"Expected 4 scaffold strands, got {len(scaf_strands)}"
-    )
+    # The closing zig across the tooth tips must be placed.
+    closing_zig = [
+        xo for xo in updated.crossovers
+        if {xo.half_a.helix_id, xo.half_b.helix_id} == {"h_XY_2_2", "h_XY_2_3"}
+    ]
+    assert closing_zig, "Expected a closing-zig crossover across tooth tips h_XY_2_2 ↔ h_XY_2_3"

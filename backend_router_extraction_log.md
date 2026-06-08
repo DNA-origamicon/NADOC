@@ -105,11 +105,14 @@ session discovers something a future session would otherwise re-learn the hard w
   the *concept* the new router owns — move only the routes/models that share its one reason to change, leave
   the rest under a retitled banner. The route count you commit to (#2: 5, not 9) is the cohesion check.
 - **L9 — Baseline a flake before you trust the count.** The framework's "1753 green" baseline was optimistic:
-  `test_seamless_router.py::test_teeth_closing_zig` fails in the *full* suite (cross-test state leak; passes in
-  isolation) on clean HEAD with everything stashed — i.e. it pre-dates this loop. When `just test` shows ONE
-  failure after a verbatim router lift, **stash-and-rerun on clean HEAD** before assuming you caused it; a
-  verbatim move of routes unrelated to the failing test's domain almost never is the cause. True full-suite
-  green is **1752 / 1** until that flake is fixed (see `issues_ledger.md`).
+  `test_seamless_router.py::test_teeth_closing_zig` *appeared* to be a cross-test leak (failed in full suite,
+  passed in isolation). When `just test` shows ONE failure after a verbatim router lift, **stash-and-rerun on
+  clean HEAD** before assuming you caused it; a verbatim move of routes unrelated to the failing test's domain
+  almost never is the cause. **UPDATE (2026-06-08, ISSUE-6):** the "leak" was a misdiagnosis — it was
+  hash-seed nondeterminism in the shared `_hamiltonian_path` (no lexicographic tiebreaker), now FIXED; the test
+  was re-pinned to the closing-zig topological event. True full-suite green is now **1753 / 0**. The lesson
+  still stands (stash-and-rerun to attribute a failure), but the order-dependence was hash-order, not state
+  residue — a single-test fresh-process re-run varying pass/fail is the tell for hash nondeterminism, not a leak.
 
 ## Difficulties ledger (extraction dead-ends — NOT user-facing bugs)
 

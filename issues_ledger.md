@@ -582,27 +582,37 @@ ladder used it to cap depth).
 
 ---
 
-## ISSUE-6 — `test_teeth_closing_zig` fails in the full suite (test-isolation / global-state leak)
+## ISSUE-6 — `test_teeth_closing_zig` flaky (hash-seed-dependent scaffold-strand count)
 
-- **Status:** `[ ]` OPEN. **Pushed in from the backend router carve-up loop** (Refactor #2, 2026-06-08) —
-  surfaced when `just test` after a *verbatim* router lift showed 1 failure; stash-and-rerun on clean HEAD
-  `250f91e` reproduced it, proving it pre-dates the carve-up (NOT caused by the extraction).
-- **Symptom:** `tests/test_seamless_router.py::test_teeth_closing_zig` **fails inside the full `just test`
-  run** but **passes when its file is run alone** (`just test-file tests/test_seamless_router.py`). So full-
-  suite green is **1752 passed / 1 failed**, not 1753. Order-dependent.
-- **Assertion that trips:** `Expected 4 scaffold strands, got 5` (`tests/test_seamless_router.py:168`).
-  `bridge_xovers == 6` still holds; only the scaffold-strand *count* is off by one — a stray
-  `scaf_XY_1_2_h_XY_3_0_61_r`-style fragment survives that an earlier test's state apparently left behind.
-- **Diagnosis lead:** classic shared-mutable-state leak — a test that runs *before* it (alphabetical /
-  collection order) mutates a module-level singleton (likely `backend/api/state` `_active_design`, or a
-  seamless-router module cache) without resetting, so `test_teeth_closing_zig` builds on residue. Confirmed
-  by: passes first when run alone; fails when run after the rest. **Repro for the fixer:**
-  `python -m pytest tests/test_seamless_router.py::test_teeth_closing_zig tests/test_seamless_router.py -p no:randomly -q` → fails (running the target FIRST then the file re-imports/re-runs and leaves it red), vs the
-  file alone → green.
-- **Fix direction (unconfirmed — follow the carve-up's "repro-with-a-test FIRST then ask" discipline):**
-  add an autouse fixture that resets the design/router singleton between tests, OR make the seamless-router
-  builder not retain cross-call state. Do NOT touch the `_PHASE_*` constants. Decide with the user whether
-  the leak is in the test harness (fixture) or a real router statefulness bug before patching.
+- **Status:** `[x]` DONE 2026-06-08 (single phase). **Pushed in from the backend router carve-up loop**
+  (Refactor #2, 2026-06-08); also the long-standing `KNOWN_FLAKES` entry carried across every REFACTOR_AUDIT
+  pass. Fix in `backend/core/seamed_router.py` (`_hamiltonian_path` tiebreaker) + `tests/test_seamless_router.py`
+  (re-pinned `test_teeth_closing_zig` to the topological event, not a strand count).
+- **The ledger's original diagnosis was WRONG.** It is **not** a cross-test state leak. The test fails/passes
+  in a *single fresh process with no other tests running* — pin/fail tracks `PYTHONHASHSEED` (deterministic
+  within a fixed seed, varies across seeds; ~30% of seeds gave 4 strands, ~70% gave 5). A reset fixture would
+  not have touched it.
+- **Root cause (5-Whys):** `test_teeth_closing_zig` asserted `len(scaf_strands) == 4` → the strand count varied
+  → because the seamless router's Hamiltonian path varied → because the shared `_hamiltonian_path` (in
+  `seamed_router.py`, used by both the seamless and advanced-seamed routers) sorted candidate helices by
+  **degree only with no tiebreaker** → so equal-degree helices came out in `set`-iteration (hash-seed) order.
+  A 2026-06-01 refactor routed teeth through this shared search and lost the `(len(adj[n]), n)` tiebreaker that
+  `seamless_router._ham_path_ending` already had. A standing FIXME at the spot named the exact bug.
+- **Fix part 1 — determinism (root cause):** added the `(len(adj[n]), n)` lexicographic tiebreaker to BOTH the
+  starter sort and the neighbor key in `_hamiltonian_path`. Verified deterministic across 13 hash seeds.
+- **Fix part 2 — re-pin the test to its real intent:** with the user's framing that *a fully-routed scaffold is
+  1 strand and `auto_scaffold_seamless` is only an INTERMEDIATE stage* (it places crossovers, doesn't ligate to
+  one loop), the absolute count of leftover scaffold pieces (4 vs 5) is a meaningless artifact of path ordering,
+  NOT an invariant. The test is named for the **closing-zig event**, which I confirmed **fires reliably in both
+  the 4- and 5-piece orderings** (crossover `h_XY_2_2 ↔ h_XY_2_3` is present). So the assertion now checks the
+  topological events — `bridge_xovers == 6`, no warnings, and the closing-zig crossover exists — matching the
+  process-count style of every other test in the file. Order-independent green across 13 seeds + 2× full `just
+  test` (1753 passed, was 1752/1-fail).
+- **Failed hypothesis chased first:** the FIXME's prescribed "add the tiebreaker" alone made it deterministic but
+  locked onto **5** strands (the wrong target if you believe the old `== 4`); the resolution was to recognize the
+  count itself was never the right assertion, not to hunt for the tiebreak direction that yields 4.
+- **Knock-on:** this kills the `KNOWN_FLAKES` entry referenced throughout `REFACTOR_AUDIT.md`,
+  `backend_router_carveup.md`, and `backend_router_extraction_log.md`.
 
 ## Next-session handoff
 

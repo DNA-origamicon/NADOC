@@ -161,11 +161,11 @@ request `BaseModel` across the WHOLE god-file (`grep -rn ClassName backend/`) �
 `backend.core.models` imports in crud.py's import block — remove them (#2 dropped `StrandExtension`,
 `VALID_MODIFICATIONS`; #1 dropped `DesignAnimation`/`AnimationKeyframe`).
 
-**⚠ PRE-EXISTING TEST FAILURE (not from the carve-up):** `tests/test_seamless_router.py::test_teeth_closing_zig`
-fails in the **full** `just test` run (passes in isolation) — confirmed failing on clean HEAD 250f91e with all
-working-tree changes stashed, so it's a cross-test global-state leak independent of any extraction. Full-suite
-green count is therefore **1752 passed / 1 failed**, not 1753. Don't chase it during a carve-up; logged to
-`issues_ledger.md`.
+**✅ RESOLVED (2026-06-08, ISSUE-6):** `tests/test_seamless_router.py::test_teeth_closing_zig` was NOT a
+cross-test state leak — it was hash-seed-dependent nondeterminism in the shared `_hamiltonian_path`
+(`seamed_router.py`) missing a lexicographic tiebreaker. Fixed + the test re-pinned to the closing-zig
+topological event instead of a brittle strand count. **Full-suite green is now 1753 passed / 0 failed.**
+See ISSUE-6 in `issues_ledger.md`.
 
 **▶ NEXT — assembly.py:** **Forward-kinematics helpers** (banner `# ── Forward kinematics helpers`,
 ~446–1106, ~660 ln) is the highest-value *service* extraction — pure FK math marooned in the api file →
