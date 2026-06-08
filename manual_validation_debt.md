@@ -52,7 +52,9 @@ it discharges.
 5. **Commit:** `docs(manual-debt): generate manual ops for <item-id>`.
 6. **When the user later runs a block and reports back,** move that item from
    GENERATED → **VALIDATED** (pass) or **REGRESSION FOUND** (fail, with a one-line
-   note + open a fix). That transition can happen in any loop, out of band.
+   note + open a fix). That transition can happen in any loop, out of band. When an
+   item is VALIDATED, its runnable GENERATED block is **deleted** (the VALIDATED
+   summary replaces it) to keep this file lean.
 
 **Loop ends** when PENDING is empty (every item has a generated block). A second
 pass over GENERATED → VALIDATED happens as the user actually executes them.
@@ -62,10 +64,10 @@ pass over GENERATED → VALIDATED happens as the user actually executes them.
 ## Register state
 
 - Total items: **19**
-- PENDING (no manual ops yet): **15**
-- GENERATED (ready to run): **2** — MV-2, MV-4
-- VALIDATED: **2** — MV-1 (cluster Move/Rotate, 2026-06-07), MV-3 (selection-rules UX, 2026-06-07)
-- REGRESSION FOUND: **0** (MV-1 + MV-3 enhancements found during validation were shipped same session)
+- PENDING (no manual ops yet): **14**
+- GENERATED (ready to run): **2** — MV-4, MV-5
+- VALIDATED: **3** — MV-1 (cluster Move/Rotate, 2026-06-07), MV-2 (overhang orientation, 2026-06-07), MV-3 (selection-rules UX, 2026-06-07)
+- REGRESSION FOUND: **0** (MV-1 + MV-2 + MV-3 enhancements/bugs found during validation were shipped same session)
 
 ---
 
@@ -77,11 +79,11 @@ Core editing + default-selection UX first; niche/visual last.
 | # | id | feature / manual operation | discharges | fixture hint | why deferred |
 |---|----|----------------------------|-----------|--------------|--------------|
 | — | **MV-1** | ✅ **VALIDATED 2026-06-07** (see VALIDATED) — design-mode cluster **Move / Rotate** tool: right-click cluster → gizmo/panel → ✓ commit | #71 #78 #79 #80 #81 | a cluster-bearing design (e.g. `Examples/26hb_platform_v3.nadoc`) | 3D pointer-pick on a cluster + gizmo-handle drag not drivable at pixel precision (LESSONS H7) |
-| — | **MV-2** | *(generated — see GENERATED)* **Overhang Orientation** panel: right-click a rendered overhang → Edit Orientation → step/apply/reset/auto-close; also the migrated context menu | #64, fix #7 | `Examples/NS_trans_fix.nadoc` (51 overhangs) ✓ + `workspace/OH6hb_test.nadoc` (2) ✓ | WebGL raycast on 1 of N overhang beads not drivable |
+| — | **MV-2** | ✅ **VALIDATED 2026-06-07** (see VALIDATED) — **Overhang Orientation** panel: right-click a rendered overhang → Edit Orientation → step/apply/reset/auto-close; also the migrated context menu | #64, fix #7 | `Examples/NS_trans_fix.nadoc` (51 overhangs) ✓ + `workspace/OH6hb_test.nadoc` (2) ✓ | WebGL raycast on 1 of N overhang beads not drivable |
 | — | **MV-3** | ✅ **VALIDATED 2026-06-07** (see VALIDATED) — **selection-rules UX** (drill levels, crossover tube, yellow hover+snap, Ctrl+click, cluster Tab removal) | fixes #10 #11 #12 #14 #15 | `Examples/6hb_test.nadoc` ✓ + `Examples/2hb_xover_val.nadoc` ✓ | — |
 | — | **MV-4** | *(generated — see GENERATED)* Assembly **multi-select purple union BoxHelper**: Ctrl-lasso ≥2 instances → purple box around the union; drops below 2 → clears | #34 | `workspace/Belt_test1.nass` (parts+groups) or any ≥2-part `.nass` | needs a built ≥2-part assembly + Ctrl-lasso multi-select |
-| ▶ HEAD | **MV-5** | Assembly **right-click context menu**: right-click a part → linker-relax (enabled/disabled), attach-to-belt, select; pan-suppress | #69 | `workspace/Linker_Assem_test.nass` / `Belt_test1.nass` | assembly + linker/belt multi-step setup; right-click router |
-| | **MV-6** | **Belt polymerize**: built belt assembly → Polymerize along belt → evenly-spaced copies | #32 | `workspace/Belt_test1.nass` / `belt_test.nass` | needs a built belt assembly |
+| — | **MV-5** | *(generated — see GENERATED)* Assembly **right-click context menu**: right-click a part → linker-relax (enabled/disabled), attach-to-belt, select; pan-suppress | #69 | `workspace/Linker_Assem_test.nass` / `Belt_test1.nass` | assembly + linker/belt multi-step setup; right-click router |
+| ▶ HEAD | **MV-6** | **Belt polymerize**: built belt assembly → Polymerize along belt → evenly-spaced copies | #32 | `workspace/Belt_test1.nass` / `belt_test.nass` | needs a built belt assembly |
 | | **MV-7** | **Coalesced assembly part-refresh**: edit a part in part-context + save burst → shared instances refresh once (not per-instance) | #38 | a multi-part assembly with ≥2 instances of one source part | needs multi-part assembly + part-editor save burst |
 | | **MV-8** | Assembly **config animation**: assembly with a saved feature-log configuration → "animate to configuration" tweens instances | #68 | an assembly that has ≥1 saved configuration (may need to create one) | needs assembly WITH a saved configuration |
 | | **MV-9** | **Assembly open from library**: open a `.nass` from a library row → enters assembly mode cleanly | #59 | any `workspace/*.nass` | part-open exercised live; assembly-open path verbatim-only |
@@ -99,379 +101,6 @@ Core editing + default-selection UX first; niche/visual last.
 ---
 
 ## GENERATED (manual ops ready — run these, then report pass/fail)
-
-### MV-1 — Design-mode cluster Move / Rotate tool
-*Discharges extractions #71 (flex-relax sub-block), #78 (Move/Rotate panel shell),
-#79 + #80 (flex bridge re-emit dedup), #81 (tool gesture core). LESSONS H7 — the
-standing "design-mode cluster-gizmo 3D-drag commit not hand-driven" caveat for the
-whole Translate/Rotate band.*
-
-**Why this is the head item.** Five extractions all rest on one live gesture that no
-automated gate touches: activating the Move/Rotate tool on a real cluster, dragging
-it, and committing. The assembly path *is* covered by `assembly_move_tool.spec.js`
-(real raycast) — it's the **design-mode** path that's pure verbatim-move + jsdom
-factory tests. A break here corrupts edits silently.
-
-**SETUP**
-1. Start both servers (`just dev` + `just frontend`), open `http://localhost:5173`.
-2. Load a design that has clusters — `Examples/26hb_platform_v3.nadoc` is the
-   canonical multi-cluster geometry fixture. (If clusters aren't visible, open the
-   **Clusters** panel / confirm cluster auto-detect is on so a cluster is
-   selectable.)
-3. Enter cluster-selection (drill to the **cluster** level — Tab cycles selection
-   levels; the engaged level shows in the selection-filter row). Left-click a
-   cluster so it's the active/drilled cluster.
-
-**MAIN CASES**
-1. **Activate via right-click.** Right-click the selected cluster → context menu →
-   **"Move / Rotate"**. Expect: a transform gizmo attaches at the cluster, the
-   **Move/Rotate** right-sidebar panel opens with numeric translate/rotate fields,
-   and a floating green **✓** button appears bottom-left.
-2. **Translate by gizmo drag.** Drag a gizmo translate handle. Expect: the cluster's
-   beads move live (preview), the panel's translate fields update to match.
-3. **Rotate by gizmo drag.** Drag a rotation ring. Expect: live rotation about the
-   pivot; panel rotate fields update.
-4. **Commit.** Click **✓**. Expect: the transform sticks, the gizmo/panel close, and
-   a **`cluster_op` (Move/Rotate) entry appears in the Feature Log**. Geometry should
-   look identical to the previewed pose (no snap-back, no jump).
-5. **Commit via panel inputs (no drag).** Re-select the cluster → Move/Rotate, type a
-   value into a translate field (press Enter / blur), then ✓. Expect: same commit
-   path as the drag — this is the input that drives `_mrCommitInputs` (the path the
-   automated assembly test uses).
-
-**EDGE CASES**
-1. **Cancel reverts.** Activate, drag to a clearly different pose, then press
-   **Escape**. Expect: the cluster snaps **back** to its pre-tool pose and **no**
-   Feature Log entry is added.
-2. **Pivot selection.** In the panel, switch the pivot dropdown (centroid / joint /
-   ssDNA, whichever the cluster offers) and rotate. Expect: rotation pivots about the
-   chosen point, not always the centroid.
-3. **Re-edit an existing op.** From the Feature Log, edit the `cluster_op` you just
-   committed. Expect: the tool reopens **prepopulated** with that op's values;
-   changing + ✓ edits the existing entry **in place** (does not append a new one).
-4. **Stale-op guard.** Commit two Move/Rotate ops on the *same* cluster, then try to
-   edit the *earlier* one. Expect: a toast "Edit blocked: a later move/rotate exists
-   for this cluster. Edit the latest one." (no silent corruption).
-5. **Three-Layer Law spot-check.** After a commit, the move must have written to the
-   **topological** cluster pose and the geometry rederived — switch representations
-   (F1–F7) and confirm the new pose holds in every rep (it's not a display-only
-   shimmer that a rebuild would lose).
-
-**PASS CRITERIA**
-- Activate → drag/type → ✓ leaves the cluster in the dragged/typed pose, persisted,
-  with exactly one Feature Log `cluster_op` per commit.
-- Escape always reverts with no log entry.
-- Re-edit modifies in place; the stale-op guard fires.
-- No console errors at any step (keep devtools open).
-
-**WATCH FOR (flagged latent bug — confirm or deny)**
-- **ssDNA flexible-arc rebuild on commit.** If the moved cluster has *anchored ssDNA
-  flexible arcs* between it and another cluster: the tool's two commit paths pass
-  `_refreshClusterOverlays({ withFlexibleArcs: false })`, whereas the response-delta
-  (undo/redo) paths pass `true`. So after a **tool** commit the flexible arcs may
-  **not** rebuild to follow the new pose, while an undo/redo would. Set up a cluster
-  with an ssDNA flexible arc to a neighbor, move it, and report whether the arc
-  visually follows. If it lags/stales → that's the flagged bug (do **not** fix
-  blind; report so the user can decide — verbatim-rule region).
-
----
-
-### MV-2 — Overhang Orientation panel + migrated context menu
-*Discharges extraction #64 (the orientation panel lifted out of main.js —
-`ui/overhang_orientation_panel.js`, factory `initOverhangOrientationPanel`) and fix
-#7 (the right-click menu migrated onto the shared `createContextMenu` primitive —
-`ui/overhang_orientation_menu.js`). Both have jsdom/vitest coverage
-(`overhang_orientation_panel.test.js`, `overhang_orientation_menu.test.js`) but the
-**live WebGL raycast onto 1 overhang of N + the gizmo drag + the instant client-side
-preview** are the never-hand-driven parts.*
-
-**Why this needs a human.** The unit tests pin the menu item set, the single-vs-multi
-gating, and `buildOverhangRotationOps` (the delta-compose math). What they cannot
-touch: the raycast that decides *which* overhang you right-clicked (domain bead, cone
-over an overhang domain, or a Ctrl-lasso union), the rotate-only TransformControls
-gizmo, and the no-server preview that only commits on **Apply**. A break in any of
-those passes every automated gate.
-
-**Routing facts (so you know where to click):** the right-click menu fires via
-`selection_manager.js` → `onOverhangRightClick` → `_orientMenu.show` (main.js:857).
-A **single** overhang menu is reached by right-clicking an overhang in **domain**
-selection level (or a strand cone that sits on an overhang domain). A **multi**
-overhang menu is reached by **Ctrl-lasso** over ≥2 overhang domains, then right-click.
-Selection level is set by the `#select-filter` row buttons or **Tab**; **Esc** → default.
-
-**SETUP**
-1. Start both servers (`just dev` + `just frontend`), open `http://localhost:5173`,
-   keep devtools console open.
-2. Load `Examples/NS_trans_fix.nadoc` (51 overhangs — dense, the canonical overhang
-   fixture). For the single-vs-multi gating checks, `workspace/OH6hb_test.nadoc`
-   (exactly 2 overhangs) is smaller and easier to aim at — use whichever lets you
-   land a clean right-click.
-3. Make overhangs visible/selectable: zoom in past cylinder-LOD so individual beads
-   render; set the selection level to **domain** (Tab or the `#select-filter` row) so
-   a right-click resolves to an overhang domain rather than a whole strand.
-
-**MAIN CASES**
-1. **Open the context menu on one overhang.** Right-click directly on a rendered
-   overhang (its domain bead or terminal cone). Expect a `.context-menu` with exactly:
-   **Edit Orientation · Reset Orientation · Set Label… · Generate OH binding strand ·
-   Open Overhangs Manager… · Clear All Overhangs** (last one red/danger), plus a
-   **Representation** flyout. Set Label / Generate appear **only** for a single
-   overhang.
-2. **Edit Orientation opens the panel + gizmo.** Click **Edit Orientation**. Expect:
-   the right-sidebar **Overhang Orientation** section (`#overhang-orient-panel`)
-   un-hides showing the overhang's label/id, three axis rows each with **−45 / value /
-   +45** controls (`oo-rx/ry/rz`), and **Reset / Cancel / Apply** buttons; a
-   **rotate-only** TransformControls gizmo attaches at the overhang's junction
-   (root-bead) pivot — three rotation rings, no translate arrows.
-3. **Step buttons preview live.** Click **+45** on X (`oo-rx-inc`). Expect: the
-   overhang visibly rotates 45° about its junction *instantly* (no server round-trip /
-   no spinner), and the X field reads `45`. Click it again → `90`, etc. (accumulates).
-4. **Gizmo drag previews live.** Drag a rotation ring. Expect: the overhang follows
-   the drag in real time and the angle fields update to match the accumulated delta.
-5. **Typed absolute angle previews.** Type a value into the X field and press
-   **Enter**. Expect: the overhang snaps to that absolute angle (delta computed from
-   the current accumulated rotation), previewed client-side.
-6. **Apply commits.** Click **Apply**. Expect: the rotation persists (the panel closes,
-   gizmo detaches), an **`overhang_rotation` entry appears in the Feature Log**, and
-   the geometry stays exactly where it was previewed — no snap-back, no jump. The
-   committed rotation is the *delta composed onto the existing* rotation
-   (`patchOverhangRotationsBatch`), so applying twice stacks.
-
-**EDGE CASES**
-1. **Cancel reverts the preview.** Edit Orientation → step/drag to a clearly different
-   pose → click **Cancel**. Expect: the overhang snaps **back** to its pre-edit pose
-   (panel re-fetches server geometry) and **no** Feature Log entry is added.
-2. **Reset zeroes the orientation.** With an overhang that already carries a rotation,
-   Edit Orientation → **Reset**. Expect: the overhang returns to identity orientation
-   `[0,0,0,1]` (this *does* hit the server — `patchOverhangRotationsBatch` with
-   identity) and the gizmo re-attaches at zero. (Note: the **Reset Orientation** menu
-   item — without opening the panel — does the same identity-batch for every clicked
-   overhang. Verify both the menu item and the in-panel button.)
-3. **Multi-overhang selection gates the menu.** Ctrl-lasso ≥2 overhang domains →
-   right-click. Expect: the menu **omits** Set Label… and Generate OH binding strand
-   (single-only), still shows Edit Orientation / Reset / Open Manager / Clear All.
-   Edit Orientation on the multi-selection rotates **all** selected overhangs about
-   **each one's own** junction pivot (the gizmo centers on the right-clicked anchor).
-4. **Auto-close on structural change.** With the panel open on an overhang, trigger a
-   change to the overhang *set* — e.g. **Clear All Overhangs**, or delete/add an
-   overhang elsewhere. Expect: the panel **auto-closes** (the subscriber fires only
-   when the overhang id-set changes, not on a rotation patch). A plain rotation Apply
-   must **not** close it via this path (it closes via its own Apply→close).
-5. **Set Label round-trips.** Single overhang → **Set Label…** → type a label → it
-   shows on the overhang / in the panel header; **Cancel** at the prompt must not patch.
-6. **Single-overhang special: Generate OH binding strand.** Fire it on one overhang;
-   expect a binder strand generated for that overhang id (no error). (Lower priority —
-   binder generation is separately covered; just confirm the menu wiring fires the
-   right call.)
-
-**PASS CRITERIA**
-- Right-click resolves to the *correct* overhang (the one under the cursor), with the
-  expected item set + single/multi gating.
-- Edit → step/drag/type previews instantly with **no server round-trip**; angle fields
-  always mirror the current accumulated delta.
-- **Apply** persists exactly one `overhang_rotation` Feature Log entry per commit, in
-  the previewed pose; **Cancel** reverts with no entry; **Reset** returns to identity.
-- Panel auto-closes when the overhang set changes; stays open across a rotation patch.
-- No console errors at any step.
-
-**WATCH FOR (suspect behaviors — confirm or deny)**
-- **Pivot correctness on multi-select.** The gizmo centers on the right-clicked
-  anchor's pivot, but each overhang rotates about **its own** junction
-  (`_ooPivotPositions[id]`). On a Ctrl-lasso of overhangs that are far apart, confirm
-  each one pivots about its *own* root bead — not all about the anchor's pivot (that
-  would be a regression and would visibly fling distant overhangs).
-- **Preview-vs-commit drift.** Because Apply commits the *delta* composed onto the
-  existing rotation, watch for a one-step double-apply or off-by-one (e.g. the pose
-  jumping further than previewed the instant you click Apply). The preview should be
-  pixel-identical to the committed result.
-- **Stale gizmo after Apply.** After Apply the panel closes and the gizmo detaches;
-  confirm no orphaned rotation rings linger in the scene, and re-opening Edit
-  Orientation on the same overhang starts from a fresh zero delta (fields read 0),
-  not the previously-applied angle.
-- **Extrude overhangs.** `NS_trans_fix` may contain extrude-type overhangs
-  (independent helix). For those the preview also re-poses the helix axes +
-  overhang-location sprites (`isExtrudeOverhang` branch). Right-click an extrude
-  overhang and confirm the whole stub (axis + label sprite) rotates coherently, not
-  just the beads.
-
----
-
-### MV-3 — Drill-v2 selection on a multi-helix design (with crossovers)
-*Discharges fixes #10 #11 #12 #14 #15 — the unified `selectionLevel` model that
-replaced the legacy auto-drill ladder / manual filter pins / Tab drill-lock (those
-were physically deleted 2026-06-06). Pure model in `scene/selection_level.js`; click
-paths are `_v2HandleBead` / `_v2HandleCone` / `_v2HandleArc` in `selection_manager.js`.*
-
-**Why this needs a human.** Every automated test runs against a **single-helix**
-harness fixture — so it has **no crossovers**, and the three things that only exist
-on a real multi-helix design with inter-helix crossovers are entirely un-exercised:
-(1) the thin crossover **arc** as a pick target (its cone is hidden, so the arc is
-picked by 18-px screen proximity, not raycast), (2) the **red hover tube → green
-selection tube** colour transition on that arc, and (3) a multi-element **Ctrl-lasso
-that respects the engaged level** across more than one helix. The pure model is
-unit-pinned (`selection_level.test.js`); the live gesture is not.
-
-**FIXTURE** — you need a multi-helix design that *actually has crossover arcs*.
-Verified counts (probed from the files):
-- **`Examples/6hb_test.nadoc`** ✓ — **6 helices, 2 crossovers**. **Primary** — true
-  multi-helix, and it has arcs to hover/click.
-- `Examples/2hb_xover_val.nadoc` ✓ — 2 helices, **4 crossovers** (denser arcs, easier
-  to land an arc click) but only 2 helices — use as the **arc-specific backup**.
-- ⚠️ **Do NOT use `Examples/26hb_platform_v3.nadoc` for the arc steps** — it has 26
-  helices but **0 explicit crossovers**, so there are no arcs to pick. (Fine only for
-  the level-button / Tab / lasso steps that don't need an arc.)
-
-**SETUP**
-1. Start both servers (`just dev` + `just frontend`), open `http://localhost:5173`,
-   keep devtools console open.
-2. Load **`Examples/6hb_test.nadoc`**. Zoom in past cylinder-LOD so individual beads,
-   cones, and the thin crossover arcs between helices render.
-3. The selection level is driven by the **`#select-filter`** button row (buttons:
-   **clust / strand / line(=domain) / ends / xover**) and by **Tab**; **Esc** → default.
-   "No button lit" = the **default** drill level.
-
-**MAIN CASES**
-1. **Default drill ladder.** With no filter button lit: 1st click on a strand →
-   the whole **strand** highlights green. 2nd click *on that same strand*, **on a
-   backbone bead** → drills to the **end/nucleotide under the cursor**; 2nd click **on
-   a cone** → the **crossover**. A repeat click keeps the leaf. Clicking a *different*
-   strand restarts at strand level.
-2. **`strand` fixed level.** Click the **strand** filter button (or Tab to it). Now
-   *every* click selects the whole clicked strand — no leaf drill on a 2nd click.
-3. **`domain` (line) fixed level.** Click **line**. Every click → the clicked
-   **domain** only (not the whole strand, not a single bead).
-4. **`end` fixed level.** Click **ends**. Clicking a terminus selects the **5'/3' end
-   bead** (gold measurement-bead style), not the strand.
-5. **`xover` fixed level — arc click → GREEN TUBE.** Click **xover**, then click
-   directly on a thin **crossover arc** between two helices. Expect: a **green glow
-   tube traced along the arc polyline** (not an endpoint sphere), and the Properties/
-   selection reads a **crossover** object. Click the **same** arc again → it **toggles
-   off** (deselects). (Use `2hb_xover_val.nadoc` if the 6hb arcs are hard to hit.)
-6. **Default-level arc hover preview → RED TUBE.** Back at **default** level, select a
-   strand that *carries* a crossover (so `mode = strand`). Hover the cursor over that
-   strand's crossover arc **without clicking**. Expect: a **red glow tube** along the
-   arc (the "a click here would select this crossover" preview). Click it → the red
-   preview becomes the **green** selection tube (case 5's result).
-7. **Tab cycles the level.** Press **Tab** repeatedly with the canvas focused. Expect
-   the engaged filter button to advance **cluster → strand → domain(line) → end(ends)
-   → xover → none(default) → cluster …**, the lit button mirroring each step.
-8. **Esc → default.** From any engaged level press **Esc**. Expect: all filter buttons
-   unlight (back to the drill ladder) and the current selection clears.
-
-**EDGE CASES**
-1. **Engaged level survives an empty-space click.** Engage e.g. **domain**, click empty
-   background (deselects the object). The **domain** button must **stay lit** — an
-   empty click clears the *selection*, not the *level*. (This is the ISSUE-4 fix: the
-   old model would silently drop back to a different level.)
-2. **Multi-element Ctrl-lasso respects the engaged level.** This is the core
-   `lassoCaptureType` fix (#14/#15). Ctrl-drag a rectangle over a region spanning
-   **≥2 helices** and check WHAT it captures at each level:
-   - default / **strand** → whole **strands** in the rect.
-   - **domain (line)** → **domains** in the rect (white domain highlight), not strands.
-   - **end** → only the **5'/3' termini** beads in the rect (not every bead).
-   - **xover** → the **crossovers** whose arcs fall in the rect.
-   The old "Tab to ends, lasso grabs a cluster" bug is the regression to watch for.
-3. **No legacy red sf-pinned BoxHelper.** Through ALL of the above, confirm there is
-   **never** a stray **red wireframe selection box** drawn around a strand/region.
-   That red "selection-filter-pinned" BoxHelper was part of the deleted legacy model;
-   the only red you should ever see now is the **arc hover tube** (case 6). Green =
-   selection (glow / arc tube), red = hover-preview arc only.
-4. **Filter button toggles off to default.** Click an already-lit level button (e.g.
-   **xover** when xover is lit). Expect it to turn off → back to **default** (not stay
-   stuck lit).
-5. **Hover preview is scoped.** The red arc/bead hover preview should appear **only**
-   at default level **with a strand already selected**, and **only** for elements on
-   *that* strand — hovering a different strand's arc shows nothing. Also: it must
-   **not** appear when the cursor is over the right ~300 px (the sidebar panel zone).
-
-**PASS CRITERIA**
-- Each level (default ladder / strand / domain / end / xover) selects exactly the
-  element type described; the `#select-filter` lit button always matches the engaged
-  level, and Tab/Esc move it as specified.
-- Crossover **arc**: hover = red tube, click = green tube + crossover selected, 2nd
-  click toggles off. (At least on `2hb_xover_val.nadoc` if 6hb arcs are too thin.)
-- Ctrl-lasso captures the SAME element type the engaged level's click would — verified
-  across ≥2 helices for at least strand / domain / end.
-- An empty-space click clears the selection but **keeps** the engaged level lit.
-- **No red wireframe selection BoxHelper appears anywhere.**
-- No console errors at any step.
-
-**WATCH FOR (suspect behaviors — confirm or deny)**
-- **Arc pickability at distance / odd camera angles.** The arc is picked by 18-px
-  *screen-space proximity* to its projected polyline (`_findStrandArcAt`), not by a
-  3D raycast. On a steeply foreshortened arc or when two arcs overlap on screen,
-  confirm the *intended* arc is the one that lights — a wrong-arc pick or a dead zone
-  is the likely silent break.
-- **Tab swallowed by a gizmo.** Tab is owned by `cluster_gizmo` / `instance_gizmo`
-  while a Move/Rotate gizmo is active. Confirm Tab cycles selection levels **only**
-  when no transform gizmo is up (it should be skipped, not double-fire, when one is).
-- **xover toggle vs. unresolvable arc.** When you click an arc whose crossover can't be
-  resolved (forced-ligation edge case) **at xover level**, the handler now **selects
-  nothing** (keeps the current selection) — the old strand fallback was removed
-  2026-06-07 (see REGRESSION FOUND below). Confirm it does NOT select the strand.
-
----
-
-## VALIDATED (user-confirmed pass)
-
-### MV-1 — Design-mode cluster Move / Rotate tool ✅ VALIDATED 2026-06-07
-Discharges extractions #71 #78 #79 #80 #81 (the LESSONS H7 "cluster-gizmo 3D-drag
-commit not hand-driven" caveat for the whole design-mode Translate/Rotate band).
-Confirmed live by the user across all MAIN + EDGE cases in the GENERATED block:
-activate via right-click, gizmo translate/rotate, ✓ commit (drag and panel-input),
-Escape-reverts, pivot selection, re-edit-in-place, stale-op guard, and the
-Three-Layer spot-check.
-
-Two UX gaps were found *during* validation and shipped the same session:
-
-1. **Unified cluster selection** — clicking a cluster with the cluster selection
-   filter active and clicking its row in the **Dynamics → Movable clusters** list now
-   drive ONE selected-cluster state: same green glow (`0x3fb950`) + 1.3× bead scale +
-   cluster `selectedObject` + sidebar row highlight. selection_manager owns the commit
-   (`_applyClusterSelection` + exported `selectCluster`); a thin main.js subscriber
-   mirrors the cluster `selectedObject` onto `activeClusterId`. The blue
-   `clusterGlowLayer` is now reserved for the Move/Rotate tool's active cluster.
-2. **Earlier Move/Rotate ops are independently editable** — the old "Edit blocked: a
-   later move/rotate exists" guard (frontend toast + backend 409) was removed. Each
-   `cluster_op` stores the cluster's ABSOLUTE pose after that step and the live pose is
-   the LAST op for that cluster, so editing an earlier op (A1→A2) rewrites only that
-   step's seek/scrub frame while the latest op keeps defining the final pose (B1).
-   Editing an earlier op seeks the feature log to it (shows that step's pose); commit
-   and cancel seek back to the latest pose. Backend: `_edit_cluster_op_feature`
-   recomputes the live transform from the last op. (Use case: tweaking one cluster
-   position in a scrubbed series without redoing the rest.)
-
-Backend `just test` 1747 passed (2 new cluster_op-edit pins); frontend
-`just test-frontend` 1090 passed (2 new tool pins + the selection-unify wiring);
-`just smoke` 23/23. Live-exercised: sidebar↔3D selection parity, and edit-earlier-op
-→ seek-to-step → cancel → seek-back-to-latest, all zero console errors.
-
-### MV-3 — Drill-v2 selection, part-3D editor ✅ VALIDATED 2026-06-07
-Discharges fixes #10 #11 #12 #14 #15. Confirmed live by the user across an extended
-selection-rules UX session (the original block + a large follow-on overhaul). **The
-part-3D-editor selection-rules UX is now validated & finished.** What's in place:
-
-- **Fixed levels select only their own type** — domain/end/xover/cluster no longer
-  soft-fall to a whole-strand selection; a mismatched click is a no-op. End level
-  selects only 5′/3′ termini.
-- **Crossovers are arc-only, rendered as a glow TUBE** — single-click, lasso/additive
-  multi-select, and Ctrl+click toggle all use the same green tube (full, double-sided,
-  12 radial segments, depthTest-off, r = 0.147 nm). Cones never participate in crossover
-  selection; the invisible cross-helix "cones" that FEED the arc pipeline are excluded
-  from picking so they can't be selected or flash visible.
-- **Ctrl+click** toggles a crossover in/out of the multi-set; **plain click** single-
-  selects; lasso respects the engaged level.
-- **Generic yellow hover preview** at every filter level (cluster/strand/domain/end/
-  xover): hovering shows — in yellow — exactly what a click will select (same FORM as
-  the green selection), with snap-to-nearest within 80 px. The already-selected element
-  stays green (no yellow on it); other elements preview yellow.
-- **Cluster** removed from the Tab cycle (button-only) and its button moved to the gate
-  group (skip/loop/ovhg) — a late-stage, occasional tool.
-- No legacy red sf-pinned BoxHelper anywhere.
-
-1087 frontend tests green; served `dist/` rebuilt. Tube geometry pinned by
-`frontend/src/scene/arc_tube_geometry.test.js` (never NaNs). The earlier MV-3
-REGRESSION-FOUND items (below) are resolved by the above.
 
 ### MV-4 — Assembly multi-select purple union BoxHelper
 *Discharges extraction #34 (the multi-select union box lifted out of main.js →
@@ -587,6 +216,243 @@ group-gizmo drag are also human-eye-only.
 
 ---
 
+### MV-5 — Assembly right-click context menu (part / linker / belt)
+*Discharges fix #69 — the assembly right-click router moved onto the shared
+`createContextMenu` primitive. The router (`assembly_pointer.js`
+`onAssemblyContextMenu`, line 575) and the part menu builder
+(`ui/assembly_context_menu.js`) have unit coverage for the item set and gating, but
+the **live WebGL right-click that decides part vs linker vs belt, the right-drag pan-
+suppress, and the enabled/disabled linker-relax state** are the never-hand-driven
+parts.*
+
+**Why this needs a human.** The unit tests pin which items the part menu builds and
+the multi-select/group gating, but they cannot touch: the **raycast priority chain**
+that decides whether your right-click resolves to a *linker*, a *belt path*, or a
+*part instance* (and routes to a different menu for each), the **5-pixel pan-suppress**
+that must let a right-*drag* orbit/pan without ever popping a menu, and the
+**linker-relax enabled-vs-disabled** state that depends on a backend availability
+call. A break in any of those passes every automated gate.
+
+**Routing facts (so you know where to click) — `assembly_pointer.js:575-620`:**
+- Right-click fires `onAssemblyContextMenu`. It first reads the right-button-down
+  position: if the pointer moved **> 5 px** (squared dist > 25) since right-button-
+  down, it treats the gesture as a **right-drag pan** and **suppresses the menu
+  entirely** (line 584-586). No browser menu appears either (`preventDefault`).
+- The hit is resolved in a **priority chain**, first match wins:
+  1. **Overhang arrow** (only if the overhang tool's locations are visible) → handled
+     by `selection_manager`, the part menu is skipped (line 591-595).
+  2. **Linker** (`pickLinker` — complement/bridge beads or the connector arc) →
+     **Linker menu** (line 598-599).
+  3. **Belt path** (`pickBeltAt`) → **Belt menu** (line 603-609).
+  4. **Part instance** (`pickInstance`) → selects it (`activeInstanceId = inst.id`,
+     line 618) **and** opens the **part context menu** (line 619).
+- **Linker menu** (`showAssemblyLinkerMenu`, line 548): header `Linker · {name}`, one
+  item **"Relax linker"**. It is **disabled** when the backend
+  `getAssemblyOverhangConnectionRelaxStatus(connId)` returns `available === false`
+  (ds-only; needs a movable free part); when disabled, a second header line shows the
+  **reason** (line 570).
+- **Belt menu** (line 605): header `Belt path`, one item **"Attach part to belt"**.
+- **Part menu** (`ui/assembly_context_menu.js`): header = part name; a **Repr**
+  dropdown (Full/Beads/Cylinders/Hull Prism/VDW/Ball+Stick); **Move / Rotate**;
+  **Define Connector**; **Fixed (anchored)** toggle; **Allow Part Joints** toggle;
+  conditional **Show/Hide**, **Edit Part…**, **Duplicate**, **Polymerize…**;
+  **Group (N parts)** *only when a multi-select exists*; **Ungroup** *only when the
+  part is in a group*; danger-styled **Delete**.
+- **Dismiss:** outside `pointerdown` or **Escape** → `hide()`; the dismiss listeners
+  are bound on a `setTimeout(…,0)` so the originating right-click doesn't instantly
+  close the menu. Exiting the assembly calls `hide()`.
+
+**SETUP**
+1. Start both servers (`just dev` + `just frontend`), open `http://localhost:5173`,
+   keep devtools console open. This is an **assembly-mode** block.
+2. For the **linker-relax** cases: File → Open → **`workspace/Linker_Assem_test.nass`**
+   (verified present — a cross-part linker assembly). For the **attach-to-belt** case:
+   File → Open → **`workspace/Belt_test1.nass`** (verified — 62 instances + 2 groups +
+   1 belt). You'll do the part-menu + pan-suppress cases on either.
+3. Wait for parts to render; zoom/orbit so an individual part, the linker beads/arc,
+   and (in Belt_test1) the belt tube are each comfortably clickable.
+
+**MAIN CASES**
+1. **Right-click a bare part → part menu + selects it.** Right-click a part instance
+   that is *not* on a linker or belt. Expect: the part is **selected** (its white
+   per-instance outline appears) AND a `.context-menu` opens at the cursor with the
+   header = the part's name and the item set listed in routing facts (Repr dropdown,
+   Move / Rotate, Define Connector, Fixed, Allow Part Joints, … Delete).
+2. **Right-click a part in a group → Ungroup appears.** In Belt_test1, right-click a
+   part that belongs to a group. Expect the menu to include **Ungroup** (it is omitted
+   for an ungrouped part).
+3. **Multi-select then right-click → Group (N parts).** Ctrl-lasso ≥2 instances (the
+   MV-4 gesture), then right-click one of them. Expect the menu to include
+   **Group (N parts)** with N = the multi-selected count.
+4. **Right-click the linker → Relax menu (ENABLED).** In Linker_Assem_test, right-click
+   directly on the linker (a complement/bridge bead or the connector arc between the two
+   parts). Expect a small menu: header **`Linker · {name}`** + an **enabled**
+   **"Relax linker"** item. Click it → a toast "Relaxed linker — free part moved into a
+   coaxial native-length duplex." and the free part rigid-translates into a coaxial
+   duplex.
+5. **Right-click the belt → Attach menu.** In Belt_test1, right-click on the **belt
+   tube**. Expect a menu: header **`Belt path`** + **"Attach part to belt"**. (You can
+   stop at confirming the menu + that clicking it begins the attach flow; the full
+   attach pick is a separate feature.)
+6. **Pan-suppress: right-DRAG never opens a menu.** Press right mouse button on a part
+   and **drag** (> a few px) to pan/orbit the camera, then release. Expect: the camera
+   pans/orbits and **NO context menu appears** on release.
+
+**EDGE CASES**
+1. **Linker-relax DISABLED state.** If the linker in the fixture is **not** relax-
+   eligible (not ds, or no movable free part), the **"Relax linker"** item must be
+   **greyed/disabled** and a second header line shows the **reason** (e.g. "Relax
+   unavailable"). Confirm a disabled item does nothing when clicked. *(If
+   Linker_Assem_test's linker is eligible and always enabled, note that and flag that a
+   disabled-case fixture is missing.)*
+2. **Outside-click dismiss.** Open any of the three menus, then left-click elsewhere
+   (empty space or another part). Expect: the menu **closes** cleanly (and an
+   outside-click that lands on a part also performs that part's normal selection).
+3. **Escape dismiss.** Open a menu, press **Escape**. Expect: the menu closes.
+4. **Originating click doesn't self-dismiss.** Confirm the menu actually **stays open**
+   after the right-click that spawned it (the deferred-listener fix) — it must not flash
+   open-and-immediately-closed.
+5. **Right-click empty space → nothing.** Right-click on empty background (no part,
+   linker, or belt under the cursor). Expect: **no menu**, no error (`pickInstance`
+   returns null → early return).
+6. **Pending-edit commit on re-target.** With a Move/Rotate (or other) edit pending on
+   part A, right-click part **B**. Expect: the pending edit on A **commits** first
+   (`commitAssemblyPending`), B becomes active, B's menu opens — no lost edit, no error.
+7. **Assembly-exit teardown.** Open a menu, then exit the assembly (close doc / main
+   menu / open a design). Expect: the menu is hidden, **no console error**, no orphaned
+   `.context-menu` node left in the DOM.
+
+**PASS CRITERIA**
+- A right-click resolves to the **correct** target under the cursor: linker → Linker
+  menu, belt → Belt menu, bare part → part menu (and selects the part). The priority
+  chain never shows the wrong menu (e.g. a part menu on top of a linker).
+- "Relax linker" is **enabled** when relax-eligible and **disabled with a reason** when
+  not; clicking the enabled item relaxes (toast + free part moves).
+- "Attach part to belt" appears on a belt right-click.
+- The part menu's **Group / Ungroup** items obey the multi-select / in-a-group gating.
+- A right-**drag** pans/orbits and **never** opens a menu (5 px threshold).
+- Outside-click and Escape both dismiss; the spawning click does not self-dismiss;
+  exiting the assembly leaves no orphan node and throws no error.
+- No console errors at any step.
+
+**WATCH FOR (suspect behaviors — confirm or deny)**
+- **Pan-suppress threshold feel.** The cutoff is a fixed **5 px**. A *deliberate*
+  micro-nudge right-click (< 5 px jitter) should still open the menu; a real pan should
+  not. Confirm a normal "I didn't mean to drag" hand-tremor right-click still pops the
+  menu (i.e. the threshold isn't so tight that ordinary clicks get eaten).
+- **Linker vs part priority on overlap.** Where a linker bead sits directly in front of
+  a part, the linker wins the chain (it's checked first). Confirm right-clicking the
+  *part body* (away from the linker beads/arc) still gives the **part** menu, not the
+  linker menu — i.e. the linker pick isn't grabbing too wide a screen radius.
+- **Belt pick precision.** `pickBeltAt` uses the event directly (screen-proximity to the
+  belt tube). On a foreshortened belt or where it overlaps a part, confirm the intended
+  target wins and you can still reach the part underneath.
+- **Relax-status call failure.** The relax-status fetch is wrapped in try/catch and
+  *treats a failure as available* (line 552). If the backend is slow/erroring, the
+  "Relax linker" item may show **enabled** but then fail on click with an error toast.
+  If you see that, note it — it's a known soft-fail, not a crash.
+- **Active-instance side effect.** A right-click on a part sets `activeInstanceId`
+  *before* the menu opens (line 618), so right-clicking a part **changes the selection**
+  even if you dismiss the menu without choosing anything. Confirm that's acceptable (it
+  mirrors most apps) and that dismissing doesn't leave a half-state.
+
+---
+
+## VALIDATED (user-confirmed pass)
+
+### MV-1 — Design-mode cluster Move / Rotate tool ✅ VALIDATED 2026-06-07
+Discharges extractions #71 #78 #79 #80 #81 (the LESSONS H7 "cluster-gizmo 3D-drag
+commit not hand-driven" caveat for the whole design-mode Translate/Rotate band).
+Confirmed live by the user across all MAIN + EDGE cases: activate via right-click,
+gizmo translate/rotate, ✓ commit (drag and panel-input), Escape-reverts, pivot
+selection, re-edit-in-place, stale-op guard, and the Three-Layer spot-check.
+
+Two UX gaps were found *during* validation and shipped the same session:
+
+1. **Unified cluster selection** — clicking a cluster with the cluster selection
+   filter active and clicking its row in the **Dynamics → Movable clusters** list now
+   drive ONE selected-cluster state: same green glow (`0x3fb950`) + 1.3× bead scale +
+   cluster `selectedObject` + sidebar row highlight. selection_manager owns the commit
+   (`_applyClusterSelection` + exported `selectCluster`); a thin main.js subscriber
+   mirrors the cluster `selectedObject` onto `activeClusterId`. The blue
+   `clusterGlowLayer` is now reserved for the Move/Rotate tool's active cluster.
+2. **Earlier Move/Rotate ops are independently editable** — the old "Edit blocked: a
+   later move/rotate exists" guard (frontend toast + backend 409) was removed. Each
+   `cluster_op` stores the cluster's ABSOLUTE pose after that step and the live pose is
+   the LAST op for that cluster, so editing an earlier op (A1→A2) rewrites only that
+   step's seek/scrub frame while the latest op keeps defining the final pose (B1).
+   Backend: `_edit_cluster_op_feature` recomputes the live transform from the last op.
+
+Backend `just test` 1747 passed (2 new cluster_op-edit pins); frontend
+`just test-frontend` 1090 passed (2 new tool pins + the selection-unify wiring);
+`just smoke` 23/23. Live-exercised: sidebar↔3D selection parity, and edit-earlier-op
+→ seek-to-step → cancel → seek-back-to-latest, all zero console errors.
+
+### MV-2 — Overhang Orientation panel + migrated context menu ✅ VALIDATED 2026-06-07
+Discharges extraction #64 (`ui/overhang_orientation_panel.js`) and fix #7 (the
+right-click menu on the shared `createContextMenu` primitive). Confirmed live by the
+user across the GENERATED block: Edit Orientation opens the panel + rotate-only gizmo,
+step/drag/typed previews are instant and client-side, Apply commits one
+`overhang_rotation` Feature Log entry, single-vs-multi menu gating, and auto-close on
+structural change. **The live WebGL raycast → gizmo → preview gesture is now
+hand-driven and validated.**
+
+Five bugs were found *during* validation and fixed the same session:
+
+1. **Dual context menu on an overhang bead.** An overhang's free tip is "unpaired", so
+   a right-click on its bead opened the short *flexible-segment* menu instead of the
+   overhang menu — the unpaired-bead check ran first. Fixed in `selection_manager.js`:
+   an overhang-bead right-click (`hitBead.nuc.overhang_id != null`) routes to
+   `onOverhangRightClick`, matching the cone-on-overhang dispatch.
+2. **Reset jumped the gizmo to the wrong location.** The in-panel **Reset** re-attached
+   the gizmo without the cached pivot, falling back to `anchor.pivot` (`[0,0,0]` for
+   inline overhangs). Fixed: Reset (and Apply) re-attach with
+   `_ooPivotPositions[_ooRightClickedId]`.
+3. **Reset → Cancel still left a Feature Log entry.** Reset committed to the server
+   immediately. Reworked to a **client-side preview** (per-overhang baseline → identity,
+   tracked via `_ooBaseRotations`): Reset→Apply commits identity; Reset→Cancel reverts
+   with no entry.
+4. **Multi-overhang menu pixel-dependence.** The multi-overhang divert was gated
+   `!hitCone`, so a right-click on an overhang's terminal cone fell through to a
+   single-id dispatch. Fixed: the divert fires for any overhang hit (cone OR frontmost
+   bead) and dispatches the full `_multiOverhangIds` set.
+5. **Flexible scaffold run rendered rigid after Generate OH binder → undo.** The binder
+   add/remove undo routed `_design_replace_response` through the compact geometry form,
+   omitting the per-bead `is_flexible_segment` flag. Fixed in `crud.py`: ship per-nuc
+   geometry whenever the diff changed the marks OR the target design has flexible
+   connections.
+
+Backend `just test` 1747 passed (+1 new pin `test_topology_change_replace_keeps_flexible_flag`).
+Frontend `just test-frontend` 1101 passed (+4 new overhang-panel pins). All five fixes
+confirmed live by the user.
+
+### MV-3 — Drill-v2 selection, part-3D editor ✅ VALIDATED 2026-06-07
+Discharges fixes #10 #11 #12 #14 #15. Confirmed live by the user across an extended
+selection-rules UX session (the original block + a large follow-on overhaul). **The
+part-3D-editor selection-rules UX is now validated & finished.** What's in place:
+
+- **Fixed levels select only their own type** — domain/end/xover/cluster no longer
+  soft-fall to a whole-strand selection; a mismatched click is a no-op. End level
+  selects only 5′/3′ termini.
+- **Crossovers are arc-only, rendered as a glow TUBE** — single-click, lasso/additive
+  multi-select, and Ctrl+click toggle all use the same green tube (full, double-sided,
+  12 radial segments, depthTest-off, r = 0.147 nm). Cones never participate in crossover
+  selection.
+- **Ctrl+click** toggles a crossover in/out of the multi-set; **plain click** single-
+  selects; lasso respects the engaged level.
+- **Generic yellow hover preview** at every filter level: hovering shows — in yellow —
+  exactly what a click will select (same FORM as the green selection), with snap-to-
+  nearest within 80 px. The already-selected element stays green.
+- **Cluster** removed from the Tab cycle (button-only) and its button moved to the gate
+  group — a late-stage, occasional tool.
+- No legacy red sf-pinned BoxHelper anywhere.
+
+1087 frontend tests green; served `dist/` rebuilt. Tube geometry pinned by
+`frontend/src/scene/arc_tube_geometry.test.js` (never NaNs). The earlier MV-3
+REGRESSION-FOUND items (below) are resolved by the above.
+
+---
+
 ## REGRESSION FOUND (user-confirmed fail → fix opened)
 
 ### MV-3 (2026-06-07) — two issues found running the block → **FIXED + re-validated same session** (see VALIDATED)
@@ -595,16 +461,13 @@ group-gizmo drag are also human-eye-only.
    selecting the whole strand. Fixed: each fixed level now selects ONLY its own type;
    a mismatched click is a **no-op** (current selection kept). `selection_manager.js`
    `_v2HandleBead` / `_v2HandleCone` / `_v2HandleArc` — removed every `_selectStrandV2`
-   fallback (cluster/domain/end/xover). `strand` level still selects the strand (its job).
+   fallback (cluster/domain/end/xover). `strand` level still selects the strand.
 2. **Lasso crossover highlight ≠ single-click highlight.** Lasso/additive multi-select
    drew a cyan arc-line recolor + green glow spheres; single-click draws a green glow
    tube. Fixed: multi-select now renders the **same green glow tubes**
    (`design_renderer.setSelectionArcs` / `clearSelectionArcs`, a pooled mirror of
    `setSelectionArc`); `_applyMultiCrossoverHighlight` + the shift-click arc toggle both
-   route through it. The old `unfold_view.updateArcGlow` + `_arcGlow*` path is now
-   unused (harmless early-out).
-   - *Re-test:* lasso ≥2 crossovers at xover level → each is a green tube identical to a
-     single-click selection; shift-click toggles individual arcs in/out as green tubes.
+   route through it.
 
 ## RE-TEST NEEDED (fix shipped, user not yet re-confirmed)
 
@@ -614,11 +477,11 @@ _(none — MV-3 re-validated 2026-06-07; see VALIDATED)_
 
 ## Next loop
 
-**▶ Process MV-5 — Assembly right-click context menu** (discharges #69).
-Dig: the assembly right-click router (`assembly_pointer.js` right-click handler →
-context-menu builder), the menu items (linker-relax enabled/disabled, attach-to-belt,
-select) and the pan-suppress behavior (right-drag must orbit/pan, not fire the menu).
-**Fixture:** `workspace/Linker_Assem_test.nass` (cross-part linker, for the relax
-enabled/disabled gating) and/or `workspace/Belt_test1.nass` (belt, for attach-to-belt);
-verify each has the relevant feature. This is an **assembly-mode** block — SETUP opens
-the `.nass`. Right-click on a part on a WebGL canvas is the never-driven gesture.
+**▶ Process MV-6 — Belt polymerize** (discharges #32).
+Dig: the "Polymerize along belt" entry point (Assembly menu / belt context action),
+the backend route that generates the evenly-spaced copies along the belt path, and
+how spacing/count are specified. **Fixture:** `workspace/Belt_test1.nass` or
+`workspace/belt_test.nass` — verify the fixture has a *defined belt path* with two
+revolute-mated pulleys (a belt polymerize needs a built belt, not just parts). This
+is an **assembly-mode** block — SETUP opens the `.nass`. The live "grow N copies along
+the belt" gesture + the visual even-spacing along the tube is the never-driven part.
