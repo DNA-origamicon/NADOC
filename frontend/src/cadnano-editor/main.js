@@ -17,7 +17,7 @@ import { addRecentFile, getRecentFiles, closeSession as apiCloseSession,
 import { openFileBrowser } from '../ui/file_browser.js'
 import {
   fetchDesign, addHelixAtCell, deleteHelix, reorderHelices, extendHelixBounds,
-  autoScaffold, scaffoldDomainPaint,
+  scaffoldDomainPaint,
   paintStapleDomain, deleteStrand, deleteStrandsBatch, deleteDomain, nickStrand, ligateStrand, forcedLigation,
   deleteForcedLigation, batchDeleteForcedLigations,
   patchStrandsColor, patchStrandsReference, patchOverhang, undoDesign, redoDesign, placeCrossover, moveCrossover, batchMoveCrossovers,
