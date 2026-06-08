@@ -614,11 +614,49 @@ ladder used it to cap depth).
 - **Knock-on:** this kills the `KNOWN_FLAKES` entry referenced throughout `REFACTOR_AUDIT.md`,
   `backend_router_carveup.md`, and `backend_router_extraction_log.md`.
 
+## ISSUE-7 — Negative-bp scaffold segments undeletable in the 2D editor (functional bug)
+
+- **Status:** `[x]` DONE 2026-06-08 (single phase). **Direct triage** — user reported on `workspace/teeth.nadoc`:
+  "I cannot delete the scaffold segments on helices 0–7 starting at bp −17; nothing happens." Fix routes ALL
+  cadnano-editor element-key parsing through a new tested module `cadnano-editor/element_keys.js` (negative-bp
+  safe). Commit pending.
+- **Symptom (user-facing):** selecting a scaffold stub that lives entirely in the negative-bp region
+  (helices 0–7 of teeth: bp −17..−6/−12) and pressing Delete does NOTHING — no error, the strand stays.
+- **ROOT CAUSE (multi-factor, confirmed by code read + Node repro + e2e):**
+  1. **Primary — the delete path's key parsers used `(\d+)`, which can't match a negative bp.** The 2D
+     editor's `erase` tool is dead UI (no toolbar button / keybinding); the real delete gesture is
+     **select-tool → Delete key → `onDeleteElements`** (`cadnano-editor/main.js`). That function (and 4
+     sibling parsers) parse element keys like `line:h_XY_0_0_-17_-6_FORWARD` / `end:…_-17_…` / `xo:…_-5_…` /
+     `ls:…_-17_…` with `(\d+)` regexes → `null` on any negative-bp key → the domain-selector set stays empty
+     → no API call fires → "nothing happens." (Builders in `pathview.js` correctly EMIT negative bp; only the
+     parsers were blind. Two drag-handler parsers already used the correct `-?\d+` — the rest never did.)
+  2. **Secondary (visibility) — `_fitToContent` drew the negative-bp cells off the left edge.** `_bpToX(bp)
+     = GUTTER + bp*BP_W` places bp −17 at world-x −130, but the fit positioned content as if it began at
+     world-x 0 (panX clamped ≥ 0), so on a fresh open the entirely-negative stubs rendered ~43 px off-screen
+     left while blank EXTEND space sat on the right. Fixed by offsetting panX by the true left edge
+     (`worldLeft = min(0, _bpToX(bp0))`). Proven on/off-screen by a throwaway Playwright probe
+     (bp −17: screen-x −37 → 0 after fix). This was a real bug but NOT why Delete no-ops — fixing it alone
+     didn't let the user delete (the reopen that surfaced factor 1).
+- **FIX (user chose "sweep all bp-key parsers"):** new `cadnano-editor/element_keys.js` owns BOTH the build
+  and the parse of every element key (single source of truth; `-?\d+` everywhere). `pathview.js` imports the
+  5 builders (aliased to the old `_`-names → no call-site churn) + routes its 2 parse sites through the
+  module; `main.js` routes its 5 broken parse sites (delete path ×4 + extra-bases menu) through it. Plus the
+  `_fitToContent` panX offset.
+- **Repro pinned by:** `cadnano-editor/element_keys.test.js` ×19 (the exact teeth stub keys parse to the
+  right object + build↔parse round-trips for negative / zero-crossing / positive / reversed cases; old `\d+`
+  proven red via a standalone Node eval). App-validated: a throwaway gesture e2e drove the REAL select →
+  Delete path on teeth and confirmed the stub is removed (factor 1) and lands on-screen (factor 2); removed
+  after verification along with the temp debug hooks.
+- **Class of bug → LESSONS.md F5** (bp is signed; never parse it with `(\d+)`). Cross-refs C6 (the cadnano
+  editor has its own API client / code — this bug lived entirely in editor-local parsers).
+
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. Last updated 2026-06-06 (ISSUE-4 legacy-deletion shipped: the
-auto-drill ladder / manual pins / Tab drill-lock + the `NADOC_DRILL_V2` flag are PHYSICALLY GONE — selection-level
-is the only model now, no opt-out. ISSUE-4's core is closed; ISSUE-1 context-menu migration is now unblocked)._
+_Living pointer — each session overwrites this. Last updated 2026-06-08 (ISSUE-7 shipped: negative-bp element
+keys are now parsed with `-?\d+` via the new tested `cadnano-editor/element_keys.js`; the negative-bp scaffold
+stubs on teeth helices 0–7 are deletable again. Note the reopen — the `_fitToContent` visibility fix shipped
+first was the wrong layer; see the fix-log reopen log + difficulties entry. ISSUE-1 context-menu migration
+remains the recommended pick)._
 
 **NEXT PICK: ISSUE-1 — context-menu migration, Phase 2a-blunt.** ISSUE-4's drill overhaul is functionally
 complete and its legacy is deleted, so ISSUE-1 (deferred behind it) resumes. Phase 2a-blunt is the

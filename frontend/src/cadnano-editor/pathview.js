@@ -85,6 +85,15 @@ import {
   ensureStapleColors,
   stapleColorOf,
 } from './pathview/palette.js'
+import {
+  domainLineKey as _domainLineKey,
+  domainEndKey as _domainEndKey,
+  xoverKey as _xoverKey,
+  forcedLigKey as _forcedLigKey,
+  loopSkipKey as _loopSkipKey,
+  parseEndKey,
+  parseLineKey,
+} from './element_keys.js'
 
 // Crossover indicator geometry
 const XOVER_R = 4            // sprite circle radius (world-space px)
@@ -384,27 +393,9 @@ export function initPathview(canvasEl, containerEl, {
   // used only by the drag-to-reorder interaction. Does NOT emit onSelectionChange.
   let _selectedHelices = new Set()
 
-  function _domainLineKey(dom) {
-    const lo = Math.min(dom.start_bp, dom.end_bp)
-    const hi = Math.max(dom.start_bp, dom.end_bp)
-    return `line:${dom.helix_id}_${lo}_${hi}_${dom.direction}`
-  }
-
-  function _domainEndKey(dom, which) {   // which = '5p' | '3p'
-    const lo  = Math.min(dom.start_bp, dom.end_bp)
-    const hi  = Math.max(dom.start_bp, dom.end_bp)
-    const isFwd = dom.direction === 'FORWARD'
-    const bp  = which === '5p' ? (isFwd ? lo : hi) : (isFwd ? hi : lo)
-    return `end:${dom.helix_id}_${bp}_${dom.direction}`
-  }
-
-  function _xoverKey(xo) {
-    return `xo:${xo.half_a.helix_id}_${xo.half_a.index}_${xo.half_a.strand}`
-  }
-
-  function _forcedLigKey(fl) {
-    return `fl:${fl.id}`
-  }
+  // Element-key builders (_domainLineKey/_domainEndKey/_xoverKey/_forcedLigKey/
+  // _loopSkipKey) + the negative-bp-safe parsers are imported from element_keys.js
+  // (single source of truth; round-trip unit-tested). See top-of-file imports.
 
   /** True if the domain transition (domA→domB) matches a forced ligation record. */
   function _isForcedLigTransition(domA, domB) {
@@ -435,10 +426,6 @@ export function initPathview(canvasEl, containerEl, {
       keys.push(_domainEndKey(dom, '3p'))
     }
     return keys
-  }
-
-  function _loopSkipKey(helixId, bpIndex, delta) {
-    return `ls:${helixId}_${bpIndex}_${delta > 0 ? 'loop' : 'skip'}`
   }
 
   /**
@@ -878,16 +865,22 @@ export function initPathview(canvasEl, containerEl, {
   function _fitToContent() {
     const W = canvasEl.width, H = canvasEl.height
     if (!W || !H || !_helices.length) return
-    // Include negative bp range: bp0 is the leftmost bp that must be visible.
-    // For designs with no negative-bp helices this equals the original formula.
-    const bp0 = Math.min(0, _minBp)
-    const span = (_totalBp - bp0) + EXTEND_BPS
-    const cW = GUTTER + span * BP_W
+    // Leftmost world edge of all content: the gutter (world 0) OR — when helices
+    // start at negative bp — the negative cells, which _bpToX draws LEFT of the
+    // gutter at _bpToX(bp0) < 0.  _bpToX applies no bp0 shift, so the fit must
+    // offset panX by worldLeft; otherwise negative-bp cells render off the left
+    // edge and become unclickable (e.g. scaffold stubs living entirely in bp < 0
+    // could not be erased in the 2D editor).
+    const bp0        = Math.min(0, _minBp)
+    const worldLeft  = Math.min(0, _bpToX(bp0))
+    const worldRight = _bpToX(_totalBp + EXTEND_BPS)
+    const cW         = worldRight - worldLeft
     // Use actual bottom of last row (accounts for group gaps)
     const lastInfo = _rowMap.get(_helices[_helices.length - 1].id)
     const cH = (lastInfo ? lastInfo.revY + CELL_H / 2 : RULER_H + TOP_PAD) + 20
     _zoom = Math.max(MIN_ZOOM, Math.min(1, W / cW, H / cH))
-    _panX = Math.max(0, (W - cW * _zoom) / 2)
+    const leftMargin = Math.max(0, (W - cW * _zoom) / 2)
+    _panX = leftMargin - worldLeft * _zoom
     _panY = Math.max(0, (H - cH * _zoom) / 2)
   }
 
@@ -2731,11 +2724,9 @@ export function initPathview(canvasEl, containerEl, {
     const entries = []
     for (const key of _selectedElements) {
       if (!key.startsWith('end:')) continue
-      // bp may be negative (domains can start before 0), so allow a leading '-'.
-      const m = key.match(/^end:(.+)_(-?\d+)_(FORWARD|REVERSE)$/)
-      if (!m) continue
-      const [, helix_id, bpStr, direction] = m
-      const bp = parseInt(bpStr)
+      const parsed = parseEndKey(key)
+      if (!parsed) continue
+      const { helix_id, bp, direction } = parsed
       for (const strand of (_design?.strands ?? [])) {
         let found = false
         for (const dom of strand.domains) {
@@ -2922,11 +2913,9 @@ export function initPathview(canvasEl, containerEl, {
     const entries = []
     for (const key of _selectedElements) {
       if (!key.startsWith('line:')) continue
-      // lo/hi may be negative (domains can span before bp 0), so allow '-'.
-      const m = key.match(/^line:(.+)_(-?\d+)_(-?\d+)_(FORWARD|REVERSE)$/)
-      if (!m) continue
-      const [, helix_id, loStr, hiStr, direction] = m
-      const lo = parseInt(loStr), hi = parseInt(hiStr)
+      const parsed = parseLineKey(key)
+      if (!parsed) continue
+      const { helix_id, lo, hi, direction } = parsed
       let found = false
       for (const strand of (_design?.strands ?? [])) {
         for (let di = 0; di < strand.domains.length; di++) {

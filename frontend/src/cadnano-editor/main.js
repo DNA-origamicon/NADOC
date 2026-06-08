@@ -44,6 +44,7 @@ import { initStrandsSpreadsheet } from './strands_spreadsheet.js'
 import { initFeatureLogPanel } from '../ui/feature_log_panel.js'
 import { initPlateView } from '../ui/plate_view.js'
 import { ensureStapleColors, stapleColorOf, EXT_MOD_NAMES } from './pathview/palette.js'
+import { xoverKey, parseXoverKey, parseLineKey, parseEndKey, parseLoopSkipKey } from './element_keys.js'
 
 // ── Tab identity ─────────────────────────────────────────────────────────────
 // Each editor tab gets a unique, stable window.name so the 3D view (and other
@@ -1956,19 +1957,18 @@ async function _handleExtraBasesMenuClick() {
   if (result === null) return   // cancelled
 
   // If the right-clicked crossover is part of a multi-selection, apply to all selected.
-  const rightClickedKey = `xo:${xo.half_a.helix_id}_${xo.half_a.index}_${xo.half_a.strand}`
+  const rightClickedKey = xoverKey(xo)
   const applyToAll = keys.length > 1 && keys.includes(rightClickedKey)
 
   if (applyToAll) {
     const design  = editorStore.getState().design
     const entries = keys.flatMap(k => {
-      const m = k.match(/^xo:(.+)_(\d+)_(FORWARD|REVERSE)$/)
-      if (!m) return []
-      const [, helix_id, index, strand] = m
+      const p = parseXoverKey(k)
+      if (!p) return []
       const found = design.crossovers?.find(x =>
-        x.half_a.helix_id === helix_id &&
-        x.half_a.index    === parseInt(index) &&
-        x.half_a.strand   === strand,
+        x.half_a.helix_id === p.helix_id &&
+        x.half_a.index    === p.index &&
+        x.half_a.strand   === p.strand,
       )
       return found ? [{ crossover_id: found.id, sequence: result }] : []
     })
@@ -2098,13 +2098,13 @@ const pathview = initPathview(pathCanvas, pathContainer, {
     const xoPositions = new Set()
     for (const key of elementKeys) {
       if (key.startsWith('xo:')) {
-        const m = key.match(/^xo:(.+)_(\d+)_(FORWARD|REVERSE)$/)
-        if (!m) continue
-        const [, helix_id, index, strand] = m
+        const p = parseXoverKey(key)
+        if (!p) continue
+        const { helix_id, index, strand } = p
         xoPositions.add(`${helix_id}_${index}_${strand}`)
         const xo = design.crossovers?.find(x =>
           x.half_a.helix_id === helix_id &&
-          x.half_a.index    === parseInt(index) &&
+          x.half_a.index    === index &&
           x.half_a.strand   === strand
         )
         if (xo) {
@@ -2126,16 +2126,15 @@ const pathview = initPathview(pathCanvas, pathContainer, {
     for (const key of elementKeys) {
       if (key.startsWith('xo:') || key.startsWith('fl:')) continue  // already handled above
       if (key.startsWith('line:')) {
-        const m = key.match(/^line:(.+)_(\d+)_(\d+)_(FORWARD|REVERSE)$/)
-        if (m) domainSelectors.add(`${m[1]}|${m[2]}|${m[3]}|${m[4]}`)
+        const p = parseLineKey(key)
+        if (p) domainSelectors.add(`${p.helix_id}|${p.lo}|${p.hi}|${p.direction}`)
       } else if (key.startsWith('end:')) {
-        const m = key.match(/^end:(.+)_(\d+)_(FORWARD|REVERSE)$/)
-        if (!m) continue
-        const [, helix_id, bp, direction] = m
+        const p = parseEndKey(key)
+        if (!p) continue
+        const { helix_id, bp: bpN, direction } = p
         // Skip end-caps that overlap a selected crossover — the user intended
         // to delete the crossover, not the domain.
-        if (xoPositions.has(`${helix_id}_${bp}_${direction}`)) continue
-        const bpN = parseInt(bp)
+        if (xoPositions.has(`${helix_id}_${bpN}_${direction}`)) continue
         for (const strand of design.strands) {
           for (const dom of strand.domains) {
             if (dom.helix_id !== helix_id || dom.direction !== direction) continue
@@ -2170,8 +2169,8 @@ const pathview = initPathview(pathCanvas, pathContainer, {
     const lsKeys = [...elementKeys].filter(k => k.startsWith('ls:'))
     if (lsKeys.length) {
       await Promise.all(lsKeys.map(key => {
-        const m = key.match(/^ls:(.+)_(\d+)_(loop|skip)$/)
-        return m ? insertLoopSkip(m[1], parseInt(m[2]), 0) : null
+        const p = parseLoopSkipKey(key)
+        return p ? insertLoopSkip(p.helix_id, p.bp, 0) : null
       }))
     }
 
