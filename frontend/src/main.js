@@ -117,6 +117,7 @@ import { initMdSegmentationOverlay, computeSegments as _computeMdSegments } from
 import { initPeriodicMdOverlay }    from './scene/periodic_md_overlay.js'
 import { initPeriodicMdPanel }      from './ui/periodic_md_panel.js'
 import { initMdPanel }    from './ui/md_panel.js'
+import { initMdJobsPanel } from './ui/md_jobs_panel.js'
 import { createPhotoRenderer } from './scene/photo_renderer.js'
 import { initPhotoPanel }      from './ui/photo_panel.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
@@ -1875,7 +1876,8 @@ async function main() {
 
   // ── MD overlay + panel ───────────────────────────────────────────────────────
   const mdOverlay         = initMdOverlay(scene)
-  initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
+  const mdDisplayController = initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
+  initMdJobsPanel({ mdDisplayController })
 
   const periodicMdOverlay = initPeriodicMdOverlay(scene)
   initPeriodicMdPanel(store, {
@@ -3848,9 +3850,15 @@ Typical debugging workflow for "reverts to 3D" bug:
   let _workspacePath         = localStorage.getItem(_WS_PATH_KEY)  || null
   let _assemblyWorkspacePath = localStorage.getItem(_ASM_PATH_KEY) || null
   function _setWorkspacePath(path) {
+    const previousPath = _workspacePath
     _workspacePath = path
     if (path) localStorage.setItem(_WS_PATH_KEY, path)
     else      localStorage.removeItem(_WS_PATH_KEY)
+    if (path !== previousPath) {
+      window.dispatchEvent(new CustomEvent('nadoc:workspace-path-change', {
+        detail: { path, previousPath },
+      }))
+    }
   }
   function _setAssemblyWorkspacePath(path) {
     _assemblyWorkspacePath = path
@@ -10426,6 +10434,9 @@ Typical debugging workflow for "reverts to 3D" bug:
         const nowOnAnimations = !collapsed && activeTab === 'scene'
         if (wasOnAnimations && !nowOnAnimations) _leaveAnimationsTab()
         _render()
+        window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
+          detail: { activeTab, collapsed },
+        }))
         _persist()
       }
 
@@ -11747,6 +11758,9 @@ Typical debugging workflow for "reverts to 3D" bug:
 
     _updateReprRadio(repr)
     _reprOptionSliders(repr)
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
+      detail: { representation: repr },
+    }))
   }
 
   for (const { id, repr } of _ALL_REPRS) {

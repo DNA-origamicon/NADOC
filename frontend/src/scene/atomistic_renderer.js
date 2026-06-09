@@ -68,7 +68,6 @@ export function initAtomisticRenderer(scene) {
   function _clearScene() {
     for (const mesh of Object.values(_state.elementMeshes)) {
       _state.scene.remove(mesh)
-      mesh.geometry.dispose()
       mesh.material.dispose()
     }
     _state.elementMeshes = {}
@@ -76,7 +75,6 @@ export function initAtomisticRenderer(scene) {
     _state.elementRadius = {}
     if (_state.bondMesh) {
       _state.scene.remove(_state.bondMesh)
-      _state.bondMesh.geometry.dispose()
       _state.bondMesh.material.dispose()
       _state.bondMesh = null
     }

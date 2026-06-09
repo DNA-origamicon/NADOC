@@ -1,8 +1,8 @@
 /**
  * ui/md_panel.js — Molecular Dynamics panel.
  *
- * File pickers for topology (.gro / .tpr) and trajectory (.xtc) use the
- * server-side /api/md/browse endpoint to navigate the filesystem.
+ * A server-side config picker loads a NADOC/NAMD MD manifest or .namd/.conf.
+ * The backend resolves PSF/PDB/DCD paths and streams frames through /ws/md-run.
  * Trajectory streaming goes through /ws/md-run.
  *
  * Repr modes:
@@ -37,6 +37,26 @@ function _basename(path) {
   return path ? path.replace(/\\/g, '/').split('/').pop() : ''
 }
 
+function _emitMdDisplayEvent(detail) {
+  window.dispatchEvent(new CustomEvent('nadoc:md-display-state', { detail }))
+}
+
+function _activeSceneRepresentation() {
+  const map = {
+    'menu-view-hull-prism': 'hull-prism',
+    'menu-view-detail-cylinders': 'cylinders',
+    'menu-view-detail-beads': 'beads',
+    'menu-view-detail-full': 'full',
+    'menu-view-surface': 'surface',
+    'menu-view-atomistic-vdw': 'vdw',
+    'menu-view-atomistic-ballstick': 'ballstick',
+  }
+  for (const [id, repr] of Object.entries(map)) {
+    if (document.getElementById(id)?.classList.contains('is-checked')) return repr
+  }
+  return 'full'
+}
+
 export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer }) {
   // ── DOM refs ──────────────────────────────────────────────────────────────
   const panel          = document.getElementById('md-panel')
@@ -44,10 +64,8 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   const arrow          = document.getElementById('md-panel-arrow')
   const body           = document.getElementById('md-panel-body')
 
-  const topoNameEl     = document.getElementById('md-topo-name')
-  const topoBrowseBtn  = document.getElementById('md-topo-browse')
-  const xtcNameEl      = document.getElementById('md-xtc-name')
-  const xtcBrowseBtn   = document.getElementById('md-xtc-browse')
+  const configNameEl   = document.getElementById('md-config-name')
+  const configBrowseBtn = document.getElementById('md-config-browse')
   const loadBtn        = document.getElementById('md-load-btn')
 
   const outputHeading  = document.getElementById('md-output-heading')
@@ -86,8 +104,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   if (!panel) return
 
   // ── State ──────────────────────────────────────────────────────────────────
-  let _topoPath  = null   // abs path to topology (.gro/.tpr)
-  let _xtcPath   = null   // abs path to trajectory (.xtc)
+  let _configPath = null  // abs path to NAMD manifest/config
   let _browseDir = ''     // last directory visited in file browser
 
   let _ws        = null
@@ -117,6 +134,12 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   let _speed     = 1.0
   let _amp       = 1.0   // displacement amplification factor (1 = no amp)
   let _showNadoc = true   // mirrors #md-show-nadoc checkbox
+  let _latestOnReady = false
+  let _latestOnceOnReady = false
+  let _autoDisplayActive = false
+  let _displayVisible = true
+  let _lastFrameMsg = null
+  let _sceneRepr = _activeSceneRepresentation()
 
   // ── Panel collapse ────────────────────────────────────────────────────────
   heading.addEventListener('click', () => {
@@ -302,8 +325,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   function _persistPaths() {
     try {
       localStorage.setItem(_LS_KEY, JSON.stringify({
-        topoPath: _topoPath,
-        xtcPath:  _xtcPath,
+        configPath: _configPath,
       }))
     } catch (_) {}
   }
@@ -312,68 +334,53 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     try {
       const raw = localStorage.getItem(_LS_KEY)
       if (!raw) return
-      const { topoPath, xtcPath } = JSON.parse(raw)
-      if (topoPath) _setTopoPath(topoPath, _basename(topoPath))
-      if (xtcPath)  _setXtcPath(xtcPath,  _basename(xtcPath))
+      const { configPath, topoPath } = JSON.parse(raw)
+      const path = configPath || topoPath
+      if (path) _setConfigPath(path, _basename(path))
     } catch (_) {}
   }
 
   // ── File picker wiring ────────────────────────────────────────────────────
-  function _setTopoPath(path, name) {
-    _topoPath = path
-    if (topoNameEl) {
-      topoNameEl.textContent = name || _basename(path)
-      topoNameEl.title = path
-      topoNameEl.style.color = _C.text
+  function _setConfigPath(path, name) {
+    _configPath = path
+    if (configNameEl) {
+      configNameEl.textContent = name || _basename(path)
+      configNameEl.title = path
+      configNameEl.style.color = _C.text
     }
-    // Seed XTC browser in same directory
-    if (!_xtcPath) _browseDir = path.replace(/[^/\\]+$/, '')
-    _updateLoadBtn()
-    _persistPaths()
-  }
-
-  function _setXtcPath(path, name) {
-    _xtcPath = path
-    if (xtcNameEl) {
-      xtcNameEl.textContent = name || _basename(path)
-      xtcNameEl.title = path
-      xtcNameEl.style.color = _C.text
-    }
-    if (!_topoPath) _browseDir = path.replace(/[^/\\]+$/, '')
+    _browseDir = path.replace(/[^/\\]+$/, '')
     _updateLoadBtn()
     _persistPaths()
   }
 
   function _updateLoadBtn() {
-    const ready = !!_topoPath && !!_xtcPath
+    const ready = !!_configPath
     if (!loadBtn) return
     loadBtn.disabled = !ready
     loadBtn.style.color  = ready ? _C.text  : _C.dim
     loadBtn.style.cursor = ready ? 'pointer' : 'not-allowed'
   }
 
-  topoBrowseBtn?.addEventListener('click', () => {
-    // Start in topo dir if already selected, else shared browse dir
-    if (_topoPath) _browseDir = _topoPath.replace(/[^/\\]+$/, '')
-    _openFileBrowser(['.gro', '.tpr'], 'Select Topology (.gro / .tpr)', _setTopoPath)
-  })
-
-  xtcBrowseBtn?.addEventListener('click', () => {
-    if (_xtcPath) _browseDir = _xtcPath.replace(/[^/\\]+$/, '')
-    else if (_topoPath) _browseDir = _topoPath.replace(/[^/\\]+$/, '')
-    _openFileBrowser(['.xtc'], 'Select Trajectory (.xtc)', _setXtcPath)
+  configBrowseBtn?.addEventListener('click', () => {
+    if (_configPath) _browseDir = _configPath.replace(/[^/\\]+$/, '')
+    _openFileBrowser(['.json', '.namd', '.conf'], 'Select MD Config / Manifest', _setConfigPath)
   })
 
   // ── Load ──────────────────────────────────────────────────────────────────
   loadBtn?.addEventListener('click', () => {
-    if (!_topoPath || !_xtcPath) return
-    _log(`Loading topology: ${_basename(_topoPath)}`, 'info')
-    _log(`Loading trajectory: ${_basename(_xtcPath)}`, 'info')
+    if (!_configPath) return
+    _displayVisible = true
+    _autoDisplayActive = false
+    _log(`Loading config: ${_basename(_configPath)}`, 'info')
     _openWebSocket()
   })
 
   function _openWebSocket() {
-    if (_ws) { _ws.close(); _ws = null }
+    if (_ws) {
+      _ws.onclose = null
+      _ws.close()
+      _ws = null
+    }
     _setPlaying(false)
     _setLive(false)
     if (statusLine) statusLine.textContent = 'Connecting…'
@@ -386,11 +393,12 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     }
 
     _ws.onopen = () => {
+      _emitMdDisplayEvent({ state: 'loading', message: 'Loading MD trajectory...' })
       _ws.send(JSON.stringify({
         action:          'load',
-        topology_path:   _topoPath,
-        xtc_path:        _xtcPath,
+        config_path:     _configPath,
         mode:            _repr,
+        design:          store?.getState?.().currentDesign ?? null,
       }))
       if (statusLine) statusLine.textContent = 'Loading…'
     }
@@ -419,10 +427,15 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   // Restore design to full visibility and revert any MD-displaced positions.
   function _restoreDesign() {
     _stopLiveBar()
+    mdOverlay?.dispose?.()
+    if (!_autoDisplayActive || _sceneUsesNativeCg()) {
+      atomisticRenderer?.setMode?.('off')
+    }
     designRenderer?.applyFemPositions(null)
-    designRenderer?.setDesignVisible(true)
-    if (showNadocChk) showNadocChk.checked = true
-    _showNadoc = true
+    const showNative = !_autoDisplayActive || _sceneUsesNativeCg()
+    designRenderer?.setDesignVisible(showNative)
+    if (showNadocChk) showNadocChk.checked = showNative
+    _showNadoc = showNative
   }
 
   showNadocChk?.addEventListener('change', () => {
@@ -461,15 +474,42 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       if (statusLine) statusLine.textContent = `Ready — ${_nFrames} frames`
 
       _log(`Ready: ${_nFrames} frames, ${ns}, ${temp}`, 'ok')
+      if (msg.trajectory_path) _log(`Trajectory: ${_basename(msg.trajectory_path)}`, 'info')
+      _emitMdDisplayEvent({
+        state: 'ready',
+        message: `Loaded ${_nFrames} MD frames`,
+        nFrames: _nFrames,
+        totalNs: _totalNs,
+      })
       if (msg.warnings && msg.warnings.length > 0) {
         for (const w of msg.warnings) _log(`Warning: ${w}`, 'warn')
       }
-      _seekFrame(0)
+      if (_latestOnReady) {
+        _latestOnReady = false
+        if (_latestOnceOnReady) {
+          _latestOnceOnReady = false
+          _sendPoll()
+        } else {
+          _setLive(true)
+        }
+      } else {
+        _seekFrame(0)
+      }
     }
 
     if (msg.type === 'frame') {
       _updateTimeline(msg.frame_idx)
-      _applyFrame(msg)
+      _lastFrameMsg = msg
+      if (_displayVisible) {
+        _applyFrame(msg)
+        _emitMdDisplayEvent({
+          state: 'frame',
+          message: `Displaying frame ${msg.frame_idx + 1}/${msg.n_frames ?? _nFrames}`,
+          frameIdx: msg.frame_idx,
+          nFrames: msg.n_frames ?? _nFrames,
+          nPositions: msg.positions?.length ?? msg.atoms?.length ?? 0,
+        })
+      }
       if (_live) {
         // Frame landed: clear the "fetching" state and restart the countdown.
         _livePendingPoll = false
@@ -480,6 +520,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     if (msg.type === 'error') {
       _log('Error: ' + msg.message, 'error')
       if (statusLine) statusLine.textContent = 'Error — see Output'
+      _emitMdDisplayEvent({ state: 'error', message: msg.message })
     }
   }
 
@@ -503,8 +544,8 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       mdOverlay?.update(msg.positions, _beadSize * 0.15, _opacity)
     } else if (_repr === 'ballstick') {
       if (!msg.atoms) return
-      atomisticRenderer?.setMode('ballstick')
-      atomisticRenderer?.update({ atoms: msg.atoms, bonds: [] })
+      atomisticRenderer?.setMode(_sceneRepr === 'vdw' ? 'vdw' : 'ballstick')
+      atomisticRenderer?.update({ atoms: msg.atoms, bonds: msg.bonds ?? [] })
     }
   }
 
@@ -623,6 +664,46 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   }
   liveBtn?.addEventListener('click', () => _setLive(!_live))
 
+  function _sceneUsesNativeCg() {
+    return _sceneRepr === 'full' || _sceneRepr === 'beads' || _sceneRepr === 'cylinders'
+  }
+
+  function _sceneUsesAtomistic() {
+    return _sceneRepr === 'vdw' || _sceneRepr === 'ballstick'
+  }
+
+  function _targetStreamMode() {
+    return _sceneUsesAtomistic() ? 'ballstick' : 'nadoc'
+  }
+
+  function _reapplyCachedFrame() {
+    if (!_autoDisplayActive || !_lastFrameMsg) return
+    if (_repr === 'nadoc' && !_sceneUsesNativeCg()) return
+    if (_repr === 'ballstick' && !_sceneUsesAtomistic()) return
+    if (_sceneUsesNativeCg()) designRenderer?.setDesignVisible(true)
+    _applyFrame(_lastFrameMsg)
+  }
+
+  window.addEventListener('nadoc:representation-change', evt => {
+    _sceneRepr = evt.detail?.representation ?? _activeSceneRepresentation()
+    if (!_autoDisplayActive) return
+    const nextMode = _targetStreamMode()
+    const modeChanged = _repr !== nextMode
+    _repr = nextMode
+    if (_sceneUsesNativeCg() || _sceneUsesAtomistic()) {
+      requestAnimationFrame(() => {
+        if (modeChanged && _configPath) {
+          _lastFrameMsg = null
+          _latestOnReady = true
+          _openWebSocket()
+          return
+        }
+        _reapplyCachedFrame()
+        if (_ws?.readyState === WebSocket.OPEN) _sendPoll()
+      })
+    }
+  })
+
   // ── Speed / stride / repr / sliders ──────────────────────────────────────
   speedSel?.addEventListener('change', () => {
     _speed = parseFloat(speedSel.value) || 1
@@ -642,7 +723,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     if (_repr !== 'nadoc')     designRenderer?.applyFemPositions(null)
     // Re-apply user's show/hide preference for the NADOC model.
     designRenderer?.setDesignVisible(_showNadoc)
-    if (_topoPath && _xtcPath) _openWebSocket()
+    if (_configPath) _openWebSocket()
   })
 
   opacitySlider?.addEventListener('input', () => {
@@ -663,4 +744,95 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
 
   // Restore paths from previous session.
   _loadPersistedPaths()
+
+  return {
+    displayLatest(configPath, { forceReload = false, live = true } = {}) {
+      if (!configPath) return
+      const nextMode = _targetStreamMode()
+      const modeChanged = _repr !== nextMode
+      const alreadyOpen = _ws?.readyState === WebSocket.OPEN && _configPath === configPath && !modeChanged
+      _autoDisplayActive = true
+      _displayVisible = true
+      _repr = nextMode
+      _latestOnReady = true
+      _latestOnceOnReady = !live
+      if (beadSizeRow) beadSizeRow.style.display = 'none'
+      if (_sceneUsesNativeCg()) {
+        mdOverlay?.dispose?.()
+        atomisticRenderer?.setMode?.('off')
+        _setShowNadoc(true)
+      } else if (_sceneUsesAtomistic()) {
+        mdOverlay?.dispose?.()
+        designRenderer?.applyFemPositions(null)
+        designRenderer?.setDesignVisible(false)
+        atomisticRenderer?.setMode?.(_sceneRepr)
+      }
+      _setConfigPath(configPath, _basename(configPath))
+      if (alreadyOpen && !forceReload) {
+        if (live) _setLive(true)
+        else {
+          _setLive(false)
+        }
+        if (_lastFrameMsg) _reapplyCachedFrame()
+        else _sendPoll()
+        return
+      }
+      _openWebSocket()
+    },
+
+    prewarmLatest(configPath, { forceReload = false } = {}) {
+      if (!configPath) return
+      const nextMode = _targetStreamMode()
+      const modeChanged = _repr !== nextMode
+      const alreadyOpen = _ws?.readyState === WebSocket.OPEN && _configPath === configPath && !modeChanged
+      _displayVisible = false
+      _autoDisplayActive = false
+      _repr = nextMode
+      _latestOnReady = true
+      _latestOnceOnReady = true
+      _setConfigPath(configPath, _basename(configPath))
+      if (alreadyOpen && !forceReload) {
+        _setLive(false)
+        _sendPoll()
+        return
+      }
+      _openWebSocket()
+    },
+
+    requestLatest() {
+      if (_ws?.readyState === WebSocket.OPEN) _sendPoll()
+    },
+
+    stopPrewarm() {
+      if (_displayVisible || _autoDisplayActive) return
+      _latestOnReady = false
+      _latestOnceOnReady = false
+      _setLive(false)
+      if (_ws) {
+        try {
+          _ws.onclose = null
+          _ws.close()
+        } catch { /* ok */ }
+        _ws = null
+      }
+    },
+
+    stopAndRestore() {
+      _lastFrameMsg = null
+      _latestOnReady = false
+      _latestOnceOnReady = false
+      _setPlaying(false)
+      _setLive(false)
+      _displayVisible = true
+      if (_ws) {
+        try {
+          _ws.onclose = null
+          _ws.close()
+        } catch { /* ok */ }
+        _ws = null
+      }
+      _restoreDesign()
+      _autoDisplayActive = false
+    },
+  }
 }

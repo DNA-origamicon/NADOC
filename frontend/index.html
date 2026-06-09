@@ -3303,37 +3303,172 @@
             </div>
           </div><!-- /oxdna-section -->
 
-          <div class="panel-section" id="md-panel">
+          <!-- ── MD relaxation panel (job launcher + live progress) ───────── -->
+          <div class="panel-section" id="md-jobs-panel">
+            <h2 id="md-jobs-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+              <span>Molecular Dynamics</span>
+              <span id="md-jobs-panel-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+            </h2>
+            <div id="md-jobs-panel-body" style="display:none;margin-top:8px">
+
+              <!-- NAMD availability badge -->
+              <div id="md-jobs-namd-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
+
+              <!-- Launch form -->
+              <div style="margin-bottom:8px">
+                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:3px">Protocol</div>
+                <select id="md-jobs-preset"
+                        style="width:100%;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:3px 5px;margin-bottom:6px">
+                  <option value="equilibrium_aware_namd">Equilibrium-Aware NAMD</option>
+                  <option value="mgh_slow_release">Legacy Explicit Mg/MGH Slow Release</option>
+                </select>
+                <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+                  <button id="md-jobs-run-btn"
+                          style="flex:1;font-size:var(--text-xs);padding:5px;background:#1a4a1a;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;font-weight:600">
+                    ▶ Relax
+                  </button>
+                  <button id="md-jobs-prod-btn"
+                          disabled
+                          style="flex:1;font-size:var(--text-xs);padding:5px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
+                    Start Production
+                  </button>
+                </div>
+                <div id="md-jobs-production"
+                     style="background:#0d1117;border:1px solid #21262d;border-radius:3px;padding:5px;margin-bottom:6px">
+                  <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
+                    <label for="md-jobs-prod-steps" style="font-size:var(--text-xs);color:#8b949e">Production steps</label>
+                    <input id="md-jobs-prod-steps" type="number" value="500000" min="100" max="50000000" step="10000"
+                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <span style="font-size:var(--text-xs);color:#8b949e">Total time</span>
+                    <span id="md-jobs-prod-time" style="font-size:var(--text-xs);color:#c9d1d9;font-family:var(--font-mono)">1.000 ns</span>
+                  </div>
+                  <label style="display:flex;align-items:center;gap:5px;margin-top:5px;font-size:10px;color:#8b949e;cursor:pointer">
+                    <input id="md-jobs-prod-continue" type="checkbox" style="accent-color:#3fb950">
+                    Continue from latest production checkpoint
+                  </label>
+                  <div id="md-jobs-prod-status" style="font-size:10px;color:#484f58;margin-top:3px;min-height:12px"></div>
+                </div>
+                <label style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
+                  <input id="md-jobs-display-toggle" type="checkbox" style="accent-color:#58a6ff">
+                  Display MD
+                </label>
+                <div id="md-jobs-display-status" style="font-size:10px;color:#484f58;margin-top:2px;min-height:12px"></div>
+              </div>
+
+              <!-- Advanced disclosure -->
+              <div id="md-jobs-adv-toggle"
+                   style="font-size:var(--text-xs);color:#8b949e;cursor:pointer;user-select:none;margin-bottom:4px;display:flex;align-items:center;gap:4px">
+                <span id="md-jobs-adv-arrow" style="display:inline-block;transition:transform 0.15s">▶</span>
+                <span>Advanced</span>
+              </div>
+              <div id="md-jobs-adv-body" style="display:none;margin-bottom:8px;padding:6px;background:#0d1117;border:1px solid #21262d;border-radius:4px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:var(--text-xs)">
+                  <label style="color:#8b949e;align-self:center">Threads</label>
+                  <input id="md-jobs-threads" type="number" value="16" min="1"
+                         style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  <label style="color:#8b949e;align-self:center">CUDA device</label>
+                  <input id="md-jobs-devices" type="text" value="0"
+                         style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  <label style="color:#8b949e;align-self:center">Salt</label>
+                  <select id="md-jobs-salt-mode"
+                          style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <option value="screening">Auto screening</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                  <label style="color:#8b949e;align-self:center">Mg (mM)</label>
+                  <input id="md-jobs-mg" type="number" value="12.5" min="0" step="0.5"
+                         style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  <label style="color:#8b949e;align-self:center">NaCl (mM)</label>
+                  <input id="md-jobs-nacl" type="number" value="0" min="0" step="10"
+                         style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  <label style="color:#8b949e;align-self:center">Padding (nm)</label>
+                  <input id="md-jobs-padding" type="number" value="1.2" min="0.5" step="0.1"
+                         style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  <label style="color:#8b949e;align-self:center">Min. steps</label>
+                  <input id="md-jobs-minsteps" type="number" value="10000" min="100" step="1000"
+                         style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                </div>
+                <label style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
+                  <input id="md-jobs-autostart" type="checkbox" checked style="accent-color:#3fb950">
+                  Start immediately
+                </label>
+              </div>
+
+              <!-- Job list -->
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;margin-top:4px">
+                <div style="font-size:var(--text-xs);color:#8b949e">Jobs</div>
+                <label style="display:flex;align-items:center;gap:5px;font-size:10px;color:#8b949e;cursor:pointer">
+                  <input id="md-jobs-show-all" type="checkbox" style="accent-color:#58a6ff">
+                  Show all
+                </label>
+              </div>
+              <div id="md-jobs-list" style="margin-bottom:6px;max-height:160px;overflow-y:auto;scrollbar-width:thin"></div>
+
+              <!-- Active job detail -->
+              <div id="md-jobs-detail" style="display:none">
+                <!-- Status + run controls -->
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                  <div id="md-jobs-detail-status" style="flex:1;font-size:var(--text-xs);color:#8b949e"></div>
+                  <button id="md-jobs-start-btn"
+                          style="font-size:var(--text-xs);padding:3px 8px;background:#122117;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;display:none">
+                    ▶ Start
+                  </button>
+                  <button id="md-jobs-stop-btn"
+                          style="font-size:var(--text-xs);padding:3px 8px;background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;cursor:pointer;display:none">
+                    ■ Stop
+                  </button>
+                </div>
+
+                <!-- Error message -->
+                <div id="md-jobs-detail-error"
+                     style="display:none;font-size:var(--text-xs);color:#f85149;background:#1a0a0a;border:1px solid #5e1a1a;border-radius:3px;padding:5px;margin-bottom:6px;white-space:pre-wrap;word-break:break-word"></div>
+
+                <!-- Progress -->
+                <div id="md-jobs-progress"
+                     style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px"></div>
+
+                <!-- Stage timeline -->
+                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:3px">Stage timeline</div>
+                <div id="md-jobs-timeline"
+                     style="font-size:10px;font-family:var(--font-mono);background:#0d1117;border:1px solid #21262d;border-radius:3px;padding:5px;margin-bottom:6px;max-height:160px;overflow-y:auto"></div>
+
+                <!-- Metric cards -->
+                <div id="md-jobs-metrics"
+                     style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px"></div>
+
+                <div id="md-jobs-frame-controls"
+                     style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+                  <button id="md-jobs-load-frames-btn"
+                          style="flex:1;font-size:var(--text-xs);padding:4px 6px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer">
+                    Load Frames
+                  </button>
+                  <button id="md-jobs-delete-btn"
+                          style="font-size:var(--text-xs);padding:4px 7px;background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;cursor:pointer">
+                    Delete
+                  </button>
+                </div>
+
+              </div>
+
+            </div>
+          </div><!-- /md-jobs-panel -->
+
+          <div class="panel-section" id="md-panel" style="display:none">
             <h2 id="md-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
               <span>Molecular Dynamics</span>
               <span id="md-panel-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
             </h2>
             <div id="md-panel-body" style="display:none;margin-top:8px">
 
-              <!-- Topology file picker (.gro / .tpr) -->
-              <div style="margin-bottom:5px">
-                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:2px">Topology (.gro / .tpr)</div>
-                <div style="display:flex;gap:4px">
-                  <span id="md-topo-name" title=""
-                        style="flex:1;min-width:0;font-size:var(--text-xs);color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
-                    Not selected
-                  </span>
-                  <button id="md-topo-browse"
-                          style="flex-shrink:0;font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
-                    Browse
-                  </button>
-                </div>
-              </div>
-
-              <!-- Trajectory file picker (.xtc) -->
+              <!-- MD config/manifest picker -->
               <div style="margin-bottom:7px">
-                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:2px">Trajectory (.xtc)</div>
+                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:2px">Config / manifest</div>
                 <div style="display:flex;gap:4px">
-                  <span id="md-xtc-name" title=""
+                  <span id="md-config-name" title=""
                         style="flex:1;min-width:0;font-size:var(--text-xs);color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
                     Not selected
                   </span>
-                  <button id="md-xtc-browse"
+                  <button id="md-config-browse"
                           style="flex-shrink:0;font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
                     Browse
                   </button>
