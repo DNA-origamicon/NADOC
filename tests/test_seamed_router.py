@@ -161,3 +161,56 @@ def test_seamed_autoscaffold_does_not_place_hinge_xovers_on_manual_anchor_strand
         }
         assert scaffold_ids
         assert scaffold_ids.isdisjoint(protected)
+
+
+def test_circular_scaffold_is_linearized_at_buried_noncrossover_nick():
+    """A scaffold whose 5'/3' are joined by a crossover (circular) is reopened into
+    one linear strand, nicked at a buried, non-crossover bp near the structure middle."""
+    from backend.core.models import (
+        Crossover,
+        Direction,
+        Domain,
+        HalfCrossover,
+        Strand,
+    )
+    from backend.core.seamed_router import (
+        SeamedResult,
+        _linearize_circular_scaffolds,
+        _scaffold_end_join_xover,
+    )
+
+    base = make_bundle_design(
+        [(0, 0), (0, 1)], length_bp=60,
+        lattice_type=LatticeType.SQUARE, strand_filter="scaffold",
+    )
+    h0, h1 = [h.id for h in base.helices]
+    scaf = Strand(
+        id="scaf_loop", strand_type=StrandType.SCAFFOLD,
+        domains=[
+            Domain(helix_id=h0, start_bp=0, end_bp=50, direction=Direction.FORWARD),
+            Domain(helix_id=h1, start_bp=50, end_bp=0, direction=Direction.REVERSE),
+        ],
+    )
+    xo_turn = Crossover(
+        half_a=HalfCrossover(helix_id=h0, index=50, strand=Direction.FORWARD),
+        half_b=HalfCrossover(helix_id=h1, index=50, strand=Direction.REVERSE),
+    )
+    xo_close = Crossover(
+        half_a=HalfCrossover(helix_id=h1, index=0, strand=Direction.REVERSE),
+        half_b=HalfCrossover(helix_id=h0, index=0, strand=Direction.FORWARD),
+    )
+    design = base.copy_with(strands=[scaf], crossovers=[xo_turn, xo_close])
+
+    circ = [s for s in design.strands if s.is_scaffold and not s.is_reference]
+    assert _scaffold_end_join_xover(design, circ[0]) is not None  # confirm it starts circular
+
+    result = SeamedResult()
+    out = _linearize_circular_scaffolds(design, result)
+
+    out_scaf = [s for s in out.strands if s.is_scaffold and not s.is_reference]
+    assert len(out_scaf) == 1                                    # still a single strand
+    assert _scaffold_end_join_xover(out, out_scaf[0]) is None    # no longer circular
+    s = out_scaf[0]
+    assert s.domains[0].start_bp not in (0, 50)                  # nick is interior, not a crossover bp
+    assert s.domains[-1].end_bp not in (0, 50)
+    assert not result.warnings

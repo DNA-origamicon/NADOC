@@ -1,22 +1,22 @@
 {
-  "id": "dfc98821-5bb7-42ca-ac42-6857c21eda26",
+  "id": "6e629392-ed81-4f1c-9338-12f49940ae10",
   "helices": [
     {
       "id": "h_XY_0_0",
       "axis_start": {
         "x": 0.0,
         "y": 0.0,
-        "z": -1.6700000000000002
+        "z": 0.0
       },
       "axis_end": {
         "x": 0.0,
         "y": 0.0,
-        "z": 73.81400000000001
+        "z": 84.168
       },
-      "phase_offset": 2.356194490192345,
+      "phase_offset": 5.301437602932776,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 226,
-      "bp_start": -5,
+      "length_bp": 252,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -30,17 +30,17 @@
       "axis_start": {
         "x": 2.25,
         "y": 0.0,
-        "z": -1.6700000000000002
+        "z": 0.0
       },
       "axis_end": {
         "x": 2.25,
         "y": 0.0,
-        "z": 71.142
+        "z": 84.168
       },
-      "phase_offset": 1.8325957145940466,
+      "phase_offset": 4.777838827334477,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 218,
-      "bp_start": -5,
+      "length_bp": 252,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -54,17 +54,17 @@
       "axis_start": {
         "x": 4.5,
         "y": 0.0,
-        "z": -1.6700000000000002
+        "z": 0.0
       },
       "axis_end": {
         "x": 4.5,
         "y": 0.0,
-        "z": 71.142
+        "z": 84.168
       },
-      "phase_offset": 2.356194490192345,
+      "phase_offset": 5.301437602932776,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 218,
-      "bp_start": -5,
+      "length_bp": 252,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -78,17 +78,17 @@
       "axis_start": {
         "x": 6.75,
         "y": 0.0,
-        "z": -1.6700000000000002
+        "z": 0.0
       },
       "axis_end": {
         "x": 6.75,
         "y": 0.0,
-        "z": 72.144
+        "z": 84.168
       },
-      "phase_offset": 1.8325957145940466,
+      "phase_offset": 4.777838827334477,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 221,
-      "bp_start": -5,
+      "length_bp": 252,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -102,17 +102,17 @@
       "axis_start": {
         "x": 6.75,
         "y": 2.25,
-        "z": -3.6740000000000004
+        "z": 0.0
       },
       "axis_end": {
         "x": 6.75,
         "y": 2.25,
-        "z": 72.144
+        "z": 84.168
       },
-      "phase_offset": -1.1780972450961729,
+      "phase_offset": 5.301437602932776,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 227,
-      "bp_start": -11,
+      "length_bp": 252,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -126,17 +126,17 @@
       "axis_start": {
         "x": 4.5,
         "y": 2.25,
-        "z": -3.6740000000000004
+        "z": 0.0
       },
       "axis_end": {
         "x": 4.5,
         "y": 2.25,
-        "z": 70.14
+        "z": 84.168
       },
-      "phase_offset": -1.7016960206944711,
+      "phase_offset": 4.777838827334477,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 221,
-      "bp_start": -11,
+      "length_bp": 252,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -150,17 +150,17 @@
       "axis_start": {
         "x": 2.25,
         "y": 2.25,
-        "z": -3.6740000000000004
+        "z": 0.0
       },
       "axis_end": {
         "x": 2.25,
         "y": 2.25,
-        "z": 70.14
+        "z": 84.168
       },
-      "phase_offset": -1.1780972450961729,
+      "phase_offset": 5.301437602932776,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 221,
-      "bp_start": -11,
+      "length_bp": 252,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -174,17 +174,17 @@
       "axis_start": {
         "x": 0.0,
         "y": 2.25,
-        "z": -3.6740000000000004
+        "z": 0.0
       },
       "axis_end": {
         "x": 0.0,
         "y": 2.25,
-        "z": 73.81400000000001
+        "z": 84.168
       },
-      "phase_offset": -1.7016960206944711,
+      "phase_offset": 4.777838827334477,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 232,
-      "bp_start": -11,
+      "length_bp": 252,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -198,17 +198,17 @@
       "axis_start": {
         "x": 0.0,
         "y": 4.5,
-        "z": -1.002
+        "z": 0.0
       },
       "axis_end": {
         "x": 0.0,
         "y": 4.5,
-        "z": 73.146
+        "z": 70.14
       },
-      "phase_offset": 3.534291735288517,
+      "phase_offset": 5.301437602932776,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 222,
-      "bp_start": -3,
+      "length_bp": 210,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -222,17 +222,17 @@
       "axis_start": {
         "x": 2.25,
         "y": 4.5,
-        "z": -3.6740000000000004
+        "z": 0.0
       },
       "axis_end": {
         "x": 2.25,
         "y": 4.5,
-        "z": 73.146
+        "z": 70.14
       },
-      "phase_offset": -1.7016960206944711,
+      "phase_offset": 4.777838827334477,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 230,
-      "bp_start": -11,
+      "length_bp": 210,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -246,17 +246,17 @@
       "axis_start": {
         "x": 4.5,
         "y": 4.5,
-        "z": -3.6740000000000004
+        "z": 0.0
       },
       "axis_end": {
         "x": 4.5,
         "y": 4.5,
         "z": 70.14
       },
-      "phase_offset": -1.1780972450961729,
+      "phase_offset": 5.301437602932776,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 221,
-      "bp_start": -11,
+      "length_bp": 210,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -270,17 +270,17 @@
       "axis_start": {
         "x": 6.75,
         "y": 4.5,
-        "z": -2.672
+        "z": 0.0
       },
       "axis_end": {
         "x": 6.75,
         "y": 4.5,
         "z": 70.14
       },
-      "phase_offset": 0.06544984694978773,
+      "phase_offset": 4.777838827334477,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 218,
-      "bp_start": -8,
+      "length_bp": 210,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -294,17 +294,17 @@
       "axis_start": {
         "x": 6.75,
         "y": 6.75,
-        "z": -2.672
+        "z": 0.0
       },
       "axis_end": {
         "x": 6.75,
         "y": 6.75,
-        "z": 71.142
+        "z": 70.14
       },
-      "phase_offset": 0.589048622548086,
+      "phase_offset": 5.301437602932776,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 221,
-      "bp_start": -8,
+      "length_bp": 210,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -318,17 +318,17 @@
       "axis_start": {
         "x": 4.5,
         "y": 6.75,
-        "z": -1.6700000000000002
+        "z": 0.0
       },
       "axis_end": {
         "x": 4.5,
         "y": 6.75,
-        "z": 71.142
+        "z": 70.14
       },
-      "phase_offset": 1.8325957145940466,
+      "phase_offset": 4.777838827334477,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 218,
-      "bp_start": -5,
+      "length_bp": 210,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -342,17 +342,17 @@
       "axis_start": {
         "x": 2.25,
         "y": 6.75,
-        "z": -1.6700000000000002
+        "z": 0.0
       },
       "axis_end": {
         "x": 2.25,
         "y": 6.75,
-        "z": 71.142
+        "z": 70.14
       },
-      "phase_offset": 2.356194490192345,
+      "phase_offset": 5.301437602932776,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 218,
-      "bp_start": -5,
+      "length_bp": 210,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -366,17 +366,17 @@
       "axis_start": {
         "x": 0.0,
         "y": 6.75,
-        "z": -1.002
+        "z": 0.0
       },
       "axis_end": {
         "x": 0.0,
         "y": 6.75,
-        "z": 71.142
+        "z": 70.14
       },
-      "phase_offset": 3.0106929596902186,
+      "phase_offset": 4.777838827334477,
       "twist_per_bp_rad": 0.5890486225480862,
-      "length_bp": 216,
-      "bp_start": -3,
+      "length_bp": 210,
+      "bp_start": 0,
       "loop_skips": [],
       "label": null,
       "grid_pos": [
@@ -388,20 +388,58 @@
   ],
   "strands": [
     {
+      "id": "scaf_XY_0_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_0",
+          "start_bp": 0,
+          "end_bp": 251,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
+    },
+    {
       "id": "stpl_XY_0_0",
       "domains": [
         {
           "helix_id": "h_XY_0_0",
-          "start_bp": 209,
+          "start_bp": 251,
           "end_bp": 0,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_0_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 251,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_0_1",
@@ -409,31 +447,71 @@
         {
           "helix_id": "h_XY_0_1",
           "start_bp": 0,
-          "end_bp": 209,
+          "end_bp": 251,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_0_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_2",
+          "start_bp": 0,
+          "end_bp": 251,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_0_2",
       "domains": [
         {
           "helix_id": "h_XY_0_2",
-          "start_bp": 209,
+          "start_bp": 251,
           "end_bp": 0,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_0_3",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_3",
+          "start_bp": 251,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_0_3",
@@ -441,54 +519,71 @@
         {
           "helix_id": "h_XY_0_3",
           "start_bp": 0,
-          "end_bp": 209,
+          "end_bp": 251,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_1_3",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_3",
+          "start_bp": 0,
+          "end_bp": 251,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_1_3",
       "domains": [
         {
           "helix_id": "h_XY_1_3",
-          "start_bp": 209,
+          "start_bp": 251,
           "end_bp": 0,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "scaf_XY_1_2",
       "domains": [
         {
           "helix_id": "h_XY_1_2",
-          "start_bp": 209,
-          "end_bp": 184,
+          "start_bp": 251,
+          "end_bp": 0,
           "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_2_2",
-          "start_bp": 184,
-          "end_bp": 209,
-          "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "scaffold",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_1_2",
@@ -496,31 +591,71 @@
         {
           "helix_id": "h_XY_1_2",
           "start_bp": 0,
-          "end_bp": 209,
+          "end_bp": 251,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_1_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_1",
+          "start_bp": 0,
+          "end_bp": 251,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_1_1",
       "domains": [
         {
           "helix_id": "h_XY_1_1",
-          "start_bp": 209,
+          "start_bp": 251,
           "end_bp": 0,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_1_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_1_0",
+          "start_bp": 251,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_1_0",
@@ -528,15 +663,35 @@
         {
           "helix_id": "h_XY_1_0",
           "start_bp": 0,
-          "end_bp": 209,
+          "end_bp": 251,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_2_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_0",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_2_0",
@@ -546,13 +701,33 @@
           "start_bp": 41,
           "end_bp": 0,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_2_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 41,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_2_1",
@@ -562,13 +737,33 @@
           "start_bp": 0,
           "end_bp": 41,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_2_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_2",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_2_2",
@@ -578,13 +773,15 @@
           "start_bp": 41,
           "end_bp": 0,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "scaf_XY_2_3",
@@ -592,120 +789,17 @@
         {
           "helix_id": "h_XY_2_3",
           "start_bp": 41,
-          "end_bp": -8,
+          "end_bp": 0,
           "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_3_3",
-          "start_bp": -8,
-          "end_bp": 52,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_3_2",
-          "start_bp": 52,
-          "end_bp": -5,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_3_1",
-          "start_bp": -5,
-          "end_bp": 52,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_3_0",
-          "start_bp": 52,
-          "end_bp": -3,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_2_0",
-          "start_bp": -3,
-          "end_bp": 47,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_2_1",
-          "start_bp": 47,
-          "end_bp": -11,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_2_2",
-          "start_bp": -11,
-          "end_bp": 23,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_1_2",
-          "start_bp": 23,
-          "end_bp": -11,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_1_3",
-          "start_bp": -11,
-          "end_bp": 215,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_0_3",
-          "start_bp": 215,
-          "end_bp": -5,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_0_2",
-          "start_bp": -5,
-          "end_bp": 212,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_0_1",
-          "start_bp": 212,
-          "end_bp": -5,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_0_0",
-          "start_bp": -5,
-          "end_bp": 220,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_1_0",
-          "start_bp": 220,
-          "end_bp": -11,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_1_1",
-          "start_bp": -11,
-          "end_bp": 209,
-          "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "scaffold",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_2_3",
@@ -715,13 +809,33 @@
           "start_bp": 0,
           "end_bp": 41,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_3_3",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_3",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_3_3",
@@ -731,13 +845,33 @@
           "start_bp": 41,
           "end_bp": 0,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_3_2",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_2",
+          "start_bp": 41,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_3_2",
@@ -747,13 +881,33 @@
           "start_bp": 0,
           "end_bp": 41,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_3_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_1",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_3_1",
@@ -763,13 +917,33 @@
           "start_bp": 41,
           "end_bp": 0,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_3_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_0",
+          "start_bp": 41,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_3_0",
@@ -779,13 +953,33 @@
           "start_bp": 0,
           "end_bp": 41,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_2_0_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_0",
+          "start_bp": 84,
+          "end_bp": 125,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_2_0_0",
@@ -795,13 +989,33 @@
           "start_bp": 125,
           "end_bp": 84,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_2_1_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 125,
+          "end_bp": 84,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_2_1_0",
@@ -811,13 +1025,33 @@
           "start_bp": 84,
           "end_bp": 125,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_2_2_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_2",
+          "start_bp": 84,
+          "end_bp": 125,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_2_2_0",
@@ -827,13 +1061,15 @@
           "start_bp": 125,
           "end_bp": 84,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "scaf_XY_2_3_0",
@@ -841,78 +1077,17 @@
         {
           "helix_id": "h_XY_2_3",
           "start_bp": 125,
-          "end_bp": 77,
+          "end_bp": 84,
           "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_3_3",
-          "start_bp": 77,
-          "end_bp": 128,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_3_2",
-          "start_bp": 128,
-          "end_bp": 80,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_3_1",
-          "start_bp": 80,
-          "end_bp": 128,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_3_0",
-          "start_bp": 128,
-          "end_bp": 72,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_2_0",
-          "start_bp": 72,
-          "end_bp": 132,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_2_1",
-          "start_bp": 132,
-          "end_bp": 75,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_2_2",
-          "start_bp": 75,
-          "end_bp": 108,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_1_2",
-          "start_bp": 108,
-          "end_bp": 24,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_2_2",
-          "start_bp": 24,
-          "end_bp": 41,
-          "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "scaffold",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_2_3_0",
@@ -922,13 +1097,33 @@
           "start_bp": 84,
           "end_bp": 125,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_3_3_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_3",
+          "start_bp": 84,
+          "end_bp": 125,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_3_3_0",
@@ -938,13 +1133,33 @@
           "start_bp": 125,
           "end_bp": 84,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_3_2_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_2",
+          "start_bp": 125,
+          "end_bp": 84,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_3_2_0",
@@ -954,13 +1169,33 @@
           "start_bp": 84,
           "end_bp": 125,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_3_1_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_1",
+          "start_bp": 84,
+          "end_bp": 125,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_3_1_0",
@@ -970,13 +1205,33 @@
           "start_bp": 125,
           "end_bp": 84,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_3_0_0",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_0",
+          "start_bp": 125,
+          "end_bp": 84,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_3_0_0",
@@ -986,13 +1241,33 @@
           "start_bp": 84,
           "end_bp": 125,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_2_0_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_0",
+          "start_bp": 168,
+          "end_bp": 209,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_2_0_1",
@@ -1002,13 +1277,33 @@
           "start_bp": 209,
           "end_bp": 168,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_2_1_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_1",
+          "start_bp": 209,
+          "end_bp": 168,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_2_1_1",
@@ -1018,13 +1313,33 @@
           "start_bp": 168,
           "end_bp": 209,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_2_2_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_2_2",
+          "start_bp": 168,
+          "end_bp": 209,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_2_2_1",
@@ -1034,13 +1349,15 @@
           "start_bp": 209,
           "end_bp": 168,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "scaf_XY_2_3_1",
@@ -1048,78 +1365,17 @@
         {
           "helix_id": "h_XY_2_3",
           "start_bp": 209,
-          "end_bp": 163,
+          "end_bp": 168,
           "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_3_3",
-          "start_bp": 163,
-          "end_bp": 212,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_3_2",
-          "start_bp": 212,
-          "end_bp": 165,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_3_1",
-          "start_bp": 165,
-          "end_bp": 212,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_3_0",
-          "start_bp": 212,
-          "end_bp": 157,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_2_0",
-          "start_bp": 157,
-          "end_bp": 218,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_2_1",
-          "start_bp": 218,
-          "end_bp": 160,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_2_2",
-          "start_bp": 160,
-          "end_bp": 183,
-          "direction": "FORWARD",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_1_2",
-          "start_bp": 183,
-          "end_bp": 109,
-          "direction": "REVERSE",
-          "overhang_id": null
-        },
-        {
-          "helix_id": "h_XY_2_2",
-          "start_bp": 109,
-          "end_bp": 125,
-          "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "scaffold",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_2_3_1",
@@ -1129,13 +1385,33 @@
           "start_bp": 168,
           "end_bp": 209,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_3_3_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_3",
+          "start_bp": 168,
+          "end_bp": 209,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_3_3_1",
@@ -1145,13 +1421,33 @@
           "start_bp": 209,
           "end_bp": 168,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_3_2_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_2",
+          "start_bp": 209,
+          "end_bp": 168,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_3_2_1",
@@ -1161,13 +1457,33 @@
           "start_bp": 168,
           "end_bp": 209,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_3_1_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_1",
+          "start_bp": 168,
+          "end_bp": 209,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_3_1_1",
@@ -1177,13 +1493,33 @@
           "start_bp": 209,
           "end_bp": 168,
           "direction": "REVERSE",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "scaf_XY_3_0_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_3_0",
+          "start_bp": 209,
+          "end_bp": 168,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": null,
+      "color": null,
+      "notes": null,
+      "is_reference": false
     },
     {
       "id": "stpl_XY_3_0_1",
@@ -1193,13 +1529,15 @@
           "start_bp": 168,
           "end_bp": 209,
           "direction": "FORWARD",
-          "overhang_id": null
+          "overhang_id": null,
+          "binds_overhang_id": null
         }
       ],
       "strand_type": "staple",
       "sequence": null,
       "color": null,
-      "notes": null
+      "notes": null,
+      "is_reference": false
     }
   ],
   "lattice_type": "SQUARE",
@@ -1214,7 +1552,7 @@
   "deformations": [],
   "cluster_transforms": [
     {
-      "id": "1e569f36-f8a7-48ae-a3be-09dd046795a0",
+      "id": "73b6a61b-74cd-4f6d-851b-decb07a92977",
       "name": "Cluster 1",
       "is_default": true,
       "helix_ids": [
@@ -1256,523 +1594,477 @@
   ],
   "cluster_joints": [],
   "overhangs": [],
+  "overhang_connections": [],
+  "overhang_bindings": [],
+  "flexible_segment_marks": [],
+  "flexible_connections": [],
+  "protein_assets": [],
+  "protein_attachments": [],
+  "tm_settings": {
+    "na_mM": 50.0,
+    "conc_nM": 250.0
+  },
   "extensions": [],
+  "plate_layout": {
+    "orientation": "8x12",
+    "plate_count": 1,
+    "wells": [],
+    "tubes": []
+  },
+  "representation_overrides": [],
   "photoproduct_junctions": [],
-  "crossovers": [
-    {
-      "id": "7318f89a-7395-4bbf-96f2-76354cf8f3fe",
-      "half_a": {
-        "helix_id": "h_XY_2_2",
-        "index": 23,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_1_2",
-        "index": 23,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:bridge"
-    },
-    {
-      "id": "18e0ce6f-8cb4-489f-9e37-00f571bd02bb",
-      "half_a": {
-        "helix_id": "h_XY_2_2",
-        "index": 24,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_1_2",
-        "index": 24,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:bridge"
-    },
-    {
-      "id": "f425bbe8-7a12-49ab-b321-658dc575ea23",
-      "half_a": {
-        "helix_id": "h_XY_2_2",
-        "index": 108,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_1_2",
-        "index": 108,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:bridge"
-    },
-    {
-      "id": "8dfee9e0-b2af-49c8-a955-701d3b4b7a71",
-      "half_a": {
-        "helix_id": "h_XY_2_2",
-        "index": 109,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_1_2",
-        "index": 109,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:bridge"
-    },
-    {
-      "id": "a1b87b88-9cdb-44d3-89e8-57fc8699c63f",
-      "half_a": {
-        "helix_id": "h_XY_2_2",
-        "index": 183,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_1_2",
-        "index": 183,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:bridge"
-    },
-    {
-      "id": "b5275c5c-3b3d-4353-b4a7-de1ee90dd0c5",
-      "half_a": {
-        "helix_id": "h_XY_2_2",
-        "index": 184,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_1_2",
-        "index": 184,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:bridge"
-    },
-    {
-      "id": "e46b6e95-a6b9-4cb2-bc97-51f0ca8349b2",
-      "half_a": {
-        "helix_id": "h_XY_2_3",
-        "index": -8,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_3_3",
-        "index": -8,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "7449a6b8-330a-4825-a656-ca67131071c3",
-      "half_a": {
-        "helix_id": "h_XY_2_3",
-        "index": 77,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_3_3",
-        "index": 77,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "a0b538b9-1bfe-494d-b12d-4077fa99d972",
-      "half_a": {
-        "helix_id": "h_XY_2_3",
-        "index": 163,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_3_3",
-        "index": 163,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "be826e2b-602b-4baf-9610-afc5a3ddfa0d",
-      "half_a": {
-        "helix_id": "h_XY_3_3",
-        "index": 52,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_3_2",
-        "index": 52,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "17caa4ee-9bb8-4814-b3aa-85704e9c9993",
-      "half_a": {
-        "helix_id": "h_XY_3_3",
-        "index": 128,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_3_2",
-        "index": 128,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "c46079e4-adb5-4d41-8621-a9d56e07c360",
-      "half_a": {
-        "helix_id": "h_XY_3_3",
-        "index": 212,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_3_2",
-        "index": 212,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "0372fcbd-2532-46ca-892c-1e60e71d24bf",
-      "half_a": {
-        "helix_id": "h_XY_3_2",
-        "index": -5,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_3_1",
-        "index": -5,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "7cda805e-ada3-4ff3-8f6d-25e0fa1cb2ce",
-      "half_a": {
-        "helix_id": "h_XY_3_2",
-        "index": 80,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_3_1",
-        "index": 80,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "481c3bf1-f943-414a-9cb5-2d6d7ecbcdb2",
-      "half_a": {
-        "helix_id": "h_XY_3_2",
-        "index": 165,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_3_1",
-        "index": 165,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "d66b256b-80c8-4615-b861-a18241d5202b",
-      "half_a": {
-        "helix_id": "h_XY_3_1",
-        "index": 52,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_3_0",
-        "index": 52,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "7912fd5d-54df-4df7-9648-d089bb76d53e",
-      "half_a": {
-        "helix_id": "h_XY_3_1",
-        "index": 128,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_3_0",
-        "index": 128,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "5a3fc5ff-2689-45c8-9625-6bdf5b37674e",
-      "half_a": {
-        "helix_id": "h_XY_3_1",
-        "index": 212,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_3_0",
-        "index": 212,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "1b521ff7-a1f9-4a52-8675-20dca46ac2bb",
-      "half_a": {
-        "helix_id": "h_XY_3_0",
-        "index": -3,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_2_0",
-        "index": -3,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "72a81875-f988-40af-89b1-8a90e2623915",
-      "half_a": {
-        "helix_id": "h_XY_3_0",
-        "index": 72,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_2_0",
-        "index": 72,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "c516e6b9-8d88-40cb-88c8-c268097d2d55",
-      "half_a": {
-        "helix_id": "h_XY_3_0",
-        "index": 157,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_2_0",
-        "index": 157,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "aff09fba-4095-43a7-b1eb-c60b64e75f89",
-      "half_a": {
-        "helix_id": "h_XY_2_0",
-        "index": 47,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_2_1",
-        "index": 47,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "3a7b11b0-3645-4b28-8447-cdf798880bf5",
-      "half_a": {
-        "helix_id": "h_XY_2_0",
-        "index": 132,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_2_1",
-        "index": 132,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "1aa35c3c-898f-42ef-9488-da644462e9b7",
-      "half_a": {
-        "helix_id": "h_XY_2_0",
-        "index": 218,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_2_1",
-        "index": 218,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "ada908a3-5269-45d7-b53a-1a47a5cacc86",
-      "half_a": {
-        "helix_id": "h_XY_2_1",
-        "index": -11,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_2_2",
-        "index": -11,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "e8516d58-9f35-4d95-8995-9e5172cdc4bb",
-      "half_a": {
-        "helix_id": "h_XY_2_1",
-        "index": 75,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_2_2",
-        "index": 75,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "cfc33dd1-32c2-4d55-9375-78467be6f1a5",
-      "half_a": {
-        "helix_id": "h_XY_2_1",
-        "index": 160,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_2_2",
-        "index": 160,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "6915134e-34d1-4fbb-8a3a-be4d6e7aa3c4",
-      "half_a": {
-        "helix_id": "h_XY_1_2",
-        "index": -11,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_1_3",
-        "index": -11,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "02d5befb-d1e2-4221-bde2-596aa91fbdc9",
-      "half_a": {
-        "helix_id": "h_XY_1_3",
-        "index": 215,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_0_3",
-        "index": 215,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "8429beb6-a137-4401-b642-15fe08233936",
-      "half_a": {
-        "helix_id": "h_XY_0_3",
-        "index": -5,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_0_2",
-        "index": -5,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "11b89a65-7ce2-44cd-9113-0c53e737e913",
-      "half_a": {
-        "helix_id": "h_XY_0_2",
-        "index": 212,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_0_1",
-        "index": 212,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "480aff87-5dd1-44f7-a426-7d433792a14f",
-      "half_a": {
-        "helix_id": "h_XY_0_1",
-        "index": -5,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_0_0",
-        "index": -5,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "9b2bfacc-2fe8-41d0-a055-203b9720741a",
-      "half_a": {
-        "helix_id": "h_XY_0_0",
-        "index": 220,
-        "strand": "FORWARD"
-      },
-      "half_b": {
-        "helix_id": "h_XY_1_0",
-        "index": 220,
-        "strand": "REVERSE"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    },
-    {
-      "id": "f59d5663-aac0-42e7-9b22-3f9df3f8f7ec",
-      "half_a": {
-        "helix_id": "h_XY_1_0",
-        "index": -11,
-        "strand": "REVERSE"
-      },
-      "half_b": {
-        "helix_id": "h_XY_1_1",
-        "index": -11,
-        "strand": "FORWARD"
-      },
-      "extra_bases": null,
-      "process_id": "auto_scaffold_seamless:zig"
-    }
-  ],
+  "crossovers": [],
   "forced_ligations": [],
   "camera_poses": [],
   "animations": [],
-  "feature_log": [],
-  "feature_log_cursor": -1
+  "loadouts": [],
+  "active_loadout_id": null,
+  "feature_log": [
+    {
+      "feature_type": "snapshot",
+      "id": "d7b8ef34-8e7d-4d34-9de9-000f275f80ef",
+      "op_kind": "bundle-create",
+      "label": "Create bundle: teeth",
+      "timestamp": "2026-05-25T15:55:06.377453+00:00",
+      "params": {
+        "cells": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            0,
+            3
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            0
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            1
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            3,
+            3
+          ],
+          [
+            3,
+            2
+          ],
+          [
+            3,
+            1
+          ],
+          [
+            3,
+            0
+          ]
+        ],
+        "length_bp": 42,
+        "name": "teeth",
+        "plane": "XY",
+        "strand_filter": "both",
+        "lattice_type": "SQUARE",
+        "ligate_adjacent": true
+      },
+      "design_snapshot_gz_b64": "H4sIANpwFGoA/11Sy07DMBD8F58b1DZJCblx4MgBECeErK29SVwldmSvK1DVf2dN0/Rx88x4Z8e7PgijRS2qonzEvGyyXBWbrIBtlUG1brJqU+RPUOa4XuViITrsjcIg6q/vhQjkweoJ9EDEkqTfEdnv4+3z+f2FKwYk0EAg6oOwMCSNEKljSWNQ3oxknGWWCYjUOX86K49AqCXQCQ9Om8ZcEQTtf+tjMmqcHyAZTWlUHwOhlylhSOIdv3PG0sS5PfoObHsHpXLWoroynZWtsdrMBaN3hMZKCAHpniMC1Q04N6NB8i06VaeJyOFV1OXyYcnhnFXSMlwnzO/CH0IbLgHGzpFjax0VyV201+GUdyGkhBPmRyueVm/am7nwBjzI0YXzEsGam8n1DrSL57jALfYoJ1Kmr2Jj37M9byf6pLRTvwshVfQh7TFb3fIhbmct2Rz/AH7Ktgx9AgAA",
+      "snapshot_size_bytes": 637,
+      "post_state_gz_b64": "H4sIANpwFGoA/9VZXY/jJhT9L35OIgNOnORtpZ2+VVWz6peqCjE2Ttg64ALeznY0/71gO5kZOzF2ta7wkwPc4HvOPRcu5jlgabAPNnQDd2gHlzTdgmWUgWS5Q2i7BDCLdrsoJBSEwSI40ZwlVAX735/r/53wr7/hENsx8sQUVppIHeyfg6dgH67CRfC1ef5TPV8aM8rTO0YgWoVwa+yKE1EUiyxT1Ey4XqEQRCjehMZNGMebRaD/Zkrjgkr8WGBJUjvHersLo+0GwnW0Dc1zEeSUH/XJmAT7yDSNaeOieV0uhGn+yQoL6A/TJo80D/a8zPNFcJQsxYWwQ+EiNKMpkzTRTHAD+7sfDr98OHwMXhbveQC3eIAruHYT0bG6w0S0iuN4i7ZbGCMURXH8/zIBWkwcHn5+OHx66DABbzERrQYQ0TbyUxFwoCLQLR42q3gAER0rPxWBBikCOJio5e+k4mrmoypAh4vbqgD92dFPRcfKR1WATn7cU0X/itlPRdfMT1W018x7qujdRfup6Fj5qYr2PnpbFbCfiSoDXERcjHxUBBxYT0BHdvQS0bHyURFwYD0B+1fMXiLaRn4qYlg9AR27aC8RHSs/FTGsnkAOJuofTiquZj6qAg2sJ1B/dvRT0bHyURVoYD2BHCtmPxVdMz9VMayeQP27aD8VHSs/VXG3njD9SkvC0zffKlRCstfPFak4E8brYftZ4wm3P2hUDlUeGp8MNbWz4Db3i0B8ofJE+LGax/r66gTWXwvaeJCJPLWT079KyhN6gZWIXMhLgwttP7LUDRMXSTMqa+uM5IpeA610kf83SBbHBVN4m8RhkDQpcvrtAF1jBJyAwDSApovRWEjfTHZTxQg6AcG55dFYSN7nEXICQnPLo7GQPM8j4AQEpgI0VYzGQ/I8j4BzYQBTLQzTxWgsJO/zyLXBgqk22OliNBaS93nkKlTBVIXqdDEaC8nzPIJOQHBu56PxkDzPI+hcGODczkfjIXmfR64NFs7tfDQekvd55CpU4dzOR+MheZ5HyAkIze18NB6S53mEnAsDmtv5aDwk7/PItcGiuZ2PxkPyPo9chSqa2/loPCTP8qi6gdKaJfQy8acff/pwsLyeqSYp0cTemnFytmOaUn2ygKlKJCsav00HKfXJvtX+TiQlmqaY6Lp9FinL2JsOTY7V5deLnSgT8kzsRM19WJKXSlOJLVhlB1v9nwXjuum70NRq4kRwXrPaHnlkPGXXPxTS0MM4JkpR3e7TmiSnM72+TJ+xsdL1vy0j+Px9sF9Xl4nmhQnmpgnX9Y0jfdKUq1cHipPQwkydlonGn0v+1rlECqWsh03bgE4MWzk7vuPFREASezlImx7C2TvmckFSUV7cJeYVXyhuOq9CMtOb6JTSjhyb97124KSUysZxCd73q/LxOlbp8V9btSmYWy0AAA==",
+      "post_state_size_bytes": 11611,
+      "evicted": false,
+      "diff_added_b64": "",
+      "diff_removed_ids": [],
+      "diff_modified_b64": "",
+      "pre_state_from_previous": false
+    },
+    {
+      "feature_type": "snapshot",
+      "id": "ef17348b-0544-4137-a8ca-28b9f86df9bb",
+      "op_kind": "extrude-continuation",
+      "label": "Extrude continuation: 8 cells × 42 bp",
+      "timestamp": "2026-05-25T15:55:34.595621+00:00",
+      "params": {
+        "cells": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            0,
+            3
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            0
+          ]
+        ],
+        "length_bp": 42,
+        "plane": "XY",
+        "offset_nm": 14.028,
+        "strand_filter": "both",
+        "extend_inplace": true,
+        "ligate_adjacent": true
+      },
+      "design_snapshot_gz_b64": "H4sIAPZwFGoA/9VZXY+jNhT9KxXPJMI2CSRvq+3sW1U1q35ptUIOmIQtwdSY6WxH899rA2E8kGColpV5GGVsX+x7js+1r+1nK4msvbUlW7hDO7gikQ9WbgzC1Q4hfwVg7O52roMJcCzbOpM0CUlh7T8919+dgz/+DJxAtuGnpAgKjhm39s/Wk7V31o5tfW1+/61+XxozkkV3jIC7dqAv7PIzLkhA47ggosPNGjnARd7WEW5Cz9vaFv8nKXiQExYc84DhSPax8XeO628h3Li+I35tKyXZiZ+FibV3RVGYNi6K4VJKRfGvJJeAPosyPpLU2mdlmtrWiSVRkFPZ5NiOaI0SRkKe0EzA/vDz4fd3hx+tF/stD+AWD3ANN3oielZ3mHDXnuf5yPehh5Dret73ZQJ0mDg8/PZw+PjQYwLeYsJdjyCia2SmIuBIRaBbPGzX3ggielZmKgKNUgTQMFHLX0tFa2aiKkCPi9uqAMPRMUxFz8pEVYBefNxTxfCKOUxF38xMVXTXzHuqGNxFh6noWZmpiu4+elsVcJiJKgJ0RFyNTFQEHJlPQE10DBLRszJREXBkPgGHV8xBIrpGZipiXD4BNbvoIBE9KzMVMS6fQBom6n+0VLRmJqoCjcwn0HB0DFPRszJRFWhkPoE0K+YwFX0zM1UxLp9Aw7voMBU9KzNVcTefEPUFZziLlLuKIsTx63VFRC84yepmea3xFHQvNCqHKg+FT4Ka2llwm3vboo+EnXF2qvqRvr46EfCvOWk8iGkayc7J3yXJQnKFFdKUsmsho1xestQFMS+MxITV1jFOC9JOdMHz9P9BkjiumJzbJI6DxHGekm8HqJ0joAUE5gE03xxNhfTNZDfXHEEtILi0OJoKyfg4QlpAaGlxNBWS4XEEtIDAXIDmmqPpkAyPI6BdGMBcC8N8czQVkvFxpNtgwVwb7HxzNBWS8XGkS1TBXInqfHM0FZLhcQS1gODSzkfTIRkeR1C7MMClnY+mQzI+jnQbLFza+Wg6JOPjSJeowqWdj6ZDMjyOkBYQWtr5aDokw+MIaRcGtLTz0XRIxseRboNFSzsfTYdkfBzpElW0tPPRdEiGxVH1AsV5EpJrxx9/+fXdQfJ6IRxHmGP5apbhi2zjhPCzBEyKkCV547eowCU/y1Hl/yEjmJMowLwuX2iUxIlSwfGpevx6kR3FlF2w7Kh5DwvTsuCEBRJsIRuVRy4PHbd4C44rzw2jlRtvo5W/EcWIhEfHwzu48zzRf+Ps+7qnH2SMCOhiKFymwgXOSmK38yS7V1+RlMcK5U5cuXpVbviUiyTlvkI5FiunLyXJV3JJJWVRdkZlAVbivJXT56viGvdFuWIrxfWEfJIPnM2faGOU32iwQdWYJ4+Udz55UabhC00y3gxyVWWnGIQ0y2oRd1uOSRYl7Qe58IQIr3FREN6t4xyH5wtpB+OXQFjx+mspwODyk7XfVG+3YsAwyEQRbuoHXvLESVa8OpCfKaei66gMefClzFTnQkaLQnrYlIXGQiHONDm9kaHQEMPyLZY0NThL3gg1pTii5dVdLIZ4JEFT2cat6F4EQ8lky6kZ77UiCEtWyLBZgbf1RXls26rw/w/cYaUuyi4AAA==",
+      "snapshot_size_bytes": 11978,
+      "post_state_gz_b64": "H4sIAPZwFGoA/9VZXY+jNhT9KxXPJMI2AZK31Xb2rao6q35ptUIOmIQtwdSY6WxH899rA2EYSDBs45XnYZSxfWPfc+659o39ZKWxtbM84sEt2sIViQOwchMQrbYIBSsAE3e7dR1MgGPZ1pFkaURKa/fpqfneMfzjz9AJ5Rh+TMuw5Jhxa/dkPVo7Z+3Y1tf289/687k1I3l8xQgGa2fjCbviiEsS0iQpiZhws0YOcJHvOcJN6PuebfF/0pKHBWHhvggZjuUcm2DruIEH4cYNHPFpWxnJD/woTKxd4NqWMG1dFMtllIrmX2khAX0WbbwnmbXLqyyzrQNL47CgcsixHTEap4xEPKW5gP3h5/vf393/aD3br3kAl3iAa7hREzGyusKEu/Z9P0BBAH2EXNf3vy8TYMDE/d1vd/cf70ZMwEtMuOsZRAyNzFQEnKkIdIkHb+3PIGJkZaYi0CxFAAUTjfyVVHRmJqoCjLi4rAownR3TVIysTFQFGOXHNVVM75jTVIzNzFTFcM+8porJU3SaipGVmaoYnqOXVQGnmagzQEXE2Qi4awcGWhThwm/kAc6sJ6AiOyaJGFldYeIWivgfTMyrJ+D0jjlJxNDITEXMqyeg4hSdJGJkZaYi5tUTSMFE84+Sis7MRFWgmfUEms6OaSpGViaqAs2sJ5Bix5ymYmxmpirm1RNo+hSdpmJkZaYqrtYTor/kDOdx766ijHDycl0R0xNO82ZYXms8hsMLjdqh2kPhk6CmKX7QZe5tiz4QdsT5oZ5H+vriRMi/FqT1IKFZLCcnf1ckj8gZVkQzys6NnHJ5ydI0RFwYSQhrrBOclaQLdMmL7NsgSRxnTM5lEudB4rjIyO0AdTECSkBADyB9MVoK6Way0xUjqAQE31oeLYVkfB4hJSD01vJoKSTD8wgoAQFdgHTFaDkkw/MIKDcGoGtj0BejpZCMzyPVAQt0HbD6YrQUkvF5pCpUga5CVV+MlkIyPI+gEhC8DsgFJubRckgSh8F5BJUbAxxsDDcDpC9GSyHdTHa6YqQ6YOH1A9bUPFoKyfg8UhWqcFCovoE8WgrJ8DxCSkBIFyBdMVoOyfA8QsqNAenaGPTFaCkk4/NIdcAiXQesvhgthWR8HqkKVaSrUNUXo6WQDMuj+gWK8zQi54k//vLru3vJ64lwHGOO5atZjk9yjBPCjxIwKSOWFq3fogNX/ChXlf9HjGBO4hDzpn2icZqkvQ6OD/Xj17OcKKHshOVE7XtYlFUlJyyUYEs52Hvk8tHewx7Yr3w3ildu4sWrYCOaMYn2jo+3cOv7Yv7W2ffNTD/IHBHQxVK4yoQLnFXE7uIkp++/IvUeK3p34r2r194NX+8iqXdf0ftZ3Pv11Svye7Vkr2TpnYy9DbiX552cPp8V17ov2jVbGW4C8kk+cLZ/YoxRfmHABvVgkT5QPvjKcy8MX2ia83aRsyoHzTCied6IeDiyT/M47b5QCE+I8BqXJeHDPs5xdDyRbjF+CoUVb74tBRiefrJ2m/rtViwYhblowk3zwEseOcnLFweKI+VUTB1XEQ+/VHnfuYjRspQetm2hsUiIM0sPr2QoNMSwfIslbQ/O01dCzSiOaXV2F4slHkjYdnZ5K6YXyVAxOXJo13vpCKOKlTJtVuB1f1ntu7E6/f8Dzf3+6couAAA=",
+      "post_state_size_bytes": 11978,
+      "evicted": false,
+      "diff_added_b64": "",
+      "diff_removed_ids": [],
+      "diff_modified_b64": "",
+      "pre_state_from_previous": false
+    },
+    {
+      "feature_type": "snapshot",
+      "id": "c63e4e08-c811-4441-bb35-1301ae5aa578",
+      "op_kind": "extrude-continuation",
+      "label": "Extrude continuation: 16 cells × 42 bp",
+      "timestamp": "2026-05-25T15:55:44.718749+00:00",
+      "params": {
+        "cells": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            0,
+            3
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            0
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            1
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            3,
+            3
+          ],
+          [
+            3,
+            2
+          ],
+          [
+            3,
+            1
+          ],
+          [
+            3,
+            0
+          ]
+        ],
+        "length_bp": 42,
+        "plane": "XY",
+        "offset_nm": 28.056,
+        "strand_filter": "both",
+        "extend_inplace": true,
+        "ligate_adjacent": true
+      },
+      "design_snapshot_gz_b64": "H4sIAABxFGoA/9VZXY+jNhT9KxXPJMI2AZK31Xb2rao6q35ptUIOmIQtwdSY6WxH899rA2EYSDBs45XnYZSxfWPfc+659o39ZKWxtbM84sEt2sIViQOwchMQrbYIBSsAE3e7dR1MgGPZ1pFkaURKa/fpqfneMfzjz9AJ5Rh+TMuw5Jhxa/dkPVo7Z+3Y1tf289/687k1I3l8xQgGa2fjCbviiEsS0iQpiZhws0YOcJHvOcJN6PuebfF/0pKHBWHhvggZjuUcm2DruIEH4cYNHPFpWxnJD/woTKxd4NqWMG1dFMtllIrmX2khAX0WbbwnmbXLqyyzrQNL47CgcsixHTEap4xEPKW5gP3h5/vf393/aD3br3kAl3iAa7hREzGyusKEu/Z9P0BBAH2EXNf3vy8TYMDE/d1vd/cf70ZMwEtMuOsZRAyNzFQEnKkIdIkHb+3PIGJkZaYi0CxFAAUTjfyVVHRmJqoCjLi4rAownR3TVIysTFQFGOXHNVVM75jTVIzNzFTFcM+8porJU3SaipGVmaoYnqOXVQGnmagzQEXE2Qi4awcGWhThwm/kAc6sJ6AiOyaJGFldYeIWivgfTMyrJ+D0jjlJxNDITEXMqyeg4hSdJGJkZaYi5tUTSMFE84+Sis7MRFWgmfUEms6OaSpGViaqAs2sJ5Bix5ymYmxmpirm1RNo+hSdpmJkZaYqrtYTor/kDOdx766ijHDycl0R0xNO82ZYXms8hsMLjdqh2kPhk6CmKX7QZe5tiz4QdsT5oZ5H+vriRMi/FqT1IKFZLCcnf1ckj8gZVkQzys6NnHJ5ydI0RFwYSQhrrBOclaQLdMmL7NsgSRxnTM5lEudB4rjIyO0AdTECSkBADyB9MVoK6Way0xUjqAQE31oeLYVkfB4hJSD01vJoKSTD8wgoAQFdgHTFaDkkw/MIKDcGoGtj0BejpZCMzyPVAQt0HbD6YrQUkvF5pCpUga5CVV+MlkIyPI+gEhC8DsgFJubRckgSh8F5BJUbAxxsDDcDpC9GSyHdTHa6YqQ6YOH1A9bUPFoKyfg8UhWqcFCovoE8WgrJ8DxCSkBIFyBdMVoOyfA8QsqNAenaGPTFaCkk4/NIdcAiXQesvhgthWR8HqkKVaSrUNUXo6WQDMuj+gWK8zQi54k//vLru3vJ64lwHGOO5atZjk9yjBPCjxIwKSOWFq3fogNX/ChXlf9HjGBO4hDzpn2icZqkvQ6OD/Xj17OcKKHshOVE7XtYlFUlJyyUYEs52Hvk8tHewx7Yr3w3ildu4sWrYCOaMYn2jo+3cOv7Yv7W2ffNTD/IHBHQxVK4yoQLnFXE7uIkp++/IvUeK3p34r2r194NX+8iqXdf0ftZ3Pv11Svye7Vkr2TpnYy9DbiX552cPp8V17ov2jVbGW4C8kk+cLZ/YoxRfmHABvVgkT5QPvjKcy8MX2ia83aRsyoHzTCied6IeDiyT/M47b5QCE+I8BqXJeHDPs5xdDyRbjF+CoUVb74tBRiefrJ2m/rtViwYhblowk3zwEseOcnLFweKI+VUTB1XEQ+/VHnfuYjRspQetm2hsUiIM0sPr2QoNMSwfIslbQ/O01dCzSiOaXV2F4slHkjYdnZ5K6YXyVAxOXJo13vpCKOKlTJtVuB1f1ntu7E6/f8Dzf3+6couAAA=",
+      "snapshot_size_bytes": 11978,
+      "post_state_gz_b64": "H4sIAABxFGoA/9VaXY+jNhT9KxXPSYRtEkjeVu3sW1V1Vv3SaoUcMAlbgimY6WxH899rA2EIJBiP4pV5GGWML+aee8+xr8EvVhxaO2tDNnCLtnBJQg8snQgEyy1C3hLAyNluHRsTYFsL60iSOCCFtfv8Ut939P/8y7d90Yef48IvGM6ZtXuxnq2dvbIX1rfm97/q97UxI2l4w8iBK9tzuF12xAXxaRQVhA+4XiEbOMjd2NxN6LqbhcX+jQvmZyT395mf41CMsfa2tuNtIFw7ns1/F1ZC0gM7chNrByC/i9s2PvLnJZTy5t9xJhB94W28J4m1S8skWViHPA79jIoue2Hz3jDOScBimnLcH395/OPD40/W6+IyEOBaIOAKruWRGFjdCIWzcl3XQ54HXYQcx3W/cyhALxSPD78/PH56GIQCXguFs5oQib6RoZyAEzmBrgVis3InRGJgZSgn0CROAEkoagVIY9GaGckLMAjGdV6AcYGMx2JgZSQvwEAit3gxPm2Ox2JoZigv+hPnLV6MLqbjsRhYGcqL/nJ6nRdwPBSVCGSROBsZyQk4sa6AEoGMRmJgZSQn4MS6Ao5Pm6OR6BsZyolpdQWULKajkRhYGcqJaXUFkoSi/kcai9bMSF6giXUFGhfIeCwGVkbyAk2sK5Bk2hyPxdDMUF5MqyvQ+GI6HouBlaG8uFlX8OsFy3Eadt5dFAGO3l5fhPSE47TuFq85nv3+C47KocpF7hOPTePt+nr0FxZ9IvkRp4dqIOHsmxc++5aRxoWIJqEYnfxTkjQgZ1wBTWh+bqSUibcudYNnJicRyWvrCCcFaVNdsCx5H6YKyBmVfT2M0zAxnCXkfojaLAEpIqAJkb4sqWK6H/N0ZQlKEcHZaUkVk/laQlJEaHZaUsVkupaAFBHQhkhXltQxma4lIJ0dgLbZQV+WVDGZryXZSgu0rbT6sqSKyXwtyapWoK1q1ZclVUymawlKEcHbiBxgopTUIQkcBisJSucG2Jsb7gZIX45UId2NdrpyJFtl4e1V1lQdqUIyXkeyehX26tUZ6EgVkuE6QlJASBcgXTlSh2S4jpB0YkC6JgZ9OVKFZLyOZAss0rXA6suRKiTjdSQrVJGuQlVfjlQhGa4jOOHrS3874TnGv254D6yL7bnAaJqe4IT9eX9bcUdQGvdKyrDuSEFt+6UJoOD8dKUOawa6kk/r/W3GLHSlDst4XaFJS7A2UBr3UMqwjNcVmjBZ9LcdM9DVe2DNQFfyRbi//ZiFrtRhzUBX8uK2vw2Zha7UYRmnq+rEH2NxQM4Df/r1tw+PIrYnwnCIGRbHFFN8En2MEHYUkEkR5HHW+M0v4JIdxVPF/0FOMCOhj1ndPtEwjuLOBYYP1WHDVzFQRPMTFgM15w+DpCwYyX0BthCdnUOFLtpv8Absl64ThEsn2oRLb82bIQn2tou3cOu6fPzG2R/rkX4QauHQ+aNwmXAXWF6SRZspMXz30F7nZFjn+FHnjEvnIEXna33nk3Dnu2Nn39bZFnSqzk5R01kzO1NyR/Etob6cOde4z9tVtBJcJ+SzOFHa/PG+nLIrHQtQdWbxE2W9W147afhK45Q1Dzmzstf0A5qmNYn7Pfs4DeP2hox7QrjXuCgI619jDAfHE2kfxk4+t2L13YKA/ulna7euDsvyBwZ+yptwXZ+oJc+MpMWbA9mRMsqHDsuA+V/LtOtckNOiEB42bc6xgJMziQ8XNOQcyrE4+0qaKziNL4iaUBzS8uwu5o94In5zsdUtH56LocxFz6F53tsFPyjzQshmCS6vF+W+7avk/z/p7tx2SjwAAA==",
+      "post_state_size_bytes": 15434,
+      "evicted": false,
+      "diff_added_b64": "",
+      "diff_removed_ids": [],
+      "diff_modified_b64": "",
+      "pre_state_from_previous": false
+    },
+    {
+      "feature_type": "snapshot",
+      "id": "ea4955c2-b1a3-40e1-aa62-aa2b5fdd5c93",
+      "op_kind": "extrude-continuation",
+      "label": "Extrude continuation: 8 cells × 42 bp",
+      "timestamp": "2026-05-25T15:56:08.009778+00:00",
+      "params": {
+        "cells": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            0,
+            3
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            0
+          ]
+        ],
+        "length_bp": 42,
+        "plane": "XY",
+        "offset_nm": 42.084,
+        "strand_filter": "both",
+        "extend_inplace": true,
+        "ligate_adjacent": true
+      },
+      "design_snapshot_gz_b64": "H4sIABhxFGoA/9VaXY+jNhT9KxXPSYRtEkjeVu3sW1V1Vv3SaoUcMAlbgimY6WxH899rA2EIJBiP4pV5GGWML+aee8+xr8EvVhxaO2tDNnCLtnBJQg8snQgEyy1C3hLAyNluHRsTYFsL60iSOCCFtfv8Ut939P/8y7d90Yef48IvGM6ZtXuxnq2dvbIX1rfm97/q97UxI2l4w8iBK9tzuF12xAXxaRQVhA+4XiEbOMjd2NxN6LqbhcX+jQvmZyT395mf41CMsfa2tuNtIFw7ns1/F1ZC0gM7chNrByC/i9s2PvLnJZTy5t9xJhB94W28J4m1S8skWViHPA79jIoue2Hz3jDOScBimnLcH395/OPD40/W6+IyEOBaIOAKruWRGFjdCIWzcl3XQ54HXYQcx3W/cyhALxSPD78/PH56GIQCXguFs5oQib6RoZyAEzmBrgVis3InRGJgZSgn0CROAEkoagVIY9GaGckLMAjGdV6AcYGMx2JgZSQvwEAit3gxPm2Ox2JoZigv+hPnLV6MLqbjsRhYGcqL/nJ6nRdwPBSVCGSROBsZyQk4sa6AEoGMRmJgZSQn4MS6Ao5Pm6OR6BsZyolpdQWULKajkRhYGcqJaXUFkoSi/kcai9bMSF6giXUFGhfIeCwGVkbyAk2sK5Bk2hyPxdDMUF5MqyvQ+GI6HouBlaG8uFlX8OsFy3Eadt5dFAGO3l5fhPSE47TuFq85nv3+C47KocpF7hOPTePt+nr0FxZ9IvkRp4dqIOHsmxc++5aRxoWIJqEYnfxTkjQgZ1wBTWh+bqSUibcudYNnJicRyWvrCCcFaVNdsCx5H6YKyBmVfT2M0zAxnCXkfojaLAEpIqAJkb4sqWK6H/N0ZQlKEcHZaUkVk/laQlJEaHZaUsVkupaAFBHQhkhXltQxma4lIJ0dgLbZQV+WVDGZryXZSgu0rbT6sqSKyXwtyapWoK1q1ZclVUymawlKEcHbiBxgopTUIQkcBisJSucG2Jsb7gZIX45UId2NdrpyJFtl4e1V1lQdqUIyXkeyehX26tUZ6EgVkuE6QlJASBcgXTlSh2S4jpB0YkC6JgZ9OVKFZLyOZAss0rXA6suRKiTjdSQrVJGuQlVfjlQhGa4jOOHrS3874TnGv254D6yL7bnAaJqe4IT9eX9bcUdQGvdKyrDuSEFt+6UJoOD8dKUOawa6kk/r/W3GLHSlDst4XaFJS7A2UBr3UMqwjNcVmjBZ9LcdM9DVe2DNQFfyRbi//ZiFrtRhzUBX8uK2vw2Zha7UYRmnq+rEH2NxQM4Df/r1tw+PIrYnwnCIGRbHFFN8En2MEHYUkEkR5HHW+M0v4JIdxVPF/0FOMCOhj1ndPtEwjuLOBYYP1WHDVzFQRPMTFgM15w+DpCwYyX0BthCdnUOFLtpv8Absl64ThEsn2oRLb82bIQn2tou3cOu6fPzG2R/rkX4QauHQ+aNwmXAXWF6SRZspMXz30F7nZFjn+FHnjEvnIEXna33nk3Dnu2Nn39bZFnSqzk5R01kzO1NyR/Etob6cOde4z9tVtBJcJ+SzOFHa/PG+nLIrHQtQdWbxE2W9W147afhK45Q1Dzmzstf0A5qmNYn7Pfs4DeP2hox7QrjXuCgI619jDAfHE2kfxk4+t2L13YKA/ulna7euDsvyBwZ+yptwXZ+oJc+MpMWbA9mRMsqHDsuA+V/LtOtckNOiEB42bc6xgJMziQ8XNOQcyrE4+0qaKziNL4iaUBzS8uwu5o94In5zsdUtH56LocxFz6F53tsFPyjzQshmCS6vF+W+7avk/z/p7tx2SjwAAA==",
+      "snapshot_size_bytes": 15434,
+      "post_state_gz_b64": "H4sIABhxFGoA/9VaXY+jNhT9KxXPJMI2AZK31Xb6VlXNql9arZADJmFLMAUzne1o/nttIAwDCYZpXJmHUcb4Yu459x77GvxsxKGxMxziwC3awhUJPbCyIxCstgh5KwAje7u1LUyAZZjGiSRxQApj9/m5vu/k//6Hb/miDz/FhV8wnDNj92w8GTtrbZnGt+b3n+r3pTEjaXjDaOOsAYDcLjvhgvg0igrCB9yskQVs5DoWdxO6rmMa7O+4YH5Gcv+Q+TkOxRgbb2vZngPhxvYs/msaCUmP7MRNjB1wPNPgto2P/HkJpbz5Z5wJRF94Gx9IYuzSMklM45jHoZ9R0WWZFu8N45wELKYpx/3DT/vfPuy/N17Mt0SAa0TANdzImRhY3aDCXruu6yHPgy5Ctu26/zMVoEfF/uHXh/2nhwEV8BoV9noCE30jTXMCTswJdI0IZ+1OYGJgpWlOoEk5ASRU1AqQctGaaZkXYEDG9bwA4wIZ52JgpWVegIFEbuXF+LQ5zsXQTNO86E+ct/JidDEd52JgpWle9JfT63kBx6moRCBj4mJkw7Xl2WpyAjrvJAJOrCugRCCjTAysblBxl5z4D1RMqyvg+LQ5ykTfSNOcmFZXQMliOsrEwErTnJhWVyAJFfU/Ui5aMy3zAk2sK9C4QMa5GFhpmRdoYl2BJNPmOBdDM03zYlpdgcYX03EuBlaa5sXNuoJfL1iO07Dz7qIIcPT6+iKkZxyndbd4zfHk919wVA5VLnKfODdNFeReZ9806CPJTzg9VgMJZ1+98Nm3jDQuRDQJxejkr5KkAbngCmhC80sjpUy8dakbPDI5iUheW0c4KUgb6oJlyfswVUAuqKzrNE7DxHCWkPshaqMEpIiAIkTqojQX0/0yT1WUoBQRXJyW5mLSX0tIiggtTktzMemuJSBFBJQhUhWl+Zh01xKQzg5A2eygLkpzMemvJdlKC5SttOqiNBeT/lqSVa1AWdWqLkpzMemuJShFBG8jsoGOUpoPSeDQWElQOjfA3txwN0DqYjQX0t3STlWMZKssvL3K6qqjuZC015GsXoW9enUBOpoLSXMdISkgpAqQqhjNh6S5jpB0YkCqJgZ1MZoLSXsdyRZYpGqBVRejuZC015GsUEWqClV1MZoLSXMdwQlfX/rbCc/ubPrEd0f9tPQeWBWUCy6BUTc9wQn78/624o6gFO6VZsO6Ywoq2y9NAAWXp6v5sBagK/m03t9mLEJX82Fprys0aQlWBkrhHmo2LO11hSZMFv1txwJ09R5YC9CVfBHubz8Woav5sBagK3lx29+GLEJX82Fpp6vqxB9jcUAuA3/6+ZcPe8HtmTAcYobFMcUUn0UfI4SdBGRSBHmcNX7zC7hkJ/FU8X+QE8xI6GNWt880jKO4c4HhY3XY8EUMFNH8jMVAzfnDICkLRnJfgC1EZ+dQoYsODnbAYeXaQbiyIydceRveDElwsFy8hVvX5eM3zn6sR/pOqIVD54/CZcJdYHlJzDZSYvjuob3OybDO8aPOGZfOQYrO1/rOJ+HOd8fOvq2zLehUnZ2iprNmdqbkjuLbhPpyybnGfd6u2EpwHZDP4kRp88f7csqudJig6sziR8p6t7x0wvCVxilrHnLJyl7TD2ia1knc7znEaRi3N2TcE8K9xkVBWP8aYzg4nUn7MHb2uRWr7xYJ6J9/NHab6rAsf2Dgp7wJN/WJWvLESFq8OpCdKKN86LAMmP+1TLvOBTktCuFh0+Y5FvDkTOLjmzTkOZRjcfaVNFdwGr9J1ITikJYXdzF/xCPxm4utbvnwXAxlLnqOzfNeL/hBmRdCNivw9npRHtq+Sv7/Apdwj7FKPAAA",
+      "post_state_size_bytes": 15434,
+      "evicted": false,
+      "diff_added_b64": "",
+      "diff_removed_ids": [],
+      "diff_modified_b64": "",
+      "pre_state_from_previous": false
+    },
+    {
+      "feature_type": "snapshot",
+      "id": "73c9ff3c-46c3-4a49-9978-3df215d3e582",
+      "op_kind": "extrude-continuation",
+      "label": "Extrude continuation: 16 cells × 42 bp",
+      "timestamp": "2026-05-25T15:56:17.326486+00:00",
+      "params": {
+        "cells": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            0,
+            3
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            0
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            1
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            3,
+            3
+          ],
+          [
+            3,
+            2
+          ],
+          [
+            3,
+            1
+          ],
+          [
+            3,
+            0
+          ]
+        ],
+        "length_bp": 42,
+        "plane": "XY",
+        "offset_nm": 56.112,
+        "strand_filter": "both",
+        "extend_inplace": true,
+        "ligate_adjacent": true
+      },
+      "design_snapshot_gz_b64": "H4sIACFxFGoA/9VaXY+jNhT9KxXPJMI2AZK31Xb6VlXNql9arZADJmFLMAUzne1o/nttIAwDCYZpXJmHUcb4Yu459x77GvxsxKGxMxziwC3awhUJPbCyIxCstgh5KwAje7u1LUyAZZjGiSRxQApj9/m5vu/k//6Hb/miDz/FhV8wnDNj92w8GTtrbZnGt+b3n+r3pTEjaXjDaOOsAYDcLjvhgvg0igrCB9yskQVs5DoWdxO6rmMa7O+4YH5Gcv+Q+TkOxRgbb2vZngPhxvYs/msaCUmP7MRNjB1wPNPgto2P/HkJpbz5Z5wJRF94Gx9IYuzSMklM45jHoZ9R0WWZFu8N45wELKYpx/3DT/vfPuy/N17Mt0SAa0TANdzImRhY3aDCXruu6yHPgy5Ctu26/zMVoEfF/uHXh/2nhwEV8BoV9noCE30jTXMCTswJdI0IZ+1OYGJgpWlOoEk5ASRU1AqQctGaaZkXYEDG9bwA4wIZ52JgpWVegIFEbuXF+LQ5zsXQTNO86E+ct/JidDEd52JgpWle9JfT63kBx6moRCBj4mJkw7Xl2WpyAjrvJAJOrCugRCCjTAysblBxl5z4D1RMqyvg+LQ5ykTfSNOcmFZXQMliOsrEwErTnJhWVyAJFfU/Ui5aMy3zAk2sK9C4QMa5GFhpmRdoYl2BJNPmOBdDM03zYlpdgcYX03EuBlaa5sXNuoJfL1iO07Dz7qIIcPT6+iKkZxyndbd4zfHk919wVA5VLnKfODdNFeReZ9806CPJTzg9VgMJZ1+98Nm3jDQuRDQJxejkr5KkAbngCmhC80sjpUy8dakbPDI5iUheW0c4KUgb6oJlyfswVUAuqKzrNE7DxHCWkPshaqMEpIiAIkTqojQX0/0yT1WUoBQRXJyW5mLSX0tIiggtTktzMemuJSBFBJQhUhWl+Zh01xKQzg5A2eygLkpzMemvJdlKC5SttOqiNBeT/lqSVa1AWdWqLkpzMemuJShFBG8jsoGOUpoPSeDQWElQOjfA3txwN0DqYjQX0t3STlWMZKssvL3K6qqjuZC015GsXoW9enUBOpoLSXMdISkgpAqQqhjNh6S5jpB0YkCqJgZ1MZoLSXsdyRZYpGqBVRejuZC015GsUEWqClV1MZoLSXMdwQlfX/rbCc/ubPrEd0f9tPQeWBWUCy6BUTc9wQn78/624o6gFO6VZsO6Ywoq2y9NAAWXp6v5sBagK/m03t9mLEJX82Fprys0aQlWBkrhHmo2LO11hSZMFv1txwJ09R5YC9CVfBHubz8Woav5sBagK3lx29+GLEJX82Fpp6vqxB9jcUAuA3/6+ZcPe8HtmTAcYobFMcUUn0UfI4SdBGRSBHmcNX7zC7hkJ/FU8X+QE8xI6GNWt880jKO4c4HhY3XY8EUMFNH8jMVAzfnDICkLRnJfgC1EZ+dQoYsODnbAYeXaQbiyIydceRveDElwsFy8hVvX5eM3zn6sR/pOqIVD54/CZcJdYHlJzDZSYvjuob3OybDO8aPOGZfOQYrO1/rOJ+HOd8fOvq2zLehUnZ2iprNmdqbkjuLbhPpyybnGfd6u2EpwHZDP4kRp88f7csqudJig6sziR8p6t7x0wvCVxilrHnLJyl7TD2ia1knc7znEaRi3N2TcE8K9xkVBWP8aYzg4nUn7MHb2uRWr7xYJ6J9/NHab6rAsf2Dgp7wJN/WJWvLESFq8OpCdKKN86LAMmP+1TLvOBTktCuFh0+Y5FvDkTOLjmzTkOZRjcfaVNFdwGr9J1ITikJYXdzF/xCPxm4utbvnwXAxlLnqOzfNeL/hBmRdCNivw9npRHtq+Sv7/Apdwj7FKPAAA",
+      "snapshot_size_bytes": 15434,
+      "post_state_gz_b64": "H4sIACFxFGoA/9VbXY+rNhD9KxXPSYRtEpK8XbXbt6rqXvVLVyvkgEm4JZhis93b1f732kASFhKMV3FlHlZZ48GeMzPHngH86iSRs3VWZAU3aAPnJFqDuReDcL5BaD0HMPY2G8/FBLjOzDmQNAkJc7ZfXuv7DsEffwZuIPvwS8ICxnHBne2r8+Js3YU7c741v/9Wv2+NGMmiG0K+uwCeEMsPmJGAxjEjYrzlArnAQ/7KFVpC31/NHP5PwniQkyLY5UGBIznEcr1xvfUKwqW3dsXvzElJtucHIeJsIRAzCNlGRdFIKRXNv5JcAnoSbbwjqbPNyjSdOfsiiYKcyi535oreKClIyBOaCdg//vz4+6fHH5y32Xs7gGt2gAu4VBuiJ3XdEt7C9/01Wq+hj5Dn+f7/bAnQscTjw28Pj58fepaA1yzhLUYYoitkZ0TAkRGBrtlhtfBHGKInZWdEoFERARSWqMNfaYqzmI1RAXq2uB4VYJgdw6boSdkYFaDHj1tRMbxiDpuiL2ZnVHTXzFtRMbiLDpuiJ2VnVHT30etRAYctUTFAZYiTkI0RAUfmE1DBjkFD9KRsjAg4Mp+AwyvmoCG6QnZGxLh8Aip20UFD9KTsjIhx+QRSWKL+R2mKs5iNUYFG5hNomB3DpuhJ2RgVaGQ+gRQr5rAp+mJ2RsW4fAIN76LDpuhJ2RkVN/MJcZ3xAmdR61kFC3F8eVwR0SNOsrpbPtZ4CboPNCqFKhWFTsI0tbbu5rrxZw59JsUBZ/tqIKnsRYuAf8tJo0JM00iOTv4uSRaSE66QprQ4NTLK5VOWuiEcU5CYFLV0jFNGzp5mPE8/hqkCckLlXjfjOEwc5ym5H6Kzl4ASETCEyJyXdDHdL/JMeQkqEcHJcUkXk/1cQkpEaHJc0sVkO5eAEhEwhsiUl/Qx2c4loFwdgLHVwZyXdDHZzyXVTguM7bTmvKSLyX4uqbJWYCxrNeclXUy2cwkqEcHbiDxgI5X0IUkcFjMJKtcG2Fkb7gbInI90Id0t7Ez5SLXLwtu7rK080oVkPY9U+Srs5KsT4JEuJMt5hJSAkClApnykD8lyHiHlwoBMLQzmfKQLyXoeqTZYZGqDNecjXUjW80iVqCJTiao5H+lCspxHcMTbl245sfYumIB862gflz4Cq4JywiUx2sYnOKI+75YVdwRlsFbShnXHEDRWL40ABafHK31YE+CVelnvlhmT4JU+LOt5hUZtwcZAGayhtGFZzys0YrHolh0T4NVHYE2AV+pNuFt+TIJX+rAmwCt1ctstQybBK31Y1vMKjvhuqleIrNbWv8/9CK537z8rkLYxC454T90tRe6JymSJpYvrnlForsZSo4IT5JY+rilwS/2As1uOTINb+rjs5xYa9TjaHCqThZYuLvu5hUasGN2SZArc+giuKXBLvRv3ipJJcEsf1xS4pc50u2XJNLilj8s+blUnrDhPQnIa+PMvv356lMY9Eo4jzLE8FZbho+zjhPCDxExYWCR5o7e4gEt+kLPK/8OCYE6iAPO6faRREietCxzvpbme3uRAMS2OWA7E6vNeYVoyTopAgmWyk10Ocflot8IrsJv7XhjNvXgVzddL0YxIuHN9vIEb3xfjN8p+X4/0nXSSgC6mwmUqVOBFSWZnV8nh24ekWidxWsc9WmcKWh+ut76Obn2C2/rOs1XGtWqEVgLaym5aW2drXW6R/hxRT6ega9QX7cpaKa4d8kUe4Gv+RF9B+ZWOGag68+SZ8s4tby03fKVJxptJTlHZaQYhzbI6iLs9uySLkvMNudCECK0xY4R3r3GOw8ORnCfjx0BI8fpuGYDB8Sdnu6zOJooJwyATTbisDzCSF04ydlEgP1BOxdBRGfLga5m1lQsLypjUsGmLGAtFcKbJ/l0YihgqsDxrSJorOEveBWpKcUTLk7pYTPFMgubimbdieEGGspA9+2a+y4UgLAsmaTMH76+zcnfuq+j/H4L/YN2qSQAA",
+      "post_state_size_bytes": 18858,
+      "evicted": false,
+      "diff_added_b64": "",
+      "diff_removed_ids": [],
+      "diff_modified_b64": "",
+      "pre_state_from_previous": false
+    },
+    {
+      "feature_type": "snapshot",
+      "id": "6224a699-0bd0-4232-b15e-33728f8da545",
+      "op_kind": "extrude-continuation",
+      "label": "Extrude continuation: 8 cells × 42 bp",
+      "timestamp": "2026-05-26T17:11:07.825750+00:00",
+      "params": {
+        "cells": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            0,
+            3
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            0
+          ]
+        ],
+        "length_bp": 42,
+        "plane": "XY",
+        "offset_nm": 70.14,
+        "strand_filter": "both",
+        "extend_inplace": true,
+        "ligate_adjacent": true
+      },
+      "design_snapshot_gz_b64": "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",
+      "snapshot_size_bytes": 18934,
+      "post_state_gz_b64": "H4sIACvUFWoA/9VbXY+jNhT9KxXPSYRtEkjeVtvp26rqrPql1Qg54CRsCaZgZme6mv9em4+EgQTjNK7MwyhjfGN8zr3Hvpfg71YUWhtrRVZwjdZwTkIPzJ0dCOZrhLw5gDtnvXZsTIBtzawDiaOA5Nbmy/fqewf/jz992xd9+CXK/ZzhjFmb79aLtbEX9sx6rT//KT/fajOShFeMPGcBVh63Sw84Jz7d7XLCB1wukA0c5K5sPk3ouquZxb5FOfNTkvnb1M9wKMZYemvb8VYQLh3P5p8zKybJnh24ibWBS97mtvUc+f1iSnnzrygViJ54G29JbG2SIo5n1j6LQj+losue2bw3jDISsIgmHPdPPz/+/uHxR+tt9p4IcIkIuIBLORM9qytUOAvXdT3kedBFyHFc93+mAnSoeHz47eHx80OPCniJCmcxgomukaExAUfGBLpExGrhjmCiZ2VoTKBRMQEkVFQKkHJxMjMyLkCPjMtxAYYFMsxFz8rIuAA9iVyLi+Flc5iLvpmhcdFdOK/FxeBmOsxFz8rQuOhup5fjAg5TUYpAxkRj5NoL4OgJCWDfyAMcmVZAiT4GiehZXWbiLhHxH5gYl1XA4UVzkIiukZkRMS6pgJKddJCInpWZETEup0ASJqp/pFSczEyMCjQypUDD6himomdlYlSgkRkFkqyYw1T0zcyMinEJBRreRYep6FmZGRVX8wl+PWcZTsLWM4s8wLvzY4uQHnGUVN3i8caL332wUU6onCKfE6emzn7AZfJnFn0m2QEn+3IgMdnzLHz2mpJ6Cjsah2J08ndBkoA0uAIa06xpJJSJpy1VgzsmIzuSVdY7HOfk5OmcpfFtmEogDSr7Mo3jMDGcxuR+iE5eAlJEQBMifV5SxXS/yNPlJShFBCenJVVM5msJSRGhyWlJFZPpWgJSREAbIl1eUsdkupaAdHUA2lYHfV5SxWS+lmQ7LdC20+rzkiom87Uky1qBtqxVn5dUMZmuJShFBK8jcoyUkjokx2wlQenaADtrw90A6fORKqS7hZ0uH8l2WXh9lzVVR6qQjNeRLF+FnXx1AjpShWS4jpAUENIFSJeP1CEZriMkXRiQroVBn49UIRmvI9kGi3RtsPp8pArJeB3JElWkK1HV5yNVSIbrCI749aVbTnjOGRMQvzqap6VbYJVQGlwCo2l6giPq825ZcUdQGmslZVh3DEFt9dIIUHB6ulKHNQFdyZf1bpkxCV2pwzJeV2jUFqwNlMYaShmW8bpCIxaLbtkxAV3dAmsCupJvwt3yYxK6Uoc1AV3Jk9tuGTIJXanDMl5XcMR7U71CZOW1flWz1yYK6xZcJZSTtwRI05QFR/xO3S1F7olKZ4mliuueUaivxpKjghPUljquKWhL/oCzW45MQ1vquMzXFhr1OFofKp2Fliou87WFRqwY3ZJkCtq6BdcUtCXfjXtFySS0pY5rCtqSZ7rdsmQa2lLHZZ62yhNWjEUBaQb+/MuvHx4FuUfCcIgZFqfCEnwUfYwQdhCYSR5kUVrPm1/ABTuIu4r/g4xgRkIfs6p9pGG0i1oXGN4Lup7exEA7mh2xGCivznsFcZEzkvkCbC468/MhLhdtV3gFtnPXCcK5s1uFc2/JmyEJtraL13Dtunz8erIfq5F+EE7i0PmtcBHzKbCsILOTq8Tw7UNSrZM4reMerTMFrRfXW29Ht17Bbb3n2SrjWjVCKwFtZTetrbO1LrdEf4qopybo6unzdslWjCuHfBEH+Oo/3pdRdqFjBsrONHqmrPOVt5YbvtIoYfVNmqjsNP2AJkkVxN2ebZSE0ekLKZ8J4bPGeU5Y9xpjODgcyelm7OhzK1Z9WwSgf/xkbZbl2UR+w8BPPolXZqsDjOSFkSQ/TyDlVBA/xq+0KI8+0iziI9csWN4LENRWRgEtEm4DZtY3EsfNzYstaUI0PVBG+TTDImD+1yJpAw0ymucCbd3m8RrwQI+j/buQ5vGYYXFukdRXcBK9C/qY4pBPtenlt3jm068untYAPjwXVpGJnn19v/MFPyiyXEhwDt5fz4vtqa9cSv4F6Dtowf5JAAA=",
+      "post_state_size_bytes": 18942,
+      "evicted": false,
+      "diff_added_b64": "",
+      "diff_removed_ids": [],
+      "diff_modified_b64": "",
+      "pre_state_from_previous": false
+    }
+  ],
+  "feature_log_cursor": -1,
+  "feature_log_sub_cursor": null
 }

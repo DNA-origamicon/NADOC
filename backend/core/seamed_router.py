@@ -480,7 +480,7 @@ class SeamedResult:
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def _auto_scaffold_seamed_impl(
-    design: Design, *, matched_ends: bool = False
+    design: Design, *, matched_ends: bool = False, bounded_ends: bool = False
 ) -> tuple[Design, SeamedResult]:
     """Shared seamed pipeline body (Seam → Near Ends → Far Ends).
 
@@ -498,6 +498,18 @@ def _auto_scaffold_seamed_impl(
     blunt faces sit in integer-turn helical register), and a single interior
     nick per component reopens the resulting circular scaffold into one linear
     strand with its 5'/3' buried mid-bundle.  See the "matched ends" plan.
+
+    When ``bounded_ends`` is True (classic only — the section router routes its
+    WINDOW sub-bundles with it) the near/far end-turn search starts AT the section
+    face instead of ``lo-3``/``hi+3``: it takes the nearest valid crossover site
+    at-or-past each face rather than the first one ``≥3`` bp out.  Valid sites for
+    a specific helix pair recur one crossover-period apart, so the ``±3`` floor
+    skips the face-aligned site and lands a full period out (+32 on SQ) — which
+    for a segmented WINDOW pokes scaffold deep into the physical inter-tooth gaps.
+    Starting at the face keeps the turn-around bounded to ≲ one helical turn (the
+    reference hand-route's pattern: mostly +0, ≤10 where faces stay ragged), so
+    adjacent teeth never overlap.  Default-off leaves uniform-prism + matched-ends
+    routing byte-identical.
 
     Returns (updated_design, result).  result.warnings lists any placements that
     were skipped due to validation errors or missing crossover sites.
@@ -559,7 +571,11 @@ def _auto_scaffold_seamed_impl(
             sig_map.setdefault(cov_sig(hid), []).append(hid)
         groups = list(sig_map.values())
 
-        if len(groups) == 1:
+        if len(groups) == 1 or bounded_ends:
+            # Bounded mode routes one WINDOW sub-bundle whose ragged faces give each
+            # helix a distinct coverage signature; its grid adjacency is still full
+            # (the helices overlap heavily), so route it as a single Hamiltonian
+            # serpentine rather than splitting it by signature.
             path = _hamiltonian_path(comp, adj)
         else:
             # Multi-section (dumbbell etc.): sort groups by total bp ascending.
@@ -673,24 +689,48 @@ def _auto_scaffold_seamed_impl(
         strand_b = Direction.REVERSE if fwd else Direction.FORWARD
         covA, covB = coverage.get(hA_id, []), coverage.get(hB_id, [])
 
-        for iv in _intersect(covA, covB):
-            lo = iv["lo"]
-            if (not any(c["lo"] == lo for c in covA)
-                    or not any(c["lo"] == lo for c in covB)):
-                continue
+        # Each near pair turns at ONE crossover near the lo face.  In the default
+        # (uniform / squared) routing the pair shares an exact lo face and the search
+        # runs from lo-3 outward.  In bounded mode (section-router WINDOWs, ragged
+        # faces) the two helices may co-terminate at DIFFERENT bp; pairing them at the
+        # deeper face (min lo) and extending the shallower helix down to the turn keeps
+        # each tooth's turn-around at its OWN face — the ≤ one-turn extension stays out
+        # of the inter-tooth gaps instead of being dragged to a common squared face.
+        if bounded_ends:
+            # The near turn sits at the bundle's lo end, so pair each helix's
+            # LOWEST section (the seam phase split each domain in two; only the
+            # lower halves carry the near face).  One turn per pair, at the deeper
+            # of the two ragged lo faces.
+            turn_items = []
+            if covA and covB:
+                secA = min(covA, key=lambda s: s["lo"])
+                secB = min(covB, key=lambda s: s["lo"])
+                if secA["lo"] <= secB["hi"] and secB["lo"] <= secA["hi"]:
+                    turn_items = [(secA["lo"], secB["lo"], min(secA["lo"], secB["lo"]))]
+        else:
+            turn_items = [
+                (iv["lo"], iv["lo"], iv["lo"])
+                for iv in _intersect(covA, covB)
+                if any(c["lo"] == iv["lo"] for c in covA)
+                and any(c["lo"] == iv["lo"] for c in covB)
+            ]
+
+        for face_a, face_b, face in turn_items:
+            near_floor = face if bounded_ends else face - 3
             xover_bp = next(
-                (bp for bp in range(lo - 3, lo - period - 1, -1)
+                (bp for bp in range(near_floor, face - period - 1, -1)
                  if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)),
                 None,
             )
             if xover_bp is None:
                 result.warnings.append(
-                    f"[NearEnds] No xover found for {hA_id}↔{hB_id} near lo={lo}"
+                    f"[NearEnds] No xover found for {hA_id}↔{hB_id} near lo={face}"
                 )
                 continue
             near_specs.append({
                 "hA_id": hA_id, "hB_id": hB_id,
-                "face_bp": lo, "new_lo": xover_bp, "xover_bp": xover_bp,
+                "face_a": face_a, "face_b": face_b,
+                "new_lo": xover_bp, "xover_bp": xover_bp,
                 "strand_a": strand_a, "strand_b": strand_b,
                 "nick_a": _nick_bp(xover_bp, strand_a, period, bow_right),
                 "nick_b": _nick_bp(xover_bp, strand_b, period, bow_right),
@@ -708,8 +748,8 @@ def _auto_scaffold_seamed_impl(
 
     # Extend scaffold domains, then place crossovers.
     for sp in near_specs:
-        for hid in (sp["hA_id"], sp["hB_id"]):
-            current = _extend_scaf_domain_lo(current, hid, sp["face_bp"], sp["new_lo"])
+        current = _extend_scaf_domain_lo(current, sp["hA_id"], sp["face_a"], sp["new_lo"])
+        current = _extend_scaf_domain_lo(current, sp["hB_id"], sp["face_b"], sp["new_lo"])
         ha = HalfCrossover(helix_id=sp["hA_id"], index=sp["xover_bp"], strand=sp["strand_a"])
         hb = HalfCrossover(helix_id=sp["hB_id"], index=sp["xover_bp"], strand=sp["strand_b"])
         current, xo = _place_xover(
@@ -744,8 +784,12 @@ def _auto_scaffold_seamed_impl(
     # Classic mode: skip the pair with the lowest-indexed helix (parks the open
     # scaffold terminus there).  Matched mode caps every pair (no open face) and
     # reopens the resulting circle with one interior nick later.
+    # Classic mode parks the open terminus by skipping the lowest-helix far pair.
+    # Bounded mode (section-router WINDOWs) must cap EVERY far pair so the window
+    # closes into a cycle for the 2-opt splice — like matched mode, but the cap
+    # sits at the nearest valid site (bounded_ends) instead of a one-period translate.
     skip_id: str | None = None
-    if not matched_ends:
+    if not matched_ends and not bounded_ends:
         helix_array_idx = {h.id: i for i, h in enumerate(current.helices)}
         lowest = float("inf")
         for ha_id, hb_id in far_end_pairs:
@@ -784,20 +828,34 @@ def _auto_scaffold_seamed_impl(
         strand_b = Direction.REVERSE if fwd else Direction.FORWARD
         covA, covB = coverage.get(ha_id, []), coverage.get(hb_id, [])
 
-        intervals = [
-            iv for iv in _intersect(covA, covB)
-            if any(c["hi"] == iv["hi"] for c in covA)
-            and any(c["hi"] == iv["hi"] for c in covB)
-        ]
+        # Mirror of the near phase: each far pair turns at one crossover near the hi
+        # face.  Bounded mode (ragged WINDOWs) pairs at the deeper face (max hi) and
+        # extends the shorter helix UP to the turn, keeping the turn-around at each
+        # tooth's own hi face rather than a common squared face.
+        if bounded_ends:
+            # Mirror of near: pair each helix's HIGHEST section (the upper halves
+            # carry the hi face) for one far turn at the deeper of the two hi faces.
+            far_items = []
+            if covA and covB:
+                secA = max(covA, key=lambda s: s["hi"])
+                secB = max(covB, key=lambda s: s["hi"])
+                if secA["lo"] <= secB["hi"] and secB["lo"] <= secA["hi"]:
+                    far_items = [(secA["hi"], secB["hi"], max(secA["hi"], secB["hi"]))]
+        else:
+            far_items = [
+                (iv["hi"], iv["hi"], iv["hi"])
+                for iv in _intersect(covA, covB)
+                if any(c["hi"] == iv["hi"] for c in covA)
+                and any(c["hi"] == iv["hi"] for c in covB)
+            ]
         near_list = near_xover_by_pair.get(tuple(sorted([ha_id, hb_id])), [])  # type: ignore[arg-type]
-        if matched_ends and P and len(intervals) != len(near_list):
+        if matched_ends and P and len(far_items) != len(near_list):
             result.warnings.append(
                 f"[MatchedEnds] {ha_id}↔{hb_id}: {len(near_list)} near vs "
-                f"{len(intervals)} far interval(s); ends may not match exactly."
+                f"{len(far_items)} far interval(s); ends may not match exactly."
             )
 
-        for idx, iv in enumerate(intervals):
-            hi = iv["hi"]
+        for idx, (face_a, face_b, hi) in enumerate(far_items):
             xover_bp: int | None
             if matched_ends and P and idx < len(near_list):
                 # Exact translate of the matching near crossover.
@@ -824,8 +882,9 @@ def _auto_scaffold_seamed_impl(
                 if xover_bp is not None and (xover_bp % period) in bow_right:
                     xover_bp -= 1
             else:
+                far_floor = hi if bounded_ends else hi + 3
                 xover_bp = next(
-                    (bp for bp in range(hi + 3, hi + period + 1)
+                    (bp for bp in range(far_floor, hi + period + 1)
                      if _scaf_nb(current, rowA, colA, bp) == tuple(hB.grid_pos)),
                     None,
                 )
@@ -836,7 +895,8 @@ def _auto_scaffold_seamed_impl(
                 continue
             far_specs.append({
                 "hA_id": ha_id, "hB_id": hb_id,
-                "face_bp": hi, "new_hi": xover_bp, "xover_bp": xover_bp,
+                "face_a": face_a, "face_b": face_b,
+                "new_hi": xover_bp, "xover_bp": xover_bp,
                 "strand_a": strand_a, "strand_b": strand_b,
                 "nick_a": _nick_bp(xover_bp, strand_a, period, bow_right),
                 "nick_b": _nick_bp(xover_bp, strand_b, period, bow_right),
@@ -854,8 +914,8 @@ def _auto_scaffold_seamed_impl(
 
     # Extend scaffold domains, then place crossovers.
     for sp in far_specs:
-        for hid in (sp["hA_id"], sp["hB_id"]):
-            current = _extend_scaf_domain_hi(current, hid, sp["face_bp"], sp["new_hi"])
+        current = _extend_scaf_domain_hi(current, sp["hA_id"], sp["face_a"], sp["new_hi"])
+        current = _extend_scaf_domain_hi(current, sp["hB_id"], sp["face_b"], sp["new_hi"])
         ha = HalfCrossover(helix_id=sp["hA_id"], index=sp["xover_bp"], strand=sp["strand_a"])
         hb = HalfCrossover(helix_id=sp["hB_id"], index=sp["xover_bp"], strand=sp["strand_b"])
         current, xo = _place_xover(
@@ -873,18 +933,13 @@ def _auto_scaffold_seamed_impl(
     from backend.core.lattice import retry_all_pending_ligations
     current = retry_all_pending_ligations(current)
 
-    # Matched mode caps every pair at both faces.  Empirically the serpentine
-    # stays a single *linear* strand (the path's two termini remain open), so no
-    # nick is needed.  But a topology that happens to close into a *circular*
-    # scaffold would have no 5'/3' for sequence assignment, so reopen any such
-    # circle with one interior nick at the mid-span of its middle domain.
-    if matched_ends:
-        for s in list(current.strands):
-            if not (s.is_scaffold and not s.is_reference and getattr(s, "is_circular", False)):
-                continue
-            dom = s.domains[len(s.domains) // 2]
-            mid_bp = (dom.start_bp + dom.end_bp) // 2
-            current = _nick_if_needed(current, dom.helix_id, mid_bp, dom.direction)
+    # A scaffold that closes into a circle (its 5'/3' termini joined by a
+    # crossover) has no free end for sequence assignment and trips the circular
+    # warning.  Reopen any such loop with one buried, non-crossover nick near the
+    # structure's middle (see _linearize_circular_scaffolds).  Runs for every
+    # routing mode, not just matched ends — the NADOC model cannot store a truly
+    # circular strand, so the loop is a linear strand whose ends a crossover joins.
+    current = _linearize_circular_scaffolds(current, result)
 
     append_single_strand_warning(current, result)
     return current, result
@@ -943,6 +998,89 @@ def append_single_strand_warning(design: Design, result) -> None:
         )
 
 
+def _scaffold_end_join_xover(design: Design, strand: Strand) -> Crossover | None:
+    """Return the crossover joining ``strand``'s 3' terminus to its own 5' terminus.
+
+    The NADOC model cannot store a truly circular strand, so a routed loop is a
+    linear strand whose first-domain 5' and last-domain 3' sit on a shared
+    crossover (which ``_ligate_xover`` left unligated to avoid self-circularizing).
+    Its presence is exactly the 'circular scaffold' condition the UI warns about.
+    """
+    if len(strand.domains) < 2:
+        return None
+    f, l = strand.domains[0], strand.domains[-1]
+    target = {(f.helix_id, f.start_bp), (l.helix_id, l.end_bp)}
+    for xo in design.crossovers:
+        ends = {(xo.half_a.helix_id, xo.half_a.index),
+                (xo.half_b.helix_id, xo.half_b.index)}
+        if ends == target:
+            return xo
+    return None
+
+
+def _choose_buried_nick(design: Design, strand: Strand) -> tuple[str, int, Direction] | None:
+    """Pick a buried, non-crossover interior bp on ``strand`` nearest the structure's
+    bp-center — the spot to reopen a circular scaffold so its 5'/3' land mid-bundle.
+
+    Returns ``(helix_id, bp_index, direction)`` or ``None`` if no safe site exists
+    (e.g. every domain is too short or fully occupied by crossover sites).
+    """
+    all_bp = [bp for dm in strand.domains for bp in (dm.start_bp, dm.end_bp)]
+    center = (min(all_bp) + max(all_bp)) / 2.0
+    xover_bp: dict[str, set[int]] = {}
+    for xo in design.crossovers:
+        xover_bp.setdefault(xo.half_a.helix_id, set()).add(xo.half_a.index)
+        xover_bp.setdefault(xo.half_b.helix_id, set()).add(xo.half_b.index)
+    best: tuple[str, int, Direction] | None = None
+    best_d: float | None = None
+    for dm in strand.domains:
+        lo, hi = min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp)
+        # interior bps with >=2 margin from each domain end (clear of termini/stubs)
+        interior = [bp for bp in range(lo + 2, hi - 1)
+                    if bp not in xover_bp.get(dm.helix_id, ())]
+        if not interior:
+            continue
+        bp = min(interior, key=lambda b: abs(b - center))
+        d = abs(bp - center)
+        if best_d is None or d < best_d:
+            best_d, best = d, (dm.helix_id, bp, dm.direction)
+    return best
+
+
+def _linearize_circular_scaffolds(design: Design, result: SeamedResult) -> Design:
+    """Open any circular scaffold into one linear strand with a buried, mid-structure nick.
+
+    The loop's 5'/3' are joined by a crossover (see _scaffold_end_join_xover).  We nick
+    at a non-crossover interior bp near the bundle's middle (_choose_buried_nick); that
+    splits the strand into two fragments, then ligating the closing crossover re-merges
+    them into one strand re-rooted at the nick — so the open 5'/3' end up buried
+    mid-bundle instead of on the (often surface) closing crossover.
+    """
+    from backend.core.lattice import make_nick
+    for strand in [s for s in design.strands if s.is_scaffold and not s.is_reference]:
+        xo = _scaffold_end_join_xover(design, strand)
+        if xo is None:
+            continue
+        pick = _choose_buried_nick(design, strand)
+        if pick is None:
+            result.warnings.append(
+                "Scaffold is circular but no buried non-crossover nick site was found; "
+                "add a nick manually to open the loop."
+            )
+            continue
+        helix_id, bp_index, direction = pick
+        try:
+            design = make_nick(design, helix_id, bp_index, direction)
+        except ValueError:
+            result.warnings.append(
+                "Scaffold is circular; automatic mid-structure nick hit a terminus guard "
+                "and was skipped — add a nick manually to open the loop."
+            )
+            continue
+        design = _ligate_xover(design, xo)
+    return design
+
+
 def _matched_ends_feasible(result: SeamedResult) -> bool:
     """True when a matched-ends run produced a clean, fully-matched far face.
 
@@ -971,7 +1109,24 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
 
     Each attempt runs on its own deep copy so the discarded matched attempt can
     never leak crossovers into the classic fallback.
+
+    Irregular multi-section designs (teeth, dumbbells) — any helix whose scaffold
+    coverage spans more than one section — are routed to a single strand by the
+    section router, which keeps each tooth's end-turns at its own faces so the
+    inter-tooth gaps stay clear (the per-helix seamed path over-extends tooth far
+    faces a full crossover-period into the gaps).  The section router falls back to
+    ``None`` for anything it cannot cleanly route, so this drops through to the
+    classic seamed pipeline below; designs with manual forced ligations are never
+    overridden.  See backend/core/section_router.py.
     """
+    if not design.forced_ligations:
+        coverage = _scaffold_coverage(design)
+        from backend.core.section_router import has_multisection_helix, route_sections
+        if has_multisection_helix(coverage):
+            sectioned = route_sections(design.model_copy(deep=True))
+            if sectioned is not None:
+                return sectioned
+
     matched_design, matched_result = _auto_scaffold_seamed_impl(
         design.model_copy(deep=True), matched_ends=True
     )
@@ -985,6 +1140,19 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
         0, "Matched ends not feasible for this geometry; used classic seamed routing."
     )
     return classic_design, classic_result
+
+
+def auto_scaffold_seamed_bounded(design: Design) -> tuple[Design, SeamedResult]:
+    """Classic seamed route with bounded end-turns (no matched-ends attempt).
+
+    Used by the section router for WINDOW sub-bundles: places each near/far
+    end-turn at the nearest valid crossover at-or-past its section face so the
+    turn-around never extends a full crossover-period into the inter-tooth gaps.
+    See ``_auto_scaffold_seamed_impl``'s ``bounded_ends`` for the rationale.
+    """
+    return _auto_scaffold_seamed_impl(
+        design.model_copy(deep=True), matched_ends=False, bounded_ends=True
+    )
 
 
 def auto_scaffold_matched(design: Design) -> tuple[Design, SeamedResult]:

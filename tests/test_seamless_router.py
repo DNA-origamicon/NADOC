@@ -153,17 +153,16 @@ def test_two_group_design_has_bridge_xovers():
 
 
 def test_teeth_closing_zig():
-    """teeth.nadoc: the bridge HJs break circularity, which enables a closing-zig
-    end crossover across each pair of tooth tips (e.g. h_XY_2_2 ↔ h_XY_2_3).
+    """teeth.nadoc (clean, pre-routing fixture): the bridge HJs break circularity,
+    which enables a closing-zig end crossover across each pair of tooth tips
+    (e.g. h_XY_2_2 ↔ h_XY_2_3).
 
-    We assert the *topological events* — 6 bridge HJs and the presence of the
-    closing-zig crossover — not the count of leftover scaffold pieces.  The
-    seamless router is an INTERMEDIATE stage: it places crossovers but does not
-    ligate the scaffold into a single loop (that happens in a later step), so the
-    number of disconnected scaffold strands at this stage is an unstable artifact
-    of Hamiltonian-path ordering, not a meaningful invariant.  (The original
-    `== 4 strands` assertion was hash-seed-flaky for exactly this reason; the
-    closing zig fires in both the 4- and 5-piece orderings.)
+    On the clean uniform-face fixture the seamless router routes the whole teeth
+    cluster to ONE scaffold strand with no fragmentation warning.  (The old fixture
+    was already seamless-routed — its ragged, gap-extended faces broke the
+    Hamiltonian path and fragmented the re-route into 5 pieces; that fragmentation,
+    and the warning, were artifacts of routing an already-routed design.  See the
+    double-routing issue in issues_ledger.md.)
     """
     design = Design.model_validate_json(
         (FIXTURES / "teeth.nadoc").read_text()
@@ -171,12 +170,9 @@ def test_teeth_closing_zig():
     design = design.copy_with(crossovers=[])
     updated, result = auto_scaffold_seamless(design)
 
-    # teeth is ONE connected cluster but routes to 5 pieces (single-strand
-    # consolidation for irregular multi-section designs is not yet automatic),
-    # so the router emits the fragmentation warning and no other warning.
-    assert len(result.warnings) == 1 and "should be a single strand" in result.warnings[0], (
-        result.warnings
-    )
+    # Clean teeth is one connected cluster and routes to a single strand — no
+    # fragmentation warning.
+    assert result.warnings == [], result.warnings
     assert result.bridge_xovers == 6, f"Expected 6 bridge xovers, got {result.bridge_xovers}"
 
     # The closing zig across the tooth tips must be placed.
@@ -186,16 +182,12 @@ def test_teeth_closing_zig():
     ]
     assert closing_zig, "Expected a closing-zig crossover across tooth tips h_XY_2_2 ↔ h_XY_2_3"
 
-    # Determinism guard.  The Hamiltonian path that drives this route is now
-    # fully tiebroken (seamed_router `(len(adj[n]), n)` key), so the route — and
-    # therefore the leftover scaffold-piece count and the crossover set — is
-    # identical run-to-run.  Before the tiebreaker fix this count flapped 4↔5
-    # across PYTHONHASHSEED (the old known-flake).  Pinning it here makes any
-    # reintroduced set-iteration nondeterminism fail across CI hash seeds again.
-    # NOTE: 5 is the current routed-but-unligated intermediate; when single-strand
-    # consolidation for irregular multi-section designs lands this becomes 1.
+    # Determinism guard: the tiebroken Hamiltonian path (seamed_router `(len(adj[n]), n)`
+    # key) makes the route — and thus the single-strand result and crossover set —
+    # identical run-to-run.  Any reintroduced set-iteration nondeterminism fails this
+    # across CI hash seeds.
     scaffold = [s for s in updated.strands if s.strand_type == StrandType.SCAFFOLD]
-    assert len(scaffold) == 5, f"Expected 5 scaffold pieces (deterministic), got {len(scaffold)}"
+    assert len(scaffold) == 1, f"Expected 1 scaffold strand (deterministic), got {len(scaffold)}"
 
     def _xover_sig(d):
         return sorted(
