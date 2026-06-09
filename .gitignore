@@ -74,6 +74,36 @@ experiments/*/results/namd_run/
 # Solvated run directories (large PSF/PDB/ITP outputs, never in git)
 experiments/*/results/solvated/
 
+# Additional NAMD/mrDNA generated files
+*.coor
+*.vel
+*.xsc
+*.xst
+*.BAK
+*.extrabonds
+*.bd
+*.particles.txt
+
+# Local experiment result trees and benchmark scratch.
+# Keep experiment docs/scripts trackable; keep generated run packages local.
+experiments/exp23_periodic_cell_benchmark/results/hyp_runs/
+experiments/exp23_periodic_cell_benchmark/results/*_run/
+experiments/exp23_periodic_cell_benchmark/results/single_helix_*/
+experiments/exp25_full_origami_relaxation/results/runs/
+experiments/exp26_hardware_benchmark/bench_output/
+experiments/exp26_hardware_benchmark/bench_output
+experiments/exp26_hardware_benchmark/_tmp.conf
+experiments/exp26_hardware_benchmark/run_log.txt
+experiments/exp27_mrdna_namd_precondition/results/
+experiments/exp28_hierarchical_tube_cg/results/
+
+# Generated experiment caches and bulky derived potentials
+experiments/**/__pycache__/
+experiments/**/mrdna/potentials/
+experiments/**/performance_benchmarks/
+experiments/**/bench_output/
+experiments/**/run_logs/
+
 # ── Bulk simulation run directories ──────────────────────────────────────────
 bp_health_runs/
 gromacs_run/
