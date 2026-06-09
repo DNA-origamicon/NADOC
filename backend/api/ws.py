@@ -17,6 +17,7 @@ import asyncio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from backend.api import state as design_state
+from backend.core.models import Design
 import numpy as np
 
 router = APIRouter()
@@ -34,8 +35,10 @@ async def md_run_ws(websocket: WebSocket) -> None:
     ────────
     Client → Server
       {"action": "load",
-       "topology_path": str,   # abs path to .gro or .tpr
-       "xtc_path":      str,   # abs path to .xtc
+       "config_path":   str,   # optional abs path to NAMD .json/.namd/.conf
+       "topology_path": str,   # abs path to .gro/.tpr or .psf
+       "xtc_path":      str,   # abs path to .xtc or .dcd
+       "coordinate_path": str, # optional abs path to .pdb for PSF/DCD
        "mode": "nadoc"|"beads"|"ballstick"}
       {"action": "seek",       "frame_idx": int}
       {"action": "get_latest"}
@@ -64,7 +67,11 @@ async def md_run_ws(websocket: WebSocket) -> None:
         "c1p_idx":      None,   # numpy int64 array: C1' MDAnalysis index per p_order entry
         "dt_ps":        None,
         "nstxout_comp": None,
+        "coordinate_path": None,
+        "latest_frame_cache": None,
+        "latest_frame_sig": None,
     }
+    _latest_refresh_lock = asyncio.Lock()
 
     def _try_unwrap(u, logs: list) -> None:
         """Add PBC make-whole transformation to the Universe if bond data exists.
@@ -98,7 +105,14 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 "centroid shift still applied."
             )
 
-    def _load_sync(topology_str: str, xtc_str: str, mode: str, design) -> dict:
+    def _load_sync(
+        topology_str: str,
+        xtc_str: str,
+        mode: str,
+        design,
+        coordinate_str: str | None = None,
+        config_str: str | None = None,
+    ) -> dict:
         """Synchronous load — runs inside asyncio.to_thread."""
         from pathlib import Path
 
@@ -111,34 +125,60 @@ async def md_run_ws(websocket: WebSocket) -> None:
             _unwrap_min_image,
             build_chain_map,
             build_p_gro_order,
+            build_p_pdb_order,
             centroid_offset,
         )
         from backend.core.md_metrics import derive_total_ns, parse_log_metrics
+        from backend.core.md_import import resolve_md_config
 
         logs: list[str] = []
         load_warnings: list[str] = []
 
-        topology_path = Path(topology_str)
-        xtc_path      = Path(xtc_str)
+        resolved = resolve_md_config(config_str) if config_str else None
+        topology_path = resolved.topology_path if resolved else Path(topology_str)
+        xtc_path      = resolved.trajectory_path if resolved else Path(xtc_str)
+        coordinate_path = resolved.coordinate_path if resolved else (Path(coordinate_str) if coordinate_str else None)
         run_dir       = topology_path.parent
+        is_namd       = topology_path.suffix.lower() == ".psf" or xtc_path.suffix.lower() == ".dcd"
 
+        if resolved:
+            logs.append(f"Config    : {resolved.config_path.name}")
+            if resolved.stage_name:
+                logs.append(f"Stage     : {resolved.stage_name}")
         logs.append(f"Topology : {topology_path.name}")
+        if coordinate_path:
+            logs.append(f"Reference: {coordinate_path.name}")
         logs.append(f"Trajectory: {xtc_path.name}")
 
-        # Require input_nadoc.pdb in the same directory for chain mapping.
-        input_pdb = run_dir / "input_nadoc.pdb"
-        if not input_pdb.exists():
-            raise ValueError(
-                f"input_nadoc.pdb not found in {run_dir}. "
-                "Select a topology from a NADOC-generated GROMACS run directory."
-            )
+        if is_namd:
+            if coordinate_path is None or not coordinate_path.exists():
+                candidate = topology_path.with_suffix(".pdb")
+                if candidate.exists():
+                    coordinate_path = candidate
+                else:
+                    raise ValueError(
+                        "NAMD PSF/DCD loading requires a reference PDB. "
+                        "Use a NADOC NAMD manifest/config or place <name>.pdb next to <name>.psf."
+                    )
+            input_pdb = coordinate_path
+        else:
+            # Require input_nadoc.pdb in the same directory for chain mapping.
+            input_pdb = run_dir / "input_nadoc.pdb"
+            if not input_pdb.exists():
+                raise ValueError(
+                    f"input_nadoc.pdb not found in {run_dir}. "
+                    "Select a topology from a NADOC-generated GROMACS run directory."
+                )
 
         # Build chain map from current design.
         model    = build_atomistic_model(design)
         cm       = build_chain_map(model)
         pdb_text = input_pdb.read_text(errors="replace")
-        p_order  = build_p_gro_order(pdb_text, cm)
-        logs.append(f"Chain map : {len(cm)} P atoms, {len(p_order)} GRO P entries")
+        p_order  = build_p_pdb_order(pdb_text, cm) if is_namd else build_p_gro_order(pdb_text, cm)
+        logs.append(
+            f"Chain map : {len(cm)} P atoms, {len(p_order)} "
+            f"{'PDB/DCD' if is_namd else 'GRO/XTC'} P entries"
+        )
 
         # Design equilibrium positions for each entry in p_order (nm, NADOC frame).
         # Used for Kabsch rotation alignment.  Entries in p_order that have no
@@ -244,8 +284,19 @@ async def md_run_ws(websocket: WebSocket) -> None:
             all_logs = sorted(run_dir.glob("*.log"), key=lambda p: p.stat().st_mtime)
             log_path = all_logs[-1] if all_logs else None
 
-        metrics  = parse_log_metrics(log_path) if log_path else None
-        total_ns = derive_total_ns(metrics, n_frames) if metrics else None
+        if resolved:
+            metrics = None
+            total_ns = (
+                max(0, n_frames - 1) * resolved.dt_ps * resolved.nstxout_comp / 1000.0
+                if resolved.dt_ps is not None and resolved.nstxout_comp is not None
+                else None
+            )
+            load_warnings.extend(resolved.warnings)
+            if resolved.log_path:
+                logs.append(f"Log       : {resolved.log_path.name}")
+        else:
+            metrics  = parse_log_metrics(log_path) if log_path else None
+            total_ns = derive_total_ns(metrics, n_frames) if metrics else None
         if metrics:
             logs.append(
                 f"Log       : {log_path.name} — "
@@ -272,6 +323,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             "universe":      u,
             "topology_path": str(topology_path),
             "xtc_path":      str(xtc_path),
+            "coordinate_path": str(coordinate_path) if coordinate_path else None,
             "p_order":       p_order,
             "eq_positions":  eq_positions,
             "eq_valid":      eq_valid,
@@ -281,10 +333,10 @@ async def md_run_ws(websocket: WebSocket) -> None:
             "centroid_T":    T,
             "n_frames":      n_frames,
             "n_p_atoms":     len(cm),
-            "dt_ps":         metrics.dt_ps         if metrics else None,
-            "nstxout_comp":  metrics.nstxout_comp  if metrics else None,
-            "ns_per_day":    metrics.ns_per_day    if metrics else None,
-            "temperature_k": metrics.temperature_k if metrics else None,
+            "dt_ps":         resolved.dt_ps if resolved else (metrics.dt_ps if metrics else None),
+            "nstxout_comp":  resolved.nstxout_comp if resolved else (metrics.nstxout_comp if metrics else None),
+            "ns_per_day":    resolved.ns_per_day if resolved else (metrics.ns_per_day if metrics else None),
+            "temperature_k": resolved.temperature_k if resolved else (metrics.temperature_k if metrics else None),
             "total_ns":      total_ns,
             "atom_meta":     None,
             "heavy_idx":     None,
@@ -508,7 +560,114 @@ async def md_run_ws(websocket: WebSocket) -> None:
             heavy_idx = _ctx["heavy_idx"]
             atom_meta = _ctx["atom_meta"]
             ag        = u.atoms[heavy_idx]
-            pos_nm    = ag.positions / 10.0 + T
+            pos_raw   = ag.positions / 10.0
+            pos_nm    = pos_raw + T
+
+            # Keep atomistic MD display in one coherent periodic image.  The CG
+            # NADOC/bead path above corrects P atoms against the design reference;
+            # mirror that for atomistic display, then reconstruct each residue's
+            # heavy atoms from the nearest image relative to its corrected P atom.
+            # This avoids the common visual failure where a strand is displayed
+            # one periodic box away while preserving actual intra-residue MD
+            # coordinates.
+            try:
+                dna_p = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
+                p_raw = dna_p.positions / 10.0
+                dims = u.dimensions
+                eq_pos = _ctx.get("eq_positions")
+                rigid_mask = _ctx.get("rigid_mask")
+                eq_centroid = _ctx.get("eq_centroid")
+                eq_centered = _ctx.get("eq_centered")
+                if dims is not None and dims[0] > 0 and len(p_raw) == len(p_order):
+                    box_nm = dims[:3] / 10.0
+                    p_box = _unwrap_min_image(p_raw, box_nm)
+                    if rigid_mask is not None and rigid_mask.any():
+                        c_box = _np.median(p_box[rigid_mask], axis=0)
+                    else:
+                        c_box = p_box.mean(axis=0)
+
+                    T_dyn = eq_centroid - c_box if eq_centroid is not None else T
+                    if (eq_pos is not None and eq_centroid is not None
+                            and rigid_mask is not None and len(eq_pos) == len(p_box)):
+                        eq_box = eq_pos - T_dyn
+                        dc = p_box - eq_box
+                        for d in range(3):
+                            if box_nm[d] > 0:
+                                dc[:, d] -= _np.round(dc[:, d] / box_nm[d]) * box_nm[d]
+                        p_box_corr = eq_box + dc
+                        p_box_corr[~rigid_mask] = p_box[~rigid_mask]
+                        p_pre = p_box_corr + T_dyn
+                    else:
+                        p_pre = p_box + T_dyn
+
+                    # Residue-local reconstruction: heavy atom = corrected P +
+                    # minimum-image(raw atom - raw P).  Use residue ix because it
+                    # is stable inside this MDAnalysis Universe.
+                    p_raw_by_res = {int(a.residue.ix): p_raw[i] for i, a in enumerate(dna_p)}
+                    p_pre_by_res = {int(a.residue.ix): p_pre[i] for i, a in enumerate(dna_p)}
+                    p_res_by_key: dict[tuple[str, int], int] = {}
+                    p_resids_by_seg: dict[str, list[int]] = {}
+                    for a in dna_p:
+                        segid = str(getattr(a.residue, "segid", "") or getattr(a, "segid", ""))
+                        resid = int(a.residue.resid)
+                        p_res_by_key[(segid, resid)] = int(a.residue.ix)
+                        p_resids_by_seg.setdefault(segid, []).append(resid)
+                    for segid in p_resids_by_seg:
+                        p_resids_by_seg[segid].sort()
+
+                    def _anchor_residue_ix(atom) -> int | None:
+                        res_ix = int(atom.residue.ix)
+                        if res_ix in p_raw_by_res:
+                            return res_ix
+                        segid = str(getattr(atom.residue, "segid", "") or getattr(atom, "segid", ""))
+                        resid = int(atom.residue.resid)
+                        # Terminal residues may not have a P atom.  Anchor them
+                        # to the nearest residue with a P in the same segment.
+                        for delta_resid in (1, -1, 2, -2):
+                            near = p_res_by_key.get((segid, resid + delta_resid))
+                            if near is not None:
+                                return near
+                        candidates = p_resids_by_seg.get(segid)
+                        if candidates:
+                            nearest_resid = min(candidates, key=lambda r: abs(r - resid))
+                            return p_res_by_key.get((segid, nearest_resid))
+                        return None
+
+                    pos_pre = pos_nm.copy()
+                    for i, a in enumerate(ag):
+                        res_ix = _anchor_residue_ix(a)
+                        if res_ix is None:
+                            continue
+                        p0 = p_raw_by_res.get(res_ix)
+                        pc = p_pre_by_res.get(res_ix)
+                        if p0 is None or pc is None:
+                            continue
+                        delta = pos_raw[i] - p0
+                        for d in range(3):
+                            if box_nm[d] > 0:
+                                delta[d] -= _np.round(delta[d] / box_nm[d]) * box_nm[d]
+                        pos_pre[i] = pc + delta
+
+                    # Use the same rigid-body Kabsch alignment as the P-bead path
+                    # so atomistic and NADOC representations occupy the same view.
+                    if (eq_centered is not None and eq_centroid is not None
+                            and len(eq_centered) == len(p_pre)):
+                        rm = rigid_mask if (rigid_mask is not None and rigid_mask.any()) else None
+                        mob_c = p_pre[rm].mean(axis=0) if rm is not None else p_pre.mean(axis=0)
+                        mc = p_pre - mob_c
+                        H = mc.T @ eq_centered
+                        U2, _, Vt2 = _np.linalg.svd(H)
+                        det = _np.linalg.det(Vt2.T @ U2.T)
+                        R_align = Vt2.T @ _np.diag([1.0, 1.0, det]) @ U2.T
+                        pos_nm = (pos_pre - mob_c) @ R_align.T + eq_centroid
+                    else:
+                        pos_nm = pos_pre
+            except Exception as exc:
+                print(
+                    f"[ws seek] atomistic PBC correction skipped "
+                    f"({type(exc).__name__}: {exc})",
+                    flush=True,
+                )
             atoms = [
                 {
                     "serial":  m["serial"],
@@ -527,30 +686,83 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 "atoms":     atoms,
             }
 
+    def _trajectory_signature() -> tuple[int, int] | None:
+        from pathlib import Path
+
+        xtc_path = _ctx.get("xtc_path")
+        if not xtc_path:
+            return None
+        st = Path(xtc_path).stat()
+        return (int(st.st_mtime_ns), int(st.st_size))
+
+    def _refresh_latest_sync(force: bool = False) -> dict:
+        """Return the latest trajectory frame, rebuilding only when the file changed."""
+        import MDAnalysis as mda  # type: ignore
+
+        sig = _trajectory_signature()
+        cached = _ctx.get("latest_frame_cache")
+        if not force and cached is not None and sig == _ctx.get("latest_frame_sig"):
+            return dict(cached)
+
+        new_u = mda.Universe(_ctx["topology_path"], _ctx["xtc_path"])
+        _ctx["universe"] = new_u
+        _ctx["n_frames"] = len(new_u.trajectory)
+        _ctx["R_prev"] = None
+        _ctx["prev_frame_idx"] = -999
+        frame_msg = _seek_sync(_ctx["n_frames"] - 1)
+        _ctx["latest_frame_cache"] = frame_msg
+        _ctx["latest_frame_sig"] = sig
+        return frame_msg
+
+    async def _refresh_latest(force: bool = False) -> dict:
+        async with _latest_refresh_lock:
+            return await asyncio.to_thread(_refresh_latest_sync, force)
+
     try:
         while True:
             msg    = await websocket.receive_json()
             action = msg.get("action")
 
             if action == "load":
+                config_str   = msg.get("config_path") or ""
                 topology_str = msg.get("topology_path", "")
                 xtc_str      = msg.get("xtc_path", "")
+                coordinate_str = msg.get("coordinate_path") or None
                 mode         = msg.get("mode", "nadoc")
-                design       = design_state.get_design()
+                design_payload = msg.get("design")
+                design = None
+                if design_payload:
+                    try:
+                        design = Design.model_validate(design_payload)
+                    except Exception as exc:
+                        await websocket.send_json({"type": "error", "message": f"Invalid design payload: {exc}"})
+                        continue
                 if design is None:
-                    await websocket.send_json({"type": "error", "message": "No design loaded."})
+                    design = design_state.get_design()
+                if design is None:
+                    await websocket.send_json({"type": "error", "message": "No design loaded. Reload the design or reopen this MD run from NADOC."})
                     continue
-                if not topology_str or not xtc_str:
-                    await websocket.send_json({"type": "error", "message": "topology_path and xtc_path are required."})
+                if not config_str and (not topology_str or not xtc_str):
+                    await websocket.send_json({"type": "error", "message": "config_path or topology_path and xtc_path are required."})
                     continue
                 try:
-                    loaded = await asyncio.to_thread(_load_sync, topology_str, xtc_str, mode, design)
+                    loaded = await asyncio.to_thread(
+                        _load_sync,
+                        topology_str,
+                        xtc_str,
+                        mode,
+                        design,
+                        coordinate_str,
+                        config_str or None,
+                    )
                 except Exception as exc:
                     await websocket.send_json({"type": "error", "message": str(exc)})
                     continue
 
                 _ctx.update(loaded)
                 _ctx["mode"] = mode
+                _ctx["latest_frame_cache"] = None
+                _ctx["latest_frame_sig"] = None
 
                 for log_line in loaded.get("logs", []):
                     await websocket.send_json({"type": "log", "message": log_line})
@@ -564,6 +776,9 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     "total_ns":      loaded["total_ns"],
                     "dt_ps":         loaded["dt_ps"],
                     "nstxout_comp":  loaded["nstxout_comp"],
+                    "topology_path":  loaded["topology_path"],
+                    "trajectory_path": loaded["xtc_path"],
+                    "coordinate_path": loaded.get("coordinate_path"),
                     "warnings":      loaded.get("warnings", []),
                 })
 
@@ -578,23 +793,17 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 except Exception as exc:
                     await websocket.send_json({"type": "error", "message": str(exc)})
                     continue
+                if frame_msg.get("frame_idx") == _ctx["n_frames"] - 1:
+                    _ctx["latest_frame_cache"] = frame_msg
+                    _ctx["latest_frame_sig"] = _trajectory_signature()
                 await websocket.send_json(frame_msg)
 
             elif action == "get_latest":
                 if _ctx["universe"] is None:
                     await websocket.send_json({"type": "error", "message": "No trajectory loaded."})
                     continue
-
-                def _refresh_and_seek() -> dict:
-                    """Rebuild Universe from disk to discover frames written since load, then seek last."""
-                    import MDAnalysis as mda  # type: ignore
-                    new_u = mda.Universe(_ctx["topology_path"], _ctx["xtc_path"])
-                    _ctx["universe"] = new_u
-                    _ctx["n_frames"] = len(new_u.trajectory)
-                    return _seek_sync(_ctx["n_frames"] - 1)
-
                 try:
-                    frame_msg = await asyncio.to_thread(_refresh_and_seek)
+                    frame_msg = await _refresh_latest()
                 except Exception as exc:
                     await websocket.send_json({"type": "error", "message": str(exc)})
                     continue
@@ -786,3 +995,77 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
             await websocket.close()
         except Exception:
             pass
+
+
+# ── MD job status streaming WebSocket ──────────────────────────────────────────
+
+
+@router.websocket("/ws/md-jobs/{job_id}")
+async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
+    """
+    Stream NAMD job status updates to the UI.
+
+    Protocol (Server → Client only)
+    ────────────────────────────────
+    {"type": "state", "job": {...}}   — full job dict + live_metrics if running
+    {"type": "error", "message": str} — job not found
+
+    Sent immediately on connect, then every 3 s while running.
+    Connection closes when status reaches completed / failed / stopped.
+    """
+    from backend.api.assembly import _WORKSPACE_DIR
+    from backend.core.md_job import MdJob, MdStatus
+    from backend.core.namd_metrics import parse_namd_log
+    from backend.core.namd_runner import reconcile_job_status
+
+    await websocket.accept()
+    try:
+        while True:
+            try:
+                job = reconcile_job_status(MdJob.load(job_id, _WORKSPACE_DIR), _WORKSPACE_DIR)
+            except FileNotFoundError:
+                await websocket.send_json({"type": "error", "message": f"Job {job_id!r} not found"})
+                break
+            except Exception as exc:
+                await websocket.send_json({"type": "error", "message": str(exc)})
+                break
+
+            payload = job.to_dict()
+
+            # Attach live NAMD log metrics for the current segment when running
+            if job.status == MdStatus.running and 0 <= job.current_segment_idx < len(job.segments):
+                seg = job.segments[job.current_segment_idx]
+                log_path = job.package_dir(_WORKSPACE_DIR) / f"{seg.name}.log"
+                if log_path.exists():
+                    try:
+                        m = parse_namd_log(log_path)
+                        payload["live_metrics"] = {
+                            "temperature_k":  m.temperature_k,
+                            "pressure_bar":   m.pressure_bar,
+                            "pressure_avg_bar": m.pressure_avg_bar,
+                            "gpressure_bar":  m.gpressure_bar,
+                            "gpressure_avg_bar": m.gpressure_avg_bar,
+                            "volume_ang3":    m.volume_ang3,
+                            "ns_per_day":     m.ns_per_day,
+                            "n_energy_lines": m.n_energy_lines,
+                            "timestep":       m.timestep,
+                            "segment_steps":  seg.steps,
+                            "segment_progress": (
+                                min(1.0, max(0.0, float(m.timestep or 0) / float(seg.steps)))
+                                if seg.steps else None
+                            ),
+                        }
+                    except Exception:
+                        pass
+
+            await websocket.send_json({"type": "state", "job": payload})
+
+            if job.status in (MdStatus.completed, MdStatus.failed, MdStatus.stopped):
+                break
+
+            await asyncio.sleep(3.0)
+
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass

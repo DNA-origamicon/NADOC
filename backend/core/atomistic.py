@@ -42,6 +42,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 import functools as _functools
+import hashlib as _hashlib
+import json as _json
 import math as _math
 import numpy as _np
 from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
@@ -53,7 +55,6 @@ from backend.core.atomistic_helpers import (
 )
 from backend.core.atomistic_minimisers import (
     _atom_pos,
-    _interpolate_backbone_bridge,
     _minimize_1_extra_base,
     _minimize_2_extra_base,
     _minimize_3_extra_base,
@@ -407,6 +408,77 @@ def merge_models(*models: AtomisticModel) -> AtomisticModel:
     return AtomisticModel(atoms=atoms, bonds=bonds)
 
 
+def atomistic_reference_topology_hash(design: Design) -> str:
+    """Stable hash of design fields that affect atom identity or coordinates."""
+    payload = design.model_dump(
+        mode="json",
+        exclude={
+            "atomistic_reference",
+            "metadata",
+            "camera_poses",
+            "animations",
+            "loadouts",
+            "active_loadout_id",
+            "feature_log",
+            "feature_log_cursor",
+            "feature_log_sub_cursor",
+        },
+    )
+    raw = _json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return _hashlib.sha256(raw).hexdigest()
+
+
+def atomistic_model_from_reference(
+    design: Design,
+    exclude_helix_ids: set[str] | None = None,
+) -> AtomisticModel | None:
+    """Return the persisted MD-derived atomistic reference, if usable.
+
+    ``Design.atomistic_reference`` is optional and may be absent in older
+    files.  When a caller asks to exclude helices, serials and bonds are
+    compacted so the returned model remains valid.
+    """
+    ref = getattr(design, "atomistic_reference", None)
+    if ref is None or not ref.atoms:
+        return None
+    if ref.topology_hash and ref.topology_hash != atomistic_reference_topology_hash(design):
+        return None
+
+    atoms: list[Atom] = []
+    old_to_new: dict[int, int] = {}
+    for ref_atom in ref.atoms:
+        if exclude_helix_ids and ref_atom.helix_id in exclude_helix_ids:
+            continue
+        new_serial = len(atoms)
+        old_to_new[int(ref_atom.serial)] = new_serial
+        atoms.append(Atom(
+            serial=new_serial,
+            name=ref_atom.name,
+            element=ref_atom.element,
+            residue=ref_atom.residue,
+            chain_id=ref_atom.chain_id,
+            seq_num=ref_atom.seq_num,
+            x=ref_atom.x,
+            y=ref_atom.y,
+            z=ref_atom.z,
+            strand_id=ref_atom.strand_id,
+            helix_id=ref_atom.helix_id,
+            bp_index=ref_atom.bp_index,
+            direction=ref_atom.direction,
+            is_modified=ref_atom.is_modified,
+            aux_helix_id=ref_atom.aux_helix_id,
+            aux_t=ref_atom.aux_t,
+        ))
+
+    bonds: list[tuple[int, int]] = []
+    for i, j in ref.bonds:
+        ni = old_to_new.get(int(i))
+        nj = old_to_new.get(int(j))
+        if ni is not None and nj is not None:
+            bonds.append((ni, nj))
+    return AtomisticModel(atoms=atoms, bonds=bonds)
+
+
 # ── Frame constants ───────────────────────────────────────────────────────────
 # _FRAME_ROT_RAD cancels the +37.05° pre-compensation baked into the templates
 # (both SUGAR and BASE_TEMPLATES).  Net effect = 0° rotation; kept so templates
@@ -443,6 +515,8 @@ _ATOMISTIC_TOPOLOGY_GROOVE_RAD: float = _math.radians(150.0) # topology-layer gr
 # representation: −32° aligns the backbone groove phase of the all-atom model
 # with the coarse-grained model at phase_offset=0.
 _ATOMISTIC_PHASE_OFFSET_RAD: float = _math.radians(-32.0)
+
+_PHOSPHODIESTER_LINKER_CONTOUR_NM: float = 0.606  # C3'-O3'-P-O5'-C5' contour length
 
 # ── Frame builder ─────────────────────────────────────────────────────────────
 
@@ -545,6 +619,131 @@ def _atom_frame(
     R = R @ _np.array([[c, -s, 0.], [s, c, 0.], [0., 0., 1.]])
 
     return origin, R
+
+
+def crossover_geometry_diagnostics(design: Design) -> dict:
+    """Report crossover linker spans without changing the design.
+
+    A direct crossover is only chemically plausible when the source C3' and
+    destination C5' anchors can be joined by the explicitly modeled linker
+    length.  This diagnostic flags strained crossovers so callers can move the
+    crossover, locally relax the design geometry, or add explicit extra bases in
+    NADOC if that is the intended construct.
+    """
+    from backend.core.deformation import effective_helix_for_geometry
+    from backend.core.lattice import position_linker_virtual_helices
+
+    design = position_linker_virtual_helices(design)
+    helix_map = {h.id: effective_helix_for_geometry(h, design) for h in design.helices}
+    crossover_by_site: dict[frozenset[tuple[str, int, str]], object] = {}
+    for xo in design.crossovers:
+        key = frozenset({
+            (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value),
+            (xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value),
+        })
+        crossover_by_site[key] = xo
+
+    pos_cache: dict[str, dict[tuple[int, Direction, int], NucleotidePosition]] = {}
+    axis_cache: dict[str, tuple[_np.ndarray, _np.ndarray, int]] = {}
+    for h in helix_map.values():
+        nucs: dict[tuple[int, Direction, int], NucleotidePosition] = {}
+        copy_count: dict[tuple[int, Direction], int] = {}
+        for nuc in nucleotide_positions(h):
+            base = (nuc.bp_index, nuc.direction)
+            copy_k = copy_count.get(base, 0)
+            nucs[(nuc.bp_index, nuc.direction, copy_k)] = nuc
+            copy_count[base] = copy_k + 1
+        pos_cache[h.id] = nucs
+
+        start = _np.array([h.axis_start.x, h.axis_start.y, h.axis_start.z])
+        end = _np.array([h.axis_end.x, h.axis_end.y, h.axis_end.z])
+        axis = end - start
+        norm = float(_np.linalg.norm(axis))
+        axis_cache[h.id] = (start, axis / norm if norm > 1e-9 else axis, h.bp_start)
+
+    def _sugar_atom_world(helix_id: str, bp: int, direction: Direction, atom_name: str) -> _np.ndarray | None:
+        helix = helix_map.get(helix_id)
+        nuc = pos_cache.get(helix_id, {}).get((bp, direction, 0))
+        axis_info = axis_cache.get(helix_id)
+        if helix is None or nuc is None or axis_info is None:
+            return None
+        axis_start, axis_hat, bp_start = axis_info
+        axis_pt = axis_start + (bp - bp_start) * BDNA_RISE_PER_BP * axis_hat
+        origin, R = _atom_frame(nuc, direction, axis_point=axis_pt, helix_direction=helix.direction)
+        for name, _element, n, y, z_local in _SUGAR:
+            if name == atom_name:
+                return origin + R @ _np.array([n, y, z_local])
+        return None
+
+    rows: list[dict] = []
+    for strand in design.strands:
+        prev_domain = None
+        for domain in strand.domains:
+            if (
+                prev_domain is not None
+                and prev_domain.helix_id != domain.helix_id
+                and prev_domain.end_bp == domain.start_bp
+            ):
+                site_key = frozenset({
+                    (prev_domain.helix_id, prev_domain.end_bp, prev_domain.direction.value),
+                    (domain.helix_id, domain.start_bp, domain.direction.value),
+                })
+                xo = crossover_by_site.get(site_key)
+                if xo is None:
+                    prev_domain = domain
+                    continue
+                c3_src = _sugar_atom_world(
+                    prev_domain.helix_id, prev_domain.end_bp, prev_domain.direction, "C3'",
+                )
+                c5_dst = _sugar_atom_world(
+                    domain.helix_id, domain.start_bp, domain.direction, "C5'",
+                )
+                if c3_src is None or c5_dst is None:
+                    rows.append({
+                        "crossover_id": xo.id,
+                        "strand_id": strand.id,
+                        "status": "missing_endpoint_geometry",
+                    })
+                    prev_domain = domain
+                    continue
+
+                explicit_extra_bases = len(xo.extra_bases or "")
+                linker_segments = explicit_extra_bases + 1
+                contour_nm = linker_segments * _PHOSPHODIESTER_LINKER_CONTOUR_NM
+                span_nm = float(_np.linalg.norm(c5_dst - c3_src))
+                stretch_ratio = span_nm / contour_nm if contour_nm > 0 else float("inf")
+                rows.append({
+                    "crossover_id": xo.id,
+                    "strand_id": strand.id,
+                    "source": {
+                        "helix_id": prev_domain.helix_id,
+                        "bp_index": prev_domain.end_bp,
+                        "direction": prev_domain.direction.value,
+                    },
+                    "destination": {
+                        "helix_id": domain.helix_id,
+                        "bp_index": domain.start_bp,
+                        "direction": domain.direction.value,
+                    },
+                    "explicit_extra_bases": xo.extra_bases or "",
+                    "explicit_extra_base_count": explicit_extra_bases,
+                    "anchor_span_nm": span_nm,
+                    "available_contour_nm": contour_nm,
+                    "stretch_ratio": stretch_ratio,
+                    "status": "strained" if stretch_ratio > 1.05 else "ok",
+                })
+            prev_domain = domain
+
+    strained = [row for row in rows if row.get("status") == "strained"]
+    return {
+        "schema": "nadoc.atomistic_crossover_geometry.v1",
+        "linker_contour_nm_per_segment": _PHOSPHODIESTER_LINKER_CONTOUR_NM,
+        "counts": {
+            "crossovers_checked": len(rows),
+            "strained_crossovers": len(strained),
+        },
+        "crossovers": rows,
+    }
 
 
 # ── Backbone torsion adjustment ───────────────────────────────────────────────
@@ -693,9 +892,16 @@ def build_atomistic_model(
     - Extra crossover bases: full ribose + base placed along the interpolation
       line between the two junction nucleotides, with backbone atoms minimised.
     """
+    if nuc_pos_override is None:
+        ref_model = atomistic_model_from_reference(design, exclude_helix_ids)
+        if ref_model is not None:
+            return ref_model
+
     from backend.core.deformation import effective_helix_for_geometry
     from backend.core.lattice import position_linker_virtual_helices
     design = position_linker_virtual_helices(design)
+
+    helix_map = {h.id: effective_helix_for_geometry(h, design) for h in design.helices}
 
     seq_map = _build_sequence_map(design)
     sugar_template = _SUGAR
@@ -744,7 +950,6 @@ def build_atomistic_model(
     bp_to_sugar_serials: dict[tuple[str, int, str], dict[str, int]] = {}
 
     # Cache nucleotide positions per helix (avoid recomputing for each domain)
-    helix_map   = {h.id: effective_helix_for_geometry(h, design) for h in design.helices}
     nuc_pos_cache: dict[str, dict[tuple[int, Direction], NucleotidePosition]] = {}
 
     # Cache helix axis geometry for radial correction: (axis_start, axis_hat)
@@ -965,10 +1170,12 @@ def build_atomistic_model(
                     prev_o3_serial = None
                     prev_nuc_key   = None
 
-    # ── Crossover phosphate bridge interpolation ──────────────────────────────
+    # ── Crossover phosphate bridge relaxation ────────────────────────────────
     # At each crossover (consecutive domains on different helices sharing the
-    # same bp position), linearly interpolate the backbone atoms between
-    # C4′(N) and C3′(N+1) to reduce geometric strain in GROMACS simulations.
+    # same bp position), place O3′(src), P(dst), and O5′(dst) by minimising
+    # canonical phosphodiester bond-length and bond-angle error.  This keeps the
+    # ribose anchors fixed while avoiding the collinear linker geometry produced
+    # by straight interpolation, which is a poor starting point for MD.
     # Crossovers with extra bases are skipped here — their interpolation is
     # handled by _build_extra_base_atoms which covers every pair in the chain.
     for strand in design.strands:
@@ -985,7 +1192,7 @@ def build_atomistic_model(
                 src_s = bp_to_sugar_serials.get(src_key)
                 dst_s = bp_to_sugar_serials.get(dst_key)
                 if src_s and dst_s:
-                    _interpolate_backbone_bridge(atoms, src_s, dst_s)
+                    _minimize_backbone_bridge(atoms, src_s, dst_s)
 
             prev_domain = domain
 

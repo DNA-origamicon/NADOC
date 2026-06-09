@@ -51,7 +51,7 @@ from backend.core.atomistic import (
 )
 from backend.core.constants import BDNA_RISE_PER_BP, HC_CROSSOVER_PERIOD
 from backend.core.models import Design, Direction, Helix, Vec3
-from backend.core.namd_package import _complete_psf_from_stub
+from backend.core.namd_helpers import _complete_psf_from_stub
 from backend.core.namd_solvate import (
     _FF_DIR,
     _FF_FILES,

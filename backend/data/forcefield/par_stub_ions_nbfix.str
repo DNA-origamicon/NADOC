@@ -1,0 +1,35 @@
+* Stub vdW parameters for protein/lipid atom types referenced in NBFIX
+* entries of toppar_water_ions_cufix.str.
+*
+* These residue types are NEVER present in a DNA+water+Mg2+ simulation.
+* NAMD3 validates ALL NBFIX pairs whose first atom type (OTMG, OTCA, SOD,
+* POT, NH3, …) is present in the PSF — which requires BOTH members to have
+* defined vdW parameters.  Without these stubs, NAMD exits with "DIDN'T FIND
+* vdW PARAMETER FOR ATOM TYPE OC/OG2P1/NH3/…" whenever MGH is present.
+*
+* Missing types: OC OCL OC2D2 OC2DP OG2D2 OG2P1 O2L NH3 NH3L NC2 NG3P3 NP NR3
+* Values approximate CHARMM36 protein/lipid parameters.  Exact values do not
+* affect DNA+water+Mg physics because these atoms are absent from the PSF.
+*
+
+NONBONDED  NBXMOD 5  ATOM CDIEL FSHIFT VATOM VDISTANCE VFSWITCH -
+cutnb 14.0 ctofnb 12.0 ctonnb 10.0 eps 1.0 e14fac 1.0 wmin 1.5
+
+! Oxygen types (protein carboxylate, lipid carbonyl/ester/phosphate)
+OC       0.000000  -0.120000     1.700200  ! carboxylate O (par_all36_prot.prm)
+OCL      0.000000  -0.120000     1.700200  ! lipid carbonyl O
+OC2D2    0.000000  -0.120000     1.700200  ! ester carbonyl O
+OG2D2    0.000000  -0.120000     1.700200  ! aldehdye/ketone O (CHARMM36c)
+O2L      0.000000  -0.121000     1.768200  ! lipid phosphate O
+OG2P1    0.000000  -0.120000     1.700000  ! phosphate O (CHARMM36c/m)
+OC2DP    0.000000  -0.120000     1.700000  ! phosphate O (CHARMM36c)
+
+! Nitrogen types (protein/lipid amine, guanidinium, ring N)
+NH3      0.000000  -0.200000     1.850000  ! protonated amine (Lys NH3+)
+NH3L     0.000000  -0.200000     1.850000  ! lipid amine (CHARMM36 lipid)
+NC2      0.000000  -0.200000     1.850000  ! guanidinium N (Arg)
+NG3P3    0.000000  -0.200000     1.850000  ! amine N (CHARMM36c)
+NP       0.000000  -0.200000     1.850000  ! protonated amine N
+NR3      0.000000  -0.200000     1.850000  ! aromatic/imidazole N
+
+END

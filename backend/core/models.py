@@ -1766,6 +1766,44 @@ class ProteinAttachment(BaseModel):
     visible: bool = True
 
 
+# ── MD-derived atomistic reference (optional, display/export layer only) ──
+
+
+class AtomisticReferenceAtom(BaseModel):
+    """One persisted heavy atom for an MD-derived CAD atomistic reference.
+
+    These records deliberately mirror ``backend.core.atomistic.Atom`` without
+    importing it here.  The topological design remains the editable source of
+    truth, while this optional reference lets rendering/export reuse a more
+    honest relaxed atomistic pose when the topology still matches.
+    """
+    serial: int
+    name: str
+    element: str
+    residue: str
+    chain_id: str
+    seq_num: int
+    x: float
+    y: float
+    z: float
+    strand_id: str
+    helix_id: str
+    bp_index: int
+    direction: str
+    is_modified: bool = False
+    aux_helix_id: str = ""
+    aux_t: float = 0.0
+
+
+class AtomisticReference(BaseModel):
+    """Persisted all-atom coordinate reference attached to a Design."""
+    source: str = ""
+    notes: str = ""
+    topology_hash: str = ""
+    atoms: List[AtomisticReferenceAtom] = Field(default_factory=list)
+    bonds: List[Tuple[int, int]] = Field(default_factory=list)
+
+
 class Design(BaseModel):
     """
     Top-level design object.  This is the ground truth for a DNA origami
@@ -1803,6 +1841,7 @@ class Design(BaseModel):
     camera_poses: List[CameraPose] = Field(default_factory=list)
     animations: List[DesignAnimation] = Field(default_factory=list)
     loadouts: List[DesignLoadout] = Field(default_factory=list)
+    atomistic_reference: Optional[AtomisticReference] = None
     active_loadout_id: Optional[str] = None
     feature_log: List[FeatureLogEntry] = Field(default_factory=list)
     feature_log_cursor: int = -1   # -1 = at end; ≥0 = index of last active entry

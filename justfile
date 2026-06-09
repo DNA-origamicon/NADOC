@@ -11,7 +11,7 @@ start:
 
 # Start FastAPI backend with hot reload
 dev:
-    uv run uvicorn backend.api.main:app --reload --host 0.0.0.0 --port 8000
+    uv run uvicorn backend.api.main:app --reload --reload-dir backend --reload-dir scripts --reload-exclude 'workspace/**' --reload-exclude 'experiments/**' --reload-exclude 'runs/**' --reload-exclude 'bp_health_runs/**' --reload-exclude 'gromacs_run/**' --reload-exclude 'memory/**' --host 0.0.0.0 --port 8000
 
 # Run all tests
 test:

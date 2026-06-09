@@ -184,6 +184,7 @@ import { initPeriodicMdPanel }      from './ui/periodic_md_panel.js'
 import { initMdPanel }    from './ui/md_panel.js'
 import { initReprOptionSliders } from './ui/repr_option_sliders.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
+import { initMdJobsPanel } from './ui/md_jobs_panel.js'
 import { createPhotoRenderer } from './scene/photo_renderer.js'
 import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
@@ -1786,7 +1787,8 @@ async function main() {
 
   // ── MD overlay + panel ───────────────────────────────────────────────────────
   const mdOverlay         = initMdOverlay(scene)
-  initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
+  const mdDisplayController = initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
+  initMdJobsPanel({ mdDisplayController })
 
   const periodicMdOverlay = initPeriodicMdOverlay(scene)
   initPeriodicMdPanel(store, {
@@ -2626,6 +2628,7 @@ async function main() {
   let _workspacePath         = localStorage.getItem(_WS_PATH_KEY)  || null
   let _assemblyWorkspacePath = localStorage.getItem(_ASM_PATH_KEY) || null
   function _setWorkspacePath(path) {
+    const previousPath = _workspacePath
     _workspacePath = path
     try {
       if (path) localStorage.setItem(_WS_PATH_KEY, path)
@@ -2635,6 +2638,11 @@ async function main() {
     // recompute our own badge. Both are hoisted fn decls, only called post-init.
     _announceDocPresence?.()
     _refreshCoediting?.()
+    if (path !== previousPath) {
+      window.dispatchEvent(new CustomEvent('nadoc:workspace-path-change', {
+        detail: { path, previousPath },
+      }))
+    }
   }
   function _setAssemblyWorkspacePath(path) {
     _assemblyWorkspacePath = path
@@ -5666,6 +5674,9 @@ async function main() {
         const nowOnAnimations = !collapsed && activeTab === 'scene'
         if (wasOnAnimations && !nowOnAnimations) _leaveAnimationsTab()
         _render()
+        window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
+          detail: { activeTab, collapsed },
+        }))
         _persist()
       }
 

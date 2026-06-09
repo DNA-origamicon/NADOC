@@ -206,6 +206,9 @@ export function initRepresentationSwitcher({
 
     _updateReprRadio(repr)
     reprOptionSliders(repr)
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
+      detail: { representation: repr },
+    }))
   }
 
   for (const { id, repr } of _ALL_REPRS) {
