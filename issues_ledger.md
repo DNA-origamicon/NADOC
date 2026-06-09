@@ -110,6 +110,8 @@ design decisions + research (so early sessions build the loop's muscle on tracta
 | 2 | ~~**ISSUE-2** Cross-tab sync delay + console clutter~~ ✅ DONE 2026-06-05 (propagation fix + silent-logging C + badge co-editing B all shipped) | functional bug (data-integrity) | medium | no |
 | done | **ISSUE-4** Drill-selection overhaul — Phases 1/2/3-preview/3-xover/3-filter-audit-lasso ✅ + v2-eyeball feedback batch ✅ + **2026-06-06 legacy-deletion ✅**: the 87 dead legacy sites (auto-drill ladder / manual filter pins / Tab drill-lock) + the `NADOC_DRILL_V2` flag plumbing PHYSICALLY DELETED — selection-level is now the only model, no opt-out (`?drillv2=0` gone). **Remaining (optional, low-priority): assembly unification (decision G), optional text level-breadcrumb (decision E).** | UX redesign | large, multi-phase | spec done |
 | **→ NEXT** | **ISSUE-1** Context-menu proliferation — Phase 1 ✅ + Phase 2a-binding ✅ + Phase 2a-orientation ✅ DONE 2026-06-05; Phase 2a-blunt / 2b–2e + Phase 3+ open (was deferred behind ISSUE-4, now unblocked) | UX + tech-debt | large, multi-phase | yes (done) |
+| ~~mostly done~~ | **ISSUE-8** Autoscaffold single-strand consolidation — 2026-06-08 root cause = the `teeth.nadoc` fixture was already seamless-routed (corrupt baseline). On the CLEAN fixture (`preroute_teeth.nadoc`) the standard seamed/seamless routers route teeth to 1 strand; the section router (now **default-on** for multi-section via `auto_scaffold_seamed`) keeps gaps clear (1 strand, ~9bp worst dip, ~32bp clearance). In-app seamed Auto-scaffold fixed. Owe: user eyeball + clean dumbbell fixture. | routing correctness + tech debt | mostly resolved | no (algorithmic) |
+| open | **ISSUE-9** Autoscaffold is not idempotent — running it on an ALREADY-routed design extends scaffold into gaps / corrupts faces (re-routes the extended geometry). Each re-run compounds. Auto-scaffold must first clear any prior auto-route (reset to clean per-domain seed) so N calls == 1 call. | routing correctness | medium | no (algorithmic) |
 
 This order is a recommendation; the user may name a different issue. **2026-06-05: user diverted the loop to
 ISSUE-4 next** — the drill-selection UX is actively in the way, so it jumps ahead of the remaining ISSUE-1
@@ -649,6 +651,93 @@ ladder used it to cap depth).
   after verification along with the temp debug hooks.
 - **Class of bug → LESSONS.md F5** (bp is signed; never parse it with `(\d+)`). Cross-refs C6 (the cadnano
   editor has its own API client / code — this bug lived entirely in editor-local parsers).
+
+## ISSUE-8 — Autoscaffold doesn't route irregular multi-section designs to a single scaffold strand (routing correctness + tech debt)
+
+- **Status:** `[~]` IN PROGRESS — **warn-only mitigation shipped** (commits `e9d6750` + `91fa2ac`,
+  2026-06-08). **Build session 2 (2026-06-08): single-strand construction SOLVED + GENERALIZED in the
+  harness** (NOT yet codified): reuse-trunk + reuse-window-cycles + 2-opt splice gives **1 strand, 0 bad
+  transitions, full coverage, no double-coverage, buried nick** on BOTH teeth (square) and the 10-6-10
+  dumbbell (honeycomb). Prototype: `scripts/section_router_prototype.py` (+ `..._harness.py`). Full decode +
+  session-3 checklist in plan `~/.claude/plans/floating-crunching-widget.md` and `project_autoscaffold_single_strand.md`.
+  **CODIFIED + GATED (default-OFF `NADOC_SECTION_ROUTER`) in `backend/core/section_router.py`; 1837 tests
+  pass.** **FIXTURE CORRECTION (user caught it):** `teeth.nadoc` IS the reference base pre-fine-routing (same
+  grid/bp_start/axis; differs only in helix length); `teeth_unrouted.nadoc` is an IDEALIZED uniform-face
+  block, NOT representative — validate on `teeth.nadoc`. Added `_uniformize` (square ragged faces) so the
+  REAL ragged teeth.nadoc routes to **1 strand, full coverage, 0 bad transitions, 0 overflow** (+ dumbbell).
+  **NOT visually done:** the reuse approach over-extends ~822 bp of scaffold INTO THE GAPS on teeth (bloated
+  teeth, unlike the reference's clean no-gap route). **REMAINING = non-extending window end-turns (construct
+  the end turns at/just-past the true faces) → eyeball on teeth.nadoc → flip default.** See
+  `project_autoscaffold_single_strand.md` + plan.
+
+  **OPEN USER DECISION (window-face tradeoff) — blocks codification.** Sub-bundle routing extends helix
+  geometry+scaffold past the section faces (router end-search = first valid ≥ hi+3, so +3…+period). Fine for
+  the TRUNK (wanted blunt ends; propagate the extended helices). For WINDOWS it pushes helix+scaffold into the
+  physical gaps. Lossless suppression is impossible when no valid crossover sits exactly at a window face
+  (measured offsets: raw `teeth_unrouted` ≤6 bp, production-shaped `teeth.nadoc` ≤1 bp, HC dumbbell ≤4). So a
+  window end-turn lands either (a) just INSIDE → ≤6 bp tooth-TIP coverage gap, or (b) just OUTSIDE → ≤ a few
+  bp minimal extension into the gap but FULL coverage. On real designs both are ≤1 bp. Pick (a) or (b) →
+  implement window end-turns at nearest-valid-to-face → propagate trunk extension → codify
+  `section_router.py` (gate `_has_multisection_helix`, DEFAULT-OFF flag) → tests → `just test` → write teeth +
+  dumbbell `.nadoc` → USER EYEBALL → flip default.
+- **Symptom (user-facing):** a single *connected* design — one cluster of helices that share valid scaffold
+  crossover adjacency — routes to MULTIPLE scaffold strands instead of one. It should be one strand per
+  connected cluster (multiple strands only across genuinely *disconnected* clusters). Measured: `teeth.nadoc`
+  → 5 (seamless) / 11 (seamed) pieces; the 10-6-10 dumbbell → 2–3 pieces. Uniform prisms (6HB/18HB) already
+  route to 1.
+- **What shipped (mitigation only):** both `auto_scaffold_seamed` and `auto_scaffold_seamless` now emit a
+  warning when a connected cluster fragments into >1 scaffold strand ("Scaffold routed into N strands across M
+  connected cluster(s)…"), so the gap is visible/actionable instead of silent. Helpers
+  `scaffold_strand_clusters()` + `append_single_strand_warning()` in `backend/core/seamed_router.py`. (Same
+  work: matched-ends became the seamed default — uniform prisms → 1 matched-end strand — and the CSP /
+  advanced-seamed / advanced-seamless routers were deleted.)
+- **Why the easy fix does NOT work (empirically falsified — do not re-try it):** you cannot consolidate by
+  adding scaffold crossovers at valid mid-strand sites. Proven on teeth/seamless: a SINGLE crossover between
+  two distinct pieces *splits* (5→6); a DOUBLE crossover (bp, bp+1) *swaps* (5→5). Neither merges. The
+  fragments are **linear strands** whose 5'/3' termini must be joined — that's end-joining (forced-ligation
+  territory, manual-only) or a **2-opt cycle reconnection** (remove one crossover from each of two cycles, add
+  two that cross-connect them). 2-opt is the real path; it is the "cycle merging not implemented" gap the
+  deleted CSP router had noted.
+- **Caution:** this is the area `memory/project_dumbbell_autoscaffold.md` documents as repeatedly producing
+  tests-pass-but-visually-wrong results. Do the rework with a real design loaded in the running app + visual
+  confirmation at each step, NOT tests alone.
+
+### Reference fixtures — hand-made + validated scaffold routings (use these to troubleshoot)
+`workspace/Scaffold routing/` holds **hand-routed, user-validated** scaffold paths for the teeth design — the
+*correct target outputs* to diff the router against when debugging fragmentation / single-strand routing:
+- `workspace/Scaffold routing/teeth_seamed_route1.nadoc`, `…/teeth_seamed_route2.nadoc` — validated **seamed**
+  routings (two variants). Each: 16 helices, **1 scaffold strand**, 62 crossovers.
+- `workspace/Scaffold routing/teeth_seamless_route1.nadoc`, `…/teeth_seamless_route2.nadoc` — validated
+  **seamless** routings (two variants). Each: 16 helices, **1 scaffold strand**, 38 crossovers.
+All four are the single-strand TARGET (`scaffold_strands == 1`). The "yields 5/11 pieces" claim was measured
+on a CORRUPT fixture (see below); on the clean fixture the standard routers route teeth to 1 strand. Clean
+pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 with `workspace/preroute_teeth.nadoc`).
+
+## ISSUE-9 — Autoscaffold is not idempotent (re-routing an already-routed design corrupts geometry)
+
+- **Status:** `[ ]` OPEN — discovered 2026-06-08 while fixing the teeth fixture (ISSUE-8).
+- **Symptom:** running an autoscaffold mode on a design that was ALREADY autoscaffold-routed does NOT reset to
+  a clean per-domain seed first — it routes the previously-EXTENDED scaffold geometry, pushing domain ends
+  further past the section faces and into the inter-tooth gaps. Each re-run compounds. This is how the old
+  `tests/fixtures/teeth.nadoc` got corrupted: it was a seamless-routed file whose tooth faces had already been
+  pushed from the clean `[0,41] [84,125] [168,209]` out to ragged `[-3,47] [72,132] [157,218]`, etc. Measuring
+  the section router against THAT baseline made clean routes look like they over-filled the gaps (172 bp in-gap
+  vs the clean route's ~9 bp worst extension / 32 bp gap clearance). It cost most of a session chasing a
+  non-existent "gap-stagger" problem.
+- **Root cause (to verify):** `auto_scaffold_seamed` / `auto_scaffold_seamless` (and the matched variant) do
+  clear `auto_scaffold_*`-prefixed crossovers, but they re-route on the existing (already-extended) scaffold
+  DOMAINS / helix lengths rather than resetting each scaffold strand to its clean per-domain extent first. The
+  seamed `_extend_helix_*` / `_extend_scaf_domain_*` then extend an already-extended domain.
+- **Desired behavior:** autoscaffold is idempotent — N calls produce the same result as 1. Before routing,
+  reset the scaffold to its clean per-domain seed (un-extend faces back to the design's true section extents,
+  drop prior route crossovers) so a re-route starts from the bare structure, not a prior route's output.
+- **Repro (write as the pin):** load a clean multi-section design (`workspace/preroute_teeth.nadoc`), run seamed
+  autoscaffold twice; assert run-2 output == run-1 output (same domains/faces/crossovers), and that no scaffold
+  domain end has been pushed further into a gap on the second run. The section-router gap invariants in
+  `tests/test_section_router.py` (`intertooth_gap_extension`, `min_per_gap_clearance`) are the ready-made checks.
+- **Caution:** `tests/fixtures/10-6-10hb_seamed.nadoc` (the dumbbell) is ALSO a pre-routed file (14 scaffold
+  strands, 12 crossovers, `_seamed` in the name) — same latent corruption; its tests happen to pass but it
+  should likely be replaced with a clean pre-routing dumbbell when this is fixed.
 
 ## Next-session handoff
 

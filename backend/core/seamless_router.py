@@ -40,11 +40,27 @@ from backend.core.seamed_router import (
     _hamiltonian_path,
     _intersect,
     _is_forward,
+    _linearize_circular_scaffolds,
     _nick_bp,
     _place_xover,
     _scaffold_coverage,
     _scaf_nb,
 )
+
+
+def _closeable_path(ids: list[str], adj: dict[str, set[str]]) -> list[str] | None:
+    """A Hamiltonian path whose two endpoints are scaffold-adjacent (a Hamiltonian
+    cycle minus one edge), or None.  Routing a uniform bundle along such a path lets a
+    closing zig turn it into a circular scaffold — so the single nick can be buried
+    mid-bundle instead of stranded at an outer face (the seamless route is otherwise a
+    linear path with non-closeable ends)."""
+    id_set = set(ids)
+    for end in sorted(ids):
+        for start in sorted(n for n in adj.get(end, set()) if n in id_set):
+            p = _ham_path_ending(ids, adj, end, start)
+            if p and len(p) == len(id_set) and p[0] in adj.get(p[-1], set()):
+                return p
+    return None
 
 
 # ── Local helpers ─────────────────────────────────────────────────────────────
@@ -92,13 +108,21 @@ class SeamlessResult:
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def auto_scaffold_seamless(design: Design) -> tuple[Design, SeamlessResult]:
+def auto_scaffold_seamless(
+    design: Design, *, close_cycle: bool = False
+) -> tuple[Design, SeamlessResult]:
     """Run the seamless scaffold pipeline.
 
     Phase 1 (Bridge HJs): place Holliday junctions between coverage-signature
       groups for multi-section designs (dumbbell, teeth).
     Phase 2 (Zig-Zag): place one end crossover per within-group adjacent pair,
       at the hi face for FORWARD helices and the lo face for REVERSE helices.
+
+    ``close_cycle`` (used by the section router for a uniform sub-bundle like the
+    trunk) routes the bundle along a Hamiltonian path with adjacent endpoints and adds
+    a closing zig, so the bundle becomes a circular scaffold; the resulting loop is then
+    reopened with one buried mid-bundle nick.  This gives a FULLY SEAMLESS backbone with
+    a proper nick (no seamed raster needed).
 
     Returns (updated_design, result).
     """
@@ -111,6 +135,18 @@ def auto_scaffold_seamless(design: Design) -> tuple[Design, SeamlessResult]:
     if not coverage:
         result.warnings.append("No scaffold strands found.")
         return design, result
+
+    # Irregular multi-section designs (teeth, dumbbells) fragment under the native
+    # zig/bridge route; the section router decomposes them into uniform sub-bundles,
+    # routes the windows seamless and the backbone seamed (so it closes into a circle
+    # and the single nick buries mid-bundle), and 2-opt-splices them into ONE strand.
+    # Falls back to the native route when it cannot cleanly section.
+    if not design.forced_ligations:
+        from backend.core.section_router import has_multisection_helix, route_sections
+        if has_multisection_helix(coverage):
+            sectioned = route_sections(design.model_copy(deep=True), seamless=True)
+            if sectioned is not None:
+                return sectioned
 
     helix_by_id: dict = {h.id: h for h in design.helices}
     adj = _build_adj(design, coverage)
@@ -162,11 +198,22 @@ def auto_scaffold_seamless(design: Design) -> tuple[Design, SeamlessResult]:
         groups = list(sig_map.values())
 
         if len(groups) == 1:
-            path = _hamiltonian_path(comp, adj) or comp
+            path = None
+            if close_cycle:
+                path = _closeable_path(comp, adj)  # endpoints adjacent → loop closes
+            if path is None:
+                path = _hamiltonian_path(comp, adj) or comp
             if len(path) < 2:
                 continue
             for i in range(len(path) - 1):
                 zig_pairs.append((path[i], path[i + 1]))
+            # Closing zig: turn the linear raster into a circular scaffold so its single
+            # nick can be buried.  FORWARD helix as hA (hi face), like the group case.
+            if close_cycle and path[0] in adj.get(path[-1], set()):
+                a, b = path[-1], path[0]
+                h_fwd = a if _is_forward(*helix_by_id[a].grid_pos) else b
+                h_rev = b if h_fwd == a else a
+                zig_pairs.append((h_fwd, h_rev))
 
         else:
             # Multi-section: sort groups by total bp ascending (arms first),
@@ -410,6 +457,11 @@ def auto_scaffold_seamless(design: Design) -> tuple[Design, SeamlessResult]:
     # their nicks. See seamed_router for the same pattern.
     from backend.core.lattice import retry_all_pending_ligations
     current = retry_all_pending_ligations(current)
+
+    # close_cycle made the bundle a circular scaffold (closing zig); reopen it with a
+    # single buried, non-crossover mid-bundle nick (same machinery as the seamed router).
+    if close_cycle:
+        current = _linearize_circular_scaffolds(current, result)
 
     append_single_strand_warning(current, result)
     return current, result
