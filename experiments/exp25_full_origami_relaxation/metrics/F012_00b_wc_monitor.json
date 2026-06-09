@@ -1,0 +1,18 @@
+{
+  "psf": "/home/jojo/Work/NADOC/experiments/exp22_btube_md_benchmark/results/namd_run/B_tube.psf",
+  "ref_pdb": "/home/jojo/Work/NADOC/experiments/exp25_full_origami_relaxation/results/B_tube_full_F001_minimized_reference.pdb",
+  "dcd": "output/F012_00b_25K_enm020.dcd",
+  "frame": 20,
+  "n_pairs": 6451,
+  "cutoff_ang": 3.6,
+  "ref_delta_ang": 0.75,
+  "absolute_paired_fraction": 0.0010851030847930554,
+  "absolute_paired_percent": 0.10851030847930554,
+  "ref_relative_paired_fraction": 0.2081847775538676,
+  "ref_relative_paired_percent": 20.81847775538676,
+  "mean_hbond_proxy_ang": 4.748439332640942,
+  "p90_max_hbond_proxy_ang": 6.547022819519043,
+  "max_hbond_proxy_ang": 14.511725425720215,
+  "reference_mean_hbond_proxy_ang": 3.6155967842803864,
+  "reference_p90_max_hbond_proxy_ang": 4.6337714195251465
+}

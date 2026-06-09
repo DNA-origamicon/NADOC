@@ -26,6 +26,7 @@ Defaults to the exp23 run directory.  Safe to run while NAMD is writing
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -276,6 +277,8 @@ def main() -> None:
                    help="Analyse every Nth frame (default 1 = all frames)")
     p.add_argument("--safe-back", type=int, default=3,
                    help="Skip last N frames (avoid partial writes from live simulation)")
+    p.add_argument("--json", type=Path, default=None,
+                   help="Write JSON metrics sidecar to this path (default: <out>.json)")
     args = p.parse_args()
 
     for path, label in [(args.psf, "PSF"), (args.pdb, "PDB"), (args.dcd, "DCD")]:
@@ -300,6 +303,27 @@ def main() -> None:
     print(f"Mean C1'…C1'    : {mean_d.mean():.2f} Å mean,  {mean_d[-1]:.2f} Å final")
 
     make_figure(times, frac, mean_d, p10, p90, n_pairs, args.out)
+
+    json_path = args.json or args.out.with_suffix(".json")
+    sidecar = {
+        "psf": str(args.psf),
+        "dcd": str(args.dcd),
+        "n_pairs": n_pairs,
+        "n_frames": len(times),
+        "paired_max_angstrom": PAIRED_MAX,
+        "time_range_ns": [float(times[0]), float(times[-1])] if len(times) else [],
+        "bp_fraction_mean": float(frac.mean()) if len(frac) else None,
+        "bp_fraction_final": float(frac[-1]) if len(frac) else None,
+        "mean_c1p_dist_angstrom": {
+            "mean": float(mean_d.mean()),
+            "final": float(mean_d[-1]),
+            "p10_final": float(p10[-1]),
+            "p90_final": float(p90[-1]),
+        } if len(mean_d) else {},
+    }
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(json.dumps(sidecar, indent=2))
+    print(f"JSON sidecar: {json_path}")
 
 
 if __name__ == "__main__":

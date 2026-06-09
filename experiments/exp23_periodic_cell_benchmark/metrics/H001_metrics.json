@@ -1,0 +1,47 @@
+{
+  "hypothesis_id": "H001",
+  "log_file": "experiments/exp23_periodic_cell_benchmark/results/hyp_runs/H001/H001.log",
+  "n_energy_frames": 501,
+  "temperature": {
+    "mean": 309.46971916167666,
+    "std": 0.6864072293559376,
+    "min": 307.5312,
+    "max": 311.3987
+  },
+  "total_energy": {
+    "mean": -650192.9157814371,
+    "std": 644.6367064620841,
+    "last": -650467.5667
+  },
+  "potential": {
+    "mean": -756993.8554303393,
+    "std": 609.6430823361584,
+    "last": -757492.2278
+  },
+  "pressure": {
+    "mean": -124.9427626746507,
+    "std": 123.65762686817156
+  },
+  "volume_angstrom3": {
+    "first": 1651691.4727,
+    "last": 1651691.4727,
+    "drift_pct": 0.0
+  },
+  "timestep_fs": 2.0,
+  "wall_time_s": 1816.53,
+  "ns_per_day": 23.781605588677312,
+  "bp_fraction_final": 0.32341269841269843,
+  "fatal_errors": [],
+  "warnings": [
+    "Warning: The Langevin gamma parameters differ over the particles,",
+    "Warning: requiring extra work per step to constrain rigid bonds.",
+    "Warning: Ignored 46893 bonds with zero force constants.",
+    "Warning: Will get H-H distance in rigid H2O from H-O-H angle."
+  ],
+  "z_cell_angstrom": {
+    "mean": 70.14,
+    "std": 0.0,
+    "min": 70.14,
+    "max": 70.14
+  }
+}

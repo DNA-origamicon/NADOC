@@ -1,0 +1,19 @@
+{
+  "psf": "experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/B_tube_periodic_1x.psf",
+  "dcd": "experiments/exp23_periodic_cell_benchmark/results/hyp_runs/H016/output/H016_off_iso_npt_50ps.dcd",
+  "n_pairs": 504,
+  "n_frames": 25,
+  "paired_max_angstrom": 12.0,
+  "time_range_ns": [
+    0.0,
+    0.04800000014310748
+  ],
+  "bp_fraction_mean": 0.6283333333333334,
+  "bp_fraction_final": 0.5615079365079365,
+  "mean_c1p_dist_angstrom": {
+    "mean": 11.574310302734375,
+    "final": 11.847454071044922,
+    "p10_final": 9.792553901672363,
+    "p90_final": 14.496017456054688
+  }
+}

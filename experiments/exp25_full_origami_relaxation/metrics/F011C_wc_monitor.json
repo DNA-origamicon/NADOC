@@ -1,0 +1,18 @@
+{
+  "psf": "experiments/exp22_btube_md_benchmark/results/namd_run/B_tube.psf",
+  "ref_pdb": "experiments/exp25_full_origami_relaxation/results/B_tube_full_F001_minimized_reference.pdb",
+  "dcd": "experiments/exp25_full_origami_relaxation/results/runs/F011_quick_enm_ab/output/F011C_positional_enm_zeroidx_310K_smoke.dcd",
+  "frame": 17,
+  "n_pairs": 6451,
+  "cutoff_ang": 3.6,
+  "ref_delta_ang": 0.75,
+  "absolute_paired_fraction": 0.002325220895985119,
+  "absolute_paired_percent": 0.2325220895985119,
+  "ref_relative_paired_fraction": 0.11734614788404898,
+  "ref_relative_paired_percent": 11.7346147884049,
+  "mean_hbond_proxy_ang": 5.054663641978953,
+  "p90_max_hbond_proxy_ang": 7.262843608856201,
+  "max_hbond_proxy_ang": 13.944305419921875,
+  "reference_mean_hbond_proxy_ang": 3.6155967842803864,
+  "reference_p90_max_hbond_proxy_ang": 4.6337714195251465
+}

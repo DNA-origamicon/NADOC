@@ -1,0 +1,14 @@
+{
+  "source": "F002b_cold_1ps_minref_k1_final_frame",
+  "notes": "Full B_tube GBIS 1 ps at nominal 10 K, 0.25 fs, k=1 restraints to minimized reference; diagnostic relaxed starting-pose reference.",
+  "topology_hash": "e0f6f41054cb3b1b972e7a800f776bec3941b2518372d264a45b30ddb5d2b76e",
+  "design_atoms": 289470,
+  "coordinate_atoms": 289470,
+  "used_coordinate_atoms": 289470,
+  "alignment": "none",
+  "minimum_image_box_nm": null,
+  "template_vs_reference_rmsd_nm": 0.10039683610717338,
+  "template_vs_reference_mean_displacement_nm": 0.08895596000889927,
+  "template_vs_reference_max_displacement_nm": 0.5659374322391634,
+  "bonds": 324582
+}

@@ -1,0 +1,42 @@
+{
+  "unit_source": "Examples/2hb_xover_val.nadoc",
+  "ring": {
+    "units": 80,
+    "radius_nm": 150.0,
+    "angular_offset_deg": 0.0,
+    "closure_connector_labels": ["left", "right"]
+  },
+  "stack": {
+    "rings": 126,
+    "axial_spacing_nm": 8.0,
+    "twist_deg_per_ring": 0.0
+  },
+  "coarse_sites": [
+    {"name": "center", "position_nm": [0.0, 0.0, 0.0]},
+    {"name": "left", "position_nm": [0.0, -4.0, 0.0]},
+    {"name": "right", "position_nm": [0.0, 4.0, 0.0]},
+    {"name": "bottom", "position_nm": [0.0, 0.0, -4.0]},
+    {"name": "top", "position_nm": [0.0, 0.0, 4.0]}
+  ],
+  "relaxation": {
+    "steps": 20,
+    "dt": 0.04,
+    "ring_spring": 1.0,
+    "stack_spring": 1.0,
+    "radial_spring": 0.4,
+    "axial_spring": 0.2,
+    "exclusion_spring": 4.0,
+    "min_center_distance_nm": 4.0,
+    "damping": 0.85,
+    "record_every": 10
+  },
+  "reconstruction": {
+    "ring_start": 60,
+    "ring_count": 1,
+    "unit_start": 0,
+    "unit_count": 3,
+    "context_rings": 1,
+    "context_units": 1
+  }
+}
+

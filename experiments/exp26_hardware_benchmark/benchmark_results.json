@@ -1,0 +1,290 @@
+{
+  "single_helix__standard_cuda__p4__freq2": {
+    "system": "single_helix",
+    "mode": "standard_cuda",
+    "threads": 4,
+    "fullElectFreq": 2,
+    "ns_per_day": 170.574,
+    "elapsed_s": 10.9
+  },
+  "single_helix__standard_cuda__p8__freq2": {
+    "system": "single_helix",
+    "mode": "standard_cuda",
+    "threads": 8,
+    "fullElectFreq": 2,
+    "ns_per_day": 189.997,
+    "elapsed_s": 9.8
+  },
+  "single_helix__standard_cuda__p16__freq2": {
+    "system": "single_helix",
+    "mode": "standard_cuda",
+    "threads": 16,
+    "fullElectFreq": 2,
+    "ns_per_day": 300.167,
+    "elapsed_s": 6.4
+  },
+  "single_helix__standard_cuda__p32__freq2": {
+    "system": "single_helix",
+    "mode": "standard_cuda",
+    "threads": 32,
+    "fullElectFreq": 2,
+    "ns_per_day": 233.015,
+    "elapsed_s": 8.7
+  },
+  "single_helix__gpu_resident__p4__freq2": {
+    "system": "single_helix",
+    "mode": "gpu_resident",
+    "threads": 4,
+    "fullElectFreq": 2,
+    "ns_per_day": 275.52,
+    "elapsed_s": 7.1
+  },
+  "single_helix__gpu_resident__p8__freq2": {
+    "system": "single_helix",
+    "mode": "gpu_resident",
+    "threads": 8,
+    "fullElectFreq": 2,
+    "ns_per_day": 271.987,
+    "elapsed_s": 7.2
+  },
+  "single_helix__gpu_resident__p16__freq2": {
+    "system": "single_helix",
+    "mode": "gpu_resident",
+    "threads": 16,
+    "fullElectFreq": 2,
+    "ns_per_day": 378.023,
+    "elapsed_s": 5.3
+  },
+  "single_helix__gpu_resident__p32__freq2": {
+    "system": "single_helix",
+    "mode": "gpu_resident",
+    "threads": 32,
+    "fullElectFreq": 2,
+    "ns_per_day": 312.939,
+    "elapsed_s": 7.2
+  },
+  "btube_1x__standard_cuda__p4__freq2": {
+    "system": "btube_1x",
+    "mode": "standard_cuda",
+    "threads": 4,
+    "fullElectFreq": 2,
+    "ns_per_day": 27.14545,
+    "elapsed_s": 32.6
+  },
+  "btube_1x__standard_cuda__p8__freq2": {
+    "system": "btube_1x",
+    "mode": "standard_cuda",
+    "threads": 8,
+    "fullElectFreq": 2,
+    "ns_per_day": 38.5529,
+    "elapsed_s": 23.1
+  },
+  "btube_1x__standard_cuda__p16__freq2": {
+    "system": "btube_1x",
+    "mode": "standard_cuda",
+    "threads": 16,
+    "fullElectFreq": 2,
+    "ns_per_day": 51.24305,
+    "elapsed_s": 17.6
+  },
+  "btube_1x__standard_cuda__p32__freq2": {
+    "system": "btube_1x",
+    "mode": "standard_cuda",
+    "threads": 32,
+    "fullElectFreq": 2,
+    "ns_per_day": 45.44815,
+    "elapsed_s": 19.8
+  },
+  "btube_1x__gpu_resident__p4__freq2": {
+    "system": "btube_1x",
+    "mode": "gpu_resident",
+    "threads": 4,
+    "fullElectFreq": 2,
+    "ns_per_day": 72.18275,
+    "elapsed_s": 12.7
+  },
+  "btube_1x__gpu_resident__p8__freq2": {
+    "system": "btube_1x",
+    "mode": "gpu_resident",
+    "threads": 8,
+    "fullElectFreq": 2,
+    "ns_per_day": 71.6231,
+    "elapsed_s": 12.7
+  },
+  "btube_1x__gpu_resident__p16__freq2": {
+    "system": "btube_1x",
+    "mode": "gpu_resident",
+    "threads": 16,
+    "fullElectFreq": 2,
+    "ns_per_day": 71.9416,
+    "elapsed_s": 12.8
+  },
+  "btube_1x__gpu_resident__p32__freq2": {
+    "system": "btube_1x",
+    "mode": "gpu_resident",
+    "threads": 32,
+    "fullElectFreq": 2,
+    "ns_per_day": 67.48625,
+    "elapsed_s": 13.8
+  },
+  "btube_2x__standard_cuda__p4__freq2": {
+    "system": "btube_2x",
+    "mode": "standard_cuda",
+    "threads": 4,
+    "fullElectFreq": 2,
+    "ns_per_day": 12.3174,
+    "elapsed_s": 43.6
+  },
+  "btube_2x__standard_cuda__p8__freq2": {
+    "system": "btube_2x",
+    "mode": "standard_cuda",
+    "threads": 8,
+    "fullElectFreq": 2,
+    "ns_per_day": 17.2487,
+    "elapsed_s": 31.4
+  },
+  "btube_2x__standard_cuda__p16__freq2": {
+    "system": "btube_2x",
+    "mode": "standard_cuda",
+    "threads": 16,
+    "fullElectFreq": 2,
+    "ns_per_day": 21.5292,
+    "elapsed_s": 25.2
+  },
+  "btube_2x__standard_cuda__p32__freq2": {
+    "system": "btube_2x",
+    "mode": "standard_cuda",
+    "threads": 32,
+    "fullElectFreq": 2,
+    "ns_per_day": 19.4617,
+    "elapsed_s": 28.1
+  },
+  "btube_2x__gpu_resident__p4__freq2": {
+    "system": "btube_2x",
+    "mode": "gpu_resident",
+    "threads": 4,
+    "fullElectFreq": 2,
+    "ns_per_day": 36.5007,
+    "elapsed_s": 15.4
+  },
+  "btube_2x__gpu_resident__p8__freq2": {
+    "system": "btube_2x",
+    "mode": "gpu_resident",
+    "threads": 8,
+    "fullElectFreq": 2,
+    "ns_per_day": 36.4484,
+    "elapsed_s": 15.3
+  },
+  "btube_2x__gpu_resident__p16__freq2": {
+    "system": "btube_2x",
+    "mode": "gpu_resident",
+    "threads": 16,
+    "fullElectFreq": 2,
+    "ns_per_day": 36.5931,
+    "elapsed_s": 15.4
+  },
+  "btube_2x__gpu_resident__p32__freq2": {
+    "system": "btube_2x",
+    "mode": "gpu_resident",
+    "threads": 32,
+    "fullElectFreq": 2,
+    "ns_per_day": 35.621,
+    "elapsed_s": 16.3
+  },
+  "btube_1x__standard_cuda__p4__freq1": {
+    "system": "btube_1x",
+    "mode": "standard_cuda",
+    "threads": 4,
+    "fullElectFreq": 1,
+    "ns_per_day": 23.53735,
+    "elapsed_s": 37.5
+  },
+  "btube_1x__standard_cuda__p8__freq1": {
+    "system": "btube_1x",
+    "mode": "standard_cuda",
+    "threads": 8,
+    "fullElectFreq": 1,
+    "ns_per_day": 33.59625,
+    "elapsed_s": 26.3
+  },
+  "btube_1x__standard_cuda__p16__freq1": {
+    "system": "btube_1x",
+    "mode": "standard_cuda",
+    "threads": 16,
+    "fullElectFreq": 1,
+    "ns_per_day": 42.3361,
+    "elapsed_s": 21.1
+  },
+  "btube_1x__standard_cuda__p32__freq1": {
+    "system": "btube_1x",
+    "mode": "standard_cuda",
+    "threads": 32,
+    "fullElectFreq": 1,
+    "ns_per_day": 33.59965,
+    "elapsed_s": 26.4
+  },
+  "full_btube__standard_cuda__p4__freq1": {
+    "system": "full_btube",
+    "mode": "standard_cuda",
+    "threads": 4,
+    "fullElectFreq": 1,
+    "ns_per_day": 0.7380697764520515,
+    "elapsed_s": 354.7
+  },
+  "full_btube__standard_cuda__p8__freq1": {
+    "system": "full_btube",
+    "mode": "standard_cuda",
+    "threads": 8,
+    "fullElectFreq": 1,
+    "ns_per_day": 0.9660542089446443,
+    "elapsed_s": 275.9
+  },
+  "full_btube__standard_cuda__p16__freq1": {
+    "system": "full_btube",
+    "mode": "standard_cuda",
+    "threads": 16,
+    "fullElectFreq": 1,
+    "ns_per_day": 0.9496456132923585,
+    "elapsed_s": 278.6
+  },
+  "full_btube__standard_cuda__p32__freq1": {
+    "system": "full_btube",
+    "mode": "standard_cuda",
+    "threads": 32,
+    "fullElectFreq": 1,
+    "ns_per_day": 0.837864552523785,
+    "elapsed_s": 317.1
+  },
+  "full_btube__gpu_resident__p4__freq1": {
+    "system": "full_btube",
+    "mode": "gpu_resident",
+    "threads": 4,
+    "fullElectFreq": 1,
+    "ns_per_day": null,
+    "elapsed_s": 125.9
+  },
+  "full_btube__gpu_resident__p8__freq1": {
+    "system": "full_btube",
+    "mode": "gpu_resident",
+    "threads": 8,
+    "fullElectFreq": 1,
+    "ns_per_day": null,
+    "elapsed_s": 126.1
+  },
+  "full_btube__gpu_resident__p16__freq1": {
+    "system": "full_btube",
+    "mode": "gpu_resident",
+    "threads": 16,
+    "fullElectFreq": 1,
+    "ns_per_day": null,
+    "elapsed_s": 126.4
+  },
+  "full_btube__gpu_resident__p32__freq1": {
+    "system": "full_btube",
+    "mode": "gpu_resident",
+    "threads": 32,
+    "fullElectFreq": 1,
+    "ns_per_day": null,
+    "elapsed_s": 131.5
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "hypothesis_id": "H015",
+  "log_file": "experiments/exp23_periodic_cell_benchmark/results/hyp_runs/H015/H015_off_1fs_e1_20ps.log",
+  "n_energy_frames": 41,
+  "temperature": {
+    "mean": 309.97481707317075,
+    "std": 0.831537664481423,
+    "min": 308.4366,
+    "max": 312.7824
+  },
+  "total_energy": {
+    "mean": -647149.4003121952,
+    "std": 2887.374749039356,
+    "last": -648408.5035
+  },
+  "potential": {
+    "mean": -754124.6557439024,
+    "std": 2891.662825494848,
+    "last": -755351.3829
+  },
+  "pressure": {
+    "mean": -251.51581951219512,
+    "std": 122.4628551322037
+  },
+  "volume_angstrom3": {
+    "first": 1651691.4727,
+    "last": 1651691.4727,
+    "drift_pct": 0.0
+  },
+  "timestep_fs": 2.0,
+  "wall_time_s": 148.726,
+  "ns_per_day": 23.237362666917686,
+  "bp_fraction_final": 0.628968253968254,
+  "fatal_errors": [],
+  "warnings": [
+    "Warning: The following variables were set in the",
+    "Warning: configuration file but will be ignored:",
+    "Warning:    consref (constraints)",
+    "Warning:    conskfile (constraints)",
+    "Warning:    conskcol (constraints)",
+    "Warning:    constraintScaling (constraints)",
+    "Warning: The Langevin gamma parameters differ over the particles,",
+    "Warning: requiring extra work per step to constrain rigid bonds.",
+    "Warning: Ignored 46893 bonds with zero force constants.",
+    "Warning: Will get H-H distance in rigid H2O from H-O-H angle."
+  ],
+  "z_cell_angstrom": {
+    "mean": 70.14,
+    "std": 0.0,
+    "min": 70.14,
+    "max": 70.14
+  }
+}

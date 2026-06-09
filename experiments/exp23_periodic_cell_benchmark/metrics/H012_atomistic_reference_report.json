@@ -1,0 +1,18 @@
+{
+  "source": "H012_k1_prod_final_frame",
+  "notes": "1x B_tube periodic cell, fixed-Z NVT, retained DNA heavy-atom restraints k=1.0; nearest-image placed in CAD frame; use as relaxed starting pose, not proof of unrestrained stability.",
+  "topology_hash": "a314bddada42d77de5f436b042eefbbee499fe8ca447023f05a6dc53eb2e56d0",
+  "design_atoms": 20664,
+  "coordinate_atoms": 162671,
+  "used_coordinate_atoms": 20664,
+  "alignment": "none",
+  "minimum_image_box_nm": [
+    16.1027,
+    15.6614,
+    7.014
+  ],
+  "template_vs_reference_rmsd_nm": 0.15615219499337077,
+  "template_vs_reference_mean_displacement_nm": 0.09535540753952948,
+  "template_vs_reference_max_displacement_nm": 1.5405591026730658,
+  "bonds": 23171
+}

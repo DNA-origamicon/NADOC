@@ -1,0 +1,19 @@
+{
+  "psf": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/periodic_cell_run/B_tube_periodic_1x.psf",
+  "dcd": "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results/hyp_runs/H001/output/H001.dcd",
+  "n_pairs": 504,
+  "n_frames": 247,
+  "paired_max_angstrom": 12.0,
+  "time_range_ns": [
+    0.0,
+    0.49200000146685163
+  ],
+  "bp_fraction_mean": 0.41828128012338545,
+  "bp_fraction_final": 0.32341269841269843,
+  "mean_c1p_dist_angstrom": {
+    "mean": 12.891101837158203,
+    "final": 13.736741065979004,
+    "p10_final": 9.583876609802246,
+    "p90_final": 19.064533233642578
+  }
+}

@@ -130,6 +130,14 @@ id_ed25519.pub
 # ── Misc logs ────────────────────────────────────────────────────────────────
 monitor_v2.log
 
+# ── Large MD experiment reference structures (regenerable; never pushed) ─────
+# Relaxed all-atom reference designs/coords are tens of MB each; keep local.
+# Scoped to experiment result dirs so Examples/*.nadoc stays tracked.
+experiments/*/results/*.nadoc
+experiments/*/results/*.pdb
+experiments/*/results/*.dcd
+experiments/*/results/*.psf
+
 # ── Editor / tool local state (machine-specific, not user content) ───────────
 .codex
 .coverage

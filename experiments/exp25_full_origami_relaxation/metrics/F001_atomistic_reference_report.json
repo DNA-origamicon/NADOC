@@ -1,0 +1,14 @@
+{
+  "source": "F001_min_only_5k_final_frame",
+  "notes": "Full B_tube GBIS 5000-step minimization from raw NADOC template coordinates; diagnostic starting-pose reference.",
+  "topology_hash": "e0f6f41054cb3b1b972e7a800f776bec3941b2518372d264a45b30ddb5d2b76e",
+  "design_atoms": 289470,
+  "coordinate_atoms": 289470,
+  "used_coordinate_atoms": 289470,
+  "alignment": "none",
+  "minimum_image_box_nm": null,
+  "template_vs_reference_rmsd_nm": 0.05042861598321207,
+  "template_vs_reference_mean_displacement_nm": 0.038353382952086755,
+  "template_vs_reference_max_displacement_nm": 0.4236783269890081,
+  "bonds": 324582
+}

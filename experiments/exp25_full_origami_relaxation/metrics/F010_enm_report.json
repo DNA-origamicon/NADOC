@@ -1,0 +1,12 @@
+{
+  "psf": "experiments/exp22_btube_md_benchmark/results/namd_run/B_tube.psf",
+  "pdb": "experiments/exp25_full_origami_relaxation/results/B_tube_full_F001_minimized_reference.pdb",
+  "n_base_pairs": 6901,
+  "n_pair_restraints": 9974,
+  "n_stack_restraints": 51212,
+  "n_total_restraints": 61186,
+  "pair_k": 0.5,
+  "stack_k": 0.1,
+  "pair_cutoff_ang": 4.2,
+  "stack_cutoff_ang": 4.8
+}

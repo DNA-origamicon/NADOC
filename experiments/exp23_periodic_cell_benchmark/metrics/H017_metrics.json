@@ -1,0 +1,50 @@
+{
+  "hypothesis_id": "H017",
+  "log_file": "experiments/exp23_periodic_cell_benchmark/results/hyp_runs/H017/H017_k1_relax_100ps.log",
+  "n_energy_frames": 5102,
+  "temperature": {
+    "mean": 6.145331164249314,
+    "std": 43.24896753265932,
+    "min": 0.0,
+    "max": 323.6522
+  },
+  "total_energy": {
+    "mean": 1867542.617886417,
+    "std": 104278250.24854012,
+    "last": -1198414.3791
+  },
+  "potential": {
+    "mean": 1863305.792777166,
+    "std": 104278378.71715084,
+    "last": -1411825.7195
+  },
+  "pressure": {
+    "mean": -22352.30085735006,
+    "std": 10411.846985536105
+  },
+  "volume_angstrom3": {
+    "first": 3538479.8776,
+    "last": 3538479.8776,
+    "drift_pct": 0.0
+  },
+  "timestep_fs": 2.0,
+  "wall_time_s": 961.804,
+  "ns_per_day": 9.881431143975279,
+  "bp_fraction_final": 0.9702380952380952,
+  "fatal_errors": [],
+  "warnings": [
+    "Warning: The Langevin gamma parameters differ over the particles,",
+    "Warning: requiring extra work per step to constrain rigid bonds.",
+    "Warning: Ignored 93655 bonds with zero force constants.",
+    "Warning: Will get H-H distance in rigid H2O from H-O-H angle.",
+    "minimization_low_cuda_exclusion",
+    "Warning: This warning is not unusual during minimization.",
+    "Warning: Increasing pairlistdist or cutoff may avoid this."
+  ],
+  "z_cell_angstrom": {
+    "mean": 140.28,
+    "std": 0.0,
+    "min": 140.28,
+    "max": 140.28
+  }
+}
