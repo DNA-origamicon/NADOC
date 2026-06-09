@@ -42,6 +42,8 @@ PAtomOrder = list[tuple[str, int, str]]
 _GRO_DNA_RESNAMES = frozenset({
     "DA", "DT", "DC", "DG",
     "DA3", "DA5", "DT3", "DT5", "DC3", "DC5", "DG3", "DG5",
+    "ADE", "THY", "CYT", "GUA",
+    "A", "T", "C", "G",
 })
 
 
@@ -159,6 +161,30 @@ def build_p_gro_order(pdb_text: str, chain_map: ChainMap) -> PAtomOrder:
         seq_num  = int(line[22:26])
         if (chain_id, seq_num) in block_starts:
             continue  # 5'-terminal P stripped by pdb2gmx
+        entry = chain_map.get((chain_id, seq_num))
+        if entry is not None:
+            order.append(entry)
+    return order
+
+
+def build_p_pdb_order(pdb_text: str, chain_map: ChainMap) -> PAtomOrder:
+    """
+    Build the ordered (helix_id, bp_index, direction) list for PDB/PSF/DCD data.
+
+    Unlike GROMACS ``pdb2gmx`` outputs, NAMD PSF/DCD packages preserve the P atoms
+    present in the NADOC-written PDB.  This therefore walks every mapped P atom in
+    PDB file order without stripping 5' terminal phosphates.
+    """
+    order: PAtomOrder = []
+    for line in pdb_text.splitlines():
+        if not line.startswith(("ATOM  ", "HETATM")):
+            continue
+        if len(line) < 26:
+            continue
+        if line[12:16].strip() != "P":
+            continue
+        chain_id = line[21]
+        seq_num = int(line[22:26])
         entry = chain_map.get((chain_id, seq_num))
         if entry is not None:
             order.append(entry)

@@ -11,9 +11,24 @@ from backend.core.atomistic import (
     _SUGAR_BONDS,
     build_atomistic_model,
     atomistic_to_json,
+    crossover_geometry_diagnostics,
 )
 from backend.core.lattice import make_bundle_design
-from backend.core.pdb_export import _box_dimensions, _h36, export_pdb, export_psf
+from backend.core.models import Crossover, Direction, Domain, HalfCrossover, Strand, StrandType
+from backend.core.pdb_export import (
+    _box_dimensions,
+    _h36,
+    export_basepair_map_json,
+    export_basepair_map_tsv,
+    export_design_maps_json,
+    export_dry_implicit_restraints,
+    export_identity_json,
+    export_identity_tsv,
+    export_pdb,
+    export_psf,
+    export_stacking_map_json,
+    export_stacking_map_tsv,
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -24,6 +39,40 @@ _CELLS_6HB = [(0, 0), (0, 1), (1, 0), (1, 2), (0, 2), (2, 1)]
 def _small_design():
     """6HB 42-bp design — minimum valid design for scaffold/staple tests."""
     return make_bundle_design(cells=_CELLS_6HB, length_bp=42, plane='XY')
+
+
+def _crossover_design_needing_linker_bases():
+    """Two-helix atomistic fixture with a direct crossover too long for one linker."""
+    base = make_bundle_design(cells=[(0, 0), (0, 1)], length_bp=21, plane='XY')
+    h0, h1 = base.helices[0].id, base.helices[1].id
+    strand = Strand(
+        id="xstrand",
+        strand_type=StrandType.SCAFFOLD,
+        domains=[
+            Domain(helix_id=h0, start_bp=0, end_bp=10, direction=Direction.FORWARD),
+            Domain(helix_id=h1, start_bp=10, end_bp=20, direction=Direction.FORWARD),
+        ],
+    )
+    crossover = Crossover(
+        id="xo_direct",
+        half_a=HalfCrossover(helix_id=h0, index=10, strand=Direction.FORWARD),
+        half_b=HalfCrossover(helix_id=h1, index=10, strand=Direction.FORWARD),
+    )
+    return base.model_copy(update={"strands": [strand], "crossovers": [crossover]})
+
+
+def _cross_helix_o3p_distances(model):
+    atom_by_serial = {atom.serial: atom for atom in model.atoms}
+    distances = []
+    for i, j in model.bonds:
+        a, b = atom_by_serial[i], atom_by_serial[j]
+        if a.helix_id == b.helix_id:
+            continue
+        if {a.name, b.name} != {"O3'", "P"}:
+            continue
+        dist = ((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2) ** 0.5
+        distances.append(dist)
+    return distances
 
 
 # ── Template completeness ─────────────────────────────────────────────────────
@@ -108,6 +157,36 @@ def test_build_atomistic_model_bond_serials_in_range():
         assert i != j,      f"Self-bond at serial {i}"
 
 
+def test_atomistic_does_not_add_hidden_crossover_bases():
+    design = _crossover_design_needing_linker_bases()
+
+    model = build_atomistic_model(design)
+    expected_nucleotides = sum(
+        abs(domain.end_bp - domain.start_bp) + 1
+        for strand in design.strands
+        for domain in strand.domains
+    )
+
+    assert len({(a.chain_id, a.seq_num) for a in model.atoms}) == expected_nucleotides
+    distances = _cross_helix_o3p_distances(model)
+    assert distances and max(distances) > 0.3
+    assert design.crossovers[0].extra_bases is None
+
+
+def test_crossover_geometry_diagnostics_flags_strained_direct_bridge():
+    design = _crossover_design_needing_linker_bases()
+    report = crossover_geometry_diagnostics(design)
+
+    assert report["schema"] == "nadoc.atomistic_crossover_geometry.v1"
+    assert report["counts"]["crossovers_checked"] == 1
+    assert report["counts"]["strained_crossovers"] == 1
+    row = report["crossovers"][0]
+    assert row["crossover_id"] == "xo_direct"
+    assert row["explicit_extra_base_count"] == 0
+    assert row["anchor_span_nm"] > row["available_contour_nm"]
+    assert row["status"] == "strained"
+
+
 def test_atoms_per_nucleotide_count():
     """Each nucleotide should have exactly len(_SUGAR) + len(base_atoms) heavy atoms."""
     design = _small_design()
@@ -178,6 +257,115 @@ def test_atomistic_to_json_keys():
             assert key in atom_dict, f"Missing key {key!r} in atom dict"
 
 
+def test_identity_json_preserves_atom_and_nucleotide_identity():
+    import json
+
+    design = _small_design()
+    model = build_atomistic_model(design)
+    data = json.loads(export_identity_json(design, model=model))
+
+    assert data["schema"] == "nadoc.md_identity.v1"
+    assert data["counts"]["atoms"] == len(model.atoms)
+    assert data["counts"]["bonds"] == len(model.bonds)
+    assert len(data["atoms"]) == len(model.atoms)
+
+    atom0 = data["atoms"][0]
+    for key in (
+        "atom_serial_1based", "atom_name", "nucleotide_uid", "strand_id",
+        "helix_id", "bp_index", "direction", "chain_id", "seq_num",
+        "pdb_chain", "pdb_resseq", "psf_segid", "psf_resid",
+    ):
+        assert key in atom0
+
+    atom_serials = [row["atom_serial"] for row in data["atoms"]]
+    assert atom_serials == list(range(len(model.atoms)))
+
+    nucleotide_uids = [row["nucleotide_uid"] for row in data["nucleotides"]]
+    assert len(nucleotide_uids) == len(set(nucleotide_uids))
+    assert all(row["atom_serials"] for row in data["nucleotides"])
+
+
+def test_identity_tsv_has_one_row_per_atom():
+    design = _small_design()
+    model = build_atomistic_model(design)
+    tsv = export_identity_tsv(design, model=model)
+    lines = tsv.strip().splitlines()
+    assert lines[0].split("\t")[:4] == [
+        "atom_serial_1based", "atom_serial", "atom_name", "element",
+    ]
+    assert len(lines) == len(model.atoms) + 1
+
+
+def test_design_maps_export_basepairs_and_stacking():
+    import json
+
+    design = _small_design()
+    model = build_atomistic_model(design)
+    data = json.loads(export_design_maps_json(design, model=model))
+
+    assert data["schema"] == "nadoc.md_design_maps.v1"
+    assert data["counts"]["basepairs"] > 0
+    assert data["counts"]["stacking_neighbors"] > 0
+
+    bp = data["basepairs"][0]
+    fwd = bp["nucleotide_5p_side"]
+    rev = bp["nucleotide_3p_side"]
+    assert fwd["helix_id"] == rev["helix_id"] == bp["helix_id"]
+    assert fwd["bp_index"] == rev["bp_index"] == bp["bp_index"]
+    assert {fwd["direction"], rev["direction"]} == {"FORWARD", "REVERSE"}
+    assert bp["basepair_atom_pairs"]
+
+    stack = data["stacking"][0]
+    assert stack["nucleotide_3p"]["seq_num"] == stack["nucleotide_5p"]["seq_num"] + 1
+
+
+def test_map_specific_exports_run():
+    import json
+
+    design = _small_design()
+    model = build_atomistic_model(design)
+
+    basepair_json = json.loads(export_basepair_map_json(design, model=model))
+    stacking_json = json.loads(export_stacking_map_json(design, model=model))
+    assert basepair_json["schema"] == "nadoc.md_basepair_map.v1"
+    assert stacking_json["schema"] == "nadoc.md_stacking_map.v1"
+    assert basepair_json["basepairs"]
+    assert stacking_json["stacking"]
+
+    basepair_tsv = export_basepair_map_tsv(design, model=model).strip().splitlines()
+    stacking_tsv = export_stacking_map_tsv(design, model=model).strip().splitlines()
+    assert basepair_tsv[0].startswith("pair_id\thelix_id\tbp_index")
+    assert stacking_tsv[0].startswith("stack_id\tstrand_id\tchain_id")
+    assert len(basepair_tsv) == len(basepair_json["basepairs"]) + 1
+    assert len(stacking_tsv) == len(stacking_json["stacking"]) + 1
+
+
+def test_dry_implicit_restraints_are_unique_and_non_covalent():
+    import json
+
+    design = _small_design()
+    model = build_atomistic_model(design)
+    files = export_dry_implicit_restraints(design, model=model)
+
+    assert "restraints_dry_implicit_combined.extrabonds" in files
+    summary = json.loads(files["restraints_summary.json"])
+    assert summary["schema"] == "nadoc.md_restraints_summary.v1"
+    assert summary["counts"]["wc_restraints"] > 0
+    assert summary["counts"]["stacking_restraints"] > 0
+
+    covalent = {tuple(sorted(pair)) for pair in model.bonds}
+    seen = set()
+    for line in files["restraints_dry_implicit_combined.extrabonds"].splitlines():
+        if not line.startswith("bond "):
+            continue
+        parts = line.split()
+        pair = tuple(sorted((int(parts[1]), int(parts[2]))))
+        assert pair not in seen
+        assert pair not in covalent
+        seen.add(pair)
+    assert len(seen) == summary["counts"]["combined_restraints"]
+
+
 # ── PDB format tests ──────────────────────────────────────────────────────────
 
 def test_pdb_export_runs():
@@ -243,6 +431,29 @@ def test_pdb_has_conect_records():
     pdb    = export_pdb(design)
     conect_lines = [l for l in pdb.splitlines() if l.startswith("CONECT")]
     assert len(conect_lines) > 0
+
+
+def test_namd_package_includes_identity_sidecars():
+    import zipfile
+    from io import BytesIO
+
+    from backend.core import namd_package
+
+    design = _small_design()
+    blob = namd_package.build_namd_package(design)
+    name = (design.metadata.name or "design").replace(" ", "_")
+    prefix = f"{name}_namd_complete/"
+    with zipfile.ZipFile(BytesIO(blob)) as zf:
+        names = set(zf.namelist())
+    assert prefix + f"{name}.identity.json" in names
+    assert prefix + f"{name}.identity.tsv" in names
+    assert prefix + f"{name}.design_maps.json" in names
+    assert prefix + f"{name}.basepairs.json" in names
+    assert prefix + f"{name}.basepairs.tsv" in names
+    assert prefix + f"{name}.stacking.json" in names
+    assert prefix + f"{name}.stacking.tsv" in names
+    assert prefix + "restraints/restraints_dry_implicit_combined.extrabonds" in names
+    assert prefix + "restraints/restraints_summary.json" in names
 
 
 def test_pdb_non_std_bonds_link_record():

@@ -2,13 +2,13 @@
 NAMD Explicit-Solvent Package Builder
 ======================================
 Builds a self-contained NAMD simulation package with TIP3P explicit water
-and NaCl ions from a NADOC design.
+and NaCl/MgCl2 ions from a NADOC design.
 
 Physics:
-  - Explicit TIP3P water + 150 mM NaCl (adjustable)
-  - CUDASOAintegrate on (GPU-resident MD, fastest NAMD3 mode)
+  - Explicit TIP3P water + NaCl/MgCl2 ions (adjustable)
+  - Standard CUDA by default; benchmark GPU-resident separately
   - PME electrostatics, 12 Å cutoff
-  - rigidBonds water (SHAKE on O-H bonds, 2 fs timestep)
+  - rigidBonds all (SHAKE on all H-bonds, required for 2 fs DNA; see Pan 2014 JCTC)
   - Langevin thermostat 310 K / barostat 1 atm (NPT)
 
 Solvation pipeline:
@@ -16,7 +16,7 @@ Solvation pipeline:
   2. gmx editconf  → rectangular box with padding
   3. gmx solvate   → TIP3P water from spc216.gro template
   4. Parse solvated GRO → water positions (nm)
-  5. Python ion placement → replace random waters with Na+/Cl-
+  5. Python ion placement → replace random waters with Na+/Mg2+/Cl-
   6. Merge water/ions into PSF (extend NATOM/NBOND/NTHETA sections)
   7. Build solvated PDB (DNA ATOM + water/ion HETATM)
   8. Emit NAMD conf + ZIP
@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import dataclasses
 import io
+import json
 import math
 import os
 import random
@@ -53,21 +54,26 @@ from pathlib import Path
 from typing import Optional
 
 from backend.core.models import Design
+from backend.core.md_charge import audit_psf
 from backend.core.pdb_export import export_pdb
 from backend.core.namd_package import complete_psf
+from backend.core.namd_topology import build_charmm_psfgen_topology
 
 _FF_DIR = Path(__file__).parent.parent / "data" / "forcefield"
 _FF_FILES = [
     "top_all36_na.rtf",
     "par_all36_na.prm",
-    "toppar_water_ions_na.str",   # DNA-safe cufix: protein/lipid NBFIX removed
+    "toppar_water_ions_cufix.str",   # includes Yoo/Aksimentiev Na+/Mg2+ CUFIX terms
+    "par_stub_ions_nbfix.str",       # stub vdW for protein/lipid types in cufix NBFIX
 ]
 
 # ── Ion parameters (CHARMM36 / toppar_water_ions_cufix.str) ───────────────────
 # SOD: Na+  type SOD  charge +1.00  mass 22.98977
+# MG:  Mg2+ type MG   charge +2.00  mass 24.30500
 # CLA: Cl-  type CLA  charge -1.00  mass 35.45000
 _ION_PARAMS = {
     "SOD": ("SOD",  1.00, 22.98977),   # (atomtype, charge, mass)
+    "MG":  ("MG",   2.00, 24.30500),
     "CLA": ("CLA", -1.00, 35.45000),
 }
 
@@ -77,6 +83,30 @@ _TIP3_PARAMS = {
     "H1":  ("HT",  +0.417,  1.00800),
     "H2":  ("HT",  +0.417,  1.00800),
 }
+
+_MGH_PARAMS = {
+    "MG": ("MG", 2.00, 24.30500),
+    "O":  ("OTMG", -1.190, 15.99940),
+    "H":  ("HT", +0.595, 1.00800),
+}
+
+_MGH_WATER_NAMES = (
+    ("OHA", "H1A", "H2A"),
+    ("OHB", "H1B", "H2B"),
+    ("OHC", "H1C", "H2C"),
+    ("OHD", "H1D", "H2D"),
+    ("OHE", "H1E", "H2E"),
+    ("OHF", "H1F", "H2F"),
+)
+
+_MGH_DIRECTIONS = (
+    (1.0, 0.0, 0.0),
+    (-1.0, 0.0, 0.0),
+    (0.0, 1.0, 0.0),
+    (0.0, -1.0, 0.0),
+    (0.0, 0.0, 1.0),
+    (0.0, 0.0, -1.0),
+)
 
 # Avogadro constant for ion count calculation
 _NA = 6.02214076e23
@@ -92,6 +122,13 @@ class _Water:
     ox: float;  oy: float;  oz: float   # OW → OH2
     h1x: float; h1y: float; h1z: float  # HW1 → H1
     h2x: float; h2y: float; h2z: float  # HW2 → H2
+
+
+@dataclasses.dataclass
+class _MgHexahydrate:
+    """Idealized Mg(H2O)6 cluster with positions in nm."""
+    mg: tuple[float, float, float]
+    waters: list[_Water]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -288,6 +325,7 @@ def _periodic_cell_header(
     periodic_z_nm: float,
     *,
     mode: str,
+    langevin_damping: float = 1.0,
 ) -> str:
     bx, by, bz = box_nm
     bx_a, by_a = bx * 10, by * 10
@@ -329,13 +367,15 @@ exclude            scaled1-4
 oneFourScaling     1.0
 
 # ── Constraints ───────────────────────────────────────────────────────────────
-rigidBonds         water
+# rigidBonds all: constrain all H-bonds (N-H ω~3300 cm⁻¹, C-H ω~2950 cm⁻¹).
+# Required for 2 fs integration of DNA; see Pan et al. (2014) JCTC 10:2906.
+rigidBonds         all
 rigidTolerance     1.0e-8
 
 # ── Thermostat — Langevin 310 K ────────────────────────────────────────────────
 temperature        310
 langevin           on
-langevinDamping    5
+langevinDamping    {langevin_damping}
 langevinTemp       310
 langevinHydrogen   off
 """
@@ -372,6 +412,7 @@ def _render_periodic_equilibrate_npt_conf(
     header = _periodic_cell_header(
         name, box_nm, n_atoms, periodic_z_nm,
         mode="standard CUDA, restrained NPT box discovery",
+        langevin_damping=5.0,  # stronger coupling during box discovery is fine
     )
     return header + f"""\
 
@@ -386,7 +427,7 @@ langevinPistonDecay   100.0
 langevinPistonTemp    310
 
 # ── Integrator ────────────────────────────────────────────────────────────────
-timestep           2.0        ;# 2 fs — safe with rigidBonds water
+timestep           2.0        ;# 2 fs — safe with rigidBonds all
 nonbondedFreq      1
 fullElectFrequency 2
 stepspercycle      10
@@ -462,7 +503,7 @@ constraintScaling  {restraint_scaling:.3f}
 # X/Y from the stable NPT tail and forces Z back to the exact 21 bp period.
 
 # ── Integrator ────────────────────────────────────────────────────────────────
-timestep           2.0
+timestep           2.0        ;# 2 fs — safe with rigidBonds all
 nonbondedFreq      1
 fullElectFrequency 2
 stepspercycle      10
@@ -675,25 +716,47 @@ def _ion_counts(
     ion_conc_mM: float,
     box_nm: tuple[float, float, float],
 ) -> tuple[int, int]:
-    """Return (n_Na, n_Cl) to neutralise DNA and reach target NaCl concentration.
+    """Return (n_Na, n_Cl) to neutralise DNA and reach target NaCl concentration."""
+    n_na, _n_mg, n_cl = _ion_counts_mixed(
+        n_waters=n_waters,
+        dna_charge=dna_charge,
+        nacl_mM=ion_conc_mM,
+        mgcl2_mM=0.0,
+        box_nm=box_nm,
+    )
+    return n_na, n_cl
+
+
+def _ion_counts_mixed(
+    n_waters: int,
+    dna_charge: float,
+    nacl_mM: float,
+    mgcl2_mM: float,
+    box_nm: tuple[float, float, float],
+) -> tuple[int, int, int]:
+    """Return (n_Na, n_Mg, n_Cl) for neutral DNA plus NaCl/MgCl2 bath.
 
     Strategy:
-      1. Neutralise: add enough Na+ to cancel DNA charge (DNA is negative).
-      2. Bulk salt: add NaCl pairs to reach ion_conc_mM in the water volume.
-    """
-    # Neutralisation ions (DNA charge is negative, so we need Na+)
-    dna_neg_charge = -int(round(dna_charge))  # positive integer (number of Na+ needed)
-    n_neutralise = max(0, dna_neg_charge)
+      1. Add MgCl2 pairs for the requested bulk magnesium concentration.
+      2. Add NaCl pairs for the requested monovalent salt concentration.
+      3. Add enough extra Na+ to neutralise the DNA and the added salt bath.
 
-    # Volume of the water phase (approximate as full box volume)
+    This keeps the simple water-replacement implementation deterministic while
+    allowing origami-style Mg-containing explicit-solvent tests.  It does not
+    place hexahydrated Mg clusters; use the included CUFIX parameters for Mg2+
+    as the closest currently supported established-practice approximation.
+    """
     # 1 nm³ = 1e-27 m³ = 1e-24 L  (since 1 m³ = 1000 L)
     bx, by, bz = box_nm
     vol_L = bx * by * bz * 1e-24  # nm³ → L
-    n_salt = int(round(ion_conc_mM * 1e-3 * _NA * vol_L))
+    n_nacl = int(round(nacl_mM * 1e-3 * _NA * vol_L))
+    n_mg = int(round(mgcl2_mM * 1e-3 * _NA * vol_L))
 
-    n_na = n_neutralise + n_salt
-    n_cl = n_salt
-    return n_na, n_cl
+    dna_neg_charge = -int(round(dna_charge))
+    n_neutralise_na = max(0, dna_neg_charge)
+    n_na = n_neutralise_na + n_nacl
+    n_cl = n_nacl + 2 * n_mg
+    return n_na, n_mg, n_cl
 
 
 def _place_ions(
@@ -732,6 +795,147 @@ def _place_ions(
     return remaining, na_pos, cl_pos
 
 
+def _place_ions_mixed(
+    waters: list[_Water],
+    n_na: int,
+    n_mg: int,
+    n_cl: int,
+    seed: int = 42,
+    mg_hexahydrate: bool = False,
+) -> tuple[
+    list[_Water],
+    list[tuple[float, float, float]],
+    list[tuple[float, float, float]],
+    list[tuple[float, float, float]],
+    list[_MgHexahydrate],
+]:
+    """Replace waters with Na+, Mg2+/MGH, and Cl- ions."""
+    if mg_hexahydrate:
+        return _place_ions_mixed_mgh(waters, n_na, n_mg, n_cl, seed=seed)
+
+    rng = random.Random(seed)
+    total_ions = n_na + n_mg + n_cl
+    if total_ions > len(waters):
+        raise RuntimeError(
+            f"Not enough water molecules ({len(waters)}) to place {total_ions} ions."
+        )
+    chosen_idx = rng.sample(range(len(waters)), total_ions)
+    na_idx = set(chosen_idx[:n_na])
+    mg_idx = set(chosen_idx[n_na:n_na + n_mg])
+    cl_idx = set(chosen_idx[n_na + n_mg:])
+
+    remaining: list[_Water] = []
+    na_pos: list[tuple[float, float, float]] = []
+    mg_pos: list[tuple[float, float, float]] = []
+    cl_pos: list[tuple[float, float, float]] = []
+
+    for i, w in enumerate(waters):
+        if i in na_idx:
+            na_pos.append((w.ox, w.oy, w.oz))
+        elif i in mg_idx:
+            mg_pos.append((w.ox, w.oy, w.oz))
+        elif i in cl_idx:
+            cl_pos.append((w.ox, w.oy, w.oz))
+        else:
+            remaining.append(w)
+
+    return remaining, na_pos, mg_pos, cl_pos, []
+
+
+def _ideal_mgh_cluster(mg: tuple[float, float, float]) -> _MgHexahydrate:
+    """Build an ideal octahedral Mg(H2O)6 cluster around *mg* in nm."""
+    import numpy as np
+
+    mg_vec = np.asarray(mg, dtype=float)
+    mg_o_nm = 0.1940
+    oh_nm = 0.09572
+    half_angle = math.radians(104.52 / 2.0)
+    waters: list[_Water] = []
+
+    for direction in _MGH_DIRECTIONS:
+        radial = np.asarray(direction, dtype=float)
+        radial /= np.linalg.norm(radial)
+        if abs(float(np.dot(radial, np.array([0.0, 0.0, 1.0])))) < 0.9:
+            tangent = np.cross(radial, np.array([0.0, 0.0, 1.0]))
+        else:
+            tangent = np.cross(radial, np.array([0.0, 1.0, 0.0]))
+        tangent /= np.linalg.norm(tangent)
+        oxygen = mg_vec + radial * mg_o_nm
+        h_mid = radial * math.cos(half_angle)
+        h_spread = tangent * math.sin(half_angle)
+        h1 = oxygen + oh_nm * (h_mid + h_spread)
+        h2 = oxygen + oh_nm * (h_mid - h_spread)
+        waters.append(_Water(
+            float(oxygen[0]), float(oxygen[1]), float(oxygen[2]),
+            float(h1[0]), float(h1[1]), float(h1[2]),
+            float(h2[0]), float(h2[1]), float(h2[2]),
+        ))
+    return _MgHexahydrate(mg=mg, waters=waters)
+
+
+def _place_ions_mixed_mgh(
+    waters: list[_Water],
+    n_na: int,
+    n_mg: int,
+    n_cl: int,
+    seed: int = 42,
+) -> tuple[
+    list[_Water],
+    list[tuple[float, float, float]],
+    list[tuple[float, float, float]],
+    list[tuple[float, float, float]],
+    list[_MgHexahydrate],
+]:
+    """Replace waters with Na+, MGH clusters, and Cl- ions.
+
+    Each MGH cluster removes six waters and adds one 19-atom Mg(H2O)6 residue.
+    """
+    rng = random.Random(seed)
+    waters_by_idx = {i: w for i, w in enumerate(waters)}
+    available = set(waters_by_idx)
+    total_replaced = n_na + n_cl + 6 * n_mg
+    if total_replaced > len(waters):
+        raise RuntimeError(
+            f"Not enough water molecules ({len(waters)}) to place {n_mg} MGH "
+            f"clusters plus {n_na + n_cl} monatomic ions."
+        )
+
+    def pop_random() -> int:
+        idx = rng.choice(tuple(available))
+        available.remove(idx)
+        return idx
+
+    def water_pos(idx: int) -> tuple[float, float, float]:
+        w = waters_by_idx[idx]
+        return (w.ox, w.oy, w.oz)
+
+    mgh_clusters: list[_MgHexahydrate] = []
+    for _ in range(n_mg):
+        idx = pop_random()
+        mg = water_pos(idx)
+        mx, my, mz = mg
+        nearest = sorted(
+            available,
+            key=lambda j: (waters_by_idx[j].ox - mx) ** 2
+            + (waters_by_idx[j].oy - my) ** 2
+            + (waters_by_idx[j].oz - mz) ** 2,
+        )[:5]
+        for j in nearest:
+            available.remove(j)
+        mgh_clusters.append(_ideal_mgh_cluster(mg))
+
+    na_pos: list[tuple[float, float, float]] = []
+    for _ in range(n_na):
+        na_pos.append(water_pos(pop_random()))
+
+    cl_pos: list[tuple[float, float, float]] = []
+    for _ in range(n_cl):
+        cl_pos.append(water_pos(pop_random()))
+
+    remaining = [waters_by_idx[i] for i in sorted(available)]
+    return remaining, na_pos, [], cl_pos, mgh_clusters
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # §4  PSF MERGING
 # ══════════════════════════════════════════════════════════════════════════════
@@ -742,14 +946,20 @@ def _place_ions(
 # false key collisions and "atoms not the same" errors.  Cap at _MAX_RESID per
 # segment and spread water across SOLV/SOL1/SOL2/… segments to stay within limit.
 _MAX_RESID = 9000
-_WATER_SEG_NAMES = ["SOLV"] + [f"SOL{i}" for i in range(1, 30)]
 
 
 def _water_seg_info(wi: int) -> tuple[str, int]:
     """Return (segid, local_resid) for the wi-th water molecule (0-based)."""
     seg_num   = wi // _MAX_RESID
     local_rid = (wi % _MAX_RESID) + 1
-    return _WATER_SEG_NAMES[seg_num], local_rid
+    return f"W{seg_num:03d}", local_rid
+
+
+def _ion_seg_info(ii: int) -> tuple[str, int]:
+    """Return (segid, local_resid) for the ii-th ion (0-based)."""
+    seg_num   = ii // _MAX_RESID
+    local_rid = (ii % _MAX_RESID) + 1
+    return f"I{seg_num:03d}", local_rid
 
 
 # PSF atom line format (same extended layout as pdb_export.export_psf):
@@ -820,8 +1030,10 @@ def _extend_psf(
     waters: list[_Water],
     na_pos: list[tuple[float, float, float]],
     cl_pos: list[tuple[float, float, float]],
+    mg_pos: list[tuple[float, float, float]] | None = None,
+    mgh_clusters: list[_MgHexahydrate] | None = None,
 ) -> str:
-    """Extend a complete DNA PSF with TIP3P water and NaCl ions.
+    """Extend a complete DNA PSF with TIP3P water and ions.
 
     Modifies NATOM, NBOND, NTHETA section counts and appends new entries.
     Water angles (H1-OH2-H2) and bonds (OH2-H1, OH2-H2, H1-H2) are added.
@@ -857,18 +1069,57 @@ def _extend_psf(
         # Angle: H1-OH2-H2
         new_angles.append((s_h1, s_oh2, s_h2))
 
-    ion_resid = 1
+    mg_pos = mg_pos or []
+    mgh_clusters = mgh_clusters or []
+
+    ion_idx = 0
     for i, (x, y, z) in enumerate(na_pos):
         serial += 1
+        segid, resid = _ion_seg_info(ion_idx)
+        ion_idx += 1
         new_atom_lines.append(
-            _psf_atom_line(serial, "IONS", ion_resid + i, "SOD", "SOD", *_ION_PARAMS["SOD"])
+            _psf_atom_line(serial, segid, resid, "SOD", "SOD", *_ION_PARAMS["SOD"])
         )
-    ion_resid += len(na_pos)
+
+    for i, (x, y, z) in enumerate(mg_pos):
+        serial += 1
+        segid, resid = _ion_seg_info(ion_idx)
+        ion_idx += 1
+        new_atom_lines.append(
+            _psf_atom_line(serial, segid, resid, "MG", "MG", *_ION_PARAMS["MG"])
+        )
+
+    for cluster in mgh_clusters:
+        segid, resid = _ion_seg_info(ion_idx)
+        ion_idx += 1
+        s_mg = serial + 1
+        serial += 1
+        new_atom_lines.append(
+            _psf_atom_line(s_mg, segid, resid, "MGH", "MG", *_MGH_PARAMS["MG"])
+        )
+        for water_idx, (oname, h1name, h2name) in enumerate(_MGH_WATER_NAMES):
+            s_o = serial + 1
+            s_h1 = serial + 2
+            s_h2 = serial + 3
+            serial += 3
+            new_atom_lines.append(
+                _psf_atom_line(s_o, segid, resid, "MGH", oname, *_MGH_PARAMS["O"])
+            )
+            new_atom_lines.append(
+                _psf_atom_line(s_h1, segid, resid, "MGH", h1name, *_MGH_PARAMS["H"])
+            )
+            new_atom_lines.append(
+                _psf_atom_line(s_h2, segid, resid, "MGH", h2name, *_MGH_PARAMS["H"])
+            )
+            new_bonds.extend([(s_o, s_h1), (s_o, s_h2), (s_h1, s_h2)])
+            new_angles.append((s_h1, s_o, s_h2))
 
     for i, (x, y, z) in enumerate(cl_pos):
         serial += 1
+        segid, resid = _ion_seg_info(ion_idx)
+        ion_idx += 1
         new_atom_lines.append(
-            _psf_atom_line(serial, "IONS", ion_resid + i, "CLA", "CLA", *_ION_PARAMS["CLA"])
+            _psf_atom_line(serial, segid, resid, "CLA", "CLA", *_ION_PARAMS["CLA"])
         )
 
     # ── Patch PSF sections ────────────────────────────────────────────────────
@@ -1025,6 +1276,8 @@ def _build_solvated_pdb(
     cl_pos: list[tuple[float, float, float]],
     box_nm: tuple[float, float, float],
     base_serial: int,
+    mg_pos: list[tuple[float, float, float]] | None = None,
+    mgh_clusters: list[_MgHexahydrate] | None = None,
 ) -> str:
     """Build a PDB with DNA ATOM records + water/ion HETATM records.
 
@@ -1070,26 +1323,99 @@ def _build_solvated_pdb(
         out.append(_hetatm_record(s_h1,  "H1",  "TIP3", "W", resid, h1x_a, h1y_a, h1z_a, segname=segid))
         out.append(_hetatm_record(s_h2,  "H2",  "TIP3", "W", resid, h2x_a, h2y_a, h2z_a, segname=segid))
 
-    ion_resid = 1
+    mg_pos = mg_pos or []
+    mgh_clusters = mgh_clusters or []
+
+    ion_idx = 0
     for i, (x_nm, y_nm, z_nm) in enumerate(na_pos):
         serial += 1
+        segid, resid = _ion_seg_info(ion_idx)
+        ion_idx += 1
         out.append(_hetatm_record(
-            serial, "SOD", "SOD", "I", ion_resid + i,
+            serial, "SOD", "SOD", "I", resid,
             x_nm * NM_TO_A, y_nm * NM_TO_A, z_nm * NM_TO_A,
-            segname="IONS",
+            segname=segid,
         ))
 
-    ion_resid = len(na_pos) + 1
-    for i, (x_nm, y_nm, z_nm) in enumerate(cl_pos):
+    for i, (x_nm, y_nm, z_nm) in enumerate(mg_pos):
+        serial += 1
+        segid, resid = _ion_seg_info(ion_idx)
+        ion_idx += 1
+        out.append(_hetatm_record(
+            serial, "MG", "MG", "I", resid,
+            x_nm * NM_TO_A, y_nm * NM_TO_A, z_nm * NM_TO_A,
+            segname=segid,
+        ))
+
+    for cluster in mgh_clusters:
+        segid, resid = _ion_seg_info(ion_idx)
+        ion_idx += 1
         serial += 1
         out.append(_hetatm_record(
-            serial, "CLA", "CLA", "I", ion_resid + i,
+            serial, "MG", "MGH", "I", resid,
+            cluster.mg[0] * NM_TO_A, cluster.mg[1] * NM_TO_A, cluster.mg[2] * NM_TO_A,
+            segname=segid,
+        ))
+        for water, (oname, h1name, h2name) in zip(cluster.waters, _MGH_WATER_NAMES):
+            serial += 1
+            out.append(_hetatm_record(
+                serial, oname, "MGH", "I", resid,
+                water.ox * NM_TO_A, water.oy * NM_TO_A, water.oz * NM_TO_A,
+                segname=segid,
+            ))
+            serial += 1
+            out.append(_hetatm_record(
+                serial, h1name, "MGH", "I", resid,
+                water.h1x * NM_TO_A, water.h1y * NM_TO_A, water.h1z * NM_TO_A,
+                segname=segid,
+            ))
+            serial += 1
+            out.append(_hetatm_record(
+                serial, h2name, "MGH", "I", resid,
+                water.h2x * NM_TO_A, water.h2y * NM_TO_A, water.h2z * NM_TO_A,
+                segname=segid,
+            ))
+
+    for i, (x_nm, y_nm, z_nm) in enumerate(cl_pos):
+        serial += 1
+        segid, resid = _ion_seg_info(ion_idx)
+        ion_idx += 1
+        out.append(_hetatm_record(
+            serial, "CLA", "CLA", "I", resid,
             x_nm * NM_TO_A, y_nm * NM_TO_A, z_nm * NM_TO_A,
-            segname="IONS",
+            segname=segid,
         ))
 
     out.append("END")
     return "\n".join(out) + "\n"
+
+
+def _mgh_extrabonds(
+    base_serial: int,
+    n_waters: int,
+    n_na: int,
+    n_mg: int,
+    n_mgh: int,
+    *,
+    k: float = 1.0,
+    distance_ang: float = 1.94,
+) -> str:
+    """Return NAMD extraBonds for Mg-O links in MGH residues.
+
+    The 1.94 Å / 1 kcal mol^-1 Å^-2 default follows the published
+    DNA-origami Mg-hexahydrate setup used for counterion equilibration.
+    NAMD extraBonds uses zero-based atom indices in this project.
+    """
+    if n_mgh <= 0:
+        return ""
+    first_mgh_serial = base_serial + n_waters * 3 + n_na + n_mg + 1
+    lines: list[str] = []
+    for cluster_idx in range(n_mgh):
+        s_mg = first_mgh_serial + cluster_idx * 19
+        for water_idx in range(6):
+            s_o = s_mg + 1 + water_idx * 3
+            lines.append(f"bond {s_mg - 1:d} {s_o - 1:d} {k:.4f} {distance_ang:.4f}")
+    return "\n".join(lines) + "\n"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1100,14 +1426,18 @@ def _render_solvated_namd_conf(
     name: str,
     box_nm: tuple[float, float, float],
     n_atoms: int,
+    *,
+    nacl_mM: float = 150.0,
+    mgcl2_mM: float = 0.0,
+    mg_hexahydrate: bool = False,
 ) -> str:
     bx, by, bz = box_nm
     bx_a, by_a, bz_a = bx * 10, by * 10, bz * 10
     cx, cy, cz = bx_a / 2, by_a / 2, bz_a / 2
     return f"""\
 # NAMD explicit-solvent configuration generated by NADOC
-# System: {name}  ({n_atoms:,} atoms, TIP3P water + 150 mM NaCl)
-# Mode:   CUDASOAintegrate (GPU-resident), PME electrostatics, NPT 310 K / 1 atm
+# System: {name}  ({n_atoms:,} atoms, TIP3P water + {nacl_mM:g} mM NaCl + {mgcl2_mM:g} mM MgCl2)
+# Mode:   Standard CUDA, PME electrostatics, minimization preflight
 
 structure          {name}.psf
 coordinates        {name}.pdb
@@ -1115,7 +1445,9 @@ outputName         output/{name}
 
 paraTypeCharmm     on
 parameters         forcefield/par_all36_na.prm
-parameters         forcefield/toppar_water_ions_na.str
+parameters         forcefield/toppar_water_ions_cufix.str
+parameters         forcefield/par_stub_ions_nbfix.str
+{("extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n") if mg_hexahydrate else ""}
 
 # ── Periodic boundary conditions ──────────────────────────────────────────────
 cellBasisVector1   {bx_a:.3f}  0.000    0.000
@@ -1139,34 +1471,37 @@ exclude            scaled1-4
 oneFourScaling     1.0
 
 # ── Constraints ───────────────────────────────────────────────────────────────
-rigidBonds         water
+# First-contact minimization must not use RATTLE/SHAKE; enable rigidBonds all
+# only in downstream dynamics configs after minimization has relieved clashes.
+rigidBonds         none
 rigidTolerance     1.0e-8
 
-# ── Thermostat — Langevin 310 K ────────────────────────────────────────────────
-temperature        310
+# ── Thermostat ────────────────────────────────────────────────────────────────
+temperature        0
 langevin           on
 langevinDamping    5
-langevinTemp       310
+langevinTemp       0
 langevinHydrogen   off
 
-# ── Barostat — Langevin piston (NPT) ──────────────────────────────────────────
+# ── Barostat ──────────────────────────────────────────────────────────────────
 useGroupPressure   yes
 useFlexibleCell    no
 useConstantArea    no
-langevinPiston     on
+langevinPiston     off
 langevinPistonTarget  1.01325
 langevinPistonPeriod  200.0
 langevinPistonDecay   100.0
-langevinPistonTemp    310
+langevinPistonTemp    0
 
 # ── Integrator ────────────────────────────────────────────────────────────────
-timestep           2.0        ;# 2 fs — safe with rigidBonds water
+timestep           1.0        ;# minimization/preflight config
 nonbondedFreq      1
-fullElectFrequency 2
+fullElectFrequency 1
 stepspercycle      10
 
-# ── GPU-resident integration (NAMD3, requires explicit solvent + PME) ─────────
-CUDASOAintegrate   on
+# ── GPU acceleration ──────────────────────────────────────────────────────────
+# Standard CUDA is the default for reproducibility. GPU-resident can be tested
+# separately after validating energy/temperature/structure.
 
 # ── Output ────────────────────────────────────────────────────────────────────
 outputEnergies     500
@@ -1178,9 +1513,8 @@ restartfreq        50000
 binaryrestart      yes
 
 # ── Run ───────────────────────────────────────────────────────────────────────
-minimize           2000       ;# brief EM to relieve any solvation clashes
-reinitvels         310
-run                250000     ;# 500 ps NPT equilibration (default)
+minimize           2000       ;# use managed ladder configs for dynamics
+run                0
 """
 
 
@@ -1195,9 +1529,9 @@ Generated by NADOC.
 
 Contents
 --------
-{name}.pdb          Solvated structure (DNA + TIP3P water + NaCl ions)
+{name}.pdb          Solvated structure (DNA + TIP3P water + NaCl/MgCl2 ions)
 {name}.psf          Complete topology (bonds/angles/dihedrals)
-namd.conf           NAMD configuration (GPU-resident, PME, NPT 310 K / 1 atm)
+namd.conf           NAMD configuration (PME, NPT 310 K / 1 atm)
 forcefield/         CHARMM36 parameters
 launch.sh           Automated launch script (installs NAMD3 if absent)
 
@@ -1217,14 +1551,14 @@ Requirements
 
 Performance
 -----------
-CUDASOAintegrate on: GPU-resident integration.  All force evaluations
-(bonded, nonbonded, PME reciprocal) run on the GPU.  Typical 300k-atom
-system: 10-15 ns/day on RTX 2080 Super.
+Standard CUDA is used by default for reproducibility. Benchmark GPU-resident
+mode only after explicit-solvent/Mg energy, temperature, and structure are
+validated.
 
 Typical workflow
 ----------------
-1. launch.sh runs 2000-step EM + 500 ps NPT equilibration by default.
-2. Extend production in namd.conf (increase `run` or restart from .restart.coor).
+1. namd.conf is a conservative minimization preflight.
+2. For production, use NADOC's managed equilibrium-aware ladder configs.
 3. Analyse with VMD: vmd {name}.psf output/{name}.dcd
 """
 
@@ -1286,6 +1620,9 @@ def build_namd_solvated_package(
     *,
     padding_nm: float = 1.2,
     ion_conc_mM: float = 150.0,
+    mg_conc_mM: float = 0.0,
+    mg_hexahydrate: bool = False,
+    require_full_topology: bool = False,
     seed: int = 42,
 ) -> bytes:
     """Return raw ZIP bytes of a complete NAMD explicit-solvent package.
@@ -1298,6 +1635,12 @@ def build_namd_solvated_package(
         Water padding around the DNA bounding box (nm). Default 1.2 nm.
     ion_conc_mM:
         Target NaCl bulk concentration (mM). Default 150 mM.
+    mg_conc_mM:
+        Target MgCl2 bulk concentration (mM). Default 0 mM.  Use nonzero values
+        for DNA-origami protocols that rely on magnesium-stabilized packing.
+    mg_hexahydrate:
+        If true, place Mg as idealized MGH Mg(H2O)6 residues and write Mg-O
+        extraBonds. If false, place bare MG ions.
     seed:
         Random seed for reproducible ion placement.
 
@@ -1311,9 +1654,28 @@ def build_namd_solvated_package(
     name = (design.metadata.name or "design").replace(" ", "_")
     prefix = f"{name}_namd_solvated/"
 
-    # 1. Build DNA-only PDB and complete PSF
-    dna_pdb = export_pdb(design, box_margin_nm=padding_nm)
-    dna_psf = complete_psf(design)
+    # 1. Build DNA-only PDB and complete PSF.  Legacy mode keeps the old
+    # heavy-atom Python PSF for compatibility; strict mode uses psfgen so the
+    # topology has hydrogens and CHARMM terminal/deoxy patches.
+    topology_metadata: dict = {"topology_builder": "nadoc_legacy_heavy_atom_psf"}
+    if require_full_topology:
+        topology_build = build_charmm_psfgen_topology(design)
+        dna_pdb = topology_build.pdb_text
+        dna_psf = topology_build.psf_text
+        topology_metadata = topology_build.metadata
+    else:
+        dna_pdb = export_pdb(design, box_margin_nm=padding_nm)
+        dna_psf = complete_psf(design)
+    dry_audit = audit_psf(
+        dna_psf,
+        require_dna_hydrogens=require_full_topology,
+        require_dna_residue_charge=require_full_topology,
+    )
+    if require_full_topology and not dry_audit.passed:
+        raise RuntimeError(
+            "Dry DNA topology audit failed; cannot start equilibrium-aware NAMD. "
+            + "; ".join(dry_audit.errors)
+        )
 
     with tempfile.TemporaryDirectory(prefix="nadoc_solvate_") as _tmpdir:
         tmpdir = Path(_tmpdir)
@@ -1323,35 +1685,104 @@ def build_namd_solvated_package(
 
     # 3. Count DNA net charge (1 phosphate = -1 charge) and calculate ion counts
     dna_charge = _count_dna_charge(dna_pdb)
-    n_na, n_cl = _ion_counts(len(waters), dna_charge, ion_conc_mM, box_nm)
+    n_na, n_mg, n_cl = _ion_counts_mixed(len(waters), dna_charge, ion_conc_mM, mg_conc_mM, box_nm)
 
     # 4. Place ions (replace water molecules)
-    waters, na_pos, cl_pos = _place_ions(waters, n_na, n_cl, seed=seed)
+    waters, na_pos, mg_pos, cl_pos, mgh_clusters = _place_ions_mixed(
+        waters, n_na, n_mg, n_cl, seed=seed, mg_hexahydrate=mg_hexahydrate
+    )
 
     # 5. Find last DNA atom serial for sequential numbering
     dna_n_atoms = _find_last_atom_serial(dna_psf)
-    n_total = dna_n_atoms + len(waters) * 3 + n_na + n_cl
+    n_total = (
+        dna_n_atoms
+        + len(waters) * 3
+        + n_na
+        + len(mg_pos)
+        + len(mgh_clusters) * 19
+        + n_cl
+    )
 
     # 6. Build solvated PSF
-    solvated_psf = _extend_psf(dna_psf, waters, na_pos, cl_pos)
+    solvated_psf = _extend_psf(
+        dna_psf, waters, na_pos, cl_pos, mg_pos=mg_pos, mgh_clusters=mgh_clusters
+    )
+    final_audit = audit_psf(
+        solvated_psf,
+        require_neutral=require_full_topology,
+        require_dna_hydrogens=require_full_topology,
+        require_dna_residue_charge=require_full_topology,
+    )
+    if require_full_topology and not final_audit.passed:
+        raise RuntimeError(
+            "Solvated topology audit failed; cannot start equilibrium-aware NAMD. "
+            + "; ".join(final_audit.errors)
+        )
 
     # 7. Build solvated PDB
     solvated_pdb = _build_solvated_pdb(
-        dna_pdb, waters, na_pos, cl_pos, box_nm, dna_n_atoms
+        dna_pdb,
+        waters,
+        na_pos,
+        cl_pos,
+        box_nm,
+        dna_n_atoms,
+        mg_pos=mg_pos,
+        mgh_clusters=mgh_clusters,
+    )
+    mgh_extrabonds = _mgh_extrabonds(
+        dna_n_atoms,
+        len(waters),
+        len(na_pos),
+        len(mg_pos),
+        len(mgh_clusters),
     )
 
     # 8. Render NAMD conf
-    namd_conf = _render_solvated_namd_conf(name, box_nm, n_total)
+    namd_conf = _render_solvated_namd_conf(
+        name,
+        box_nm,
+        n_total,
+        nacl_mM=ion_conc_mM,
+        mgcl2_mM=mg_conc_mM,
+        mg_hexahydrate=mg_hexahydrate and bool(mgh_clusters),
+    )
 
     readme  = _README.format(name=name)
     prompt  = _AI_PROMPT.replace("{name}", name)
     launch  = _LAUNCH_SH.format(name=name)
+    audit_json = {
+        "topology_builder": topology_metadata.get("topology_builder", "unknown"),
+        "topology_metadata": topology_metadata,
+        "production_ready": final_audit.passed
+        and final_audit.dna_hydrogens > 0
+        and abs(final_audit.total_charge) <= 1.0e-3,
+        "requirements": {
+            "full_dna_topology_required": require_full_topology,
+            "neutral_final_psf_required": require_full_topology,
+        },
+        "dry_dna": dry_audit.to_dict(),
+        "final_solvated": final_audit.to_dict(),
+        "ionization": {
+            "dna_charge_method": "phosphate_count_legacy",
+            "dna_charge_used_e": dna_charge,
+            "n_na": n_na,
+            "n_mg": n_mg,
+            "n_cl": n_cl,
+            "mg_hexahydrate": mg_hexahydrate and bool(mgh_clusters),
+            "n_waters": len(waters),
+            "box_nm": list(box_nm),
+        },
+    }
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(prefix + f"{name}.pdb",             solvated_pdb)
         zf.writestr(prefix + f"{name}.psf",             solvated_psf)
+        zf.writestr(prefix + "charge_audit.json",       json.dumps(audit_json, indent=2))
         zf.writestr(prefix + "namd.conf",               namd_conf)
+        if mgh_extrabonds:
+            zf.writestr(prefix + "mgh_extrabonds.txt",  mgh_extrabonds)
         zf.writestr(prefix + "README.txt",              readme)
         zf.writestr(prefix + "AI_ASSISTANT_PROMPT.txt", prompt)
         zf.writestr(prefix + "scripts/monitor.py",      _MONITOR_PY)
@@ -1380,6 +1811,8 @@ def get_solvation_stats(
     *,
     padding_nm: float = 1.2,
     ion_conc_mM: float = 150.0,
+    mg_conc_mM: float = 0.0,
+    mg_hexahydrate: bool = False,
 ) -> dict:
     """Return a dict with estimated system size without building the package.
 
@@ -1396,16 +1829,22 @@ def get_solvation_stats(
         tmpdir = Path(_tmp)
         waters, box_nm = _gmx_solvate(dna_pdb, padding_nm, tmpdir)
 
-    n_na, n_cl = _ion_counts(len(waters), dna_charge, ion_conc_mM, box_nm)
-    n_water_atoms = len(waters) * 3
-    n_total = dna_n_atoms + n_water_atoms + n_na + n_cl
+    n_na, n_mg, n_cl = _ion_counts_mixed(len(waters), dna_charge, ion_conc_mM, mg_conc_mM, box_nm)
+    n_replaced_by_mg = 6 * n_mg if mg_hexahydrate else n_mg
+    n_remaining_waters = len(waters) - n_na - n_replaced_by_mg - n_cl
+    n_water_atoms = n_remaining_waters * 3
+    n_mg_atoms = n_mg * 19 if mg_hexahydrate else n_mg
+    n_total = dna_n_atoms + n_water_atoms + n_na + n_mg_atoms + n_cl
 
     bx, by, bz = box_nm
     return {
         "dna_atoms":    dna_n_atoms,
-        "n_waters":     len(waters),
+        "n_waters":     n_remaining_waters,
         "water_atoms":  n_water_atoms,
         "n_na":         n_na,
+        "n_mg":         n_mg,
+        "mg_hexahydrate": mg_hexahydrate,
+        "mgh_atoms":    n_mg * 19 if mg_hexahydrate else 0,
         "n_cl":         n_cl,
         "total_atoms":  n_total,
         "box_nm":       box_nm,

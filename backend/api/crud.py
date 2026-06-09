@@ -1662,6 +1662,10 @@ class MdLoadRequest(BaseModel):
     xtc_path: str        # abs path to .xtc trajectory
 
 
+class MdResolveConfigRequest(BaseModel):
+    config_path: str
+
+
 class DesignImportRequest(BaseModel):
     content: str
 
@@ -12961,6 +12965,133 @@ def export_pdb_file() -> Response:
     )
 
 
+@router.get("/design/export/identity")
+def export_identity_file() -> Response:
+    """Export stable atom/nucleotide identity metadata for MD pipelines."""
+    from backend.core.pdb_export import export_identity_json
+
+    design = design_state.get_or_404()
+    name = (design.metadata.name or "design").replace(" ", "_")
+    identity_text = export_identity_json(design)
+    return Response(
+        content=identity_text.encode("utf-8"),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{name}.identity.json"'},
+    )
+
+
+@router.get("/design/export/identity-tsv")
+def export_identity_tsv_file() -> Response:
+    """Export a tab-separated atom identity table for MD analysis scripts."""
+    from backend.core.pdb_export import export_identity_tsv
+
+    design = design_state.get_or_404()
+    name = (design.metadata.name or "design").replace(" ", "_")
+    identity_text = export_identity_tsv(design)
+    return Response(
+        content=identity_text.encode("utf-8"),
+        media_type="text/tab-separated-values",
+        headers={"Content-Disposition": f'attachment; filename="{name}.identity.tsv"'},
+    )
+
+
+@router.get("/design/export/design-maps")
+def export_design_maps_file() -> Response:
+    """Export intended base-pair and stacking maps for MD analysis."""
+    from backend.core.pdb_export import export_design_maps_json
+
+    design = design_state.get_or_404()
+    name = (design.metadata.name or "design").replace(" ", "_")
+    maps_text = export_design_maps_json(design)
+    return Response(
+        content=maps_text.encode("utf-8"),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{name}.design_maps.json"'},
+    )
+
+
+@router.get("/design/export/basepairs")
+def export_basepair_map_file() -> Response:
+    """Export intended Watson-Crick base-pair identity map."""
+    from backend.core.pdb_export import export_basepair_map_json
+
+    design = design_state.get_or_404()
+    name = (design.metadata.name or "design").replace(" ", "_")
+    map_text = export_basepair_map_json(design)
+    return Response(
+        content=map_text.encode("utf-8"),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{name}.basepairs.json"'},
+    )
+
+
+@router.get("/design/export/basepairs-tsv")
+def export_basepair_map_tsv_file() -> Response:
+    """Export intended Watson-Crick base-pair identity map as TSV."""
+    from backend.core.pdb_export import export_basepair_map_tsv
+
+    design = design_state.get_or_404()
+    name = (design.metadata.name or "design").replace(" ", "_")
+    map_text = export_basepair_map_tsv(design)
+    return Response(
+        content=map_text.encode("utf-8"),
+        media_type="text/tab-separated-values",
+        headers={"Content-Disposition": f'attachment; filename="{name}.basepairs.tsv"'},
+    )
+
+
+@router.get("/design/export/stacking")
+def export_stacking_map_file() -> Response:
+    """Export intended strand-order stacking map."""
+    from backend.core.pdb_export import export_stacking_map_json
+
+    design = design_state.get_or_404()
+    name = (design.metadata.name or "design").replace(" ", "_")
+    map_text = export_stacking_map_json(design)
+    return Response(
+        content=map_text.encode("utf-8"),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{name}.stacking.json"'},
+    )
+
+
+@router.get("/design/export/stacking-tsv")
+def export_stacking_map_tsv_file() -> Response:
+    """Export intended strand-order stacking map as TSV."""
+    from backend.core.pdb_export import export_stacking_map_tsv
+
+    design = design_state.get_or_404()
+    name = (design.metadata.name or "design").replace(" ", "_")
+    map_text = export_stacking_map_tsv(design)
+    return Response(
+        content=map_text.encode("utf-8"),
+        media_type="text/tab-separated-values",
+        headers={"Content-Disposition": f'attachment; filename="{name}.stacking.tsv"'},
+    )
+
+
+@router.get("/design/export/restraints-dry-implicit")
+def export_dry_implicit_restraints_file() -> Response:
+    """ZIP archive of design-aware NAMD extraBonds files for dry/implicit tests."""
+    import io
+    import zipfile
+    from backend.core.pdb_export import export_dry_implicit_restraints
+
+    design = design_state.get_or_404()
+    name = (design.metadata.name or "design").replace(" ", "_")
+    restraint_files = export_dry_implicit_restraints(design)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for filename, text in restraint_files.items():
+            zf.writestr(filename, text)
+    buf.seek(0)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}_dry_implicit_restraints.zip"'},
+    )
+
+
 @router.get("/design/debug/mrdna-roundtrip")
 def debug_mrdna_roundtrip() -> Response:
     """Run a zero-step mrdna round-trip test on the active design.
@@ -13542,7 +13673,19 @@ def export_namd_bundle_file() -> Response:
     import io
     import zipfile
     from backend.core.atomistic import build_atomistic_model
-    from backend.core.pdb_export import _box_dimensions, export_pdb, export_psf
+    from backend.core.pdb_export import (
+        _box_dimensions,
+        export_basepair_map_json,
+        export_basepair_map_tsv,
+        export_design_maps_json,
+        export_dry_implicit_restraints,
+        export_identity_json,
+        export_identity_tsv,
+        export_pdb,
+        export_psf,
+        export_stacking_map_json,
+        export_stacking_map_tsv,
+    )
 
     design = design_state.get_or_404()
     name   = (design.metadata.name or "design").replace(" ", "_")
@@ -13550,8 +13693,16 @@ def export_namd_bundle_file() -> Response:
     model              = build_atomistic_model(design)
     ax, ay, az, ox, oy, oz = _box_dimensions(model.atoms, margin_nm=5.0)
 
-    pdb_text    = export_pdb(design)
-    psf_text    = export_psf(design)
+    pdb_text    = export_pdb(design, model=model)
+    psf_text    = export_psf(design, model=model)
+    identity_json = export_identity_json(design, model=model)
+    identity_tsv = export_identity_tsv(design, model=model)
+    design_maps_json = export_design_maps_json(design, model=model)
+    basepairs_json = export_basepair_map_json(design, model=model)
+    basepairs_tsv = export_basepair_map_tsv(design, model=model)
+    stacking_json = export_stacking_map_json(design, model=model)
+    stacking_tsv = export_stacking_map_tsv(design, model=model)
+    dry_restraints = export_dry_implicit_restraints(design, model=model)
     conf_text   = _NAMD_CONF_TEMPLATE.format(
         name=name, ax=ax, ay=ay, az=az, ox=ox, oy=oy, oz=oz,
     )
@@ -13561,6 +13712,15 @@ def export_namd_bundle_file() -> Response:
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(f"{name}.pdb",  pdb_text)
         zf.writestr(f"{name}.psf",  psf_text)
+        zf.writestr(f"{name}.identity.json", identity_json)
+        zf.writestr(f"{name}.identity.tsv", identity_tsv)
+        zf.writestr(f"{name}.design_maps.json", design_maps_json)
+        zf.writestr(f"{name}.basepairs.json", basepairs_json)
+        zf.writestr(f"{name}.basepairs.tsv", basepairs_tsv)
+        zf.writestr(f"{name}.stacking.json", stacking_json)
+        zf.writestr(f"{name}.stacking.tsv", stacking_tsv)
+        for filename, text in dry_restraints.items():
+            zf.writestr(f"restraints/{filename}", text)
         zf.writestr("namd.conf",    conf_text)
         zf.writestr("README.txt",   readme_text)
     buf.seek(0)
@@ -13573,6 +13733,33 @@ def export_namd_bundle_file() -> Response:
 
 
 # ── Molecular Dynamics load ────────────────────────────────────────────────────
+
+
+@router.post("/md/resolve-config")
+def md_resolve_config(body: MdResolveConfigRequest) -> dict:
+    """Resolve a NAMD MD config/manifest into the files needed for playback."""
+    try:
+        from backend.core.md_import import resolve_md_config
+
+        source = resolve_md_config(body.config_path)
+        return {
+            "ok": True,
+            "config_path": str(source.config_path),
+            "package_dir": str(source.package_dir),
+            "topology_path": str(source.topology_path),
+            "coordinate_path": str(source.coordinate_path),
+            "trajectory_path": str(source.trajectory_path),
+            "log_path": str(source.log_path) if source.log_path else None,
+            "name_stem": source.name_stem,
+            "stage_name": source.stage_name,
+            "dt_ps": source.dt_ps,
+            "nstxout_comp": source.nstxout_comp,
+            "ns_per_day": source.ns_per_day,
+            "temperature_k": source.temperature_k,
+            "warnings": source.warnings,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "warnings": []}
 
 
 @router.post("/md/load")

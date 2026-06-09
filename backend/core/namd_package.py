@@ -28,6 +28,7 @@ import stat
 import zipfile
 from pathlib import Path
 
+from backend.core.atomistic import build_atomistic_model
 from backend.core.models import Design
 from backend.core.namd_helpers import (
     _AI_PROMPT,
@@ -35,7 +36,18 @@ from backend.core.namd_helpers import (
     complete_psf,
     get_ai_prompt,  # noqa: F401  re-export for backend.api.crud import path
 )
-from backend.core.pdb_export import export_pdb, export_psf
+from backend.core.pdb_export import (
+    export_basepair_map_json,
+    export_basepair_map_tsv,
+    export_design_maps_json,
+    export_dry_implicit_restraints,
+    export_identity_json,
+    export_identity_tsv,
+    export_pdb,
+    export_psf,
+    export_stacking_map_json,
+    export_stacking_map_tsv,
+)
 
 _FF_DIR = Path(__file__).parent.parent / "data" / "forcefield"
 
@@ -58,7 +70,16 @@ def build_namd_package(design: Design) -> bytes:
     name = (design.metadata.name or "design").replace(" ", "_")
     prefix = f"{name}_namd_complete/"
 
-    pdb_text = export_pdb(design)
+    model = build_atomistic_model(design)
+    pdb_text = export_pdb(design, model=model)
+    identity_json = export_identity_json(design, model=model)
+    identity_tsv = export_identity_tsv(design, model=model)
+    design_maps_json = export_design_maps_json(design, model=model)
+    basepairs_json = export_basepair_map_json(design, model=model)
+    basepairs_tsv = export_basepair_map_tsv(design, model=model)
+    stacking_json = export_stacking_map_json(design, model=model)
+    stacking_tsv = export_stacking_map_tsv(design, model=model)
+    dry_restraints = export_dry_implicit_restraints(design, model=model)
 
     try:
         psf_text = complete_psf(design)
@@ -79,6 +100,15 @@ def build_namd_package(design: Design) -> bytes:
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(prefix + f"{name}.pdb",              pdb_text)
         zf.writestr(prefix + f"{name}.psf",              psf_text)
+        zf.writestr(prefix + f"{name}.identity.json",    identity_json)
+        zf.writestr(prefix + f"{name}.identity.tsv",     identity_tsv)
+        zf.writestr(prefix + f"{name}.design_maps.json", design_maps_json)
+        zf.writestr(prefix + f"{name}.basepairs.json",   basepairs_json)
+        zf.writestr(prefix + f"{name}.basepairs.tsv",    basepairs_tsv)
+        zf.writestr(prefix + f"{name}.stacking.json",    stacking_json)
+        zf.writestr(prefix + f"{name}.stacking.tsv",     stacking_tsv)
+        for filename, text in dry_restraints.items():
+            zf.writestr(prefix + f"restraints/{filename}", text)
         zf.writestr(prefix + "namd.conf",                conf_text)
         zf.writestr(prefix + "README.txt",               readme_text)
         zf.writestr(prefix + "AI_ASSISTANT_PROMPT.txt",  prompt_text)
@@ -421,4 +451,3 @@ CITATIONS
   CuFix NBFIX:  Yoo & Aksimentiev, J. Phys. Chem. Lett. 2012; JCTC 2016
   NAMD:         Phillips et al., J. Chem. Phys. 2020
 """
-

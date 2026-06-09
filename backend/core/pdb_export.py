@@ -31,9 +31,12 @@ until explicit entries are added.
 
 from __future__ import annotations
 
+import json
+import math
+from collections import OrderedDict, defaultdict
 from typing import Optional
 
-from backend.core.atomistic import Atom, build_atomistic_model
+from backend.core.atomistic import Atom, AtomisticModel, build_atomistic_model
 from backend.core.models import Design
 
 # ── CHARMM36 atom type / charge / mass lookup ────────────────────────────────
@@ -217,6 +220,647 @@ def _chain_char(chain_id: str) -> str:
         lo = letters.index(chain_id[1])
         idx = hi * 26 + lo
     return _CHAIN_CHARS[idx % len(_CHAIN_CHARS)]
+
+
+def _nucleotide_uid(atom: Atom) -> str:
+    """Stable nucleotide key independent of lossy PDB chain/residue fields."""
+    if atom.aux_helix_id:
+        return (
+            f"strand={atom.strand_id}|helix={atom.helix_id}|bp={atom.bp_index}|"
+            f"dir={atom.direction}|seq={atom.seq_num}|aux={atom.aux_helix_id}|"
+            f"t={atom.aux_t:.6f}"
+        )
+    return (
+        f"strand={atom.strand_id}|helix={atom.helix_id}|bp={atom.bp_index}|"
+        f"dir={atom.direction}|seq={atom.seq_num}"
+    )
+
+
+def _psf_segid(chain_id: str) -> str:
+    """Segment ID convention shared by PSF and identity sidecar exports."""
+    return ("DNA" + chain_id)[:8]
+
+
+def export_identity_json(
+    design: Design,
+    model: Optional[AtomisticModel] = None,
+) -> str:
+    """Export durable atom/nucleotide identity metadata for MD pipelines.
+
+    PDB atom serials, chain IDs, and residue numbers are fixed-width fields and
+    can wrap or be rewritten by third-party tools.  This JSON sidecar preserves
+    NADOC's design identity for every nucleotide and atom so downstream scripts
+    can build base-pair maps, restraints, and health checks from intended
+    design identity instead of inferred geometry.
+    """
+    if model is None:
+        model = build_atomistic_model(design)
+
+    nucleotide_rows: "OrderedDict[str, dict]" = OrderedDict()
+    atom_rows: list[dict] = []
+    for atom in model.atoms:
+        uid = _nucleotide_uid(atom)
+        if uid not in nucleotide_rows:
+            nucleotide_rows[uid] = {
+                "nucleotide_uid": uid,
+                "strand_id": atom.strand_id,
+                "helix_id": atom.helix_id,
+                "bp_index": atom.bp_index,
+                "direction": atom.direction,
+                "chain_id": atom.chain_id,
+                "seq_num": atom.seq_num,
+                "residue": atom.residue,
+                "is_modified": atom.is_modified,
+                "aux_helix_id": atom.aux_helix_id,
+                "aux_t": atom.aux_t,
+                "atom_serials": [],
+            }
+        nucleotide_rows[uid]["atom_serials"].append(atom.serial)
+        atom_rows.append({
+            "atom_serial": atom.serial,
+            "atom_serial_1based": atom.serial + 1,
+            "atom_name": atom.name,
+            "element": atom.element,
+            "residue": atom.residue,
+            "nucleotide_uid": uid,
+            "strand_id": atom.strand_id,
+            "helix_id": atom.helix_id,
+            "bp_index": atom.bp_index,
+            "direction": atom.direction,
+            "chain_id": atom.chain_id,
+            "seq_num": atom.seq_num,
+            "pdb_chain": _chain_char(atom.chain_id),
+            "pdb_resseq": _h36(atom.seq_num, 4),
+            "pdb_atom_serial": (atom.serial % 9999) + 1,
+            "psf_segid": _psf_segid(atom.chain_id),
+            "psf_resid": str(atom.seq_num),
+            "aux_helix_id": atom.aux_helix_id,
+            "aux_t": atom.aux_t,
+        })
+
+    payload = {
+        "schema": "nadoc.md_identity.v1",
+        "design_name": design.metadata.name,
+        "notes": [
+            "Use atom_serial_1based to join against PSF/NAMD atom ids.",
+            "PDB chain/residue/serial fields are included for convenience but are not unique for large systems.",
+            "nucleotide_uid is the stable NADOC identity key for restraint generation and health checks.",
+        ],
+        "counts": {
+            "atoms": len(model.atoms),
+            "nucleotides": len(nucleotide_rows),
+            "bonds": len(model.bonds),
+        },
+        "nucleotides": list(nucleotide_rows.values()),
+        "atoms": atom_rows,
+    }
+    return json.dumps(payload, indent=2, sort_keys=False) + "\n"
+
+
+def export_identity_tsv(
+    design: Design,
+    model: Optional[AtomisticModel] = None,
+) -> str:
+    """Export a compact atom identity table for shell/analysis workflows."""
+    if model is None:
+        model = build_atomistic_model(design)
+    header = [
+        "atom_serial_1based", "atom_serial", "atom_name", "element", "residue",
+        "nucleotide_uid", "strand_id", "helix_id", "bp_index", "direction",
+        "chain_id", "seq_num", "pdb_chain", "pdb_resseq", "psf_segid",
+        "psf_resid", "aux_helix_id", "aux_t",
+    ]
+    lines = ["\t".join(header)]
+    for atom in model.atoms:
+        uid = _nucleotide_uid(atom)
+        row = [
+            str(atom.serial + 1),
+            str(atom.serial),
+            atom.name,
+            atom.element,
+            atom.residue,
+            uid,
+            atom.strand_id,
+            atom.helix_id,
+            str(atom.bp_index),
+            atom.direction,
+            atom.chain_id,
+            str(atom.seq_num),
+            _chain_char(atom.chain_id),
+            _h36(atom.seq_num, 4),
+            _psf_segid(atom.chain_id),
+            str(atom.seq_num),
+            atom.aux_helix_id,
+            f"{atom.aux_t:.6f}",
+        ]
+        lines.append("\t".join(row))
+    return "\n".join(lines) + "\n"
+
+
+# ── Design-aware MD maps and dry/implicit restraints ─────────────────────────
+
+_BACKBONE_NAMES = {
+    "P", "OP1", "OP2", "O5'", "C5'", "C4'", "O4'", "C3'", "O3'", "C2'", "C1'",
+}
+
+_WC_ATOM_PAIRS: dict[tuple[str, str], tuple[tuple[str, str], ...]] = {
+    ("DA", "DT"): (("N1", "N3"), ("N6", "O4")),
+    ("DT", "DA"): (("N3", "N1"), ("O4", "N6")),
+    ("DG", "DC"): (("N1", "N3"), ("N2", "O2"), ("O6", "N4")),
+    ("DC", "DG"): (("N3", "N1"), ("O2", "N2"), ("N4", "O6")),
+}
+
+_GLYCOSIDIC_ATOM_BY_RESIDUE = {
+    "DA": "N9",
+    "DG": "N9",
+    "DC": "N1",
+    "DT": "N1",
+}
+
+
+def _coord_ang(atom: Atom) -> tuple[float, float, float]:
+    return atom.x * 10.0, atom.y * 10.0, atom.z * 10.0
+
+
+def _distance_ang(atom_a: Atom, atom_b: Atom) -> float:
+    ax, ay, az = _coord_ang(atom_a)
+    bx, by, bz = _coord_ang(atom_b)
+    dx, dy, dz = ax - bx, ay - by, az - bz
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+
+
+def _nucleotide_table(model: AtomisticModel) -> "OrderedDict[str, dict]":
+    """Group atomistic atoms into stable nucleotide records."""
+    table: "OrderedDict[str, dict]" = OrderedDict()
+    for atom in model.atoms:
+        uid = _nucleotide_uid(atom)
+        rec = table.get(uid)
+        if rec is None:
+            rec = {
+                "nucleotide_uid": uid,
+                "strand_id": atom.strand_id,
+                "helix_id": atom.helix_id,
+                "bp_index": atom.bp_index,
+                "direction": atom.direction,
+                "chain_id": atom.chain_id,
+                "seq_num": atom.seq_num,
+                "residue": atom.residue,
+                "is_modified": atom.is_modified,
+                "aux_helix_id": atom.aux_helix_id,
+                "aux_t": atom.aux_t,
+                "atom_serials": [],
+                "atom_serials_1based": [],
+                "atoms_by_name": {},
+            }
+            table[uid] = rec
+        rec["atom_serials"].append(atom.serial)
+        rec["atom_serials_1based"].append(atom.serial + 1)
+        rec["atoms_by_name"][atom.name] = atom
+    return table
+
+
+def _public_nucleotide_record(rec: dict) -> dict:
+    return {
+        "nucleotide_uid": rec["nucleotide_uid"],
+        "strand_id": rec["strand_id"],
+        "helix_id": rec["helix_id"],
+        "bp_index": rec["bp_index"],
+        "direction": rec["direction"],
+        "chain_id": rec["chain_id"],
+        "seq_num": rec["seq_num"],
+        "residue": rec["residue"],
+        "is_modified": rec["is_modified"],
+        "aux_helix_id": rec["aux_helix_id"],
+        "aux_t": rec["aux_t"],
+        "atom_serials": rec["atom_serials"],
+        "atom_serials_1based": rec["atom_serials_1based"],
+    }
+
+
+def _build_basepair_records(model: AtomisticModel) -> list[dict]:
+    nucleotides = _nucleotide_table(model)
+    by_site: dict[tuple[str, int, str], list[dict]] = defaultdict(list)
+    for rec in nucleotides.values():
+        if rec["aux_helix_id"]:
+            continue
+        by_site[(rec["helix_id"], rec["bp_index"], rec["direction"])].append(rec)
+
+    records: list[dict] = []
+    fwd_keys = sorted(
+        (key for key in by_site if key[2] == "FORWARD"),
+        key=lambda key: (str(key[0]), int(key[1])),
+    )
+    for helix_id, bp_index, _direction in fwd_keys:
+        forward = sorted(by_site[(helix_id, bp_index, "FORWARD")], key=lambda r: r["seq_num"])
+        reverse = sorted(by_site.get((helix_id, bp_index, "REVERSE"), []), key=lambda r: r["seq_num"])
+        for copy_index, (a, b) in enumerate(zip(forward, reverse)):
+            c1_a = a["atoms_by_name"].get("C1'")
+            c1_b = b["atoms_by_name"].get("C1'")
+            wc_pairs = [
+                {
+                    "atom_a": atom_a,
+                    "atom_b": atom_b,
+                    "atom_serial_a": a["atoms_by_name"][atom_a].serial,
+                    "atom_serial_b": b["atoms_by_name"][atom_b].serial,
+                    "atom_serial_a_1based": a["atoms_by_name"][atom_a].serial + 1,
+                    "atom_serial_b_1based": b["atoms_by_name"][atom_b].serial + 1,
+                    "distance_angstrom": _distance_ang(
+                        a["atoms_by_name"][atom_a],
+                        b["atoms_by_name"][atom_b],
+                    ),
+                    "type": "canonical_wc",
+                }
+                for atom_a, atom_b in _WC_ATOM_PAIRS.get((a["residue"], b["residue"]), ())
+                if atom_a in a["atoms_by_name"] and atom_b in b["atoms_by_name"]
+            ]
+            anchor_pairs = list(wc_pairs)
+            if not anchor_pairs and c1_a is not None and c1_b is not None:
+                anchor_pairs.append({
+                    "atom_a": "C1'",
+                    "atom_b": "C1'",
+                    "atom_serial_a": c1_a.serial,
+                    "atom_serial_b": c1_b.serial,
+                    "atom_serial_a_1based": c1_a.serial + 1,
+                    "atom_serial_b_1based": c1_b.serial + 1,
+                    "distance_angstrom": _distance_ang(c1_a, c1_b),
+                    "type": "noncanonical_c1prime_anchor",
+                })
+            gly_a_name = _GLYCOSIDIC_ATOM_BY_RESIDUE.get(a["residue"])
+            gly_b_name = _GLYCOSIDIC_ATOM_BY_RESIDUE.get(b["residue"])
+            gly_a = a["atoms_by_name"].get(gly_a_name) if gly_a_name else None
+            gly_b = b["atoms_by_name"].get(gly_b_name) if gly_b_name else None
+            if not wc_pairs and gly_a is not None and gly_b is not None:
+                anchor_pairs.append({
+                    "atom_a": gly_a.name,
+                    "atom_b": gly_b.name,
+                    "atom_serial_a": gly_a.serial,
+                    "atom_serial_b": gly_b.serial,
+                    "atom_serial_a_1based": gly_a.serial + 1,
+                    "atom_serial_b_1based": gly_b.serial + 1,
+                    "distance_angstrom": _distance_ang(gly_a, gly_b),
+                    "type": "noncanonical_glycosidic_anchor",
+                })
+            records.append({
+                "pair_id": f"{helix_id}:{bp_index}:{copy_index}",
+                "helix_id": helix_id,
+                "bp_index": bp_index,
+                "copy_index": copy_index,
+                "nucleotide_5p_side": _public_nucleotide_record(a),
+                "nucleotide_3p_side": _public_nucleotide_record(b),
+                "wc_atom_pairs": wc_pairs,
+                "basepair_atom_pairs": anchor_pairs,
+                "c1prime_distance_angstrom": (
+                    _distance_ang(c1_a, c1_b) if c1_a is not None and c1_b is not None else None
+                ),
+            })
+    return records
+
+
+def _build_stacking_records(model: AtomisticModel) -> list[dict]:
+    nucleotides = _nucleotide_table(model)
+    by_strand_chain: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for rec in nucleotides.values():
+        by_strand_chain[(rec["strand_id"], rec["chain_id"])].append(rec)
+
+    records: list[dict] = []
+    for (strand_id, chain_id), recs in sorted(by_strand_chain.items(), key=lambda item: item[0]):
+        ordered = sorted(recs, key=lambda rec: rec["seq_num"])
+        for a, b in zip(ordered, ordered[1:]):
+            records.append({
+                "stack_id": f"{strand_id}:{chain_id}:{a['seq_num']}-{b['seq_num']}",
+                "strand_id": strand_id,
+                "chain_id": chain_id,
+                "nucleotide_5p": _public_nucleotide_record(a),
+                "nucleotide_3p": _public_nucleotide_record(b),
+            })
+    return records
+
+
+def export_design_maps_json(
+    design: Design,
+    model: Optional[AtomisticModel] = None,
+) -> str:
+    """Export intended base-pair and stacking maps from design identity."""
+    if model is None:
+        model = build_atomistic_model(design)
+    basepairs = _build_basepair_records(model)
+    stacking = _build_stacking_records(model)
+    payload = {
+        "schema": "nadoc.md_design_maps.v1",
+        "design_name": design.metadata.name,
+        "notes": [
+            "Base pairs are mapped by intended helix/bp/opposite-direction identity, not inferred from geometry.",
+            "Stacking neighbors follow each strand's atomistic 5-prime to 3-prime residue order.",
+            "Atom serials are zero-based; *_1based fields join against PSF/NAMD atom ids.",
+        ],
+        "counts": {
+            "atoms": len(model.atoms),
+            "basepairs": len(basepairs),
+            "stacking_neighbors": len(stacking),
+        },
+        "basepairs": basepairs,
+        "stacking": stacking,
+    }
+    return json.dumps(payload, indent=2, sort_keys=False) + "\n"
+
+
+def export_basepair_map_json(
+    design: Design,
+    model: Optional[AtomisticModel] = None,
+) -> str:
+    if model is None:
+        model = build_atomistic_model(design)
+    payload = {
+        "schema": "nadoc.md_basepair_map.v1",
+        "design_name": design.metadata.name,
+        "basepairs": _build_basepair_records(model),
+    }
+    return json.dumps(payload, indent=2, sort_keys=False) + "\n"
+
+
+def export_stacking_map_json(
+    design: Design,
+    model: Optional[AtomisticModel] = None,
+) -> str:
+    if model is None:
+        model = build_atomistic_model(design)
+    payload = {
+        "schema": "nadoc.md_stacking_map.v1",
+        "design_name": design.metadata.name,
+        "stacking": _build_stacking_records(model),
+    }
+    return json.dumps(payload, indent=2, sort_keys=False) + "\n"
+
+
+def export_basepair_map_tsv(
+    design: Design,
+    model: Optional[AtomisticModel] = None,
+) -> str:
+    if model is None:
+        model = build_atomistic_model(design)
+    header = [
+        "pair_id", "helix_id", "bp_index", "copy_index",
+        "uid_forward", "residue_forward", "strand_forward", "seq_forward",
+        "uid_reverse", "residue_reverse", "strand_reverse", "seq_reverse",
+        "wc_atom_pair_count", "c1prime_distance_angstrom",
+    ]
+    lines = ["\t".join(header)]
+    for rec in _build_basepair_records(model):
+        fwd = rec["nucleotide_5p_side"]
+        rev = rec["nucleotide_3p_side"]
+        c1dist = rec["c1prime_distance_angstrom"]
+        lines.append("\t".join([
+            rec["pair_id"],
+            str(rec["helix_id"]),
+            str(rec["bp_index"]),
+            str(rec["copy_index"]),
+            fwd["nucleotide_uid"],
+            fwd["residue"],
+            fwd["strand_id"],
+            str(fwd["seq_num"]),
+            rev["nucleotide_uid"],
+            rev["residue"],
+            rev["strand_id"],
+            str(rev["seq_num"]),
+            str(len(rec["wc_atom_pairs"])),
+            "" if c1dist is None else f"{c1dist:.4f}",
+        ]))
+    return "\n".join(lines) + "\n"
+
+
+def export_stacking_map_tsv(
+    design: Design,
+    model: Optional[AtomisticModel] = None,
+) -> str:
+    if model is None:
+        model = build_atomistic_model(design)
+    header = [
+        "stack_id", "strand_id", "chain_id",
+        "uid_5p", "helix_5p", "bp_5p", "direction_5p", "residue_5p", "seq_5p",
+        "uid_3p", "helix_3p", "bp_3p", "direction_3p", "residue_3p", "seq_3p",
+    ]
+    lines = ["\t".join(header)]
+    for rec in _build_stacking_records(model):
+        a = rec["nucleotide_5p"]
+        b = rec["nucleotide_3p"]
+        lines.append("\t".join([
+            rec["stack_id"],
+            rec["strand_id"],
+            rec["chain_id"],
+            a["nucleotide_uid"],
+            str(a["helix_id"]),
+            str(a["bp_index"]),
+            a["direction"],
+            a["residue"],
+            str(a["seq_num"]),
+            b["nucleotide_uid"],
+            str(b["helix_id"]),
+            str(b["bp_index"]),
+            b["direction"],
+            b["residue"],
+            str(b["seq_num"]),
+        ]))
+    return "\n".join(lines) + "\n"
+
+
+def _extra_bond_line(atom_i: Atom, atom_j: Atom, distance_ang: float, k: float) -> str:
+    return f"bond {atom_i.serial} {atom_j.serial} {distance_ang:.4f} {k:.4f}"
+
+
+def _base_heavy_atoms(rec: dict) -> list[Atom]:
+    atoms = rec["atoms_by_name"].values()
+    return [
+        atom for atom in atoms
+        if atom.element != "H" and atom.name not in _BACKBONE_NAMES
+    ]
+
+
+def _append_unique_extra_bond(
+    lines: list[str],
+    seen: set[tuple[int, int]],
+    covalent: set[tuple[int, int]],
+    atom_i: Atom,
+    atom_j: Atom,
+    distance_ang: float,
+    k: float,
+) -> None:
+    key = tuple(sorted((atom_i.serial, atom_j.serial)))
+    if atom_i.serial == atom_j.serial or key in seen or key in covalent:
+        return
+    seen.add(key)
+    lines.append(_extra_bond_line(atom_i, atom_j, distance_ang, k))
+
+
+def _helix_axis_midpoint(helix) -> tuple[float, float, float]:
+    return (
+        (helix.axis_start.x + helix.axis_end.x) / 2.0,
+        (helix.axis_start.y + helix.axis_end.y) / 2.0,
+        (helix.axis_start.z + helix.axis_end.z) / 2.0,
+    )
+
+
+def _helix_midpoint_distance_nm(helix_a, helix_b) -> float:
+    ax, ay, az = _helix_axis_midpoint(helix_a)
+    bx, by, bz = _helix_axis_midpoint(helix_b)
+    dx, dy, dz = ax - bx, ay - by, az - bz
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+
+
+def export_dry_implicit_restraints(
+    design: Design,
+    model: Optional[AtomisticModel] = None,
+    wc_k: float = 5.0,
+    stacking_k: float = 1.0,
+    stacking_cutoff_angstrom: float = 4.8,
+    interhelix_k: float = 0.5,
+    interhelix_distance_angstrom: float = 31.0,
+    interhelix_neighbor_cutoff_nm: float = 3.2,
+    interhelix_stride_bp: int = 7,
+) -> dict[str, str]:
+    """Export NAMD extraBonds files for dry or implicit-solvent origami tests.
+
+    These files are design-aware: WC restraints come from intended base-pair
+    identity, stacking restraints come from strand order, and dry inter-helix
+    restraints come from the design helix layout.  Atom ids are zero-based,
+    matching NAMD extraBonds conventions.
+    """
+    if model is None:
+        model = build_atomistic_model(design)
+
+    nucleotides = _nucleotide_table(model)
+    basepairs = _build_basepair_records(model)
+    stacking = _build_stacking_records(model)
+    by_uid = nucleotides
+    covalent = {tuple(sorted(pair)) for pair in model.bonds}
+
+    wc_lines: list[str] = [
+        "# NAMD extraBonds: intended base-pair restraints",
+        "# Canonical A-T/G-C pairs use Watson-Crick heavy atoms; noncanonical pairs use C1' and glycosidic anchors.",
+    ]
+    wc_seen: set[tuple[int, int]] = set()
+    for rec in basepairs:
+        a = by_uid[rec["nucleotide_5p_side"]["nucleotide_uid"]]
+        b = by_uid[rec["nucleotide_3p_side"]["nucleotide_uid"]]
+        for pair in rec["basepair_atom_pairs"]:
+            atom_a_name = pair["atom_a"]
+            atom_b_name = pair["atom_b"]
+            atom_a = a["atoms_by_name"].get(atom_a_name)
+            atom_b = b["atoms_by_name"].get(atom_b_name)
+            if atom_a is None or atom_b is None:
+                continue
+            _append_unique_extra_bond(
+                wc_lines, wc_seen, covalent, atom_a, atom_b,
+                _distance_ang(atom_a, atom_b), wc_k,
+            )
+
+    stack_lines: list[str] = [
+        "# NAMD extraBonds: adjacent-base stacking contact restraints",
+        f"# Contacts are non-covalent base heavy-atom pairs within {stacking_cutoff_angstrom:.2f} A initially.",
+    ]
+    stack_seen: set[tuple[int, int]] = set()
+    for rec in stacking:
+        a = by_uid[rec["nucleotide_5p"]["nucleotide_uid"]]
+        b = by_uid[rec["nucleotide_3p"]["nucleotide_uid"]]
+        for atom_a in _base_heavy_atoms(a):
+            for atom_b in _base_heavy_atoms(b):
+                dist = _distance_ang(atom_a, atom_b)
+                if dist <= stacking_cutoff_angstrom:
+                    _append_unique_extra_bond(
+                        stack_lines, stack_seen, covalent, atom_a, atom_b, dist, stacking_k,
+                    )
+
+    bp_by_helix_bp = {(rec["helix_id"], rec["bp_index"]): rec for rec in basepairs}
+    helix_by_id = {helix.id: helix for helix in design.helices}
+    helix_pairs: list[tuple[str, str, float]] = []
+    helix_ids = sorted(helix_by_id)
+    for idx, hid_a in enumerate(helix_ids):
+        for hid_b in helix_ids[idx + 1:]:
+            dist = _helix_midpoint_distance_nm(helix_by_id[hid_a], helix_by_id[hid_b])
+            if dist <= interhelix_neighbor_cutoff_nm:
+                helix_pairs.append((hid_a, hid_b, dist))
+
+    inter_lines: list[str] = [
+        "# NAMD extraBonds: sparse dry inter-helix spacing restraints",
+        f"# Neighbor helices are selected by design-axis midpoint distance <= {interhelix_neighbor_cutoff_nm:.2f} nm.",
+        f"# Equilibrium distance is {interhelix_distance_angstrom:.2f} A; stride is {interhelix_stride_bp} bp.",
+    ]
+    inter_seen: set[tuple[int, int]] = set()
+    for hid_a, hid_b, _dist_nm in helix_pairs:
+        bp_indices = sorted({
+            rec["bp_index"]
+            for rec in basepairs
+            if rec["helix_id"] in {hid_a, hid_b}
+        })
+        for bp_index in bp_indices[::max(1, interhelix_stride_bp)]:
+            rec_a = bp_by_helix_bp.get((hid_a, bp_index))
+            rec_b = bp_by_helix_bp.get((hid_b, bp_index))
+            if rec_a is None or rec_b is None:
+                continue
+            for side in ("nucleotide_5p_side", "nucleotide_3p_side"):
+                nuc_a = by_uid[rec_a[side]["nucleotide_uid"]]
+                nuc_b = by_uid[rec_b[side]["nucleotide_uid"]]
+                atom_a = nuc_a["atoms_by_name"].get("P")
+                atom_b = nuc_b["atoms_by_name"].get("P")
+                if atom_a is None or atom_b is None:
+                    continue
+                _append_unique_extra_bond(
+                    inter_lines, inter_seen, covalent, atom_a, atom_b,
+                    interhelix_distance_angstrom, interhelix_k,
+                )
+
+    combined_lines = [
+        "# NAMD extraBonds: de-duplicated combined dry/implicit design restraints",
+        "# Contains intended base-pair, adjacent stacking, and sparse dry inter-helix restraints.",
+    ]
+    combined_seen: set[tuple[int, int]] = set()
+    for source_lines in (wc_lines, stack_lines, inter_lines):
+        for line in source_lines:
+            if not line.startswith("bond "):
+                continue
+            parts = line.split()
+            key = tuple(sorted((int(parts[1]), int(parts[2]))))
+            if key in combined_seen:
+                continue
+            combined_seen.add(key)
+            combined_lines.append(line)
+
+    summary = {
+        "schema": "nadoc.md_restraints_summary.v1",
+        "design_name": design.metadata.name,
+        "atom_ids": "zero_based_namd_extraBonds",
+        "parameters": {
+            "wc_k": wc_k,
+            "stacking_k": stacking_k,
+            "stacking_cutoff_angstrom": stacking_cutoff_angstrom,
+            "interhelix_k": interhelix_k,
+            "interhelix_distance_angstrom": interhelix_distance_angstrom,
+            "interhelix_neighbor_cutoff_nm": interhelix_neighbor_cutoff_nm,
+            "interhelix_stride_bp": interhelix_stride_bp,
+        },
+        "counts": {
+            "basepairs": len(basepairs),
+            "stacking_neighbors": len(stacking),
+            "helix_neighbor_pairs": len(helix_pairs),
+            "wc_restraints": len(wc_seen),
+            "basepair_restraints": len(wc_seen),
+            "stacking_restraints": len(stack_seen),
+            "interhelix_restraints": len(inter_seen),
+            "combined_restraints": len(combined_seen),
+        },
+        "notes": [
+            "Use one restraint file at a time unless you know duplicate extraBonds are impossible.",
+            "The combined file is de-duplicated and is the safest NAMD input.",
+            "These restraints preserve intended design contacts for dry/implicit screening and should be reported separately from unrestrained stability metrics.",
+        ],
+    }
+
+    return {
+        "restraints_wc_k5.extrabonds": "\n".join(wc_lines) + "\n",
+        "restraints_stack_k1.extrabonds": "\n".join(stack_lines) + "\n",
+        "restraints_interhelix_31A_k0p5.extrabonds": "\n".join(inter_lines) + "\n",
+        "restraints_dry_implicit_combined.extrabonds": "\n".join(combined_lines) + "\n",
+        "restraints_summary.json": json.dumps(summary, indent=2, sort_keys=False) + "\n",
+    }
 
 
 # ── PDB helpers ───────────────────────────────────────────────────────────────
@@ -490,14 +1134,11 @@ def export_psf(
     atoms = model.atoms
     bonds = list(model.bonds) + [(si, sj) for si, sj in non_std_bonds]
 
-    # Segment ID: "DNA" + chain_id (up to 4 chars for PSF field)
-    def _segid(chain: str) -> str:
-        return ("DNA" + chain)[:8]
-
     remarks = [
         " REMARKS NADOC all-atom model (Phase AA)",
         " REMARKS Generated by NADOC pdb_export.py",
         " REMARKS CHARMM36 atom types (heavy atoms only; no hydrogens)",
+        " REMARKS Stable nucleotide identity is exported separately in *.identity.json",
     ]
     lines: list[str] = [
         "PSF EXT",
@@ -514,7 +1155,7 @@ def export_psf(
     lines.append(f"{len(atoms):>8d} !NATOM")
     for atom in atoms:
         serial_1 = atom.serial + 1
-        segid    = _segid(atom.chain_id)
+        segid    = _psf_segid(atom.chain_id)
         resid    = str(atom.seq_num)
         atype, charge, mass = _charmm_params(atom)
         line = (

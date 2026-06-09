@@ -18,6 +18,7 @@ Coordinate convention: NADOC uses nm; mrdna uses Ångströms (×10).
 from __future__ import annotations
 
 import math
+import os
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -33,7 +34,7 @@ from backend.core.sequences import _build_loop_skip_map, domain_bp_range
 _NM_TO_ANGSTROM = 10.0
 
 
-_MRDNA_TOOL_PATH = "/tmp/mrdna-tool"
+_MRDNA_TOOL_PATH = os.environ.get("MRDNA_TOOL_PATH", "/home/jojo/Work/mrdna-tool")
 
 
 def _ensure_mrdna() -> None:
