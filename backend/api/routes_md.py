@@ -385,7 +385,7 @@ def _append_production_segments(
             continue
         spec = SegmentSpec(
             name=name,
-            stage=f"{length_ns:g} ns production run",
+            stage=f"{length_ns:g} ns conservative production run",
             percent=pct,
             steps=steps,
             temp=310.0,
