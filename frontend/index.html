@@ -4932,39 +4932,8 @@
   <!-- Autobreak modal body. Chrome from createModal() in main.js. -->
   <div id="autobreak-modal-body" hidden>
     <div style="display:flex;flex-direction:column;gap:12px">
-      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
-        <input type="radio" name="ab-algo" value="basic" checked style="margin-top:4px">
-        <div>
-          <div style="font-size:var(--text-sm);color:var(--color-text-primary)">Basic — Stage 2 autostaple</div>
-          <div style="font-size:var(--text-xs);color:var(--color-text-muted)">Use Stage 2 autostaple nick planner (preferred lengths, sandwich-aware).</div>
-        </div>
-      </label>
-      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
-        <input type="radio" name="ab-algo" value="aksel" style="margin-top:4px">
-        <div>
-          <div style="font-size:var(--text-sm);color:var(--color-text-primary)">Aksel route — Auto crossover + thermodynamic autobreak</div>
-          <div style="font-size:var(--text-xs);color:var(--color-text-muted)">Place compliant crossovers, then apply optimized legal-length staple breaks.</div>
-        </div>
-      </label>
-      <div id="ab-aksel-controls" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding-top:4px">
-        <label style="display:grid;gap:4px;font-size:var(--text-xs);color:var(--color-text-muted)">
-          Min nt
-          <input id="ab-min-nt" type="number" min="1" step="1" value="21" style="background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);color:var(--color-text-primary);padding:6px 8px;font-size:var(--text-sm)">
-        </label>
-        <label style="display:grid;gap:4px;font-size:var(--text-xs);color:var(--color-text-muted)">
-          Max nt
-          <input id="ab-max-nt" type="number" min="1" step="1" value="60" style="background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);color:var(--color-text-primary);padding:6px 8px;font-size:var(--text-sm)">
-        </label>
-        <label style="display:grid;gap:4px;font-size:var(--text-xs);color:var(--color-text-muted)">
-          Paths
-          <input id="ab-k-paths" type="number" min="1" max="50" step="1" value="3" style="background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);color:var(--color-text-primary);padding:6px 8px;font-size:var(--text-sm)">
-        </label>
-        <label style="display:grid;gap:4px;font-size:var(--text-xs);color:var(--color-text-muted)">
-          Use path
-          <input id="ab-path-index" type="number" min="0" step="1" value="0" style="background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-sm);color:var(--color-text-primary);padding:6px 8px;font-size:var(--text-sm)">
-        </label>
-      </div>
-      <div id="ab-aksel-report" style="display:none;border-top:1px solid var(--color-border-default);padding-top:10px;font-size:var(--text-xs);color:var(--color-text-muted);line-height:1.55;white-space:pre-line"></div>
+      <div style="font-size:var(--text-sm);color:var(--color-text-primary)">Break staples at every major tick mark</div>
+      <div style="font-size:var(--text-xs);color:var(--color-text-muted);line-height:1.55">Nicks all staples at major tick marks (multiples of 7 bp honeycomb / 8 bp square), then merges fragments to be as long as possible without exceeding 56 nt. Apply after Auto-crossover.</div>
     </div>
   </div>
 

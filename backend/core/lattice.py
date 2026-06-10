@@ -1949,16 +1949,28 @@ def _strand_domain_lens(positions: list) -> list[int]:
 
 
 def _has_sandwich(domain_lens: list[int]) -> bool:
-    """True if any interior domain is strictly shorter than both its neighbours.
+    """True if a contiguous RUN of interior domains is flanked by longer domains.
 
-    A 'sandwich' is the pattern [..., longer, shorter, longer, ...].
-    First and last domains cannot be sandwiched (they have only one neighbour).
-    Example: [14, 7, 14] → True (7 is sandwiched); [14, 7, 7] → False.
+    A 'sandwich' is a maximal valley: one or more consecutive interior domains
+    that are ALL strictly shorter than both the domain immediately before the run
+    and the domain immediately after it.  First and last (terminal) domains can
+    never be the valley — they have only one neighbour.
+
+    Examples (lengths):
+      [14, 7, 14]        → True  (single 7 flanked by 14, 14)
+      [14, 7, 7, 14]     → True  (run 7,7 flanked by 14, 14)
+      [14, 7, 7, 7, 14]  → True
+      [14, 7, 7]         → False (run is terminal, not flanked on both sides)
+      [7, 14, 7]         → False (the 14 sticks up; terminal 7s are fine)
+      [7, 7, 7]          → False (uniform — no taller flanks)
     """
-    return any(
-        domain_lens[i - 1] > domain_lens[i] and domain_lens[i + 1] > domain_lens[i]
-        for i in range(1, len(domain_lens) - 1)
-    )
+    n = len(domain_lens)
+    for a in range(n - 2):
+        for b in range(a + 2, n):
+            run = domain_lens[a + 1 : b]
+            if run and all(d < domain_lens[a] and d < domain_lens[b] for d in run):
+                return True
+    return False
 
 
 def _strand_nucleotide_positions(strand) -> list[tuple[str, int, "Direction"]]:
@@ -1984,7 +1996,7 @@ def compute_nick_plan_for_strand(
 
     NOTE: The primary autobreak path uses tick-mark nicking (make_autobreak) which
     inherently avoids crossover positions.  This preferred-length algorithm is kept
-    for compute_nick_plan (UI preview) but is not used by make_nicks_for_autostaple.
+    for compute_nick_plan (UI preview) but is not used by the autobreak path.
 
     Nicks are returned in REVERSE 5'→3' order so that applying them right-to-left
     preserves the original strand ID for subsequent nicks (make_nick always keeps the
@@ -2071,7 +2083,7 @@ def compute_nick_plan(
     """Compute nick positions for ALL non-scaffold strands (UI preview).
 
     Uses preferred-length ranking (not tick-mark nicking).  The actual autobreak
-    path (make_nicks_for_autostaple → make_autobreak) uses tick marks instead.
+    path (make_autobreak) uses tick marks instead.
     """
     xover_bps: set[tuple[str, int]] = set()
     for xo in design.crossovers:
@@ -2089,116 +2101,24 @@ def compute_nick_plan(
     return plan
 
 
-def make_nicks_for_autostaple(
-    design: Design,
-    preferred_lengths: "list[int] | None" = None,
-    min_length: int = 21,
-    max_length: int = 60,
-    min_crossover_gap: int = 7,
-) -> Design:
-    """Break long staple strands into canonical-length segments (Stage 2 of autostaple).
-
-    Delegates to make_autobreak which implements tick-mark nicking.
-    """
-    return make_autobreak(design)
-
-
 # ── Autobreak: tick-mark nicking ──────────────────────────────────────────────
 
 
-def _pre_nick_for_crossover_ligation(
-    design: Design,
-    max_len: int,
-    period: int,
-    tick_set: frozenset[int],
-    xover_bps: set[tuple[str, int]],
-) -> Design:
-    """Nick strands so that crossover-linked pairs can be ligated within *max_len*."""
-    result = design
-
-    five_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
-    three_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
-    for s in result.strands:
-        if (s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
-                or s.is_reference or not s.domains):
-            continue
-        fd = s.domains[0]
-        five_prime[(fd.helix_id, fd.start_bp, fd.direction)] = s
-        ld = s.domains[-1]
-        three_prime[(ld.helix_id, ld.end_bp, ld.direction)] = s
-
-    for xo in result.crossovers:
-        ha, hb = xo.half_a, xo.half_b
-        s_from = three_prime.get((ha.helix_id, ha.index, ha.strand))
-        s_to = five_prime.get((hb.helix_id, hb.index, hb.strand))
-        if s_from is None or s_to is None or s_from.id == s_to.id:
-            s_from = three_prime.get((hb.helix_id, hb.index, hb.strand))
-            s_to = five_prime.get((ha.helix_id, ha.index, ha.strand))
-        if s_from is None or s_to is None or s_from.id == s_to.id:
-            continue
-
-        from_nt = sum(abs(d.end_bp - d.start_bp) + 1 for d in s_from.domains)
-        to_nt = sum(abs(d.end_bp - d.start_bp) + 1 for d in s_to.domains)
-        if from_nt + to_nt <= max_len:
-            continue
-
-        longer = s_from if from_nt >= to_nt else s_to
-        shorter_nt = min(from_nt, to_nt)
-        budget = max_len - shorter_nt
-
-        positions = _strand_nucleotide_positions(longer)
-        if longer.id == s_from.id:
-            search_start = max(len(positions) - budget - 1, 0)
-            for i in range(search_start, len(positions) - 1):
-                h_cur, bp, d = positions[i]
-                tick_bp = (bp + 1) if d == Direction.FORWARD else bp
-                if (tick_bp % period) not in tick_set:
-                    continue
-                if (h_cur, bp) in xover_bps or (h_cur, tick_bp) in xover_bps:
-                    continue
-                if i + 1 < len(positions) and positions[i + 1][0] != h_cur:
-                    continue
-                if i > 0 and positions[i - 1][0] != h_cur:
-                    continue
-                try:
-                    result = make_nick(result, h_cur, bp, d)
-                except ValueError:
-                    pass
-                break
-        else:
-            search_start = min(budget - 1, len(positions) - 2)
-            for i in range(search_start, -1, -1):
-                h_cur, bp, d = positions[i]
-                tick_bp = (bp + 1) if d == Direction.FORWARD else bp
-                if (tick_bp % period) not in tick_set:
-                    continue
-                if (h_cur, bp) in xover_bps or (h_cur, tick_bp) in xover_bps:
-                    continue
-                if i + 1 < len(positions) and positions[i + 1][0] != h_cur:
-                    continue
-                if i > 0 and positions[i - 1][0] != h_cur:
-                    continue
-                try:
-                    result = make_nick(result, h_cur, bp, d)
-                except ValueError:
-                    pass
-                break
-
-    return result
-
-
-def make_autobreak(design: Design) -> Design:
-    """Nick all non-scaffold strands at major tick marks, producing segments
-    as long as possible without exceeding 60 nt.
+def nick_all_major_ticks(design: Design) -> Design:
+    """Nick every non-scaffold strand at *all* major tick marks (co-linear only).
 
     Major tick marks:
       HC (period 21): bp % 21 ∈ {0, 7, 14}
       SQ (period 32): bp % 32 ∈ {0, 8, 16, 24}
+
+    A nick is skipped at crossover bps, overhang bps, and anywhere the surrounding
+    nucleotides leave the strand's helix — so a nick never lands on a crossover
+    junction and multi-domain crossover strands stay traversed.  After this every
+    staple is fragmented at the tick grid, ready for crossover placement / regrowth.
     """
     is_hc    = design.lattice_type == LatticeType.HONEYCOMB
     period   = 21 if is_hc else 32
     tick_set = frozenset({0, 7, 14}) if is_hc else frozenset({0, 8, 16, 24})
-    max_len  = 60
 
     xover_bps: set[tuple[str, int]] = set()
     for xo in design.crossovers:
@@ -2211,8 +2131,6 @@ def make_autobreak(design: Design) -> Design:
             continue
         positions = _strand_nucleotide_positions(strand)
         total = len(positions)
-        if total <= max_len:
-            continue
 
         ovhg_bps: set[tuple[str, int]] = set()
         for dom in strand.domains:
@@ -2222,41 +2140,22 @@ def make_autobreak(design: Design) -> Design:
                 for _bp in range(lo, hi + 1):
                     ovhg_bps.add((dom.helix_id, _bp))
 
+        # Nick at every major tick (never the 3′ terminus at total-1).
         nick_indices: list[int] = []
-        seg_start = 0
-        while seg_start < total - 1:
-            window_end = min(seg_start + max_len, total - 1)
-
-            chosen: int | None = None
-            fallback: int | None = None
-
-            for i in range(window_end - 1, seg_start - 1, -1):
-                h_cur, bp, d = positions[i]
-                tick_bp = (bp + 1) if d == Direction.FORWARD else bp
-                if (tick_bp % period) not in tick_set:
-                    continue
-                if (h_cur, bp) in xover_bps or (h_cur, tick_bp) in xover_bps:
-                    continue
-                if (h_cur, bp) in ovhg_bps:
-                    continue
-                if positions[i + 1][0] != h_cur:
-                    continue
-                if i > 0 and positions[i - 1][0] != h_cur:
-                    continue
-                if fallback is None:
-                    fallback = i
-                seg_lens = _strand_domain_lens(positions[seg_start : i + 1])
-                if not _has_sandwich(seg_lens):
-                    chosen = i
-                    break
-
-            if chosen is None:
-                chosen = fallback
-            if chosen is None:
-                break
-
-            nick_indices.append(chosen)
-            seg_start = chosen + 1
+        for i in range(total - 1):
+            h_cur, bp, d = positions[i]
+            tick_bp = (bp + 1) if d == Direction.FORWARD else bp
+            if (tick_bp % period) not in tick_set:
+                continue
+            if (h_cur, bp) in xover_bps or (h_cur, tick_bp) in xover_bps:
+                continue
+            if (h_cur, bp) in ovhg_bps:
+                continue
+            if positions[i + 1][0] != h_cur:
+                continue
+            if i > 0 and positions[i - 1][0] != h_cur:
+                continue
+            nick_indices.append(i)
 
         for idx in reversed(nick_indices):
             h, bp, d = positions[idx]
@@ -2265,16 +2164,205 @@ def make_autobreak(design: Design) -> Design:
             except ValueError:
                 pass
 
-    result = make_merge_short_staples(result, max_merged_length=max_len)
-    result = _pre_nick_for_crossover_ligation(
-        result, max_len, period, tick_set, xover_bps,
-    )
-    result = ligate_crossover_chains(result, max_length=max_len)
+    return result
+
+
+def make_autobreak(design: Design) -> Design:
+    """Fragment staples at the tick grid, then grow them back to ≤56 nt.
+
+    Nick every non-scaffold strand at all major tick marks (co-linear, never on a
+    crossover), then re-ligate co-linear neighbours so each staple is as long as
+    possible without exceeding 56 nt — except that a merge that would otherwise
+    strand a neighbour below the lattice minimum (21 nt HC / 24 nt SQ) is allowed
+    to exceed 56.
+
+    Because nicks never land on a crossover and no orphaning crossover-ligation is
+    performed, every crossover stays traversed (no nick on a crossover).
+    """
+    result = nick_all_major_ticks(design)
+    result = grow_staples(result, max_merged_length=56)
+    return result
+
+
+# ── Stage 3: grow / merge short staples ───────────────────────────────────────
+
+
+def grow_staples(
+    design: Design,
+    max_merged_length: int = 56,
+    min_length: int | None = None,
+) -> Design:
+    """Ligate co-linear staple fragments back into long staples.
+
+    Two passes:
+      1. Greedy merge of co-linear neighbours up to ``max_merged_length``.
+      2. Absorb any staple still shorter than ``min_length`` into a co-linear
+         neighbour, even if the result exceeds ``max_merged_length`` — a
+         sub-``min_length`` staple is worse than an over-long one.
+
+    ``min_length`` defaults to three tick-segments for the design's lattice —
+    21 nt honeycomb (3×7) / 24 nt square (3×8).
+    """
+    if min_length is None:
+        min_length = 21 if design.lattice_type == LatticeType.HONEYCOMB else 24
+    result = make_merge_short_staples(design, max_merged_length=max_merged_length)
+    result = _absorb_short_staples(result, min_length=min_length, max_length=max_merged_length)
+    return result
+
+
+def _absorb_short_staples(
+    design: Design, min_length: int = 14, max_length: int = 56
+) -> Design:
+    """Eliminate sub-*min_length* staples by folding each into a co-linear neighbour.
+
+    For a short staple S with a co-linear neighbour N:
+      * **straight merge** when ``len(S) + len(N) <= max_length`` — just ligate.
+      * **rebalance-then-split** otherwise — nick N at the co-linear major tick
+        that lets ``S + N_near`` land in ``[min_length, max_length]`` while the far
+        part ``N_far`` stays ``>= min_length`` (preferring the largest legal
+        ``N_near``), then ligate S onto that near part.  This reproduces the nick a
+        careful router would leave instead of building an over-cap staple, e.g. a
+        seam-bridging run that would otherwise exceed 56 nt.
+
+    A short staple with no co-linear neighbour, or none that admits a legal tick
+    split, is left as-is (rare).  Nicks are only ever placed at co-linear ticks, so
+    no crossover is ever split.
+    """
+    is_hc    = design.lattice_type == LatticeType.HONEYCOMB
+    period   = 21 if is_hc else 32
+    tick_set = frozenset({0, 7, 14}) if is_hc else frozenset({0, 8, 16, 24})
+
+    def _is_staple(s) -> bool:
+        return (s.strand_type not in (StrandType.SCAFFOLD, StrandType.LINKER)
+                and not s.is_reference and bool(s.domains))
+
+    def _len(s) -> int:
+        return sum(abs(d.end_bp - d.start_bp) + 1 for d in s.domains)
+
+    def _is_tick(bp: int, direction: "Direction") -> bool:
+        return (((bp + 1) if direction == Direction.FORWARD else bp) % period) in tick_set
+
+    def _by_id(des: Design, sid: str):
+        return next((s for s in des.strands if s.id == sid), None)
+
+    def _absorb_one(res: Design, short: "Strand") -> "Design | None":
+        L1 = _len(short)
+        five: dict = {}
+        three: dict = {}
+        for s in res.strands:
+            if not _is_staple(s):
+                continue
+            f = s.domains[0]
+            five[(f.helix_id, f.start_bp, f.direction)] = s.id
+            l = s.domains[-1]
+            three[(l.helix_id, l.end_bp, l.direction)] = s.id
+
+        last = short.domains[-1]
+        nb3 = five.get((last.helix_id,
+                        last.end_bp + 1 if last.direction == Direction.FORWARD else last.end_bp - 1,
+                        last.direction))
+        first = short.domains[0]
+        nb5 = three.get((first.helix_id,
+                         first.start_bp - 1 if first.direction == Direction.FORWARD else first.start_bp + 1,
+                         first.direction))
+        sides = [("3prime", nb3), ("5prime", nb5)]
+
+        pos_short = _strand_nucleotide_positions(short)
+
+        # Pass 1: a straight in-cap merge on either side beats a rebalance.
+        for side, nbid in sides:
+            if nbid is None or nbid == short.id:
+                continue
+            nb = _by_id(res, nbid)
+            if nb is None or L1 + _len(nb) > max_length:
+                continue
+            pos_nb = _strand_nucleotide_positions(nb)
+            merged = pos_short + pos_nb if side == "3prime" else pos_nb + pos_short
+            if _has_sandwich(_strand_domain_lens(merged)):
+                continue  # merging here would sandwich a short interior domain
+            return _ligate(res, short, nb) if side == "3prime" else _ligate(res, nb, short)
+
+        # Pass 2: rebalance — nick the neighbour at the balancing tick, then merge.
+        for side, nbid in sides:
+            if nbid is None or nbid == short.id:
+                continue
+            nb = _by_id(res, nbid)
+            if nb is None:
+                continue
+            L2 = _len(nb)
+            lo_x = max(min_length - L1, 1)            # S + N_near >= min
+            hi_x = min(max_length - L1, L2 - min_length)  # S + N_near <= max  AND  N_far >= min
+            if lo_x > hi_x:
+                continue
+            # Co-linear-with-S domain of the neighbour, in 5'→3' order.  Nick strictly
+            # inside it (range stops at len-1) so any crossover stays internal to N_far.
+            dom = nb.domains[0] if side == "3prime" else nb.domains[-1]
+            bps = list(domain_bp_range(dom))
+            best_bp = None
+            best_x = -1
+            for i in range(len(bps) - 1):
+                # 3': N_near is the 5' part bps[:i+1] (x = i+1).
+                # 5': N_near is the 3' part bps[i+1:] (x = len-1-i).
+                x = (i + 1) if side == "3prime" else (len(bps) - 1 - i)
+                if x < lo_x or x > hi_x:
+                    continue
+                if not _is_tick(bps[i], dom.direction):
+                    continue
+                # Reject ticks whose merged piece (short + N_near) would sandwich.
+                if side == "3prime":
+                    near_pos = [(dom.helix_id, b, dom.direction) for b in bps[: i + 1]]
+                    merged = pos_short + near_pos
+                else:
+                    near_pos = [(dom.helix_id, b, dom.direction) for b in bps[i + 1 :]]
+                    merged = near_pos + pos_short
+                if _has_sandwich(_strand_domain_lens(merged)):
+                    continue
+                if x > best_x:
+                    best_x, best_bp = x, bps[i]
+            if best_bp is None:
+                continue
+
+            res2 = make_nick(res, dom.helix_id, best_bp, dom.direction)
+            sh = _by_id(res2, short.id)
+            if sh is None:
+                continue
+            if side == "3prime":
+                near = _by_id(res2, nb.id)  # left fragment keeps the id = the 5' (near) part
+                if near is None:
+                    continue
+                return _ligate(res2, sh, near)
+            # 5': the near part is the NEW (right) fragment whose 3' abuts short's 5'.
+            f = sh.domains[0]
+            prev = f.start_bp - 1 if f.direction == Direction.FORWARD else f.start_bp + 1
+            near = next((s for s in res2.strands
+                         if _is_staple(s) and s.id != sh.id
+                         and s.domains[-1].helix_id == f.helix_id
+                         and s.domains[-1].direction == f.direction
+                         and s.domains[-1].end_bp == prev), None)
+            if near is None:
+                continue
+            return _ligate(res2, near, sh)
+
+        return None
+
+    result = design
+    while True:
+        progressed = False
+        for s in result.strands:
+            if not _is_staple(s) or _len(s) >= min_length:
+                continue
+            out = _absorb_one(result, s)
+            if out is not None:
+                result = out
+                progressed = True
+                break
+        if not progressed:
+            break
 
     return result
 
 
-# ── Stage 3: merge short staples ──────────────────────────────────────────────
+# ── Stage 3b: merge short staples (≤ cap, sandwich-free) ──────────────────────
 
 
 def make_merge_short_staples(
@@ -2286,6 +2374,11 @@ def make_merge_short_staples(
     Finds adjacent pairs whose combined length ≤ max_merged_length and whose
     merged domain sequence is sandwich-free, then removes the nick.  Repeats
     until no further merges are possible.
+
+    Merge order favours **growing the shortest segments first**: candidates are
+    taken in ascending order of (shorter member, combined length), so a 7-nt
+    segment is grown via its shorter neighbour rather than topping a 49-nt segment
+    up to the cap.  This yields more uniform staple lengths.
     """
     result = design
 
@@ -2298,7 +2391,7 @@ def make_merge_short_staples(
             f = s.domains[0]
             five_prime[(f.helix_id, f.start_bp, f.direction)] = s
 
-        candidates: list[tuple[int, str, str]] = []
+        candidates: list[tuple[int, int, str, str]] = []
         for s1 in result.strands:
             if (s1.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
                     or s1.is_reference or not s1.domains):
@@ -2320,16 +2413,19 @@ def make_merge_short_staples(
                 continue
             if _has_sandwich(_strand_domain_lens(pos1 + pos2)):
                 continue
-            candidates.append((combined, s1.id, s2.id))
+            shorter = min(len(pos1), len(pos2))
+            candidates.append((shorter, combined, s1.id, s2.id))
 
         if not candidates:
             break
 
-        candidates.sort(key=lambda x: -x[0])
+        # Smallest shorter-member first (grow the shortest segment), then smallest
+        # combined (prefer the shorter partner) — favours uniform lengths.
+        candidates.sort(key=lambda x: (x[0], x[1]))
 
         merged_ids: set[str] = set()
         any_merge = False
-        for _combined, s1_id, s2_id in candidates:
+        for _shorter, _combined, s1_id, s2_id in candidates:
             if s1_id in merged_ids or s2_id in merged_ids:
                 continue
             s1 = next((s for s in result.strands if s.id == s1_id), None)
@@ -2403,6 +2499,102 @@ def _overhang_neighbor_xy(
         parent_helix.axis_start.x + (fnx - fpx),
         parent_helix.axis_start.y + (fny - fpy),
     )
+
+
+# Overhang-candidate geometry — mirrors the UI overhang tool's placement gate in
+# frontend/src/scene/overhang_locations.js so a programmatic / direct-API extrude
+# is rejected at exactly the positions the tool would refuse to offer.
+_OVERHANG_SPACING_EPS = 0.12   # nm — neighbour centre-distance tolerance
+_OVERHANG_Z_EPS       = 0.2    # nm — half a bp; Z-occupancy tolerance
+_OVERHANG_DOT_MIN     = 0.75   # cos(~41°) — backbone bead must face the target cell
+_OVERHANG_NEIGHBOR_SPACING = 2.0 * HONEYCOMB_LATTICE_RADIUS  # 2.25 nm (both lattices)
+
+
+def _overhang_cell_xy(lattice_type: "LatticeType", row: int, col: int) -> Tuple[float, float]:
+    """Formula XY centre of a lattice cell — matches the frontend _hcCellXY/_sqCellXY."""
+    if lattice_type == LatticeType.SQUARE:
+        return (col * SQUARE_COL_PITCH, row * SQUARE_ROW_PITCH)
+    return honeycomb_position(row, col)
+
+
+def _helix_nucleotide_z_band(h: Helix) -> Tuple[float, float]:
+    """Z range spanned by a helix's actual NUCLEOTIDES (not its axis).
+
+    A helix axis runs one base-rise past its last nucleotide (the end-cap):
+    ``axis_end = axis_start + length_bp·rise`` while nucleotides sit at indices
+    ``0 … length_bp-1``.  Overhang-cell occupancy must use the nucleotide extent —
+    counting the empty end-cap as occupied wrongly suppresses a candidate exactly
+    one bp beyond a short overhang (e.g. a nick-pair sibling).  Direction-agnostic.
+    """
+    z0, z1 = h.axis_start.z, h.axis_end.z
+    if h.length_bp and h.length_bp > 0:
+        z1 = z0 + (z1 - z0) * (h.length_bp - 1) / h.length_bp
+    return (min(z0, z1), max(z0, z1))
+
+
+def overhang_candidate_error(
+    design: Design,
+    orig_helix: Helix,
+    bp_index: int,
+    direction: Direction,
+    neighbor_row: int,
+    neighbor_col: int,
+) -> Optional[str]:
+    """Return a human-readable reason if (neighbor_row, neighbor_col) is NOT a valid
+    overhang target for the staple end at (orig_helix, bp_index, direction); else None.
+
+    Mirrors the UI overhang tool's candidate predicate exactly
+    (frontend/src/scene/overhang_locations.js): the neighbour must be a vacant
+    nearest-neighbour cell at the staple end's Z, and the end's backbone bead must
+    azimuthally face it (radial dot ≥ 0.75 ≈ within 41°).  Computed on the straight
+    *geometric* layer (B-DNA helical phase from topology), never physical/deformed —
+    the layer the placement question actually lives in.  Skipped for helices without
+    lattice context (imported designs whose grid_pos is None).
+    """
+    from backend.core.geometry import nucleotide_positions
+
+    if orig_helix.grid_pos is None:
+        return None
+
+    pr, pc = orig_helix.grid_pos
+    px, py = _overhang_cell_xy(design.lattice_type, pr, pc)
+    nx, ny = _overhang_cell_xy(design.lattice_type, neighbor_row, neighbor_col)
+
+    # 1) Adjacency — must be a nearest-neighbour cell.
+    if abs(math.hypot(nx - px, ny - py) - _OVERHANG_NEIGHBOR_SPACING) > _OVERHANG_SPACING_EPS:
+        return (f"Cell ({neighbor_row},{neighbor_col}) is not a lattice neighbour of "
+                f"helix {orig_helix.grid_pos}.")
+
+    # 2) Backbone bead at this staple end (straight geometric frame).
+    nuc = next((n for n in nucleotide_positions(orig_helix)
+                if n.bp_index == bp_index and n.direction == direction), None)
+    if nuc is None:
+        return (f"No nucleotide at (helix={orig_helix.id!r}, bp={bp_index}, "
+                f"direction={direction.value}).")
+    bx, by, bz = float(nuc.position[0]), float(nuc.position[1]), float(nuc.position[2])
+
+    # 3) Vacancy at the end's Z — no helix's NUCLEOTIDES may cover bz at the target
+    #    cell.  Uses the nucleotide extent (not the axis span) so the empty end-cap
+    #    one base-rise past the last nucleotide does not falsely block an adjacent bp.
+    for h in design.helices:
+        if h.grid_pos != (neighbor_row, neighbor_col):
+            continue
+        zlo, zhi = _helix_nucleotide_z_band(h)
+        if zlo - _OVERHANG_Z_EPS <= bz <= zhi + _OVERHANG_Z_EPS:
+            return f"Cell ({neighbor_row},{neighbor_col}) is occupied at this Z."
+
+    # 4) Backbone-facing — the bead's radial direction must point at the target cell.
+    rx, ry = bx - orig_helix.axis_start.x, by - orig_helix.axis_start.y
+    dx, dy = nx - px, ny - py
+    rl, dl = math.hypot(rx, ry), math.hypot(dx, dy)
+    if rl > 0.01 and dl > 0.01:
+        dot = (rx * dx + ry * dy) / (rl * dl)
+        if dot < _OVERHANG_DOT_MIN:
+            return (f"Staple {direction.value} end at bp {bp_index} on helix "
+                    f"{orig_helix.grid_pos} does not face cell ({neighbor_row},{neighbor_col}): "
+                    f"its backbone bead points away (facing score {dot:.2f} < "
+                    f"{_OVERHANG_DOT_MIN}) — the overhang tool offers no candidate here.")
+    return None
 
 
 def make_overhang_extrude(

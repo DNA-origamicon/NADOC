@@ -140,12 +140,15 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-08 after Refactor #19
-(Joint region **frame-inspection half** → `routes_assembly_frames.py` — ROUTER lift, **B=6, bespoke-B=0** per L19:
-all six back-imports are the shared read-kernel infra trio + lookups + converter; `_cluster_se3` moved IN (pure,
-not L4-blocked); frame math imported from `backend/core` (#7/#12). 3 read-only routes moved; assembly.py 61→58
-routes, −203 ln (5023→4820), 1852 passed / 0 failed unchanged. Verbatim lift — `test_joints.py` covers. Orphaned
-`_build_world_connector_frames` core import cleaned. NOT committed (awaiting user)._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-08 after Refactor #21
+(Polymerize **service-push half** → `backend/core/assembly_polymer.py::build_polymer_chain` — SERVICE push, **B=0**:
+~365 ln of inline record-assembly orchestration (connector-union + clone build + pattern-mate replication +
+the `_make_clone`/`_clone_id_*` closures) pulled out of the `polymerize_assembly` HANDLER, which shrank ~440→~80 ln.
+The chain MATH was already in core from the feature build (no dedup needed). 4 mechanical param renames the only
+adaptation; pin = 12 new `test_assembly_polymer_core.py` unit tests + the 21 unchanged `test_polymerize.py` route
+tests. assembly.py 4256→3895 ln, routes unchanged (53). 1864 passed / 0 failed. Service (not router) was correct
+because `_replay_assembly_op` calls `polymerize_assembly(body)` as a fn and stays in assembly.py. NOT committed
+(awaiting user). #20 (joints mutator, B=11 bespoke-B=0) also still uncommitted in the working tree._
 
 **▶ NEXT — crud.py:** **Flexible ssDNA segments** (banner `# ── Flexible ssDNA segments`, find via
 `grep -n "# ── Flexible ssDNA" backend/api/crud.py`, ~13200s after #3's −315 ln drift) →
@@ -175,28 +178,30 @@ cross-test state leak — it was hash-seed-dependent nondeterminism in the share
 topological event instead of a brittle strand count. **Full-suite green is now 1753 passed / 0 failed.**
 See ISSUE-6 in `issues_ledger.md`.
 
-**▶ NEXT — assembly.py:** Joint region frame-inspection half is DONE in #19. Topmost recommended next: the
-**Joint-CRUD mutator half** (the rest of `# ── Joint routes`, banner via
-`grep -n "# ── Joint routes" backend/api/assembly.py`, now ~3182 → `# ── Gear/belt endpoint resolution` ~3674
-after #19's −173 drift) → `routes_assembly_joints.py`. **5 routes: add_joint / create_mate / patch_joint
-(POST/PATCH /assembly/joints[/...], includes the `# ── Endpoint-aware revolute drive` sub-banner) +
-refresh-mate + delete_joint.** Move region-local `_compose_add_joint` IN. **Probed B≈9–11, ALL exempt
-(bespoke-B=0 expected per L19)**: kernel `_assembly_response`/`_apply_assembly_mutation_with_feature_log`;
-lookups `_find_joint`/`_find_instance`; converters `_mat4_from_model`/`_mat4_to_model`; shared infra
-`_design_with_instance_overrides`/`_assembly_source_path`/`_propagate_fk_inplace`/`_apply_prismatic_joint`;
-and `_infer_cluster_ids_for_connector_label` (arrives via `_compose_add_joint`, used cross-region at the
-`_joint_side_cluster_ids` web ~407, L4-blocked → class L13-exempt, import back). Drive math already in core
-(#15). Verbatim lift; preserve the silent-vs-undo contract per L6 (`set_assembly_silent` on patch's
-gear-resync vs `_apply_assembly_mutation_with_feature_log` on add/delete). This is the densest exempt cord
-in the file (L11) — ship on bespoke-B=0, state the exempt headcount in the row. Alt next: **Polymerize
-Origami** (`# ── Polymerize Origami`) → `routes_assembly_polymerize.py` + dedup the replication math against
-`assembly_polymer.py`/`periodic_polymer.py`. **Still L4-blocked, leave:** the cluster-inference trio
-(`_infer_cluster_ids_for_connector_label`→`_design_with_instance_overrides` file-IO, `_joint_side_cluster_ids`,
-`_propagate_cluster_delta_to_mates`). NOTE: `_apply_prismatic_joint` + `_mat4_from_model`/`_mat4_to_model` stay
-in assembly.py (26+ unrelated callers; not a gear dep) — don't chase them.
-GOTCHA banked (#19): the prior handoff lumped `_cluster_se3` with the L4-blocked cluster trio — **wrong**, it's
-pure (numpy/scipy + model fields, no file-IO) with a single in-region caller, so it moved IN cleanly. Always
-read a helper's BODY before trusting a prior session's L4 classification.
+**▶ NEXT — assembly.py:** Finish the Polymerize area, then it's router-liftable. **Recommended: the PERIODIC
+service push (mirror #21).** `polymerize_periodic_assembly` (`# ── Polymerize Origami` banner, the 2nd route, find
+via `grep -n "def polymerize_periodic_assembly" backend/api/assembly.py`) still has a ~115-ln inline build span
+(seam-IP union + `_clone` + `_seam_joint` + the forward/backward joint wiring, lines ~3260s) that is core-pure
+EXCEPT it calls `_get_connector_world_frame` — which **already lives in `backend/core/assembly_connectors.py`** (#12),
+so core CAN import it. Push that span to `backend/core/assembly_polymer.py::build_periodic_chain` (or a periodic
+module) with direct unit tests, exactly like #21. The validation + `_design_with_instance_overrides` (file-IO) +
+`derive_periodic_delta`/`principal_seam_connectors` calls stay in the handler. AFTER both build spans are in core,
+the 3 routes are all thin and the **router lift becomes trivial verbatim** → `routes_assembly_polymerize.py`
+(probe B then — likely the exempt set `_assembly_response`/`_apply_assembly_mutation_with_feature_log`/`_find_instance`/
+`_find_joint`/`_assembly_source_path`/`_design_with_instance_overrides`, all importable; `_get_connector_world_frame`
+from core). **GOTCHA (router lift only):** `_replay_assembly_op` (stays in assembly.py) calls
+`polymerize_assembly(body)` + `polymerize_periodic_assembly(body)` as fns (~2549/2574) — if you move the routes,
+either keep thin shim handlers in assembly.py or point replay at the new router. **Alt next:**
+**Overhang bindings + connections** (`# ── Assembly-level overhang bindings` ~1776 + `# ── …overhang connections`
+~1912) → `routes_assembly_overhangs.py` (larger; cross-part linker logic partly in `assembly_linker.py`/
+`assembly_linker_relax.py` already — probe what's still inline; see `project_assembly_overhang_bindings.md`).
+**Still L4-blocked, leave:** the cluster-inference trio (`_infer_cluster_ids_for_connector_label`→
+`_design_with_instance_overrides` file-IO, `_joint_side_cluster_ids`, `_propagate_cluster_delta_to_mates`).
+NOTE: `_apply_prismatic_joint` + `_mat4_from_model`/`_mat4_to_model` stay in assembly.py (26+ unrelated callers).
+GOTCHA banked (#20, → L21): before deleting an F401-flagged `from backend.core... import _helper` re-export line
+in the god-file, `grep -rn "import _helper" tests/ backend/` — a TEST (`test_periodic_polymer.py`) imported
+`_get_connector_world` *through* `backend.api.assembly`, so the "unused" re-export was its public doorway.
+Fixed by pointing the test at the true core home; do the same, or keep the line with `# noqa: F401`.
 
 **Gotcha banked (assembly.py, #4):** the assembly-side shared kernel helper is **`_assembly_response`** (the twin
 of crud's `_design_response`) — it stays in assembly.py, counts toward B, never blocks. Animation keyframe-patch
@@ -317,19 +322,20 @@ Tiers are priority hints, not gospel.
   `Mat4x4` converter swaps the only adaptation); 6 imported back, 4 module-private (L17); 27 unit tests
   (`test_assembly_kinematics_core.py`). Dead `_gear_endpoint_seed` removed. assembly.py −418 ln, routes
   unchanged (77). **This unblocks the Gear/Belt/PartGroup/Joint routers** (L18) — the drive math is now in core.
-- [~] **Joint routes** — `# ── Joint routes` (~665 ln, 3182–3846) → splitting by cohesion (handoff "split if
-  cohesion divides"). **Frame-inspection half DONE** (Refactor #19, 2026-06-08): the 3 read-only routes
-  (`GET /assembly/connector-frames`, joint `debug-frames`, joint `connector-frames`) →
-  `routes_assembly_frames.py` at **B=6, bespoke-B=0** (all shared read-kernel infra; `_cluster_se3` moved IN —
-  it's pure, not L4-blocked as the old handoff claimed). 61→58 routes, −203 LOC. **Joint-CRUD mutator half
-  STILL OPEN**: add_joint / create_mate / patch_joint / refresh_mate / delete_joint (5 routes) +
-  region-local `_compose_add_joint` → `routes_assembly_joints.py`. Re-probe on the live range: expect B≈9–11
-  all-exempt (kernel `_assembly_response`/`_apply_assembly_mutation_with_feature_log`; lookups
-  `_find_joint`/`_find_instance`; converters `_mat4_from_model`/`_mat4_to_model`; shared infra
-  `_design_with_instance_overrides`/`_assembly_source_path`/`_propagate_fk_inplace`/`_apply_prismatic_joint`;
-  L4-blocked cross-region `_infer_cluster_ids_for_connector_label` arriving via `_compose_add_joint`). bespoke-B
-  should be 0 if `_infer_cluster_ids_for_connector_label` is classed L13-exempt (shared cross-region +
-  L4-blocked). The drive math is already in core (#15). Verbatim lift; `test_joints.py` covers.
+- [x] **Joint routes** — `# ── Joint routes` split by cohesion into two routers (handoff "split if cohesion
+  divides"). **Frame-inspection half DONE** (Refactor #19): the 3 read-only routes →
+  `routes_assembly_frames.py` at **B=6, bespoke-B=0** (`_cluster_se3` moved IN). **Joint-CRUD mutator half DONE**
+  (Refactor #20, 2026-06-08) → `routes_assembly_joints.py`: 5 routes (add_joint / create_mate / patch_joint /
+  refresh_mate / delete_joint) + region-local `_compose_add_joint` + 4 request models
+  (AddJointRequest/MateConnectorSpec/CreateMateRequest/PatchJointRequest, all region-only) moved IN.
+  **B=11, bespoke-B=0** (L19) — every back-import is exempt: kernel `_assembly_response` +
+  `_apply_assembly_mutation_with_feature_log`; lookups `_find_joint`/`_find_instance`; converters
+  `_mat4_from_model`/`_mat4_to_model`/`_apply_prismatic_joint` (26+ callers); file-IO infra
+  `_assembly_source_path`/`_design_with_instance_overrides`/`_propagate_fk_inplace`; L4-blocked cross-region
+  `_infer_cluster_ids_for_connector_label`. Drive math imported from `backend/core` directly (#7/#12/#15), NOT
+  back from the god-file. Verbatim lift; `test_joints.py` covers. 58→53 routes, −564 LOC. **L21 banked:** removing
+  the now-locally-unused `_get_connector_world` re-export from assembly.py broke a TEST that imported it from
+  there — `grep -rn` the whole `tests/` too, not just `backend/`, before deleting an F401-flagged re-export.
 - [x] **PartGroup routes** — `# ── PartGroup routes` → `routes_assembly_groups.py` (Refactor #18, 2026-06-08).
   **B=3** — all shared kernel/infra, **bespoke-B=0** (L19): `_assembly_response` + `_apply_assembly_mutation_with_feature_log`
   (kernel) + `resolve_assembly` (the kernel joint-solver ROUTE, called inside `transform_group` to re-snap
@@ -355,9 +361,19 @@ Tiers are priority hints, not gospel.
   math (`_belt_to_relation`) already in core (#15). High-B-playbook option-2: every back-import is the
   accepted shared kernel, so B=4 is not bespoke entanglement. assembly.py 73→67 routes. `tests/test_belt_paths.py`
   covers (verbatim lift).
-- [ ] **Polymerize Origami** — `# ── Polymerize Origami` (~5679–6357) → `routes_assembly_polymerize.py` +
-  push the replication/pattern-mate math (~5805–6293) into `backend/core/` (much of it may already be in
-  `assembly_polymer.py` / `periodic_polymer.py` — dedup, don't duplicate). See `memory/project_polymerize_origami.md`.
+- [~] **Polymerize Origami** — `# ── Polymerize Origami` → `routes_assembly_polymerize.py` + service push.
+  **Service-push HALF DONE (Refactor #21, 2026-06-08):** the chain MATH was already in core (no dedup needed —
+  the route called `compute_chain_transforms` &c., never re-implemented them). The ~365 ln of inline
+  *record-assembly orchestration* in `polymerize_assembly` (connector-union + primary/backward clone build +
+  pattern-mate replication + the `_make_clone`/`_clone_id_*` closures) → `backend/core/assembly_polymer.py::build_polymer_chain`
+  (**B=0**, +12 unit tests). Handler shrank ~440→~80 ln (validate→lookup→delegate→commit→respond). **ROUTER
+  half STILL PENDING:** lift the 3 routes (`/assembly/polymerize`, `/assembly/polymerize-periodic`,
+  `GET .../periodic-closure`) → `routes_assembly_polymerize.py`. GOTCHA for the router lift: `_replay_assembly_op`
+  (stays in assembly.py) CALLS `polymerize_assembly(body)` + `polymerize_periodic_assembly(body)` as functions
+  (lines ~2549/2574) — a router lift forces assembly.py to reverse-import the route fns from the new router. Either
+  (a) leave the thin handlers in assembly.py and only lift the periodic route's pure build (same service-push
+  treatment as #21 — push `polymerize_periodic_assembly`'s ~115-ln build span to `build_periodic_chain`), or
+  (b) point `_replay_assembly_op` at the new router module. Probe before lifting. See `memory/project_polymerize_origami.md`.
 - [ ] **Overhang bindings + connections** — `# ── Assembly-level overhang bindings` (~2559) + `# ── …overhang
   connections` (~2695–3863) → `routes_assembly_overhangs.py`. Larger; the cross-part linker logic is partly
   in `assembly_linker.py` / `assembly_linker_relax.py` already — probe what's still inline. See

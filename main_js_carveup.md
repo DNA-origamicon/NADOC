@@ -696,7 +696,11 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   no-DOM / menu-guard+open / Run-no-design-guard / Run-dispatches+progress+routing-check / default-seamed /
   fail-toast / Cancel+backdrop-close). Gate: vitest 712 + smoke 23/23 + real-app exercise (scaffolded part →
   menu→modal→Run seamed→routing-check toggles on, zero console errors).
-- [x] **Autobreak / Aksel modal** — the second IIFE under the Autoscaffold banner (`_runAutoBreak3d`/
+- [x] **Autobreak / Aksel modal** — NOTE 2026-06-09: the Aksel thermodynamic optimizer was **removed**
+  (abandoned — it didn't work and the user dislikes it). `scene/aksel_format.js`, `readAkselOptions`, and the
+  Score/Preview/Aksel-route paths are gone; `ui/autobreak_modal.js` now runs only the simple tick-break router.
+  The historical row below is left as a dated record of the original extraction.
+  The second IIFE under the Autoscaffold banner (`_runAutoBreak3d`/
   `_scoreAksel3d`/`_previewAksel3d`/`_readAkselOptions`/`_setAkselReport`/`_buildOnce` + indeterminate-progress
   animation + `menu-routing-autobreak`). **DONE 2026-06-05 (extraction #66, commit 2f816db)** →
   `ui/autobreak_modal.js` factory `initAutobreakModal({store, api})` + pure `readAkselOptions(raw)` (raw input

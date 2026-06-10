@@ -3235,15 +3235,14 @@ async function main() {
   document.getElementById('menu-routing-full-autostaple')?.addEventListener('click', async () => {
     if (!store.getState().currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
     _showProgress('Full autostaple', 'Assigning sequences and routing staples…')
-    const result = await api.addFullAutostaple({ scaffold_name: 'M13mp18', k_paths: 3 })
+    const result = await api.addFullAutostaple({ scaffold_name: 'M13mp18' })
     _hideProgress()
     if (!result) {
       showToast('Full autostaple failed: ' + (store.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
       return
     }
     const full = result.full_autostaple ?? {}
-    const removed = full.removed_circularizing_crossover_count ?? 0
-    showToast(`Full autostaple complete: ${full.aksel_break?.new_staple_count ?? 0} staples, ${removed} circularizing crossovers removed.`)
+    showToast(`Full autostaple complete: ${full.auto_crossover?.placed ?? 0} crossovers placed.`)
   })
 
   // ── Routing: Autobreak modal → ui/autobreak_modal.js ──────────────────────

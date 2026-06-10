@@ -145,6 +145,59 @@ def all_valid_crossover_sites(
     return results
 
 
+# ── Scaffold seam detection ───────────────────────────────────────────────────
+_SEAM_BP_WINDOW = 1  # two scaffold crossovers on a pair within this many bp = a seam
+
+
+def scaffold_seam_positions(design: Design) -> dict[str, set[int]]:
+    """``helix_id`` → set of bp positions belonging to an internal scaffold seam.
+
+    A *seam* is a **double scaffold crossover**: two scaffold crossovers between
+    the same helix pair at near-consecutive bp indices (|Δbp| ≤ ``_SEAM_BP_WINDOW``).
+    Both bp positions of the pair are marked on **both** helices.
+
+    This is a structural definition computed from ``design.crossovers`` geometry,
+    so it works for hand-drawn / imported scaffolds and multi-section (teeth)
+    designs — not just auto-routed ones.  A single u-turn end cap is one crossover
+    per helix pair, so it is never flagged; only the genuine go-and-return double
+    crossover of a seam is.
+
+    A *scaffold half* is one whose strand direction matches the expected scaffold
+    direction for its helix (FORWARD if ``(row+col)%2==0`` else REVERSE).  Helices
+    without ``grid_pos`` are skipped (no parity → no seams → full crossover density).
+    """
+    helix_map = {h.id: h for h in design.helices if h.grid_pos is not None}
+
+    def _scaffold_half(half: HalfCrossover) -> bool:
+        h = helix_map.get(half.helix_id)
+        if h is None:
+            return False
+        row, col = h.grid_pos
+        expected = "FORWARD" if _is_forward(row, col) else "REVERSE"
+        return half.strand.value == expected
+
+    # Group scaffold-crossover bps by normalized helix pair (both halves share index).
+    pair_bps: dict[tuple[str, str], list[int]] = {}
+    for xo in design.crossovers:
+        if not (_scaffold_half(xo.half_a) and _scaffold_half(xo.half_b)):
+            continue
+        hid_a, hid_b = xo.half_a.helix_id, xo.half_b.helix_id
+        key = (min(hid_a, hid_b), max(hid_a, hid_b))
+        pair_bps.setdefault(key, []).append(xo.half_a.index)
+
+    seams: dict[str, set[int]] = {}
+    for (hid_a, hid_b), bps in pair_bps.items():
+        bps_sorted = sorted(bps)
+        for i in range(len(bps_sorted) - 1):
+            for j in range(i + 1, len(bps_sorted)):
+                if bps_sorted[j] - bps_sorted[i] > _SEAM_BP_WINDOW:
+                    break
+                for bp in (bps_sorted[i], bps_sorted[j]):
+                    seams.setdefault(hid_a, set()).add(bp)
+                    seams.setdefault(hid_b, set()).add(bp)
+    return seams
+
+
 def extract_crossovers_from_strands(
     strands: list,
     helices: list[Helix] | None = None,

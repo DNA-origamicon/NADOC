@@ -1,14 +1,11 @@
 """Tests for backend/core/seamless_router.py"""
 from __future__ import annotations
 
-import pathlib
-
 
 from backend.core.lattice import make_bundle_design
 from backend.core.models import Design, Direction, LatticeType, StrandType
 from backend.core.seamless_router import auto_scaffold_seamless
-
-FIXTURES = pathlib.Path(__file__).parent / "fixtures"
+from tests.conftest import make_teeth_design
 
 # ── Cell layouts ──────────────────────────────────────────────────────────────
 
@@ -164,9 +161,9 @@ def test_teeth_closing_zig():
     and the warning, were artifacts of routing an already-routed design.  See the
     double-routing issue in issues_ledger.md.)
     """
-    design = Design.model_validate_json(
-        (FIXTURES / "teeth.nadoc").read_text()
-    )
+    # Built from the same feature-log ops as teeth.nadoc (deterministic h_XY_r_c
+    # ids + strands; equivalence pinned by test_teeth_builder_matches_fixture).
+    design = make_teeth_design()
     design = design.copy_with(crossovers=[])
     updated, result = auto_scaffold_seamless(design)
 
@@ -196,7 +193,7 @@ def test_teeth_closing_zig():
             for x in d.crossovers
         )
 
-    rerun_design = Design.model_validate_json((FIXTURES / "teeth.nadoc").read_text())
+    rerun_design = make_teeth_design()
     rerun_design = rerun_design.copy_with(crossovers=[])
     rerun_updated, _ = auto_scaffold_seamless(rerun_design)
     assert _xover_sig(updated) == _xover_sig(rerun_updated), "seamless route is not deterministic"

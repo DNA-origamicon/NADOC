@@ -29,7 +29,6 @@ from backend.api import state as design_state
 from backend.api.main import app
 from backend.core.lattice import (
     make_bundle_design,
-    make_overhang_extrude,
 )
 from backend.core.models import (
     Design,
@@ -69,67 +68,11 @@ def _first_staple_end(design: Design):
 def _extrude_overhang(design: Design, length_bp: int = 12) -> tuple[Design, str]:
     """Extrude a single overhang of *length_bp* and return (design, overhang_id).
 
-    Picks the first staple 3' end on helix (0,1) and an empty neighbour cell
-    that doesn't already host a helix in the 6HB.
+    Delegates to the validated conftest helper so the overhang lands at a site the
+    app's overhang tool would actually offer (backbone bead faces the cell).
     """
-    from backend.core.models import StrandType
-    helix_by_id = {h.id: h for h in design.helices}
-    occupied_rc: set[tuple[int, int]] = set()
-    import re
-    for h in design.helices:
-        m = re.match(r"^h_\w+_(-?\d+)_(-?\d+)$", h.id)
-        if m:
-            occupied_rc.add((int(m.group(1)), int(m.group(2))))
-
-    # Find a staple end on helix (0,1) whose neighbour at (-1, 1) is empty
-    # and a valid HC site.
-    from backend.core.lattice import (
-        honeycomb_position,
-        is_valid_honeycomb_cell,
-    )
-    from backend.core.constants import HONEYCOMB_HELIX_SPACING
-    import math
-
-    for strand in design.strands:
-        if strand.strand_type != StrandType.STAPLE or not strand.domains:
-            continue
-        for is_five_prime, dom in ((True, strand.domains[0]), (False, strand.domains[-1])):
-            helix = helix_by_id.get(dom.helix_id)
-            if helix is None:
-                continue
-            m = re.match(r"^h_\w+_(-?\d+)_(-?\d+)$", helix.id)
-            if not m:
-                continue
-            row, col = int(m.group(1)), int(m.group(2))
-            ox, oy = honeycomb_position(row, col)
-            bp_index = dom.start_bp if is_five_prime else dom.end_bp
-            for dr in (-1, 0, 1):
-                for dc in (-1, 0, 1):
-                    if dr == 0 and dc == 0:
-                        continue
-                    nr, nc = row + dr, col + dc
-                    if (nr, nc) in occupied_rc:
-                        continue
-                    if not is_valid_honeycomb_cell(nr, nc):
-                        continue
-                    nx, ny = honeycomb_position(nr, nc)
-                    if abs(math.hypot(nx - ox, ny - oy) - HONEYCOMB_HELIX_SPACING) > 0.05:
-                        continue
-                    out = make_overhang_extrude(
-                        design,
-                        helix_id=helix.id,
-                        bp_index=bp_index,
-                        direction=dom.direction,
-                        is_five_prime=is_five_prime,
-                        neighbor_row=nr,
-                        neighbor_col=nc,
-                        length_bp=length_bp,
-                    )
-                    new_helix_ids = {h.id for h in out.helices} - {h.id for h in design.helices}
-                    new_helix_id = next(iter(new_helix_ids))
-                    new_ovhg = next(o for o in out.overhangs if o.helix_id == new_helix_id)
-                    return out, new_ovhg.id
-    raise AssertionError("could not extrude an overhang")
+    from tests.conftest import extrude_valid_overhang
+    return extrude_valid_overhang(design, length_bp=length_bp)
 
 
 def _load(design: Design) -> None:

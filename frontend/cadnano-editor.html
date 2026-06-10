@@ -1207,17 +1207,10 @@
     <!-- Autobreak modal -->
     <div id="autobreak-modal">
       <div id="autobreak-box">
-        <div class="ab-header">Autobreak — choose algorithm</div>
+        <div class="ab-header">Autobreak staples</div>
         <div class="ab-body">
-          <label class="ab-option"><input type="radio" name="ab-algo" value="basic" checked><div>
-            <div class="ab-label">Basic — Stage 2 autostaple</div>
-            <div class="ab-desc">Use Stage 2 autostaple nick planner (preferred lengths, sandwich-aware).</div>
-          </div></label>
-
-          <label class="ab-option"><input type="radio" name="ab-algo" value="aksel"><div>
-            <div class="ab-label">Aksel route — Auto crossover + thermodynamic autobreak</div>
-            <div class="ab-desc">Place compliant crossovers, then apply optimized legal-length staple breaks.</div>
-          </div></label>
+          <div class="ab-label">Break staples at every major tick mark</div>
+          <div class="ab-desc">Nicks all staples at major tick marks (multiples of 7 bp honeycomb / 8 bp square), then merges fragments to be as long as possible without exceeding 56 nt. Apply after Auto-crossover.</div>
         </div>
         <div class="ab-actions">
           <button id="ab-cancel">Cancel</button>

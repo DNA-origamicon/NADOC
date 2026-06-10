@@ -469,7 +469,7 @@ def test_periodic_chain_re_docks_after_part_geometry_change():
     assert moved > 1.0, f"chain did not re-dock after geometry change (max move {moved:.3f} nm)"
 
     # 2) Consecutive seam connectors still coincide — under the NEW live geometry.
-    from backend.api.assembly import _get_connector_world
+    from backend.core.assembly_connectors import _get_connector_world
     insts = {i.id: i for i in asm_done.instances}
     rigid = [j for j in asm_done.joints if j.joint_type == "rigid"]
     assert rigid

@@ -473,12 +473,11 @@ def mutate_with_feature_log(
             report = result if isinstance(result, MutationReport) else None
 
         reconciled = reconcile_cluster_membership(before, s.design, report)
-        if op_kind in ('auto-break-aksel', 'auto-route-aksel', 'full-autostaple'):
-            # Aksel autobreak deliberately creates nicks on crossover-routed
-            # staple chains.  Retrying pre-existing unligated crossovers here
-            # can immediately re-ligate across those selected breaks, undoing
-            # the optimizer's persisted topology while leaving its report
-            # describing the pre-retry design.
+        if op_kind in ('auto-break', 'full-autostaple'):
+            # Autobreak / full-autostaple deliberately leave crossovers unligated
+            # so staples stay at or below the length cap.  Retrying pre-existing
+            # unligated crossovers here would re-ligate across those breaks,
+            # busting the 56-nt cap and undoing the routed topology.
             s.design = reconciled
         else:
             s.design = _retry_pending_ligations(before, reconciled)

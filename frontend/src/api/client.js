@@ -217,8 +217,6 @@ function _busyHeaderForPath(method, path) {
   if (path === '/design/auto-scaffold-matched')                    return 'Auto Scaffold (Matched Ends)'
   if (path.startsWith('/design/auto-staple'))                      return 'Auto Staple'
   if (path === '/design/auto-break')                               return 'Auto Break'
-  if (path === '/design/auto-break-aksel')                         return 'Aksel Autobreak'
-  if (path === '/design/auto-route-aksel')                         return 'Aksel Route'
   if (path === '/design/full-autostaple')                           return 'Full Autostaple'
   if (path.startsWith('/design/auto-crossover'))                   return 'Auto Crossover'
   if (path.startsWith('/design/bundle'))                           return 'Building Bundle'
@@ -1001,27 +999,9 @@ export async function addAutoBreak(opts = {}) {
   return _syncFromDesignResponse(json)
 }
 
-export async function addAutoBreakAksel(opts = {}) {
-  const json = await _request('POST', '/design/auto-break-aksel', opts)
-  return _syncFromDesignResponse(json)
-}
-
-export async function addAutoRouteAksel(opts = {}) {
-  const json = await _request('POST', '/design/auto-route-aksel', opts)
-  return _syncFromDesignResponse(json)
-}
-
 export async function addFullAutostaple(opts = {}) {
   const json = await _request('POST', '/design/full-autostaple', opts)
   return _syncFromDesignResponse(json)
-}
-
-export async function scoreStaples(opts = {}) {
-  return _request('POST', '/design/staples/score', opts, { suppressBusy: true })
-}
-
-export async function buildStaplePrecursorGraphs(opts = {}) {
-  return _request('POST', '/design/staples/precursor-graphs', opts)
 }
 
 export async function addAutoMerge() {

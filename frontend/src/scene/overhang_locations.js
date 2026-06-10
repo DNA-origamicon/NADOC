@@ -219,8 +219,14 @@ export function initOverhangLocations(scene) {
       const [cx, cy] = cellXY(row, col)
       helixMap.set(h.id, { row, col, x, y, cx, cy, length_bp: h.length_bp })
       const key  = `${row},${col}`
-      const zMin = Math.min(h.axis_start.z, h.axis_end.z)
-      const zMax = Math.max(h.axis_start.z, h.axis_end.z)
+      // Nucleotide extent, NOT the axis span: a helix axis runs one base-rise past
+      // its last nucleotide (the end-cap).  Counting that empty cap as occupied
+      // wrongly suppressed a candidate exactly one bp beyond a short overhang (the
+      // nick-pair sibling) — see overhang_candidate_error / _helix_nucleotide_z_band.
+      let z0 = h.axis_start.z, z1 = h.axis_end.z
+      if (h.length_bp > 0) z1 = z0 + (z1 - z0) * (h.length_bp - 1) / h.length_bp
+      const zMin = Math.min(z0, z1)
+      const zMax = Math.max(z0, z1)
       if (!cellZMap.has(key)) cellZMap.set(key, [])
       cellZMap.get(key).push({ zMin, zMax })
     }

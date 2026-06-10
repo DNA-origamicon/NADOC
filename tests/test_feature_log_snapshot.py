@@ -64,7 +64,7 @@ def test_autobreak_appends_snapshot_entry():
     assert entry.snapshot_size_bytes > 0
     assert entry.design_snapshot_gz_b64 != ""
     assert entry.evicted is False
-    assert 'algorithm' in entry.params
+    assert isinstance(entry.params, dict)
 
 
 # ── Test 2: revert restores pre-state byte-exact ──────────────────────────────
@@ -431,7 +431,11 @@ def test_overhang_extrude_new_helix_inherits_parent_cluster_not_lex_neighbor():
         id="h_XY_1_0",
         axis_start=Vec3(x=0.0, y=0.0, z=0.0),
         axis_end=Vec3(x=0.0, y=0.0, z=L * BDNA_RISE_PER_BP),
-        phase_offset=0.0, length_bp=L, grid_pos=(1, 0),
+        # phase_offset orients the staple bead toward the extrude cell (1,1) so the
+        # overhang placement gate accepts it.  This test is about cluster inheritance,
+        # not the bead angle; phase_offset doesn't affect axis position, so the
+        # equidistance setup that triggers the lex tiebreak is unchanged.
+        phase_offset=0.5236, length_bp=L, grid_pos=(1, 0),  # π/6
     )
     h_lex_neighbour = Helix(
         id="h_XY_0_1",  # LEX-SMALLER than h_XY_1_0

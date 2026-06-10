@@ -18,21 +18,17 @@ domain MUST keep the junction bp fixed; only the tip bp may move.
 
 from __future__ import annotations
 
-import math
 
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import state as design_state
 from backend.api.main import app
-from backend.core.constants import BDNA_RISE_PER_BP, HONEYCOMB_HELIX_SPACING
 from backend.core.lattice import (
-    honeycomb_position,
-    is_valid_honeycomb_cell,
     make_bundle_design,
     make_overhang_extrude,
 )
-from backend.core.models import Design, StrandType
+from backend.core.models import Design
 
 
 client = TestClient(app)
@@ -47,76 +43,15 @@ def _make_stapled_6hb(length_bp: int = 42) -> Design:
     return make_bundle_design(CELLS_6HB, length_bp=length_bp)
 
 
-def _hc_valid_cells_at_spacing(row: int, col: int) -> list[tuple[int, int]]:
-    ox, oy = honeycomb_position(row, col)
-    out: list[tuple[int, int]] = []
-    for dr in (-1, 0, 1):
-        for dc in (-1, 0, 1):
-            if dr == 0 and dc == 0:
-                continue
-            nr, nc = row + dr, col + dc
-            if not is_valid_honeycomb_cell(nr, nc):
-                continue
-            nx, ny = honeycomb_position(nr, nc)
-            if abs(math.hypot(nx - ox, ny - oy) - HONEYCOMB_HELIX_SPACING) < 0.05:
-                out.append((nr, nc))
-    return out
-
-
-def _row_col(hid: str) -> tuple[int | None, int | None]:
-    import re
-    m = re.match(r"^h_\w+_(-?\d+)_(-?\d+)$", hid)
-    if not m:
-        return None, None
-    return int(m.group(1)), int(m.group(2))
-
-
 def _all_overhang_sites(design: Design):
-    """Every (helix_id, bp_index, direction, is_five_prime, neighbor_row, neighbor_col)
-    where an overhang can be extruded."""
-    helix_by_id = {h.id: h for h in design.helices}
-    cell_z: dict[str, list[tuple[float, float]]] = {}
-    for h in design.helices:
-        r, c = _row_col(h.id)
-        if r is None:
-            continue
-        zmin = min(h.axis_start.z, h.axis_end.z)
-        zmax = max(h.axis_start.z, h.axis_end.z)
-        cell_z.setdefault(f"{r},{c}", []).append((zmin, zmax))
+    """Every overhang placement the UI tool would offer (validated oracle).
 
-    def _occupied(nr: int, nc: int, z: float) -> bool:
-        return any(zmin - 0.25 <= z <= zmax + 0.25 for zmin, zmax in cell_z.get(f"{nr},{nc}", []))
-
-    sites: list[dict] = []
-    seen: set[tuple] = set()
-    for strand in design.strands:
-        if strand.strand_type != StrandType.STAPLE or not strand.domains:
-            continue
-        first, last = strand.domains[0], strand.domains[-1]
-        ends = [
-            (first.helix_id, first.start_bp, first.direction, True),
-            (last.helix_id,  last.end_bp,    last.direction,  False),
-        ]
-        for hid, bp_idx, direc, is_5p in ends:
-            helix = helix_by_id.get(hid)
-            row, col = _row_col(hid)
-            if helix is None or row is None:
-                continue
-            local = bp_idx - helix.bp_start
-            rise = BDNA_RISE_PER_BP if helix.axis_end.z >= helix.axis_start.z else -BDNA_RISE_PER_BP
-            z = helix.axis_start.z + local * rise
-            for nr, nc in _hc_valid_cells_at_spacing(row, col):
-                if _occupied(nr, nc, z):
-                    continue
-                key = (hid, bp_idx, direc, is_5p, nr, nc)
-                if key in seen:
-                    continue
-                seen.add(key)
-                sites.append(dict(
-                    helix_id=hid, bp_index=bp_idx, direction=direc,
-                    is_five_prime=is_5p, neighbor_row=nr, neighbor_col=nc,
-                ))
-    return sites
+    Thin wrapper over the shared conftest helper so this test exercises exactly the
+    sites the app's overhang tool offers (backbone-facing rule included), rather than
+    a bespoke enumeration that omitted it.
+    """
+    from tests.conftest import valid_overhang_sites
+    return valid_overhang_sites(design)
 
 
 def _junction_and_tip_bp(domain, helix) -> tuple[int, int]:

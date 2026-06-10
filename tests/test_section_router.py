@@ -54,6 +54,33 @@ def _load(path: Path) -> Design:
     return Design(**json.loads(path.read_text()))
 
 
+def _canonical_topology(d: Design):
+    """ID- and order-independent fingerprint of a design's topology.
+
+    Helices are keyed by ``grid_pos`` (unique per helix and stable across id
+    schemes); strand domains reference helices by that same key.  Two designs
+    with this fingerprint equal are treated identically by any pure router,
+    since route_sections is a pure function of topology.
+    """
+    gp = {h.id: h.grid_pos for h in d.helices}
+    helices = sorted(
+        (
+            h.grid_pos, h.length_bp, h.bp_start,
+            round(h.axis_start.x, 4), round(h.axis_start.y, 4), round(h.axis_start.z, 4),
+            round(h.axis_end.x, 4), round(h.axis_end.y, 4), round(h.axis_end.z, 4),
+        )
+        for h in d.helices
+    )
+    strands = sorted(
+        (
+            str(s.strand_type),
+            tuple((gp[dm.helix_id], dm.start_bp, dm.end_bp, str(dm.direction)) for dm in s.domains),
+        )
+        for s in d.strands
+    )
+    return helices, strands
+
+
 def _segmented_helices(base: Design) -> dict[str, list[dict]]:
     """Helices whose scaffold coverage spans more than one section (the teeth)."""
     cov = _scaffold_coverage(base)
@@ -263,6 +290,56 @@ def test_reference_route_keeps_inter_tooth_gaps_open(ref_path):
     ref = _load(ref_path)
     assert len(_active_scaffold_strands(ref)) == 1
     assert min_per_gap_clearance(ref, base) >= _MIN_GAP_CLEARANCE
+
+
+# ── The builder reproduces the committed fixture (golden-migration pin) ────────────
+
+def test_teeth_builder_matches_fixture():
+    """`make_teeth_design()` reproduces tests/fixtures/teeth.nadoc exactly.
+
+    The builder replays teeth.nadoc's own 6-op feature log through the same core
+    bundle/extrude builders the app uses, so it can replace the 63 KB committed
+    blob without changing what the routing tests consume.  Two independent proofs:
+
+    1. Canonical topology equality — identical helices (by grid_pos) and strand
+       domains.  Because route_sections is a pure function of topology, equal
+       fingerprints ⇒ the router cannot tell the two inputs apart.
+    2. Belt-and-suspenders: routing both through the seamed AND seamless paths
+       yields identical scaffold routes — the user's literal "router treats them
+       identically" criterion, checked end-to-end.
+
+    If this ever fails after a change to make_bundle_design /
+    make_bundle_continuation, the builder has drifted from the fixture: either the
+    construction semantics changed (regenerate the fixture) or the builder is wrong.
+    """
+    from tests.conftest import make_teeth_design
+
+    built = make_teeth_design()
+    fixture = _load(_TEETH)
+
+    assert _canonical_topology(built) == _canonical_topology(fixture)
+
+    for seamless in (False, True):
+        rb = route_sections(built.model_copy(deep=True), seamless=seamless)
+        rf = route_sections(fixture.model_copy(deep=True), seamless=seamless)
+        assert rb is not None and rf is not None
+        routed_built, _ = rb
+        routed_fixture, _ = rf
+        assert _canonical_topology(routed_built) == _canonical_topology(routed_fixture), (
+            f"seamless={seamless}: routed output differs between builder and fixture"
+        )
+
+
+def test_18hb_builder_matches_fixture():
+    """`make_18hb_design()` reproduces tests/fixtures/18hb_fixture.nadoc.
+
+    Single-op (bundle-create) honeycomb reference — proves the generalized
+    builder is faithful beyond the multi-pass teeth special case.
+    """
+    from tests.conftest import make_18hb_design
+
+    assert _canonical_topology(make_18hb_design()) == _canonical_topology(_load(
+        _ROOT / "tests" / "fixtures" / "18hb_fixture.nadoc"))
 
 
 # ── Structural guarantees the section router already meets ─────────────────────────

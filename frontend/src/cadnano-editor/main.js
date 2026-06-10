@@ -27,7 +27,7 @@ import {
   // menu bar operations
   createDesign, importDesign,
   exportDesign, exportCadnano, exportSequenceCsv,
-  addAutoCrossover, addAutoBreak, addAutoRouteAksel, addFullAutostaple,
+  addAutoCrossover, addAutoBreak, addFullAutostaple,
   autoScaffoldSeamed, autoScaffoldSeamless,
   assignScaffoldSequence, syncScaffoldSequenceResponse, assignStapleSequences,
   applyAllDeformations,
@@ -1040,15 +1040,14 @@ document.getElementById('menu-routing-auto-crossover')?.addEventListener('click'
 document.getElementById('menu-routing-full-autostaple')?.addEventListener('click', async () => {
   if (!editorStore.getState().design?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
   _showProgress('Full autostaple', 'Assigning sequences and routing staples…')
-  const result = await addFullAutostaple({ scaffold_name: 'M13mp18', k_paths: 3 })
+  const result = await addFullAutostaple({ scaffold_name: 'M13mp18' })
   _hideProgress()
   if (!result) {
     showToast('Full autostaple failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
     return
   }
   const full = result.full_autostaple ?? {}
-  const removed = full.removed_circularizing_crossover_count ?? 0
-  showToast(`Full autostaple complete: ${full.aksel_break?.new_staple_count ?? 0} staples, ${removed} circularizing crossovers removed.`)
+  showToast(`Full autostaple complete: ${full.auto_crossover?.placed ?? 0} crossovers placed.`)
 })
 
 ;(() => {
@@ -1063,22 +1062,10 @@ document.getElementById('menu-routing-full-autostaple')?.addEventListener('click
 
   async function _runAutoBreak() {
     modal.classList.remove('visible')
-    const algo = modal.querySelector('input[name="ab-algo"]:checked')?.value || 'current'
-    const isAksel = algo === 'aksel' || algo === 'advanced'
-    _showProgress('Autobreak', isAksel ? 'Running Aksel optimizer…' : 'Running nick planner…')
-    let _anim = null
-    if (isAksel) {
-      const fill = document.getElementById('op-progress-fill')
-      let pct = 0
-      _anim = setInterval(() => { pct = (pct + 8) % 88; if (fill) fill.style.width = pct + '%' }, 350)
-    }
-    const result = isAksel
-      ? await addAutoRouteAksel({ k_paths: 3 })
-      : await addAutoBreak({ algorithm: algo })
-    if (_anim) clearInterval(_anim)
+    _showProgress('Autobreak', 'Running nick planner…')
+    const result = await addAutoBreak({})
     _hideProgress()
     if (!result) showToast('Autobreak failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
-    else if (result.aksel_route) showToast(`Aksel route complete: ${result.aksel_route.aksel_break?.new_staple_count ?? 0} staples.`)
     else showToast('Autobreak complete.')
   }
 

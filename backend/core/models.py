@@ -1170,8 +1170,6 @@ SnapshotOpKind = Literal[
     'auto-scaffold-matched',
     'auto-scaffold-seamless',
     'auto-break',
-    'auto-break-aksel',
-    'auto-route-aksel',
     'full-autostaple',
     'auto-merge',
     'auto-crossover',

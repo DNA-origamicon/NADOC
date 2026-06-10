@@ -170,6 +170,42 @@ def validate_design(design: Design) -> ValidationReport:
         ))
     # No "pass" entry when there are no loops — avoids noise in the report.
 
+    # ── Nicks at crossover locations (non-physical, hard failure) ─────────────
+    # A crossover means the backbone runs continuously from one helix to the
+    # adjacent one.  If a strand's free 5′/3′ terminus lands exactly on a
+    # crossover half (same helix, bp and direction), the backbone is *nicked* at
+    # the crossover: the strands meet there but never cross.  That is physically
+    # impossible for a real crossover and is always an alarming failure (e.g. an
+    # autobreak that split a staple on top of a crossover, or a crossover record
+    # left behind after its two arms were broken apart).
+    xo_slots: Dict[Tuple[str, int, str], List[str]] = {}
+    for xo in design.crossovers:
+        for half in (xo.half_a, xo.half_b):
+            dirv = half.strand.value if hasattr(half.strand, "value") else str(half.strand)
+            xo_slots.setdefault((half.helix_id, half.index, dirv), []).append(xo.id)
+
+    nicked_at_xo: List[str] = []
+    for strand in design.strands:
+        if strand.is_reference or not strand.domains or strand.strand_type == StrandType.LINKER:
+            continue
+        first, last = strand.domains[0], strand.domains[-1]
+        for hid, bp, direction in (
+            (first.helix_id, first.start_bp, first.direction),
+            (last.helix_id, last.end_bp, last.direction),
+        ):
+            dirv = direction.value if hasattr(direction, "value") else str(direction)
+            if (hid, bp, dirv) in xo_slots:
+                nicked_at_xo.append(
+                    f"strand {strand.id!r} terminus on crossover at ({hid}, bp {bp}, {dirv})"
+                )
+    if nicked_at_xo:
+        shown = "; ".join(nicked_at_xo[:20])
+        more = f" (+{len(nicked_at_xo) - 20} more)" if len(nicked_at_xo) > 20 else ""
+        report.results.append(ValidationResult(
+            False,
+            f"Strand nicked at crossover location(s) — non-physical: {shown}{more}",
+        ))
+
     # ── Overhang chain topology (Alt A: parent_overhang_id) ───────────────
     # Each spec's parent_overhang_id (when set) must reference an existing
     # OverhangSpec, and the parent chain must form a tree (no cycles).

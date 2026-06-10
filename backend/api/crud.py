@@ -4810,217 +4810,37 @@ def auto_crossover() -> dict:
     Only the lower bp of each adjacent pair is used as the canonical site
     (e.g. HC pair (6,7) → canonical 6; SQ pair (7,8) → canonical 7).
     The upper bp (bow-right position) is skipped to avoid double-processing.
+
+    Crossovers are placed at full density everywhere except within 7 (HC) / 8 (SQ)
+    bp of an internal scaffold seam (a double scaffold crossover); near/far end caps
+    keep full density.  Logic lives in the shared :func:`_place_auto_crossovers` core.
     """
-    from backend.core.crossover_positions import (
-        all_valid_crossover_sites,
-        build_strand_ranges,
-        slot_covered,
-        validate_crossover,
-    )
-
-    # Bow-right sets: the upper bp of each adjacent pair — skip these so each
-    # pair is processed exactly once via its lower bp.
-    HC_BOW_RIGHT: frozenset[int] = frozenset({0, 7, 14})   # HC period 21
-    SQ_BOW_RIGHT: frozenset[int] = frozenset({0, 8, 16, 24})  # SQ period 32
-    HC_PERIOD = 21
-    SQ_PERIOD = 32
-
     design = design_state.get_or_404()
-    is_hc     = design.lattice_type.value == "HONEYCOMB"
-    period    = HC_PERIOD if is_hc else SQ_PERIOD
-    bow_right = HC_BOW_RIGHT if is_hc else SQ_BOW_RIGHT
-
-    # Occupied crossover slots: (helix_id, index, strand)
-    occupied: set[tuple[str, int, str]] = set()
-    for xo in design.crossovers:
-        occupied.add((xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value))
-        occupied.add((xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value))
-
-    # helix.id → parity (True = even = scaffold runs FORWARD)
-    helix_map = {h.id: h for h in design.helices if h.grid_pos is not None}
-
-    def _scaffold_fwd(helix_id: str) -> bool:
-        h = helix_map.get(helix_id)
-        if h is None:
-            return True
-        row, col = h.grid_pos
-        return (row + col) % 2 == 0
-
-    # Build per-helix scaffold crossover index lists for proximity exclusion.
-    # A crossover half is a scaffold half when its strand direction matches the
-    # expected scaffold direction for that helix (even parity → FORWARD).
-    scaffold_xover_by_helix: dict[str, list[int]] = {}
-    for xo in design.crossovers:
-        for half in (xo.half_a, xo.half_b):
-            h = helix_map.get(half.helix_id)
-            if h is None:
-                continue
-            row, col = h.grid_pos
-            is_even_parity = (row + col) % 2 == 0
-            expected_scaf_dir = "FORWARD" if is_even_parity else "REVERSE"
-            if half.strand.value == expected_scaf_dir:
-                scaffold_xover_by_helix.setdefault(half.helix_id, []).append(half.index)
-
-    sites = all_valid_crossover_sites(design)
-
-    # De-duplicate (A→B) vs (B→A) mirror duplicates emitted by all_valid_crossover_sites.
-    # Both the bow-left and bow-right position of each major-groove pair are kept.
-    seen_pairs: set[tuple[str, str, int]] = set()
-
-    current = design
-    placed = 0
-
-    for site in sites:
-        hid_a   = site["helix_a_id"]
-        hid_b   = site["helix_b_id"]
-        bp      = site["index"]   # lower bp of the pair
-
-        # Skip B→A duplicates (all_valid_crossover_sites emits both directions)
-        pair_key = (min(hid_a, hid_b), max(hid_a, hid_b), bp)
-        if pair_key in seen_pairs:
-            continue
-        seen_pairs.add(pair_key)
-
-        # Staple direction: opposite of scaffold direction
-        fwd_a  = _scaffold_fwd(hid_a)
-        stap_a = "REVERSE" if fwd_a else "FORWARD"
-        stap_b = "FORWARD" if fwd_a else "REVERSE"   # neighbor has opposite parity
-
-        # lower_bp is the left boundary of the nick gap, matching the pathview rule:
-        #   bow-right (bp % period in bow_right) → lower_bp = bp - 1
-        #   bow-left                              → lower_bp = bp
-        # The crossover is registered at `bp` (sprite position); nick positions use lower_bp.
-        is_bow_right = (bp % period) in bow_right
-        lower_bp = bp - 1 if is_bow_right else bp
-
-        # Nick positions:
-        #   FORWARD staple nicked at lower_bp  (3′ end of left fragment)
-        #   REVERSE staple nicked at lower_bp+1 (3′ end of left fragment in 5′→3′ direction)
-        nick_a = lower_bp     if stap_a == "FORWARD" else lower_bp + 1
-        nick_b = lower_bp     if stap_b == "FORWARD" else lower_bp + 1
-
-        # Skip if this staple crossover falls within 7 bp of any scaffold crossover
-        # on either helix (checked independently per helix).
-        _SCAF_MARGIN = 7
-        if any(
-            any(abs(lower_bp - sx) <= _SCAF_MARGIN for sx in scaffold_xover_by_helix.get(hid, []))
-            for hid in (hid_a, hid_b)
-        ):
-            continue
-
-        # Rebuild strand coverage from current (mutates with each nick).
-        # Reference strands are excluded so auto-crossover never nicks them and
-        # never bridges an active strand to reference geometry (the slot reads
-        # as uncovered → the coverage checks below skip the site).
-        sr = build_strand_ranges(
-            current.model_copy(update={"strands": current.active_strands()})
-        )
-
-        # Helix bp ranges — used to skip out-of-range checks at helix boundaries.
-        # At bp=0 (bow-right), lower_bp=-1 which is before the helix start; the
-        # strand already ends there so no coverage check or nick is needed.
-        # At bp=helix_end (bow-left), lower_bp+1 is one past the end; same rule.
-        ha = helix_map.get(hid_a)
-        hb = helix_map.get(hid_b)
-        ha_min = ha.bp_start if ha else 0
-        ha_max = (ha.bp_start + ha.length_bp - 1) if ha else 0
-        hb_min = hb.bp_start if hb else 0
-        hb_max = (hb.bp_start + hb.length_bp - 1) if hb else 0
-
-        # Skip a site only when it would leave a staple arm shorter than the
-        # lattice minimum segment (7 nt HC / 8 nt SQ).  Measure the arm against
-        # the STAPLE STRAND's actual coverage boundary, not the helix end: near
-        # the bundle caps the scaffold occupies the last bp, so the staple ends
-        # before the helix does — a crossover that looks safe vs the helix end
-        # can still isolate a 3-4 nt arm vs the true staple end.  Arms >= the min
-        # segment are legal (a short arm just becomes part of a longer staple
-        # across the crossover); this places crossovers right up to a 7/8 nt arm
-        # instead of reserving a full 21 nt staple-length margin (which left
-        # edges under-crossed) while still never creating a sub-minimum segment.
-        _MIN_AUTOCROSSOVER_SEGMENT_NT = 7 if is_hc else 8
-
-        def _staple_arm_too_short(hid: str, stap_dir: str) -> bool:
-            for lo, hi in sr.get((hid, stap_dir), []):
-                if lo <= lower_bp <= hi:
-                    left_len = lower_bp - lo + 1
-                    right_len = hi - lower_bp
-                    return (
-                        0 < left_len < _MIN_AUTOCROSSOVER_SEGMENT_NT
-                        or 0 < right_len < _MIN_AUTOCROSSOVER_SEGMENT_NT
-                    )
-            return False
-
-        if _staple_arm_too_short(hid_a, stap_a) or _staple_arm_too_short(hid_b, stap_b):
-            continue
-
-        # Both sides of the nick gap must be covered by strands (skip if out of range)
-        if ha_min <= lower_bp <= ha_max and not slot_covered(sr, hid_a, lower_bp, stap_a):
-            continue
-        if ha_min <= lower_bp + 1 <= ha_max and not slot_covered(sr, hid_a, lower_bp + 1, stap_a):
-            continue
-        if hb_min <= lower_bp <= hb_max and not slot_covered(sr, hid_b, lower_bp, stap_b):
-            continue
-        if hb_min <= lower_bp + 1 <= hb_max and not slot_covered(sr, hid_b, lower_bp + 1, stap_b):
-            continue
-
-        # Crossover slot (registered at lowerBp) must not already be occupied
-        if (hid_a, bp, stap_a) in occupied or (hid_b, bp, stap_b) in occupied:
-            continue
-
-        # Convert string directions to Direction enum for _nick_if_needed
-        dir_a = Direction.FORWARD if stap_a == "FORWARD" else Direction.REVERSE
-        dir_b = Direction.FORWARD if stap_b == "FORWARD" else Direction.REVERSE
-
-        # Nick helix A then helix B.
-        # Uses _nick_if_needed to guard against splitting multi-domain strands
-        # at existing crossover junctions (inter-domain boundaries).  Also
-        # handles terminus/no-coverage cases as no-ops.
-        # Skip nick calls for positions outside the helix bp range (strand
-        # already ends at the boundary — no nick needed).
-        if ha_min <= nick_a <= ha_max:
-            current = _nick_if_needed(current, hid_a, nick_a, dir_a)
-        if hb_min <= nick_b <= hb_max:
-            current = _nick_if_needed(current, hid_b, nick_b, dir_b)
-
-        # Register crossover
-        half_a = HalfCrossover(helix_id=hid_a, index=bp, strand=dir_a)
-        half_b = HalfCrossover(helix_id=hid_b, index=bp, strand=dir_b)
-        err = validate_crossover(current, half_a, half_b)
-        if err:
-            print(f"[AUTO XOVER] validate failed at bp={bp} {hid_a[:8]}↔{hid_b[:8]}: {err}", flush=True)
-            continue
-
-        xover = Crossover(half_a=half_a, half_b=half_b, process_id="auto_crossover")
-        # copy_with creates a new crossovers list so the snapshot reference in
-        # undo history is not mutated (make_nick returns shallow copies — the
-        # crossovers list would otherwise alias the snapshot's list).
-        current = current.copy_with(crossovers=list(current.crossovers) + [xover])
-        occupied.add((hid_a, bp, stap_a))
-        occupied.add((hid_b, bp, stap_b))
-        placed += 1
-
-    # Bulk-ligate all crossover-linked fragments into multi-domain strands.
-    # Per-crossover ligation (as in place_crossover) doesn't work here because
-    # later nicks can split already-ligated strands; the bulk graph walk handles
-    # the full crossover topology correctly in one pass.
-    from backend.core.lattice import ligate_crossover_chains
-    current = ligate_crossover_chains(current)
+    new_design, stats = _place_auto_crossovers(design)
 
     current, report, _entry = design_state.mutate_with_feature_log(
         op_kind='auto-crossover',
         label='Auto-crossover',
-        params={'sites_considered': len(sites), 'placed': placed},
-        fn=lambda _d: current,
+        params={'sites_considered': stats['sites_considered'], 'placed': stats['placed']},
+        fn=lambda _d: new_design,
     )
-    print(f"[AUTO XOVER] placed {placed} crossovers", flush=True)
+    print(f"[AUTO XOVER] placed {stats['placed']} crossovers", flush=True)
     return _design_response_with_geometry(current, report)
 
 
-def _build_auto_crossover_design(design: Design) -> tuple[Design, dict]:
-    """Pure-ish auto-crossover builder used by combined Aksel routing."""
+def _place_auto_crossovers(design: Design) -> tuple[Design, dict]:
+    """Place all possible staple crossovers, skipping a margin around scaffold seams.
+
+    Pure core shared by the ``/design/crossovers/auto`` endpoint and full-autostaple.
+    A staple crossover is placed at every valid bow site except where it falls within
+    ``7`` (HC) / ``8`` (SQ) bp of an internal scaffold *seam* — a double scaffold
+    crossover (see :func:`scaffold_seam_positions`).  Full crossover density is kept at
+    the near/far end caps (single u-turn crossovers are not seams).
+    """
     from backend.core.crossover_positions import (
         all_valid_crossover_sites,
         build_strand_ranges,
+        scaffold_seam_positions,
         slot_covered,
         validate_crossover,
     )
@@ -5046,27 +4866,13 @@ def _build_auto_crossover_design(design: Design) -> tuple[Design, dict]:
         row, col = h.grid_pos
         return (row + col) % 2 == 0
 
-    scaffold_xover_by_helix: dict[str, list[int]] = {}
-    for xo in design.crossovers:
-        for half in (xo.half_a, xo.half_b):
-            h = helix_map.get(half.helix_id)
-            if h is None:
-                continue
-            row, col = h.grid_pos
-            expected_scaf_dir = "FORWARD" if (row + col) % 2 == 0 else "REVERSE"
-            if half.strand.value == expected_scaf_dir:
-                scaffold_xover_by_helix.setdefault(half.helix_id, []).append(half.index)
+    # Internal scaffold seams (double scaffold crossovers).  Staple crossovers are
+    # excluded within `seam_margin` bp of a seam; end caps get full density.
+    seams = scaffold_seam_positions(design)
+    seam_margin = 7 if is_hc else 8
 
     sites = all_valid_crossover_sites(design)
     min_autocrossover_segment_nt = 7 if is_hc else 8
-    autocrossover_phase_mod = 2 * min_autocrossover_segment_nt
-    phase_counts: dict[int, int] = {}
-    for site in sites:
-        bp = site["index"]
-        lower_bp = bp - 1 if (bp % period) in bow_right else bp
-        phase = lower_bp % autocrossover_phase_mod
-        phase_counts[phase] = phase_counts.get(phase, 0) + 1
-    preferred_phase = max(phase_counts, key=phase_counts.get) if phase_counts else 0
     seen_pairs: set[tuple[str, str, int]] = set()
     current = design
     placed = 0
@@ -5087,9 +4893,8 @@ def _build_auto_crossover_design(design: Design) -> tuple[Design, dict]:
         nick_a = lower_bp if stap_a == "FORWARD" else lower_bp + 1
         nick_b = lower_bp if stap_b == "FORWARD" else lower_bp + 1
 
-        scaf_margin = 7
         if any(
-            any(abs(lower_bp - sx) <= scaf_margin for sx in scaffold_xover_by_helix.get(hid, []))
+            any(abs(lower_bp - sp) <= seam_margin for sp in seams.get(hid, ()))
             for hid in (hid_a, hid_b)
         ):
             continue
@@ -5102,13 +4907,12 @@ def _build_auto_crossover_design(design: Design) -> tuple[Design, dict]:
         hb_min = hb.bp_start if hb else 0
         hb_max = (hb.bp_start + hb.length_bp - 1) if hb else 0
 
-        # Aksel-style breaks are not allowed at crossovers, so a fully populated
-        # lattice phase pattern can make every inter-crossover arm too short to
-        # host a legal nick.  Keep an alternating phase so the eventual routing
-        # graph has at least one lattice-min-clear internal offset between
-        # neighboring staple crossovers.
-        if lower_bp % autocrossover_phase_mod != preferred_phase:
-            continue
+        # Full crossover density: every valid bow site is placed (matching the
+        # standalone auto-crossover endpoint and the hand-routed convention).
+        # Staple nicks are routed AT bow columns by the break stage
+        # (allow_crossover_breaks=True), so no phase thinning is needed to leave
+        # mid-arm room — the seam bow-phase carries the nick, the others carry
+        # crossovers (the honeycomb/square staple-seam pattern).
 
         # Match the standalone auto-crossover endpoint: only skip a site that
         # would leave a staple arm shorter than the lattice min segment, measured
@@ -5129,13 +4933,25 @@ def _build_auto_crossover_design(design: Design) -> tuple[Design, dict]:
         if _staple_arm_too_short(hid_a, stap_a) or _staple_arm_too_short(hid_b, stap_b):
             continue
 
-        if ha_min <= lower_bp <= ha_max and not slot_covered(sr, hid_a, lower_bp, stap_a):
-            continue
-        if ha_min <= lower_bp + 1 <= ha_max and not slot_covered(sr, hid_a, lower_bp + 1, stap_a):
-            continue
-        if hb_min <= lower_bp <= hb_max and not slot_covered(sr, hid_b, lower_bp, stap_b):
-            continue
-        if hb_min <= lower_bp + 1 <= hb_max and not slot_covered(sr, hid_b, lower_bp + 1, stap_b):
+        # Require strand coverage on both sides of the nick gap, but only WITHIN
+        # each staple's own coverage span.  A nick position beyond a staple's
+        # boundary is its 5'/3' terminus — the near/far bundle edge — where a cap
+        # crossover (the staple end-turn) is exactly what we want.  Gating on the
+        # helix bp range instead suppresses every edge crossover, because
+        # auto-scaffold extends the helix past the staple at the caps (bp 0 /
+        # bp len-1 land inside the helix but outside the staple's coverage).
+        def _coverage_hole(hid: str, stap_dir: str) -> bool:
+            ivs = sr.get((hid, stap_dir), [])
+            if not ivs:
+                return True  # no staple on this slot at all
+            cov_lo = min(lo for lo, _ in ivs)
+            cov_hi = max(hi for _, hi in ivs)
+            return any(
+                cov_lo <= pos <= cov_hi and not slot_covered(sr, hid, pos, stap_dir)
+                for pos in (lower_bp, lower_bp + 1)
+            )
+
+        if _coverage_hole(hid_a, stap_a) or _coverage_hole(hid_b, stap_b):
             continue
         if (hid_a, bp, stap_a) in occupied or (hid_b, bp, stap_b) in occupied:
             continue
@@ -6261,7 +6077,22 @@ def _build_overhang_extrude(d: Design, body: 'OverhangExtrudeRequest') -> tuple[
     helices are within Manhattan distance 2 on the lattice grid.
     """
     from backend.core.cluster_reconcile import MutationReport
-    from backend.core.lattice import make_overhang_extrude
+    from backend.core.lattice import make_overhang_extrude, overhang_candidate_error
+
+    # Placement gate (mirrors the UI overhang tool): reject any position the tool
+    # would not offer — neighbour must be a vacant nearest-neighbour cell at the
+    # staple end's Z whose direction the backbone bead faces.  Enforced here at the
+    # endpoint/generation layer so the UI, direct API, and headless build all get a
+    # 400; the core ``make_overhang_extrude`` primitive stays ungated for geometry
+    # unit tests that probe arbitrary positions.
+    orig_helix = d.find_helix(body.helix_id)
+    if orig_helix is not None:
+        gate_err = overhang_candidate_error(
+            d, orig_helix, body.bp_index, body.direction,
+            body.neighbor_row, body.neighbor_col,
+        )
+        if gate_err:
+            raise ValueError(gate_err)
 
     before_helix_ids = {h.id for h in d.helices}
     out = make_overhang_extrude(
@@ -7207,28 +7038,20 @@ def patch_strands_reference(body: BulkReferenceRequest) -> dict:
 
 @router.post("/design/auto-break", status_code=200)
 def auto_break(payload: dict | None = Body(None)) -> dict:
-    """Nick all non-scaffold strands at major tick marks (every 7 bp HC / 8 bp SQ),
-    producing segments as long as possible without exceeding 60 nt.
-    The sandwich rule (no long-short-long domain pattern) overrides the length
-    preference.  Apply after auto-crossover.
+    """Nick all non-scaffold strands at every major tick mark (multiples of 7 bp HC /
+    8 bp SQ), then merge fragments to be as long as possible without exceeding 56 nt.
+    Apply after auto-crossover.
 
     Emits a ``snapshot`` feature-log entry so the operation can be reverted
     even after a browser refresh (POST ``/design/features/{index}/revert``).
     """
-    from backend.core.lattice import make_autobreak, make_nicks_for_autostaple
-
-    algo = (payload or {}).get('algorithm', 'basic')
-    if algo in ('basic', 'advanced'):
-        # Advanced thermodynamic optimizer disabled — too slow.  Falls back to basic.
-        run = make_nicks_for_autostaple
-    else:
-        run = make_autobreak
+    from backend.core.lattice import make_autobreak
 
     updated, report, _entry = design_state.mutate_with_feature_log(
         op_kind='auto-break',
         label='Autobreak',
-        params={'algorithm': algo},
-        fn=lambda d: run(d),
+        params={},
+        fn=lambda d: make_autobreak(d),
     )
     return _design_response(updated, report)
 
@@ -7264,32 +7087,7 @@ class _ScaffoldSeqBody(BaseModel):
     strand_id: Optional[str] = None        # target strand (multi-scaffold support)
 
 
-class _StapleScoreBody(BaseModel):
-    temperature_c: float = 50.0
-    staple_conc_m: float = 100.0e-9
-    scaffold_conc_m: float = 10.0e-9
-    min_staple_nt: int = 21
-    max_staple_nt: int = 60
-
-
-class _StaplePrecursorGraphBody(_StapleScoreBody):
-    k_paths: int = 10
-    include_edges: bool = False
-    break_rule: str = "xstap.all3"
-    allow_crossover_breaks: bool = False
-    min_segment_nt: Optional[int] = None
-
-
-class _AkselBreakBody(_StapleScoreBody):
-    k_paths: int = 10
-    path_index: int = 0
-    reassign_sequences: bool = True
-    break_rule: str = "xstap.all3"
-    allow_crossover_breaks: bool = False
-    min_segment_nt: Optional[int] = None
-
-
-class _FullAutostapleBody(_AkselBreakBody):
+class _FullAutostapleBody(BaseModel):
     scaffold_name: str = "M13mp18"
     custom_sequence: Optional[str] = None
     strand_id: Optional[str] = None
@@ -7445,93 +7243,6 @@ def assign_scaffold_sequence_endpoint(body: _ScaffoldSeqBody = _ScaffoldSeqBody(
     return resp
 
 
-def _validate_staple_scoring_body(body: _StapleScoreBody) -> None:
-    if body.staple_conc_m <= 0:
-        raise HTTPException(status_code=422, detail="staple_conc_m must be positive.")
-    if body.scaffold_conc_m <= 0:
-        raise HTTPException(status_code=422, detail="scaffold_conc_m must be positive.")
-    if body.staple_conc_m <= 0.5 * body.scaffold_conc_m:
-        raise HTTPException(
-            status_code=422,
-            detail="staple_conc_m must be greater than half scaffold_conc_m.",
-        )
-    if body.min_staple_nt < 1:
-        raise HTTPException(status_code=422, detail="min_staple_nt must be at least 1.")
-    if body.max_staple_nt < body.min_staple_nt:
-        raise HTTPException(
-            status_code=422,
-            detail="max_staple_nt must be greater than or equal to min_staple_nt.",
-        )
-
-
-def _validate_aksel_break_body(body: _AkselBreakBody) -> None:
-    _validate_staple_scoring_body(body)
-    if body.k_paths < 1:
-        raise HTTPException(status_code=422, detail="k_paths must be at least 1.")
-    if body.k_paths > 50:
-        raise HTTPException(status_code=422, detail="k_paths must be at most 50.")
-    if body.allow_crossover_breaks:
-        raise HTTPException(
-            status_code=422,
-            detail="allow_crossover_breaks is not yet supported by NADOC topology.",
-        )
-    if body.min_segment_nt is not None and body.min_segment_nt < 1:
-        raise HTTPException(status_code=422, detail="min_segment_nt must be at least 1.")
-    if body.path_index < 0:
-        raise HTTPException(status_code=422, detail="path_index must be non-negative.")
-    if body.path_index >= body.k_paths:
-        raise HTTPException(status_code=422, detail="path_index must be less than k_paths.")
-    if body.min_segment_nt is not None and body.min_segment_nt < 1:
-        raise HTTPException(status_code=422, detail="min_segment_nt must be at least 1.")
-
-
-def _prune_circularizing_crossovers(design: Design) -> tuple[Design, list[str]]:
-    """Drop crossover records that would close a staple cycle if ligated.
-
-    Those crossovers are already unligated by the topology builder, so removing
-    their records does not split any strand.  It keeps one-click routing from
-    leaving circular-cleanup markers behind.
-    """
-    ids = set(unligated_crossover_ids(design))
-    if not ids:
-        return design, []
-    kept = [xo for xo in design.crossovers if xo.id not in ids]
-    return design.model_copy(update={"crossovers": kept}), sorted(ids)
-
-
-def _terminal_staple_crossover_ids(design: Design) -> set[str]:
-    starts: set[tuple[str, int, Direction]] = set()
-    ends: set[tuple[str, int, Direction]] = set()
-    for strand in design.strands:
-        if (
-            strand.strand_type != StrandType.STAPLE
-            or strand.is_reference
-            or not strand.domains
-        ):
-            continue
-        first = strand.domains[0]
-        last = strand.domains[-1]
-        starts.add((first.helix_id, first.start_bp, first.direction))
-        ends.add((last.helix_id, last.end_bp, last.direction))
-
-    out: set[str] = set()
-    for xo in design.crossovers:
-        for half in (xo.half_a, xo.half_b):
-            key = (half.helix_id, half.index, half.strand)
-            if key in starts or key in ends:
-                out.add(xo.id)
-                break
-    return out
-
-
-def _prune_invalid_terminal_crossovers(design: Design) -> tuple[Design, list[str]]:
-    ids = set(unligated_crossover_ids(design)) | _terminal_staple_crossover_ids(design)
-    if not ids:
-        return design, []
-    kept = [xo for xo in design.crossovers if xo.id not in ids]
-    return design.model_copy(update={"crossovers": kept}), sorted(ids)
-
-
 def _linearize_staple_precursors(design: Design) -> tuple[Design, dict]:
     """Remove staple crossovers and split staples into single-domain precursors."""
     helix_map = {h.id: h for h in design.helices if h.grid_pos is not None}
@@ -7645,184 +7356,24 @@ def assign_staple_sequences_endpoint() -> dict:
     return _design_response(updated, report)
 
 
-@router.post("/design/staples/score", status_code=200)
-def score_staples_endpoint(body: _StapleScoreBody = _StapleScoreBody()) -> dict:
-    """Read-only Aksel-style thermodynamic score report for current staples.
-
-    Requires an assigned scaffold sequence.  The endpoint does not snapshot or
-    mutate the design; it only builds a scaffold-position map and scores the
-    current staple routes.
-    """
-    from backend.core.staple_scoring import score_staples
-
-    _validate_staple_scoring_body(body)
-
-    design = design_state.get_or_404()
-    try:
-        return score_staples(
-            design,
-            temperature_c=body.temperature_c,
-            staple_conc=body.staple_conc_m,
-            scaffold_conc=body.scaffold_conc_m,
-            min_staple_nt=body.min_staple_nt,
-            max_staple_nt=body.max_staple_nt,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-
-@router.post("/design/staples/precursor-graphs", status_code=200)
-def staple_precursor_graphs_endpoint(
-    body: _StaplePrecursorGraphBody = _StaplePrecursorGraphBody(),
-) -> dict:
-    """Read-only weighted breakpoint graphs for Aksel-style routing.
-
-    Requires an assigned scaffold sequence.  The endpoint does not snapshot or
-    mutate the design; it returns candidate break edges and top complete paths
-    through each current staple precursor.
-    """
-    from backend.core.staple_scoring import build_precursor_graphs
-
-    _validate_staple_scoring_body(body)
-    if body.k_paths < 1:
-        raise HTTPException(status_code=422, detail="k_paths must be at least 1.")
-    if body.k_paths > 50:
-        raise HTTPException(status_code=422, detail="k_paths must be at most 50.")
-
-    design = design_state.get_or_404()
-    try:
-        return build_precursor_graphs(
-            design,
-            temperature_c=body.temperature_c,
-            staple_conc=body.staple_conc_m,
-            scaffold_conc=body.scaffold_conc_m,
-            min_staple_nt=body.min_staple_nt,
-            max_staple_nt=body.max_staple_nt,
-            k_paths=body.k_paths,
-            include_edges=body.include_edges,
-            break_rule=body.break_rule,
-            allow_crossover_breaks=body.allow_crossover_breaks,
-            min_segment_nt=body.min_segment_nt,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-
-@router.post("/design/auto-break-aksel", status_code=200)
-def auto_break_aksel_endpoint(body: _AkselBreakBody = _AkselBreakBody()) -> dict:
-    """Apply Aksel-style optimized staple breakpoints to current precursors.
-
-    This mutates only staple nick placement; it keeps existing precursor routes
-    and crossover topology.  Requires an assigned scaffold sequence.
-    """
-    from backend.core.staple_scoring import apply_precursor_breaks
-
-    _validate_aksel_break_body(body)
-
-    params = body.model_dump()
-
-    def _run(design):
-        updated, route_report = apply_precursor_breaks(
-            design,
-            temperature_c=body.temperature_c,
-            staple_conc=body.staple_conc_m,
-            scaffold_conc=body.scaffold_conc_m,
-            min_staple_nt=body.min_staple_nt,
-            max_staple_nt=body.max_staple_nt,
-            path_index=body.path_index,
-            k_paths=body.k_paths,
-            reassign_sequences=body.reassign_sequences,
-            break_rule=body.break_rule,
-            allow_crossover_breaks=body.allow_crossover_breaks,
-            min_segment_nt=body.min_segment_nt,
-        )
-        _run.route_report = route_report
-        return updated
-
-    try:
-        updated, report, _entry = design_state.mutate_with_feature_log(
-            op_kind='auto-break-aksel',
-            label='Aksel autobreak',
-            params=params,
-            fn=_run,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    resp = _design_response(updated, report)
-    resp["aksel_break"] = getattr(_run, "route_report", {})
-    return resp
-
-
-@router.post("/design/auto-route-aksel", status_code=200)
-def auto_route_aksel_endpoint(body: _AkselBreakBody = _AkselBreakBody()) -> dict:
-    """Run auto-crossover and Aksel-style breakpoint selection atomically.
-
-    This is the preferred user-facing Aksel route command because crossover
-    placement and breakpoint legality are coupled.  The standalone Aksel
-    autobreak endpoint remains useful for diagnosing or rerouting existing
-    precursor topologies.
-    """
-    from backend.core.staple_scoring import apply_precursor_breaks
-
-    _validate_aksel_break_body(body)
-    params = body.model_dump()
-
-    def _run(design):
-        crossed, crossover_report = _build_auto_crossover_design(design)
-        updated, break_report = apply_precursor_breaks(
-            crossed,
-            temperature_c=body.temperature_c,
-            staple_conc=body.staple_conc_m,
-            scaffold_conc=body.scaffold_conc_m,
-            min_staple_nt=body.min_staple_nt,
-            max_staple_nt=body.max_staple_nt,
-            path_index=body.path_index,
-            k_paths=body.k_paths,
-            reassign_sequences=body.reassign_sequences,
-            break_rule=body.break_rule,
-            allow_crossover_breaks=body.allow_crossover_breaks,
-            min_segment_nt=body.min_segment_nt,
-        )
-        _run.route_report = {
-            "auto_crossover": crossover_report,
-            "aksel_break": break_report,
-        }
-        return updated
-
-    try:
-        updated, report, _entry = design_state.mutate_with_feature_log(
-            op_kind='auto-route-aksel',
-            label='Aksel route',
-            params=params,
-            fn=_run,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    resp = _design_response_with_geometry(updated, report)
-    resp["aksel_route"] = getattr(_run, "route_report", {})
-    return resp
-
-
 @router.post("/design/full-autostaple", status_code=200)
 def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) -> dict:
-    """Assign sequences, place compliant crossovers, and Aksel-break staples.
+    """Assign sequences, place compliant crossovers, and break staples.
 
     This is the one-click routing command.  It assigns the scaffold sequence
-    first, runs the combined Aksel auto-crossover/autobreak path, re-derives
+    first, places all crossovers (skipping a margin around scaffold seams),
+    breaks staples at every major tick and merges them up to 56 nt, re-derives
     staple sequences, then prunes any unligated crossover records that would
     circularize a staple if kept.
     """
+    from backend.core.lattice import grow_staples, nick_all_major_ticks
     from backend.core.sequences import (
         SCAFFOLD_LIBRARY,
         assign_custom_scaffold_sequence,
         assign_scaffold_sequence,
         assign_staple_sequences,
     )
-    from backend.core.staple_scoring import apply_precursor_breaks
 
-    _validate_aksel_break_body(body)
     params = body.model_dump()
 
     def _run(design):
@@ -7852,30 +7403,15 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
                 0,
             )
 
+        # Order matters: nick the staples on the tick grid FIRST, then place
+        # crossovers onto the fragmented substrate, then grow fragments back into
+        # ≤56-nt staples.  Placing crossovers after nicking assembles them into
+        # open chains (no staple cycles), so every crossover stays traversed and
+        # none has to be pruned — which is also why full density is preserved.
         precursors, precursor_report = _linearize_staple_precursors(sequenced)
-        crossed, crossover_report = _build_auto_crossover_design(precursors)
-        crossed, removed_terminal_before_break = _prune_invalid_terminal_crossovers(crossed)
-        routed, break_report = apply_precursor_breaks(
-            crossed,
-            temperature_c=body.temperature_c,
-            staple_conc=body.staple_conc_m,
-            scaffold_conc=body.scaffold_conc_m,
-            min_staple_nt=body.min_staple_nt,
-            max_staple_nt=body.max_staple_nt,
-            path_index=body.path_index,
-            k_paths=body.k_paths,
-            reassign_sequences=False,
-            break_rule=body.break_rule,
-            # Staples never nick AT a crossover — breaks are mid-arm only.
-            # NOTE: with maximal crossover density a dense design can have
-            # precursors with no legal mid-arm break and will 422 ("No complete
-            # legal breakpoint path"); the planned crossover-thinning step is
-            # what makes those routable mid-arm.
-            allow_crossover_breaks=False,
-            min_segment_nt=body.min_segment_nt,
-        )
-        clean, removed_circularizing = _prune_circularizing_crossovers(routed)
-        clean, removed_terminal_after_break = _prune_invalid_terminal_crossovers(clean)
+        nicked = nick_all_major_ticks(precursors)
+        crossed, crossover_report = _place_auto_crossovers(nicked)
+        clean = grow_staples(crossed, max_merged_length=56)
         clean = assign_staple_sequences(clean)
         _assert_no_circular_staples(clean)
         _run.full_report = {
@@ -7886,15 +7422,6 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
             },
             "precursors": precursor_report,
             "auto_crossover": crossover_report,
-            "aksel_break": break_report,
-            "removed_terminal_crossover_count": (
-                len(removed_terminal_before_break) + len(removed_terminal_after_break)
-            ),
-            "removed_terminal_crossover_ids": (
-                removed_terminal_before_break + removed_terminal_after_break
-            ),
-            "removed_circularizing_crossover_count": len(removed_circularizing),
-            "removed_circularizing_crossover_ids": removed_circularizing,
         }
         return clean
 

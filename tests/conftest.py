@@ -71,3 +71,204 @@ def make_minimal_design(
         ))
 
     return Design(helices=helices, strands=strands, lattice_type=lattice)
+
+
+# ── Test-design builders ───────────────────────────────────────────────────────────
+# These rebuild common bundle designs by replaying their `bundle-create` +
+# `extrude-continuation` feature-log ops through the same core builders the app's
+# /design/bundle and /design/bundle-continuation endpoints call.  The produced
+# topology tracks how the app actually constructs designs, so tests can consume a
+# built design instead of a committed `.nadoc` blob that can be silently corrupted.
+#
+# Cell layouts are taken VERBATIM from real designs' feature logs (cited per
+# constant) — never hand-derived, per the "ask first about topology" rule.
+
+# 4×4 SQUARE teeth bundle — tests/fixtures/teeth.nadoc.  First 8 cells are the
+# columns extruded on every pass (long teeth); all 16 appear on the wide passes.
+TEETH_CELLS = [
+    (0, 0), (0, 1), (0, 2), (0, 3), (1, 3), (1, 2), (1, 1), (1, 0),
+    (2, 0), (2, 1), (2, 2), (2, 3), (3, 3), (3, 2), (3, 1), (3, 0),
+]
+# Pass widths after the initial 16-cell create — alternating narrow/wide is the
+# tooth profile (see teeth.nadoc feature_log).
+TEETH_PASSES = [8, 16, 8, 16, 8]
+
+# 6-helix honeycomb ring — common across many real designs (workspace/6hb_3dprint,
+# u6hb, OH6hb_test, Belt_segment_v1 all share these cells).
+SIX_HB_CELLS = [(0, 1), (1, 1), (1, 2), (1, 3), (0, 3), (0, 2)]
+
+# 18-helix honeycomb bundle — tests/fixtures/18hb_fixture.nadoc.
+EIGHTEEN_HB_CELLS = [
+    (1, 3), (0, 3), (0, 2), (0, 1), (1, 1), (1, 2), (2, 2), (2, 1), (3, 1),
+    (3, 2), (3, 3), (2, 3), (2, 4), (2, 5), (2, 6), (1, 6), (1, 5), (1, 4),
+]
+
+# mini_hinge base — workspace/mini_hinge.nadoc bundle-create: two 4×2 SQUARE
+# blocks at rows 0–1 and 4–5 (the gap between them is the hinge).  This is only
+# the initial extrusion; the file's later routing/flexible/overhang ops are NOT
+# reproduced here.
+MINI_HINGE_CELLS = [
+    (0, 0), (0, 1), (0, 2), (0, 3), (1, 3), (1, 2), (1, 1), (1, 0),
+    (4, 0), (4, 1), (4, 2), (4, 3), (5, 3), (5, 2), (5, 1), (5, 0),
+]
+
+
+def build_extruded_bundle(
+    cells,
+    length_bp: int,
+    *,
+    lattice: LatticeType,
+    name: str = "Bundle",
+    plane: str = "XY",
+    strand_filter: str = "both",
+    passes=(),
+) -> Design:
+    """Build a bundle (+ N extrude passes) through the headless construction API.
+
+    Thin wrapper over ``backend.api.headless_build.build_bundle`` — i.e. the same
+    route handlers the UI's bundle/extrude tools call, run mouse-free in an
+    isolated throwaway document.  Designs therefore carry a real, replayable
+    ``feature_log`` (one bundle-create + one extrude-continuation per pass), just
+    like a design built by clicking.
+
+    Parameters
+    ----------
+    cells, length_bp, lattice, name, plane, strand_filter:
+        The initial bundle-create (see ``make_bundle_design``).
+    passes:
+        Extrude-continuation passes off the blunt ends.  Each entry is an ``int``
+        n (extrude ``cells[:n]``) or an explicit cell list; pass *i* (1-based)
+        extrudes at ``offset_nm = i × length_bp × rise`` (the teeth pattern).
+        Empty for a single-create design (6hb / 18hb / mini_hinge base).
+    """
+    from backend.api.headless_build import build_bundle
+
+    return build_bundle(
+        cells, length_bp, lattice=lattice, name=name,
+        plane=plane, strand_filter=strand_filter, passes=passes,
+    )
+
+
+def make_teeth_design() -> Design:
+    """Rebuild tests/fixtures/teeth.nadoc (4×4 SQUARE, 42 bp, 5 alternating passes).
+
+    Pinned against the committed file by ``test_teeth_builder_matches_fixture``:
+    canonical topology equality + identical seamed/seamless routed output.
+    """
+    return build_extruded_bundle(
+        TEETH_CELLS, 42, lattice=LatticeType.SQUARE, name="teeth", passes=TEETH_PASSES,
+    )
+
+
+def make_6hb_design(length_bp: int = 42) -> Design:
+    """6-helix honeycomb bundle (single create).  Default 42 bp."""
+    return build_extruded_bundle(
+        SIX_HB_CELLS, length_bp, lattice=LatticeType.HONEYCOMB, name="6hb",
+    )
+
+
+def make_18hb_design(length_bp: int = 388) -> Design:
+    """18-helix honeycomb bundle — matches tests/fixtures/18hb_fixture.nadoc at 388 bp."""
+    return build_extruded_bundle(
+        EIGHTEEN_HB_CELLS, length_bp, lattice=LatticeType.HONEYCOMB, name="18hb",
+    )
+
+
+def make_18hb_routed_design(length_bp: int = 388) -> Design:
+    """Fully-routed 18hb: bundle-create → auto-scaffold-seamed → auto-crossover → auto-break.
+
+    The mouse-free equivalent of the old gitignored ``workspace/18hb.nadoc`` —
+    a scaffold-routed, crossover'd, staple-broken precursor — built in an isolated
+    scratch session via the headless auto-op wrappers.  Deterministic, so tests
+    that assert routed specifics can pin against it.
+    """
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(
+            EIGHTEEN_HB_CELLS, length_bp, lattice=LatticeType.HONEYCOMB, name="18hb",
+        )
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
+        return design_state.get_or_404().model_copy(deep=True)
+
+
+def make_mini_hinge_base_design(length_bp: int = 84) -> Design:
+    """mini_hinge initial bundle: two 4×2 SQUARE blocks (rows 0–1, 4–5).
+
+    Only the base geometry — the file's routing/flexible/overhang ops are not replayed.
+    """
+    return build_extruded_bundle(
+        MINI_HINGE_CELLS, length_bp, lattice=LatticeType.SQUARE, name="mini_hinge",
+    )
+
+
+# ── Overhang placement (single validated source of truth) ────────────────────────
+# Tests historically re-implemented "find a staple end + free neighbour" several
+# times, none of them applying the backbone-facing rule the UI enforces.  These two
+# helpers delegate to the validated oracle (overhang_candidate_error) so test
+# overhangs land exactly where the app's overhang tool would offer them.
+
+
+def valid_overhang_sites(design: Design) -> list[dict]:
+    """Every placement the UI overhang tool would offer on *design*.
+
+    Returns dicts ``{helix_id, bp_index, direction, is_five_prime, neighbor_row,
+    neighbor_col}`` for each staple 5′/3′ end × surrounding cell that passes the
+    validated gate (adjacency + vacant-at-Z + backbone bead faces the cell).  The
+    oracle does the geometry, so we just enumerate candidate cells and let it filter.
+    """
+    from backend.core.lattice import overhang_candidate_error
+    from backend.core.models import StrandType
+
+    helix_by_id = {h.id: h for h in design.helices}
+    sites: list[dict] = []
+    seen: set[tuple] = set()
+    for s in design.strands:
+        if s.strand_type != StrandType.STAPLE or not s.domains:
+            continue
+        first, last = s.domains[0], s.domains[-1]
+        for hid, bp, direc, is5 in (
+            (first.helix_id, first.start_bp, first.direction, True),
+            (last.helix_id, last.end_bp, last.direction, False),
+        ):
+            helix = helix_by_id.get(hid)
+            if helix is None or helix.grid_pos is None:
+                continue
+            r, c = helix.grid_pos
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    if dr == 0 and dc == 0:
+                        continue
+                    nr, nc = r + dr, c + dc
+                    key = (hid, bp, direc, is5, nr, nc)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    if overhang_candidate_error(design, helix, bp, direc, nr, nc) is None:
+                        sites.append(dict(
+                            helix_id=hid, bp_index=bp, direction=direc,
+                            is_five_prime=is5, neighbor_row=nr, neighbor_col=nc,
+                        ))
+    return sites
+
+
+def extrude_valid_overhang(design: Design, length_bp: int = 12) -> tuple[Design, str]:
+    """Extrude an overhang at the first valid candidate; return (design, overhang_id).
+
+    Raises AssertionError if *design* has no valid overhang site.
+    """
+    from backend.core.lattice import make_overhang_extrude
+
+    for site in valid_overhang_sites(design):
+        out = make_overhang_extrude(
+            design, site["helix_id"], site["bp_index"], site["direction"],
+            site["is_five_prime"], site["neighbor_row"], site["neighbor_col"], length_bp,
+        )
+        new_helix_ids = {h.id for h in out.helices} - {h.id for h in design.helices}
+        new_helix_id = next(iter(new_helix_ids))
+        new_ovhg = next(o for o in out.overhangs if o.helix_id == new_helix_id)
+        return out, new_ovhg.id
+    raise AssertionError("design has no valid overhang site")

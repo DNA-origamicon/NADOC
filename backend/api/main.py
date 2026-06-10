@@ -32,6 +32,7 @@ from backend.api.routes_assembly_connectors import router as assembly_connectors
 from backend.api.routes_assembly_frames import router as assembly_frames_router
 from backend.api.routes_assembly_gears import router as assembly_gears_router
 from backend.api.routes_assembly_groups import router as assembly_groups_router
+from backend.api.routes_assembly_joints import router as assembly_joints_router
 from backend.api.routes_assembly_linkers import router as assembly_linkers_router
 from backend.api.routes_assembly_validation import router as assembly_validation_router
 from backend.api.routes_assembly_workspace import router as assembly_workspace_router
@@ -96,6 +97,7 @@ app.include_router(assembly_connectors_router, prefix="/api")
 app.include_router(assembly_frames_router, prefix="/api")
 app.include_router(assembly_gears_router, prefix="/api")
 app.include_router(assembly_groups_router, prefix="/api")
+app.include_router(assembly_joints_router, prefix="/api")
 app.include_router(assembly_linkers_router, prefix="/api")
 app.include_router(assembly_validation_router, prefix="/api")
 app.include_router(assembly_workspace_router, prefix="/api")
