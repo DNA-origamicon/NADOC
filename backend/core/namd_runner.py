@@ -200,21 +200,39 @@ _NAMD_CANDIDATES = [
     "namd3",
     os.path.expanduser("~/Applications/NAMD_3.0.2/namd3"),
     os.path.expanduser("~/Applications/NAMD_3.0.2_Linux-x86_64-multicore-CUDA/namd3"),
+    os.path.expanduser("~/Applications/NAMD_3.0.2_Linux-x86_64-multicore/namd3"),
 ]
 
 _GMX_CANDIDATES = ["gmx", "gmx_mpi", "gmx_d"]
 
 
+def _resolve_namd(candidate: str) -> Optional[str]:
+    """Resolve a candidate (PATH name or explicit path) to an executable, else None."""
+    return shutil.which(candidate) or (
+        candidate if os.path.isfile(candidate) and os.access(candidate, os.X_OK) else None
+    )
+
+
 def find_namd() -> str:
-    """Return the first usable NAMD3 binary path."""
-    for candidate in _NAMD_CANDIDATES:
-        found = shutil.which(candidate) or (
-            candidate if os.path.isfile(candidate) and os.access(candidate, os.X_OK) else None
-        )
+    """Return the first usable NAMD3 binary path.
+
+    Resolution order:
+      1. ``$NADOC_NAMD_BIN`` — explicit override (absolute path or PATH-resolvable name).
+      2. ``namd3`` on ``$PATH``.
+      3. Conventional ``~/Applications`` installs (CUDA/GPU build preferred over CPU).
+
+    See ``docs/namd_setup.md`` for install guidance (WSL + GPU notes included).
+    """
+    override = os.environ.get("NADOC_NAMD_BIN", "").strip()
+    candidates = ([override] if override else []) + _NAMD_CANDIDATES
+    for candidate in candidates:
+        found = _resolve_namd(candidate)
         if found:
             return found
     raise RuntimeError(
-        "NAMD3 not found.  Install to ~/Applications/NAMD_3.0.2/namd3 or add to PATH."
+        "NAMD3 not found.  Set $NADOC_NAMD_BIN to the namd3 binary, install to "
+        "~/Applications/NAMD_3.0.2_Linux-x86_64-multicore-CUDA/namd3, or add namd3 to "
+        "PATH.  See docs/namd_setup.md."
     )
 
 
@@ -229,20 +247,38 @@ def find_gmx() -> str:
     )
 
 
+# ── Thread defaulting ─────────────────────────────────────────────────────────
+
+def default_threads() -> int:
+    """Autodetect a sensible NAMD ``+p`` count: half the logical CPUs.
+
+    On a 2-way-SMT machine (the common case) this equals the physical core
+    count, which is the right target for NAMD's standard-CUDA offload mode —
+    one PE per physical core, no hyperthread oversubscription.  Floored at 1.
+    """
+    return max(1, (os.cpu_count() or 2) // 2)
+
+
 # ── Low-level subprocess helpers ──────────────────────────────────────────────
 
 def _core_binding_prefix(threads: int) -> list[str]:
-    """Return a taskset prefix that pins future NAMD runs to explicit cores."""
+    """Return an optional ``taskset`` prefix for the NAMD launch.
+
+    Applied ONLY when ``$NADOC_NAMD_CORES`` is set explicitly (e.g. ``"0-5"`` or
+    ``"0,2,4,6,8,10"``) — the power-user knob for isolating NAMD on a shared box.
+
+    Otherwise no prefix: NAMD's own ``+setcpuaffinity`` does topology-aware
+    placement (one PE per physical core).  The previous auto ``0-{threads-1}``
+    mask assumed one logical CPU per physical core and so collapsed onto half the
+    cores on 2-way-SMT machines (adjacent siblings, e.g. cpus 0-5 == cores 0,1,2),
+    re-introducing the oversubscription it was meant to prevent.
+    """
+    core_spec = os.environ.get("NADOC_NAMD_CORES", "").strip()
+    if not core_spec:
+        return []
     taskset = shutil.which("taskset")
     if not taskset:
         return []
-
-    core_spec = os.environ.get("NADOC_NAMD_CORES", "").strip()
-    if not core_spec:
-        n_cores = os.cpu_count() or threads
-        n_bound = max(1, min(int(threads), int(n_cores)))
-        core_spec = f"0-{n_bound - 1}"
-
     return [taskset, "-c", core_spec]
 
 

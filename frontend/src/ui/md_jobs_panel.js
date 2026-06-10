@@ -113,6 +113,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   let _collapsed    = getSectionCollapsed('dynamics', 'md-jobs-panel', true)
   let _launching    = false
   let _enginesOk    = false  // both NAMD + GROMACS found
+  let _threadsInit  = false  // seeded the threads input from server recommendation once
   let _displayTimer = null
   let _prewarmTimer = null
   let _displayJobId = null
@@ -167,6 +168,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       console.log(`[${_ts()}] md-jobs: engines response`, d)
 
       _enginesOk = d.available
+
+      // Seed the threads input from the server's autodetect (half the logical
+      // CPUs) once, so the default matches the host instead of a hardcoded 16.
+      if (!_threadsInit && threadsInput && Number.isFinite(d.recommended_threads)) {
+        threadsInput.value = String(d.recommended_threads)
+        _threadsInit = true
+      }
 
       if (d.namd_available && d.gmx_available) {
         namdStatusEl.textContent = `NAMD3 + GROMACS found`

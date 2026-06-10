@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -39,16 +40,42 @@ class CharmmTopologyBuild:
     metadata: dict
 
 
+# psfgen ships *inside* the NAMD tarball (top-level, next to namd3), so the
+# conventional NAMD install dirs are also psfgen candidates.
+_PSFGEN_CANDIDATES = [
+    str(Path.home() / "Applications" / "NAMD_3.0.2" / "psfgen"),
+    str(Path.home() / "Applications" / "NAMD_3.0.2_Linux-x86_64-multicore-CUDA" / "psfgen"),
+    str(Path.home() / "Applications" / "NAMD_3.0.2_Linux-x86_64-multicore" / "psfgen"),
+]
+
+
+def _resolve_psfgen(candidate: str | None) -> str | None:
+    """Resolve a candidate (PATH name or explicit path) to an existing file, else None."""
+    if not candidate:
+        return None
+    return shutil.which(candidate) or (candidate if Path(candidate).exists() else None)
+
+
 def find_psfgen() -> str:
-    """Return a local psfgen executable path."""
-    candidates = [
-        shutil.which("psfgen"),
-        str(Path.home() / "Applications" / "NAMD_3.0.2" / "psfgen"),
-    ]
+    """Return a local psfgen executable path.
+
+    Resolution order:
+      1. ``$NADOC_PSFGEN_BIN`` — explicit override (path or PATH-resolvable name).
+      2. ``psfgen`` on ``$PATH``.
+      3. Conventional ``~/Applications`` NAMD installs (psfgen ships in the tarball).
+
+    See ``docs/namd_setup.md``.
+    """
+    override = os.environ.get("NADOC_PSFGEN_BIN", "").strip()
+    candidates = ([override] if override else []) + ["psfgen", *_PSFGEN_CANDIDATES]
     for candidate in candidates:
-        if candidate and Path(candidate).exists():
-            return candidate
-    raise RuntimeError("psfgen not found; install NAMD or add psfgen to PATH.")
+        found = _resolve_psfgen(candidate)
+        if found:
+            return found
+    raise RuntimeError(
+        "psfgen not found.  Set $NADOC_PSFGEN_BIN, install NAMD (psfgen ships inside the "
+        "NAMD tarball under ~/Applications/...), or add psfgen to PATH.  See docs/namd_setup.md."
+    )
 
 
 def _pdb_atom_name(name: str, element: str) -> str:

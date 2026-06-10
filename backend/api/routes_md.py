@@ -42,7 +42,7 @@ from backend.core.md_protocols import (
     prepare_equilibrium_aware_namd,
     segments_from_manifest,
 )
-from backend.core.namd_runner import find_gmx, find_namd, is_running, reconcile_job_status, start_job, stop_job
+from backend.core.namd_runner import default_threads, find_gmx, find_namd, is_running, reconcile_job_status, start_job, stop_job
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,8 @@ router = APIRouter(tags=["md"])
 
 class CreateJobRequest(BaseModel):
     protocol:    str   = Field(EQUILIBRIUM_AWARE_PROTOCOL, description="Protocol preset name")
-    threads:     int   = Field(16,  ge=1)
+    threads:     int   = Field(default_factory=default_threads, ge=1,
+                               description="NAMD +p thread count; defaults to half the logical CPUs")
     devices:     str   = Field("0", description="CUDA device IDs (e.g. '0' or '0,1')")
     autostart:   bool  = Field(False, description="Start NAMD immediately after preparation")
     salt_mode:   str   = Field("screening", description="'screening' uses validated origami screening defaults; 'custom' uses Mg/NaCl fields")
@@ -724,4 +725,5 @@ async def namd_available() -> dict:
         "namd_path":      namd_path,
         "gmx_available":  gmx_ok,
         "gmx_path":       gmx_path,
+        "recommended_threads": default_threads(),
     }
