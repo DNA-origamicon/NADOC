@@ -1788,7 +1788,7 @@ async function main() {
   // ── MD overlay + panel ───────────────────────────────────────────────────────
   const mdOverlay         = initMdOverlay(scene)
   const mdDisplayController = initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
-  initMdJobsPanel({ mdDisplayController })
+  initMdJobsPanel({ mdDisplayController, getWorkspacePath: () => _workspacePath })
 
   const periodicMdOverlay = initPeriodicMdOverlay(scene)
   initPeriodicMdPanel(store, {

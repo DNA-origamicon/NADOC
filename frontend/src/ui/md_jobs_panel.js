@@ -14,6 +14,7 @@
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progress.js'
 import { showToast } from './toast.js'
+import { docKey, docHeaders } from '../shared/doc_id.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
 const _C = {
@@ -36,9 +37,29 @@ const _MD_PREWARM_INTERVAL_MS = 30000
 const _ts = () => new Date().toISOString().slice(11, 23)
 
 
+// ── Pure job-filtering helpers (exported for testing) ─────────────────────────
+
+/** Normalise a workspace path for comparison: forward slashes, no trailing `/`. */
+export function normalizeWorkspacePath(path) {
+  return path ? String(path).replace(/\\/g, '/').replace(/\/+$/, '') : ''
+}
+
+/**
+ * Jobs to show for the active part. With `showAll`, every job passes. Otherwise
+ * only jobs whose `design_source_path` matches the active part's path; if no part
+ * path is known we show nothing (rather than leaking other designs' jobs).
+ */
+export function filterJobsForPart(jobs, partPath, showAll) {
+  if (showAll) return jobs
+  const current = normalizeWorkspacePath(partPath)
+  if (!current) return []
+  return jobs.filter(j => normalizeWorkspacePath(j.design_source_path) === current)
+}
+
+
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null } = {}) {
+export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -238,26 +259,22 @@ export function initMdJobsPanel({ mdDisplayController = null } = {}) {
     _renderProductionControls(null)
   }
 
-  function _normalizePath(path) {
-    return path ? String(path).replace(/\\/g, '/').replace(/\/+$/, '') : ''
-  }
-
   function _currentPartPath() {
-    return _normalizePath(localStorage.getItem(_WORKSPACE_PATH_KEY))
+    // Authoritative source is main.js's live `_workspacePath`. The doc-scoped
+    // localStorage key is the fallback — NOT the bare key, which is only correct
+    // on the legacy default doc and otherwise leaks/drops the active part.
+    const raw = getWorkspacePath
+      ? getWorkspacePath()
+      : localStorage.getItem(docKey(_WORKSPACE_PATH_KEY))
+    return normalizeWorkspacePath(raw)
   }
 
   function _showAllJobs() {
     return !!showAllToggle?.checked
   }
 
-  function _jobMatchesCurrentPart(job) {
-    const current = _currentPartPath()
-    if (!current) return false
-    return _normalizePath(job.design_source_path) === current
-  }
-
   function _visibleJobs() {
-    return _showAllJobs() ? _jobs : _jobs.filter(_jobMatchesCurrentPart)
+    return filterJobsForPart(_jobs, _currentPartPath(), _showAllJobs())
   }
 
   function _productionSteps() {
@@ -617,7 +634,10 @@ export function initMdJobsPanel({ mdDisplayController = null } = {}) {
       console.log(`[${_ts()}] md-jobs: POST /api/md/jobs`)
       const r = await fetch('/api/md/jobs', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // Doc header is required: the backend reads the ACTIVE design from this
+        // tab's document session. Without it the default (empty) doc is used and
+        // prep 404s with "No active design."
+        headers: { 'Content-Type': 'application/json', ...docHeaders() },
         body:    JSON.stringify(payload),
       })
 
