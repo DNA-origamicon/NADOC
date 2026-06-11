@@ -21,6 +21,7 @@ import { buildStapleColorMap } from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
 import { initExtrudePanel }          from './ui/extrude_panel.js'
+import { initPrimitiveLibrary }      from './ui/primitive_library.js'
 import { axesVisibleForDesign }      from './ui/extrude_panel_logic.js'
 import { bundleMidOffset }           from './scene/bundle_geometry.js'
 import { quatToEulerDeg, extractJointAngleDeg } from './scene/rotation_math.js'
@@ -2150,6 +2151,11 @@ async function main() {
   // to every extrude (new-bundle / segment / blunt-end / deformed continuation).
   _extrudePanel = initExtrudePanel({ store, slicePlane, expandedSpacing })
 
+  // ── Primitives library (right-sidebar panel) → ui/primitive_library.js ──
+  // Owns #primitives-panel; revealed by Tools → Add Primitive. Lists pre-validated
+  // building blocks (6HB/18HB beams); selecting only highlights for now.
+  const _primitiveLibrary = initPrimitiveLibrary({ store, api })
+
   // Link slicePlane to unfoldView so the plane dimensions lerp during unfold animation.
   unfoldView.setSlicePlane(slicePlane)
 
@@ -3425,6 +3431,12 @@ async function main() {
     startTool('bend')
     document.getElementById('mode-indicator').textContent =
       'BEND — click plane A (fixed), then plane B · Esc to exit'
+  })
+
+  // Tools → Add Primitive: reveal the right-sidebar Primitives library.
+  document.getElementById('menu-tools-add-primitive')?.addEventListener('click', () => {
+    if (store.getState().assemblyActive) { showToast('Not available in assembly mode.', { severity: 'error' }); return }
+    _primitiveLibrary.activate()
   })
 
   initOverhangsManagerPopup({ store })
@@ -6524,6 +6536,15 @@ async function main() {
   if (import.meta.env.DEV) {
     window.__nadocTest = {
       scene,
+      /** Camera-pose count of the loaded design (build-primitives readiness check). */
+      getDesignCameraPoseCount: () => (store.getState().currentDesign?.camera_poses?.length ?? 0),
+      /** Render the loaded design through its saved poses → {gifBase64, posterDataUrl}.
+       *  Used by the offline build-primitives pipeline; see scene/primitive_preview_capture.js. */
+      capturePrimitivePreview: async (opts = {}) => {
+        const { capturePosesGif } = await import('./scene/primitive_preview_capture.js')
+        const poses = store.getState().currentDesign?.camera_poses ?? []
+        return capturePosesGif({ renderer, scene, camera, controls, poses, ...opts })
+      },
       getAtomisticRenderer: () => atomisticRenderer,
       getPeriodicMdOverlay: () => periodicMdOverlay,
       isCGVisible: () => !!(designRenderer.getHelixCtrl()?.root?.visible),

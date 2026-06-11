@@ -46,6 +46,10 @@ frontend:
 build-frontend:
     cd frontend && npm run build
 
+# Bake hover-preview GIFs + posters for workspace/Primitives/*.nadoc (needs `just dev` + `just frontend` running)
+build-primitives:
+    cd frontend && node scripts/build-primitives.mjs
+
 # Run a specific test file
 test-file FILE:
     uv run pytest {{FILE}} -v

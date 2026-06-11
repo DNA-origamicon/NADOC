@@ -166,6 +166,13 @@ export async function checkAssemblyExists() {
   return json?.exists === true
 }
 
+/** List pre-validated primitive building blocks for the "Add Primitive" panel.
+ *  Non-critical: returns [] on any failure so the panel falls back to its static catalog. */
+export async function listPrimitives() {
+  try { return (await _request('GET', '/primitives')) ?? [] }
+  catch { return [] }
+}
+
 /** Erase the active design on the server and clear all local persistence. */
 export async function closeSession() {
   try { await fetch(`${BASE}/design`, { method: 'DELETE' }) } catch { /* ignore if unreachable */ }
