@@ -56,6 +56,31 @@ def test_single_create_has_one_entry():
     assert len(d.helices) == 6
 
 
+def test_extrude_segment_appends_fresh_disconnected_helices():
+    """The segment mode (the slice tool's "append a fresh segment", distinct from
+    continuation) adds NEW helices at fresh cells and logs ``extrude-segment`` — the
+    headless equivalent of the sidebar's segment extrude, so an agent can build
+    multi-segment structures programmatically."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+        far = [(r + 20, c) for r, c in SIX_HB_CELLS]   # fresh cells, well clear of the bundle
+        d = hb.extrude_segment(far, 42, offset_nm=0.0)
+        assert len(d.helices) == 12                    # 6 original + 6 fresh
+        assert {h.grid_pos for h in d.helices} == set(SIX_HB_CELLS) | set(far)
+        assert d.feature_log[-1].op_kind == "extrude-segment"
+
+
+def test_build_on_non_default_plane():
+    """The plane is a first-class build parameter (the sidebar's "Extrude from"
+    dropdown → XY/XZ/YZ).  A build on XZ produces XZ-keyed helices, confirming the
+    programmatic surface can target any origin plane, not just the XY default."""
+    d = hb.build_bundle(
+        SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, plane="XZ", name="6hb-xz",
+    )
+    assert len(d.helices) == 6
+    assert all(h.id.startswith("h_XZ_") for h in d.helices)
+
+
 def test_build_bundle_does_not_disturb_default_document():
     """A one-shot build runs in a throwaway doc and cleans up after itself."""
     before = design_state.peek_design(dc.DEFAULT_DOC_ID)

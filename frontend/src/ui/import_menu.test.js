@@ -80,7 +80,6 @@ function makeDeps(initialState = {}, apiOverrides = {}) {
   }
   const deps = {
     store, api,
-    workspace: { hide: vi.fn() },
     libraryPanel: { refresh: vi.fn() },
     resetForNewDesign: vi.fn(),
     showWelcome: vi.fn(),
@@ -144,7 +143,6 @@ describe('runPdbImport', () => {
     expect(deps.resetForNewDesign).toHaveBeenCalledTimes(1)
     expect(deps.api.syncDesignResponse).toHaveBeenCalledWith(json)
     expect(deps.hideWelcome).toHaveBeenCalled()
-    expect(deps.workspace.hide).toHaveBeenCalled()
     expect(showToast).toHaveBeenCalledWith('watch out', 5000)
     expect(showToast).toHaveBeenCalledWith('Imported DNA design', 4000)
   })

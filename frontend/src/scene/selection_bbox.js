@@ -52,3 +52,57 @@ export function instanceUnionBox(centers, wanted) {
   }
   return count > 0 && !union.isEmpty() ? union : null
 }
+
+/**
+ * Local-space AABB (THREE.Box3) over every positioned nucleotide backbone, or
+ * null if none are positioned. Unlike a per-helix or LOD-cylinder *chord* box
+ * (endpoint-to-endpoint), this follows the ACTUAL geometry — including a bend
+ * deformation that curves a helix between its two endpoints — so a bent (arc)
+ * part is bounded correctly instead of collapsing in the bulge direction. Pure:
+ * nucleotides in, box out. This is the source of `instBoundingBox` for the
+ * shared assembly renderer (the part / group selection box). Includes overhang
+ * nucleotides so protruding overhangs stay inside the box.
+ * @param {Array} nucleotides  [{ backbone_position:[x,y,z], ... }]
+ */
+export function nucleotideLocalBox(nucleotides) {
+  if (!nucleotides?.length) return null
+  const box = new THREE.Box3()
+  const v = new THREE.Vector3()
+  let n = 0
+  for (const nuc of nucleotides) {
+    const p = nuc?.backbone_position
+    if (!p) continue
+    box.expandByPoint(v.set(p[0], p[1], p[2])); n++
+  }
+  return n > 0 && !box.isEmpty() ? box : null
+}
+
+/**
+ * Largest distance any nucleotide backbone lies OUTSIDE `box` — 0 when every
+ * nucleotide is contained. Optional `transform` (THREE.Matrix4) is applied to
+ * each backbone position first: pass an instance matrix to validate a placed
+ * part, or a group-member matrix to validate against a world-space union box.
+ *
+ * This is the geometry-fits-its-box validation: a positive return means the
+ * selection box fails to bound the visible geometry (the bent-part chord-box
+ * bug this guards against). `tol` (nm) is the allowed slack before a point
+ * counts as outside.
+ * @param {Array} nucleotides
+ * @param {THREE.Box3} box
+ * @param {{ transform?: THREE.Matrix4, tol?: number }} [opts]
+ * @returns {number} worst overflow distance in nm (0 if all contained within tol)
+ */
+export function nucleotideBoxOverflow(nucleotides, box, { transform = null, tol = 0 } = {}) {
+  if (!nucleotides?.length || !box || box.isEmpty()) return 0
+  const v = new THREE.Vector3()
+  let worst = 0
+  for (const nuc of nucleotides) {
+    const p = nuc?.backbone_position
+    if (!p) continue
+    v.set(p[0], p[1], p[2])
+    if (transform) v.applyMatrix4(transform)
+    const d = box.distanceToPoint(v)        // 0 when inside, else nearest-face distance
+    if (d > worst) worst = d
+  }
+  return worst > tol ? worst : 0
+}

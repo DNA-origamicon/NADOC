@@ -30,7 +30,7 @@ import * as api   from '../api/client.js'
 const RISE_NM_PER_BP = 0.334
 
 export function createScriptRunner({
-  slicePlane, bluntEnds, workspace, camera, controls,
+  slicePlane, bluntEnds, camera, controls,
 }) {
   /**
    * Execute a parsed script object.
@@ -65,7 +65,6 @@ export function createScriptRunner({
           })
           if (!r) throw new Error(`bundle step failed: ${store.getState().lastError?.message ?? 'unknown'}`)
           store.setState({ currentPlane: plane })
-          workspace.hide()
           offset = step.length_bp * RISE_NM_PER_BP
           break
         }

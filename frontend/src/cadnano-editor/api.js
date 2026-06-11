@@ -592,6 +592,11 @@ export async function addFullAutostaple(opts = {}) {
   return mutate(req => req('POST', '/design/full-autostaple', opts))
 }
 
+/** Fill bare scaffold ends with connector staples + periodic-seam bridges (polymerization). */
+export async function routeForPolymerization() {
+  return mutate(req => req('POST', '/design/route-for-polymerization'))
+}
+
 /** Merge short staple fragments across nicks. */
 export async function addAutoMerge() {
   return mutate(req => req('POST', '/design/auto-merge'))

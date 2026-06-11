@@ -1,167 +1,97 @@
 /**
- * Extrude panel.
+ * Extrude tool — the right-sidebar panel that hosts the extrude controls and the
+ * "Extrude from" plane dropdown.
  *
- * Fusion-360-style solid button [▲ Extrude] plus a keyboard shortcut (E).
- * Reads length from the shared length input and calls onExtrude({cells, lengthBp}).
- * Validates that at least one cell is selected before extruding.
+ * This replaces the old floating `#slice-ctx-menu` + the `workspace.js` plane
+ * picker as the entry point to every extrude. The controls' DOM lives in
+ * `#extrude-panel` (their child IDs are unchanged, so `slice_plane.js` still reads
+ * them by ID); THIS module owns the panel's visibility + the dropdown state +
+ * the tool lifecycle (activate / hide).
+ *
+ * Modes:
+ *  - 'newBundle'   — Tools→Extrude / right-click empty space. The dropdown is the
+ *    sole plane selector; activating (and changing the dropdown) drives
+ *    `slicePlane.show(plane, …, { newBundle:true })`.
+ *  - 'continuation' | 'deformed' | 'segment' — context-driven (a blunt end / a
+ *    deformed frame). The CALLER drives `slicePlane.showAtEnd/showDeformed`; this
+ *    module just shows the panel and locks the dropdown to the context plane.
  */
+import { resolveDefaultPlane, dropdownStateForMode } from './extrude_panel_logic.js'
 
+const NEW_BUNDLE_INDICATOR =
+  'NEW BUNDLE — select cells on the plane · Extrude to build · Esc to cancel'
+const IDLE_INDICATOR = 'NADOC · WORKSPACE'
 
-export function initExtrudePanel(container, { getSelectedCells, onExtrude } = {}) {
-  container.innerHTML = `
-    <div class="extrude-length-row">
-      <label class="extrude-label">Length</label>
-      <input id="extrude-length-val" type="number" min="1" step="1" value="42"
-             class="extrude-number">
-      <div class="extrude-unit-toggle">
-        <button id="unit-bp"  class="unit-btn active" title="Base pairs">bp</button>
-        <button id="unit-nm"  class="unit-btn"        title="Nanometres">nm</button>
-      </div>
-    </div>
+/**
+ * @param {object} deps
+ * @param {object} deps.store
+ * @param {object} deps.slicePlane       slice_plane API (show / showAtEnd / hide / setExtrudeUiOpen)
+ * @param {object} deps.expandedSpacing  { forceOff }
+ * @returns {{ activate: Function, hide: Function, isActive: () => boolean }}
+ */
+export function initExtrudePanel({ store, slicePlane, expandedSpacing }) {
+  const _panel  = document.getElementById('extrude-panel')
+  const _select = document.getElementById('extrude-from')
+  let _active = false
+  let _mode   = null
 
-    <div class="extrude-length-row" style="margin-top:6px">
-      <label class="extrude-label">Direction</label>
-      <div class="extrude-unit-toggle">
-        <button id="dir-fwd" class="unit-btn active" title="Extrude in +axis direction">＋</button>
-        <button id="dir-bwd" class="unit-btn"        title="Extrude in −axis direction">－</button>
-      </div>
-    </div>
+  function _modeIndicator() { return document.getElementById('mode-indicator') }
+  function _latticeType() { return store.getState().currentDesign?.lattice_type ?? 'HONEYCOMB' }
 
-    <div id="extrude-preview" style="font-size:11px;color:#8b949e;padding:4px 0 6px;min-height:16px"></div>
-
-    <div class="extrude-status" id="extrude-status"></div>
-
-    <div style="padding:6px 0 2px;font-size:11px;color:#8b949e;letter-spacing:0.05em;text-transform:uppercase">
-      Strand filter
-    </div>
-    <div style="display:flex;gap:6px;padding-bottom:8px">
-      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#c9d1d9">
-        <input type="radio" name="extrude-filter" value="both" checked style="cursor:pointer"> Both
-      </label>
-      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#c9d1d9">
-        <input type="radio" name="extrude-filter" value="scaffold" style="cursor:pointer"> Scaffold
-      </label>
-      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#c9d1d9">
-        <input type="radio" name="extrude-filter" value="staples" style="cursor:pointer"> Staples
-      </label>
-    </div>
-
-    <div style="display:flex;align-items:center;gap:4px;padding-bottom:8px">
-      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#c9d1d9">
-        <input type="checkbox" id="extrude-ligate-adjacent" checked style="cursor:pointer"> Ligate adjacent
-      </label>
-    </div>
-
-    <div class="extrude-btns-section">
-      <button id="extrude-b" class="extrude-btn-b" title="Extrude (E)">
-        <span id="extrude-icon-b" class="extrude-icon-b">▲</span> Extrude
-      </button>
-    </div>
-  `
-
-  const lengthInput  = container.querySelector('#extrude-length-val')
-  const unitBp       = container.querySelector('#unit-bp')
-  const unitNm       = container.querySelector('#unit-nm')
-  const dirFwd       = container.querySelector('#dir-fwd')
-  const dirBwd       = container.querySelector('#dir-bwd')
-  const statusEl     = container.querySelector('#extrude-status')
-  const previewEl    = container.querySelector('#extrude-preview')
-
-  function _getStrandFilter() {
-    const checked = container.querySelector('input[name="extrude-filter"]:checked')
-    return checked?.value ?? 'both'
+  function _showNewBundleOnPlane(plane) {
+    slicePlane.show(plane, 0, false, false, { latticeType: _latticeType(), newBundle: true })
   }
 
-  const BDNA_RISE = 0.334  // nm/bp
+  /**
+   * Open the Extrude panel in a given mode. For 'newBundle' this also positions the
+   * slice widget on the chosen origin plane; for context modes the caller positions
+   * the widget (showAtEnd/showDeformed) and sets its own mode-indicator text.
+   * @param {'newBundle'|'segment'|'continuation'|'deformed'} mode
+   * @param {{ plane?: 'XY'|'XZ'|'YZ' }} [ctx]
+   */
+  function activate(mode = 'newBundle', ctx = {}) {
+    _mode   = mode
+    _active = true
+    expandedSpacing?.forceOff?.()
 
-  let _unit    = 'bp'   // 'bp' or 'nm'
-  let _dirSign = 1      // +1 = forward (+axis), -1 = backward (-axis); default +axis
+    const defaultPlane = resolveDefaultPlane(store.getState().currentPlane)
+    const { value, disabled } = dropdownStateForMode(mode, ctx.plane, defaultPlane)
+    if (_select) { _select.value = value; _select.disabled = disabled }
+    if (_panel) _panel.style.display = 'block'
+    slicePlane.setExtrudeUiOpen(true)
 
-  function _getLengthBp() {
-    const val = parseFloat(lengthInput.value)
-    if (isNaN(val) || val <= 0) return null
-    if (_unit === 'bp') return Math.round(val)
-    return Math.max(1, Math.round(val / BDNA_RISE))
+    if (mode === 'newBundle') {
+      store.setState({ currentPlane: value })
+      _showNewBundleOnPlane(value)
+      const mi = _modeIndicator()
+      if (mi) mi.textContent = NEW_BUNDLE_INDICATOR
+    }
+    // context modes: the caller drives slicePlane + mode indicator.
   }
 
-  function _setUnit(u) {
-    _unit = u
-    unitBp.classList.toggle('active', u === 'bp')
-    unitNm.classList.toggle('active', u === 'nm')
-    if (u === 'bp') {
-      lengthInput.min = '1'
-      lengthInput.step = '1'
-      lengthInput.value = Math.round(parseFloat(lengthInput.value))
-    } else {
-      lengthInput.min = '0.334'
-      lengthInput.step = '0.334'
-      lengthInput.value = (parseFloat(lengthInput.value) * BDNA_RISE).toFixed(2)
+  /** Tear down the tool: hide the panel + slice widget, reset the dropdown + indicator. */
+  function hide() {
+    const wasActive = _active
+    _active = false
+    _mode   = null
+    slicePlane.setExtrudeUiOpen(false)
+    if (wasActive) slicePlane.hide()
+    if (_panel)  _panel.style.display = 'none'
+    if (_select) _select.disabled = false
+    if (wasActive) {
+      const mi = _modeIndicator()
+      if (mi) mi.textContent = IDLE_INDICATOR
     }
   }
 
-  function _setDir(sign) {
-    _dirSign = sign
-    dirFwd.classList.toggle('active', sign === 1)
-    dirBwd.classList.toggle('active', sign === -1)
-    // Update button icon to reflect extrude direction
-    const icon = sign === 1 ? '▲' : '▼'
-    const iconEl_b = container.querySelector('#extrude-icon-b')
-    if (iconEl_b) iconEl_b.textContent = icon
-    updatePreview()
-  }
-
-  function _setStatus(msg, isError = false) {
-    statusEl.textContent = msg
-    statusEl.style.color = isError ? '#f85149' : '#3fb950'
-  }
-
-  function updatePreview() {
-    const cells = getSelectedCells?.() ?? []
-    const bp    = _getLengthBp()
-    if (!cells.length || !bp) { previewEl.textContent = ''; return }
-    const total = cells.length * bp
-    const dirLabel = _dirSign === 1 ? '+axis' : '−axis'
-    previewEl.textContent = `${cells.length} helix${cells.length > 1 ? 'es' : ''} × ${bp} bp (${dirLabel}) = ${total} bp total`
-  }
-
-  async function doExtrude() {
-    const cells = getSelectedCells?.() ?? []
-    if (!cells.length) {
-      _setStatus('Select at least one cell first.', true)
-      return
-    }
-    const lengthBp = _getLengthBp()
-    if (!lengthBp) {
-      _setStatus('Enter a valid length.', true)
-      return
-    }
-    _setStatus('Extruding…')
-    try {
-      const strandFilter  = _getStrandFilter()
-      const ligateAdjacent = container.querySelector('#extrude-ligate-adjacent')?.checked ?? true
-      const signedLengthBp = lengthBp * _dirSign
-      await onExtrude?.({ cells, lengthBp: signedLengthBp, strandFilter, ligateAdjacent })
-      const dirLabel = _dirSign === 1 ? '' : ' (−axis)'
-      _setStatus(`${cells.length} helix${cells.length > 1 ? 'es' : ''} created (${lengthBp} bp${dirLabel})`)
-    } catch (err) {
-      _setStatus(err.message ?? 'Extrude failed.', true)
-    }
-  }
-
-  unitBp.addEventListener('click', () => { _setUnit('bp'); updatePreview() })
-  unitNm.addEventListener('click', () => { _setUnit('nm'); updatePreview() })
-  dirFwd.addEventListener('click', () => _setDir(1))
-  dirBwd.addEventListener('click', () => _setDir(-1))
-  lengthInput.addEventListener('input', updatePreview)
-
-  container.querySelector('#extrude-b').addEventListener('click', doExtrude)
-
-  // Keyboard shortcut E — only when not in an input.
-  document.addEventListener('keydown', e => {
-    if (e.key === 'e' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
-      doExtrude()
-    }
+  // Dropdown is the sole plane selector in new-bundle mode: re-position the widget
+  // onto the chosen origin plane (slice_plane.show clears the in-progress selection).
+  _select?.addEventListener('change', () => {
+    if (!_active || _mode !== 'newBundle') return
+    const plane = _select.value
+    store.setState({ currentPlane: plane })
+    _showNewBundleOnPlane(plane)
   })
 
-  return { doExtrude, updatePreview }
+  return { activate, hide, isActive: () => _active }
 }

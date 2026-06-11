@@ -39,7 +39,6 @@ function makeDeps(overrides = {}) {
       createDesign: vi.fn(async () => ({})),
       uploadLibraryFile: vi.fn(async () => ({ path: 'workspace/foo.nadoc' })),
     },
-    workspace: { show: vi.fn() },
     resetForNewDesign: vi.fn(),
     setFileName: vi.fn(),
     hideWelcome: vi.fn(),
@@ -132,7 +131,6 @@ describe('initNewDesignModal (factory)', () => {
     initNewDesignModal(deps).openModal()
     expect(deps.resetForNewDesign).toHaveBeenCalled()
     expect(deps.setFileHandle).toHaveBeenCalledWith(null)
-    expect(deps.workspace.show).toHaveBeenCalledWith()
     expect(deps.api.createDesign).toHaveBeenCalledWith('Untitled')
     expect(createModal).not.toHaveBeenCalled()
   })
@@ -161,7 +159,6 @@ describe('initNewDesignModal (factory)', () => {
     expect(deps.setFileHandle).toHaveBeenCalledWith(null)
     expect(deps.setFileName).toHaveBeenCalledWith('My Part!')
     expect(deps.hideWelcome).toHaveBeenCalled()
-    expect(deps.workspace.show).toHaveBeenCalledWith('SQUARE')
     expect(deps.api.createDesign).toHaveBeenCalledWith('My Part!', 'SQUARE')
     // sanitized stem ("My Part!" → "My Part_") drives the workspace filename
     expect(deps.api.uploadLibraryFile).toHaveBeenCalledWith(expect.any(String), 'My Part_.nadoc')

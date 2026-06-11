@@ -63,6 +63,7 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
+import { nucleotideLocalBox } from './selection_bbox.js'
 import {
   IMPOSTOR_QUAD,
   IMPOSTOR_VERT_UNIFORMS,
@@ -819,7 +820,14 @@ function _bboxSolidFromNucs(nucleotides) {
 // design view) in SOURCE-LOCAL space so they instance alongside the hull.
 // Returns { solid, markers } — each a BufferGeometry the caller owns, or null
 // (no edge LineSegments: the boxes themselves stay "solid bodies only").
-function _hullGeoForSource(design, nucleotides, helixAxes) {
+//
+// EXPORTED so the assembly connector-define surface (assembly_joint_renderer.js)
+// can reuse these exact bounds as its click target — the surface you place a
+// connector on then matches the rendered Hull Prism, instead of the old coarse
+// convex bundle prism.  Pass source-local `nucleotides` + a source-local
+// helix-axes map ({helixId:{start,end,samples,ovhgAxes}}); the caller bakes the
+// instance world transform into the returned `solid`.
+export function _hullGeoForSource(design, nucleotides, helixAxes) {
   if (!design) return null
 
   // Shared inputs for every hull branch AND the markers (mirror _rebuildHullRepr):
@@ -4147,17 +4155,25 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         console.warn('[shared_renderer]   _buildOverhangLodMesh returned null')
       }
     }
-    // Recompute the source's local bbox from the ACTUAL rendered shared-LOD
-    // cylinders (mid + overhang) rather than the legacy iHelixCylinders /
-    // iOverhangCylinders bp meshes.  The legacy meshes aren't drawn on the
-    // shared path and can span more than the visible cylinders (full helix
-    // extent incl. un-rendered end slots), which inflated the selection box
-    // with empty space for offset-from-origin parts like Ultimate Polymer
-    // Hinge.  Bounding the visible cylinder matrices makes the box hug what
-    // the user actually sees.
+    // Recompute the source's local bbox so the selection / group box hugs what
+    // the user actually sees.  Two contributors, UNIONED:
+    //   1. nucleotideLocalBox — the real per-nucleotide backbone cloud.  This
+    //      FOLLOWS the bend deformation that curves each helix between its
+    //      endpoints, so a bent (arc) part is bounded correctly.  A box built
+    //      only from the mid-LOD body cylinders collapses here: those cylinders
+    //      are one straight CHORD per helix (endpoint-to-endpoint), so for a
+    //      ~167° arc (e.g. the Arm_pulley torus) the box lost the entire
+    //      arc-bulge axis — drawn box Z ≈ 6 nm vs real ≈ 83 nm.
+    //   2. the rendered shared-LOD cylinder box (mid + overhang) — covers the
+    //      radial cylinder/overhang extent that pokes slightly past the
+    //      backbone centerline, and keeps the original "only the drawn slots,
+    //      no empty end padding" property for offset-from-origin parts like
+    //      Ultimate Polymer Hinge.
     {
+      const box = nucleotideLocalBox(nucleotides) ?? new THREE.Box3()
       const visBox = _computeLodLocalBox(srcEntry.midLod, srcEntry.overhangLod)
-      if (!visBox.isEmpty()) srcEntry.instBoundingBox = visBox
+      if (!visBox.isEmpty()) box.union(visBox)
+      if (!box.isEmpty()) srcEntry.instBoundingBox = box
     }
 
     // Hull LOD: one instanced grey extrusion-box solid per hull-prism instance
@@ -4589,36 +4605,64 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     }
     if (helixIds.length === 0) return null
 
-    // Group body domains (from helixCtrl's `domainCylData`) by helixId.
-    // Each entry: { helixId, cylIdx, t0, t1, ... } in source-local fractions
-    // along the helix axis.
-    const domsByHelix = new Map()
+    // Group body domains (from helixCtrl's `domainCylData`) by helixId, kept
+    // separate for staples vs scaffold.  The scaffold spans the whole helix
+    // under the tiling staples; if we lumped it into one interval and averaged
+    // (the old behaviour), a helix whose staples change colour along its length
+    // (e.g. red end-caps + orange middle) collapsed to a single muddy average.
+    // Instead we split at STAPLE colour boundaries so every strand colour shows
+    // as its own cylinder; the scaffold core is excluded from the colour split
+    // (it's not what gives a region its colour) and only used as a fallback for
+    // scaffold-only helices so nothing vanishes.
+    const scaffoldIds = new Set()
+    for (const s of design?.strands ?? []) {
+      if (s.strand_type === 'scaffold') scaffoldIds.add(s.id)
+    }
+    const stapleByHelix = new Map()
+    const scaffByHelix  = new Map()
     const domainCylData = srcEntry.helixCtrl?.domainCylData ?? []
     for (const dom of domainCylData) {
       if (dom.t0 == null || dom.t1 == null) continue
-      let bucket = domsByHelix.get(dom.helixId)
-      if (!bucket) { bucket = []; domsByHelix.set(dom.helixId, bucket) }
+      const m = scaffoldIds.has(dom.strandId) ? scaffByHelix : stapleByHelix
+      let bucket = m.get(dom.helixId)
+      if (!bucket) { bucket = []; m.set(dom.helixId, bucket) }
       bucket.push(dom)
     }
 
-    // Per helix, sort by t0 and merge overlapping/adjacent runs into
-    // disjoint intervals.  Each surviving interval is one body cylinder.
-    // `intervals` is the flat list we'll turn into matrices.
+    // Build-time per-domain colour (from the legacy strand-coloured cylinders),
+    // quantised to 8-bit so float jitter never splits a same-colour run.
+    const cylColorArr = legacyHelixCylMesh?.instanceColor?.array ?? null
+    const _domColorKey = (d) => {
+      if (!cylColorArr) return 0
+      const ci = d.cylIdx * 3
+      return (Math.round(cylColorArr[ci] * 255) << 16)
+           | (Math.round(cylColorArr[ci + 1] * 255) << 8)
+           |  Math.round(cylColorArr[ci + 2] * 255)
+    }
+
+    // Per helix, sort by t0 and merge axially-adjacent domains into intervals,
+    // breaking a run whenever the colour changes.  Each surviving interval is
+    // one body cylinder of a single (strand) colour.  `intervals` is the flat
+    // list we'll turn into matrices.
     const intervals = []  // { helixIdx, helixId, t0, t1, domains: [...] }
     for (let i = 0; i < helixIds.length; i++) {
       const helixId = helixIds[i]
-      const doms = domsByHelix.get(helixId)
+      let doms = stapleByHelix.get(helixId)
+      if (!doms || doms.length === 0) doms = scaffByHelix.get(helixId)
       if (!doms || doms.length === 0) continue
-      doms.sort((a, b) => a.t0 - b.t0)
+      doms = doms.slice().sort((a, b) => a.t0 - b.t0)
+      let curKey = _domColorKey(doms[0])
       let cur = { helixIdx: i, helixId, t0: doms[0].t0, t1: doms[0].t1, domains: [doms[0]] }
       for (let j = 1; j < doms.length; j++) {
         const d = doms[j]
-        if (d.t0 <= cur.t1 + 1e-9) {
+        const k = _domColorKey(d)
+        if (k === curKey && d.t0 <= cur.t1 + 1e-9) {
           if (d.t1 > cur.t1) cur.t1 = d.t1
           cur.domains.push(d)
         } else {
           intervals.push(cur)
           cur = { helixIdx: i, helixId, t0: d.t0, t1: d.t1, domains: [d] }
+          curKey = k
         }
       }
       intervals.push(cur)
@@ -6014,6 +6058,26 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
         dst[i * 4 + 3] = 1
       }
       midLod.segColorTex.needsUpdate = true
+    }
+
+    // Curved-cyl LOD (bent parts): its cylinders are a baked TubeGeometry whose
+    // per-vertex colours were frozen at build time, so live coloringMode changes
+    // never reached it (the documented "Known v1 limitation").  Re-bake the
+    // colour attribute from the freshly-recoloured temp helixCtrl and copy it
+    // into the live geometry so bent parts track the coloringMode like straight
+    // ones.  Vertex order/count are deterministic from the same source, so a
+    // plain array copy suffices (guarded on count).
+    if (srcEntry.curvedCylLod?.mesh?.geometry) {
+      const reGeo = _curvedCylGeoForSource(tmpHelixCtrl)
+      if (reGeo) {
+        const newCol = reGeo.getAttribute('color')
+        const dstCol = srcEntry.curvedCylLod.mesh.geometry.getAttribute('color')
+        if (newCol && dstCol && newCol.count === dstCol.count) {
+          dstCol.array.set(newCol.array)
+          dstCol.needsUpdate = true
+        }
+        reGeo.dispose()
+      }
     }
 
     // (No far/billboard tint to update — the far tier was retired; distant

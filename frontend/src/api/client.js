@@ -1021,6 +1021,14 @@ export async function autoScaffoldMatched() {
   return _syncFromDesignResponse(json)
 }
 
+export async function routeForPolymerization() {
+  const json = await _request('POST', '/design/route-for-polymerization')
+  if (!json) return null  // 422 (nothing to route) etc. — store.lastError set by _request
+  if (json?.warnings?.length) console.warn('[RouteForPolymerization] warnings:', json.warnings)
+  _syncFromDesignResponse(json)
+  return json  // caller reads .warnings / .seam_ligation_ids before/after sync
+}
+
 
 // ── Sequence assignment ────────────────────────────────────────────────────
 

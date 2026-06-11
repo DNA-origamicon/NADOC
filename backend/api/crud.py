@@ -7199,6 +7199,36 @@ def auto_scaffold_seamless_endpoint() -> dict:
     return resp
 
 
+@router.post("/design/route-for-polymerization", status_code=200)
+def route_for_polymerization_endpoint() -> dict:
+    """Route bare scaffold ends for end-to-end polymerization.
+
+    Fills the single-stranded scaffold left at the two terminal faces with one
+    fixed connector staple per bare run, then stitches each face-helix's two
+    connectors into a bridging staple across a periodic boundary (exactly one
+    flagged ``is_periodic_seam`` so the part becomes Polymerize-Periodic
+    eligible and its far face is a translate of its near face).
+
+    Non-blocking: warns (rather than fails) when no Autoscaffold op was run or a
+    helix lacks an unpaired end. Hard-errors (422) only when there is nothing to
+    route at all.
+    """
+    from backend.core.polymer_router import route_for_polymerization
+
+    updated, report, result = _run_auto_scaffold_with_feature_log(
+        op_kind='route-for-polymerization',
+        label='Route for polymerization',
+        params={},
+        runner=lambda d: route_for_polymerization(d),
+    )
+    resp = _design_response_with_geometry(updated, report)
+    resp["warnings"] = result.warnings
+    resp["connector_strand_ids"] = result.new_connector_strand_ids
+    resp["seam_ligation_ids"] = result.seam_ligation_ids
+    resp["principal_seam_id"] = result.principal_seam_id
+    return resp
+
+
 @router.post("/design/assign-scaffold-sequence", status_code=200)
 def assign_scaffold_sequence_endpoint(body: _ScaffoldSeqBody = _ScaffoldSeqBody()) -> dict:
     """Assign a scaffold sequence to a scaffold strand.

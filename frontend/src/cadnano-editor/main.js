@@ -27,7 +27,7 @@ import {
   // menu bar operations
   createDesign, importDesign,
   exportDesign, exportCadnano, exportSequenceCsv,
-  addAutoCrossover, addAutoBreak, addFullAutostaple,
+  addAutoCrossover, addAutoBreak, addFullAutostaple, routeForPolymerization,
   autoScaffoldSeamed, autoScaffoldSeamless,
   assignScaffoldSequence, syncScaffoldSequenceResponse, assignStapleSequences,
   applyAllDeformations,
@@ -1048,6 +1048,19 @@ document.getElementById('menu-routing-full-autostaple')?.addEventListener('click
   }
   const full = result.full_autostaple ?? {}
   showToast(`Full autostaple complete: ${full.auto_crossover?.placed ?? 0} crossovers placed.`)
+})
+
+document.getElementById('menu-routing-polymerization')?.addEventListener('click', async () => {
+  if (!editorStore.getState().design?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
+  const result = await routeForPolymerization()
+  if (!result) {
+    showToast('Route for polymerization failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
+    return
+  }
+  const nBridges = result.seam_ligation_ids?.length ?? 0
+  const warnings = result.warnings ?? []
+  if (warnings.length) showToast(`Routed ${nBridges} bridging staple(s). ${warnings[0]}`, { severity: 'warning' })
+  else showToast(`Routed for polymerization: ${nBridges} bridging staple(s) across the seam.`)
 })
 
 ;(() => {

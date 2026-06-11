@@ -21,7 +21,7 @@
  * @param {Object} deps.store / deps.api
  * @param {Object} deps.slicePlane / deps.expandedSpacing / deps.debugOverlay
  * @param {Object} deps.measurementTool / deps.selectionManager
- * @param {Object} deps.workspace / deps.deformView
+ * @param {Object} deps.extrudePanel / deps.deformView
  * @param {Object} deps.crossSectionMinimap / deps.sliceHighlighter
  * @param {Function} deps.isUnfoldActive / deps.isDeformActive
  * @param {Function} deps.captureCurrentCamera / deps.frameSelectionOrAll
@@ -43,7 +43,7 @@ export function initKeyboardShortcuts(deps) {
   const {
     store, api,
     slicePlane, expandedSpacing, debugOverlay, measurementTool, selectionManager,
-    workspace, deformView, crossSectionMinimap, sliceHighlighter,
+    extrudePanel, deformView, crossSectionMinimap, sliceHighlighter,
     isUnfoldActive, isDeformActive,
     captureCurrentCamera, frameSelectionOrAll,
     setMenuToggle,
@@ -136,7 +136,7 @@ export function initKeyboardShortcuts(deps) {
         const { currentDesign } = store.getState()
         if (!currentDesign?.helices?.length) {
           slicePlane.hide()
-          workspace.show()
+          extrudePanel?.hide()
           showWelcome()
         }
         if (!currentDesign?.deformations?.length && !deformView.isActive()) {
@@ -547,6 +547,9 @@ export function initKeyboardShortcuts(deps) {
           document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
         }
       } else if (slicePlane.isVisible()) {
+        // Tears down the read-only slice plane AND the Extrude tool (the panel's
+        // hide() also calls slicePlane.hide() + resets the indicator/dropdown).
+        extrudePanel?.hide()
         slicePlane.hide()
         crossSectionMinimap.clearSlice()
         crossSectionMinimap.hide()

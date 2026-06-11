@@ -130,7 +130,7 @@ const C_HOVER       = new THREE.Color(0xffffff)  // white  — hover
  * @param {import('three').OrbitControls} controls
  * @param {{ onExtrude: Function, getDesign: Function }} opts
  */
-export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange, onPreviewToggle } = {}) {
+export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange, onPreviewToggle, onCancel } = {}) {
   // Mutable camera ref — replaced by setCamera() when an ortho camera takes over (cadnano mode).
   let _camera = camera
 
@@ -1116,9 +1116,12 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     const rawVal = parseFloat(_sliceLengthInput?.value ?? '')
     if (isNaN(rawVal)) return 0
     const unit = _sliceUnitSelect?.value ?? 'bp'
+    // Return the TRUE magnitude — 0 stays 0 (no `|| 1` fallback) so a 0-length
+    // selection shows no preview ghost. The preview only appears once the user
+    // enters a non-zero length.
     return unit === 'bp'
-      ? Math.abs(Math.trunc(rawVal)) || 1
-      : Math.max(1, Math.round(Math.abs(rawVal) / RISE))
+      ? Math.abs(Math.trunc(rawVal))
+      : Math.max(0, Math.round(Math.abs(rawVal) / RISE))
   }
 
   /** Hide all ghost meshes without disposing them (kept for reuse). */
@@ -1198,23 +1201,23 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   /**
-   * Rebuild/reposition the ghost cylinders for the current selection.  Each
-   * selected cell gets a unit cylinder at the cell's world position, scaled to
-   * length_bp × RISE.  Direction per cell matches what the extrude will create
-   * (see _extrudeDirForCell).  Cells whose extrude would overlap existing DNA are
-   * drawn RED (and _previewHasConflict is set so _doExtrude can block).
-   * No-op (cleared) when disabled, the lattice is hidden, nothing is selected, or
-   * the extrude popup (ctx-menu) is not open — the preview only appears once the
-   * user right-clicks, so selecting cells beforehand isn't obscured by ghosts.
+   * Rebuild/reposition the ghost cylinders for the current selection.  Each selected
+   * cell gets a unit cylinder at the cell's world position, scaled to length_bp × RISE,
+   * pointing the way the extrude will grow (see _extrudeDirForCell).  Cells whose
+   * extrude would overlap existing DNA are drawn RED (and _previewHasConflict is set).
+   *
+   * Length-gated (2026-06-11): the preview appears ONLY once a non-zero length is
+   * entered — the default length is 0, so selecting cells doesn't paint ghosts over
+   * them.  No on/off checkbox; it's purely a function of (cells selected × length>0).
+   * Cleared when the lattice is hidden, read-only, the panel is closed, nothing is
+   * selected, or the length is 0.
    */
   function _updatePreview() {
     _previewHasConflict = false
-    if (!_previewEnabled || !_latticeMode || _readOnly || _ctxEl?.style.display !== 'block') {
-      _hidePreview(); return
-    }
+    if (!_latticeMode || _readOnly || !_extrudeUiOpen) { _hidePreview(); return }
     const selected = _circleMeshes.filter(c => _selected.has(`${c.row},${c.col}`))
     const absBp = _previewLengthBp()
-    if (!selected.length || !absBp) { _hidePreview(); return }
+    if (!selected.length || !absBp) { _hidePreview(); return }   // length 0 → no ghosts
 
     const lengthNm = absBp * RISE
     _ensurePreviewCount(selected.length)
@@ -1356,7 +1359,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       // Lasso drag ended — selection already accumulated during pointermove, nothing more to do
       _updateCircleColors()
       _updateLabels()
-      _updatePreview()
+      _refreshExtrudeUi()
       return
     }
 
@@ -1367,7 +1370,6 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     if (_pointerDownPos && Math.hypot(e.clientX - _pointerDownPos.x, e.clientY - _pointerDownPos.y) > 4) return
 
     _setNDC(e)
-    _hideContextMenu()
 
     if (_latticeMode) {
       const cell = _rayCells()
@@ -1376,7 +1378,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         _toggleCell(key)
         _updateCircleColors()
         _updateLabels()
-        _updatePreview()
+        _refreshExtrudeUi()
       }
       // Clicks on empty plane surface are no-ops — lattice stays open,
       // selection is preserved.  Lattice only closes via hide() or Escape.
@@ -1399,15 +1401,16 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _selectCell(key)
       _updateCircleColors()
       _updateLabels()
-      _updatePreview()
+      _refreshExtrudeUi()
     }
-    if (_selected.size === 0) return
-    _showContextMenu(e.clientX, e.clientY)
   }
 
   // ── Context menu ────────────────────────────────────────────────────────────
 
-  const _ctxEl = document.getElementById('slice-ctx-menu')
+  // The extrude controls now live in the right-sidebar #extrude-panel (relocated
+  // from the old floating #slice-ctx-menu, child IDs preserved). This module reads
+  // them by ID; the extrude_panel module owns the panel's visibility.
+  const _ctxEl = document.getElementById('extrude-panel')
 
   const _sliceTotalBpEl   = _ctxEl?.querySelector('#slice-total-bp')
   const _sliceScaffoldRec = _ctxEl?.querySelector('#slice-scaffold-rec')
@@ -1415,16 +1418,13 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   const _sliceUnitSelect  = _ctxEl?.querySelector('#slice-unit')
   const _sliceDirFwd      = _ctxEl?.querySelector('#slice-dir-fwd')
   const _sliceDirBwd      = _ctxEl?.querySelector('#slice-dir-bwd')
-  const _slicePreviewToggle = _ctxEl?.querySelector('#slice-preview-toggle')
   let _sliceDirSign = 1   // default +axis
+  // True while the sidebar Extrude panel (which now hosts these controls) is open.
+  // Gates the live count refresh; set via setExtrudeUiOpen() by the extrude_panel
+  // module on activate()/hide(). Replaces the old "floating menu is display:block" check.
+  let _extrudeUiOpen = false
 
-  // "Show preview" checkbox lives in the extrude popup; it mirrors _previewEnabled
-  // and notifies main.js (which persists the choice + syncs the overhang ghost).
-  if (_slicePreviewToggle) _slicePreviewToggle.addEventListener('change', () => {
-    _previewEnabled = _slicePreviewToggle.checked
-    _updatePreview()
-    onPreviewToggle?.(_previewEnabled)
-  })
+  // (The "Show preview" ghost-cylinder toggle was removed 2026-06-11 — see _updatePreview.)
 
   // Set the extrude direction (+1 = +axis, -1 = -axis), sync the ctx-menu buttons,
   // and refresh the bp readout + ghost preview.  Used by the buttons and by
@@ -1451,16 +1451,19 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     const rawVal = parseFloat(_sliceLengthInput.value)
     const unit   = _sliceUnitSelect?.value ?? 'bp'
     const absBp  = unit === 'bp'
-      ? Math.abs(Math.trunc(rawVal)) || 1
-      : Math.max(1, Math.round(Math.abs(rawVal) / RISE))
+      ? Math.abs(Math.trunc(rawVal))
+      : Math.max(0, Math.round(Math.abs(rawVal) / RISE))
     const bp     = _sliceDirSign * absBp
     if (!count || isNaN(rawVal)) {
       _sliceTotalBpEl.textContent = ''
       if (_sliceScaffoldRec) _sliceScaffoldRec.textContent = ''
       return
     }
-    _sliceTotalBpEl.textContent =
-      `${count} × ${bp < 0 ? '-' : ''}${absBp} bp = ${bp < 0 ? '-' : ''}${count * absBp} bp total`
+    // Default length is 0 (no preview while picking) → prompt for a length but still
+    // show the scaffold recommendations below (they tell the user what to enter).
+    _sliceTotalBpEl.textContent = absBp === 0
+      ? 'Set a length (or pick a recommendation) →'
+      : `${count} × ${bp < 0 ? '-' : ''}${absBp} bp = ${bp < 0 ? '-' : ''}${count * absBp} bp total`
 
     // Scaffold length recommendation: existing helices + selected new helices,
     // each contributing length_bp + 2×_END_MARGIN_BP to the scaffold path.
@@ -1494,21 +1497,15 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     _updatePreview()
   })
 
-  function _showContextMenu(x, y) {
-    if (!_ctxEl) return
-    _ctxEl.querySelector('.ctx-count').textContent =
-      `${_selected.size} helix${_selected.size > 1 ? 'es' : ''}`
-    if (_slicePreviewToggle) _slicePreviewToggle.checked = _previewEnabled
+  // Refresh the sidebar Extrude panel's live readouts (helix count, total bp,
+  // scaffold-length recommendations) from the current selection. The panel's
+  // visibility is owned by the extrude_panel module (via setExtrudeUiOpen), not here.
+  function _refreshExtrudeUi() {
+    if (!_ctxEl || !_extrudeUiOpen) return
+    const cnt = _ctxEl.querySelector('.ctx-count')
+    if (cnt) cnt.textContent = `${_selected.size} helix${_selected.size > 1 ? 'es' : ''}`
     _updateSliceTotalBp()
-    _ctxEl.style.left    = `${x}px`
-    _ctxEl.style.top     = `${y}px`
-    _ctxEl.style.display = 'block'
-    _updatePreview()   // popup is now open → show ghosts for the selected cells
-  }
-
-  function _hideContextMenu() {
-    if (_ctxEl) _ctxEl.style.display = 'none'
-    _hidePreview()     // popup closed → no preview while (re)selecting cells
+    _updatePreview()   // length-gated: only paints ghosts once a non-zero length is set
   }
 
   if (_ctxEl) {
@@ -1521,6 +1518,12 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         : Math.max(1, Math.round(absVal / RISE))
       const lengthBp = _sliceDirSign * absLengthBp
 
+      // Default length is 0 — require a real length before building.
+      if (_previewLengthBp() === 0) {
+        showToast('Enter a length (bp) before extruding.', { severity: 'error' })
+        return
+      }
+
       // Block the extrude if any selected cell would overlap existing DNA. Leave the
       // menu + red preview up so the user can change length/direction or deselect.
       if (_anySelectedConflict()) {
@@ -1532,7 +1535,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       const filterEl = _ctxEl.querySelector('input[name="slice-strand-filter"]:checked')
       const strandFilter = filterEl?.value ?? 'both'
       const ligateAdjacent = _ctxEl.querySelector('#slice-ligate-adjacent')?.checked ?? true
-      _hideContextMenu()
+      _hidePreview()   // clear ghosts immediately; panel visibility owned by the module
       try {
         await onExtrude?.({
           cells, lengthBp, plane: _plane, offsetNm: _offset,
@@ -1551,7 +1554,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       if (_latticeMode) _buildLattice()
       _selected.clear()
       _selectionOrder = []
-      _updatePreview()
+      _refreshExtrudeUi()
     }
 
     _ctxEl.querySelector('#slice-extrude-btn').addEventListener('click', _doExtrude)
@@ -1559,13 +1562,10 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     _ctxEl.querySelector('#slice-length').addEventListener('keydown', e => {
       if (e.key === 'Enter') _doExtrude()
     })
-
-    _ctxEl.querySelector('#slice-cancel-btn').addEventListener('click', _hideContextMenu)
+    // The "Cancel" button tears down the whole tool via onCancel (wired to the
+    // extrude_panel module's hide()); the panel itself is module-owned.
+    _ctxEl.querySelector('#slice-cancel-btn').addEventListener('click', () => onCancel?.())
   }
-
-  document.addEventListener('pointerdown', e => {
-    if (_ctxEl && !_ctxEl.contains(e.target)) _hideContextMenu()
-  })
 
   // ── Attach events ───────────────────────────────────────────────────────────
 
@@ -1677,7 +1677,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _borderMesh.geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(40, 40, RISE))
       _clearLattice()
       _hidePreview()
-      _hideContextMenu()
+      _extrudeUiOpen    = false
       _isDragging       = false
       _isDragSelecting  = false
       _pendingCellClick = false
@@ -1686,6 +1686,24 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
     isVisible() { return _visible },
     isContinuation() { return _visible && _continuationMode },
+
+    /**
+     * Mark the sidebar Extrude panel open/closed. The extrude_panel module calls
+     * this on activate()/hide() — it gates the live count refresh + ghost preview
+     * (the controls' DOM is shared, but the panel's visibility is module-owned).
+     */
+    setExtrudeUiOpen(open) {
+      _extrudeUiOpen = !!open
+      if (_extrudeUiOpen) {
+        // Start every extrude session at length 0 → no ghost preview obscures the
+        // cells while the user is still selecting; the preview appears once they
+        // enter a non-zero length.
+        if (_sliceLengthInput) _sliceLengthInput.value = '0'
+        _refreshExtrudeUi()
+      } else {
+        _hidePreview()
+      }
+    },
 
     /** Enable/disable the ghost-cylinder extrude preview (driven by the sidebar toggle). */
     setPreviewEnabled(v) {

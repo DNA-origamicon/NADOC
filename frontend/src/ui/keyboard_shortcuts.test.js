@@ -60,7 +60,7 @@ function makeDeps(overrides = {}) {
       getMultiCrossoverArcs: vi.fn(() => []),
       clearMultiCrossoverArcs: vi.fn(),
     },
-    workspace: { show: vi.fn() },
+    extrudePanel: { hide: vi.fn() },
     deformView: { isActive: vi.fn(() => false), activate: vi.fn(async () => {}) },
     crossSectionMinimap: { clearSlice: vi.fn(), hide: vi.fn() },
     sliceHighlighter: { clear: vi.fn() },

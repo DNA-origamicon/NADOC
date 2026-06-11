@@ -29,17 +29,11 @@ import {
   makeRefVec,
 } from './assembly_revolute_math.js'
 import {
-  buildBundleGeometry,
-  buildPrismGeometry,
-  buildPanelSurface,
-  buildSpineSections,
-  buildSweptHullGeometry,
   buildJointPreviewMesh,
   SURFACE_COLOUR, SURFACE_OPACITY,
-  CROSS_MARGIN, AXIAL_MARGIN,
   PREV_HALF_LEN,
-  MIN_HC_FACES, MIN_SQ_FACES,
 } from './joint_renderer.js'
+import { _hullGeoForSource } from './assembly_renderer.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
 import { createBeltPreviewLayer } from './belt_preview_layer.js'
 import { beltCurvePoints, nearestArcParam, seatTransform, beltFrameAt } from './belt_geometry.js'
@@ -752,8 +746,6 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
   let _onExitCb           = null
   let _surfaceMesh   = null
   let _surfaceWire   = null
-  let _hullMesh      = null
-  let _hullWire      = null
   let _pointerDownAt = null
 
   // ── Mate define mode state ────────────────────────────────────────────────
@@ -789,25 +781,22 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
   }
 
   // ── Instance geometry helpers ────────────────────────────────────────────
-  function _worldAxes(helixAxesArray, mat4) {
+  // Source-local helix-axes array → the {helixId:{start,end,samples,ovhgAxes}}
+  // map _hullGeoForSource expects. Mirrors assembly_renderer._axesArrayToMap so
+  // the connector surface is built from byte-identical inputs to the rendered
+  // Hull Prism. No matrix applied — the instance transform is baked into the
+  // resulting solid geometry instead.
+  function _localAxes(helixAxesArray) {
+    if (!helixAxesArray?.length) return null
     const dict = {}
     for (const ax of helixAxesArray) {
-      const s = new THREE.Vector3(...ax.start).applyMatrix4(mat4)
-      const e = new THREE.Vector3(...ax.end).applyMatrix4(mat4)
-      const samples = (ax.samples ?? [ax.start, ax.end]).map(pt => {
-        const p = new THREE.Vector3(...pt).applyMatrix4(mat4)
-        return [p.x, p.y, p.z]
-      })
-      dict[ax.helix_id] = { start: [s.x, s.y, s.z], end: [e.x, e.y, e.z], samples }
+      dict[ax.helix_id] = {
+        start: ax.start, end: ax.end,
+        samples: ax.samples ?? null,
+        ovhgAxes: ax.ovhg_axes ?? null,
+      }
     }
     return dict
-  }
-
-  function _worldBackbone(nucleotides, mat4) {
-    return nucleotides.map(nuc => {
-      const p = new THREE.Vector3(...nuc.backbone_position).applyMatrix4(mat4)
-      return { helix_id: nuc.helix_id, backbone_position: [p.x, p.y, p.z] }
-    })
   }
 
   function _instMat4(inst) {
@@ -818,10 +807,10 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
 
   // ── Hull surface lifecycle ────────────────────────────────────────────────
   function _removeSurface() {
-    for (const obj of [_surfaceMesh, _surfaceWire, _hullMesh, _hullWire]) {
+    for (const obj of [_surfaceMesh, _surfaceWire]) {
       if (obj) { obj.geometry?.dispose(); obj.material?.dispose(); obj.parent?.remove(obj) }
     }
-    _surfaceMesh = _surfaceWire = _hullMesh = _hullWire = null
+    _surfaceMesh = _surfaceWire = null
   }
 
   async function _showInstanceSurface(instanceId) {
@@ -847,91 +836,36 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
 
     const helixAxesArray = geoData?.helix_axes ?? []
     const nucleotides    = geoData?.nucleotides ?? []
-    const latticeType    = geoData?.design?.lattice_type ?? null
-    if (!helixAxesArray.length) return
+    const design         = geoData?.design ?? null
+    if (!design || !nucleotides.length) return
 
-    const mat4        = _instMat4(inst)
-    const worldAxDict = _worldAxes(helixAxesArray, mat4)
-    const worldBack   = _worldBackbone(nucleotides, mat4)
+    // Reuse the Hull Prism representation's bounds as the click target: the same
+    // source-local extrusion-box / cross-section-scan decision tree the renderer
+    // draws (assembly_renderer._hullGeoForSource), so the surface you place a
+    // connector on coincides with the visible hull. Bake the instance's world
+    // transform into the solid (the geometry comes back source-local).
+    const hull = _hullGeoForSource(design, nucleotides, _localAxes(helixAxesArray))
+    if (!hull?.solid) return
+    hull.markers?.dispose?.()        // face markers aren't needed for picking
 
-    const pseudoCluster = { helix_ids: Object.keys(worldAxDict) }
-    const N = latticeType?.toUpperCase() === 'SQUARE' ? MIN_SQ_FACES : MIN_HC_FACES
+    const geo = hull.solid
+    geo.applyMatrix4(_instMat4(inst))   // source-local → world
 
-    // ── Curved swept hull (primary surface for bent designs) ──────────────
-    const isCurved = Object.values(worldAxDict).some(ax => (ax.samples?.length ?? 0) > 2)
-    if (isCurved) {
-      const sections = buildSpineSections(pseudoCluster, worldAxDict, CROSS_MARGIN, AXIAL_MARGIN)
-      if (sections) {
-        const sweptGeo = buildSweptHullGeometry(sections)
-        _surfaceMesh = new THREE.Mesh(sweptGeo, new THREE.MeshBasicMaterial({
-          color: SURFACE_COLOUR, transparent: true, opacity: SURFACE_OPACITY,
-          side: THREE.DoubleSide, depthTest: true, depthWrite: false,
-        }))
-        _surfaceMesh.renderOrder = 100
-        _surfaceWire = new THREE.LineSegments(
-          new THREE.WireframeGeometry(sweptGeo),
-          new THREE.LineBasicMaterial({
-            color: SURFACE_COLOUR, transparent: true,
-            opacity: Math.min(1, SURFACE_OPACITY * 3),
-            depthTest: false, depthWrite: false,
-          }),
-        )
-        _surfaceWire.renderOrder = 101
-        scene.add(_surfaceMesh, _surfaceWire)
-      }
-    }
-
-    // ── Straight bundle geometry (hover grid, rings, straight hull fallback) ─
-    const bg = buildBundleGeometry(pseudoCluster, worldAxDict, worldBack, N,
-                                   CROSS_MARGIN, AXIAL_MARGIN, latticeType)
-    if (!bg && !_surfaceMesh) return
-
-    if (bg) {
-      if (!_surfaceMesh) {
-        // Straight part — use panel/prism surface as primary raycaster target
-        const geo = bg.panels
-          ? buildPanelSurface(bg.panels, bg.corners, bg.halfLen)
-          : buildPrismGeometry(bg.corners, bg.halfLen)
-        _surfaceMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-          color: SURFACE_COLOUR, transparent: true, opacity: SURFACE_OPACITY,
-          side: THREE.DoubleSide, depthTest: true, depthWrite: false,
-        }))
-        _surfaceMesh.quaternion.copy(bg.rotQ)
-        _surfaceMesh.position.copy(bg.bundleMid)
-        _surfaceMesh.renderOrder = 100
-        _surfaceWire = new THREE.LineSegments(
-          new THREE.WireframeGeometry(geo),
-          new THREE.LineBasicMaterial({
-            color: SURFACE_COLOUR, transparent: true,
-            opacity: Math.min(1, SURFACE_OPACITY * 3),
-            depthTest: false, depthWrite: false,
-          }),
-        )
-        _surfaceWire.quaternion.copy(bg.rotQ)
-        _surfaceWire.position.copy(bg.bundleMid)
-        _surfaceWire.renderOrder = 101
-        scene.add(_surfaceMesh, _surfaceWire)
-      }
-
-      // Silent straight prism gap-filler (invisible backup raycaster target)
-      const hullGeo = buildPrismGeometry(bg.corners, bg.halfLen)
-      _hullMesh = new THREE.Mesh(hullGeo, new THREE.MeshBasicMaterial({
-        color: SURFACE_COLOUR, transparent: true, opacity: 0,
-        side: THREE.DoubleSide, depthTest: true, depthWrite: false,
-      }))
-      _hullMesh.quaternion.copy(bg.rotQ)
-      _hullMesh.position.copy(bg.bundleMid)
-      _hullMesh.renderOrder = 100
-      _hullWire = new THREE.LineSegments(
-        new THREE.WireframeGeometry(hullGeo),
-        new THREE.LineBasicMaterial({ color: SURFACE_COLOUR, transparent: true, opacity: 0,
-          depthTest: false, depthWrite: false }),
-      )
-      _hullWire.quaternion.copy(bg.rotQ)
-      _hullWire.position.copy(bg.bundleMid)
-      _hullWire.renderOrder = 101
-      scene.add(_hullMesh, _hullWire)
-    }
+    _surfaceMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      color: SURFACE_COLOUR, transparent: true, opacity: SURFACE_OPACITY,
+      side: THREE.DoubleSide, depthTest: true, depthWrite: false,
+    }))
+    _surfaceMesh.renderOrder = 100
+    _surfaceWire = new THREE.LineSegments(
+      new THREE.WireframeGeometry(geo),
+      new THREE.LineBasicMaterial({
+        color: SURFACE_COLOUR, transparent: true,
+        opacity: Math.min(1, SURFACE_OPACITY * 3),
+        depthTest: false, depthWrite: false,
+      }),
+    )
+    _surfaceWire.renderOrder = 101
+    scene.add(_surfaceMesh, _surfaceWire)
   }
 
   // ── Face hit detection ────────────────────────────────────────────────────
@@ -946,14 +880,8 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       return { point: hit.point, normal: worldNormal }
     }
 
-    const primTargets = [_surfaceMesh].filter(Boolean)
-    if (primTargets.length) {
-      const hits = _rc.intersectObjects(primTargets)
-      if (hits.length && hits[0].face) return _resolveHit(hits[0])
-    }
-
-    if (_hullMesh) {
-      const hits = _rc.intersectObject(_hullMesh)
+    if (_surfaceMesh) {
+      const hits = _rc.intersectObject(_surfaceMesh)
       if (hits.length && hits[0].face) return _resolveHit(hits[0])
     }
 

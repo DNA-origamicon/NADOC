@@ -28,7 +28,6 @@ export function sanitizeWorkspaceStem(name) {
  * @param {object} deps
  * @param {object} deps.store
  * @param {object} deps.api
- * @param {object} deps.workspace
  * @param {() => void} deps.resetForNewDesign
  * @param {(name: string|null) => void} deps.setFileName
  * @param {() => void} deps.hideWelcome
@@ -39,7 +38,7 @@ export function sanitizeWorkspaceStem(name) {
  * @returns {{ openModal: () => void }}
  */
 export function initNewDesignModal({
-  store, api, workspace,
+  store, api,
   resetForNewDesign, setFileName, hideWelcome, setWorkspacePath, setFileHandle,
   getLibraryPanel, spawnDocTabIfBusy,
 }) {
@@ -82,7 +81,7 @@ export function initNewDesignModal({
     if (!_newDesignModalCtrl) {
       // HTML body not in the DOM (no template) — fast-create an Untitled part
       // so the menu item never silently fails.
-      resetForNewDesign(); setFileHandle(null); workspace.show()
+      resetForNewDesign(); setFileHandle(null)
       api.createDesign('Untitled')
       return
     }
@@ -116,7 +115,6 @@ export function initNewDesignModal({
     setFileHandle(null)
     setFileName(name)
     hideWelcome()
-    workspace.show(lattice)
     await api.createDesign(name, lattice)
     // Save to workspace immediately so auto-save has a target path
     const safeStem = sanitizeWorkspaceStem(name)

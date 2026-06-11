@@ -1173,6 +1173,7 @@ SnapshotOpKind = Literal[
     'full-autostaple',
     'auto-merge',
     'auto-crossover',
+    'route-for-polymerization',
     'create-near-ends',
     'create-far-ends',
     'overhang-bulk',

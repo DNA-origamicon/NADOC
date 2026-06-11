@@ -5,10 +5,12 @@
 import { startToolAtBp } from '../scene/deformation_editor.js'
 import { showToast } from './toast.js'
 
-// deps: { store, api, slicePlane, expandedSpacing, deformView, clusterDeformGuard }
+// deps: { store, api, slicePlane, expandedSpacing, deformView, clusterDeformGuard, extrudePanel }
 // `clusterDeformGuard` is main.js's hoisted `_clusterDeformGuard` (aliased here
-// to keep the moved handler bodies byte-identical).
-export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, deformView, clusterDeformGuard: _clusterDeformGuard }) {
+// to keep the moved handler bodies byte-identical). `extrudePanel` opens the
+// right-sidebar Extrude panel (which hosts the slice-extrude controls) for the
+// blunt-end continuation / deformed-continuation flows.
+export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, deformView, clusterDeformGuard: _clusterDeformGuard, extrudePanel }) {
   // ── Blunt end sidebar panel ──────────────────────────────────────────────────
   const _bluntPanel        = document.getElementById('blunt-panel-actions')
   const _bluntPanelEmpty   = document.getElementById('blunt-panel-empty')
@@ -65,15 +67,17 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
     if (hasDeformations && deformVisuActive) {
       const frame = await api.getDeformedFrame(continuationBp, helixId)
       if (frame) {
+        extrudePanel?.activate('deformed', { plane })
         slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId, defaultDirSign: info.openSide })
         document.getElementById('mode-indicator').textContent =
-          'DEFORMED CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
+          'DEFORMED CONTINUATION — amber = extend existing strand · select cells → Extrude · Esc to close'
         return
       }
     }
+    extrudePanel?.activate('continuation', { plane })
     slicePlane.showAtEnd(helixId, continuationBp, true, { defaultDirSign: info.openSide })
     document.getElementById('mode-indicator').textContent =
-      'CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
+      'CONTINUATION — amber = extend existing strand · select cells → Extrude · Esc to close'
   }
 
   document.getElementById('blunt-extrude-btn')?.addEventListener('click', _bluntExtrude)
@@ -119,15 +123,17 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
     if (hasDeformations && deformVisuActive) {
       const frame = await api.getDeformedFrame(continuationBp, helixId)
       if (frame) {
+        extrudePanel?.activate('deformed', { plane })
         slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId, defaultDirSign: info.openSide })
         document.getElementById('mode-indicator').textContent =
-          'DEFORMED CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
+          'DEFORMED CONTINUATION — amber = extend existing strand · select cells → Extrude · Esc to close'
         return
       }
     }
+    extrudePanel?.activate('continuation', { plane })
     slicePlane.showAtEnd(helixId, continuationBp, true, { defaultDirSign: info.openSide })
     document.getElementById('mode-indicator').textContent =
-      'CONTINUATION — amber = extend existing strand · right-click cells → Extrude · Esc to close'
+      'CONTINUATION — amber = extend existing strand · select cells → Extrude · Esc to close'
   })
   document.getElementById('blunt-bend-btn-ctx')?.addEventListener('click', () => {
     const info = _domainEndCtxInfo

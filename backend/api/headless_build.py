@@ -30,10 +30,12 @@ from backend.api import state as design_state
 from backend.api.crud import (
     BundleContinuationRequest,
     BundleRequest,
+    BundleSegmentRequest,
     OverhangExtrudeRequest,
     _FullAutostapleBody,
     _ScaffoldSeqBody,
     add_bundle_continuation as _route_extrude,
+    add_bundle_segment as _route_extrude_segment,
     assign_scaffold_sequence_endpoint as _route_assign_scaffold,
     auto_break as _route_auto_break,
     auto_crossover as _route_auto_crossover,
@@ -124,6 +126,33 @@ def extrude(
         offset_nm=offset_nm,
         strand_filter=strand_filter,
         extend_inplace=extend_inplace,
+        ligate_adjacent=ligate_adjacent,
+    ))
+    return design_state.get_or_404()
+
+
+def extrude_segment(
+    cells,
+    length_bp: int,
+    offset_nm: float,
+    *,
+    plane: str = "XY",
+    strand_filter: str = "both",
+    ligate_adjacent: bool = True,
+) -> Design:
+    """Append a fresh segment of helices at ``offset_nm`` (mirrors POST /design/bundle-segment).
+
+    Unlike :func:`extrude` (continuation, which extends strands ending at the
+    offset), this always creates NEW helices at the given cells — the slice-plane
+    tool's "segment" mode.  ``length_bp`` may be negative (−axis).  Records an
+    ``extrude-segment`` feature-log entry.
+    """
+    _route_extrude_segment(BundleSegmentRequest(
+        cells=[list(c) for c in cells],
+        length_bp=length_bp,
+        plane=plane,
+        offset_nm=offset_nm,
+        strand_filter=strand_filter,
         ligate_adjacent=ligate_adjacent,
     ))
     return design_state.get_or_404()

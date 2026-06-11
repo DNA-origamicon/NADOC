@@ -19,8 +19,9 @@ import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
 import { buildStapleColorMap } from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
-import { initWorkspace }             from './scene/workspace.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
+import { initExtrudePanel }          from './ui/extrude_panel.js'
+import { axesVisibleForDesign }      from './ui/extrude_panel_logic.js'
 import { bundleMidOffset }           from './scene/bundle_geometry.js'
 import { quatToEulerDeg, extractJointAngleDeg } from './scene/rotation_math.js'
 import { initMeasurementTool }       from './scene/measurement_tool.js'
@@ -220,11 +221,24 @@ async function main() {
   // Bundle scene context for cadnano_view (and future modules that need camera/renderer switching).
   const sceneCtx = { scene, camera, renderer, controls, setRenderCamera, restoreRenderCamera, getRenderCamera, getActiveControls, setResizeCallback, clearResizeCallback, pushControls, popControls, captureCurrentCamera, animateCameraTo, setRenderFn, resetRenderFn }
 
-  // ── World-origin axes (toggleable via View > Toggle Origin Axes; off by
-  // default so they don't read as a "part origin gizmo" sitting at 0,0,0). ───
+  // ── World-origin axes (toggleable via View > Toggle Origin Axes). On by
+  // default for an EMPTY part: a new/empty file shows the XYZ origin triad as an
+  // orientation reference (the Extrude tool is how you start adding DNA). A
+  // populated part hides it (its own geometry is the reference); the helix-count
+  // subscriber below + _resetForNewDesign keep this in sync, and the View toggle
+  // still lets the user override. ──────────────────────────────────────────────
   const originAxes = new THREE.AxesHelper(4)
-  originAxes.visible = false
+  originAxes.visible = true
   scene.add(originAxes)
+  // Show/sync the triad whenever the design transitions to empty (force-on only —
+  // never auto-hide on populate, so a user's explicit View-menu choice survives).
+  function _syncOriginAxesForEmpty() {
+    const { currentDesign, assemblyActive } = store.getState()
+    if (axesVisibleForDesign(currentDesign, assemblyActive) && !originAxes.visible) {
+      originAxes.visible = true
+      _setMenuToggle('menu-view-axes', true)
+    }
+  }
 
   // ── Design renderer (reactive — shows helices when store has geometry) ───────
   const designRenderer = initDesignRenderer(scene, store)
@@ -881,11 +895,11 @@ async function main() {
       await _activateTranslateRotateTool(clusterId)
     },
     onEmptyContextMenu: (clientX, clientY) => {
-      // Right-click on empty 3D space → minimal "Extrude" menu. Suppressed
-      // while the workspace plane-picker / slice plane is already up (it owns
-      // its own interaction) and in assembly mode (separate context menu).
+      // Right-click on empty 3D space → minimal "Extrude" menu. Suppressed while the
+      // slice plane / Extrude tool is already up (it owns its own interaction) and
+      // in assembly mode (separate context menu).
       if (store.getState().assemblyActive) return
-      if (slicePlane.isVisible() || workspace.isVisible()) return
+      if (slicePlane.isVisible() || _extrudePanel?.isActive()) return
       emptySpaceMenu.show(clientX, clientY)
     },
     // Lazy getters — defined later in this init sequence.
@@ -2069,6 +2083,10 @@ async function main() {
   }
 
   // ── Slice plane ─────────────────────────────────────────────────────────────
+  // Forward-declared: onExtrude/onCancel below reference the Extrude panel, which
+  // is constructed just after slicePlane (deferred handlers, so it's assigned by
+  // the time they fire). Mirrors the `let clusterPanel = null` pattern.
+  let _extrudePanel = null
   const slicePlane = initSlicePlane(scene, camera, canvas, controls, {
     onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, newBundle, latticeType = 'HONEYCOMB', deformedFrame, refHelixId, strandFilter = 'both', ligateAdjacent = true }) => {
       let result
@@ -2093,16 +2111,14 @@ async function main() {
         // Record plane and helix creation order for the unfold view.
         const newHelices = store.getState().currentDesign?.helices?.slice(-cells.length) ?? []
         store.setState({ currentPlane: plane, unfoldHelixOrder: newHelices.map(h => h.id) })
-        slicePlane.hide()
-        workspace.deactivate()
-        workspace.hide()
+        _extrudePanel?.hide()
       } else {
         // Append new helix IDs to the unfold order (preserving existing order).
         const existing = store.getState().unfoldHelixOrder ?? []
         const newIds   = cells.map(([row, col]) => `h_${plane}_${row}_${col}`)
         const toAdd    = newIds.filter(id => !existing.includes(id))
         if (toAdd.length) store.setState({ unfoldHelixOrder: [...existing, ...toAdd] })
-        slicePlane.hide()
+        _extrudePanel?.hide()
       }
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
     },
@@ -2124,7 +2140,15 @@ async function main() {
       localStorage.setItem('NADOC_EXTRUDE_PREVIEW', String(enabled))
       _refreshOverhangGhost()
     },
+    // The sidebar Extrude panel's Cancel button tears down the whole tool.
+    onCancel: () => _extrudePanel?.hide(),
   })
+
+  // ── Extrude tool (right-sidebar panel + plane dropdown) → ui/extrude_panel.js ──
+  // Owns #extrude-panel visibility, the "Extrude from" origin-plane dropdown, and
+  // the tool lifecycle. Replaces the retired workspace.js plane-picker as the entry
+  // to every extrude (new-bundle / segment / blunt-end / deformed continuation).
+  _extrudePanel = initExtrudePanel({ store, slicePlane, expandedSpacing })
 
   // Link slicePlane to unfoldView so the plane dimensions lerp during unfold animation.
   unfoldView.setSlicePlane(slicePlane)
@@ -2167,7 +2191,10 @@ async function main() {
       sliceHighlighter.clear()
       _setMenuToggle('menu-view-slice', false)
     }
-    workspace.show(newState.currentDesign.lattice_type ?? 'HONEYCOMB')
+    // Design emptied out (e.g. last helix deleted): close any open Extrude tool and
+    // show the world-origin triad — same as a brand-new part. No forced plane-picker.
+    _extrudePanel?.hide()
+    _syncOriginAxesForEmpty()
   })
 
   // Symmetric: when the design transitions from empty → non-empty via ANY path
@@ -2187,10 +2214,7 @@ async function main() {
     if (!newState.currentDesign || newState.assemblyActive) return
     const sliceWasVisible = slicePlane.isVisible()
     if (sliceWasVisible) slicePlane.hide()
-    if (workspace.isVisible?.() ?? true) {
-      workspace.deactivate()
-      workspace.hide()
-    }
+    if (_extrudePanel?.isActive()) _extrudePanel.hide()
     if (sliceWasVisible) {
       crossSectionMinimap.clearSlice()
       crossSectionMinimap.hide()
@@ -2199,6 +2223,12 @@ async function main() {
     }
     document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
   })
+
+  // World-origin axis triad: force it on whenever the design (re)enters an empty
+  // state via any path (file load, undo, delete-last-helix, assembly exit).
+  store.subscribe(() => _syncOriginAxesForEmpty())
+  // Sync the View-menu pill with the boot default (axes on for the empty scene).
+  _setMenuToggle('menu-view-axes', originAxes.visible)
 
   // ── Slice-plane backbone highlight ──────────────────────────────────────────
   // Colours all backbone beads at the slice plane's current bp position white,
@@ -2240,6 +2270,7 @@ async function main() {
   const _bluntMenus = initBluntEndMenus({
     store, api, slicePlane, expandedSpacing, deformView,
     clusterDeformGuard: _clusterDeformGuard,
+    extrudePanel: _extrudePanel,
   })
 
   // ── Scaffold strand right-click context menu ────────────────────────────────
@@ -2322,46 +2353,31 @@ async function main() {
     getUnfoldView: () => unfoldView,
   })
 
-  // ── Workspace (blank 3D editor with plane picker) ───────────────────────────
-  const workspace = initWorkspace(scene, camera, controls, {
-    onPlanePicked: (plane, latticeType) => {
-      slicePlane.show(plane, 0, false, false, { latticeType, newBundle: true })
-      document.getElementById('mode-indicator').textContent =
-        'NEW BUNDLE — select cells · right-click → Extrude · Esc to cancel'
-    },
-  })
-  workspace.attach(canvas)
-
-  // Start with nothing visible — user must go through File > New Part first.
-  workspace.hide()
+  // The blank 3D scene starts empty (just the world-origin axis triad). Extrude is
+  // started explicitly via Tools → Extrude (or right-click empty space), which opens
+  // the #extrude-panel; there is no longer an auto plane-picker.
   camera.position.set(6, 3, 18)
   controls.target.set(6, 3, 0)
   controls.update()
 
-  // After (re)opening a saved part, decide what the user sees: a part that was
-  // created but never extruded (no helices), then saved + closed, reopens
-  // straight into the new-bundle plane-picker so the user can resume extruding —
-  // same UX as a brand-new part. A populated part just hides the workspace grid.
+  // After (re)opening a saved part with no helices (created but never extruded),
+  // just show the world-origin triad — the user starts extruding via Tools →
+  // Extrude. (Kept as a named dep for file_io; the axes subscriber also covers the
+  // load path, so this is a belt-and-suspenders sync.)
   function _revealWorkspaceForEmptyPart() {
-    const d = store.getState().currentDesign
-    if (d && !store.getState().assemblyActive && (d.helices?.length ?? 0) === 0) {
-      workspace.show(d.lattice_type ?? 'HONEYCOMB')
-    } else {
-      workspace.hide()
-    }
+    _syncOriginAxesForEmpty()
   }
 
   // ── Empty-space context menu (start a new bundle / extrude) ─────────────────
   // Right-clicking empty 3D space (no strand/bead/arc/overhang under the cursor)
-  // pops a minimal menu whose only item, "Extrude", launches the workspace
-  // plane-picker — the same flow as File > New Part.
+  // pops a minimal menu whose only item, "Extrude", which opens the Extrude panel
+  // in new-bundle mode — the same flow as Tools → Extrude.
   async function _startEmptySpaceExtrude() {
     const { currentDesign, assemblyActive } = store.getState()
     if (assemblyActive) return
-    const lattice = currentDesign?.lattice_type ?? 'HONEYCOMB'
-    // The new-bundle flow (POST /design/bundle) resets to an empty workspace
-    // before building, so completing it discards the current design. Guard
-    // against silently wiping a populated part.
+    // The new-bundle flow (POST /design/bundle) resets to an empty design before
+    // building, so completing it discards the current part. Guard against silently
+    // wiping a populated part.
     if ((currentDesign?.helices?.length ?? 0) > 0) {
       const ok = await showConfirm({
         title: 'Start a new bundle?',
@@ -2371,7 +2387,7 @@ async function main() {
       })
       if (!ok) return
     }
-    workspace.show(lattice)
+    _extrudePanel?.activate('newBundle')
   }
 
   const emptySpaceMenu = initEmptySpaceMenu({
@@ -2759,7 +2775,6 @@ async function main() {
         _setFileName(partName)
         _needsWelcomeOnBoot = false
         _hideWelcome()
-        workspace.hide()
         document.title = `NADOC 3D — ${partName} [part edit]`
         document.getElementById('mode-indicator').textContent = `PART EDIT — ${partName}`
         _flAppendLog(`Part "${partName}" loaded successfully.`, 'success')
@@ -2821,12 +2836,16 @@ async function main() {
     // If currently in straight view, reactivate before clearing state.
     if (!deformView.isActive()) deformView.activate()
     slicePlane.hide()
+    _extrudePanel?.hide()
     crossSectionMinimap.clearSlice()
     crossSectionMinimap.hide()
     sliceHighlighter.clear()
     bluntEnds.clear()
     _bluntMenus.hidePanel()
     _setMenuToggle('menu-view-slice', false)
+    // New/empty part: show the world-origin XYZ triad as the orientation reference.
+    originAxes.visible = true
+    _setMenuToggle('menu-view-axes', true)
     viewLegends.reset()
     if (periodicMdOverlay.isApplied()) _setCGVisible(true)
     periodicMdOverlay.clear()
@@ -2909,11 +2928,11 @@ async function main() {
     // entering an assembly (open/new) must drop it (no-op if not active).
     _photoMode.exit()
     _setDesignGeometryVisible(false)
-    // The workspace plane-picker (XY/XZ/YZ grid at world origin) is a
-    // new-design-only affordance; hide it whenever we enter assembly mode so
-    // its meshes don't leak into the assembly view (visible faded grid +
-    // invisible-but-pickable hit planes both sat at world origin).
-    workspace.hide()
+    // Close any open Extrude tool and hide the world-origin triad — both are
+    // design-only affordances that shouldn't leak into the assembly view.
+    _extrudePanel?.hide()
+    originAxes.visible = false
+    _setMenuToggle('menu-view-axes', false)
     store.setState({ assemblyActive: true })
     api.setPersistedMode('assembly')
     _updateAssemblyTitle()
@@ -3049,7 +3068,7 @@ async function main() {
   // The lifecycle spine + multi-doc spawn guard stay inline and are injected;
   // libraryPanel is wired later → lazy getter. Owns the menu-file-new listener.
   const _newDesignModal = initNewDesignModal({
-    store, api, workspace,
+    store, api,
     resetForNewDesign: _resetForNewDesign,
     setFileName: _setFileName,
     hideWelcome: _hideWelcome,
@@ -3183,10 +3202,11 @@ async function main() {
       _clearScaffoldChecks()
       _clearStapleChecks()
       const { currentDesign } = store.getState()
-      // If we undid back to an empty design, return to workspace.
+      // If we undid back to an empty design, return to the empty scene (origin
+      // triad + welcome). The axes subscriber re-shows the triad.
       if (!currentDesign?.helices?.length) {
         slicePlane.hide()
-        workspace.show()
+        _extrudePanel?.hide()
         _showWelcome()
       }
       // If undo removed the last deformation and deformed view is OFF, restore it.
@@ -3243,6 +3263,22 @@ async function main() {
     }
     const full = result.full_autostaple ?? {}
     showToast(`Full autostaple complete: ${full.auto_crossover?.placed ?? 0} crossovers placed.`)
+  })
+
+  document.getElementById('menu-routing-polymerization')?.addEventListener('click', async () => {
+    if (!store.getState().currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
+    const result = await api.routeForPolymerization()
+    if (!result) {
+      showToast('Route for polymerization failed: ' + (store.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
+      return
+    }
+    const nBridges = result.seam_ligation_ids?.length ?? 0
+    const warnings = result.warnings ?? []
+    if (warnings.length) {
+      showToast(`Routed ${nBridges} bridging staple(s). ${warnings[0]}`, { severity: 'warning' })
+    } else {
+      showToast(`Routed for polymerization: ${nBridges} bridging staple(s) across the seam.`)
+    }
   })
 
   // ── Routing: Autobreak modal → ui/autobreak_modal.js ──────────────────────
@@ -3356,6 +3392,15 @@ async function main() {
     return true
   }
 
+  // Tools → Extrude: open the Extrude panel in new-bundle mode on the default plane.
+  // Unlike Twist/Bend, this is allowed on an empty design (that's the point — it's
+  // how you start). On a populated part the new-bundle flow is destructive, so it
+  // goes through the same confirm guard as the empty-space right-click.
+  document.getElementById('menu-tools-extrude')?.addEventListener('click', () => {
+    if (store.getState().assemblyActive) { showToast('Not available in assembly mode.', { severity: 'error' }); return }
+    _startEmptySpaceExtrude()
+  })
+
   document.getElementById('menu-tools-twist')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
@@ -3441,7 +3486,9 @@ async function main() {
       camera.position.set(6, 3, 7)
       controls.target.set(0, 0, 7)
     } else {
-      workspace.reset()
+      // Empty scene (origin triad only): reset to the default workspace framing.
+      camera.position.set(6, 3, 18)
+      controls.target.set(6, 3, 0)
     }
     controls.update()
   })
@@ -3716,7 +3763,9 @@ async function main() {
       camera.position.set(6, 3, 7)
       controls.target.set(0, 0, 7)
     } else {
-      workspace.reset()
+      // Empty scene (origin triad only): reset to the default workspace framing.
+      camera.position.set(6, 3, 18)
+      controls.target.set(6, 3, 0)
     }
     controls.update()
   })
@@ -3730,7 +3779,7 @@ async function main() {
   initKeyboardShortcuts({
     store, api,
     slicePlane, expandedSpacing, debugOverlay, measurementTool, selectionManager,
-    workspace, deformView, crossSectionMinimap, sliceHighlighter,
+    extrudePanel: _extrudePanel, deformView, crossSectionMinimap, sliceHighlighter,
     isUnfoldActive:           _isUnfoldActive,
     isDeformActive,
     captureCurrentCamera,
@@ -4605,7 +4654,6 @@ async function main() {
       _fileHandle = null
       _setFileName(dest.name)
       _hideWelcome()
-      workspace.show(lattice)
       await api.createDesign(dest.name, lattice)
       const wsResult = await api.saveDesignAs(dest.path, false)
       if (wsResult) { _setWorkspacePath(dest.path); libraryPanel?.refresh() }
@@ -6018,7 +6066,7 @@ async function main() {
   })
 
   const { runScript } = createScriptRunner({
-    slicePlane, bluntEnds, workspace, camera, controls,
+    slicePlane, bluntEnds, camera, controls,
   })
 
   // Debug helper: window.SLICE.debug() in browser console
@@ -6101,7 +6149,7 @@ async function main() {
 
   // ── Import menu (File → Import + library-panel import callbacks) ───────────────
   _importMenu = initImportMenu({
-    store, api, workspace, libraryPanel,
+    store, api, libraryPanel,
     resetForNewDesign: _resetForNewDesign,
     showWelcome: _showWelcome,
     hideWelcome: _hideWelcome,

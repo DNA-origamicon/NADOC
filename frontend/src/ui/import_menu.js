@@ -7,7 +7,7 @@
  * `store`/`api` only, the factory takes the lifecycle helpers it calls
  * (`resetForNewDesign` / `show`+`hideWelcome` / `renderRecentMenu` /
  * `setWorkspacePath` / `setFileName` / `setSyncStatus` / `saveAs` /
- * `setFileHandle`) plus `workspace` and the already-built `libraryPanel`.
+ * `setFileHandle`) plus the already-built `libraryPanel`.
  * `showToast` / `openFileBrowser` / `openImportPdbModal` are module imports.
  *
  * Returns the two autodetection callbacks + `runPdbImport` so the (earlier)
@@ -38,7 +38,7 @@ export function importedClusterOverhangExtras(design) {
 
 export function initImportMenu(deps) {
   const {
-    store, api, workspace, libraryPanel,
+    store, api, libraryPanel,
     resetForNewDesign, showWelcome, hideWelcome, renderRecentMenu,
     setWorkspacePath, setFileName, setSyncStatus, saveAs, setFileHandle,
   } = deps
@@ -89,7 +89,7 @@ export function initImportMenu(deps) {
     const { clusters, overhangs } = importedClusterOverhangExtras(design)
     const suggestedName = sanitizeImportName(design?.metadata?.name ?? file.name.replace(/\.[^.]+$/, ''))
 
-    hideWelcome(); workspace.hide()
+    hideWelcome()
 
     const dest = await openFileBrowser({
       title: 'Save Imported Design',
@@ -139,7 +139,7 @@ export function initImportMenu(deps) {
     const { clusters, overhangs } = importedClusterOverhangExtras(design)
     const suggestedName = sanitizeImportName(design?.metadata?.name ?? baseName)
 
-    hideWelcome(); workspace.hide()
+    hideWelcome()
 
     const dest = await openFileBrowser({
       title: 'Save Imported Design',
@@ -192,7 +192,6 @@ export function initImportMenu(deps) {
         await importAsAssemblyPart(suggestedName)
       } else {
         hideWelcome()
-        workspace.hide()
         await saveAs()
       }
     }
@@ -226,7 +225,6 @@ export function initImportMenu(deps) {
         await importAsAssemblyPart(suggestedName)
       } else {
         hideWelcome()
-        workspace.hide()
         await saveAs()
       }
     }
@@ -246,7 +244,6 @@ export function initImportMenu(deps) {
       resetForNewDesign()
       api.syncDesignResponse(json)
       hideWelcome()
-      workspace.hide()
       parts.push('DNA design')
       if (json.import_warnings?.length) showToast(json.import_warnings.join(' | '), 5000)
     }
@@ -256,7 +253,6 @@ export function initImportMenu(deps) {
       // screen so the freshly-placed protein is visible.
       api.syncDesignResponse(json)
       hideWelcome()
-      workspace.hide()
       parts.push(`protein ${json.protein.name} (${json.protein.atom_count} atoms)`)
     }
     if (parts.length) showToast('Imported ' + parts.join(' + '), 4000)
