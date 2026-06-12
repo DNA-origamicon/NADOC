@@ -302,11 +302,14 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
   })
 
   loadoutAddBtn.addEventListener('click', async () => {
-    const n = (_latestDesign?.loadouts?.length ?? 1) + 1
+    // Don't compute the name here: while the implicit "Loadout 1" is showing,
+    // design.loadouts is still empty, so any client-side counter sends
+    // "Loadout 1" and the backend then materialises a SECOND "Loadout 1".
+    // Let the backend pick the lowest free "Loadout N" instead (collision-free).
     const partId = _activePartTargetId()
     const result = partId && api.createInstanceLoadout
-      ? await api.createInstanceLoadout(partId, `Loadout ${n}`)
-      : await api.createLoadout?.(`Loadout ${n}`)
+      ? await api.createInstanceLoadout(partId)
+      : await api.createLoadout?.()
     if (result?.design) {
       _latestDesign = result.design
       if (!_collapsed) _rebuild(_latestDesign)

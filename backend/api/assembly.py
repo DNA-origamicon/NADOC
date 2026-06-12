@@ -2912,8 +2912,7 @@ def create_instance_loadout(instance_id: str, body: InstanceLoadoutCreateRequest
     current = _load_design_from_source(inst.source, _assembly_source_path(assembly))
     loadouts, active_id = crud_api._ensure_loadouts(current)
     loadouts = crud_api._save_active_loadout_snapshot(current, loadouts, active_id)
-    n = len(loadouts) + 1
-    name = (body.name or "").strip() or f"Loadout {n}"
+    name = (body.name or "").strip() or crud_api._auto_loadout_name(loadouts)
     new_id = str(_uuid.uuid4())
     payload, size = crud_api._encode_loadout_design_snapshot(current)
     loadouts.append(DesignLoadout(
