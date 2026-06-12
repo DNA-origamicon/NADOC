@@ -1879,6 +1879,15 @@ class BundleSegmentRequest(BaseModel):
     ligate_adjacent: bool = True
 
 
+class CircleSegmentRequest(BaseModel):
+    cells: List[List[int]]        # [[row, col], ...] — a single row (the disc footprint)
+    cell_lengths: List[int]       # per-cell bp length, parallel to cells (circular chord profile)
+    plane: str = "XY"
+    offset_nm: float = 0.0        # the slice plane bisects the disc (helices centred on it)
+    strand_filter: str = "both"   # "both" | "scaffold" | "staples"
+    ligate_adjacent: bool = True
+
+
 class BundleContinuationRequest(BaseModel):
     cells: List[List[int]]   # [[row, col], ...] — may mix continuation and fresh cells
     length_bp: int
@@ -2445,6 +2454,50 @@ def add_bundle_segment(body: BundleSegmentRequest) -> dict:
     updated, report, _entry = design_state.mutate_with_feature_log(
         op_kind='extrude-segment',
         label=f'Extrude segment: {len(body.cells)} cells × {body.length_bp} bp',
+        params=body.model_dump(mode='json'),
+        fn=_fn,
+    )
+    return _design_response(updated, report)
+
+
+def _build_circle_segment(d: Design, body: 'CircleSegmentRequest'):
+    """Pure builder + cluster-membership report for a circle/disc placement."""
+    from backend.core.cluster_reconcile import MutationReport
+    from backend.core.lattice import ligate_new_strands, make_circle_segment
+
+    cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
+    updated = make_circle_segment(
+        d, cells, body.cell_lengths, body.plane, body.offset_nm, body.strand_filter,
+    )
+    if body.ligate_adjacent:
+        existing_ids = {s.id for s in d.strands}
+        new_ids = {s.id for s in updated.strands if s.id not in existing_ids}
+        if new_ids:
+            updated = ligate_new_strands(updated, new_ids)
+    return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated))
+
+
+@router.post("/design/circle-segment", status_code=201)
+def add_circle_segment(body: CircleSegmentRequest) -> dict:
+    """Place a parametric circle (flat disc) primitive: a row of helices whose
+    per-cell lengths trace a circular chord profile, centred on the slice plane.
+
+    The per-cell lengths arrive pre-computed from the radius (see
+    ``backend.core.circle_primitive``); this route just lays down the final
+    geometry as one additive, revertable ``circle-segment`` feature-log entry.
+    """
+    def _fn(d: Design) -> Design:
+        try:
+            updated, mreport = _build_circle_segment(d, body)
+        except ValueError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        holder['mreport'] = mreport
+        return updated
+
+    holder: dict = {}
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='circle-segment',
+        label=f'Place circle: {len(body.cells)} helices',
         params=body.model_dump(mode='json'),
         fn=_fn,
     )
@@ -11012,6 +11065,21 @@ def _ensure_loadouts(design: Design) -> tuple[list[DesignLoadout], str]:
     return [first], first.id
 
 
+def _auto_loadout_name(loadouts: list[DesignLoadout]) -> str:
+    """Lowest ``Loadout N`` not already taken by an existing loadout.
+
+    Robust against renames/deletes: counting ``len + 1`` collides once any
+    loadout has been removed or hand-renamed (e.g. delete "Loadout 1" then
+    create → len 1 → "Loadout 2", which already exists). Scanning for the first
+    free integer never collides.
+    """
+    existing = {l.name for l in loadouts}
+    n = 1
+    while f"Loadout {n}" in existing:
+        n += 1
+    return f"Loadout {n}"
+
+
 def _save_active_loadout_snapshot(design: Design, loadouts: list[DesignLoadout], active_id: str) -> list[DesignLoadout]:
     payload, size = _encode_loadout_design_snapshot(design)
     return [
@@ -11032,8 +11100,7 @@ def create_loadout(body: LoadoutCreateBody) -> dict:
     loadouts, active_id = _ensure_loadouts(current)
     loadouts = _save_active_loadout_snapshot(current, loadouts, active_id)
 
-    n = len(loadouts) + 1
-    name = (body.name or "").strip() or f"Loadout {n}"
+    name = (body.name or "").strip() or _auto_loadout_name(loadouts)
     new_id = str(_uuid.uuid4())
     payload, size = _encode_loadout_design_snapshot(current)
     loadouts.append(DesignLoadout(

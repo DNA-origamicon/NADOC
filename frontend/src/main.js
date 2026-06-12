@@ -2143,10 +2143,22 @@ async function main() {
     },
     // The sidebar Extrude panel's Cancel button tears down the whole tool.
     onCancel: () => _extrudePanel?.hide(),
-    // Primitive placement commit: drop the footprint as an additive bundle-segment,
-    // then exit (one placement per selection). cells are already lattice-translated.
-    onPlace: async ({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent }) => {
-      const result = await api.addBundleSegment({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent })
+    // Primitive placement commit: drop the footprint as an additive segment, then
+    // exit (one placement per selection). cells are already lattice-translated. A
+    // circle carries per-cell lengths (centred disc) → circle-segment route; a
+    // uniform primitive carries one lengthBp → bundle-segment route.
+    onPlace: async ({ cells, lengthBp, cellLengths, plane, offsetNm, strandFilter, ligateAdjacent, continuationMode, deformedFrame, refHelixId }) => {
+      // continuationMode → placed on an existing part's face: cells over existing
+      // helix-ends extend them, fresh cells make new helices. A bent face carries a
+      // deformedFrame. Otherwise it's an origin-plane placement (circle → circle-
+      // segment; beam → bundle-segment).
+      const result = continuationMode
+        ? deformedFrame
+          ? await api.addBundleDeformedContinuation({ cells, lengthBp, plane, frame: deformedFrame, refHelixId })
+          : await api.addBundleContinuation({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent })
+        : cellLengths
+          ? await api.addCircleSegment({ cells, cellLengths, plane, offsetNm, strandFilter, ligateAdjacent })
+          : await api.addBundleSegment({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent })
       if (!result) {
         const err = store.getState().lastError
         showToast(err?.message ?? 'Primitive placement failed', { severity: 'error' })
@@ -2160,6 +2172,9 @@ async function main() {
       slicePlane.hide()
       document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
     },
+    // Lazy (bluntEnds is created later): lets placement YIELD a ring click to the
+    // domain-end pick so it retargets the footprint onto that face.
+    getBluntEnds: () => bluntEnds,
   })
 
   // ── Extrude tool (right-sidebar panel + plane dropdown) → ui/extrude_panel.js ──
@@ -2182,9 +2197,17 @@ async function main() {
         document.getElementById('mode-indicator').textContent =
           'PLACE PRIMITIVE — hover a lattice cell · click to place · Esc to cancel'
       },
+      // Existing structure: arm without showing the origin grid; wait for the user to
+      // pick an origin plane (dropdown) or click a blunt end.
+      arm: (spec) => {
+        slicePlane.armPlacement(spec)
+        document.getElementById('mode-indicator').textContent =
+          'ADD PRIMITIVE — choose an origin plane or click a blunt end · Esc to cancel'
+      },
       setLength: (bp) => slicePlane.setPlacementLength(bp),
+      setCircle: (fp) => slicePlane.setPlacementCircle(fp),
       cancel: () => {
-        if (slicePlane.isPlacement()) slicePlane.hide()
+        slicePlane.disarmPlacement()
         document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
       },
     },
@@ -2371,7 +2394,11 @@ async function main() {
   // ── Blunt end indicators ─────────────────────────────────────────────────────
   const bluntEnds = initDomainEnds(scene, camera, canvas, {
     onDomainEndClick: (info) => {
-      _bluntMenus.showPanel(info)
+      // With a primitive armed, a blunt-end click RETARGETS the placement onto that
+      // face (continuation extrude with the primitive's footprint) — even before any
+      // origin grid is shown; otherwise it opens the normal blunt-end action panel.
+      if (slicePlane.isArmed()) _bluntMenus.placeOnEnd(info)
+      else _bluntMenus.showPanel(info)
     },
     onDomainEndRightClick: ({ clientX, clientY, ...info }) => {
       _bluntMenus.showCtx(clientX, clientY, info)
@@ -2382,7 +2409,10 @@ async function main() {
     // geometry, its capture-phase pointerdown listener swallows the click
     // and the gizmo never gets it.
     isDisabled: () => {
-      if (slicePlane.isVisible()) return true
+      // Allow blunt-end clicks during primitive *placement* (so a face-click can
+      // retarget the armed footprint), but keep them blocked for normal slice-plane
+      // selection / read-only visibility.
+      if (slicePlane.isVisible() && !slicePlane.isPlacement()) return true
       if (_isUnfoldActive()) return true
       if (isDeformActive()) return true
       const s = store.getState()
@@ -6627,6 +6657,18 @@ async function main() {
         }
         return out
       },
+      /** Screen {x,y} + identity of each visible blunt-end ring (gesture e2e for
+       *  blunt-end / primitive-on-face flows). */
+      getDomainEndScreenPositions: () =>
+        bluntEnds.getEndScreenInfo?.(camera, canvas.getBoundingClientRect()) ?? [],
+      /** Slice-plane mode snapshot (visible / placement / continuation). */
+      getSliceState: () => ({
+        visible: slicePlane.isVisible(),
+        placement: slicePlane.isPlacement(),
+        armed: slicePlane.isArmed(),
+        continuation: slicePlane.isContinuation(),
+        deformed: slicePlane.isDeformed(),
+      }),
       /** Count of Alt-picked measurement beads (the measurement tool's input). */
       getCtrlBeadCount: () => selectionManager.getCtrlBeads?.().length ?? 0,
       /** Current single-selection ({type,id,...}) or null. */

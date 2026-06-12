@@ -131,7 +131,7 @@ const C_HOVER       = new THREE.Color(0xffffff)  // white  — hover
  * @param {import('three').OrbitControls} controls
  * @param {{ onExtrude: Function, getDesign: Function }} opts
  */
-export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange, onPreviewToggle, onCancel, onPlace } = {}) {
+export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange, onPreviewToggle, onCancel, onPlace, getBluntEnds } = {}) {
   // Mutable camera ref — replaced by setCamera() when an ortho camera takes over (cadnano mode).
   let _camera = camera
 
@@ -414,7 +414,12 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   // anchor cell to the hovered cell; a left-click commits it as an additive extrude
   // (bundle-segment) via onPlace. Distinct from the per-cell selection extrude.
   let _placementMode    = false
-  let _placementSpec    = null   // { cells, anchorCell, lengthBp, strandFilter, ligateAdjacent, latticeType }
+  let _placementSpec    = null   // { cells, anchorCell, lengthBp, cellLengths?, centered?, strandFilter, ligateAdjacent, latticeType }
+  // A primitive is "armed" the moment it's selected, even before any grid is shown:
+  // on an existing structure we suppress the origin grid and wait for the user to pick
+  // a plane (dropdown) or click a blunt end. _placementArmed stays true across that wait
+  // so a blunt-end click knows to retarget (isPlacement() needs the grid actually shown).
+  let _placementArmed   = false
   let _placementHasConflict = false
   let _previewEnabled   = false      // ghost-cylinder extrude preview on/off (driven by sidebar toggle)
   let _previewMeshes    = []         // reusable THREE.Mesh ghost cylinders (parallel to selected cells)
@@ -1170,11 +1175,14 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
    * existing helix interval at the cell, with a ~0.4-bp strip at each end so a
    * boundary touch at the ligation point is NOT a conflict.  Deformed mode: skipped (v1).
    */
-  function _cellExtrudeConflict(row, col, dir, lengthNm) {
+  function _cellExtrudeConflict(row, col, dir, lengthNm, centerNm = null) {
     if (_deformedFrame) return false
     const comp   = _plane === 'XY' ? 'z' : _plane === 'XZ' ? 'y' : 'x'
     const dComp  = dir.dot(PLANE_CFG[_plane].normal)   // ±1
-    const c0 = _offset, c1 = _offset + dComp * lengthNm
+    // Circle: the helix is centred on the disc mid-line at centerNm (spans ±L/2);
+    // otherwise it extrudes from the plane in one direction.
+    const c0 = centerNm != null ? centerNm - lengthNm / 2 : _offset
+    const c1 = centerNm != null ? centerNm + lengthNm / 2 : _offset + dComp * lengthNm
     const eps = RISE * 0.4
     const gLo = Math.min(c0, c1) + eps
     const gHi = Math.max(c0, c1) - eps
@@ -1253,9 +1261,35 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   /** Where the cursor ray meets the current lattice plane (world), or null. */
   function _cursorPlanePoint() {
+    if (_deformedFrame) {
+      const n = new THREE.Vector3(..._deformedFrame.axis_dir).normalize()
+      _placementPlane.setFromNormalAndCoplanarPoint(n, _tmp.set(..._deformedFrame.grid_origin))
+      return _raycaster.ray.intersectPlane(_placementPlane, _placementPt) ? _placementPt : null
+    }
     const n = PLANE_CFG[_plane].normal
     _placementPlane.setFromNormalAndCoplanarPoint(n, _tmp.copy(n).multiplyScalar(_offset))
     return _raycaster.ray.intersectPlane(_placementPlane, _placementPt) ? _placementPt : null
+  }
+
+  /** Canonical _placementSpec shape from a caller spec (shared by arm + showPlacement). */
+  function _normalizeSpec(spec) {
+    return {
+      cells: spec.cells, anchorCell: spec.anchorCell, lengthBp: spec.lengthBp ?? 0,
+      // Parametric circle: per-cell lengths (parallel to cells) + helices centred on
+      // the slice plane. Absent for the fixed uniform-length primitives.
+      cellLengths: spec.cellLengths ?? null,
+      centered: spec.centered ?? false,
+      strandFilter: spec.strandFilter ?? 'both',
+      ligateAdjacent: spec.ligateAdjacent ?? true,
+      latticeType: spec.latticeType ?? 'HONEYCOMB',
+    }
+  }
+
+  /** Cell world position for the placement ghost/snap — deformed frame when active, else flat. */
+  function _placementCellWorldPos(row, col) {
+    return _deformedFrame
+      ? _cellWorldPosDeformed(row, col)
+      : cellWorldPos(row, col, _plane, _offset, _latticeOffsetX, _latticeOffsetY)
   }
 
   /**
@@ -1272,7 +1306,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     const cw = _cursorPlanePoint()
     let best = null, bestD = Infinity
     for (const [r, c] of cands) {
-      const p = cellWorldPos(r, c, _plane, _offset, _latticeOffsetX, _latticeOffsetY)
+      const p = _placementCellWorldPos(r, c)
       const d = cw ? p.distanceToSquared(cw) : 0
       if (d < bestD) { bestD = d; best = { row: r, col: c } }
     }
@@ -1285,6 +1319,29 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   /**
+   * {plane, offsetNm} of the helix axis at diskBp — the face a continuation opens at.
+   * Plane comes from the helix-ID prefix; the offset is the axis point interpolated at
+   * diskBp (using the live deformed axis when present). Shared by showAtEnd (blunt-end
+   * extrude) and showPlacementAtEnd (primitive-on-face).
+   */
+  function _endPlaneOffset(helixId, diskBp) {
+    const plane = helixId.match(/^h_(XY|XZ|YZ)_/)?.[1] ?? 'XY'
+    const h     = getDesign?.()?.helices?.find(x => x.id === helixId)
+    const axDef = getHelixAxes?.()?.[helixId]
+    let offsetNm = 0
+    if (h) {
+      const sx = axDef ? axDef.start[0] : h.axis_start.x, sy = axDef ? axDef.start[1] : h.axis_start.y, sz = axDef ? axDef.start[2] : h.axis_start.z
+      const ex = axDef ? axDef.end[0]   : h.axis_end.x,   ey = axDef ? axDef.end[1]   : h.axis_end.y,   ez = axDef ? axDef.end[2]   : h.axis_end.z
+      const dLen = Math.sqrt((ex-sx)**2 + (ey-sy)**2 + (ez-sz)**2)
+      const physLen = Math.max(1, Math.round(dLen / BDNA_RISE_PER_BP) + 1)
+      const t  = physLen > 1 ? (diskBp - (h.bp_start ?? 0)) / (physLen - 1) : 0
+      const px = sx + (ex - sx) * t, py = sy + (ey - sy) * t, pz = sz + (ez - sz) * t
+      offsetNm = plane === 'XY' ? pz : plane === 'XZ' ? py : px
+    }
+    return { plane, offsetNm }
+  }
+
+  /**
    * Render the primitive footprint as ghost cylinders anchored at the hovered cell.
    * Reuses the extrude ghost-mesh pool + the per-cell conflict guard (red = the
    * placement would overlap existing DNA). Cleared when there's no hover cell or
@@ -1293,26 +1350,35 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   function _updatePlacementPreview() {
     _placementHasConflict = false
     if (!_placementMode || !_placementSpec) { _hidePreview(); return }
-    const { cells, anchorCell, lengthBp } = _placementSpec
-    if (!_hoverCell || !lengthBp) { _hidePreview(); return }
+    const { cells, anchorCell, lengthBp, cellLengths } = _placementSpec
+    // A circle carries per-cell lengths; a uniform primitive carries one lengthBp.
+    const hasLen = cellLengths ? cellLengths.length > 0 : !!lengthBp
+    if (!_hoverCell || !hasLen) { _hidePreview(); return }
 
     const placed   = translateFootprint(cells, anchorCell, _hoverCell)
-    const lengthNm = Math.abs(lengthBp) * RISE
-    const dir      = _placementDir(lengthBp)
+    // A face (continuation) placement extrudes away from the body along the current
+    // dir sign; an origin placement extrudes +axis (or −, per lengthBp sign).
+    const dir      = _placementSpec.continuation ? _extrudeDirForCell() : _placementDir(lengthBp || 1)
     _previewQuat.setFromUnitVectors(_PREVIEW_UP, dir)
+    // A circle sits entirely on the +normal side, tangent to the plane: every helix
+    // is centred on the disc mid-line, R above the plane (R = longest half-chord).
+    const shiftNm  = cellLengths ? (Math.max(...cellLengths) * RISE) / 2 : 0
     _ensurePreviewCount(placed.length)
     for (let i = 0; i < _previewMeshes.length; i++) {
       const m = _previewMeshes[i]
       if (i >= placed.length) { m.visible = false; continue }
       const [row, col] = placed[i]
-      const conflict = _cellExtrudeConflict(row, col, dir, lengthNm)
+      const lenNm    = (cellLengths ? cellLengths[i] : Math.abs(lengthBp)) * RISE
+      const conflict = cellLengths
+        ? _cellExtrudeConflict(row, col, dir, lenNm, _offset + shiftNm)
+        : _cellExtrudeConflict(row, col, dir, lenNm)
       if (conflict) _placementHasConflict = true
       m.visible  = true
       m.material = conflict ? _previewConflictMat : _previewMat
-      m.scale.set(1, lengthNm, 1)
+      m.scale.set(1, lenNm, 1)
       m.quaternion.copy(_previewQuat)
-      m.position.copy(cellWorldPos(row, col, _plane, _offset, _latticeOffsetX, _latticeOffsetY))
-                 .addScaledVector(dir, lengthNm / 2)
+      m.position.copy(_placementCellWorldPos(row, col))
+                 .addScaledVector(dir, cellLengths ? shiftNm : lenNm / 2)
     }
   }
 
@@ -1323,12 +1389,17 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       showToast('Placement overlaps existing DNA — move to a clear spot.', { severity: 'error' })
       return
     }
-    const { cells, anchorCell, lengthBp, strandFilter, ligateAdjacent, latticeType } = _placementSpec
+    const { cells, anchorCell, lengthBp, cellLengths, strandFilter, ligateAdjacent, latticeType, continuation } = _placementSpec
     const placed = translateFootprint(cells, anchorCell, _hoverCell)
+    // Continuation extrudes away from the body → sign the length by the dir sign.
+    const outLen = continuation ? _sliceDirSign * Math.abs(lengthBp || 0) : lengthBp
     _hidePreview()
     onPlace?.({
-      cells: placed, lengthBp, plane: _plane, offsetNm: _offset,
+      cells: placed, lengthBp: outLen, cellLengths, plane: _plane, offsetNm: _offset,
       strandFilter, ligateAdjacent, latticeType,
+      continuationMode: !!continuation,
+      // Present when the face is a BENT end → deformed-frame continuation.
+      deformedFrame: _deformedFrame, refHelixId: _refHelixId,
     })
   }
 
@@ -1363,6 +1434,12 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
     if (e.button === 0) {
       _setNDC(e)
+      // Primitive placement, not yet on a face: if the click is on a blunt-end ring,
+      // YIELD it (don't consume) so domain_ends can pick the ring and retarget the
+      // footprint onto that face. The lattice cells sit at the SAME screen positions
+      // as the rings, so without this the cell-hit below swallows the click. Once on a
+      // face (continuation), clicks commit normally — rings no longer steal them.
+      if (_placementMode && !_placementSpec?.continuation && getBluntEnds?.()?.isRingHit(e)) return
       if (_rayHandle()) {
         _isDragging = true
         _isDragSelecting = false
@@ -1745,21 +1822,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * "away from the body": -1 for a near end, +1 for a far end).
      */
     showAtEnd(helixId, diskBp, continuation = false, { defaultDirSign = 1 } = {}) {
-      const plane = helixId.match(/^h_(XY|XZ|YZ)_/)?.[1] ?? 'XY'
-      const h     = getDesign?.()?.helices?.find(x => x.id === helixId)
-      const axDef = getHelixAxes?.()?.[helixId]
-      let offsetNm = 0
-      if (h) {
-        const sx = axDef ? axDef.start[0] : h.axis_start.x, sy = axDef ? axDef.start[1] : h.axis_start.y, sz = axDef ? axDef.start[2] : h.axis_start.z
-        const ex = axDef ? axDef.end[0]   : h.axis_end.x,   ey = axDef ? axDef.end[1]   : h.axis_end.y,   ez = axDef ? axDef.end[2]   : h.axis_end.z
-        const dLen = Math.sqrt((ex-sx)**2 + (ey-sy)**2 + (ez-sz)**2)
-        const physLen = Math.max(1, Math.round(dLen / BDNA_RISE_PER_BP) + 1)
-        const t  = physLen > 1 ? (diskBp - (h.bp_start ?? 0)) / (physLen - 1) : 0
-        const px = sx + (ex - sx) * t, py = sy + (ey - sy) * t, pz = sz + (ez - sz) * t
-        if (plane === 'XY') offsetNm = pz
-        else if (plane === 'XZ') offsetNm = py
-        else offsetNm = px
-      }
+      const { plane, offsetNm } = _endPlaneOffset(helixId, diskBp)
       this.show(plane, offsetNm, continuation)
       _setDirSign(defaultDirSign)
     },
@@ -1796,6 +1859,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _hidePreview()
       _placementMode    = false
       _placementSpec    = null
+      _placementArmed   = false
       _placementHasConflict = false
       _extrudeUiOpen    = false
       _isDragging       = false
@@ -1806,6 +1870,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
     isVisible() { return _visible },
     isContinuation() { return _visible && _continuationMode },
+    isDeformed() { return _visible && !!_deformedFrame },
 
     /**
      * Mark the sidebar Extrude panel open/closed. The extrude_panel module calls
@@ -1863,19 +1928,82 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     showPlacement(plane, spec) {
       this.show(plane, 0, false, false, { latticeType: spec?.latticeType ?? 'HONEYCOMB', newBundle: true })
       _placementMode = true
-      _placementSpec = {
-        cells: spec.cells, anchorCell: spec.anchorCell, lengthBp: spec.lengthBp ?? 0,
-        strandFilter: spec.strandFilter ?? 'both',
-        ligateAdjacent: spec.ligateAdjacent ?? true,
-        latticeType: spec.latticeType ?? 'HONEYCOMB',
-      }
+      _placementArmed = true
+      _placementSpec = _normalizeSpec(spec)
       _hidePreview()
+    },
+
+    /**
+     * Arm a primitive WITHOUT showing any grid (existing-structure case): records the
+     * footprint and waits. The grid appears only when the user picks an origin plane
+     * (→ showPlacement) or clicks a blunt end (→ showPlacementAtEnd/Deformed). Keeps the
+     * 3D scene uncluttered until the user chooses a target.
+     */
+    armPlacement(spec) {
+      _placementSpec  = _normalizeSpec(spec)
+      _placementArmed = true
+    },
+
+    /** True while a primitive is selected and waiting for (or placed on) a target. */
+    isArmed() { return _placementArmed },
+
+    /** Drop the armed primitive entirely (Cancel/Esc) — clears the wait + any shown grid. */
+    disarmPlacement() {
+      _placementArmed = false
+      _placementSpec  = null
+      if (_visible && _placementMode) this.hide()
     },
 
     /** Live-update the placement footprint length (driven by the inline length input). */
     setPlacementLength(lengthBp) {
       if (!_placementSpec) return
       _placementSpec.lengthBp = lengthBp
+      _updatePlacementPreview()
+    },
+
+    /**
+     * Retarget the *armed* primitive placement onto a blunt-end face at diskBp, in
+     * CONTINUATION mode: the footprint's cells that sit on an existing helix-end extend
+     * it; cells on empty lattice spots become fresh helices (exactly make_bundle_
+     * continuation). Keeps the armed footprint; the disc/circle case (cellLengths) isn't
+     * supported on a face yet. Returns true if it armed, false otherwise.
+     */
+    showPlacementAtEnd(helixId, diskBp, { defaultDirSign = 1 } = {}) {
+      const spec = _placementSpec
+      if (!spec || spec.cellLengths) return false   // beam footprints only (for now)
+      const { plane, offsetNm } = _endPlaneOffset(helixId, diskBp)
+      // Open the continuation lattice at the face (this wipes placement state)…
+      this.show(plane, offsetNm, true, false, { latticeType: spec.latticeType })
+      // …then re-arm the footprint on top of it, flagged as a continuation.
+      _placementMode = true
+      _placementSpec = { ...spec, continuation: true, plane }
+      _setDirSign(defaultDirSign)   // extrude away from the body (openSide)
+      _hidePreview()
+      return true
+    },
+
+    /**
+     * Retarget the armed primitive placement onto a BENT end face, using the deformed
+     * cross-section frame (same path as the deformed blunt-end continuation). Keeps the
+     * armed footprint; commits via `bundle-deformed-continuation`. Beam footprints only.
+     */
+    showPlacementDeformed(frame, { plane = 'XY', refHelixId = null, defaultDirSign = 1 } = {}) {
+      const spec = _placementSpec
+      if (!spec || spec.cellLengths) return false   // beam footprints only (for now)
+      this.showDeformed(frame, { plane, continuation: true, refHelixId })
+      _placementMode = true
+      _placementSpec = { ...spec, continuation: true, plane }
+      _setDirSign(defaultDirSign)
+      _hidePreview()
+      return true
+    },
+
+    /** Live-update a circle placement's footprint (driven by the inline radius input). */
+    setPlacementCircle({ cells, cellLengths }) {
+      if (!_placementSpec) return
+      _placementSpec.cells = cells
+      _placementSpec.cellLengths = cellLengths
+      _placementSpec.centered = true
       _updatePlacementPreview()
     },
 

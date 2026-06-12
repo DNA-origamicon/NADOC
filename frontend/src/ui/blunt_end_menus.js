@@ -80,6 +80,34 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
       'CONTINUATION — amber = extend existing strand · select cells → Extrude · Esc to close'
   }
 
+  // Retarget an *armed primitive placement* onto this blunt-end face: the primitive's
+  // footprint becomes a continuation extrude from the end (cells over existing helix-
+  // ends extend them; fresh cells make new helices). Mirrors _bluntExtrude's face
+  // targeting, but arms the slice-plane placement instead of the extrude panel.
+  async function _placeOnEnd(info) {
+    if (!info) return
+    const { plane, helixId, hasDeformations } = info
+    const continuationBp = info.bp + Math.max(0, info.openSide)
+    store.setState({ currentPlane: plane })
+    expandedSpacing.forceOff()
+    const { deformVisuActive } = store.getState()
+    let armed
+    if (hasDeformations && deformVisuActive) {
+      // Bent end → place onto the DEFORMED cross-section frame (same path as the
+      // deformed blunt-end continuation).
+      const frame = await api.getDeformedFrame(continuationBp, helixId)
+      armed = frame && slicePlane.showPlacementDeformed(frame, { plane, refHelixId: helixId, defaultDirSign: info.openSide })
+    } else {
+      armed = slicePlane.showPlacementAtEnd(helixId, continuationBp, { defaultDirSign: info.openSide })
+    }
+    if (!armed) {
+      showToast('Placing this primitive on a face isn’t supported yet (try a flat end / a beam primitive).', { severity: 'error' })
+      return
+    }
+    document.getElementById('mode-indicator').textContent =
+      'PLACE PRIMITIVE ON FACE — hover a lattice cell · click to place · Esc to cancel'
+  }
+
   document.getElementById('blunt-extrude-btn')?.addEventListener('click', _bluntExtrude)
   document.getElementById('blunt-bend-btn')?.addEventListener('click', () => {
     const info = _domainEndInfo
@@ -167,5 +195,6 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
     hidePanel: _hideBluntPanel,
     showCtx:   _showBluntCtx,
     hideCtx:   _hideBluntCtx,
+    placeOnEnd: _placeOnEnd,
   }
 }

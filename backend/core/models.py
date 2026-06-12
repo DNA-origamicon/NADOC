@@ -1162,6 +1162,7 @@ class OverhangRotationLogEntry(BaseModel):
 SnapshotOpKind = Literal[
     'bundle-create',
     'extrude-segment',
+    'circle-segment',
     'extrude-continuation',
     'extrude-deformed-continuation',
     'overhang-extrude',
@@ -1458,6 +1459,10 @@ class DesignMetadata(BaseModel):
     created_at: str = ""
     modified_at: str = ""
     tags: List[str] = Field(default_factory=list)
+    # Marks a design as a *parametric* primitive (e.g. "circle") so the Primitives
+    # panel offers it as a generative building block, not a fixed footprint. A real
+    # field (not freeform) so it survives a load→save round-trip through the app.
+    primitive_kind: Optional[str] = None
 
 
 class TmSettings(BaseModel):

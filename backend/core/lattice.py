@@ -525,6 +525,152 @@ def make_bundle_segment(
     )
 
 
+def make_circle_segment(
+    existing_design: Design,
+    cells: List[Tuple[int, int]],
+    cell_lengths: List[int],
+    plane: str = "XY",
+    offset_nm: float = 0.0,
+    strand_filter: str = "both",
+) -> Design:
+    """Append a *circle / disc* segment: a row of helices whose per-cell lengths
+    trace a circular chord profile, every helix **centered** on ``offset_nm``.
+
+    Like :func:`make_bundle_segment`, but each cell carries its OWN ``length_bp``
+    (``cell_lengths`` is parallel to ``cells``) and the slice plane bisects the
+    disc — helix ``i`` spans ``[offset − Lᵢ/2, offset + Lᵢ/2]`` along the plane
+    normal, so the varying lengths form a circle centred on the plane rather than
+    all starting at it. The per-cell length profile is computed analytically from
+    the radius (see :mod:`backend.core.circle_primitive`); this builder just lays
+    down the *final* geometry — no resize replay.
+
+    Raises ``ValueError`` for empty/mismatched inputs, a length < 1, or a bad plane.
+    """
+    if not cells:
+        raise ValueError("cells list must not be empty")
+    if len(cell_lengths) != len(cells):
+        raise ValueError(
+            f"cell_lengths ({len(cell_lengths)}) must match cells ({len(cells)})"
+        )
+    if any(int(n) < 1 for n in cell_lengths):
+        raise ValueError("every cell length must be >= 1 bp")
+    # Place the disc entirely on the +normal side, tangent to the slice plane: shift
+    # every (centred) helix up by the disc radius R ≈ the longest half-chord, so the
+    # disc's lowest point lands exactly on the plane at offset_nm.
+    radius_shift_nm = max(int(n) for n in cell_lengths) * BDNA_RISE_PER_BP / 2.0
+    lt = existing_design.lattice_type
+    valid_planes = {"XY", "XZ", "YZ"}
+    if plane not in valid_planes:
+        raise ValueError(f"plane must be one of {sorted(valid_planes)}, got {plane!r}")
+
+    existing_helix_ids:  set = {h.id for h in existing_design.helices}
+    existing_strand_ids: set = {s.id for s in existing_design.strands}
+
+    new_helices: List[Helix] = []
+    new_strands: List[Strand] = []
+
+    # Re-centering offset for imported/recentred designs (mirrors make_bundle_segment).
+    _lattice_off_lx = 0.0
+    _lattice_off_ly = 0.0
+    for _h in existing_design.helices:
+        if _h.grid_pos is not None:
+            _r0, _c0 = _h.grid_pos
+            _lx0, _ly0 = _lattice_position(_r0, _c0, lt)
+            if plane == "XY":
+                _lattice_off_lx = _h.axis_start.x - _lx0
+                _lattice_off_ly = _h.axis_start.y - _ly0
+            elif plane == "XZ":
+                _lattice_off_lx = _h.axis_start.x - _lx0
+                _lattice_off_ly = _h.axis_start.z - _ly0
+            else:  # YZ
+                _lattice_off_lx = _h.axis_start.y - _lx0
+                _lattice_off_ly = _h.axis_start.z - _ly0
+            break
+
+    for (row, col), length_bp in zip(cells, cell_lengths):
+        actual_length = int(length_bp)
+        lx, ly = _lattice_position(row, col, lt)
+        lx += _lattice_off_lx
+        ly += _lattice_off_ly
+        base_hid = f"h_{plane}_{row}_{col}"
+        base_sid = f"scaf_{plane}_{row}_{col}"
+        base_tid = f"stpl_{plane}_{row}_{col}"
+
+        all_helix_ids  = existing_helix_ids  | {h.id for h in new_helices}
+        all_strand_ids = existing_strand_ids | {s.id for s in new_strands}
+
+        helix_id = _unique_id(base_hid, all_helix_ids)
+        scaf_id  = _unique_id(base_sid, all_strand_ids)
+        stpl_id  = _unique_id(base_tid, all_strand_ids | {scaf_id})
+
+        # Centre the helix on the disc mid-line (offset + R), so the whole disc sits
+        # in [offset, offset + 2R] — tangent to the plane, all in the +normal direction.
+        half_nm = actual_length * BDNA_RISE_PER_BP / 2.0
+        centre_nm = offset_nm + radius_shift_nm
+        seg_lo = centre_nm - half_nm
+        seg_hi = centre_nm + half_nm
+        if plane == "XY":
+            axis_start = Vec3(x=lx, y=ly, z=seg_lo)
+            axis_end   = Vec3(x=lx, y=ly, z=seg_hi)
+        elif plane == "XZ":
+            axis_start = Vec3(x=lx, y=seg_lo, z=ly)
+            axis_end   = Vec3(x=lx, y=seg_hi, z=ly)
+        else:  # YZ
+            axis_start = Vec3(x=seg_lo, y=lx, z=ly)
+            axis_end   = Vec3(x=seg_hi, y=lx, z=ly)
+
+        direction    = _lattice_direction(row, col, lt)
+        phase_offset = _lattice_phase_offset(direction, lt)
+        twist        = _lattice_twist(lt)
+
+        bp_start_val = _helix_global_bp_start(axis_start, axis_end)
+        helix = Helix(
+            id=helix_id,
+            grid_pos=(row, col),
+            axis_start=axis_start,
+            axis_end=axis_end,
+            length_bp=actual_length,
+            bp_start=bp_start_val,
+            phase_offset=phase_offset,
+            twist_per_bp_rad=twist,
+            direction=direction,
+        )
+        new_helices.append(helix)
+
+        if direction == Direction.FORWARD:
+            scaf_start, scaf_end = bp_start_val, bp_start_val + actual_length - 1
+        else:
+            scaf_start, scaf_end = bp_start_val + actual_length - 1, bp_start_val
+
+        include_scaffold = strand_filter in ("both", "scaffold")
+        include_staples  = strand_filter in ("both", "staples")
+
+        if include_scaffold:
+            new_strands.append(Strand(
+                id=scaf_id,
+                domains=[Domain(helix_id=helix_id, start_bp=scaf_start, end_bp=scaf_end, direction=direction)],
+                strand_type=StrandType.SCAFFOLD,
+            ))
+
+        if include_staples:
+            staple_dir = Direction.REVERSE if direction == Direction.FORWARD else Direction.FORWARD
+            if staple_dir == Direction.FORWARD:
+                stpl_start, stpl_end = bp_start_val, bp_start_val + actual_length - 1
+            else:
+                stpl_start, stpl_end = bp_start_val + actual_length - 1, bp_start_val
+
+            new_strands.append(Strand(
+                id=stpl_id,
+                domains=[Domain(helix_id=helix_id, start_bp=stpl_start, end_bp=stpl_end, direction=staple_dir)],
+                strand_type=StrandType.STAPLE,
+            ))
+
+    return existing_design.copy_with(
+        helices=existing_design.helices + new_helices,
+        strands=existing_design.strands + new_strands,
+    )
+
+
 def _find_continuation_helix(
     helices: List[Helix],
     row: int,

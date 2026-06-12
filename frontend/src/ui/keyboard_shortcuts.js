@@ -546,11 +546,13 @@ export function initKeyboardShortcuts(deps) {
         if (!isDeformActive()) {
           document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
         }
-      } else if (slicePlane.isVisible()) {
+      } else if (slicePlane.isVisible() || slicePlane.isArmed?.()) {
         // Tears down the read-only slice plane AND the Extrude tool (the panel's
         // hide() also calls slicePlane.hide() + resets the indicator/dropdown).
         // Primitive placement also rides the slice plane → reset its panel controls.
-        if (slicePlane.isPlacement?.()) primitiveLibrary?.exitPlacement?.()
+        // isArmed covers the suppressed-grid case (armed on an existing structure, no
+        // grid shown yet — still needs Esc to cancel).
+        if (slicePlane.isArmed?.()) primitiveLibrary?.exitPlacement?.()
         extrudePanel?.hide()
         slicePlane.hide()
         crossSectionMinimap.clearSlice()

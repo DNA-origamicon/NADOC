@@ -46,6 +46,22 @@ def derive_metadata(design: dict, stem: str) -> dict:
     helix_count = len(helices)
     lattice = design.get("lattice_type") or "HONEYCOMB"
     poses = design.get("camera_poses") or []
+    kind = (design.get("metadata") or {}).get("primitive_kind")
+
+    # Parametric primitives carry their own label and are lattice-agnostic (the
+    # disc places into whatever lattice the design uses) — no helix-count name and
+    # no lattice description.
+    if kind == "circle":
+        return {
+            "id": stem,
+            "name": "Circle",
+            "short_name": "DISC",
+            "description": "Flat disc — set the radius",
+            "lattice": lattice,
+            "helix_count": helix_count,
+            "pose_count": len(poses),
+            "kind": "circle",
+        }
 
     # Prefer a deliberately-set human name; otherwise name by size. A name equal
     # to the filename stem is treated as auto-set-on-save (not a real label) and
@@ -89,8 +105,17 @@ def derive_placement_spec(design: dict) -> dict | None:
       ``lattice``         — 'HONEYCOMB' | 'SQUARE'
 
     None when no footprint can be derived (e.g. an empty/malformed design).
+
+    Parametric primitives (a design flagged ``metadata.primitive_kind``) return a
+    *generative* spec instead of a fixed footprint — e.g. a ``circle`` carries its
+    default radius (fit from the design's own helices) and edge cutoff, and the
+    frontend computes the per-radius footprint on demand.
     """
     lattice = design.get("lattice_type") or "HONEYCOMB"
+
+    kind = (design.get("metadata") or {}).get("primitive_kind")
+    if kind == "circle":
+        return _circle_placement_spec(design, lattice)
 
     # Preferred source: the bundle-create op's params (exact footprint + length).
     for entry in design.get("feature_log") or []:
@@ -123,6 +148,33 @@ def derive_placement_spec(design: dict) -> dict | None:
         "strand_filter": "both",
         "ligate_adjacent": True,
         "lattice": lattice,
+    }
+
+
+def _circle_placement_spec(design: dict, lattice: str) -> dict:
+    """Generative placement spec for a parametric circle (flat disc) primitive.
+
+    The footprint is computed per-radius at placement time (frontend mirror of
+    :mod:`backend.core.circle_primitive`), so this carries the *parameters*, not
+    fixed cells: ``kind='circle'``, the default radius fit from the design's own
+    helix lengths (so the default "corresponds" to the saved design), the edge
+    cutoff, and the origin plane.
+    """
+    from backend.core.circle_primitive import DEFAULT_MIN_CHORD_BP, fit_radius
+
+    lengths = [int(h["length_bp"]) for h in (design.get("helices") or []) if h.get("length_bp")]
+    plane = "XY"
+    for entry in design.get("feature_log") or []:
+        if entry.get("op_kind") == "bundle-create":
+            plane = (entry.get("params") or {}).get("plane") or "XY"
+            break
+    return {
+        "kind": "circle",
+        "lattice": lattice,
+        "plane": plane,
+        "default_radius_nm": round(fit_radius(lengths), 2) if lengths else 0.0,
+        "min_chord_bp": DEFAULT_MIN_CHORD_BP,
+        "anchor_cell": [0, 0],
     }
 
 

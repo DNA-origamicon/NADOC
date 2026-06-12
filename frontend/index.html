@@ -4768,9 +4768,13 @@
                   <option value="YZ">YZ (origin)</option>
                 </select>
               </label>
-              <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--text-xs);color:#8b949e;margin-bottom:8px">
+              <label id="primitive-length-row" style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--text-xs);color:#8b949e;margin-bottom:8px">
                 <span>Length (bp)</span>
                 <input id="primitive-length" type="number" min="1" step="1" value="42" style="flex:0 0 72px;text-align:right">
+              </label>
+              <label id="primitive-radius-row" style="display:none;align-items:center;justify-content:space-between;gap:8px;font-size:var(--text-xs);color:#8b949e;margin-bottom:8px">
+                <span>Radius (nm)</span>
+                <input id="primitive-radius" type="number" min="1" step="0.5" value="10.6" style="flex:0 0 72px;text-align:right">
               </label>
               <div style="font-size:11px;color:#6e7681;margin-bottom:8px">Hover the workspace to position; click a lattice cell to place. Esc cancels.</div>
               <button type="button" id="primitive-place-cancel" class="btn btn--sm" style="width:100%">Cancel</button>

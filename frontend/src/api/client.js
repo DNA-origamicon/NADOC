@@ -928,6 +928,23 @@ export async function addBundleSegment({ cells, lengthBp, plane = 'XY', offsetNm
 }
 
 /**
+ * Place a parametric circle (flat disc) primitive: a row of helices whose per-cell
+ * lengths (parallel to `cells`) trace a circular chord profile, each centred on the
+ * slice plane. Lengths are pre-computed from the radius (circle_primitive_logic.js).
+ */
+export async function addCircleSegment({ cells, cellLengths, plane = 'XY', offsetNm = 0, strandFilter = 'both', ligateAdjacent = true }) {
+  const json = await _request('POST', '/design/circle-segment', {
+    cells,
+    cell_lengths: cellLengths,
+    plane,
+    offset_nm: offsetNm,
+    strand_filter: strandFilter,
+    ligate_adjacent: ligateAdjacent,
+  })
+  return _syncFromDesignResponse(json)
+}
+
+/**
  * Extrude a continuation segment: cells whose helix ends at offsetNm extend existing strands;
  * fresh cells get new scaffold + staple strands.
  */

@@ -26,6 +26,7 @@
 import { PRIMITIVES, primitiveMeta, primitiveThumbSvg } from './primitive_catalog.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { latticeCompatible } from '../scene/primitive_placement_logic.js'
+import { circleFootprint } from '../scene/circle_primitive_logic.js'
 import { showToast } from './toast.js'
 
 const _NOOP_API = {
@@ -43,9 +44,12 @@ function _fromCatalog(p) {
   }
 }
 function _fromApi(p) {
+  // A circle is parametric (helix count varies with radius, any lattice) — show a
+  // generic meta line instead of "Square · N helices".
+  const isCircle = (p.placement?.kind ?? p.kind) === 'circle'
   return {
     id: p.id, name: p.name, shortName: p.short_name, description: p.description,
-    meta: primitiveMeta({ lattice: p.lattice, helixCount: p.helix_count }),
+    meta: isCircle ? 'Disc · variable radius' : primitiveMeta({ lattice: p.lattice, helixCount: p.helix_count }),
     helixCount: p.helix_count, posterUrl: p.poster_url, previewUrl: p.preview_url,
     placement: p.placement ?? null,
   }
@@ -64,6 +68,9 @@ export function initPrimitiveLibrary({ store, api, placement } = {}) {
   const placeName = document.getElementById('primitive-placement-name')
   const planeSel = document.getElementById('primitive-plane')
   const lenInput = document.getElementById('primitive-length')
+  const lenRow = document.getElementById('primitive-length-row')
+  const radiusInput = document.getElementById('primitive-radius')
+  const radiusRow = document.getElementById('primitive-radius-row')
   const placeCancel = document.getElementById('primitive-place-cancel')
 
   let _active = false
@@ -202,27 +209,45 @@ export function initPrimitiveLibrary({ store, api, placement } = {}) {
   function _currentLength() {
     return Math.max(1, parseInt(lenInput?.value ?? '', 10) || 1)
   }
+  function _currentRadius() {
+    return Math.max(0.5, parseFloat(radiusInput?.value ?? '') || 0.5)
+  }
+  const _isCircle = (c) => c?.placement?.kind === 'circle'
 
-  // Build the placement spec the slice-plane consumes from a card + chosen plane/length.
-  function _specFor(c, plane, lengthBp) {
+  // Build the placement spec the slice-plane consumes from a card + chosen plane.
+  // A circle is parametric: its footprint (cells + per-cell lengths) is computed from
+  // the radius input; a fixed primitive carries its cells + one uniform length.
+  function _specFor(c, plane) {
     const p = c.placement
-    return {
-      cells: p.cells, anchorCell: p.anchor_cell,
-      lengthBp, plane,
+    // A circle is lattice-agnostic: it builds into whatever lattice the current
+    // design uses, so its snap/parity must follow the DESIGN's lattice, not the
+    // primitive's. A fixed primitive keeps its own lattice.
+    const designLattice = store?.getState?.().currentDesign?.lattice_type
+    const base = {
+      plane,
       strandFilter: p.strand_filter ?? 'both',
       ligateAdjacent: p.ligate_adjacent ?? true,
-      latticeType: p.lattice ?? 'HONEYCOMB',
+      latticeType: (_isCircle(c) ? designLattice : p.lattice) ?? 'HONEYCOMB',
     }
+    if (_isCircle(c)) {
+      const fp = circleFootprint(_currentRadius(), { minChordBp: p.min_chord_bp })
+      if (!fp) return null
+      return { ...base, cells: fp.cells, anchorCell: fp.anchorCell, cellLengths: fp.cellLengths, centered: true }
+    }
+    return { ...base, cells: p.cells, anchorCell: p.anchor_cell, lengthBp: _currentLength() }
   }
 
   // Enter placement mode for a selected primitive: prefill the controls and arm the
   // slice-plane footprint. Guards lattice compatibility against the current design.
   function _enterPlacement(c) {
     const p = c?.placement
-    if (!p || !p.cells?.length || !placement?.enter) return   // no spec → highlight only
+    // A fixed primitive needs cells; a circle is generative (no cells until radius).
+    if (!p || !placement?.enter || (!_isCircle(c) && !p.cells?.length)) return
+    // A circle is lattice-agnostic (builds into the design's lattice); a fixed
+    // primitive must match the design's lattice — we don't mix lattices.
     const d = store?.getState?.().currentDesign
     const empty = !(d?.helices?.length)
-    if (!latticeCompatible(d?.lattice_type, p.lattice, empty)) {
+    if (!_isCircle(c) && !latticeCompatible(d?.lattice_type, p.lattice, empty)) {
       showToast(
         `${c.name} is ${p.lattice}; the current design is ${d?.lattice_type}. Lattices can't be mixed.`,
         { severity: 'error' },
@@ -231,11 +256,25 @@ export function initPrimitiveLibrary({ store, api, placement } = {}) {
       return
     }
     const plane = p.plane || 'XY'
-    if (planeSel) planeSel.value = plane
-    if (lenInput) lenInput.value = String(p.length_bp || 1)
+    const circle = _isCircle(c)
+    if (lenRow) lenRow.style.display = circle ? 'none' : 'flex'
+    if (radiusRow) radiusRow.style.display = circle ? 'flex' : 'none'
+    if (circle && radiusInput) radiusInput.value = String(p.default_radius_nm || 10.6)
+    else if (lenInput) lenInput.value = String(p.length_bp || 1)
     if (placeName) placeName.textContent = `Place: ${c.name}`
     if (placeBox) placeBox.style.display = 'block'
-    placement.enter(_specFor(c, plane, _currentLength()))
+    const spec = _specFor(c, plane)
+    if (!spec) return
+    if (empty) {
+      // Empty workspace: no blunt ends to target → show the origin grid immediately.
+      if (planeSel) planeSel.value = plane
+      placement.enter(spec)
+    } else {
+      // Existing structure: suppress the origin grid. Blank the plane dropdown so the
+      // user must explicitly pick a plane (→ grid) or click a blunt end (→ that face).
+      if (planeSel) planeSel.selectedIndex = -1
+      placement.arm?.(spec)
+    }
   }
 
   // Leave placement mode + clear the highlight (we exit after a single placement).
@@ -243,13 +282,24 @@ export function initPrimitiveLibrary({ store, api, placement } = {}) {
     _selectedId = null
     _applySelection(null)
     if (placeBox) placeBox.style.display = 'none'
+    // Reset to the default (uniform-length) control layout for the next selection.
+    if (lenRow) lenRow.style.display = 'flex'
+    if (radiusRow) radiusRow.style.display = 'none'
+    if (planeSel) planeSel.selectedIndex = 0   // un-blank the plane dropdown
   }
 
   planeSel?.addEventListener('change', () => {
     const c = _selectedId && _cardsById.get(_selectedId)
-    if (c?.placement) placement?.enter?.(_specFor(c, planeSel.value, _currentLength()))
+    const spec = c?.placement && _specFor(c, planeSel.value)
+    if (spec) placement?.enter?.(spec)
   })
   lenInput?.addEventListener('input', () => placement?.setLength?.(_currentLength()))
+  radiusInput?.addEventListener('input', () => {
+    const c = _selectedId && _cardsById.get(_selectedId)
+    if (!_isCircle(c)) return
+    const fp = circleFootprint(_currentRadius(), { minChordBp: c.placement.min_chord_bp })
+    if (fp) placement?.setCircle?.({ cells: fp.cells, cellLengths: fp.cellLengths })
+  })
   placeCancel?.addEventListener('click', () => { _exitPlacement(); placement?.cancel?.() })
 
   // Selecting a card highlights it and arms placement (if it carries a placement spec).
