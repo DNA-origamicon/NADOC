@@ -67,6 +67,95 @@ def derive_metadata(design: dict, stem: str) -> dict:
     }
 
 
+def derive_placement_spec(design: dict) -> dict | None:
+    """Derive how to *place* a primitive as an additive extrude, or None.
+
+    Pure. A primitive's content is defined by its feature log; for the simple
+    single-extrusion building blocks (6hb / 18hb beams) that log is one
+    ``bundle-create`` entry whose params already carry the full footprint. We
+    read those params and hand them straight to the additive ``bundle-segment``
+    path at placement time (translated to the cursor's lattice cell). Falls back
+    to deriving the footprint from the helices' ``grid_pos`` for older files with
+    no usable log entry.
+
+    Returns a dict with:
+      ``cells``           — list of ``[row, col]`` footprint cells (lattice coords)
+      ``anchor_cell``     — ``[row, col]`` the deterministic reference cell
+                            (min row, then min col); what snaps to the cursor
+      ``length_bp``       — default extrude length (editable at placement)
+      ``plane``           — the saved origin plane ('XY' | 'XZ' | 'YZ')
+      ``strand_filter``   — 'both' | 'scaffold' | 'staple'
+      ``ligate_adjacent`` — bool
+      ``lattice``         — 'HONEYCOMB' | 'SQUARE'
+
+    None when no footprint can be derived (e.g. an empty/malformed design).
+    """
+    lattice = design.get("lattice_type") or "HONEYCOMB"
+
+    # Preferred source: the bundle-create op's params (exact footprint + length).
+    for entry in design.get("feature_log") or []:
+        if entry.get("op_kind") != "bundle-create":
+            continue
+        p = entry.get("params") or {}
+        cells = p.get("cells")
+        if not cells:
+            break  # malformed create op → fall through to helix derivation
+        cells = [[int(r), int(c)] for r, c in cells]
+        return {
+            "cells": cells,
+            "anchor_cell": _anchor_cell(cells),
+            "length_bp": int(p.get("length_bp") or _length_from_helices(design) or 0),
+            "plane": p.get("plane") or "XY",
+            "strand_filter": p.get("strand_filter") or "both",
+            "ligate_adjacent": bool(p.get("ligate_adjacent", True)),
+            "lattice": p.get("lattice_type") or lattice,
+        }
+
+    # Fallback: footprint straight off the helices (no usable log entry).
+    cells = _cells_from_helices(design)
+    if not cells:
+        return None
+    return {
+        "cells": cells,
+        "anchor_cell": _anchor_cell(cells),
+        "length_bp": int(_length_from_helices(design) or 0),
+        "plane": "XY",
+        "strand_filter": "both",
+        "ligate_adjacent": True,
+        "lattice": lattice,
+    }
+
+
+def _anchor_cell(cells: list[list[int]]) -> list[int]:
+    """The deterministic reference cell: lowest row, then lowest col."""
+    return list(min(cells, key=lambda rc: (rc[0], rc[1])))
+
+
+def _cells_from_helices(design: dict) -> list[list[int]]:
+    """Footprint cells read off each helix's ``grid_pos`` (deduped, in order)."""
+    out: list[list[int]] = []
+    seen: set[tuple[int, int]] = set()
+    for h in design.get("helices") or []:
+        gp = h.get("grid_pos")
+        if not gp:
+            continue
+        rc = (int(gp[0]), int(gp[1]))
+        if rc in seen:
+            continue
+        seen.add(rc)
+        out.append([rc[0], rc[1]])
+    return out
+
+
+def _length_from_helices(design: dict) -> int:
+    """A representative helix length (bp) for the bundle, 0 if unknown."""
+    for h in design.get("helices") or []:
+        n = h.get("length_bp")
+        if n:
+            return int(n)
+    return 0
+
+
 def list_primitives(primitives_dir: Path) -> list[dict]:
     """Scan ``primitives_dir`` for ``*.nadoc`` files and return one metadata dict
     per primitive, sorted by helix count then name.
@@ -88,6 +177,7 @@ def list_primitives(primitives_dir: Path) -> list[dict]:
         except (OSError, json.JSONDecodeError):
             continue
         meta = derive_metadata(design, stem)
+        meta["placement"] = derive_placement_spec(design)
         meta["has_preview"] = (primitives_dir / f"{stem}{_PREVIEW_SUFFIX}").is_file()
         meta["has_poster"] = (primitives_dir / f"{stem}{_POSTER_SUFFIX}").is_file()
         out.append(meta)

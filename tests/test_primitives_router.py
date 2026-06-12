@@ -54,6 +54,67 @@ def test_is_safe_id_rejects_traversal():
     assert not pc.is_safe_id("foo.nadoc")
 
 
+# ── Placement-spec derivation ────────────────────────────────────────────────────
+
+def _bundle_create_design(cells, length_bp=42, plane="XY"):
+    return {
+        "lattice_type": "HONEYCOMB",
+        "helices": [{"grid_pos": c, "length_bp": length_bp} for c in cells],
+        "feature_log": [{
+            "op_kind": "bundle-create",
+            "params": {
+                "cells": cells, "length_bp": length_bp, "plane": plane,
+                "strand_filter": "both", "ligate_adjacent": True,
+                "lattice_type": "HONEYCOMB",
+            },
+        }],
+    }
+
+
+def test_placement_spec_from_bundle_create_op():
+    cells = [[0, 1], [1, 1], [1, 2], [1, 3], [0, 3], [0, 2]]
+    spec = pc.derive_placement_spec(_bundle_create_design(cells, length_bp=42))
+    assert spec["cells"] == cells
+    assert spec["anchor_cell"] == [0, 1]       # min row then min col
+    assert spec["length_bp"] == 42
+    assert spec["plane"] == "XY"
+    assert spec["strand_filter"] == "both"
+    assert spec["ligate_adjacent"] is True
+    assert spec["lattice"] == "HONEYCOMB"
+
+
+def test_placement_spec_anchor_is_min_row_then_col():
+    spec = pc.derive_placement_spec(_bundle_create_design([[2, 5], [1, 9], [1, 4]]))
+    assert spec["anchor_cell"] == [1, 4]
+
+
+def test_placement_spec_falls_back_to_helices_without_log():
+    design = {
+        "lattice_type": "SQUARE",
+        "helices": [{"grid_pos": [0, 0], "length_bp": 32},
+                    {"grid_pos": [0, 1], "length_bp": 32}],
+        "feature_log": [],
+    }
+    spec = pc.derive_placement_spec(design)
+    assert spec["cells"] == [[0, 0], [0, 1]]
+    assert spec["anchor_cell"] == [0, 0]
+    assert spec["length_bp"] == 32
+    assert spec["lattice"] == "SQUARE"
+    assert spec["plane"] == "XY"
+
+
+def test_placement_spec_none_when_no_footprint():
+    assert pc.derive_placement_spec({"helices": [], "feature_log": []}) is None
+
+
+def test_list_primitives_includes_placement(tmp_path):
+    cells = [[0, 1], [1, 1]]
+    (tmp_path / "two.nadoc").write_text(json.dumps(_bundle_create_design(cells)), encoding="utf-8")
+    out = pc.list_primitives(tmp_path)
+    assert out[0]["placement"]["cells"] == cells
+    assert out[0]["placement"]["anchor_cell"] == [0, 1]
+
+
 # ── Directory scan ──────────────────────────────────────────────────────────────
 
 def _write_design(path, helices, lattice="HONEYCOMB", poses=()):

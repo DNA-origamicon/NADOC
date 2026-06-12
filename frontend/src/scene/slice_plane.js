@@ -31,6 +31,7 @@ import {
   isValidSquareCell,
   squareCellWorldPos,
 } from './slice_plane/lattice_math.js'
+import { translateFootprint, validParityCandidates } from './primitive_placement_logic.js'
 
 // Default grid extents when no design is loaded.
 // Origin (0,0) is at the world origin; row/col indices start at 0.
@@ -130,7 +131,7 @@ const C_HOVER       = new THREE.Color(0xffffff)  // white  — hover
  * @param {import('three').OrbitControls} controls
  * @param {{ onExtrude: Function, getDesign: Function }} opts
  */
-export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange, onPreviewToggle, onCancel } = {}) {
+export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange, onPreviewToggle, onCancel, onPlace } = {}) {
   // Mutable camera ref — replaced by setCamera() when an ortho camera takes over (cadnano mode).
   let _camera = camera
 
@@ -408,6 +409,13 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _selectionOrder   = []       // 'row,col' keys in click/lasso order — determines provisional helix numbers
   let _hoverCell        = null
   let _visible          = false
+  // ── Primitive-placement mode ─────────────────────────────────────────────────
+  // When active, a fixed cross-section footprint follows the cursor and snaps its
+  // anchor cell to the hovered cell; a left-click commits it as an additive extrude
+  // (bundle-segment) via onPlace. Distinct from the per-cell selection extrude.
+  let _placementMode    = false
+  let _placementSpec    = null   // { cells, anchorCell, lengthBp, strandFilter, ligateAdjacent, latticeType }
+  let _placementHasConflict = false
   let _previewEnabled   = false      // ghost-cylinder extrude preview on/off (driven by sidebar toggle)
   let _previewMeshes    = []         // reusable THREE.Mesh ghost cylinders (parallel to selected cells)
   let _cursorPx         = null     // { x, y } canvas-local pixels for proximity opacity
@@ -1238,6 +1246,92 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     }
   }
 
+  // ── Primitive placement ─────────────────────────────────────────────────────
+
+  const _placementPlane = new THREE.Plane()
+  const _placementPt    = new THREE.Vector3()
+
+  /** Where the cursor ray meets the current lattice plane (world), or null. */
+  function _cursorPlanePoint() {
+    const n = PLANE_CFG[_plane].normal
+    _placementPlane.setFromNormalAndCoplanarPoint(n, _tmp.copy(n).multiplyScalar(_offset))
+    return _raycaster.ray.intersectPlane(_placementPlane, _placementPt) ? _placementPt : null
+  }
+
+  /**
+   * Snap the raw hovered cell to the nearest cell that PRESERVES the primitive's
+   * shape. On honeycomb, only cells with the anchor's (row+col) parity are valid
+   * (an odd shift flips the y-stagger + scaffold polarity → distorts the footprint);
+   * a wrong-parity hover snaps to whichever same-parity edge-neighbour is closest to
+   * the cursor. Square lattice: every cell is valid → identity.
+   */
+  function _snapPlacementCell(raw) {
+    if (!raw || !_placementSpec) return raw
+    const cands = validParityCandidates(raw, _placementSpec.anchorCell, _placementSpec.latticeType)
+    if (cands.length === 1) return { row: cands[0][0], col: cands[0][1] }
+    const cw = _cursorPlanePoint()
+    let best = null, bestD = Infinity
+    for (const [r, c] of cands) {
+      const p = cellWorldPos(r, c, _plane, _offset, _latticeOffsetX, _latticeOffsetY)
+      const d = cw ? p.distanceToSquared(cw) : 0
+      if (d < bestD) { bestD = d; best = { row: r, col: c } }
+    }
+    return best
+  }
+
+  /** World extrude direction for placement: plane normal × sign(lengthBp) (+axis default). */
+  function _placementDir(lengthBp) {
+    return PLANE_CFG[_plane].normal.clone().multiplyScalar(lengthBp < 0 ? -1 : 1).normalize()
+  }
+
+  /**
+   * Render the primitive footprint as ghost cylinders anchored at the hovered cell.
+   * Reuses the extrude ghost-mesh pool + the per-cell conflict guard (red = the
+   * placement would overlap existing DNA). Cleared when there's no hover cell or
+   * length. Sets _placementHasConflict (read by _commitPlacement to block).
+   */
+  function _updatePlacementPreview() {
+    _placementHasConflict = false
+    if (!_placementMode || !_placementSpec) { _hidePreview(); return }
+    const { cells, anchorCell, lengthBp } = _placementSpec
+    if (!_hoverCell || !lengthBp) { _hidePreview(); return }
+
+    const placed   = translateFootprint(cells, anchorCell, _hoverCell)
+    const lengthNm = Math.abs(lengthBp) * RISE
+    const dir      = _placementDir(lengthBp)
+    _previewQuat.setFromUnitVectors(_PREVIEW_UP, dir)
+    _ensurePreviewCount(placed.length)
+    for (let i = 0; i < _previewMeshes.length; i++) {
+      const m = _previewMeshes[i]
+      if (i >= placed.length) { m.visible = false; continue }
+      const [row, col] = placed[i]
+      const conflict = _cellExtrudeConflict(row, col, dir, lengthNm)
+      if (conflict) _placementHasConflict = true
+      m.visible  = true
+      m.material = conflict ? _previewConflictMat : _previewMat
+      m.scale.set(1, lengthNm, 1)
+      m.quaternion.copy(_previewQuat)
+      m.position.copy(cellWorldPos(row, col, _plane, _offset, _latticeOffsetX, _latticeOffsetY))
+                 .addScaledVector(dir, lengthNm / 2)
+    }
+  }
+
+  /** Commit the placement at the current hover cell via onPlace (additive segment). */
+  function _commitPlacement() {
+    if (!_placementMode || !_placementSpec || !_hoverCell) return
+    if (_placementHasConflict) {
+      showToast('Placement overlaps existing DNA — move to a clear spot.', { severity: 'error' })
+      return
+    }
+    const { cells, anchorCell, lengthBp, strandFilter, ligateAdjacent, latticeType } = _placementSpec
+    const placed = translateFootprint(cells, anchorCell, _hoverCell)
+    _hidePreview()
+    onPlace?.({
+      cells: placed, lengthBp, plane: _plane, offsetNm: _offset,
+      strandFilter, ligateAdjacent, latticeType,
+    })
+  }
+
   // ── Raycasting helpers ──────────────────────────────────────────────────────
 
   function _rayHandle() {
@@ -1320,6 +1414,16 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     if (_latticeMode) {
       _hoverCell = _rayCells()
 
+      // Primitive placement: the footprint follows the cursor, snapping the anchor
+      // to a shape-preserving (same-parity on honeycomb) cell; no lasso selection.
+      if (_placementMode) {
+        _hoverCell = _snapPlacementCell(_hoverCell)
+        _updatePlacementPreview()
+        _updateCircleColors()
+        _maybeExpandGrid(_cursorGridApprox())
+        return
+      }
+
       // Upgrade pending click → lasso once movement exceeds 4px
       if (_pendingCellClick && _pointerDownPos &&
           Math.hypot(e.clientX - _pointerDownPos.x, e.clientY - _pointerDownPos.y) > 4) {
@@ -1345,6 +1449,15 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   function _onPointerUp(e) {
     if (!_visible) return
+
+    // Primitive placement: a clean left-click (no camera drag) commits the footprint.
+    if (_placementMode) {
+      _pendingCellClick = false
+      const dragged = _pointerDownPos &&
+        Math.hypot(e.clientX - _pointerDownPos.x, e.clientY - _pointerDownPos.y) > 4
+      if (e.button === 0 && !dragged && _hoverCell) _commitPlacement()
+      return
+    }
 
     if (_isDragging) {
       _isDragging = false
@@ -1387,6 +1500,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   function _onContextMenu(e) {
     if (!_visible || !_latticeMode || _readOnly) return
+    if (_placementMode) { e.preventDefault(); return }  // no per-cell select during placement
     if (_rightDownPos) {
       const moved = Math.hypot(e.clientX - _rightDownPos.x, e.clientY - _rightDownPos.y)
       _rightDownPos = null
@@ -1590,6 +1704,9 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * @param {boolean} [continuation] - if true, cells ending at offset are amber/selectable
      */
     show(plane, offsetNm, continuation = false, readOnly = false, { latticeType = 'HONEYCOMB', newBundle = false } = {}) {
+      _placementMode    = false
+      _placementSpec    = null
+      _placementHasConflict = false
       _dynBounds        = null
       _baseBounds       = null
       _plane            = plane ?? 'XY'
@@ -1677,6 +1794,9 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _borderMesh.geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(40, 40, RISE))
       _clearLattice()
       _hidePreview()
+      _placementMode    = false
+      _placementSpec    = null
+      _placementHasConflict = false
       _extrudeUiOpen    = false
       _isDragging       = false
       _isDragSelecting  = false
@@ -1730,6 +1850,36 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     refreshLattice() {
       if (_latticeMode) _buildLattice()
     },
+
+    /**
+     * Enter primitive-placement mode on the given origin plane. Shows the lattice
+     * (existing helices greyed) and a fixed cross-section footprint that follows the
+     * cursor, snapping its anchor cell to the hovered cell; a left-click commits it
+     * as an additive bundle-segment via the onPlace callback.
+     * @param {'XY'|'XZ'|'YZ'} plane
+     * @param {{cells:Array<[number,number]>, anchorCell:[number,number], lengthBp:number,
+     *          strandFilter?:string, ligateAdjacent?:boolean, latticeType?:string}} spec
+     */
+    showPlacement(plane, spec) {
+      this.show(plane, 0, false, false, { latticeType: spec?.latticeType ?? 'HONEYCOMB', newBundle: true })
+      _placementMode = true
+      _placementSpec = {
+        cells: spec.cells, anchorCell: spec.anchorCell, lengthBp: spec.lengthBp ?? 0,
+        strandFilter: spec.strandFilter ?? 'both',
+        ligateAdjacent: spec.ligateAdjacent ?? true,
+        latticeType: spec.latticeType ?? 'HONEYCOMB',
+      }
+      _hidePreview()
+    },
+
+    /** Live-update the placement footprint length (driven by the inline length input). */
+    setPlacementLength(lengthBp) {
+      if (!_placementSpec) return
+      _placementSpec.lengthBp = lengthBp
+      _updatePlacementPreview()
+    },
+
+    isPlacement() { return _visible && _placementMode },
 
     /**
      * Show the slice plane in deformed mode at the given cross-section frame.

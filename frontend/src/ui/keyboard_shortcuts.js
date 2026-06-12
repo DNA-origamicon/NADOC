@@ -43,7 +43,7 @@ export function initKeyboardShortcuts(deps) {
   const {
     store, api,
     slicePlane, expandedSpacing, debugOverlay, measurementTool, selectionManager,
-    extrudePanel, deformView, crossSectionMinimap, sliceHighlighter,
+    extrudePanel, deformView, crossSectionMinimap, sliceHighlighter, primitiveLibrary,
     isUnfoldActive, isDeformActive,
     captureCurrentCamera, frameSelectionOrAll,
     setMenuToggle,
@@ -549,6 +549,8 @@ export function initKeyboardShortcuts(deps) {
       } else if (slicePlane.isVisible()) {
         // Tears down the read-only slice plane AND the Extrude tool (the panel's
         // hide() also calls slicePlane.hide() + resets the indicator/dropdown).
+        // Primitive placement also rides the slice plane → reset its panel controls.
+        if (slicePlane.isPlacement?.()) primitiveLibrary?.exitPlacement?.()
         extrudePanel?.hide()
         slicePlane.hide()
         crossSectionMinimap.clearSlice()

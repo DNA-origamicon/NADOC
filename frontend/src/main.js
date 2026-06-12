@@ -2143,6 +2143,23 @@ async function main() {
     },
     // The sidebar Extrude panel's Cancel button tears down the whole tool.
     onCancel: () => _extrudePanel?.hide(),
+    // Primitive placement commit: drop the footprint as an additive bundle-segment,
+    // then exit (one placement per selection). cells are already lattice-translated.
+    onPlace: async ({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent }) => {
+      const result = await api.addBundleSegment({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent })
+      if (!result) {
+        const err = store.getState().lastError
+        showToast(err?.message ?? 'Primitive placement failed', { severity: 'error' })
+        return
+      }
+      const existing = store.getState().unfoldHelixOrder ?? []
+      const newIds   = cells.map(([row, col]) => `h_${plane}_${row}_${col}`)
+      const toAdd    = newIds.filter(id => !existing.includes(id))
+      if (toAdd.length) store.setState({ unfoldHelixOrder: [...existing, ...toAdd] })
+      _primitiveLibrary?.exitPlacement()
+      slicePlane.hide()
+      document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+    },
   })
 
   // ── Extrude tool (right-sidebar panel + plane dropdown) → ui/extrude_panel.js ──
@@ -2153,8 +2170,25 @@ async function main() {
 
   // ── Primitives library (right-sidebar panel) → ui/primitive_library.js ──
   // Owns #primitives-panel; revealed by Tools → Add Primitive. Lists pre-validated
-  // building blocks (6HB/18HB beams); selecting only highlights for now.
-  const _primitiveLibrary = initPrimitiveLibrary({ store, api })
+  // building blocks (6HB/18HB beams). Selecting one arms placement: the inline plane
+  // dropdown + length input drive the slice-plane footprint ghost; a click commits
+  // it as an additive bundle-segment (onPlace above). The `placement` dep is thin
+  // wiring — the cohesive logic lives in primitive_library.js + slice_plane.js.
+  const _primitiveLibrary = initPrimitiveLibrary({
+    store, api,
+    placement: {
+      enter: (spec) => {
+        slicePlane.showPlacement(spec.plane, spec)
+        document.getElementById('mode-indicator').textContent =
+          'PLACE PRIMITIVE — hover a lattice cell · click to place · Esc to cancel'
+      },
+      setLength: (bp) => slicePlane.setPlacementLength(bp),
+      cancel: () => {
+        if (slicePlane.isPlacement()) slicePlane.hide()
+        document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+      },
+    },
+  })
 
   // Link slicePlane to unfoldView so the plane dimensions lerp during unfold animation.
   unfoldView.setSlicePlane(slicePlane)
@@ -3792,6 +3826,7 @@ async function main() {
     store, api,
     slicePlane, expandedSpacing, debugOverlay, measurementTool, selectionManager,
     extrudePanel: _extrudePanel, deformView, crossSectionMinimap, sliceHighlighter,
+    primitiveLibrary: _primitiveLibrary,
     isUnfoldActive:           _isUnfoldActive,
     isDeformActive,
     captureCurrentCamera,

@@ -412,6 +412,23 @@ def test_bundle_segment_appends_helices():
     assert len(result.strands) == 4   # 2 scaffold + 2 staple
 
 
+def test_bundle_segment_from_empty_design_builds_full_bundle():
+    """Segment onto an EMPTY design builds the bundle at canonical lattice
+    positions — the additive path used to place the first primitive into a
+    blank workspace (no existing helix carries grid_pos → zero offset)."""
+    from backend.core.models import Design
+
+    cells = [(0, 1), (1, 1), (1, 2)]
+    result = make_bundle_segment(Design(), cells, length_bp=42, plane="XY")
+    assert len(result.helices) == 3
+    assert {tuple(h.grid_pos) for h in result.helices} == set(cells)
+    # Canonical placement: a fresh (0,1) helix sits where a bundle-create would put it.
+    base = make_bundle_design([(0, 1)], length_bp=42, plane="XY")
+    seg01 = next(h for h in result.helices if tuple(h.grid_pos) == (0, 1))
+    assert seg01.axis_start.x == pytest.approx(base.helices[0].axis_start.x)
+    assert seg01.axis_start.y == pytest.approx(base.helices[0].axis_start.y)
+
+
 def test_bundle_segment_unique_ids():
     """Segment helix/strand IDs do not collide with the base design."""
     base = make_bundle_design([(0, 0)], length_bp=42)

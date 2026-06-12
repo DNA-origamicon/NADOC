@@ -25,6 +25,8 @@
  */
 import { PRIMITIVES, primitiveMeta, primitiveThumbSvg } from './primitive_catalog.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { latticeCompatible } from '../scene/primitive_placement_logic.js'
+import { showToast } from './toast.js'
 
 const _NOOP_API = {
   activate() {},
@@ -45,10 +47,11 @@ function _fromApi(p) {
     id: p.id, name: p.name, shortName: p.short_name, description: p.description,
     meta: primitiveMeta({ lattice: p.lattice, helixCount: p.helix_count }),
     helixCount: p.helix_count, posterUrl: p.poster_url, previewUrl: p.preview_url,
+    placement: p.placement ?? null,
   }
 }
 
-export function initPrimitiveLibrary({ store, api } = {}) {
+export function initPrimitiveLibrary({ store, api, placement } = {}) {
   const panel = document.getElementById('primitives-panel')
   const heading = document.getElementById('primitives-panel-heading')
   const arrow = document.getElementById('primitives-panel-arrow')
@@ -56,8 +59,16 @@ export function initPrimitiveLibrary({ store, api } = {}) {
   const listEl = document.getElementById('primitives-list')
   if (!panel || !listEl) return _NOOP_API
 
+  // Inline placement controls (revealed when a primitive with a placement spec is selected).
+  const placeBox = document.getElementById('primitive-placement')
+  const placeName = document.getElementById('primitive-placement-name')
+  const planeSel = document.getElementById('primitive-plane')
+  const lenInput = document.getElementById('primitive-length')
+  const placeCancel = document.getElementById('primitive-place-cancel')
+
   let _active = false
   let _selectedId = null
+  let _cardsById = new Map()   // id → normalized card (carries .placement)
 
   // ── Collapse / expand (persisted) ──────────────────────────────────────────
   let _collapsed = getSectionCollapsed('tools', 'primitives-panel', false)
@@ -92,9 +103,9 @@ export function initPrimitiveLibrary({ store, api } = {}) {
       </button>`,
     ).join('')
 
-    const byId = new Map(cards.map((c) => [c.id, c]))
+    _cardsById = new Map(cards.map((c) => [c.id, c]))
     for (const card of listEl.querySelectorAll('.primitive-card')) {
-      const c = byId.get(card.dataset.primitiveId)
+      const c = _cardsById.get(card.dataset.primitiveId)
       card.addEventListener('click', () => _select(card.dataset.primitiveId))
       // Poster → looping GIF in the small thumb; plus a larger workspace-corner
       // preview, both on hover. Capture poster/anim once (src mutates on hover).
@@ -186,10 +197,66 @@ export function initPrimitiveLibrary({ store, api } = {}) {
     }
   }
 
-  // Highlight only — selecting a primitive does nothing else yet.
+  // ── Placement ────────────────────────────────────────────────────────────────
+
+  function _currentLength() {
+    return Math.max(1, parseInt(lenInput?.value ?? '', 10) || 1)
+  }
+
+  // Build the placement spec the slice-plane consumes from a card + chosen plane/length.
+  function _specFor(c, plane, lengthBp) {
+    const p = c.placement
+    return {
+      cells: p.cells, anchorCell: p.anchor_cell,
+      lengthBp, plane,
+      strandFilter: p.strand_filter ?? 'both',
+      ligateAdjacent: p.ligate_adjacent ?? true,
+      latticeType: p.lattice ?? 'HONEYCOMB',
+    }
+  }
+
+  // Enter placement mode for a selected primitive: prefill the controls and arm the
+  // slice-plane footprint. Guards lattice compatibility against the current design.
+  function _enterPlacement(c) {
+    const p = c?.placement
+    if (!p || !p.cells?.length || !placement?.enter) return   // no spec → highlight only
+    const d = store?.getState?.().currentDesign
+    const empty = !(d?.helices?.length)
+    if (!latticeCompatible(d?.lattice_type, p.lattice, empty)) {
+      showToast(
+        `${c.name} is ${p.lattice}; the current design is ${d?.lattice_type}. Lattices can't be mixed.`,
+        { severity: 'error' },
+      )
+      _exitPlacement()
+      return
+    }
+    const plane = p.plane || 'XY'
+    if (planeSel) planeSel.value = plane
+    if (lenInput) lenInput.value = String(p.length_bp || 1)
+    if (placeName) placeName.textContent = `Place: ${c.name}`
+    if (placeBox) placeBox.style.display = 'block'
+    placement.enter(_specFor(c, plane, _currentLength()))
+  }
+
+  // Leave placement mode + clear the highlight (we exit after a single placement).
+  function _exitPlacement() {
+    _selectedId = null
+    _applySelection(null)
+    if (placeBox) placeBox.style.display = 'none'
+  }
+
+  planeSel?.addEventListener('change', () => {
+    const c = _selectedId && _cardsById.get(_selectedId)
+    if (c?.placement) placement?.enter?.(_specFor(c, planeSel.value, _currentLength()))
+  })
+  lenInput?.addEventListener('input', () => placement?.setLength?.(_currentLength()))
+  placeCancel?.addEventListener('click', () => { _exitPlacement(); placement?.cancel?.() })
+
+  // Selecting a card highlights it and arms placement (if it carries a placement spec).
   function _select(id) {
     _selectedId = id
     _applySelection(id)
+    _enterPlacement(_cardsById.get(id))
   }
 
   // Render the static fallback immediately, then upgrade to the live catalog.
@@ -207,7 +274,13 @@ export function initPrimitiveLibrary({ store, api } = {}) {
     _active = false
     panel.style.display = 'none'
     _hideZoom()
+    _exitPlacement()
   }
 
-  return { activate, hide, isActive: () => _active, getSelected: () => _selectedId }
+  return {
+    activate, hide, isActive: () => _active, getSelected: () => _selectedId,
+    // Called by the host after a placement commits (exit-after-one-placement) or to
+    // tear down placement mode externally (e.g. Escape).
+    exitPlacement: _exitPlacement,
+  }
 }

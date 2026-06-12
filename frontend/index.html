@@ -4757,6 +4757,24 @@
           <div id="primitives-panel-body" style="margin-top:8px">
             <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:8px">Pre-validated DNA building blocks. Click to select.</div>
             <div id="primitives-list" class="primitives-list"></div>
+            <!-- Placement controls: revealed when a primitive is selected -->
+            <div id="primitive-placement" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--color-border)">
+              <div id="primitive-placement-name" style="font-size:var(--text-sm);font-weight:600;color:#c9d1d9;margin-bottom:8px"></div>
+              <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">
+                <span>Place on plane</span>
+                <select id="primitive-plane" style="flex:0 0 auto">
+                  <option value="XY">XY (origin)</option>
+                  <option value="XZ">XZ (origin)</option>
+                  <option value="YZ">YZ (origin)</option>
+                </select>
+              </label>
+              <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--text-xs);color:#8b949e;margin-bottom:8px">
+                <span>Length (bp)</span>
+                <input id="primitive-length" type="number" min="1" step="1" value="42" style="flex:0 0 72px;text-align:right">
+              </label>
+              <div style="font-size:11px;color:#6e7681;margin-bottom:8px">Hover the workspace to position; click a lattice cell to place. Esc cancels.</div>
+              <button type="button" id="primitive-place-cancel" class="btn btn--sm" style="width:100%">Cancel</button>
+            </div>
           </div>
         </div>
 
