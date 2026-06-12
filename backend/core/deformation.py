@@ -88,6 +88,18 @@ def _normalize_helix_for_grid(
     z_end     = (helix.bp_start + helix.length_bp) * BDNA_RISE_PER_BP
     row, col  = helix.grid_pos
     direction = Direction.FORWARD if (row + col) % 2 == 0 else Direction.REVERSE
+    # Guard against canonicalising a DELIBERATELY-POSED helix. Normalising assumes the
+    # stored axis is the straight, axis-along-+normal lattice pose and only rewrites Z to
+    # the bp-derived value. A free-posed helix — e.g. a deformed-continuation segment placed
+    # at a bent end (its axis runs along the bent direction; grid_pos got back-filled from
+    # its h_XY_{r}_{c} id) — stores a NON-canonical axis. Rewriting it to straight-+Z would
+    # discard that pose, and any active bend then re-applies on top, collapsing the whole
+    # segment onto a single 45° sheet. Canonical lattice helices store exactly this Z, so the
+    # deviation is ~0 and they normalise as before; only genuinely posed helices are preserved.
+    _POSE_TOL_NM = 1.0
+    if (abs(helix.axis_start.z - z_start) > _POSE_TOL_NM
+            or abs(helix.axis_end.z - z_end) > _POSE_TOL_NM):
+        return helix
     return helix.model_copy(update={
         "axis_start":       Vec3(x=helix.axis_start.x, y=helix.axis_start.y, z=z_start),
         "axis_end":         Vec3(x=helix.axis_end.x,   y=helix.axis_end.y,   z=z_end),

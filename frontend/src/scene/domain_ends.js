@@ -69,11 +69,24 @@ function _offsetFromPos(pos, plane) {
 }
 
 /**
+ * Number of disk slots spanned by the helix (bp count + 1), used to map a disk_bp to a
+ * parametric t along the axis samples. Prefer the topological `length_bp`; fall back to
+ * the chord-derived estimate only when it's missing. For a BENT helix the chord between
+ * the deformed endpoints is shorter than the traced arc, so a chord-derived count would
+ * make t overshoot — see the comment in _axisPoint.
+ */
+export function _physLen(h, dLen) {
+  return (h.length_bp ?? 0) >= 1
+    ? h.length_bp + 1
+    : Math.max(1, Math.round(dLen / BDNA_RISE_PER_BP) + 1)
+}
+
+/**
  * Compute the 3-D position on (or extrapolated beyond) a helix axis at disk_bp.
  * axDef = { start, end, samples? } from helixAxes map, or null for straight axis.
  * Returns THREE.Vector3.
  */
-function _axisPoint(h, axDef, diskBp) {
+export function _axisPoint(h, axDef, diskBp) {
   const sx = axDef ? axDef.start[0] : h.axis_start.x
   const sy = axDef ? axDef.start[1] : h.axis_start.y
   const sz = axDef ? axDef.start[2] : h.axis_start.z
@@ -81,7 +94,13 @@ function _axisPoint(h, axDef, diskBp) {
   const ey = axDef ? axDef.end[1] : h.axis_end.y
   const ez = axDef ? axDef.end[2] : h.axis_end.z
   const dLen = Math.sqrt((ex-sx)**2 + (ey-sy)**2 + (ez-sz)**2)
-  const physLen = Math.max(1, Math.round(dLen / BDNA_RISE_PER_BP) + 1)
+  // bp span of the helix. Use the topological length_bp, NOT the chord between the
+  // (possibly deformed) endpoints: for a BENT helix the straight-line chord is much
+  // shorter than the arc the samples trace, so a chord-derived physLen makes the
+  // disk→t map overshoot and the blunt-end ring floats well past the bent tip.
+  // length_bp equals the chord-derived value for a straight helix, so this only
+  // changes bent cases.
+  const physLen = _physLen(h, dLen)
   const t = physLen > 1 ? (diskBp - (h.bp_start ?? 0)) / (physLen - 1) : 0
 
   const samples = axDef?.samples
@@ -120,7 +139,7 @@ function _axisDir(h, axDef, diskBp) {
   const ey = axDef ? axDef.end[1] : h.axis_end.y
   const ez = axDef ? axDef.end[2] : h.axis_end.z
   const dLen = Math.sqrt((ex-sx)**2 + (ey-sy)**2 + (ez-sz)**2)
-  const physLen = Math.max(1, Math.round(dLen / BDNA_RISE_PER_BP) + 1)
+  const physLen = _physLen(h, dLen)   // length_bp-based — see _axisPoint
   const t = physLen > 1 ? (diskBp - (h.bp_start ?? 0)) / (physLen - 1) : 0
 
   const samples = axDef?.samples
@@ -616,6 +635,32 @@ export function initDomainEnds(scene, camera, canvas, {
     clear() { _rebuild(null, null) },
 
     setVisible(bool) { _group.visible = bool },
+
+    /**
+     * True if a blunt-end ring is under the pointer right now (and picking isn't
+     * blocked). The slice plane consults this during primitive placement so a click
+     * on a ring yields to the domain-end pick (retarget onto that face) instead of
+     * being swallowed by the lattice cell that sits at the same screen position.
+     */
+    isRingHit(e) { return !_isBlocked() && _getHitIndex(e) >= 0 },
+
+    /** Screen {x,y} + identity of each on-screen, visible blunt-end ring (gesture e2e). */
+    getEndScreenInfo(cam, rect) {
+      const v = new THREE.Vector3()
+      const out = []
+      for (const end of _ends) {
+        if (!end.ringMesh?.visible || !_group.visible) continue
+        v.setFromMatrixPosition(end.ringMesh.matrixWorld)
+        const ndc = v.project(cam)
+        if (ndc.z > 1 || Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue
+        out.push({
+          x: rect.left + (ndc.x * 0.5 + 0.5) * rect.width,
+          y: rect.top + (-ndc.y * 0.5 + 0.5) * rect.height,
+          helixId: end.helixId, diskBp: end.diskBp, openSide: end.openSide,
+        })
+      }
+      return out
+    },
 
     /**
      * Lerp rings and labels from straight to deformed axis positions.
