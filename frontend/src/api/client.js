@@ -1851,7 +1851,7 @@ export async function getDeformedFrame(sourceBp, refHelixId = null) {
  * Extrude a bundle continuation using a deformed cross-section frame.
  * frame must be the object returned by getDeformedFrame().
  */
-export async function addBundleDeformedContinuation({ cells, lengthBp, plane = 'XY', frame, refHelixId = null }) {
+export async function addBundleDeformedContinuation({ cells, lengthBp, plane = 'XY', frame, refHelixId = null, sourceBp = null }) {
   const json = await _request('POST', '/design/bundle-deformed-continuation', {
     cells,
     length_bp:    lengthBp,
@@ -1861,6 +1861,9 @@ export async function addBundleDeformedContinuation({ cells, lengthBp, plane = '
     frame_right:  frame.frame_right,
     frame_up:     frame.frame_up,
     ref_helix_id: refHelixId,
+    // bp where the frame was sampled — lets the backend recompute the frame live
+    // and re-place this segment if an upstream bend/twist is later deleted/edited.
+    source_bp:    sourceBp,
   })
   return _syncFromDesignResponse(json)
 }
@@ -1900,6 +1903,43 @@ export async function exportOxdna() {
 export async function runOxdna(steps = 10000) {
   return _request('POST', `/design/oxdna/run?steps=${steps}`)
 }
+
+// ── oxDNA relaxation jobs (managed 3-stage runner) ─────────────────────────────
+// These talk to the oxDNA job manager (routes_oxdna.py), a sibling of the NAMD
+// /md/jobs API.  They do NOT mutate the design, so they bypass _request's
+// design-sync and just return parsed JSON (or null on error).
+
+async function _oxdnaJSON(method, path, body = undefined) {
+  const opts = { method, headers: { ...docHeaders() } }
+  if (body !== undefined) {
+    opts.headers['Content-Type'] = 'application/json'
+    opts.body = JSON.stringify(body)
+  }
+  const r = await fetch(`${BASE}${path}`, opts)
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    return null
+  }
+  return r.json().catch(() => null)
+}
+
+/** Last API error message (e.g. the 400 detail from a rejected create). */
+export const lastErrorMessage    = ()            => store.getState().lastError?.message ?? null
+
+export const oxdnaAvailable      = ()            => _oxdnaJSON('GET',  '/oxdna/available')
+export const createOxdnaJob      = (body)        => _oxdnaJSON('POST', '/oxdna/jobs', body)
+export const listOxdnaJobs       = ()            => _oxdnaJSON('GET',  '/oxdna/jobs')
+export const getOxdnaJob         = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}`)
+export const getOxdnaProgress    = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/progress`)
+export const startOxdnaJob       = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/start`)
+export const appendOxdnaProduction = (id, body)  => _oxdnaJSON('POST', `/oxdna/jobs/${id}/production`, body)
+export const stopOxdnaJob        = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/stop`)
+export const deleteOxdnaJob      = (id)          => _oxdnaJSON('DELETE', `/oxdna/jobs/${id}`)
+export const getOxdnaHealth      = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/health`)
+export const getOxdnaMetrics     = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/metrics`)
+export const getOxdnaDisplay     = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/display`)
+export const getOxdnaRmsd        = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsd`)
 
 // ── Cluster rigid transforms ──────────────────────────────────────────────────
 

@@ -41,6 +41,7 @@ from backend.api.routes_deformation import router as deformation_router
 from backend.api.routes_extensions import router as extensions_router
 from backend.api.routes_loop_skip import router as loop_skip_router
 from backend.api.routes_md import router as md_router
+from backend.api.routes_oxdna import router as oxdna_router
 from backend.api.routes_primitives import router as primitives_router
 from backend.api.ws import router as ws_router
 
@@ -103,6 +104,7 @@ app.include_router(assembly_linkers_router, prefix="/api")
 app.include_router(assembly_validation_router, prefix="/api")
 app.include_router(assembly_workspace_router, prefix="/api")
 app.include_router(md_router,          prefix="/api")
+app.include_router(oxdna_router,       prefix="/api")
 app.include_router(primitives_router,  prefix="/api")
 app.include_router(ws_router)          # WebSocket routes have no /api prefix
 

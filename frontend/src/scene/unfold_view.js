@@ -717,6 +717,53 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     designRenderer.flushExtraBaseMeshes()
   }
 
+  /**
+   * Move the crossover arc lines (and any extra-base beads) to follow an
+   * mrDNA/oxDNA FEM-position overlay (designRenderer.applyFemPositions).  Each
+   * arc endpoint jumps to the relaxed backbone position of its nucleotide, drawn
+   * as a straight chord (matching the base 3D view).  Pass null to revert the
+   * arcs to the design geometry (from3D/to3D).  Called by design_renderer right
+   * after applyFemPositions so the arcs don't lag at the original positions.
+   */
+  function applyFemArcs(updates) {
+    const posMap = updates
+      ? new Map(updates.map(u => [`${u.helix_id}:${u.bp_index}:${u.direction}`, u.backbone_position]))
+      : null
+    for (const e of _arcMeta) {
+      const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
+      if (!merged) continue
+      const buf  = merged.positions
+      const base = e.vertIdx
+
+      if (e.hidden) {
+        for (let j = 0; j <= ARC_SEGS; j++) {
+          const bi = (base + j) * 3
+          buf[bi] = e.from3D.x; buf[bi + 1] = e.from3D.y; buf[bi + 2] = e.from3D.z
+        }
+        continue
+      }
+
+      const fp = posMap?.get(`${e.fromNuc?.helix_id}:${e.fromNuc?.bp_index}:${e.fromNuc?.direction}`)
+      const tp = posMap?.get(`${e.toNuc?.helix_id}:${e.toNuc?.bp_index}:${e.toNuc?.direction}`)
+      if (fp) _sv0.set(fp[0], fp[1], fp[2]); else _sv0.copy(e.from3D)
+      if (tp) _sv1.set(tp[0], tp[1], tp[2]); else _sv1.copy(e.to3D)
+      _sCtrl.set((_sv0.x + _sv1.x) * 0.5, (_sv0.y + _sv1.y) * 0.5, (_sv0.z + _sv1.z) * 0.5)
+
+      for (let j = 0; j <= ARC_SEGS; j++) {
+        const u = j / ARC_SEGS, u2 = 1 - u
+        const w0 = u2 * u2, w1 = 2 * u2 * u, w2 = u * u
+        const bi = (base + j) * 3
+        buf[bi]     = w0 * _sv0.x + w1 * _sCtrl.x + w2 * _sv1.x
+        buf[bi + 1] = w0 * _sv0.y + w1 * _sCtrl.y + w2 * _sv1.y
+        buf[bi + 2] = w0 * _sv0.z + w1 * _sCtrl.z + w2 * _sv1.z
+      }
+      if (e.crossover_id) designRenderer.updateExtraBaseArc(e.crossover_id, _sv0, _sCtrl, _sv1)
+    }
+    if (_scaffoldMerged) _scaffoldMerged.geo.attributes.position.needsUpdate = true
+    if (_stapleMerged)   _stapleMerged.geo.attributes.position.needsUpdate   = true
+    designRenderer.flushExtraBaseMeshes()
+  }
+
   // ── Offset computation ──────────────────────────────────────────────────────
 
   /**
@@ -1027,6 +1074,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     activate,
     deactivate,
     setSpacing,
+    applyFemArcs,
     isActive:  () => _active,
     getMidZ:   () => _midZ,
 

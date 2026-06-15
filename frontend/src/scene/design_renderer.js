@@ -26,6 +26,7 @@ import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
  */
 export function initDesignRenderer(scene, storeRef) {
   let _helixCtrl        = null
+  let _femArcUpdater    = null   // unfold_view.applyFemArcs — keeps arcs synced with applyFemPositions
   let _designVisible    = true   // controlled by setDesignVisible(); re-applied after every _rebuild
   // VISIBILITY RULE: design_renderer has ONE scene object — _helixCtrl.root.
   // Extra-base beads+slabs (from buildCrossoverConnections) are children of root,
@@ -816,7 +817,14 @@ export function initDesignRenderer(scene, storeRef) {
      */
     applyFemPositions(updates, amp = 1.0) {
       _helixCtrl?.applyFemPositions(updates, amp)
+      // Keep crossover arc lines (owned by unfold_view) in sync — applyFemPositions
+      // moves beads/cones/slabs but not the arcs, which otherwise lag at the
+      // original design positions during an mrDNA/oxDNA display overlay.
+      _femArcUpdater?.(updates, amp)
     },
+
+    /** Register unfold_view's applyFemArcs so the arcs follow applyFemPositions. */
+    setFemArcUpdater(fn) { _femArcUpdater = fn },
 
     setDetailLevel(level) {
       _detailLevel = level

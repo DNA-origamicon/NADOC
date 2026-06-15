@@ -393,6 +393,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _latticeType      = 'HONEYCOMB'  // 'HONEYCOMB' | 'SQUARE' — used before any helices exist
   let _deformedFrame    = null   // { grid_origin, axis_dir, frame_right, frame_up } when in deformed mode
   let _refHelixId       = null   // helix that opened the deformed frame (for cluster membership)
+  let _deformedSourceBp = null   // bp where the deformed frame was sampled (lets the backend re-place this segment after an upstream bend/twist edit/delete)
   let _readOnly         = false  // when true: no lattice, no extrude — display + snap only
   let _cadnanoDims      = null   // when set, overrides _computeLerpedDimensions in _resizePlane
   let _planeW           = 40    // current plane width  (nm) — updated by _resizePlane
@@ -1399,7 +1400,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       strandFilter, ligateAdjacent, latticeType,
       continuationMode: !!continuation,
       // Present when the face is a BENT end → deformed-frame continuation.
-      deformedFrame: _deformedFrame, refHelixId: _refHelixId,
+      deformedFrame: _deformedFrame, refHelixId: _refHelixId, sourceBp: _deformedSourceBp,
     })
   }
 
@@ -1735,6 +1736,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
           latticeType: _latticeType,
           deformedFrame: _deformedFrame,
           refHelixId: _refHelixId,
+          sourceBp: _deformedSourceBp,
           strandFilter,
           ligateAdjacent,
         })
@@ -1841,6 +1843,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _borderMesh.visible  = true
       _deformedFrame  = null
       _refHelixId     = null
+      _deformedSourceBp = null
       _latticeOffsetX = 0
       _latticeOffsetY = 0
       _lateralCenter.set(0, 0, 0)
@@ -1987,10 +1990,10 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * cross-section frame (same path as the deformed blunt-end continuation). Keeps the
      * armed footprint; commits via `bundle-deformed-continuation`. Beam footprints only.
      */
-    showPlacementDeformed(frame, { plane = 'XY', refHelixId = null, defaultDirSign = 1 } = {}) {
+    showPlacementDeformed(frame, { plane = 'XY', refHelixId = null, defaultDirSign = 1, sourceBp = null } = {}) {
       const spec = _placementSpec
       if (!spec || spec.cellLengths) return false   // beam footprints only (for now)
-      this.showDeformed(frame, { plane, continuation: true, refHelixId })
+      this.showDeformed(frame, { plane, continuation: true, refHelixId, sourceBp })
       _placementMode = true
       _placementSpec = { ...spec, continuation: true, plane }
       _setDirSign(defaultDirSign)
@@ -2015,11 +2018,12 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * @param {object} frame  - { grid_origin, axis_dir, frame_right, frame_up }
      * @param {object} [opts] - { plane, continuation }
      */
-    showDeformed(frame, { plane = 'XY', continuation = false, refHelixId = null, defaultDirSign = 1 } = {}) {
+    showDeformed(frame, { plane = 'XY', continuation = false, refHelixId = null, defaultDirSign = 1, sourceBp = null } = {}) {
       _dynBounds        = null
       _baseBounds       = null
       _deformedFrame    = frame
       _refHelixId       = refHelixId
+      _deformedSourceBp = sourceBp
       _plane            = plane
       _continuationMode = !!continuation
       _latticeMode      = true

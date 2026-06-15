@@ -448,6 +448,364 @@ def read_configuration(
     return result
 
 
+def read_configuration_full(
+    conf_path: str | Path,
+    design:    Design,
+) -> dict[tuple[str, int, str], dict]:
+    """
+    Read an oxDNA configuration (.dat) and return position + orientation per nuc.
+
+    Like ``read_configuration`` but also recovers the a1 (base-normal) and a3
+    (5′→3′) unit vectors from the file, so callers can both render faithful
+    orientation (display) and compute base-site positions (base-pair-retention
+    health).
+
+    Returns
+    -------
+    dict mapping (helix_id, bp_index, direction_str) → {
+        "backbone_position": np.ndarray (3,) nm,
+        "a1":                np.ndarray (3,) unit (backbone→base, cross-strand),
+        "a3":                np.ndarray (3,) unit (5′→3′ along chain),
+    }
+    For loop copies the last copy wins (matches ``read_configuration``).
+    """
+    order = _strand_nucleotide_order(design)
+    lines = Path(conf_path).read_text(encoding="utf-8").splitlines()
+    data_lines = [l for l in lines if l.strip() and not l.startswith(('t ', 'b ', 'E '))]
+
+    result: dict[tuple[str, int, str], dict] = {}
+    for i, key in enumerate(order):
+        if i >= len(data_lines):
+            break
+        parts = data_lines[i].split()
+        if len(parts) < 9:
+            continue
+        vals = [float(x) for x in parts[:9]]
+        pos_nm = np.array(vals[0:3]) * OXDNA_LENGTH_UNIT
+        a1 = np.array(vals[3:6])
+        a3 = np.array(vals[6:9])
+        result[key[:3]] = {
+            "backbone_position": pos_nm,
+            "a1": a1 / (np.linalg.norm(a1) + 1e-14),
+            "a3": a3 / (np.linalg.norm(a3) + 1e-14),
+        }
+
+    return result
+
+
+# oxDNA2 backbone-site offset from the centre of mass (model.h POS_MM_BACK1/2),
+# in oxDNA length units.  The .dat position is the CM; the backbone sits at
+# CM + POS_MM_BACK1·a1 + POS_MM_BACK2·a2 (a2 = a3 × a1).
+_POS_MM_BACK1: float = -0.34
+_POS_MM_BACK2: float = 0.3408
+
+
+def oxdna_backbone_site(cm_nm: np.ndarray, a1: np.ndarray, a3: np.ndarray) -> np.ndarray:
+    """Reconstruct a nucleotide's true backbone position (nm) from its centre of
+    mass + orientation, for display.  oxDNA stores the CM (which sits inward of the
+    backbone), so rendering the raw CM collapses the apparent helical diameter
+    (paired backbones ~1.0 nm apart instead of ~1.6 nm) and overlaps the base-pair
+    slabs.  This puts the rendered backbone where the real phosphate is."""
+    a2 = np.cross(a3, a1)
+    return cm_nm + (_POS_MM_BACK1 * a1 + _POS_MM_BACK2 * a2) * OXDNA_LENGTH_UNIT
+
+
+def _parse_box_nm(conf_path: str | Path) -> Optional[np.ndarray]:
+    """Read the oxDNA box edge lengths (`b = Lx Ly Lz`) → per-axis nm, or None."""
+    for line in Path(conf_path).read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if s.startswith("b"):
+            parts = s.replace("=", " ").split()
+            try:
+                return np.array([float(parts[1]), float(parts[2]), float(parts[3])]) * OXDNA_LENGTH_UNIT
+            except (IndexError, ValueError):
+                return None
+    return None
+
+
+def read_configuration_unwrapped(
+    conf_path:      str | Path,
+    design:         Design,
+    reference_path: str | Path,
+) -> dict[tuple[str, int, str], dict]:
+    """Read a relaxed oxDNA config and undo periodic-boundary wrapping for display.
+
+    oxDNA writes coordinates wrapped into the simulation box [0, L), so an intact
+    structure that straddles a box face (or whose centre-of-mass diffused into a
+    far image) renders as an exploded mess of beads scattered across the box.
+    This rebuilds whole molecules and re-seats them at the design location:
+
+      1. Connect all nucleotides by backbone bonds AND designed base pairs.  In an
+         origami (crossovers + WC pairs) this makes the whole structure ONE
+         connected component; a bundle with no crossovers is one component per
+         helix-duplex.
+      2. BFS each component, placing every neighbour at the minimum-image position
+         relative to its already-placed neighbour → the component is whole (never
+         torn — only whole-component box shifts happen).
+      3. Box-shift each whole component to the image nearest its centroid in
+         *reference_path* (the initial conf.dat), then **rigid-body superpose**
+         (Kabsch: best-fit rotation + translation) the whole assembly onto the
+         reference.  This removes the molecule's rigid-body diffusion (drift +
+         tumbling) — expected oxDNA MD motion — so the display shows the relaxed
+         structure in the design's original frame, with only the internal
+         relaxation visible (not the whole thing "thrown out of position").
+
+    Returns the same shape as ``read_configuration_full`` (positions nm + a1 + a3);
+    the a1/a3 orientation vectors are rotated by the same alignment.
+    """
+    relax = read_configuration_full(conf_path, design)
+    ref = read_configuration_full(reference_path, design)
+    box = _parse_box_nm(conf_path)
+    if box is None or not np.all(box > 0):
+        return relax
+    return unwrap_align_to_reference(relax, ref, design, box)
+
+
+def unwrap_align_to_reference(
+    relax: dict[tuple, dict],
+    ref:   dict[tuple, dict],
+    design: Design,
+    box:   np.ndarray,
+) -> dict[tuple, dict]:
+    """In-memory core of read_configuration_unwrapped: BFS-unwrap each bonded
+    component to whole, box-shift it toward its reference image, then Kabsch-align
+    the whole assembly onto *ref*.  Used for display AND per-frame RMSD."""
+    # Adjacency: backbone bonds + designed WC pairs (3-tuple keys present in relax).
+    adj: dict[tuple, list[tuple]] = {k: [] for k in relax}
+    for a, b in backbone_bond_pairs(design):
+        if a in relax and b in relax:
+            adj[a].append(b)
+            adj[b].append(a)
+    fwd = {(k[0], k[1]): k for k in relax if k[2] == "FORWARD"}
+    rev = {(k[0], k[1]): k for k in relax if k[2] == "REVERSE"}
+    for hb in set(fwd) & set(rev):
+        a, b = fwd[hb], rev[hb]
+        adj[a].append(b)
+        adj[b].append(a)
+
+    placed: dict[tuple, np.ndarray] = {}
+    for seed in relax:
+        if seed in placed:
+            continue
+        # BFS this component, unwrapping to whole.
+        comp = [seed]
+        placed[seed] = relax[seed]["backbone_position"].copy()
+        stack = [seed]
+        while stack:
+            u = stack.pop()
+            for v in adj[u]:
+                if v in placed:
+                    continue
+                p = relax[v]["backbone_position"].copy()
+                placed[v] = p - box * np.round((p - placed[u]) / box)
+                comp.append(v)
+                stack.append(v)
+        # Box-shift the whole component toward its reference image.
+        ref_keys = [k for k in comp if k in ref]
+        if ref_keys:
+            rc = np.mean([placed[k] for k in comp], axis=0)
+            oc = np.mean([ref[k]["backbone_position"] for k in ref_keys], axis=0)
+            shift = box * np.round((oc - rc) / box)
+            for k in comp:
+                placed[k] = placed[k] + shift
+
+    # Rigid-body superpose (Kabsch) the whole assembly onto the reference frame,
+    # so diffusion + tumbling are removed and only the internal relaxation shows.
+    keys = list(placed)
+    ref_all = [k for k in keys if k in ref]
+    if len(ref_all) >= 3:
+        P = np.array([placed[k] for k in ref_all])               # relaxed (mobile)
+        Q = np.array([ref[k]["backbone_position"] for k in ref_all])  # reference (target)
+        Pc, Qc = P.mean(0), Q.mean(0)
+        H = (P - Pc).T @ (Q - Qc)
+        U, _, Vt = np.linalg.svd(H)
+        d = np.sign(np.linalg.det(Vt.T @ U.T))
+        R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T                  # rotation: relaxed → reference
+        out: dict[tuple, dict] = {}
+        for k in keys:
+            v = relax[k]
+            out[k] = {
+                "backbone_position": R @ (placed[k] - Pc) + Qc,
+                "a1": R @ v["a1"],
+                "a3": R @ v["a3"],
+            }
+        return out
+
+    return {k: {**relax[k], "backbone_position": placed[k]} for k in keys}
+
+
+def read_trajectory_frames_full(
+    traj_path: str | Path,
+    design:    Design,
+) -> list[dict[tuple[str, int, str], dict]]:
+    """Parse every frame of an oxDNA trajectory (.dat) into a list of per-nucleotide
+    maps (same shape as read_configuration_full: position nm + a1 + a3).  Frames are
+    split on the ``t = …`` header lines."""
+    order = _strand_nucleotide_order(design)
+    lines = Path(traj_path).read_text(encoding="utf-8").splitlines()
+    starts = [i for i, l in enumerate(lines) if l.startswith("t ")]
+    frames: list[dict] = []
+    for fi, s in enumerate(starts):
+        e = starts[fi + 1] if fi + 1 < len(starts) else len(lines)
+        data = [l for l in lines[s:e] if l.strip() and not l.startswith(("t ", "b ", "E "))]
+        m: dict[tuple, dict] = {}
+        for i, key in enumerate(order):
+            if i >= len(data):
+                break
+            parts = data[i].split()
+            if len(parts) < 9:
+                continue
+            vals = [float(x) for x in parts[:9]]
+            a1 = np.array(vals[3:6]); a3 = np.array(vals[6:9])
+            m[key[:3]] = {
+                "backbone_position": np.array(vals[0:3]) * OXDNA_LENGTH_UNIT,
+                "a1": a1 / (np.linalg.norm(a1) + 1e-14),
+                "a3": a3 / (np.linalg.norm(a3) + 1e-14),
+            }
+        if m:
+            frames.append(m)
+    return frames
+
+
+def count_hbonds(
+    conf_path:         str | Path,
+    topology_path:     str | Path,
+    dnanalysis_bin:    str,
+    *,
+    salt_concentration: float = 0.5,
+    temperature:       str = "296K",
+    timeout:           int = 60,
+) -> Optional[int]:
+    """Count the actual Watson-Crick hydrogen bonds in *conf_path* using oxDNA's
+    own ``HBList`` observable (via the ``DNAnalysis`` binary built alongside oxDNA).
+
+    This is the ground-truth base-pair count — oxDNA's energy-based H-bond
+    detector, not a geometric proxy.  Returns the bond count, or None if
+    DNAnalysis is unavailable / fails (caller falls back to the geometric proxy).
+    """
+    import subprocess
+    import tempfile
+
+    conf_path = Path(conf_path).resolve()
+    topology_path = Path(topology_path).resolve()
+    inp = (
+        "backend = CPU\n"
+        f"conf_file = {conf_path}\n"
+        f"topology = {topology_path}\n"
+        f"trajectory_file = {conf_path}\n"
+        "interaction_type = DNA2\n"
+        f"salt_concentration = {salt_concentration}\n"
+        f"T = {temperature}\n"
+        "verlet_skin = 0.2\n"
+        # Modified backbone potential so DNAnalysis can load strained configs
+        # (NADOC backbone bonds start longer than oxDNA's standard FENE range).
+        "max_backbone_force = 5\n"
+        "max_backbone_force_far = 10\n"
+        "analysis_data_output_1 = {\n"
+        "name = stdout\n"
+        "print_every = 1\n"
+        "col_1 = {\n"
+        "type = hb_list\n"
+        "only_count = true\n"
+        "}\n"
+        "}\n"
+    )
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
+            fh.write(inp)
+            inp_path = fh.name
+        # Capture as bytes — DNAnalysis can emit non-UTF8 on stderr/stdout, which
+        # would crash text mode (and the health check).  Decode leniently.
+        result = subprocess.run(
+            [dnanalysis_bin, inp_path],
+            capture_output=True, timeout=timeout,
+        )
+        Path(inp_path).unlink(missing_ok=True)
+        stdout = result.stdout.decode("utf-8", errors="replace")
+        for line in stdout.splitlines():
+            if line.strip().isdigit():
+                return int(line.strip())
+        return None
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+
+
+def write_mutual_traps(
+    design: Design,
+    path:   str | Path,
+    *,
+    stiff:  float = 1.0,
+    r0:     float = 1.2,
+) -> int:
+    """Write an oxDNA external-forces file with mutual traps for every designed
+    Watson-Crick pair, and return the number of pairs trapped.
+
+    A NADOC-built structure starts at the coarse NADOC duplex geometry (backbones
+    ~1.9 nm apart), far outside oxDNA's base-pair H-bond range (~0.34 nm), so
+    oxDNA never forms the designed pairs and a free MD melts them.  Mutual traps
+    pull each WC partner pair together (toward CM-CM separation ``r0`` oxDNA units
+    with stiffness ``stiff``) during the relaxation MC/MD stages, so oxDNA forms
+    the bonds while the backbone relaxes into native geometry.  This is the
+    standard oxDNA relaxation aid (relaxation.html / oxView).
+
+    Designed pairs = (helix, bp) carrying both FORWARD and REVERSE nucleotides.
+    Particle indices are the 0-based topology order (``_strand_nucleotide_order``),
+    matching the .top file written by ``write_topology``.
+    """
+    order = _strand_nucleotide_order(design)
+    idx = {k: i for i, k in enumerate(order)}
+    fwd = {(k[0], k[1]): idx[k] for k in order if len(k) == 3 and k[2] == "FORWARD"}
+    rev = {(k[0], k[1]): idx[k] for k in order if len(k) == 3 and k[2] == "REVERSE"}
+    pairs = sorted(set(fwd) & set(rev))
+
+    blocks: list[str] = []
+    for key in pairs:
+        i, j = fwd[key], rev[key]
+        for a, b in ((i, j), (j, i)):   # symmetric: trap each toward the other
+            blocks.append(
+                "{\n"
+                "type = mutual_trap\n"
+                f"particle = {a}\n"
+                f"ref_particle = {b}\n"
+                f"stiff = {stiff}\n"
+                f"r0 = {r0}\n"
+                "PBC = 1\n"
+                "}\n"
+            )
+    Path(path).write_text("\n".join(blocks), encoding="utf-8")
+    return len(pairs)
+
+
+def backbone_bond_pairs(design: Design) -> list[tuple[tuple, tuple]]:
+    """
+    Return consecutive (3′-neighbour) backbone-bonded nucleotide key pairs.
+
+    Each pair is ((helix_id, bp, dir), (helix_id, bp, dir)) of two nucleotides
+    adjacent along a strand backbone.  Keys are the 3-tuple form (loop copies
+    collapsed to their base bp).  Used by the relaxation health check to measure
+    over-stretched backbone bonds (steric-clash proxy) on a relaxed config.
+    """
+    pairs: list[tuple[tuple, tuple]] = []
+    ls_lookup = _build_ls_lookup(design)
+    for strand in design.strands:
+        seq_keys: list[tuple] = []
+        for domain in strand.domains:
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp)
+            if domain.direction == Direction.FORWARD:
+                bp_range = range(lo, hi + 1)
+            else:
+                bp_range = range(hi, lo - 1, -1)
+            for bp in bp_range:
+                delta = ls_lookup.get((domain.helix_id, bp), 0)
+                if delta <= -1:
+                    continue
+                seq_keys.append((domain.helix_id, bp, domain.direction.value))
+        for a, b in zip(seq_keys, seq_keys[1:]):
+            pairs.append((a, b))
+    return pairs
+
+
 # ── oxDNA runner ──────────────────────────────────────────────────────────────
 
 

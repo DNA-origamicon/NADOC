@@ -110,7 +110,9 @@ describe('blunt-end Extrude (continuation)', () => {
     expect(deps.api.getDeformedFrame).toHaveBeenCalledWith(3, 4)
     expect(deps.slicePlane.showDeformed).toHaveBeenCalledWith(
       { some: 'frame' },
-      { plane: 'XZ', continuation: true, refHelixId: 4, defaultDirSign: 1 },
+      // sourceBp = continuationBp (bp 2 + openSide 1) → lets the backend re-place
+      // this segment after an upstream bend/twist is deleted/edited (Phase 2).
+      { plane: 'XZ', continuation: true, refHelixId: 4, defaultDirSign: 1, sourceBp: 3 },
     )
     expect(deps.slicePlane.showAtEnd).not.toHaveBeenCalled()
     expect(document.getElementById('mode-indicator').textContent).toContain('DEFORMED CONTINUATION')

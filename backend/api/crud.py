@@ -1908,6 +1908,13 @@ class BundleDeformedContinuationRequest(BaseModel):
     frame_up:    List[float]   # [x, y, z]
     plane: str = "XY"          # used for helix/strand ID naming only
     ref_helix_id: Optional[str] = None  # helix that opened the slice plane — used for cluster membership
+    # bp index at which the deformed frame was sampled. When present, the frame is
+    # RECOMPUTED server-side from the live design at this bp (instead of trusting the
+    # baked grid_origin/axis_dir/... fields), which makes the op replayable: if an
+    # upstream bend/twist is later deleted or edited, re-running this continuation
+    # against the un-bent design re-derives a straight frame and re-places the
+    # segment. Legacy requests without source_bp fall back to the baked frame.
+    source_bp: Optional[int] = None
 
 
 class NickRequest(BaseModel):
@@ -2568,12 +2575,18 @@ def _build_extrude_deformed_continuation(d: Design, body: 'BundleDeformedContinu
     from backend.core.cluster_reconcile import MutationReport
     from backend.core.lattice import make_bundle_deformed_continuation
 
-    frame = {
-        "grid_origin": body.grid_origin,
-        "axis_dir":    body.axis_dir,
-        "frame_right": body.frame_right,
-        "frame_up":    body.frame_up,
-    }
+    # Prefer recomputing the deformed frame from the LIVE design at source_bp so the
+    # op is replayable (see BundleDeformedContinuationRequest.source_bp). Falls back
+    # to the baked frame for legacy requests that didn't send source_bp.
+    if body.source_bp is not None:
+        frame = deformed_frame_at_bp(d, body.source_bp, body.ref_helix_id)
+    else:
+        frame = {
+            "grid_origin": body.grid_origin,
+            "axis_dir":    body.axis_dir,
+            "frame_right": body.frame_right,
+            "frame_up":    body.frame_up,
+        }
     axes = deformed_helix_axes(d)
     deformed_endpoints = {ax["helix_id"]: {"start": ax["start"], "end": ax["end"]} for ax in axes}
     cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
@@ -11011,6 +11024,11 @@ def delete_feature(index: int, sub_index: int | None = None) -> dict:
             temp = _reconcile_cluster_joints_between(temp, post_design, pre_design)
 
     updated = _seek_feature_log(temp, new_cursor)
+    # Deleting a bend/twist must re-place any primitive that was appended onto the
+    # bent face (a deformed continuation bakes the deformed frame), so its geometry
+    # reflects the now-un-bent part. No-op when the design has no such continuation.
+    if entry.feature_type == 'deformation':
+        updated = _rebuild_deformed_continuations(updated)
     design_state.set_design(updated)
     report = validate_design(updated)
     # Use the same fast-path picker as undo/redo/seek so deleting a cluster_op
@@ -11379,6 +11397,10 @@ def _edit_deformation_feature(
     updated = design.copy_with(
         deformations=rebuilt_ops, feature_log=new_log, feature_log_cursor=-1,
     )
+    # Editing a bend/twist (e.g. changing its angle) must re-place any primitive
+    # appended onto the bent face so it tracks the new deformation. No-op when the
+    # design has no deformed continuation.
+    updated = _rebuild_deformed_continuations(updated)
     design_state.set_design(updated)
     report = _validate_design(updated)
     return _design_replace_response(design, updated, report)
@@ -11534,6 +11556,28 @@ def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
         if not isinstance(entry, _RoutingClusterLogEntry):
             raise HTTPException(400, detail="sub_index is only valid for Fine Routing cluster entries.")
         return _revert_before_routing_child(design, log, index, entry, sub_index)
+
+    # Delta entries (deformation / cluster_op / overhang_rotation) carry no
+    # baked pre-state snapshot — their effect is reconstructed by replaying the
+    # log. "Revert to before" such an entry therefore means: truncate the log to
+    # [0..index-1] and re-seek to the end, which rebuilds the topology base from
+    # the last surviving snapshot and re-derives the deformation / cluster /
+    # overhang overlays WITHOUT this entry (and without every entry after it).
+    # Same user-facing contract as snapshot revert; Ctrl-Z restores.
+    if entry.feature_type in ('deformation', 'cluster_op', 'overhang_rotation'):
+        truncated = design.copy_with(feature_log=log[:index])
+        if log[:index]:
+            restored = _seek_feature_log(truncated, -1)
+        else:
+            # Truncated to an empty log → no features active. _seek_feature_log's
+            # empty-log fast path skips the overlay rebuild, leaving the now-
+            # removed deformation in place, so seek to the -2 (no-features) state
+            # which clears the deformation / cluster / overhang overlays, then
+            # pin the cursor to -1 to match snapshot-revert-to-F0 semantics.
+            restored = _seek_feature_log(truncated, -2).copy_with(feature_log_cursor=-1)
+        design_state.set_design(restored)
+        report = validate_design(restored)
+        return _design_response_with_geometry(restored, report)
 
     # Pull pre-state bytes from whichever payload type this is.
     if isinstance(entry, _SnapshotLogEntry):
@@ -11717,6 +11761,90 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
         photoproduct_junctions=snap_design.photoproduct_junctions,
         forced_ligations=snap_design.forced_ligations,
     )
+
+
+def _rebuild_deformed_continuations(design: Design) -> Design:
+    """Re-run every ``extrude-deformed-continuation`` feature so its baked geometry
+    reflects the CURRENT deformation set.
+
+    Call this after a bend/twist is DELETED or EDITED. A deformed continuation
+    (a primitive appended onto a BENT face) bakes the deformed cross-section frame
+    into its new helices, so removing the upstream bend would otherwise leave the
+    appended segment dangling at the old bent position. This forward-replays the
+    log from the first deformed-continuation entry, threading a base design forward:
+
+      * deformation deltas → folded into the evolving deformation overlay so each
+        continuation's frame is recomputed against the right bends/twists;
+      * deformed-continuation snapshots → re-run via the live builder (which now
+        recomputes the frame from ``source_bp``), re-placing the segment and
+        rewriting the entry's baked pre/post snapshots;
+      * other replayable snapshots (extrude-segment/continuation, overhang-extrude)
+        → re-run so segments stacked on top of a re-placed continuation follow it;
+      * cluster_op / overhang_rotation deltas → skipped here (they're geometric
+        overlays re-applied by the seek logic, not topology);
+      * non-replayable snapshots (auto-*, circle-segment) → accept their baked
+        post-state and continue (best-effort; they don't bake a deformed frame).
+
+    Legacy continuations whose entry has no ``source_bp`` can't recompute a frame,
+    so they re-run with their baked frame (no re-placement) — graceful degradation.
+
+    Only the topology-bearing fields are swapped back into ``design``; its
+    deformation / cluster / overhang overlays and cursor are preserved.
+    """
+    from backend.core.models import SnapshotLogEntry as _SnapshotLogEntry
+
+    log = list(design.feature_log)
+    dc_idxs = [
+        i for i, e in enumerate(log)
+        if isinstance(e, _SnapshotLogEntry)
+        and e.op_kind == 'extrude-deformed-continuation'
+        and not e.evicted
+        and e.design_snapshot_gz_b64
+    ]
+    if not dc_idxs:
+        return design
+
+    first = dc_idxs[0]
+    # Base topology = the first continuation's stored PRE-state (base helices are
+    # canonical; the bend was only ever an overlay). Override its deformation
+    # overlay with the CURRENT active set up to that point so frames recompute
+    # against the surviving bends/twists.
+    state = design_state.decode_design_snapshot(log[first].design_snapshot_gz_b64)
+    defs_before = [
+        e.op_snapshot for e in log[:first]
+        if e.feature_type == 'deformation' and e.op_snapshot is not None
+    ]
+    state = state.copy_with(deformations=defs_before)
+
+    new_log = list(log)
+    for i in range(first, len(log)):
+        e = log[i]
+        if e.feature_type == 'deformation':
+            if e.op_snapshot is not None:
+                state = state.copy_with(deformations=list(state.deformations) + [e.op_snapshot])
+            continue
+        if not isinstance(e, _SnapshotLogEntry):
+            continue  # cluster_op / overhang_rotation deltas — overlays, not topology
+        if e.evicted or not e.post_state_gz_b64:
+            continue
+        pre_b64, pre_size = design_state.encode_design_snapshot(state)
+        try:
+            new_post = _edit_dispatch_run(e.op_kind, state, e.params)
+        except (HTTPException, ValidationError, ValueError):
+            # Non-replayable (auto-*, circle-segment, schema drift) — keep its baked
+            # post-state as the base for whatever follows and move on.
+            state = _topology_substitute(state, design_state.decode_design_snapshot(e.post_state_gz_b64))
+            continue
+        post_b64, post_size = design_state.encode_design_snapshot(new_post)
+        new_log[i] = e.model_copy(update={
+            'design_snapshot_gz_b64': pre_b64,
+            'snapshot_size_bytes':    pre_size,
+            'post_state_gz_b64':      post_b64,
+            'post_state_size_bytes':  post_size,
+        })
+        state = new_post
+
+    return _topology_substitute(design, state).copy_with(feature_log=new_log)
 
 
 def _seek_snapshot_base(design: Design, position: int, sub_position: int | None = None) -> Design:

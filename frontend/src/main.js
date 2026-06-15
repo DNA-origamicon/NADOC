@@ -187,6 +187,8 @@ import { initMdPanel }    from './ui/md_panel.js'
 import { initReprOptionSliders } from './ui/repr_option_sliders.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
+import { initOxdnaDisplay } from './ui/oxdna_display.js'
+import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
 import { createPhotoRenderer } from './scene/photo_renderer.js'
 import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
@@ -1256,49 +1258,7 @@ async function main() {
     })
   }
 
-  _initCollapsiblePanel('oxdna-heading',   'oxdna-body',   'oxdna-arrow',   true, 'dynamics', 'oxdna-section')
-
-  // ── oxDNA controls ───────────────────────────────────────────────────────────
-  ;(function _initOxdnaControls() {
-    const stepsSlider = document.getElementById('pl-oxdna-steps')
-    const stepsVal    = document.getElementById('pv-oxdna-steps')
-    const statusEl    = document.getElementById('oxdna-status')
-    const exportBtn   = document.getElementById('btn-oxdna-export')
-    const runBtn      = document.getElementById('btn-oxdna-run')
-
-    stepsSlider?.addEventListener('input', () => {
-      stepsVal.textContent = stepsSlider.value
-    })
-
-    exportBtn?.addEventListener('click', async () => {
-      statusEl.textContent = 'Preparing ZIP…'
-      exportBtn.disabled = true
-      const ok = await api.exportOxdna()
-      statusEl.textContent = ok ? 'ZIP downloaded.' : 'Export failed — check console.'
-      exportBtn.disabled = false
-    })
-
-    runBtn?.addEventListener('click', async () => {
-      const steps = parseInt(stepsSlider?.value ?? '10000', 10)
-      statusEl.textContent = `Running oxDNA (${steps} steps)…`
-      runBtn.disabled = true
-      const result = await api.runOxdna(steps)
-      runBtn.disabled = false
-      if (!result) {
-        statusEl.textContent = 'Request failed — is design loaded?'
-        return
-      }
-      if (!result.available) {
-        statusEl.textContent = 'Not installed. Use Export ZIP instead.'
-        return
-      }
-      statusEl.textContent = result.message
-      if (result.positions?.length) {
-        // Overlay relaxed positions via the shared mrDNA relaxed-position path.
-        designRenderer.applyFemPositions(result.positions)
-      }
-    })
-  })()
+  // oxDNA controls consolidated into the single #oxdna-jobs-panel (initOxdnaJobsPanel).
 
   // ── Bend/Twist deformation editor ──────────────────────────────────────────
 
@@ -1508,6 +1468,8 @@ async function main() {
   // ── 2D Unfold view ──────────────────────────────────────────────────────────
   // bluntEnds is initialized below; use a getter so unfoldView can call it lazily.
   const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, null)
+  // Crossover arcs (owned by unfold_view) follow applyFemPositions (mrDNA/oxDNA display).
+  designRenderer.setFemArcUpdater?.((updates) => unfoldView.applyFemArcs(updates))
 
   // ── Cadnano mode ─────────────────────────────────────────────────────────
   const cadnanoView = initCadnanoView(sceneCtx, designRenderer, () => unfoldView, () => sequenceOverlay, null, () => slicePlane, () => bluntEnds, () => loopSkipHighlight)
@@ -1805,6 +1767,10 @@ async function main() {
   const mdDisplayController = initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
   initMdJobsPanel({ mdDisplayController, getWorkspacePath: () => _workspacePath })
 
+  // ── oxDNA relaxation panel + display (deforms NADOC model to relaxed CG) ──────
+  const oxdnaDisplay = initOxdnaDisplay({ designRenderer, api })
+  initOxdnaJobsPanel({ oxdnaDisplay, getWorkspacePath: () => _workspacePath })
+
   const periodicMdOverlay = initPeriodicMdOverlay(scene)
   initPeriodicMdPanel(store, {
     periodicMdOverlay,
@@ -2089,7 +2055,7 @@ async function main() {
   // the time they fire). Mirrors the `let clusterPanel = null` pattern.
   let _extrudePanel = null
   const slicePlane = initSlicePlane(scene, camera, canvas, controls, {
-    onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, newBundle, latticeType = 'HONEYCOMB', deformedFrame, refHelixId, strandFilter = 'both', ligateAdjacent = true }) => {
+    onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, newBundle, latticeType = 'HONEYCOMB', deformedFrame, refHelixId, sourceBp = null, strandFilter = 'both', ligateAdjacent = true }) => {
       let result
       if (newBundle) {
         // Preserve the user's design name across bundle creation — _fileName is set
@@ -2098,7 +2064,7 @@ async function main() {
         const bundleName = _fileName ?? store.getState().currentDesign?.metadata?.name
         result = await api.createBundle({ cells, lengthBp, plane, strandFilter, latticeType, ligateAdjacent, ...(bundleName ? { name: bundleName } : {}) })
       } else if (deformedFrame) {
-        result = await api.addBundleDeformedContinuation({ cells, lengthBp, plane, frame: deformedFrame, refHelixId })
+        result = await api.addBundleDeformedContinuation({ cells, lengthBp, plane, frame: deformedFrame, refHelixId, sourceBp })
       } else if (continuationMode) {
         result = await api.addBundleContinuation({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent })
       } else {
@@ -2147,14 +2113,14 @@ async function main() {
     // exit (one placement per selection). cells are already lattice-translated. A
     // circle carries per-cell lengths (centred disc) → circle-segment route; a
     // uniform primitive carries one lengthBp → bundle-segment route.
-    onPlace: async ({ cells, lengthBp, cellLengths, plane, offsetNm, strandFilter, ligateAdjacent, continuationMode, deformedFrame, refHelixId }) => {
+    onPlace: async ({ cells, lengthBp, cellLengths, plane, offsetNm, strandFilter, ligateAdjacent, continuationMode, deformedFrame, refHelixId, sourceBp = null }) => {
       // continuationMode → placed on an existing part's face: cells over existing
       // helix-ends extend them, fresh cells make new helices. A bent face carries a
       // deformedFrame. Otherwise it's an origin-plane placement (circle → circle-
       // segment; beam → bundle-segment).
       const result = continuationMode
         ? deformedFrame
-          ? await api.addBundleDeformedContinuation({ cells, lengthBp, plane, frame: deformedFrame, refHelixId })
+          ? await api.addBundleDeformedContinuation({ cells, lengthBp, plane, frame: deformedFrame, refHelixId, sourceBp })
           : await api.addBundleContinuation({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent })
         : cellLengths
           ? await api.addCircleSegment({ cells, cellLengths, plane, offsetNm, strandFilter, ligateAdjacent })
@@ -2968,7 +2934,7 @@ async function main() {
     'selection-filter-section', 'properties-section',
     'blunt-panel', 'deform-panel', 'strand-hist-section',
     'groups-panel', 'overhang-panel',
-    'oxdna-section', 'md-panel',
+    'oxdna-jobs-panel', 'md-panel',
     'repr-options-section', 'reset-btn',
   ]
   let _savedDesignPanelDisplay = {}

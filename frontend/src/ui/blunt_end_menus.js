@@ -68,7 +68,7 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
       const frame = await api.getDeformedFrame(continuationBp, helixId)
       if (frame) {
         extrudePanel?.activate('deformed', { plane })
-        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId, defaultDirSign: info.openSide })
+        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId, defaultDirSign: info.openSide, sourceBp: continuationBp })
         document.getElementById('mode-indicator').textContent =
           'DEFORMED CONTINUATION — amber = extend existing strand · select cells → Extrude · Esc to close'
         return
@@ -96,7 +96,7 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
       // Bent end → place onto the DEFORMED cross-section frame (same path as the
       // deformed blunt-end continuation).
       const frame = await api.getDeformedFrame(continuationBp, helixId)
-      armed = frame && slicePlane.showPlacementDeformed(frame, { plane, refHelixId: helixId, defaultDirSign: info.openSide })
+      armed = frame && slicePlane.showPlacementDeformed(frame, { plane, refHelixId: helixId, defaultDirSign: info.openSide, sourceBp: continuationBp })
     } else {
       armed = slicePlane.showPlacementAtEnd(helixId, continuationBp, { defaultDirSign: info.openSide })
     }
@@ -152,7 +152,7 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
       const frame = await api.getDeformedFrame(continuationBp, helixId)
       if (frame) {
         extrudePanel?.activate('deformed', { plane })
-        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId, defaultDirSign: info.openSide })
+        slicePlane.showDeformed(frame, { plane, continuation: true, refHelixId: helixId, defaultDirSign: info.openSide, sourceBp: continuationBp })
         document.getElementById('mode-indicator').textContent =
           'DEFORMED CONTINUATION — amber = extend existing strand · select cells → Extrude · Esc to close'
         return

@@ -3408,25 +3408,102 @@
           </div>
 
 
-          <!-- oxDNA controls (collapsible) -->
-          <div class="panel-section" id="oxdna-section">
-            <h2 id="oxdna-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+          <!-- ── oxDNA (single consolidated panel: relaxation + production + display) ──── -->
+          <div class="panel-section" id="oxdna-jobs-panel">
+            <h2 id="oxdna-jobs-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
               <span>oxDNA</span>
-              <span id="oxdna-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+              <span id="oxdna-jobs-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
             </h2>
-            <div id="oxdna-body" style="display:none;margin-top:8px">
-              <div class="slider-row">
-                <label>Steps</label>
-                <span class="val" id="pv-oxdna-steps">10000</span>
-                <input type="range" id="pl-oxdna-steps" min="1000" max="100000" step="1000" value="10000">
+            <div id="oxdna-jobs-body" style="display:none;margin-top:8px">
+
+              <!-- availability badge -->
+              <div id="oxdna-jobs-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
+
+              <!-- launch (current design): Relax + Production side by side (mirrors MD) -->
+              <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+                <button id="oxdna-jobs-run-btn" disabled
+                        style="flex:1;font-size:var(--text-xs);padding:5px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer;font-weight:600">
+                  ▶ Relax
+                </button>
+                <button id="oxdna-jobs-prod-btn" disabled
+                        style="flex:1;font-size:var(--text-xs);padding:5px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
+                  Start Production
+                </button>
               </div>
-              <div style="display:flex;gap:6px;margin-top:6px">
-                <button id="btn-oxdna-export" style="flex:1;font-size:var(--text-xs);padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Export ZIP</button>
-                <button id="btn-oxdna-run"    style="flex:1;font-size:var(--text-xs);padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Run oxDNA</button>
+              <!-- production parameters (enabled once a relaxation completes) -->
+              <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center;margin-bottom:6px">
+                <label for="oxdna-jobs-prod-steps" style="font-size:var(--text-xs);color:#8b949e">Production steps</label>
+                <input id="oxdna-jobs-prod-steps" type="number" value="5000000" min="1000" max="200000000" step="1000000"
+                       style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
               </div>
-              <div id="oxdna-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+              <div id="oxdna-jobs-prod-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
+
+              <!-- advanced drawer -->
+              <div style="margin-bottom:6px">
+                <div id="oxdna-jobs-adv-toggle" style="cursor:pointer;user-select:none;font-size:var(--text-xs);color:#8b949e;display:flex;align-items:center;gap:4px">
+                  <span id="oxdna-jobs-adv-arrow" style="display:inline-block;transition:transform .15s">▸</span><span>Advanced</span>
+                </div>
+                <div id="oxdna-jobs-adv-body" style="display:none;margin-top:5px;display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
+                  <label style="font-size:var(--text-xs);color:#8b949e">Backend</label>
+                  <select id="oxdna-jobs-backend" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <option value="CUDA">CUDA (GPU)</option>
+                    <option value="CPU">CPU</option>
+                  </select>
+                  <label style="font-size:var(--text-xs);color:#8b949e">CUDA device</label>
+                  <input id="oxdna-jobs-device" type="text" value="0" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  <label style="font-size:var(--text-xs);color:#8b949e">Salt (M)</label>
+                  <input id="oxdna-jobs-salt" type="number" value="0.5" min="0.01" step="0.05" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  <label style="font-size:var(--text-xs);color:#8b949e">MC steps</label>
+                  <input id="oxdna-jobs-mc-steps" type="number" value="1000" min="100" step="500" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  <label style="font-size:var(--text-xs);color:#8b949e">MD relax steps</label>
+                  <input id="oxdna-jobs-md-steps" type="number" value="1000000" min="100" step="100000" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  <label style="font-size:var(--text-xs);color:#8b949e">Equil steps</label>
+                  <input id="oxdna-jobs-equil-steps" type="number" value="100000" min="100" step="10000" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  <label style="font-size:var(--text-xs);color:#8b949e">Bp gate</label>
+                  <input id="oxdna-jobs-bp-gate" type="number" value="0.5" min="0" max="1" step="0.05" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                </div>
+              </div>
+
+              <!-- show-all toggle -->
+              <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
+                <input id="oxdna-jobs-show-all" type="checkbox"> Show jobs for all designs
+              </label>
+
+              <!-- scrollable jobs list -->
+              <div id="oxdna-jobs-list" style="max-height:140px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;padding:3px;margin-bottom:6px"></div>
+
+              <!-- detail -->
+              <div id="oxdna-jobs-detail" style="display:none">
+                <div id="oxdna-jobs-detail-status" style="font-size:var(--text-xs);margin-bottom:4px;min-height:14px"></div>
+                <div id="oxdna-jobs-progress" style="margin-bottom:6px"></div>
+                <div id="oxdna-jobs-timeline" style="margin-bottom:4px"></div>
+                <div id="oxdna-jobs-health"></div>
+                <div id="oxdna-jobs-detail-error" style="display:none;font-size:var(--text-xs);color:#d9534f;margin-top:5px"></div>
+                <div style="display:flex;gap:5px;margin-top:6px">
+                  <button id="oxdna-jobs-start-btn" style="display:none;flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Start</button>
+                  <button id="oxdna-jobs-stop-btn"  style="display:none;flex:1;font-size:var(--text-xs);padding:4px;background:#3a1a1a;border:1px solid #d9534f;color:#d9534f;border-radius:3px;cursor:pointer">Stop</button>
+                  <button id="oxdna-jobs-delete-btn" style="flex:1;font-size:var(--text-xs);padding:4px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Delete</button>
+                </div>
+                <!-- display toggle -->
+                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:pointer">
+                  <input id="oxdna-jobs-display-toggle" type="checkbox"> OxDNA display
+                </label>
+                <div id="oxdna-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                <!-- RMSD (enabled after a production run) -->
+                <button id="oxdna-jobs-rmsd-btn" disabled
+                        style="width:100%;font-size:var(--text-xs);padding:4px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;margin-top:8px">
+                  Show RMSD
+                </button>
+                <div id="oxdna-jobs-rmsd-result" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+              </div>
+
+              <!-- manual export (run oxDNA yourself from the ZIP) -->
+              <button id="oxdna-jobs-export-btn"
+                      style="width:100%;font-size:var(--text-xs);padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer;margin-top:8px">
+                Export oxDNA ZIP
+              </button>
             </div>
-          </div><!-- /oxdna-section -->
+          </div><!-- /oxdna-jobs-panel -->
 
           <!-- ── MD relaxation panel (job launcher + live progress) ───────── -->
           <div class="panel-section" id="md-jobs-panel">
