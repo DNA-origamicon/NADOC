@@ -1940,6 +1940,11 @@ export const getOxdnaHealth      = (id)          => _oxdnaJSON('GET',  `/oxdna/j
 export const getOxdnaMetrics     = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/metrics`)
 export const getOxdnaDisplay     = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/display`)
 export const getOxdnaRmsd        = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsd`)
+export const getOxdnaRmsf         = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsf`)
+
+/** Create a NAMD MD job (routes_md.py).  Pass {oxdna_job_id} to seed the run
+ *  from a completed oxDNA job's relaxed coordinates instead of ideal B-DNA. */
+export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)
 
 // ── Cluster rigid transforms ──────────────────────────────────────────────────
 

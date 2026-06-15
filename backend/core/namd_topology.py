@@ -10,10 +10,10 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from backend.core.atomistic import Atom, build_atomistic_model
+from backend.core.atomistic import Atom, AtomisticModel, build_atomistic_model
 from backend.core.md_charge import audit_psf
 from backend.core.models import Design
-from backend.core.pdb_export import _chain_char, _cryst1_record, _h36, _psf_segid
+from backend.core.pdb_export import _chain_char, _cryst1_record, _h36
 
 
 _FF_DIR = Path(__file__).parent.parent / "data" / "forcefield"
@@ -94,24 +94,46 @@ def _psfgen_atom_name(atom: Atom) -> str:
     return _ATOM_TO_CHARMM.get(atom.name, atom.name)
 
 
-def _psfgen_pdb_record(atom: Atom, serial: int) -> str:
+_B36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+def _psfgen_segid(index: int) -> str:
+    """Unique 4-char psfgen segment name for the *index*-th DNA chain.
+
+    psfgen/NAMD segnames are short fixed-width fields; the old ``_psf_segid()[:4]``
+    truncation collapsed many strands onto the same name (e.g. chains ``A``/``AA``/
+    ``AB`` all → ``DNAA``), which overwrote the shared ``DNAA.pdb`` and emitted
+    duplicate ``segment DNAA`` blocks with mismatched residue counts → psfgen
+    "no residue N" FATAL.  ``D`` + 3 base-36 digits gives 46 656 unique names.
+    """
+    a = _B36[(index // 1296) % 36]
+    b = _B36[(index // 36) % 36]
+    c = _B36[index % 36]
+    return f"D{a}{b}{c}"
+
+
+def _psfgen_pdb_record(atom: Atom, serial: int, segid: str) -> str:
     atom_name = _psfgen_atom_name(atom)
     resname = _psfgen_resname(atom)
     chain = _chain_char(atom.chain_id)
-    segid = _psf_segid(atom.chain_id)[:4]
     x_ang = atom.x * 10.0
     y_ang = atom.y * 10.0
     z_ang = atom.z * 10.0
     return (
-        f"ATOM  {serial:5d} {_pdb_atom_name(atom_name, atom.element)} {resname:>3s} {chain}"
+        f"ATOM  {_h36(serial, 5)} {_pdb_atom_name(atom_name, atom.element)} {resname:>3s} {chain}"
         f"{_h36(atom.seq_num, 4)}    "
         f"{x_ang:8.3f}{y_ang:8.3f}{z_ang:8.3f}"
         f"  1.00  0.00      {segid:<4s}{atom.element:>2s}  "
     )
 
 
-def _write_segment_pdbs(design: Design, tmpdir: Path) -> tuple[list[dict], str]:
-    model = build_atomistic_model(design)
+def _write_segment_pdbs(
+    design: Design,
+    tmpdir: Path,
+    model: AtomisticModel | None = None,
+) -> tuple[list[dict], str]:
+    if model is None:
+        model = build_atomistic_model(design)
     atoms_by_chain: dict[str, list[Atom]] = {}
     for atom in model.atoms:
         atoms_by_chain.setdefault(atom.chain_id, []).append(atom)
@@ -122,9 +144,11 @@ def _write_segment_pdbs(design: Design, tmpdir: Path) -> tuple[list[dict], str]:
     ]
     segments: list[dict] = []
     serial = 1
-    for chain_id, atoms in sorted(atoms_by_chain.items(), key=lambda item: item[0]):
+    for seg_index, (chain_id, atoms) in enumerate(
+        sorted(atoms_by_chain.items(), key=lambda item: item[0])
+    ):
         atoms = sorted(atoms, key=lambda a: (a.seq_num, a.serial))
-        segid = _psf_segid(chain_id)[:4]
+        segid = _psfgen_segid(seg_index)   # unique 4-char psfgen segname (no [:4] collisions)
         residues = sorted({a.seq_num for a in atoms})
         if not residues:
             continue
@@ -133,13 +157,13 @@ def _write_segment_pdbs(design: Design, tmpdir: Path) -> tuple[list[dict], str]:
             _cryst1_record(atoms, margin_nm=1.2),
         ]
         for atom in atoms:
-            line = _psfgen_pdb_record(atom, serial)
+            line = _psfgen_pdb_record(atom, serial, segid)
             seg_lines.append(line)
             full_lines.append(line)
             serial += 1
         last = atoms[-1]
         seg_lines.append(
-            f"TER   {serial:5d}      {_psfgen_resname(last):>3s} "
+            f"TER   {_h36(serial, 5)}      {_psfgen_resname(last):>3s} "
             f"{_chain_char(last.chain_id)}{_h36(last.seq_num, 4)}"
         )
         full_lines.append(seg_lines[-1])
@@ -196,20 +220,29 @@ def _psfgen_script(segments: list[dict], output_prefix: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build_charmm_psfgen_topology(design: Design, *, psfgen_path: str | None = None) -> CharmmTopologyBuild:
+def build_charmm_psfgen_topology(
+    design: Design,
+    *,
+    psfgen_path: str | None = None,
+    atomistic_model: AtomisticModel | None = None,
+) -> CharmmTopologyBuild:
     """Build a full all-hydrogen CHARMM DNA PSF/PDB with psfgen.
 
     This follows the working AutoNAMD NAMD-side topology convention:
     CHARMM residue names (ADE/CYT/GUA/THY), 5TER/3TER strand termini,
     DEO5 on the 5-prime residue, DEOX on internal/3-prime residues, and
     psfgen guesscoord for hydrogens.
+
+    ``atomistic_model`` (optional) supplies pre-built heavy-atom coordinates —
+    pass an oxDNA-relaxed model so psfgen starts from relaxed backbone positions
+    instead of ideal B-DNA (the Phase-2 NAMD seed).  Default: build ideal B-DNA.
     """
     if not _TOP_ALL36_NA.exists():
         raise RuntimeError(f"Missing CHARMM NA topology file: {_TOP_ALL36_NA}")
     psfgen = psfgen_path or find_psfgen()
     with tempfile.TemporaryDirectory(prefix="nadoc_psfgen_") as raw_tmp:
         tmpdir = Path(raw_tmp)
-        segments, input_pdb = _write_segment_pdbs(design, tmpdir)
+        segments, input_pdb = _write_segment_pdbs(design, tmpdir, atomistic_model)
         if not segments:
             raise RuntimeError("No DNA segments found for psfgen topology build.")
         out_prefix = tmpdir / "nadoc_charmm"

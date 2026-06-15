@@ -1684,6 +1684,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     const n = entry.nuc
     _keyToEntry.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, entry)
   }
+  // Per-instance colour captured before a scalar (RMSF) recolour overlay (beads +
+  // cones + slabs), so it can be restored when the overlay is cleared.  null = no
+  // overlay active.
+  let _savedScalarColors = null
+  const _scalarColorScratch = new THREE.Color()
+  function _flagScalarColorMeshes() {
+    for (const m of [iSpheres, iCubes, iCones, iSlabs]) {
+      if (m && m.instanceColor) m.instanceColor.needsUpdate = true
+    }
+  }
   // key string → slab entry (for surgical per-bead overrides, e.g. overhang
   // unzip animation that moves only a handful of beads each frame).
   const _keyToSlab = new Map()
@@ -3255,6 +3265,59 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iSlabs.setMatrixAt(slab.id, _tMatrix)
       }
       iSlabs.instanceMatrix.needsUpdate = true
+    },
+
+    /**
+     * Recolour by a per-base scalar (the oxDNA flexibility map): backbone beads
+     * AND their base-pair slabs AND direction cones all take the colour of their
+     * nucleotide, so the whole representation reads as one rigid→flexible map.
+     * `colorByKey` maps "helix_id:bp_index:direction" → hex int.  The current
+     * colour of every recoloured instance is captured once (keyed by
+     * mesh-uuid:instance-id) so clearScalarColors() restores the prior colours
+     * exactly — including any live strand/group overrides — with no rebuild.
+     */
+    applyScalarColors(colorByKey) {
+      if (!colorByKey) return
+      const get = colorByKey instanceof Map
+        ? (k) => colorByKey.get(k)
+        : (k) => colorByKey[k]
+      if (!_savedScalarColors) _savedScalarColors = new Map()
+      const recolor = (mesh, id, hex) => {
+        const tok = `${mesh.uuid}:${id}`
+        if (!_savedScalarColors.has(tok) && mesh.instanceColor) {
+          mesh.getColorAt(id, _scalarColorScratch)
+          _savedScalarColors.set(tok, { mesh, id, hex: _scalarColorScratch.getHex() })
+        }
+        mesh.setColorAt(id, _tColor.setHex(hex))
+      }
+      for (const [key, entry] of _keyToEntry) {
+        const hex = get(key)
+        if (hex === undefined || hex === null) continue
+        recolor(entry.instMesh, entry.id, hex)
+      }
+      for (const cone of coneEntries) {
+        const n = cone.fromNuc
+        const hex = get(`${n.helix_id}:${n.bp_index}:${n.direction}`)
+        if (hex === undefined || hex === null) continue
+        recolor(cone.instMesh, cone.id, hex)
+      }
+      for (const slab of slabEntries) {
+        const n = slab.nuc
+        const hex = get(`${n.helix_id}:${n.bp_index}:${n.direction}`)
+        if (hex === undefined || hex === null) continue
+        recolor(slab.instMesh, slab.id, hex)
+      }
+      _flagScalarColorMeshes()
+    },
+
+    /** Restore the colours captured before the scalar-colour overlay. */
+    clearScalarColors() {
+      if (!_savedScalarColors) return
+      for (const { mesh, id, hex } of _savedScalarColors.values()) {
+        mesh.setColorAt(id, _tColor.setHex(hex))
+      }
+      _flagScalarColorMeshes()
+      _savedScalarColors = null
     },
 
     /**

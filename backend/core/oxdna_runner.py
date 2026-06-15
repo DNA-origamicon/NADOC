@@ -170,6 +170,68 @@ def _load_snapshot_design(job_dir: Path) -> Optional[Design]:
         return None
 
 
+# ── Phase 2: NAMD seed handoff ──────────────────────────────────────────────────
+
+@dataclass
+class NamdSeed:
+    """An oxDNA-relaxed structure ready to seed a NAMD run (Physical-layer only —
+    a NAMD INPUT artifact, never written back into Design topology)."""
+    design:          Design
+    atomistic_model: object         # AtomisticModel (imported lazily to avoid a heavy import here)
+    stage_name:      str            # oxDNA stage the coords came from (e.g. "3_equil")
+    conf_path:       Path           # the last_conf.dat used
+    source_job_id:   str
+
+
+def _latest_relaxed_conf(job: OxdnaJob, workspace_dir: Path) -> tuple[Optional[Path], Optional[str]]:
+    """Return (conf_path, stage_name) of the most-advanced stage that has a
+    ``last_conf.dat`` — the relaxed (or production) coordinates."""
+    for st in reversed(job.stages):
+        cand = job.stage_dir(workspace_dir, st.name) / "last_conf.dat"
+        if cand.exists():
+            return cand, st.name
+    return None, None
+
+
+def build_namd_seed(job_id: str, workspace_dir: Path) -> NamdSeed:
+    """Build a NAMD starting-structure seed from a completed oxDNA job.
+
+    Reads the job's OWN ``design.json`` snapshot (never the live editor design —
+    they can differ) and the latest relaxed/production ``last_conf.dat``, then
+    reconstructs an atomistic model whose backbone is informed by the
+    oxDNA-relaxed coordinates.  Uses the true backbone site (~1.6 nm cross-pair,
+    near B-DNA) — NOT the raw oxDNA centre of mass — so the seeded duplex isn't
+    too thin (which would cause the very startup clashes we're preventing).
+
+    Raises FileNotFoundError if the snapshot or a relaxed conf is missing.
+    """
+    job = OxdnaJob.load(job_id, workspace_dir)
+    jd  = job.job_dir(workspace_dir)
+    design = _load_snapshot_design(jd)
+    if design is None:
+        raise FileNotFoundError(
+            f"oxDNA job {job_id} has no design.json snapshot; cannot build a NAMD seed."
+        )
+    conf_path, stage_name = _latest_relaxed_conf(job, workspace_dir)
+    if conf_path is None:
+        raise FileNotFoundError(
+            f"oxDNA job {job_id} has no relaxed last_conf.dat yet; run a relaxation first."
+        )
+
+    # Lazy import: cg_to_atomistic pulls scipy + atomistic; keep it off the
+    # module import path (the runner is imported by lightweight route code).
+    from backend.core.cg_to_atomistic import build_atomistic_model_from_cg_spline
+
+    model = build_atomistic_model_from_cg_spline(design, conf_path)
+    return NamdSeed(
+        design          = design,
+        atomistic_model = model,
+        stage_name      = stage_name,
+        conf_path       = conf_path,
+        source_job_id   = job_id,
+    )
+
+
 # ── Progress ──────────────────────────────────────────────────────────────────
 
 def _stage_energy_lines(stage_dir: Path) -> int:
@@ -453,3 +515,64 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
             handle.loop.call_soon_threadsafe(handle.task.cancel)
         return True
     return False
+
+
+def reconcile_oxdna_status(
+    job: OxdnaJob,
+    workspace_dir: Path,
+    specs: Optional[list[OxdnaStageSpec]] = None,
+) -> OxdnaJob:
+    """Recover a detached job's status from disk after the runner thread died.
+
+    A job is marked ``running`` only while an in-process runner thread owns it.
+    If the backend restarts (or the thread otherwise dies) while oxDNA is mid-run,
+    the persisted status stays ``running`` forever and the finished production
+    run is never recognised (Show RMSD / Use-as-NAMD-seed stay disabled).
+
+    This inspects the stage outputs on disk: a stage whose ``energy.dat`` reached
+    its expected line count AND has a ``last_conf.dat`` physically finished, so we
+    mark it ``done``.  If every stage finished → ``completed``; if the active
+    stage was interrupted mid-run → ``stopped`` (resumable from there).  No-op for
+    any job that isn't an orphaned ``running`` one.  Idempotent.
+    """
+    if job.status != OxdnaStatus.running:
+        return job
+    if is_running(job.job_id):
+        return job  # a live runner owns it — leave it alone
+    if specs is None:
+        specs = load_stage_specs(job.job_dir(workspace_dir))
+    if not specs or len(specs) < len(job.stages):
+        return job  # can't size expectations; don't guess
+
+    interrupted = False
+    for idx, st in enumerate(job.stages):
+        if st.status == "done":
+            continue
+        sdir = job.stage_dir(workspace_dir, st.name)
+        expected = expected_energy_lines(specs[idx])
+        complete = (
+            (sdir / "last_conf.dat").exists()
+            and _stage_energy_lines(sdir) >= expected
+        )
+        if complete and st.status != "failed":
+            st.status = "done"
+        else:
+            interrupted = True
+            break
+
+    if all(s.status == "done" for s in job.stages):
+        job.status = OxdnaStatus.completed
+        job.current_stage_idx = len(job.stages)
+        job.error = None
+    elif interrupted:
+        # The runner died partway through a stage that never finished on disk.
+        job.status = OxdnaStatus.stopped
+        job.current_stage_idx = next(
+            (i for i, s in enumerate(job.stages) if s.status not in ("done",)),
+            len(job.stages),
+        )
+    else:
+        return job  # nothing changed (shouldn't happen — guarded above)
+
+    job.save(workspace_dir)
+    return job

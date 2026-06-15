@@ -19,8 +19,6 @@ from __future__ import annotations
 
 import io
 import json
-import math
-import re
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -288,48 +286,81 @@ def write_aksimentiev_enm_files(
     base_k: float = 0.5,
     scales: tuple[float, ...] = (0.5, 0.1, 0.01),
     cut_ang: float = 8.0,
-    residue_com_cut_ang: float = 30.0,
 ) -> dict[str, object]:
-    """Write tutorial-style base-ring ENM extraBonds files for all k scales."""
+    """Write tutorial-style base-ring ENM extraBonds files for all k scales.
+
+    Restraints connect base-ring atoms of DIFFERENT residues within ``cut_ang``.
+    A single atom-level KD-tree query finds them in C — the previous
+    residue-COM-prefilter + Python atom double-loop was both ~10× slower on large
+    designs AND buggy: when the PDB's 1-char chain column collided across many
+    strands (>62), two physical residues merged under one key, their centroid
+    landed far away, and the 30 Å COM prefilter silently dropped their valid
+    restraints.  Working on absolute atom positions avoids that entirely.
+    """
     residues = _parse_base_ring_residues(pdb_path)
     if not residues:
         raise RuntimeError(f"No DNA base-ring atoms found for ENM generation in {pdb_path}")
 
-    coms = np.array([res.com for res in residues], dtype=float)
-    residue_pairs = cKDTree(coms).query_pairs(residue_com_cut_ang, output_type="ndarray")
+    # Flatten every base-ring atom into parallel arrays (position, global 0-based
+    # atom index, owning-residue index).  One atom-level KD-tree query then finds
+    # ALL atom pairs within cut_ang in C — replacing the old O(residue_pairs × 81)
+    # Python double-loop (142M numpy.dot calls for a 5.7k-base origami → ~5 min).
+    pos_list: list[np.ndarray] = []
+    gidx_list: list[int] = []
+    rid_list: list[int] = []
+    for ri, res in enumerate(residues):
+        for idx, _name, pos in res.atoms:
+            pos_list.append(pos)
+            gidx_list.append(idx)
+            rid_list.append(ri)
+    positions = np.asarray(pos_list, dtype=float)
+    gidx = np.asarray(gidx_list, dtype=np.int64)
+    rid  = np.asarray(rid_list, dtype=np.int64)
 
-    base_records: list[tuple[int, int, float]] = []
-    for ri, rj in residue_pairs:
-        res_i = residues[int(ri)]
-        res_j = residues[int(rj)]
-        for idx_i, _name_i, pos_i in res_i.atoms:
-            for idx_j, _name_j, pos_j in res_j.atoms:
-                dist = math.sqrt(float(np.dot(pos_i - pos_j, pos_i - pos_j)))
-                if dist > cut_ang:
-                    continue
-                a, b = sorted((idx_i, idx_j))
-                base_records.append((a, b, dist))
+    pairs = cKDTree(positions).query_pairs(cut_ang, output_type="ndarray")
+    if len(pairs):
+        # Keep only INTER-residue pairs (matches the old loop, which only paired
+        # atoms across distinct residues — never within a base ring).
+        pairs = pairs[rid[pairs[:, 0]] != rid[pairs[:, 1]]]
+
+    if len(pairs):
+        ga = gidx[pairs[:, 0]]
+        gb = gidx[pairs[:, 1]]
+        lo = np.minimum(ga, gb)               # canonical (a ≤ b) bond ordering
+        hi = np.maximum(ga, gb)
+        dists = np.linalg.norm(positions[pairs[:, 0]] - positions[pairs[:, 1]], axis=1)
+    else:
+        lo = hi = np.empty(0, dtype=np.int64)
+        dists = np.empty(0, dtype=float)
+
+    n_bonds = int(len(lo))
+    a_str = [f"{int(a):10d}{int(b):10d}" for a, b in zip(lo.tolist(), hi.tolist())]
+    d_str = [f"{d:10.3g}\n" for d in dists.tolist()]
 
     files: dict[str, int] = {}
     for k in scales:
         filename = f"{name_stem}_k{k:g}.enm.extra"
         path = package_dir / filename
-        k_text = f"{k:.6g}"
+        k_col = f"{f'{k:.6g}':>10s}"
         with path.open("w") as handle:
-            for a, b, dist in base_records:
-                handle.write(f"bond{a:10d}{b:10d}{k_text:>10s}{dist:10.3g}\n")
-        files[filename] = len(base_records)
+            # Chunked writes: build line blocks so we never hold a full ~470 MB
+            # string nor pay a syscall per restraint.
+            for start in range(0, n_bonds, 200_000):
+                end = min(start + 200_000, n_bonds)
+                handle.write("".join(
+                    f"bond{a_str[i]}{k_col}{d_str[i]}" for i in range(start, end)
+                ))
+        files[filename] = n_bonds
 
     report = {
         "schema": "nadoc.aksimentiev_enm.v1",
         "source_pdb": str(pdb_path),
         "n_residues_with_base_atoms": len(residues),
-        "n_residue_pairs_com_le_30A": int(len(residue_pairs)),
-        "n_restraints_per_file": len(base_records),
+        "n_base_atoms": int(len(positions)),
+        "n_restraints_per_file": n_bonds,
         "base_k_kcal_mol_A2": base_k,
         "scales": list(scales),
         "cut_ang": cut_ang,
-        "residue_com_cut_ang": residue_com_cut_ang,
         "base_atoms": sorted(BASE_RING_ATOMS),
         "files": files,
     }
@@ -461,8 +492,13 @@ def prepare_mgh_slow_release(
     min_scale: float = 0.5,
     require_full_topology: bool = False,
     seed: int = 42,
+    atomistic_model=None,
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Build the solvated package and all stage configs in job_dir.
+
+    ``atomistic_model`` (optional) is a pre-built heavy-atom model supplying the
+    DNA starting coordinates — pass an oxDNA-relaxed model (Phase-2 NAMD seed)
+    to start NAMD from relaxed positions instead of ideal B-DNA.
 
     Calls build_namd_solvated_package (GROMACS solvation step, ~60-120 s).
     Extracts the ZIP to job_dir/package/, then writes:
@@ -485,6 +521,7 @@ def prepare_mgh_slow_release(
         mg_hexahydrate  = True,
         require_full_topology = require_full_topology,
         seed            = seed,
+        atomistic_model = atomistic_model,
     )
 
     # Extract ZIP — inner folder is "{name}_namd_solvated/"

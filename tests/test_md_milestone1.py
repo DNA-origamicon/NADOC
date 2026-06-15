@@ -555,6 +555,88 @@ class TestProductionAppend:
             "wc_ref_relative": 0.75,
         }
 
+    def _seeded_job(self, tmp_path: Path):
+        """An oxDNA-seeded job whose package is built but NO relaxation has run
+        (no completed segments, no restart files)."""
+        from backend.core.md_job import MdStatus, new_job
+
+        job = new_job(
+            design_name="S", protocol="equilibrium_aware",
+            name_stem="S", package_subdir="package/S_namd_solvated",
+            seed_oxdna_job_id="oxjob123",
+        )
+        job.status = MdStatus.queued
+        job.save(tmp_path)
+        package_dir = job.package_dir(tmp_path)
+        package_dir.mkdir(parents=True, exist_ok=True)
+        manifest = {
+            "name_stem": "S",
+            "box_ang": [100.0, 90.0, 80.0],
+            "mgh_extrabonds": False,
+            "minimization": {"name": "S_00_min_k5", "steps": 4800},
+            "segments": [],
+        }
+        text = json.dumps(manifest, indent=2)
+        (package_dir / "manifest.json").write_text(text)
+        (package_dir / "nadoc_md_run.json").write_text(text)
+        (package_dir / "output").mkdir()
+        return job
+
+    def test_seeded_job_produces_from_seed_without_relaxation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A seeded job with no relaxation checkpoint can still start production:
+        the first segment minimizes + heats the seeded structure (no checkpoint
+        restart files), later segments continue normally."""
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        assert routes_md._seed_production_available(self._seeded_job(tmp_path)) is True
+
+        job = self._seeded_job(tmp_path)
+        segments = routes_md._append_production_segments(job, 1000)
+        assert [int(s.percent) for s in segments] == [10, 50, 100]
+
+        package_dir = job.package_dir(tmp_path)
+        first = (package_dir / f"{segments[0].name}.conf").read_text()
+        # From-seed: starts from the solvated PDB, minimizes + reinit velocities,
+        # and does NOT continue from a checkpoint restart.
+        assert "minimize           4800" in first
+        assert "reinitvels         310" in first
+        assert "coordinates        S.pdb" in first
+        assert "binCoordinates" not in first
+        # Later split-segments DO continue from the previous restart (normal conf).
+        later = (package_dir / f"{segments[1].name}.conf").read_text()
+        assert "binCoordinates" in later
+        assert "minimize" not in later
+
+        manifest = json.loads((package_dir / "manifest.json").read_text())
+        assert manifest["production_extension"]["from_seed"] is True
+
+    def test_display_meta_marks_seeded_job_production_ready(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The /display meta the panel reads must report production_ready +
+        production_from_seed for a seeded job, so the button enables."""
+        import asyncio
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        job = self._seeded_job(tmp_path)
+        meta = asyncio.run(routes_md.get_md_job_display(job.job_id))
+        assert meta["production_ready"] is True
+        assert meta["production_from_seed"] is True
+        assert "seed" in (meta["production_checkpoint"] or "").lower()
+
+    def test_unseeded_job_without_checkpoint_still_blocks_production(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A NON-seeded job with no relaxation checkpoint must still 400 (no
+        produce-from-seed shortcut)."""
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        job = self._seeded_job(tmp_path)
+        job.seed_oxdna_job_id = None          # remove the seed provenance
+        job.save(tmp_path)
+        with pytest.raises(Exception) as exc:
+            routes_md._append_production_segments(job, 1000)
+        assert getattr(exc.value, "status_code", None) == 400
+
 
 # ── namd_runner (pure helpers only) ──────────────────────────────────────────
 

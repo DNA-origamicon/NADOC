@@ -1470,6 +1470,8 @@ async function main() {
   const unfoldView = initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, null)
   // Crossover arcs (owned by unfold_view) follow applyFemPositions (mrDNA/oxDNA display).
   designRenderer.setFemArcUpdater?.((updates) => unfoldView.applyFemArcs(updates))
+  // …and follow the RMSF scalar recolour (oxDNA flexibility map).
+  designRenderer.setScalarArcUpdater?.((colorByKey) => unfoldView.applyFemArcColors(colorByKey))
 
   // ── Cadnano mode ─────────────────────────────────────────────────────────
   const cadnanoView = initCadnanoView(sceneCtx, designRenderer, () => unfoldView, () => sequenceOverlay, null, () => slicePlane, () => bluntEnds, () => loopSkipHighlight)

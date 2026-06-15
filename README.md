@@ -116,6 +116,20 @@ twisting bundles by inserting/deleting base pairs. Enforces physical limits
 All-atom template with PDB/PSF export. One-click NAMD simulation package (ZIP)
 with GBIS implicit solvent config.
 
+### oxDNA relaxation → NAMD seed pipeline
+Local oxDNA (CUDA) coarse-grained relaxation as a Dynamics sub-panel: staged
+MC → MD relax → equilibration → optional production, with live progress, a stage
+timeline, ETA, and health readouts (base-pair retention, energy convergence,
+clash). An **"OxDNA display"** toggle deforms the model to the relaxed positions
+(PBC-unwrapped + Kabsch-aligned). A **flexibility map** toggle colors every base
+by its per-base RMSF over the production run (viridis, rigid→flexible) with an
+adjustable in-workspace scale (draggable bounds, live recolor). A completed job
+feeds NAMD via **"Use as NAMD seed"**: the relaxed coordinates (reconstructed at
+the true backbone site, ~1.6 nm cross-pair) seed the all-atom run so it starts
+pre-relaxed instead of from ideal B-DNA — for seeded jobs the NAMD relaxation
+ladder is optional and production can run minimize-then-produce directly from the
+seeded structure.
+
 ### FEM structural analysis
 Euler-Bernoulli beam model; RMSF heatmap via eigenvalue decomposition; real-time
 WebSocket streaming.

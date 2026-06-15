@@ -27,6 +27,7 @@ import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 export function initDesignRenderer(scene, storeRef) {
   let _helixCtrl        = null
   let _femArcUpdater    = null   // unfold_view.applyFemArcs — keeps arcs synced with applyFemPositions
+  let _scalarArcUpdater = null   // unfold_view.applyFemArcColors — recolours arcs with the RMSF scalar map
   let _designVisible    = true   // controlled by setDesignVisible(); re-applied after every _rebuild
   // VISIBILITY RULE: design_renderer has ONE scene object — _helixCtrl.root.
   // Extra-base beads+slabs (from buildCrossoverConnections) are children of root,
@@ -825,6 +826,26 @@ export function initDesignRenderer(scene, storeRef) {
 
     /** Register unfold_view's applyFemArcs so the arcs follow applyFemPositions. */
     setFemArcUpdater(fn) { _femArcUpdater = fn },
+
+    /** Register unfold_view's applyFemArcColors so crossover arcs follow the
+     *  scalar (RMSF) recolour. */
+    setScalarArcUpdater(fn) { _scalarArcUpdater = fn },
+
+    /**
+     * Recolour by a scalar (e.g. per-base RMSF) — the oxDNA flexibility map.
+     * `colorByKey` maps "helix_id:bp_index:direction" → hex int.  Recolours the
+     * backbone beads + base slabs + direction cones (helix_renderer) AND the
+     * crossover arcs (unfold_view, via the registered arc updater).  The previous
+     * colours are captured and restored by clearScalarColors().
+     */
+    applyScalarColors(colorByKey) {
+      _helixCtrl?.applyScalarColors(colorByKey)
+      _scalarArcUpdater?.(colorByKey)
+    },
+    clearScalarColors() {
+      _helixCtrl?.clearScalarColors()
+      _scalarArcUpdater?.(null)
+    },
 
     setDetailLevel(level) {
       _detailLevel = level

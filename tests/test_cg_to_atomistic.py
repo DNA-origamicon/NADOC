@@ -34,6 +34,7 @@ from backend.core.cg_to_atomistic import (
     _smooth_cg_positions_per_domain,
     build_atomistic_model_from_cg,
     build_atomistic_model_from_cg_spline,
+    read_backbone_positions,
 )
 from backend.core.constants import NM_TO_OXDNA
 from backend.core.lattice import make_bundle_design
@@ -41,6 +42,7 @@ from backend.core.models import Design
 from backend.core.sequences import domain_bp_range
 from backend.physics.oxdna_interface import (
     _strand_nucleotide_order,
+    read_configuration,
     write_configuration,
 )
 
@@ -526,6 +528,111 @@ class TestSplineOverrideDrivesBackbonePositions:
         assert mean_dz == pytest.approx(expected_shift_nm, abs=0.05), (
             f"sigma=2 path Δz expected ≈ {expected_shift_nm:.3f} nm, got {mean_dz:.4f}"
         )
+
+
+# ── read_backbone_positions — the §18/§23 CRITICAL backbone-site fix ─────────
+
+
+def _write_relaxed_oxdna_conf(design: Design, conf_path: Path) -> None:
+    """Author a synthetic *relaxed-oxDNA* .dat where each designed WC pair's
+    CENTRES OF MASS sit ~1.04 nm apart (oxDNA2 duplex CM-CM, §18), with a1
+    pointing inward (backbone→base, toward the partner) and a3 antiparallel
+    across the pair.  This reproduces the geometry where the raw CM gives a
+    too-thin ~1.0 nm duplex; the backbone-site reconstruction should widen it
+    to ~1.6 nm.
+
+    Layout: cross-pair axis = x (FORWARD at x=-0.52 nm, REVERSE at x=+0.52 nm),
+    helix axis = z, helices separated along y by helix index.
+    """
+    helix_y = {h.id: float(i) * 3.0 for i, h in enumerate(design.helices)}
+    half = 0.52  # nm → 1.04 nm CM-CM separation across the pair
+
+    lines = ["t = 0", "b = 200.0 200.0 200.0", "E = 0.0 0.0 0.0"]
+    for key in _strand_nucleotide_order(design):
+        h_id, bp, dir_str = key[0], key[1], key[2]
+        hy = helix_y.get(h_id, 0.0)
+        z = bp * 0.34
+        if dir_str == "FORWARD":
+            cm = np.array([-half, hy, z])
+            a1 = np.array([1.0, 0.0, 0.0])   # toward partner (inward)
+            a3 = np.array([0.0, 0.0, 1.0])
+        else:
+            cm = np.array([half, hy, z])
+            a1 = np.array([-1.0, 0.0, 0.0])  # toward partner (inward)
+            a3 = np.array([0.0, 0.0, -1.0])
+        p = cm * NM_TO_OXDNA
+        lines.append(
+            f"{p[0]:.6f} {p[1]:.6f} {p[2]:.6f}  "
+            f"{a1[0]:.6f} {a1[1]:.6f} {a1[2]:.6f}  "
+            f"{a3[0]:.6f} {a3[1]:.6f} {a3[2]:.6f}  "
+            "0.0 0.0 0.0  0.0 0.0 0.0"
+        )
+    conf_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _first_wc_pair_key(design: Design) -> tuple:
+    """Find a (helix_id, bp) that has BOTH a FORWARD and REVERSE nucleotide —
+    a designed Watson-Crick pair — and return (helix_id, bp)."""
+    order = _strand_nucleotide_order(design)
+    fwd = {(k[0], k[1]) for k in order if k[2] == "FORWARD"}
+    rev = {(k[0], k[1]) for k in order if k[2] == "REVERSE"}
+    both = sorted(fwd & rev)
+    assert both, "fixture has no designed WC pair (need FORWARD+REVERSE at one site)"
+    return both[0]
+
+
+class TestReadBackbonePositions:
+    """§18/§23 critical fix: the cg→atomistic seed must use the reconstructed
+    BACKBONE site, not the raw oxDNA centre of mass.  The CM gives a too-thin
+    ~1.0 nm cross-pair duplex → NAMD startup clashes; the backbone site widens
+    it to ~1.6 nm (near B-DNA)."""
+
+    def test_backbone_widens_cross_pair_vs_centre_of_mass(self, tmp_path: Path):
+        design = _small_design()
+        conf = tmp_path / "relaxed.dat"
+        _write_relaxed_oxdna_conf(design, conf)
+
+        h_id, bp = _first_wc_pair_key(design)
+        kf = (h_id, bp, "FORWARD")
+        kr = (h_id, bp, "REVERSE")
+
+        cm = read_configuration(conf, design)
+        cm_sep = float(np.linalg.norm(cm[kf] - cm[kr]))
+        # Raw CM-CM is the collapsed ~1.04 nm duplex.
+        assert cm_sep == pytest.approx(1.04, abs=0.05), (
+            f"CM cross-pair sep {cm_sep:.3f} nm not ~1.04 (fixture invariant)"
+        )
+
+        bb = read_backbone_positions(conf, design)
+        bb_sep = float(np.linalg.norm(bb[kf] - bb[kr]))
+        # Backbone-site reconstruction widens it to ~1.6 nm, near B-DNA.
+        assert bb_sep == pytest.approx(1.62, abs=0.1), (
+            f"backbone cross-pair sep {bb_sep:.3f} nm not ~1.6 (the fix)"
+        )
+        # And it must be meaningfully WIDER than the CM (the whole point).
+        assert bb_sep > cm_sep + 0.4
+
+    def test_spline_seed_uses_backbone_not_cm(self, tmp_path: Path):
+        """The orchestrator wires read_backbone_positions through: the seeded
+        atomistic backbone across a WC pair is ~B-DNA-wide, not the collapsed
+        CM width.  (sigma=0 → raw backbone positions drive nuc_pos_override.)"""
+        design = _small_design()
+        conf = tmp_path / "relaxed.dat"
+        _write_relaxed_oxdna_conf(design, conf)
+
+        bb = read_backbone_positions(conf, design)
+        h_id, bp = _first_wc_pair_key(design)
+        bb_sep = float(
+            np.linalg.norm(bb[(h_id, bp, "FORWARD")] - bb[(h_id, bp, "REVERSE")])
+        )
+        # The model builds without clashing-thin geometry; the override carries
+        # the widened backbone separation, not the 1.04 nm CM.
+        assert bb_sep > 1.4
+
+        model = build_atomistic_model_from_cg_spline(design, conf, sigma=0.0)
+        assert isinstance(model, AtomisticModel)
+        coords = np.array([[a.x, a.y, a.z] for a in model.atoms])
+        assert np.all(np.isfinite(coords))
 
 
 # ── Constants reference (sanity) ─────────────────────────────────────────────

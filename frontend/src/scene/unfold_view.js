@@ -764,6 +764,30 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     designRenderer.flushExtraBaseMeshes()
   }
 
+  /**
+   * Recolour crossover arcs by a per-base scalar (the oxDNA flexibility map), so
+   * the arcs match the recoloured backbone beads.  `colorByKey` maps
+   * "helix_id:bp_index:direction" → hex int; each arc takes the colour of its
+   * from-endpoint (falling back to its to-endpoint).  Pass `null` to restore the
+   * arcs' natural strand/mode colours (no `e.color` is mutated, so restore is a
+   * simple re-paint).  Also recolours any extra-base bead chain via designRenderer.
+   */
+  function applyFemArcColors(colorByKey) {
+    if (!_arcMeta.length) return
+    if (!colorByKey) {
+      for (const e of _arcMeta) _paintArcByMode(e)
+      return
+    }
+    const get = colorByKey instanceof Map ? (k) => colorByKey.get(k) : (k) => colorByKey[k]
+    const keyOf = (n) => (n ? `${n.helix_id}:${n.bp_index}:${n.direction}` : null)
+    for (const e of _arcMeta) {
+      let hex = get(keyOf(e.fromNuc))
+      if (hex === undefined || hex === null) hex = get(keyOf(e.toNuc))
+      if (hex === undefined || hex === null) continue
+      _setArcColor(e, hex)
+    }
+  }
+
   // ── Offset computation ──────────────────────────────────────────────────────
 
   /**
@@ -1075,6 +1099,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     deactivate,
     setSpacing,
     applyFemArcs,
+    applyFemArcColors,
     isActive:  () => _active,
     getMidZ:   () => _midZ,
 

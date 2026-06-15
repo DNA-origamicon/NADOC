@@ -68,6 +68,12 @@ class CreateJobRequest(BaseModel):
         None,
         description="Workspace path of the part used to create this job",
     )
+    oxdna_job_id: Optional[str] = Field(
+        None,
+        description="If set, seed the NAMD run from this completed oxDNA job's "
+                    "relaxed coordinates (its OWN design.json + latest last_conf) "
+                    "instead of ideal B-DNA.",
+    )
 
 
 class ProductionRequest(BaseModel):
@@ -276,6 +282,15 @@ def _production_ready_checkpoint(job: MdJob) -> tuple[Optional[int], Optional[Se
     return None, None, "No passing unrestrained qualification/probe checkpoint is available yet", ""
 
 
+def _seed_production_available(job: MdJob) -> bool:
+    """An oxDNA-seeded job whose solvated package is built can run production
+    directly from the seeded structure (minimize-then-produce), skipping the
+    NAMD relaxation ladder.  True only when the package manifest exists."""
+    if not job.seed_oxdna_job_id:
+        return False
+    return (job.package_dir(_workspace()) / "manifest.json").exists()
+
+
 def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
                                   box: tuple[float, float, float],
                                   mgh_extrabonds: bool) -> str:
@@ -341,6 +356,75 @@ run                {spec.steps}
 """
 
 
+def _seed_production_conf(spec: SegmentSpec, name_stem: str,
+                         box: tuple[float, float, float],
+                         mgh_extrabonds: bool, minimize_steps: int) -> str:
+    """Production conf that starts DIRECTLY from the oxDNA-seeded solvated
+    structure (no relaxation checkpoint): minimize first to clear fresh-solvent
+    clashes, assign velocities at 310 K, then run unrestrained.  Used when the
+    user skips the NAMD relaxation ladder on a seeded job."""
+    bx, by, bz = box
+    cx, cy, cz = bx / 2, by / 2, bz / 2
+    extras = "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n" if mgh_extrabonds else ""
+    return f"""\
+structure          {name_stem}.psf
+coordinates        {name_stem}.pdb
+
+seed               54321
+paraTypeCharmm     on
+parameters         forcefield/par_all36_na.prm
+parameters         forcefield/toppar_water_ions_cufix.str
+parameters         forcefield/par_stub_ions_nbfix.str
+{extras}
+cellBasisVector1   {bx:.3f}  0.000    0.000
+cellBasisVector2   0.000    {by:.3f}  0.000
+cellBasisVector3   0.000    0.000    {bz:.3f}
+cellOrigin         {cx:.3f}   {cy:.3f}   {cz:.3f}
+
+wrapAll            on
+wrapWater          on
+exclude            scaled1-4
+oneFourScaling     1.0
+switching          on
+switchdist         10.0
+cutoff             12.0
+pairlistdist       14.0
+PME                yes
+PMEGridSpacing     1.0
+rigidBonds         none
+rigidTolerance     1.0e-8
+timestep           1.0
+nonbondedFreq      1
+fullElectFrequency 1
+stepspercycle      10
+langevin           on
+langevinTemp       310
+langevinDamping    1.0
+langevinHydrogen   off
+useGroupPressure   yes
+useFlexibleCell    no
+useConstantArea    no
+langevinPiston     on
+langevinPistonTarget  1.01325
+langevinPistonPeriod  400.0
+langevinPistonDecay   200.0
+langevinPistonTemp 310
+outputEnergies     100
+xstFreq            1000
+restartfreq        1000
+binaryrestart      yes
+constraints        off
+outputName         output/{spec.name}
+dcdFile            output/{spec.name}.dcd
+dcdFreq            {spec.dcd_freq}
+xstFile            output/{spec.name}.xst
+temperature        310
+minimize           {minimize_steps}
+reinitvels         310
+run                {spec.steps}
+"""
+
+
 def _production_steps_and_ns(body: ProductionRequest) -> tuple[int, float]:
     if body.steps is not None:
         steps = max(100, int(body.steps))
@@ -356,27 +440,40 @@ def _append_production_segments(
     *,
     continue_from_production: bool = False,
 ) -> list[SegmentSpec]:
+    from_seed = False
     if continue_from_production:
         checkpoint_idx, checkpoint, reason = _completed_production_checkpoint(job)
         warning = ""
         if checkpoint is None:
             raise HTTPException(400, reason)
+        checkpoint_name = checkpoint.name
     else:
         checkpoint_idx, checkpoint, reason, warning = _production_ready_checkpoint(job)
         if checkpoint is None:
-            raise HTTPException(400, reason)
+            # No relaxation checkpoint — but an oxDNA-seeded job can produce
+            # directly from its relaxed solvated structure (minimize-then-produce).
+            if _seed_production_available(job):
+                from_seed = True
+                checkpoint_name = "oxdna_seed"
+                warning = ("NAMD relaxation skipped: the oxDNA-seeded structure is "
+                           "minimized then produced unrestrained. Watch the first frames.")
+            else:
+                raise HTTPException(400, reason)
+        else:
+            checkpoint_name = checkpoint.name
     package_dir = job.package_dir(_workspace())
     manifest_path = package_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
     name_stem = manifest["name_stem"]
     box = tuple(float(x) for x in manifest["box_ang"])
     mgh_extrabonds = bool(manifest.get("mgh_extrabonds"))
+    min_steps = int(manifest.get("minimization", {}).get("steps", 4800) or 4800)
 
     existing = {s["name"] for s in manifest.get("segments", [])}
     stage_idx = len({s["stage"] for s in manifest.get("segments", [])}) + 1
     length_ns = total_steps / 1_000_000.0
     label_ns = f"{length_ns:g}".replace(".", "p")
-    previous = checkpoint.name
+    previous = "" if from_seed else checkpoint.name
     segments: list[SegmentSpec] = []
     for pct, frac in ((10.0, 0.10), (50.0, 0.40), (100.0, 0.50)):
         steps = max(100, int(round(total_steps * frac)))
@@ -399,9 +496,13 @@ def _append_production_segments(
             min_c1_paired=0.90,
             min_wc_ref_relative=0.25,
         )
-        (package_dir / f"{spec.name}.conf").write_text(
-            _conservative_production_conf(spec, name_stem, box, mgh_extrabonds)
-        )
+        # The FIRST from-seed segment starts from the solvated PDB (minimize +
+        # heat); every later split-segment continues from the prior restart.
+        if from_seed and not previous:
+            conf = _seed_production_conf(spec, name_stem, box, mgh_extrabonds, min_steps)
+        else:
+            conf = _conservative_production_conf(spec, name_stem, box, mgh_extrabonds)
+        (package_dir / f"{spec.name}.conf").write_text(conf)
         segments.append(spec)
         previous = name
 
@@ -413,7 +514,8 @@ def _append_production_segments(
     manifest["production_extension"] = {
         "length_ns": length_ns,
         "steps": total_steps,
-        "previous": checkpoint.name,
+        "previous": checkpoint_name,
+        "from_seed": from_seed,
         "continue_from_production": continue_from_production,
         "first_new_segment": segments[0].name,
         "last_new_segment": segments[-1].name,
@@ -467,7 +569,25 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         ion_conc_mM = 0.0
         mg_conc_mM = 12.5
 
-    design = design_state.get_or_404()
+    # NAMD seed (Phase 2): when an oxDNA job is named, build the starting
+    # structure from THAT job's own design.json + relaxed last_conf (not the live
+    # editor design — they can differ).  The relaxed coords feed NAMD so the
+    # all-atom run begins pre-relaxed instead of from ideal B-DNA.
+    seed_model = None
+    seed_job_id = None
+    if body.oxdna_job_id:
+        from backend.core.oxdna_runner import build_namd_seed  # noqa: PLC0415
+        try:
+            seed = await run_in_threadpool(build_namd_seed, body.oxdna_job_id, _workspace())
+        except FileNotFoundError as exc:
+            raise HTTPException(400, str(exc))
+        design = seed.design
+        seed_model = seed.atomistic_model
+        seed_job_id = body.oxdna_job_id
+        logger.info("create_md_job: seeding from oxDNA job %s (stage %s)",
+                    body.oxdna_job_id, seed.stage_name)
+    else:
+        design = design_state.get_or_404()
     name = (design.metadata.name or "design").replace(" ", "_")
 
     # Sequence check — must happen before the expensive solvation step.
@@ -508,6 +628,7 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         threads        = body.threads,
         devices        = body.devices,
         design_source_path = body.design_source_path,
+        seed_oxdna_job_id  = seed_job_id,
     )
     job.status = MdStatus.preparing
     job.save(_workspace())
@@ -530,6 +651,7 @@ async def create_md_job(body: CreateJobRequest) -> dict:
             salt_mode      = body.salt_mode,
             padding_nm     = body.padding_nm,
             minimize_steps = body.minimize_steps,
+            atomistic_model = seed_model,
         )
         logger.info("create_md_job: preparation done; package=%s name_stem=%s segments=%d",
                     package_subdir, name_stem, len(segments))
@@ -588,6 +710,26 @@ async def get_md_job_display(job_id: str) -> dict:
     ready_idx, ready_spec, ready_reason, ready_warning = _production_ready_checkpoint(job)
     continue_idx, continue_spec, continue_reason = _completed_production_checkpoint(job)
     ready = manifest.exists() and dcd_path is not None
+    busy = job.status in {MdStatus.running, MdStatus.preparing}
+
+    # oxDNA-seeded jobs can skip the NAMD relaxation and produce straight from
+    # the seeded structure when no relaxation checkpoint exists yet.
+    from_seed = (
+        ready_spec is None and continue_spec is None
+        and _seed_production_available(job) and not busy
+    )
+    production_ready = (ready_spec is not None or from_seed) and not busy
+    if ready_spec is not None:
+        production_checkpoint = ready_spec.name
+        production_warning = ready_warning
+    elif from_seed:
+        production_checkpoint = "oxDNA seed (minimize → produce)"
+        production_warning = ("Relaxation skipped: the oxDNA-seeded structure is minimized "
+                              "then produced unrestrained. Watch the first frames for instability.")
+    else:
+        production_checkpoint = None
+        production_warning = ""
+
     return {
         "job_id": job.job_id,
         "status": job.status.value,
@@ -596,10 +738,11 @@ async def get_md_job_display(job_id: str) -> dict:
         "package_dir": str(package_dir.resolve()) if package_dir.exists() else None,
         "segment_name": segment_name,
         "trajectory_path": str(dcd_path.resolve()) if dcd_path else None,
-        "production_ready": ready_spec is not None and job.status not in {MdStatus.running, MdStatus.preparing},
-        "production_checkpoint": ready_spec.name if ready_spec else None,
-        "production_ready_reason": "" if ready_spec else ready_reason,
-        "production_warning": ready_warning if ready_spec else "",
+        "production_ready": production_ready,
+        "production_from_seed": from_seed,
+        "production_checkpoint": production_checkpoint,
+        "production_ready_reason": "" if production_ready else ready_reason,
+        "production_warning": production_warning if production_ready else "",
         "production_continue_available": continue_spec is not None,
         "production_continue_checkpoint": continue_spec.name if continue_spec else None,
         "production_continue_reason": "" if continue_spec else continue_reason,

@@ -43,7 +43,11 @@ from scipy.ndimage import gaussian_filter1d
 
 from backend.core.models import Design, Helix, Vec3
 from backend.core.atomistic import AtomisticModel, build_atomistic_model
-from backend.physics.oxdna_interface import read_configuration
+from backend.physics.oxdna_interface import (
+    read_configuration,
+    read_configuration_full,
+    oxdna_backbone_site,
+)
 from backend.core.sequences import domain_bp_range
 
 
@@ -130,6 +134,14 @@ def build_atomistic_model_from_cg_spline(
     Gaussian smoothing within each helix domain removes MC positional noise
     before the override so backbone bond lengths remain physically correct.
 
+    The oxDNA ``.dat`` stores each nucleotide's CENTRE OF MASS, which sits
+    ~0.34 units inward of the backbone.  Using the raw CM (as ``read_configuration``
+    returns) makes the seeded atomistic duplex too THIN (paired backbones ~1.0 nm
+    apart instead of ~1.6 nm) → backbone atoms of paired strands clash at NAMD
+    startup — the very thing the relaxation is meant to prevent.  So we reconstruct
+    the true backbone site (``oxdna_backbone_site``) from the CM + a1/a3 before
+    smoothing.
+
     Parameters
     ----------
     design    : Design — must match the topology used to generate the conf.
@@ -140,9 +152,34 @@ def build_atomistic_model_from_cg_spline(
     -------
     AtomisticModel with CG-informed backbone positions.
     """
-    cg_positions = read_configuration(conf_path, design)
+    cg_positions = read_backbone_positions(conf_path, design)
     pos_override = _smooth_cg_positions_per_domain(design, cg_positions, sigma=sigma)
     return build_atomistic_model(design, nuc_pos_override=pos_override)
+
+
+def read_backbone_positions(
+    conf_path: str | Path,
+    design:    Design,
+) -> dict[tuple[str, int, str], np.ndarray]:
+    """
+    Read a relaxed oxDNA configuration and return the reconstructed true
+    BACKBONE position per nucleotide (nm), not the raw centre of mass.
+
+    oxDNA's ``.dat`` position is the centre of mass; the backbone phosphate sits
+    ~0.34 units outward along a1/a2 (oxDNA2, ``model.h`` POS_MM_BACK1/2).  This
+    helper applies ``oxdna_backbone_site`` per nucleotide so downstream
+    atomistic seeding gets a ~1.6 nm cross-pair duplex (near B-DNA) instead of
+    the ~1.0 nm CM-to-CM separation that causes startup clashes.
+
+    Returns
+    -------
+    dict mapping (helix_id, bp_index, direction_str) → backbone position (nm).
+    """
+    full = read_configuration_full(conf_path, design)
+    return {
+        key: oxdna_backbone_site(rec["backbone_position"], rec["a1"], rec["a3"])
+        for key, rec in full.items()
+    }
 
 
 # ── Phase 3a: per-helix PCA axis refitting (kept for reference) ───────────────

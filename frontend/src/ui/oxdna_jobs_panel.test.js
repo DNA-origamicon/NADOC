@@ -8,13 +8,15 @@ vi.mock('../api/client.js', () => ({
   listOxdnaJobs: vi.fn(),
   getOxdnaProgress: vi.fn().mockResolvedValue({ overall: 1, stage_fraction: 0 }),
   getOxdnaRmsd: vi.fn().mockResolvedValue({ ready: true, mean: 2.31, max: 2.53, n_frames: 10 }),
+  getOxdnaRmsf: vi.fn().mockResolvedValue({ ready: true, n_frames: 10, positions: [], min_rmsf: 0.1, max_rmsf: 1.4, mean_rmsf: 0.7 }),
+  createMdJob: vi.fn().mockResolvedValue({ job_id: 'md1', status: 'queued' }),
   lastErrorMessage: () => null,
 }))
 
 import * as api from '../api/client.js'
 import {
   formatProgress, latestHealth, detailStatusText, stageChips, jobDisplayName,
-  productionState, jobListStatus, formatEta, initOxdnaJobsPanel,
+  productionState, jobListStatus, formatEta, seedReady, initOxdnaJobsPanel,
 } from './oxdna_jobs_panel.js'
 
 describe('formatEta', () => {
@@ -52,6 +54,16 @@ describe('productionState / jobListStatus', () => {
   it('a still-relaxing job keeps its raw status', () => {
     expect(jobListStatus({ status: 'running', stages: [{ kind: 'md_relax', status: 'running' }] }).label)
       .toBe('running')
+  })
+})
+
+describe('seedReady', () => {
+  it('is true only when the relaxation has completed', () => {
+    expect(seedReady({ status: 'completed' })).toBe(true)
+    expect(seedReady({ status: 'running' })).toBe(false)
+    expect(seedReady({ status: 'queued' })).toBe(false)
+    expect(seedReady({ status: 'failed' })).toBe(false)
+    expect(seedReady(null)).toBe(false)
   })
 })
 
@@ -214,7 +226,7 @@ describe('initOxdnaJobsPanel — per-design job filtering', () => {
   })
 })
 
-describe('initOxdnaJobsPanel — production buttons + Show RMSD', () => {
+describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
   const SPEC = {
     'oxdna-jobs-panel': 'div', 'oxdna-jobs-heading': 'div', 'oxdna-jobs-arrow': 'div',
     'oxdna-jobs-body': 'div', 'oxdna-jobs-status': 'div', 'oxdna-jobs-prod-status': 'div',
@@ -224,7 +236,23 @@ describe('initOxdnaJobsPanel — production buttons + Show RMSD', () => {
     'oxdna-jobs-run-btn': 'button', 'oxdna-jobs-prod-btn': 'button', 'oxdna-jobs-prod-steps': 'input',
     'oxdna-jobs-start-btn': 'button', 'oxdna-jobs-stop-btn': 'button', 'oxdna-jobs-delete-btn': 'button',
     'oxdna-jobs-display-toggle': 'input', 'oxdna-jobs-display-status': 'div',
-    'oxdna-jobs-rmsd-btn': 'button', 'oxdna-jobs-rmsd-result': 'div', 'oxdna-jobs-export-btn': 'button',
+    'oxdna-jobs-flex-toggle': 'input', 'oxdna-jobs-flex-status': 'div',
+    'oxdna-jobs-flex-bar': 'div', 'oxdna-jobs-flex-legend': 'div',
+    'oxdna-jobs-export-btn': 'button',
+    'oxdna-jobs-seed-btn': 'button', 'oxdna-jobs-seed-status': 'div',
+    // workspace colour-scale widget (middle-right)
+    'flex-scale': 'div', 'flex-scale-max': 'input', 'flex-scale-min': 'input', 'flex-scale-reset': 'button',
+  }
+  const fakeDisplay = () => {
+    let mode = null
+    return {
+      displayJob: vi.fn(async () => { mode = 'relaxed'; return { ok: true, n: 5, stage: 's' } }),
+      displayRmsf: vi.fn(async () => { mode = 'rmsf'; return { ok: true, n: 5, min: 0.1, max: 1.4, mean: 0.7 } }),
+      stopAndRestore: vi.fn(() => { mode = null }),
+      isActive: () => mode !== null,
+      mode: () => mode,
+      activeJobId: () => null,
+    }
   }
   const $ = (id) => document.getElementById(id)
   const relaxStages = (...extra) => [
@@ -243,13 +271,14 @@ describe('initOxdnaJobsPanel — production buttons + Show RMSD', () => {
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
   }
 
-  it('a completed relaxation → Production enabled, Show RMSD disabled', async () => {
+  it('a completed relaxation → Production enabled, Flexibility map disabled (waiting for production)', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 3, stages: relaxStages() }])
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await selectFirstJob(panel)
-    expect($('oxdna-jobs-prod-btn').disabled).toBe(false)   // production ready
-    expect($('oxdna-jobs-rmsd-btn').disabled).toBe(true)    // no production run yet
+    expect($('oxdna-jobs-prod-btn').disabled).toBe(false)     // production ready
+    expect($('oxdna-jobs-flex-toggle').disabled).toBe(true)   // no production run yet
+    expect($('oxdna-jobs-flex-status').textContent.toLowerCase()).toContain('waiting for production')
   })
 
   it('while production runs → both Relax and Production greyed; bar shows steps + ETA', async () => {
@@ -265,16 +294,113 @@ describe('initOxdnaJobsPanel — production buttons + Show RMSD', () => {
     expect(prog).toContain('ETA ~3m 20s')                    // 200 s
   })
 
-  it('after production completes → Show RMSD is clickable and reports the value', async () => {
+  it('after production completes → Flexibility map toggle unlocks; toggling it calls displayRmsf + shows the legend', async () => {
+    const disp = fakeDisplay()
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j3', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 4, stages: relaxStages({ kind: 'production', status: 'done', steps: 5000000 }) }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    await selectFirstJob(panel)
+
+    const flex = $('oxdna-jobs-flex-toggle')
+    expect(flex.disabled).toBe(false)
+    flex.checked = true
+    flex.dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+    expect(disp.displayRmsf).toHaveBeenCalledWith('j3')
+    expect($('oxdna-jobs-flex-bar').innerHTML.toLowerCase()).toContain('ready')   // ✓ check
+    expect($('oxdna-jobs-flex-legend').innerHTML.toLowerCase()).toContain('flexible')
+    expect($('oxdna-jobs-flex-status').textContent.toLowerCase()).toContain('rmsf')
+    // The workspace scale appears, seeded with the data min→max from displayRmsf.
+    expect($('flex-scale').style.display).not.toBe('none')
+    expect($('flex-scale-min').value).toBe('0.10')
+    expect($('flex-scale-max').value).toBe('1.40')
+  })
+
+  it('editing the workspace scale bounds recolours via oxdnaDisplay.recolorRmsf', async () => {
+    const disp = fakeDisplay()
+    disp.recolorRmsf = vi.fn()
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jB', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 4, stages: relaxStages({ kind: 'production', status: 'done', steps: 100 }) }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    await selectFirstJob(panel)
+    const flex = $('oxdna-jobs-flex-toggle')
+    flex.checked = true; flex.dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+    $('flex-scale-max').value = '0.8'
+    $('flex-scale-max').dispatchEvent(new Event('change'))
+    expect(disp.recolorRmsf).toHaveBeenLastCalledWith(0.1, 0.8)
+  })
+
+  it('flexibility map and OxDNA display are mutually exclusive', async () => {
+    const disp = fakeDisplay()
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jX', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 4, stages: relaxStages({ kind: 'production', status: 'done', steps: 100 }) }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    await selectFirstJob(panel)
+
+    // Turn on the relaxed display first.
+    const display = $('oxdna-jobs-display-toggle')
+    display.checked = true; display.dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve()
+    expect(disp.displayJob).toHaveBeenCalled()
+
+    // Turning on the flexibility map must switch the relaxed display off.
+    const flex = $('oxdna-jobs-flex-toggle')
+    flex.checked = true; flex.dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    expect(disp.displayRmsf).toHaveBeenCalled()
+    expect($('oxdna-jobs-display-toggle').checked).toBe(false)
+  })
+
+  it('a completed relaxation → "Use as NAMD seed" enabled; click POSTs an MD job seeded from this oxDNA job', async () => {
+    api.createMdJob.mockClear()
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jSeed', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 3, stages: relaxStages() }])
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await selectFirstJob(panel)
-    const rmsd = $('oxdna-jobs-rmsd-btn')
-    expect(rmsd.disabled).toBe(false)
-    rmsd.click()
-    await Promise.resolve(); await Promise.resolve()
-    expect($('oxdna-jobs-rmsd-result').textContent.toLowerCase()).toContain('rmsd')
-    expect($('oxdna-jobs-rmsd-result').textContent).toContain('2.31')
+
+    const seed = $('oxdna-jobs-seed-btn')
+    expect(seed.disabled).toBe(false)
+    seed.click()
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+    expect(api.createMdJob).toHaveBeenCalledTimes(1)
+    const body = api.createMdJob.mock.calls[0][0]
+    expect(body.oxdna_job_id).toBe('jSeed')
+    expect(body.design_source_path).toBe('A.nadoc')
+    expect($('oxdna-jobs-seed-status').textContent.toLowerCase()).toContain('namd seed job created')
+  })
+
+  it('on seed success → collapses the oxDNA panel and clicks the MD panel heading open', async () => {
+    // oxDNA panel open, MD panel collapsed (so seed should collapse oxDNA + open MD).
+    localStorage.setItem('nadoc.leftSidebar.sections.v1', JSON.stringify({
+      dynamics: { 'oxdna-jobs-panel': false, 'md-jobs-panel': true },
+    }))
+    const mdHeading = document.createElement('div'); mdHeading.id = 'md-jobs-panel-heading'
+    document.body.appendChild(mdHeading)
+    let mdClicked = 0; mdHeading.addEventListener('click', () => { mdClicked++ })
+
+    api.createMdJob.mockResolvedValue({ job_id: 'md9', status: 'queued' })
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jSeed2', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 3, stages: relaxStages() }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await selectFirstJob(panel)
+
+    expect($('oxdna-jobs-body').style.display).not.toBe('none')   // open before
+    $('oxdna-jobs-seed-btn').click()
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+    expect($('oxdna-jobs-body').style.display).toBe('none')        // oxDNA collapsed
+    expect(mdClicked).toBe(1)                                      // MD opened (was collapsed by default)
+  })
+
+  it('a still-running job → "Use as NAMD seed" stays disabled', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jRun', design_source_path: 'A.nadoc', status: 'running',
+      created_at: 1, current_stage_idx: 1, stages: [{ kind: 'mc', status: 'done' }, { kind: 'md_relax', status: 'running' }] }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await selectFirstJob(panel)
+    expect($('oxdna-jobs-seed-btn').disabled).toBe(true)
   })
 })

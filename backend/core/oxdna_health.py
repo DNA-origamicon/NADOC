@@ -178,6 +178,74 @@ def production_rmsd(
             "mean": float(s.mean()), "max": float(s.max()), "min": float(s.min())}
 
 
+def production_rmsf(
+    design,
+    production_traj_path,
+    reference_conf_path,
+) -> dict:
+    """Per-NUCLEOTIDE average position + RMSF (root-mean-square fluctuation, nm)
+    over a production trajectory — the flexibility map.
+
+    Each frame is PBC-unwrapped + Kabsch-aligned to the relaxed reference (rigid
+    diffusion/tumbling removed), then for every nucleotide we take the mean of its
+    true backbone-site position across frames and the RMSF about that mean.  Low
+    RMSF = rigid, high RMSF = flexible.  The backbone site (not the raw oxDNA
+    centre of mass) is used so the displayed mean structure has the correct duplex
+    width.
+
+    Returns {ready, n_frames, positions:[{helix_id, bp_index, direction,
+    backbone_position:[mean xyz], nx, ny, nz (mean a1), rmsf}], min_rmsf,
+    max_rmsf, mean_rmsf}.
+    """
+    from backend.physics.oxdna_interface import (
+        _parse_box_nm,
+        oxdna_backbone_site,
+        read_configuration_full,
+        read_trajectory_frames_full,
+        unwrap_align_to_reference,
+    )
+    ref = read_configuration_full(reference_conf_path, design)
+    frames = read_trajectory_frames_full(production_traj_path, design)
+    box = _parse_box_nm(production_traj_path)
+
+    acc: dict[tuple, dict] = {}   # key → {"pos": [bb xyz...], "a1": [a1...]}
+    n_frames = 0
+    for fr in frames:
+        aligned = (unwrap_align_to_reference(fr, ref, design, box)
+                   if box is not None and np.all(box > 0) else fr)
+        n_frames += 1
+        for k, v in aligned.items():
+            bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
+            slot = acc.setdefault(k, {"pos": [], "a1": []})
+            slot["pos"].append(bb)
+            slot["a1"].append(v["a1"])
+
+    if n_frames == 0 or not acc:
+        return {"ready": False, "n_frames": 0, "positions": [],
+                "min_rmsf": None, "max_rmsf": None, "mean_rmsf": None}
+
+    positions: list[dict] = []
+    rmsfs: list[float] = []
+    for (hid, bp, direction), slot in acc.items():
+        P = np.array(slot["pos"])                      # (F, 3)
+        mean_pos = P.mean(axis=0)
+        rmsf = float(np.sqrt(((P - mean_pos) ** 2).sum(axis=1).mean()))
+        a1m = np.array(slot["a1"]).mean(axis=0)
+        a1m = a1m / (np.linalg.norm(a1m) + 1e-14)
+        positions.append({
+            "helix_id": hid, "bp_index": bp, "direction": direction,
+            "backbone_position": mean_pos.tolist(),
+            "nx": float(a1m[0]), "ny": float(a1m[1]), "nz": float(a1m[2]),
+            "rmsf": rmsf,
+        })
+        rmsfs.append(rmsf)
+
+    r = np.array(rmsfs)
+    return {"ready": True, "n_frames": n_frames, "positions": positions,
+            "min_rmsf": float(r.min()), "max_rmsf": float(r.max()),
+            "mean_rmsf": float(r.mean())}
+
+
 def max_backbone_stretch(
     design: Design,
     full_map: dict[tuple[str, int, str], dict],

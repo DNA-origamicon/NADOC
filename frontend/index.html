@@ -3489,12 +3489,21 @@
                   <input id="oxdna-jobs-display-toggle" type="checkbox"> OxDNA display
                 </label>
                 <div id="oxdna-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                <!-- RMSD (enabled after a production run) -->
-                <button id="oxdna-jobs-rmsd-btn" disabled
+                <!-- Flexibility map (avg production structure recoloured by per-base RMSF; unlocks after a production run) -->
+                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                       title="Average structure over the production run, recoloured rigid→flexible by per-base RMSF">
+                  <input id="oxdna-jobs-flex-toggle" type="checkbox" disabled> Flexibility map (RMSF)
+                </label>
+                <div id="oxdna-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px">Waiting for production</div>
+                <div id="oxdna-jobs-flex-bar" style="margin-top:3px;display:none"></div>
+                <div id="oxdna-jobs-flex-legend" style="display:none"></div>
+                <!-- NAMD seed handoff (enabled once relaxation completes) -->
+                <button id="oxdna-jobs-seed-btn" disabled
+                        title="Start a NAMD all-atom run from this relaxed structure instead of ideal B-DNA"
                         style="width:100%;font-size:var(--text-xs);padding:4px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;margin-top:8px">
-                  Show RMSD
+                  Use as NAMD seed
                 </button>
-                <div id="oxdna-jobs-rmsd-result" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                <div id="oxdna-jobs-seed-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
               </div>
 
               <!-- manual export (run oxDNA yourself from the ZIP) -->
@@ -4647,6 +4656,37 @@
             pointer-events:none; z-index:var(--z-overlay);
             box-shadow:var(--shadow-sm);
           "></div>
+          <!-- oxDNA flexibility-map colour scale (middle-right; shown only while the RMSF map is active).
+               Two draggable handles window the RMSF→colour range; dragging recolours in real time. -->
+          <div id="flex-scale" style="
+            position:absolute; right:14px; top:50%; transform:translateY(-50%); display:none;
+            z-index:var(--z-overlay); width:56px; padding:7px 6px;
+            background:var(--color-bg-raised); border:1px solid var(--color-border-default);
+            border-radius:6px; box-shadow:var(--shadow-sm); font-family:var(--font-ui);">
+            <div style="font-size:9px;color:var(--color-text-secondary);text-align:center;margin-bottom:4px">RMSF (nm)</div>
+            <input id="flex-scale-max" type="number" step="0.05" min="0" title="Upper bound"
+                   style="width:100%;box-sizing:border-box;font-size:10px;text-align:center;padding:1px;margin-bottom:5px;
+                          background:var(--color-bg-inset);color:var(--color-text-primary);
+                          border:1px solid var(--color-border-default);border-radius:3px">
+            <div id="flex-scale-track" style="position:relative;width:18px;height:140px;margin:0 auto;border-radius:3px;
+                        background:linear-gradient(to top,#440154,#3b528b,#21918c,#5dc863,#fde725)">
+              <div id="flex-scale-handle-hi" title="Drag to set the upper bound" style="position:absolute;left:-5px;width:28px;
+                        height:5px;margin-top:-3px;top:0%;border-radius:2px;background:#f0f0f0;border:1px solid #1a1a1a;
+                        box-shadow:0 1px 2px rgba(0,0,0,0.6);cursor:ns-resize;touch-action:none"></div>
+              <div id="flex-scale-handle-lo" title="Drag to set the lower bound" style="position:absolute;left:-5px;width:28px;
+                        height:5px;margin-top:-3px;top:100%;border-radius:2px;background:#f0f0f0;border:1px solid #1a1a1a;
+                        box-shadow:0 1px 2px rgba(0,0,0,0.6);cursor:ns-resize;touch-action:none"></div>
+            </div>
+            <input id="flex-scale-min" type="number" step="0.05" min="0" title="Lower bound"
+                   style="width:100%;box-sizing:border-box;font-size:10px;text-align:center;padding:1px;margin-top:5px;
+                          background:var(--color-bg-inset);color:var(--color-text-primary);
+                          border:1px solid var(--color-border-default);border-radius:3px">
+            <button id="flex-scale-reset" title="Reset to data min→max"
+                    style="width:100%;margin-top:6px;font-size:9px;padding:2px;cursor:pointer;
+                           background:var(--color-bg-inset);color:var(--color-text-secondary);
+                           border:1px solid var(--color-border-default);border-radius:3px">Reset</button>
+          </div>
+
           <div id="length-heatmap-legend">
             <div class="lhl-title">Length</div>
             <div class="lhl-body">

@@ -18,6 +18,7 @@
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { showToast } from './toast.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
+import { initFlexScale } from './flex_scale.js'
 import * as api from '../api/client.js'
 
 const POLL_MS = 1500
@@ -101,6 +102,13 @@ export function productionState(job) {
   return 'none'
 }
 
+/** Pure: a job whose relaxation has completed can seed a NAMD run (Phase 2).
+ *  A completed status means the relaxation (and any production) finished, so a
+ *  relaxed last_conf exists to hand off to NAMD. */
+export function seedReady(job) {
+  return job?.status === 'completed'
+}
+
 /** Pure: list/detail status label + color — derives "production ready" + production states. */
 export function jobListStatus(job) {
   const ps = productionState(job)
@@ -148,8 +156,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   const healthEl   = document.getElementById('oxdna-jobs-health')
   const displayToggle = document.getElementById('oxdna-jobs-display-toggle')
   const displayStatus = document.getElementById('oxdna-jobs-display-status')
-  const rmsdBtn       = document.getElementById('oxdna-jobs-rmsd-btn')
-  const rmsdResult    = document.getElementById('oxdna-jobs-rmsd-result')
+  const flexToggle    = document.getElementById('oxdna-jobs-flex-toggle')
+  const flexStatus    = document.getElementById('oxdna-jobs-flex-status')
+  const flexBar       = document.getElementById('oxdna-jobs-flex-bar')
+  const flexLegend    = document.getElementById('oxdna-jobs-flex-legend')
+  const seedBtn       = document.getElementById('oxdna-jobs-seed-btn')
+  const seedStatus    = document.getElementById('oxdna-jobs-seed-status')
 
   // ── State ──────────────────────────────────────────────────────────────────
   let _jobs       = []
@@ -160,6 +172,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   let _advOpen    = false
   let _available  = false
   let _launching  = false
+  let _seeding    = false
+  let _flexBusy   = false
+
+  // Workspace colour-scale widget (middle-right); editing its bounds re-colours
+  // the active flexibility map live without re-fetching.
+  const flexScale = initFlexScale({
+    onBoundsChange: (lo, hi) => oxdnaDisplay?.recolorRmsf(lo, hi),
+  })
   const _SHOW_ALL_KEY = 'nadoc:oxdna-jobs-show-all'
 
   if (showAllToggle) showAllToggle.checked = localStorage.getItem(_SHOW_ALL_KEY) === '1'
@@ -433,13 +453,24 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     else _setProdStatus(prodReady ? 'Ready to run production from the relaxed structure.'
                                   : 'Production unlocks after relaxation completes.', _C.dim)
 
-    // Show RMSD — only after a production run has completed.
-    if (rmsdBtn) {
+    // Flexibility map (RMSF) — toggle unlocks only after a production run finishes.
+    if (flexToggle && !_flexBusy) {
       const ok = ps === 'done'
-      rmsdBtn.disabled = !ok
-      rmsdBtn.style.cursor = ok ? 'pointer' : 'not-allowed'
-      rmsdBtn.style.background = ok ? '#21262d' : '#122117'
-      rmsdBtn.style.color = ok ? '#c9d1d9' : '#484f58'
+      flexToggle.disabled = !ok
+      const lab = flexToggle.closest('label')
+      if (lab) { lab.style.opacity = ok ? '1' : '0.5'; lab.style.cursor = ok ? 'pointer' : 'not-allowed' }
+      if (!ok && flexStatus && oxdnaDisplay?.mode() !== 'rmsf') {
+        _setFlexStatus(ps === 'running' ? 'Running production…' : 'Waiting for production', _C.dim)
+      }
+    }
+
+    // Use as NAMD seed — only once the relaxation has completed.
+    if (seedBtn && !_seeding) {
+      const ok = seedReady(job)
+      seedBtn.disabled = !ok
+      seedBtn.style.cursor = ok ? 'pointer' : 'not-allowed'
+      seedBtn.style.background = ok ? '#21262d' : '#122117'
+      seedBtn.style.color = ok ? '#c9d1d9' : '#484f58'
     }
   }
   function _setProdStatus(text, color = _C.dim) {
@@ -473,24 +504,122 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     setTimeout(() => { exportBtn.textContent = prev; exportBtn.disabled = false }, 2000)
   })
 
-  // ── Show RMSD (production trajectory vs the relaxed structure) ──────────────
-  rmsdBtn?.addEventListener('click', async () => {
-    if (!_selectedId || rmsdBtn.disabled) return
-    rmsdBtn.disabled = true
-    if (rmsdResult) { rmsdResult.textContent = 'Computing RMSD…'; rmsdResult.style.color = _C.accent }
-    const r = await api.getOxdnaRmsd(_selectedId)
-    rmsdBtn.disabled = false
-    if (r?.ready && r.mean != null) {
-      if (rmsdResult) {
-        rmsdResult.textContent =
-          `RMSD vs relaxed: mean ${r.mean.toFixed(2)} nm · max ${r.max.toFixed(2)} nm · ${r.n_frames} frames`
-        rmsdResult.style.color = _C.text
+  // ── Flexibility map (production avg structure recoloured by per-base RMSF) ───
+  function _setFlexStatus(text, color = _C.dim) {
+    if (flexStatus) { flexStatus.textContent = text; flexStatus.style.color = color }
+  }
+  function _setFlexBar(state) {
+    // state: 'computing' (indeterminate stripe) | 'done' | 'off'
+    if (!flexBar) return
+    if (state === 'computing') {
+      flexBar.style.display = ''
+      flexBar.innerHTML =
+        `<div style="position:relative;height:6px;border-radius:4px;overflow:hidden;background:#222">` +
+        `<div style="position:absolute;top:0;height:100%;width:35%;background:${_C.accent};` +
+        `animation:gromacs-indeterminate 1.1s linear infinite"></div></div>`
+    } else if (state === 'done') {
+      flexBar.style.display = ''
+      flexBar.innerHTML = `<span style="color:${_C.ok};font-size:11px">✓ Flexibility map ready</span>`
+    } else {
+      flexBar.style.display = 'none'
+      flexBar.innerHTML = ''
+    }
+  }
+  function _setFlexLegend(min, max) {
+    if (!flexLegend) return
+    if (min == null || max == null) { flexLegend.style.display = 'none'; flexLegend.innerHTML = ''; return }
+    flexLegend.style.display = ''
+    // viridis ramp: dark-purple (rigid) → yellow (flexible)
+    flexLegend.innerHTML =
+      `<div style="display:flex;align-items:center;gap:5px;font-size:9px;color:${_C.dim};margin-top:3px">` +
+      `<span>${min.toFixed(2)} nm</span>` +
+      `<span style="flex:1;height:7px;border-radius:3px;background:linear-gradient(90deg,#440154,#3b528b,#21918c,#5dc863,#fde725)"></span>` +
+      `<span>${max.toFixed(2)} nm</span></div>` +
+      `<div style="font-size:9px;color:${_C.dim}">rigid → flexible (RMSF)</div>`
+  }
+  function _setFlexOff() {
+    if (oxdnaDisplay?.mode() === 'rmsf') oxdnaDisplay.stopAndRestore()
+    if (flexToggle) flexToggle.checked = false
+    flexScale.hide()
+    _setFlexBar('off')
+    _setFlexLegend(null, null)
+    _setFlexStatus('Off', _C.dim)
+  }
+  async function _refreshFlex() {
+    if (!_selectedId || !oxdnaDisplay) return
+    _flexBusy = true
+    _setFlexStatus('Computing average structure + RMSF…', _C.accent)
+    _setFlexBar('computing')
+    const r = await oxdnaDisplay.displayRmsf(_selectedId)
+    _flexBusy = false
+    if (r.ok) {
+      _setFlexBar('done')
+      _setFlexLegend(r.min, r.max)
+      flexScale.show(r.min, r.max)
+      _setFlexStatus(`Avg of production · ${r.n} bases coloured by RMSF`, _C.ok)
+    } else {
+      _setFlexBar('off')
+      _setFlexLegend(null, null)
+      _setFlexStatus(r.reason === 'waiting for production' ? 'Waiting for production'
+                                                          : (r.reason || 'no data'), _C.warn)
+      if (flexToggle) flexToggle.checked = false
+    }
+    _updateButtons(_selectedJob())
+  }
+  flexToggle?.addEventListener('change', async () => {
+    if (flexToggle.checked) {
+      if (!_selectedId) { flexToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); return }
+      if (productionState(_selectedJob()) !== 'done') {
+        flexToggle.checked = false; _setFlexStatus('Waiting for production', _C.warn); return
       }
-    } else if (rmsdResult) {
-      rmsdResult.textContent = r?.reason || 'No RMSD available'
-      rmsdResult.style.color = _C.warn
+      if (displayToggle?.checked) _setDisplayOff()   // mutually exclusive with OxDNA display
+      await _refreshFlex()
+    } else {
+      _setFlexOff()
     }
   })
+
+  // ── Use as NAMD seed (Phase 2 — feed relaxed coords into a NAMD MD run) ─────
+  function _setSeedStatus(text, color = _C.dim) {
+    if (seedStatus) { seedStatus.textContent = text; seedStatus.style.color = color }
+  }
+  seedBtn?.addEventListener('click', async () => {
+    if (!_selectedId || seedBtn.disabled || _seeding) return
+    const src = _selectedJob()
+    _seeding = true
+    seedBtn.disabled = true
+    _setSeedStatus('Building NAMD seed + solvating (this can take 1–2 min)…', _C.accent)
+    const job = await api.createMdJob({
+      oxdna_job_id: _selectedId,
+      design_source_path: src?.design_source_path || _currentPartPath(),
+      autostart: false,
+    })
+    _seeding = false
+    if (job?.job_id && job.status !== 'failed') {
+      _setSeedStatus('NAMD seed job created — see Molecular Dynamics below.', _C.ok)
+      showToast('NAMD seed job created from relaxed oxDNA structure', 'ok')
+      _revealMdPanel()
+    } else {
+      const detail = job?.error || api.lastErrorMessage?.()
+      _setSeedStatus(detail || 'Failed to create NAMD seed (see console)', _C.err)
+    }
+    _updateButtons(_selectedJob())
+  })
+
+  // Collapse this oxDNA panel and open the Molecular Dynamics panel so the new
+  // seeded job is visible right away.  Expanding MD via its own heading click
+  // keeps its collapse state consistent and refreshes its job list.
+  function _revealMdPanel() {
+    if (!_collapsed) {
+      _collapsed = true
+      body.style.display = 'none'
+      arrow?.classList.toggle('is-collapsed', true)
+      setSectionCollapsed('dynamics', 'oxdna-jobs-panel', true)
+    }
+    if (getSectionCollapsed('dynamics', 'md-jobs-panel', true)) {
+      document.getElementById('md-jobs-panel-heading')?.click()
+    }
+  }
 
   // ── Detail actions ───────────────────────────────────────────────────────
   startBtn?.addEventListener('click', async () => {
@@ -506,7 +635,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   deleteBtn?.addEventListener('click', async () => {
     if (!_selectedId) return
     await api.deleteOxdnaJob(_selectedId)
-    if (oxdnaDisplay?.activeJobId() === _selectedId) _setDisplayOff()
+    if (oxdnaDisplay?.activeJobId() === _selectedId) _allDisplaysOff()
     _selectedId = null
     if (detailEl) detailEl.style.display = 'none'
     _updateButtons(null)
@@ -521,13 +650,23 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
                       r.ok ? _C.ok : _C.warn)
   }
   function _setDisplayOff() {
-    oxdnaDisplay?.stopAndRestore()
+    if (oxdnaDisplay?.mode() === 'relaxed') oxdnaDisplay.stopAndRestore()
     if (displayToggle) displayToggle.checked = false
     _setDisplayStatus('Display off', _C.dim)
+  }
+  // Turn off whichever overlay is active (relaxed display OR flexibility map).
+  function _allDisplaysOff() {
+    if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
+    else _setDisplayOff()
+    // Defensive: ensure both checkboxes are cleared and the renderer restored.
+    if (oxdnaDisplay?.isActive()) oxdnaDisplay.stopAndRestore()
+    if (displayToggle) displayToggle.checked = false
+    if (flexToggle) flexToggle.checked = false
   }
   displayToggle?.addEventListener('change', async () => {
     if (displayToggle.checked) {
       if (!_selectedId) { displayToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); return }
+      if (flexToggle?.checked) _setFlexOff()   // mutually exclusive with the flexibility map
       await _refreshDisplay()
     } else {
       _setDisplayOff()
@@ -537,7 +676,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // ── Pause display when leaving the Dynamics tab ───────────────────────────
   window.addEventListener('nadoc:left-tab-change', (e) => {
     if (e.detail?.activeTab !== 'dynamics') {
-      if (oxdnaDisplay?.isActive()) _setDisplayOff()
+      if (oxdnaDisplay?.isActive()) _allDisplaysOff()
       if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
     } else if (!_collapsed) {
       _onOpen()
@@ -548,7 +687,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // Without this the list keeps showing the previous design's jobs (and the
   // selection/display belong to the old design).  Mirrors md_jobs_panel.
   window.addEventListener('nadoc:workspace-path-change', () => {
-    if (oxdnaDisplay?.isActive()) _setDisplayOff()
+    if (oxdnaDisplay?.isActive()) _allDisplaysOff()
     _selectedId = null
     if (detailEl) detailEl.style.display = 'none'
     _updateButtons(null)

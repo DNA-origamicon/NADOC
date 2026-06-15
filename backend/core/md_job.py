@@ -68,6 +68,7 @@ class MdJob:
     devices:             str                    = "0"
     health_samples:      list[MdHealthSample]   = field(default_factory=list)
     design_source_path:  Optional[str]          = None
+    seed_oxdna_job_id:   Optional[str]          = None  # provenance: oxDNA job whose relaxed coords seeded this run
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -96,6 +97,7 @@ class MdJob:
             MdHealthSample(**h) for h in data.get("health_samples", [])
         ]
         data.setdefault("design_source_path", None)
+        data.setdefault("seed_oxdna_job_id", None)
         return cls(**data)
 
     @classmethod
@@ -128,6 +130,7 @@ def new_job(
     threads: int = 16,
     devices: str = "0",
     design_source_path: Optional[str] = None,
+    seed_oxdna_job_id: Optional[str] = None,
 ) -> MdJob:
     return MdJob(
         job_id         = uuid.uuid4().hex[:12],
@@ -140,4 +143,5 @@ def new_job(
         threads        = threads,
         devices        = devices,
         design_source_path = design_source_path,
+        seed_oxdna_job_id = seed_oxdna_job_id,
     )

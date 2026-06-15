@@ -56,6 +56,11 @@ export function filterJobsForPart(jobs, partPath, showAll) {
   return jobs.filter(j => normalizeWorkspacePath(j.design_source_path) === current)
 }
 
+/** Pure: list badge for a job seeded from an oxDNA relaxation, else ''. */
+export function seededBadge(job) {
+  return job?.seed_oxdna_job_id ? 'oxDNA seeded' : ''
+}
+
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -691,6 +696,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // ── Stop button ────────────────────────────────────────────────────────────
   startBtn?.addEventListener('click', async () => {
     if (!_selectedId) return
+    // oxDNA-seeded jobs are already relaxed — let the user skip the NAMD
+    // relaxation ladder and jump straight to Start Production instead.
+    const sel = _jobs.find(j => j.job_id === _selectedId)
+    if (sel?.seed_oxdna_job_id && !window.confirm(
+      'This structure was relaxed by oxDNA, so the NAMD relaxation can be skipped — '
+      + 'you can press "Start Production" to minimize and produce directly from the '
+      + 'seeded structure.\n\nRun the full NAMD relaxation anyway?')) {
+      return
+    }
     console.log(`[${_ts()}] md-jobs: start ${_selectedId}`)
     try {
       const r = await fetch(`/api/md/jobs/${_selectedId}/start`, { method: 'POST' })
@@ -751,6 +765,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       name.style.cssText = `flex:1;font-size:var(--text-xs);color:${_C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap`
       name.textContent = job.design_name
       row.appendChild(name)
+
+      // "oxDNA seeded" badge — this run started from oxDNA-relaxed coordinates.
+      const badge = seededBadge(job)
+      if (badge) {
+        const seeded = document.createElement('span')
+        seeded.title = `Seeded from oxDNA job ${job.seed_oxdna_job_id}`
+        seeded.textContent = badge
+        seeded.style.cssText = `font-size:9px;color:#4a9eff;border:1px solid #2a4a6a;border-radius:3px;padding:0 4px;flex-shrink:0;margin-right:4px`
+        row.appendChild(seeded)
+      }
 
       // Timestamp (HH:MM today, else MM-DD HH:MM)
       const ts = document.createElement('span')

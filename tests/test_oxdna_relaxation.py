@@ -241,6 +241,42 @@ def test_production_rmsd(design, geometry, tmp_path):
     assert r["mean"] < 0.1 and r["max"] < 0.1
 
 
+def test_production_rmsf(design, geometry, tmp_path):
+    """Per-base RMSF (flexibility map): a single nucleotide that moves between
+    frames must show a markedly higher RMSF than the rest, and the payload carries
+    a mean position + colour-ready scalar per base."""
+    from backend.core.constants import NM_TO_OXDNA
+    from backend.physics.oxdna_interface import write_configuration
+    from backend.core.oxdna_health import production_rmsf
+
+    ref = tmp_path / "ref.dat"
+    write_configuration(design, geometry, ref, box_nm=80.0)
+    lines = ref.read_text().splitlines()
+    hdr, data = lines[:3], [l for l in lines[3:] if l.strip()]
+
+    def frame(move_first_by_ox):
+        out = list(hdr)
+        for i, ln in enumerate(data):
+            p = ln.split()
+            if i == 0:                          # perturb ONLY the first nucleotide
+                p[0] = f"{float(p[0]) + move_first_by_ox:.6f}"
+            out.append(" ".join(p))
+        return out
+
+    traj = tmp_path / "traj.dat"
+    traj.write_text("\n".join(frame(0.0) + frame(6.0 * NM_TO_OXDNA)) + "\n")
+
+    r = production_rmsf(design, traj, ref)
+    assert r["ready"] is True
+    assert r["n_frames"] == 2
+    assert len(r["positions"]) > 0
+    p0 = r["positions"][0]
+    assert {"helix_id", "bp_index", "direction", "backbone_position", "nx", "ny", "nz", "rmsf"} <= set(p0)
+    # The moved base is far more flexible than the rest.
+    assert r["max_rmsf"] > 0.5
+    assert r["max_rmsf"] > r["min_rmsf"] + 0.4
+
+
 # ── PBC unwrap for display ────────────────────────────────────────────────────
 
 def test_read_configuration_unwrapped(design, geometry, tmp_path):
@@ -688,6 +724,30 @@ def test_oxdna_rmsd_not_ready_without_production(monkeypatch, tmp_path):
     assert "production" in body["reason"].lower()
 
 
+def test_oxdna_rmsf_waiting_for_production(monkeypatch, tmp_path):
+    """The flexibility-map (RMSF) endpoint is not ready until a production stage
+    has FINISHED — gating the panel's toggle with 'waiting for production'."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    from backend.core.oxdna_protocol import build_production_stage
+    import backend.api.routes_oxdna as routes_oxdna
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    # No production stage at all → "no production run yet".
+    specs = build_relaxation_stages()
+    job = new_oxdna_job("d", [s.to_status() for s in specs])
+    job.save(tmp_path)
+    r = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/rmsf").json()
+    assert r["ready"] is False and "production" in r["reason"].lower()
+
+    # Production stage present but still running → "waiting for production".
+    job.stages.append(build_production_stage(steps=1000).to_status())
+    job.stages[-1].status = "running"
+    job.save(tmp_path)
+    r2 = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/rmsf").json()
+    assert r2["ready"] is False and r2["reason"] == "waiting for production"
+
+
 @pytest.mark.skipif(
     __import__("backend.core.oxdna_runner", fromlist=["find_oxdna"]).find_oxdna() is None,
     reason="oxDNA binary not installed",
@@ -772,3 +832,174 @@ def test_oxdna_http_lifecycle(monkeypatch, tmp_path):
     assert final["status"] == "completed", final
     assert [st["kind"] for st in final["stages"]] == ["mc", "md_relax", "equil", "production"]
     assert final["stages"][-1]["status"] == "done"
+
+
+# ── Phase 2: NAMD-seed handoff ────────────────────────────────────────────────
+# build_namd_seed reconstructs a NAMD starting structure from a completed oxDNA
+# job's OWN design.json + latest relaxed last_conf, using the true backbone site.
+
+def _stage_a_relaxed_job(tmp_path, design, geometry, *, write_conf=True):
+    """Create an oxDNA job dir with a design.json snapshot and (optionally) a
+    relaxed last_conf.dat in the final stage — the inputs build_namd_seed reads."""
+    specs = build_relaxation_stages()
+    job = new_oxdna_job("seed_src", [s.to_status() for s in specs],
+                        n_nucleotides=len(geometry))
+    job.status = OxdnaStatus.completed
+    job.save(tmp_path)
+    jd = job.job_dir(tmp_path)
+    (jd / "design.json").write_text(design.model_dump_json())
+    if write_conf:
+        last = job.stages[-1]
+        sdir = job.stage_dir(tmp_path, last.name)
+        sdir.mkdir(parents=True, exist_ok=True)
+        write_configuration(design, geometry, sdir / "last_conf.dat", box_nm=50.0)
+    return job
+
+
+def test_build_namd_seed_uses_snapshot_and_backbone_site(tmp_path, geometry):
+    """build_namd_seed reads the job's OWN design.json (not the live editor design)
+    and returns an AtomisticModel whose cross-pair backbone is widened toward
+    B-DNA (the §18 fix), with correct provenance."""
+    from backend.core.oxdna_runner import build_namd_seed
+
+    design = _sequence_for_oxdna(make_6hb_design())
+    geom = __import__("backend.api.crud", fromlist=["_geometry_for_design"])._geometry_for_design(design)
+    job = _stage_a_relaxed_job(tmp_path, design, geom)
+
+    seed = build_namd_seed(job.job_id, tmp_path)
+    assert seed.source_job_id == job.job_id
+    assert seed.stage_name == job.stages[-1].name
+    assert seed.conf_path.name == "last_conf.dat"
+    # The snapshot drove the model: same nucleotide count as the snapshot design.
+    assert len(seed.atomistic_model.atoms) > 0
+    assert seed.design.metadata is not None
+
+    # The seed must carry a WIDER cross-pair duplex than the raw oxDNA centre of
+    # mass — proving the backbone-site reconstruction (§18) is in the path, not
+    # the collapsed ~1.0 nm CM that would clash at NAMD startup.
+    from backend.core.cg_to_atomistic import read_backbone_positions
+    from backend.physics.oxdna_interface import read_configuration
+    bb = read_backbone_positions(seed.conf_path, design)
+    cm = read_configuration(seed.conf_path, design)
+    # Find any designed WC pair present in both maps.
+    fwd = {(h, b) for (h, b, d) in bb if d == "FORWARD"}
+    rev = {(h, b) for (h, b, d) in bb if d == "REVERSE"}
+    h, b = sorted(fwd & rev)[0]
+    bb_sep = float(np.linalg.norm(bb[(h, b, "FORWARD")] - bb[(h, b, "REVERSE")]))
+    cm_sep = float(np.linalg.norm(cm[(h, b, "FORWARD")] - cm[(h, b, "REVERSE")]))
+    assert bb_sep > cm_sep, f"backbone {bb_sep:.2f} not wider than CM {cm_sep:.2f}"
+
+
+def test_build_namd_seed_missing_conf_raises(tmp_path, geometry):
+    """No relaxed last_conf.dat yet → a clear FileNotFoundError (the route maps
+    this to a 400)."""
+    from backend.core.oxdna_runner import build_namd_seed
+
+    design = _sequence_for_oxdna(make_6hb_design())
+    geom = __import__("backend.api.crud", fromlist=["_geometry_for_design"])._geometry_for_design(design)
+    job = _stage_a_relaxed_job(tmp_path, design, geom, write_conf=False)
+    with pytest.raises(FileNotFoundError):
+        build_namd_seed(job.job_id, tmp_path)
+
+
+def _write_detached_job(tmp_path, *, production=True, production_complete=True):
+    """Build a job whose runner DIED leaving status=running (server-restart case):
+    relax stages have complete energy.dat + last_conf; the trailing stage's
+    completeness is controlled by `production_complete`."""
+    from dataclasses import asdict
+    from backend.core.oxdna_protocol import build_production_stage, expected_energy_lines
+    specs = list(build_relaxation_stages())
+    if production:
+        specs.append(build_production_stage(steps=1000))
+    job = new_oxdna_job("detached", [s.to_status() for s in specs])
+    # Relax stages done; the last stage left "running" (runner died before marking it).
+    for i in range(len(job.stages) - 1):
+        job.stages[i].status = "done"
+    job.stages[-1].status = "running"
+    job.current_stage_idx = len(job.stages) - 1
+    job.status = OxdnaStatus.running
+    job.oxdna_pid = None
+    job.save(tmp_path)
+    (job.job_dir(tmp_path) / "stages_spec.json").write_text(
+        __import__("json").dumps([asdict(s) for s in specs])
+    )
+    # Write per-stage outputs.
+    for i, spec in enumerate(specs):
+        sdir = job.stage_dir(tmp_path, job.stages[i].name)
+        sdir.mkdir(parents=True, exist_ok=True)
+        last = (i == len(specs) - 1)
+        complete = (not last) or production_complete
+        n = expected_energy_lines(spec) + 1 if complete else 1
+        sdir.joinpath("energy.dat").write_text(
+            "".join(f"{k} -1.5 0.5 -1.0\n" for k in range(n))
+        )
+        if complete:
+            sdir.joinpath("last_conf.dat").write_text("t = 0\nb = 1 1 1\nE = 0 0 0\n")
+    return job
+
+
+def test_reconcile_completes_detached_finished_production(tmp_path):
+    """A finished production whose runner thread died (status stuck at running) is
+    recovered to completed with the production stage marked done."""
+    from backend.core.oxdna_runner import reconcile_oxdna_status
+    job = _write_detached_job(tmp_path, production=True, production_complete=True)
+    out = reconcile_oxdna_status(OxdnaJob.load(job.job_id, tmp_path), tmp_path)
+    assert out.status == OxdnaStatus.completed
+    assert out.stages[-1].kind == "production"
+    assert out.stages[-1].status == "done"
+    # Persisted, so a re-load sees it too.
+    assert OxdnaJob.load(job.job_id, tmp_path).status == OxdnaStatus.completed
+
+
+def test_reconcile_interrupted_midstage_to_stopped(tmp_path):
+    """A run interrupted partway through a stage (energy.dat incomplete, no
+    last_conf) is recovered to stopped, not falsely completed."""
+    from backend.core.oxdna_runner import reconcile_oxdna_status
+    job = _write_detached_job(tmp_path, production=True, production_complete=False)
+    out = reconcile_oxdna_status(OxdnaJob.load(job.job_id, tmp_path), tmp_path)
+    assert out.status == OxdnaStatus.stopped
+    assert out.stages[-1].status != "done"
+
+
+def test_reconcile_noop_for_terminal_job(tmp_path):
+    """Completed/failed jobs are never touched by reconciliation."""
+    from backend.core.oxdna_runner import reconcile_oxdna_status
+    specs = build_relaxation_stages()
+    job = new_oxdna_job("done", [s.to_status() for s in specs])
+    job.status = OxdnaStatus.completed
+    for s in job.stages:
+        s.status = "done"
+    job.save(tmp_path)
+    out = reconcile_oxdna_status(OxdnaJob.load(job.job_id, tmp_path), tmp_path)
+    assert out.status == OxdnaStatus.completed
+    assert [s.status for s in out.stages] == ["done"] * len(out.stages)
+
+
+def test_oxdna_list_route_reconciles_detached(monkeypatch, tmp_path):
+    """GET /oxdna/jobs surfaces the recovered status so the panel re-enables
+    Show RMSD / Use-as-NAMD-seed without a manual restart."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes_oxdna
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    job = _write_detached_job(tmp_path, production=True, production_complete=True)
+    listed = TestClient(app).get("/api/oxdna/jobs").json()
+    row = next(j for j in listed if j["job_id"] == job.job_id)
+    assert row["status"] == "completed"
+    assert row["stages"][-1]["status"] == "done"
+
+
+def test_md_create_with_bad_oxdna_seed_returns_400(monkeypatch, tmp_path):
+    """POST /md/jobs with an unknown oxdna_job_id fails fast (400) before any
+    expensive solvation — the seed lookup happens up front."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_md as routes_md
+
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    r = TestClient(app).post("/api/md/jobs", json={
+        "autostart": False,
+        "oxdna_job_id": "does_not_exist",
+    })
+    assert r.status_code == 400

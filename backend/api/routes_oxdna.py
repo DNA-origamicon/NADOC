@@ -46,6 +46,7 @@ from backend.core.oxdna_runner import (
     load_stage_specs,
     oxdna_available,
     prepare_oxdna_job,
+    reconcile_oxdna_status,
     start_job,
     stop_job,
 )
@@ -87,11 +88,14 @@ def _workspace() -> Path:
 
 def _load_job(job_id: str) -> OxdnaJob:
     try:
-        return OxdnaJob.load(job_id, _workspace())
+        job = OxdnaJob.load(job_id, _workspace())
     except FileNotFoundError:
         raise HTTPException(404, f"oxDNA job {job_id!r} not found")
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(500, f"Failed to load job {job_id}: {exc}")
+    # Recover a finished run whose runner thread died (e.g. backend restart) so
+    # the completed production is recognised (Show RMSD / NAMD seed unlock).
+    return reconcile_oxdna_status(job, _workspace())
 
 
 def _jsonl_records(path: Path) -> list[dict]:
@@ -197,7 +201,10 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
 
 @router.get("/oxdna/jobs")
 async def list_oxdna_jobs() -> list[dict]:
-    return [j.to_dict() for j in OxdnaJob.list_jobs(_workspace())]
+    return [
+        reconcile_oxdna_status(j, _workspace()).to_dict()
+        for j in OxdnaJob.list_jobs(_workspace())
+    ]
 
 
 @router.get("/oxdna/jobs/{job_id}")
@@ -334,6 +341,43 @@ async def get_oxdna_rmsd(job_id: str) -> dict:
     design = Design.model_validate_json((jd / "design.json").read_text())
     result = await run_in_threadpool(production_rmsd, design, traj, ref_conf)
     return {"ready": result["n_frames"] > 0, **result}
+
+
+@router.get("/oxdna/jobs/{job_id}/rmsf")
+async def get_oxdna_rmsf(job_id: str) -> dict:
+    """Per-nucleotide average position + RMSF over the production run — the
+    flexibility map.  Each production frame is PBC-unwrapped + Kabsch-aligned to
+    the SAME reference the OxDNA display uses (the job's ``conf.dat`` = the design
+    geometry), so the average structure overlays the design in the exact same
+    place/orientation as the relaxed-display toggle.  Every base's mean backbone
+    position and its RMSF (root-mean-square fluctuation about that mean) are
+    returned, so the panel can deform the model to the average structure
+    recoloured rigid→flexible.
+
+    Ready only once a production stage has finished (the toggle is gated on this).
+    """
+    from backend.core.models import Design
+    from backend.core.oxdna_health import production_rmsf
+
+    job = _load_job(job_id)
+    prod_idx = next((i for i, s in enumerate(job.stages) if s.kind == "production"), None)
+    if prod_idx is None:
+        return {"ready": False, "reason": "no production run yet"}
+    if job.stages[prod_idx].status != "done":
+        return {"ready": False, "reason": "waiting for production"}
+
+    jd = job.job_dir(_workspace())
+    traj = job.stage_dir(_workspace(), job.stages[prod_idx].name) / "trajectory.dat"
+    if not traj.exists():
+        return {"ready": False, "reason": "production trajectory not available yet"}
+
+    # Reference = the job's conf.dat (design geometry) — IDENTICAL to the OxDNA
+    # display route's Kabsch reference, so the flexibility map and the relaxed
+    # display sit in the same place.
+    ref_conf = jd / "conf.dat"
+
+    design = Design.model_validate_json((jd / "design.json").read_text())
+    return await run_in_threadpool(production_rmsf, design, traj, ref_conf)
 
 
 @router.get("/oxdna/jobs/{job_id}/display")

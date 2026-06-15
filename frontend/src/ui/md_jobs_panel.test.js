@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeWorkspacePath, filterJobsForPart } from './md_jobs_panel.js'
+import { normalizeWorkspacePath, filterJobsForPart, seededBadge } from './md_jobs_panel.js'
+
+describe('seededBadge', () => {
+  it('labels oxDNA-seeded jobs and nothing else', () => {
+    expect(seededBadge({ seed_oxdna_job_id: 'abc123' })).toBe('oxDNA seeded')
+    expect(seededBadge({ seed_oxdna_job_id: null })).toBe('')
+    expect(seededBadge({})).toBe('')
+    expect(seededBadge(null)).toBe('')
+  })
+})
 
 describe('normalizeWorkspacePath', () => {
   it('returns empty string for null/undefined/empty', () => {

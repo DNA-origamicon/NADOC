@@ -51,7 +51,10 @@ import subprocess
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from backend.core.atomistic import AtomisticModel
 
 from backend.core.models import Design
 from backend.core.md_charge import audit_psf
@@ -1623,6 +1626,7 @@ def build_namd_solvated_package(
     mg_hexahydrate: bool = False,
     require_full_topology: bool = False,
     seed: int = 42,
+    atomistic_model: "AtomisticModel | None" = None,
 ) -> bytes:
     """Return raw ZIP bytes of a complete NAMD explicit-solvent package.
 
@@ -1630,6 +1634,12 @@ def build_namd_solvated_package(
     ----------
     design:
         Active NADOC design.
+    atomistic_model:
+        Optional pre-built heavy-atom model supplying the DNA starting
+        coordinates.  Pass an oxDNA-relaxed model (Phase-2 NAMD seed) so the
+        solvated PDB starts from relaxed backbone positions instead of ideal
+        B-DNA; the PSF (topology/connectivity) is unaffected.  Default: build
+        ideal B-DNA internally.
     padding_nm:
         Water padding around the DNA bounding box (nm). Default 1.2 nm.
     ion_conc_mM:
@@ -1658,12 +1668,12 @@ def build_namd_solvated_package(
     # topology has hydrogens and CHARMM terminal/deoxy patches.
     topology_metadata: dict = {"topology_builder": "nadoc_legacy_heavy_atom_psf"}
     if require_full_topology:
-        topology_build = build_charmm_psfgen_topology(design)
+        topology_build = build_charmm_psfgen_topology(design, atomistic_model=atomistic_model)
         dna_pdb = topology_build.pdb_text
         dna_psf = topology_build.psf_text
         topology_metadata = topology_build.metadata
     else:
-        dna_pdb = export_pdb(design, box_margin_nm=padding_nm)
+        dna_pdb = export_pdb(design, box_margin_nm=padding_nm, model=atomistic_model)
         dna_psf = complete_psf(design)
     dry_audit = audit_psf(
         dna_psf,
