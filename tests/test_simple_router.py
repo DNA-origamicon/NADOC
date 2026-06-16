@@ -325,7 +325,6 @@ def _full_autostaple(cells, length, lattice):
 
 
 def _staple_crossover_count(design):
-    helix_map = {h.id: h for h in design.helices if h.grid_pos is not None}
     n = 0
     for xo in design.crossovers:
         if not (_scaffold_half(design, xo.half_a) and _scaffold_half(design, xo.half_b)):

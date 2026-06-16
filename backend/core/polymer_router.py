@@ -193,7 +193,6 @@ def _bridge(
     scaffold polarity.
     """
     near_dom = near_s.domains[0]
-    far_dom = far_s.domains[0]
     near_cap = min(near_dom.start_bp, near_dom.end_bp)   # near connector's outer (low) cap
     # near connector's cap tip is its 3' end iff its domain ends at the low cap.
     if near_dom.end_bp == near_cap:

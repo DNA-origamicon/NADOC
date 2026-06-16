@@ -12,7 +12,6 @@ import json
 import sys
 import time
 import types
-from dataclasses import asdict
 from pathlib import Path
 
 import pytest

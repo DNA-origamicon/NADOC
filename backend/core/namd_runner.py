@@ -24,14 +24,14 @@ import shutil
 import signal
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from backend.core.md_job import MdJob, MdStatus, MdSegmentStatus, MdHealthSample
+from backend.core.md_job import MdJob, MdStatus, MdHealthSample
 from backend.core.md_health import run_health_check, append_health_jsonl
 from backend.core.namd_metrics import parse_namd_log
-from backend.core.md_protocols import segments_from_manifest, SegmentSpec
+from backend.core.md_protocols import segments_from_manifest
 
 logger = logging.getLogger(__name__)
 
@@ -401,9 +401,6 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     min_name = manifest["minimization"]["name"]
     _, segments = segments_from_manifest(manifest_path)
     logger.info("[%s] Loaded manifest: %d segments, min=%s", job.job_id, len(segments), min_name)
-
-    # Build segment status index for fast lookup
-    seg_by_name = {s.name: s for s in segments}
 
     # ── Minimization ─────────────────────────────────────────────────────────
 

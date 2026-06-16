@@ -29,7 +29,6 @@ from backend.core.models import (
     Crossover,
     Design,
     Direction,
-    Domain,
     HalfCrossover,
     LatticeType,
     Strand,

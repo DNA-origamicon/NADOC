@@ -17,7 +17,6 @@ from backend.core.seamed_router import (
     auto_scaffold_matched,
     auto_scaffold_seamed,
 )
-from backend.core.seamless_router import auto_scaffold_seamless
 from backend.core.validator import validate_design
 
 

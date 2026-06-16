@@ -10,7 +10,6 @@ strand count.
 import math
 
 import numpy as np
-import pytest
 
 from backend.core.lattice import _opposite_direction, _scaffold_coverage_by_helix
 from backend.core.models import Design, Direction, Domain, Strand, StrandType

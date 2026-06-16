@@ -22,12 +22,11 @@ from __future__ import annotations
 import json
 import logging
 import shutil
-import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
