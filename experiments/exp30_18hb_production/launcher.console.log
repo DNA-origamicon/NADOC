@@ -1,0 +1,95 @@
+2026-06-14 12:58:49 INFO Created job e29d1e5d5ace (design=18hb); wrote /home/jojo/Work/NADOC/experiments/exp30_18hb_production/JOB_ID
+2026-06-14 12:58:49 INFO Preparing (psfgen full topology → GROMACS solvate @ 50 mM NaCl + 12.5 mM Mg → ENM ladder configs, minimize=24000 steps)...
+2026-06-14 13:01:59 INFO Prep done in 190s: package=package/18hb_namd_solvated name_stem=18hb segments=12 solvated_atoms=2,979,096
+2026-06-14 13:01:59 INFO   segment 18hb_01_300K_NPT_ENM_k0p5_p10    steps=240000 (300K NPT ENM k=0.5)
+2026-06-14 13:01:59 INFO   segment 18hb_01_300K_NPT_ENM_k0p5_p50    steps=960000 (300K NPT ENM k=0.5)
+2026-06-14 13:01:59 INFO   segment 18hb_01_300K_NPT_ENM_k0p5_p100   steps=1200000 (300K NPT ENM k=0.5)
+2026-06-14 13:01:59 INFO   segment 18hb_02_300K_NPT_ENM_k0p1_p10    steps=240000 (300K NPT ENM k=0.1)
+2026-06-14 13:01:59 INFO   segment 18hb_02_300K_NPT_ENM_k0p1_p50    steps=960000 (300K NPT ENM k=0.1)
+2026-06-14 13:01:59 INFO   segment 18hb_02_300K_NPT_ENM_k0p1_p100   steps=1200000 (300K NPT ENM k=0.1)
+2026-06-14 13:01:59 INFO   segment 18hb_03_300K_NPT_ENM_k0p01_p10   steps=240000 (300K NPT ENM k=0.01)
+2026-06-14 13:01:59 INFO   segment 18hb_03_300K_NPT_ENM_k0p01_p50   steps=960000 (300K NPT ENM k=0.01)
+2026-06-14 13:01:59 INFO   segment 18hb_03_300K_NPT_ENM_k0p01_p100  steps=1200000 (300K NPT ENM k=0.01)
+2026-06-14 13:01:59 INFO   segment 18hb_04_300K_NPT_MGHH_only_p10   steps=240000 (300K NPT k=0)
+2026-06-14 13:01:59 INFO   segment 18hb_04_300K_NPT_MGHH_only_p50   steps=960000 (300K NPT k=0)
+2026-06-14 13:01:59 INFO   segment 18hb_04_300K_NPT_MGHH_only_p100  steps=1200000 (300K NPT k=0)
+2026-06-14 13:01:59 INFO Launching ladder for e29d1e5d5ace (threads=16 device=0)...
+2026-06-14 13:01:59 INFO [e29d1e5d5ace] run_job starting; package_dir=/home/jojo/Work/NADOC/workspace/md_jobs/e29d1e5d5ace/package/18hb_namd_solvated
+2026-06-14 13:01:59 INFO [e29d1e5d5ace] NAMD binary: /home/jojo/Applications/NAMD_3.0.2/namd3
+2026-06-14 13:01:59 INFO [e29d1e5d5ace] Loaded manifest: 12 segments, min=18hb_00_min_enm_k0p5
+2026-06-14 13:01:59 INFO [e29d1e5d5ace] Running minimization: 18hb_00_min_enm_k0p5
+2026-06-14 13:57:49 INFO [e29d1e5d5ace] Minimization done
+2026-06-14 13:57:49 INFO [e29d1e5d5ace] Segment 1/12: 18hb_01_300K_NPT_ENM_k0p5_p10 (300K NPT ENM k=0.5)
+2026-06-14 17:15:04 INFO Resuming job e29d1e5d5ace status=MdStatus.running segment_idx=0
+2026-06-14 17:15:04 INFO Launching ladder for e29d1e5d5ace (threads=16 device=0)...
+2026-06-14 17:15:04 INFO [e29d1e5d5ace] run_job starting; package_dir=/home/jojo/Work/NADOC/workspace/md_jobs/e29d1e5d5ace/package/18hb_namd_solvated
+2026-06-14 17:15:04 INFO [e29d1e5d5ace] NAMD binary: /home/jojo/Applications/NAMD_3.0.2/namd3
+2026-06-14 17:15:04 INFO [e29d1e5d5ace] Loaded manifest: 12 segments, min=18hb_00_min_enm_k0p5
+2026-06-14 17:15:04 INFO [e29d1e5d5ace] Minimization already done (skipping)
+2026-06-14 17:15:04 INFO [e29d1e5d5ace] Segment 1/12: 18hb_01_300K_NPT_ENM_k0p5_p10 (300K NPT ENM k=0.5)
+2026-06-14 17:15:05 INFO [e29d1e5d5ace] Resuming 18hb_01_300K_NPT_ENM_k0p5_p10 from step 86400/240000 (conf=18hb_01_300K_NPT_ENM_k0p5_p10.resume1)
+2026-06-14 17:15:17 ERROR [e29d1e5d5ace] NAMD failed rc=-6 for 18hb_01_300K_NPT_ENM_k0p5_p10; log=/home/jojo/Work/NADOC/workspace/md_jobs/e29d1e5d5ace/package/18hb_namd_solvated/18hb_01_300K_NPT_ENM_k0p5_p10.resume1.log
+2026-06-14 17:15:17 INFO run_job returned. Final status: MdStatus.failed (segment_idx=0)
+2026-06-14 17:18:16 INFO Resuming job e29d1e5d5ace status=MdStatus.running segment_idx=0
+2026-06-14 17:18:16 INFO Launching ladder for e29d1e5d5ace (threads=16 device=0)...
+2026-06-14 17:18:16 INFO [e29d1e5d5ace] run_job starting; package_dir=/home/jojo/Work/NADOC/workspace/md_jobs/e29d1e5d5ace/package/18hb_namd_solvated
+2026-06-14 17:18:16 INFO [e29d1e5d5ace] NAMD binary: /home/jojo/Applications/NAMD_3.0.2/namd3
+2026-06-14 17:18:17 INFO [e29d1e5d5ace] Loaded manifest: 12 segments, min=18hb_00_min_enm_k0p5
+2026-06-14 17:18:17 INFO [e29d1e5d5ace] Minimization already done (skipping)
+2026-06-14 17:18:17 INFO [e29d1e5d5ace] Segment 1/12: 18hb_01_300K_NPT_ENM_k0p5_p10 (300K NPT ENM k=0.5)
+2026-06-14 17:18:17 INFO [e29d1e5d5ace] Resuming 18hb_01_300K_NPT_ENM_k0p5_p10 from step 86400/240000 (conf=18hb_01_300K_NPT_ENM_k0p5_p10.resume1)
+2026-06-14 19:50:56 INFO [e29d1e5d5ace] Health check: 18hb_01_300K_NPT_ENM_k0p5_p10
+2026-06-14 19:50:56 WARNING netCDF4 is not available. Writing AMBER ncdf files will be slow.
+2026-06-14 19:50:56 WARNING Guessing that this is actually a NAMD-type PSF file... continuing with fingers crossed!
+2026-06-14 19:51:13 INFO The attribute(s) types, masses have already been read from the topology file. The guesser will only guess empty values for this attribute, if any exists. To overwrite it by completely guessed values, you can pass the attribute to the force_guess parameter instead of the to_guess one
+2026-06-14 19:51:13 INFO There is no empty types values. Guesser did not guess any new values for types attribute
+2026-06-14 19:51:13 INFO There is no empty masses values. Guesser did not guess any new values for masses attribute
+2026-06-14 19:51:13 WARNING Guessing that this is actually a NAMD-type PSF file... continuing with fingers crossed!
+2026-06-14 19:51:29 INFO The attribute(s) types, masses have already been read from the topology file. The guesser will only guess empty values for this attribute, if any exists. To overwrite it by completely guessed values, you can pass the attribute to the force_guess parameter instead of the to_guess one
+2026-06-14 19:51:30 INFO There is no empty types values. Guesser did not guess any new values for types attribute
+2026-06-14 19:51:30 INFO There is no empty masses values. Guesser did not guess any new values for masses attribute
+2026-06-14 19:51:32 WARNING Guessing that this is actually a NAMD-type PSF file... continuing with fingers crossed!
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/coordinates/DCD.py:171: DeprecationWarning: DCDReader currently makes independent timesteps by copying self.ts while other readers update self.ts inplace. This behavior will be changed in 3.0 to be the same as other readers. Read more at https://github.com/MDAnalysis/mdanalysis/issues/3889 to learn if this change in behavior might affect you.
+  warnings.warn("DCDReader currently makes independent timesteps"
+2026-06-14 19:51:43 INFO The attribute(s) types, masses have already been read from the topology file. The guesser will only guess empty values for this attribute, if any exists. To overwrite it by completely guessed values, you can pass the attribute to the force_guess parameter instead of the to_guess one
+2026-06-14 19:51:43 INFO There is no empty types values. Guesser did not guess any new values for types attribute
+2026-06-14 19:51:43 INFO There is no empty masses values. Guesser did not guess any new values for masses attribute
+2026-06-14 19:51:43 WARNING Guessing that this is actually a NAMD-type PSF file... continuing with fingers crossed!
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/coordinates/base.py:730: UserWarning: Reader has no dt information, set to 1.0 ps
+  return self.ts.dt
+2026-06-14 19:52:13 INFO The attribute(s) types, masses have already been read from the topology file. The guesser will only guess empty values for this attribute, if any exists. To overwrite it by completely guessed values, you can pass the attribute to the force_guess parameter instead of the to_guess one
+2026-06-14 19:52:13 INFO There is no empty types values. Guesser did not guess any new values for types attribute
+2026-06-14 19:52:13 INFO There is no empty masses values. Guesser did not guess any new values for masses attribute
+2026-06-14 19:52:13 WARNING Guessing that this is actually a NAMD-type PSF file... continuing with fingers crossed!
+2026-06-14 19:52:43 INFO The attribute(s) types, masses have already been read from the topology file. The guesser will only guess empty values for this attribute, if any exists. To overwrite it by completely guessed values, you can pass the attribute to the force_guess parameter instead of the to_guess one
+2026-06-14 19:52:43 INFO There is no empty types values. Guesser did not guess any new values for types attribute
+2026-06-14 19:52:43 INFO There is no empty masses values. Guesser did not guess any new values for masses attribute
+2026-06-14 19:52:57 INFO [e29d1e5d5ace] Health: c1=1.000 wc=0.948 passed=True
+2026-06-14 19:52:57 INFO [e29d1e5d5ace] Segment 2/12: 18hb_01_300K_NPT_ENM_k0p5_p50 (300K NPT ENM k=0.5)
+2026-06-15 11:36:37 INFO [e29d1e5d5ace] Health check: 18hb_01_300K_NPT_ENM_k0p5_p50
+2026-06-15 11:36:37 WARNING Guessing that this is actually a NAMD-type PSF file... continuing with fingers crossed!
+2026-06-15 11:36:54 INFO The attribute(s) types, masses have already been read from the topology file. The guesser will only guess empty values for this attribute, if any exists. To overwrite it by completely guessed values, you can pass the attribute to the force_guess parameter instead of the to_guess one
+2026-06-15 11:36:54 INFO There is no empty types values. Guesser did not guess any new values for types attribute
+2026-06-15 11:36:54 INFO There is no empty masses values. Guesser did not guess any new values for masses attribute
+2026-06-15 11:36:54 WARNING Guessing that this is actually a NAMD-type PSF file... continuing with fingers crossed!
+2026-06-15 11:37:13 INFO The attribute(s) types, masses have already been read from the topology file. The guesser will only guess empty values for this attribute, if any exists. To overwrite it by completely guessed values, you can pass the attribute to the force_guess parameter instead of the to_guess one
+2026-06-15 11:37:13 INFO There is no empty types values. Guesser did not guess any new values for types attribute
+2026-06-15 11:37:13 INFO There is no empty masses values. Guesser did not guess any new values for masses attribute
+2026-06-15 11:37:15 WARNING Guessing that this is actually a NAMD-type PSF file... continuing with fingers crossed!
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/coordinates/DCD.py:171: DeprecationWarning: DCDReader currently makes independent timesteps by copying self.ts while other readers update self.ts inplace. This behavior will be changed in 3.0 to be the same as other readers. Read more at https://github.com/MDAnalysis/mdanalysis/issues/3889 to learn if this change in behavior might affect you.
+  warnings.warn("DCDReader currently makes independent timesteps"
+2026-06-15 11:37:26 INFO The attribute(s) types, masses have already been read from the topology file. The guesser will only guess empty values for this attribute, if any exists. To overwrite it by completely guessed values, you can pass the attribute to the force_guess parameter instead of the to_guess one
+2026-06-15 11:37:26 INFO There is no empty types values. Guesser did not guess any new values for types attribute
+2026-06-15 11:37:26 INFO There is no empty masses values. Guesser did not guess any new values for masses attribute
+2026-06-15 11:37:27 WARNING Guessing that this is actually a NAMD-type PSF file... continuing with fingers crossed!
+/home/jojo/Work/NADOC/.venv/lib/python3.12/site-packages/MDAnalysis/coordinates/base.py:730: UserWarning: Reader has no dt information, set to 1.0 ps
+  return self.ts.dt
+2026-06-15 11:37:55 INFO The attribute(s) types, masses have already been read from the topology file. The guesser will only guess empty values for this attribute, if any exists. To overwrite it by completely guessed values, you can pass the attribute to the force_guess parameter instead of the to_guess one
+2026-06-15 11:37:55 INFO There is no empty types values. Guesser did not guess any new values for types attribute
+2026-06-15 11:37:55 INFO There is no empty masses values. Guesser did not guess any new values for masses attribute
+2026-06-15 11:37:55 WARNING Guessing that this is actually a NAMD-type PSF file... continuing with fingers crossed!
+2026-06-15 11:38:24 INFO The attribute(s) types, masses have already been read from the topology file. The guesser will only guess empty values for this attribute, if any exists. To overwrite it by completely guessed values, you can pass the attribute to the force_guess parameter instead of the to_guess one
+2026-06-15 11:38:24 INFO There is no empty types values. Guesser did not guess any new values for types attribute
+2026-06-15 11:38:25 INFO There is no empty masses values. Guesser did not guess any new values for masses attribute
+2026-06-15 11:38:49 INFO [e29d1e5d5ace] Health: c1=1.000 wc=0.948 passed=True
+2026-06-15 11:38:49 INFO [e29d1e5d5ace] Segment 3/12: 18hb_01_300K_NPT_ENM_k0p5_p100 (300K NPT ENM k=0.5)

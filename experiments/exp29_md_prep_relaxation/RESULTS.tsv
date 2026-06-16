@@ -1,0 +1,12 @@
+label	min_steps	stage_ns	equil_ns	k_ladder	first_fail	all_passed	per_stage_C1%_WC%	notes
+baseline_min4800	4800	0.3	0.0	0.5,0.1,0.01,0	1	False	k0p5:90/78 | k0p1:83/60 | k0p01:68/20 | k0:29/0	2hb baseline; production default min; reproduce 6hb k-drop failure
+longmin_24000	24000	0.3	0.0	0.5,0.1,0.01,0	2	False	k0p5:90/85 | k0p1:85/50 | k0p01:76/22 | k0:20/5	longer declash minimisation; test min-length lever
+longmin_50000	50000	0.3	0.0	0.5,0.1,0.01,0	2	False	k0p5:93/82 | k0p1:83/52 | k0p01:76/25 | k0:24/8	longer declash minimisation; test min-length lever
+ladder_fine	24000	0.3	0.0	0.5,0.3,0.2,0.1,0.05,0.02,0.01,0	2	False	k0p5:90/85 | k0p3:93/62 | k0p2:88/62 | k0p1:88/60 | k0p05:88/45 | k0p02:85/40 | k0p01:83/25 | k0:49/12	Cycle 2: gentler fine k-ladder; pre-registered Model A vs B test; decision=C1' at k=0
+final_taper	24000	0.3	0.0	0.1,0.05,0.02,0.01,0.005,0.002,0.001,0	1	False	k0p1:93/45 | k0p05:90/38 | k0p02:83/30 | k0p01:68/22 | k0p005:56/20 | k0p002:46/15 | k0p001:27/0 | k0:17/2	Cycle 3: subdivide final removal 0.01->0; decision=C1' at k=0 vs Cycle2 48.8
+salt150_min24k	24000	0.3	0.0	0.5,0.1,0.01,0	2	False	k0p5:91/82 | k0p1:84/51 | k0p01:67/26 | k0:44/10	Cycle 4 salt arm: +150 mM NaCl on 12.5 mM Mg; baseline recipe (cf longmin_24000 k0=20, 0 salt); decision=C1' at k=0
+expand1p1_min24k	24000	0.3	0.0	0.5,0.1,0.01,0	2	False	k0p5:98/87 | k0p1:90/62 | k0p01:49/18 | k0:12/8	Cycle 4 expansion arm: +10% lateral inter-helix spacing (2.25->2.475nm), 0 salt; baseline recipe (cf longmin_24000 k0=20); decision=C1' at k=0
+salt050_min24k	24000	0.3	0.0	0.5,0.1,0.01,0	1	False	k0p5:88/78 | k0p1:83/52 | k0p01:74/22 | k0:40/2	Cycle 4 salt ladder: 50 mM NaCl on 12.5 mM Mg; baseline recipe; decision=C1' at k=0 dose-response
+salt300_min24k	24000	0.3	0.0	0.5,0.1,0.01,0	1	False	k0p5:90/78 | k0p1:86/56 | k0p01:74/29 | k0:48/2	Cycle 4 salt ladder: 300 mM NaCl on 12.5 mM Mg; baseline recipe; decision=C1' at k=0 dose-response
+control_50mM	24000	0.3	0.0	0.5,0.1,0.01,0	2	False	k0p5:100/81 | k0p1:100/31 | k0p01:78/19 | k0:41/19	Cycle 5 control: non-strained 2hb (no FL, no 2xT) @50mM NaCl; discriminator for the non-electrostatic residual
+6hb_salt50_min24k	24000	0.3	0.0	0.5,0.1,0.01,0	2	False	k0p5:91/84 | k0p1:88/56 | k0p01:78/27 | k0:56/8	Cycle 5 6hb 'based on learnings': 6hb_2xT @50mM NaCl, min24k, declash auto, no expansion, +p16; does the electrostatic fix transfer
