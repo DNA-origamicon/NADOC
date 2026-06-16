@@ -164,18 +164,18 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #33
-(**crud.py: auto-scaffold routing variants** → `routes_scaffold_routing.py`, B=1 / bespoke-B=0, verbatim, 4 routes,
-2071 passed / 55 skipped unchanged). **The prior handoff's "fold sequence-assignment into routes_sequences.py" plan
-was REJECTED on cohesion** — the `# ── Sequence assignment endpoints` banner was a 3-concern L8 adjacency trap, and
-routes_sequences.py's own docstring forbids the fold (export ≠ assignment). Instead the cohesive sub-cluster found:
-the 4 auto-*routing* endpoints (`auto-scaffold-seamed`/`-matched`/`-seamless` + `route-for-polymerization`) +
-their shared `_run_auto_scaffold_with_feature_log` helper → a NEW `routes_scaffold_routing.py` at floor B=1
-(`_design_response_with_geometry` only). **L23 banked:** `backend/api/headless_build.py` imports crud route
-handlers as fns — repointed 2 of them. crud.py 143→**139 routes**. #32 (caDNAno seq export, B=1) + #31 (oxDNA+
-structural, B=2) + #30 (NAMD/GROMACS, B=2) + #29 (Cluster joints, B=1) + #28 (Cluster transforms, B=2) + #27
-(Flexible ssDNA, B=1) were the prior crud extractions. assembly.py is at **29 routes**, near terminal kernel (see
-assembly ▶ NEXT). **Working tree carries uncommitted #22–#33 + the Part-library deletion** (awaiting user commit)._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #34
+(**crud.py: Cluster autodetect SERVICE push** — the 5 pure cluster-detection fns → `backend/core/cluster_autodetect.py`,
+**B=0**, +4 direct unit tests in `tests/test_cluster_autodetect_core.py`, 2071→**2075 passed** / 55 skipped, 0 failed).
+This was the **first crud Tier-3 service push** and the biggest *real* decoupling the review flagged: ~640 ln of pure
+topology marooned in crud.py's `# ── Internal helpers` now lives in core, directly unit-tested for the first time.
+crud.py imports back only the 2 entry points its routes call (`_autodetect_clusters`, `_cluster_bundle_regions`); the 3
+inner phase helpers are module-private in core (L17). `_ensure_default_cluster` STAYS (calls `design_state.set_design_silent`,
+shared cross-region). crud.py routes unchanged (**139** — service push, no router moved). #33 (auto-scaffold routing, B=1)
++ #32 (caDNAno seq export, B=1) + #31/#30 (oxDNA/NAMD exports, B=2) + #27–#29 (flexible/cluster, B=1–2) were the prior
+crud extractions. assembly.py is at **29 routes** (routes drained, kernel-surface reduction pending). **All carve-up
+work through #34 is committed + pushed** (the Part-library legacy deletion landed in f769c60; do NOT re-describe it as
+pending). Working tree is clean after each session's commit._
 
 **▶ LOOP PHASE SHIFT (2026-06-16, post-review):** the cheap **B=1 router lifts are drained** — 173 routes now
 live in extracted routers, crud.py is at 139 routes / assembly.py at 29. An external review confirmed the router
@@ -187,13 +187,16 @@ right there. The two highest-value targets: crud's **Cluster autodetect** (~1460
 **geometry-cache + file-load kernel** (`_geo_cache_*` + `_load_design_from_source`/`_design_with_instance_overrides`,
 the surface `routes_assembly_geometry`/`_joints`/`_frames` all lean on).
 
-**▶ NEXT — crud.py (PRIMARY, Tier 3 service push):** **Cluster autodetect → `backend/core/cluster_autodetect.py`**
-— the `# ── Internal helpers` mass (~144–1605, esp. the autodetect phases ~835–1155) is ~1460 ln of pure
-topology/clustering marooned in the api file: the single biggest *real* improvement left, B=0 by construction
-(pure topology, no api deps), with direct unit tests. No router, no URL change. Multi-session — carve by phase.
-This is the move the review says delivers the next score jump.
+**▶ NEXT — crud.py (PRIMARY, Tier 3 service push):** **Feature-log edit-feature dispatch →
+`backend/core/feature_log_edit.py`** — the `# ── Edit-feature dispatch` banner (`grep -n "# ── Edit-feature
+dispatch" backend/api/crud.py`) holds the giant `edit_feature` dispatcher whose deformation/cluster_op branch
+logic is business logic marooned in the api layer (the `# ── Cluster_op edit branch`/`# ── Deformation edit
+branch` sub-blocks). Push the pure per-branch transform logic to core (B=0 for the pure parts; classify each
+helper's body per L20 — the parts that call `state`/`HTTPException` stay as thin api shims per L15), with direct
+unit tests. Probe the live range first — this is higher coupling than #34 (cluster autodetect was self-contained
+pure topology; the edit dispatcher threads through the feature log). Multi-session; carve by branch.
 
-**▶ NEXT — crud.py (secondary, only if you want a quick clean router lift):** Sequence-assignment cluster →
+**▶ NEXT — crud.py (secondary, quick clean router lift):** Sequence-assignment cluster →
 NEW `routes_assign_sequences.py` (do NOT fold into `routes_sequences.py` — that's export-only by its own
 docstring). The residual `# ── Sequence assignment endpoints`
 banner now holds exactly the cohesive sequence-assignment trio: `assign-scaffold-sequence`, `assign-staple-sequences`,
@@ -206,10 +209,8 @@ import back (gate ≤3 passes). **TWO L23 repoints needed in the same commit:** 
 moves IN but is imported by `tests/test_simple_router.py` → repoint that test; (2) `headless_build.py` imports
 `assign_scaffold_sequence_endpoint` + `full_autostaple_endpoint` as fns → repoint at the new module. Their request
 models `_ScaffoldSeqBody`/`_FullAutostapleBody` are ALSO imported by `headless_build.py` — move them IN and repoint.
-**Higher-value alt (Tier 3, multi-session):** the **Cluster autodetect** service push (`# ── Internal helpers`
-~144–1605, esp. the autodetect phases ~835–1155) → `backend/core/cluster_autodetect.py` — ~1460 ln of pure
-topology/clustering marooned in the api file, the single biggest *real* improvement left. No router, pure service
-extraction, carve by phase with direct unit tests.
+**Higher-value alt (Tier 3, multi-session):** the **Feature-log edit-feature dispatch** service push (see crud
+PRIMARY above) — the next-biggest marooned-business-logic target now that Cluster autodetect (#34) is in core.
 
 **Gotchas banked (cumulative):** (1) **Adjacency ≠ cohesion** — #2's `# ── Strand extensions` banner secretly
 contained 4 plate-layout / representation-override routes; #3's `# ── Deformation endpoints` banner held
@@ -368,12 +369,18 @@ Tiers are priority hints, not gospel.
 
 ### Tier 3 — service-heavy (do a service push first, then maybe a router)
 
-- [ ] **Cluster autodetect → `backend/core`** — the "Internal helpers" mass (~157–1618), esp. the cluster
-  autodetect phases (~848–1168) and the rebuild logic (~1021–1618). **This is the single biggest *real*
-  improvement available** — ~1460 lines of pure topology/clustering logic living in the api file. Push it to
-  `backend/core/cluster_autodetect.py` (or extend `cluster_reconcile.py`) with direct unit tests. **No router,
-  no URL change — pure service extraction.** Big payoff on handler-thinness + testability; expect LOC drop as
-  a *result*. Multi-session; carve it by phase.
+- [x] **Cluster autodetect → `backend/core/cluster_autodetect.py`** — DONE (Refactor #34, 2026-06-16).
+  **Service push, B=0** (the new core module imports nothing from `backend.api` — only `backend.core.models` +
+  `crossover_positions` + `constants`). Moved the 5 pure cluster-detection functions **byte-identical**
+  (`_cluster_bundle_regions`, `_cluster_by_lattice_neighbors`, `_cluster_by_scaffold_routing`,
+  `_geometry_clusters_multi_scaffold`, `_autodetect_clusters`, ~640 ln) out of crud.py's `# ── Internal
+  helpers` block. crud.py imports back only the 2 entry points its routes call (`_autodetect_clusters` ×2,
+  `_cluster_bundle_regions` ×1); the 3 inner phase helpers are module-private in core (L17). `_ensure_default_cluster`
+  STAYS (calls `design_state.set_design_silent`, shared cross-region). +4 direct unit tests
+  (`tests/test_cluster_autodetect_core.py`). 2071→2075 passed (the +4), 55 skipped unchanged. crud.py routes
+  unchanged (139 — no router moved). The residual "Internal helpers" mass is now response/geometry/export
+  helpers (`_design_response*`, `_geometry_for_*`, `_strand_nucleotide_info`) — a *different* concern (kernel +
+  export-geometry), not autodetect; the topology-clustering logic is fully out.
 - [ ] **Feature log + edit-feature dispatch** — `# ── Feature log endpoints` (~11189–11909) + `# ── Edit-feature
   dispatch` (~11683–12690) → router + a `backend/core/feature_log_edit.py` service for the giant
   `edit_feature` dispatcher (the deformation/cluster_op branch logic is business logic). High value, higher
