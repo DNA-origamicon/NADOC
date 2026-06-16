@@ -140,34 +140,36 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-15 after Refactor #26
-(**Instance design / geometry** → `routes_assembly_geometry.py`). **B=8, bespoke-B=0** (L19): every back-import
-is exempt shared infra — `_find_instance` lookup + the file-IO design-load trio
-`_assembly_source_path`/`_load_design_from_source`/`_design_with_instance_overrides` (L4-blocked) +
-`_display_design` (shared cross-region, also in polymerize router) + the geometry-cache trio
-`_geo_cache_key`/`_geo_cache_get`/`_geo_cache_set` (tied to assembly.py's module-level `_GEO_CACHE`, read by
-other assembly routes + frames router). 6 read-only GET routes moved IN; no module-level helpers/models in the
-region; the heavy geometry math (`_geometry_for_design`/`deformed_helix_axes`/`build_atomistic_model`/
-`compute_surface`) stays function-locally imported in each handler, NOT back from the god-file. All GETs →
-read-only, no mutation contract, no `_replay_assembly_op` gotcha. assembly.py 38→32 routes, −221 ln. Verbatim
-lift — no new tests; 2076 passed / 55 skipped unchanged. **THEN (same session, user-approved) DELETED the dead
-Part-library (legacy) cluster** (3 routes + `_sha256_file`/`_LIBRARY_DIR`/`RegisterLibraryRequest` + its 5
-backend route tests — see L22 gotcha): assembly.py 32→**29 routes**, deterministic full suite **2071 passed /
-55 skipped / 0 failed**. **Skip audit done:** all 55 skips are legitimate (missing optional tools openmm/mrdna,
-missing user fixtures OHtest2/Hinge3/10hb/U6hb, env-bound XTC) — NONE skip on stale "not-implemented" rules; the
-`"cadnano importer not yet implemented"` guards are now obsolete (importer exists → they never fire, tests run)
-but harmless. **Working tree now carries uncommitted #22 + #23 + #24 + #25 + #26 + the Part-library deletion**
-(awaiting user commit). **oxDNA flake did NOT reappear** under deterministic full run — 540755b's atomic-write
-fix holds (L9-addendum)._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #31
+(**crud.py: oxDNA + single-file structural exports** → `routes_export_structure.py`, B=2 / bespoke-B=0, verbatim,
+13 routes, 2071 passed / 55 skipped unchanged). The cohesive cluster left behind by #30 moved out — oxDNA
+export/run + pdb/psf + identity[-tsv] + design-maps + basepairs[-tsv] + stacking[-tsv] + restraints-dry-implicit +
+mrdna-roundtrip; back-imports are the SAME shared pair as #30 (`_design_for_export` + `_geometry_for_design`).
+**L8 3-segment cut held:** the display routes (`/design/atomistic`, `/surface`, `/surface/region`), the 3D-print
+exports (`/export/stl`, `/3mf`), and `/design/debug/strand-stats` are interleaved between the oxDNA / pdb→mrdna /
+psf blocks and ALL correctly STAYED. Zero region-local helpers/models; every core dep (`pdb_export`,
+`oxdna_interface`, `gromacs_package`, `mrdna_bridge`) was already function-local. crud.py 158→**145 routes**,
+−441 LOC. **Coverage gap (→ row #31):** these routes have NO TestClient route tests (only core-fn tests in
+`test_atomistic.py`) — verbatim-lift guarantee only, same profile as #25/#30. #30 (NAMD/GROMACS, B=2) + #29
+(Cluster joints, B=1) + #28 (Cluster transforms, B=2) + #27 (Flexible ssDNA, B=1) were the prior crud extractions.
+assembly.py is at **29 routes**, near terminal kernel (see assembly ▶ NEXT — Instance routes, expected "leave in
+the kernel"). **Working tree carries uncommitted #22–#31 + the Part-library deletion** (awaiting user commit)._
 
-**▶ NEXT — crud.py:** **Flexible ssDNA segments** (banner `# ── Flexible ssDNA segments`, find via
-`grep -n "# ── Flexible ssDNA" backend/api/crud.py`, ~13200s after #3's −315 ln drift) →
-`routes_flexible_segments.py`. **Probed B=1** (`_design_response_with_geometry`). **Read
-`memory/project_ssdna_ball_joints.md` first.** Re-run the probe on the live range AND — per the new L10
-gotcha — `grep -rn "_helpername" backend/api/` (the WHOLE api dir, not just crud.py) for every helper the
-region defines, to catch cross-file back-imports like the one #3 hit. Mirror `routes_deformation.py`,
-mount in main.py. Alt: **Cluster rigid transforms** (`# ── Cluster rigid transforms`) — probe first,
-cluster helpers may pull more than the response helper.
+**▶ NEXT — crud.py:** **sequence-file exports → `routes_sequences.py`** — the `# ── caDNAno sequence export`
+banner (now ~10521) holds 2 routes (`/design/export/sequence-csv` + `/design/export/sequence-xlsx`), **probed
+B=1** (`_design_for_export` only, zero region-local helpers/models) — a clean small lift mirroring #31. **Decide
+the fold:** the handoff has long suggested folding it with `# ── Sequence assignment endpoints` (~7139) +
+`# ── Overhang random-sequence generation` (~7531) into one `routes_sequences.py`, BUT probe says only the
+*export* half is clean: Sequence-assignment is B=2 (`_design_response`/`_with_geometry` kernel +
+`_place_auto_crossovers` bespoke) and Overhang-random-gen is **B=7 with 5 BESPOKE** helpers
+(`_apply_boundary_hairpin_warnings`/`_apply_driver_to_joint`/`_delete_linker_connections_from_design`/
+`_first_claimant_for_joint`/`_select_driver_for_joint` — the overhang/joint web). So per L8/L19 do NOT force the
+fold: either (a) ship the 2-route caDNAno-export lift alone at B=1, or (b) fold ONLY sequence-assignment (B=2,
+bespoke-B=1 via `_place_auto_crossovers`) with it, leaving random-gen for a later overhang-web service push.
+**Higher-value alt (Tier 3, multi-session):** the **Cluster autodetect** service push (`# ── Internal helpers`
+~144–1605, esp. the autodetect phases ~835–1155) → `backend/core/cluster_autodetect.py` — ~1460 ln of pure
+topology/clustering marooned in the api file, the single biggest *real* improvement left. No router, pure service
+extraction, carve by phase with direct unit tests.
 
 **Gotchas banked (cumulative):** (1) **Adjacency ≠ cohesion** — #2's `# ── Strand extensions` banner secretly
 contained 4 plate-layout / representation-override routes; #3's `# ── Deformation endpoints` banner held
@@ -251,19 +253,52 @@ Tiers are priority hints, not gospel.
   callers (deformation routes, crud's edit-feature branch, AND `routes_loop_skip.py`'s validate route —
   a *cross-file* back-import the in-file grep missed). `_rollback_last_feature` left in crud.py (used only
   by the feature-log revert path, not by any deformation route — adjacency, not cohesion). crud.py 178→174 routes.
-- [ ] **Flexible ssDNA segments** — `# ── Flexible ssDNA segments` (~13521–13723) →
-  `routes_flexible_segments.py`. **Probed B=1** (`_design_response_with_geometry`). See
-  `memory/project_ssdna_ball_joints.md` before touching.
+- [x] **Flexible ssDNA segments** — `# ── Flexible ssDNA segments` → `routes_flexible_segments.py`
+  (Refactor #27, 2026-06-16). **B=1** (`_design_response_with_geometry`). 5 routes moved (flexible-relax +
+  mark/unmark/batch + GET connections) + their 4 request models + the 2 region-only helpers
+  (`_flex_mark_from_body`, `_flex_log_response`, zero external callers). **Banner was NOT cohesive (L8):** the
+  two generic undo-stack routes physically under it (`POST /design/cluster/{id}/begin-drag`,
+  `POST /design/snapshot`) are cluster-drag / undo utilities, NOT flexible-specific — left in crud.py under a
+  retitled `# ── Cluster drag / undo-stack snapshot utilities` banner. Verbatim lift; `test_flexible_segments.py`
+  covers. crud.py 178→173 routes.
 
 ### Tier 2 — router lifts, probe first (likely B = 1–3)
 
 - [ ] **Camera poses** — ALREADY DONE (`routes_camera_poses.py`, 13-B). Listed only so nobody re-lifts it.
-- [ ] **Cluster rigid transforms** — `# ── Cluster rigid transforms` (~13383–13521) → `routes_clusters.py`
-  (consider pairing with **Cluster joint routes** ~13796–14178 — same resource). Probe B; cluster helpers
-  may pull in more than the response helper.
-- [ ] **oxDNA + atomistic export** — `# ── oxDNA export / run` (~14440–14596) + `# ── Atomistic model + PDB/PSF`
-  (~14596–15092) + `# ── NAMD bundle templates` (~15092) → `routes_export_atomistic.py`. Export cluster;
-  heavy `backend/core` delegation already — probe for export-helper back-imports.
+- [x] **Cluster rigid transforms** — `# ── Cluster rigid transforms` → `routes_clusters.py` (Refactor #28,
+  2026-06-16). **B=2** (`_design_response` kernel + `_ensure_default_cluster` — shared cross-region, also
+  called by crud's auto-cluster path ~1337, so left back; bespoke-B=1, gate ≤3 passes). 3 routes
+  (POST/PATCH/DELETE `/design/cluster`) + 2 region-only request models (`AddClusterBody`/`PatchClusterBody`)
+  moved verbatim. `ClusterOpLogEntry` is a `core.models` model (imported directly, not a back-import).
+  **Cluster joint routes** (`# ── Cluster joint routes`) NOT folded in — different resource (joints vs
+  transforms), separate reason to change. crud.py 173→170 routes. `test_clusters*` + `test_cluster_*` cover.
+- [x] **Cluster joint routes** — `# ── Cluster joint routes` → `routes_cluster_joints.py` (Refactor #29,
+  2026-06-16). **B=1** (`_design_response`), bespoke-B=0. 3 routes (place/patch/delete joint) + 2 region-only
+  request models + the 3 pure builders (`_build_add/update/delete_joint`) moved IN. **L8:** the 2 `loop/skip`
+  routes physically under the same banner (`clear-all`, `apply-deformations`) are a separate concern — LEFT in
+  crud.py. **L21 circular-import:** the builders are also called by crud's `_replay_minor_op` dispatcher (stays),
+  so it imports them **function-locally** (top-level = circular). Sibling of #28 but separate resource → own
+  module. crud.py 170→167 routes. `test_joints.py` (9 route + replay) covers.
+- [x] **MD/structural file exports** — the handoff's big "oxDNA+atomistic+NAMD" range (banners
+  `# ── oxDNA export / run`, `# ── Atomistic model + PDB/PSF export`, `# ── NAMD bundle templates`).
+  **NAMD + GROMACS complete-package exports DONE** (Refactor #30, 2026-06-16): the contiguous
+  `# ── NAMD bundle templates` banner (9 routes) → `routes_export_md.py` at **B=2, bespoke-B=0**
+  (`_design_for_export` + `_geometry_for_design`, both shared cross-file/cross-region export/geometry
+  infra). Moved IN: the 2 NAMD templates + the GROMACS background-job store (`_gromacs_jobs`/`_lock`,
+  was at crud.py top). Orphaned `import copy` + `import threading` cleaned from crud.py (their only real
+  users moved out). **L8 cut:** the full 28-route span is interleaved with NON-cohesive routes — leave them
+  for crud.py: the atomistic/surface *display* routes (`/design/atomistic`, `/design/surface`,
+  `/design/surface/region` — feed the renderer, not file downloads), the 3D-print exports
+  (`/design/export/stl`, `/3mf` — own concern + topic file), and `/design/debug/strand-stats` (crossover
+  diagnostic, unrelated). **DONE (Refactor #31, 2026-06-16):** the cohesive single-file structural-export
+  cluster left behind — `# ── oxDNA export / run` (2 routes) + the individual exporters under
+  `# ── Atomistic model + PDB/PSF export` (`/design/export/pdb|psf|identity|identity-tsv|design-maps|
+  basepairs|basepairs-tsv|stacking|stacking-tsv|restraints-dry-implicit` + `/design/debug/mrdna-roundtrip`)
+  → `routes_export_structure.py` at **B=2, bespoke-B=0** (`_design_for_export` + `_geometry_for_design`, the
+  same shared export/geometry pair as #30; mrdna's gromacs/mrdna deps were function-local core imports, NOT crud
+  privates — probe was empty for that segment). 3-segment cut held (oxDNA / pdb→mrdna contiguous / psf), with the
+  display + 3D-print + strand-stats routes correctly LEFT in crud.py. Zero region-local helpers/models. crud.py
+  158→145 routes, −441 LOC. Verbatim lift; 2071 passed / 55 skipped unchanged.
 - [ ] **caDNAno sequence export** — `# ── caDNAno sequence export` (~11019–11189) → fold into a
   `routes_sequences.py` with the sequence-assignment block (~7288–8029) and overhang random-gen (~8029–8485).
 

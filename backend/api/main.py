@@ -41,8 +41,13 @@ from backend.api.routes_assembly_polymerize import router as assembly_polymerize
 from backend.api.routes_assembly_validation import router as assembly_validation_router
 from backend.api.routes_assembly_workspace import router as assembly_workspace_router
 from backend.api.routes_camera_poses import router as camera_poses_router
+from backend.api.routes_cluster_joints import router as cluster_joints_router
+from backend.api.routes_clusters import router as clusters_router
 from backend.api.routes_deformation import router as deformation_router
+from backend.api.routes_export_md import router as export_md_router
+from backend.api.routes_export_structure import router as export_structure_router
 from backend.api.routes_extensions import router as extensions_router
+from backend.api.routes_flexible_segments import router as flexible_segments_router
 from backend.api.routes_loop_skip import router as loop_skip_router
 from backend.api.routes_md import router as md_router
 from backend.api.routes_oxdna import router as oxdna_router
@@ -92,9 +97,14 @@ app.include_router(documents_router,   prefix="/api")
 app.include_router(crud_router,        prefix="/api")
 app.include_router(loop_skip_router,   prefix="/api")
 app.include_router(camera_poses_router, prefix="/api")
+app.include_router(clusters_router,    prefix="/api")
+app.include_router(cluster_joints_router, prefix="/api")
 app.include_router(animations_router,  prefix="/api")
 app.include_router(extensions_router,  prefix="/api")
 app.include_router(deformation_router, prefix="/api")
+app.include_router(flexible_segments_router, prefix="/api")
+app.include_router(export_md_router,   prefix="/api")
+app.include_router(export_structure_router, prefix="/api")
 app.include_router(assembly_router,    prefix="/api")
 app.include_router(assembly_animations_router, prefix="/api")
 app.include_router(assembly_belts_router, prefix="/api")
