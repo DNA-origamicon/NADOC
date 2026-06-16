@@ -164,18 +164,20 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #38
-(**crud.py: overhang polarity/linker-compatibility SERVICE push** — the 6 pure topology fns of the
-`# ── Overhang connections` region → NEW `backend/core/overhang_ops.py` at **B=0**, +15 unit tests. The 3
-public entry points (`_overhang_end`/`_used_overhang_ends`/`_check_linker_compatibility`) import back into crud;
-the 3 sibling helpers are module-private in core (L17). The connection-create handler keeps the `HTTPException`
-translation (L15). −112 LOC crud.py; routes unchanged (132 — service push). 2088→**2103 passed** / 55 skipped.
-This is the FIRST slice of the deferred crud overhang-web Tier-3 push; `overhang_ops.py` now exists for future
-slices to extend). #37 (feature-log read-router, B=3) is now **COMMITTED** (e65028c). Prior crud: #36 (seq-assign
-router B=3) + #35 (edit-branch service B=0 +13) + #34 (cluster-autodetect service B=0) + #33/#32 + #31/#30 + #27–#29.
-assembly.py at **29 routes** (routes drained, kernel-surface reduction pending). **#38 NOT YET COMMITTED** — sits in
-the working tree (`overhang_ops.py` + `test_overhang_ops_core.py` new + `crud.py` edit + ledger updates); commit +
-push when the user asks (CLAUDE.md git rules)._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #39
+(**crud.py: sub-domain tiling/sequence/annotation SERVICE push — overhang-web slice 2**). Extended
+`backend/core/overhang_ops.py` with 4 pure fns moved verbatim
+(`_ovhg_domain_lengths`/`_ovhg_backing_length`/`_resolve_sub_domain_sequence`/`_compute_sub_domain_annotations`)
++ the tiling validator **L15-split** (`_validate_sub_domain_tiling` → core `validate_sub_domain_tiling` raising
+`SubDomainTilingError`; api keeps a 13-ln shim that translates `.status`/`.detail` → `HTTPException`, its 6
+mutating-endpoint callers unchanged). **B=0** (core still imports only `typing` + `backend.core.models`),
++19 unit tests (15→34 in `test_overhang_ops_core.py`). Dead `_next_sub_domain_name` deleted (zero callers).
+−137 LOC crud.py; routes unchanged (132 — service push). **2103→2122 passed** / 55 skipped, 0 failed.
+**#38 was the first slice** (polarity/linker-compat, B=0 +15) and **is COMMITTED** (70685aa — the prior handoff's
+"#38 not yet committed" note was stale). **#39 is the ONLY uncommitted work** in the tree (`overhang_ops.py` +
+`test_overhang_ops_core.py` + `crud.py` edits + these ledger updates); commit + push when the user asks
+(CLAUDE.md git rules). #37 (feature-log read-router) is COMMITTED (e65028c).
+assembly.py at **29 routes** (routes drained, kernel-surface reduction pending)._
 
 **▶ LOOP PHASE SHIFT (2026-06-16, post-review):** the cheap **B=1 router lifts are drained** — 173 routes now
 live in extracted routers, crud.py is at 139 routes / assembly.py at 29. An external review confirmed the router
@@ -190,12 +192,15 @@ the surface `routes_assembly_geometry`/`_joints`/`_frames` all lean on).
 **▶ NEXT — crud.py (PRIMARY = SERVICE push; the cheap router clusters are now drained):** the crud ROUTER
 carve-up is essentially done — the last clean router cluster (feature-log read-only seek/batch) shipped as #37,
 and the feature-log MUTATING half is a documented difficulties-ledger stuck region (builder/replay-engine kernel).
-**Continue the Tier-3 overhang-web service push — `backend/core/overhang_ops.py` now EXISTS (Refactor #38).**
-The first slice (polarity / linker-compatibility rules, 6 pure fns, B=0, +15 tests) is in. **Next slice:** extend
-`overhang_ops.py` with the **sub-domain tiling/annotation** pure cluster — probe the BODIES (L20) of
-`_ovhg_backing_length`/`_validate_sub_domain_tiling`/`_resolve_sub_domain_sequence`/`_compute_sub_domain_annotations`/
-`_next_sub_domain_name` (~6984–7090) + `_ovhg_domain_lengths` (~6510); the ones with no `design_state`/`HTTPException`/
-`_build_*` push to core with direct unit tests (B=0), the state/builder-bound ones stay as thin api shims (L15).
+**Continue the Tier-3 overhang-web service push — `overhang_ops.py` has slices #38+#39.** Slice 1 (#38:
+polarity/linker-compat, 6 fns, B=0 +15) and slice 2 (#39: sub-domain tiling/sequence/annotation — 4 verbatim
+fns `_ovhg_domain_lengths`/`_ovhg_backing_length`/`_resolve_sub_domain_sequence`/`_compute_sub_domain_annotations`
++ the L15-split tiling validator `validate_sub_domain_tiling`/`SubDomainTilingError`, B=0 +19; dead
+`_next_sub_domain_name` deleted) are in. **Next slice:** probe the BODY (L20) of `_apply_boundary_hairpin_warnings`
+(was ~7103, now ~6953 after #39's −137) — it calls the now-in-core `_resolve_sub_domain_sequence` +
+`_compute_sub_domain_annotations` plus `_replace_ovhg` (a builder). Check whether `_replace_ovhg` is a pure
+`design.model_copy` rebuild (→ whole fn can move) or needs an L15 split (pure annotation recompute in core, the
+`_replace_ovhg` commit left in a thin shim). If clean, push to `overhang_ops.py` with direct unit tests.
 The remaining marooned mass (overhang connections record-build, relax-bond `design_state` mutators, binding
 topology-relocation engine, `_resplice_overhang_in_strand`, `_build_overhang_*`) is L4-blocked — leave as shims.
 _Secondary (only if a clean B≤2 cluster is sitting there):_ **Protein** (`# ── Protein import + library` + `# ── Protein attachments`, ~3278–3596) →
@@ -417,12 +422,16 @@ Tiers are priority hints, not gospel.
   share the overhang/cluster helper web → **high B**. **`backend/core/overhang_ops.py` ESTABLISHED (Refactor
   #38, 2026-06-16):** the pure polarity/linker-compatibility cluster (`_overhang_end`/`_used_overhang_ends`/
   `_check_linker_compatibility` + 3 sibling-private) service-pushed at B=0, +15 unit tests; the connection-create
-  handler keeps the `HTTPException` translation (L15). **REMAINING (extend `overhang_ops.py` slice by slice):**
-  probe each helper BODY (L20) and push the pure ones — likely next: the sub-domain tiling/annotation cluster
-  (`_ovhg_backing_length`/`_validate_sub_domain_tiling`/`_resolve_sub_domain_sequence`/
-  `_compute_sub_domain_annotations`/`_next_sub_domain_name`, ~6984–7090) and `_ovhg_domain_lengths` (~6510).
-  Leave the state/builder-bound ones (`_resplice_overhang_in_strand`, `_build_overhang_*`, the binding
-  topology-relocation engine, relax-bond's `design_state` mutators) as thin api shims.
+  handler keeps the `HTTPException` translation (L15). **SLICE 2 DONE (Refactor #39, 2026-06-16):** the
+  sub-domain tiling/sequence/annotation cluster — 4 pure fns moved verbatim
+  (`_ovhg_domain_lengths`/`_ovhg_backing_length`/`_resolve_sub_domain_sequence`/`_compute_sub_domain_annotations`)
+  + the tiling validator L15-split (`_validate_sub_domain_tiling` → core `validate_sub_domain_tiling` raising
+  `SubDomainTilingError`; thin api shim translates) → `overhang_ops.py` at B=0, +19 unit tests. Dead
+  `_next_sub_domain_name` deleted (zero callers). **REMAINING (extend `overhang_ops.py` slice by slice):** probe
+  each helper BODY (L20) and push the pure ones — `_apply_boundary_hairpin_warnings` (~7090, calls `_replace_ovhg`
+  builder — check if pure-enough for an L15 split) is the adjacent candidate; otherwise the marooned mass
+  (`_resplice_overhang_in_strand`, `_build_overhang_*`, the binding topology-relocation engine, relax-bond's
+  `design_state` mutators) is L4-blocked — leave as thin api shims.
 - [ ] **Protein** — `# ── Protein import + library` + `# ── Protein attachments` (~3278–3596) →
   `routes_protein.py`. **Probed B=4** (`_design_for_export`, `_design_response`, `_find_ovhg_or_404`,
   `_geometry_for_helices`). Co-move `_find_ovhg_or_404` + `_geometry_for_helices` (or share via core) to get

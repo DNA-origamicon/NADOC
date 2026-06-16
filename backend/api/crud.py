@@ -147,9 +147,15 @@ from backend.core.cluster_autodetect import (  # noqa: F401
     _cluster_bundle_regions,
 )
 from backend.core.overhang_ops import (
+    SubDomainTilingError,
     _check_linker_compatibility,
+    _compute_sub_domain_annotations,
     _overhang_end,
+    _ovhg_backing_length,
+    _ovhg_domain_lengths,
+    _resolve_sub_domain_sequence,
     _used_overhang_ends,
+    validate_sub_domain_tiling,
 )
 
 router = APIRouter()
@@ -6512,19 +6518,6 @@ def auto_merge() -> dict:
 # ── Overhang random-sequence generation ───────────────────────────────────────
 
 
-def _ovhg_domain_lengths(design) -> dict:
-    """Return {overhang_id: domain_length_bp} for every overhang domain.
-
-    Uses abs() because REVERSE-direction domains have start_bp > end_bp.
-    """
-    result = {}
-    for strand in design.strands:
-        for domain in strand.domains:
-            if domain.overhang_id is not None:
-                result[domain.overhang_id] = abs(domain.end_bp - domain.start_bp) + 1
-    return result
-
-
 def _resplice_overhang_in_strand(design, overhang_id: str, strand_id: str):
     """Re-derive and update the sequence for only the strand that owns the overhang.
 
@@ -6986,118 +6979,19 @@ _HEX_RE = _re_subdomain.compile(r"^#[0-9A-Fa-f]{6}$")
 _DNA_BASES = set("ACGTN")
 
 
-def _ovhg_backing_length(design: Design, overhang_id: str) -> Optional[int]:
-    """Resolve the backing-domain length for a given overhang id.
-
-    Returns None when no domain references the overhang (e.g. orphaned spec).
-    Mirrors the convention used by ``_ovhg_domain_lengths``.
-    """
-    for strand in design.strands:
-        for domain in strand.domains:
-            if domain.overhang_id == overhang_id:
-                return abs(domain.end_bp - domain.start_bp) + 1
-    return None
-
-
 def _validate_sub_domain_tiling(design: Design, overhang_id: str) -> None:
-    """Raise HTTP 422 if the overhang's sub-domain tiling is broken.
+    """Thin api shim — delegate tiling validation to ``backend.core.overhang_ops``
+    and translate its ``SubDomainTilingError`` into ``HTTPException`` (L15).
 
-    Invariants enforced:
-      • Σ length_bp == backing domain length.
-      • Offsets contiguous (each sd.start_bp_offset == previous end).
-      • Every length_bp ≥ 1.
-      • Each ``sequence_override`` (if set) has length == length_bp and bases
-        in ACGTN.
-
-    Designed to run after every mutating sub-domain endpoint.
+    The invariants enforced live in ``overhang_ops.validate_sub_domain_tiling``
+    (Σ length_bp == backing length, gap-less contiguous offsets, length_bp ≥ 1,
+    ACGTN sequence_override). This shim keeps the HTTP translation in the api
+    layer so the rule itself stays pure + directly testable.
     """
-    ovhg = next((o for o in design.overhangs if o.id == overhang_id), None)
-    if ovhg is None:
-        raise HTTPException(404, detail=f"Overhang {overhang_id!r} not found.")
-    sub_doms = sorted(ovhg.sub_domains, key=lambda sd: sd.start_bp_offset)
-    if not sub_doms:
-        raise HTTPException(422, detail=f"Overhang {overhang_id!r} has no sub-domains.")
-
-    expected_offset = 0
-    for sd in sub_doms:
-        if sd.length_bp < 1:
-            raise HTTPException(422, detail=(
-                f"Sub-domain {sd.name!r} ({sd.id}) has length_bp < 1."
-            ))
-        if sd.start_bp_offset != expected_offset:
-            raise HTTPException(422, detail=(
-                f"Sub-domains on overhang {overhang_id!r} are not gap-less "
-                f"(sub-domain {sd.name!r} starts at {sd.start_bp_offset}, "
-                f"expected {expected_offset})."
-            ))
-        if sd.sequence_override is not None:
-            if len(sd.sequence_override) != sd.length_bp:
-                raise HTTPException(422, detail=(
-                    f"Sub-domain {sd.name!r} ({sd.id}) sequence_override length "
-                    f"({len(sd.sequence_override)}) != length_bp ({sd.length_bp})."
-                ))
-            if any(b not in _DNA_BASES for b in sd.sequence_override.upper()):
-                raise HTTPException(422, detail=(
-                    f"Sub-domain {sd.name!r} ({sd.id}) sequence_override contains "
-                    f"non-ACGTN bases."
-                ))
-        expected_offset += sd.length_bp
-
-    backing = _ovhg_backing_length(design, overhang_id)
-    if backing is not None and expected_offset != backing:
-        raise HTTPException(422, detail=(
-            f"Sub-domain tiling sum ({expected_offset}) != backing domain length "
-            f"({backing}) for overhang {overhang_id!r}."
-        ))
-
-
-def _resolve_sub_domain_sequence(ovhg, sub_dom) -> Optional[str]:
-    """Return the effective 5'→3' sequence for *sub_dom* (override or parent slice).
-
-    Returns ``None`` when neither the sub-domain nor the parent overhang has a
-    sequence (Tm/GC/structure annotations are undefined in that case).
-    """
-    if sub_dom.sequence_override:
-        return sub_dom.sequence_override.upper()
-    parent = ovhg.sequence
-    if not parent:
-        return None
-    start = sub_dom.start_bp_offset
-    end = start + sub_dom.length_bp
-    slice_ = parent.upper()[start:end]
-    if len(slice_) < sub_dom.length_bp:
-        return None
-    return slice_
-
-
-def _compute_sub_domain_annotations(seq: Optional[str], na_mM: float, conc_nM: float) -> dict:
-    """Return the annotation cache dict for *seq*; safely handles None / 'N's."""
-    from backend.core.overhang_generator import has_hairpin, has_dimer
-    from backend.core.thermo import tm_nn, gc_content
-    if not seq:
-        return {
-            "tm_celsius": None,
-            "gc_percent": None,
-            "hairpin_warning": False,
-            "dimer_warning": False,
-        }
-    tm = tm_nn(seq, na_mM=na_mM, conc_nM=conc_nM)
-    gc = gc_content(seq) if all(b in "ACGT" for b in seq) else None
-    # has_hairpin / has_dimer are robust to short sequences.
     try:
-        hp = has_hairpin(seq) if all(b in "ACGT" for b in seq) else False
-    except Exception:
-        hp = False
-    try:
-        dm = has_dimer(seq) if all(b in "ACGT" for b in seq) else False
-    except Exception:
-        dm = False
-    return {
-        "tm_celsius": tm,
-        "gc_percent": gc,
-        "hairpin_warning": hp,
-        "dimer_warning": dm,
-    }
+        validate_sub_domain_tiling(design, overhang_id)
+    except SubDomainTilingError as exc:
+        raise HTTPException(exc.status, detail=exc.detail)
 
 
 def _apply_boundary_hairpin_warnings(design: Design, overhang_id: str) -> Design:
@@ -7234,21 +7128,6 @@ def _recompute_flexible_connections(design: Design) -> Design:
         return design
     from backend.core.flexible_segments import apply_marks
     return apply_marks(design)
-
-
-def _next_sub_domain_name(existing: list) -> str:
-    """Lowest unused single lowercase letter ("a","b",…), then "ab","ac",… ."""
-    taken = {sd.name for sd in existing}
-    for letter in "abcdefghijklmnopqrstuvwxyz":
-        if letter not in taken:
-            return letter
-    # Two-letter fallback (very unlikely to be hit in practice).
-    for a in "abcdefghijklmnopqrstuvwxyz":
-        for b in "abcdefghijklmnopqrstuvwxyz":
-            name = a + b
-            if name not in taken:
-                return name
-    return _uuid.uuid4().hex[:6]
 
 
 def _find_ovhg_or_404(design: Design, overhang_id: str):
