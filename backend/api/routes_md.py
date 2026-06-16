@@ -76,6 +76,10 @@ class CreateJobRequest(BaseModel):
     mg_conc_mM:  float = Field(12.5, ge=0.0)
     padding_nm:  float = Field(1.2,  gt=0.0)
     minimize_steps: int = Field(4_800, ge=100)
+    declash: bool = Field(
+        False,
+        description="Force the declash protocol (auto-enabled anyway for designs with crossover extra bases, e.g. 2xT thymines)",
+    )
     design_source_path: Optional[str] = Field(
         None,
         description="Workspace path of the part used to create this job",
@@ -749,6 +753,7 @@ async def _prepare_job_bg(
             padding_nm      = body.padding_nm,
             minimize_steps  = body.minimize_steps,
             atomistic_model = seed_model,
+            declash         = body.declash,
             progress        = tracker.report,
         )
         logger.info("prep %s: done; package=%s name_stem=%s segments=%d",

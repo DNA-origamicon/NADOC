@@ -50,6 +50,9 @@ from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 
 from backend.core.atomistic_helpers import (
     _arc_bow_dir,
+    _arc_ctrl_pt,
+    _bezier_pt,
+    _bezier_tan,
     _lerp,
     _normalise,
 )
@@ -1506,6 +1509,14 @@ def _build_extra_base_atoms(
         line_len = float(_np.linalg.norm(line_vec))
         line_dir = line_vec / line_len if line_len > 1e-9 else bow_dir
 
+        # Bow the extra-base sugar origins outward along the rendered crossover
+        # arc (quadratic bezier bowing BOW_FRAC_3D of the chord) instead of the
+        # straight chord.  The straight chord threads the cramped inter-helix
+        # backbone gap, so the inserted single-stranded loop landed on top of
+        # the neighbouring helix backbones (steric clash); bowing it out lets the
+        # loop bulge into solvent, matching the arc the renderer already draws.
+        arc_ctrl = _arc_ctrl_pt(line_p0, line_p1, bow_dir)
+
         n = len(xo.extra_bases)
         eb_sugar_serials:  list[dict[str, int]] = []
         eb_glycosidic_ns:  list[str]            = []
@@ -1537,9 +1548,14 @@ def _build_extra_base_atoms(
         target_c1n = avg_axis if z_sign > 0.0 else -avg_axis
 
         for i, base_char in enumerate(xo.extra_bases, start=1):
-            t_i        = i / (n + 1)
-            origin_pos = _lerp(line_p0, line_p1, t_i)
-            origin, R  = _extra_base_frame(origin_pos, line_dir, bow_dir)
+            t_i = i / (n + 1)
+            if line_len > 1e-9:
+                origin_pos = _bezier_pt(line_p0, arc_ctrl, line_p1, t_i)
+                arc_dir = _bezier_tan(line_p0, arc_ctrl, line_p1, t_i)
+            else:
+                origin_pos = _lerp(line_p0, line_p1, t_i)
+                arc_dir = bow_dir
+            origin, R = _extra_base_frame(origin_pos, arc_dir, bow_dir)
 
             residue = _BASE_CHAR_TO_RESIDUE.get(base_char.upper(), "DT")
             extra_seq_num[chain_id] = extra_seq_num.get(chain_id, 0) + 1
