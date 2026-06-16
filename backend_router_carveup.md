@@ -164,19 +164,19 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #36
-(**crud.py: Sequence-assignment ROUTER lift** — the 3 sequence-assignment routes (`assign-scaffold-sequence`,
-`assign-staple-sequences`, `full-autostaple`) → NEW `routes_assign_sequences.py` at **B=3, bespoke-B=0**
-(`_design_response`/`_design_response_with_geometry` shared kernel + `_place_auto_crossovers` L13 cross-region
-shared infra). The 2 region models + 2 region helpers (`_linearize_staple_precursors`/`_assert_no_circular_staples`)
-moved IN; 2 L23 repoints (`test_simple_router.py` import split + `headless_build.py` 4 imports). 2088 passed / 55
-skipped unchanged. crud.py 139→**136 routes**, −257 LOC). #35 (edit-branch service push, B=0, +13 tests) +
-#34 (cluster-autodetect service, B=0) + #33/#32 (auto-scaffold routing / caDNAno seq, B=1) + #31/#30 (oxDNA/NAMD
-exports, B=2) + #27–#29 (flexible/cluster, B=1–2) were prior crud extractions. assembly.py is at **29 routes**
-(routes drained, kernel-surface reduction pending). **NOT YET COMMITTED: #35 + #36** — both sit in the working
-tree; commit + push when the user asks (CLAUDE.md git rules). They are cleanly separable (#35 = feature-log region
-~9753+ in crud + `backend/core/feature_log_edit.py` + its test; #36 = sequence-assignment region ~6507 in crud +
-`routes_assign_sequences.py` + main.py/headless/test repoints) — can be two commits._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #37
+(**crud.py: feature-log READ-ONLY seek/scrub/batch ROUTER half** — the 4 geometry-preview routes
+(`/design/features/seek` + `/geometry-batch` + `/atomistic-batch` + `/surface-batch`) → NEW `routes_feature_log.py`
+at **B=3, bespoke-B=0** (`_seek_feature_log` L13 shared-cross-file+L4-blocked, `_design_replace_response` kernel,
+`_compact_geometry_for_design` geometry-kernel; + the `_TimingTrace` timing-utility class, exempt). 3 region-only
+request models moved IN. Verbatim lift; 2088 passed / 55 skipped unchanged. crud.py 136→**132 routes**, −148 LOC.
+The feature-log MUTATING half — delete/edit/revert/rollback — was correctly LEFT: it's welded to the bespoke
+L4-blocked builder+replay engine, see the difficulties ledger). #36 (sequence-assignment router, B=3) + #35
+(edit-branch service push, B=0, +13 tests) + #34 (cluster-autodetect service, B=0) + #33/#32 (auto-scaffold routing /
+caDNAno seq, B=1) + #31/#30 (oxDNA/NAMD exports, B=2) + #27–#29 (flexible/cluster, B=1–2) were prior crud
+extractions. assembly.py is at **29 routes** (routes drained, kernel-surface reduction pending). **#37 NOT YET
+COMMITTED** — sits in the working tree (3 files: `routes_feature_log.py` new + `crud.py`/`main.py` edits); commit +
+push when the user asks (CLAUDE.md git rules). #35/#36 are already committed (fd8b62a/bd31dd7)._
 
 **▶ LOOP PHASE SHIFT (2026-06-16, post-review):** the cheap **B=1 router lifts are drained** — 173 routes now
 live in extracted routers, crud.py is at 139 routes / assembly.py at 29. An external review confirmed the router
@@ -188,25 +188,25 @@ right there. The two highest-value targets: crud's **Cluster autodetect** (~1460
 **geometry-cache + file-load kernel** (`_geo_cache_*` + `_load_design_from_source`/`_design_with_instance_overrides`,
 the surface `routes_assembly_geometry`/`_joints`/`_frames` all lean on).
 
-**▶ NEXT — crud.py (PRIMARY, ROUTER lift now that the edit-branch service push #35 is done):** **Feature-log
-ROUTER half → NEW `routes_feature_log.py`.** The `# ── Feature log endpoints` banner
-(`grep -n "# ── Feature log endpoints" backend/api/crud.py`) + the `# ── Edit-feature dispatch` /
-`# ── Feature-log rollback helper` neighbours hold the cohesive feature-log route cluster
-(`/design/features` GET, `/design/features/{index}/edit`, `/revert`, the seek/log routes). #35 already pushed the
-two pure edit-branch transforms to `backend/core/feature_log_edit.py`, so the `edit_feature` handler is now thin.
-**PROBE THE LIVE RANGE FIRST** — this region's helpers are shared cross-region: `_seek_feature_log`,
-`_rollback_last_feature`, `_revert_before_routing_child`, `_edit_dispatch_run` (L4-blocked, stays — calls crud
-builders), `_design_replace_response` (shared kernel). Classify each per L19/L20 (kernel/L4-blocked = exempt;
-bespoke region-only = move IN). Expect a moderate raw-B with bespoke-B=0 if the seek/rollback helpers are shared
-(leave-and-import-back, L13) — but VERIFY, several may be feature-log-only and should move IN. Watch the L21
-circular-import gotcha: if `_replay_*`/seek code in crud references a moved handler, use a function-local import.
+**▶ NEXT — crud.py (PRIMARY = SERVICE push; the cheap router clusters are now drained):** the crud ROUTER
+carve-up is essentially done — the last clean router cluster (feature-log read-only seek/batch) shipped as #37,
+and the feature-log MUTATING half is a documented difficulties-ledger stuck region (builder/replay-engine kernel).
+**Pivot to the Tier-3 service pushes.** Highest value: the **overhang web → `backend/core/overhang_ops.py`** — the
+next-biggest mass of marooned business logic in crud's "Internal helpers": overhang connections (~9548-ish),
+relax-bond, bindings, sub-domains, free-end resize, all sharing a dense overhang/cluster helper web → high raw-B
+today. Probe the helper BODIES (L14/L20): the pure geometry/topology transforms (no `design_state`, no
+`HTTPException`, no `_build_*` builder) push to a dependency-free `backend/core/overhang_ops.py` with direct unit
+tests (B=0 by construction); the file-IO/state-bound ones stay as thin api shims (L15). This drops the overhang
+routers' coupling and is the real decoupling, not a relocation. _Secondary (only if a clean B≤2 cluster is sitting
+there):_ **Protein** (`# ── Protein import + library` + `# ── Protein attachments`, ~3278–3596) →
+`routes_protein.py`, probed **B=4** (`_design_for_export`/`_design_response`/`_find_ovhg_or_404`/`_geometry_for_helices`);
+classify each per L19 (the first two are kernel-exempt; co-move or share `_find_ovhg_or_404`+`_geometry_for_helices`
+to land bespoke-B=0). See `memory/project_protein_attachment.md`.
 
-**▶ DONE (Refactor #36) — crud.py Sequence-assignment cluster → `routes_assign_sequences.py`** (was the
-secondary). B=3, bespoke-B=0 (`_place_auto_crossovers` is L13 cross-region shared infra, not bespoke), verbatim
-3-route lift, 2 L23 repoints (`test_simple_router.py` split + `headless_build.py` 4 imports). crud.py 139→136
-routes. The **feature-log ROUTER half (PRIMARY above) is now the cleanest remaining crud router target**; after
-that the router clusters are largely drained and the loop should pivot to the Tier-3 service pushes (the overhang
-web → `backend/core/overhang_ops.py`, the next-biggest marooned-business-logic mass; protein router at B=4).
+**▶ DONE (Refactor #37) — crud.py feature-log read-only seek/scrub/batch ROUTER half → `routes_feature_log.py`**
+(see the handoff header above + the `[~] Feature log` backlog row). B=3, bespoke-B=0, verbatim 4-route lift,
+crud.py 136→132 routes. The mutating half stayed (difficulties ledger). **#36 (Sequence-assignment router,
+`routes_assign_sequences.py`, B=3 bespoke-B=0) was the prior crud extraction.**
 
 **Gotchas banked (cumulative):** (1) **Adjacency ≠ cohesion** — #2's `# ── Strand extensions` banner secretly
 contained 4 plate-layout / representation-override routes; #3's `# ── Deformation endpoints` banner held
@@ -400,10 +400,19 @@ Tiers are priority hints, not gospel.
   (`_rebuild_deformed_continuations`, needs `design_state` snapshot decode + live builders) STAYS in the api shim
   (L4-blocked). +13 direct unit tests (`tests/test_feature_log_edit_core.py`). crud.py −94 LOC, routes unchanged (139).
   **STILL OPEN:** (1) `_edit_dispatch_run` (the extrusion replay dispatcher) is **L4-blocked** — it calls crud-private
-  builders (`_build_bundle`/`_build_extrude_*`/`_build_overhang_extrude`), so it stays in the api layer; (2) the
-  **feature-log ROUTER half** (`# ── Feature log endpoints` + the `/design/features/{index}/edit|revert|…` routes)
-  has not been lifted — probe + lift to `routes_feature_log.py` next (watch `_rollback_last_feature` /
-  `_seek_feature_log` / `_revert_before_routing_child` shared-cross-region back-imports).
+  builders (`_build_bundle`/`_build_extrude_*`/`_build_overhang_extrude`), so it stays in the api layer.
+  **ROUTER half — READ-ONLY seek/scrub/batch SUB-HALF DONE (Refactor #37, 2026-06-16):** the 4 read-only
+  feature-log geometry-preview routes (`/design/features/seek` + `/geometry-batch` + `/atomistic-batch` +
+  `/surface-batch`) → NEW `routes_feature_log.py` at **B=3, bespoke-B=0** (`_seek_feature_log` L13 leave-and-import-back
+  [shared cross-file w/ assembly.py + L4-blocked on the builder/replay engine], `_design_replace_response` kernel
+  response-family, `_compact_geometry_for_design` geometry-kernel; + `_TimingTrace` shared timing-utility *class*,
+  exempt). All 3 region-only request models moved IN. Verbatim lift; 2088 passed / 55 skipped unchanged.
+  crud.py 136→**132 routes**, −148 LOC. **The MUTATING half STAYS (genuinely-stuck — see difficulties ledger):** the
+  delete/edit/revert/rollback routes are welded to the bespoke L4-blocked builder+replay engine (`_edit_dispatch_run`→
+  `_build_*`, `_replay_minor_op`, `_topology_substitute`, `_rebuild_deformed_continuations`, `_delete_routing_child`,
+  `_revert_before_routing_child`, `_rollback_last_feature`) — these helpers are feature-log-bespoke AND can't go to core
+  (call crud builders + design_state), so neither leaving-back (bespoke-B>0) nor moving-out (drags the `_build_*`
+  builders → bespoke builder back-imports) hits the gate. This is replay-engine kernel that stays with the builders.
 - [ ] **Overhang web (defer)** — overhang connections (~9548–10110), relax bond (~10110–10445), bindings
   (~10445–11019), sub-domains (~8485–9548), free-end resize (~8784–8950). These share the overhang/cluster
   helper web → **high B**. Drain the B=1 clusters first; come back when the loop is grooved and tackle the

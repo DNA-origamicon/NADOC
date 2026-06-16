@@ -47,6 +47,7 @@ from backend.api.routes_deformation import router as deformation_router
 from backend.api.routes_export_md import router as export_md_router
 from backend.api.routes_export_structure import router as export_structure_router
 from backend.api.routes_extensions import router as extensions_router
+from backend.api.routes_feature_log import router as feature_log_router
 from backend.api.routes_sequences import router as sequences_router
 from backend.api.routes_flexible_segments import router as flexible_segments_router
 from backend.api.routes_loop_skip import router as loop_skip_router
@@ -104,6 +105,7 @@ app.include_router(clusters_router,    prefix="/api")
 app.include_router(cluster_joints_router, prefix="/api")
 app.include_router(animations_router,  prefix="/api")
 app.include_router(extensions_router,  prefix="/api")
+app.include_router(feature_log_router, prefix="/api")
 app.include_router(deformation_router, prefix="/api")
 app.include_router(flexible_segments_router, prefix="/api")
 app.include_router(export_md_router,   prefix="/api")
