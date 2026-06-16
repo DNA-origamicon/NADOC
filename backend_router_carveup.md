@@ -140,20 +140,25 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-15 after Refactor #24
-(**Overhang bindings + connections** → `routes_assembly_overhangs.py` — the largest remaining cohesive assembly
-cluster). **B=7, bespoke-B=0** (L19): all seven back-imports are the exempt shared set (`_assembly_response` /
-`_apply_assembly_mutation_with_feature_log` kernel + `_find_instance` lookup + file-IO
-`_assembly_source_path`/`_load_design_from_source` + L13 forced-shared `_linker_geometry_for_assembly` +
-`_propagate_fk_inplace`). 8 routes (3 binding + 3 connection CRUD + relax-status + relax) + 5 request models +
-6 region-only helpers moved IN; the linker/kinematics math imported from `backend/core` directly. The
-**`_replay_assembly_op` circular-import GOTCHA** (same as #23) resolved via function-local imports in the two
-overhang-connection op-kind branches. `SeekAssemblyFeaturesRequest` (nested under the bindings banner, used by
-the staying feature-log seek route) relocated to a new feature-log banner (L8). assembly.py 50→42 routes,
-~−547 ln (extraction's own). Verbatim lift — no new tests; existing `test_assembly_overhang_bindings.py` (27) +
-`test_assembly_linker_relax.py` (16) cover (43 green). **Working tree carries uncommitted #22 + #23 + #24**
-(awaiting user commit). **oxDNA flake** (see ▶ NEXT, L9): not extraction-caused — deterministic before/after is
-68 passed both ways._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-15 after Refactor #26
+(**Instance design / geometry** → `routes_assembly_geometry.py`). **B=8, bespoke-B=0** (L19): every back-import
+is exempt shared infra — `_find_instance` lookup + the file-IO design-load trio
+`_assembly_source_path`/`_load_design_from_source`/`_design_with_instance_overrides` (L4-blocked) +
+`_display_design` (shared cross-region, also in polymerize router) + the geometry-cache trio
+`_geo_cache_key`/`_geo_cache_get`/`_geo_cache_set` (tied to assembly.py's module-level `_GEO_CACHE`, read by
+other assembly routes + frames router). 6 read-only GET routes moved IN; no module-level helpers/models in the
+region; the heavy geometry math (`_geometry_for_design`/`deformed_helix_axes`/`build_atomistic_model`/
+`compute_surface`) stays function-locally imported in each handler, NOT back from the god-file. All GETs →
+read-only, no mutation contract, no `_replay_assembly_op` gotcha. assembly.py 38→32 routes, −221 ln. Verbatim
+lift — no new tests; 2076 passed / 55 skipped unchanged. **THEN (same session, user-approved) DELETED the dead
+Part-library (legacy) cluster** (3 routes + `_sha256_file`/`_LIBRARY_DIR`/`RegisterLibraryRequest` + its 5
+backend route tests — see L22 gotcha): assembly.py 32→**29 routes**, deterministic full suite **2071 passed /
+55 skipped / 0 failed**. **Skip audit done:** all 55 skips are legitimate (missing optional tools openmm/mrdna,
+missing user fixtures OHtest2/Hinge3/10hb/U6hb, env-bound XTC) — NONE skip on stale "not-implemented" rules; the
+`"cadnano importer not yet implemented"` guards are now obsolete (importer exists → they never fire, tests run)
+but harmless. **Working tree now carries uncommitted #22 + #23 + #24 + #25 + #26 + the Part-library deletion**
+(awaiting user commit). **oxDNA flake did NOT reappear** under deterministic full run — 540755b's atomic-write
+fix holds (L9-addendum)._
 
 **▶ NEXT — crud.py:** **Flexible ssDNA segments** (banner `# ── Flexible ssDNA segments`, find via
 `grep -n "# ── Flexible ssDNA" backend/api/crud.py`, ~13200s after #3's −315 ln drift) →
@@ -183,18 +188,22 @@ cross-test state leak — it was hash-seed-dependent nondeterminism in the share
 topological event instead of a brittle strand count. **Full-suite green is now 1753 passed / 0 failed.**
 See ISSUE-6 in `issues_ledger.md`.
 
-**▶ NEXT — assembly.py:** **Instance routes** (`# ── Instance routes`, `grep -n "# ── Instance routes"
-backend/api/assembly.py`) — the largest remaining banner (~610–1290). It is NOT monolithic: it holds
-`add_instance`/`patch_instance`/`delete_instance`/`duplicate_instance` (CRUD) + the loadout sub-routes
-(`# ── Per-entry actions` region carries the 4 `/assembly/instances/{id}/loadouts*` routes, now adjacent at
-~2918 after this extraction) + a BFS re-application block. **Cut on cohesion, not the banner (L8):** the
-clean sub-cluster is **Instance loadouts** (`create/select/rename/delete` loadout — 4 routes, region-local,
-probe expected B≈3 = `_assembly_response`/`_apply_assembly_mutation_with_feature_log`/`_find_instance`) →
-`routes_assembly_loadouts.py`. Probe the LIVE range first. **Leave the kernel:** `GET/POST /assembly`,
-undo/redo, geometry cache (`# ── Core assembly routes`). **Still L4-blocked, leave:** the cluster-inference
-trio (`_infer_cluster_ids_for_connector_label`→`_design_with_instance_overrides` file-IO,
-`_joint_side_cluster_ids`, `_propagate_cluster_delta_to_mates`). NOTE: `_apply_prismatic_joint` +
-`_mat4_from_model`/`_mat4_to_model` stay in assembly.py (26+ unrelated callers).
+**▶ NEXT — assembly.py:** assembly.py is now down to **29 routes** and approaching its terminal state (kernel +
+lifted sub-resources). The remaining extractable cluster is the cohesive bits of **`# ── Instance routes`**
+(`grep -n "# ── Instance routes" backend/api/assembly.py`, ~602) — the per-instance CRUD (add / patch / delete
+instance, visibility, source-swap). **CAUTION: kernel-adjacent + HIGH coupling** — these handlers run FK
+propagation (`_propagate_fk_inplace` / `_enforce_connector_coincidence`) + the mutation contract
+(`_apply_assembly_mutation_with_feature_log`) + cluster-delta propagation; probe B on the LIVE range and expect
+several shared back-imports (classify each as bespoke-vs-exempt per L19 before committing). It may NOT split
+cleanly — if the probe shows bespoke-B>0, this is a "leave in the kernel" region, not a forced extraction.
+**Still L4-blocked, leave behind:** the cluster-inference trio
+(`_infer_cluster_ids_for_connector_label`→`_design_with_instance_overrides` file-IO, `_joint_side_cluster_ids`,
+`_propagate_cluster_delta_to_mates`). `_apply_prismatic_joint` + `_mat4_from_model`/`_mat4_to_model` stay
+(26+ unrelated callers). **Leave the kernel:** `GET/POST /assembly`, undo/redo (`# ── Core assembly routes`),
+the feature-log seek/replay + per-entry-actions banners (the `_replay_assembly_op` dispatcher lives here and is
+called by everything — it's kernel), and `# ── Debug endpoints` (`/debug/assembly` IS still frontend-used — not
+dead). **When the Instance-routes probe says "kernel, don't extract," assembly.py's carve-up is DONE** — switch
+the loop to crud.py (NEXT: Flexible ssDNA segments, probed B=1).
 GOTCHA re-banked (#23/#24, → L21+circular): when the extracted router imports kernel helpers BACK from
 assembly.py, any reference in a STAYING function (esp. `_replay_assembly_op`) to a moved handler/model must
 become a **function-local** `from backend.api.routes_<area> import ...` — a top-level import is circular. Both
@@ -441,6 +450,34 @@ Tiers are priority hints, not gospel.
   `_safe_workspace_path` (shared api wrapper, L13) + `_assembly_response` (kernel), and moved the workspace-only
   `_patch_references` in. `# ── Part library (legacy)` (~6357 now) is a SEPARATE concern (scans `parts-library/`,
   uses `_sha256_file`/`_LIBRARY_DIR`) — left behind. assembly.py 89→79 routes. See L16 (monkeypatch-fidelity).
+  **Instance loadouts router DONE** (Refactor #25, 2026-06-15): the 4 per-instance loadout routes
+  (create/select/rename/delete) + their 2 region-only request models → `routes_assembly_loadouts.py` at
+  **B=5, bespoke-B=0** (all shared infra: `_assembly_response` + `_find_instance` +
+  `_load_design_from_source`/`_assembly_source_path` file-IO + `_replace_instance_design` cross-region writer);
+  the loadout snapshot codec stays function-locally imported from `crud` (shared with `/design/loadouts`).
+  42→38 routes, ≈−104 LOC, 2076 green. **No route tests exist for these 4 — verbatim-lift guarantee only.**
+  **Instance design / geometry router DONE** (Refactor #26, 2026-06-15): the 6 read-only GET geometry routes
+  (`/assembly/instances/{id}/design` + `/geometry` + `/bend-centers` + `/atomistic-geometry` +
+  `/surface-geometry` + the batch `/assembly/geometry`) → `routes_assembly_geometry.py` at **B=8, bespoke-B=0**
+  (L19): every back-import is the exempt shared set — `_find_instance` lookup + the file-IO design-load infra
+  `_assembly_source_path`/`_load_design_from_source`/`_design_with_instance_overrides` (L4-blocked) +
+  `_display_design` (shared cross-region with polymerize router) + the geometry-cache trio
+  `_geo_cache_key`/`_geo_cache_get`/`_geo_cache_set` (tied to assembly.py's module-level `_GEO_CACHE`, also
+  read by other assembly routes + the frames router). The geometry math (`_geometry_for_design` from `crud`,
+  `deformed_helix_axes`/`compute_bend_centers` from `backend.core.deformation`, `build_atomistic_model`/
+  `compute_surface`) stays **function-locally imported** inside each handler exactly as before — NOT back from
+  the god-file. No module-level helpers/models in the region (only a nested `_source_key_for`), all 6 GETs →
+  read-only, no mutation contract, no `_replay_assembly_op` gotcha. Verbatim lift; 38→32 routes, −221 LOC,
+  2076 passed / 55 skipped unchanged.
+  **Part library (legacy) DELETED (2026-06-15, post-#26, user-approved):** the 3 dead routes
+  (`/assembly/library` + `/library/register` + `/library/rescan`) + their `_sha256_file` / `_LIBRARY_DIR`
+  helpers + `RegisterLibraryRequest` model removed (confirmed zero `frontend/src` refs). **GOTCHA (→ L22):**
+  the routes were frontend-dead but had **5 backend route tests** in `tests/test_assembly_api.py`
+  (`test_library_*` / `test_register_library_*`) — the still-used gate (step 4) only greps `frontend/src`, so a
+  full deterministic suite went 5-RED until those tests were deleted alongside. `PartLibraryEntry` model STAYS
+  in `core/models.py` (independently tested by `test_assembly_models.py`). assembly.py 32→29 routes, −~70 LOC,
+  deterministic full suite **2071 passed / 55 skipped / 0 failed** (the prior "5 failed" was exactly these
+  deleted tests; the banked oxDNA flake did NOT reappear — 540755b's atomic-write fix holds).
 
 ### Stays in assembly.py (kernel)
 - Core assembly routes (`# ── Core assembly routes` ~1289), undo/redo, the geometry cache, and the shared

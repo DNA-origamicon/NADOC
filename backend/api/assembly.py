@@ -33,10 +33,6 @@ GET   /assembly/linker-geometry         nucleotide geometry for all assembly_hel
 POST  /assembly/undo                    undo last assembly-level op
 POST  /assembly/redo                    redo last undone op
 
-GET   /assembly/library                 scan parts-library/ for *.nadoc files
-POST  /assembly/library/register        manually register a part file
-POST  /assembly/library/rescan          refresh sha256 hashes, remove missing files
-
 GET   /assembly/instances/{id}/design   resolve and return instance's Design JSON
 GET   /assembly/instances/{id}/geometry geometry for instance's design (local frame)
 
@@ -73,7 +69,6 @@ from backend.core.models import (
     InterfacePoint,
     Mat4x4,
     PartInstance,
-    PartLibraryEntry,
     PartSourceFile,
     Vec3,
 )
@@ -84,7 +79,6 @@ router = APIRouter()
 
 # ── Project root (two levels above this file: backend/api/ → backend/ → root) ──
 _PROJECT_ROOT  = Path(__file__).resolve().parent.parent.parent
-_LIBRARY_DIR   = _PROJECT_ROOT / "parts-library"
 _WORKSPACE_DIR = Path(os.environ.get("NADOC_WORKSPACE", str(_PROJECT_ROOT / "workspace")))
 
 
@@ -200,14 +194,6 @@ def _find_joint(assembly: Assembly, joint_id: str) -> AssemblyJoint:
         if j.id == joint_id:
             return j
     raise HTTPException(404, detail=f"Joint {joint_id!r} not found.")
-
-
-def _sha256_file(path: str | Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def _load_design_from_source(source, assembly_path: str | None = None):
@@ -486,12 +472,6 @@ class PatchInstanceDesignRequest(BaseModel):
 class InstanceSeekFeaturesRequest(BaseModel):
     position: int
     sub_position: Optional[int] = None
-
-
-class RegisterLibraryRequest(BaseModel):
-    path: str
-    name: Optional[str] = None
-    tags: list[str] = []
 
 
 # ── Core assembly routes ───────────────────────────────────────────────────────
@@ -2613,70 +2593,6 @@ def undo_assembly() -> dict:
 def redo_assembly() -> dict:
     """Redo the last undone assembly-level operation."""
     return _assembly_response(assembly_state.redo())
-
-
-# ── Part library (legacy — scans parts-library/ dir) ──────────────────────────
-
-@router.get("/assembly/library", status_code=200)
-def get_library() -> dict:
-    """
-    Scan the parts-library/ directory for *.nadoc files.
-
-    Returns a list of PartLibraryEntry objects.  For each file, reads any
-    interface_points from a Part wrapper if the file contains one; otherwise
-    returns an empty list.  The sha256 digest is computed fresh on each call
-    (files are small; caching is not worth the complexity yet).
-    """
-    from backend.core.models import Design
-    _LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
-    entries = []
-    for p in sorted(_LIBRARY_DIR.glob("*.nadoc")):
-        try:
-            sha = _sha256_file(p)
-            ipts: list = []
-            try:
-                Design.from_json(p.read_text(encoding="utf-8"))
-                # Interface points may be stored on a Part wrapper or on the design itself
-                # For now we return an empty list — Part wrapper not required
-            except Exception:
-                pass
-            entries.append(PartLibraryEntry(
-                name=p.stem,
-                path=str(p.relative_to(_PROJECT_ROOT)),
-                sha256=sha,
-                interface_points=ipts,
-            ).model_dump())
-        except Exception:
-            continue
-    return {"entries": entries}
-
-
-@router.post("/assembly/library/register", status_code=201)
-def register_library_entry(body: RegisterLibraryRequest) -> dict:
-    """Manually register a .nadoc file in the library by recording its path and hash."""
-    p = Path(body.path)
-    if not p.is_absolute():
-        p = (_PROJECT_ROOT / p).resolve()
-    if not p.is_file():
-        raise HTTPException(400, detail=f"File not found: {body.path!r}")
-    sha = _sha256_file(p)
-    entry = PartLibraryEntry(
-        name=body.name or p.stem,
-        path=str(p.relative_to(_PROJECT_ROOT)),
-        sha256=sha,
-        tags=body.tags,
-    )
-    return {"entry": entry.model_dump()}
-
-
-@router.post("/assembly/library/rescan", status_code=200)
-def rescan_library() -> dict:
-    """Re-hash all files in parts-library/ and report missing ones."""
-    _LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
-    found = []
-    for p in sorted(_LIBRARY_DIR.glob("*.nadoc")):
-        found.append({"path": str(p.relative_to(_PROJECT_ROOT)), "sha256": _sha256_file(p)})
-    return {"files": found, "count": len(found)}
 
 
 # ── Debug endpoints ───────────────────────────────────────────────────────────
