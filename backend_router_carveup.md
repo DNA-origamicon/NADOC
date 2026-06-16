@@ -55,20 +55,35 @@ didn't, nothing improved.
 So **LOC is never the pass criterion.** It is narrative only — a *side effect* of a real improvement, logged
 for the story, never the goal. A move is valid only if it moves one of these the right way:
 
-### Primary metric — back-import surface `B` (the shovel detector)
+### Primary metric — back-import surface `B`, split into **bespoke-B** (the gate) and **raw-B** (a debt signal)
 `B` = the count of **distinct private symbols** (`_foo`) the new `routes_<area>.py` imports back from
-crud.py/assembly.py. Lower is better.
-- **The two shipped exemplars have B = 1–2** (`_design_response`, +`_helix_label`). That is the bar.
-- **Gate: B ≤ 3 to ship a router extraction.** If a candidate's B is higher, the cluster is NOT cleanly
-  separable yet — you have three honest options, in order of preference:
+crud.py/assembly.py. It splits in two, and you must report BOTH:
+- **bespoke-B** = back-imports that are *private region helpers* — logic specific to this cluster that
+  didn't make it out. **This is the gate.**
+- **raw-B** = bespoke-B + the *exempt shared kernel* (`_design_response`/`_assembly_response`, the
+  `mutate_and_validate` wrappers, 20+-caller trivial lookups like `_find_instance`, and L4-blocked file-IO
+  infra). The exempt set is documented in L19.
+
+- **GATE: bespoke-B = 0 to ship a router extraction.** (Not "raw B ≤ 3" — that was the original heuristic;
+  L19 corrected it. The shipped routers sit at bespoke-B=0 with raw-B anywhere from 1 to 11, and that's the
+  real bar.) If even ONE back-import is a bespoke region helper, the cluster is NOT cleanly separable — three
+  honest options, in order of preference:
   1. **Co-extract the shared helpers into `backend/core/<area>.py`** (they were service logic too) and import
      them from core in *both* files — coupling genuinely drops.
-  2. **Promote a truly-shared helper** (used by 50+ routes, like `_design_response`) — it stays in crud.py and
-     is imported; that's an accepted shared-kernel dependency, not coupling debt. Count it toward B but don't
-     let it block you (the exemplars do exactly this).
-  3. **Pick a different cluster.** A high-B cluster that's all bespoke helpers is telling you it isn't ripe.
+  2. **Move the bespoke helper IN** with the router (if it has no caller outside the moved cluster) — then it
+     isn't a back-import at all.
+  3. **Pick a different cluster.** A cluster that's all bespoke helpers is telling you it isn't ripe.
+
+- **HIGH raw-B IS NOT A PASS — it is a debt marker (NEW, 2026-06-16, the reviewer's point).** bespoke-B=0
+  means "no umbilical of *cluster-specific* logic," NOT "cleanly decoupled." A router that ships at
+  bespoke-B=0 / **raw-B ≥ 6** (e.g. `routes_assembly_geometry` at 8, `routes_assembly_joints` at 11) still
+  has a broad dependency on the god-file's *kernel surface* — that is an **intermediate state, not a victory
+  lap.** When you ship such a row you MUST, in the same session, **append a Tier-3 service-push candidate to
+  the backlog** naming the broad kernel cluster the router leaned on (e.g. "the `_geo_cache_*` trio +
+  `_load_design_from_source`/`_design_with_instance_overrides` file-IO → `backend/core/assembly_geometry.py`").
+  The router lift is fine; it just doesn't *finish* the decoupling, and the loop must not lose the thread.
 - Measure B with the probe in the extraction log's "Coupling probe" section before you start. Log
-  *before-B and after-B* in the metrics row.
+  *before-B → after-B for BOTH bespoke-B and raw-B* in the metrics row.
 
 ### Secondary metrics (log the ones that moved)
 - **Handler thinness** — for a service extraction, the max route-handler body LOC in the touched cluster,
@@ -110,6 +125,15 @@ A fresh session keeps token cost low. Per session:
      keeps its decorator and shrinks to delegate.
 6. **Gate:** `just test` green (cite pass count; flag any count *drop* — that's a regression, not a win).
    `just lint` clean on touched files. A service extraction without a new unit test does not ship.
+   - **Repo-wide lint debt (2026-06-16): `just lint` reports ~13 pre-existing errors, NONE from the carve-up**
+     — they live in NAMD/oxDNA/polymer feature code (`namd_runner.py`, `routes_md.py`, `polymer_router.py`,
+     `seamed_router.py`, `namd_solvate.py`) + four test files (mostly F401 unused-import / F841 unused-local,
+     ~10 of 13 are `ruff --fix`-able). The carve-up didn't cause them and isn't on the hook to fix them all,
+     BUT: (a) **never let the count rise** — after a lift, `ruff` will flag now-orphaned `core.models` imports
+     in the god-file (gotcha #3); remove them so your touched files are clean; (b) **opportunistic fix** — if a
+     pre-existing F401/F841 is in a file you're already editing or directly adjacent, fix it in the same commit.
+     A standalone `ruff check --fix backend/ tests/` lint-sweep commit (separate from any extraction) is welcome
+     any session — it's mechanical and drains the gate without touching the carve-up's risk surface.
 7. **One region per commit** (`area: extract <cluster> router/service from crud.py`). Update this map (check
    the box, note the commit), add a metrics row to the log **with the required justification line**.
 8. **Route what you found** (don't let it die): a bug found in/near the region → `issues_ledger.md` dossier
@@ -140,32 +164,48 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #31
-(**crud.py: oxDNA + single-file structural exports** → `routes_export_structure.py`, B=2 / bespoke-B=0, verbatim,
-13 routes, 2071 passed / 55 skipped unchanged). The cohesive cluster left behind by #30 moved out — oxDNA
-export/run + pdb/psf + identity[-tsv] + design-maps + basepairs[-tsv] + stacking[-tsv] + restraints-dry-implicit +
-mrdna-roundtrip; back-imports are the SAME shared pair as #30 (`_design_for_export` + `_geometry_for_design`).
-**L8 3-segment cut held:** the display routes (`/design/atomistic`, `/surface`, `/surface/region`), the 3D-print
-exports (`/export/stl`, `/3mf`), and `/design/debug/strand-stats` are interleaved between the oxDNA / pdb→mrdna /
-psf blocks and ALL correctly STAYED. Zero region-local helpers/models; every core dep (`pdb_export`,
-`oxdna_interface`, `gromacs_package`, `mrdna_bridge`) was already function-local. crud.py 158→**145 routes**,
-−441 LOC. **Coverage gap (→ row #31):** these routes have NO TestClient route tests (only core-fn tests in
-`test_atomistic.py`) — verbatim-lift guarantee only, same profile as #25/#30. #30 (NAMD/GROMACS, B=2) + #29
-(Cluster joints, B=1) + #28 (Cluster transforms, B=2) + #27 (Flexible ssDNA, B=1) were the prior crud extractions.
-assembly.py is at **29 routes**, near terminal kernel (see assembly ▶ NEXT — Instance routes, expected "leave in
-the kernel"). **Working tree carries uncommitted #22–#31 + the Part-library deletion** (awaiting user commit)._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #33
+(**crud.py: auto-scaffold routing variants** → `routes_scaffold_routing.py`, B=1 / bespoke-B=0, verbatim, 4 routes,
+2071 passed / 55 skipped unchanged). **The prior handoff's "fold sequence-assignment into routes_sequences.py" plan
+was REJECTED on cohesion** — the `# ── Sequence assignment endpoints` banner was a 3-concern L8 adjacency trap, and
+routes_sequences.py's own docstring forbids the fold (export ≠ assignment). Instead the cohesive sub-cluster found:
+the 4 auto-*routing* endpoints (`auto-scaffold-seamed`/`-matched`/`-seamless` + `route-for-polymerization`) +
+their shared `_run_auto_scaffold_with_feature_log` helper → a NEW `routes_scaffold_routing.py` at floor B=1
+(`_design_response_with_geometry` only). **L23 banked:** `backend/api/headless_build.py` imports crud route
+handlers as fns — repointed 2 of them. crud.py 143→**139 routes**. #32 (caDNAno seq export, B=1) + #31 (oxDNA+
+structural, B=2) + #30 (NAMD/GROMACS, B=2) + #29 (Cluster joints, B=1) + #28 (Cluster transforms, B=2) + #27
+(Flexible ssDNA, B=1) were the prior crud extractions. assembly.py is at **29 routes**, near terminal kernel (see
+assembly ▶ NEXT). **Working tree carries uncommitted #22–#33 + the Part-library deletion** (awaiting user commit)._
 
-**▶ NEXT — crud.py:** **sequence-file exports → `routes_sequences.py`** — the `# ── caDNAno sequence export`
-banner (now ~10521) holds 2 routes (`/design/export/sequence-csv` + `/design/export/sequence-xlsx`), **probed
-B=1** (`_design_for_export` only, zero region-local helpers/models) — a clean small lift mirroring #31. **Decide
-the fold:** the handoff has long suggested folding it with `# ── Sequence assignment endpoints` (~7139) +
-`# ── Overhang random-sequence generation` (~7531) into one `routes_sequences.py`, BUT probe says only the
-*export* half is clean: Sequence-assignment is B=2 (`_design_response`/`_with_geometry` kernel +
-`_place_auto_crossovers` bespoke) and Overhang-random-gen is **B=7 with 5 BESPOKE** helpers
-(`_apply_boundary_hairpin_warnings`/`_apply_driver_to_joint`/`_delete_linker_connections_from_design`/
-`_first_claimant_for_joint`/`_select_driver_for_joint` — the overhang/joint web). So per L8/L19 do NOT force the
-fold: either (a) ship the 2-route caDNAno-export lift alone at B=1, or (b) fold ONLY sequence-assignment (B=2,
-bespoke-B=1 via `_place_auto_crossovers`) with it, leaving random-gen for a later overhang-web service push.
+**▶ LOOP PHASE SHIFT (2026-06-16, post-review):** the cheap **B=1 router lifts are drained** — 173 routes now
+live in extracted routers, crud.py is at 139 routes / assembly.py at 29. An external review confirmed the router
+layer is much healthier BUT flagged that the **next real architectural jump is SERVICE extraction, not more
+router lifts** — several shipped routers sit at bespoke-B=0 / raw-B 6–11, i.e. they still lean on a broad
+god-file *kernel surface* (geometry cache, file-IO design-load, cluster autodetect). Those are intermediate
+states. **Prefer a Tier-3 service push over a router lift from here on** unless a clean B=1 cluster is sitting
+right there. The two highest-value targets: crud's **Cluster autodetect** (~1460 ln) and the assembly
+**geometry-cache + file-load kernel** (`_geo_cache_*` + `_load_design_from_source`/`_design_with_instance_overrides`,
+the surface `routes_assembly_geometry`/`_joints`/`_frames` all lean on).
+
+**▶ NEXT — crud.py (PRIMARY, Tier 3 service push):** **Cluster autodetect → `backend/core/cluster_autodetect.py`**
+— the `# ── Internal helpers` mass (~144–1605, esp. the autodetect phases ~835–1155) is ~1460 ln of pure
+topology/clustering marooned in the api file: the single biggest *real* improvement left, B=0 by construction
+(pure topology, no api deps), with direct unit tests. No router, no URL change. Multi-session — carve by phase.
+This is the move the review says delivers the next score jump.
+
+**▶ NEXT — crud.py (secondary, only if you want a quick clean router lift):** Sequence-assignment cluster →
+NEW `routes_assign_sequences.py` (do NOT fold into `routes_sequences.py` — that's export-only by its own
+docstring). The residual `# ── Sequence assignment endpoints`
+banner now holds exactly the cohesive sequence-assignment trio: `assign-scaffold-sequence`, `assign-staple-sequences`,
+`full-autostaple` (+ the region helpers `_linearize_staple_precursors`/`_assert_no_circular_staples`, ends before
+`# ── Overhang random-sequence generation` ~7396 now). **Probed B=3, bespoke-B=1:** `_design_response`(2) +
+`_design_response_with_geometry`(1) (shared kernel, exempt) + `_place_auto_crossovers`(1) — the ONE bespoke, used
+only by full-autostaple. **`_place_auto_crossovers` is L13 leave-and-import-back:** defined at crud.py:4889 (crossover
+region), called by a crossover route AND `tests/test_simple_router.py` → shared cross-region, leave in crud.py +
+import back (gate ≤3 passes). **TWO L23 repoints needed in the same commit:** (1) `_linearize_staple_precursors`
+moves IN but is imported by `tests/test_simple_router.py` → repoint that test; (2) `headless_build.py` imports
+`assign_scaffold_sequence_endpoint` + `full_autostaple_endpoint` as fns → repoint at the new module. Their request
+models `_ScaffoldSeqBody`/`_FullAutostapleBody` are ALSO imported by `headless_build.py` — move them IN and repoint.
 **Higher-value alt (Tier 3, multi-session):** the **Cluster autodetect** service push (`# ── Internal helpers`
 ~144–1605, esp. the autodetect phases ~835–1155) → `backend/core/cluster_autodetect.py` — ~1460 ln of pure
 topology/clustering marooned in the api file, the single biggest *real* improvement left. No router, pure service
@@ -190,8 +230,15 @@ cross-test state leak — it was hash-seed-dependent nondeterminism in the share
 topological event instead of a brittle strand count. **Full-suite green is now 1753 passed / 0 failed.**
 See ISSUE-6 in `issues_ledger.md`.
 
-**▶ NEXT — assembly.py:** assembly.py is now down to **29 routes** and approaching its terminal state (kernel +
-lifted sub-resources). The remaining extractable cluster is the cohesive bits of **`# ── Instance routes`**
+**▶ NEXT — assembly.py (PRIMARY = service push, per the phase shift above):** assembly.py is at **29 routes**
+("routes drained") but is **NOT done** — `routes_assembly_geometry`/`_joints`/`_frames` lean on a broad 8–11-symbol
+kernel surface (the `_geo_cache_*` trio tied to module global `_GEO_CACHE`, + `_load_design_from_source`/
+`_design_with_instance_overrides` file-IO design-load). **The remaining real work is a SERVICE push of that
+geometry-cache + design-load kernel → `backend/core/assembly_geometry.py`** (raw-B on those three routers drops
+once the cache/load infra is in core; carve by phase, direct unit tests, B=0 by construction for the pure parts —
+the file-IO half may be L4-blocked and stay, classify per L20). That is what moves assembly.py from "routes
+drained" to actually-done. _Secondary router-lift option (only if a clean cluster is sitting there):_ the cohesive
+bits of **`# ── Instance routes`**
 (`grep -n "# ── Instance routes" backend/api/assembly.py`, ~602) — the per-instance CRUD (add / patch / delete
 instance, visibility, source-swap). **CAUTION: kernel-adjacent + HIGH coupling** — these handlers run FK
 propagation (`_propagate_fk_inplace` / `_enforce_connector_coincidence`) + the mutation contract
@@ -204,8 +251,9 @@ cleanly — if the probe shows bespoke-B>0, this is a "leave in the kernel" regi
 (26+ unrelated callers). **Leave the kernel:** `GET/POST /assembly`, undo/redo (`# ── Core assembly routes`),
 the feature-log seek/replay + per-entry-actions banners (the `_replay_assembly_op` dispatcher lives here and is
 called by everything — it's kernel), and `# ── Debug endpoints` (`/debug/assembly` IS still frontend-used — not
-dead). **When the Instance-routes probe says "kernel, don't extract," assembly.py's carve-up is DONE** — switch
-the loop to crud.py (NEXT: Flexible ssDNA segments, probed B=1).
+dead). **When the Instance-routes probe says "kernel, don't extract," assembly.py's ROUTER carve-up is drained** — but
+the file is still not done (see the geometry-cache/design-load service push above). Either do that service push,
+or switch the loop to crud.py's Cluster-autodetect service push (the higher-value Tier-3 target).
 GOTCHA re-banked (#23/#24, → L21+circular): when the extracted router imports kernel helpers BACK from
 assembly.py, any reference in a STAYING function (esp. `_replay_assembly_op`) to a moved handler/model must
 become a **function-local** `from backend.api.routes_<area> import ...` — a top-level import is circular. Both
@@ -299,8 +347,24 @@ Tiers are priority hints, not gospel.
   privates — probe was empty for that segment). 3-segment cut held (oxDNA / pdb→mrdna contiguous / psf), with the
   display + 3D-print + strand-stats routes correctly LEFT in crud.py. Zero region-local helpers/models. crud.py
   158→145 routes, −441 LOC. Verbatim lift; 2071 passed / 55 skipped unchanged.
-- [ ] **caDNAno sequence export** — `# ── caDNAno sequence export` (~11019–11189) → fold into a
-  `routes_sequences.py` with the sequence-assignment block (~7288–8029) and overhang random-gen (~8029–8485).
+- [x] **caDNAno sequence export** — `# ── caDNAno sequence export` → `routes_sequences.py` (Refactor #32,
+  2026-06-16). **B=1** (`_design_for_export`), bespoke-B=0. 2 routes moved (`/design/export/sequence-csv` +
+  `/design/export/sequence-xlsx`) + the region-only `_SequenceXlsxRequest` model. **Did NOT force the fold**
+  (per L8/L19 + the handoff): sequence-assignment (B=2, bespoke `_place_auto_crossovers`) and overhang
+  random-gen (B=7, 5 bespoke) stay in crud.py — the clean caDNAno-export half lifted alone. Verbatim;
+  `test_reference_geometry.py` hits the csv route. Orphaned `pydantic.Field` import cleaned from crud.py.
+  crud.py 145→143 routes, −170 LOC.
+
+- [x] **Auto-scaffold routing variants** — the 4 routing endpoints mislabeled under the
+  `# ── Sequence assignment endpoints` banner (`auto-scaffold-seamed`/`-matched`/`-seamless` +
+  `route-for-polymerization`) → `routes_scaffold_routing.py` (Refactor #33, 2026-06-16). **B=1**
+  (`_design_response_with_geometry`), bespoke-B=0. 4 routes + their shared `_run_auto_scaffold_with_feature_log`
+  helper (moved IN, zero external callers) — no request models. **L8 banner-trap caught + the handoff's
+  fold-into-routes_sequences plan REJECTED:** these place crossovers/seams (topology routing), NOT sequences;
+  the actual sequence-assignment + full-autostaple routes stay in crud.py (full-autostaple's
+  `_place_auto_crossovers`/`_linearize_staple_precursors` are shared cross-region + test-imported → defer to a
+  later sequence/overhang service push). **L23 banked:** `headless_build.py` imported 2 of these handlers as fns
+  → repointed at the new module. crud.py 143→139 routes.
 
 ### Tier 3 — service-heavy (do a service push first, then maybe a router)
 
@@ -514,14 +578,32 @@ Tiers are priority hints, not gospel.
   deterministic full suite **2071 passed / 55 skipped / 0 failed** (the prior "5 failed" was exactly these
   deleted tests; the banked oxDNA flake did NOT reappear — 540755b's atomic-write fix holds).
 
+### Tier 3 — assembly service pushes (the remaining REAL decoupling, post-review 2026-06-16)
+- [ ] **Geometry-cache + design-load kernel → `backend/core/assembly_geometry.py`** — the surface that
+  `routes_assembly_geometry` (raw-B=8), `routes_assembly_joints` (raw-B=11), and `routes_assembly_frames` all
+  lean back on: the `_geo_cache_key`/`_geo_cache_get`/`_geo_cache_set` trio (tied to module global `_GEO_CACHE`)
+  + the file-IO design-load infra `_load_design_from_source`/`_design_with_instance_overrides`/
+  `_assembly_source_path`. Push the cache logic + the pure parts of design-load to core with direct unit tests;
+  the genuinely file-IO/`HTTPException` parts may be L4-blocked and stay (classify per L20). This is what drops
+  those routers' raw-B and moves assembly.py from "routes drained" to actually-done. (Module-global `_GEO_CACHE`
+  must be read through its module post-move — L16.)
+
 ### Stays in assembly.py (kernel)
-- Core assembly routes (`# ── Core assembly routes` ~1289), undo/redo, the geometry cache, and the shared
-  `_assembly_response`-style helpers. Same terminal state as crud.py: kernel + lifted sub-resources.
+- Core assembly routes (`# ── Core assembly routes` ~1289), undo/redo, and the shared
+  `_assembly_response`-style helpers. Same terminal state as crud.py: kernel + lifted sub-resources. (The
+  geometry cache is currently here too but is a Tier-3 service-push target — see above, not permanent kernel.)
 
 ---
 
 **The goal is NOT a LOC number.** It is: **each god-file holds only its design/assembly-core kernel routes +
 the shared response helpers, with every cohesive sub-resource in its own `routes_<area>.py` and every chunk
-of business logic in `backend/core`.** When the backlog is drained and the only thing left in crud.py is the
-kernel, the loop is done — LOC lands wherever it lands as a *result*. Keep it done by extracting new route
-clusters into their own router from the start (same law as `FEATURE_DEVELOPMENT.md` for the frontend).
+of business logic in `backend/core`.** LOC lands wherever it lands as a *result*. Keep it done by extracting
+new route clusters into their own router from the start (same law as `FEATURE_DEVELOPMENT.md` for the frontend).
+
+**"Routes drained" ≠ "done" (2026-06-16, post-review).** Having lifted all the route clusters out is only HALF
+the terminal state. The loop is done **only when the residual kernel surface is also small** — i.e. the routers'
+**max raw-B against the god-file is low** AND the marooned business logic (cluster autodetect, geometry/cache/
+file-load helpers) has moved to tested `backend/core` modules. assembly.py at 29 routes is "routes drained," but
+its routers still lean on an 8–11-symbol kernel surface (geometry cache + file-IO design-load), so it is **NOT
+done** — the geometry/file-load service push is the remaining work. State the file's status as *"routes drained,
+kernel-surface reduction pending"* until that surface is itself extracted, not *"near terminal / done."*
