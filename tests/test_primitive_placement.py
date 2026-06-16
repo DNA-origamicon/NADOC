@@ -39,6 +39,14 @@ SIX_HB = [(0, 1), (1, 1), (1, 2), (1, 3), (0, 3), (0, 2)]
 SIX_HB_ANCHOR = (0, 1)
 _PRIMITIVE_6HB = Path("workspace/Primitives/6hb_primitive.nadoc")
 
+# 6hb_primitive.nadoc is a hand-built reference design under workspace/, not checked
+# into the repo — skip the test that reads it when absent (fresh clone / CI / second
+# computer) instead of erroring with FileNotFoundError.
+_skip_if_no_6hb = pytest.mark.skipif(
+    not _PRIMITIVE_6HB.exists(),
+    reason=f"primitive fixture missing: {_PRIMITIVE_6HB} (hand-built, not in repo)",
+)
+
 
 @pytest.fixture(autouse=True)
 def reset_state():
@@ -64,6 +72,7 @@ def _directions(cells):
 
 # ── 1. General primitive-addition validation ──────────────────────────────────
 
+@_skip_if_no_6hb
 def test_derive_placement_spec_matches_real_6hb_primitive():
     design = json.loads(_PRIMITIVE_6HB.read_text())
     spec = derive_placement_spec(design)

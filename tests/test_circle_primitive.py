@@ -37,6 +37,14 @@ client = TestClient(app)
 
 _SMALL_CIRCLE = Path("workspace/Primitives/small_circle.nadoc")
 
+# small_circle.nadoc is a hand-built reference design kept under workspace/ and not
+# checked into the repo, so skip the tests that read it when it's absent (fresh
+# clone / CI / second computer) rather than erroring with FileNotFoundError.
+_skip_if_no_circle = pytest.mark.skipif(
+    not _SMALL_CIRCLE.exists(),
+    reason=f"primitive fixture missing: {_SMALL_CIRCLE} (hand-built, not in repo)",
+)
+
 
 @pytest.fixture(autouse=True)
 def reset_state():
@@ -173,6 +181,7 @@ def test_place_circle_is_additive_over_existing_dna():
 
 # ── 4. Catalog surfaces the parametric spec ────────────────────────────────────
 
+@_skip_if_no_circle
 def test_small_circle_derives_parametric_circle_spec():
     from backend.core.primitive_catalog import derive_placement_spec
     spec = derive_placement_spec(json.loads(_SMALL_CIRCLE.read_text()))
@@ -184,6 +193,7 @@ def test_small_circle_derives_parametric_circle_spec():
     assert spec["min_chord_bp"] == DEFAULT_MIN_CHORD_BP
 
 
+@_skip_if_no_circle
 def test_small_circle_metadata_is_named_circle_no_lattice():
     from backend.core.primitive_catalog import derive_metadata
     meta = derive_metadata(json.loads(_SMALL_CIRCLE.read_text()), "small_circle")
@@ -195,6 +205,7 @@ def test_small_circle_metadata_is_named_circle_no_lattice():
     assert "helix beam" not in meta["description"]
 
 
+@_skip_if_no_circle
 def test_primitive_kind_survives_design_roundtrip():
     """`primitive_kind` is a real DesignMetadata field, so it persists through a
     load→save round-trip (the app's save would drop a freeform metadata key)."""
