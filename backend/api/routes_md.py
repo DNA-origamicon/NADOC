@@ -576,6 +576,7 @@ def _append_production_segments(
     job.current_segment_idx = start_idx
     job.status = MdStatus.queued
     job.error = None
+    job.user_stopped = False  # new work to do — allow auto-resume again
     job.save(_workspace())
     return segments
 
@@ -909,7 +910,8 @@ async def start_md_job(job_id: str) -> dict:
         raise HTTPException(400, str(exc))
 
     job.status = MdStatus.running
-    job.error  = None
+    job.error = None
+    job.user_stopped = False  # explicit (re)start clears the no-auto-resume flag
     job.save(_workspace())
 
     start_job(job, _workspace())
@@ -920,6 +922,10 @@ async def start_md_job(job_id: str) -> dict:
 async def stop_md_job(job_id: str) -> dict:
     """Cancel a running job."""
     job = _load_job(job_id)
+
+    # Mark as user-stopped so the startup/supervisor auto-resume leaves it alone.
+    job.user_stopped = True
+    job.save(_workspace())
 
     cancelled = stop_job(job_id, _workspace())
     if not cancelled:

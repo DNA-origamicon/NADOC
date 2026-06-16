@@ -9,6 +9,8 @@ from frontend/dist via StaticFiles.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -63,6 +65,32 @@ from backend.api.routes_protein import router as protein_router
 from backend.api.routes_assign_sequences import router as assign_sequences_router
 from backend.api.routes_scaffold_routing import router as scaffold_routing_router
 from backend.api.ws import router as ws_router
+from backend.core.namd_runner import resume_interrupted_jobs
+
+logger = logging.getLogger(__name__)
+
+# How often the MD supervisor scans for interrupted NAMD jobs to (re)launch.
+# NAMD segments run for minutes-to-hours, so a coarse cadence is plenty and keeps
+# /proc + reconciliation overhead negligible.
+_MD_SUPERVISOR_INTERVAL_S = 30.0
+
+
+async def _md_supervisor_loop() -> None:
+    """Periodically relaunch MD jobs interrupted by a server/runner death.
+
+    Runs the (blocking) supervisor pass in a worker thread so health-check I/O
+    never stalls the event loop.  Resilient to per-pass errors.
+    """
+    while True:
+        try:
+            resumed = await asyncio.to_thread(resume_interrupted_jobs, _WORKSPACE_DIR)
+            if resumed:
+                logger.info("MD supervisor resumed jobs: %s", ", ".join(resumed))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("MD supervisor pass failed")
+        await asyncio.sleep(_MD_SUPERVISOR_INTERVAL_S)
 
 
 @asynccontextmanager
@@ -72,7 +100,14 @@ async def lifespan(app: FastAPI):
     library_events.start(_WORKSPACE_DIR)
     # Restore any cached in-progress document, then start the autosave thread.
     session_cache.start(_WORKSPACE_DIR)
+    # Resume any NAMD jobs interrupted by a previous shutdown, then keep watching.
+    md_supervisor = asyncio.create_task(_md_supervisor_loop())
     yield
+    md_supervisor.cancel()
+    try:
+        await md_supervisor
+    except asyncio.CancelledError:
+        pass
     session_cache.stop()
     library_events.stop()
 

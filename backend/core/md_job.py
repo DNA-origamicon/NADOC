@@ -53,22 +53,29 @@ class MdSegmentStatus:
 
 @dataclass
 class MdJob:
-    job_id:              str
-    design_name:         str
-    protocol:            str
-    status:              MdStatus
-    created_at:          float
-    package_subdir:      str        # relative path inside job_dir (e.g. "package/B_tube_namd_solvated")
-    name_stem:           str        # PSF/PDB file stem (e.g. "B_tube")
-    segments:            list[MdSegmentStatus]  = field(default_factory=list)
-    current_segment_idx: int                    = 0
-    error:               Optional[str]          = None
-    namd_pid:            Optional[int]          = None
-    threads:             int                    = 16
-    devices:             str                    = "0"
-    health_samples:      list[MdHealthSample]   = field(default_factory=list)
-    design_source_path:  Optional[str]          = None
-    seed_oxdna_job_id:   Optional[str]          = None  # provenance: oxDNA job whose relaxed coords seeded this run
+    job_id: str
+    design_name: str
+    protocol: str
+    status: MdStatus
+    created_at: float
+    package_subdir: (
+        str  # relative path inside job_dir (e.g. "package/B_tube_namd_solvated")
+    )
+    name_stem: str  # PSF/PDB file stem (e.g. "B_tube")
+    segments: list[MdSegmentStatus] = field(default_factory=list)
+    current_segment_idx: int = 0
+    error: Optional[str] = None
+    namd_pid: Optional[int] = None
+    threads: int = 16
+    devices: str = "0"
+    health_samples: list[MdHealthSample] = field(default_factory=list)
+    design_source_path: Optional[str] = None
+    seed_oxdna_job_id: Optional[str] = (
+        None  # provenance: oxDNA job whose relaxed coords seeded this run
+    )
+    # True when the user explicitly stopped the job — keeps the startup/supervisor
+    # auto-resume from relaunching a deliberately-paused run.  Reset on manual start.
+    user_stopped: bool = False
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 

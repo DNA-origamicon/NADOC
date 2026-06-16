@@ -782,10 +782,13 @@ class TestFindNamd:
 
         reconciled = runner.reconcile_job_status(job, tmp_path)
 
-        assert reconciled.status == MdStatus.stopped
+        # A completed segment with pending work left behind now stays `running` so
+        # the startup/supervisor auto-resume relaunches the next segment, instead
+        # of parking at `stopped` and waiting for a manual click.
+        assert reconciled.status == MdStatus.running
         assert reconciled.current_segment_idx == 1
         assert reconciled.segments[0].status == "done"
-        assert "resume to continue" in (reconciled.error or "")
+        assert "resuming from" in (reconciled.error or "")
         assert "D_01_production_p50" in (output_dir / "metrics.jsonl").read_text()
         assert "D_01_production_p50" in (output_dir / "health.jsonl").read_text()
 

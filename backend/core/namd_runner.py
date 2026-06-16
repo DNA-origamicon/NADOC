@@ -54,17 +54,17 @@ def is_running(job_id: str) -> bool:
     return handle is not None and handle.thread.is_alive()
 
 
-def _external_pid(job: MdJob) -> Optional[int]:
-    """PID of a detached/restarted NAMD process for this job's current segment, found
-    by scanning /proc for the stage conf in a NAMD command line — or None.
+def _segment_pid(segment_name: str) -> Optional[int]:
+    """PID of a running NAMD/srun process for this segment (fresh or resume conf), or None.
 
+    Matches both ``<seg>.conf`` and any ``<seg>.resumeN.conf`` continuation conf.
     Matching by the stage conf name (not a stored PID) is self-verifying: it cannot
-    mistake a recycled PID for ours, so it is safe to signal.  Returns the PID so the
-    caller can both detect AND stop/re-adopt the orphan."""
-    if not (0 <= job.current_segment_idx < len(job.segments)):
-        return None
-    seg = job.segments[job.current_segment_idx]
-    needle = f"{seg.name}.conf".encode()
+    mistake a recycled PID for ours, so it is safe to signal.  Including the trailing
+    ``.conf`` / ``.resume`` in the needle prevents a ``..._p10`` segment from matching
+    a running ``..._p100`` process.  Returns the PID so the caller can both detect AND
+    stop/re-adopt the orphan.
+    """
+    needles = (f"{segment_name}.conf".encode(), f"{segment_name}.resume".encode())
     try:
         proc_dirs = list(Path("/proc").iterdir())
     except OSError:
@@ -77,7 +77,7 @@ def _external_pid(job: MdJob) -> Optional[int]:
         except OSError:
             continue
         lower = cmdline.lower()
-        if needle in cmdline and (b"namd" in lower or b"srun" in lower):
+        if any(n in cmdline for n in needles) and (b"namd" in lower or b"srun" in lower):
             try:
                 return int(proc_dir.name)
             except ValueError:
@@ -85,9 +85,149 @@ def _external_pid(job: MdJob) -> Optional[int]:
     return None
 
 
+def _external_pid(job: MdJob) -> Optional[int]:
+    """PID of a detached/restarted NAMD process for this job's current segment, or None.
+
+    Returns the PID so the caller can both detect AND stop/re-adopt the orphan."""
+    if not (0 <= job.current_segment_idx < len(job.segments)):
+        return None
+    return _segment_pid(job.segments[job.current_segment_idx].name)
+
+
+def _segment_process_running(segment_name: str) -> bool:
+    """True if a NAMD/srun process is currently running this segment (fresh or resume conf)."""
+    return _segment_pid(segment_name) is not None
+
+
 def _external_process_running(job: MdJob) -> bool:
     """Detect a detached/restarted NAMD process that the in-memory registry lost."""
-    return _external_pid(job) is not None
+    if not (0 <= job.current_segment_idx < len(job.segments)):
+        return False
+    return _segment_process_running(job.segments[job.current_segment_idx].name)
+
+
+async def _wait_for_segment_process(segment_name: str, poll: float = 10.0) -> None:
+    """Block until an adopted (orphaned) NAMD process for this segment exits.
+
+    Used when a NAMD run outlived its previous orchestrator (e.g. a dev-server
+    reload): rather than spawn a duplicate that would corrupt the shared output
+    files, the new runner waits for the survivor to finish.  Cancellable — a stop
+    request interrupts the wait but leaves the orphan running (it is not ours to
+    kill via the process-group registry).
+    """
+    while _segment_process_running(segment_name):
+        await asyncio.sleep(poll)
+
+
+def _read_xsc_step(xsc_path: Path) -> Optional[int]:
+    """Return the NAMD step recorded in an .xsc / .restart.xsc file, or None."""
+    try:
+        for line in xsc_path.read_text(errors="replace").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            return int(float(line.split()[0]))
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def _latest_segment_log(package_dir: Path, segment_name: str) -> Path:
+    """Newest of the segment's fresh log and any resume-continuation logs."""
+    cands = [
+        package_dir / f"{segment_name}.log",
+        *sorted(package_dir.glob(f"{segment_name}.resume*.log")),
+    ]
+    existing = [p for p in cands if p.exists()]
+    if not existing:
+        return package_dir / f"{segment_name}.log"
+    return max(existing, key=lambda p: p.stat().st_mtime)
+
+
+def _resume_step(
+    output_dir: Path, segment_name: str, total_steps: int
+) -> Optional[int]:
+    """Last NAMD checkpoint step for a partially-run segment, or None for a fresh run.
+
+    Returns None when the segment already finished (final ``.coor`` present) or has
+    never produced a usable ``.restart.xsc`` — both cases run NAMD from the
+    previous segment's coordinates rather than from a mid-segment checkpoint.
+    """
+    if (output_dir / f"{segment_name}.coor").exists():
+        return None
+    restart_xsc = output_dir / f"{segment_name}.restart.xsc"
+    if not restart_xsc.exists():
+        return None
+    step = _read_xsc_step(restart_xsc)
+    if step is None or step <= 0:
+        return None
+    return min(step, int(total_steps))
+
+
+# Directives the resume conf rewrites — dropped from the original conf and
+# re-emitted to point at the checkpoint and run only the remaining steps.
+_RESUME_DROP = {
+    "binCoordinates",
+    "binVelocities",
+    "extendedSystem",
+    "temperature",
+    "reinitvels",
+    "firsttimestep",
+    "dcdFile",
+    "xstFile",
+    "run",
+}
+
+
+def _write_resume_conf(
+    package_dir: Path,
+    output_dir: Path,
+    segment_name: str,
+    resume_step: int,
+    total_steps: int,
+) -> str:
+    """Write a NAMD conf that resumes a segment from its last checkpoint.
+
+    Reads the segment's ``.restart.{coor,vel,xsc}`` (copied to a stable
+    ``<seg>.resumeN.*`` input set to avoid read/write aliasing), continues the
+    step counter with ``firsttimestep`` and runs only the remaining steps, and
+    writes trajectory frames to a fresh ``<seg>.contN.dcd`` so the
+    partial trajectory is preserved.  ``outputName`` is unchanged, so the final
+    ``<seg>.{coor,vel,xsc}`` land where the next segment expects them.
+
+    Returns the base name of the resume conf (without ``.conf``).
+    """
+    text = (package_dir / f"{segment_name}.conf").read_text()
+    k = 1 + len(list(output_dir.glob(f"{segment_name}.cont*.dcd")))
+    resume_base = f"{segment_name}.resume{k}"
+
+    for ext in ("coor", "vel", "xsc"):
+        shutil.copy2(
+            output_dir / f"{segment_name}.restart.{ext}",
+            output_dir / f"{resume_base}.{ext}",
+        )
+
+    kept = [
+        line
+        for line in text.splitlines()
+        if (line.split()[0] if line.split() else "") not in _RESUME_DROP
+    ]
+    kept += [
+        f"binCoordinates     output/{resume_base}.coor",
+        f"binVelocities      output/{resume_base}.vel",
+        f"extendedSystem     output/{resume_base}.xsc",
+        f"dcdFile            output/{segment_name}.cont{k}.dcd",
+        f"xstFile            output/{segment_name}.cont{k}.xst",
+        f"firsttimestep      {int(resume_step)}",
+        # NAMD 3.0.2's Tcl `run` does not accept the `upto` keyword (it fatals
+        # with "first arg not norepeat").  firsttimestep already advances the
+        # step label, so run only the REMAINING steps. resume_step is a restart
+        # checkpoint (multiple of restartfreq, itself a multiple of
+        # stepspercycle), so the remainder stays cycle-aligned.
+        f"run                {int(total_steps) - int(resume_step)}",
+    ]
+    (package_dir / f"{resume_base}.conf").write_text("\n".join(kept) + "\n")
+    return resume_base
 
 
 def _log_completed(log_path: Path) -> bool:
@@ -149,11 +289,19 @@ def _reconcile_preparing(job: MdJob, workspace_dir: Path) -> MdJob:
 
 
 def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
-    """Repair stale running state after server/runner interruption.
+    """Repair stale running state after a server/runner interruption.
 
-    If a NAMD segment finished but the Python runner died before writing metrics,
-    health, or status, finish that post-processing step and leave the job stopped
-    so the user can explicitly resume the next pending segment.
+    Only acts on a job left in ``running`` with no live process (this server's
+    registry, an adopted orphan, or an external NAMD).  Finishes any missing
+    post-processing for a completed segment, then leaves the job:
+
+    - ``completed`` when the last segment finished,
+    - ``failed``    when a health gate failed or a segment died with no usable
+      checkpoint, or
+    - ``running``   when there is still work to do — the next pending segment, or
+      the current segment partway through a NAMD checkpoint.  These resumable
+      states are picked up and relaunched by ``resume_interrupted_jobs`` (startup
+      + periodic supervisor); ``run_job`` then resumes mid-segment if needed.
     """
     if job.status == MdStatus.preparing:
         return _reconcile_preparing(job, workspace_dir)
@@ -168,21 +316,34 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
     manifest_path = package_dir / "manifest.json"
     output_dir = package_dir / "output"
     active = job.segments[job.current_segment_idx]
-    log_path = package_dir / f"{active.name}.log"
 
-    if not _log_completed(log_path):
+    # Source of truth for "segment finished" is the presence of the final
+    # output files (independent of which log — fresh or resume — produced them).
+    if not _segment_outputs_complete(output_dir, active.name):
+        step = _read_xsc_step(output_dir / f"{active.name}.restart.xsc")
+        if step and step > 0:
+            # Interrupted mid-segment but a NAMD checkpoint survives → resumable.
+            active.status = "running"
+            job.error = (
+                f"Interrupted during {active.name} at step {step}/{active.steps}; "
+                "resuming from the last checkpoint."
+            )
+            job.save(workspace_dir)
+            return job
         active.status = "failed"
         job.status = MdStatus.failed
         job.error = (
-            f"Runner is no longer active and {active.name}.log does not show "
-            "normal NAMD completion."
+            f"{active.name} stopped with no usable checkpoint "
+            "(no completed output and no restart files)."
         )
         job.save(workspace_dir)
         return job
 
     if not manifest_path.exists():
-        job.status = MdStatus.stopped
-        job.error = "Runner stopped after NAMD completion; manifest.json not found for status reconciliation."
+        job.status = MdStatus.failed
+        job.error = (
+            "Segment completed but manifest.json is missing for status reconciliation."
+        )
         job.save(workspace_dir)
         return job
 
@@ -190,11 +351,14 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
     spec_by_name = {s.name: s for s in specs}
     spec = spec_by_name.get(active.name)
     if spec is None:
-        job.status = MdStatus.stopped
-        job.error = f"Runner stopped after NAMD completion; {active.name} not found in manifest."
+        job.status = MdStatus.failed
+        job.error = (
+            f"Segment completed but {active.name} is not present in manifest.json."
+        )
         job.save(workspace_dir)
         return job
 
+    log_path = _latest_segment_log(package_dir, active.name)
     metrics_path = output_dir / "metrics.jsonl"
     if not _jsonl_has_segment(metrics_path, active.name):
         _append_metrics_jsonl(output_dir, active.name, active.stage, log_path)
@@ -232,10 +396,11 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
         job.status = MdStatus.completed
         job.error = None
     else:
-        job.status = MdStatus.stopped
+        # Stay running so the supervisor relaunches the next pending segment.
+        job.status = MdStatus.running
         job.error = (
-            f"Runner stopped after {active.name} completed; resume to continue "
-            f"from {job.segments[job.current_segment_idx].name}."
+            f"{active.name} completed after a runner interruption; "
+            f"resuming from {job.segments[job.current_segment_idx].name}."
         )
     job.save(workspace_dir)
     return job
@@ -502,9 +667,31 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     else:
         logger.info("[%s] Minimization already done (skipping)", job.job_id)
 
+    # ── Declash reference rebuild ─────────────────────────────────────────────
+    # For declash designs, re-anchor the ENM ladder, heavy-atom restraints and
+    # the C1'/WC health reference to the declashed coordinates produced by the
+    # ss-excluded minimisation.  Idempotent (skips if already rebuilt), so it is
+    # safe across resume.
+    if manifest.get("declash"):
+        from backend.core.md_protocols import rebuild_declashed_references  # noqa: PLC0415
+
+        try:
+            report = rebuild_declashed_references(package_dir, job.name_stem, min_coor)
+            logger.info("[%s] Declash references: %s", job.job_id, report)
+        except Exception as exc:
+            logger.error("[%s] Declash reference rebuild failed: %s", job.job_id, exc)
+            job.status = MdStatus.failed
+            job.error = f"Declash reference rebuild failed: {exc}"
+            job.save(workspace_dir)
+            return
+
     # ── Segments ──────────────────────────────────────────────────────────────
 
     job.status = MdStatus.running
+    # A resumed job carries an informational "interrupted/resuming" message in
+    # `error` from reconcile.  Clear it now that we are actively running again so
+    # the UI never shows a stale "stopped — resume to continue" banner on a live job.
+    job.error = None
     job.save(workspace_dir)
 
     start_idx = job.current_segment_idx
@@ -515,30 +702,91 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         # Mark segment running
         logger.info("[%s] Segment %d/%d: %s (%s)", job.job_id, idx+1, len(segments), spec.name, spec.stage)
         job.current_segment_idx = idx
+        job.error = None
         if idx < len(job.segments):
             job.segments[idx].status = "running"
         job.save(workspace_dir)
 
         seg_log = package_dir / f"{spec.name}.log"
-        rc, pid = await _run_namd_async(
-            namd_bin, spec.name, package_dir, seg_log, job.threads, job.devices, job.job_id,
-            on_spawn=_persist_pid,
-        )
 
-        # Check if we were cancelled while NAMD was running
-        if asyncio.current_task().cancelled():
-            if pid:
-                _kill_process_group(pid)
-            raise asyncio.CancelledError
+        if _segment_outputs_complete(output_dir, spec.name) and _log_completed(
+            _latest_segment_log(package_dir, spec.name)
+        ):
+            # Resumed past a segment that already finished — skip NAMD, re-run the
+            # health gate below from the existing output files.
+            logger.info(
+                "[%s] Segment %s already complete; skipping NAMD", job.job_id, spec.name
+            )
+            seg_log = _latest_segment_log(package_dir, spec.name)
+        elif _segment_process_running(spec.name):
+            # A NAMD run for this segment outlived a previous orchestrator
+            # (e.g. dev-server reload).  Adopt it instead of spawning a duplicate.
+            logger.info("[%s] Adopting running NAMD for %s", job.job_id, spec.name)
+            await _wait_for_segment_process(spec.name)
+            seg_log = _latest_segment_log(package_dir, spec.name)
+            if not (
+                _segment_outputs_complete(output_dir, spec.name)
+                or _log_completed(seg_log)
+            ):
+                logger.error(
+                    "[%s] Adopted NAMD for %s ended without completing",
+                    job.job_id,
+                    spec.name,
+                )
+                if idx < len(job.segments):
+                    job.segments[idx].status = "failed"
+                job.status = MdStatus.failed
+                job.error = f"Adopted NAMD run for {spec.name} ended without completing. See {seg_log.name}"
+                job.save(workspace_dir)
+                return
+        else:
+            resume_step = _resume_step(output_dir, spec.name, spec.steps)
+            if resume_step is not None:
+                conf_name = _write_resume_conf(
+                    package_dir, output_dir, spec.name, resume_step, spec.steps
+                )
+                seg_log = package_dir / f"{conf_name}.log"
+                logger.info(
+                    "[%s] Resuming %s from step %d/%d (conf=%s)",
+                    job.job_id,
+                    spec.name,
+                    resume_step,
+                    spec.steps,
+                    conf_name,
+                )
+            else:
+                conf_name = spec.name
+            rc, pid = await _run_namd_async(
+                namd_bin,
+                conf_name,
+                package_dir,
+                seg_log,
+                job.threads,
+                job.devices,
+                job.job_id,
+                on_spawn=_persist_pid,
+            )
 
-        if rc != 0:
-            logger.error("[%s] NAMD failed rc=%d for %s; log=%s", job.job_id, rc, spec.name, seg_log)
-            if idx < len(job.segments):
-                job.segments[idx].status = "failed"
-            job.status = MdStatus.failed
-            job.error  = f"NAMD failed for {spec.name} (rc={rc}). See {spec.name}.log"
-            job.save(workspace_dir)
-            return
+            # Check if we were cancelled while NAMD was running
+            if asyncio.current_task().cancelled():
+                if pid:
+                    _kill_process_group(pid)
+                raise asyncio.CancelledError
+
+            if rc != 0:
+                logger.error(
+                    "[%s] NAMD failed rc=%d for %s; log=%s",
+                    job.job_id,
+                    rc,
+                    spec.name,
+                    seg_log,
+                )
+                if idx < len(job.segments):
+                    job.segments[idx].status = "failed"
+                job.status = MdStatus.failed
+                job.error = f"NAMD failed for {spec.name} (rc={rc}). See {seg_log.name}"
+                job.save(workspace_dir)
+                return
 
         # Append performance metrics
         _append_metrics_jsonl(output_dir, spec.name, spec.stage, seg_log)
@@ -624,21 +872,31 @@ def start_job(job: MdJob, workspace_dir: Path) -> None:
         task = loop.create_task(run_job(job, workspace_dir))
         if handle is not None:
             handle.task = task
+        run_error: Optional[BaseException] = None
         try:
             loop.run_until_complete(task)
         except asyncio.CancelledError:
             pass
+        except BaseException as exc:  # noqa: BLE001 — must not leave job stuck "running"
+            run_error = exc
+            logger.exception("[%s] run_job crashed", job.job_id)
         finally:
             _ACTIVE_PIDS.pop(job.job_id, None)
             _RUNNING.pop(job.job_id, None)
-            if task.cancelled():
-                try:
-                    j = MdJob.load(job.job_id, workspace_dir)
-                    if j.status == MdStatus.running:
-                        j.status = MdStatus.stopped
-                        j.save(workspace_dir)
-                except Exception:
-                    pass
+            try:
+                j = MdJob.load(job.job_id, workspace_dir)
+                if task.cancelled() and j.status == MdStatus.running:
+                    # User stop — keep it from being auto-resumed.
+                    j.status = MdStatus.stopped
+                    j.user_stopped = True
+                    j.save(workspace_dir)
+                elif run_error is not None and j.status == MdStatus.running:
+                    # Unexpected crash — fail rather than relaunch in a loop.
+                    j.status = MdStatus.failed
+                    j.error = f"Runner crashed: {run_error}"
+                    j.save(workspace_dir)
+            except Exception:
+                pass
             loop.close()
 
     thread = threading.Thread(
@@ -682,6 +940,9 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
         return False
     _kill_process_group(pid)
     job.status = MdStatus.stopped
+    # Explicit user stop on the orphan path too — keep it from being auto-resumed
+    # by resume_interrupted_jobs (the runner thread that normally sets this is gone).
+    job.user_stopped = True
     job.namd_pid = None
     job.save(workspace_dir)
     return True
@@ -694,3 +955,44 @@ def _pid_is_namd(pid: int) -> bool:
     except OSError:
         return False
     return b"namd" in cmdline or b"srun" in cmdline
+
+
+def resume_interrupted_jobs(workspace_dir: Path) -> list[str]:
+    """Relaunch any job interrupted by a server/runner death (supervisor pass).
+
+    A job is auto-resumable when it is persisted as ``running`` but no live
+    process is tracked for it, and the user did not explicitly stop it.  This
+    covers every interruption shape:
+
+    - server restarted while NAMD was active (status still ``running`` on disk);
+    - the orchestrator died but NAMD survived (adopted by ``run_job``);
+    - a segment was killed partway through (resumed from its NAMD checkpoint);
+    - a segment finished but the next one was never launched.
+
+    ``reconcile_job_status`` first repairs the persisted state (advancing past a
+    completed segment, marking genuine failures); only jobs left ``running`` with
+    pending work are relaunched.  ``run_job`` is idempotent, so calling this
+    repeatedly is safe.  Returns the ids of the jobs (re)launched.
+
+    A job the user stopped (``user_stopped``) or one already terminal
+    (``completed`` / ``failed``) — including the currently-parked ones — is left
+    untouched.
+    """
+    resumed: list[str] = []
+    for job in MdJob.list_jobs(workspace_dir):
+        if job.user_stopped or job.status != MdStatus.running or is_running(job.job_id):
+            continue
+        job = reconcile_job_status(job, workspace_dir)
+        if job.status != MdStatus.running:
+            continue
+        if not (0 <= job.current_segment_idx < len(job.segments)):
+            continue
+        logger.info(
+            "[%s] Auto-resuming interrupted job (segment %d/%d)",
+            job.job_id,
+            job.current_segment_idx + 1,
+            len(job.segments),
+        )
+        start_job(job, workspace_dir)
+        resumed.append(job.job_id)
+    return resumed
