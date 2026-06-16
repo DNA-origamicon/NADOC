@@ -264,3 +264,158 @@ def test_no_additionals_no_pattern_joints():
     )
     # only the primary chain joints — no pattern replication.
     assert all(nj.name.startswith("AB ") for nj in new_j)
+
+
+# ── Periodic chain (single-seed, derived delta) ─────────────────────────────────
+
+from backend.core.assembly_polymer import build_periodic_chain   # noqa: E402
+
+
+def _z_translation(dz: float) -> np.ndarray:
+    m = np.eye(4, dtype=float)
+    m[2, 3] = dz
+    return m
+
+
+# part-local seam connectors: 5' end-cap at z=0 (normal -Z), 3' end-cap at z=5
+# (normal +Z). Plain lists so the helper builds frames via the fallback path.
+_SPECS = (([0.0, 0.0, 0.0], [0.0, 0.0, -1.0]),
+          ([0.0, 0.0, 5.0], [0.0, 0.0, 1.0]))
+
+
+def _periodic_seed(ips=None) -> PartInstance:
+    """A single seed instance at the origin with one non-seam IP."""
+    design = Design()
+    return PartInstance(
+        id="seed",
+        name="Ring",
+        source=PartSourceInline(design=design),
+        transform=Mat4x4.from_array(np.eye(4)),
+        interface_points=ips if ips is not None else [
+            InterfacePoint(label="front", position=Vec3(x=0.0, y=0.0, z=0.0),
+                           normal=Vec3(x=0.0, y=0.0, z=-1.0),
+                           connection_type=ConnectionType.BLUNT_END),
+        ],
+    )
+
+
+def _other(inst_id: str = "other") -> PartInstance:
+    design = Design()
+    return PartInstance(
+        id=inst_id, name="Other", source=PartSourceInline(design=design),
+        transform=Mat4x4.from_array(_z_translation(99.0)),
+    )
+
+
+def test_periodic_forward_count_and_placement():
+    seed = _periodic_seed()
+    delta = _z_translation(10.0)
+    existing, new_i, new_j = build_periodic_chain(
+        seed, delta, np.linalg.inv(delta), _SPECS, 3, "forward", [seed],
+    )
+    # count=3 → 2 new copies beyond the seed, both forward.
+    assert len(new_i) == 2
+    assert [i.name for i in new_i] == ["Ring +1", "Ring +2"]
+    # placed at T_seed @ delta^k → z = 10, 20.
+    assert np.isclose(new_i[0].transform.to_array()[2, 3], 10.0)
+    assert np.isclose(new_i[1].transform.to_array()[2, 3], 20.0)
+    # one seam joint per consecutive pair.
+    assert len(new_j) == 2
+
+
+def test_periodic_backward_direction():
+    seed = _periodic_seed()
+    delta = _z_translation(10.0)
+    _, new_i, new_j = build_periodic_chain(
+        seed, delta, np.linalg.inv(delta), _SPECS, 3, "backward", [seed],
+    )
+    assert [i.name for i in new_i] == ["Ring -1", "Ring -2"]
+    assert np.isclose(new_i[0].transform.to_array()[2, 3], -10.0)
+    assert np.isclose(new_i[1].transform.to_array()[2, 3], -20.0)
+    assert len(new_j) == 2
+
+
+def test_periodic_both_splits_extra_forward_when_odd():
+    seed = _periodic_seed()
+    delta = _z_translation(10.0)
+    _, new_i, _ = build_periodic_chain(
+        seed, delta, np.linalg.inv(delta), _SPECS, 4, "both", [seed],
+    )
+    # new_total = 3 → forward (3+1)//2 = 2, backward = 1.
+    fwd = [i for i in new_i if "+" in i.name]
+    back = [i for i in new_i if "-" in i.name]
+    assert len(fwd) == 2
+    assert len(back) == 1
+
+
+def test_periodic_seam_ips_added_to_seed_and_clones():
+    seed = _periodic_seed()
+    delta = _z_translation(10.0)
+    existing, new_i, _ = build_periodic_chain(
+        seed, delta, np.linalg.inv(delta), _SPECS, 3, "forward", [seed],
+    )
+    seed_updated = next(i for i in existing if i.id == "seed")
+    labels = {ip.label for ip in seed_updated.interface_points}
+    assert "seam0:5p" in labels and "seam0:3p" in labels
+    # the non-seam base IP is preserved.
+    assert "front" in labels
+    # every clone carries both seam connectors too.
+    for clone in new_i:
+        clabels = {ip.label for ip in clone.interface_points}
+        assert "seam0:5p" in clabels and "seam0:3p" in clabels
+
+
+def test_periodic_stale_seam_ips_replaced():
+    # seed already has stale seam IPs from a prior polymerize.
+    seed = _periodic_seed(ips=[
+        InterfacePoint(label="seam0:5p", position=Vec3(x=1.0, y=1.0, z=1.0),
+                       normal=Vec3(x=0.0, y=0.0, z=1.0),
+                       connection_type=ConnectionType.COVALENT),
+        InterfacePoint(label="keep", position=Vec3(x=0.0, y=0.0, z=0.0),
+                       normal=Vec3(x=1.0, y=0.0, z=0.0),
+                       connection_type=ConnectionType.BLUNT_END),
+    ])
+    delta = _z_translation(10.0)
+    existing, _, _ = build_periodic_chain(
+        seed, delta, np.linalg.inv(delta), _SPECS, 2, "forward", [seed],
+    )
+    seed_updated = next(i for i in existing if i.id == "seed")
+    seam5 = [ip for ip in seed_updated.interface_points if ip.label == "seam0:5p"]
+    assert len(seam5) == 1                      # not duplicated
+    # the fresh seam IP wins — position is the spec's, not the stale (1,1,1).
+    assert np.isclose(seam5[0].position.z, 0.0)
+    assert {ip.label for ip in seed_updated.interface_points} >= {"keep", "seam0:5p", "seam0:3p"}
+
+
+def test_periodic_joint_wiring_and_labels():
+    seed = _periodic_seed()
+    delta = _z_translation(10.0)
+    existing, new_i, new_j = build_periodic_chain(
+        seed, delta, np.linalg.inv(delta), _SPECS, 3, "forward", [seed],
+    )
+    seed_id = next(i for i in existing if i.id == "seed").id
+    # forward: seed → f1, f1 → f2.
+    assert new_j[0].instance_a_id == seed_id
+    assert new_j[0].instance_b_id == new_i[0].id
+    assert new_j[1].instance_a_id == new_i[0].id
+    assert new_j[1].instance_b_id == new_i[1].id
+    for j in new_j:
+        assert j.joint_type == "rigid"
+        assert j.connector_a_label == "seam0:3p"
+        assert j.connector_b_label == "seam0:5p"
+        # uniform mate frame captured from the first consecutive pair.
+        assert j.mate_relative_transform is not None
+
+
+def test_periodic_originals_untouched():
+    seed = _periodic_seed()
+    other = _other()
+    delta = _z_translation(10.0)
+    existing, _, _ = build_periodic_chain(
+        seed, delta, np.linalg.inv(delta), _SPECS, 3, "forward", [seed, other],
+    )
+    # the seed object passed in is not mutated in place.
+    assert {ip.label for ip in seed.interface_points} == {"front"}
+    # the unrelated instance is passed through by reference, unchanged.
+    passed_other = next(i for i in existing if i.id == "other")
+    assert passed_other is other

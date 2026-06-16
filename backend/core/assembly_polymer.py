@@ -29,11 +29,14 @@ import numpy as np
 
 from backend.core.models import (
     AssemblyJoint,
+    ConnectionType,
+    InterfacePoint,
     Mat4x4,
     PartInstance,
     PartSource,
     PartSourceFile,
     PartSourceInline,
+    Vec3,
 )
 
 
@@ -687,5 +690,152 @@ def build_polymer_chain(
                 # chain joints above).
                 mate_relative_transform=pm.mate_relative_transform,
             ))
+
+    return existing_instances, new_instances, new_joints
+
+
+# ── Periodic chain record assembly ──────────────────────────────────────────────
+
+
+def build_periodic_chain(
+    seed: PartInstance,
+    delta: np.ndarray,
+    delta_inv: np.ndarray,
+    specs: Tuple[Tuple, Tuple],
+    count: int,
+    direction: Direction,
+    all_instances: list[PartInstance],
+) -> Tuple[list[PartInstance], list[PartInstance], list[AssemblyJoint]]:
+    """Build the PartInstance + AssemblyJoint records for a *periodic* polymer.
+
+    The periodic variant grows a chain from a SINGLE seed instance whose
+    repeat transform ``delta`` (part-local SE3) is derived from its
+    ``is_periodic_seam`` forced ligations — there is no hand-defined seed mate.
+    Copy k is placed at ``T_seed @ delta**k`` (forward) / ``T_seed @ delta_inv**k``
+    (backward).  Consecutive copies are tied by synthesized rigid seam joints
+    carrying one replicated ``mate_relative_transform`` so the chain re-resolves
+    on part edits.
+
+    ``specs`` is ``((p5, n5), (p3, n3))`` — the part-local seam 5'/3' connector
+    positions + normals from :func:`backend.core.periodic_polymer.principal_seam_connectors`.
+
+    Pure record-assembly: the caller owns validation, the design load with
+    instance overrides, the ``delta`` derivation (it raises domain errors), and
+    the feature-log commit; this function owns the geometry + connector-union +
+    seam-joint wiring.  Returns ``(existing_instances, new_instances, new_joints)``.
+    """
+    from backend.core.assembly_connectors import _get_connector_world_frame
+
+    (p5, n5), (p3, n3) = specs
+
+    # ── Chain split: count-1 NEW copies beyond the single seed ────────────────
+    new_total = count - 1
+    if direction == "forward":
+        n_forward, n_backward = new_total, 0
+    elif direction == "backward":
+        n_forward, n_backward = 0, new_total
+    else:  # both — extra on forward when odd
+        n_forward = (new_total + 1) // 2
+        n_backward = new_total - n_forward
+
+    T_seed = seed.transform.to_array()
+    forward_T  = [T_seed @ _matrix_power(delta, k)     for k in range(1, n_forward + 1)]
+    backward_T = [T_seed @ _matrix_power(delta_inv, k) for k in range(1, n_backward + 1)]
+
+    # ── Seam connectors (part-local; identical on seed + every clone) ─────────
+    seam_ips = [
+        InterfacePoint(label="seam0:5p",
+                       position=Vec3(x=p5[0], y=p5[1], z=p5[2]),
+                       normal=Vec3(x=n5[0], y=n5[1], z=n5[2]),
+                       connection_type=ConnectionType.COVALENT),
+        InterfacePoint(label="seam0:3p",
+                       position=Vec3(x=p3[0], y=p3[1], z=p3[2]),
+                       normal=Vec3(x=n3[0], y=n3[1], z=n3[2]),
+                       connection_type=ConnectionType.COVALENT),
+    ]
+    # Fresh seam IPs win over any stale ones from a prior polymerize.
+    base_ips  = [ip.model_copy(deep=True) for ip in seed.interface_points
+                 if not ip.label.startswith("seam0:")]
+    union_ips = base_ips + seam_ips
+
+    seed_updated = seed.model_copy(update={"interface_points": list(union_ips)})
+    existing_instances = [seed_updated if i.id == seed.id else i for i in all_instances]
+
+    def _clone(new_id: str, name: str, T_arr: np.ndarray) -> PartInstance:
+        T_mat = Mat4x4.from_array(T_arr)
+        return PartInstance.model_construct(
+            id=new_id,
+            name=name,
+            source=seed.source,                 # shared by reference (read-only downstream)
+            transform=T_mat,
+            base_transform=T_mat,
+            mode=seed.mode,
+            visible=seed.visible,
+            representation="cylinders",
+            fixed=seed.fixed,
+            allow_part_joints=seed.allow_part_joints,
+            joint_states=dict(seed.joint_states),
+            cluster_transform_overrides=list(seed.cluster_transform_overrides),
+            interface_points=list(union_ips),
+        )
+
+    new_instances: list[PartInstance] = []
+    forward_ids:  list[str] = []
+    backward_ids: list[str] = []
+    for k, T_arr in enumerate(forward_T, start=1):
+        nid = str(_uuid.uuid4())
+        new_instances.append(_clone(nid, f"{seed.name} +{k}", T_arr))
+        forward_ids.append(nid)
+    for k, T_arr in enumerate(backward_T, start=1):
+        nid = str(_uuid.uuid4())
+        new_instances.append(_clone(nid, f"{seed.name} -{k}", T_arr))
+        backward_ids.append(nid)
+
+    inst_lookup = {i.id: i for i in [seed_updated] + new_instances}
+
+    # ── mate_relative_transform: capture ONCE from the first consecutive pair ──
+    # The chain is uniform, so one M = inv(F_a^3p_world) @ F_b^5p_world applies to
+    # every junction (exactly as polymerize_assembly replicates one mate frame).
+    if n_forward >= 1:
+        low_inst, high_inst = seed_updated, inst_lookup[forward_ids[0]]
+    else:
+        low_inst, high_inst = inst_lookup[backward_ids[0]], seed_updated
+    F_a = _get_connector_world_frame(low_inst, "seam0:3p", None)
+    F_b = _get_connector_world_frame(high_inst, "seam0:5p", None)
+    mate_M: 'list | None' = None
+    if F_a is not None and F_b is not None:
+        try:
+            mate_M = (np.linalg.inv(F_a) @ F_b).flatten().tolist()
+        except np.linalg.LinAlgError:
+            mate_M = None
+
+    def _seam_joint(name: str, a_id: str, b_id: str) -> AssemblyJoint:
+        Fa = _get_connector_world_frame(inst_lookup[a_id], "seam0:3p", None)
+        axis_o = Fa[:3, 3].tolist() if Fa is not None else [0.0, 0.0, 0.0]
+        axis_d = Fa[:3, 2].tolist() if Fa is not None else [0.0, 0.0, 1.0]
+        return AssemblyJoint(
+            name=name,
+            joint_type="rigid",
+            instance_a_id=a_id,
+            instance_b_id=b_id,
+            axis_origin=axis_o,
+            axis_direction=axis_d,
+            current_value=0.0,
+            connector_a_label="seam0:3p",
+            connector_b_label="seam0:5p",
+            mate_relative_transform=mate_M,
+        )
+
+    new_joints: list[AssemblyJoint] = []
+    # Forward: seed(3p) → f1(5p), f1(3p) → f2(5p), …
+    prev_id = seed_updated.id
+    for k, nid in enumerate(forward_ids, start=1):
+        new_joints.append(_seam_joint(f"Seam +{k}", prev_id, nid))
+        prev_id = nid
+    # Backward: b1(3p) → seed(5p), b2(3p) → b1(5p), …
+    prev_id = seed_updated.id
+    for k, nid in enumerate(backward_ids, start=1):
+        new_joints.append(_seam_joint(f"Seam -{k}", nid, prev_id))
+        prev_id = nid
 
     return existing_instances, new_instances, new_joints
