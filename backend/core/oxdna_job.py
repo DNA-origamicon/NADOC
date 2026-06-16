@@ -16,6 +16,7 @@ but are NEVER written into Design topology.  See CLAUDE.md Three-Layer Law.
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -86,7 +87,16 @@ class OxdnaJob:
         jd.mkdir(parents=True, exist_ok=True)
         data = asdict(self)
         data["status"] = self.status.value
-        (jd / "job.json").write_text(json.dumps(data, indent=2))
+        # Atomic write: the background runner thread saves job.json on every
+        # state change while readers (the status-poll endpoint, the test's
+        # _wait_terminal) call load() concurrently.  A plain write_text()
+        # truncates-then-writes, so a reader can catch an empty/partial file and
+        # hit JSONDecodeError.  Write to a temp file in the same dir, then
+        # os.replace() (atomic rename on POSIX) so a reader always sees either
+        # the complete old or complete new file — never a torn one.
+        tmp = jd / f"job.json.{os.getpid()}.tmp"
+        tmp.write_text(json.dumps(data, indent=2))
+        os.replace(tmp, jd / "job.json")
 
     @classmethod
     def load(cls, job_id: str, workspace_dir: Path) -> "OxdnaJob":
