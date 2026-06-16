@@ -164,18 +164,19 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #34
-(**crud.py: Cluster autodetect SERVICE push** — the 5 pure cluster-detection fns → `backend/core/cluster_autodetect.py`,
-**B=0**, +4 direct unit tests in `tests/test_cluster_autodetect_core.py`, 2071→**2075 passed** / 55 skipped, 0 failed).
-This was the **first crud Tier-3 service push** and the biggest *real* decoupling the review flagged: ~640 ln of pure
-topology marooned in crud.py's `# ── Internal helpers` now lives in core, directly unit-tested for the first time.
-crud.py imports back only the 2 entry points its routes call (`_autodetect_clusters`, `_cluster_bundle_regions`); the 3
-inner phase helpers are module-private in core (L17). `_ensure_default_cluster` STAYS (calls `design_state.set_design_silent`,
-shared cross-region). crud.py routes unchanged (**139** — service push, no router moved). #33 (auto-scaffold routing, B=1)
-+ #32 (caDNAno seq export, B=1) + #31/#30 (oxDNA/NAMD exports, B=2) + #27–#29 (flexible/cluster, B=1–2) were the prior
-crud extractions. assembly.py is at **29 routes** (routes drained, kernel-surface reduction pending). **All carve-up
-work through #34 is committed + pushed** (the Part-library legacy deletion landed in f769c60; do NOT re-describe it as
-pending). Working tree is clean after each session's commit._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #36
+(**crud.py: Sequence-assignment ROUTER lift** — the 3 sequence-assignment routes (`assign-scaffold-sequence`,
+`assign-staple-sequences`, `full-autostaple`) → NEW `routes_assign_sequences.py` at **B=3, bespoke-B=0**
+(`_design_response`/`_design_response_with_geometry` shared kernel + `_place_auto_crossovers` L13 cross-region
+shared infra). The 2 region models + 2 region helpers (`_linearize_staple_precursors`/`_assert_no_circular_staples`)
+moved IN; 2 L23 repoints (`test_simple_router.py` import split + `headless_build.py` 4 imports). 2088 passed / 55
+skipped unchanged. crud.py 139→**136 routes**, −257 LOC). #35 (edit-branch service push, B=0, +13 tests) +
+#34 (cluster-autodetect service, B=0) + #33/#32 (auto-scaffold routing / caDNAno seq, B=1) + #31/#30 (oxDNA/NAMD
+exports, B=2) + #27–#29 (flexible/cluster, B=1–2) were prior crud extractions. assembly.py is at **29 routes**
+(routes drained, kernel-surface reduction pending). **NOT YET COMMITTED: #35 + #36** — both sit in the working
+tree; commit + push when the user asks (CLAUDE.md git rules). They are cleanly separable (#35 = feature-log region
+~9753+ in crud + `backend/core/feature_log_edit.py` + its test; #36 = sequence-assignment region ~6507 in crud +
+`routes_assign_sequences.py` + main.py/headless/test repoints) — can be two commits._
 
 **▶ LOOP PHASE SHIFT (2026-06-16, post-review):** the cheap **B=1 router lifts are drained** — 173 routes now
 live in extracted routers, crud.py is at 139 routes / assembly.py at 29. An external review confirmed the router
@@ -187,30 +188,25 @@ right there. The two highest-value targets: crud's **Cluster autodetect** (~1460
 **geometry-cache + file-load kernel** (`_geo_cache_*` + `_load_design_from_source`/`_design_with_instance_overrides`,
 the surface `routes_assembly_geometry`/`_joints`/`_frames` all lean on).
 
-**▶ NEXT — crud.py (PRIMARY, Tier 3 service push):** **Feature-log edit-feature dispatch →
-`backend/core/feature_log_edit.py`** — the `# ── Edit-feature dispatch` banner (`grep -n "# ── Edit-feature
-dispatch" backend/api/crud.py`) holds the giant `edit_feature` dispatcher whose deformation/cluster_op branch
-logic is business logic marooned in the api layer (the `# ── Cluster_op edit branch`/`# ── Deformation edit
-branch` sub-blocks). Push the pure per-branch transform logic to core (B=0 for the pure parts; classify each
-helper's body per L20 — the parts that call `state`/`HTTPException` stay as thin api shims per L15), with direct
-unit tests. Probe the live range first — this is higher coupling than #34 (cluster autodetect was self-contained
-pure topology; the edit dispatcher threads through the feature log). Multi-session; carve by branch.
+**▶ NEXT — crud.py (PRIMARY, ROUTER lift now that the edit-branch service push #35 is done):** **Feature-log
+ROUTER half → NEW `routes_feature_log.py`.** The `# ── Feature log endpoints` banner
+(`grep -n "# ── Feature log endpoints" backend/api/crud.py`) + the `# ── Edit-feature dispatch` /
+`# ── Feature-log rollback helper` neighbours hold the cohesive feature-log route cluster
+(`/design/features` GET, `/design/features/{index}/edit`, `/revert`, the seek/log routes). #35 already pushed the
+two pure edit-branch transforms to `backend/core/feature_log_edit.py`, so the `edit_feature` handler is now thin.
+**PROBE THE LIVE RANGE FIRST** — this region's helpers are shared cross-region: `_seek_feature_log`,
+`_rollback_last_feature`, `_revert_before_routing_child`, `_edit_dispatch_run` (L4-blocked, stays — calls crud
+builders), `_design_replace_response` (shared kernel). Classify each per L19/L20 (kernel/L4-blocked = exempt;
+bespoke region-only = move IN). Expect a moderate raw-B with bespoke-B=0 if the seek/rollback helpers are shared
+(leave-and-import-back, L13) — but VERIFY, several may be feature-log-only and should move IN. Watch the L21
+circular-import gotcha: if `_replay_*`/seek code in crud references a moved handler, use a function-local import.
 
-**▶ NEXT — crud.py (secondary, quick clean router lift):** Sequence-assignment cluster →
-NEW `routes_assign_sequences.py` (do NOT fold into `routes_sequences.py` — that's export-only by its own
-docstring). The residual `# ── Sequence assignment endpoints`
-banner now holds exactly the cohesive sequence-assignment trio: `assign-scaffold-sequence`, `assign-staple-sequences`,
-`full-autostaple` (+ the region helpers `_linearize_staple_precursors`/`_assert_no_circular_staples`, ends before
-`# ── Overhang random-sequence generation` ~7396 now). **Probed B=3, bespoke-B=1:** `_design_response`(2) +
-`_design_response_with_geometry`(1) (shared kernel, exempt) + `_place_auto_crossovers`(1) — the ONE bespoke, used
-only by full-autostaple. **`_place_auto_crossovers` is L13 leave-and-import-back:** defined at crud.py:4889 (crossover
-region), called by a crossover route AND `tests/test_simple_router.py` → shared cross-region, leave in crud.py +
-import back (gate ≤3 passes). **TWO L23 repoints needed in the same commit:** (1) `_linearize_staple_precursors`
-moves IN but is imported by `tests/test_simple_router.py` → repoint that test; (2) `headless_build.py` imports
-`assign_scaffold_sequence_endpoint` + `full_autostaple_endpoint` as fns → repoint at the new module. Their request
-models `_ScaffoldSeqBody`/`_FullAutostapleBody` are ALSO imported by `headless_build.py` — move them IN and repoint.
-**Higher-value alt (Tier 3, multi-session):** the **Feature-log edit-feature dispatch** service push (see crud
-PRIMARY above) — the next-biggest marooned-business-logic target now that Cluster autodetect (#34) is in core.
+**▶ DONE (Refactor #36) — crud.py Sequence-assignment cluster → `routes_assign_sequences.py`** (was the
+secondary). B=3, bespoke-B=0 (`_place_auto_crossovers` is L13 cross-region shared infra, not bespoke), verbatim
+3-route lift, 2 L23 repoints (`test_simple_router.py` split + `headless_build.py` 4 imports). crud.py 139→136
+routes. The **feature-log ROUTER half (PRIMARY above) is now the cleanest remaining crud router target**; after
+that the router clusters are largely drained and the loop should pivot to the Tier-3 service pushes (the overhang
+web → `backend/core/overhang_ops.py`, the next-biggest marooned-business-logic mass; protein router at B=4).
 
 **Gotchas banked (cumulative):** (1) **Adjacency ≠ cohesion** — #2's `# ── Strand extensions` banner secretly
 contained 4 plate-layout / representation-override routes; #3's `# ── Deformation endpoints` banner held
@@ -367,6 +363,19 @@ Tiers are priority hints, not gospel.
   later sequence/overhang service push). **L23 banked:** `headless_build.py` imported 2 of these handlers as fns
   → repointed at the new module. crud.py 143→139 routes.
 
+- [x] **Sequence assignment** — `# ── Sequence assignment endpoints` → `routes_assign_sequences.py`
+  (Refactor #36, 2026-06-16). **B=3, bespoke-B=0** — `_design_response`(2) + `_design_response_with_geometry`(1)
+  (shared kernel, exempt) + `_place_auto_crossovers`(1) (L13 leave-and-import-back: lives in crud's crossover
+  region ~4257, called by a crossover route there + `tests/test_simple_router.py`, so NOT
+  sequence-assignment-bespoke — cross-region shared infra, same call as #28's `_ensure_default_cluster`). 3 routes
+  (`assign-scaffold-sequence`, `assign-staple-sequences`, `full-autostaple`) + the 2 region-only models
+  (`_ScaffoldSeqBody`/`_FullAutostapleBody`) + the 2 region-only helpers
+  (`_linearize_staple_precursors`/`_assert_no_circular_staples`) moved IN. **TWO L23 repoints (same commit):**
+  (1) `tests/test_simple_router.py` import split — `_linearize_staple_precursors` now from the new module,
+  `_place_auto_crossovers` still from crud; (2) `headless_build.py`'s 4 imports (`_ScaffoldSeqBody`/
+  `_FullAutostapleBody`/`assign_scaffold_sequence_endpoint`/`full_autostaple_endpoint`) repointed at the new
+  module. Verbatim lift; 2088 passed / 55 skipped unchanged. crud.py 139→136 routes, −257 LOC.
+
 ### Tier 3 — service-heavy (do a service push first, then maybe a router)
 
 - [x] **Cluster autodetect → `backend/core/cluster_autodetect.py`** — DONE (Refactor #34, 2026-06-16).
@@ -381,10 +390,20 @@ Tiers are priority hints, not gospel.
   unchanged (139 — no router moved). The residual "Internal helpers" mass is now response/geometry/export
   helpers (`_design_response*`, `_geometry_for_*`, `_strand_nucleotide_info`) — a *different* concern (kernel +
   export-geometry), not autodetect; the topology-clustering logic is fully out.
-- [ ] **Feature log + edit-feature dispatch** — `# ── Feature log endpoints` (~11189–11909) + `# ── Edit-feature
-  dispatch` (~11683–12690) → router + a `backend/core/feature_log_edit.py` service for the giant
-  `edit_feature` dispatcher (the deformation/cluster_op branch logic is business logic). High value, higher
-  coupling — probe and split.
+- [~] **Feature log + edit-feature dispatch** — `# ── Feature log endpoints` + `# ── Edit-feature dispatch`
+  → router + a `backend/core/feature_log_edit.py` service for the giant `edit_feature` dispatcher.
+  **SERVICE PUSH (edit branches) DONE — Refactor #35, 2026-06-16, B=0.** The two pure model-transform branches
+  (`edit_cluster_op_entry` = last-op-wins cluster pose rewrite; `edit_deformation_entry` = op-snapshot rewrite +
+  deformation-set rebuild-from-log) moved to `backend/core/feature_log_edit.py` with a `FeatureEditError(status=…)`
+  HTTP-free error carrier; the api shims (`_edit_cluster_op_feature`/`_edit_deformation_feature`) shrank ~60→~14 ln
+  each (delegate → translate error → re-bake/commit/respond). The deformed-continuation re-bake
+  (`_rebuild_deformed_continuations`, needs `design_state` snapshot decode + live builders) STAYS in the api shim
+  (L4-blocked). +13 direct unit tests (`tests/test_feature_log_edit_core.py`). crud.py −94 LOC, routes unchanged (139).
+  **STILL OPEN:** (1) `_edit_dispatch_run` (the extrusion replay dispatcher) is **L4-blocked** — it calls crud-private
+  builders (`_build_bundle`/`_build_extrude_*`/`_build_overhang_extrude`), so it stays in the api layer; (2) the
+  **feature-log ROUTER half** (`# ── Feature log endpoints` + the `/design/features/{index}/edit|revert|…` routes)
+  has not been lifted — probe + lift to `routes_feature_log.py` next (watch `_rollback_last_feature` /
+  `_seek_feature_log` / `_revert_before_routing_child` shared-cross-region back-imports).
 - [ ] **Overhang web (defer)** — overhang connections (~9548–10110), relax bond (~10110–10445), bindings
   (~10445–11019), sub-domains (~8485–9548), free-end resize (~8784–8950). These share the overhang/cluster
   helper web → **high B**. Drain the B=1 clusters first; come back when the loop is grooved and tackle the

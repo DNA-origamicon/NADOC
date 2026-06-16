@@ -53,6 +53,7 @@ from backend.api.routes_loop_skip import router as loop_skip_router
 from backend.api.routes_md import router as md_router
 from backend.api.routes_oxdna import router as oxdna_router
 from backend.api.routes_primitives import router as primitives_router
+from backend.api.routes_assign_sequences import router as assign_sequences_router
 from backend.api.routes_scaffold_routing import router as scaffold_routing_router
 from backend.api.ws import router as ws_router
 
@@ -109,6 +110,7 @@ app.include_router(export_md_router,   prefix="/api")
 app.include_router(export_structure_router, prefix="/api")
 app.include_router(sequences_router,   prefix="/api")
 app.include_router(scaffold_routing_router, prefix="/api")
+app.include_router(assign_sequences_router, prefix="/api")
 app.include_router(assembly_router,    prefix="/api")
 app.include_router(assembly_animations_router, prefix="/api")
 app.include_router(assembly_belts_router, prefix="/api")

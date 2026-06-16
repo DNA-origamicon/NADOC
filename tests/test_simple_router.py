@@ -361,7 +361,8 @@ def test_full_autostaple_keeps_full_crossover_density():
     # standalone seam-aware density on the same nicked substrate.
     from backend.core.sequences import assign_scaffold_sequence
     from backend.core.lattice import nick_all_major_ticks
-    from backend.api.crud import _linearize_staple_precursors, _place_auto_crossovers
+    from backend.api.crud import _place_auto_crossovers
+    from backend.api.routes_assign_sequences import _linearize_staple_precursors
 
     with hb.scratch_session(LatticeType.HONEYCOMB):
         hb.create_bundle(_HC6_CELLS, 168, lattice=LatticeType.HONEYCOMB, name="t")

@@ -32,17 +32,19 @@ from backend.api.crud import (
     BundleRequest,
     BundleSegmentRequest,
     OverhangExtrudeRequest,
-    _FullAutostapleBody,
-    _ScaffoldSeqBody,
     add_bundle_continuation as _route_extrude,
     add_bundle_segment as _route_extrude_segment,
-    assign_scaffold_sequence_endpoint as _route_assign_scaffold,
     auto_break as _route_auto_break,
     auto_crossover as _route_auto_crossover,
     auto_merge as _route_auto_merge,
     create_bundle as _route_create_bundle,
-    full_autostaple_endpoint as _route_full_autostaple,
     overhang_extrude as _route_overhang_extrude,
+)
+from backend.api.routes_assign_sequences import (
+    _FullAutostapleBody,
+    _ScaffoldSeqBody,
+    assign_scaffold_sequence_endpoint as _route_assign_scaffold,
+    full_autostaple_endpoint as _route_full_autostaple,
 )
 from backend.api.routes_scaffold_routing import (
     auto_scaffold_seamed_endpoint as _route_auto_scaffold_seamed,
