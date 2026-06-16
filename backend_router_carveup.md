@@ -164,19 +164,18 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #37
-(**crud.py: feature-log READ-ONLY seek/scrub/batch ROUTER half** — the 4 geometry-preview routes
-(`/design/features/seek` + `/geometry-batch` + `/atomistic-batch` + `/surface-batch`) → NEW `routes_feature_log.py`
-at **B=3, bespoke-B=0** (`_seek_feature_log` L13 shared-cross-file+L4-blocked, `_design_replace_response` kernel,
-`_compact_geometry_for_design` geometry-kernel; + the `_TimingTrace` timing-utility class, exempt). 3 region-only
-request models moved IN. Verbatim lift; 2088 passed / 55 skipped unchanged. crud.py 136→**132 routes**, −148 LOC.
-The feature-log MUTATING half — delete/edit/revert/rollback — was correctly LEFT: it's welded to the bespoke
-L4-blocked builder+replay engine, see the difficulties ledger). #36 (sequence-assignment router, B=3) + #35
-(edit-branch service push, B=0, +13 tests) + #34 (cluster-autodetect service, B=0) + #33/#32 (auto-scaffold routing /
-caDNAno seq, B=1) + #31/#30 (oxDNA/NAMD exports, B=2) + #27–#29 (flexible/cluster, B=1–2) were prior crud
-extractions. assembly.py is at **29 routes** (routes drained, kernel-surface reduction pending). **#37 NOT YET
-COMMITTED** — sits in the working tree (3 files: `routes_feature_log.py` new + `crud.py`/`main.py` edits); commit +
-push when the user asks (CLAUDE.md git rules). #35/#36 are already committed (fd8b62a/bd31dd7)._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #38
+(**crud.py: overhang polarity/linker-compatibility SERVICE push** — the 6 pure topology fns of the
+`# ── Overhang connections` region → NEW `backend/core/overhang_ops.py` at **B=0**, +15 unit tests. The 3
+public entry points (`_overhang_end`/`_used_overhang_ends`/`_check_linker_compatibility`) import back into crud;
+the 3 sibling helpers are module-private in core (L17). The connection-create handler keeps the `HTTPException`
+translation (L15). −112 LOC crud.py; routes unchanged (132 — service push). 2088→**2103 passed** / 55 skipped.
+This is the FIRST slice of the deferred crud overhang-web Tier-3 push; `overhang_ops.py` now exists for future
+slices to extend). #37 (feature-log read-router, B=3) is now **COMMITTED** (e65028c). Prior crud: #36 (seq-assign
+router B=3) + #35 (edit-branch service B=0 +13) + #34 (cluster-autodetect service B=0) + #33/#32 + #31/#30 + #27–#29.
+assembly.py at **29 routes** (routes drained, kernel-surface reduction pending). **#38 NOT YET COMMITTED** — sits in
+the working tree (`overhang_ops.py` + `test_overhang_ops_core.py` new + `crud.py` edit + ledger updates); commit +
+push when the user asks (CLAUDE.md git rules)._
 
 **▶ LOOP PHASE SHIFT (2026-06-16, post-review):** the cheap **B=1 router lifts are drained** — 173 routes now
 live in extracted routers, crud.py is at 139 routes / assembly.py at 29. An external review confirmed the router
@@ -191,14 +190,15 @@ the surface `routes_assembly_geometry`/`_joints`/`_frames` all lean on).
 **▶ NEXT — crud.py (PRIMARY = SERVICE push; the cheap router clusters are now drained):** the crud ROUTER
 carve-up is essentially done — the last clean router cluster (feature-log read-only seek/batch) shipped as #37,
 and the feature-log MUTATING half is a documented difficulties-ledger stuck region (builder/replay-engine kernel).
-**Pivot to the Tier-3 service pushes.** Highest value: the **overhang web → `backend/core/overhang_ops.py`** — the
-next-biggest mass of marooned business logic in crud's "Internal helpers": overhang connections (~9548-ish),
-relax-bond, bindings, sub-domains, free-end resize, all sharing a dense overhang/cluster helper web → high raw-B
-today. Probe the helper BODIES (L14/L20): the pure geometry/topology transforms (no `design_state`, no
-`HTTPException`, no `_build_*` builder) push to a dependency-free `backend/core/overhang_ops.py` with direct unit
-tests (B=0 by construction); the file-IO/state-bound ones stay as thin api shims (L15). This drops the overhang
-routers' coupling and is the real decoupling, not a relocation. _Secondary (only if a clean B≤2 cluster is sitting
-there):_ **Protein** (`# ── Protein import + library` + `# ── Protein attachments`, ~3278–3596) →
+**Continue the Tier-3 overhang-web service push — `backend/core/overhang_ops.py` now EXISTS (Refactor #38).**
+The first slice (polarity / linker-compatibility rules, 6 pure fns, B=0, +15 tests) is in. **Next slice:** extend
+`overhang_ops.py` with the **sub-domain tiling/annotation** pure cluster — probe the BODIES (L20) of
+`_ovhg_backing_length`/`_validate_sub_domain_tiling`/`_resolve_sub_domain_sequence`/`_compute_sub_domain_annotations`/
+`_next_sub_domain_name` (~6984–7090) + `_ovhg_domain_lengths` (~6510); the ones with no `design_state`/`HTTPException`/
+`_build_*` push to core with direct unit tests (B=0), the state/builder-bound ones stay as thin api shims (L15).
+The remaining marooned mass (overhang connections record-build, relax-bond `design_state` mutators, binding
+topology-relocation engine, `_resplice_overhang_in_strand`, `_build_overhang_*`) is L4-blocked — leave as shims.
+_Secondary (only if a clean B≤2 cluster is sitting there):_ **Protein** (`# ── Protein import + library` + `# ── Protein attachments`, ~3278–3596) →
 `routes_protein.py`, probed **B=4** (`_design_for_export`/`_design_response`/`_find_ovhg_or_404`/`_geometry_for_helices`);
 classify each per L19 (the first two are kernel-exempt; co-move or share `_find_ovhg_or_404`+`_geometry_for_helices`
 to land bespoke-B=0). See `memory/project_protein_attachment.md`.
@@ -413,10 +413,16 @@ Tiers are priority hints, not gospel.
   `_revert_before_routing_child`, `_rollback_last_feature`) — these helpers are feature-log-bespoke AND can't go to core
   (call crud builders + design_state), so neither leaving-back (bespoke-B>0) nor moving-out (drags the `_build_*`
   builders → bespoke builder back-imports) hits the gate. This is replay-engine kernel that stays with the builders.
-- [ ] **Overhang web (defer)** — overhang connections (~9548–10110), relax bond (~10110–10445), bindings
-  (~10445–11019), sub-domains (~8485–9548), free-end resize (~8784–8950). These share the overhang/cluster
-  helper web → **high B**. Drain the B=1 clusters first; come back when the loop is grooved and tackle the
-  shared helpers as a `backend/core/overhang_ops.py` service extraction up front.
+- [~] **Overhang web** — overhang connections, relax bond, bindings, sub-domains, free-end resize. These
+  share the overhang/cluster helper web → **high B**. **`backend/core/overhang_ops.py` ESTABLISHED (Refactor
+  #38, 2026-06-16):** the pure polarity/linker-compatibility cluster (`_overhang_end`/`_used_overhang_ends`/
+  `_check_linker_compatibility` + 3 sibling-private) service-pushed at B=0, +15 unit tests; the connection-create
+  handler keeps the `HTTPException` translation (L15). **REMAINING (extend `overhang_ops.py` slice by slice):**
+  probe each helper BODY (L20) and push the pure ones — likely next: the sub-domain tiling/annotation cluster
+  (`_ovhg_backing_length`/`_validate_sub_domain_tiling`/`_resolve_sub_domain_sequence`/
+  `_compute_sub_domain_annotations`/`_next_sub_domain_name`, ~6984–7090) and `_ovhg_domain_lengths` (~6510).
+  Leave the state/builder-bound ones (`_resplice_overhang_in_strand`, `_build_overhang_*`, the binding
+  topology-relocation engine, relax-bond's `design_state` mutators) as thin api shims.
 - [ ] **Protein** — `# ── Protein import + library` + `# ── Protein attachments` (~3278–3596) →
   `routes_protein.py`. **Probed B=4** (`_design_for_export`, `_design_response`, `_find_ovhg_or_404`,
   `_geometry_for_helices`). Co-move `_find_ovhg_or_404` + `_geometry_for_helices` (or share via core) to get
