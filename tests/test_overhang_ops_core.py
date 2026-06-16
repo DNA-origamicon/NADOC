@@ -17,12 +17,14 @@ from backend.core.models import (
 )
 from backend.core.overhang_ops import (
     SubDomainTilingError,
+    _apply_boundary_hairpin_warnings,
     _check_linker_compatibility,
     _comp_first_polarity,
     _compute_sub_domain_annotations,
     _overhang_end,
     _ovhg_backing_length,
     _ovhg_domain_lengths,
+    _replace_ovhg,
     _resolve_sub_domain_sequence,
     _used_overhang_ends,
     validate_sub_domain_tiling,
@@ -311,3 +313,69 @@ def test_compute_annotations_real_seq():
     assert ann["gc_percent"] is not None
     assert isinstance(ann["hairpin_warning"], bool)
     assert isinstance(ann["dimer_warning"], bool)
+
+
+# ── _replace_ovhg (Refactor #40) ─────────────────────────────────────────────
+
+
+def test_replace_ovhg_swaps_matching_id():
+    d = _design_with_overhang(ovhg_id="oh_x_5p", backing_len=8, sequence="ACGTACGT")
+    new_spec = d.overhangs[0].model_copy(update={"sequence": "TTTTTTTT"})
+    out = _replace_ovhg(d, new_spec)
+    assert out is not d  # new model
+    assert out.overhangs[0].sequence == "TTTTTTTT"
+    # Original design untouched (immutability of the transform).
+    assert d.overhangs[0].sequence == "ACGTACGT"
+
+
+def test_replace_ovhg_leaves_other_overhangs():
+    d = _design_with_overhang(ovhg_id="oh_a_5p", backing_len=8, sequence="ACGTACGT")
+    other = OverhangSpec(id="oh_b_3p", helix_id="h_oh", strand_id="s1", sequence="GGGG")
+    d.overhangs = [d.overhangs[0], other]
+    new_spec = d.overhangs[0].model_copy(update={"sequence": "TTTTTTTT"})
+    out = _replace_ovhg(d, new_spec)
+    by_id = {o.id: o for o in out.overhangs}
+    assert by_id["oh_a_5p"].sequence == "TTTTTTTT"
+    assert by_id["oh_b_3p"].sequence == "GGGG"  # untouched
+
+
+# ── _apply_boundary_hairpin_warnings (Refactor #40) ──────────────────────────
+
+
+def test_hairpin_warnings_noop_when_overhang_missing():
+    d = _design_with_overhang(backing_len=8,
+                              sub_domains=[SubDomain(name="a", length_bp=8)])
+    assert _apply_boundary_hairpin_warnings(d, "no_such_overhang") is d
+
+
+def test_hairpin_warnings_noop_when_no_sub_domains():
+    d = _design_with_overhang(backing_len=8)  # sub_domains == []
+    assert _apply_boundary_hairpin_warnings(d, "oh_x_5p") is d
+
+
+def test_hairpin_warnings_no_change_returns_same_design():
+    # Benign sequence, flag already False → nothing to toggle → identity.
+    subs = [SubDomain(name="a", start_bp_offset=0, length_bp=8,
+                      sequence_override="AAAAAAAA", hairpin_warning=False)]
+    d = _design_with_overhang(backing_len=8, sub_domains=subs)
+    assert _apply_boundary_hairpin_warnings(d, "oh_x_5p") is d
+
+
+def test_hairpin_warnings_clears_stale_true():
+    # Benign sequence + no boundary hairpin, but flag stuck True → cleared.
+    subs = [SubDomain(name="a", start_bp_offset=0, length_bp=8,
+                      sequence_override="AAAAAAAA", hairpin_warning=True)]
+    d = _design_with_overhang(backing_len=8, sub_domains=subs)
+    out = _apply_boundary_hairpin_warnings(d, "oh_x_5p")
+    assert out is not d
+    assert out.overhangs[0].sub_domains[0].hairpin_warning is False
+
+
+def test_hairpin_warnings_sets_from_inner_sequence():
+    # Strongly self-complementary inner sequence → has_hairpin fires → flag set.
+    subs = [SubDomain(name="a", start_bp_offset=0, length_bp=12,
+                      sequence_override="GCGCGCGCGCGC", hairpin_warning=False)]
+    d = _design_with_overhang(backing_len=12, sub_domains=subs)
+    out = _apply_boundary_hairpin_warnings(d, "oh_x_5p")
+    assert out is not d
+    assert out.overhangs[0].sub_domains[0].hairpin_warning is True

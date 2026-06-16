@@ -291,3 +291,74 @@ def _compute_sub_domain_annotations(seq: Optional[str], na_mM: float, conc_nM: f
         "hairpin_warning": hp,
         "dimer_warning": dm,
     }
+
+
+# ── Boundary-hairpin scan + overhang replacement (Refactor #40) ──────────────
+#
+# Pure model transforms service-pushed out of crud.py's ``# ── Sub-domains``
+# region. ``_replace_ovhg`` rebuilds a Design with one overhang swapped (a
+# ``model_copy``); ``_apply_boundary_hairpin_warnings`` re-runs the
+# boundary-hairpin detector + the inner-sequence annotation scan and toggles
+# each sub-domain's ``hairpin_warning`` accordingly. Both are HTTP-free and
+# state-free — they take a :class:`Design` and return a new one — so they live
+# in core and the crud handlers import them back (api → core).
+
+
+def _replace_ovhg(design: Design, new_spec) -> Design:
+    new_overhangs = [new_spec if o.id == new_spec.id else o for o in design.overhangs]
+    return design.model_copy(update={"overhangs": new_overhangs})
+
+
+def _apply_boundary_hairpin_warnings(design: Design, overhang_id: str) -> Design:
+    """Toggle ``hairpin_warning`` on sub-domains based on boundary-hairpin scan.
+
+    Phase 3 (overhang revamp): after any sub-domain sequence change, scan every
+    pair of adjacent sub-domains for a hairpin spanning their junction
+    (see ``backend.core.overhang_generator.detect_boundary_hairpins``). Both
+    sub-domains touching a flagged boundary get ``hairpin_warning=True`` *added*;
+    sub-domains that previously had a warning solely from a boundary that no
+    longer reports get it cleared.
+
+    The detector flags BOUNDARIES, not sub-domains. We translate by collecting
+    every sub-domain id that touches at least one flagged boundary into a "warn"
+    set, and clearing the flag on everyone else (so user fixes propagate
+    immediately).
+
+    Note: this does NOT clobber per-sub-domain hairpin warnings flagged by the
+    inner-sequence scan (``_compute_sub_domain_annotations``). Callers always
+    invoke the inner scan first (which sets ``hairpin_warning`` from the inner
+    bases), so when the boundary scan then unions in boundary-driven warnings,
+    the existing inner-warning bit is preserved via the explicit ``or``.
+    """
+    from backend.core.overhang_generator import detect_boundary_hairpins
+    ovhg = next((o for o in design.overhangs if o.id == overhang_id), None)
+    if ovhg is None or not ovhg.sub_domains:
+        return design
+    reports = detect_boundary_hairpins(ovhg)
+    boundary_warn_ids: set[str] = set()
+    for r in reports:
+        boundary_warn_ids.add(r["sub_domain_a_id"])
+        boundary_warn_ids.add(r["sub_domain_b_id"])
+
+    # Re-evaluate inner-sequence hairpin status per sub-domain so a stale boundary
+    # warning clears when the actual inner sequence has no hairpin AND the
+    # boundary no longer fires. This keeps user-visible warnings honest.
+    new_sub_doms = []
+    changed = False
+    for sd in ovhg.sub_domains:
+        seq = _resolve_sub_domain_sequence(ovhg, sd)
+        ann = _compute_sub_domain_annotations(
+            seq, na_mM=design.tm_settings.na_mM, conc_nM=design.tm_settings.conc_nM
+        )
+        inner_hp = bool(ann.get("hairpin_warning"))
+        bdy_hp   = sd.id in boundary_warn_ids
+        new_hp   = inner_hp or bdy_hp
+        if new_hp != sd.hairpin_warning:
+            changed = True
+            new_sub_doms.append(sd.model_copy(update={"hairpin_warning": new_hp}))
+        else:
+            new_sub_doms.append(sd)
+    if not changed:
+        return design
+    new_ovhg = ovhg.model_copy(update={"sub_domains": new_sub_doms})
+    return _replace_ovhg(design, new_ovhg)
