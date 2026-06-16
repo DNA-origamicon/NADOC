@@ -244,11 +244,112 @@ def test_md_run_ws_load_seek_get_latest(client, md_fixture_dir):
         assert f1["type"] == "frame"
         assert f1["frame_idx"] == 1
 
-        # get_latest — exercises _refresh_and_seek (rebuilds Universe).
+        # get_latest — exercises _refresh_latest_sync (load_new + safe-back seek).
         ws.send_json({"action": "get_latest"})
         gl = ws.receive_json()
         assert gl["type"] == "frame"
         assert gl["frame_idx"] == fix["n_frames"] - 1
+
+
+def _rewrite_xtc(gro: str, xtc: str, n_frames: int) -> None:
+    """Rewrite the fixture trajectory in place with `n_frames` identical frames.
+
+    Simulates NAMD/GROMACS flushing more frames to a live trajectory between
+    two `get_latest` polls.
+    """
+    import MDAnalysis as mda  # type: ignore
+
+    u = mda.Universe(gro, xtc)
+    n_atoms = len(u.atoms)
+    frame0 = u.atoms.positions.copy()
+    with mda.Writer(xtc, n_atoms=n_atoms) as w:
+        for _ in range(n_frames):
+            u.atoms.positions = frame0
+            w.write(u.atoms)
+
+
+def test_md_run_ws_get_latest_follows_growing_trajectory(client, md_fixture_dir):
+    """get_latest must discover frames appended after load — the live-DCD fix.
+
+    Before the fix this path rebuilt the whole Universe each poll; the regression
+    risk is that a cheaper `load_new` fails to re-read the header and never sees
+    new frames. Grow the trajectory mid-session and assert the latest frame index
+    advances.
+    """
+    fix = md_fixture_dir
+    with client.websocket_connect("/ws/md-run") as ws:
+        ws.send_json(
+            {
+                "action": "load",
+                "topology_path": fix["gro"],
+                "xtc_path": fix["xtc"],
+                "mode": "nadoc",
+            }
+        )
+        ready = None
+        for _ in range(60):
+            m = ws.receive_json()
+            if m["type"] == "ready":
+                ready = m
+                break
+            assert m["type"] == "log"
+        assert ready is not None
+        assert ready["n_frames"] == 3
+
+        ws.send_json({"action": "get_latest"})
+        gl = ws.receive_json()
+        assert gl["type"] == "frame"
+        assert gl["frame_idx"] == 2
+
+        # NAMD flushes more frames to the same file.
+        _rewrite_xtc(fix["gro"], fix["xtc"], 6)
+
+        ws.send_json({"action": "get_latest"})
+        gl2 = ws.receive_json()
+        assert gl2["type"] == "frame"
+        assert gl2["frame_idx"] == 5, "load_new did not discover appended frames"
+
+
+def test_md_run_ws_get_latest_tolerates_torn_final_frame(client, md_fixture_dir):
+    """A half-flushed trailing frame must not error the live stream.
+
+    MDAnalysis floors n_frames by file size, so a byte-truncated final frame is
+    dropped; combined with the safe-back fallback, get_latest returns the last
+    COMPLETE frame instead of an error message that would blank Display MD.
+    """
+    import os
+
+    fix = md_fixture_dir
+    _rewrite_xtc(fix["gro"], fix["xtc"], 5)  # known clean 5-frame file
+    with client.websocket_connect("/ws/md-run") as ws:
+        ws.send_json(
+            {
+                "action": "load",
+                "topology_path": fix["gro"],
+                "xtc_path": fix["xtc"],
+                "mode": "nadoc",
+            }
+        )
+        ready = None
+        for _ in range(60):
+            m = ws.receive_json()
+            if m["type"] == "ready":
+                ready = m
+                break
+            assert m["type"] == "log"
+        assert ready is not None
+        assert ready["n_frames"] == 5
+
+        # Tear the trailing frame: chop bytes off the end of the file.
+        size = os.path.getsize(fix["xtc"])
+        with open(fix["xtc"], "r+b") as f:
+            f.truncate(size - 60)
+
+        ws.send_json({"action": "get_latest"})
+        gl = ws.receive_json()
+        assert gl["type"] == "frame", f"torn frame surfaced as: {gl}"
+        # Last complete frame — strictly fewer than the original 5 (index 4).
+        assert gl["frame_idx"] < 4
 
 
 def test_md_run_ws_load_seek_ballstick(client, md_fixture_dir):

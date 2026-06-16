@@ -697,23 +697,57 @@ async def md_run_ws(websocket: WebSocket) -> None:
         return (int(st.st_mtime_ns), int(st.st_size))
 
     def _refresh_latest_sync(force: bool = False) -> dict:
-        """Return the latest trajectory frame, rebuilding only when the file changed."""
-        import MDAnalysis as mda  # type: ignore
+        """Return the latest trajectory frame, re-reading only when the file changed.
 
+        A live DCD that NAMD is mid-write on changes mtime/size every poll, so the
+        signature cache never hits while a run is active.  Rather than rebuild the
+        whole ``mda.Universe`` (which re-parses the PSF — ~1.7 s for a 0.5 M-atom
+        system and worse for multi-GB trajectories, easily exceeding the 5 s live
+        cadence), reuse the existing Universe and only re-read the trajectory with
+        ``Universe.load_new``.  load_new re-reads the DCD header so newly-flushed
+        frames are discovered (``_reopen()`` does NOT — see the live-reload lesson),
+        while the parsed topology and all the precomputed eq/p_order/c1p arrays in
+        ``_ctx`` (keyed by atom index, stable across reloads of the same PSF) stay
+        valid.
+
+        The final frame of an actively-written DCD may be torn (NAMD flushed the
+        frame-count header before the coordinate block fully landed).  MDAnalysis
+        floors n_frames by file size so a half-written trailing frame is usually
+        simply not counted, but to be safe against a torn read we seek the latest
+        frame and fall back one frame on any error.
+        """
         sig = _trajectory_signature()
         cached = _ctx.get("latest_frame_cache")
         if not force and cached is not None and sig == _ctx.get("latest_frame_sig"):
             return dict(cached)
 
-        new_u = mda.Universe(_ctx["topology_path"], _ctx["xtc_path"])
-        _ctx["universe"] = new_u
-        _ctx["n_frames"] = len(new_u.trajectory)
+        u = _ctx.get("universe")
+        if u is None:
+            raise RuntimeError("No trajectory loaded.")
+
+        # Re-read the trajectory in place (cheap) to discover appended frames.
+        u.load_new(_ctx["xtc_path"])
+        n_frames = len(u.trajectory)
+        _ctx["n_frames"] = n_frames
         _ctx["R_prev"] = None
         _ctx["prev_frame_idx"] = -999
-        frame_msg = _seek_sync(_ctx["n_frames"] - 1)
-        _ctx["latest_frame_cache"] = frame_msg
-        _ctx["latest_frame_sig"] = sig
-        return frame_msg
+        if n_frames <= 0:
+            raise RuntimeError("Trajectory has no complete frames yet.")
+
+        # Seek the latest frame; on a torn final frame fall back one frame.
+        last_err: Exception | None = None
+        for idx in (n_frames - 1, n_frames - 2):
+            if idx < 0:
+                break
+            try:
+                frame_msg = _seek_sync(idx)
+                _ctx["latest_frame_cache"] = frame_msg
+                _ctx["latest_frame_sig"] = sig
+                return frame_msg
+            except Exception as exc:  # noqa: BLE001 — torn/partial trailing frame
+                last_err = exc
+                continue
+        raise last_err if last_err else RuntimeError("Could not read latest frame.")
 
     async def _refresh_latest(force: bool = False) -> dict:
         async with _latest_refresh_lock:

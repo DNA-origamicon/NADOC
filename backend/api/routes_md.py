@@ -168,9 +168,20 @@ def _latest_display_segment(job: MdJob) -> tuple[Optional[str], Optional[Path]]:
         if seg.name in seen:
             continue
         seen.add(seg.name)
-        for dcd in (output_dir / f"{seg.name}.dcd", package_dir / f"{seg.name}.dcd"):
-            if dcd.exists() and dcd.stat().st_size > 0:
-                return seg.name, dcd
+        # Prefer the newest trajectory for this segment: a resumed segment writes
+        # its continuation frames to <seg>.contN.dcd, leaving the pre-checkpoint
+        # <seg>.dcd intact.  Pick whichever was written most recently.
+        dcds = [
+            d
+            for d in (
+                *output_dir.glob(f"{seg.name}.cont*.dcd"),
+                output_dir / f"{seg.name}.dcd",
+                package_dir / f"{seg.name}.dcd",
+            )
+            if d.exists() and d.stat().st_size > 0
+        ]
+        if dcds:
+            return seg.name, max(dcds, key=lambda d: d.stat().st_mtime)
     return None, None
 
 

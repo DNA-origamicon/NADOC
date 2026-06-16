@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
-from backend.core.md_import import resolve_md_config
+from backend.core.md_import import _latest_existing_dcd, resolve_md_config
 
 
 def test_resolve_namd_manifest_picks_latest_existing_stage(tmp_path: Path) -> None:
@@ -111,3 +112,82 @@ def test_resolve_nadoc_segments_manifest_uses_conf_metadata(tmp_path: Path) -> N
     assert source.nstxout_comp == 5000
     assert source.ns_per_day == 9.75
     assert source.temperature_k == 310.1
+
+
+# ── .contN.dcd continuation preference ───────────────────────────────────────
+# A resumed segment writes its continuation frames to <seg>.contN.dcd and leaves
+# the pre-checkpoint <seg>.dcd intact. The stream resolver must follow the newest
+# continuation so live Display MD shows the active trajectory — matching
+# routes_md._latest_display_segment. Regression for the resolver mismatch where
+# _latest_existing_dcd ignored .contN.dcd and streamed the stale base DCD.
+
+
+def _touch(path: Path, mtime: float) -> None:
+    path.write_bytes(b"x")
+    os.utime(path, (mtime, mtime))
+
+
+def test_latest_existing_dcd_prefers_newest_continuation(tmp_path: Path) -> None:
+    output = tmp_path / "output"
+    output.mkdir(parents=True)
+    _touch(output / "prod.dcd", 1000)  # pre-checkpoint base
+    _touch(output / "prod.cont1.dcd", 2000)  # first resume
+    _touch(output / "prod.cont2.dcd", 3000)  # latest resume (newest)
+
+    dcd, stage = _latest_existing_dcd(tmp_path, ["prod"], output)
+
+    assert dcd == (output / "prod.cont2.dcd").resolve()
+    assert stage == "prod"
+
+
+def test_latest_existing_dcd_falls_back_to_base_when_no_continuation(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "output"
+    output.mkdir(parents=True)
+    _touch(output / "prod.dcd", 1000)
+
+    dcd, stage = _latest_existing_dcd(tmp_path, ["prod"], output)
+
+    assert dcd == (output / "prod.dcd").resolve()
+    assert stage == "prod"
+
+
+def test_latest_existing_dcd_base_wins_when_newer_than_continuation(
+    tmp_path: Path,
+) -> None:
+    # If the base DCD is somehow newer (e.g. continuation was an aborted stub that
+    # got truncated to zero and rewritten earlier), the newest non-empty file wins.
+    output = tmp_path / "output"
+    output.mkdir(parents=True)
+    _touch(output / "prod.cont1.dcd", 1000)
+    _touch(output / "prod.dcd", 2000)
+
+    dcd, _ = _latest_existing_dcd(tmp_path, ["prod"], output)
+
+    assert dcd == (output / "prod.dcd").resolve()
+
+
+def test_resolve_manifest_streams_continuation_dcd(tmp_path: Path) -> None:
+    package = tmp_path / "pkg"
+    output = package / "output"
+    output.mkdir(parents=True)
+    (package / "tube.psf").write_text("PSF\n")
+    (package / "tube.pdb").write_text("CRYST1\n")
+    _touch(output / "prod.dcd", 1000)
+    _touch(output / "prod.cont1.dcd", 5000)
+    manifest = package / "nadoc_md_run.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "package_dir": str(package),
+                "name_stem": "tube",
+                "stages": [{"name": "prod"}],
+            }
+        )
+    )
+
+    source = resolve_md_config(manifest)
+
+    assert source.trajectory_path == (output / "prod.cont1.dcd").resolve()
+    assert source.stage_name == "prod"

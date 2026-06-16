@@ -831,6 +831,11 @@ export function initDesignRenderer(scene, storeRef) {
       // moves beads/cones/slabs but not the arcs, which otherwise lag at the
       // original design positions during an mrDNA/oxDNA display overlay.
       _femArcUpdater?.(updates, amp)
+      // Extra-base crossover beads live in a separate group and are not touched
+      // by the helix renderer's FEM/MD overlay. Re-interpolate every arc from the
+      // now-live (MD-moved, or reverted-to-geometry when updates===null) endpoint
+      // positions so the extra bases track the deformation instead of freezing.
+      this.applyClusterCrossoverUpdate([])
     },
 
     /** Register unfold_view's applyFemArcs so the arcs follow applyFemPositions. */

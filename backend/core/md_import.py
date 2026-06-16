@@ -100,8 +100,21 @@ def _first_existing(candidates: list[Path]) -> Path | None:
 def _latest_existing_dcd(package_dir: Path, stage_names: list[str], output_dir: Path | None = None) -> tuple[Path | None, str | None]:
     output = output_dir or package_dir / "output"
     for name in reversed(stage_names):
-        dcd = output / f"{name}.dcd"
-        if dcd.exists() and dcd.stat().st_size > 0:
+        # A resumed segment writes its continuation frames to <name>.contN.dcd and
+        # leaves the pre-checkpoint <name>.dcd intact.  Pick whichever was written
+        # most recently so the stream follows the live continuation, matching
+        # routes_md._latest_display_segment.
+        candidates = [
+            d
+            for d in (
+                *(output.glob(f"{name}.cont*.dcd") if output.exists() else []),
+                output / f"{name}.dcd",
+                package_dir / f"{name}.dcd",
+            )
+            if d.exists() and d.stat().st_size > 0
+        ]
+        if candidates:
+            dcd = max(candidates, key=lambda p: p.stat().st_mtime)
             return dcd.resolve(), name
     dcds = sorted(output.glob("*.dcd"), key=lambda p: p.stat().st_mtime) if output.exists() else []
     if dcds:
