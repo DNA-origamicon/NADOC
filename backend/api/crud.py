@@ -107,9 +107,11 @@ from backend.core.deformation import (
     deformed_helix_axes,
     deformed_nucleotide_arrays,
     effective_helix_for_geometry,
-    helices_crossing_planes,
-    parse_deformation_params,
-    resolve_cluster_scope,
+)
+from backend.core.feature_log_edit import (
+    FeatureEditError,
+    edit_cluster_op_entry,
+    edit_deformation_entry,
 )
 from backend.core.models import (
     ClusterOpLogEntry,
@@ -10311,56 +10313,20 @@ def _edit_cluster_op_feature(
     index: int,
     entry: 'ClusterOpLogEntry',
     body: EditFeatureBody,
-    log: list,
     design: Design,
 ) -> dict:
     """Edit branch for ``edit_feature`` when the target is a ClusterOpLogEntry.
 
-    ``body.params`` accepts ``translation``, ``rotation``, ``pivot`` — the
-    new ABSOLUTE transform stored on THIS op. Updates the log entry's fields
-    (so seek-replay reproduces the new pose at that step) and recomputes the
-    live ClusterTransform in ``design.cluster_transforms``.
-
-    ANY cluster_op of a given cluster is editable, not just the latest. Each
-    cluster_op records the cluster's absolute pose AFTER that step, and the
-    cluster's live transform is the LAST op for that cluster — so editing an
-    earlier op only rewrites that step's seek/scrub frame, while the latest op
-    keeps defining the final pose. (manual_validation_debt MV-1 follow-on.)
+    Thin api shell: delegate the pure pose-rewrite to
+    ``backend.core.feature_log_edit.edit_cluster_op_entry`` (translate
+    :class:`FeatureEditError` → HTTPException), then commit + respond.
     """
-    p = body.params or {}
-    for f in ('translation', 'rotation', 'pivot'):
-        if f not in p:
-            raise HTTPException(400, detail=f"cluster_op edit requires '{f}'.")
-
-    cts = list(design.cluster_transforms)
-    ct_idx = next((i for i, c in enumerate(cts) if c.id == entry.cluster_id), None)
-    if ct_idx is None:
-        raise HTTPException(404, detail=f"Cluster {entry.cluster_id!r} no longer exists.")
-
-    new_log = list(log)
-    new_log[index] = entry.model_copy(update={
-        'translation': list(p['translation']),
-        'rotation':    list(p['rotation']),
-        'pivot':       list(p['pivot']),
-    })
-
-    # Live pose = the LAST cluster_op for this cluster across the full (edited)
-    # log. That's this op when it's the latest, else a later op that must keep
-    # winning — so editing an earlier op leaves the final pose untouched.
-    last_op = next(
-        (e for e in reversed(new_log)
-         if e.feature_type == 'cluster_op' and e.cluster_id == entry.cluster_id),
-        None,
-    )
-    if last_op is not None:
-        cts[ct_idx] = cts[ct_idx].model_copy(update={
-            'translation': list(last_op.translation),
-            'rotation':    list(last_op.rotation),
-            'pivot':       list(last_op.pivot),
-        })
+    try:
+        updated = edit_cluster_op_entry(design, index, entry, body.params)
+    except FeatureEditError as e:
+        raise HTTPException(e.status, detail=str(e))
 
     from backend.core.validator import validate_design as _validate_design
-    updated = design.copy_with(cluster_transforms=cts, feature_log=new_log)
     design_state.set_design(updated)
     report = _validate_design(updated)
     # Cluster-only diff: design differs from prev only in cluster_transforms,
@@ -10373,85 +10339,25 @@ def _edit_deformation_feature(
     index: int,
     entry: 'DeformationLogEntry',
     body: EditFeatureBody,
-    log: list,
     design: Design,
 ) -> dict:
     """Edit branch for ``edit_feature`` when the target is a DeformationLogEntry.
 
-    ``body.params`` accepts the same fields as the ``AddDeformationBody``
-    request: ``type``, ``plane_a_bp``, ``plane_b_bp``, ``params``, optional
-    ``affected_helix_ids``, optional ``cluster_ids``. Updates the target
-    DeformationOp's stored op_snapshot in the log and rebuilds
-    ``design.deformations`` from the log — does NOT append a new log entry.
-    Pushes the prior state to the undo stack.
-
-    The deformations list is rebuilt from the LOG (the source of truth) rather
-    than mutated in the live ``design.deformations``. This is what makes the edit
-    robust: the frontend seeks the design back to the op's pre-state to drive the
-    edit preview, which rolls the target op (and any later deformations) OUT of
-    the live ``design.deformations`` and adds a transient ``preview=true`` op.
-    Rebuilding from the log restores the full deformation set (with the edited
-    params), drops the preview op, and is correct regardless of the current
-    cursor. Deformations are geometric-only (no topology change), so the live
-    topology is unaffected.
+    Thin api shell: delegate the pure op-rewrite + deformation-set rebuild to
+    ``backend.core.feature_log_edit.edit_deformation_entry`` (translate
+    :class:`FeatureEditError` → HTTPException), then run the api-bound
+    deformed-continuation re-bake, commit + respond.
     """
-    p = body.params or {}
-    op_type = p.get('type', entry.op_snapshot.type if entry.op_snapshot else None)
-    if op_type not in ('twist', 'bend'):
-        raise HTTPException(400, detail=f"deformation 'type' must be 'twist' or 'bend' (got {op_type!r}).")
-    if 'plane_a_bp' not in p or 'plane_b_bp' not in p:
-        raise HTTPException(400, detail="deformation edit requires plane_a_bp and plane_b_bp.")
-    if 'params' not in p:
-        raise HTTPException(400, detail="deformation edit requires nested params.")
-    if entry.op_snapshot is None:
-        raise HTTPException(
-            409,
-            detail=(
-                f"Deformation entry {index} has no stored op snapshot (evicted/broken); "
-                "revert to this point and re-apply instead of editing."
-            ),
-        )
-
     try:
-        new_params = parse_deformation_params(op_type, p['params'])
-    except ValueError as e:
-        raise HTTPException(400, detail=str(e))
-
-    helix_ids = p.get('affected_helix_ids') or helices_crossing_planes(
-        design, p['plane_a_bp'], p['plane_b_bp']
-    )
-    resolved = resolve_cluster_scope(design, p.get('cluster_ids') or [], helix_ids)
-    helix_ids = resolved["helix_ids"]
-    cluster_ids = resolved["cluster_ids"]
-
-    # Build the edited op from the entry's stored snapshot (preserves the op id).
-    new_op = entry.op_snapshot.model_copy(update={
-        'type':               op_type,
-        'plane_a_bp':         p['plane_a_bp'],
-        'plane_b_bp':         p['plane_b_bp'],
-        'affected_helix_ids': helix_ids,
-        'cluster_ids':        cluster_ids,
-        'params':             new_params,
-    })
-
-    # Refresh the entry's op_snapshot so seek replays match the new params.
-    new_log = list(log)
-    new_log[index] = entry.model_copy(update={'op_snapshot': new_op})
-
-    # Rebuild the full deformation set from the log (source of truth). Drops any
-    # transient preview op and restores ops the edit-preview seek rolled out.
-    rebuilt_ops = [
-        e.op_snapshot for e in new_log
-        if getattr(e, 'feature_type', None) == 'deformation' and e.op_snapshot is not None
-    ]
+        updated = edit_deformation_entry(design, index, entry, body.params)
+    except FeatureEditError as e:
+        raise HTTPException(e.status, detail=str(e))
 
     from backend.core.validator import validate_design as _validate_design
-    updated = design.copy_with(
-        deformations=rebuilt_ops, feature_log=new_log, feature_log_cursor=-1,
-    )
     # Editing a bend/twist (e.g. changing its angle) must re-place any primitive
     # appended onto the bent face so it tracks the new deformation. No-op when the
-    # design has no deformed continuation.
+    # design has no deformed continuation. (api-bound: needs snapshot decode +
+    # live builders, so it stays here, not in core.)
     updated = _rebuild_deformed_continuations(updated)
     design_state.set_design(updated)
     report = _validate_design(updated)
@@ -10496,12 +10402,12 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
 
     # ── Deformation edit branch ───────────────────────────────────────────────
     if isinstance(entry, _DeformationLogEntry):
-        return _edit_deformation_feature(index, entry, body, log, design)
+        return _edit_deformation_feature(index, entry, body, design)
 
     # ── Cluster_op edit branch ────────────────────────────────────────────────
     from backend.core.models import ClusterOpLogEntry as _ClusterOpLogEntry
     if isinstance(entry, _ClusterOpLogEntry):
-        return _edit_cluster_op_feature(index, entry, body, log, design)
+        return _edit_cluster_op_feature(index, entry, body, design)
 
     if not isinstance(entry, _SnapshotLogEntry):
         raise HTTPException(400, detail=f"Feature at index {index} is not editable (type {entry.feature_type!r}).")
