@@ -40,11 +40,13 @@ from backend.api.crud import (
     auto_break as _route_auto_break,
     auto_crossover as _route_auto_crossover,
     auto_merge as _route_auto_merge,
-    auto_scaffold_seamed_endpoint as _route_auto_scaffold_seamed,
-    auto_scaffold_seamless_endpoint as _route_auto_scaffold_seamless,
     create_bundle as _route_create_bundle,
     full_autostaple_endpoint as _route_full_autostaple,
     overhang_extrude as _route_overhang_extrude,
+)
+from backend.api.routes_scaffold_routing import (
+    auto_scaffold_seamed_endpoint as _route_auto_scaffold_seamed,
+    auto_scaffold_seamless_endpoint as _route_auto_scaffold_seamless,
 )
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import Design, Direction, LatticeType
