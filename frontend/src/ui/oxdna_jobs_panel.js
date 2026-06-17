@@ -19,6 +19,8 @@ import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_sta
 import { showToast } from './toast.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
 import { initFlexScale } from './flex_scale.js'
+import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
+import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import * as api from '../api/client.js'
 
 const POLL_MS = 1500
@@ -92,14 +94,51 @@ export function stageChips(job) {
   }))
 }
 
-/** Pure: production-stage state — 'none' | 'running' | 'done' | 'failed'. */
+/** Pure: production-stage state — 'none' | 'running' | 'done' | 'failed'.
+ *  Reflects the LATEST production run (jobs can have several). */
 export function productionState(job) {
-  const prod = (job?.stages || []).find(s => s.kind === 'production')
+  const prods = (job?.stages || []).filter(s => s.kind === 'production')
+  const prod = prods.length ? prods[prods.length - 1] : null
   if (!prod) return 'none'
   if (prod.status === 'done')   return 'done'
   if (prod.status === 'failed') return 'failed'
   if (prod.status === 'running' || prod.status === 'pending') return 'running'
   return 'none'
+}
+
+/** Pure: how many production runs a job has (done or otherwise). */
+export function productionRunCount(job) {
+  return (job?.stages || []).filter(s => s.kind === 'production').length
+}
+
+/** Pure: does the job have any trajectory data to scrub (≥1 stage started)? */
+export function hasTrajectory(job) {
+  return (job?.stages || []).some(s => s.status === 'done' || s.status === 'running')
+}
+
+/** Pure: is the job in an in-progress state (a spinner should show)? */
+export function jobIsActive(job) {
+  return ['queued', 'preparing', 'running'].includes(job?.status)
+}
+
+/** Pure: is the job actively running a RELAXATION stage (mc/md_relax/equil)? */
+export function isRelaxRunning(job) {
+  return job?.status === 'running' && !isProductionRunning(job)
+}
+
+/** Pure: is the job actively running its PRODUCTION stage? */
+export function isProductionRunning(job) {
+  return job?.status === 'running' && productionState(job) === 'running'
+}
+
+/** A spinning circular activity indicator (CSS class .nadoc-spinner). */
+export function makeSpinner(color = 'currentColor', size = 11) {
+  const s = document.createElement('span')
+  s.className = 'nadoc-spinner'
+  s.style.width = s.style.height = `${size}px`
+  if (color) s.style.color = color
+  s.setAttribute('aria-hidden', 'true')
+  return s
 }
 
 /** Pure: a job whose relaxation has completed can seed a NAMD run (Phase 2).
@@ -162,18 +201,33 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   const flexLegend    = document.getElementById('oxdna-jobs-flex-legend')
   const seedBtn       = document.getElementById('oxdna-jobs-seed-btn')
   const seedStatus    = document.getElementById('oxdna-jobs-seed-status')
+  const trajToggle    = document.getElementById('oxdna-jobs-traj-toggle')
+  const trajStatus    = document.getElementById('oxdna-jobs-traj-status')
+  const trajControls  = document.getElementById('oxdna-jobs-traj-controls')
+  const trajPlay      = document.getElementById('oxdna-jobs-traj-play')
+  const trajSlider    = document.getElementById('oxdna-jobs-traj-slider')
+  const trajMarkers   = document.getElementById('oxdna-jobs-traj-markers')
+  const trajLabel     = document.getElementById('oxdna-jobs-traj-label')
 
   // ── State ──────────────────────────────────────────────────────────────────
   let _jobs       = []
   let _selectedId = null
   let _progress   = null
   let _pollTimer  = null
+  let _listSig    = null   // last-rendered list signature (avoids spinner-restart churn)
   let _collapsed  = getSectionCollapsed('dynamics', 'oxdna-jobs-panel', true)
   let _advOpen    = false
   let _available  = false
   let _launching  = false
   let _seeding    = false
   let _flexBusy   = false
+  let _trajBusy   = false
+
+  // Trajectory player (play/pause + scrub slider); seeks drive the display frame.
+  const trajPlayer = initOxdnaTrajectoryPlayer({
+    playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
+    onSeek: (i) => oxdnaDisplay?.showFrame(i),
+  })
 
   // Workspace colour-scale widget (middle-right); editing its bounds re-colours
   // the active flexibility map live without re-fetching.
@@ -245,6 +299,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     if (Array.isArray(jobs)) {
       _jobs = jobs
       _renderList()
+      // Refresh the launch-button spinners from live job state even when nothing
+      // is selected (e.g. after a page reload while a job is still running).
+      _updateButtons(_selectedJob())
       if (_selectedId) {
         const sel = _jobs.find(j => j.job_id === _selectedId)
         if (sel) {
@@ -282,6 +339,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _launching = true
     runBtn.disabled = true
     _setStatus('Preparing relaxation job…', _C.accent)
+    _updateButtons(_selectedJob())   // show the relax spinner immediately
     const body = {
       backend:            backendSel?.value || 'CUDA',
       device:             deviceInput?.value || '0',
@@ -303,14 +361,32 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       await _fetchJobs()
     } else {
       const detail = api.lastErrorMessage?.()
-      _setStatus(detail || 'Failed to start relaxation (see console)', _C.err)
+      if (isUndefinedSequenceError(detail)) {
+        // Design has undefined bases — block with a clear warning popup rather
+        // than a quiet inline status line.
+        showSequenceWarningModal({ message: detail })
+        _setStatus('Relaxation blocked — finish assigning sequences', _C.err)
+      } else {
+        _setStatus(detail || 'Failed to start relaxation (see console)', _C.err)
+      }
     }
   })
 
   // ── List ─────────────────────────────────────────────────────────────────
+  // Signature of what the list actually renders (id + status + production state +
+  // selection) — a running job's health/progress changing must NOT re-render the
+  // list, or the row spinners restart their animation every poll.
+  function _listSignature(jobs) {
+    return jobs.map(j => `${j.job_id}:${j.status}:${productionState(j)}`).join(',') +
+           `|sel=${_selectedId}`
+  }
+
   function _renderList() {
     if (!listEl) return
     const jobs = _visibleJobs().slice().sort((a, b) => b.created_at - a.created_at)
+    const sig = _listSignature(jobs)
+    if (sig === _listSig && listEl.childElementCount > 0) return
+    _listSig = sig
     if (!jobs.length) {
       listEl.innerHTML = `<div style="color:${_C.dim};padding:6px 4px;font-size:11px">No oxDNA jobs for this design yet.</div>`
       return
@@ -321,17 +397,23 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       row.style.cssText =
         `display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:4px;` +
         `font-size:11px;${job.job_id === _selectedId ? 'background:#2a3a4a;' : ''}`
-      const dot = document.createElement('span')
-      dot.textContent = '●'
       const ls = jobListStatus(job)
-      dot.style.color = ls.color
+      // A running/queued job spins; finished jobs show a static status dot.
+      let indicator
+      if (jobIsActive(job)) {
+        indicator = makeSpinner(ls.color, 10)
+      } else {
+        indicator = document.createElement('span')
+        indicator.textContent = '●'
+        indicator.style.color = ls.color
+      }
       const label = document.createElement('span')
       label.style.flex = '1'
       label.textContent = jobDisplayName(job)
       const st = document.createElement('span')
       st.style.color = ls.color
       st.textContent = ls.label
-      row.append(dot, label, st)
+      row.append(indicator, label, st)
       row.addEventListener('click', async () => {
         _selectedId = job.job_id
         _progress = await api.getOxdnaProgress(job.job_id).catch(() => null)
@@ -432,13 +514,39 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // ── Production (enabled only after a relaxation completes — mirrors MD) ─────
   // Central button-state: Relax + Production grey out while a production run is
   // active; Show RMSD unlocks only after a production stage completes.
+  // Toggle a leading spinner on a launch button without restarting its animation
+  // every poll (rebuild only on a state change, tracked via dataset.spinning).
+  function _setBtnSpinner(btn, active, idleLabel, busyLabel = idleLabel) {
+    if (active) {
+      if (btn.dataset.spinning !== '1') {
+        btn.textContent = ''
+        btn.append(makeSpinner(_C.warn, 10), document.createTextNode(' ' + busyLabel))
+        btn.dataset.spinning = '1'
+      }
+    } else if (btn.dataset.spinning !== '0') {
+      btn.textContent = idleLabel
+      btn.dataset.spinning = '0'
+    }
+  }
+
   function _updateButtons(job) {
     const ps = productionState(job)
     const prodRunning = job?.status === 'running' && ps === 'running'
-    const prodReady = job?.status === 'completed' && ps === 'none'
+    // Production is allowed whenever the job is completed — the first run starts
+    // from the relaxed structure, later runs CONTINUE from the previous run's
+    // last frame (each is its own stage).
+    const prodReady = job?.status === 'completed'
+    const hasRun = productionRunCount(job) > 0
 
     // Relax — disabled while unavailable, launching, or a production run is active.
     if (runBtn) runBtn.disabled = !_available || _launching || prodRunning
+
+    // Activity spinners — derived from live job state (across this design's jobs),
+    // so they re-appear correctly after a page reload while a job is still running.
+    const relaxActive = _launching || _visibleJobs().some(isRelaxRunning)
+    const prodActive  = _visibleJobs().some(isProductionRunning)
+    if (runBtn)  _setBtnSpinner(runBtn,  relaxActive, '▶ Relax', 'Relaxing…')
+    if (prodBtn) _setBtnSpinner(prodBtn, prodActive,  'Start Production', 'Production…')
 
     if (prodBtn) {
       prodBtn.disabled = !prodReady
@@ -448,8 +556,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       prodBtn.style.color = prodReady ? '#3fb950' : '#484f58'
     }
     if (prodRunning) _setProdStatus('Production running…', _C.warn)
-    else if (ps === 'done')   _setProdStatus('Production complete.', _C.ok)
     else if (ps === 'failed') _setProdStatus('Production failed.', _C.err)
+    else if (prodReady && hasRun)
+      _setProdStatus(`Production complete (${productionRunCount(job)} run${productionRunCount(job) > 1 ? 's' : ''}). Start again to continue from the last frame.`, _C.ok)
     else _setProdStatus(prodReady ? 'Ready to run production from the relaxed structure.'
                                   : 'Production unlocks after relaxation completes.', _C.dim)
 
@@ -471,6 +580,15 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       seedBtn.style.cursor = ok ? 'pointer' : 'not-allowed'
       seedBtn.style.background = ok ? '#21262d' : '#122117'
       seedBtn.style.color = ok ? '#c9d1d9' : '#484f58'
+    }
+
+    // View trajectory — unlocks once the job has any trajectory data (≥1 stage
+    // started); shows the composite relaxation + all production runs.
+    if (trajToggle && !_trajBusy) {
+      const ok = hasTrajectory(job)
+      trajToggle.disabled = !ok
+      const lab = trajToggle.closest('label')
+      if (lab) { lab.style.opacity = ok ? '1' : '0.5'; lab.style.cursor = ok ? 'pointer' : 'not-allowed' }
     }
   }
   function _setProdStatus(text, color = _C.dim) {
@@ -573,9 +691,53 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
         flexToggle.checked = false; _setFlexStatus('Waiting for production', _C.warn); return
       }
       if (displayToggle?.checked) _setDisplayOff()   // mutually exclusive with OxDNA display
+      if (trajToggle?.checked) _setTrajOff()
       await _refreshFlex()
     } else {
       _setFlexOff()
+    }
+  })
+
+  // ── View trajectory (scrub composite relaxation + all production runs) ──────
+  function _setTrajStatus(text, color = _C.dim) {
+    if (trajStatus) { trajStatus.textContent = text; trajStatus.style.color = color }
+  }
+  function _setTrajOff() {
+    trajPlayer.stop()
+    if (oxdnaDisplay?.mode() === 'trajectory') oxdnaDisplay.stopAndRestore()
+    if (trajToggle) trajToggle.checked = false
+    if (trajControls) trajControls.style.display = 'none'
+    _setTrajStatus('', _C.dim)
+  }
+  async function _refreshTraj() {
+    if (!_selectedId || !oxdnaDisplay) return
+    _trajBusy = true
+    _setTrajStatus('Loading trajectory…', _C.accent)
+    const r = await oxdnaDisplay.loadTrajectory(_selectedId)
+    _trajBusy = false
+    if (r.ok) {
+      if (trajControls) trajControls.style.display = ''
+      trajPlayer.setTrajectory(r.n_frames, r.markers)
+      const nProd = (r.stages || []).filter(s => s.kind === 'production').length
+      _setTrajStatus(`${r.n_frames} frames · relaxation + ${nProd} production run${nProd === 1 ? '' : 's'}`, _C.ok)
+    } else {
+      if (trajToggle) trajToggle.checked = false
+      if (trajControls) trajControls.style.display = 'none'
+      _setTrajStatus(r.reason || 'no trajectory', _C.warn)
+    }
+    _updateButtons(_selectedJob())
+  }
+  trajToggle?.addEventListener('change', async () => {
+    if (trajToggle.checked) {
+      if (!_selectedId) { trajToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); return }
+      if (!hasTrajectory(_selectedJob())) {
+        trajToggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); return
+      }
+      if (displayToggle?.checked) _setDisplayOff()   // mutually exclusive overlays
+      if (flexToggle?.checked) _setFlexOff()
+      await _refreshTraj()
+    } else {
+      _setTrajOff()
     }
   })
 
@@ -654,19 +816,25 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     if (displayToggle) displayToggle.checked = false
     _setDisplayStatus('Display off', _C.dim)
   }
-  // Turn off whichever overlay is active (relaxed display OR flexibility map).
+  // Turn off whichever overlay is active (relaxed display / flexibility map /
+  // trajectory player) — they share the one bead overlay.
   function _allDisplaysOff() {
     if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
+    else if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
     else _setDisplayOff()
-    // Defensive: ensure both checkboxes are cleared and the renderer restored.
+    // Defensive: ensure every checkbox is cleared and the renderer restored.
+    trajPlayer.stop()
     if (oxdnaDisplay?.isActive()) oxdnaDisplay.stopAndRestore()
     if (displayToggle) displayToggle.checked = false
     if (flexToggle) flexToggle.checked = false
+    if (trajToggle) trajToggle.checked = false
+    if (trajControls) trajControls.style.display = 'none'
   }
   displayToggle?.addEventListener('change', async () => {
     if (displayToggle.checked) {
       if (!_selectedId) { displayToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); return }
       if (flexToggle?.checked) _setFlexOff()   // mutually exclusive with the flexibility map
+      if (trajToggle?.checked) _setTrajOff()
       await _refreshDisplay()
     } else {
       _setDisplayOff()

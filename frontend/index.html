@@ -3497,6 +3497,25 @@
                 <div id="oxdna-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px">Waiting for production</div>
                 <div id="oxdna-jobs-flex-bar" style="margin-top:3px;display:none"></div>
                 <div id="oxdna-jobs-flex-legend" style="display:none"></div>
+                <!-- View trajectory: scrub the composite relaxation + all production runs -->
+                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                       title="Play/scrub the composite trajectory: relaxation stages + every production run, with markers at each transition">
+                  <input id="oxdna-jobs-traj-toggle" type="checkbox" disabled> View trajectory
+                </label>
+                <div id="oxdna-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                <div id="oxdna-jobs-traj-controls" style="display:none;margin-top:4px">
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <button id="oxdna-jobs-traj-play" title="Play / pause"
+                            style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
+                    <div style="position:relative;flex:1;min-width:0">
+                      <input id="oxdna-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
+                             style="width:100%;display:block;margin:0">
+                      <!-- stage-transition markers overlaid on the slider track -->
+                      <div id="oxdna-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
+                    </div>
+                  </div>
+                  <div id="oxdna-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
+                </div>
                 <!-- NAMD seed handoff (enabled once relaxation completes) -->
                 <button id="oxdna-jobs-seed-btn" disabled
                         title="Start a NAMD all-atom run from this relaxed structure instead of ideal B-DNA"

@@ -277,6 +277,118 @@ def test_production_rmsf(design, geometry, tmp_path):
     assert r["max_rmsf"] > r["min_rmsf"] + 0.4
 
 
+def _write_traj(design, geometry, path, n_frames, box_nm=80.0):
+    """Write a tiny oxDNA trajectory of n_frames identical frames at *path*."""
+    from backend.physics.oxdna_interface import write_configuration
+    tmp = path.parent / "_one.dat"
+    write_configuration(design, geometry, tmp, box_nm=box_nm)
+    lines = tmp.read_text().splitlines()
+    hdr, data = lines[:3], [l for l in lines[3:] if l.strip()]
+    out = []
+    for _ in range(n_frames):
+        out += hdr + data
+    path.write_text("\n".join(out) + "\n")
+
+
+def test_build_production_stage_custom_name():
+    """Each production re-run gets its own uniquely-named stage dir."""
+    from backend.core.oxdna_protocol import build_production_stage
+    assert build_production_stage().name == "4_production"
+    assert build_production_stage(name="5_production").kind == "production"
+    assert build_production_stage(name="5_production").name == "5_production"
+
+
+def test_production_rmsf_pools_multiple_trajectories(design, geometry, tmp_path):
+    """Passing a LIST of production trajectories pools their frames (all runs)."""
+    from backend.core.oxdna_health import production_rmsf
+    ref = tmp_path / "ref.dat"
+    _write_traj(design, geometry, ref, 1)
+    t1 = tmp_path / "p1.dat"; _write_traj(design, geometry, t1, 2)
+    t2 = tmp_path / "p2.dat"; _write_traj(design, geometry, t2, 3)
+    single = production_rmsf(design, t1, ref)
+    pooled = production_rmsf(design, [t1, t2], ref)
+    assert single["n_frames"] == 2
+    assert pooled["n_frames"] == 5            # 2 + 3 frames across both runs
+
+
+def test_composite_trajectory(design, geometry, tmp_path):
+    """Composite trajectory concatenates stages, sends keys once, flat float
+    frames, and a transition marker at each stage boundary."""
+    from backend.core.oxdna_health import composite_trajectory
+    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
+    e = tmp_path / "equil.dat";  _write_traj(design, geometry, e, 2)
+    p = tmp_path / "prod.dat";   _write_traj(design, geometry, p, 3)
+    stages = [("3_equil", "equil", e), ("4_production", "production", p)]
+    r = composite_trajectory(design, stages, ref)
+    assert r["n_frames"] == 5                       # 2 + 3
+    M = r["n_nucleotides"]
+    assert M > 0 and len(r["keys"]) == M
+    assert all(len(f) == 6 * M for f in r["frames"])  # 6 floats (bb xyz + a1) per key
+    assert [s["kind"] for s in r["stages"]] == ["equil", "production"]
+    assert len(r["markers"]) == 1                   # one transition equil→production
+    assert r["markers"][0]["frame"] == 2 and r["markers"][0]["kind"] == "production"
+
+
+def test_composite_trajectory_downsamples_keeping_each_stage(design, geometry, tmp_path):
+    """Downsampling to a small cap keeps ≥1 frame per stage + the boundary marker."""
+    from backend.core.oxdna_health import composite_trajectory
+    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
+    a = tmp_path / "a.dat"; _write_traj(design, geometry, a, 20)
+    b = tmp_path / "b.dat"; _write_traj(design, geometry, b, 20)
+    r = composite_trajectory(design, [("3_equil", "equil", a), ("4_production", "production", b)],
+                             ref, max_frames=6)
+    assert r["n_frames"] <= 6
+    assert all(s["n_frames"] >= 1 for s in r["stages"])
+    assert len(r["markers"]) == 1
+
+
+def test_oxdna_continue_production_unique_stage(monkeypatch, tmp_path):
+    """A completed job that already has a production run can start ANOTHER; it
+    appends a uniquely-named production stage (continues from the last run)."""
+    import json as _json
+    from dataclasses import asdict
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes_oxdna
+    from backend.core.oxdna_protocol import build_production_stage
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(routes_oxdna, "find_oxdna", lambda: "/fake/oxDNA")
+    monkeypatch.setattr(routes_oxdna, "start_job", lambda job, ws, specs: None)
+
+    specs = build_relaxation_stages()
+    specs.append(build_production_stage(name="4_production"))   # one run already done
+    job = new_oxdna_job("d", [s.to_status() for s in specs])
+    job.status = OxdnaStatus.completed
+    for s in job.stages:
+        s.status = "done"
+    job.current_stage_idx = len(specs)
+    job.save(tmp_path)
+    (job.job_dir(tmp_path) / "stages_spec.json").write_text(
+        _json.dumps([asdict(s) for s in specs], indent=2))
+
+    r = TestClient(app).post(f"/api/oxdna/jobs/{job.job_id}/production", json={"steps": 1000})
+    assert r.status_code == 200
+    reloaded = OxdnaJob.load(job.job_id, tmp_path)
+    prod_names = [s.name for s in reloaded.stages if s.kind == "production"]
+    assert prod_names == ["4_production", "5_production"]   # second run, unique name
+    assert reloaded.status == OxdnaStatus.running
+
+
+def test_oxdna_trajectory_not_ready_without_frames(monkeypatch, tmp_path):
+    """GET /trajectory degrades gracefully when no stage has written a trajectory."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes_oxdna
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    job = new_oxdna_job("d", [s.to_status() for s in build_relaxation_stages()])
+    job.save(tmp_path)
+    r = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/trajectory")
+    assert r.status_code == 200
+    assert r.json()["ready"] is False
+
+
 # ── PBC unwrap for display ────────────────────────────────────────────────────
 
 def test_read_configuration_unwrapped(design, geometry, tmp_path):
@@ -692,6 +804,65 @@ def test_oxdna_create_rejects_unsequenced(monkeypatch, tmp_path):
     assert "sequence" in r.json()["detail"].lower()
 
 
+def _full_seq(strand, base="A"):
+    n = sum(abs(d.end_bp - d.start_bp) + 1 for d in strand.domains)
+    return base * n
+
+
+def test_count_undefined_bases_all_unsequenced():
+    from backend.physics.oxdna_interface import count_undefined_bases
+    undef, total = count_undefined_bases(make_6hb_design())
+    assert total > 0
+    assert undef == total          # every base is 'N'
+
+
+def test_count_undefined_bases_fully_sequenced():
+    from backend.physics.oxdna_interface import count_undefined_bases
+    d = make_6hb_design()
+    for s in d.strands:
+        s.sequence = _full_seq(s)
+    undef, total = count_undefined_bases(d)
+    assert total > 0
+    assert undef == 0
+
+
+def test_count_undefined_bases_partial():
+    from backend.physics.oxdna_interface import count_undefined_bases
+    d = make_6hb_design()
+    for s in d.strands[1:]:         # leave the first strand unsequenced
+        s.sequence = _full_seq(s)
+    undef, total = count_undefined_bases(d)
+    assert 0 < undef < total
+
+
+def test_count_undefined_bases_excludes_reference():
+    from backend.physics.oxdna_interface import count_undefined_bases
+    d = make_6hb_design()
+    for s in d.strands:
+        s.sequence = _full_seq(s)
+    d.strands[0].is_reference = True   # backdrop strand, all 'N'
+    d.strands[0].sequence = None
+    assert count_undefined_bases(d, exclude_reference=True)[0] == 0
+    assert count_undefined_bases(d, exclude_reference=False)[0] > 0
+
+
+def test_oxdna_create_rejects_partial_sequence(monkeypatch, tmp_path):
+    """A design with SOME undefined bases is blocked (not just all-unsequenced)."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes_oxdna
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(routes_oxdna, "find_oxdna", lambda: "/fake/oxDNA")
+    d = make_6hb_design()
+    for s in d.strands[1:]:            # one strand left unsequenced
+        s.sequence = _full_seq(s)
+    _set_active_design(d)
+    r = TestClient(app).post("/api/oxdna/jobs", json={"backend": "CPU", "autostart": False})
+    assert r.status_code == 400
+    assert "undefined base" in r.json()["detail"].lower()
+
+
 def test_oxdna_production_requires_completed(monkeypatch, tmp_path):
     """Production is rejected unless the relaxation job has completed."""
     from fastapi.testclient import TestClient
@@ -959,6 +1130,18 @@ def test_reconcile_interrupted_midstage_to_stopped(tmp_path):
     out = reconcile_oxdna_status(OxdnaJob.load(job.job_id, tmp_path), tmp_path)
     assert out.status == OxdnaStatus.stopped
     assert out.stages[-1].status != "done"
+
+
+def test_reconcile_keeps_running_when_process_still_alive(monkeypatch, tmp_path):
+    """An orphaned-but-alive oxDNA process (e.g. detached by a dev-server reload)
+    must NOT be mislabeled stopped — the /proc detection keeps it running."""
+    import backend.core.oxdna_runner as runner
+    job = _write_detached_job(tmp_path, production=True, production_complete=False)
+    # Simulate the still-running orphan that the in-memory registry lost.
+    monkeypatch.setattr(runner, "_external_oxdna_running", lambda j, w: True)
+    out = runner.reconcile_oxdna_status(OxdnaJob.load(job.job_id, tmp_path), tmp_path)
+    assert out.status == OxdnaStatus.running          # left running, not stopped
+    assert OxdnaJob.load(job.job_id, tmp_path).status == OxdnaStatus.running
 
 
 def test_reconcile_noop_for_terminal_job(tmp_path):

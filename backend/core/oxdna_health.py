@@ -186,6 +186,9 @@ def production_rmsf(
     """Per-NUCLEOTIDE average position + RMSF (root-mean-square fluctuation, nm)
     over a production trajectory — the flexibility map.
 
+    ``production_traj_path`` may be a single path or a LIST of paths; when several
+    production runs exist their frames are pooled so the map reflects ALL runs.
+
     Each frame is PBC-unwrapped + Kabsch-aligned to the relaxed reference (rigid
     diffusion/tumbling removed), then for every nucleotide we take the mean of its
     true backbone-site position across frames and the RMSF about that mean.  Low
@@ -205,20 +208,24 @@ def production_rmsf(
         unwrap_align_to_reference,
     )
     ref = read_configuration_full(reference_conf_path, design)
-    frames = read_trajectory_frames_full(production_traj_path, design)
-    box = _parse_box_nm(production_traj_path)
+    paths = (list(production_traj_path)
+             if isinstance(production_traj_path, (list, tuple))
+             else [production_traj_path])
 
     acc: dict[tuple, dict] = {}   # key → {"pos": [bb xyz...], "a1": [a1...]}
     n_frames = 0
-    for fr in frames:
-        aligned = (unwrap_align_to_reference(fr, ref, design, box)
-                   if box is not None and np.all(box > 0) else fr)
-        n_frames += 1
-        for k, v in aligned.items():
-            bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
-            slot = acc.setdefault(k, {"pos": [], "a1": []})
-            slot["pos"].append(bb)
-            slot["a1"].append(v["a1"])
+    for path in paths:
+        frames = read_trajectory_frames_full(path, design)
+        box = _parse_box_nm(path)
+        for fr in frames:
+            aligned = (unwrap_align_to_reference(fr, ref, design, box)
+                       if box is not None and np.all(box > 0) else fr)
+            n_frames += 1
+            for k, v in aligned.items():
+                bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
+                slot = acc.setdefault(k, {"pos": [], "a1": []})
+                slot["pos"].append(bb)
+                slot["a1"].append(v["a1"])
 
     if n_frames == 0 or not acc:
         return {"ready": False, "n_frames": 0, "positions": [],
@@ -244,6 +251,96 @@ def production_rmsf(
     return {"ready": True, "n_frames": n_frames, "positions": positions,
             "min_rmsf": float(r.min()), "max_rmsf": float(r.max()),
             "mean_rmsf": float(r.mean())}
+
+
+def composite_trajectory(
+    design,
+    stages,
+    reference_conf_path,
+    max_frames: int = 200,
+) -> dict:
+    """Build the composite scrub-able trajectory for the View-trajectory player.
+
+    ``stages`` is an ordered list of ``(stage_name, kind, trajectory_path)`` —
+    every stage that has written a ``trajectory.dat`` (relaxation stages + all
+    production runs).  Each frame is PBC-unwrapped + Kabsch-aligned to the design
+    reference (same as the OxDNA-display toggle) so the whole sequence plays in
+    place.  Frames are downsampled PER STAGE (≥1 each) to keep the total ≤
+    ``max_frames`` while preserving every stage boundary.
+
+    Compact payload (keys sent once, each frame a flat float list) to keep the
+    preload small:
+      ``keys``   = [[helix_id, bp_index, direction], …]   (M nucleotides)
+      ``frames`` = [[x,y,z,nx,ny,nz, … per key], …]        (backbone site + a1)
+      ``stages`` = [{name, kind, n_frames}]
+      ``markers``= [{frame, label, kind, stage_name}]      (transition at each
+                   stage's first composite-frame; the very first frame is omitted)
+    """
+    from backend.physics.oxdna_interface import (
+        _parse_box_nm,
+        _strand_nucleotide_order,
+        oxdna_backbone_site,
+        read_configuration_full,
+        read_trajectory_frames_full,
+        unwrap_align_to_reference,
+    )
+    ref = read_configuration_full(reference_conf_path, design)
+    key_list = list(dict.fromkeys(k[:3] for k in _strand_nucleotide_order(design)))
+
+    # Read + align every stage's frames first (so we know the natural counts).
+    per_stage: list[dict] = []
+    for name, kind, path in stages:
+        frames = read_trajectory_frames_full(path, design)
+        box = _parse_box_nm(path)
+        aligned = [
+            (unwrap_align_to_reference(fr, ref, design, box)
+             if box is not None and np.all(box > 0) else fr)
+            for fr in frames
+        ]
+        per_stage.append({"name": name, "kind": kind, "frames": aligned})
+
+    total = sum(len(s["frames"]) for s in per_stage)
+    if total == 0:
+        return {"n_frames": 0, "n_nucleotides": len(key_list),
+                "keys": [list(k) for k in key_list], "frames": [],
+                "stages": [], "markers": []}
+
+    # Per-stage downsample budget (proportional, ≥1 frame per non-empty stage).
+    def _stride_pick(items: list, keep: int) -> list:
+        if keep >= len(items) or keep <= 0:
+            return items
+        return [items[round(i * (len(items) - 1) / (keep - 1))] for i in range(keep)] \
+            if keep > 1 else [items[0]]
+
+    out_frames: list[list[float]] = []
+    out_stages: list[dict] = []
+    markers: list[dict] = []
+    for s in per_stage:
+        f = s["frames"]
+        if not f:
+            continue
+        keep = max(1, round(len(f) * max_frames / total)) if total > max_frames else len(f)
+        picked = _stride_pick(f, keep)
+        if out_frames:  # a transition into this stage (skip the very first frame)
+            markers.append({"frame": len(out_frames), "label": f"→ {s['kind']}",
+                            "kind": s["kind"], "stage_name": s["name"]})
+        out_stages.append({"name": s["name"], "kind": s["kind"], "n_frames": len(picked)})
+        for fr in picked:
+            flat: list[float] = []
+            for key in key_list:
+                v = fr.get(key)
+                if v is None:
+                    flat.extend((0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+                    continue
+                bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
+                a1 = v["a1"]
+                flat.extend((float(bb[0]), float(bb[1]), float(bb[2]),
+                             float(a1[0]), float(a1[1]), float(a1[2])))
+            out_frames.append(flat)
+
+    return {"n_frames": len(out_frames), "n_nucleotides": len(key_list),
+            "keys": [list(k) for k in key_list], "frames": out_frames,
+            "stages": out_stages, "markers": markers}
 
 
 def max_backbone_stretch(

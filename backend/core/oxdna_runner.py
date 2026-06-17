@@ -67,6 +67,34 @@ def is_running(job_id: str) -> bool:
     return handle is not None and handle.thread.is_alive()
 
 
+def _external_oxdna_running(job: OxdnaJob, workspace_dir: Path) -> bool:
+    """Detect a detached/orphaned oxDNA process the in-memory registry lost.
+
+    A ``uvicorn --reload`` restart (auto-triggered by any backend .py edit) kills
+    the worker that spawned oxDNA; the oxDNA subprocess survives, re-parented to
+    init, and keeps writing its stage outputs.  Without this check
+    ``reconcile_oxdna_status`` would mislabel that still-running job ``stopped``.
+
+    Scans /proc for a process whose command line references this job's directory
+    AND is the oxDNA binary.  Mirrors namd_runner._external_process_running.
+    """
+    needle = str(job.job_dir(workspace_dir).resolve()).encode()
+    try:
+        proc_dirs = list(Path("/proc").iterdir())
+    except OSError:
+        return False
+    for proc_dir in proc_dirs:
+        if not proc_dir.name.isdigit():
+            continue
+        try:
+            cmdline = (proc_dir / "cmdline").read_bytes()
+        except OSError:
+            continue
+        if needle in cmdline and b"oxdna" in cmdline.lower():
+            return True
+    return False
+
+
 # ── oxDNA binary discovery ────────────────────────────────────────────────────
 
 _OXDNA_CANDIDATES = [
@@ -539,6 +567,8 @@ def reconcile_oxdna_status(
         return job
     if is_running(job.job_id):
         return job  # a live runner owns it — leave it alone
+    if _external_oxdna_running(job, workspace_dir):
+        return job  # orphaned but still alive on disk/GPU — keep it running
     if specs is None:
         specs = load_stage_specs(job.job_dir(workspace_dir))
     if not specs or len(specs) < len(job.stages):

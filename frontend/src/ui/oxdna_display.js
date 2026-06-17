@@ -81,11 +81,31 @@ export function rmsfColorMap(resp, loBound, hiBound) {
   return { updates, colorByKey, min: dataLo, max: dataHi }
 }
 
+/**
+ * Pure: turn one composite-trajectory frame (flat float list) + the shared key
+ * list into applyFemPositions updates.  keys = [[helix,bp,dir], …]; frame holds
+ * 6 floats per key (backbone x,y,z then a1 nx,ny,nz).  Kept pure for testing.
+ */
+export function framesToUpdates(keys, frame) {
+  if (!Array.isArray(keys) || !Array.isArray(frame)) return []
+  const updates = []
+  for (let j = 0; j < keys.length; j++) {
+    const o = j * 6
+    updates.push({
+      helix_id: keys[j][0], bp_index: keys[j][1], direction: keys[j][2],
+      backbone_position: [frame[o], frame[o + 1], frame[o + 2]],
+      nx: frame[o + 3], ny: frame[o + 4], nz: frame[o + 5],
+    })
+  }
+  return updates
+}
+
 export function initOxdnaDisplay({ designRenderer, api }) {
   let _active = false
   let _jobId = null
-  let _mode = null     // 'relaxed' | 'rmsf'
+  let _mode = null     // 'relaxed' | 'rmsf' | 'trajectory'
   let _rmsfResp = null // cached /rmsf payload so the scale can recolour without re-fetching
+  let _traj = null     // cached /trajectory payload {keys, frames, markers, n_frames, stages}
 
   /** Fetch the latest relaxed frame for jobId and deform the model to it. */
   async function displayJob(jobId) {
@@ -137,9 +157,38 @@ export function initOxdnaDisplay({ designRenderer, api }) {
     return true
   }
 
+  /**
+   * Fetch the composite trajectory (relaxation + all production runs) for jobId,
+   * cache it, and show the first frame.  Returns metadata for the player
+   * (n_frames + stage markers).  The actual scrubbing is driven by showFrame().
+   */
+  async function loadTrajectory(jobId) {
+    if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
+    const resp = await api.getOxdnaTrajectory(jobId)
+    if (!resp?.ready || !Array.isArray(resp.frames) || !resp.frames.length) {
+      return { ok: false, reason: resp?.reason || 'no trajectory yet' }
+    }
+    _traj = resp
+    designRenderer.clearScalarColors?.()
+    _active = true
+    _mode = 'trajectory'
+    _jobId = jobId
+    showFrame(0)
+    return { ok: true, n_frames: resp.n_frames, markers: resp.markers || [], stages: resp.stages || [] }
+  }
+
+  /** Deform the model to composite-trajectory frame i (clamped). No-op off mode. */
+  function showFrame(i) {
+    if (_mode !== 'trajectory' || !_traj || !designRenderer) return
+    const n = _traj.frames.length
+    const idx = Math.max(0, Math.min(n - 1, i | 0))
+    designRenderer.applyFemPositions(framesToUpdates(_traj.keys, _traj.frames[idx]))
+  }
+
   /** Re-fetch the current job's frame (e.g. after a stage completes). */
   async function refresh() {
     if (!_active || !_jobId) return { ok: false, reason: 'not active' }
+    if (_mode === 'trajectory') return loadTrajectory(_jobId)
     return _mode === 'rmsf' ? displayRmsf(_jobId) : displayJob(_jobId)
   }
 
@@ -152,12 +201,15 @@ export function initOxdnaDisplay({ designRenderer, api }) {
     _mode = null
     _jobId = null
     _rmsfResp = null
+    _traj = null
   }
 
   return {
     displayJob,
     displayRmsf,
     recolorRmsf,
+    loadTrajectory,
+    showFrame,
     refresh,
     stopAndRestore,
     isActive: () => _active,

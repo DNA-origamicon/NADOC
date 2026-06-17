@@ -194,6 +194,48 @@ def _strand_nucleotide_order(design: Design) -> list[tuple]:
     return order
 
 
+def count_undefined_bases(
+    design: Design, exclude_reference: bool = True
+) -> tuple[int, int]:
+    """Count nucleotides whose assigned base is *not* a definite A/C/G/T.
+
+    Mirrors ``write_topology``'s per-nucleotide sequence assignment exactly
+    (loop copies expanded, skips/deletions dropped), so the count reflects what
+    oxDNA actually receives — every position that would be written as ``'N'``.
+
+    Reference 'backdrop' strands (``Strand.is_reference``) are skipped by
+    default, matching how they are excluded from every export/validation path.
+
+    Returns ``(undefined_count, total_count)``.
+    """
+    ls_lookup = _build_ls_lookup(design)
+    undefined = 0
+    total = 0
+    for strand in design.strands:
+        if exclude_reference and strand.is_reference:
+            continue
+        seq = (strand.sequence or "").upper()
+        seq_idx = 0
+        for domain in strand.domains:
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp)
+            if domain.direction == Direction.FORWARD:
+                bp_range = range(lo, hi + 1)
+            else:
+                bp_range = range(hi, lo - 1, -1)
+            for bp in bp_range:
+                delta = ls_lookup.get((domain.helix_id, bp), 0)
+                if delta <= -1:
+                    continue  # deletion: no nucleotide written
+                for _ in range(max(1, delta + 1)):
+                    base = seq[seq_idx] if seq_idx < len(seq) else 'N'
+                    total += 1
+                    if base not in "ACGT":
+                        undefined += 1
+                    seq_idx += 1
+    return undefined, total
+
+
 # ── Topology writer ───────────────────────────────────────────────────────────
 
 

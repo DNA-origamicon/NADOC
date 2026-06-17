@@ -9,6 +9,7 @@ vi.mock('../api/client.js', () => ({
   getOxdnaProgress: vi.fn().mockResolvedValue({ overall: 1, stage_fraction: 0 }),
   getOxdnaRmsd: vi.fn().mockResolvedValue({ ready: true, mean: 2.31, max: 2.53, n_frames: 10 }),
   getOxdnaRmsf: vi.fn().mockResolvedValue({ ready: true, n_frames: 10, positions: [], min_rmsf: 0.1, max_rmsf: 1.4, mean_rmsf: 0.7 }),
+  getOxdnaTrajectory: vi.fn().mockResolvedValue({ ready: true, n_frames: 4, keys: [], frames: [[]], markers: [], stages: [] }),
   createMdJob: vi.fn().mockResolvedValue({ job_id: 'md1', status: 'queued' }),
   lastErrorMessage: () => null,
 }))
@@ -17,6 +18,8 @@ import * as api from '../api/client.js'
 import {
   formatProgress, latestHealth, detailStatusText, stageChips, jobDisplayName,
   productionState, jobListStatus, formatEta, seedReady, initOxdnaJobsPanel,
+  jobIsActive, isRelaxRunning, isProductionRunning, makeSpinner,
+  productionRunCount, hasTrajectory,
 } from './oxdna_jobs_panel.js'
 
 describe('formatEta', () => {
@@ -64,6 +67,60 @@ describe('seedReady', () => {
     expect(seedReady({ status: 'queued' })).toBe(false)
     expect(seedReady({ status: 'failed' })).toBe(false)
     expect(seedReady(null)).toBe(false)
+  })
+})
+
+describe('multi-production helpers', () => {
+  const stages = (...prods) => [
+    { kind: 'mc', status: 'done' }, { kind: 'equil', status: 'done' },
+    ...prods.map(st => ({ kind: 'production', status: st })),
+  ]
+  it('productionState reflects the LATEST production run', () => {
+    expect(productionState({ status: 'running', stages: stages('done', 'running') })).toBe('running')
+    expect(productionState({ status: 'completed', stages: stages('done', 'done') })).toBe('done')
+  })
+  it('productionRunCount counts production stages', () => {
+    expect(productionRunCount({ stages: stages() })).toBe(0)
+    expect(productionRunCount({ stages: stages('done', 'done', 'running') })).toBe(3)
+  })
+  it('hasTrajectory is true once any stage has started/finished', () => {
+    expect(hasTrajectory({ stages: [{ kind: 'mc', status: 'pending' }] })).toBe(false)
+    expect(hasTrajectory({ stages: [{ kind: 'mc', status: 'running' }] })).toBe(true)
+    expect(hasTrajectory({ stages: [{ kind: 'mc', status: 'done' }] })).toBe(true)
+  })
+})
+
+describe('activity-state helpers (spinner drivers)', () => {
+  const prod = (status) => ({ status: 'running', stages: [{ kind: 'equil', status: 'done' }, { kind: 'production', status }] })
+
+  it('jobIsActive is true for queued/preparing/running only', () => {
+    for (const s of ['queued', 'preparing', 'running']) expect(jobIsActive({ status: s })).toBe(true)
+    for (const s of ['completed', 'failed', 'stopped']) expect(jobIsActive({ status: s })).toBe(false)
+    expect(jobIsActive(null)).toBe(false)
+  })
+
+  it('isRelaxRunning: running on a relaxation stage, but NOT during production', () => {
+    expect(isRelaxRunning({ status: 'running', stages: [{ kind: 'md_relax', status: 'running' }] })).toBe(true)
+    expect(isRelaxRunning(prod('running'))).toBe(false)   // production running ≠ relax
+    expect(isRelaxRunning({ status: 'completed' })).toBe(false)
+    expect(isRelaxRunning(null)).toBe(false)
+  })
+
+  it('isProductionRunning: only while the production stage is active', () => {
+    expect(isProductionRunning(prod('running'))).toBe(true)
+    expect(isProductionRunning({ ...prod('done'), status: 'completed' })).toBe(false)
+    expect(isProductionRunning({ status: 'running', stages: [{ kind: 'mc', status: 'running' }] })).toBe(false)
+    expect(isProductionRunning(null)).toBe(false)
+  })
+})
+
+describe('makeSpinner', () => {
+  it('builds a .nadoc-spinner span with the requested colour + size', () => {
+    const s = makeSpinner('#e0a800', 10)
+    expect(s.className).toBe('nadoc-spinner')
+    expect(s.style.color).toBe('rgb(224, 168, 0)')
+    expect(s.style.width).toBe('10px')
+    expect(s.getAttribute('aria-hidden')).toBe('true')
   })
 })
 
@@ -240,6 +297,9 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     'oxdna-jobs-flex-bar': 'div', 'oxdna-jobs-flex-legend': 'div',
     'oxdna-jobs-export-btn': 'button',
     'oxdna-jobs-seed-btn': 'button', 'oxdna-jobs-seed-status': 'div',
+    'oxdna-jobs-traj-toggle': 'input', 'oxdna-jobs-traj-status': 'div',
+    'oxdna-jobs-traj-controls': 'div', 'oxdna-jobs-traj-play': 'button',
+    'oxdna-jobs-traj-slider': 'input', 'oxdna-jobs-traj-markers': 'div', 'oxdna-jobs-traj-label': 'div',
     // workspace colour-scale widget (middle-right)
     'flex-scale': 'div', 'flex-scale-max': 'input', 'flex-scale-min': 'input', 'flex-scale-reset': 'button',
   }
@@ -248,6 +308,12 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     return {
       displayJob: vi.fn(async () => { mode = 'relaxed'; return { ok: true, n: 5, stage: 's' } }),
       displayRmsf: vi.fn(async () => { mode = 'rmsf'; return { ok: true, n: 5, min: 0.1, max: 1.4, mean: 0.7 } }),
+      loadTrajectory: vi.fn(async () => {
+        mode = 'trajectory'
+        return { ok: true, n_frames: 6, markers: [{ frame: 3, kind: 'production' }],
+                 stages: [{ kind: 'equil' }, { kind: 'production' }] }
+      }),
+      showFrame: vi.fn(),
       stopAndRestore: vi.fn(() => { mode = null }),
       isActive: () => mode !== null,
       mode: () => mode,
@@ -292,6 +358,82 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     const prog = $('oxdna-jobs-progress').textContent
     expect(prog).toContain('2,000,000 / 5,000,000 steps')   // 0.4 × 5e6
     expect(prog).toContain('ETA ~3m 20s')                    // 200 s
+  })
+
+  // ── Activity spinners (reload-safe: driven by live job state, no selection) ──
+  it('a running relaxation spins the list row + Relax button (no selection needed)', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jRlx', design_source_path: 'A.nadoc', status: 'running',
+      created_at: 1, current_stage_idx: 1, stages: [{ kind: 'mc', status: 'done' }, { kind: 'md_relax', status: 'running' }] }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await panel.refresh()
+    await Promise.resolve(); await Promise.resolve()
+    expect($('oxdna-jobs-list').querySelector('.nadoc-spinner')).toBeTruthy()
+    expect($('oxdna-jobs-run-btn').querySelector('.nadoc-spinner')).toBeTruthy()
+    expect($('oxdna-jobs-prod-btn').querySelector('.nadoc-spinner')).toBeFalsy()
+  })
+
+  it('a running production spins the list row + Production button, not Relax', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jPrd', design_source_path: 'A.nadoc', status: 'running',
+      created_at: 1, current_stage_idx: 3, stages: relaxStages({ kind: 'production', status: 'running', steps: 5000000 }) }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await panel.refresh()
+    await Promise.resolve(); await Promise.resolve()
+    expect($('oxdna-jobs-prod-btn').querySelector('.nadoc-spinner')).toBeTruthy()
+    expect($('oxdna-jobs-list').querySelector('.nadoc-spinner')).toBeTruthy()
+    expect($('oxdna-jobs-run-btn').querySelector('.nadoc-spinner')).toBeFalsy()
+  })
+
+  it('a completed job shows no spinners (static status dot, idle buttons)', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jFin', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 3, stages: relaxStages() }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await panel.refresh()
+    await Promise.resolve(); await Promise.resolve()
+    expect($('oxdna-jobs-list').querySelector('.nadoc-spinner')).toBeFalsy()
+    expect($('oxdna-jobs-run-btn').querySelector('.nadoc-spinner')).toBeFalsy()
+    expect($('oxdna-jobs-prod-btn').querySelector('.nadoc-spinner')).toBeFalsy()
+    expect($('oxdna-jobs-run-btn').textContent.trim()).toBe('▶ Relax')
+  })
+
+  // ── Continue production + View trajectory ─────────────────────────────────
+  it('a completed job WITH a production run keeps Production enabled to continue', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jc', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 5, stages: relaxStages({ kind: 'production', status: 'done', steps: 5000000 }) }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await selectFirstJob(panel)
+    expect($('oxdna-jobs-prod-btn').disabled).toBe(false)                       // continue allowed
+    expect($('oxdna-jobs-prod-status').textContent.toLowerCase()).toContain('continue')
+  })
+
+  it('View trajectory toggle loads frames and reveals the player controls', async () => {
+    const disp = fakeDisplay()
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jt', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 5, stages: relaxStages({ kind: 'production', status: 'done', steps: 5000000 }) }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    await selectFirstJob(panel)
+    expect($('oxdna-jobs-traj-toggle').disabled).toBe(false)                    // has trajectory
+    $('oxdna-jobs-traj-toggle').checked = true
+    $('oxdna-jobs-traj-toggle').dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    expect(disp.loadTrajectory).toHaveBeenCalledWith('jt')
+    expect($('oxdna-jobs-traj-controls').style.display).not.toBe('none')
+    expect($('oxdna-jobs-traj-slider').max).toBe('5')                           // 6 frames → max idx 5
+  })
+
+  it('enabling View trajectory turns off the OxDNA display (shared overlay)', async () => {
+    const disp = fakeDisplay()
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jx', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 5, stages: relaxStages({ kind: 'production', status: 'done', steps: 5000000 }) }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    await selectFirstJob(panel)
+    $('oxdna-jobs-display-toggle').checked = true
+    $('oxdna-jobs-display-toggle').dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve()
+    $('oxdna-jobs-traj-toggle').checked = true
+    $('oxdna-jobs-traj-toggle').dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    expect($('oxdna-jobs-display-toggle').checked).toBe(false)
+    expect(disp.mode()).toBe('trajectory')
   })
 
   it('after production completes → Flexibility map toggle unlocks; toggling it calls displayRmsf + shows the legend', async () => {

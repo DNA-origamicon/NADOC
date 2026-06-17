@@ -218,6 +218,7 @@ DEFAULT_PRODUCTION_STEPS: int = 5_000_000
 
 def build_production_stage(
     *,
+    name:               str = "4_production",
     steps:              int = DEFAULT_PRODUCTION_STEPS,
     backend:            str = "CUDA",
     device:             str = "0",
@@ -225,9 +226,13 @@ def build_production_stage(
 ) -> OxdnaStageSpec:
     """Return an unbiased MD production stage (standard backbone potential, no
     traps, no force cap) — the real dynamics run, appended after relaxation passes.
-    No base-pair gate: production is sampling, the structure is free to evolve."""
+    No base-pair gate: production is sampling, the structure is free to evolve.
+
+    ``name`` is unique per run (``4_production``, ``5_production``, …) so repeated
+    "Start Production" clicks each get their own stage dir and continue from the
+    previous run's ``last_conf.dat`` instead of overwriting it."""
     return OxdnaStageSpec(
-        name="4_production", kind="production", sim_type="MD", steps=steps,
+        name=name, kind="production", sim_type="MD", steps=steps,
         backend=backend, dt=0.005,
         max_backbone_force=None, max_backbone_force_far=None,
         external_forces=False,

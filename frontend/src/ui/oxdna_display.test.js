@@ -1,5 +1,20 @@
 import { describe, it, expect, vi } from 'vitest'
-import { toFemUpdates, viridisHex, rmsfColorMap, initOxdnaDisplay } from './oxdna_display.js'
+import { toFemUpdates, viridisHex, rmsfColorMap, framesToUpdates, initOxdnaDisplay } from './oxdna_display.js'
+
+describe('framesToUpdates', () => {
+  it('zips the shared key list with a flat frame into applyFemPositions updates', () => {
+    const keys = [['h0', 0, 'FORWARD'], ['h0', 0, 'REVERSE']]
+    const frame = [1, 2, 3, 1, 0, 0,  4, 5, 6, 0, 1, 0]
+    expect(framesToUpdates(keys, frame)).toEqual([
+      { helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [1, 2, 3], nx: 1, ny: 0, nz: 0 },
+      { helix_id: 'h0', bp_index: 0, direction: 'REVERSE', backbone_position: [4, 5, 6], nx: 0, ny: 1, nz: 0 },
+    ])
+  })
+  it('returns [] for bad input', () => {
+    expect(framesToUpdates(null, [])).toEqual([])
+    expect(framesToUpdates([], null)).toEqual([])
+  })
+})
 
 describe('toFemUpdates', () => {
   it('returns [] for not-ready / empty responses', () => {
@@ -124,6 +139,36 @@ describe('initOxdnaDisplay controller', () => {
     expect(deps.designRenderer.clearScalarColors).toHaveBeenCalled()
     expect(ctrl.isActive()).toBe(false)
     expect(ctrl.activeJobId()).toBe(null)
+  })
+
+  it('loadTrajectory caches frames and showFrame deforms to a given frame', async () => {
+    const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
+    const traj = {
+      ready: true, n_frames: 2, n_nucleotides: 1,
+      keys: [['h0', 0, 'FORWARD']],
+      frames: [[1, 1, 1, 1, 0, 0], [2, 2, 2, 1, 0, 0]],
+      markers: [{ frame: 1, kind: 'production' }], stages: [{ kind: 'equil' }, { kind: 'production' }],
+    }
+    const api = { getOxdnaTrajectory: vi.fn().mockResolvedValue(traj) }
+    const ctrl = initOxdnaDisplay({ designRenderer, api })
+    const r = await ctrl.loadTrajectory('jobT')
+    expect(r.ok).toBe(true)
+    expect(r.n_frames).toBe(2)
+    expect(ctrl.mode()).toBe('trajectory')
+    expect(designRenderer.applyFemPositions).toHaveBeenLastCalledWith(
+      [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [1, 1, 1], nx: 1, ny: 0, nz: 0 }])
+    ctrl.showFrame(1)
+    expect(designRenderer.applyFemPositions).toHaveBeenLastCalledWith(
+      [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [2, 2, 2], nx: 1, ny: 0, nz: 0 }])
+  })
+
+  it('loadTrajectory reports not-ready when there are no frames', async () => {
+    const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
+    const api = { getOxdnaTrajectory: vi.fn().mockResolvedValue({ ready: false, reason: 'no trajectory yet' }) }
+    const ctrl = initOxdnaDisplay({ designRenderer, api })
+    const r = await ctrl.loadTrajectory('jobT')
+    expect(r.ok).toBe(false)
+    expect(ctrl.isActive()).toBe(false)
   })
 
   it('displayRmsf deforms to the average structure and recolours by RMSF', async () => {

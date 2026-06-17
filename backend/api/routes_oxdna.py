@@ -50,7 +50,11 @@ from backend.core.oxdna_runner import (
     start_job,
     stop_job,
 )
-from backend.physics.oxdna_interface import oxdna_backbone_site, read_configuration_unwrapped
+from backend.physics.oxdna_interface import (
+    count_undefined_bases,
+    oxdna_backbone_site,
+    read_configuration_unwrapped,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -138,21 +142,21 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         name = Path(body.design_source_path).stem or None
     name = (name or design.metadata.name or "design").replace(" ", "_")
 
-    # Sequence check (mirrors the NAMD job path): an unsequenced design writes every
-    # base as 'N', which oxDNA's DNA2 interaction rejects — and even if accepted,
-    # base-pair H-bonding is sequence-dependent, so the structure would melt with no
-    # complementary partners.  Require sequences before relaxing.
-    sequenced_bases = sum(
-        sum(1 for c in (s.sequence or "") if c.upper() in "ACGT")
-        for s in design.strands
-    )
-    if sequenced_bases == 0:
+    # Sequence check: oxDNA's DNA2 interaction needs a definite base (A/C/G/T) on
+    # every nucleotide — any undefined ('N') base has no sequence-complementary
+    # Watson-Crick partner, so that region melts during relaxation.  Block the job
+    # if ANY base is still undefined (reference backdrop strands excluded, like
+    # every other export path).  The frontend turns this 400 into a warning popup.
+    undefined, _total = count_undefined_bases(design, exclude_reference=True)
+    if undefined > 0:
+        plural = "s" if undefined != 1 else ""
         raise HTTPException(
             400,
-            "Design has no sequence assigned — oxDNA needs valid bases (A/C/G/T) and "
-            "sequence-complementary Watson-Crick partners to hold the structure together "
-            "during relaxation. Assign a scaffold sequence (e.g. M13mp18) and staple "
-            "sequences before starting an oxDNA relaxation.",
+            f"Design has {undefined} undefined base{plural} — oxDNA needs every "
+            "nucleotide assigned a definite base (A/C/G/T) with sequence-complementary "
+            "Watson-Crick partners to hold the structure together during relaxation. "
+            "Finish assigning sequences (a scaffold, e.g. M13mp18, plus all staple "
+            "sequences) before starting an oxDNA relaxation.",
         )
 
     specs = build_relaxation_stages(
@@ -240,10 +244,13 @@ async def start_oxdna_job(job_id: str) -> dict:
 
 @router.post("/oxdna/jobs/{job_id}/production")
 async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
-    """Append an unbiased MD production stage after the relaxation stages pass.
+    """Append an unbiased MD production stage after a completed job.
 
-    Only available once the relaxation has completed — production is the real
-    dynamics run, started from the relaxed structure (no traps, no force cap).
+    Available whenever the job is ``completed`` — the first time it continues from
+    the relaxed structure; on a job that already has a production run it appends
+    ANOTHER production stage that continues from the previous run's last frame
+    (each run gets its own uniquely-named stage dir, so trajectories accumulate
+    rather than overwrite).
     """
     job = _load_job(job_id)
     if is_running(job_id) or job.status != OxdnaStatus.completed:
@@ -254,7 +261,10 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
     specs = load_stage_specs(job.job_dir(_workspace()))
     if not specs:
         raise HTTPException(500, "stages_spec.json missing; cannot append production.")
+    # Unique stage name (1-based position prefix) so a re-run continues from the
+    # previous stage's last_conf.dat instead of clobbering "4_production".
     prod = build_production_stage(
+        name=f"{len(specs) + 1}_production",
         steps=body.steps, backend=job.backend, device=job.device,
         salt_concentration=job.salt_concentration,
     )
@@ -360,15 +370,19 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
     from backend.core.oxdna_health import production_rmsf
 
     job = _load_job(job_id)
-    prod_idx = next((i for i, s in enumerate(job.stages) if s.kind == "production"), None)
-    if prod_idx is None:
+    prod_stages = [s for s in job.stages if s.kind == "production"]
+    if not prod_stages:
         return {"ready": False, "reason": "no production run yet"}
-    if job.stages[prod_idx].status != "done":
+    done_prods = [s for s in prod_stages if s.status == "done"]
+    if not done_prods:
         return {"ready": False, "reason": "waiting for production"}
 
     jd = job.job_dir(_workspace())
-    traj = job.stage_dir(_workspace(), job.stages[prod_idx].name) / "trajectory.dat"
-    if not traj.exists():
+    # Pool the trajectories of EVERY finished production run, so the flexibility
+    # map reflects all production runs associated with this job, not just the first.
+    trajs = [job.stage_dir(_workspace(), s.name) / "trajectory.dat" for s in done_prods]
+    trajs = [t for t in trajs if t.exists()]
+    if not trajs:
         return {"ready": False, "reason": "production trajectory not available yet"}
 
     # Reference = the job's conf.dat (design geometry) — IDENTICAL to the OxDNA
@@ -377,7 +391,35 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
     ref_conf = jd / "conf.dat"
 
     design = Design.model_validate_json((jd / "design.json").read_text())
-    return await run_in_threadpool(production_rmsf, design, traj, ref_conf)
+    return await run_in_threadpool(production_rmsf, design, trajs, ref_conf)
+
+
+@router.get("/oxdna/jobs/{job_id}/trajectory")
+async def get_oxdna_trajectory(job_id: str) -> dict:
+    """Composite scrub-able trajectory: every stage that wrote a trajectory.dat
+    (relaxation stages + all production runs), each frame PBC-unwrapped +
+    Kabsch-aligned to the design reference, downsampled, with stage-boundary
+    markers.  Feeds the View-trajectory play/pause + slider in the panel.
+    """
+    from backend.core.models import Design
+    from backend.core.oxdna_health import composite_trajectory
+
+    job = _load_job(job_id)
+    jd = job.job_dir(_workspace())
+    stages = []
+    for st in job.stages:
+        traj = job.stage_dir(_workspace(), st.name) / "trajectory.dat"
+        if traj.exists():
+            stages.append((st.name, st.kind, traj))
+    if not stages:
+        return {"ready": False, "reason": "no trajectory yet"}
+
+    snap = jd / "design.json"
+    if not snap.exists():
+        raise HTTPException(500, "design.json snapshot missing for this job")
+    design = Design.model_validate_json(snap.read_text())
+    result = await run_in_threadpool(composite_trajectory, design, stages, jd / "conf.dat")
+    return {"ready": result["n_frames"] > 0, **result}
 
 
 @router.get("/oxdna/jobs/{job_id}/display")
