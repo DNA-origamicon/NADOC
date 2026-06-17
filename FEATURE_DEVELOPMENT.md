@@ -83,6 +83,16 @@ returns); just don't let *new cohesive logic* join it.
   `MV-N` row into `manual_validation_debt.md`. (Same cross-loop intake the carve-up uses — see
   `issues_ledger.md` "Intake" + `manual_validation_debt.md` "Intake".)
 
+## The design-automation loop (a feature loop that runs ON this law)
+
+`design_automation_backlog.md` + `design_automation_log.md` (invoked by **`/automate-feature`**) are a
+feature-development loop in the carve-up family: each session gives one UI-only / API-less operation a
+**programmatic (headless) entry point + a reusable validation oracle**, building toward automated
+validation and eventual text-to-DNA-origami. It is bound by *this* document — new code lands in
+`headless_build.py` / a new `headless_*_build.py` / `backend/core`, never in a god-file. Its anti-shovel
+metric is **"validation gained, not just a passthrough"** (an oracle that asserts a property of the result),
+the analog of the carve-up's back-import-surface gate. Read its backlog's `## Next-session handoff` to start.
+
 ## Cross-references
 
 - Construction mechanics + init/subscription order: `.claude/rules/main-init.md`

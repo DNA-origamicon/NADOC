@@ -29,16 +29,34 @@ from backend.api import doc_context
 from backend.api import state as design_state
 from backend.api.crud import (
     BundleContinuationRequest,
+    BundleDeformedContinuationRequest,
     BundleRequest,
     BundleSegmentRequest,
+    CircleSegmentRequest,
+    NickRequest,
     OverhangExtrudeRequest,
     add_bundle_continuation as _route_extrude,
+    add_bundle_deformed_continuation as _route_deformed_continuation,
     add_bundle_segment as _route_extrude_segment,
+    add_circle_segment as _route_circle_segment,
+    add_nick as _route_add_nick,
+    apply_loop_skips_from_deformations as _route_apply_loop_skip_deformations,
     auto_break as _route_auto_break,
     auto_crossover as _route_auto_crossover,
     auto_merge as _route_auto_merge,
     create_bundle as _route_create_bundle,
+    delete_strand as _route_delete_strand,
+    get_deformed_frame as _route_deformed_frame,
+    ligate_strand as _route_ligate,
     overhang_extrude as _route_overhang_extrude,
+)
+from backend.api.routes_deformation import (
+    AddDeformationBody,
+    add_deformation as _route_add_deformation,
+)
+from backend.api.routes_loop_skip import (
+    LoopSkipInsertRequest,
+    insert_loop_skip as _route_insert_loop_skip,
 )
 from backend.api.routes_assign_sequences import (
     _FullAutostapleBody,
@@ -49,6 +67,10 @@ from backend.api.routes_assign_sequences import (
 from backend.api.routes_scaffold_routing import (
     auto_scaffold_seamed_endpoint as _route_auto_scaffold_seamed,
     auto_scaffold_seamless_endpoint as _route_auto_scaffold_seamless,
+)
+from backend.core.circle_primitive import (
+    DEFAULT_MIN_CHORD_BP as _DEFAULT_MIN_CHORD_BP,
+    circle_footprint,
 )
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import Design, Direction, LatticeType
@@ -162,6 +184,88 @@ def extrude_segment(
     return design_state.get_or_404()
 
 
+def circle_segment(
+    radius_nm: float,
+    *,
+    plane: str = "XY",
+    offset_nm: float = 0.0,
+    strand_filter: str = "both",
+    ligate_adjacent: bool = True,
+    min_chord_bp: int = _DEFAULT_MIN_CHORD_BP,
+) -> Design:
+    """Place a parametric circle (flat disc) of ``radius_nm`` (POST /design/circle-segment).
+
+    A "circle" is a single row of SQUARE-lattice helices whose per-cell lengths
+    trace a circular chord profile, every helix centred on ``offset_nm`` so the
+    disc is bisected by the slice plane.  Unlike the route — which takes the
+    pre-computed ``cells`` + ``cell_lengths`` the UI's preview derives — this
+    wrapper takes the *radius* and runs the same analytic footprint
+    (:func:`backend.core.circle_primitive.circle_footprint`) the frontend mirror
+    uses, so a scripted disc is identical to a clicked one.  Build inside a SQUARE
+    :func:`scratch_session` (the column pitch the chord profile assumes is the
+    SQUARE lattice's).  Records a ``circle-segment`` feature-log entry.
+
+    Raises ``ValueError`` if ``radius_nm`` is too small to admit even the centre
+    column (no helix clears ``min_chord_bp``).
+    """
+    footprint = circle_footprint(
+        radius_nm, plane=plane, min_chord_bp=min_chord_bp,
+    )
+    if footprint is None:
+        raise ValueError(
+            f"radius {radius_nm} nm is too small to place any helix "
+            f"(no chord reaches the {min_chord_bp}-bp floor)"
+        )
+    _route_circle_segment(CircleSegmentRequest(
+        cells=footprint["cells"],
+        cell_lengths=footprint["cell_lengths"],
+        plane=plane,
+        offset_nm=offset_nm,
+        strand_filter=strand_filter,
+        ligate_adjacent=ligate_adjacent,
+    ))
+    return design_state.get_or_404()
+
+
+def bundle_deformed_continuation(
+    cells,
+    length_bp: int,
+    *,
+    source_bp: int,
+    ref_helix_id: str | None = None,
+    plane: str = "XY",
+) -> Design:
+    """Extrude a continuation onto the DEFORMED cross-section frame (POST /design/bundle-deformed-continuation).
+
+    Unlike :func:`extrude` (which continues a *straight* blunt end), this lands the
+    new helices on the deformed cross-section at ``source_bp`` — the cell-grid
+    rotated and translated to follow an upstream bend/twist.  Mirrors the UI flow
+    exactly: it first samples the deformed frame at ``source_bp`` via
+    ``GET /design/deformed-frame`` (the same handler the slice-plane tool calls),
+    then POSTs the continuation *with* ``source_bp`` so the route RE-derives the
+    frame server-side from the live design — the replayable path (if the upstream
+    bend is later deleted/edited, re-running re-places the segment; see
+    ``BundleDeformedContinuationRequest.source_bp``).  ``length_bp`` may be negative
+    (extrude backward along the deformed tangent).  Requires an active design with
+    at least one bend/twist op (else the sampled frame is straight and this is just
+    a plain continuation).  Records an ``extrude-deformed-continuation`` feature-log
+    entry.
+    """
+    frame = _route_deformed_frame(source_bp=source_bp, ref_helix_id=ref_helix_id)
+    _route_deformed_continuation(BundleDeformedContinuationRequest(
+        cells=[list(c) for c in cells],
+        length_bp=length_bp,
+        grid_origin=frame["grid_origin"],
+        axis_dir=frame["axis_dir"],
+        frame_right=frame["frame_right"],
+        frame_up=frame["frame_up"],
+        plane=plane,
+        ref_helix_id=ref_helix_id,
+        source_bp=source_bp,
+    ))
+    return design_state.get_or_404()
+
+
 def build_bundle(
     cells,
     length_bp: int,
@@ -195,6 +299,156 @@ def build_bundle(
                 plane=plane, strand_filter=strand_filter, extend_inplace=True,
             )
         return design_state.get_or_404().model_copy(deep=True)
+
+
+# ── Strand-edit wrappers (nick / ligate / delete) ────────────────────────────────
+# nick and ligate are an exact inverse pair: both take the SAME (helix, bp,
+# direction) shape (NickRequest), so ``ligate(*args)`` repairs ``nick(*args)``.
+# All three drive the real route handler and mutate the active document, so they
+# chain after create_bundle/extrude inside a scratch_session exactly as a person
+# clicks.  Handlers raise ``fastapi.HTTPException`` on bad input (e.g. nicking a
+# strand's 3′ terminus → 400; ligating where no nick exists → 404).
+
+
+def nick(helix_id: str, bp_index: int, direction: Direction) -> Design:
+    """Break a strand at the 3′ side of (helix_id, bp_index, direction) (POST /design/nick).
+
+    ``bp_index`` becomes the 3′ end of the left fragment; the next nucleotide in
+    5′→3′ order becomes the 5′ end of the right fragment.  Inverse of :func:`ligate`
+    with the same arguments.  Records a ``nick`` minor-log entry.
+    """
+    _route_add_nick(NickRequest(helix_id=helix_id, bp_index=bp_index, direction=direction))
+    return design_state.get_or_404()
+
+
+def ligate(helix_id: str, bp_index: int, direction: Direction) -> Design:
+    """Repair a nick at (helix_id, bp_index, direction) (POST /design/ligate).
+
+    Merges the strand whose 3′ end sits at ``bp_index`` with the strand whose 5′
+    end sits at the adjacent bp.  Exact inverse of :func:`nick` (identical request
+    shape).  Records a ``ligate`` minor-log entry.
+    """
+    _route_ligate(NickRequest(helix_id=helix_id, bp_index=bp_index, direction=direction))
+    return design_state.get_or_404()
+
+
+def delete_strand(strand_id: str) -> Design:
+    """Delete a strand by id (DELETE /design/strands/{id}).
+
+    Cascades linker/overhang cleanup the same way the UI's delete does.  Records a
+    ``strand-delete`` minor-log entry.
+    """
+    _route_delete_strand(strand_id)
+    return design_state.get_or_404()
+
+
+# ── Loop/skip wrappers ───────────────────────────────────────────────────────────
+# Loop/skip marks live on Helix.loop_skips and change the *effective* bp count of a
+# helix: a loop (+1) inserts one extra base, a skip (−1) deletes one — the geometry
+# layer emits one fewer / one more nucleotide per strand accordingly (see
+# ``geometry.nucleotide_positions``).  Both wrappers drive the real route handler
+# and mutate the active document, so they chain after create_bundle/route inside a
+# scratch_session.  Handlers raise ``fastapi.HTTPException`` on bad input.
+
+
+def loop_skip(helix_id: str, bp_index: int, delta: int) -> Design:
+    """Insert or remove a single loop/skip at (helix_id, bp_index) (POST /design/loop-skip/insert).
+
+    ``delta=+1`` inserts a loop (extra base → geometry gains one nucleotide per
+    strand), ``delta=-1`` inserts a skip (deleted base → geometry loses one per
+    strand), and ``delta=0`` *removes* any existing mark at that position — the
+    documented "delta=0 removes" convention (a loop/skip's own inverse).  Records a
+    ``loop-skip-insert`` minor-log entry.
+    """
+    _route_insert_loop_skip(LoopSkipInsertRequest(
+        helix_id=helix_id, bp_index=bp_index, delta=delta,
+    ))
+    return design_state.get_or_404()
+
+
+def apply_loop_skip_deformations() -> Design:
+    """Bake every DeformationOp into concrete loop/skip marks (POST /design/loop-skip/apply-deformations).
+
+    Wipes existing marks, then for each bend/twist op (and, on SQUARE lattices, the
+    periodic skips) computes the per-helix loop/skip pattern and applies it
+    atomically — the topological realisation of a geometric deformation.  Requires
+    crossovers placed (cells are 7 bp) and at least one deformation op (or a SQUARE
+    design).  Records an ``apply-loop-skips`` feature-log entry.
+    """
+    _route_apply_loop_skip_deformations()
+    return design_state.get_or_404()
+
+
+# ── Deformation (bend/twist) wrappers ────────────────────────────────────────────
+# A bend/twist is a GEOMETRIC overlay (a DeformationOp): topology is never bent (the
+# Three-Layer Law). Both wrappers drive the real route handler (add_deformation), so
+# /design/deformation flips to covered by function identity and a scripted bend is
+# indistinguishable from a clicked one (same revertable DeformationLogEntry). The
+# total angle of the result is pinned by automation_harness.assert_deformation_angle
+# (a DIRECTION-AGNOSTIC magnitude oracle — the bend/twist SIGN + frame conventions
+# are an ASK-FIRST topic per CLAUDE.md, so neither these wrappers nor that oracle
+# reason about them).
+
+
+def add_bend(
+    plane_a_bp: int,
+    plane_b_bp: int,
+    *,
+    curvature_deg_per_bp: float,
+    direction_deg: float = 0.0,
+    affected_helix_ids=(),
+    cluster_ids=(),
+) -> Design:
+    """Add a bend between two bp planes (POST /design/deformation, type='bend').
+
+    The bend's total angle is ``curvature_deg_per_bp × (plane_b_bp − plane_a_bp)``
+    (the value the popup reads back as "Angle"); ``direction_deg`` rotates the bend
+    plane within the cross-section (0 = +X).  When ``affected_helix_ids`` /
+    ``cluster_ids`` are both empty the op auto-applies to every helix crossing both
+    planes (the unscoped default).  Records a revertable ``deformation`` feature-log
+    entry.  Pin the realised magnitude with
+    :func:`tests.automation_harness.assert_deformation_angle`.
+    """
+    _route_add_deformation(AddDeformationBody(
+        type="bend", plane_a_bp=plane_a_bp, plane_b_bp=plane_b_bp,
+        affected_helix_ids=list(affected_helix_ids), cluster_ids=list(cluster_ids),
+        params={"kind": "bend", "curvature_deg_per_bp": curvature_deg_per_bp,
+                "direction_deg": direction_deg},
+    ))
+    return design_state.get_or_404()
+
+
+def add_twist(
+    plane_a_bp: int,
+    plane_b_bp: int,
+    *,
+    total_degrees: float | None = None,
+    degrees_per_nm: float | None = None,
+    affected_helix_ids=(),
+    cluster_ids=(),
+) -> Design:
+    """Add a twist between two bp planes (POST /design/deformation, type='twist').
+
+    Specify the twist as either a ``total_degrees`` across the window OR a
+    ``degrees_per_nm`` rate — pass exactly one (they are mutually exclusive in
+    :class:`TwistParams`).  When ``affected_helix_ids`` / ``cluster_ids`` are both
+    empty the op auto-applies to every helix crossing both planes.  Records a
+    revertable ``deformation`` feature-log entry.  Pin the realised magnitude with
+    :func:`tests.automation_harness.assert_deformation_angle`.
+    """
+    if (total_degrees is None) == (degrees_per_nm is None):
+        raise ValueError("pass exactly one of total_degrees / degrees_per_nm")
+    params: dict = {"kind": "twist"}
+    if total_degrees is not None:
+        params["total_degrees"] = total_degrees
+    else:
+        params["degrees_per_nm"] = degrees_per_nm
+    _route_add_deformation(AddDeformationBody(
+        type="twist", plane_a_bp=plane_a_bp, plane_b_bp=plane_b_bp,
+        affected_helix_ids=list(affected_helix_ids), cluster_ids=list(cluster_ids),
+        params=params,
+    ))
+    return design_state.get_or_404()
 
 
 # ── Auto-op wrappers ─────────────────────────────────────────────────────────────

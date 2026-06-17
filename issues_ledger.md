@@ -757,6 +757,35 @@ pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 wit
   tooling / notebook / curl-based workflow depends on them (the carve-up only proved no *in-repo* caller).
 - **Scope:** tiny, mechanical deletion. No behavior change (nothing calls them). Low priority.
 
+## ISSUE-11 — Deformed-continuation helices carry `grid_pos=None` (data-model inconsistency; ask-first)
+
+- **Status:** `[ ]` OPEN. Discovered 2026-06-17 during AF-5 (`/automate-feature`, deformed-continuation
+  headless wrapper). NOT fixed — it's a three-layer/directionality question (see "desired behavior").
+- **Symptom:** `make_bundle_deformed_continuation` (`backend/core/lattice.py:1234`) is the **only** bundle
+  builder that does not set `grid_pos` on the new `Helix` it creates — `make_bundle_design`,
+  `make_bundle_segment`, and `make_bundle_continuation` all pass `grid_pos=(row,col)`. Because the new helix's
+  id collides with the source cell's (`h_XY_0_0` → `_unique_id` → `h_XY_0_0_1`), the legacy
+  `_recover_grid_pos` regex (`fullmatch r'h_XY_(-?\d+)_(-?\d+)'`) does NOT back-fill it either, so the helix
+  ends up with `grid_pos=None`.
+- **Impact:** any design containing a deformed continuation crashes `canonical_topology` /
+  `assert_roundtrip_stable` (`TypeError: '<' not supported between NoneType and tuple` — it sorts on
+  grid_pos). More broadly, grid_pos drives cluster reconciliation, overhang-neighbor lookup, and
+  `loop_skip_calculator` (which raises "no grid_pos") — so a deformed-continuation segment may be invisible to
+  or break those features. AF-5 worked around it by using a pure geometric oracle (`assert_on_deformed_frame`)
+  instead of the round-trip oracle.
+- **Where:** `backend/core/lattice.py` ~1322 (the `Helix(...)` constructor inside
+  `make_bundle_deformed_continuation`); `canonical_topology` in `tests/automation_harness.py:52`.
+- **Desired behavior (ASK USER FIRST — do NOT just patch):** likely fix = add `grid_pos=(row, col)` to that
+  constructor to match every sibling builder. BUT the omission may be **intentional**: a non-None grid_pos
+  could make the straight-geometry path (`_helix_lattice_params`, which derives x/y from grid_pos) recompute
+  the helix's lattice position and *clobber the baked deformed world-coordinates* the deformed continuation
+  stores in `axis_start`/`axis_end`. This is a three-layer (topology↔geometry) boundary question — confirm
+  with the user whether geometry reads grid_pos or the baked axis for these helices before changing it.
+  Secondary (defensive, independent): make `canonical_topology` tolerate `grid_pos=None` (stable sort key)
+  so the round-trip oracle degrades instead of crashing.
+- **Scope:** one-line builder change IF approved; small oracle hardening. Medium priority (blocks round-trip
+  validation of any deformed design; may mask feature breakage).
+
 ## Next-session handoff
 
 _Living pointer — each session overwrites this. Last updated 2026-06-08 (ISSUE-7 shipped: negative-bp element

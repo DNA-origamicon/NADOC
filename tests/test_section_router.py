@@ -29,6 +29,9 @@ from backend.core.models import Design, StrandType
 from backend.core.seamed_router import _scaffold_coverage, auto_scaffold_seamed
 from backend.core.seamless_router import auto_scaffold_seamless
 from backend.core.section_router import route_sections
+# Promoted to the shared automation harness (AF-1) so the design-automation loop's
+# round-trip oracle and this router test share one definition.
+from tests.automation_harness import canonical_topology as _canonical_topology
 
 _ROOT = Path(__file__).resolve().parents[1]
 _TEETH = _ROOT / "tests" / "fixtures" / "teeth.nadoc"
@@ -52,33 +55,6 @@ def _load(path: Path) -> Design:
     if not path.exists():
         pytest.skip(f"{path} not available")
     return Design(**json.loads(path.read_text()))
-
-
-def _canonical_topology(d: Design):
-    """ID- and order-independent fingerprint of a design's topology.
-
-    Helices are keyed by ``grid_pos`` (unique per helix and stable across id
-    schemes); strand domains reference helices by that same key.  Two designs
-    with this fingerprint equal are treated identically by any pure router,
-    since route_sections is a pure function of topology.
-    """
-    gp = {h.id: h.grid_pos for h in d.helices}
-    helices = sorted(
-        (
-            h.grid_pos, h.length_bp, h.bp_start,
-            round(h.axis_start.x, 4), round(h.axis_start.y, 4), round(h.axis_start.z, 4),
-            round(h.axis_end.x, 4), round(h.axis_end.y, 4), round(h.axis_end.z, 4),
-        )
-        for h in d.helices
-    )
-    strands = sorted(
-        (
-            str(s.strand_type),
-            tuple((gp[dm.helix_id], dm.start_bp, dm.end_bp, str(dm.direction)) for dm in s.domains),
-        )
-        for s in d.strands
-    )
-    return helices, strands
 
 
 def _segmented_helices(base: Design) -> dict[str, list[dict]]:
