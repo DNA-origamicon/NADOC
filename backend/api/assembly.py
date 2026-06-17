@@ -43,12 +43,9 @@ GET   /debug/assembly-joint-transform/{joint_id}  preview joint transform at ang
 
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 import os
 import uuid as _uuid
-from collections import OrderedDict
 from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
 from typing import Optional
@@ -83,62 +80,23 @@ _WORKSPACE_DIR = Path(os.environ.get("NADOC_WORKSPACE", str(_PROJECT_ROOT / "wor
 
 
 # ── Geometry cache ─────────────────────────────────────────────────────────────
-# In-memory LRU cache for nucleotide geometry + helix axes.
-# Key: stable fingerprint of (source file + mtime, cluster_transform_overrides).
-# Value: {"nucleotides": [...], "helix_axes": [...], "design": {...}}
-# Avoids re-running the expensive _geometry_for_design pipeline on repeated calls
-# for the same design configuration (e.g. undo/redo, reassembly rebuilds, tab
-# switches back to the same instance).
+# The LRU + cache-key compute live in backend/core/assembly_geometry.py (router
+# carve-up Refactor #49 — pure, unit-tested, no api deps). These thin shims keep
+# the original private names (imported back by routes_assembly_geometry / _frames)
+# and pass the api-layer's monkeypatch-able _WORKSPACE_DIR into the pure key fn.
+from backend.core import assembly_geometry as _ageo  # noqa: E402
 
-_GEO_CACHE: OrderedDict[str, dict] = OrderedDict()
-_GEO_CACHE_MAX = 16
+_geo_cache_get = _ageo.geo_cache_get
+_geo_cache_set = _ageo.geo_cache_set
 
 
 def _geo_cache_key(inst: "PartInstance") -> str | None:
-    """Return a stable cache key for an instance's geometry, or None if not cacheable."""
-    overrides = inst.cluster_transform_overrides or []
-    try:
-        ov_str = json.dumps(
-            [co.model_dump() for co in overrides],
-            sort_keys=True, separators=(',', ':'),
-        )
-    except Exception:
-        return None
-    ov_hash = hashlib.sha256(ov_str.encode()).hexdigest()[:12] if overrides else ''
+    """Stable per-instance geometry cache key (None if not cacheable).
 
-    src = inst.source
-    if src.type == 'file':
-        p = Path(src.path)
-        if not p.is_absolute():
-            for base in filter(None, [_WORKSPACE_DIR]):
-                candidate = (base / p).resolve()
-                if candidate.is_file():
-                    p = candidate
-                    break
-            else:
-                return None
-        if not p.is_file():
-            return None
-        mtime_ns = p.stat().st_mtime_ns
-        return f"f:{p}:{mtime_ns}:{ov_hash}"
-    elif src.type == 'inline' and src.design:
-        return f"i:{src.design.id}:{ov_hash}"
-    return None
-
-
-def _geo_cache_get(key: str) -> dict | None:
-    if key not in _GEO_CACHE:
-        return None
-    _GEO_CACHE.move_to_end(key)
-    return _GEO_CACHE[key]
-
-
-def _geo_cache_set(key: str, value: dict) -> None:
-    if key in _GEO_CACHE:
-        _GEO_CACHE.move_to_end(key)
-    _GEO_CACHE[key] = value
-    while len(_GEO_CACHE) > _GEO_CACHE_MAX:
-        _GEO_CACHE.popitem(last=False)
+    Delegates to the pure ``assembly_geometry.geo_cache_key``, threading in the
+    live ``_WORKSPACE_DIR`` at call time so tests that monkeypatch it still win.
+    """
+    return _ageo.geo_cache_key(inst, _WORKSPACE_DIR)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -225,15 +183,13 @@ def _load_design_from_source(source, assembly_path: str | None = None):
 
 
 def _design_with_instance_overrides(inst: PartInstance, assembly_path: str | None = None):
-    """Resolve an instance design plus assembly-scoped cluster transform overrides."""
+    """Resolve an instance design plus assembly-scoped cluster transform overrides.
+
+    File load stays here (L4-blocked on HTTPException); the pure override merge
+    is ``assembly_geometry.merge_cluster_overrides`` (Refactor #49).
+    """
     design = _load_design_from_source(inst.source, assembly_path)
-    if not inst.cluster_transform_overrides:
-        return design
-    overrides = {ct.id: ct for ct in inst.cluster_transform_overrides}
-    merged = [overrides.get(ct.id, ct) for ct in design.cluster_transforms]
-    existing = {ct.id for ct in merged}
-    merged.extend(ct for ct in inst.cluster_transform_overrides if ct.id not in existing)
-    return design.copy_with(cluster_transforms=merged)
+    return _ageo.merge_cluster_overrides(design, inst.cluster_transform_overrides)
 
 
 def _display_design(design):
@@ -1288,7 +1244,7 @@ def _replace_instance_design(assembly: Assembly, inst: PartInstance, design) -> 
     assembly_state.snapshot()
     updated = assembly.model_copy(update={"instances": new_instances})
     assembly_state.set_assembly_silent(updated)
-    _GEO_CACHE.clear()
+    _ageo.clear_geo_cache()
     return assembly_state.get_or_404(), new_inst
 
 

@@ -18,14 +18,15 @@ Routes
   GET /assembly/instances/{id}/surface-geometry     — triangulated molecular surface
   GET /assembly/geometry                            — batch geometry, all visible instances (dedup by source)
 
-Back-imports (B=8, all shared read-kernel / cache infrastructure, bespoke-B=0):
+Back-imports (raw-B=6, all shared read-kernel / cache infrastructure, bespoke-B=0):
 ``_find_instance`` (the trivial instance lookup, 7+ shared callers),
 ``_assembly_source_path`` / ``_load_design_from_source`` / ``_design_with_instance_overrides``
 (file-IO design-load infra, L4-blocked from core, 3-7 shared callers each),
 ``_display_design`` (shared cross-region display shim, also used by the polymerize
-router), and the geometry-cache trio ``_geo_cache_key`` / ``_geo_cache_get`` /
-``_geo_cache_set`` (tied to assembly.py's module-level ``_GEO_CACHE`` state and
-also read by other assembly routes + the frames router — shared cache infra).
+router), and ``_geo_cache_key`` (api shim threading the monkeypatch-able
+``_WORKSPACE_DIR`` into the pure key fn). The pure LRU ``geo_cache_get`` /
+``geo_cache_set`` are imported DIRECTLY from ``backend.core.assembly_geometry``
+(Refactor #49), not back from the god-file — they have no workspace dependency.
 The geometry math itself (``_geometry_for_design``, ``deformed_helix_axes``,
 ``build_atomistic_model``, ``compute_surface``, …) is imported function-locally
 from ``backend.api.crud`` / ``backend.core`` exactly as it was in assembly.py —
@@ -45,10 +46,12 @@ from backend.api.assembly import (
     _design_with_instance_overrides,
     _display_design,
     _find_instance,
-    _geo_cache_get,
     _geo_cache_key,
-    _geo_cache_set,
     _load_design_from_source,
+)
+from backend.core.assembly_geometry import (
+    geo_cache_get as _geo_cache_get,
+    geo_cache_set as _geo_cache_set,
 )
 
 router = APIRouter()

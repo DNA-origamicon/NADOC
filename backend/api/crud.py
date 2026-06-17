@@ -97,16 +97,11 @@ from backend.api import state as design_state
 from backend.api.doc_context import should_skip_geometry
 from backend.core.geometry import (
     nucleotide_positions,
-    nucleotide_positions_arrays_extended,
-    nucleotide_positions_arrays_extended_right,
 )
 from backend.core.deformation import (
     _apply_ovhg_rotations_to_axes,
-    apply_overhang_rotation_if_needed,
     deformed_frame_at_bp,
     deformed_helix_axes,
-    deformed_nucleotide_arrays,
-    effective_helix_for_geometry,
 )
 from backend.core.feature_log_edit import (
     FeatureEditError,
@@ -147,13 +142,27 @@ from backend.core.cluster_autodetect import (  # noqa: F401
 # (assembly geometry routes, exporters, feature-log preview, linker_relax, …)
 # keep working unchanged.
 from backend.core.design_geometry import (  # noqa: F401
+    _compact_geometry_for_design,
+    _compact_geometry_from_nucleotides,
     _emit_bridge_nucs,
     _geometry_for_design,
     _geometry_for_design_straight,
     _geometry_for_helices,
+    _positions_by_helix,
+    _positions_for_design,
     _straight_helix_axes,
     _strand_extension_geometry,
     _strand_nucleotide_info,
+)
+# Render fast-path diff kernel lives in backend/core (pure Design×Design
+# comparison; carve-up service push #47). Re-exported here under the original
+# underscore names so the response fast-path callers + the test imports
+# (`from backend.api.crud import _topology_diff_field`) keep working unchanged.
+from backend.core.render_diff import (  # noqa: F401
+    _cluster_diff_payload,
+    _diff_is_cluster_only,
+    _topology_diff_field,
+    _topology_unchanged,
 )
 from backend.core.overhang_ops import (
     SubDomainTilingError,
@@ -316,88 +325,6 @@ def _inject_joint_world_axes(design_dict: dict) -> None:
         world_origin, world_dir = _local_to_world_joint(local_origin, local_dir, ct)
         j['axis_origin']    = world_origin
         j['axis_direction'] = world_dir
-
-
-def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
-    """Convert a flat list of nucleotide dicts into the COMPACT
-    per-helix-per-direction parallel-array form used by the
-    ``nucleotides_compact`` wire format. See _compact_geometry_for_design
-    for the rationale; this helper exists so callers that already have the
-    nucleotide list (e.g. _design_response_with_geometry) don't recompute it.
-    """
-    out: dict = {}
-    for n in nucleotides:
-        helix = n.get("helix_id")
-        if helix is None:
-            continue
-        direction = n.get("direction")
-        helix_bucket = out.get(helix)
-        if helix_bucket is None:
-            helix_bucket = {}
-            out[helix] = helix_bucket
-        b = helix_bucket.get(direction)
-        if b is None:
-            b = {
-                "bp": [], "bb": [], "bs": [], "bn": [], "at": [],
-                "sid": [], "stype": [], "is5": [], "is3": [],
-                "did": [], "ohid": [],
-                # Sparse fields: appended lazily, so empty arrays don't ship.
-                "extid": None, "ismod": None, "mod": None, "base": None,
-            }
-            helix_bucket[direction] = b
-        b["bp"].append(n.get("bp_index"))
-        b["bb"].append(n.get("backbone_position"))
-        b["bs"].append(n.get("base_position"))
-        b["bn"].append(n.get("base_normal"))
-        b["at"].append(n.get("axis_tangent"))
-        b["sid"].append(n.get("strand_id"))
-        b["stype"].append(n.get("strand_type"))
-        b["is5"].append(bool(n.get("is_five_prime")))
-        b["is3"].append(bool(n.get("is_three_prime")))
-        b["did"].append(n.get("domain_index", 0))
-        b["ohid"].append(n.get("overhang_id"))
-        # Sparse fields — only allocate the array when first non-default appears.
-        ext_id = n.get("extension_id")
-        if ext_id is not None:
-            if b["extid"] is None: b["extid"] = [None] * (len(b["bp"]) - 1)
-            b["extid"].append(ext_id)
-        elif b["extid"] is not None:
-            b["extid"].append(None)
-        is_mod = bool(n.get("is_modification"))
-        if is_mod:
-            if b["ismod"] is None: b["ismod"] = [False] * (len(b["bp"]) - 1)
-            b["ismod"].append(True)
-        elif b["ismod"] is not None:
-            b["ismod"].append(False)
-        mod = n.get("modification")
-        if mod is not None:
-            if b["mod"] is None: b["mod"] = [None] * (len(b["bp"]) - 1)
-            b["mod"].append(mod)
-        elif b["mod"] is not None:
-            b["mod"].append(None)
-        base = n.get("nucleobase")
-        if base is not None:
-            if b["base"] is None: b["base"] = [None] * (len(b["bp"]) - 1)
-            b["base"].append(base)
-        elif b["base"] is not None:
-            b["base"].append(None)
-    # Drop sparse-field placeholders that never got populated, to keep the wire
-    # tight when none of those fields apply.
-    for helix_bucket in out.values():
-        for b in helix_bucket.values():
-            for k in ("extid", "ismod", "mod", "base"):
-                if b.get(k) is None:
-                    b.pop(k, None)
-    return out
-
-
-def _compact_geometry_for_design(design: 'Design') -> dict:
-    """Compute full deformed geometry in COMPACT per-helix-per-direction
-    parallel-arrays form. Wire size is ~50% of the equivalent dict-list
-    ``nucleotides`` payload because field names don't repeat per nuc;
-    JSON.parse on the frontend is roughly proportionally faster.
-    """
-    return _compact_geometry_from_nucleotides(_geometry_for_design(design))
 
 
 def _design_response_with_geometry(
@@ -832,322 +759,6 @@ def export_design() -> Response:
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{safe}"'},
     )
-
-
-def _diff_is_cluster_only(prev: 'Design', new: 'Design') -> bool:
-    """True iff prev and new differ ONLY in cluster_transforms' rotation /
-    translation (no add/remove/structural/pivot change). Used by undo/redo
-    to take a Plan-B-style fast path that avoids the full geometry recompute
-    and the frontend scene rebuild.
-
-    Cluster_joints are allowed to differ because they move with cluster
-    transforms by design.
-
-    Pivot equality is required because the frontend's delta-transform math
-    (which composes the existing applyClusterTransform call to step from
-    the OLD cluster transform's world position to the NEW one) only holds
-    when the pivot is unchanged. If pivots differ, the math would need to
-    re-resolve via the straight-position basis — fall back to the full
-    geometry refetch path in that rare case.
-    """
-    structural = [
-        'helices', 'strands', 'crossovers', 'forced_ligations',
-        'deformations', 'extensions', 'overhangs', 'overhang_connections',
-        'photoproduct_junctions',
-    ]
-    for f in structural:
-        if getattr(prev, f) != getattr(new, f):
-            return False
-    if len(prev.cluster_transforms) != len(new.cluster_transforms):
-        return False
-    if prev.cluster_transforms == new.cluster_transforms:
-        return False   # nothing changed at all — let the regular path handle it
-    by_id_prev = {ct.id: ct for ct in prev.cluster_transforms}
-    by_id_new  = {ct.id: ct for ct in new.cluster_transforms}
-    if set(by_id_prev) != set(by_id_new):
-        return False   # cluster added or removed
-    for cid, p_ct in by_id_prev.items():
-        n_ct = by_id_new[cid]
-        if p_ct.helix_ids   != n_ct.helix_ids:   return False
-        if p_ct.domain_ids  != n_ct.domain_ids:  return False
-        if p_ct.name        != n_ct.name:        return False
-        if p_ct.is_default  != n_ct.is_default:  return False
-        if p_ct.pivot       != n_ct.pivot:       return False   # frontend delta math requires this
-    return True
-
-
-def _cluster_diff_payload(prev: 'Design', new: 'Design') -> list[dict]:
-    """For each cluster whose translation / rotation / pivot changed
-    between *prev* and *new*, emit a record the frontend can use to
-    apply the delta to the renderer's bead/slab/cone/axis matrices
-    in-place. Caller is responsible for ensuring `_diff_is_cluster_only`
-    holds — this helper just emits the records.
-    """
-    by_id_prev = {ct.id: ct for ct in prev.cluster_transforms}
-    out = []
-    for n_ct in new.cluster_transforms:
-        p_ct = by_id_prev.get(n_ct.id)
-        if p_ct is None:
-            continue
-        if (p_ct.translation == n_ct.translation
-                and p_ct.rotation == n_ct.rotation
-                and p_ct.pivot == n_ct.pivot):
-            continue
-        out.append({
-            "cluster_id": n_ct.id,
-            "helix_ids":  list(n_ct.helix_ids),
-            "old_translation": list(p_ct.translation),
-            "old_rotation":    list(p_ct.rotation),
-            "old_pivot":       list(p_ct.pivot),
-            "new_translation": list(n_ct.translation),
-            "new_rotation":    list(n_ct.rotation),
-            "new_pivot":       list(n_ct.pivot),
-        })
-    return out
-
-
-def _topology_unchanged(prev: 'Design', new: 'Design') -> bool:
-    """True iff the renderer's structural inventory (mesh/cone/slab counts,
-    axis-tube curvature, helix lengths) is invariant between prev and new.
-
-    The frontend's ``positions_only`` fast path mutates per-nuc positions in
-    place WITHOUT a full design_renderer rebuild, so anything that would force
-    a rebuild must be excluded here:
-
-      • Helix add/remove or axis change → mesh count / curvature change.
-      • Strand domain change → which bps have nucs.
-      • Crossover/extension/overhang change → adds or removes nucs.
-      • DEFORMATION add/remove/edit → can flip a helix between straight and
-        curved, which requires rebuilding the axis tube geometry.
-
-    Cluster transforms ARE allowed to differ — they just translate/rotate
-    existing meshes without changing topology or curvature.
-    """
-    return _topology_diff_field(prev, new) is None
-
-
-def _topology_diff_field(prev: 'Design', new: 'Design') -> str | None:
-    """If the topology check rejects, return the name of the field that
-    differs. ``None`` means topology IS unchanged. Used to attach a more
-    informative ``path:full_geometry(<reason>)`` tag to the perf trace so
-    you can see at a glance why positions_only didn't fire."""
-    if prev.helices != new.helices:           return "helices"
-    if prev.strands != new.strands:           return "strands"
-    if prev.crossovers != new.crossovers:     return "crossovers"
-    if prev.extensions != new.extensions:     return "extensions"
-    if prev.overhang_connections != new.overhang_connections: return "overhang_connections"
-    if prev.overhangs != new.overhangs:       return "overhangs"
-    if prev.forced_ligations != new.forced_ligations: return "forced_ligations"
-    if prev.photoproduct_junctions != new.photoproduct_junctions: return "photoproduct_junctions"
-    if prev.deformations != new.deformations: return "deformations"
-    # Flexible-segment marks change per-bead `is_flexible_segment` (which beads
-    # render rigid vs. as a bowed arc) and carve the helix axis — the
-    # positions_only fast path ships neither, so force full geometry. Without
-    # this, undo/redo/seek of a mark leaves beads excluded with a stale flag and
-    # no arc → the segment vanishes.
-    if prev.flexible_segment_marks != new.flexible_segment_marks: return "flexible_segment_marks"
-    return None
-
-
-def _positions_by_helix(nucleotides: list[dict]) -> dict:
-    """Compact per-nuc-position payload for the ``positions_only`` diff,
-    converted from a list-of-dicts. Used as a fallback when callers already
-    have nucleotide dicts on hand. Hot paths should call
-    :func:`_positions_for_design` instead, which emits parallel arrays
-    directly from the numpy pipeline and skips the per-nuc dict allocation.
-    """
-    out: dict = {}
-    for n in nucleotides:
-        helix = n.get("helix_id")
-        if helix is None:
-            continue
-        direction = n.get("direction")
-        bucket = out.setdefault(helix, {}).setdefault(direction, None)
-        if bucket is None:
-            bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
-            out[helix][direction] = bucket
-        bucket["bp"].append(n.get("bp_index"))
-        bucket["bb"].append(n.get("backbone_position"))
-        bucket["bs"].append(n.get("base_position"))
-        bucket["bn"].append(n.get("base_normal"))
-        bucket["at"].append(n.get("axis_tangent"))
-    return out
-
-
-def _positions_for_design(design: 'Design') -> tuple[dict, list[dict]]:
-    """Compute positions for *design* in compact per-helix-per-direction
-    parallel arrays, **without** materialising per-nuc dicts for the bulk
-    geometry. Used by the ``positions_only`` fast path.
-
-    Returns ``(positions_by_helix, helix_axes)``.
-
-    The numpy pipeline (``deformed_nucleotide_arrays`` + extension/loop
-    helpers) is the same as ``_geometry_for_helices``; the saving comes
-    from skipping the ~50K dict allocations + ``**sinfo`` spreads that
-    dominate the full-geometry path's response-build time.
-
-    ds-linker bridge nucs: ``_emit_bridge_nucs`` emits per-nuc dicts and
-    needs anchor-nuc lookups by overhang_id. Bridges are a tiny fraction
-    of total nucs (≤200 per design), so we build a thin dict list for
-    JUST the OH-bearing helices and feed that through the existing helper,
-    then fold the resulting bridge-nuc positions into ``positions_by_helix``.
-    Bulk positions stay dict-free.
-    """
-    from backend.core.deformation import (
-        deform_extended_arrays,
-    )
-
-    positions: dict = {}
-
-    # Strand-domain bp range per helix (needed for ss-scaffold loop extensions).
-    min_domain_bp: dict[str, int] = {}
-    max_domain_bp: dict[str, int] = {}
-    for strand in design.strands:
-        for domain in strand.domains:
-            lo = min(domain.start_bp, domain.end_bp)
-            hi = max(domain.start_bp, domain.end_bp)
-            hid = domain.helix_id
-            if hid not in min_domain_bp or lo < min_domain_bp[hid]:
-                min_domain_bp[hid] = lo
-            if hid not in max_domain_bp or hi > max_domain_bp[hid]:
-                max_domain_bp[hid] = hi
-
-    _DIR_NAMES = ("FORWARD", "REVERSE")
-
-    def _emit_compact(arrs: dict, helix_id: str) -> None:
-        M = len(arrs['bp_indices'])
-        if M == 0:
-            return
-        bp_list   = arrs['bp_indices'].tolist()
-        dir_arr   = arrs['directions']
-        pos_list  = arrs['positions'].tolist()
-        base_list = arrs['base_positions'].tolist()
-        bn_list   = arrs['base_normals'].tolist()
-        at_list   = arrs['axis_tangents'].tolist()
-        helix_bucket = positions.get(helix_id)
-        if helix_bucket is None:
-            helix_bucket = {}
-            positions[helix_id] = helix_bucket
-        for i in range(M):
-            dir_name = _DIR_NAMES[dir_arr[i]]
-            dir_bucket = helix_bucket.get(dir_name)
-            if dir_bucket is None:
-                dir_bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
-                helix_bucket[dir_name] = dir_bucket
-            dir_bucket["bp"].append(bp_list[i])
-            dir_bucket["bb"].append(pos_list[i])
-            dir_bucket["bs"].append(base_list[i])
-            dir_bucket["bn"].append(bn_list[i])
-            dir_bucket["at"].append(at_list[i])
-
-    for helix in design.helices:
-        if helix.id.startswith("__lnk__"):
-            continue   # virtual linker helix has no real geometry of its own
-
-        arrs = deformed_nucleotide_arrays(helix, design)
-        arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
-        _emit_compact(arrs, arrs['helix_id'])
-
-        norm_helix = None
-        lo_bp = min_domain_bp.get(helix.id, helix.bp_start)
-        if lo_bp < helix.bp_start:
-            norm_helix = effective_helix_for_geometry(helix, design)
-            extra = nucleotide_positions_arrays_extended(norm_helix, lo_bp)
-            extra = deform_extended_arrays(extra, helix, design, edge_bp=helix.bp_start)
-            _emit_compact(extra, helix.id)
-
-        hi_bp = max_domain_bp.get(helix.id, helix.bp_start + helix.length_bp - 1)
-        helix_hi = helix.bp_start + helix.length_bp
-        if hi_bp >= helix_hi:
-            if norm_helix is None:
-                norm_helix = effective_helix_for_geometry(helix, design)
-            extra = nucleotide_positions_arrays_extended_right(norm_helix, hi_bp)
-            extra = deform_extended_arrays(extra, helix, design, edge_bp=helix_hi - 1)
-            _emit_compact(extra, helix.id)
-
-    # Helix axes — same pipeline as the full-geometry path.
-    axes = deformed_helix_axes(design)
-
-    # Build the (helix_id, bp_index, direction) → backbone_position lookup
-    # straight from positions_by_helix so _apply_ovhg_rotations_to_axes can
-    # work without us materialising per-nuc dicts. Direction here uses
-    # string form to match the dict-based legacy API.
-    nuc_lookup: dict = {}
-    from backend.core.models import Direction
-    for hid, by_dir in positions.items():
-        for dir_name, bucket in by_dir.items():
-            d_enum = Direction.FORWARD if dir_name == "FORWARD" else Direction.REVERSE
-            bp_arr = bucket["bp"]
-            bb_arr = bucket["bb"]
-            for i in range(len(bp_arr)):
-                nuc_lookup[(hid, bp_arr[i], d_enum)] = bb_arr[i]
-                # _apply_ovhg_rotations_to_axes' lookup uses the legacy
-                # tuple form keyed by Direction enum; in older code the
-                # tuple key uses the .value string. Cover both for safety.
-                nuc_lookup[(hid, bp_arr[i], dir_name)] = bb_arr[i]
-    _apply_ovhg_rotations_to_axes(design, axes, nuc_lookup=nuc_lookup)
-
-    # Bridge nucs: build a thin dict list for OH-bearing helices and run
-    # _emit_bridge_nucs. Bridge nucs are typically <200 per design — paying
-    # the dict cost for them is fine. After emission, fold their positions
-    # into positions_by_helix.
-    if any(c.linker_type == "ds" for c in design.overhang_connections):
-        nuc_info = _strand_nucleotide_info(design)
-        # Identify helices that carry an overhang or a complement strand on
-        # the OH side; that's the lookup _emit_bridge_nucs needs.
-        oh_strand_ids = {o.strand_id for o in design.overhangs}
-        anchor_dicts: list[dict] = []
-        for hid, by_dir in positions.items():
-            for dir_name, bucket in by_dir.items():
-                d_enum = Direction.FORWARD if dir_name == "FORWARD" else Direction.REVERSE
-                bp_arr   = bucket["bp"]
-                bb_arr   = bucket["bb"]
-                bs_arr   = bucket["bs"]
-                bn_arr   = bucket["bn"]
-                at_arr   = bucket["at"]
-                for i in range(len(bp_arr)):
-                    sinfo = nuc_info.get((hid, bp_arr[i], d_enum))
-                    # We only need anchors whose strand has an overhang_id
-                    # OR is a linker complement strand. Skip bulk-only nucs
-                    # so the dict list stays small.
-                    if not sinfo or (sinfo.get("overhang_id") is None
-                                     and sinfo.get("strand_id") not in oh_strand_ids
-                                     and not (sinfo.get("strand_id") or "").startswith("__lnk__")):
-                        continue
-                    anchor_dicts.append({
-                        "helix_id":          hid,
-                        "bp_index":          bp_arr[i],
-                        "direction":         dir_name,
-                        "backbone_position": bb_arr[i],
-                        "base_position":     bs_arr[i],
-                        "base_normal":       bn_arr[i],
-                        "axis_tangent":      at_arr[i],
-                        **sinfo,
-                    })
-        # _emit_bridge_nucs reads anchor_dicts (via nucs_by_strand /
-        # nucs_by_ovhg) and APPENDS bridge nucs to it.
-        before = len(anchor_dicts)
-        _emit_bridge_nucs(design, {}, anchor_dicts)
-        for n in anchor_dicts[before:]:
-            hid = n.get("helix_id")
-            if not hid:
-                continue
-            dir_name = n.get("direction")
-            helix_bucket = positions.get(hid)
-            if helix_bucket is None:
-                helix_bucket = {}
-                positions[hid] = helix_bucket
-            dir_bucket = helix_bucket.get(dir_name)
-            if dir_bucket is None:
-                dir_bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
-                helix_bucket[dir_name] = dir_bucket
-            dir_bucket["bp"].append(n.get("bp_index"))
-            dir_bucket["bb"].append(n.get("backbone_position"))
-            dir_bucket["bs"].append(n.get("base_position"))
-            dir_bucket["bn"].append(n.get("base_normal"))
-            dir_bucket["at"].append(n.get("axis_tangent"))
-
-    return positions, axes
 
 
 def _design_replace_response(

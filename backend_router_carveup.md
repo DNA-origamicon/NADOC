@@ -164,54 +164,54 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #46
-(**crud.py: per-nucleotide display-geometry kernel → NEW `backend/core/design_geometry.py`**, the FIRST crud
-Tier-3 service push of the post-router phase). 7 pure geometry-compute fns (`_strand_nucleotide_info` …
-`_geometry_for_design`/`_emit_bridge_nucs`, ~466 ln) moved byte-identical out of `# ── Internal helpers` →
-new dependency-free core module at **B=0**; crud re-exports all 7 under their `_`-names so the ~15 cross-file
-callers keep working unchanged. +8 direct unit tests (`tests/test_design_geometry_core.py`). The probe's lone
-`_recenter_design(1)` was a docstring comment (not a call); an api-symbol grep over the range was empty → fully
-pure. `_design_for_export` (touches `design_state.get_or_404`) STAYED, L4-blocked. crud.py routes unchanged
-(**113** — service push); 3 orphaned crud imports cleaned (`math` + 2 deformation fns, each had a function-local
-re-import). ruff clean on all 3 touched files; **2130→2138 passed** / 55 skipped (the +8 new tests, no drops).
-NOT committed yet (awaiting user) — stacks on uncommitted #43 (display-metadata)/#44 (3D-print)/#45
-(display-geometry). #42 (4550772, MD-load); #41 (8e4a0cc, Protein). assembly.py at **29 routes**.
-**Every clean B≤1 router cluster in crud is DRAINED; the geometry-compute kernel is now also out** — what
-remains in crud is shared kernel + L4-blocked marooned mass (see ▶ NEXT)._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #49
+(**assembly.py: geometry-cache + override-merge kernel → NEW `backend/core/assembly_geometry.py`**, the
+post-review Tier-3 primary target). Service push, **B=0**. The PURE half moved: LRU state
+(`_GEO_CACHE`/`_GEO_CACHE_MAX`) + ops (`geo_cache_get`/`geo_cache_set`/`clear_geo_cache`) + cache-key compute
+(`geo_cache_key`, `workspace_dir` now an explicit param — L16/L20 monkeypatch fidelity) + the pure override-merge
+of `_design_with_instance_overrides` (`merge_cluster_overrides`). assembly.py keeps thin shims under the original
+`_`-names so the back-importing routers work unchanged; `routes_assembly_geometry` repointed `geo_cache_get`/`_set`
+DIRECTLY to core → its **raw-B 8→6**. +15 unit tests (`tests/test_assembly_geometry_core.py`). Orphaned
+`hashlib`/`json`/`OrderedDict` imports removed from assembly.py; ruff clean on all 4 touched files. assembly.py
+**29 routes** unchanged (service push), −44 net LOC. **2155→2170 passed** / 55 skipped (the +15, no drops).
+NOT committed yet (awaiting user) — stacks on uncommitted #43–#48 (crud display-metadata/3D-print/display-geometry/
+design-geometry/render-diff/compaction). #42 (4550772, MD-load); #41 (8e4a0cc, Protein)._
 
-**▶ LOOP PHASE SHIFT (2026-06-16, post-review):** the cheap **B=1 router lifts are drained** in BOTH files —
-176 routes now live in extracted routers, crud.py is at 113 routes / assembly.py at 29. An external review
-confirmed the router layer is much healthier BUT flagged that the **next real architectural jump is SERVICE
-extraction, not more router lifts** — several shipped routers sit at bespoke-B=0 / raw-B 6–11, i.e. they still
-lean on a broad god-file *kernel surface* (geometry cache, file-IO design-load, cluster autodetect). Those are
-intermediate states. **From here on the loop is Tier-3 service pushes only** — there is no clean B=1 cluster
-left sitting in either file. The two highest-value targets: the assembly **geometry-cache + file-load kernel**
-(`_geo_cache_*` + `_load_design_from_source`/`_design_with_instance_overrides`, the surface
-`routes_assembly_geometry`/`_joints`/`_frames` all lean on) and crud's residual export/geometry-response kernel.
+**▶ STATUS (both files near terminal):** crud.py = **113 routes**, pure-compute kernel FULLY DRAINED (residual is
+the L4-blocked api-bound response kernel `_design_response*`/`_design_replace_response`/`_inject_joint_world_axes`/
+`_strip_feature_log_payloads`). assembly.py = **29 routes**, geometry-cache + override-merge now in core (#49).
+The only broad god-file surface the assembly routers still lean on is the **file-IO design-load infra**
+(`_load_design_from_source`/`_design_with_instance_overrides`/`_assembly_source_path`) — genuinely L4-blocked
+(HTTPException + file IO + `_WORKSPACE_DIR`/`_PROJECT_ROOT` module globals). It still counts toward
+`routes_assembly_joints`(raw-B 11)/`_frames`/`_overhangs`/`_loadouts`/`_polymerize` back-imports.
 
-**▶ NEXT — crud.py (Tier-3 SERVICE push — geometry-compute kernel now ALSO drained by #46):** the pure
-geometry-compute cluster left in #46. What's LEFT in the `# ── Internal helpers` block is the **response/diff/
-positions kernel** (`_design_response`/`_design_response_with_geometry`/`_design_replace_response`,
-`_compact_geometry_from_nucleotides`/`_compact_geometry_for_design`, `_positions_by_helix`/`_positions_for_design`,
-`_diff_is_cluster_only`/`_cluster_diff_payload`/`_topology_unchanged`/`_topology_diff_field`,
-`_inject_joint_world_axes`, `_strip_feature_log_payloads`). PROBE EACH BODY (L13/L20) before moving — most are
-**L4-blocked or shared response kernel that SHOULD stay**: `_design_response*` touch the response shape (kernel,
-terminal-state glue); `_compact_geometry_for_design`/`_positions_for_design` call the now-in-core
-`_geometry_for_design` and are pure-ish *compaction/index* wrappers (candidate: a thin `design_geometry`
-follow-on push — but verify they don't touch `design_state`); the `_diff_*`/`_topology_*` family is pure model
-comparison (candidate for `backend/core/design_diff.py` — these take `prev`/`new` Designs and return bool/list,
-NO state, used by the undo/redo diff-response path). **The `_diff_*`/`_topology_diff_*` pure-comparison cluster
-is the cleanest remaining crud Tier-3 candidate** (probe it first: pure `Design×Design→bool/list`, no api). **The
-higher-value target is the assembly geometry-cache push (option B below) — recommend switching the loop to assembly.**
-**(B, RECOMMENDED — Tier-3 SERVICE push):** the **assembly geometry-cache + design-load
-kernel** (`_geo_cache_*` trio + `_load_design_from_source`/`_design_with_instance_overrides` file-IO) →
-`backend/core/assembly_geometry.py` — the 8–11-symbol surface `routes_assembly_geometry`/`_joints`/`_frames`
-all lean on. This is an *assembly.py* target (switch the loop with `/carve-router assembly`).
-What's LEFT in crud is shared kernel + L4-blocked marooned mass: the overhang web's
-`_resplice_overhang_in_strand`/`_build_overhang_*`/binding topology-relocation/relax-bond mutators, the
-feature-log MUTATING half (welded to the `_build_*`+`_replay_minor_op` replay engine — difficulties ledger),
-crossover/ligation/forced-ligation endpoints, and the design-core kernel (`GET/POST /design`, helices, strands,
-geometry). Those need service pushes, not router lifts.
+**▶ NEXT — assembly.py (the last service-push candidate, MARGINAL — classify before committing):** an **L15 split
+of `_load_design_from_source`** — push the pure path-resolution + `Design.from_json` parse to a core
+`load_design_from_source(source, workspace_dir, project_root, assembly_path) -> Design` raising a custom
+`PartLoadError`, leaving a thin api shim that translates to `HTTPException`. This is the only remaining way to
+shrink the assembly routers' raw-B (the load infra is their last broad back-import). **CAVEAT:** the shim still
+gets imported back for error translation, AND `_design_with_instance_overrides` wraps the load — so the raw-B drop
+is partial and the value is marginal (L13/L20: a forced-shared api-bound wrapper). Probe the actual raw-B
+reduction before committing; if the shim must stay imported anyway, this is a "leave in the kernel" region and
+**assembly.py is at terminal state — declare it done.** Module globals `_WORKSPACE_DIR`/`_PROJECT_ROOT` are
+read at call time (monkeypatched by `test_primitives_router`/`test_md_milestone1`) → thread them as explicit
+params exactly like #49 did for `geo_cache_key` (L16). **If you decide NOT to do this split, the backend
+god-file carve-up is COMPLETE** — both files hold only their core routes + shared/L4-blocked kernel, every
+cohesive sub-resource is in its own `routes_<area>.py`, and every pure-compute cluster is in tested `backend/core`.
+
+**▶ LOOP PHASE SHIFT (2026-06-16, post-review) — now mostly executed.** The cheap B=1 router lifts drained in
+BOTH files (176 routes in extracted routers; crud.py 113 / assembly.py 29). The review's flag — "next jump is
+SERVICE extraction" — drove the Tier-3 pushes: crud's pure geometry/diff/cluster kernel (#34/#46/#47/#48) and
+assembly's geometry-cache + override-merge (#49) are now in tested `backend/core`. **The only remaining broad
+god-file surface is assembly's file-IO design-load infra** (`_load_design_from_source` &c.), an L15-split
+candidate of marginal value — see the `## Next-session handoff` block above for the go/no-go.
+
+**▶ crud.py is at terminal state for service pushes.** The residual `# ── Internal helpers` block is the api-bound
+response kernel (`_design_response*`/`_design_replace_response`/`_inject_joint_world_axes`/
+`_strip_feature_log_payloads`, all L4-blocked or terminal response glue) + the L4-blocked marooned mass (overhang
+web mutators, feature-log MUTATING/replay engine, crossover/ligation). Those call crud builders + `design_state`,
+so they need a different strategy than service push — they are NOT carve-up backlog. Any further crud routing
+work is the design-core kernel (`GET/POST /design`, helices, strands, geometry), which STAYS by definition.
 
 **▶ DONE (Refactor #37) — crud.py feature-log read-only seek/scrub/batch ROUTER half → `routes_feature_log.py`**
 (see the handoff header above + the `[~] Feature log` backlog row). B=3, bespoke-B=0, verbatim 4-route lift,
@@ -516,6 +516,43 @@ Tiers are priority hints, not gospel.
   `_positions_*`, `_diff_*`, `_inject_joint_world_axes`) — a *different* concern (api-bound response shaping +
   L4-blocked `design_state` callers), not geometry compute; the pure geometry kernel is fully out.
 
+- [x] **Render fast-path diff kernel → `backend/core/render_diff.py`** — DONE (Refactor #47, 2026-06-16).
+  **Service push, B=0.** The 4 pure `Design×Design → bool/list/str` comparison fns (`_diff_is_cluster_only`,
+  `_cluster_diff_payload`, `_topology_unchanged`, `_topology_diff_field`, ~113 ln) moved **byte-identical** out
+  of the `# ── Internal helpers` block into a new dependency-free core module (imports only
+  `backend.core.models.Design` for the type annotation). These classify the cheapest render path for undo/redo/
+  seek (cluster-only delta vs positions-only vs full rebuild) — the decision `_design_replace_response` makes at
+  crud ~1179. Probe over 837–949 printed ZERO crud privates + ZERO api symbols → fully pure. **Name-collision
+  resolved on cohesion (L8/L12):** a `backend/core/design_diff.py` already exists but owns the Fine-Routing
+  id-keyed *content* diff (reconstructs intermediate cluster states) — a different reason to change — so the new
+  module is `render_diff.py`, NOT a fold. crud **re-exports** all 4 under their `_`-names (the test
+  `test_flexible_segments.py` + the response-path callers keep working unchanged). +12 direct unit tests
+  (`tests/test_render_diff_core.py`). `_topology_unchanged` had no live caller (only test prose) — moved with the
+  cohesive cluster, not deleted (deletion needs user sign-off), now pinned + reachable. 2138→2150 passed / 55
+  skipped (the +12, no drops). crud.py routes unchanged (113 — service push). The residual "Internal helpers"
+  mass is now the response/positions kernel (`_design_response*`, `_compact_geometry_*`, `_positions_*`,
+  `_inject_joint_world_axes`, `_strip_feature_log_payloads`) — mostly L4-blocked or shared response kernel.
+
+- [x] **Compaction / positions geometry kernel → `backend/core/design_geometry.py` (#46 follow-on)** — DONE
+  (Refactor #48, 2026-06-16). **Service push, B=0.** The 4 pure compaction/positions fns
+  (`_compact_geometry_from_nucleotides`, `_compact_geometry_for_design`, `_positions_by_helix`,
+  `_positions_for_design`, ~280 ln) moved **byte-identical** out of the `# ── Internal helpers` block into the
+  EXISTING `design_geometry.py` (a fold, not a new module — same one-reason-to-change as #46; the compact/
+  positions forms are narrower projections of the same `_geometry_for_design` kernel already there). Probe over
+  all 4 ranges printed only docstring false-positives → fully pure; every real dep was already in `backend/core`
+  (design_geometry / deformation / geometry), so 2 extra core-deformation imports (`deformed_helix_axes`,
+  `_apply_ovhg_rotations_to_axes`) were added to design_geometry and the move is pure core→core, B=0. crud
+  re-exports all 4 under their `_`-names (the cross-file callers `routes_assembly_geometry.py`/`assembly.py`/
+  `routes_feature_log.py` + crud's own response builders keep working unchanged). **Orphaned-import cleanup:**
+  5 now-unused imports removed from crud (`nucleotide_positions_arrays_extended[_right]` from core.geometry +
+  `apply_overhang_rotation_if_needed`/`deformed_nucleotide_arrays`/`effective_helix_for_geometry` from
+  core.deformation) — ruff clean. `_positions_by_helix` had no live caller (docstring/comment/dict-key refs
+  only, same as #47's `_topology_unchanged`) — moved with the cohesive cluster, not deleted (sign-off), now
+  pinned. +5 direct unit tests (`tests/test_design_geometry_core.py`, 8→13). 2150→**2155** passed / 55 skipped.
+  crud.py routes unchanged (113). The residual "Internal helpers" mass is now the **api-bound response kernel**
+  (`_design_response*`/`_design_replace_response`, `_inject_joint_world_axes`, `_strip_feature_log_payloads`) —
+  all L4-blocked (touch `design_state` / response-shaping); the pure geometry kernel is fully out.
+
 ### Stays in crud.py (the shared kernel — do NOT extract)
 - `_design_response` / `_design_response_with_geometry` / `_helix_label` (used by 100+ routes), the request
   models shared across clusters, and the design endpoints proper (`GET/POST /design`, metadata, geometry).
@@ -708,14 +745,21 @@ Tiers are priority hints, not gospel.
   deleted tests; the banked oxDNA flake did NOT reappear — 540755b's atomic-write fix holds).
 
 ### Tier 3 — assembly service pushes (the remaining REAL decoupling, post-review 2026-06-16)
-- [ ] **Geometry-cache + design-load kernel → `backend/core/assembly_geometry.py`** — the surface that
-  `routes_assembly_geometry` (raw-B=8), `routes_assembly_joints` (raw-B=11), and `routes_assembly_frames` all
-  lean back on: the `_geo_cache_key`/`_geo_cache_get`/`_geo_cache_set` trio (tied to module global `_GEO_CACHE`)
-  + the file-IO design-load infra `_load_design_from_source`/`_design_with_instance_overrides`/
-  `_assembly_source_path`. Push the cache logic + the pure parts of design-load to core with direct unit tests;
-  the genuinely file-IO/`HTTPException` parts may be L4-blocked and stay (classify per L20). This is what drops
-  those routers' raw-B and moves assembly.py from "routes drained" to actually-done. (Module-global `_GEO_CACHE`
-  must be read through its module post-move — L16.)
+- [x] **Geometry-cache + design-load kernel → `backend/core/assembly_geometry.py`** — DONE (Refactor #49,
+  2026-06-16). **Service push, B=0.** The PURE half moved: the LRU state (`_GEO_CACHE`/`_GEO_CACHE_MAX`) + its
+  ops (`geo_cache_get`/`geo_cache_set`/`clear_geo_cache`) + the cache-key compute (`geo_cache_key`, with
+  `workspace_dir` now an **explicit param** so the monkeypatch-able `_WORKSPACE_DIR` stays the single source of
+  truth — L16/L20) + the pure override-merge half of `_design_with_instance_overrides`
+  (`merge_cluster_overrides`). +15 direct unit tests (`tests/test_assembly_geometry_core.py`). assembly.py keeps
+  thin shims under the original private names (`_geo_cache_key` threads `_WORKSPACE_DIR`; `_geo_cache_get`/`_set`
+  alias core; `_GEO_CACHE.clear()` → `_ageo.clear_geo_cache()`; `_design_with_instance_overrides` = load +
+  delegate) so the back-importing routers keep working unchanged. **raw-B drop:** `routes_assembly_geometry`
+  repointed `geo_cache_get`/`geo_cache_set` DIRECTLY to core (no workspace dep) → **raw-B 8→6**. **L4-blocked,
+  STAYS as shims** (classified per L20): `_load_design_from_source` (HTTPException + file IO),
+  `_assembly_source_path` (trivial getattr), and the load-wrapper `_design_with_instance_overrides` — these still
+  count toward `routes_assembly_joints`(11)/`_frames` raw-B (file-IO design-load is genuinely api-bound). Orphaned
+  `hashlib`/`json`/`OrderedDict` imports removed from assembly.py; ruff clean. assembly.py 29 routes unchanged
+  (service push), −44 net LOC. 2155→**2170** passed / 55 skipped (the +15, no drops).
 
 ### Stays in assembly.py (kernel)
 - Core assembly routes (`# ── Core assembly routes` ~1289), undo/redo, and the shared

@@ -36,7 +36,9 @@ from backend.core.geometry import (
     nucleotide_positions_arrays_extended_right,
 )
 from backend.core.deformation import (
+    _apply_ovhg_rotations_to_axes,
     apply_overhang_rotation_if_needed,
+    deformed_helix_axes,
     deformed_nucleotide_arrays,
     effective_helix_for_geometry,
 )
@@ -508,3 +510,286 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
 
 def _geometry_for_design(design: Design, include_linker_helices: bool = False) -> list[dict]:
     return _geometry_for_helices(design, include_linker_helices=include_linker_helices)
+
+
+def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:
+    """Convert a flat list of nucleotide dicts into the COMPACT
+    per-helix-per-direction parallel-array form used by the
+    ``nucleotides_compact`` wire format. See _compact_geometry_for_design
+    for the rationale; this helper exists so callers that already have the
+    nucleotide list (e.g. _design_response_with_geometry) don't recompute it.
+    """
+    out: dict = {}
+    for n in nucleotides:
+        helix = n.get("helix_id")
+        if helix is None:
+            continue
+        direction = n.get("direction")
+        helix_bucket = out.get(helix)
+        if helix_bucket is None:
+            helix_bucket = {}
+            out[helix] = helix_bucket
+        b = helix_bucket.get(direction)
+        if b is None:
+            b = {
+                "bp": [], "bb": [], "bs": [], "bn": [], "at": [],
+                "sid": [], "stype": [], "is5": [], "is3": [],
+                "did": [], "ohid": [],
+                # Sparse fields: appended lazily, so empty arrays don't ship.
+                "extid": None, "ismod": None, "mod": None, "base": None,
+            }
+            helix_bucket[direction] = b
+        b["bp"].append(n.get("bp_index"))
+        b["bb"].append(n.get("backbone_position"))
+        b["bs"].append(n.get("base_position"))
+        b["bn"].append(n.get("base_normal"))
+        b["at"].append(n.get("axis_tangent"))
+        b["sid"].append(n.get("strand_id"))
+        b["stype"].append(n.get("strand_type"))
+        b["is5"].append(bool(n.get("is_five_prime")))
+        b["is3"].append(bool(n.get("is_three_prime")))
+        b["did"].append(n.get("domain_index", 0))
+        b["ohid"].append(n.get("overhang_id"))
+        # Sparse fields — only allocate the array when first non-default appears.
+        ext_id = n.get("extension_id")
+        if ext_id is not None:
+            if b["extid"] is None: b["extid"] = [None] * (len(b["bp"]) - 1)
+            b["extid"].append(ext_id)
+        elif b["extid"] is not None:
+            b["extid"].append(None)
+        is_mod = bool(n.get("is_modification"))
+        if is_mod:
+            if b["ismod"] is None: b["ismod"] = [False] * (len(b["bp"]) - 1)
+            b["ismod"].append(True)
+        elif b["ismod"] is not None:
+            b["ismod"].append(False)
+        mod = n.get("modification")
+        if mod is not None:
+            if b["mod"] is None: b["mod"] = [None] * (len(b["bp"]) - 1)
+            b["mod"].append(mod)
+        elif b["mod"] is not None:
+            b["mod"].append(None)
+        base = n.get("nucleobase")
+        if base is not None:
+            if b["base"] is None: b["base"] = [None] * (len(b["bp"]) - 1)
+            b["base"].append(base)
+        elif b["base"] is not None:
+            b["base"].append(None)
+    # Drop sparse-field placeholders that never got populated, to keep the wire
+    # tight when none of those fields apply.
+    for helix_bucket in out.values():
+        for b in helix_bucket.values():
+            for k in ("extid", "ismod", "mod", "base"):
+                if b.get(k) is None:
+                    b.pop(k, None)
+    return out
+
+
+def _compact_geometry_for_design(design: 'Design') -> dict:
+    """Compute full deformed geometry in COMPACT per-helix-per-direction
+    parallel-arrays form. Wire size is ~50% of the equivalent dict-list
+    ``nucleotides`` payload because field names don't repeat per nuc;
+    JSON.parse on the frontend is roughly proportionally faster.
+    """
+    return _compact_geometry_from_nucleotides(_geometry_for_design(design))
+
+
+def _positions_by_helix(nucleotides: list[dict]) -> dict:
+    """Compact per-nuc-position payload for the ``positions_only`` diff,
+    converted from a list-of-dicts. Used as a fallback when callers already
+    have nucleotide dicts on hand. Hot paths should call
+    :func:`_positions_for_design` instead, which emits parallel arrays
+    directly from the numpy pipeline and skips the per-nuc dict allocation.
+    """
+    out: dict = {}
+    for n in nucleotides:
+        helix = n.get("helix_id")
+        if helix is None:
+            continue
+        direction = n.get("direction")
+        bucket = out.setdefault(helix, {}).setdefault(direction, None)
+        if bucket is None:
+            bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
+            out[helix][direction] = bucket
+        bucket["bp"].append(n.get("bp_index"))
+        bucket["bb"].append(n.get("backbone_position"))
+        bucket["bs"].append(n.get("base_position"))
+        bucket["bn"].append(n.get("base_normal"))
+        bucket["at"].append(n.get("axis_tangent"))
+    return out
+
+
+def _positions_for_design(design: 'Design') -> tuple[dict, list[dict]]:
+    """Compute positions for *design* in compact per-helix-per-direction
+    parallel arrays, **without** materialising per-nuc dicts for the bulk
+    geometry. Used by the ``positions_only`` fast path.
+
+    Returns ``(positions_by_helix, helix_axes)``.
+
+    The numpy pipeline (``deformed_nucleotide_arrays`` + extension/loop
+    helpers) is the same as ``_geometry_for_helices``; the saving comes
+    from skipping the ~50K dict allocations + ``**sinfo`` spreads that
+    dominate the full-geometry path's response-build time.
+
+    ds-linker bridge nucs: ``_emit_bridge_nucs`` emits per-nuc dicts and
+    needs anchor-nuc lookups by overhang_id. Bridges are a tiny fraction
+    of total nucs (≤200 per design), so we build a thin dict list for
+    JUST the OH-bearing helices and feed that through the existing helper,
+    then fold the resulting bridge-nuc positions into ``positions_by_helix``.
+    Bulk positions stay dict-free.
+    """
+    from backend.core.deformation import (
+        deform_extended_arrays,
+    )
+
+    positions: dict = {}
+
+    # Strand-domain bp range per helix (needed for ss-scaffold loop extensions).
+    min_domain_bp: dict[str, int] = {}
+    max_domain_bp: dict[str, int] = {}
+    for strand in design.strands:
+        for domain in strand.domains:
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp)
+            hid = domain.helix_id
+            if hid not in min_domain_bp or lo < min_domain_bp[hid]:
+                min_domain_bp[hid] = lo
+            if hid not in max_domain_bp or hi > max_domain_bp[hid]:
+                max_domain_bp[hid] = hi
+
+    _DIR_NAMES = ("FORWARD", "REVERSE")
+
+    def _emit_compact(arrs: dict, helix_id: str) -> None:
+        M = len(arrs['bp_indices'])
+        if M == 0:
+            return
+        bp_list   = arrs['bp_indices'].tolist()
+        dir_arr   = arrs['directions']
+        pos_list  = arrs['positions'].tolist()
+        base_list = arrs['base_positions'].tolist()
+        bn_list   = arrs['base_normals'].tolist()
+        at_list   = arrs['axis_tangents'].tolist()
+        helix_bucket = positions.get(helix_id)
+        if helix_bucket is None:
+            helix_bucket = {}
+            positions[helix_id] = helix_bucket
+        for i in range(M):
+            dir_name = _DIR_NAMES[dir_arr[i]]
+            dir_bucket = helix_bucket.get(dir_name)
+            if dir_bucket is None:
+                dir_bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
+                helix_bucket[dir_name] = dir_bucket
+            dir_bucket["bp"].append(bp_list[i])
+            dir_bucket["bb"].append(pos_list[i])
+            dir_bucket["bs"].append(base_list[i])
+            dir_bucket["bn"].append(bn_list[i])
+            dir_bucket["at"].append(at_list[i])
+
+    for helix in design.helices:
+        if helix.id.startswith("__lnk__"):
+            continue   # virtual linker helix has no real geometry of its own
+
+        arrs = deformed_nucleotide_arrays(helix, design)
+        arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
+        _emit_compact(arrs, arrs['helix_id'])
+
+        norm_helix = None
+        lo_bp = min_domain_bp.get(helix.id, helix.bp_start)
+        if lo_bp < helix.bp_start:
+            norm_helix = effective_helix_for_geometry(helix, design)
+            extra = nucleotide_positions_arrays_extended(norm_helix, lo_bp)
+            extra = deform_extended_arrays(extra, helix, design, edge_bp=helix.bp_start)
+            _emit_compact(extra, helix.id)
+
+        hi_bp = max_domain_bp.get(helix.id, helix.bp_start + helix.length_bp - 1)
+        helix_hi = helix.bp_start + helix.length_bp
+        if hi_bp >= helix_hi:
+            if norm_helix is None:
+                norm_helix = effective_helix_for_geometry(helix, design)
+            extra = nucleotide_positions_arrays_extended_right(norm_helix, hi_bp)
+            extra = deform_extended_arrays(extra, helix, design, edge_bp=helix_hi - 1)
+            _emit_compact(extra, helix.id)
+
+    # Helix axes — same pipeline as the full-geometry path.
+    axes = deformed_helix_axes(design)
+
+    # Build the (helix_id, bp_index, direction) → backbone_position lookup
+    # straight from positions_by_helix so _apply_ovhg_rotations_to_axes can
+    # work without us materialising per-nuc dicts. Direction here uses
+    # string form to match the dict-based legacy API.
+    nuc_lookup: dict = {}
+    from backend.core.models import Direction
+    for hid, by_dir in positions.items():
+        for dir_name, bucket in by_dir.items():
+            d_enum = Direction.FORWARD if dir_name == "FORWARD" else Direction.REVERSE
+            bp_arr = bucket["bp"]
+            bb_arr = bucket["bb"]
+            for i in range(len(bp_arr)):
+                nuc_lookup[(hid, bp_arr[i], d_enum)] = bb_arr[i]
+                # _apply_ovhg_rotations_to_axes' lookup uses the legacy
+                # tuple form keyed by Direction enum; in older code the
+                # tuple key uses the .value string. Cover both for safety.
+                nuc_lookup[(hid, bp_arr[i], dir_name)] = bb_arr[i]
+    _apply_ovhg_rotations_to_axes(design, axes, nuc_lookup=nuc_lookup)
+
+    # Bridge nucs: build a thin dict list for OH-bearing helices and run
+    # _emit_bridge_nucs. Bridge nucs are typically <200 per design — paying
+    # the dict cost for them is fine. After emission, fold their positions
+    # into positions_by_helix.
+    if any(c.linker_type == "ds" for c in design.overhang_connections):
+        nuc_info = _strand_nucleotide_info(design)
+        # Identify helices that carry an overhang or a complement strand on
+        # the OH side; that's the lookup _emit_bridge_nucs needs.
+        oh_strand_ids = {o.strand_id for o in design.overhangs}
+        anchor_dicts: list[dict] = []
+        for hid, by_dir in positions.items():
+            for dir_name, bucket in by_dir.items():
+                d_enum = Direction.FORWARD if dir_name == "FORWARD" else Direction.REVERSE
+                bp_arr   = bucket["bp"]
+                bb_arr   = bucket["bb"]
+                bs_arr   = bucket["bs"]
+                bn_arr   = bucket["bn"]
+                at_arr   = bucket["at"]
+                for i in range(len(bp_arr)):
+                    sinfo = nuc_info.get((hid, bp_arr[i], d_enum))
+                    # We only need anchors whose strand has an overhang_id
+                    # OR is a linker complement strand. Skip bulk-only nucs
+                    # so the dict list stays small.
+                    if not sinfo or (sinfo.get("overhang_id") is None
+                                     and sinfo.get("strand_id") not in oh_strand_ids
+                                     and not (sinfo.get("strand_id") or "").startswith("__lnk__")):
+                        continue
+                    anchor_dicts.append({
+                        "helix_id":          hid,
+                        "bp_index":          bp_arr[i],
+                        "direction":         dir_name,
+                        "backbone_position": bb_arr[i],
+                        "base_position":     bs_arr[i],
+                        "base_normal":       bn_arr[i],
+                        "axis_tangent":      at_arr[i],
+                        **sinfo,
+                    })
+        # _emit_bridge_nucs reads anchor_dicts (via nucs_by_strand /
+        # nucs_by_ovhg) and APPENDS bridge nucs to it.
+        before = len(anchor_dicts)
+        _emit_bridge_nucs(design, {}, anchor_dicts)
+        for n in anchor_dicts[before:]:
+            hid = n.get("helix_id")
+            if not hid:
+                continue
+            dir_name = n.get("direction")
+            helix_bucket = positions.get(hid)
+            if helix_bucket is None:
+                helix_bucket = {}
+                positions[hid] = helix_bucket
+            dir_bucket = helix_bucket.get(dir_name)
+            if dir_bucket is None:
+                dir_bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
+                helix_bucket[dir_name] = dir_bucket
+            dir_bucket["bp"].append(n.get("bp_index"))
+            dir_bucket["bb"].append(n.get("backbone_position"))
+            dir_bucket["bs"].append(n.get("base_position"))
+            dir_bucket["bn"].append(n.get("base_normal"))
+            dir_bucket["at"].append(n.get("axis_tangent"))
+
+    return positions, axes

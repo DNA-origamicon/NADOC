@@ -11,6 +11,10 @@ from backend.core.design_geometry import (
     _straight_helix_axes,
     _geometry_for_design,
     _geometry_for_design_straight,
+    _compact_geometry_from_nucleotides,
+    _compact_geometry_for_design,
+    _positions_by_helix,
+    _positions_for_design,
 )
 from backend.core.models import (
     Design,
@@ -149,3 +153,76 @@ def test_geometry_for_design_five_prime_extension_tip_is_cube():
                          if n["helix_id"] == "h0" and n["bp_index"] == 0
                          and n["direction"] == Direction.FORWARD.value)
     assert not real_terminal["is_five_prime"]
+
+
+# ── Compaction / positions kernel (service push #48) ─────────────────────────
+
+def test_compact_geometry_from_nucleotides_buckets_by_helix_and_direction():
+    """Flat nuc dicts → per-helix-per-direction parallel arrays with matching
+    lengths, and the bp values are preserved in order."""
+    d = _single_helix_design(direction=Direction.FORWARD, length_bp=10)
+    nucs = _geometry_for_design(d)
+    compact = _compact_geometry_from_nucleotides(nucs)
+    assert "h0" in compact
+    fwd = compact["h0"][Direction.FORWARD.value]
+    # Parallel arrays for the core position fields are all the same length.
+    n = len(fwd["bp"])
+    assert n == 10
+    for key in ("bb", "bs", "bn", "at", "sid", "stype", "is5", "is3"):
+        assert len(fwd[key]) == n
+    # bp values round-trip from the source nuc dicts (same FORWARD bps).
+    src_bps = sorted(x["bp_index"] for x in nucs
+                     if x["helix_id"] == "h0" and x["direction"] == Direction.FORWARD.value)
+    assert sorted(fwd["bp"]) == src_bps
+
+
+def test_compact_geometry_from_nucleotides_drops_unused_sparse_fields():
+    """A plain (no-modification/no-extension) design ships none of the sparse
+    fields — they're popped, not shipped as empty arrays."""
+    d = _single_helix_design(length_bp=8)
+    compact = _compact_geometry_from_nucleotides(_geometry_for_design(d))
+    for by_dir in compact.values():
+        for bucket in by_dir.values():
+            for sparse in ("extid", "ismod", "mod", "base"):
+                assert sparse not in bucket
+
+
+def test_compact_geometry_for_design_equals_compose():
+    """_compact_geometry_for_design is exactly the compaction of the full
+    per-nuc geometry (it's a thin composition wrapper)."""
+    d = _single_helix_design(length_bp=10)
+    assert _compact_geometry_for_design(d) == \
+        _compact_geometry_from_nucleotides(_geometry_for_design(d))
+
+
+def test_positions_by_helix_emits_only_position_fields():
+    """The positions_only payload carries just bp + the four position arrays,
+    no strand metadata."""
+    d = _single_helix_design(length_bp=10)
+    pos = _positions_by_helix(_geometry_for_design(d))
+    fwd = pos["h0"][Direction.FORWARD.value]
+    assert set(fwd.keys()) == {"bp", "bb", "bs", "bn", "at"}
+    n = len(fwd["bp"])
+    assert n == 10
+    for key in ("bb", "bs", "bn", "at"):
+        assert len(fwd[key]) == n
+
+
+def test_positions_for_design_matches_dict_path_backbone():
+    """The numpy-direct positions path produces the same backbone positions as
+    the dict-based _positions_by_helix(_geometry_for_design(...)) fallback."""
+    d = _single_helix_design(direction=Direction.FORWARD, length_bp=12)
+    direct, axes = _positions_for_design(d)
+    fallback = _positions_by_helix(_geometry_for_design(d))
+
+    def _bb_by_key(payload):
+        out = {}
+        for hid, by_dir in payload.items():
+            for dir_name, bucket in by_dir.items():
+                for i, bp in enumerate(bucket["bp"]):
+                    out[(hid, dir_name, bp)] = bucket["bb"][i]
+        return out
+
+    assert _bb_by_key(direct) == _bb_by_key(fallback)
+    # Axes come back alongside positions, one per real helix.
+    assert [ax["helix_id"] for ax in axes] == ["h0"]
