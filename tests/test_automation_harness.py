@@ -126,6 +126,509 @@ def test_coverage_report_marks_af6_route_covered():
     assert "add_deformation" in covered
 
 
+def test_coverage_report_marks_af7_assembly_routes_covered():
+    """AF-7's new headless_assembly_build module flips the core /assembly routes."""
+    report = headless_coverage_report()
+    covered = {r["endpoint"] for r in report["covered_routes"]}
+    assert {"create_assembly", "add_instance", "resolve_assembly"} <= covered
+
+
+def test_coverage_report_marks_af8_mate_routes_covered():
+    """AF-8 flipped add_connector + create_mate → covered."""
+    report = headless_coverage_report()
+    covered = {r["endpoint"] for r in report["covered_routes"]}
+    assert {"add_connector", "create_mate"} <= covered
+
+
+def test_coverage_report_marks_af9_gear_routes_covered():
+    """AF-9 flipped create_gear_relation + patch_joint (drive) → covered."""
+    report = headless_coverage_report()
+    covered = {r["endpoint"] for r in report["covered_routes"]}
+    assert {"create_gear_relation", "patch_joint"} <= covered
+
+
+# ── The gear-ratio oracle PASSES on a real gear and FIRES otherwise ────────────
+
+def _geared_build(*, ratio: float = 2.0):
+    """Active scratch assembly: two wheels revolute-mated to a base about +Z and
+    gear-coupled at ``ratio``.  Returns ``(before_snapshot, rel_id, joint_a_id)``."""
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+
+    hab.new_assembly("G")
+    hab.add_inline_instance(make_6hb_design(), name="base")
+    hab.add_inline_instance(
+        make_6hb_design(), name="wheelA", transform=hab.translation(20.0, 0.0, 0.0))
+    hab.add_inline_instance(
+        make_6hb_design(), name="wheelB", transform=hab.translation(40.0, 0.0, 0.0))
+    a = assembly_state.get_or_404()
+    base_id, wa_id, wb_id = a.instances[0].id, a.instances[1].id, a.instances[2].id
+    for label in ("hub_a", "hub_b"):
+        hab.add_connector(base_id, label, position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+    hab.add_connector(wa_id, "axleA", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+    hab.add_connector(wb_id, "axleB", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+    hab.define_mate(wa_id, base_id, child_label="axleA", parent_label="hub_a",
+                    joint_type="revolute", axis_direction=[0.0, 0.0, 1.0])
+    hab.define_mate(wb_id, base_id, child_label="axleB", parent_label="hub_b",
+                    joint_type="revolute", axis_direction=[0.0, 0.0, 1.0])
+    a = assembly_state.get_or_404()
+    ja, jb = a.joints[0].id, a.joints[1].id
+    hab.define_gear(ja, jb, ratio=ratio)
+    a = assembly_state.get_or_404()
+    return a.model_copy(deep=True), a.gear_relations[0].id, ja, jb
+
+
+def test_gear_ratio_oracle_passes_on_real_gear():
+    """assert_gear_ratio is green when the gear propagates the promised ratio."""
+    import math
+
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_gear_ratio
+
+    with hab.assembly_scratch_session():
+        before, rel_id, ja, _jb = _geared_build(ratio=2.0)
+        hab.drive_joint(ja, math.radians(25.0))
+        after = assembly_state.get_or_404()
+        assert abs(assert_gear_ratio(before, after, rel_id, expected_ratio=2.0) - 2.0) <= 0.02
+
+
+def test_gear_ratio_oracle_fires_when_uncoupled():
+    """Red-test: if the driven body did NOT rotate, the oracle raises (the gear
+    didn't propagate the ratio)."""
+    import math
+
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_gear_ratio
+
+    with hab.assembly_scratch_session():
+        before, rel_id, ja, jb = _geared_build(ratio=2.0)
+        hab.drive_joint(ja, math.radians(25.0))
+        after = assembly_state.get_or_404()
+        # forcibly revert the driven wheel's transform to its undriven pose
+        joint_b = next(j for j in after.joints if j.id == jb)
+        driven_id = joint_b.instance_b_id
+        undriven = next(i for i in before.instances if i.id == driven_id)
+        patched = [undriven if i.id == driven_id else i for i in after.instances]
+        broken = after.model_copy(update={"instances": patched})
+        with pytest.raises(AssertionError, match="did not propagate"):
+            assert_gear_ratio(before, broken, rel_id, expected_ratio=2.0)
+
+
+def test_gear_ratio_oracle_fires_on_undriven():
+    """Red-test: the can-go-red guard raises when nothing was driven at all."""
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_gear_ratio
+
+    with hab.assembly_scratch_session():
+        before, rel_id, _ja, _jb = _geared_build(ratio=2.0)
+        after = assembly_state.get_or_404()  # nothing driven
+        with pytest.raises(AssertionError, match="nothing was driven"):
+            assert_gear_ratio(before, after, rel_id, expected_ratio=2.0)
+
+
+# ── The gear-ratio oracle GENERALISES to belt-derived relations (AF-9 belts) ────
+
+def test_coverage_report_marks_af9_belt_route_covered():
+    """AF-9 belts flipped create_belt_path → covered."""
+    report = headless_coverage_report()
+    covered = {r["endpoint"] for r in report["covered_routes"]}
+    assert "create_belt_path" in covered
+
+
+def _belted_build(*, radius_a: float = 2.0, radius_b: float = 1.0):
+    """Active scratch assembly: two pulleys revolute-mated to a base about +Z and
+    belt-coupled with the given rim radii.  Returns ``(before_snapshot, belt_rel_id,
+    joint_a_id, joint_b_id)`` — ``belt_rel_id`` is the synthetic ``__belt__<id>``."""
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+
+    hab.new_assembly("Belt")
+    hab.add_inline_instance(make_6hb_design(), name="base")
+    hab.add_inline_instance(
+        make_6hb_design(), name="pulleyA", transform=hab.translation(20.0, 0.0, 0.0))
+    hab.add_inline_instance(
+        make_6hb_design(), name="pulleyB", transform=hab.translation(40.0, 0.0, 0.0))
+    a = assembly_state.get_or_404()
+    base_id, wa_id, wb_id = a.instances[0].id, a.instances[1].id, a.instances[2].id
+    for label in ("hub_a", "hub_b"):
+        hab.add_connector(base_id, label, position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+    hab.add_connector(wa_id, "axleA", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+    hab.add_connector(wb_id, "axleB", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+    hab.define_mate(wa_id, base_id, child_label="axleA", parent_label="hub_a",
+                    joint_type="revolute", axis_direction=[0.0, 0.0, 1.0])
+    hab.define_mate(wb_id, base_id, child_label="axleB", parent_label="hub_b",
+                    joint_type="revolute", axis_direction=[0.0, 0.0, 1.0])
+    a = assembly_state.get_or_404()
+    ja, jb = a.joints[0].id, a.joints[1].id
+    hab.define_belt(ja, jb, radius_a=radius_a, radius_b=radius_b)
+    a = assembly_state.get_or_404()
+    return a.model_copy(deep=True), f"__belt__{a.belt_paths[0].id}", ja, jb
+
+
+def test_gear_ratio_oracle_passes_on_a_real_belt():
+    """assert_gear_ratio (handed the belt's synthetic relation id + radius ratio) is
+    green when the belt propagates r_a/r_b — pinning the belt→relation synthesis."""
+    import math
+
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_gear_ratio
+
+    with hab.assembly_scratch_session():
+        before, rel_id, ja, _jb = _belted_build(radius_a=2.0, radius_b=1.0)
+        hab.drive_joint(ja, math.radians(25.0))
+        after = assembly_state.get_or_404()
+        assert abs(assert_gear_ratio(before, after, rel_id, expected_ratio=2.0) - 2.0) <= 0.02
+
+
+def test_belt_ratio_oracle_fires_when_uncoupled():
+    """Red-test: if the belt-driven pulley did NOT rotate, the oracle raises."""
+    import math
+
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_gear_ratio
+
+    with hab.assembly_scratch_session():
+        before, rel_id, ja, jb = _belted_build(radius_a=2.0, radius_b=1.0)
+        hab.drive_joint(ja, math.radians(25.0))
+        after = assembly_state.get_or_404()
+        joint_b = next(j for j in after.joints if j.id == jb)
+        driven_id = joint_b.instance_b_id
+        undriven = next(i for i in before.instances if i.id == driven_id)
+        patched = [undriven if i.id == driven_id else i for i in after.instances]
+        broken = after.model_copy(update={"instances": patched})
+        with pytest.raises(AssertionError, match="did not propagate"):
+            assert_gear_ratio(before, broken, rel_id, expected_ratio=2.0)
+
+
+# ── The polymer-chain oracle PASSES on a real chain and FIRES otherwise ────────
+
+def test_coverage_report_marks_af9_polymerize_route_covered():
+    """AF-9 polymerize flipped polymerize_assembly → covered."""
+    report = headless_coverage_report()
+    covered = {r["endpoint"] for r in report["covered_routes"]}
+    assert "polymerize_assembly" in covered
+
+
+def _polymer_build():
+    """Active scratch assembly: two identical inline parts mated rigidly (B snapped to
+    +10 nm X), then polymerized forward to length 4.  Returns ``(before_snapshot,
+    seed_joint_id, after_assembly)``."""
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+
+    design = make_6hb_design()
+    hab.new_assembly("P")
+    hab.add_inline_instance(design, name="A")
+    hab.add_inline_instance(design, name="B", transform=hab.translation(20.0, 0.0, 0.0))
+    a = assembly_state.get_or_404()
+    id_a, id_b = a.instances[0].id, a.instances[1].id
+    hab.add_connector(id_a, "mate_a", position=[5.0, 0.0, 0.0], normal=[1.0, 0.0, 0.0])
+    hab.add_connector(id_b, "mate_b", position=[-5.0, 0.0, 0.0], normal=[-1.0, 0.0, 0.0])
+    hab.define_mate(id_b, id_a, child_label="mate_b", parent_label="mate_a")
+    before = assembly_state.get_or_404().model_copy(deep=True)
+    seed_jid = before.joints[0].id
+    hab.polymerize(seed_jid, count=4, direction="forward")
+    return before, seed_jid, assembly_state.get_or_404().model_copy(deep=True)
+
+
+def test_polymer_chain_oracle_passes_on_a_real_chain():
+    """assert_polymer_chain is green when every copy sits on the seed's delta lattice."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_polymer_chain
+
+    with hab.assembly_scratch_session():
+        before, seed_jid, after = _polymer_build()
+        assert_polymer_chain(before, after, seed_jid, count=4)
+
+
+def test_polymer_chain_oracle_fires_on_off_lattice_copy():
+    """Red-test: shoving one new copy off the repeat lattice makes the oracle raise."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_polymer_chain
+
+    with hab.assembly_scratch_session():
+        before, seed_jid, after = _polymer_build()
+        new = next(i for i in after.instances
+                   if i.id not in {b.id for b in before.instances})
+        moved = new.model_copy(update={"transform": hab.translation(999.0, 0.0, 0.0)})
+        broken = after.model_copy(update={
+            "instances": [moved if i.id == new.id else i for i in after.instances]
+        })
+        with pytest.raises(AssertionError, match="repeat"):
+            assert_polymer_chain(before, broken, seed_jid, count=4)
+
+
+def test_polymer_chain_oracle_fires_vacuously_on_stacked_seed():
+    """Red-test: if the seed pair is stacked (delta ≈ identity) every copy lands on the
+    seed, so the can-go-red guard raises instead of passing vacuously."""
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_polymer_chain
+
+    with hab.assembly_scratch_session():
+        design = make_6hb_design()
+        hab.new_assembly("Stacked")
+        hab.add_inline_instance(design, name="A")
+        hab.add_inline_instance(design, name="B", transform=hab.translation(20.0, 0.0, 0.0))
+        a = assembly_state.get_or_404()
+        id_a, id_b = a.instances[0].id, a.instances[1].id
+        # both connectors at the part origin → the rigid snap stacks B onto A (delta ≈ I)
+        hab.add_connector(id_a, "hub", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+        hab.add_connector(id_b, "hub", position=[0.0, 0.0, 0.0], normal=[0.0, 0.0, 1.0])
+        hab.define_mate(id_b, id_a, child_label="hub", parent_label="hub")
+        before = assembly_state.get_or_404().model_copy(deep=True)
+        seed_jid = before.joints[0].id
+        hab.polymerize(seed_jid, count=4, direction="forward")
+        after = assembly_state.get_or_404()
+        with pytest.raises(AssertionError, match="~identity"):
+            assert_polymer_chain(before, after, seed_jid, count=4)
+
+
+# ── The binding-resolves oracle PASSES on a real binding and FIRES otherwise ───
+
+def test_coverage_report_marks_af9_overhang_binding_routes_covered():
+    """AF-9 overhang-bindings flipped create/patch/delete → covered."""
+    report = headless_coverage_report()
+    covered = {r["endpoint"] for r in report["covered_routes"]}
+    assert {
+        "create_assembly_overhang_binding",
+        "patch_assembly_overhang_binding",
+        "delete_assembly_overhang_binding",
+    } <= covered
+
+
+def _binding_design(oh_id: str, sequence: str):
+    """Part design with one real overhang (auto sub-domain); grid_pos set so
+    canonical_topology works."""
+    from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.models import (
+        Design, Direction, Domain, Helix, OverhangSpec, Strand, StrandType, Vec3,
+    )
+
+    length_bp = 8
+    helix_id, strand_id = f"hx_{oh_id}", f"str_{oh_id}"
+    helix = Helix(
+        id=helix_id, grid_pos=(0, 0),
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=length_bp * BDNA_RISE_PER_BP),
+        phase_offset=0.0, length_bp=length_bp,
+    )
+    direction = Direction.FORWARD if oh_id.endswith("_5p") else Direction.REVERSE
+    strand = Strand(
+        id=strand_id,
+        domains=[Domain(helix_id=helix_id, start_bp=0, end_bp=length_bp - 1,
+                        direction=direction, overhang_id=oh_id)],
+        strand_type=StrandType.STAPLE,
+    )
+    ovhg = OverhangSpec(id=oh_id, helix_id=helix_id, strand_id=strand_id,
+                        sequence=sequence, label=oh_id)
+    return Design(helices=[helix], strands=[strand], overhangs=[ovhg])
+
+
+def _bound_build():
+    """Active scratch assembly with one cross-part overhang binding. Returns
+    ``(assembly, binding_id)``."""
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+
+    hab.new_assembly("Bind")
+    hab.add_inline_instance(_binding_design("oh-A_5p", "ACGTACGT"), name="PartA")
+    hab.add_inline_instance(_binding_design("oh-B_3p", "GGGGCCCC"), name="PartB",
+                            transform=hab.translation(10.0, 0.0, 0.0))
+    a = assembly_state.get_or_404()
+    ia, ib = a.instances[0], a.instances[1]
+    sub_a = ia.source.design.overhangs[0].sub_domains[0].id
+    sub_b = ib.source.design.overhangs[0].sub_domains[0].id
+    hab.bind_overhangs(
+        ia.id, ib.id,
+        overhang_a_id="oh-A_5p", sub_domain_a_id=sub_a,
+        overhang_b_id="oh-B_3p", sub_domain_b_id=sub_b,
+    )
+    a = assembly_state.get_or_404()
+    return a.model_copy(deep=True), a.overhang_bindings[0].id
+
+
+def test_binding_resolves_oracle_passes_on_real_binding():
+    """assert_binding_resolves is green when both endpoints resolve to live
+    sub-domains."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_binding_resolves
+
+    with hab.assembly_scratch_session():
+        a, bid = _bound_build()
+        assert_binding_resolves(a, bid)
+
+
+def test_binding_resolves_oracle_fires_on_dropped_subdomain():
+    """Red-test: if the binding references a sub-domain that no longer exists on the
+    part, the oracle raises (the case canonical_assembly can't see)."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_binding_resolves
+
+    with hab.assembly_scratch_session():
+        a, bid = _bound_build()
+        # corrupt the stored binding ref to a non-existent sub-domain id
+        b = a.overhang_bindings[0].model_copy(update={"sub_domain_a_id": "ghost-sd"})
+        broken = a.model_copy(update={"overhang_bindings": [b]})
+        with pytest.raises(AssertionError, match="dropped sub-domain"):
+            assert_binding_resolves(broken, bid)
+
+
+def test_binding_resolves_oracle_fires_on_degenerate_self_pair():
+    """Red-test: a binding whose two endpoints are the SAME (instance, sub-domain)
+    resolves but is degenerate — the non-triviality guard raises."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_binding_resolves
+
+    with hab.assembly_scratch_session():
+        a, bid = _bound_build()
+        # rewire side B to be identical to side A (still resolves, but degenerate)
+        b = a.overhang_bindings[0]
+        same = b.model_copy(update={
+            "instance_b_id": b.instance_a_id,
+            "overhang_b_id": b.overhang_a_id,
+            "sub_domain_b_id": b.sub_domain_a_id,
+        })
+        broken = a.model_copy(update={"overhang_bindings": [same]})
+        with pytest.raises(AssertionError, match="sub-domain with itself"):
+            assert_binding_resolves(broken, bid)
+
+
+# ── The mate-coincidence oracle PASSES on a real mate and FIRES otherwise ──────
+
+def _mate_build():
+    """Active scratch assembly with one rigid mate between ±5 nm-offset connectors."""
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+
+    hab.new_assembly("M")
+    hab.add_inline_instance(make_6hb_design(), name="A")
+    hab.add_inline_instance(
+        make_6hb_design(), name="B", transform=hab.translation(20.0, 0.0, 0.0),
+    )
+    a = assembly_state.get_or_404()
+    id_a, id_b = a.instances[0].id, a.instances[1].id
+    hab.add_connector(id_a, "mate_a", position=[5.0, 0.0, 0.0], normal=[1.0, 0.0, 0.0])
+    hab.add_connector(id_b, "mate_b", position=[-5.0, 0.0, 0.0], normal=[-1.0, 0.0, 0.0])
+    hab.define_mate(id_b, id_a, child_label="mate_b", parent_label="mate_a")
+    return assembly_state.get_or_404().model_copy(deep=True)
+
+
+def test_mate_oracle_passes_on_real_mate():
+    """assert_mate_coincident is green on a correctly-snapped mate."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_mate_coincident
+
+    with hab.assembly_scratch_session():
+        a = _mate_build()
+        assert assert_mate_coincident(a, a.joints[0].id) <= 0.01
+
+
+def test_mate_oracle_fires_on_separated_connectors():
+    """If the connectors are not coincident, the oracle raises (green can go red)."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_mate_coincident
+
+    with hab.assembly_scratch_session():
+        a = _mate_build()
+        moved_b = a.instances[1].model_copy(
+            update={"transform": hab.translation(50.0, 0.0, 0.0)}
+        )
+        broken = a.model_copy(update={"instances": [a.instances[0], moved_b]})
+        with pytest.raises(AssertionError, match="not coincident"):
+            assert_mate_coincident(broken, a.joints[0].id)
+
+
+def test_mate_oracle_vacuity_guard_fires_on_stacked_parts():
+    """The non-triviality guard raises when both parts sit at the same origin, so
+    connector coincidence would be vacuous."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_mate_coincident
+
+    with hab.assembly_scratch_session():
+        a = _mate_build()
+        # collapse both parts onto the world origin → connectors trivially near
+        stacked = [
+            inst.model_copy(update={"transform": hab.translation(0.0, 0.0, 0.0)})
+            for inst in a.instances
+        ]
+        degenerate = a.model_copy(update={"instances": stacked})
+        with pytest.raises(AssertionError, match="trivial"):
+            assert_mate_coincident(degenerate, a.joints[0].id)
+
+
+# ── The assembly round-trip oracle PASSES on a real build and FIRES otherwise ──
+
+def _inline_assembly():
+    """Active scratch assembly: two inline 6hb parts (2nd offset +20 nm in X)."""
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+
+    hab.new_assembly("T")
+    hab.add_inline_instance(make_6hb_design(), name="A")
+    hab.add_inline_instance(
+        make_6hb_design(), name="B", transform=hab.translation(20.0, 0.0, 0.0),
+    )
+    return assembly_state.get_or_404().model_copy(deep=True)
+
+
+def test_assembly_roundtrip_stable_on_clean_build():
+    """A well-formed headless assembly survives .nass export→import unchanged."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_assembly_roundtrip_stable
+
+    with hab.assembly_scratch_session():
+        reloaded = assert_assembly_roundtrip_stable(_inline_assembly)
+        assert len(reloaded.instances) == 2
+
+
+def _drop_an_instance_roundtrip(assembly):
+    """A deliberately buggy round-trip: faithfully reloads, then loses one part.
+
+    Stands in for a real export/import bug (a placement that doesn't survive a
+    save).  assert_assembly_roundtrip_stable MUST notice the structure changed.
+    """
+    from tests.automation_harness import roundtrip_nass
+
+    reloaded = roundtrip_nass(assembly)
+    reloaded.instances = reloaded.instances[:-1]  # drop one placed part
+    return reloaded
+
+
+def test_assembly_oracle_catches_corrupted_roundtrip():
+    """If the round-trip drops a part, assert_assembly_roundtrip_stable raises."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_assembly_roundtrip_stable
+
+    with hab.assembly_scratch_session():
+        with pytest.raises(AssertionError, match="changed the assembly structure"):
+            assert_assembly_roundtrip_stable(
+                _inline_assembly, roundtrip=_drop_an_instance_roundtrip,
+            )
+
+
+def test_assembly_oracle_catches_invalid_build():
+    """If the build itself doesn't validate (missing file source), the oracle
+    raises before round-tripping."""
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_assembly_roundtrip_stable
+
+    def _build_missing_file():
+        hab.new_assembly("bad")
+        hab.add_file_instance("does/not/exist.nadoc", name="ghost")
+        return assembly_state.get_or_404().model_copy(deep=True)
+
+    with hab.assembly_scratch_session():
+        with pytest.raises(AssertionError, match="did not validate before round-trip"):
+            assert_assembly_roundtrip_stable(_build_missing_file)
+
+
 # ── The deformation-angle oracle PASSES on a real bend and FIRES otherwise ─────
 
 def _bent_bundle(kappa=2.0, plane_a=20, plane_b=60):

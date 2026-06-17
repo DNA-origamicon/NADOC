@@ -132,18 +132,89 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 8). AF-6 shipped 2026-06-17._
+_Living pointer — each session overwrites this (step 8). AF-9 overhang-bindings sub-op shipped 2026-06-17._
 
-**▶ NEXT — AF-7 (Tier 3, Phase 1: headless ASSEMBLY builder).** This is the biggest construction gap:
-`headless_build.py` covers design ops but **assembly has NO programmatic builder at all** (220 uncovered
-routes, almost all `/assembly/*`). Create a NEW module `backend/api/headless_assembly_build.py` mirroring
-`headless_build.py`'s shape: a scratch-session context manager (bind a throwaway assembly doc) +
-`add_instance(source, transform)` + save/validate. Re-derive the real surface FIRST: the instance-create
-+ resolve + validate routes live in `backend/api/assembly*.py` / `routes_assembly*.py` — `rg "@router\\.(post|put)\\(" backend/api/ | rg -i assembly`
-and check the `.nass` save path + `/assembly/validate` handler. **Augment:** `.nass` round-trip — build →
-save → load → canonical assembly-equality + `/assembly/validate` passes (the assembly analog of
-`assert_roundtrip_stable`; you'll likely add a `canonical_assembly` fingerprint to `automation_harness.py`).
-Coverage report counts `/assembly` routes too — `headless_coverage_report()["uncovered_routes"]` is the live list.
+**▶ NEXT — AF-10 instance layout helpers (grid / radial / ring placement).** Phase 3 (AF-9) is essentially
+done: gears, belts, mate-seeded polymerize, and overhang-bindings all shipped (see metrics rows below). The one
+Phase-3 straggler — **`polymerize_periodic`** — is fixture-blocked (the part needs `is_periodic_seam=True`
+forced ligations the inline `make_6hb_design()` fixtures don't carry; build one via the route-for-polymerization
+op headlessly first, then assert each copy sits at `T_seed @ derive_periodic_delta(design)^k` — likely its own
+session). **AF-10 is the cleaner next step:** small pure placement helpers (e.g. `hab.place_grid(design, rows,
+cols, *, pitch)` / `place_ring(design, n, *, radius)`) that drive `add_instance` per cell at computed
+transforms. **Augment:** a geometric oracle on the placement lattice — assert each instance origin lands on the
+exact grid/ring (spacing == pitch, radius exact, count exact, angular step == 2π/n), id-independent. The
+placement math is a pure `backend/core` candidate (mirror `circle_primitive`), with the oracle reading the
+*placed* instance transforms (not the spec) — the AF-4 "measure the result, not the footprint" pattern.
+After AF-10: AF-11 the DSL (Tier 4).
+
+**▶ HARNESS NOW AVAILABLE (AF-9 overhang-bindings, use it):** `from tests.automation_harness import
+assert_binding_resolves`. `assert_binding_resolves(assembly, binding_id, *, require_cross_part=True)` — a
+referential-integrity oracle for cross-part `AssemblyOverhangBinding`s: loads each endpoint's part design with
+the route's own `_load_design_from_source` and asserts both `(overhang_id, sub_domain_id)` refs resolve, plus a
+non-degenerate / cross-part guard. Use it AFTER a round-trip too — it catches the gap `canonical_assembly` can't:
+`canonical_topology` doesn't fingerprint a design's overhangs/sub-domains, so a round-trip that regenerated a
+sub-domain id while the binding kept its stale ref slips past the structure fingerprint. Builders:
+`hab.bind_overhangs(inst_a, inst_b, *, overhang_a_id, sub_domain_a_id, overhang_b_id, sub_domain_b_id,
+binding_mode=…, allow_n_wildcard=…)` / `hab.patch_binding(binding_id, *, binding_mode=…)` /
+`hab.unbind_overhangs(binding_id)`. `canonical_assembly` now returns a **5-tuple** `(instances, joints, gears,
+belts, bindings)` — it fingerprints `overhang_bindings`, so a dropped/rewired binding fails the round-trip oracle.
+The overhang fixture needs `grid_pos` set on its helices (the AF-5 `grid_pos=None` TypeError trap) and an
+`OverhangSpec` (auto-populates one sub-domain).
+
+**▶ HARNESS NOW AVAILABLE (AF-9 polymerize, use it):** `from tests.automation_harness import assert_polymer_chain`.
+`assert_polymer_chain(assembly_before, assembly_after, seed_joint_id, *, count, direction="forward", tol_nm=0.01,
+min_delta_nm=0.5)` — the geometric oracle for mate-seeded polymerize. Re-derives the seed mate's repeat
+`delta = T_B @ inv(T_A)` from the seed pair's world transforms ALONE (NOT the route's chain helpers → independent,
+not a tautology) and asserts the `count−2` new instances form the exact `delta`-power multiset (`delta^k @ T_B`
+forward / `inv(delta)^k @ T_A` backward), matched id-independently within `tol_nm`, with a can-go-red guard that
+`delta`'s translation > `min_delta_nm` (a stacked seed pair → every copy on the seed → vacuous). Returns the 4×4
+`delta`. Builder: `hab.polymerize(joint_id, count, *, direction, additional_instance_ids=…)` — needs a seed mate
+between **identical** parts (use the SAME `Design` object for both `add_inline_instance` calls so `_sources_match`
+is true, else the route 422s). `canonical_assembly` already fingerprints instances+joints, so a polymerized chain
+round-trips through `assert_assembly_roundtrip_stable` unchanged with **no** harness extension (polymerize adds no
+new top-level relation list — unlike gears/belts).
+
+**▶ HARNESS NOW AVAILABLE (AF-9 belts, use it):** `hab.define_belt(joint_a_id, joint_b_id, *, radius_a, radius_b,
+side_a=…, instance_a_id=…, connector_a_label=…)` (the two joints must already be **revolute** mates, like the gear
+fixture). The belt's coupling relation surfaces with the synthetic id `f"__belt__{belt.id}"`; pin it by reusing the
+gear oracle — `assert_gear_ratio(before, after, f"__belt__{belt.id}", expected_ratio=radius_a/radius_b)` — which now
+searches `_coupling_relations` (gears + belt-derived), so the SAME oracle handles both. `canonical_assembly` now
+returns a **4-tuple** `(instances, joints, gears, belts)` — it fingerprints belt_paths, so
+`assert_assembly_roundtrip_stable` catches a dropped/rewired belt. When you add the next top-level relation list
+(rider chains, polymer groups), extend `canonical_assembly` in the same commit (4th time — see the banked lesson).
+
+**▶ HARNESS NOW AVAILABLE (AF-9 gears, use it):** `from tests.automation_harness import assert_gear_ratio`.
+`assert_gear_ratio(assembly_before, assembly_after, rel_id, *, expected_ratio, ratio_tol=0.02, min_angle_deg=2.0)` —
+the resolve-invariant for any ratio-coupling relation. Drive ONE side with `hab.drive_joint(joint_id, radians)` (its
+PATCH auto-propagates the relation — no separate `resolve()` needed), capture `assembly_state.get_or_404()` as
+`after`, and the oracle measures the two coupled bodies' real *instance-transform* rotation magnitudes (via the gear
+endpoint sides) and asserts driven/driver = `|expected_ratio|`, with a can-go-red "driver actually rotated" guard.
+**Direction-agnostic** (magnitude only — `invert` flips sign not magnitude, so no ASK-FIRST). Builders:
+`hab.define_gear(joint_a_id, joint_b_id, *, ratio, invert=False, endpoint_*=…)` (the two joints must already be
+**revolute** mates) and `hab.drive_joint(joint_id, value_radians, *, endpoint_side=None, silent=False)`.
+`canonical_assembly` now returns a **4-tuple** `(instances, joints, gears, belts)` — it fingerprints gear AND belt
+relations, so `assert_assembly_roundtrip_stable` catches a dropped/rewired gear or belt.
+
+**▶ HARNESS NOW AVAILABLE (AF-8, use it):** `from tests.automation_harness import assert_mate_coincident`.
+`assert_mate_coincident(assembly, joint_id, *, tol_nm=0.01, min_offset_nm=0.5)` — the two mated connectors are
+coincident in world space (uses the SAME `_get_connector_world` machinery resolve uses, on the instance-overridden
+design) within tol, with a non-triviality guard (the mated part origins must be separated, else the coincidence is
+vacuous — place mate connectors at a non-zero LOCAL offset from their part origins). Builders:
+`hab.add_connector(inst_id, label, position, normal)` (LOCAL position/normal) then
+`hab.define_mate(child_inst_id, parent_inst_id, *, child_label, parent_label, joint_type="rigid", axis_origin=,
+axis_direction=, min_limit=, max_limit=)`. The mate SNAPS the child onto the parent connector at create time
+(coincident before resolve too); pass `joint_type="revolute"`+`axis_*` for the AF-9 gear mates. `canonical_assembly`
+now keys joints by `(type, conn labels, parent-src, child-src, value)` so a dropped/rewired mate fails the
+round-trip fingerprint.
+
+**▶ HARNESS NOW AVAILABLE (AF-7, use it):** `from tests.automation_harness import canonical_assembly,
+roundtrip_nass, assert_assembly_roundtrip_stable`. `assert_assembly_roundtrip_stable(build_fn)` = one-line
+"assembly validates + survives a real `.nass` import unchanged". `canonical_assembly(a)` = id/order-independent
+(instances, joints) fingerprint. `roundtrip_nass(a)` = in-memory `to_json`→`POST /assembly/import` (inline parts
+travel inside; no disk). Builder: `from backend.api import headless_assembly_build as hab` →
+`hab.assembly_scratch_session()` / `hab.new_assembly()` / `hab.add_inline_instance(design, name=, transform=)` /
+`hab.add_file_instance(path, …)` / `hab.resolve()` / `hab.translation(x,y,z)`. Keep test assemblies ≤6 full-rep
+instances (import auto-downgrades >6 'full' → 'cylinders', which would change the rep field the fingerprint reads).
 
 **▶ KNOWN GOTCHA found in AF-5 (still relevant if you reuse round-trip):** `make_bundle_deformed_continuation`
 (`backend/core/lattice.py:1234`) is the **only** bundle builder that does NOT set `grid_pos` on its new
@@ -186,8 +257,9 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
   can-go-red guard (fails on an un-deformed design). **Direction-AGNOSTIC** (no sign/frame reasoning → safe
   per the ASK-FIRST rule; a signed-curvature oracle was deliberately NOT built). `design_after` is the design
   after the deformation is applied.
-- `headless_coverage_report()["uncovered_routes"]` IS the live AF backlog (**220 uncovered** after AF-6;
-  paths carry the `/api` prefix — match with `.endswith()`). Now lists mostly `/assembly/*` (the AF-7+ gap).
+- `headless_coverage_report()["uncovered_routes"]` IS the live AF backlog (**207 uncovered / 32 covered** after
+  AF-9 overhang-bindings; paths carry the `/api` prefix — match with `.endswith()`). Now lists mostly
+  `/assembly/*` layout/overhang-connection routes + the design cluster/extension residue (the AF-10+ gap).
 - Headless wrappers now exist: `hb.nick/ligate/delete_strand` (AF-2); `hb.loop_skip(h,bp,delta)` +
   `hb.apply_loop_skip_deformations()` (AF-3, delta=0 removes); `hb.circle_segment(radius_nm)` (AF-4, SQUARE);
   `hb.bundle_deformed_continuation(cells, length_bp, *, source_bp, ref_helix_id)` (AF-5);
@@ -195,7 +267,9 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
   degrees_per_nm)` (AF-6).
 
 **▶ STRUCTURAL FACTS from the audit (don't re-derive these — they're durable):**
-- `headless_build.py` exposes ~19 design ops; **assembly has NO headless builder** (the AF-7..AF-10 gap).
+- `headless_build.py` exposes ~19 design ops; **`headless_assembly_build.py` now exists (AF-7/8)** with
+  create/place/resolve/import + add-connector/define-mate — the AF-9..AF-10 gap is now gears/belts,
+  overhang-bindings/polymerize, and layout helpers.
 - Remaining design REST routes lacking a wrapper: overhang rotation, cluster ops (`/design/cluster`),
   strand-end-resize, extensions, scaffold-nick — plus the whole `/assembly/*` surface (AF-7+).
 - Pixel-drag-only ops (crossover sprite place/move, domain-shift, strand-end-resize, helix-reorder) DO
@@ -267,15 +341,66 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
 
 ### Tier 3 — headless ASSEMBLY builder (biggest construction gap; multi-phase, `headless_assembly_build.py`)
 
-- [ ] **AF-7 (Phase 1) — assembly scratch-session + `add_instance(source, transform)` + save/validate.**
-  NEW module `backend/api/headless_assembly_build.py` mirroring `headless_build.py`. **Augment:** `.nass`
-  round-trip — build → save → load → canonical assembly equality + `/assembly/validate` passes.
-- [ ] **AF-8 (Phase 2) — headless mate/joint by connector labels** (`define_mate(inst_a:label, inst_b:label,
-  type)` wrapping `/assembly/joints/create-mate`). **Augment:** post-`resolve` oracle — the mated
-  connectors are coincident (within tol) after `/assembly/resolve`.
-- [ ] **AF-9 (Phase 3) — gears / belts / overhang-bindings / polymerize wrappers.** **Augment:** each
-  resolve-invariant (gear ratio holds, belt tangent length, polymerized chain count + seam geometry via
-  `derive_periodic_delta`).
+- [x] **AF-7 (Phase 1) — assembly scratch-session + `add_instance(source, transform)` + save/validate.**
+  SHIPPED 2026-06-17. NEW module `backend/api/headless_assembly_build.py` mirroring `headless_build.py`:
+  `assembly_scratch_session()` + `new_assembly` + `add_inline_instance` / `add_file_instance` / `add_instance`
+  (imports `create_assembly` / `add_instance` / `resolve_assembly` / `import_assembly` route handlers → covered
+  by function identity) + `resolve()` + `translation()` helper. **Augment:** `assert_assembly_roundtrip_stable`
+  (new reusable oracle) + `canonical_assembly` fingerprint + `roundtrip_nass` in `automation_harness.py` — build
+  → `.nass` export (`to_json` v2) → real `POST /assembly/import` → `validate_assembly_report` passes both sides
+  AND id/order-independent fingerprint (inline source → embedded design's `canonical_topology`; file → path+sha;
+  + per-instance transform/mode/rep/fixed/visible; + joints for AF-8) is unchanged. In-memory (inline parts
+  travel inside the payload, no disk) — the assembly analog of `roundtrip_nadoc`'s import path, NOT file save/load.
+  Coverage 19→23 (create + add-instance + resolve + import all flip). `headless_coverage_report` now scans both
+  `headless_build` AND `headless_assembly_build`.
+- [x] **AF-8 (Phase 2) — headless mate/joint by connector labels.** SHIPPED 2026-06-17.
+  `hab.add_connector(inst, label, position, normal)` (imports `add_connector` route → covered) +
+  `hab.define_mate(child, parent, *, child_label, parent_label, joint_type="rigid")` (imports `create_mate`
+  → covered); the route snaps the child so its connector meets the parent's (no FK transform passed — the
+  connector-derived snap aligns the parts). **Augment:** `assert_mate_coincident` (new reusable oracle) —
+  the two mated connectors are coincident in world space (via the SAME `_get_connector_world` machinery
+  resolve uses) within tol, plus a non-triviality guard (mated part origins must be separated, else
+  coincidence is vacuous). Also enriched `canonical_assembly`'s joint key with the mated parts' source
+  fingerprints (id-independent). Coverage 23→25.
+- [ ] **AF-9 (Phase 3) — gears / belts / overhang-bindings / polymerize wrappers.** Multi-op; one sub-op
+  per session. **Augment:** each resolve-invariant (gear ratio holds, belt tangent length, polymerized chain
+  count + seam geometry via `derive_periodic_delta`).
+  - [x] **gears — SHIPPED 2026-06-17.** `hab.define_gear(joint_a_id, joint_b_id, *, ratio, invert=…)`
+    (imports `create_gear_relation`) + `hab.drive_joint(joint_id, value, *, endpoint_side=…)` (imports
+    `patch_joint`; PATCH auto-propagates the gear, path 1). **Augment:** `assert_gear_ratio(before, after,
+    rel_id, *, expected_ratio)` — measures the two coupled bodies' real *instance-transform* rotation
+    magnitudes after driving one side, asserts driven/driver = |ratio| (NOT a re-test of `current_value`),
+    with a can-go-red "driver actually moved" guard. Direction-agnostic (magnitude only). Also enriched
+    `canonical_assembly` to fingerprint `gear_relations` (keyed by the coupled joints' id-independent
+    fingerprints + ratio/invert/anchors) so the round-trip oracle now catches a dropped/rewired gear.
+    Coverage 25→27.
+  - [x] **belts — SHIPPED 2026-06-17.** `hab.define_belt(joint_a_id, joint_b_id, *, radius_a, radius_b, …)`
+    (imports `create_belt_path` + `CreateBeltPathRequest`/`BeltPulleyRequest` from `routes_assembly_belts`).
+    **Augment:** generalised `assert_gear_ratio` to search `_coupling_relations` (gears + belt-derived) so a
+    belt pins with the SAME oracle — pass `rel_id=f"__belt__{belt.id}"` + `expected_ratio = radius_a/radius_b`;
+    it proves `_belt_to_relation`'s radius→ratio synthesis actually drives the coupled pulley (NOT a hand-passed
+    gear ratio). Also extended `canonical_assembly` to fingerprint `belt_paths` (now a **4-tuple**). Coverage 27→28.
+  - [x] **polymerize (mate-seeded) — SHIPPED 2026-06-17.** `hab.polymerize(joint_id, count, *,
+    direction="forward", additional_instance_ids=…)` (imports `polymerize_assembly` +
+    `PolymerizeAssemblyRequest` from `routes_assembly_polymerize`). **Augment:**
+    `assert_polymer_chain(before, after, seed_joint_id, *, count, direction)` — re-derives the seed mate's
+    repeat `delta = T_B @ inv(T_A)` from the seed pair ALONE (not the route's chain helpers) and asserts
+    the `count−2` new copies form the exact `delta`-power multiset (`delta^k @ T_B` fwd / `inv(delta)^k @ T_A`
+    back), id-independent, within tol — plus a can-go-red guard that `delta`'s translation > 0.5 nm (stacked
+    seed → vacuous). `canonical_assembly` already fingerprints instances+joints, so the round-trip oracle
+    catches a dropped copy/joint with no extension needed. Coverage 28→29.
+  - [x] **overhang-bindings — SHIPPED 2026-06-17.** `hab.bind_overhangs` / `hab.patch_binding` /
+    `hab.unbind_overhangs` (import `create_/patch_/delete_assembly_overhang_binding` + the two request models
+    from `routes_assembly_overhangs` — covered by function identity). **Augment:** `assert_binding_resolves`
+    (new reusable oracle) — a cross-part binding's two endpoints each resolve to a real overhang sub-domain on
+    their part design (loaded via the route's own `_load_design_from_source`), with a non-degenerate guard
+    (distinct endpoints + cross-part). Genuinely new power: `canonical_topology` does NOT fingerprint a design's
+    overhangs/sub-domains, so a round-trip that regenerated a sub-domain id while the binding kept its stale ref
+    would slip past `canonical_assembly` — only resolving against the actual designs catches it. Also extended
+    `canonical_assembly` to fingerprint `overhang_bindings` (now a **5-tuple**). Coverage 29→32.
+  - [ ] **periodic polymerize remains** — `polymerize_periodic` (the SINGLE-part `is_periodic_seam` path with
+    the `derive_periodic_delta` Kabsch oracle) was NOT built: it needs a heavy fixture (a design carrying
+    `is_periodic_seam` forced ligations, e.g. via the route-for-polymerization op) — see handoff.
 - [ ] **AF-10 — instance layout helpers** (grid / radial / ring placement) for parametric assembly gen.
   **Augment:** geometric oracle on the placement lattice (spacing / radius / count exact).
 

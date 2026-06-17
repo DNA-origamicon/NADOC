@@ -56,6 +56,7 @@ Pulled from the 2026-06-16 audit; each is a *proven* pattern already green in th
 | conftest builders (`make_teeth/6hb/18hb/mini_hinge_design`) | feature-log replay reconstructs a fixture's canonical topology | `tests/conftest.py`; `tests/test_section_router.py` | the build_fn input to `assert_roundtrip_stable` |
 | `overhang_candidate_error` / `valid_overhang_sites` | geometric feasibility of an overhang placement | `backend/core/lattice.py`; `tests/conftest.py` | overhang wrappers |
 | design-geometry kernel (`_geometry_for_design`, `_strand_nucleotide_info`) | nucleotide position + 5′/3′ terminus convention | `backend/core/design_geometry.py`; `tests/test_design_geometry_core.py` | geometry-level assertions |
+| `assert_binding_resolves` (AF-9) | a metadata-only cross-part relation's endpoints resolve to live targets (survives round-trip; the gap `canonical_assembly` can't see) | `tests/automation_harness.py` | any metadata-only cross-part relation (overhang connections next) |
 
 ---
 
@@ -201,6 +202,185 @@ ignored the planes, or dropped the op fails), works for both bend and twist via 
 its per-step summation correctly handles large angles the naive relative-rotation form silently folds. The
 two red-tests prove it goes red on a wrong angle and on a non-deformed build.**"
 
+**AF-7 — headless ASSEMBLY builder (Phase 1: place + resolve + round-trip)** · _shape:_ **NEW module**
+`backend/api/headless_assembly_build.py` (the first assembly-layer headless builder — mirrors `headless_build.py`:
+`assembly_scratch_session` + `new_assembly` + `add_inline_instance`/`add_file_instance`/`add_instance` +
+`resolve` + `import_assembly`, each importing the exact route handler — `create_assembly` / `add_instance` /
+`resolve_assembly` / `import_assembly` — so they register as covered by function identity, NOT re-implemented)
++ 3 reusable oracles (`canonical_assembly`, `roundtrip_nass`, `assert_assembly_roundtrip_stable`) in
+`tests/automation_harness.py`; `headless_coverage_report` extended to scan BOTH `headless_build` and the new
+module; `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (zero god-file growth — all new code is a new module +
+the test harness) · _headless-coverage Δ:_ **19 → 23 / 239** (create + add-instance + resolve + import all flip) ·
+_oracle shipped:_ `assert_assembly_roundtrip_stable(build_fn, *, roundtrip=roundtrip_nass)` — the assembly analog
+of `assert_roundtrip_stable`: validates the built assembly (`validate_assembly_report` — file sources resolve,
+joint refs/limits hold, ids unique, flatten ok), round-trips it through the **real** `POST /assembly/import`
+(`roundtrip_nass`: `to_json` v2 → import, **in-memory**, inline part designs travel inside the payload — no
+workspace files), re-validates, and asserts the **id/order-independent** `canonical_assembly` fingerprint is
+unchanged (instances keyed by source fingerprint — inline → the embedded design's `canonical_topology`, file →
+path+sha — plus the world transform + mode/rep/fixed/visible; joints keyed by type+connector-labels+value for
+AF-8). Injectable `roundtrip=` seam so the meta-test feeds a part-dropping round-trip and proves it raises ·
+_tests:_ 7 new in `test_headless_assembly_build.py` (inline two-part round-trip stable, placement transform
+survives, canonical order-independent + placement-sensitive, resolve no-op without joints, file-source structural,
+coverage flip) + 4 new in `test_automation_harness.py` (af7-covered + oracle passes on a real build + **two
+load-bearing red-tests**: a dropped-part round-trip raises "changed the assembly structure", a missing-file source
+raises "did not validate before round-trip"); full suite **2260 passed / 55 skipped**, no drop ·
+**"Validation gained, not just a passthrough:** before AF-7 there was *no way at all* to build an assembly without
+a browser, and therefore no way to pin assembly construction — `headless_build` stopped at the design layer.
+`assert_assembly_roundtrip_stable` is the first assembly correctness oracle: it proves a scripted multi-part
+placement validates AND that every part, at its exact world transform, survives a real `.nass` save/load with an
+identical id-independent fingerprint (so a builder that dropped a part, garbled a transform, or lost an inline
+design would fail), with a red-test proving the green can go red. It is the spine the AF-8+ mate/joint, gear/belt,
+and layout wrappers pin themselves against — the assembly analog of what AF-1 did for designs.**"
+
+**AF-8 — headless mate/joint by connector labels** · _shape:_ 2 wrappers in
+`backend/api/headless_assembly_build.py` (`add_connector` imports the `add_connector` route handler from
+`routes_assembly_connectors`; `define_mate` imports `create_mate` + `CreateMateRequest`/`MateConnectorSpec` from
+`routes_assembly_joints` — exact route handlers, registers covered by function identity, NOT re-implemented) + 1
+reusable oracle `assert_mate_coincident` in `tests/automation_harness.py` + enriched `canonical_assembly`'s joint
+key; `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (all new code is the existing new module + the harness) ·
+_headless-coverage Δ:_ **23 → 25 / 239** (`POST /assembly/instances/{id}/connectors` + `POST
+/assembly/joints/create-mate` flip to covered) · _oracle shipped:_ `assert_mate_coincident(assembly, joint_id, *,
+tol_nm=0.01, min_offset_nm=0.5)` — a **geometric** oracle: it resolves the two mated connectors' world positions
+with the SAME `_get_connector_world` machinery `resolve_assembly` uses (on the instance-overridden design, so it's
+the real resolve definition of "where the connector is", not a re-derivation) and asserts they coincide within
+`tol_nm`, plus a non-triviality guard that the two mated part *origins* are separated by > `min_offset_nm` (so the
+coincidence is genuine alignment work on offset parts, not the vacuous both-stacked-at-origin case — the mate analog
+of `assert_inverse_pair`'s "forward really mutated" guard). Also enriched `canonical_assembly`'s joint key from
+`(type, conn_a, conn_b, value)` to additionally carry the two mated instances' *source fingerprints*
+(id-independent), so the round-trip fingerprint detects a mate rewired to a different part · _tests:_ 5 new in
+`test_headless_assembly_build.py` (mate makes connectors coincident, coincidence survives `resolve()`, mated
+assembly round-trips stable WITH its joint + still coincident after re-import, dropping the mate changes the
+fingerprint, + a **load-bearing red-test**: shoving the child +30 nm after the mate makes the oracle raise "not
+coincident") + 4 new in `test_automation_harness.py` (af8-covered + oracle passes on a real mate + **two
+load-bearing red-tests**: separated connectors raise "not coincident", stacked-at-origin parts raise the "trivial"
+vacuity guard); full suite **2269 passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:**
+before AF-8 there was no way to mate parts headlessly, and nothing pinned that a mate actually snaps its two
+connectors together — `assert_assembly_roundtrip_stable` (AF-7) checks the assembly *structure* survives save/load
+but is blind to whether the joint's geometric promise (connector coincidence) holds. `assert_mate_coincident`
+closes that by measuring the real connector world positions the resolver computes and asserting they coincide on an
+offset pair of parts (so a builder that registered the joint but failed to snap, or snapped to the wrong connector,
+fails), with a vacuity guard + red-tests proving the green can go red. It's the resolve-invariant spine the AF-9
+gear/belt/polymerize wrappers pin themselves against (each is 'after resolve, this relation holds').**"
+
+**AF-9 — gears (Tier 3 Phase 3, gear sub-op): `define_gear` + `drive_joint` + ratio oracle** · _shape:_ 2 wrappers
+in `backend/api/headless_assembly_build.py` (`define_gear` imports `create_gear_relation` + `CreateGearRelationRequest`
+from `routes_assembly_gears`; `drive_joint` imports `patch_joint` + `PatchJointRequest` from `routes_assembly_joints`
+— exact route handlers, registers covered by function identity) + 1 reusable oracle `assert_gear_ratio` in
+`tests/automation_harness.py` + enriched `canonical_assembly` to fingerprint `gear_relations` (now returns a 3-tuple
+`(instances, joints, gears)`); `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (all new code is the existing new
+module + the harness) · _headless-coverage Δ:_ **25 → 27 / 239** (`POST /assembly/gear-relations` + `PATCH
+/assembly/joints/{id}` flip to covered) · _oracle shipped:_ `assert_gear_ratio(assembly_before, assembly_after,
+rel_id, *, expected_ratio, ratio_tol=0.02, min_angle_deg=2.0)` — a **geometric resolve-invariant** oracle: after
+driving one side of the gear (`drive_joint`, whose PATCH auto-propagates the relation), it measures the two coupled
+bodies' real **instance-transform rotation magnitudes** (relative rotation `arccos((tr(R₁R₀ᵀ)−1)/2)` of each gear-
+endpoint instance, picked via `_gear_endpoint_side`) and asserts driven/driver = `|expected_ratio|`, with a can-go-red
+"driver actually rotated > min_angle" guard (a no-op gear makes the ratio `0/0`). Measures the placed geometry, NOT
+`joint.current_value` — so it is not a re-test of the route's own `θ_b = ratio·θ_a` arithmetic. **Direction-agnostic**
+(magnitude only → no ASK-FIRST sign/handedness reasoning; `invert` flips the driven body's direction but not the
+magnitude ratio). Also enriched `canonical_assembly` to key each `GearRelation` by its two coupled joints' id-
+independent fingerprints + ratio/invert/anchors, so `assert_assembly_roundtrip_stable` now catches a dropped/rewired
+gear · _tests:_ 6 new in `test_headless_assembly_build.py` (gear drives coupled wheel at ratio 2, fractional ratio
+0.5, invert flips sign not magnitude, gear-over-rigid-mates 400s, geared assembly round-trips stable WITH its gear,
+canonical distinguishes a gear) + 4 new in `test_automation_harness.py` (af9-covered + oracle passes on a real gear +
+**two load-bearing red-tests**: reverting the driven wheel's transform raises "did not propagate", and an undriven
+assembly raises the "nothing was driven" guard); full suite **2279 passed / 55 skipped**, no drop ·
+**"Validation gained, not just a passthrough:** before AF-9 there was no way to couple parts headlessly, and nothing
+pinned that a gear relation actually *drives* its coupled body — `assert_assembly_roundtrip_stable` (AF-7/8) checks the
+gear's structure survives save/load but is blind to whether its kinematic promise (the angular ratio) holds when you
+spin one wheel. `assert_gear_ratio` closes that by driving one side and measuring the *other body's real rotation*
+against the promised ratio (so a builder that registered the gear but failed to propagate, or used the wrong ratio,
+fails), with a can-go-red guard + two red-tests proving the green can go red. It's the resolve-invariant spine the
+belt/polymerize sub-ops pin themselves against — a belt IS a gear-equivalent coupling (`_belt_to_relation`), so it
+should reuse this same oracle with `expected_ratio = r_a/r_b`.**"
+
+**AF-9 — belts (Tier 3 Phase 3, belt sub-op): `define_belt` + generalised ratio oracle** · _shape:_ 1 wrapper
+in `backend/api/headless_assembly_build.py` (`define_belt` imports `create_belt_path` +
+`CreateBeltPathRequest`/`BeltPulleyRequest` from `routes_assembly_belts` — exact route handler, registers
+covered by function identity) + **generalised** the existing `assert_gear_ratio` oracle (now searches
+`_coupling_relations`, which folds belt-derived relations in, instead of only `assembly.gear_relations`) +
+extended `canonical_assembly` to fingerprint `belt_paths` (return is now a **4-tuple**
+`(instances, joints, gears, belts)`); `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (all new code is the
+existing new module + the harness) · _headless-coverage Δ:_ **27 → 28 / 239** (`POST /assembly/belt-paths`
+flips to covered) · _oracle shipped:_ reused `assert_gear_ratio(before, after, rel_id, *, expected_ratio)` with
+the belt's synthetic relation id `f"__belt__{belt.id}"` and `expected_ratio = radius_a/radius_b` — it measures the
+two coupled pulleys' real **instance-transform rotation magnitudes** after driving one side and asserts
+driven/driver = `|r_a/r_b|`, with the same can-go-red "driver actually moved" guard. The generalisation
+(search `_coupling_relations`, not just stored gears) is backward-safe: gears are first in that list, so every
+existing gear test is unchanged · _tests:_ 5 new in `test_headless_assembly_build.py` (belt drives pulley at
+radius ratio 2, 3:1 ratio, belt-over-rigid-mates 400s, belted assembly round-trips stable WITH its belt,
+canonical distinguishes a belt) + 3 new in `test_automation_harness.py` (af9-belt-covered + oracle passes on a
+real belt + a **load-bearing red-test**: reverting the belt-driven pulley's transform raises "did not
+propagate"); full suite **2287 passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:**
+before this, nothing proved that defining a belt with rim radii `r_a`/`r_b` actually couples its two pulleys at
+angular ratio `r_a/r_b` — the belt→`GearRelation` synthesis (`_belt_to_relation`, which derives the ratio AND the
+world-sense `invert` from the radii/sides/axes and folds the belt into propagation) was untested via a headless
+build. The gear test (AF-9 gears) hand-passes a literal ratio; the belt test passes *radii* and asserts the
+*derived* ratio drives the coupled body — so if `_belt_to_relation` computed `r_b/r_a`, dropped the belt from
+`_coupling_relations`, or got the sign wrong, the belt test goes red while the gear test stays green. That is
+distinct, new validation power, and the red-test proves the green can go red. `canonical_assembly` now also
+catches a dropped/rewired belt in the round-trip fingerprint.**"
+
+**AF-9 — polymerize (Tier 3 Phase 3, mate-seeded sub-op): `polymerize` + chain-lattice oracle** · _shape:_ 1
+wrapper in `backend/api/headless_assembly_build.py` (`polymerize` imports `polymerize_assembly` +
+`PolymerizeAssemblyRequest` from `routes_assembly_polymerize` — exact route handler, registers covered by
+function identity) + 1 reusable oracle `assert_polymer_chain` in `tests/automation_harness.py`;
+`canonical_assembly` **unchanged** (it already fingerprints instances+joints, and polymerize adds NO new
+top-level relation list — so the round-trip oracle catches a dropped copy/joint with no extension, unlike
+gears/belts); `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (all new code is the existing new module + the
+harness) · _headless-coverage Δ:_ **28 → 29 / 239** (`POST /assembly/polymerize` flips to covered) · _oracle
+shipped:_ `assert_polymer_chain(before, after, seed_joint_id, *, count, direction="forward", tol_nm=0.01,
+min_delta_nm=0.5)` — a **geometric** oracle: re-derives the seed mate's repeat `delta = T_B @ inv(T_A)` from the
+seed pair's world transforms ALONE (NOT the route's `compute_chain_transforms` — an independent derivation, so it
+is not a tautology re-running the implementation), then asserts the `count−2` new instances form the exact
+`delta`-power multiset (`delta^k @ T_B` forward / `inv(delta)^k @ T_A` backward) matched id-independently within
+`tol_nm`, plus a can-go-red guard that `‖delta translation‖ > min_delta_nm` (stacked seed pair → every copy lands
+on the seed → the oracle would pass vacuously; the analog of `assert_mate_coincident`'s separation guard).
+Direction-agnostic on handedness (re-derives the documented fwd/back split, checks placed geometry, never a
+bend/twist sign) · _tests:_ 5 new in `test_headless_assembly_build.py` (length-4 chain on the +10 nm delta
+lattice, length-6 chain, count-2 no-op, 422-on-non-identical-parts, polymerized chain round-trips stable WITH its
+2 replicated joints, + the coverage-flip assertion extended) + 4 new in `test_automation_harness.py`
+(af9-polymerize-covered + oracle passes on a real chain + **two load-bearing red-tests**: a copy shoved off the
+lattice raises "repeat", and a stacked seed pair raises the "~identity" vacuity guard); full suite **2296 passed
+/ 55 skipped**, no drop · **"Validation gained, not just a passthrough:** before this, nothing pinned that
+mate-seeded polymerize lays its copies on a geometric progression — `test_polymerize.py` checked the pure chain
+*math* (`compute_chain_transforms` with hand-fed matrices) and the route's *count*, but nothing asserted that a
+**headless** build places `count−2` real instances at the seed mate's actual `delta`-power transforms. `assert_
+polymer_chain` closes that by measuring the placed instance transforms against a `delta` re-derived solely from
+the seed pair (so a builder that dropped a copy, used the wrong repeat, or mis-ordered the chain fails), with a
+vacuity guard + two red-tests proving the green can go red. It's the resolve-invariant for any repeat-lattice
+construction; `polymerize_periodic` will reuse the same 'each copy = `T_seed @ delta^k`' shape with `delta` from
+`derive_periodic_delta` instead of the seed mate.**"
+
+**AF-9 — overhang-bindings (Tier 3 Phase 3, binding sub-op): `bind/patch/unbind_overhangs` + integrity oracle**
+· _shape:_ 3 wrappers in `backend/api/headless_assembly_build.py` (`bind_overhangs` imports
+`create_assembly_overhang_binding`; `patch_binding` imports `patch_assembly_overhang_binding`;
+`unbind_overhangs` imports `delete_assembly_overhang_binding` — all + their request models from
+`routes_assembly_overhangs`, exact route handlers, registers covered by function identity) + 1 reusable oracle
+`assert_binding_resolves` in `tests/automation_harness.py` + extended `canonical_assembly` to fingerprint
+`overhang_bindings` (now returns a **5-tuple** `(instances, joints, gears, belts, bindings)`);
+`crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (all new code is the existing new module + the harness) ·
+_headless-coverage Δ:_ **29 → 32 / 239** (`POST` + `PATCH` + `DELETE /assembly/overhang-bindings` flip to
+covered) · _oracle shipped:_ `assert_binding_resolves(assembly, binding_id, *, require_cross_part=True)` — a
+**referential-integrity** oracle: it loads each endpoint's part design with the route's OWN
+`_load_design_from_source` and asserts both `(overhang_id, sub_domain_id)` refs resolve to a live overhang
+sub-domain, plus a non-degenerate guard (the two endpoints are distinct `(instance, sub-domain)` pairs and, by
+default, cross-part). The binding is pure topology metadata (no geometry to measure), so the property to pin is
+ref validity — and crucially that it survives a `.nass` round-trip · _tests:_ 6 new in
+`test_headless_assembly_build.py` (bind resolves; bound assembly round-trips stable WITH its binding AND still
+resolves after re-import; unbind restores the pre-bind fingerprint; canonical distinguishes a binding; patch
+changes mode + fingerprint; unknown-sub-domain 404) + 4 new in `test_automation_harness.py`
+(af9-overhang-binding-covered + oracle passes on a real binding + **two load-bearing red-tests**: a binding
+pointing at a dropped sub-domain raises "dropped sub-domain", and a degenerate self-pair binding raises
+"sub-domain with itself"); full suite **2306 passed / 55 skipped**, no drop · **"Validation gained, not just a
+passthrough:** before this, nothing pinned that a cross-part overhang binding's references stay valid — and
+`assert_assembly_roundtrip_stable` *cannot* pin it, because `canonical_topology` (the inline-source fingerprint
+`canonical_assembly` keys on) does NOT fingerprint a design's overhangs or sub-domains. So a round-trip that
+regenerated a sub-domain id inside a part while the binding kept its stale id would slip past the structure
+fingerprint entirely; `assert_binding_resolves` is the only thing that catches it, by resolving the binding's
+endpoints against the actual round-tripped part designs. The two red-tests prove the green can go red. It's the
+referential-integrity spine for any future metadata-only cross-part relation (assembly overhang *connections*
+next).**"
+
 ## Lessons (anti-patterns banked — read before building)
 
 _(none yet — first session. Candidates the audit already suggests:)_
@@ -309,6 +489,153 @@ _(none yet — first session. Candidates the audit already suggests:)_
   it bends — the oracle is provably correct without needing the user to adjudicate sign/handedness. The backlog's
   floated signed-curvature/closure oracle (`solve_closing_curvature`) would have needed that conversation; it was
   deliberately not built. If a future item needs a *signed* curvature pin, that's the moment to ask.
+
+### Banked from AF-7
+- **A second headless module needs the coverage report taught about it, or its wrappers don't count.**
+  `headless_coverage_report` matched routes against `vars(headless_build)` only. The new
+  `headless_assembly_build.py` wrappers import real route handlers (so they ARE covered in spirit), but until the
+  report scanned that module too, the `/assembly` routes stayed listed as uncovered — the wrapper existed yet the
+  metric didn't move. When you add a `headless_*_build.py`, extend the report's module list in the same commit
+  (it now iterates `(headless_build, headless_assembly_build)`), or the coverage Δ silently lies.
+- **Round-trip via `import`, not `save`, to keep it in-memory and inline-preserving.** The backlog said "build →
+  save → load", but `POST /assembly/save` auto-converts inline part designs to on-disk `.nadoc` files (changing the
+  sources AND writing to the workspace). The faithful analog of `roundtrip_nadoc` is `to_json` → `POST
+  /assembly/import` (`roundtrip_nass`): it exercises the real import handler, stays in memory, and keeps inline
+  sources inline — so a self-contained scripted assembly round-trips with zero disk side effects. Use the file
+  save/load path only when the test is specifically about the inline→file conversion.
+- **Keep test assemblies ≤6 'full'-rep instances.** `import_assembly` runs `_maybe_auto_downgrade_for_memory`,
+  which silently rewrites >6 `representation='full'` instances to `'cylinders'`. `canonical_assembly` reads the
+  rep field, so an oversized assembly would fail the round-trip fingerprint check for a *non*-bug reason. The real
+  threshold is a UI/memory guard, not a topology fact — small fixtures sidestep it.
+- **`canonical_assembly` keys inline sources by the design's `canonical_topology`, NOT `design.id`.** The id is a
+  uuid that *is* preserved across round-trip, so keying on it would pass — but it wouldn't be order/id-independent
+  the way the design fingerprint is, and it would miss a builder that swapped one part's design for a
+  topologically-different one carrying the same id. Reusing `canonical_topology` makes the assembly fingerprint
+  inherit the design fingerprint's robustness for free (and composes cleanly when AF-8 adds joints).
+
+### Banked from AF-8
+- **The mate snaps at create time — you don't need `resolve()` to get coincidence, but pin both.** `create_mate`
+  → `_compose_add_joint` derives the snap from the LIVE connector world positions (`ca_world − cb_world`) and
+  applies it to the child instance immediately, so connectors are coincident the moment `define_mate` returns.
+  `resolve_assembly` re-applies the same constraint. The handoff framed the oracle as "post-`resolve`", but the
+  faithful pin is "coincident after the mate AND still coincident after an explicit resolve" — test both (a resolve
+  that *broke* coincidence would be a real bug the create-time-only check would miss).
+- **No FK transform needed for a connector mate — let the connector-derived snap align the parts.** The UI's
+  `create_mate` also accepts `moved_instance_id`+`transform` (the live drag pose), but `_compose_add_joint`
+  recomputes the snap from the connectors regardless ("safety net — frontend pre-aligns, backend recomputes to
+  guarantee coincidence"). So a headless `define_mate` can omit the FK move entirely and still land coincident —
+  simpler and it exercises the same guarantee the route promises. The connector LOCAL `position`/`normal` (set via
+  `add_connector`) are what drive the alignment.
+- **A coincidence oracle passes vacuously on stacked parts — guard on part-origin separation.** If both mated
+  parts sit at the same world origin with connectors at their part origins, "connectors coincident" is trivially
+  true with no snap. The non-triviality guard asserts the two mated instances' *origins* are separated (the snap
+  moved the child to a distinct place yet the connectors still meet) — place mate connectors at a non-zero LOCAL
+  offset from their part origins so this holds. Same shape as AF-5's "differs from straight" and AF-2's "forward
+  really mutated" guards: an oracle you can't make go red is unproven.
+- **Enrich the joint fingerprint with the mated parts' SOURCE keys, not their instance ids.** `canonical_assembly`
+  keyed joints by `(type, conn_a_label, conn_b_label, value)` — blind to *which parts* a mate joins, so a mate
+  rewired to a different instance with the same labels would pass the round-trip fingerprint. Keying additionally on
+  the two instances' source fingerprints (`canonical_topology` for inline, path+sha for file — the same id-
+  independent keys the instance fingerprint uses) makes the joint key inherit that robustness. Use `("world",)` for
+  a World mate's absent parent so the sort doesn't trip over `None` vs. tuple.
+
+### Banked from AF-9
+- **A resolve-invariant oracle must measure the moved GEOMETRY, not the stored joint value.** The gear route
+  computes `θ_b = anchor_b + sign·(θ_a − anchor_a)·ratio` and writes it to `joint_b.current_value`. An oracle that
+  reads `current_value` back and checks the same formula is testing the route's arithmetic against itself —
+  tautological, proves nothing about whether the *part* actually rotated. `assert_gear_ratio` instead measures each
+  coupled instance's **transform rotation magnitude** (the `_apply_revolute_value_to_gear_endpoint` + FK actually
+  moved it) and asserts the ratio on that — so a gear that set the value but failed to drive the body (an FK bug)
+  fails. Same shape as AF-4's "measure the placed geometry, not the footprint."
+- **Driving via PATCH auto-propagates the relation — no separate `resolve()` needed (path 1).** `patch_joint`
+  calls `_propagate_gear_relations_from(assembly, joint_id)` after applying the revolute, so a single
+  `drive_joint(joint_a, θ)` moves joint_a's body AND every gear/belt-coupled body in one call. The handoff framed
+  the oracle as "drive then resolve"; the faithful (and simpler) path is just `drive_joint` — the same auto-apply
+  insight as AF-8's "the mate snaps at create time." `resolve()` re-applies all constraints and is the right tool
+  only when you didn't get there through a driving PATCH.
+- **`canonical_assembly` ignored `gear_relations` — extend the fingerprint when a new relation type ships.** The
+  fingerprint keyed instances + joints but not gears, so a round-trip that dropped a gear would have passed
+  `assert_assembly_roundtrip_stable` silently. Keying each gear by its two coupled joints' *id-independent
+  fingerprints* (not joint ids) + ratio/invert/anchors makes the round-trip oracle catch it — the direct analog of
+  AF-8 enriching the joint key with part-source fingerprints and AF-7 teaching the coverage report about a second
+  module. **When you add a new top-level assembly relation list (belts next), extend `canonical_assembly` in the
+  same commit or the round-trip oracle silently under-pins it.** (The return is now a 3-tuple; callers index
+  `[0]`/`[1]` and compare equality, so adding `[2]` was backward-safe.)
+- **Magnitude-only kept AF-9 clear of ASK-FIRST, same as AF-6.** The gear's `ratio` magnitude is the core promise
+  and is direction-agnostic; `invert` only flips the driven body's rotation *sign*. Pinning the magnitude ratio
+  (an `arccos`, always ≥ 0) needs no handedness/frame-sign reasoning, so no user adjudication was required. The
+  invert *direction* is verified at the cheap `current_value`-sign level inside a test (pure scalar arithmetic, not
+  a geometric convention), never in the oracle.
+
+### Banked from AF-9 belts
+- **Generalise the existing resolve-invariant oracle, don't fork a near-clone.** The belt's coupling promise is
+  the SAME shape as the gear's (drive one body, the other rotates by the ratio), and `_belt_to_relation` already
+  expresses a `BeltPath` AS a `GearRelation`. The temptation is a second `assert_belt_ratio` that copy-pastes 90%
+  of `assert_gear_ratio`. The clean move was a one-line generalisation: make the oracle look the relation up in
+  `_coupling_relations(assembly, joint_by_id)` (gears + belt-derived) instead of `assembly.gear_relations`, and
+  hand it the belt's synthetic id `f"__belt__{belt.id}"`. Backward-safe because gears are first in that list — no
+  existing gear test moved. One oracle now pins both coupling types; a future relation that also lowers to a
+  `GearRelation` (a chain/sprocket) reuses it for free.
+- **The belt's `radius` is the kinematic knob even though the model calls it "advisory geometry".** `BeltPulley.radius`
+  is documented as frontend-computed advisory metadata (the *rendered* belt geometry — tangent line, centres — is
+  computed in JS and not re-derived on the backend). But `_belt_to_relation` reads `radius_a`/`radius_b` to set the
+  coupling ratio, so the radius IS load-bearing for kinematics. The validation gain is pinning that ratio
+  derivation, NOT the rendered belt-path geometry. The **tangent length** the handoff floated as a second oracle
+  is a *frontend* computation with no backend invariant to pin headlessly — pinning it would need porting that JS
+  math (a future JS↔Python-parity item or an MV row), not an AF backend oracle. Don't try to oracle a quantity the
+  backend doesn't actually compute.
+- **A new top-level relation list → extend `canonical_assembly` in the same commit (third time this rule fired).**
+  Same as AF-7 (teach the coverage report about a 2nd module), AF-8 (enrich joint key with part sources), AF-9 gears
+  (fingerprint `gear_relations`): the round-trip oracle silently under-pins a list it doesn't fingerprint. Added
+  `belt_paths` keyed by the two pulley joints' id-independent fingerprints + radii/sides/anchors. The return grew
+  from a 3-tuple to a 4-tuple; every caller compares the whole tuple for equality, so the widening was backward-safe
+  (verify with `rg 'canonical_assembly'` that nothing indexes a fixed position before widening).
+
+### Banked from AF-9 polymerize
+- **Re-derive the lattice from the SEED, not the route's chain helper, or the oracle is a tautology.** The
+  obvious move is to import `compute_chain_transforms` and compare the placed copies to its output — but that
+  re-runs the exact code under test, so a bug in the helper passes. `assert_polymer_chain` re-derives
+  `delta = T_B @ inv(T_A)` and the `delta`-power progression from the seed pair's two world transforms ALONE
+  (numpy, ~6 lines), independent of the implementation. Same shape as AF-9 gears' "measure the moved geometry,
+  not `current_value`" and AF-4's "measure the placed geometry, not the footprint": the oracle must stand
+  outside the implementation it pins.
+- **Polymerize needs source-identical seed parts — share ONE `Design` object across both inline instances.**
+  `/assembly/polymerize` 422s unless `_sources_match(inst_a.source, inst_b.source)` — for inline parts that's a
+  structural-dump equality that includes nested helix/strand ids. Two separate `make_6hb_design()` calls can
+  carry different nested ids → the dumps differ → 422. Passing the SAME `Design` object to both
+  `add_inline_instance` calls makes both embed the identical dict, so the dumps match. (AF-8's mate fixtures
+  used two *separate* designs because mates don't require source identity; polymerize does.)
+- **No `canonical_assembly` extension this time — polymerize adds no new top-level relation list.** AF-7/8/9
+  gears/belts each had to extend the fingerprint (coverage-module list / joint-source key / gear list / belt
+  list). Polymerize only appends to the EXISTING `instances` + `joints` lists, which `canonical_assembly`
+  already fingerprints, so a polymerized chain round-trips through `assert_assembly_roundtrip_stable` and a
+  dropped copy/joint is caught with zero harness change. The "extend the fingerprint in the same commit" rule
+  fires only when you add a new *top-level list* on `Assembly`, not when you grow an existing one.
+
+### Banked from AF-9 overhang-bindings
+- **For a metadata-only relation, pin referential INTEGRITY, not geometry — and know what the structure
+  fingerprint is blind to.** An `AssemblyOverhangBinding` applies no geometry (no snap, no transform), so there's
+  no placed position to measure the way the mate/gear/polymerize oracles do. The right property is that the
+  binding's refs *resolve* to live overhang sub-domains. The non-passthrough punch is that `canonical_assembly`
+  (the round-trip structure oracle) is BLIND here: it keys inline instances by `canonical_topology`, which
+  fingerprints only helices + strands — NOT overhangs or sub-domains. So a round-trip that regenerated a
+  sub-domain id while the binding kept its stale ref would pass `assert_assembly_roundtrip_stable` silently.
+  Resolving the endpoints against the actual part designs is the only thing that catches that — genuinely
+  orthogonal validation power, not a re-check of the route's create-time 404.
+- **Extend `canonical_assembly` for the new top-level list AND ship a semantic oracle — they cover different
+  failures.** The "new top-level relation list → extend the fingerprint in the same commit" rule fired a **5th
+  time** (after AF-7 coverage-module, AF-8 joint-source key, AF-9 gears, AF-9 belts): added `overhang_bindings`
+  as the 5-tuple's `[4]`. But fingerprinting alone is insufficient for bindings — it catches a *dropped/rewired*
+  binding (structure change) but not a *broken ref* (the sub-domain-id-regenerated case above, which doesn't
+  change the structure fingerprint). The pair (`canonical_assembly` extension + `assert_binding_resolves`) is
+  what fully pins it; for a geometry-bearing relation (mate/gear) the fingerprint + the geometric oracle play
+  the same complementary roles.
+- **`model_copy(update=…)` bypasses the model validator — use it to construct the "impossible" red-test state.**
+  `AssemblyOverhangBinding` has a field validator that rejects a self-binding at construction. The degenerate
+  self-pair red-test needs exactly that forbidden state to feed the oracle. Pydantic v2 `model_copy` does NOT
+  revalidate, so `binding.model_copy(update={"instance_b_id": …, "sub_domain_b_id": …})` builds the degenerate
+  object without tripping the validator — the clean way to manufacture a corrupt state a constructor would
+  refuse. (Same trick the gear/belt/polymerize red-tests use to shove a body off its lattice.)
 
 ## Difficulties ledger (genuinely-stuck items + why)
 
