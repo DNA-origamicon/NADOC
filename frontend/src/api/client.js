@@ -1941,6 +1941,7 @@ export const getOxdnaMetrics     = (id)          => _oxdnaJSON('GET',  `/oxdna/j
 export const getOxdnaDisplay     = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/display`)
 export const getOxdnaRmsd        = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsd`)
 export const getOxdnaRmsf         = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsf`)
+export const getOxdnaTrajectory  = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory`)
 
 /** Create a NAMD MD job (routes_md.py).  Pass {oxdna_job_id} to seed the run
  *  from a completed oxDNA job's relaxed coordinates instead of ideal B-DNA. */
@@ -2913,8 +2914,14 @@ export async function moveLibrary(path, destFolder) {
   return _request('POST', '/library/move', { path, dest_folder: destFolder })
 }
 
-export async function deleteLibraryItem(path) {
-  return _request('DELETE', `/library/file?path=${encodeURIComponent(path)}`)
+export async function deleteLibraryItem(path, deleteJobs = false) {
+  const q = deleteJobs ? '&delete_jobs=true' : ''
+  return _request('DELETE', `/library/file?path=${encodeURIComponent(path)}${q}`)
+}
+
+/** MD / oxDNA job folders associated with a workspace file/folder. */
+export async function getAssociatedJobs(path) {
+  return _request('GET', `/library/file/jobs?path=${encodeURIComponent(path)}`)
 }
 
 export function subscribeLibraryEvents(onEvent) {

@@ -12,6 +12,7 @@
  */
 
 import { showConfirm } from './primitives/confirm.js'
+import { confirmAndDeleteFile } from './file_deletion.js'
 
 const S = {
   bg:       '#161b22',
@@ -486,14 +487,8 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
           actions: [
             { label: '✎', title: 'Rename', fn: () => _startRename(row, folder) },
             { label: '×', title: 'Delete', color: S.red, fn: async () => {
-              const ok = await showConfirm({
-                title: 'Delete folder',
-                message: `Delete folder "${folderName}" and all its contents?`,
-                danger: true,
-                confirmLabel: 'Delete',
-              })
-              if (!ok) return
-              await api.deleteLibraryItem(folder.path); await _reload()
+              const deleted = await confirmAndDeleteFile({ api, path: folder.path, name: folderName, isDir: true })
+              if (deleted) await _reload()
             }},
           ],
           onClick: () => _navigateTo(folder.path),
@@ -524,14 +519,8 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
             { label: '✎', title: 'Rename', fn: () => _startRename(row, file) },
             { label: '↗', title: 'Move',   fn: () => _startMove(file) },
             { label: '×', title: 'Delete', color: S.red, fn: async () => {
-              const ok = await showConfirm({
-                title: 'Delete file',
-                message: `Delete "${fileName}"?`,
-                danger: true,
-                confirmLabel: 'Delete',
-              })
-              if (!ok) return
-              await api.deleteLibraryItem(file.path); await _reload()
+              const deleted = await confirmAndDeleteFile({ api, path: file.path, name: fileName })
+              if (deleted) await _reload()
             }},
           ],
           onClick: mode === 'open'

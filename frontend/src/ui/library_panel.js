@@ -8,7 +8,7 @@
 
 import { openFileBrowser } from './file_browser.js'
 import { showToast } from './toast.js'
-import { showConfirm } from './primitives/confirm.js'
+import { confirmAndDeleteFile } from './file_deletion.js'
 
 function _relativeTime(isoString) {
   const ms  = Date.now() - new Date(isoString).getTime()
@@ -265,14 +265,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       { label: '✎', title: 'Rename', fn: (e) => { e.stopPropagation(); _startRename(rowEl, nameEl, folder) } },
       { label: '×', title: 'Delete', danger: true, fn: async (e) => {
         e.stopPropagation()
-        const ok = await showConfirm({
-          title: 'Delete folder',
-          message: `Delete folder "${folder.name}" and all its contents?`,
-          danger: true,
-          confirmLabel: 'Delete',
-        })
-        if (!ok) return
-        await api.deleteLibraryItem(folder.path); await refresh()
+        const deleted = await confirmAndDeleteFile({ api, path: folder.path, name: folder.name, isDir: true })
+        if (deleted) await refresh()
       }},
     ])
 
@@ -322,14 +316,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       { label: '↗', title: 'Move',   fn: async (e) => { e.stopPropagation(); await _moveItem(file) } },
       { label: '×', title: 'Delete', danger: true, fn: async (e) => {
         e.stopPropagation()
-        const ok = await showConfirm({
-          title: 'Delete file',
-          message: `Delete "${file.name}"?`,
-          danger: true,
-          confirmLabel: 'Delete',
-        })
-        if (!ok) return
-        await api.deleteLibraryItem(file.path); await refresh()
+        const deleted = await confirmAndDeleteFile({ api, path: file.path, name: file.name })
+        if (deleted) await refresh()
       }},
     ])
 

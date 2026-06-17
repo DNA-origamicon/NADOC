@@ -51,6 +51,7 @@ from backend.api import assembly as _asm
 from backend.api import assembly_state
 from backend.api import state as design_state
 from backend.core import workspace as _ws
+from backend.core.job_cleanup import find_associated_jobs
 from backend.core.models import PartSourceFile
 
 # Shared back-imports (count toward B):
@@ -262,17 +263,75 @@ def library_move(body: MoveRequest) -> dict:
     return {"old_path": old_rel, "new_path": new_rel, "patched_assemblies": patched}
 
 
-@router.delete("/library/file", status_code=200)
-def library_delete(path: str) -> dict:
-    """Delete a workspace file or folder (folders are deleted recursively)."""
+def _job_running(kind: str, job) -> bool:
+    """True if an MD/oxDNA job is mid-run (active process or status==running).
+
+    Runner modules are imported lazily so this workspace router stays cheap to
+    import and free of circular-import risk with the job routers."""
+    if kind == "md":
+        from backend.core.md_job import MdStatus  # noqa: PLC0415
+        from backend.core.namd_runner import is_running as _ir  # noqa: PLC0415
+        return _ir(job.job_id) or job.status == MdStatus.running
+    from backend.core.oxdna_job import OxdnaStatus  # noqa: PLC0415
+    from backend.core.oxdna_runner import is_running as _ir  # noqa: PLC0415
+    return _ir(job.job_id) or job.status == OxdnaStatus.running
+
+
+@router.get("/library/file/jobs", status_code=200)
+def library_file_jobs(path: str) -> dict:
+    """List the MD / oxDNA job folders associated with a workspace file/folder.
+
+    Used by the delete-file flow to decide whether to offer cleaning up the
+    generated job folders. ``running`` flags a job whose process is still active
+    (its folder cannot be removed until it is stopped)."""
     dest = _safe_workspace_path(path)
     if not dest.exists():
         raise HTTPException(404, detail=f"Not found: {path!r}")
+    found = find_associated_jobs(_asm._WORKSPACE_DIR, path, dest.is_dir())
+    md = [
+        {"job_id": j.job_id, "design_name": j.design_name, "running": _job_running("md", j)}
+        for j in found["md"]
+    ]
+    ox = [
+        {"job_id": j.job_id, "design_name": j.design_name, "running": _job_running("oxdna", j)}
+        for j in found["oxdna"]
+    ]
+    return {"md": md, "oxdna": ox, "running": any(e["running"] for e in (*md, *ox))}
+
+
+@router.delete("/library/file", status_code=200)
+def library_delete(path: str, delete_jobs: bool = False) -> dict:
+    """Delete a workspace file or folder (folders are deleted recursively).
+
+    With ``delete_jobs=true`` the MD / oxDNA job folders generated from this
+    file (or any file under this folder) are removed too. If any of those jobs is
+    still running the whole operation is refused with 409 — stop the job first."""
+    dest = _safe_workspace_path(path)
+    if not dest.exists():
+        raise HTTPException(404, detail=f"Not found: {path!r}")
+
+    deleted_jobs: list[str] = []
+    if delete_jobs:
+        found = find_associated_jobs(_asm._WORKSPACE_DIR, path, dest.is_dir())
+        jobs = [("md", j) for j in found["md"]] + [("oxdna", j) for j in found["oxdna"]]
+        running = [j.job_id for kind, j in jobs if _job_running(kind, j)]
+        if running:
+            raise HTTPException(
+                409,
+                detail="Stop running job(s) before deleting their folders: "
+                + ", ".join(running),
+            )
+        for _kind, j in jobs:
+            job_dir = j.job_dir(_asm._WORKSPACE_DIR)
+            if job_dir.exists():
+                shutil.rmtree(str(job_dir))
+                deleted_jobs.append(j.job_id)
+
     if dest.is_dir():
         shutil.rmtree(str(dest))
     else:
         dest.unlink()
-    return {"path": path}
+    return {"path": path, "deleted_jobs": deleted_jobs}
 
 
 @router.post("/design/save-workspace", status_code=200)
