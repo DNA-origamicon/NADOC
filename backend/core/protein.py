@@ -199,6 +199,19 @@ def parse_protein_pdb(
     )
 
 
+def protein_asset_meta(asset: ProteinAsset) -> dict:
+    """Lightweight library metadata for an asset (no atom list)."""
+    return {
+        "id": asset.id,
+        "name": asset.name,
+        "source_filename": asset.source_filename,
+        "atom_count": len(asset.atoms),
+        "residue_count": asset.metadata.get("residue_count", 0),
+        "chain_ids": asset.metadata.get("chain_ids", []),
+        "default_conjugation_atom_serial": asset.default_conjugation_atom_serial,
+    }
+
+
 def protein_asset_to_atomistic(
     asset: ProteinAsset,
     pose_matrix: np.ndarray | None = None,

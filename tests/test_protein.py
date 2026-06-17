@@ -39,6 +39,7 @@ from backend.core.protein import (
     PROTEIN_SENTINEL_PREFIX,
     compose_protein_world_transform,
     parse_protein_pdb,
+    protein_asset_meta,
     protein_asset_to_atomistic,
     resolve_overhang_anchor,
 )
@@ -67,6 +68,22 @@ ATOM     11  H1  TIP3    1      12.700  12.300  12.000  1.00  0.00      WAT
 ATOM     12  SOD SOD     1      20.000  20.000  20.000  1.00  0.00      ION
 END
 """
+
+
+def test_protein_asset_meta_shape():
+    # Direct input→output pin for the core helper service-pushed from crud.py
+    # (Refactor #41): library metadata = id/name/source + counts + conjugation
+    # serial, with NO atom list leaking into the dict.
+    asset = parse_protein_pdb(_SYNTH_PDB, name="synth", source_filename="synth.pdb")
+    meta = protein_asset_meta(asset)
+    assert meta["id"] == asset.id
+    assert meta["name"] == "synth"
+    assert meta["source_filename"] == "synth.pdb"
+    assert meta["atom_count"] == len(asset.atoms) == 9   # 9 protein atoms (water+ion dropped)
+    assert meta["residue_count"] == 2                    # ALA + CYS
+    assert meta["chain_ids"] == asset.metadata.get("chain_ids", [])
+    assert meta["default_conjugation_atom_serial"] == asset.default_conjugation_atom_serial
+    assert "atoms" not in meta   # metadata-only — the heavy atom list must not be embedded
 
 
 def test_parse_keeps_protein_drops_water_ions():

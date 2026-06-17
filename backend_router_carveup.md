@@ -164,17 +164,17 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #40
-(**crud.py: boundary-hairpin scan + overhang replacement SERVICE push — overhang-web slice 3**). Extended
-`backend/core/overhang_ops.py` with 2 pure model transforms moved verbatim — `_apply_boundary_hairpin_warnings`
-(sub-domain hairpin-warning recompute, 4 route call sites) + `_replace_ovhg` (pure `model_copy` overhang swap;
-the handoff's predicted "check if pure" blocker turned out fully pure, so it moved WITH the scan — leaving it in
-api would have forced core to import `backend.api`/L4). **B=0** (core still imports only `typing` +
-`backend.core.models`), +7 unit tests (34→41 in `test_overhang_ops_core.py`). −58 LOC crud.py; routes unchanged
-(132 — service push). **2122→2129 passed** / 55 skipped, 0 failed. **#39 is COMMITTED** (fa65f73) and **#40 is the
-ONLY uncommitted work** in the tree (`overhang_ops.py` + `test_overhang_ops_core.py` + `crud.py` edits + these
-ledger updates); commit + push when the user asks (CLAUDE.md git rules). #38 (polarity/linker-compat) COMMITTED
-(70685aa); #37 (feature-log read-router) COMMITTED (e65028c).
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #41
+(**crud.py: Protein import/library + attachments ROUTER lift → `routes_protein.py`, + a small `protein_asset_meta`
+SERVICE push**). 7 cohesive display-only protein routes + 4 request models + region-only `_resolve_protein_asset`
+moved verbatim; **bespoke-B=0** (raw-B=3, all kernel/exempt: `_design_response`/`_geometry_for_helices`/
+`_find_ovhg_or_404`). The bootstrap-probed B=4 was an L8 banner-trap — `_design_for_export` belonged to the
+adjacent `/design/export/cadnano` route (LEFT in crud with `/design/save`). `_protein_asset_meta` was shared with
+the staying `_import_protein_free` (would've been bespoke-B=1) so it was pushed pure to `backend/core/protein.py`
+as `protein_asset_meta` + 1 unit test. crud.py **132→125 routes**, −274 LOC. **2129→2130 passed** / 55 skipped,
+0 failed. **#41 is the ONLY uncommitted work** in the tree (`routes_protein.py` + `main.py` mount + `crud.py`
+deletion + `core/protein.py` + `tests/test_protein.py` + these ledger updates); commit + push when the user asks
+(CLAUDE.md git rules). #40 COMMITTED (9fa033b); #39 (fa65f73); #38 (70685aa); #37 (e65028c).
 assembly.py at **29 routes** (routes drained, kernel-surface reduction pending)._
 
 **▶ LOOP PHASE SHIFT (2026-06-16, post-review):** the cheap **B=1 router lifts are drained** — 173 routes now
@@ -187,20 +187,20 @@ right there. The two highest-value targets: crud's **Cluster autodetect** (~1460
 **geometry-cache + file-load kernel** (`_geo_cache_*` + `_load_design_from_source`/`_design_with_instance_overrides`,
 the surface `routes_assembly_geometry`/`_joints`/`_frames` all lean on).
 
-**▶ NEXT — crud.py (the overhang-web service push is now DRAINED of easy pure fns; PRIMARY = the Protein router
-lift):** the Tier-3 overhang-web push shipped 3 slices (#38 polarity/linker-compat B=0 +15; #39 sub-domain
-tiling/sequence/annotation B=0 +19; #40 boundary-hairpin scan + `_replace_ovhg` B=0 +7). What's LEFT of the
-overhang web is the L4-blocked marooned mass (`_resplice_overhang_in_strand`, `_build_overhang_*`, the binding
-topology-relocation engine, relax-bond's `design_state` mutators) — leave as thin api shims, don't force it.
-**PRIMARY NEXT = Protein** (`# ── Protein import + library` + `# ── Protein attachments`,
-`grep -n "# ── Protein" backend/api/crud.py`) → `routes_protein.py`. Bootstrap-probed **B=4**
-(`_design_for_export`/`_design_response`/`_find_ovhg_or_404`/`_geometry_for_helices`) — RE-PROBE the live range first.
-Classify each per L19: `_design_for_export`+`_design_response` are kernel-exempt (count toward raw-B, never block);
-to land **bespoke-B=0** either co-move `_find_ovhg_or_404`+`_geometry_for_helices` INTO the router (if no caller
-outside the protein cluster — grep first) or share them via a small `backend/core` helper. Note `_find_ovhg_or_404`
-(crud ~7080) is a trivial lookup with several overhang-region callers, so it's likely leave-and-import-back (L13),
-not co-move. See `memory/project_protein_attachment.md`. _If Protein won't split clean, switch the loop to the
-assembly geometry-cache/design-load service push (see the assembly handoff below — the higher-value Tier-3 target)._
+**▶ NEXT — crud.py (the cheap router lifts AND the overhang-web service push are now DRAINED; PRIMARY = the
+assembly geometry-cache/design-load service push, OR a remaining crud display/export cluster):** #41 lifted
+Protein → `routes_protein.py` (bespoke-B=0; the last clean cohesive cluster). What's LEFT in crud.py is mostly the
+shared kernel + L4-blocked marooned mass: the overhang web's `_resplice_overhang_in_strand`/`_build_overhang_*`/
+binding topology-relocation engine/relax-bond `design_state` mutators, the feature-log MUTATING half (welded to
+the `_build_*`+`_replay_minor_op` replay engine — difficulties ledger), the crossover/ligation/forced-ligation
+endpoints, and the design-core kernel (`GET/POST /design`, helices, strands, geometry/atomistic/surface display
+routes). **No obvious B=0 router cluster remains** — the next real architectural jump is the **assembly
+geometry-cache + design-load SERVICE push** (the higher-value Tier-3 target, see the assembly handoff below;
+`routes_assembly_geometry`/`_joints`/`_frames` all lean on its 8–11-symbol kernel surface). _If you'd rather stay
+in crud: probe the remaining display/export clusters (`/design/atomistic`/`/surface`/`/surface/region` display
+routes ~11096 area, the STL/3mf 3D-print exports) for a cohesive B≤3 lift — but expect them to lean on
+`_geometry_for_design`/`_design_for_export` geometry-export infra (raw-B>0, bespoke-B likely 0). Probe the LIVE
+range first._
 
 **▶ DONE (Refactor #37) — crud.py feature-log read-only seek/scrub/batch ROUTER half → `routes_feature_log.py`**
 (see the handoff header above + the `[~] Feature log` backlog row). B=3, bespoke-B=0, verbatim 4-route lift,
@@ -429,10 +429,17 @@ Tiers are priority hints, not gospel.
   marooned mass (`_resplice_overhang_in_strand`, `_build_overhang_*`, the binding topology-relocation engine,
   relax-bond's `design_state` mutators) is L4-blocked — leave as thin api shims. The overhang-web service push is
   effectively complete; switch the loop to a different region (see handoff).
-- [ ] **Protein** — `# ── Protein import + library` + `# ── Protein attachments` (~3278–3596) →
-  `routes_protein.py`. **Probed B=4** (`_design_for_export`, `_design_response`, `_find_ovhg_or_404`,
-  `_geometry_for_helices`). Co-move `_find_ovhg_or_404` + `_geometry_for_helices` (or share via core) to get
-  B down. See `memory/project_protein_attachment.md`.
+- [x] **Protein** — `# ── Protein import + library` + `# ── Protein attachments` →
+  `routes_protein.py` (Refactor #41, 2026-06-16). **B=3, bespoke-B=0** (L19): the probe's `_design_for_export`
+  belonged to the adjacent `/design/export/cadnano` route (NOT protein — L8, left in crud); the live protein-only
+  range probes `_design_response`(3, kernel) + `_geometry_for_helices`(1, geometry kernel, 10 cross-region
+  callers) + `_find_ovhg_or_404`(1, trivial overhang lookup, 11 overhang-region callers) — all exempt
+  leave-and-import-back. 7 routes (import/library/delete/atomistic + attach POST/PATCH/DELETE) + 4 request models
+  + region-only `_resolve_protein_asset` moved IN. **Service push (high-B-playbook option 1):** `_protein_asset_meta`
+  was shared with the staying `_import_protein_free` (generic PDB-import path) → would've been a bespoke
+  back-import (bespoke-B=1, fails gate); it's pure (asset→dict), so pushed to `backend/core/protein.py` as
+  `protein_asset_meta` + imported from core in BOTH files + 1 unit test (`test_protein_asset_meta_shape`).
+  crud.py 132→125 routes, −274 LOC. See `memory/project_protein_attachment.md`.
 
 ### Stays in crud.py (the shared kernel — do NOT extract)
 - `_design_response` / `_design_response_with_geometry` / `_helix_label` (used by 100+ routes), the request

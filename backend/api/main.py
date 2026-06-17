@@ -54,6 +54,7 @@ from backend.api.routes_loop_skip import router as loop_skip_router
 from backend.api.routes_md import router as md_router
 from backend.api.routes_oxdna import router as oxdna_router
 from backend.api.routes_primitives import router as primitives_router
+from backend.api.routes_protein import router as protein_router
 from backend.api.routes_assign_sequences import router as assign_sequences_router
 from backend.api.routes_scaffold_routing import router as scaffold_routing_router
 from backend.api.ws import router as ws_router
@@ -132,6 +133,7 @@ app.include_router(assembly_workspace_router, prefix="/api")
 app.include_router(md_router,          prefix="/api")
 app.include_router(oxdna_router,       prefix="/api")
 app.include_router(primitives_router,  prefix="/api")
+app.include_router(protein_router,     prefix="/api")
 app.include_router(ws_router)          # WebSocket routes have no /api prefix
 
 
