@@ -206,12 +206,17 @@ assembly's geometry-cache + override-merge (#49) are now in tested `backend/core
 god-file surface is assembly's file-IO design-load infra** (`_load_design_from_source` &c.), an L15-split
 candidate of marginal value — see the `## Next-session handoff` block above for the go/no-go.
 
-**▶ crud.py is at terminal state for service pushes.** The residual `# ── Internal helpers` block is the api-bound
-response kernel (`_design_response*`/`_design_replace_response`/`_inject_joint_world_axes`/
+**▶ crud.py is at terminal state — RE-VERIFIED against the live file 2026-06-16 (`/carve-router crud`, no extraction).**
+113 routes; banner walk + probes confirmed nothing ships honestly: (a) file tail is a single B=0 debug route
+(`/design/debug/strand-stats`) — not a cohesive cluster; (b) the two remaining `# ── Crossover helpers`
+(`_find_strand_domain_at`, `_desplice_strands_for_crossover`) have **zero callers outside crud.py** → a core push
+is pure relocation (no cross-file coupling to break) = shovel; (c) the residual `# ── Internal helpers` block is the
+api-bound response kernel (`_design_response*`/`_design_replace_response`/`_inject_joint_world_axes`/
 `_strip_feature_log_payloads`, all L4-blocked or terminal response glue) + the L4-blocked marooned mass (overhang
 web mutators, feature-log MUTATING/replay engine, crossover/ligation). Those call crud builders + `design_state`,
 so they need a different strategy than service push — they are NOT carve-up backlog. Any further crud routing
 work is the design-core kernel (`GET/POST /design`, helices, strands, geometry), which STAYS by definition.
+**Do not re-open crud.py for the carve-up loop** unless a NEW route cluster is added by feature work.
 
 **▶ DONE (Refactor #37) — crud.py feature-log read-only seek/scrub/batch ROUTER half → `routes_feature_log.py`**
 (see the handoff header above + the `[~] Feature log` backlog row). B=3, bespoke-B=0, verbatim 4-route lift,
