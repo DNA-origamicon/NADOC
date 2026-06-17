@@ -18,6 +18,7 @@ from backend.core.seamed_router import (
     auto_scaffold_seamed,
 )
 from backend.core.validator import validate_design
+from tests.conftest import EIGHTEEN_HB_CELLS
 
 
 def _scaffold_forced_ligation_edges(design: Design) -> dict[str, list[tuple[str, int, int]]]:
@@ -64,8 +65,12 @@ def test_matched_ends_far_is_left_side_translate_of_near():
     its junction so copy N's far crossover and copy N+1's near crossover form an
     adjacent (bp-1, bp) HJ pair when polymerized.
     """
-    cells = [(r, c) for r in range(3) for c in range(6)]  # fresh 18HB block
-    design = make_bundle_design(cells, 105, lattice_type=LatticeType.HONEYCOMB)
+    # The 18hb honeycomb layout (and 388 bp) is the confirmed repro for the
+    # bow-left near-crossover bug: it contains the three vertical (row-differing)
+    # bonds whose legal xover sites straddle the near floor.  A plain 3×6 block did
+    # NOT reproduce it (its near faces fall elsewhere relative to the bows), so the
+    # regression must run on this layout to exercise the fix.
+    design = make_bundle_design(EIGHTEEN_HB_CELLS, 388, lattice_type=LatticeType.HONEYCOMB)
 
     updated, result = auto_scaffold_matched(design)
 
@@ -85,7 +90,18 @@ def test_matched_ends_far_is_left_side_translate_of_near():
 
     assert near and far
 
-    # Every far crossover sits on the LEFT side of its junction (never bow-right).
+    # Every NEAR crossover sits on its BOW-RIGHT site, and every FAR crossover on the
+    # LEFT side of its junction.  All three honeycomb bond directions must be
+    # bow-consistent on the near face: the vertical (row-differing) bond's legal sites
+    # straddle the near floor, so the descending search used to land its near crossover
+    # on the bow-LEFT member (one bp off), giving that pair a period one bp longer than
+    # the rest and putting its seam crossover on the wrong strand of the junction.
+    for bps in near.values():
+        for bp in bps:
+            assert bp % HC_CROSSOVER_PERIOD in _HC_SCAF_BOW_RIGHT, (
+                f"near crossover at bp {bp} (phase {bp % HC_CROSSOVER_PERIOD}) is "
+                "bow-left — not all bond directions landed on their bow-right site"
+            )
     for bps in far.values():
         for bp in bps:
             assert bp % HC_CROSSOVER_PERIOD not in _HC_SCAF_BOW_RIGHT
@@ -97,9 +113,14 @@ def test_matched_ends_far_is_left_side_translate_of_near():
             for a, b in zip(sorted(near[key]), sorted(far[key])):
                 deltas.add(b - a)
     assert deltas
-    for d in deltas:
-        # d is P or P-1 (left-side step); P itself is a multiple of the period.
-        assert (d % HC_CROSSOVER_PERIOD) in (0, HC_CROSSOVER_PERIOD - 1)
+    # REGRESSION: every pair must share ONE uniform period (the far face is a single
+    # clean translate of the near face).  The bow-left near-crossover bug gave the
+    # vertical-bond pairs a period of P while the rest were P-1 — a non-uniform seam
+    # that broke end-to-end polymer stacking.  A single distinct period is the oracle.
+    assert len(deltas) == 1, f"non-uniform matched-ends period: {sorted(deltas)}"
+    (period,) = deltas
+    # the uniform period is P-1 (one whole crossover period minus the left-side step).
+    assert period % HC_CROSSOVER_PERIOD == HC_CROSSOVER_PERIOD - 1
 
 
 def test_seamed_autoscaffold_preserves_hinge_forced_scaffold_anchors():

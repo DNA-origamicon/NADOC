@@ -726,6 +726,22 @@ def _auto_scaffold_seamed_impl(
                     f"[NearEnds] No xover found for {hA_id}↔{hB_id} near lo={face}"
                 )
                 continue
+            # Matched-ends: land every near turn on its BOW-RIGHT site so all three
+            # honeycomb bond directions are bow-consistent.  Each bond's legal xover
+            # sites come in adjacent bow pairs (bow-left at bp, bow-right at bp+1);
+            # the descending search from face-3 can land on the bow-LEFT member when
+            # the pair straddles the floor (the vertical/row-differing bond does this),
+            # putting that copy's seam crossover on the wrong strand of the junction.
+            # Snapping to the adjacent bow-right site (when legal) makes the far-end
+            # translate + bow-right −1 normalisation treat every pair uniformly, so the
+            # far face is a single clean period translate of the near face.
+            if (
+                matched_ends
+                and (xover_bp % period) not in bow_right
+                and ((xover_bp + 1) % period) in bow_right
+                and _scaf_nb(current, rowA, colA, xover_bp + 1) == tuple(hB.grid_pos)
+            ):
+                xover_bp += 1
             near_specs.append({
                 "hA_id": hA_id, "hB_id": hB_id,
                 "face_a": face_a, "face_b": face_b,
