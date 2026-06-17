@@ -44,6 +44,9 @@ from backend.api.routes_camera_poses import router as camera_poses_router
 from backend.api.routes_cluster_joints import router as cluster_joints_router
 from backend.api.routes_clusters import router as clusters_router
 from backend.api.routes_deformation import router as deformation_router
+from backend.api.routes_display_geometry import router as display_geometry_router
+from backend.api.routes_display_metadata import router as display_metadata_router
+from backend.api.routes_export_3dprint import router as export_3dprint_router
 from backend.api.routes_export_md import router as export_md_router
 from backend.api.routes_export_structure import router as export_structure_router
 from backend.api.routes_extensions import router as extensions_router
@@ -108,7 +111,10 @@ app.include_router(animations_router,  prefix="/api")
 app.include_router(extensions_router,  prefix="/api")
 app.include_router(feature_log_router, prefix="/api")
 app.include_router(deformation_router, prefix="/api")
+app.include_router(display_geometry_router, prefix="/api")
+app.include_router(display_metadata_router, prefix="/api")
 app.include_router(flexible_segments_router, prefix="/api")
+app.include_router(export_3dprint_router, prefix="/api")
 app.include_router(export_md_router,   prefix="/api")
 app.include_router(export_structure_router, prefix="/api")
 app.include_router(sequences_router,   prefix="/api")
