@@ -739,6 +739,24 @@ pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 wit
   strands, 12 crossovers, `_seamed` in the name) — same latent corruption; its tests happen to pass but it
   should likely be replaced with a clean pre-routing dumbbell when this is fixed.
 
+## ISSUE-10 — Dead MD-load REST routes superseded by the WebSocket path (tech debt / dead code)
+
+- **Status:** `[x]` DONE 2026-06-16 — both dead handlers + their request models deleted from `routes_md.py`
+  in the same session they were discovered (user approved). `/md/browse` (live) kept. 2130 passed, 0 failed;
+  ruff clean. Discovered during the crud.py carve-up (Refactor #42, MD-load fold-in).
+- **Symptom:** `POST /md/resolve-config` and `POST /md/load` have **no caller** — not in `frontend/src/`,
+  not in `tests/`. The live MD-playback load path is the `/ws/md-run` WebSocket (`backend/api/ws.py`,
+  `action:'load'`), which calls `backend.core.md_import.resolve_md_config` directly and does the trajectory
+  load itself. The REST twins are leftovers from before the WS path. (`GET /md/browse`, by contrast, IS
+  live — `frontend/src/ui/md_panel.js` uses it for the file picker.)
+- **Where:** both routes now live in `backend/api/routes_md.py` (folded out of crud.py in #42, moved verbatim
+  rather than deleted because deletion is a risky action needing user sign-off). `md_resolve_config` /
+  `md_load`, just below the `# ── Molecular Dynamics load` banner.
+- **Desired behavior (to confirm with user):** if truly dead, delete both handlers + their request models
+  (`MdResolveConfigRequest` / `MdLoadRequest`) from `routes_md.py`. Before deleting, double-check no external
+  tooling / notebook / curl-based workflow depends on them (the carve-up only proved no *in-repo* caller).
+- **Scope:** tiny, mechanical deletion. No behavior change (nothing calls them). Low priority.
+
 ## Next-session handoff
 
 _Living pointer — each session overwrites this. Last updated 2026-06-08 (ISSUE-7 shipped: negative-bp element

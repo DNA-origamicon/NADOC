@@ -164,18 +164,21 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #41
-(**crud.py: Protein import/library + attachments ROUTER lift → `routes_protein.py`, + a small `protein_asset_meta`
-SERVICE push**). 7 cohesive display-only protein routes + 4 request models + region-only `_resolve_protein_asset`
-moved verbatim; **bespoke-B=0** (raw-B=3, all kernel/exempt: `_design_response`/`_geometry_for_helices`/
-`_find_ovhg_or_404`). The bootstrap-probed B=4 was an L8 banner-trap — `_design_for_export` belonged to the
-adjacent `/design/export/cadnano` route (LEFT in crud with `/design/save`). `_protein_asset_meta` was shared with
-the staying `_import_protein_free` (would've been bespoke-B=1) so it was pushed pure to `backend/core/protein.py`
-as `protein_asset_meta` + 1 unit test. crud.py **132→125 routes**, −274 LOC. **2129→2130 passed** / 55 skipped,
-0 failed. **#41 is the ONLY uncommitted work** in the tree (`routes_protein.py` + `main.py` mount + `crud.py`
-deletion + `core/protein.py` + `tests/test_protein.py` + these ledger updates); commit + push when the user asks
-(CLAUDE.md git rules). #40 COMMITTED (9fa033b); #39 (fa65f73); #38 (70685aa); #37 (e65028c).
-assembly.py at **29 routes** (routes drained, kernel-surface reduction pending)._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #42
+(**crud.py: Molecular Dynamics load FOLD-IN → the existing `routes_md.py`**). The 3 MD-load routes
+(`/md/resolve-config` + `/md/load` + `/md/browse`) + their 2 request models moved verbatim into `routes_md.py`
+(the NAMD-job-runner router) — **B=0** (the probe printed ZERO crud privates; they depend only on `design_state`,
+function-local `backend.core.*` imports, and their own models). **L12 fold-in, not a new module** — `routes_md.py`
+already owns the MD subsystem; no `main.py` change. The whole "Molecular Dynamics load" concern is now out of
+crud.py. **Finding (→ issues_ledger):** `/md/resolve-config` + `/md/load` are dead REST routes — the live
+MD-load path is the `/ws/md-run` WebSocket (`ws.py`); only `/md/browse` is frontend-used (`md_panel.js`). **Both
+dead routes + their request models were then DELETED (user-approved, same session) → ISSUE-10 DONE in
+`issues_ledger.md`/`issues_fix_log.md`**; `/md/browse` kept. crud.py **125→122 routes**, −161 LOC; `routes_md.py`
+nets **+1 route** (browse). **2130→2130 passed** / 55 skipped, 0 failed (deletion of dead code, no test delta). #42 COMMITTED + pushed
+2026-06-16; #41 COMMITTED (8e4a0cc, Protein → `routes_protein.py`, bespoke-B=0); #40 (9fa033b); #39 (fa65f73);
+#38 (70685aa); #37 (e65028c). assembly.py at **29 routes** (routes drained, kernel-surface reduction pending).
+**New exemplar banked:** an L12 fold-into-an-existing-sibling-router (B=0) is a legit, clean alternative to a new
+`routes_<area>.py` when the concern already has a home — prefer it over spawning a tiny module._
 
 **▶ LOOP PHASE SHIFT (2026-06-16, post-review):** the cheap **B=1 router lifts are drained** — 173 routes now
 live in extracted routers, crud.py is at 139 routes / assembly.py at 29. An external review confirmed the router
@@ -374,6 +377,17 @@ Tiers are priority hints, not gospel.
   `_place_auto_crossovers` still from crud; (2) `headless_build.py`'s 4 imports (`_ScaffoldSeqBody`/
   `_FullAutostapleBody`/`assign_scaffold_sequence_endpoint`/`full_autostaple_endpoint`) repointed at the new
   module. Verbatim lift; 2088 passed / 55 skipped unchanged. crud.py 139→136 routes, −257 LOC.
+
+- [x] **Molecular Dynamics load** — `# ── Molecular Dynamics load` (`/md/resolve-config` + `/md/load` +
+  `/md/browse`) **folded into the existing `routes_md.py`** (Refactor #42, 2026-06-16). **B=0** — the probe
+  printed ZERO crud privates; the 3 handlers depend only on `design_state` (already imported in `routes_md.py`),
+  function-local `backend.core.*` imports, and their own 2 request models (moved with them). **L12 fold-in**
+  (not a new module): `routes_md.py` already owns the MD subsystem (`/md/jobs/*`, `/md/namd-available`); the
+  load/resolve/browse routes share that reason to change + the `/md` prefix. No `main.py` change (already
+  mounted). **Finding:** `/md/resolve-config` + `/md/load` have no frontend/test caller (the live load path is
+  the `/ws/md-run` WebSocket in `ws.py`); only `/md/browse` is live (`md_panel.js`). Moved verbatim, not deleted
+  (deletion needs user sign-off) → see `issues_ledger.md`. crud.py 125→**122 routes**, −161 LOC. The whole MD
+  concern is now out of crud.py.
 
 ### Tier 3 — service-heavy (do a service push first, then maybe a router)
 

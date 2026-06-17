@@ -869,3 +869,53 @@ async def namd_available() -> dict:
         "gmx_path":       gmx_path,
         "recommended_threads": default_threads(),
     }
+
+
+# ── Molecular Dynamics load ────────────────────────────────────────────────────
+
+
+@router.get("/md/browse")
+def md_browse(dir: str = "", ext: str = "") -> dict:
+    """
+    List server-side filesystem entries for the MD file picker.
+
+    Parameters
+    ----------
+    dir : absolute directory path to list (empty → user home directory)
+    ext : comma-separated extensions to filter files (e.g. ".gro,.tpr")
+          Empty = show all non-hidden files
+    """
+    from pathlib import Path
+
+    base = Path(dir).resolve() if dir else Path.home()
+    exts = {e.strip().lower() for e in ext.split(",") if e.strip()} if ext else set()
+
+    entries: list[dict] = []
+
+    # Parent navigation
+    parent = base.parent
+    if parent != base:
+        entries.append({"name": "..", "path": str(parent), "type": "dir", "size": 0})
+
+    try:
+        items = sorted(base.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
+    except PermissionError:
+        return {"path": str(base), "entries": entries}
+
+    for p in items:
+        if p.name.startswith("."):
+            continue
+        try:
+            if p.is_dir():
+                entries.append({"name": p.name, "path": str(p), "type": "dir", "size": 0})
+            elif not exts or p.suffix.lower() in exts:
+                entries.append({
+                    "name": p.name,
+                    "path": str(p),
+                    "type": "file",
+                    "size": p.stat().st_size,
+                })
+        except (PermissionError, OSError):
+            continue
+
+    return {"path": str(base), "entries": entries}
