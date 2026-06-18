@@ -62,6 +62,13 @@ Pulled from the 2026-06-16 audit; each is a *proven* pattern already green in th
 | `assert_cluster_translated` (AF-15) | a cluster's DISPLAY-layer rigid-TRANSLATION pose actually shifts the cluster's helix geometry by the exact vector (read via `deformed_helix_axes`), only the cluster moves, `‖T‖>min` guard; the load-bearing pin where `canonical_topology` is blind to the pose overlay | `tests/automation_harness.py` | any cluster/group pose op that is a geometric overlay outside the strand graph (cluster transforms, plate layout) — measure the placed geometry, don't trust round-trip |
 | `assert_edges_collinear` (AF-15 P2) | a cluster's OBB edge shares one infinite line with a target edge/world line after the alignment solver — parallel-or-antiparallel directions (within `tol_deg`) AND both src endpoints on the target line (within `tol_nm`), recomputed on the POSED geometry; direction-AGNOSTIC, non-degeneracy guard | `tests/automation_harness.py`; `backend/core/cluster_obb.py` | any rigid-body edge/axis alignment (AF-14 joint-axis placement, the 4-bar parallelogram capstone) |
 | OBB equivariance `OBB(g·design)=g·OBB(design)` (AF-15 P2) | the cluster OBB frame rotates WITH the cluster (half preserved, axes rotate, centre moves) — so a named edge/corner refers to the same physical feature before/after a pose; PCA cross-section frame + **positional** sign anchor (NOT a value-argmax, which ties on symmetric corners) | `backend/core/cluster_obb.py`; `tests/test_cluster_obb.py::test_obb_is_equivariant` | any named-feature picker on a posed rigid body (AF-14 corner/edge joint anchors) |
+| `assert_joint_on_hull_corner` (AF-14 P1) | a revolute joint's world axis (re-derived from cluster-LOCAL storage via `_local_to_world_joint`, so it also pins the route's world→local→world round-trip on a posed cluster) lies along a named OBB edge / passes through a named corner of the independently recomputed OBB; direction-AGNOSTIC, non-degeneracy guard | `tests/automation_harness.py`; `backend/core/cluster_obb.py` (`hull_prism_axis` + `OBB.face_normal`) | any axis/feature anchored on a named OBB element (AF-14 P2 ROM candidates, the 4-bar capstone joints) |
+| `assert_range_of_motion` (AF-14 P2) | a revolute joint's collision-free swing about a world axis equals the expected magnitude (swept OBB–OBB SAT, `_obb_intersect` 15-axis + per-step scan + bisection, OBBs padded by helix radius); total two-sided θ⁺+θ⁻ clamped to the joint limits, direction-AGNOSTIC; physical-bound guard + can-go-red (no-obstacle→full limit, obstacle in path strictly reduces) | `tests/automation_harness.py`; `backend/core/cluster_obb.py` (`obb_sweep_rom`/`cluster_range_of_motion`/`rank_joint_candidates`) | any swept-rigid-body clearance / kinematic-mechanism DOF check (the 4-bar parallelogram capstone, AF-12 linkage mobility) |
+| `assert_parallelogram_linkage` + `grubler_mobility` (capstone) | an ASSEMBLED multi-cluster mechanism is a valid parallelogram four-bar linkage: closed quadrilateral (adjacent bars share an OBB corner, enclosed area > min — non-degeneracy guard) + opposite sides parallel-and-equal + Grübler/Kutzbach planar mobility == expected DOF (`3(n−1)−2·lower−higher`) + every hinge movable (nonzero swept-OBB ROM vs. the non-pinned bars); direction-AGNOSTIC; can-go-red on wrong joint count (mobility≠1) or unarranged bars (no shared corner) | `tests/automation_harness.py`; `backend/core/cluster_obb.py` (`grubler_mobility`) | any composed linkage / mechanism (AF-12 linkage layer); `grubler_mobility` reusable for any planar mechanism's DOF |
+| `assert_cluster_in_feature_log` (AF-16) | a logged cluster-creation is recorded: exactly one `cluster_create` feature-log entry for the cluster, naming its exact helix set + name; the load-bearing pin where `canonical_topology` is blind to clusters (the loop/skip / deformation / pose blind-spot, 4th instance), so only the feature-log entry proves the grouping persisted across a `.nadoc` round-trip; can-go-red on an unlogged build (no entry) or a mismatched helix set | `tests/automation_harness.py`; `backend/core/models.py` (`ClusterCreateLogEntry`) | any feature-logged grouping/overlay op whose effect is invisible to the strand-graph fingerprint (cluster create, future group/layout log entries) |
+| `assert_recommended_hinge` (AF-14 P3) | the #1 of a cluster's ranked hinge-edge recommendations is NOT parallel to the helical (`w`) axis (a fold, not a barrel-roll), is the LONGEST such non-axial edge, and is corner-anchored (stored `axis_origin` coincides with an edge endpoint, not the midpoint) — all re-measured on the independent equivariant OBB; direction-AGNOSTIC; can-go-red on an axial edge ranked first or a midpoint anchor | `tests/automation_harness.py`; `backend/core/cluster_obb.py` (`recommend_hinge_joints`) | any heuristic feature-ranker on an OBB (hinge/anchor recommenders); the corner-vs-midpoint anchor check reusable for any "named point on a named edge" placement |
+| `assert_fully_sequenced` (full-sequencing feature) | a design carries a complete, *correct* sequence: zero undefined bases (same `count_undefined_bases` gate every export / `create_oxdna_job` path enforces, reference strands excluded) AND every scaffold-paired staple base is the `complement_base` of its scaffold base (walked independently of the assignment code, so a wrong-base fill fails, not just an `'N'`); non-vacuity guards on both; can-go-red on an unsequenced design or a corrupted staple base | `tests/automation_harness.py`; `backend/api/headless_build.py` (`full_sequence`/`assign_staple_sequences`) | any op that must leave a design fully + correctly sequenced (export readiness, the AF-13 oxDNA fixture, future autostaple-sequence checks) |
+| `assert_relaxed_geometry_recovered` (AF-13 P1) | a headless oxDNA relaxation reached `completed` AND its relaxed last frame reads back (display route → `read_configuration_unwrapped`, PBC-unwrapped + Kabsch-aligned) into a full per-nucleotide position map: exactly one *finite* position per design nucleotide, every `(helix_id, bp, dir)` key a real key of the design's geometry (set-equal); the first **physical-layer** oracle (Tier 5), Three-Layer-clean (reads relaxed geometry, never writes it to `Design`); can-go-red on a non-completed job or a wrong nucleotide count | `tests/automation_harness.py`; `backend/api/headless_oxdna_build.py` (`run_relaxation`/`read_relaxed_positions`) | any physical-layer (oxDNA) headless run + geometry-recovery check (AF-13 P2 measurement/constraint oracles build on it) |
 
 ---
 
@@ -716,6 +723,282 @@ strand topology is never touched.**"
 
 ---
 
+**AF-14 — geometry-aware revolute-joint placement (Phase 1): `place_cluster_joint` + `hull_prism_axis` +
+`assert_joint_on_hull_corner`** · _shape:_ 1 wrapper `hb.place_cluster_joint` in `backend/api/headless_build.py`
+(imports the exact `add_joint` route handler + `AddJointBody` from `routes_cluster_joints` → covered by function
+identity) + 1 pure helper `hull_prism_axis` (+ a new `OBB.face_normal` method) in the existing
+`backend/core/cluster_obb.py` + 1 NEW reusable oracle `assert_joint_on_hull_corner` in `tests/automation_harness.py`;
+`crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (new code is the existing headless module + the existing core module +
+the harness — NO god-file growth, NO new module) · _headless-coverage Δ:_ **34 → 35** (`POST
+/design/cluster/{id}/joint` = `add_joint` flips to covered — a REAL route-wrapper item, the first coverage flip since
+AF-15 Phase 1; the AF-15-P2 / AF-10 / AF-11 items in between were all construction-sugar) · _oracle shipped:_
+`assert_joint_on_hull_corner(design, joint_id, *, edge=(axis,s1,s2) | corner=(su,sv,sw)+face=(axis,sign),
+tol_nm=0.05, tol_deg=1.0)` — a **geometric** oracle: re-derives the placed joint's world axis from its cluster-LOCAL
+storage + the cluster's current pose via `_local_to_world_joint` (so it measures where the axis really is after the
+route's world→local→world conversion, honoring the local-frame round-trip on a *posed* cluster), recomputes the OBB
+independently with the equivariant `cluster_obb`, and asserts — EDGE mode: the joint axis line is collinear with the
+named edge (direction ∥/anti-∥ within `tol_deg` AND both edge endpoints within `tol_nm` of the joint line);
+CORNER mode: the joint axis passes through the named corner (perp dist < `tol_nm`) AND its direction ∥/anti-∥ the
+named face normal. **Direction-AGNOSTIC** (a line, not a ray — both senses pass → no ASK-FIRST sign/handedness
+reasoning; the *swing sense* is Phase 2's ROM). Non-degeneracy guard (OBB edge longer than `min_len_nm`) · _tests:_
+7 new in `test_cluster_obb.py` (`hull_prism_axis` edge-runs-along-edge / corner-pivots-along-face-normal / 4
+rejections; `place_cluster_joint` lands-on-edge, passes-through-corner, **posed-cluster local-frame round-trip**,
+coverage flip) + 5 new in `test_automation_harness.py` (oracle passes on a real edge + a real corner placement +
+**two load-bearing red-tests**: a joint on edge (w,+1,+1) checked against the parallel-but-offset edge (w,−1,+1)
+raises "off the joint axis line"; a joint at corner (+1,+1,+1) checked against corner (−1,+1,+1) raises "from
+corner"; + af14-covered) + repointed the two coverage-count assertions (`test_align_cluster_edge_adds_no_coverage`,
+`test_spec_build_adds_no_coverage`) 34 → 35; full suite **2478 passed / 55 skipped**, no drop · _cohesion:_
+`hull_prism_axis` adds ONE reason to change to `cluster_obb.py` (named-OBB-feature → world axis), same dep surface
+(the existing `cluster_obb` + numpy); `place_cluster_joint` is a thin route-driver · **"Validation gained, not just a
+passthrough:** before AF-14 a revolute joint could only be placed by clicking a face of the hull approximation in the
+gizmo — there was no headless entry, so no automated way to pin that a joint lands where you asked. `place_cluster_joint`
+gives the entry and `assert_joint_on_hull_corner` proves the geometric promise: the placed joint's *real world axis*
+(re-derived from its LOCAL storage, so it also exercises the world→local→world round-trip the route performs) lies on
+the named OBB edge / passes through the named corner of an independently recomputed OBB — so a placer that snapped to
+the wrong edge, mangled the world→local conversion, or used the wrong face normal fails. The posed-cluster test is the
+sharp one: it places the joint on a translated+rotated cluster and the oracle still finds the axis on the edge,
+proving the local-frame storage is drift-free (the whole point of storing the axis in local coords). Two red-tests
+prove the green can go red. It's the per-joint geometry the AF-14 Phase-2 ROM selector and the 4-bar-parallelogram
+capstone compose. Three-layer law honoured: placing a `ClusterJoint` is a topological/design-layer write, but the
+hull-prism OBB it anchors to is a pure geometric *read* that never writes back.**"
+
+**AF-14 — geometry-aware revolute-joint ROM (Phase 2): `cluster_range_of_motion` + `rank_joint_candidates` +
+`assert_range_of_motion`** · _shape:_ pure swept-collision geometry added to the existing
+`backend/core/cluster_obb.py` (`_obb_intersect` = Ericson 15-axis SAT; `_padded`/`_rotate_obb` helpers;
+`obb_sweep_rom` = OBB-only per-step scan + 40-iter bisection of first contact in each sense; `cluster_range_of_motion`
+= the design-level wrapper, anchored cluster swings vs. all others static; `rank_joint_candidates` = the 12 OBB edges
+ranked by ROM) + 1 NEW reusable oracle `assert_range_of_motion` in `tests/automation_harness.py`;
+`crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (all new code is the existing core module + the harness — NO god-file
+growth, NO new module) · _headless-coverage Δ:_ **35 → 35** (UNCHANGED — a construction/analysis item: it wraps NO new
+route, it *reads* geometry; the deliverable is the oracle, not a coverage flip — like AF-10/AF-11/AF-15-P2) · _oracle
+shipped:_ `assert_range_of_motion(design, cluster_id, axis, expected_deg, *, tol_deg=2.0, min_angle_deg=-180,
+max_angle_deg=180, pad=HELIX_RADIUS, step_deg=2.0)` — a **geometric** oracle: computes the swept-OBB total two-sided
+free swing about `axis` and asserts it == `expected_deg ± tol_deg`, with a physical-bound guard (`0 ≤ ROM ≤ max−min`).
+**ASK-FIRST decisions confirmed by the user (2026-06-17):** (1) the *anchored* cluster is the moving body, every
+other cluster a static obstacle; (2) ROM is the **total two-sided magnitude** θ⁺+θ⁻ (each clamped to the angular
+limit) — direction-AGNOSTIC, no handedness, so it stays clear of the ASK-FIRST DNA-directionality rule the way AF-6
+did; (3) each OBB is **padded by the helix radius** (~1 nm) so two bundles register contact rim-to-rim rather than
+when their axis boxes overlap · _tests:_ 7 new in `test_cluster_obb.py` (SAT overlap/separation; **synthetic
+rod+double-wall analytic** ROM = `2·(asin(Y0/√(L²+w²))−atan2(w,L))` to <1°, an independent closed-form derivation NOT
+the SAT sweep; no-obstacle full-limit for 360° and a custom ±90°; lone-cluster full swing; **obstacle-reduces +
+monotonic** on real bars; `rank_joint_candidates` sorted-by-ROM + door-jamb variation + target filter; oracle pass +
+wrong-angle red) + 3 new in `test_automation_harness.py` (oracle passes on a lone cluster's full swing + **two
+load-bearing red-tests**: a free 360° swing checked against 180° raises; a neighbour-blocked joint checked against
+360° raises while the true reduced value passes) ; full suite **2488 passed / 55 skipped**, no drop · _cohesion:_ the
+ROM block adds ONE reason to change to `cluster_obb.py` (swept-OBB clearance of a cluster about an axis), small dep
+surface (the existing `cluster_obb`/`hull_prism_axis` + numpy/scipy `Rotation`) · **"Validation gained, not just a
+passthrough:** before AF-14 P2 nothing could compute — let alone pin — how far a revolute-jointed cluster can swing
+before it collides with a neighbour. `assert_range_of_motion` gives that, and its trustworthiness rests on TWO
+independent legs: the analytic precision is proved on a synthetic rod-and-wall fixture whose contact angle is a
+closed-form `asin`/`atan2` expression (so a bug in the SAT or the bisection would diverge from the trig), and the two
+can-go-red guards are proved on real DNA bars (a lone cluster swings the full limit; pushing a neighbour into the
+swing path strictly and monotonically shrinks the ROM). So a ROM that over-/under-counted contact, ignored the helix
+pad, or escaped its angular limits fails. This is the swept-clearance spine the 4-bar-parallelogram capstone and the
+AF-12 linkage-mobility check compose; `rank_joint_candidates` makes the door-jamb principle quantitative (the
+interface hinge swings least, the away-facing hinge swings free). NB construction-sugar item: coverage flat by design
+— the pass criterion was always the oracle.**"
+
+---
+
+**CAPSTONE — the headless 4-bar parallelogram (first headless kinematic mechanism)** · _shape:_ 1 new pure helper
+`grubler_mobility(n_links, *, revolute, prismatic, higher)` in `backend/core/cluster_obb.py` (planar Kutzbach DOF —
+`3(n−1)−2·lower−higher`, pure combinatorics, no geometry) + 1 reusable oracle `assert_parallelogram_linkage` in
+`tests/automation_harness.py` + a reusable builder + integration test in NEW `tests/test_parallelogram_linkage.py`;
+`crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (all new code is `backend/core` + the harness + a new test module) ·
+_headless-coverage Δ:_ **35 → 35** (UNCHANGED — pure composition of already-covered wrappers `create_bundle` /
+`add_cluster` / `update_cluster` (via `align_cluster_edge`) / `add_joint` (via `place_cluster_joint`); wraps no new
+route, so like AF-10/AF-11/AF-15-P2 it moves the oracle count, not coverage — `test_parallelogram_wraps_no_new_route`
+pins it) · _oracle shipped:_ `assert_parallelogram_linkage(design, bar_ids, *, joint_ids, tol_nm=0.1, tol_deg=2.0,
+expected_dof=1, min_area_nm2=1.0, require_movable=True)` — a **composed geometric + kinematic** oracle measured on the
+*posed* OBBs (recomputed, never trusting the solver's claimed transform): (1) **closed quadrilateral** — adjacent bars
+share an OBB corner (the hinge point), the 4 shared corners enclose area > `min_area_nm2` (the non-degeneracy guard:
+four collinear/collapsed bars fail); (2) **parallelogram** — opposite bars' long axes parallel-or-antiparallel within
+`tol_deg` AND equal-length within `tol_nm`; (3) **mobility** — `grubler_mobility(4, revolute=len(joint_ids))` ==
+`expected_dof`; (4) **each hinge movable** — each joint's world axis (re-derived from cluster-LOCAL storage via
+`_local_to_world_joint`, the placed axis) admits a nonzero swept-OBB ROM vs. the non-adjacent (non-pinned) bars.
+Direction-AGNOSTIC throughout · _tests:_ 4 in `test_parallelogram_linkage.py` (full capstone is 1-DOF + each hinge on
+its shared-corner edge + adjacent bars share exact corners + wraps-no-route) + 3 grübler unit tests in
+`test_cluster_obb.py` (four-bar=1, textbook cases, bad-input reject) + 3 harness meta-tests in
+`test_automation_harness.py` (oracle passes on a real mechanism + **two load-bearing red-tests**: 3 joints → mobility 3
+≠ 1 raises, one bar shoved away → closure raises); full suite **2498 passed / 55 skipped**, no drop ·
+**"Validation gained, not just a passthrough:** before the capstone, every kinematic-cluster oracle pinned ONE
+construction step in isolation (`assert_edges_collinear` = one alignment, `assert_joint_on_hull_corner` = one joint,
+`assert_range_of_motion` = one swing); nothing validated that *composing* them with the headless wrappers yields a
+working mechanism. `assert_parallelogram_linkage` is the first **assembled-mechanism** oracle: it proves four bars
+edge-aligned + hinged headlessly form a genuine closed, parallel, 1-DOF four-bar linkage (so a build that mis-aligned a
+bar, dropped a joint, or collapsed the loop fails), and `grubler_mobility` makes the DOF claim a rigorous combinatorial
+statement reusable for any planar linkage (the AF-12 layer). The two red-tests prove the green can go red on a wrong
+joint count and a broken loop. This is the AF-12 linkage-mobility (Grübler) demo the AF-14/AF-15 geometry was built
+toward — the validation is 'the assembled mechanism has the expected DOF and every hinge is movable.' NB
+composition-only (coverage flat by design): the pass criterion was always the oracle.**"
+
+---
+
+**AF-11 — build-spec grammar growth (Phase 2): `auto_scaffold` / `auto_crossover` / `full_autostaple` / `apply_loop_skips`
+design ops** · _shape:_ grammar growth only — 4 new design ops in the PURE parser `backend/core/build_spec.py`
+(`auto_scaffold` allowed-keys `{op, seamless}`; `auto_crossover` / `apply_loop_skips` `{op}` only; `full_autostaple`
+`{op, scaffold_name, custom_sequence, strand_id}` — all NON-primordial, so none may be the first op) + 4 dispatch
+branches in the driver `backend/api/headless_spec_build.py` driving the REAL existing wrappers
+(`hb.auto_scaffold` / `hb.auto_crossover` / `hb.full_autostaple` / `hb.apply_loop_skip_deformations` — re-implements
+nothing); `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** · _headless-coverage Δ:_ **35 → 35** (UNCHANGED — composition
+sugar over already-covered wrappers, wraps no new route; `test_spec_build_adds_no_coverage` still green at 35) ·
+_oracle shipped:_ **no new oracle — reused `assert_spec_matches_calls` (AF-11) as the LOAD-BEARING augment for the three
+routing ops** (`auto_scaffold`/`auto_crossover`/`full_autostaple` ADD a scaffold strand / crossover domain-transitions /
+broken-merged staples that `canonical_topology` SEES — so the golden pin is genuinely load-bearing: the hand reference
+runs the real auto ops, so a driver that silently dropped one would diverge and fail; a non-vacuity test confirms the
+routed topology ≠ a bare bundle) **+ reused the AF-3 per-helix `geometric_nucleotide_count` conservation check as the
+LOAD-BEARING augment for `apply_loop_skips`** (its baked marks live on `Helix.loop_skips`, OUTSIDE the strand graph, so
+`assert_spec_matches_calls` is BLIND to them — the same AF-3/loop_skip lesson; the geometric per-helix law
+`Δgeometry == 2 × net marks` is the only thing that proves the marks flowed spec → parser → wrapper → geometry
+helix-by-helix). The session's keystone: `apply_loop_skips` was DEFERRED until a spec op could place crossovers — its
+route 400s without them — and `auto_crossover` now produces exactly those, so both landed together (a
+`test_apply_loop_skips_spec_requires_crossovers` red-test proves the route really runs by 400ing on a bare bundle) ·
+_tests:_ 2 grammar normalisation (routing-ops defaults + fields) + 7 grammar rejections (4× can't-be-first, seamless
+non-bool, full_autostaple typo'd field, auto_crossover extra field) in `test_build_spec.py` + 7 driver tests in
+`test_headless_spec_build.py` (auto_scaffold+crossover spec ≡ hand-calls; routed-topology ≠ bare bundle non-vacuity;
+full_autostaple spec ≡ hand-calls; full_autostaple round-trips stable; apply_loop_skips per-helix conservation;
+apply_loop_skips requires-crossovers 400); full suite **2513 passed / 55 skipped**, no drop ·
+**"Validation gained, not just a passthrough:** the grammar now lowers declarative bulk-routing ops to the real
+scaffold/crossover/autostaple wrappers, and a spec-routed design is *proven byte-identical in canonical topology* to the
+equivalent hand-clicked routing (`assert_spec_matches_calls` is load-bearing here — unlike bend/twist/loop_skip — because
+the routing ADDS strands the fingerprint sees). Separately, `apply_loop_skips` — finally reachable now that
+`auto_crossover` can place the crossovers its route demands — is proven to bake the SQUARE periodic-skip pattern with the
+per-helix conservation law `Δgeometry == 2 × net marks` (no mark leaks between helices or is dropped), the only pin that
+catches a dropped overlay the canonical fingerprint can't see. This closes the last DEFERRED design-op in the AF-11
+Phase-2 grammar. No ASK-FIRST violation: every wrapper + oracle is already-cleared direction-agnostic machinery; this
+layer adds only parameter plumbing + the parse-time grammar gates.**"
+
+**AF-14 — Phase 3 hinge-joint recommender (`recommend_hinge_joints`) + corner anchoring** · _shape:_ pure
+selector in `backend/core/cluster_obb.py` (`recommend_hinge_joints` — reuses the equivariant OBB +
+`obb_sweep_rom`; imports nothing from `backend.api`) + an `anchor="midpoint"|"corner"` option threaded through
+`hull_prism_axis` and the `hb.place_cluster_joint` wrapper (`headless_build.py`) + 1 reusable oracle
+`assert_recommended_hinge` in `tests/automation_harness.py`; `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** ·
+_headless-coverage Δ:_ **35 → 35** (UNCHANGED — `recommend_hinge_joints` wraps NO route; the `anchor` option
+drives the SAME already-covered `add_joint` route, so like AF-10/AF-15-P2 this moves the oracle count, not
+coverage — verified by `test_recommend_hinge_adds_no_coverage`) · _oracle shipped:_
+`assert_recommended_hinge(design, cluster_id, *, recommendations=None, axial_tol_deg=20, tol_nm=0.05,
+length_tol_nm=0.1)` — re-measures on the **independently recomputed** equivariant OBB that the #1 recommendation
+(1) is non-axial (edge angle to the helical `w` axis > `axial_tol_deg` — a fold, not a barrel-roll), (2) is the
+**longest** non-axial edge (within `length_tol_nm`), and (3) is **corner-anchored** (stored `axis_origin`
+within `tol_nm` of an edge endpoint, not the midpoint). Direction-AGNOSTIC (edge length + angle-to-axis are
+magnitudes; ROM is the two-sided total). Injectable `recommendations=` seam so the red-tests feed a mangled
+list · _tests:_ 7 new in `test_cluster_obb.py` (top is the wide `u`-edge non-axial corner-anchored; axial
+`w`-edges demoted to the last 4 + flagged; corner-vs-midpoint anchor differ by half the edge length on the same
+line; `target_rom_deg` filter; corner-anchored joint still passes `assert_joint_on_hull_corner` edge mode;
+bad-anchor `ValueError`; no-coverage) + 3 harness meta-tests (passes on a real bar + **two load-bearing
+red-tests**: an axial edge hand-ranked #1 raises "axial", a midpoint-anchored top raises "corner-anchored");
+full suite **2523 passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** before AF-14
+P3 the only hinge ranker was `rank_joint_candidates`, which sorts by ROM ALONE — it would happily return an
+axial `w`-edge (a barrel-roll about the bundle axis, kinematically useless) as #1 if that edge happened to swing
+freest, and it anchored every joint at the edge midpoint. `recommend_hinge_joints` encodes the user's actual
+design intent (the hinge is the longest cross-section *fold* edge, anchored at a face corner) and
+`assert_recommended_hinge` *proves* the ranker honours it — that the top pick is a fold not a barrel-roll, is
+the widest such edge, and is corner-anchored — none of which the ROM-only sort or any prior oracle asserted. The
+two red-tests prove the green can go red on the exact two ways the recommendation can be wrong (axial-on-top,
+midpoint-anchor). The corner-vs-midpoint anchor check is reusable for any 'named point on a named edge'
+placement. No ASK-FIRST violation: all magnitudes (length, angle-to-axis, two-sided ROM), zero sign/handedness
+reasoning.**"
+
+**AF-16 — loggable cluster creation (`cluster_create` feature-log entry)** · _shape:_ NEW `ClusterCreateLogEntry`
+Pydantic model in `backend/core/models.py` (mirrors `ClusterOpLogEntry`: `feature_type='cluster_create'`,
+`cluster_id`/`name`/`helix_ids`/`domain_ids: List[DomainRef]`) added to the `FeatureLogEntry` discriminated union +
+opt-in `log: bool = False` on the `add_cluster` route (appends the entry inside the same `copy_with(...)`, with the
+cursor-truncation `update_cluster`'s commit+log path uses) + a `log=` passthrough on the `hb.add_cluster` wrapper
+(default OFF — backward-compatible) + 1 reusable oracle `assert_cluster_in_feature_log` in
+`tests/automation_harness.py`; `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (model in `core`, wiring in the
+already-extracted `routes_clusters.py` sub-router, wrapper in `headless_build.py`) · _headless-coverage Δ:_ **35 →
+35** (UNCHANGED — `add_cluster` was already covered since AF-15 P1; AF-16 adds the *log path* on an existing route,
+wraps no new route — like AF-10/AF-11 it moves the oracle count, not coverage) · _oracle shipped:_
+`assert_cluster_in_feature_log(design, cluster_id, *, expect_helix_ids=None)` — a **feature-log integrity** oracle:
+asserts exactly one `cluster_create` entry carries `cluster_id`, its `helix_ids` are exactly the live cluster's set
+(or `expect_helix_ids`), and its `name` matches. The deciding fact (4th confirmation of the blind-spot lesson):
+`canonical_topology` does NOT fingerprint clusters (they're a display/geometry-layer grouping outside the strand
+graph — same as loop/skip marks, deformation overlays, cluster poses), so `assert_roundtrip_stable` *cannot* prove
+the grouping persisted — only the feature-log entry can; call the oracle on a `roundtrip_nadoc` result to pin
+`.nadoc` survival · _tests:_ 3 new in `test_headless_build.py` (log=True records the entry with the right helices;
+the entry survives a `.nadoc` round-trip; the default log=False appends NO entry — backward-compat + can-go-red) +
+3 new in `test_automation_harness.py` (oracle passes on a logged creation + **two load-bearing red-tests**: an
+unlogged build raises "created without logging", a mismatched `expect_helix_ids` raises "does not match the
+cluster"); full suite **2529 passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** before
+AF-16 there was no `ClusterCreateLogEntry` type at all — `add_cluster` built the cluster in design state but emitted
+nothing to the feature log, so a generated multi-bar part's construction history could record the bars' *poses*
+(`cluster_op`) and *joints* but never the *grouping* that created them; a user replaying the log saw bars appear
+fully-formed with no creation step. AF-16 makes the grouping loggable AND `assert_cluster_in_feature_log` proves
+the entry names the right cluster + exact helices AND survives a round-trip — none of which any prior oracle could
+assert (canonical_topology is structurally blind to clusters). The two red-tests prove the green can go red on the
+two real failure modes (unlogged build, wrong helix set). It's the feature-log-integrity spine for any future
+display-layer grouping/overlay that needs a loggable, round-trip-durable construction step. No ASK-FIRST violation:
+creating a cluster is a pure grouping, never a topology or directionality edit.**"
+
+---
+
+**Full-sequencing automation — `full_sequence` + `assign_staple_sequences` wrappers + `assert_fully_sequenced`**
+· _shape:_ 2 wrappers in `backend/api/headless_build.py` (`assign_staple_sequences` imports the exact
+`assign_staple_sequences_endpoint` route handler → covered by function identity; `full_sequence` is composition
+sugar that assigns the scaffold sequence to every scaffold strand then drives `assign_staple_sequences`) + 1 reusable
+oracle `assert_fully_sequenced` in `tests/automation_harness.py`; `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** ·
+_headless-coverage Δ:_ design/assembly **35 → 36** (`/design/assign-staple-sequences` flips to covered — the WC-
+complement-every-staple op had no headless entry; `full_sequence` itself wraps no new route, it composes the
+already-covered scaffold + the newly-covered staple wrappers) · _oracle shipped:_ `assert_fully_sequenced(design, *,
+require_wc=True)` — asserts zero undefined bases (the `count_undefined_bases` gate every export / `create_oxdna_job`
+path uses) AND that every scaffold-paired staple base is the Watson-Crick complement of its scaffold base, walked
+*independently* of the assignment code; returns the count of WC positions verified, with non-vacuity guards on both
+checks · _tests:_ 4 new in `test_headless_build.py` (full_sequence leaves no undefined base on a routed single-
+scaffold 6hb; `assign_staple_sequences` alone 422s without a scaffold sequence; full sequencing survives a `.nadoc`
+round-trip; coverage flip) + 3 new in `test_automation_harness.py` (oracle passes on a sequenced design + **two
+load-bearing red-tests**: an unsequenced design raises "undefined", a corrupted staple base raises "WC complement");
+full suite **2544 passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** the headless
+surface could route a design (`auto_scaffold`/`auto_crossover`/`auto_break`) and assign a *scaffold* sequence, but
+there was no programmatic way to finish the job — WC-complement the staples — so a headless-built design could not be
+made export / oxDNA ready without borrowing a test helper (`_sequence_for_oxdna`, exactly the gap AF-13 P1 hit).
+`full_sequence` closes that, and `assert_fully_sequenced` proves the result is *complete AND correct* (no `'N'` AND
+genuinely complementary, checked against the scaffold independently of the assignment code) — so a builder that left
+positions undefined, or filled them with the wrong base, fails. The two red-tests prove the green can go red. NB:
+the staple complement comes from the single active scaffold, so `full_sequence` needs a routed single-scaffold
+origami (`auto_scaffold` first) — documented on the wrapper.**"
+
+---
+
+**AF-13 — headless oxDNA relaxation (Phase 1: drive + recover)** · _shape:_ **NEW module**
+`backend/api/headless_oxdna_build.py` (the first *physical-layer* headless builder — distinct lifecycle subsystem,
+rule 2; mirrors `headless_assembly_build.py`): `run_relaxation` (one-call: create-no-autostart → start → poll to
+terminal) + `create_job`/`start_relaxation`/`append_production`/`read_relaxed_positions`/`wait_for_terminal`, each
+importing the exact route handler — `create_oxdna_job`/`start_oxdna_job`/`append_oxdna_production`/`get_oxdna_display`
+— so they register covered by function identity, NOT re-implemented. Two isolation context managers
+(`_use_workspace` redirects the routes' module-global `routes_oxdna._WORKSPACE_DIR`; `_scratch_design` binds the
+design into a throwaway doc) so a scripted relaxation never touches the real workspace / active design. The route
+handlers are `async` → driven via `asyncio.run`. + 1 reusable oracle `assert_relaxed_geometry_recovered` in
+`tests/automation_harness.py` + NEW **separate** `oxdna_coverage_report()` (refactored the existing report into a
+shared `_coverage_report(modules, path_predicate)` core so `headless_coverage_report()`'s output is byte-identical —
+still 35); `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (all new code is a new module + the harness) ·
+_headless-coverage Δ:_ design/assembly **35 → 35** (untouched — oxDNA is a separate surface); NEW oxDNA audit shows
+**3 `/oxdna` mutation routes covered** (`create_oxdna_job` + `start_oxdna_job` + `append_oxdna_production`;
+`get_oxdna_display` is a read-only GET, correctly absent from the mutation audit, pinned by an import-identity test) ·
+_oracle shipped:_ `assert_relaxed_geometry_recovered(job, design, workspace, *, expected_count=None)` — a
+**physical-layer recovery** oracle: asserts (1) the terminal `OxdnaJob` reached `completed`; (2) the display route
+reads the relaxed `last_conf` back (`ready`) via `read_configuration_unwrapped` (PBC-unwrapped + Kabsch-aligned);
+(3) the recovered map has exactly one **finite** position per design nucleotide AND every recovered
+`(helix_id, bp, direction)` key is a real key of the design's geometry (set-equal, so a dropped/truncated/mis-keyed
+conf is caught). **Physical-layer only** — it reads the relaxed geometry, never asserts it was written into `Design`
+(the Three-Layer Law) · _tests:_ 7 new in `test_headless_oxdna_build.py` (run_relaxation completes + recovers
+geometry; create→start two-step; append-production extends a completed job + still recovers; coverage flip;
+import-identity; + **two load-bearing red-tests**: a non-completed job raises "did not reach completed", a wrong
+expected_count raises "expected …") + 1 new in `test_automation_harness.py` (oxDNA audit is separate + design/assembly
+stays 35 + the 3 routes covered); runs against the mock binary (`$OXDNA_BIN`), `min_bp_retained=0.0` since the mock
+copies conf→last_conf rather than relaxing; full suite **2537 passed / 55 skipped**, no drop ·
+**"Validation gained, not just a passthrough:** before AF-13 the physical layer was browser-only — there was *no way
+at all* to relax a design and recover the result without the Dynamics panel, and therefore nothing pinned that a
+headless relaxation runs to completion and yields readable relaxed geometry. `assert_relaxed_geometry_recovered` is
+the first physical-layer oracle: it drives a real oxDNA job to `completed` and proves the relaxed last frame reads
+back as a full per-nucleotide position map (count + finiteness + key-coverage), so a builder that failed silently,
+dropped nucleotides, or returned an unreadable conf fails — with two red-tests proving the green can go red. It is
+the spine the AF-13 P2+ measurement/constraint oracles (the stochastic measured-property-within-tolerance class) pin
+themselves against — the physical-layer analog of what AF-1 did for designs and AF-7 for assemblies. No ASK-FIRST
+violation: Phase 1 exposes ONLY the read path and asserts a count/coverage property, no geometry/directionality
+reasoning (the landmark-direction question is deferred to Phase 2, where the backlog flags it ASK-FIRST).**"
+
+---
+
 ## Lessons (anti-patterns banked — read before building)
 
 _(none yet — first session. Candidates the audit already suggests:)_
@@ -1109,6 +1392,21 @@ _(none yet — first session. Candidates the audit already suggests:)_
   before any build, with a precise message instead of a deep 400. Same shape as the loop_skip `delta∈{-1,0,+1}` and
   circle_segment square-lattice gates: when the spec already carries the fact a downstream guard needs, cross-check
   it in the pure grammar.
+
+### Banked from the capstone (the 4-bar parallelogram)
+- **An assembled linkage's per-hinge ROM must exclude the *pinned* (adjacent) bars.** In a closed loop the bars
+  touch at their shared corners, so a padded all-obstacle `cluster_range_of_motion` reads **0** for every hinge —
+  the bars are in contact at rest (`_sweep_clearance` returns 0 the instant the rest OBBs intersect). That's not a
+  bug; it's correct collision geometry. The *kinematic* meaning of "is this hinge movable" is swing-vs-the-bars-it-
+  is-NOT-connected-to: pass `obstacles=[the non-adjacent bar(s)]`. The adjacent bars co-move through the joints in a
+  real mechanism, so treating them as static obstacles is wrong.
+- **For a multi-body mechanism the rigorous DOF claim is combinatorial (Grübler), not a swept-ROM number.** ROM is a
+  per-joint geometric clearance; "this is a 1-DOF mechanism" is `grubler_mobility(n_links, revolute=…)`. Pair them:
+  Grübler gives the DOF, the geometry (closure + opposite-sides-parallel-and-equal) makes the DOF claim non-vacuous
+  (4 collinear bars also score Grübler 1 but aren't a parallelogram — the area>min guard catches that).
+- **Compose, don't re-prove.** The capstone is composition-only (coverage flat): it drives the already-covered
+  AF-14/AF-15 wrappers and ships ONE new assembled-mechanism oracle. Don't re-pin the individual steps (their own
+  oracles already do); the new validation power is in the *composition*.
 
 ## Difficulties ledger (genuinely-stuck items + why)
 

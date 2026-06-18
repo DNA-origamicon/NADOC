@@ -34,7 +34,7 @@ from backend.api import state as design_state
 # crud.py's auto-clustering path). Both stay in crud.py and are imported back
 # here (same convention as routes_camera_poses.py / routes_deformation.py).
 from backend.api.crud import _design_response, _ensure_default_cluster
-from backend.core.models import ClusterOpLogEntry
+from backend.core.models import ClusterCreateLogEntry, ClusterOpLogEntry
 
 router = APIRouter()
 
@@ -43,6 +43,7 @@ class AddClusterBody(BaseModel):
     name: str = "Cluster"
     helix_ids: List[str]
     domain_ids: List[dict] = Field(default_factory=list)  # [{strand_id, domain_index}]
+    log: bool = False                                       # when True: append a cluster_create feature_log entry
 
 
 class PatchClusterBody(BaseModel):
@@ -92,7 +93,27 @@ def add_cluster(body: AddClusterBody) -> dict:
 
     domain_ids = [DomainRef(**d) for d in (body.domain_ids or [])]
     ct = ClusterRigidTransform(name=body.name, helix_ids=body.helix_ids, domain_ids=domain_ids)
-    updated = design.copy_with(cluster_transforms=surviving + [ct])
+
+    if body.log:
+        # Record the cluster-creation step in the feature log so a design's
+        # construction history can replay "group these helices into a bar"
+        # (mirrors the commit+log cursor discipline update_cluster uses).
+        log = list(design.feature_log)
+        if design.feature_log_cursor >= 0:
+            log = log[:design.feature_log_cursor + 1]
+        log_entry = ClusterCreateLogEntry(
+            cluster_id=ct.id,
+            name=ct.name,
+            helix_ids=list(ct.helix_ids),
+            domain_ids=list(ct.domain_ids),
+        )
+        updated = design.copy_with(
+            cluster_transforms=surviving + [ct],
+            feature_log=log + [log_entry],
+            feature_log_cursor=-1,
+        )
+    else:
+        updated = design.copy_with(cluster_transforms=surviving + [ct])
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)

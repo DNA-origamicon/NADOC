@@ -23,6 +23,7 @@ isolated scratch document and returns a standalone deep copy.
 from __future__ import annotations
 
 import inspect
+import math
 from typing import Callable
 
 from backend.api import state as design_state
@@ -1371,6 +1372,63 @@ def assert_cluster_translated(
     return moved
 
 
+def assert_cluster_in_feature_log(design, cluster_id: str, *, expect_helix_ids=None):
+    """Oracle: a logged cluster-creation is recorded in the design's feature log.
+
+    ``add_cluster(..., log=True)`` must append a ``cluster_create`` feature-log entry
+    naming the new cluster and its exact helix set, so a design's construction history
+    can replay "group these helices into a bar" — the cluster-creation step of a
+    kinematic mechanism (e.g. the generated 4-bar parallelogram part).  Without it the
+    history is incomplete: a user replaying the log sees the bundle + the cluster
+    transforms + the joints, but never the cluster creation.
+
+    ``canonical_topology`` is **blind** to clusters — they are a display/geometry-layer
+    grouping outside the strand graph (the same blind-spot as loop/skip marks and
+    bend/twist overlays) — so :func:`assert_roundtrip_stable` *cannot* prove the grouping
+    persisted across a save/load; only the feature-log entry can.  Call this on a
+    :func:`roundtrip_nadoc` result to prove the entry survived ``.nadoc`` save/load.
+
+    Asserts:
+
+      1. **The entry exists.** Exactly one ``cluster_create`` entry carries
+         ``cluster_id`` — a build that created the cluster *without* ``log=True`` leaves
+         none (the can-go-red guard).
+      2. **It names the right helices.** Its ``helix_ids`` are exactly the live cluster's
+         helix set (or ``expect_helix_ids`` when given) — so a build that logged the
+         wrong helices, or whose cluster lost/gained helices after logging, fails.
+      3. **It names the right cluster.** Its ``name`` matches the live cluster's name.
+
+    Returns the matched log entry.
+    """
+    cluster = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
+    assert cluster is not None, f"no cluster {cluster_id!r} in design.cluster_transforms"
+
+    entries = [
+        e for e in design.feature_log
+        if getattr(e, "feature_type", None) == "cluster_create" and e.cluster_id == cluster_id
+    ]
+    assert entries, (
+        f"no 'cluster_create' feature-log entry for cluster {cluster_id!r} — the cluster "
+        "was created without logging (call add_cluster(..., log=True)); its construction "
+        "step is unrepresentable in the design's history."
+    )
+    assert len(entries) == 1, (
+        f"expected exactly one 'cluster_create' entry for {cluster_id!r}, got {len(entries)}."
+    )
+    entry = entries[0]
+
+    expected = set(expect_helix_ids) if expect_helix_ids is not None else set(cluster.helix_ids)
+    source = "requested" if expect_helix_ids is not None else "live cluster"
+    assert set(entry.helix_ids) == expected, (
+        f"cluster_create entry helix set {sorted(entry.helix_ids)} != {source} helix set "
+        f"{sorted(expected)} — the logged grouping does not match the cluster."
+    )
+    assert entry.name == cluster.name, (
+        f"cluster_create entry name {entry.name!r} != live cluster name {cluster.name!r}."
+    )
+    return entry
+
+
 def assert_edges_collinear(
     design,
     cluster_id: str,
@@ -1471,7 +1529,544 @@ def assert_edges_collinear(
     return ang
 
 
+def assert_joint_on_hull_corner(
+    design,
+    joint_id: str,
+    *,
+    edge=None,
+    corner=None,
+    face=None,
+    tol_nm: float = 0.05,
+    tol_deg: float = 1.0,
+    min_len_nm: float = 0.5,
+):
+    """Geometric oracle for AF-14 Phase 1 cluster-joint placement.
+
+    After :func:`~backend.api.headless_build.place_cluster_joint` anchors a revolute
+    joint on a named OBB feature, this asserts the placed joint's world axis really sits
+    on that feature of the **independently recomputed** OBB.  It re-derives the joint's
+    world axis from its cluster-LOCAL storage and the cluster's current pose
+    (:func:`backend.core.models._local_to_world_joint`) — so it measures where the axis
+    actually landed after the world→local→world round-trip the route performs, not what
+    the placement helper claimed.  Recomputes the OBB from the posed geometry
+    (:func:`backend.core.cluster_obb.cluster_obb`), the equivariant frame, so a named
+    edge/corner refers to the same physical feature even on a posed cluster.
+
+    Two modes (mirroring :func:`hull_prism_axis`):
+
+      * ``edge=(axis, s1, s2)`` — the joint axis line is **collinear** with the named OBB
+        edge: its direction is parallel-or-antiparallel to the edge (within ``tol_deg``)
+        AND both edge endpoints lie within ``tol_nm`` of the joint axis line.
+      * ``corner=(su, sv, sw)`` with ``face=(axis, sign)`` — the joint axis line passes
+        **through** the named corner (perpendicular distance < ``tol_nm``) AND its
+        direction is parallel-or-antiparallel to the named face normal (within
+        ``tol_deg``).
+
+    **Direction-AGNOSTIC** (a line, not a ray — either sense passes), so it stays clear
+    of the ASK-FIRST DNA-directionality rule.  A non-degeneracy guard (the OBB edge is
+    longer than ``min_len_nm``) keeps a collapsed box from passing vacuously; the
+    on-line / through-corner assertions go red when the joint was placed on a different
+    feature (the can-go-red property the red-tests exercise).  Returns the measured
+    angular deviation from collinear (degrees).
+    """
+    import math
+
+    import numpy as np
+
+    from backend.core.cluster_obb import cluster_obb
+    from backend.core.models import _local_to_world_joint
+
+    if edge is not None and corner is not None:
+        raise ValueError("pass exactly one of edge / corner, not both")
+
+    joint = next((j for j in design.cluster_joints if j.id == joint_id), None)
+    assert joint is not None, f"no joint {joint_id!r} in design"
+    cluster = next(
+        (c for c in design.cluster_transforms if c.id == joint.cluster_id), None
+    )
+    assert cluster is not None, f"joint {joint_id!r} references missing cluster"
+
+    world_origin, world_dir = _local_to_world_joint(
+        joint.local_axis_origin, joint.local_axis_direction, cluster,
+    )
+    o = np.asarray(world_origin, dtype=float)
+    dlen = float(np.linalg.norm(world_dir))
+    assert dlen > 1e-9, "joint axis direction is ~zero"
+    d = np.asarray(world_dir, dtype=float) / dlen
+
+    def _dist_to_joint_line(p) -> float:
+        v = np.asarray(p, dtype=float) - o
+        perp = v - float(np.dot(v, d)) * d
+        return float(np.linalg.norm(perp))
+
+    obb = cluster_obb(design, cluster.id)
+
+    if edge is not None:
+        p_lo, p_hi = obb.edge_endpoints(edge)
+        edge_len = float(np.linalg.norm(p_hi - p_lo))
+        assert edge_len > min_len_nm, (
+            f"OBB edge {edge} is degenerate (length {edge_len:.3f} nm ≤ {min_len_nm} nm)"
+            " — collinearity would be vacuous."
+        )
+        edge_dir = (p_hi - p_lo) / edge_len
+        cos_ang = abs(float(np.dot(d, edge_dir)))
+        ang = math.degrees(math.acos(min(1.0, cos_ang)))
+        assert ang < tol_deg, (
+            f"joint axis is not collinear with edge {edge}: directions deviate "
+            f"{ang:.2f}° from parallel (tol {tol_deg}°)."
+        )
+        for p in (p_lo, p_hi):
+            dist = _dist_to_joint_line(p)
+            assert dist < tol_nm, (
+                f"edge endpoint {np.round(p, 3)} lies {dist:.3f} nm off the joint axis "
+                f"line (tol {tol_nm} nm) — the joint is parallel but not on the edge."
+            )
+        return ang
+
+    if corner is not None:
+        if face is None:
+            raise ValueError("corner mode requires a face=(axis, sign)")
+        su, sv, sw = corner
+        corner_pt = obb.corner(su, sv, sw)
+        dist = _dist_to_joint_line(corner_pt)
+        assert dist < tol_nm, (
+            f"joint axis line passes {dist:.3f} nm from corner {corner} "
+            f"(tol {tol_nm} nm) — the joint is not anchored at that corner."
+        )
+        f_normal = obb.face_normal(face)
+        cos_ang = abs(float(np.dot(d, f_normal / np.linalg.norm(f_normal))))
+        ang = math.degrees(math.acos(min(1.0, cos_ang)))
+        assert ang < tol_deg, (
+            f"joint axis direction deviates {ang:.2f}° from the face {face} normal "
+            f"(tol {tol_deg}°) — the swing plane is wrong."
+        )
+        return ang
+
+    raise ValueError("pass exactly one of edge / corner")
+
+
+def assert_range_of_motion(
+    design,
+    cluster_id: str,
+    axis,
+    expected_deg: float,
+    *,
+    tol_deg: float = 2.0,
+    min_angle_deg: float = -180.0,
+    max_angle_deg: float = 180.0,
+    pad=None,
+    step_deg: float = 2.0,
+):
+    """Geometric oracle for AF-14 Phase 2 cluster range-of-motion.
+
+    Computes the anchored cluster's collision-free swing about ``axis``
+    (:func:`backend.core.cluster_obb.cluster_range_of_motion` — the swept OBB–OBB SAT
+    bisection, padded by the helix radius) and asserts it equals ``expected_deg`` within
+    ``tol_deg``.  ``axis`` is ``(origin, direction)`` as from ``hull_prism_axis``.
+
+    Two can-go-red properties the tests exercise: with **no obstacle** the swing equals
+    the joint's full angular limit (``max − min``, e.g. 360°), and an obstacle moved into
+    the swing path **strictly reduces** it — so the green goes red on a wrong angle or a
+    blocked joint.  A physical-bound guard (``0 ≤ ROM ≤ max − min``) keeps the sweep from
+    silently passing on a runaway angle.  **Direction-AGNOSTIC** total magnitude (no
+    handedness), so it stays clear of the ASK-FIRST DNA-directionality rule.  Returns the
+    measured ROM in degrees.
+    """
+    from backend.core.cluster_obb import cluster_range_of_motion
+    from backend.core.constants import HELIX_RADIUS
+
+    if pad is None:
+        pad = HELIX_RADIUS
+    rom = cluster_range_of_motion(
+        design, cluster_id, axis,
+        min_angle_deg=min_angle_deg, max_angle_deg=max_angle_deg,
+        pad=pad, step_deg=step_deg,
+    )
+    full = max_angle_deg - min_angle_deg
+    assert -1e-6 <= rom <= full + tol_deg, (
+        f"ROM {rom:.2f}° is outside the physical bound [0, {full:.1f}°] — the sweep "
+        "escaped its angular limits."
+    )
+    assert abs(rom - expected_deg) <= tol_deg, (
+        f"cluster {cluster_id!r} ROM about the given axis is {rom:.2f}°, expected "
+        f"{expected_deg:.2f}° ± {tol_deg}°."
+    )
+    return rom
+
+
+def assert_parallelogram_linkage(
+    design,
+    bar_ids,
+    *,
+    joint_ids,
+    tol_nm: float = 0.1,
+    tol_deg: float = 2.0,
+    expected_dof: int = 1,
+    min_area_nm2: float = 1.0,
+    require_movable: bool = True,
+):
+    """Geometric + kinematic oracle for the headless 4-bar parallelogram (the capstone).
+
+    Proves that four rigid-body clusters — arranged headlessly by composing
+    :func:`~backend.api.headless_build.align_cluster_edge` (AF-15 P2) + posed bars and
+    hinged with :func:`~backend.api.headless_build.place_cluster_joint` (AF-14 P1) — form
+    a genuine **parallelogram four-bar linkage** with the expected mobility.  This is the
+    first headless *kinematic mechanism*; nothing before it validated an assembled
+    multi-cluster mechanism (the individual pieces — edge collinearity, joint-on-edge,
+    per-joint ROM — are pinned by their own AF oracles; this pins their *composition*).
+
+    ``bar_ids`` are the 4 bar clusters in **cyclic order** around the loop; ``joint_ids``
+    are the placed :class:`ClusterJoint`s (revolute hinges).  Checks, all measured on the
+    *posed* geometry (each bar's equivariant OBB, recomputed here — never trusting the
+    solver's claimed transform):
+
+      1. **Closed quadrilateral** — adjacent bars share an OBB corner (the hinge point):
+         the minimum corner-to-corner distance between bar ``k`` and bar ``k+1`` is
+         < ``tol_nm``.  The 4 shared corners, taken in order, enclose an area
+         > ``min_area_nm2`` (the non-degeneracy guard — four collinear/collapsed bars
+         fail, so the oracle can't pass vacuously).
+      2. **Parallelogram** — opposite bars' long (axial) directions are
+         parallel-or-antiparallel within ``tol_deg`` AND equal in length within
+         ``tol_nm`` (opposite sides parallel + equal = a parallelogram).
+      3. **Mobility** — :func:`backend.core.cluster_obb.grubler_mobility` of the
+         ``(len(bar_ids))`` links + ``len(joint_ids)`` revolute joints equals
+         ``expected_dof`` (1 for a 4-bar) — the rigorous planar-DOF claim.
+      4. **Each hinge movable** (when ``require_movable``) — each joint's world axis,
+         re-derived from its cluster-LOCAL storage (so it's the *placed* axis, not a
+         re-derivation), admits a **nonzero** collision-free swing against the
+         non-adjacent (non-pinned) bars — i.e. the joint is a real movable revolute, not
+         frozen.
+
+    **Direction-AGNOSTIC** throughout (parallelism is a line property; ROM is a
+    magnitude), so it stays clear of the ASK-FIRST DNA-directionality rule.  Returns a
+    dict ``{"corners", "side_lengths", "mobility", "joint_roms"}``.
+    """
+    import math
+
+    import numpy as np
+
+    from backend.core.cluster_obb import (
+        cluster_obb,
+        cluster_range_of_motion,
+        grubler_mobility,
+    )
+    from backend.core.models import _local_to_world_joint
+
+    n = len(bar_ids)
+    assert n == 4, f"a parallelogram needs exactly 4 bars, got {n}"
+
+    obbs = [cluster_obb(design, bid) for bid in bar_ids]
+
+    def _corners(o):
+        return [o.corner(su, sv, sw)
+                for su in (-1, 1) for sv in (-1, 1) for sw in (-1, 1)]
+
+    def _long_axis(o):
+        i = int(np.argmax(o.half))
+        return o.axes[i], 2.0 * float(o.half[i])
+
+    corners = [_corners(o) for o in obbs]
+
+    # (1) adjacent bars share a corner → the 4 hinge points.
+    shared = []
+    for k in range(n):
+        ci, cj = corners[k], corners[(k + 1) % n]
+        best = min(((np.linalg.norm(x - y), x, y) for x in ci for y in cj),
+                   key=lambda t: t[0])
+        d, x, _ = best
+        assert d < tol_nm, (
+            f"bars {bar_ids[k]!r} and {bar_ids[(k + 1) % n]!r} do not meet at a shared "
+            f"corner (nearest corners are {d:.3f} nm apart, tol {tol_nm} nm) — the "
+            "linkage is not a closed loop."
+        )
+        shared.append(x)
+
+    # non-degeneracy: the 4 shared corners enclose a real (planar) area.
+    sc = [np.asarray(p, float) for p in shared]
+    diag1 = sc[2] - sc[0]
+    diag2 = sc[3] - sc[1]
+    area = 0.5 * float(np.linalg.norm(np.cross(diag1, diag2)))
+    assert area > min_area_nm2, (
+        f"the four shared corners enclose only {area:.3f} nm² (≤ {min_area_nm2} nm²) — "
+        "the arrangement is degenerate (collinear / collapsed), not a parallelogram."
+    )
+
+    # (2) opposite sides parallel + equal length.
+    side_lengths = []
+    for k in range(n):
+        _, L = _long_axis(obbs[k])
+        side_lengths.append(L)
+    for k in (0, 1):
+        d_a, L_a = _long_axis(obbs[k])
+        d_b, L_b = _long_axis(obbs[k + 2])
+        cos_ang = abs(float(np.dot(d_a, d_b)))
+        ang = math.degrees(math.acos(min(1.0, cos_ang)))
+        assert ang < tol_deg, (
+            f"opposite bars {bar_ids[k]!r} / {bar_ids[k + 2]!r} are not parallel "
+            f"(axes deviate {ang:.2f}° from parallel, tol {tol_deg}°) — not a parallelogram."
+        )
+        assert abs(L_a - L_b) < tol_nm, (
+            f"opposite bars {bar_ids[k]!r} / {bar_ids[k + 2]!r} differ in length "
+            f"({L_a:.3f} vs {L_b:.3f} nm, tol {tol_nm}) — not a parallelogram."
+        )
+
+    # (3) mobility (Grübler/Kutzbach): a 4-link, 4-revolute planar mechanism is 1-DOF.
+    mobility = grubler_mobility(n, revolute=len(joint_ids))
+    assert mobility == expected_dof, (
+        f"mechanism mobility is {mobility}, expected {expected_dof} "
+        f"({n} links, {len(joint_ids)} revolute joints) — not a {expected_dof}-DOF linkage."
+    )
+
+    # (4) each hinge is a real movable revolute (nonzero swing vs. non-pinned bars).
+    joint_roms = {}
+    if require_movable:
+        bar_index = {bid: i for i, bid in enumerate(bar_ids)}
+        for jid in joint_ids:
+            joint = next((j for j in design.cluster_joints if j.id == jid), None)
+            assert joint is not None, f"no joint {jid!r} in design"
+            i = bar_index.get(joint.cluster_id)
+            assert i is not None, (
+                f"joint {jid!r} is on cluster {joint.cluster_id!r}, not one of the bars"
+            )
+            cluster = next(c for c in design.cluster_transforms
+                           if c.id == joint.cluster_id)
+            origin, direction = _local_to_world_joint(
+                joint.local_axis_origin, joint.local_axis_direction, cluster,
+            )
+            # non-adjacent bars = those not pinned to bar i (its neighbours co-move in a
+            # real linkage; the collision concern is the un-connected bar(s)).
+            obstacles = [bar_ids[j] for j in range(n)
+                         if j not in {(i - 1) % n, i, (i + 1) % n}]
+            rom = cluster_range_of_motion(
+                design, bar_ids[i], (origin, direction), obstacles=obstacles or None,
+            )
+            assert rom > tol_deg, (
+                f"hinge {jid!r} on bar {bar_ids[i]!r} has ROM {rom:.2f}° — the joint is "
+                "frozen, not a movable revolute."
+            )
+            joint_roms[jid] = rom
+
+    return {
+        "corners": [p.tolist() for p in sc],
+        "side_lengths": side_lengths,
+        "mobility": mobility,
+        "joint_roms": joint_roms,
+    }
+
+
+def assert_recommended_hinge(
+    design,
+    cluster_id: str,
+    *,
+    recommendations=None,
+    axial_tol_deg: float = 20.0,
+    tol_nm: float = 0.05,
+    length_tol_nm: float = 0.1,
+):
+    """Geometric oracle for AF-14 Phase 3's hinge-joint recommender.
+
+    Pins that :func:`backend.core.cluster_obb.recommend_hinge_joints` surfaces the right
+    #1 hinge under the user-fixed priority (2026-06-18).  Asserts the top recommendation:
+
+      1. **is NOT axial** — its edge makes an angle > ``axial_tol_deg`` with the cluster's
+         helical (``w``) axis, so it's a fold, not a barrel-roll about the bundle axis;
+      2. **is the longest non-axial edge** — its OBB-edge length is ≥ every other
+         non-axial candidate's (within ``length_tol_nm``);
+      3. **is corner-anchored** — its stored ``axis_origin`` coincides (within ``tol_nm``)
+         with an edge endpoint (a face corner) and is **not** the edge midpoint.
+
+    Everything is re-measured on the **independently recomputed** equivariant OBB
+    (:func:`backend.core.cluster_obb.cluster_obb`), so the oracle never trusts the
+    recommender's own numbers.  Pass ``recommendations=`` a hand-built candidate list to
+    drive the can-go-red guards (an axial edge wrongly on top → check 1 fires; a
+    midpoint-anchored top → check 3 fires).  **Direction-AGNOSTIC** (edge length +
+    angle-to-axis are magnitudes), so it stays clear of the ASK-FIRST rule.  Returns the
+    top recommendation dict.
+    """
+    import math
+
+    import numpy as np
+
+    from backend.core.cluster_obb import cluster_obb, recommend_hinge_joints
+
+    recs = (
+        recommendations
+        if recommendations is not None
+        else recommend_hinge_joints(design, cluster_id)
+    )
+    assert recs, "recommender returned no hinge candidates"
+    top = recs[0]
+
+    obb = cluster_obb(design, cluster_id)
+    w = obb.axes[2]  # (u, v, w) — w is the helical/bundle axis
+
+    def _edge_len_angle(edge):
+        p_lo, p_hi = obb.edge_endpoints(edge)
+        vec = p_hi - p_lo
+        length = float(np.linalg.norm(vec))
+        ang = math.degrees(math.acos(min(1.0, abs(float((vec / length) @ w)))))
+        return p_lo, p_hi, length, ang
+
+    p_lo, p_hi, edge_len, angle = _edge_len_angle(top["edge"])
+
+    # (1) the top hinge is a fold, not an axial barrel-roll.
+    assert angle > axial_tol_deg, (
+        f"top recommended hinge {top['edge']} is axial — its edge is only {angle:.1f}° "
+        f"from the helical axis (≤ {axial_tol_deg}°), a barrel-roll not a fold."
+    )
+
+    # (2) it is the longest of the non-axial edges.
+    non_axial_lengths = []
+    for c in recs:
+        _, _, length, ang = _edge_len_angle(c["edge"])
+        if ang > axial_tol_deg:
+            non_axial_lengths.append(length)
+    assert non_axial_lengths, "no non-axial edges among the recommendations"
+    longest = max(non_axial_lengths)
+    assert edge_len >= longest - length_tol_nm, (
+        f"top hinge edge length {edge_len:.2f} nm is not the longest non-axial edge "
+        f"(longest is {longest:.2f} nm) — the recommender mis-ranked."
+    )
+
+    # (3) the anchor is a face corner, NOT the edge midpoint.  For a real (non-degenerate)
+    # edge a corner and the midpoint are half the edge length apart, so a midpoint anchor
+    # is far from every corner and fails this single check (the can-go-red guard).
+    origin = np.asarray(top["axis_origin"], dtype=float)
+    midpoint = (p_lo + p_hi) / 2.0
+    d_corner = min(float(np.linalg.norm(origin - p_lo)),
+                   float(np.linalg.norm(origin - p_hi)))
+    at_midpoint = float(np.linalg.norm(origin - midpoint)) < tol_nm
+    assert d_corner < tol_nm, (
+        f"hinge anchor {np.round(origin, 3)} is {d_corner:.3f} nm from the nearest edge "
+        f"corner (tol {tol_nm} nm) — it is not corner-anchored"
+        + (" (it sits at the edge MIDPOINT)." if at_midpoint else ".")
+    )
+    return top
+
+
 # ── Headless-coverage audit ───────────────────────────────────────────────────
+
+# ── Full-sequencing oracle (every base defined + WC-complementary) ────────────
+
+def assert_fully_sequenced(design: Design, *, require_wc: bool = True) -> int:
+    """A design carries a *complete, correct* sequence: no undefined base AND every
+    scaffold-paired staple base is the Watson-Crick complement of its scaffold base.
+
+    The load-bearing property is **zero undefined bases** — exactly the gate
+    ``create_oxdna_job`` and every export path enforce (so "fully sequenced" means
+    oxDNA/export-ready), measured by the same ``count_undefined_bases`` they use
+    (reference 'backdrop' strands excluded).  ``require_wc`` adds the correctness
+    proof: walking the strand graph independently of the assignment code, every
+    staple base at a scaffold-covered position must equal ``complement_base`` of the
+    scaffold base there — so a builder that filled positions with the *wrong* base
+    (or the scaffold's own base instead of its complement) fails, not just one that
+    left them ``'N'``.  Returns the number of WC-paired positions verified.
+
+    Can-go-red: an unsequenced (or partially sequenced) design trips the undefined
+    guard; a corrupted staple base trips the WC guard.
+    """
+    from backend.core.models import Direction, StrandType
+    from backend.core.sequences import complement_base
+    from backend.physics.oxdna_interface import count_undefined_bases
+
+    undefined, total = count_undefined_bases(design, exclude_reference=True)
+    assert total > 0, "design has no sequenceable nucleotides (oracle would be vacuous)"
+    assert undefined == 0, (
+        f"{undefined}/{total} bases still undefined — design is not fully sequenced")
+
+    if not require_wc:
+        return 0
+
+    def _positions(strand):
+        out = []
+        for dm in strand.domains:
+            lo, hi = min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp)
+            rng = (range(lo, hi + 1) if dm.direction == Direction.FORWARD
+                   else range(hi, lo - 1, -1))
+            out.extend((dm.helix_id, bp) for bp in rng)
+        return out
+
+    scaffold_base: dict[tuple[str, int], str] = {}
+    for s in design.strands:
+        if s.is_reference or s.strand_type != StrandType.SCAFFOLD:
+            continue
+        for key, base in zip(_positions(s), s.sequence or ""):
+            scaffold_base[key] = base.upper()
+
+    checked = 0
+    for s in design.strands:
+        if s.is_reference or s.strand_type != StrandType.STAPLE:
+            continue
+        for key, base in zip(_positions(s), s.sequence or ""):
+            scaf = scaffold_base.get(key)
+            if scaf is None:
+                continue
+            expected = complement_base(scaf)
+            assert base.upper() == expected, (
+                f"staple base {base!r} at {key} is not the WC complement of "
+                f"scaffold base {scaf!r} (expected {expected!r})")
+            checked += 1
+    assert checked > 0, (
+        "no scaffold-paired staple positions to verify — WC check would be vacuous")
+    return checked
+
+
+# ── Physical-layer (oxDNA) relaxation oracle (AF-13, Tier 5) ──────────────────
+
+def assert_relaxed_geometry_recovered(job, design: Design, workspace, *,
+                                      expected_count: int | None = None) -> dict:
+    """Tier-5 foundational oracle: a headless oxDNA relaxation reached
+    ``completed`` AND its relaxed last frame reads back into a full per-nucleotide
+    position map — "we can drive oxDNA headlessly and recover the relaxed geometry."
+
+    Asserts, on the terminal :class:`~backend.core.oxdna_job.OxdnaJob` returned by
+    :func:`~backend.api.headless_oxdna_build.run_relaxation`:
+
+    1. the job status is ``completed`` (a silently failed / stopped / still-queued
+       run raises — the can-go-red status guard);
+    2. the display route reads the relaxed ``last_conf`` back and reports ``ready``;
+    3. the recovered map has **exactly one finite position per design nucleotide**,
+       and every recovered ``(helix_id, bp_index, direction)`` key is a real key of
+       the design's geometry — so a dropped / truncated / mis-keyed conf is caught,
+       not silently accepted.
+
+    *Physical-layer only*: it reads the relaxed geometry, it never asserts (or
+    requires) that those positions were written into ``Design`` topology.  Returns
+    the display dict so callers can inspect the recovered positions.
+    """
+    from backend.api import headless_oxdna_build as hox
+
+    status = getattr(job.status, "value", str(job.status))
+    assert status == "completed", (
+        f"oxDNA job did not reach completed (status={status!r}); error={job.error!r}")
+
+    display = hox.read_relaxed_positions(job.job_id, workspace)
+    assert display.get("ready") is True, (
+        "relaxed last_conf did not read back (display route not ready)")
+    positions = display["positions"]
+
+    geom = _geometry_for_design(design)
+    expected = expected_count if expected_count is not None else len(geom)
+    assert len(positions) == expected, (
+        f"recovered {len(positions)} relaxed positions, expected {expected} "
+        "(one per design nucleotide)")
+
+    design_keys = {(g["helix_id"], g["bp_index"], g["direction"]) for g in geom}
+    for p in positions:
+        bb = p["backbone_position"]
+        assert len(bb) == 3 and all(math.isfinite(float(c)) for c in bb), (
+            f"recovered a non-finite backbone position: {bb!r}")
+        key = (p["helix_id"], p["bp_index"], p["direction"])
+        assert key in design_keys, (
+            f"recovered position key {key!r} is not a nucleotide of the design")
+
+    recovered_keys = {(p["helix_id"], p["bp_index"], p["direction"]) for p in positions}
+    assert recovered_keys == design_keys, (
+        f"recovered geometry does not cover every design nucleotide "
+        f"(missing {len(design_keys - recovered_keys)}, extra "
+        f"{len(recovered_keys - design_keys)})")
+    return display
+
 
 _MUTATION_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
@@ -1492,11 +2087,36 @@ def headless_coverage_report() -> dict:
     path.  ``uncovered_routes`` is the live backlog of AF wrapper candidates.
     """
     from backend.api import headless_assembly_build, headless_build
+
+    return _coverage_report(
+        (headless_build, headless_assembly_build),
+        lambda path: "/design" in path or "/assembly" in path,
+    )
+
+
+def oxdna_coverage_report() -> dict:
+    """Automated audit for the *physical* layer: ``/oxdna`` mutation routes vs.
+    :mod:`backend.api.headless_oxdna_build` wrappers (AF-13, Tier 5).
+
+    Kept separate from :func:`headless_coverage_report` (which is scoped to the
+    design/assembly surface) so the oxDNA tier has its own coverage number without
+    perturbing the design/assembly denominator the AF-1..AF-12 metrics report.
+    Same function-identity matching: a wrapper imports the exact route handler, so
+    the report tracks reality and can't silently rot.
+    """
+    from backend.api import headless_oxdna_build
+
+    return _coverage_report((headless_oxdna_build,), lambda path: "/oxdna" in path)
+
+
+def _coverage_report(modules, path_predicate) -> dict:
+    """Shared core of the coverage audits: which mutation routes whose path passes
+    ``path_predicate`` have a function-identity wrapper in one of ``modules``."""
     from backend.api.main import app
 
     wrapped_fns = {
         obj
-        for module in (headless_build, headless_assembly_build)
+        for module in modules
         for obj in vars(module).values()
         if inspect.isfunction(obj)
     }
@@ -1508,7 +2128,7 @@ def headless_coverage_report() -> dict:
         path = getattr(route, "path", "")
         if not methods or not (methods & _MUTATION_METHODS):
             continue
-        if "/design" not in path and "/assembly" not in path:
+        if not path_predicate(path):
             continue
         row = {
             "methods": sorted(methods & _MUTATION_METHODS),

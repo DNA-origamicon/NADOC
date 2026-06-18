@@ -1062,6 +1062,28 @@ class ClusterOpLogEntry(BaseModel):
     source: Optional[str] = None   # e.g. 'relax', None for manual move/rotate
 
 
+class ClusterCreateLogEntry(BaseModel):
+    """Feature log entry for *creating* a cluster (grouping helices into a rigid body).
+
+    Distinct from :class:`ClusterOpLogEntry`, which records a translate/rotate *pose*:
+    this records the grouping itself — which helices/domains became a named cluster — so
+    a design's construction history can replay "group these helices into a bar" (the
+    cluster-creation step of a kinematic mechanism), not just the bars' later poses and
+    joints.  Without it, a user replaying the log of a generated multi-bar part sees the
+    bundle + the cluster transforms + the joints, but never the cluster creation, so the
+    history is incomplete.
+
+    Creating a cluster is a display/geometry-layer grouping — it never touches the strand
+    graph (the three-layer law), exactly like ``ClusterOpLogEntry``.
+    """
+    feature_type: Literal['cluster_create'] = 'cluster_create'
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    cluster_id: str
+    name: str
+    helix_ids: List[str]
+    domain_ids: List[DomainRef] = Field(default_factory=list)
+
+
 class OverhangRotationLogEntry(BaseModel):
     """Feature log entry for one or more overhang orientation changes applied as a batch.
 
@@ -1385,6 +1407,7 @@ FeatureLogEntry = Annotated[
     Union[
         DeformationLogEntry,
         ClusterOpLogEntry,
+        ClusterCreateLogEntry,
         OverhangRotationLogEntry,
         SnapshotLogEntry,
         RoutingClusterLogEntry,

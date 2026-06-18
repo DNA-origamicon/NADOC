@@ -95,6 +95,35 @@ def test_design_spec_normalises_circle_segment():
     assert "min_chord_bp" not in p       # optional, omitted by default
 
 
+def test_design_spec_normalises_routing_ops():
+    """The bulk routing ops parse with their defaults filled / fields preserved."""
+    parsed = parse_design_spec({"lattice": "square", "ops": [
+        {"op": "bundle", "cells": [[0, 0], [0, 1]], "length_bp": 96},
+        {"op": "auto_scaffold", "seamless": True},
+        {"op": "auto_crossover"},
+        {"op": "full_autostaple", "scaffold_name": "p7560"},
+        {"op": "apply_loop_skips"},
+    ]})
+    assert [o.op for o in parsed.ops] == [
+        "bundle", "auto_scaffold", "auto_crossover", "full_autostaple", "apply_loop_skips"]
+    assert parsed.ops[1].params["seamless"] is True
+    assert parsed.ops[2].params == {}                       # no params beyond op
+    assert parsed.ops[3].params["scaffold_name"] == "p7560"
+    assert "custom_sequence" not in parsed.ops[3].params    # optional, omitted
+    assert parsed.ops[4].params == {}
+
+
+def test_design_spec_routing_ops_defaults():
+    """auto_scaffold defaults to seamed; full_autostaple to M13mp18."""
+    parsed = parse_design_spec({"lattice": "square", "ops": [
+        {"op": "bundle", "cells": [[0, 0]], "length_bp": 96},
+        {"op": "auto_scaffold"},
+        {"op": "full_autostaple"},
+    ]})
+    assert parsed.ops[1].params["seamless"] is False
+    assert parsed.ops[2].params["scaffold_name"] == "M13mp18"
+
+
 # ── design grammar: rejections ────────────────────────────────────────────────
 
 @pytest.mark.parametrize("bad,match", [
@@ -147,6 +176,20 @@ def test_design_spec_normalises_circle_segment():
     # circle_segment with a typo'd field
     ({"lattice": "square",
       "ops": [{"op": "circle_segment", "radius_nm": 10.6, "raidus": 5}]}, "unknown field"),
+    # routing ops can't be first (all need existing helices/strands)
+    ({"ops": [{"op": "auto_scaffold"}]}, "first op must be 'bundle'"),
+    ({"ops": [{"op": "auto_crossover"}]}, "first op must be 'bundle'"),
+    ({"ops": [{"op": "full_autostaple"}]}, "first op must be 'bundle'"),
+    ({"ops": [{"op": "apply_loop_skips"}]}, "first op must be 'bundle'"),
+    # auto_scaffold seamless must be a bool
+    ({"ops": [{"op": "bundle", "cells": [[0, 0]], "length_bp": 42},
+              {"op": "auto_scaffold", "seamless": "yes"}]}, "must be a bool"),
+    # full_autostaple with a typo'd field
+    ({"ops": [{"op": "bundle", "cells": [[0, 0]], "length_bp": 42},
+              {"op": "full_autostaple", "scafold_name": "M13mp18"}]}, "unknown field"),
+    # auto_crossover takes no params
+    ({"ops": [{"op": "bundle", "cells": [[0, 0]], "length_bp": 42},
+              {"op": "auto_crossover", "density": 1.0}]}, "unknown field"),
 ])
 def test_design_spec_rejects_malformed(bad, match):
     with pytest.raises(BuildSpecError, match=match):

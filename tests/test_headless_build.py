@@ -21,8 +21,10 @@ from backend.core.models import Direction, LatticeType
 from backend.core.validator import validate_design
 from tests.automation_harness import (
     assert_circular_disc,
+    assert_cluster_in_feature_log,
     assert_cluster_translated,
     assert_deformation_angle,
+    assert_fully_sequenced,
     assert_geometric_length_delta,
     assert_inverse_pair,
     assert_on_deformed_frame,
@@ -755,3 +757,104 @@ def test_cluster_routes_flip_to_covered():
     rep = headless_coverage_report()
     covered = {r["endpoint"] for r in rep["covered_routes"]}
     assert {"add_cluster", "update_cluster"} <= covered
+
+
+# ── AF-16: loggable cluster creation ───────────────────────────────────────────
+# add_cluster(log=True) appends a cluster_create feature-log entry so a generated
+# multi-bar part's construction history can replay the *grouping* step. canonical_topology
+# is blind to clusters, so the feature-log entry is the only thing that proves the grouping
+# persisted across a .nadoc round-trip — assert_cluster_in_feature_log is the load-bearing pin.
+
+def test_add_cluster_log_records_feature_log_entry():
+    """add_cluster(log=True) appends a cluster_create entry naming the cluster + its
+    exact helix set."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+        design = design_state.get_or_404()
+        cluster_helix_ids = [design.helices[0].id, design.helices[1].id]
+        hb.add_cluster("armA", cluster_helix_ids, log=True)
+        after = design_state.get_or_404()
+        cid = after.cluster_transforms[-1].id
+        entry = assert_cluster_in_feature_log(after, cid)
+        assert entry.name == "armA"
+        assert set(entry.helix_ids) == set(cluster_helix_ids)
+
+
+def test_add_cluster_log_survives_roundtrip():
+    """The cluster_create entry survives a .nadoc round-trip — the only proof the grouping
+    persisted, since canonical_topology can't see clusters."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+        design = design_state.get_or_404()
+        cluster_helix_ids = [design.helices[0].id, design.helices[1].id]
+        hb.add_cluster("armA", cluster_helix_ids, log=True)
+        built = design_state.get_or_404().model_copy(deep=True)
+        cid = built.cluster_transforms[-1].id
+        reloaded = roundtrip_nadoc(built)
+        assert_cluster_in_feature_log(reloaded, cid, expect_helix_ids=cluster_helix_ids)
+
+
+def test_add_cluster_default_does_not_log():
+    """add_cluster without log=True (the default, backward-compatible) appends NO
+    cluster_create entry — so the existing capstone/tests are unaffected and the oracle
+    can go red on an unlogged build."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+        design = design_state.get_or_404()
+        cluster_helix_ids = [design.helices[0].id, design.helices[1].id]
+        hb.add_cluster("armA", cluster_helix_ids)  # default: log=False
+        after = design_state.get_or_404()
+        cid = after.cluster_transforms[-1].id
+        assert not any(
+            getattr(e, "feature_type", None) == "cluster_create" for e in after.feature_log
+        )
+        with pytest.raises(AssertionError, match="created without logging"):
+            assert_cluster_in_feature_log(after, cid)
+
+
+# ── Full sequencing automation (assign scaffold + WC-complement staples) ───────
+
+def _routed_6hb():
+    """A 6hb auto-scaffolded to a single scaffold (so the staple complement covers
+    every staple) — the routed-origami starting point for full sequencing."""
+    hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+    hb.auto_scaffold()
+    return design_state.get_or_404()
+
+
+def test_full_sequence_leaves_no_undefined_bases():
+    """full_sequence on a routed single-scaffold 6hb assigns the scaffold sequence +
+    WC-complements every staple → zero undefined bases, all WC-correct."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        _routed_6hb()
+        sequenced = hb.full_sequence()
+        # The oracle proves both: nothing left 'N' AND staples are WC-complementary.
+        checked = assert_fully_sequenced(sequenced)
+        assert checked > 0
+
+
+def test_assign_staple_sequences_requires_scaffold_sequence():
+    """assign_staple_sequences alone (no scaffold sequence yet) 422s — it drives the
+    real route, which demands an assigned scaffold first."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        _routed_6hb()
+        with pytest.raises(HTTPException) as exc:
+            hb.assign_staple_sequences()
+        assert exc.value.status_code == 422
+
+
+def test_full_sequence_survives_roundtrip():
+    """A fully-sequenced design stays fully sequenced through a .nadoc save/load."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        _routed_6hb()
+        sequenced = hb.full_sequence().model_copy(deep=True)
+    reloaded = roundtrip_nadoc(sequenced)
+    assert_fully_sequenced(reloaded)
+
+
+def test_full_sequence_flips_assign_staples_route_to_covered():
+    """The assign_staple_sequences wrapper registers its route as covered
+    (function-identity audit)."""
+    rep = headless_coverage_report()
+    covered = {r["endpoint"] for r in rep["covered_routes"]}
+    assert "assign_staple_sequences_endpoint" in covered

@@ -29,7 +29,16 @@ the seed's part-to-part offset).
 ``bend``/``twist`` ops are *unscoped* geometric deformations driven through
 ``hb.add_bend`` / ``hb.add_twist`` (the AF-6 wrappers); ``circle_segment`` drives
 ``hb.circle_segment`` (the AF-4 parametric-disc wrapper — takes the *radius* and runs
-the same footprint analytic the UI mirror uses).  Note ``canonical_topology``
+the same footprint analytic the UI mirror uses).  The bulk routing ops
+``auto_scaffold`` / ``auto_crossover`` / ``full_autostaple`` drive the matching
+``hb.*`` wrappers (route the scaffold, place all staple crossovers, one-click
+sequence+crossover+break); ``apply_loop_skips`` drives ``hb.apply_loop_skip_deformations``
+(bake deformations + SQUARE periodic skips into loop/skip marks).  Because these four
+ADD/modify strands the strand graph fingerprint sees, ``assert_spec_matches_calls`` is
+LOAD-BEARING for the routing ops (a dropped op fails the golden pin) — but, like
+loop_skip, the marks ``apply_loop_skips`` bakes live outside the strand graph, so its
+load-bearing pin is the geometric per-helix nucleotide-count conservation, not the
+faithfulness oracle.  Note ``canonical_topology``
 is blind to a loop/skip mark AND to a deformation overlay (both live outside the
 strand graph), so the load-bearing pin for a ``loop_skip`` spec is the geometric
 :func:`tests.automation_harness.assert_geometric_length_delta` / bare
@@ -107,6 +116,19 @@ def _run_design_op(op: BuildOp, lattice: LatticeType) -> None:
             hb.add_twist(p["plane_a_bp"], p["plane_b_bp"], total_degrees=p["total_degrees"])
         else:
             hb.add_twist(p["plane_a_bp"], p["plane_b_bp"], degrees_per_nm=p["degrees_per_nm"])
+    elif op.op == "auto_scaffold":
+        hb.auto_scaffold(seamless=p["seamless"])
+    elif op.op == "auto_crossover":
+        hb.auto_crossover()
+    elif op.op == "full_autostaple":
+        kwargs = {"scaffold_name": p["scaffold_name"]}
+        if "custom_sequence" in p:
+            kwargs["custom_sequence"] = p["custom_sequence"]
+        if "strand_id" in p:
+            kwargs["strand_id"] = p["strand_id"]
+        hb.full_autostaple(**kwargs)
+    elif op.op == "apply_loop_skips":
+        hb.apply_loop_skip_deformations()
     else:  # unreachable — parse_design_spec rejects unknown ops
         raise BuildSpecError(f"unsupported design op {op.op!r}")
 

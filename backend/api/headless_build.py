@@ -56,6 +56,10 @@ from backend.api.routes_clusters import (
     add_cluster as _route_add_cluster,
     update_cluster as _route_update_cluster,
 )
+from backend.api.routes_cluster_joints import (
+    AddJointBody,
+    add_joint as _route_add_joint,
+)
 from backend.api.routes_deformation import (
     AddDeformationBody,
     add_deformation as _route_add_deformation,
@@ -68,6 +72,7 @@ from backend.api.routes_assign_sequences import (
     _FullAutostapleBody,
     _ScaffoldSeqBody,
     assign_scaffold_sequence_endpoint as _route_assign_scaffold,
+    assign_staple_sequences_endpoint as _route_assign_staples,
     full_autostaple_endpoint as _route_full_autostaple,
 )
 from backend.api.routes_scaffold_routing import (
@@ -79,7 +84,7 @@ from backend.core.circle_primitive import (
     circle_footprint,
 )
 from backend.core.constants import BDNA_RISE_PER_BP
-from backend.core.models import Design, Direction, LatticeType
+from backend.core.models import Design, Direction, LatticeType, StrandType
 
 _scratch_counter = itertools.count()
 
@@ -517,6 +522,50 @@ def full_autostaple(scaffold_name: str = "M13mp18", **kwargs) -> Design:
     return design_state.get_or_404()
 
 
+def assign_staple_sequences() -> Design:
+    """Watson-Crick-complement every staple base from the assigned scaffold
+    (POST /design/assign-staple-sequences).
+
+    Requires the scaffold to already carry a sequence (call
+    :func:`assign_scaffold_sequence` or :func:`full_sequence` first); a position
+    with no scaffold coverage is left ``'N'``.
+    """
+    _route_assign_staples()
+    return design_state.get_or_404()
+
+
+def full_sequence(
+    scaffold_name: str = "M13mp18",
+    *,
+    custom_sequence: str | None = None,
+    strand_id: str | None = None,
+) -> Design:
+    """Fully sequence a routed origami: assign the scaffold sequence to every
+    scaffold strand, then Watson-Crick-complement every staple — leaving no
+    undefined base, so the design is export / oxDNA ready.
+
+    This is *pure sequencing*: it does NOT route staples or place crossovers (use
+    :func:`full_autostaple` for the routing path).  It's the headless analog of
+    clicking "Assign scaffold sequence" then "Assign staple sequences".  The staple
+    complement is taken from the active (single) scaffold, so a complete result
+    needs a routed **single-scaffold** origami — call :func:`auto_scaffold` first on
+    a raw bundle (one scaffold strand per helix won't fully cover the staples).
+    Pass ``strand_id`` to sequence one named scaffold instead of all of them.
+    """
+    if strand_id is not None:
+        assign_scaffold_sequence(
+            scaffold_name, custom_sequence=custom_sequence, strand_id=strand_id)
+    else:
+        scaffold_ids = [
+            s.id for s in design_state.get_or_404().strands
+            if s.strand_type == StrandType.SCAFFOLD and not s.is_reference
+        ]
+        for sid in scaffold_ids:
+            assign_scaffold_sequence(
+                scaffold_name, custom_sequence=custom_sequence, strand_id=sid)
+    return assign_staple_sequences()
+
+
 def overhang_extrude(
     helix_id: str,
     bp_index: int,
@@ -538,7 +587,7 @@ def overhang_extrude(
 
 # ── clusters (rigid-body grouping + DISPLAY-layer pose) ─────────────────────────
 
-def add_cluster(name: str, helix_ids, *, domain_ids=()) -> Design:
+def add_cluster(name: str, helix_ids, *, domain_ids=(), log: bool = False) -> Design:
     """Create a named rigid-body cluster of helices (POST /design/cluster).
 
     A cluster groups helices into a rigid body that carries a DISPLAY-layer pose
@@ -548,12 +597,19 @@ def add_cluster(name: str, helix_ids, *, domain_ids=()) -> Design:
     default catch-all cluster surrenders helices to the new one (intentional clusters
     are left intact).  Pushes undo.
 
+    ``log=True`` records a ``cluster_create`` feature-log entry (naming the cluster +
+    its exact helix set), so a generated multi-cluster part's construction history can
+    replay the *grouping* step, not just the later poses/joints.  Pin it with
+    :func:`tests.automation_harness.assert_cluster_in_feature_log`; ``canonical_topology``
+    is blind to clusters, so the feature-log entry is what proves the grouping persisted
+    across a round-trip.
+
     The new cluster is the last entry in ``cluster_transforms`` — read its id from the
     returned design (``design.cluster_transforms[-1].id``) to pose it with
     :func:`transform_cluster`.
     """
     _route_add_cluster(AddClusterBody(
-        name=name, helix_ids=list(helix_ids), domain_ids=list(domain_ids),
+        name=name, helix_ids=list(helix_ids), domain_ids=list(domain_ids), log=log,
     ))
     return design_state.get_or_404()
 
@@ -629,3 +685,60 @@ def align_cluster_edge(
         cluster_id, translation=translation, rotation=quat, pivot=pivot,
         commit=commit, log=log,
     )
+
+
+def place_cluster_joint(
+    cluster_id: str,
+    *,
+    edge=None,
+    corner=None,
+    face=None,
+    anchor: str = "midpoint",
+    name: str = "Joint",
+    surface_detail: int = 6,
+    min_angle_deg: float = -180.0,
+    max_angle_deg: float = 180.0,
+) -> Design:
+    """Place a revolute joint anchored on a named OBB edge/corner (AF-14 Phase 1).
+
+    A ``ClusterJoint`` is a **topological/design-layer** intent — which rigid cluster
+    swings about what axis — so placing one is an allowed write (the hull prism / OBB it
+    is anchored to is a pure geometric *read* that never writes back; clean Three-Layer,
+    mirroring how AF-6 deformation reads the frame).  This is the headless analog of the
+    gizmo gesture where the user clicks a face of the cluster's hull approximation.
+
+    The anchor is a named feature of the cluster's hull-prism OBB
+    (:func:`backend.core.cluster_obb.hull_prism_axis`):
+
+      * ``edge=(axis, s1, s2)`` — the revolute hinge runs ALONG that OBB edge (the
+        door-jamb placement that maximises range of motion);
+      * ``corner=(su, sv, sw)`` with ``face=(axis, sign)`` — a point pivot AT the corner,
+        swinging in the named face's plane.
+
+    ``anchor`` (edge mode): ``"midpoint"`` (default) stores the edge centre; ``"corner"``
+    stores a face corner (the AF-14 Phase 3 convention) — same hinge line either way.
+
+    Drives the real ``POST /design/cluster/{id}/joint`` handler (``add_joint``), which
+    converts the world axis into the cluster's LOCAL frame for drift-free storage.  Read
+    the new joint id from ``design.cluster_joints[-1].id``.
+
+    Pin the result with
+    :func:`tests.automation_harness.assert_joint_on_hull_corner` (the placed joint's
+    re-derived world axis lies along the named edge / passes through the named corner of
+    the independently recomputed OBB).
+    """
+    from backend.core.cluster_obb import hull_prism_axis
+
+    design = design_state.get_or_404()
+    origin, direction = hull_prism_axis(
+        design, cluster_id, edge=edge, corner=corner, face=face, anchor=anchor,
+    )
+    _route_add_joint(cluster_id, AddJointBody(
+        axis_origin=list(origin),
+        axis_direction=list(direction),
+        surface_detail=surface_detail,
+        name=name,
+        min_angle_deg=min_angle_deg,
+        max_angle_deg=max_angle_deg,
+    ))
+    return design_state.get_or_404()

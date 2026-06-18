@@ -18,7 +18,8 @@ well-formed op list.
 The grammar is deliberately tiny (the "start small, grow it" of the backlog):
 
 * **design** ops — ``bundle`` · ``extrude`` · ``nick`` · ``ligate`` · ``loop_skip`` ·
-  ``bend`` · ``twist`` · ``circle_segment``
+  ``bend`` · ``twist`` · ``circle_segment`` · ``auto_scaffold`` · ``auto_crossover`` ·
+  ``full_autostaple`` · ``apply_loop_skips``
 * **assembly** ops — ``add_part`` · ``place_grid`` · ``place_ring`` · ``mate`` ·
   ``gear`` · ``belt`` · ``polymerize``
 
@@ -194,6 +195,10 @@ _DESIGN_OP_KEYS = {
     "twist": {"op", "plane_a_bp", "plane_b_bp", "total_degrees", "degrees_per_nm"},
     "circle_segment": {"op", "radius_nm", "plane", "offset_nm", "strand_filter",
                        "ligate_adjacent", "min_chord_bp"},
+    "auto_scaffold": {"op", "seamless"},
+    "auto_crossover": {"op"},
+    "full_autostaple": {"op", "scaffold_name", "custom_sequence", "strand_id"},
+    "apply_loop_skips": {"op"},
 }
 
 # Ops that create their own helices from scratch → may be the FIRST op (all others
@@ -258,6 +263,26 @@ def _parse_design_op(raw, *, where: str) -> BuildOp:
         p["ligate_adjacent"] = _as_bool(raw.get("ligate_adjacent", True), key="ligate_adjacent", where=here)
         if "min_chord_bp" in raw:
             p["min_chord_bp"] = _as_int(raw["min_chord_bp"], key="min_chord_bp", where=here)
+    elif op == "auto_scaffold":
+        # Route the scaffold onto the existing helices as a single strand (seamed
+        # Hamiltonian path by default; seamless = one end-crossover per helix pair).
+        p["seamless"] = _as_bool(raw.get("seamless", False), key="seamless", where=here)
+    elif op == "auto_crossover":
+        # Place all compliant staple crossovers in bulk — no parameters.
+        pass
+    elif op == "full_autostaple":
+        # One-click routing: assign the scaffold sequence + place crossovers +
+        # tick-break/merge staples.  custom_sequence (when set) overrides scaffold_name.
+        p["scaffold_name"] = _as_str(raw.get("scaffold_name", "M13mp18"),
+                                     key="scaffold_name", where=here)
+        if raw.get("custom_sequence") is not None:
+            p["custom_sequence"] = _as_str(raw["custom_sequence"], key="custom_sequence", where=here)
+        if raw.get("strand_id") is not None:
+            p["strand_id"] = _as_str(raw["strand_id"], key="strand_id", where=here)
+    elif op == "apply_loop_skips":
+        # Bake every DeformationOp (and, on SQUARE, the periodic skips) into concrete
+        # loop/skip marks — no parameters.  Requires crossovers already placed.
+        pass
     else:  # bend / twist — a geometric DeformationOp between two bp planes
         p["plane_a_bp"] = _as_int(_get(raw, "plane_a_bp", where=here), key="plane_a_bp", where=here)
         p["plane_b_bp"] = _as_int(_get(raw, "plane_b_bp", where=here), key="plane_b_bp", where=here)
@@ -305,7 +330,11 @@ def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
             {"op": "twist",   "plane_a_bp": int, "plane_b_bp": int,
              "total_degrees": num | "degrees_per_nm": num},
             {"op": "circle_segment", "radius_nm": num, "plane": str,
-             "offset_nm": num, …}
+             "offset_nm": num, …},
+            {"op": "auto_scaffold", "seamless": bool},
+            {"op": "auto_crossover"},
+            {"op": "full_autostaple", "scaffold_name": str, …},
+            {"op": "apply_loop_skips"}
           ]
         }
 
@@ -321,7 +350,15 @@ def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
     (auto-applies to every helix crossing both — helix/cluster scoping is deferred;
     it would need a grid_pos→id resolution the spec layer does not yet do).  A
     ``twist`` must carry exactly one of ``total_degrees`` / ``degrees_per_nm``.
-    Raises :class:`BuildSpecError` on any grammar violation.
+
+    ``auto_scaffold`` / ``auto_crossover`` / ``full_autostaple`` are the bulk
+    routing ops (route the scaffold, place all staple crossovers, one-click
+    sequence+crossover+break respectively); ``apply_loop_skips`` bakes the design's
+    deformation ops (and, on SQUARE, the periodic skips) into concrete loop/skip
+    marks — it requires crossovers already placed (so it follows ``auto_crossover``
+    or ``full_autostaple`` in the op list).  All four need existing helices/strands,
+    so none may be the first op.  Raises :class:`BuildSpecError` on any grammar
+    violation.
     """
     if not isinstance(spec, dict):
         raise BuildSpecError(f"{where}: spec must be an object, got {type(spec).__name__}")
@@ -339,7 +376,8 @@ def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
     if ops[0].op not in _PRIMORDIAL_DESIGN_OPS:
         raise BuildSpecError(
             f"{where}: the first op must be 'bundle' or 'circle_segment' "
-            f"(got {ops[0].op!r}) — extrude/nick/ligate/loop_skip/bend/twist need "
+            f"(got {ops[0].op!r}) — extrude/nick/ligate/loop_skip/bend/twist/"
+            "auto_scaffold/auto_crossover/full_autostaple/apply_loop_skips need "
             "existing helices"
         )
     if (any(o.op == "circle_segment" for o in ops)

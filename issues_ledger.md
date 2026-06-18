@@ -786,6 +786,30 @@ pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 wit
 - **Scope:** one-line builder change IF approved; small oracle hardening. Medium priority (blocks round-trip
   validation of any deformed design; may mask feature breakage).
 
+## ISSUE-12 — `cluster_create` feature-log entries mislabel as "move/rotate" in the log panel (UI correctness)
+
+- **Status:** `[ ]` OPEN. Discovered 2026-06-18 during AF-16 (`/automate-feature`, loggable cluster creation).
+  NOT fixed — frontend work outside the backend design-automation loop's scope; logged for cross-loop intake.
+- **Symptom:** the feature-log panel's render dispatch (`frontend/src/ui/feature_log_panel.js`) switches on
+  `entry.feature_type` with explicit branches for `deformation` / `overhang_rotation` / `routing-cluster` /
+  `snapshot`, and a **catch-all `else` (line ~1374) that assumes any remaining entry is a `cluster_op`** (it reads
+  `entry.cluster_id`, renders `"F#: move/rotate <name>"`, and wires an edit button to the cluster-transform editor
+  `onEditFeature`). The NEW `cluster_create` entry type (AF-16) ALSO carries `cluster_id`, so it falls into that
+  `else` and renders as a misleading **"move/rotate"** row with an edit button that opens the *transform* editor on
+  a grouping entry (wrong tool; may error or produce nonsense).
+- **Impact:** LOW today — `cluster_create` entries are only produced by a **headless** `add_cluster(..., log=True)`
+  build; no UI path emits one, so it surfaces only when a user *loads* a headless-/automation-built `.nadoc` that
+  used the AF-16 log path. But once the generated 4-bar/parallelogram parts (which is the AF-16 motivating use case)
+  are saved and opened, every bar's creation step will mislabel.
+- **Where:** `frontend/src/ui/feature_log_panel.js` ~817 (`_brokenReason`, returns null for the type — fine) and
+  ~1374 (the catch-all `else` that should test `entry.feature_type === 'cluster_op'` explicitly and give
+  `cluster_create` its own branch). Model: `ClusterCreateLogEntry` in `backend/core/models.py`.
+- **Desired behavior:** add an explicit `else if (entry.feature_type === 'cluster_create')` branch rendering a
+  sensible label (e.g. `"F#: Group <name> (N helices)"` with a distinct icon) and a delete button (no transform
+  edit/revert — creating a cluster isn't a posable op). Tighten the trailing `else` to `feature_type === 'cluster_op'`
+  so a future unknown type doesn't silently inherit the move/rotate UI. Route through the panel module; gate vitest
+  + smoke + one app exercise (load a headless design carrying the entry). Low priority.
+
 ## Next-session handoff
 
 _Living pointer — each session overwrites this. Last updated 2026-06-08 (ISSUE-7 shipped: negative-bp element

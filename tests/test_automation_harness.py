@@ -148,6 +148,18 @@ def test_coverage_report_marks_af9_gear_routes_covered():
     assert {"create_gear_relation", "patch_joint"} <= covered
 
 
+def test_oxdna_coverage_report_separate_from_design_assembly():
+    """AF-13's physical-layer audit (oxdna_coverage_report) is scoped to /oxdna and
+    does NOT perturb the design/assembly coverage number."""
+    from tests.automation_harness import oxdna_coverage_report
+
+    assert headless_coverage_report()["covered"] == 36  # /oxdna audit is separate
+    ox = oxdna_coverage_report()
+    assert ox["total"] == ox["covered"] + ox["uncovered"]
+    covered = {r["endpoint"] for r in ox["covered_routes"]}
+    assert {"create_oxdna_job", "start_oxdna_job", "append_oxdna_production"} <= covered
+
+
 # ── The gear-ratio oracle PASSES on a real gear and FIRES otherwise ────────────
 
 def _geared_build(*, ratio: float = 2.0):
@@ -1071,6 +1083,65 @@ def test_cluster_translated_vacuity_guard_on_zero_translation():
             assert_cluster_translated(before, after, cid, translation=[0.0, 0.0, 0.0])
 
 
+# ── AF-16: the cluster-create feature-log oracle PASSES on a logged creation, FIRES
+#    on an unlogged one and on a mismatched helix set ──────────────────────────────
+
+def _logged_cluster_design():
+    """Active scratch: a 6hb with a 2-helix cluster created with log=True.
+    Returns (design, cluster_id, cluster_helix_ids)."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from tests.conftest import SIX_HB_CELLS
+
+    hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+    design = design_state.get_or_404()
+    helix_ids = [design.helices[0].id, design.helices[1].id]
+    hb.add_cluster("armA", helix_ids, log=True)
+    after = design_state.get_or_404()
+    return after, after.cluster_transforms[-1].id, helix_ids
+
+
+def test_cluster_in_feature_log_passes_on_a_logged_creation():
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_cluster_in_feature_log
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        design, cid, helix_ids = _logged_cluster_design()
+        entry = assert_cluster_in_feature_log(design, cid)
+        assert entry.feature_type == "cluster_create"
+        assert set(entry.helix_ids) == set(helix_ids)
+
+
+def test_cluster_in_feature_log_fires_when_creation_unlogged():
+    """Load-bearing red-test: a cluster created without log=True leaves no entry → the
+    oracle raises (the can-go-red guard)."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from tests.automation_harness import assert_cluster_in_feature_log
+    from tests.conftest import SIX_HB_CELLS
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+        design = design_state.get_or_404()
+        hb.add_cluster("armA", [design.helices[0].id, design.helices[1].id])  # log=False
+        after = design_state.get_or_404()
+        cid = after.cluster_transforms[-1].id
+        with pytest.raises(AssertionError, match="created without logging"):
+            assert_cluster_in_feature_log(after, cid)
+
+
+def test_cluster_in_feature_log_fires_on_wrong_helix_set():
+    """Load-bearing red-test: asserting a helix set that doesn't match the logged entry
+    raises — so a build that logged the wrong helices is caught."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_cluster_in_feature_log
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        design, cid, helix_ids = _logged_cluster_design()
+        with pytest.raises(AssertionError, match="does not match the cluster"):
+            assert_cluster_in_feature_log(design, cid, expect_helix_ids=helix_ids[:1])
+
+
 # ── AF-15 Phase 2: the edge-collinearity oracle PASSES on a real alignment, FIRES
 #    when the edges are left skew / on different lines ───────────────────────────
 
@@ -1150,3 +1221,327 @@ def test_edges_collinear_fires_on_wrong_direction():
         with pytest.raises(AssertionError, match="not collinear"):
             assert_edges_collinear(design_state.get_or_404(), cid, src,
                                    target_line=([4.0, 0.0, 0.0], [1.0, 0.0, 1.0]))
+
+
+# ── assert_joint_on_hull_corner (AF-14 Phase 1) ───────────────────────────────
+
+def _bar_with_joint(*, edge=None, corner=None, face=None):
+    """Active scratch SQUARE: a 2×6 bar clustered whole, with one joint placed on the
+    named OBB feature; return (design, cluster_id, joint_id)."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+
+    hb.create_bundle(
+        [(r, c) for r in range(2) for c in range(6)],
+        32, lattice=LatticeType.SQUARE, name="grid",
+    )
+    d = design_state.get_or_404()
+    hb.add_cluster("bar", [h.id for h in d.helices])
+    cid = design_state.get_or_404().cluster_transforms[-1].id
+    hb.place_cluster_joint(cid, edge=edge, corner=corner, face=face)
+    d = design_state.get_or_404()
+    return d, cid, d.cluster_joints[-1].id
+
+
+def test_joint_on_hull_corner_passes_on_a_real_edge_placement():
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_joint_on_hull_corner
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        d, _cid, jid = _bar_with_joint(edge=("w", 1, 1))
+        ang = assert_joint_on_hull_corner(d, jid, edge=("w", 1, 1))
+        assert ang < 1.0
+
+
+def test_joint_on_hull_corner_passes_on_a_real_corner_placement():
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_joint_on_hull_corner
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        d, _cid, jid = _bar_with_joint(corner=(1, 1, 1), face=("w", 1))
+        assert_joint_on_hull_corner(d, jid, corner=(1, 1, 1), face=("w", 1))
+
+
+def test_joint_on_hull_corner_fires_on_a_different_edge():
+    """Load-bearing red-test: a joint placed on edge (w,+1,+1) is parallel to but offset
+    from edge (w,-1,+1) → the on-line assertion raises."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_joint_on_hull_corner
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        d, _cid, jid = _bar_with_joint(edge=("w", 1, 1))
+        with pytest.raises(AssertionError, match="off the joint axis line"):
+            assert_joint_on_hull_corner(d, jid, edge=("w", -1, 1))
+
+
+def test_joint_on_hull_corner_fires_on_a_different_corner():
+    """Load-bearing red-test: a joint at corner (+1,+1,+1) does not pass through corner
+    (-1,+1,+1) → the through-corner assertion raises."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_joint_on_hull_corner
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        d, _cid, jid = _bar_with_joint(corner=(1, 1, 1), face=("w", 1))
+        with pytest.raises(AssertionError, match="from corner"):
+            assert_joint_on_hull_corner(d, jid, corner=(-1, 1, 1), face=("w", 1))
+
+
+# ── assert_range_of_motion (AF-14 Phase 2) ────────────────────────────────────
+
+def _lone_bar():
+    """Active scratch SQUARE: a 2×6 bar clustered whole; return (design, cluster_id)."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+
+    hb.create_bundle(
+        [(r, c) for r in range(2) for c in range(6)],
+        32, lattice=LatticeType.SQUARE, name="grid",
+    )
+    d = design_state.get_or_404()
+    hb.add_cluster("bar", [h.id for h in d.helices])
+    return design_state.get_or_404(), design_state.get_or_404().cluster_transforms[-1].id
+
+
+def test_range_of_motion_passes_on_lone_cluster_full_swing():
+    from backend.api import headless_build as hb
+    from backend.core.cluster_obb import hull_prism_axis
+    from tests.automation_harness import assert_range_of_motion
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        d, cid = _lone_bar()
+        axis = hull_prism_axis(d, cid, edge=("w", 1, 1))
+        rom = assert_range_of_motion(d, cid, axis, 360.0)
+        assert abs(rom - 360.0) < 2.0
+
+
+def test_range_of_motion_fires_on_wrong_angle():
+    """Load-bearing red-test: a free 360° swing is not 180° → the oracle raises."""
+    from backend.api import headless_build as hb
+    from backend.core.cluster_obb import hull_prism_axis
+    from tests.automation_harness import assert_range_of_motion
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        d, cid = _lone_bar()
+        axis = hull_prism_axis(d, cid, edge=("w", 1, 1))
+        with pytest.raises(AssertionError, match="expected"):
+            assert_range_of_motion(d, cid, axis, 180.0)
+
+
+def test_range_of_motion_obstacle_reduces_swing():
+    """The second can-go-red guard: a neighbour in the swing path drops ROM below the
+    full limit, so claiming the full 360° raises while the true (reduced) value passes."""
+    import numpy as np
+
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from backend.core.cluster_obb import (
+        cluster_obb,
+        cluster_range_of_motion,
+        hull_prism_axis,
+    )
+    from tests.automation_harness import assert_range_of_motion
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle(
+            [(r, c) for r in range(2) for c in range(6)],
+            32, lattice=LatticeType.SQUARE, name="grid",
+        )
+        d = design_state.get_or_404()
+        hb.add_cluster("A", [h.id for h in d.helices if h.grid_pos and h.grid_pos[1] <= 2])
+        a = design_state.get_or_404().cluster_transforms[-1].id
+        hb.add_cluster("B", [h.id for h in d.helices if h.grid_pos and h.grid_pos[1] >= 3])
+        b = design_state.get_or_404().cluster_transforms[-1].id
+
+        d = design_state.get_or_404()
+        sep = cluster_obb(d, b).center - cluster_obb(d, a).center
+        sep_u = sep / np.linalg.norm(sep)
+        hb.transform_cluster(b, translation=(sep_u * 2).tolist(),
+                             rotation=[0, 0, 0, 1], pivot=[0, 0, 0])
+        d = design_state.get_or_404()
+
+        obb_a = cluster_obb(d, a)
+        # hinge on the interface edge nearest B → one swing sense drives A's bulk into B
+        best, best_d = None, 1e30
+        for key in [("w", s1, s2) for s1 in (-1, 1) for s2 in (-1, 1)]:
+            p_lo, p_hi = obb_a.edge_endpoints(key)
+            dist = float(np.linalg.norm((p_lo + p_hi) / 2 - cluster_obb(d, b).center))
+            if dist < best_d:
+                best, best_d = key, dist
+        axis = hull_prism_axis(d, a, edge=best)
+
+        rom = cluster_range_of_motion(d, a, axis)
+        assert rom < 360.0, "B should reduce A's swing"
+        assert_range_of_motion(d, a, axis, rom)  # the true reduced value passes
+        with pytest.raises(AssertionError, match="expected"):
+            assert_range_of_motion(d, a, axis, 360.0)  # claiming a free swing fails
+
+
+def test_coverage_report_marks_af14_route_covered():
+    """AF-14 Phase 1 flipped POST /design/cluster/{id}/joint (add_joint) → covered."""
+    report = headless_coverage_report()
+    covered = {r["endpoint"] for r in report["covered_routes"]}
+    assert "add_joint" in covered
+
+
+# ── assert_parallelogram_linkage (the 4-bar capstone oracle) ──────────────────
+
+def test_parallelogram_oracle_passes_on_a_real_mechanism():
+    """The oracle accepts a genuinely-built headless 4-bar parallelogram."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_parallelogram_linkage
+    from tests.test_parallelogram_linkage import build_parallelogram
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        design, bar_ids, joint_ids = build_parallelogram()
+        out = assert_parallelogram_linkage(design, bar_ids, joint_ids=joint_ids)
+        assert out["mobility"] == 1
+        assert len(out["joint_roms"]) == 4
+
+
+def test_parallelogram_oracle_red_on_wrong_joint_count():
+    """Load-bearing can-go-red: 3 joints on a 4-link mechanism → Grübler mobility 3,
+    not 1, so the oracle raises (the mobility check is real, not cosmetic)."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_parallelogram_linkage
+    from tests.test_parallelogram_linkage import build_parallelogram
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        design, bar_ids, joint_ids = build_parallelogram()
+        with pytest.raises(AssertionError, match="mobility"):
+            assert_parallelogram_linkage(
+                design, bar_ids, joint_ids=joint_ids[:3], require_movable=False,
+            )
+
+
+def test_parallelogram_oracle_red_on_unarranged_bars():
+    """Load-bearing can-go-red: if a bar is never aligned (left in the grid), the bars
+    don't meet at shared corners → the closure assertion raises."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from tests.automation_harness import assert_parallelogram_linkage
+    from tests.test_parallelogram_linkage import build_parallelogram
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        # build a full parallelogram, then shove one bar far away → loop no longer closes
+        design, bar_ids, joint_ids = build_parallelogram()
+        hb.transform_cluster(bar_ids[2], translation=[100.0, 100.0, 100.0],
+                             rotation=[0, 0, 0, 1], pivot=[0, 0, 0])
+        design = design_state.get_or_404()
+        with pytest.raises(AssertionError, match="shared corner|parallel|degenerate"):
+            assert_parallelogram_linkage(
+                design, bar_ids, joint_ids=joint_ids, require_movable=False,
+            )
+
+
+# ── assert_recommended_hinge (AF-14 Phase 3) ──────────────────────────────────
+
+def _recommend_bar():
+    """Active scratch SQUARE: a 2×6 bar clustered whole; return (design, cluster_id)."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+
+    hb.create_bundle(
+        [(r, c) for r in range(2) for c in range(6)],
+        32, lattice=LatticeType.SQUARE, name="grid",
+    )
+    d = design_state.get_or_404()
+    hb.add_cluster("bar", [h.id for h in d.helices])
+    return design_state.get_or_404(), design_state.get_or_404().cluster_transforms[-1].id
+
+
+def test_recommended_hinge_passes_on_a_real_bar():
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_recommended_hinge
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        d, cid = _recommend_bar()
+        top = assert_recommended_hinge(d, cid)
+        assert not top["is_axial"]
+
+
+def test_recommended_hinge_red_on_axial_edge_on_top():
+    """Load-bearing red-test: a hand-built list with an axial (w) edge wrongly ranked #1
+    → the non-axial check raises."""
+    from backend.api import headless_build as hb
+    from backend.core.cluster_obb import recommend_hinge_joints
+    from tests.automation_harness import assert_recommended_hinge
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        d, cid = _recommend_bar()
+        recs = recommend_hinge_joints(d, cid)
+        axial = next(c for c in recs if c["edge"][0] == "w")
+        mangled = [axial] + [c for c in recs if c is not axial]
+        with pytest.raises(AssertionError, match="axial"):
+            assert_recommended_hinge(d, cid, recommendations=mangled)
+
+
+def test_recommended_hinge_red_on_midpoint_anchor():
+    """Load-bearing red-test: a top candidate anchored at the edge MIDPOINT (not a
+    corner) → the corner-anchor check raises."""
+    from backend.api import headless_build as hb
+    from backend.core.cluster_obb import recommend_hinge_joints
+    from tests.automation_harness import assert_recommended_hinge
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        d, cid = _recommend_bar()
+        midpoint_recs = recommend_hinge_joints(d, cid, anchor="midpoint")
+        with pytest.raises(AssertionError, match="corner-anchored"):
+            assert_recommended_hinge(d, cid, recommendations=midpoint_recs)
+
+
+# ── The full-sequencing oracle PASSES on a sequenced design and FIRES otherwise ─
+
+def _routed_sequenced_6hb():
+    """Active scratch design: a 6hb auto-scaffolded to one strand and fully
+    sequenced (scaffold + WC staples).  Returns the sequenced design copy."""
+    from backend.api import headless_build as hb
+
+    hb.create_bundle(
+        [(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)], 42,
+        lattice=LatticeType.HONEYCOMB, name="6hb")
+    hb.auto_scaffold()
+    return hb.full_sequence()
+
+
+def test_fully_sequenced_oracle_passes_on_sequenced_design():
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_fully_sequenced
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        sequenced = _routed_sequenced_6hb()
+        assert assert_fully_sequenced(sequenced) > 0
+
+
+def test_fully_sequenced_oracle_fires_on_unsequenced_design():
+    """Red-test: a routed-but-unsequenced design trips the undefined-base guard."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from tests.automation_harness import assert_fully_sequenced
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(
+            [(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)], 42,
+            lattice=LatticeType.HONEYCOMB, name="6hb")
+        hb.auto_scaffold()
+        unsequenced = design_state.get_or_404()
+        with pytest.raises(AssertionError, match="undefined"):
+            assert_fully_sequenced(unsequenced)
+
+
+def test_fully_sequenced_oracle_fires_on_wrong_complement():
+    """Red-test: a staple base that is NOT the scaffold's WC complement raises."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_fully_sequenced
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        sequenced = _routed_sequenced_6hb()
+        # Corrupt one staple's sequence to a definite-but-wrong base (no 'N', so the
+        # undefined guard passes and the WC guard is the one that must fire).
+        staples = [s for s in sequenced.strands if s.strand_type == StrandType.STAPLE]
+        target = staples[0]
+        bad = "A" * len(target.sequence or "")
+        patched = [s.model_copy(update={"sequence": bad}) if s.id == target.id else s
+                   for s in sequenced.strands]
+        broken = sequenced.model_copy(update={"strands": patched})
+        with pytest.raises(AssertionError, match="WC complement"):
+            assert_fully_sequenced(broken)

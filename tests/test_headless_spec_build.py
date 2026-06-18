@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 
 import pytest
+from fastapi import HTTPException
 
 from backend.api import assembly_state
 from backend.api import headless_assembly_build as hab
@@ -277,6 +278,138 @@ def test_circle_segment_spec_builds_a_disc_of_the_requested_radius(radius):
 
 def test_circle_segment_spec_roundtrips_stable():
     assert_roundtrip_stable(lambda: hs.build_design(_circle_spec()))
+
+
+# ── bulk routing ops: auto_scaffold / auto_crossover / full_autostaple ─────────
+# Unlike loop_skip/bend/twist, these ADD strands (a scaffold strand, crossover
+# domain-transitions, broken/merged staples) the strand graph fingerprint sees — so
+# canonical_topology CAN see them and assert_spec_matches_calls is LOAD-BEARING here:
+# the hand reference runs the REAL auto ops, so if the driver silently dropped one,
+# the spec build would diverge and the golden pin would go red.
+
+_TEETH = [list(c) for c in TEETH_CELLS]
+
+
+def _routed_spec(*, seamless=False):
+    return {"lattice": "square", "ops": [
+        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
+        {"op": "auto_scaffold", "seamless": seamless},
+        {"op": "auto_crossover"},
+    ]}
+
+
+def test_auto_scaffold_crossover_spec_matches_hand_calls():
+    """A bundle → auto_scaffold → auto_crossover spec builds the SAME canonical
+    topology as the equivalent hand calls — load-bearing, since the auto ops add
+    real strands the fingerprint sees (a dropped op would diverge from the hand build)."""
+    def hand():
+        with hb.scratch_session(LatticeType.SQUARE):
+            hb.create_bundle(TEETH_CELLS, 96, lattice=LatticeType.SQUARE, name="sq")
+            hb.auto_scaffold(seamless=False)
+            hb.auto_crossover()
+            return design_state.get_or_404().model_copy(deep=True)
+
+    assert_spec_matches_calls(lambda: hs.build_design(_routed_spec()), hand, kind="design")
+
+
+def test_auto_scaffold_crossover_spec_changes_topology_vs_bundle():
+    """The routing ops visibly change the strand graph vs a bare bundle — so the
+    faithfulness pin above is non-vacuous (it's not comparing two bare bundles)."""
+    bare = hs.build_design({"lattice": "square", "ops": [
+        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"}]})
+    routed = hs.build_design(_routed_spec())
+    assert canonical_topology(routed) != canonical_topology(bare)
+    # the routing ran end-to-end and left a replayable log
+    assert [e.op_kind for e in routed.feature_log][0] == "bundle-create"
+    assert len(routed.feature_log) >= 3  # bundle + scaffold + crossover entries
+
+
+def test_full_autostaple_spec_matches_hand_calls():
+    """A bundle → auto_scaffold → full_autostaple spec builds the SAME canonical
+    topology as the equivalent hand calls (full_autostaple assigns sequence, places
+    crossovers, breaks+merges staples — all visible to the fingerprint)."""
+    def hand():
+        with hb.scratch_session(LatticeType.SQUARE):
+            hb.create_bundle(TEETH_CELLS, 96, lattice=LatticeType.SQUARE, name="sq")
+            hb.auto_scaffold()
+            hb.full_autostaple()
+            return design_state.get_or_404().model_copy(deep=True)
+
+    spec = {"lattice": "square", "ops": [
+        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
+        {"op": "auto_scaffold"},
+        {"op": "full_autostaple"},
+    ]}
+    assert_spec_matches_calls(lambda: hs.build_design(spec), hand, kind="design")
+
+
+def test_full_autostaple_spec_roundtrips_stable():
+    """A fully-routed spec design (scaffold + full_autostaple) is well-formed and
+    survives a .nadoc round-trip. (auto_crossover alone leaves staples nicked at
+    crossovers — non-physical until broken/merged — so the complete autostaple is the
+    valid round-trip target.)"""
+    spec = {"lattice": "square", "ops": [
+        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
+        {"op": "auto_scaffold"},
+        {"op": "full_autostaple"},
+    ]}
+    assert_roundtrip_stable(lambda: hs.build_design(spec))
+
+
+# ── apply_loop_skips op (AF-11 Phase 2 — unblocked by auto_crossover) ──────────
+# apply_loop_skips bakes the design's deformations (+ SQUARE periodic skips) into
+# concrete loop/skip marks. Its route needs crossovers placed — which auto_crossover
+# now produces in the same spec. Like loop_skip, the marks live OUTSIDE the strand
+# graph, so canonical_topology (and assert_spec_matches_calls) is BLIND to them: the
+# load-bearing pin is the AF-3 per-helix geometric conservation law (each helix's
+# nucleotide count changes by exactly twice its net loop/skip delta).
+
+def _pre_apply_spec():
+    """The routed SQUARE substrate apply_loop_skips runs on (no apply op yet)."""
+    return {"lattice": "square", "ops": [
+        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
+        {"op": "auto_scaffold"},
+        {"op": "auto_crossover"},
+    ]}
+
+
+def _apply_loop_skips_spec():
+    spec = _pre_apply_spec()
+    spec["ops"].append({"op": "apply_loop_skips"})
+    return spec
+
+
+def test_apply_loop_skips_spec_honors_marks_per_helix():
+    """apply_loop_skips in a spec bakes the SQUARE periodic-skip pattern, and each
+    helix's geometry changes by exactly 2 × its net mark delta — proving the marks
+    flowed spec → parser → hb.apply_loop_skip_deformations → geometry helix-by-helix
+    (which assert_spec_matches_calls can't see: the marks live outside the strand graph)."""
+    before = hs.build_design(_pre_apply_spec())
+    after = hs.build_design(_apply_loop_skips_spec())
+
+    assert after.feature_log[-1].op_kind == "apply-loop-skips"
+    # Guard: the op actually placed marks (else the conservation law is vacuous).
+    assert any(ls.delta for h in after.helices for ls in h.loop_skips)
+    before_by_grid = {tuple(h.grid_pos): h.id for h in before.helices}
+    for h in after.helices:
+        net = sum(ls.delta for ls in h.loop_skips)
+        bhid = before_by_grid[tuple(h.grid_pos)]
+        diff = (geometric_nucleotide_count(after, h.id)
+                - geometric_nucleotide_count(before, bhid))
+        assert diff == 2 * net, (
+            f"helix {h.id}: geometry changed by {diff}, marks net {net} (×2 expected)"
+        )
+
+
+def test_apply_loop_skips_spec_requires_crossovers():
+    """Without crossovers, apply_loop_skips' route 400s — so a spec that applies on a
+    bare bundle fails at build time (proves the op runs the real route, not a no-op)."""
+    spec = {"lattice": "square", "ops": [
+        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
+        {"op": "apply_loop_skips"},
+    ]}
+    with pytest.raises(HTTPException):
+        hs.build_design(spec)
 
 
 # ── assembly interpreter ──────────────────────────────────────────────────────
@@ -594,4 +727,6 @@ def test_spec_build_adds_no_coverage():
     """AF-11 composes already-covered wrappers — like AF-10, it moves the oracle
     count, not the route-coverage count."""
     from tests.automation_harness import headless_coverage_report
-    assert headless_coverage_report()["covered"] == 34
+    # AF-14 Phase 1's place_cluster_joint added one route (add_joint): 34 → 35;
+    # the full_sequence feature added assign_staple_sequences: 35 → 36.
+    assert headless_coverage_report()["covered"] == 36
