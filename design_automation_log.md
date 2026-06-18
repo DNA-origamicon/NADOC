@@ -57,6 +57,8 @@ Pulled from the 2026-06-16 audit; each is a *proven* pattern already green in th
 | `overhang_candidate_error` / `valid_overhang_sites` | geometric feasibility of an overhang placement | `backend/core/lattice.py`; `tests/conftest.py` | overhang wrappers |
 | design-geometry kernel (`_geometry_for_design`, `_strand_nucleotide_info`) | nucleotide position + 5′/3′ terminus convention | `backend/core/design_geometry.py`; `tests/test_design_geometry_core.py` | geometry-level assertions |
 | `assert_binding_resolves` (AF-9) | a metadata-only cross-part relation's endpoints resolve to live targets (survives round-trip; the gap `canonical_assembly` can't see) | `tests/automation_harness.py` | any metadata-only cross-part relation (overhang connections next) |
+| `assert_instances_on_grid` / `assert_instances_on_ring` (AF-10) | placed instance origins form an exact regular lattice (grid: count + even pitch + every cell; ring: on-radius + even `360°/n` step), measured on placed transforms, non-degeneracy guard | `tests/automation_harness.py` | any parametric instance-layout (radial-facing layouts, AF-11 DSL layout specs) |
+| `assert_spec_matches_calls` (AF-11) | a declarative build-spec is lowered to the SAME canonical structure as the equivalent hand-call wrapper sequence (`canonical_topology` design / `canonical_assembly` assembly), non-emptiness guard; doubles as the spec→fingerprint golden pin | `tests/automation_harness.py` | any interpreter/DSL/codegen that claims to be sugar over existing ops (AF-11 grammar growth) |
 
 ---
 
@@ -381,6 +383,223 @@ endpoints against the actual round-tripped part designs. The two red-tests prove
 referential-integrity spine for any future metadata-only cross-part relation (assembly overhang *connections*
 next).**"
 
+**AF-10 — instance layout helpers (grid / ring): `place_grid` + `place_ring` + lattice oracles** · _shape:_
+**NEW pure core** `backend/core/instance_layout.py` (`grid_translations` / `ring_translations` — spec→world
+translations, plane in {XY,XZ,YZ}, identity orientation; mirrors `circle_primitive`) + 2 construction-sugar
+wrappers in `backend/api/headless_assembly_build.py` (`place_grid` / `place_ring` — compute the per-slot
+translations then drive the existing `add_inline_instance` once per slot) + 2 reusable oracles
+(`assert_instances_on_grid`, `assert_instances_on_ring`) in `tests/automation_harness.py`;
+`crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (all new code is a new core module + the existing headless module
++ the harness) · _headless-coverage Δ:_ **32 → 32** (UNCHANGED — the layout helpers wrap NO new route; they
+compose the already-covered `add_instance`, so this item moves the oracle count, not the coverage count — a
+construction-sugar item, not a route-wrapper item) · _oracles shipped:_ `assert_instances_on_grid(assembly,
+rows, cols, *, pitch, row_pitch=None, plane="XY")` + `assert_instances_on_ring(assembly, n, *, radius,
+plane="XY", center=…)` — both **geometric** oracles reading the *placed* instance origins (not the layout spec):
+grid asserts the origins occupy exactly `cols` distinct columns × `rows` distinct rows, evenly spaced by
+`pitch`/`row_pitch`, with every cell filled; ring asserts every origin is at `radius` from `center` with an even
+`360°/n` angular step. The expected lattice is re-derived from the user-facing params as *properties* of the
+result, never by re-running the placement formula, so a builder bug (wrong pitch, dropped slot, transposed axes)
+is caught not mirrored. Each carries a non-degeneracy guard; the ring's `radius>min_radius` guard is
+load-bearing (radius=0 stacks every part at `center` where `dist==radius==0` passes vacuously) · _tests:_ 17 new
+in `test_instance_layout.py` (pure formula: grid count/spacing/centring/plane/reject + ring radius/step/
+start-angle/center/plane/reject) + 4 new in `test_headless_assembly_build.py` (grid lands + rectangular grid
+round-trips, ring lands + offset-centre XZ-plane ring round-trips) + 9 new in `test_automation_harness.py`
+(helpers-compose + grid passes/off-lattice-fires/vacuity-guard + ring passes/off-ring-fires/vacuity-guard); full
+suite **2334 passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** before AF-10 there
+was no way to lay out a parametric pattern of parts headlessly, and nothing pinned that a programmatic layout
+places copies on a *regular* lattice. `assert_instances_on_grid` / `assert_instances_on_ring` close that by
+measuring the real placed instance origins against the lattice the user asked for (so a builder that mis-scaled
+the pitch, dropped a slot, used the wrong radius, or transposed the axes fails), with non-degeneracy guards +
+red-tests (shoving one part off the grid/ring raises) proving the green can go red. The oracles are the
+geometric spine the AF-11 DSL's layout specs will pin themselves against. NB: this is a construction-sugar item
+(it wraps no route), so coverage is unchanged by design — the pass criterion was always the oracle, not a
+coverage flip, and here that distinction is explicit.**"
+
+**AF-11 — declarative build-spec interpreter (Phase 1): `build_design` / `build_assembly` + faithfulness oracle**
+· _shape:_ **NEW pure core** `backend/core/build_spec.py` (`parse_design_spec` / `parse_assembly_spec` → ordered
+`BuildOp` list; full grammar validation + assembly referential-integrity, NO execution, imports nothing from
+`backend.api`) + **NEW driver** `backend/api/headless_spec_build.py` (`build_design` / `build_assembly` —
+dispatch each parsed op to the REAL existing `hb.*` / `hab.*` wrappers; helices resolved by `grid_pos`, instances
+by spec `ref`; nested part designs built via `build_design`) + 1 reusable oracle `assert_spec_matches_calls` in
+`tests/automation_harness.py`; `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (all new code is two new modules +
+the harness) · _headless-coverage Δ:_ **32 → 32** (UNCHANGED — the interpreter wraps NO new route; it composes
+the already-covered design/assembly wrappers, so like AF-10 it moves the oracle count, not the coverage count) ·
+_oracle shipped:_ `assert_spec_matches_calls(build_from_spec, build_by_hand, *, kind="design"|"assembly")` — the
+**faithful-façade / golden-pin** oracle: it asserts a spec build produces the SAME id/order-independent fingerprint
+(`canonical_topology` for design, `canonical_assembly` for assembly) as the equivalent hand-call wrapper sequence,
+with a non-emptiness guard so it can't pass vacuously on a spec that builds nothing. Because the hand-call
+reference is deterministic, "the spec matches the calls" IS the spec→canonical-fingerprint golden pin the backlog
+asked for · _tests:_ 25 new in `test_build_spec.py` (pure grammar: design/assembly normalisation + ~20 parametrized
+rejections — unknown op, typo'd key, bad types, dangling part/mate/connector refs, degenerate layout, propagated
+bad part spec) + 15 new in `test_headless_spec_build.py` (6hb spec ≡ `make_6hb_design`; teeth spec ≡
+`build_bundle` passes; round-trip stable; nick→ligate declarative identity; nick-alone mutates; unknown-grid_pos
+raises; isolation; grid/ring/mate spec ≡ hand-call; mate coincident; mate round-trips; coverage stays 32) + 4 new
+in `test_automation_harness.py` (oracle passes on a faithful build + **load-bearing red-tests**: a divergent build
+raises "did not produce the same canonical", an empty build trips the vacuity guard, + assembly-kind); full suite
+**2378 passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** before AF-11 there was no
+way to drive a build from a declarative spec, and — the real point — nothing proved that a spec is lowered to the
+*same* build a person's clicks produce. `assert_spec_matches_calls` closes that: it pins that a JSON spec builds a
+byte-identical canonical structure to the equivalent hand-call wrapper sequence, so the interpreter is provably a
+faithful façade (it drives the real wrappers; it does NOT re-implement an op) — the exact guarantee the
+text-to-DNA goal rests on. Separately, the PURE parser is itself new validation power: it rejects a malformed spec
+(unknown op, typo'd field, a `mate` referencing an instance never added or a connector label that doesn't exist) at
+parse time with a precise error, before any build runs — 20+ rejection pins. The red-tests prove the green can go
+red. This is the Tier-4 capstone, and it's deliberately composition-only (coverage flat) — the pass criterion was
+always the oracle.**"
+
+**AF-11 — build-spec grammar growth (Phase 2): `bend` / `twist` design ops** · _shape:_ grammar growth only — 2
+new design ops in the PURE parser `backend/core/build_spec.py` (`bend`/`twist` allowed-key sets + a parse branch
+that validates the two bp planes, bend's required curvature, and twist's `total_degrees` XOR `degrees_per_nm`)
++ 2 dispatch branches in the driver `backend/api/headless_spec_build.py` driving the REAL AF-6 wrappers
+(`hb.add_bend` / `hb.add_twist` — re-implements nothing); `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** ·
+_headless-coverage Δ:_ **32 → 32** (UNCHANGED — composition sugar over already-covered wrappers, wraps no new
+route; like AF-10/AF-11-Phase-1 it moves the oracle count, not coverage) · _oracle shipped:_ **no new oracle —
+reused `assert_deformation_angle` (AF-6) as the LOAD-BEARING augment** + `assert_spec_matches_calls` (AF-11) as a
+secondary pin. The deciding fact: `canonical_topology` is **blind to a deformation overlay** (it lives outside the
+strand graph — the AF-3 loop/skip lesson, now confirmed for deformations too), so `assert_spec_matches_calls`
+*passes even if the bend were dropped* — it only proves the underlying bundle topology is faithful. What proves the
+deformation actually flowed spec→parser→`hb.add_bend`→DeformationOp is the geometric `assert_deformation_angle` on
+the spec-built design (κ×Δbp for a bend; θ for a twist; magnitude-only, direction-agnostic) · _tests:_ 1 grammar
+normalisation + 5 grammar rejections (bend missing curvature, planes out of order, twist neither/both rate,
+bend-can't-be-first) in `test_build_spec.py` + 4 driver tests in `test_headless_spec_build.py` (bend spec ≡
+hand-calls, bend realises κ×Δbp, twist `total_degrees` realises θ, twist `degrees_per_nm` realises rate); full
+suite **2388 passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** the grammar now lowers
+a declarative `{op:bend|twist}` to the real AF-6 deformation wrappers, and the spec-built bend/twist is *proven to
+realise the requested angle* (`assert_deformation_angle`) — not merely structurally equal to the hand build. The
+genuinely-new validation power is the recognition (and pinning) that `assert_spec_matches_calls` ALONE is vacuous
+for a deformation cluster because the canonical fingerprint can't see the overlay; the geometric angle oracle is the
+only thing that catches a dropped/mistranslated bend. No ASK-FIRST violation: the wrappers + oracle are AF-6's
+direction-agnostic, already-cleared machinery; this layer adds zero new geometric/sign/frame reasoning, only
+parameter plumbing.**"
+
+**AF-11 — build-spec grammar growth (Phase 2): `loop_skip` design op** · _shape:_ grammar growth only — 1 new
+design op in the PURE parser `backend/core/build_spec.py` (`loop_skip` allowed-key set `{op,helix,bp_index,delta}`
++ a parse branch validating the helix cell, a non-negative `bp_index`, and a route-faithful `delta ∈ {-1,0,+1}`
+gate) + 1 dispatch branch in the driver `backend/api/headless_spec_build.py` driving the REAL AF-3 wrapper
+`hb.loop_skip` (re-implements nothing; helix resolved by `grid_pos` like nick/ligate);
+`crud.py`/`assembly.py`/`main.js` LOC Δ = **0** · _headless-coverage Δ:_ **32 → 32** (UNCHANGED — composition sugar
+over the already-covered `insert_loop_skip` route; wraps no new route, moves the oracle count not coverage —
+verified by the passing `test_spec_build_adds_no_coverage`) · _oracle shipped:_ **no new oracle — reused
+`geometric_nucleotide_count` / `assert_geometric_length_delta` (AF-3) as the LOAD-BEARING augment** +
+`assert_spec_matches_calls` (AF-11) as a secondary pin. Same deciding fact as the bend/twist cluster: a loop/skip
+mark lives on `Helix.loop_skips`, OUTSIDE the strand graph, so `canonical_topology` (and thus
+`assert_spec_matches_calls`) is **blind to it** (the original AF-3 lesson) — a spec whose loop was silently dropped
+would still match the hand-call canonical fingerprint. What proves the mark flowed spec→parser→`hb.loop_skip`→
+geometry is the geometric nucleotide count on the spec-built design (a loop +1 adds exactly 1 bp = 2 nucleotides on
+its helix; a skip −1 removes 2) · _tests:_ 1 grammar normalisation (loop/skip/remove deltas) + 4 grammar rejections
+(delta out of {-1,0,+1}, missing delta, negative bp_index, loop_skip-can't-be-first) in `test_build_spec.py` + 4
+driver tests in `test_headless_spec_build.py` (loop_skip spec ≡ bundle topology of hand-calls; loop +1 adds 2
+nucleotides; skip −1 removes 2; loop survives a `.nadoc` round-trip via the geometric count) ; full suite **2397
+passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** the grammar now lowers a
+declarative `{op:loop_skip}` to the real AF-3 wrapper, and the spec-built loop/skip is *proven to change the
+geometry by the requested amount* (geometric nucleotide count) and to *persist through a save/load* — neither of
+which `assert_spec_matches_calls` can pin, because the canonical fingerprint can't see a loop/skip mark. The
+genuinely-new validation power is the geometric length-delta pin on a declarative length-changing op (a bundle
+clicked-then-looped vs. a spec-looped build are now proven byte-identical in *emitted geometry*, not just
+topology). The `delta ∈ {-1,0,+1}` parse-time gate also rejects a malformed length op before any build runs.
+**Scope note:** `apply_loop_skips` (the AF-3 sibling) is deferred — its route requires crossovers placed
+(cross-helix domain transitions), which the spec grammar has no op to produce yet; it rides with the
+`auto_scaffold`/`auto_crossover` cluster that generates those crossovers. No ASK-FIRST violation: `hb.loop_skip` +
+the count oracle are AF-3's direction-agnostic machinery; this layer adds only parameter plumbing.**"
+
+**AF-11 — build-spec grammar growth (Phase 2): `circle_segment` design op** · _shape:_ grammar growth only — 1 new
+PRIMORDIAL design op in the PURE parser `backend/core/build_spec.py` (`circle_segment` allowed-key set
+`{op,radius_nm,plane,offset_nm,strand_filter,ligate_adjacent,min_chord_bp}` + a parse branch validating a positive
+`radius_nm`; added to `_PRIMORDIAL_DESIGN_OPS` so it may be the FIRST op like `bundle`; + a spec-level guard that a
+spec containing a `circle_segment` op MUST be `square` lattice — the chord profile assumes the SQUARE column pitch)
++ 1 dispatch branch in the driver `backend/api/headless_spec_build.py` driving the REAL AF-4 wrapper
+`hb.circle_segment` (re-implements nothing — the wrapper itself runs the same `circle_footprint` analytic the UI
+mirror uses); `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** · _headless-coverage Δ:_ **32 → 32** (UNCHANGED —
+composition sugar over the already-covered `add_circle_segment` route; wraps no new route, moves the oracle count
+not coverage — verified by the still-passing `test_spec_build_adds_no_coverage`) · _oracle shipped:_ **no new oracle
+— reused BOTH `assert_spec_matches_calls` (AF-11, LOAD-BEARING here) AND the geometric `assert_circular_disc`
+(AF-4)**. The deciding fact, and what makes this cluster DIFFERENT from loop_skip/bend/twist: a circle ADDS real
+helices + strands to the strand graph, so `canonical_topology` *can* see it → `assert_spec_matches_calls` is a real,
+load-bearing faithfulness pin (a spec whose disc was silently dropped would fail it, unlike the deformation/loop
+overlays where it's vacuous). `assert_circular_disc` additionally pins the radius→footprint→route→placed-geometry
+path end-to-end (spread <0.5 nm, fit_radius within 0.5 nm of R) · _tests:_ 1 grammar normalisation (primordial,
+defaults filled) + 4 grammar rejections (missing radius_nm, non-positive radius, non-square lattice, typo'd field)
+in `test_build_spec.py` + 5 driver tests in `test_headless_spec_build.py` (circle spec ≡ hand-call canonical; disc
+of requested radius over R∈{8,10.6,14}; round-trip stable); full suite **2407 passed / 55 skipped**, no drop ·
+**"Validation gained, not just a passthrough:** the grammar now lowers a declarative `{op:circle_segment,radius_nm}`
+to the real AF-4 parametric-disc wrapper, and — distinctively for this cluster — the spec-built disc is pinned by the
+faithful-façade oracle (`assert_spec_matches_calls` is load-bearing because the circle is *visible* in canonical
+topology, the first Phase-2 op for which it is) AND by the geometric `assert_circular_disc` (the placed helices
+actually trace a circle of the requested radius). The genuinely-new validation power is the parse-time SQUARE-lattice
+guard: a `circle_segment` on a honeycomb lattice would silently produce a non-circular profile (the chord math
+assumes the SQUARE pitch), and nothing else in the stack rejects it — the parser now catches it before any build
+runs, alongside the positive-radius and primordial-first-op gates. No ASK-FIRST violation: `hb.circle_segment` +
+`assert_circular_disc` are AF-4's already-cleared machinery; this layer adds only parameter plumbing + the lattice
+guard.**"
+
+**AF-11 — build-spec grammar growth (Phase 2): `gear` assembly op (relations cluster, sub-op 1)** · _shape:_
+grammar growth only — 1 new assembly op in the PURE parser `backend/core/build_spec.py` (`gear` allowed-key set
+`{op,joint_a,joint_b,ratio,invert,name}` + a parse branch validating a non-zero `ratio`) **plus a NEW joint-`ref`
+namespace**: the `mate` op grew an optional `ref` key, and the referential-integrity pass now tracks
+`defined_joints: dict[ref→joint_type]` so a `gear` `joint_*` must name a prior mate `ref` **that is `revolute`**
+(rejecting gear-over-rigid + dangling/duplicate joint refs at parse time) + 1 dispatch branch in the driver
+`backend/api/headless_spec_build.py` driving the REAL AF-9 wrapper `hab.define_gear` (the driver tracks
+`joint_refs: dict[ref→runtime joint id]`, capturing `joints[-1].id` after each `define_mate`; re-implements
+nothing); `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** · _headless-coverage Δ:_ **32 → 32** (UNCHANGED —
+composition sugar over the already-covered `create_gear_relation` route; wraps no new route, moves the oracle count
+not coverage — verified by the still-passing `test_spec_build_adds_no_coverage`) · _oracle shipped:_ **no new oracle
+— reused BOTH `assert_gear_ratio` (AF-9, LOAD-BEARING) AND `assert_spec_matches_calls` (AF-11, also load-bearing
+here)**. The deciding fact: a gear is a top-level `GearRelation` that `canonical_assembly` HAS fingerprinted since
+AF-9, so `assert_spec_matches_calls` is a real faithfulness pin (a dropped/rewired gear fails it — like
+`circle_segment`, unlike the bend/twist/loop_skip overlays). But it's necessary-not-sufficient: the fingerprint
+catches a *structurally* dropped gear, NOT a gear that's present but fails to *propagate* (drive its coupled body).
+`assert_gear_ratio` is the orthogonal kinematic pin — drive `rel.joint_a_id` 30°, measure the coupled wheel's real
+instance-transform rotation, assert driven/driver = `|ratio|` (parametrized 2.0 + 0.5) — the same complementary
+roles as AF-9 overhang-bindings (fingerprint + resolve oracle) · _tests:_ 7 new in `test_build_spec.py` (gear
+normalisation incl. defaults; **5 rejections**: dangling joint ref, gear-over-rigid → "must be 'revolute'",
+zero ratio, duplicate joint ref, missing `joint_b`) + 4 new in `test_headless_spec_build.py` (gear spec ≡ hand-call
+canonical assembly; drives coupled wheel at ratio 2.0 + 0.5; geared assembly round-trips stable WITH its gear); full
+suite **2418 passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** the grammar now lowers
+a declarative `{op:gear,joint_a,joint_b,ratio}` to the real AF-9 wrapper, and the spec-built gear is pinned BOTH
+structurally (`assert_spec_matches_calls` — load-bearing because gears live in `canonical_assembly`) AND kinematically
+(`assert_gear_ratio` — driving one joint of the *spec-built* assembly actually rotates the coupled wheel by the ratio,
+so a gear that's registered but doesn't propagate fails). The genuinely-new validation power is two-fold: (1) the
+parse-time `revolute` gate — a gear over a rigid mate is rejected before any build, mirroring the route's 400 up into
+the pure grammar by tracking each mate ref's joint_type; (2) the joint-`ref` namespace itself, the first grammar
+construct that lets one op reference the runtime output of two prior ops, which `belt`/`polymerize` now reuse. No
+ASK-FIRST violation: `define_gear` + `assert_gear_ratio` are AF-9's direction-agnostic (magnitude-only) machinery;
+this layer adds only parameter plumbing + the ref resolution.**"
+
+**AF-11 — build-spec grammar growth (Phase 2): `belt` assembly op (relations cluster, sub-op 2)** · _shape:_
+grammar growth only — 1 new assembly op in the PURE parser `backend/core/build_spec.py` (`belt` allowed-key set
+`{op,joint_a,joint_b,radius_a,radius_b,name}` + a parse branch validating positive `radius_a`/`radius_b`) **reusing
+the gear's joint-`ref` namespace verbatim**: the referential-integrity pass's revolute-joint-ref check was widened
+from `op == "gear"` to `op in ("gear","belt")` (so a belt `joint_*` must name a prior mate `ref` that is `revolute`,
+rejecting belt-over-rigid + dangling joint refs at parse time) + 1 dispatch branch in the driver
+`backend/api/headless_spec_build.py` driving the REAL AF-9 wrapper `hab.define_belt` (re-implements nothing — drives
+the same `create_belt_path` route the gear-sibling drove for gears); `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** ·
+_headless-coverage Δ:_ **32 → 32** (UNCHANGED — composition sugar over the already-covered `create_belt_path` route;
+wraps no new route, moves the oracle count not coverage — verified by the still-passing
+`test_spec_build_adds_no_coverage`) · _oracle shipped:_ **no new oracle — reused BOTH `assert_gear_ratio` (AF-9,
+LOAD-BEARING — handed the belt's synthetic relation id `f"__belt__{belt.id}"` + `expected_ratio = radius_a/radius_b`)
+AND `assert_spec_matches_calls` (AF-11, also load-bearing here)**. Same deciding fact as gear: a belt is a top-level
+`BeltPath` that `canonical_assembly` HAS fingerprinted since AF-9 (the 5-tuple), so `assert_spec_matches_calls` is a
+real faithfulness pin (a dropped/rewired belt fails it) — but necessary-not-sufficient: the fingerprint catches a
+*structurally* dropped belt, NOT a belt that's present but fails to *propagate*. `assert_gear_ratio` is the orthogonal
+kinematic pin — drive `belt.pulley_a.joint_id` 30°, measure the coupled pulley's real instance-transform rotation,
+assert driven/driver = `|radius_a/radius_b|` (parametrized 2:1 + 3:1) — which crucially passes the *radii* (not a
+literal ratio) so it pins `_belt_to_relation`'s radius→ratio synthesis, distinct from the gear test · _tests:_ 8 new
+in `test_build_spec.py` (belt normalisation incl. name; **5 rejections**: dangling joint ref, belt-over-rigid →
+"must be 'revolute'", radius_a≤0, radius_b<0, missing `radius_b`) + 4 new in `test_headless_spec_build.py` (belt spec
+≡ hand-call canonical assembly; drives coupled pulley at radius ratio 2:1 + 3:1; belted assembly round-trips stable
+WITH its belt); full suite **2428 passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** the
+grammar now lowers a declarative `{op:belt,joint_a,joint_b,radius_a,radius_b}` to the real AF-9 wrapper, and the
+spec-built belt is pinned BOTH structurally (`assert_spec_matches_calls` — load-bearing because belts live in
+`canonical_assembly`) AND kinematically (`assert_gear_ratio` — driving one pulley of the *spec-built* assembly
+actually rotates the coupled pulley by the *rim-radius* ratio, so a belt that's registered but fails to propagate, or
+whose radius→ratio synthesis is wrong, fails). The genuinely-new validation power over the gear sub-op is that the
+spec passes pulley *radii* and the oracle asserts the *derived* `radius_a/radius_b` drives the coupling — if the
+parser dropped a radius or the driver swapped `radius_a`/`radius_b`, the belt test goes red while the gear test stays
+green. No ASK-FIRST violation: `define_belt` + `assert_gear_ratio` are AF-9's direction-agnostic (magnitude-only)
+machinery; this layer adds only parameter plumbing, reusing the gear's revolute-ref gate by widening one condition.**"
+
+---
+
 ## Lessons (anti-patterns banked — read before building)
 
 _(none yet — first session. Candidates the audit already suggests:)_
@@ -636,6 +855,144 @@ _(none yet — first session. Candidates the audit already suggests:)_
   revalidate, so `binding.model_copy(update={"instance_b_id": …, "sub_domain_b_id": …})` builds the degenerate
   object without tripping the validator — the clean way to manufacture a corrupt state a constructor would
   refuse. (Same trick the gear/belt/polymerize red-tests use to shove a body off its lattice.)
+
+### Banked from AF-10
+- **A construction-sugar item moves the ORACLE count, not the coverage count — and that's fine, but say so.**
+  Coverage is matched by route-handler function identity (AF-1). `place_grid`/`place_ring` wrap no new route —
+  they compose the already-covered `add_instance` — so the coverage Δ is **0** by construction. That is NOT a
+  passthrough smell: the loop's pass criterion was always the *oracle* (a property of the result), never a
+  coverage flip. Most AF items happen to flip a route too, so the two move together; AF-10 is the case where they
+  don't, which makes explicit that "validation gained" — not "coverage moved" — is the real bar. Log it plainly
+  so a future reader doesn't mistake the flat coverage for a shovel.
+- **A lattice oracle must check PROPERTIES of the placed result, not re-run the placement formula.** The trap
+  (same family as AF-4's "measure the placed geometry, not the footprint" and AF-9's "measure the moved geometry,
+  not `current_value`"): import `grid_translations`, recompute the expected origins, and `np.allclose` them to the
+  placed ones — that re-runs the code under test, so a bug in the formula passes. Instead the oracle re-derives the
+  lattice from the *user-facing params* as invariants: grid → "the origins occupy exactly `cols` evenly-spaced
+  columns × `rows` rows with every cell filled"; ring → "every origin at `radius`, consecutive angular steps ==
+  `360°/n`". These hold for the canonical lattice regardless of construction order and catch a transposed-axes /
+  wrong-pitch / dropped-slot bug the formula-replay would mirror.
+- **The ring's `radius>0` guard is genuinely load-bearing (unlike the grid's pitch guard).** For a grid, stacking
+  all parts at the origin already fails the count-of-distinct-columns check, so the `pitch>min_pitch` guard is
+  belt-and-suspenders. For a ring, `radius=0` puts every origin AT the centre where `dist==radius==0` is trivially
+  true AND all angles collapse — the on-ring + step checks both pass vacuously. So the `radius>min_radius` guard is
+  the only thing that can make the ring oracle go red on a degenerate request; its red-test (build 6 stacked
+  instances, ask the oracle to pass with radius=0) is the one that proves the guard fires.
+- **Orientation is an ASK-FIRST convention — ship translation-only, defer facing.** A common ring want is parts
+  *rotated* to face the centre / tangent, but "which local axis points at the centre" is exactly the
+  geometry/directionality question `CLAUDE.md` reserves for the user. AF-10 places origins only (identity rotation)
+  — fully pinnable by a direction-agnostic origin oracle — and defers radial facing to a future item that opens
+  with the orientation-convention conversation. Same discipline as AF-6 staying magnitude-only to avoid the
+  bend/twist sign ASK-FIRST.
+
+### Banked from AF-11
+- **The faithfulness oracle (`spec ≡ hand-call`) IS the anti-passthrough proof for an interpreter.** A spec
+  interpreter's whole risk is that it quietly re-implements an op (different default, dropped/mis-ordered step,
+  mistranslated param) instead of driving the real wrapper. You cannot catch that with round-trip stability alone
+  (a re-implemented build can still round-trip). The catch is `assert_spec_matches_calls`: build the spec AND the
+  equivalent hand-call sequence, assert equal `canonical_topology`/`canonical_assembly`. This is the AF-4 lesson
+  ("measure the placed geometry, not the footprint") applied to a whole pipeline — the oracle stands outside the
+  interpreter and compares it to the thing it claims to be sugar over. Bonus: because the hand-call is
+  deterministic, this same oracle IS the "spec → fixed canonical fingerprint" golden pin (no separate stored hash).
+- **Split the interpreter pure-parser ⟂ driver so the grammar is testable HTTP-free and the driver re-implements
+  nothing.** `backend/core/build_spec.py` (parse → ordered `BuildOp` list, validate, NO execution) imports nothing
+  from `backend.api`; the driver `backend/api/headless_spec_build.py` only dispatches `BuildOp`s to real wrappers.
+  This let 25 grammar/rejection pins run as pure unit tests (no build, no scratch session) AND kept the driver a
+  thin dispatch table — the parser does all the validating, the driver does all the driving, neither does both.
+- **A declarative spec must reference runtime ids by STABLE keys, not generated ids.** A nick can't name a helix by
+  its uuid (the spec is written before the build runs). The fix: reference helices by lattice `grid_pos`
+  `[row,col]` and resolve to the runtime id in the driver; reference assembly instances by a spec-assigned `ref`
+  key the driver maps to the created instance id. The parser validates `ref` integrity (every `mate` endpoint was
+  defined by a prior `add_part`, with the named connector label) so a dangling reference fails at parse time.
+- **Build nested part designs BEFORE entering the assembly scratch session — don't nest scratch sessions.** An
+  assembly spec's parts are nested design specs; `build_assembly` builds each via `build_design` (its own design
+  scratch) FIRST, collecting standalone `Design` copies, THEN opens the assembly scratch and places them. Building
+  a part inside the assembly scratch would nest two `doc_context` bindings — works (different state modules) but is
+  needless; build-then-place is cleaner and each part is a detached deep copy by the time it's embedded inline.
+- **Composition-sugar items keep coverage flat — same as AF-10, say so explicitly.** The interpreter wraps no
+  route (it composes the already-covered `hb.*`/`hab.*`), so `headless_coverage_report()["covered"]` stays 32. That
+  is NOT a passthrough smell: the pass criterion was always the oracle. Pinned with an explicit
+  `test_spec_build_adds_no_coverage` so a future reader doesn't mistake the flat coverage for a shovel.
+
+### Banked from AF-11 Phase 2 (grammar growth — bend/twist)
+- **`assert_spec_matches_calls` is VACUOUS for any op `canonical_topology` can't see — pick the oracle by what the
+  op changes, not by reflex.** A `bend`/`twist` op adds a geometric `DeformationOp` overlay that lives OUTSIDE the
+  strand graph (exactly like a loop/skip — the AF-3 blind-spot, now confirmed for deformations). So the spec-built
+  and hand-built designs have *identical* canonical topology whether the bend is applied, dropped, or mistranslated
+  — `assert_spec_matches_calls` passes regardless and proves only the bundle plumbing. The load-bearing pin for a
+  deformation cluster is the geometric `assert_deformation_angle` on the spec-built design (it realises κ×Δbp / θ).
+  General rule for Phase-2 grammar growth: before reaching for the AF-11 golden pin, ask "does the canonical
+  fingerprint see this op's effect?" If not (deformations, loop/skips, cluster transforms, plate layout), the
+  faithfulness oracle is necessary-but-insufficient — add the op's own geometric/count oracle as the real augment.
+- **Grammar growth that drives an already-validated wrapper is NOT an ASK-FIRST geometry decision.** Bend/twist is
+  a three-layer minefield, but the sign/frame conventions were settled (ASK-FIRST) back in AF-6, and both the
+  wrappers (`hb.add_bend`/`add_twist`) and the oracle (`assert_deformation_angle`) are direction-agnostic. Adding a
+  spec op that plumbs `plane_a_bp`/`plane_b_bp`/`curvature`/`total_degrees` straight into that wrapper introduces
+  ZERO new geometric reasoning — it's parameter routing. The discipline holds: drive the real wrapper, never
+  re-derive a convention. (Mirror the parser's XOR validation of `total_degrees`/`degrees_per_nm` so a malformed
+  twist fails at parse time, before the wrapper's own ValueError.)
+
+### Banked from AF-11 Phase 2 (grammar growth — loop_skip)
+- **A spec op can depend on a not-yet-grammared op — check the wrapper's runtime preconditions before scoping the
+  cluster.** `loop_skip` and `apply_loop_skips` were listed as one cluster, but `apply_loop_skips_from_deformations`
+  raises 400 unless the design has **crossovers placed** (cross-helix domain transitions), and NO current grammar op
+  produces them (`bundle`/`extrude`/`ligate_adjacent` only ligate collinear fragments along one helix). So the
+  sibling op was undriveable — and therefore unvalidatable — this session; it was deferred to ride with the
+  `auto_scaffold`/`auto_crossover` cluster that generates its precondition. Lesson: when a handoff groups ops,
+  re-derive each op's runtime guard (read the route handler) before committing to ship both — split the cluster at
+  the dependency boundary rather than shipping an op you can't exercise.
+- **Mirror the route's input domain in the parser, not just the type.** The loop/skip route constrains `delta` to
+  `{-1, 0, +1}` (an HTTPException otherwise). The parser gates on that exact set, so a `delta: 2` spec fails at
+  PARSE time with a precise message — before any build — rather than surfacing as a 400 deep in the driver. Pushing
+  a known finite domain up into the pure grammar is free, reusable validation power (the `circle_segment` radius and
+  the assembly layout counts are the same shape).
+
+### Banked from AF-11 Phase 2 (grammar growth — circle_segment)
+- **`assert_spec_matches_calls` is load-bearing again the moment the op touches the strand graph.** The bend/twist
+  and loop_skip lessons established the faithful-façade oracle is VACUOUS for an overlay outside the strand graph.
+  `circle_segment` is the inverse case: it ADDS real helices + strands, so `canonical_topology` sees it and the
+  oracle becomes a genuine pin (a silently-dropped disc fails it). The rule isn't "Phase-2 ops need a geometric
+  oracle" — it's "the oracle's power tracks whether `canonical_topology`/`canonical_assembly` can see the op's
+  effect." Strand-graph ops (bundle/extrude/nick/ligate/circle_segment) → `assert_spec_matches_calls` is real;
+  overlay ops (loop_skip/bend/twist) → it's vacuous and you need the geometric oracle. Pair both when in doubt.
+- **A primordial op needs the `_PRIMORDIAL_DESIGN_OPS` set, not a special case.** `circle_segment` builds its own
+  helices (like `bundle`), so it must be allowed as the FIRST op. Generalising the old `ops[0].op != "bundle"`
+  check to a membership test (`not in _PRIMORDIAL_DESIGN_OPS`) keeps the "first op must be 'bundle'" substring in
+  the message (so the existing extrude/nick/loop_skip/bend "can't-be-first" rejection tests still match) while
+  admitting the new op. Future scratch-creating ops (auto-built rings, imported parts) drop into the same set.
+- **A geometry-assumption baked into a wrapper is grammar-level validation when the spec carries the lattice.** The
+  circle chord profile assumes the SQUARE column pitch — the AF-4 wrapper just documents "build in a SQUARE session"
+  and nothing rejects a honeycomb build (it silently produces a non-circular profile). Because the *spec* names the
+  lattice, the pure parser can reject `circle_segment` + non-square at parse time — free validation power no
+  individual wrapper enforces. When an op's correctness depends on a session-level fact the spec also declares,
+  cross-check them in the parser.
+
+### Banked from AF-11 Phase 2 (grammar growth — gear)
+- **A spec op that couples the OUTPUTS of two prior ops needs its own ref namespace — don't overload the instance
+  refs.** A gear references two *joints*, which are created by `mate` ops, not by `add_part`. The instance `ref`
+  namespace (`defined`) names parts, not joints, so a gear can't reuse it. The clean move: give `mate` an optional
+  `ref` (a joint key), track it in a parallel `defined_joints: dict[ref→joint_type]` in the parser, and a parallel
+  `joint_refs: dict[ref→runtime joint id]` in the driver (captured as `assembly_state.get_or_404().joints[-1].id`
+  right after `define_mate` returns — the mate appends exactly one joint). This is the first grammar construct where
+  one op references the runtime output of two prior ops; `belt` (two joints) and `polymerize` (one joint) reuse it
+  verbatim. General rule: when a new op references something a prior op *created at runtime*, add a ref namespace for
+  that thing, mirroring the existing instance-ref pattern — don't try to address it positionally.
+- **For a fingerprinted top-level assembly relation, `assert_spec_matches_calls` is load-bearing AGAIN — but still
+  insufficient alone.** The "pick the oracle by what canonical sees" rule (banked from bend/twist, then inverted for
+  circle_segment) holds: a gear IS a `GearRelation` that `canonical_assembly` has fingerprinted since AF-9, so the
+  faithful-façade oracle is a real pin (catches a dropped/rewired gear), unlike the deformation/loop overlays where
+  it's vacuous. BUT — new wrinkle for *relations* specifically — the structure fingerprint catches a *structurally*
+  dropped gear, not a gear that's present but fails to *propagate* (an FK/coupling bug). So pair it with the
+  kinematic `assert_gear_ratio` (drive one side, measure the other body's real rotation). Same complementary split
+  as AF-9 overhang-bindings (fingerprint catches dropped binding; `assert_binding_resolves` catches a broken ref).
+  The refined rule: fingerprinted relation → `assert_spec_matches_calls` (structure) + the relation's own
+  semantic/kinematic oracle (behaviour); the two cover different failures.
+- **Push the route's relation precondition up into the parser via the ref's tracked metadata.** The gear route 400s
+  unless both joints are revolute. Because the parser already tracks each mate ref's `joint_type` (for the new joint
+  namespace), checking "gear joints are revolute" at parse time is nearly free — and it rejects gear-over-rigid
+  before any build, with a precise message instead of a deep 400. Same shape as the loop_skip `delta∈{-1,0,+1}` and
+  circle_segment square-lattice gates: when the spec already carries the fact a downstream guard needs, cross-check
+  it in the pure grammar.
 
 ## Difficulties ledger (genuinely-stuck items + why)
 

@@ -27,6 +27,13 @@ add is only trustworthy if it ships with a way to *prove* it does the right thin
 (Tier 0) and the per-feature oracles are therefore the spine — text-to-DNA (Tier 4) is built *on top of*
 a validated wrapper library, not before it. A wrapper with no oracle is a liability, not an asset.
 
+Tiers 0–4 pin the **topological + geometric** layers (deterministic — exact fingerprints, analytic
+geometry). **Tier 5** extends the spine to the **physical layer**: drive oxDNA headlessly, *measure*
+properties of the relaxed structure, and eventually iterate the design until a user constraint is met
+("make these two ends 50 nm ± 5 nm apart"). That introduces a new, *stochastic* oracle class — a measured
+property within tolerance, **gated by the confidence metric** (frames pooled / RMSF SE), not exact
+equality — and is the concrete bridge from Tier 4's text-to-DNA grammar to *constraint-driven* design.
+
 ---
 
 ## Target shape (where new code lands — NOT the god-files)
@@ -132,20 +139,94 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 8). AF-9 overhang-bindings sub-op shipped 2026-06-17._
+_Living pointer — each session overwrites this (step 8). AF-11 Phase 2 grammar growth (belt) shipped 2026-06-17._
 
-**▶ NEXT — AF-10 instance layout helpers (grid / radial / ring placement).** Phase 3 (AF-9) is essentially
-done: gears, belts, mate-seeded polymerize, and overhang-bindings all shipped (see metrics rows below). The one
-Phase-3 straggler — **`polymerize_periodic`** — is fixture-blocked (the part needs `is_periodic_seam=True`
-forced ligations the inline `make_6hb_design()` fixtures don't carry; build one via the route-for-polymerization
-op headlessly first, then assert each copy sits at `T_seed @ derive_periodic_delta(design)^k` — likely its own
-session). **AF-10 is the cleaner next step:** small pure placement helpers (e.g. `hab.place_grid(design, rows,
-cols, *, pitch)` / `place_ring(design, n, *, radius)`) that drive `add_instance` per cell at computed
-transforms. **Augment:** a geometric oracle on the placement lattice — assert each instance origin lands on the
-exact grid/ring (spacing == pitch, radius exact, count exact, angular step == 2π/n), id-independent. The
-placement math is a pure `backend/core` candidate (mirror `circle_primitive`), with the oracle reading the
-*placed* instance transforms (not the spec) — the AF-4 "measure the result, not the footprint" pattern.
-After AF-10: AF-11 the DSL (Tier 4).
+**▶ NEW BACKLOG ITEMS (2026-06-17, not yet started) — the kinematic-mechanism cluster (Tier 2), all sharing
+`backend/core/cluster_obb.py` (the Python OBB corner/edge enumerator — built JS-only today; whichever item
+lands first builds it). Dependency order: AF-15 → AF-14, capstone = the 4-bar parallelogram.**
+- **AF-15 — cluster rigid-transform wrapper + OBB-edge-alignment solver** (`add_cluster` / `update_cluster`
+  routes). *Sequences FIRST.* `hb.add_cluster` + `hb.transform_cluster` + a pure `align_edge_transform`
+  solver that poses a rigid bar so its chosen OBB edge lands on a target edge (design-layer analog of the
+  AF-8 connector-mate). Cluster transform = **DISPLAY-layer pose, never topology** (clean three-layer).
+  Oracle `assert_edges_collinear` (direction-AGNOSTIC); the antiparallel flip + endpoint-snap are ASK-FIRST.
+- **AF-14 — geometry-aware revolute-joint placement on hull-prism corners/edges** (`add_joint` route).
+  Headless `place_cluster_joint` + the kinematic selector: rank a cluster's OBB edges/corners by collision-free
+  **range of motion** vs. the other clusters (swept OBB–OBB SAT bisection). Principle = hinge-on-the-contact-edge
+  (door-jamb) maximises ROM. ROM oracle direction-AGNOSTIC (magnitude); which-body-moves + swing-sense ASK-FIRST.
+- **Capstone (after both)** — build the **4-bar parallelogram** headlessly: extrude 4 bars → cluster +
+  edge-align into a parallelogram → 4 revolute joints at the corners → assert 1-DOF ROM. First headless
+  kinematic mechanism; the concrete payload behind the AF-12 linkage discussion.
+
+**▶ NEXT — AF-11 Phase 2 (continue): finish the assembly relations cluster — `polymerize` is the next sub-op.**
+The relations cluster (`gear`/`belt`/`polymerize`/`bind_overhangs`) is now HALF done: **`gear` + `belt` SHIPPED.**
+The joint-`ref` namespace is fully laid down (the mate op carries an optional `ref`; the parser tracks
+`defined_joints: dict[ref→joint_type]` + rejects gear/belt-over-rigid; the driver tracks
+`joint_refs: dict[ref→runtime joint id]`, captured as `assembly_state.get_or_404().joints[-1].id` right after each
+`define_mate`). **`polymerize` reuses the joint-`ref` namespace** — it seeds off a SINGLE mate `ref` + a count:
+`{"op":"polymerize","joint":"<ref>","count":int,"direction":"forward"|"backward"}` driving `hab.polymerize(joint_id,
+count, direction=…)`. **The fixture gotcha:** the seed mate must be between source-IDENTICAL parts (the route 422s on
+`_sources_match` mismatch) → both `add_part` ops must reference the SAME `part` key, which the driver already reuses
+as ONE `Design` object — so a two-`add_part`-of-the-same-key + one revolute `mate` + `polymerize` spec works.
+**Oracle:** `assert_polymer_chain(before, after, seed_joint_id, *, count, direction)` (re-derives the seed mate's
+repeat `delta` from the seed pair ALONE, asserts the `count−2` new copies form the `delta`-power multiset, can-go-red
+guard on `‖delta‖`). `canonical_assembly` already fingerprints instances+joints and polymerize adds NO new top-level
+relation list, so `assert_spec_matches_calls` IS load-bearing here too (a dropped copy/joint fails the fingerprint) —
+pair it with `assert_polymer_chain` for the geometric progression. Then `bind_overhangs` remains (the heaviest —
+needs an OverhangSpec on the part design + `grid_pos` set; oracle `assert_binding_resolves`; canonical is BLIND to a
+broken ref so the resolve oracle is the load-bearing one).
+**Discipline:** the driver DRIVES the real `hab.*` wrappers — never re-implement — so coverage stays flat
+(composition sugar, 32; `test_spec_build_adds_no_coverage` guards it). **PICK THE ORACLE BY WHAT THE OP CHANGES (the
+load-bearing AF-11-P2 lesson, confirmed five times):** `assert_spec_matches_calls` is the golden pin ONLY when
+`canonical_topology`/`canonical_assembly` can see the op's effect — load-bearing for strand-graph ops AND for
+fingerprinted top-level assembly relations (gears/belts/joints/instances, since AF-9), VACUOUS for overlays outside it
+(`loop_skip`→`geometric_nucleotide_count`, `bend`/`twist`→`assert_deformation_angle`). For relations ALSO pair it
+with the kinematic/semantic oracle (`assert_gear_ratio` / `assert_polymer_chain` / `assert_binding_resolves`) — the
+fingerprint catches a dropped/rewired relation, the semantic oracle catches one that's present-but-doesn't-work.
+**HOW:** mirror this session — `_ASSEMBLY_OP_KEYS` entry + parse branch + referential-integrity (resolve joint ref(s)
+to prior revolute mate(s)) + dispatch branch + grammar-rejection tests + a driver test using the op's own oracle.
+
+**▶ DEFERRED THIS SESSION — `apply_loop_skips` (design op).** Its route
+(`apply_loop_skips_from_deformations`) raises 400 unless the design has crossovers placed (cross-helix domain
+transitions) AND (a deformation op OR SQUARE lattice). The spec grammar has NO op that produces crossovers yet —
+`bundle`/`extrude`/`ligate_adjacent` only ligate collinear fragments along one helix. So `apply_loop_skips` can't be
+exercised (let alone validated by its per-helix conservation oracle) until the `auto_scaffold`/`auto_crossover`
+cluster lands. Add it in the SAME session as that cluster, with the AF-3 per-helix `geometric_nucleotide_count ==
+2×net_marks` conservation check (see `test_apply_deformations_geometry_honors_marks_per_helix` for the SQUARE-routed
+fixture to mirror).
+
+**▶ STRAGGLER (still open, its own session) — `polymerize_periodic`.** The SINGLE-part `is_periodic_seam` path
+with the `derive_periodic_delta` Kabsch oracle was NOT built: it needs a part carrying `is_periodic_seam=True`
+forced ligations the inline `make_6hb_design()` fixtures don't have. Build one headlessly via the
+route-for-polymerization op first, then assert each copy sits at `T_seed @ derive_periodic_delta(design)^k`.
+
+**▶ HARNESS NOW AVAILABLE (AF-11, use it):** `from tests.automation_harness import assert_spec_matches_calls`.
+`assert_spec_matches_calls(build_from_spec, build_by_hand, *, kind="design"|"assembly")` — the faithful-façade /
+golden-pin oracle: asserts a spec build produces the SAME `canonical_topology` (design) / `canonical_assembly`
+(assembly) as the equivalent hand-call wrapper sequence, with a non-emptiness guard so it can't pass vacuously.
+Builders: `from backend.api import headless_spec_build as hs` → `hs.build_design(spec)` / `hs.build_assembly(spec)`
+(both parse → drive real wrappers in a scratch session → standalone deep copy; raise `BuildSpecError` at PARSE
+time on a malformed spec). Parser: `from backend.core.build_spec import parse_design_spec, parse_assembly_spec,
+BuildSpecError` (pure, HTTP-free — test grammar/rejection here without any build). Design helices are referenced
+by `grid_pos` `[row,col]`; assembly instances by spec `ref` key; a part = a nested design spec under `parts`.
+
+**▶ STRAGGLER (still open, its own session) — `polymerize_periodic`.** The SINGLE-part `is_periodic_seam` path
+with the `derive_periodic_delta` Kabsch oracle was NOT built: it needs a part carrying `is_periodic_seam=True`
+forced ligations the inline `make_6hb_design()` fixtures don't have. Build one headlessly via the
+route-for-polymerization op first, then assert each copy sits at `T_seed @ derive_periodic_delta(design)^k`.
+
+**▶ HARNESS NOW AVAILABLE (AF-10, use it):** `from tests.automation_harness import assert_instances_on_grid,
+assert_instances_on_ring`. `assert_instances_on_grid(assembly, rows, cols, *, pitch, row_pitch=None, plane="XY",
+tol_nm=0.01, instance_ids=None)` — reads the placed instance origins and asserts they form the exact rows×cols
+lattice (count, even spacing == pitch on each axis, every cell filled), id-independent, with a `pitch>min_pitch`
+non-degeneracy guard. `assert_instances_on_ring(assembly, n, *, radius, plane="XY", center=(0,0,0), tol_nm=0.01,
+angle_tol_deg=1.0, instance_ids=None)` — every origin at `radius` from `center` + even angular step `360°/n`,
+with a load-bearing `radius>min_radius` guard (radius=0 stacks all at centre → vacuous). Builders:
+`hab.place_grid(design, rows, cols, *, pitch, row_pitch=None, plane="XY", center=False)` /
+`hab.place_ring(design, n, *, radius, plane="XY", start_angle_deg=0.0, center=(0,0,0))` — pure-translation
+placement (identity orientation; radial *facing* deferred as an ASK-FIRST orientation convention). Both are
+construction sugar over `add_inline_instance` (NO route wrapped → coverage unchanged). Pure math in
+`backend/core/instance_layout.py` (`grid_translations` / `ring_translations`, plane in {XY,XZ,YZ}). Keep layout
+counts ≤6 if you round-trip (the >6-'full'→cylinders downgrade still applies).
 
 **▶ HARNESS NOW AVAILABLE (AF-9 overhang-bindings, use it):** `from tests.automation_harness import
 assert_binding_resolves`. `assert_binding_resolves(assembly, binding_id, *, require_cross_part=True)` — a
@@ -339,6 +420,111 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
   un-deformed design). **Direction-AGNOSTIC** (magnitude only → no ASK-FIRST sign/frame reasoning needed;
   the signed-curvature oracle the backlog floated was *not* built, deliberately). Coverage 18→19.
 
+- [ ] **AF-14 — geometry-aware revolute-joint placement on hull-prism corners/edges** (route
+  `POST /design/cluster/{cluster_id}/joint`, handler `add_joint` in `routes_cluster_joints.py`; currently
+  gizmo-only — the user clicks a face on the cluster's hull-surface approximation, the frontend computes a
+  world axis, the route converts it to the cluster's LOCAL frame). **No headless wrapper exists** → uncovered.
+  Three-layer note: a `ClusterJoint` is a **topological/design-layer** intent (which rigid cluster rotates
+  about what axis) — placing one is an allowed write; the hull prism, the OBB, and the range-of-motion (ROM)
+  math are all **geometric reads** and never write back (clean Three-Layer; mirrors how AF-6 deformation reads
+  the frame). Multi-phase — one phase per session.
+
+  **The kinematic-design framing (this is the point — it's why "face corners" is the right primitive).**
+  A revolute joint is a hinge: a rigid cluster M swings about an axis line relative to the static rest of the
+  design. What a designer actually wants to pick is *which hinge gives the desired free swing without M
+  colliding into a neighbouring cluster*. The hull prism **is the cluster's oriented bounding box (OBB)**, so
+  its faces/edges/corners are the natural discretised anchor set, and the relevant mechanical principles are:
+  - **The hinge axis belongs on the contact interface (the door-jamb principle).** Co-locating the axis with
+    the *edge of M's OBB that lies against the neighbour* maximises ROM: M rotates immediately *away* from the
+    obstacle instead of swinging *into* it. An axis through M's interior (or the far edge) collides almost
+    at once. So the high-value candidates are the OBB **edges on the face adjacent to the obstacle**.
+  - **For a revolute joint the primitive is an EDGE (a corner→corner pair); for a ball/point joint it's a
+    CORNER.** "Face corners" enumerates both: the 8 corners give point pivots; corner-pairs give the 12
+    candidate hinge edges. The axis *direction* is the edge's line (typically perpendicular to the helix axis
+    = a fold; parallel = a barrel-roll — usually not what's wanted).
+  - **ROM is a swept-collision root-find.** Rotating M about axis a sweeps every point p on a circle of radius
+    `r = dist(p, a)`; first contact is driven by the point of M **farthest from a on the obstacle side** (the
+    instantaneous-centre / largest-swing-radius point). Because both M and every obstacle are OBBs, the swept
+    interference is exact and cheap: **bisect θ on OBB–OBB separation (SAT) to find θ⁺ and θ⁻**, and
+    `ROM(a) = θ⁺ + θ⁻` (clamped to the joint's `min/max_angle_deg` limits), checked against **all** other
+    clusters, not just the nearest. This is the discretised collision-free workspace of a 1-DOF joint.
+  - Connects to the **AF-12 hinge-primitive / 4-bar-linkage** discussion: a multi-joint mechanism's mobility
+    (Grübler) and ROM both depend on these corner/edge choices; AF-14 is the per-joint geometry the linkage
+    layer will compose.
+
+  **Feasibility blocker to settle first (do this in Phase 1):** the hull-prism OBB is currently computed in
+  **JS** (`frontend/src/scene/joint_renderer.js` — `_bundleGeometry`/`_buildExtrusionBoxes`), NOT Python, so a
+  headless ROM oracle needs a backend OBB. Build it from the geometry kernel (`_geometry_for_design` →
+  per-cluster nucleotide positions → PCA/bundle-frame OBB), as a NEW pure `backend/core/cluster_obb.py`
+  (service+oracle shape, rule 3; `backend/core` imports nothing from `backend/api`). Pin it for parity against
+  the JS extents on a shared fixture so the headless corner set matches what the user sees.
+
+  - [ ] **Phase 1 — `hb.place_cluster_joint` + corner/edge resolver + on-corner oracle.** Wrapper in
+    `headless_build.py` importing `add_joint` (covered by identity) + `AddJointBody`. A pure helper
+    `hull_prism_axis(design, cluster_id, *, face, corner|edge) → (axis_origin, axis_direction)` in
+    `cluster_obb.py` turns a named face-corner/edge into the world axis the route expects. **Augment:**
+    `assert_joint_on_hull_corner(design, joint_id, *, face, corner|edge, tol_nm)` — the placed joint's world
+    axis (re-derived via `_local_to_world_joint`) passes through the named corner / lies along the named edge
+    of the **independently recomputed** OBB, with a can-go-red guard (a joint placed at a different corner
+    fails). Coverage +1.
+  - [ ] **Phase 2 — `cluster_range_of_motion` + `rank_joint_candidates` (the geometry-aware selector).**
+    `cluster_range_of_motion(design, cluster_id, axis, *, obstacles=all_other_clusters) → ROM_deg` via swept
+    OBB–OBB SAT bisection (in `cluster_obb.py`); `rank_joint_candidates(design, cluster_id, *,
+    target_rom_deg=None)` enumerates the OBB edges/corners and returns them ranked by ROM (filtered to those
+    meeting the target). **Augment:** `assert_range_of_motion(design, cluster_id, axis, expected_deg, *,
+    tol_deg)` — on a fixture with a known obstacle at a known offset the computed swing-to-contact matches the
+    analytic angle, with TWO can-go-red guards: no-obstacle → ROM = the joint's full angular limit; an
+    obstacle moved into the swing path strictly reduces it. **Direction-AGNOSTIC magnitude** (total free swing,
+    not a signed handedness) → stays clear of the ASK-FIRST DNA-directionality rule (same discipline AF-6 used).
+    **ASK-FIRST** before building: *which* cluster is the moving body vs. the static frame, and the swing
+    *sense* (which limit is + / −) — that's a directionality decision, do not guess.
+
+- [ ] **AF-15 — cluster rigid-transform wrapper + OBB-edge-alignment solver** (routes `POST /design/cluster`
+  = `add_cluster`, `PATCH /design/cluster/{cluster_id}` = `update_cluster` in `routes_clusters.py`; both
+  uncovered). **Sequences BEFORE AF-14 Phase 2 and the linkage demo** — you arrange the rigid bars, *then*
+  hinge them. This is the design-layer analog of the AF-8 assembly connector-mate, but driven by **OBB edges**
+  instead of named connectors. Three-layer note (load-bearing, and clean here): a `ClusterRigidTransform` is a
+  **DISPLAY/geometric pose — it never mutates topology** (stated at `routes_clusters.py:8`). So aligning two
+  bars edge-to-edge *reposes rigid bodies*; the DNA strand graph of each bar is untouched. The articulated
+  arrangement (poses) + AF-14 joints (kinematic intent) together describe the mechanism without ever editing
+  the bars' topology — the three-layer law made concrete for a mechanism. **Shares `backend/core/cluster_obb.py`
+  with AF-14** (whichever lands first builds it; the OBB corner/edge enumerator is the common foundation).
+
+  **What the user wants automated (the parallelogram 4-bar linkage, at the part-design level):** four rigid
+  bars → arranged into a parallelogram → hinged at the four corners → a working 1-DOF mechanism, all in ONE
+  `Design` (4 clusters + 4 `ClusterJoint`s), no assembly layer. The pieces:
+  - **Extrude the bars — ALREADY AUTOMATABLE.** `hb.create_bundle` / `hb.extrude` (and the AF-11 `bundle` /
+    `extrude` build-spec ops) build the bar bundles today. AF-15 does NOT re-do this.
+  - **Cluster each bar — NEW.** `hb.add_cluster(name, helix_ids, domain_ids=…)` wraps `add_cluster` (covered
+    by identity).
+  - **Pose each bar — NEW.** `hb.transform_cluster(cluster_id, *, translation, rotation_quat, pivot)` wraps
+    `update_cluster` (covered). Low-level; takes an explicit rigid transform.
+  - **Align by OBB edge — NEW, the high-value piece.** A pure solver
+    `align_edge_transform(design, cluster_id, src_edge, target_edge|target_line) → (R, T, pivot)` in
+    `cluster_obb.py` computes the rigid transform that brings cluster M's chosen OBB edge onto a target edge
+    (another cluster's OBB edge, or a world line), then drives `transform_cluster`. Composing four of these is
+    the parallelogram arrangement.
+
+  **Augment (Phase split — one per session):**
+  - [ ] **Phase 1 — cluster create/transform wrappers + round-trip pin.** `assert_roundtrip_stable` reuse:
+    a built+clustered+posed design validates and survives `.nadoc` save/load with an unchanged fingerprint.
+    NB `canonical_topology` *may be blind to the cluster pose* (a geometric overlay, like the AF-3 loop/skip
+    and AF-6 deformation lessons) — **verify which** before relying on it; if blind, pin the pose with a
+    geometric read of the transformed cluster centroid/extent instead (mirror `assert_on_deformed_frame`'s
+    "measure the placed geometry" approach). Coverage +2 (`add_cluster` + `update_cluster`).
+  - [ ] **Phase 2 — `align_edge_transform` solver + alignment oracle.**
+    `assert_edges_collinear(design, cluster_id, src_edge, target_edge, *, tol_nm, tol_deg)` — after the solved
+    transform the two OBB edges are **collinear** (shared line: angle between directions ≈ 0/180° AND
+    perpendicular distance < tol), with a can-go-red guard (the pre-align edges are skew/separated, so a no-op
+    solver fails). Collinearity is **direction-AGNOSTIC** (a line, not a ray) → ASK-FIRST-safe. **ASK-FIRST:**
+    the antiparallel **flip** (an edge aligns two ways) and whether endpoints must *coincide* (full snap) vs.
+    merely lie on the shared line — that picks an orientation/handedness, do not guess. The capstone
+    integration test (its own session, after AF-14 Phase 2): build the **4-bar parallelogram headlessly** —
+    extrude 4 bars, cluster + edge-align into a parallelogram, place 4 revolute joints at the corners — and
+    assert (a) opposite bars' OBB edges are parallel (parallelogram closure) and (b) the assembled mechanism
+    has the expected 1-DOF ROM via AF-14's `cluster_range_of_motion`. This is the first headless **kinematic
+    mechanism** and the concrete payload behind the AF-12 hinge-primitive / linkage discussion.
+
 ### Tier 3 — headless ASSEMBLY builder (biggest construction gap; multi-phase, `headless_assembly_build.py`)
 
 - [x] **AF-7 (Phase 1) — assembly scratch-session + `add_instance(source, transform)` + save/validate.**
@@ -401,14 +587,140 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
   - [ ] **periodic polymerize remains** — `polymerize_periodic` (the SINGLE-part `is_periodic_seam` path with
     the `derive_periodic_delta` Kabsch oracle) was NOT built: it needs a heavy fixture (a design carrying
     `is_periodic_seam` forced ligations, e.g. via the route-for-polymerization op) — see handoff.
-- [ ] **AF-10 — instance layout helpers** (grid / radial / ring placement) for parametric assembly gen.
-  **Augment:** geometric oracle on the placement lattice (spacing / radius / count exact).
+- [x] **AF-10 — instance layout helpers** (grid / ring placement) for parametric assembly gen.
+  SHIPPED 2026-06-17. NEW pure core `backend/core/instance_layout.py` (`grid_translations` /
+  `ring_translations` — spec→world translations, identity orientation; mirrors `circle_primitive`) +
+  `hab.place_grid` / `hab.place_ring` (construction sugar over the already-covered `add_instance` — they
+  wrap NO new route, so headless-coverage is unchanged at 32). **Augment:** `assert_instances_on_grid` /
+  `assert_instances_on_ring` (new reusable oracles) — read the *placed* instance origins and assert the
+  lattice as PROPERTIES re-derived from the user-facing params (count exact, even spacing == pitch / every
+  cell filled; on-ring radius exact + angular step == 360°/n), not by re-running the placement formula, each
+  with a non-degeneracy guard (the ring's `radius>0` guard is load-bearing — radius=0 stacks every part where
+  `dist==radius==0` passes vacuously). Radial-facing/rotated layouts deferred (orientation convention =
+  ASK-FIRST). Coverage 32→32.
 
 ### Tier 4 — text-to-DNA-origami groundwork (the eventual goal; built ON the validated wrapper library)
 
-- [ ] **AF-11 — declarative build-spec interpreter.** A JSON/DSL design spec → a `headless_build` /
-  `headless_assembly_build` call sequence. **Augment:** every spec round-trips through
-  `assert_roundtrip_stable` (AF-1); a corpus of spec→design golden pins. *Depends on Tiers 1–3 wrappers.*
+- [x] **AF-11 (Phase 1) — declarative build-spec interpreter.** SHIPPED 2026-06-17. Pure grammar/parser
+  `backend/core/build_spec.py` (`parse_design_spec` / `parse_assembly_spec` → ordered `BuildOp` list; full
+  grammar + referential-integrity validation, NO execution) + driver `backend/api/headless_spec_build.py`
+  (`build_design` / `build_assembly` dispatch each parsed op to the REAL existing wrappers — re-implements
+  nothing). Grammar: design `{bundle, extrude, nick, ligate}` (helices referenced by `grid_pos`), assembly
+  `{add_part, place_grid, place_ring, mate}` (parts = a named library of nested design specs; instances by
+  spec `ref`; nested part designs built via `build_design`). **Augment:** `assert_spec_matches_calls` (new
+  reusable oracle) — a spec builds the SAME `canonical_topology`/`canonical_assembly` as the equivalent
+  hand-call wrapper sequence (the faithful-façade / golden-pin guarantee), + reuse of
+  `assert_roundtrip_stable` / `assert_assembly_roundtrip_stable` per spec. Coverage 32→32 (wraps no new
+  route — composition sugar, like AF-10). *Phase 2 grammar growth (one cluster per session): **`bend`/`twist`
+  SHIPPED 2026-06-17** (drive `hb.add_bend`/`add_twist`; pinned by `assert_deformation_angle`, NOT
+  `assert_spec_matches_calls` — the canonical fingerprint is blind to a deformation overlay). **`loop_skip`
+  SHIPPED 2026-06-17** (drive `hb.loop_skip`; helix by `grid_pos`; `delta ∈ {-1,0,+1}` parse gate; pinned by the
+  geometric `geometric_nucleotide_count`, NOT `assert_spec_matches_calls` — canonical is blind to a loop/skip mark
+  too. Sibling `apply_loop_skips` DEFERRED: its route needs crossovers the grammar can't yet produce → rides with
+  the auto-scaffold cluster). **`circle_segment` SHIPPED 2026-06-17** (primordial design op — may be FIRST, builds
+  its own helices; requires a `square` lattice, enforced at parse time; drives `hb.circle_segment(radius_nm)`.
+  Pinned by BOTH `assert_spec_matches_calls` — LOAD-BEARING here, circle ADDS real strands so canonical_topology
+  sees it — AND the geometric `assert_circular_disc` from AF-4 as the radius→geometry pin). **`gear` SHIPPED
+  2026-06-17** (assembly relations cluster — first sub-op; drives `hab.define_gear` over two revolute mate-joints
+  referenced by a NEW joint-`ref` namespace added to the `mate` op; pinned by BOTH `assert_spec_matches_calls` —
+  load-bearing, gears ARE fingerprinted in `canonical_assembly` since AF-9 — AND the kinematic `assert_gear_ratio`,
+  which catches the orthogonal failure the fingerprint can't: a gear that's structurally present but fails to
+  *drive* its coupled body. Parser also rejects gear-over-rigid + dangling joint refs at parse time). **`belt`
+  SHIPPED 2026-06-17** (relations cluster, second sub-op; reuses the gear's joint-`ref` namespace verbatim by
+  widening the revolute-ref check to `op in ("gear","belt")`; drives `hab.define_belt`; pinned by BOTH
+  `assert_spec_matches_calls` — load-bearing, belts ARE fingerprinted in `canonical_assembly` since AF-9 — AND
+  `assert_gear_ratio` handed `f"__belt__{belt.id}"` + `expected_ratio = radius_a/radius_b`, passing the *radii* so it
+  pins `_belt_to_relation`'s radius→ratio synthesis distinctly from the gear test). Remaining:
+  polymerize/overhang-bindings (assembly, each like gear) + auto-scaffold/full-autostaple (design) — each a
+  tiny dispatch entry over an existing wrapper, oracle picked by what the op changes.*
+
+- [ ] **AF-12 — build from primitives (catalog/file-backed parts in the build-spec).** PLACEHOLDER, expand later.
+  **The gap (assessed 2026-06-17):** there is no primitive-catalog → automation pipeline. The design-level "Add
+  Primitive" catalog is **read-only + UI-only** — `routes_primitives.py` exposes only `GET /primitives` +
+  `preview.gif`/`poster.png`; there is **no placement route** (the browser reads `derive_placement_spec` and composes
+  the `bundle-segment`/`continuation` calls client-side), and no headless layer references the catalog at all (the
+  one parametric primitive with a headless entry is the circle disc, `hb.circle_segment`). At the assembly level,
+  `hab.add_file_instance(path)` CAN instance a saved validated `.nadoc` part by workspace path and mate it — but the
+  declarative grammar's `add_part`/`parts` accept **inline design specs only** (`parse_design_spec` per part), so a
+  spec cannot reference a saved/validated primitive **by name**. **The missing rung** = a catalog/file-backed
+  `add_part` (e.g. `"parts": {"hinge": {"from_primitive": "hinge_6hb_120deg"}}` or `{"from_file": "<path>"}`) + a
+  headless primitive-instantiation wrapper. **The motivating use case (user, 2026-06-17):** hand-author +
+  experimentally validate a hinge's custom scaffold routing (real topology = ground truth), save it as a part, then
+  let automation place/articulate copies (display-layer mates/gears — never touching the validated topology; fits the
+  three-layer law). A "hinge primitive" is likely an *assembly-level template* (two leaves + a revolute mate), not
+  just a design primitive — so consider a parts-library that can carry small mate recipes, not only geometry.
+  **Augment (when built):** a round-trip-style oracle asserting the instanced part's `canonical_topology` equals the
+  referenced catalog file's `canonical_topology` — i.e. "build from primitive X provably uses *exactly* validated X"
+  (so a stale/renamed/edited primitive can't silently substitute). Builds ON AF-11 (the build-spec interpreter) and
+  AF-7 (`add_file_instance`). See the chat assessment + the 4-bar/parallelogram linkage discussion for context.
+  **NB (2026-06-17): the mechanism layer this item gestured at is now spec'd as AF-14 + AF-15** (Tier 2,
+  geometry-aware joint placement + OBB-edge alignment, sharing `backend/core/cluster_obb.py`). The 4-bar
+  parallelogram capstone there builds the linkage at the *part-design level* (4 clusters + 4 `ClusterJoint`s in
+  one `Design`); AF-12's role is the complementary path — instancing a hand-validated *saved* hinge/bar primitive
+  by name — so the two compose (validated primitive geometry ← AF-12; articulation/arrangement ← AF-14/AF-15).
+
+### Tier 5 — physical-layer validation (oxDNA-in-the-loop) + constraint satisfaction (the eventual goal)
+
+**What's different here.** Tiers 0–4 validate the **topological/geometric** layers and are *deterministic*
+(`canonical_topology` equality, analytic geometry oracles). Tier 5 validates the **physical** layer: it
+drives an oxDNA relaxation/production headlessly, *measures* a property of the relaxed structure (end-to-end
+distance, R_g, inter-helix spacing, segment angle), and — the capstone — **iterates the design until a user
+constraint is satisfied.** Because MD is stochastic, the oracle class is new: **a measured property within a
+tolerance, GATED by the confidence metric** (`oxdna_health.rmsf_confidence` — frames pooled + RMSF standard
+error, already built), NOT exact equality. A short run reports *inconclusive*, not pass/fail.
+
+**Eventual goal (user, 2026-06-17):** *"Make sure two ends of a curved structure are 50 nm ± 5 nm apart"* →
+NADOC iterates over several oxDNA simulations until the request is met.
+
+**Three-Layer Law (load-bearing here).** The iterate loop EDITS the **topological** layer (a bend op /
+loop-skip / length knob), re-derives **geometric** positions, RE-RELAXES the **physical** layer (oxDNA),
+then MEASURES the physical result. The edit is topological; the measurement is physical; **oxDNA output is
+never written back into `Design`** (it stays a Physical-layer artifact, exactly as the display/RMSF paths do).
+Confusion about *which* nucleotide is "an end", or *which* knob bends *which* way, is an ASK-FIRST
+directionality question (`feedback_crossover_no_reasoning`, the DNA-topology rule) — do not guess.
+
+**Reuse map (durable — don't re-derive; see `memory/project_oxdna_relaxation.md`):** job lifecycle / resume /
+reconcile in `backend/core/oxdna_runner.py`; routes in `backend/api/routes_oxdna.py` (`create_oxdna_job`,
+`start_oxdna_job`, `append_oxdna_production`, `/rmsf`, `/trajectory`, `/display`); average-structure + per-base
+RMSF in `oxdna_health.production_rmsf`; the confidence metric in `oxdna_health.rmsf_confidence`; relaxed-geometry
+readers `read_configuration_unwrapped` / `read_configuration_full` / `oxdna_backbone_site` in
+`backend/physics/oxdna_interface.py`. **CI-without-GPU:** the **mock oxDNA binary** (`_MOCK_OXDNA` fixture in
+`tests/test_oxdna_relaxation.py`) lets the wrapper + oracles run deterministically; gate real-binary paths with
+`skipif find_oxdna() is None`.
+
+- [ ] **AF-13 (Phase 1) — headless oxDNA job wrapper.** Drive the REAL routes
+  (`create_oxdna_job` → `start_oxdna_job` → poll to terminal → optional `append_oxdna_production`) from a scratch
+  session, mirroring `headless_assembly_build`. **Shape:** a NEW `backend/api/headless_oxdna_build.py` (distinct
+  lifecycle subsystem → rule 2, new module, not a god-file block); import the route handlers so it's covered by
+  function-identity. Must run against the mock binary in tests and `skipif`-degrade without a real one.
+  **Augment:** assert the job reaches `completed` AND its relaxed `last_conf` reads back into a position map via
+  `read_configuration_unwrapped` — the foundational "we can drive oxDNA headlessly and recover relaxed geometry."
+
+- [ ] **AF-13 (Phase 2) — relaxed-geometry MEASUREMENT oracle (the constraint primitive).** A reusable
+  `measure_*` over the relaxed structure — start with **end-to-end distance** between two landmark nucleotides;
+  generalize to R_g / inter-helix spacing / segment angle. Prefer `production_rmsf`'s noise-averaged mean
+  structure over a single frame, and carry its `confidence`. **Augment:** new oracle class
+  `assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *, min_confidence)` — on a known fixture (a
+  straight relaxed 6hb) the measured end-to-end ≈ expected contour length within tol, and the confidence (frames /
+  SE) is surfaced so a short run is flagged. **ASK-FIRST:** the landmark-specification convention (a nucleotide by
+  `helix_id:bp:dir`? a strand terminus? a named cluster?) — directionality/topology, do not guess.
+
+- [ ] **AF-13 (Phase 3) — declarative constraint spec + checker.** A constraint object
+  `{"measure":"end_to_end","landmarks":[a,b],"target_nm":50,"tol_nm":5,"min_confidence":…}` + a PURE checker
+  (`backend/core/…`) evaluating it against a job's relaxed output → `{met, measured_nm, confidence}`. Slots into
+  the AF-11 build-spec grammar as a `constraints` block on a design. **Augment:** the checker returns met
+  True/False correctly on fixtures bracketing the tolerance, and **cannot report "met" below `min_confidence`**
+  (returns "inconclusive — run longer" instead — the confidence gate is the load-bearing guard).
+
+- [ ] **AF-13 (Phase 4, capstone — the eventual goal) — iterate-until-met loop.** Given a PARAMETRIC design knob
+  (a bend curvature via `hb.add_bend`, a loop/skip count, a length) + a constraint: build design → relax (oxDNA) →
+  measure → if unmet, adjust the knob → re-relax → … until met or budget exhausted. **Three-Layer Law:** vary
+  TOPOLOGY only; never write oxDNA output back. **Augment:** on a fixture where the knob monotonically maps to the
+  measurement (mock binary returns a deterministic geometry as a function of the knob → the *search* is testable
+  without a GPU), assert the loop converges into the tolerance band in ≤ N iterations. **ASK-FIRST (heavily):**
+  which knobs may vary, the search strategy (bisection / gradient / grid), and how stochastic re-run variance is
+  separated from knob effect — all design decisions. Large; decompose further when reached. Builds on Phases 1–3 +
+  the AF-11 build-spec interpreter + the AF-6 deformation wrappers.
 
 ### Appendix — genuinely UI-only (route these to manual-validation debt, NOT here)
 

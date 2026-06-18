@@ -855,3 +855,165 @@ def test_on_deformed_frame_fires_on_a_straight_continuation():
         after = hb.bundle_deformed_continuation([(0, 0)], 21, source_bp=84, ref_helix_id=ref)
         with pytest.raises(AssertionError, match="had no"):
             assert_on_deformed_frame(before, after, 84, [(0, 0)], ref_helix_id=ref)
+
+
+# ── AF-10: instance-layout oracles (grid / ring) ──────────────────────────────
+
+def _grid_assembly(rows, cols, *, pitch, row_pitch=None):
+    """Active scratch assembly: rows×cols inline 6hb parts on a grid."""
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+
+    hab.new_assembly("Grid")
+    hab.place_grid(make_6hb_design(), rows, cols, pitch=pitch, row_pitch=row_pitch)
+    return assembly_state.get_or_404().model_copy(deep=True)
+
+
+def _ring_assembly(n, *, radius):
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+
+    hab.new_assembly("Ring")
+    hab.place_ring(make_6hb_design(), n, radius=radius)
+    return assembly_state.get_or_404().model_copy(deep=True)
+
+
+def test_layout_helpers_compose_add_instance():
+    """place_grid/place_ring are construction sugar over the (already-covered)
+    add_instance route — they wrap no new route, so they intentionally do not move
+    the headless-coverage count; the validation gain is the layout oracles below."""
+    from backend.api import headless_assembly_build as hab
+
+    assert hasattr(hab, "place_grid") and hasattr(hab, "place_ring")
+
+
+def test_instances_on_grid_passes_on_a_real_grid():
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_instances_on_grid
+
+    with hab.assembly_scratch_session():
+        a = _grid_assembly(2, 3, pitch=15.0, row_pitch=9.0)
+        u, v = assert_instances_on_grid(a, 2, 3, pitch=15.0, row_pitch=9.0)
+        assert len(u) == 3 and len(v) == 2
+
+
+def test_instances_on_grid_fires_when_a_part_is_off_lattice():
+    """Shoving one part off its cell makes the grid oracle raise (green→red)."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_instances_on_grid
+
+    with hab.assembly_scratch_session():
+        a = _grid_assembly(2, 3, pitch=15.0)
+        a.instances[0].transform.values[3] += 5.0  # nudge one origin off-grid
+        with pytest.raises(AssertionError):
+            assert_instances_on_grid(a, 2, 3, pitch=15.0)
+
+
+def test_instances_on_grid_vacuity_guard():
+    """A below-floor pitch trips the non-degeneracy guard."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_instances_on_grid
+
+    with hab.assembly_scratch_session():
+        a = _grid_assembly(2, 3, pitch=15.0)
+        with pytest.raises(AssertionError, match="non-degeneracy"):
+            assert_instances_on_grid(a, 2, 3, pitch=0.0)
+
+
+def test_instances_on_ring_passes_on_a_real_ring():
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_instances_on_ring
+
+    with hab.assembly_scratch_session():
+        a = _ring_assembly(6, radius=20.0)
+        radii = assert_instances_on_ring(a, 6, radius=20.0)
+        assert len(radii) == 6
+
+
+def test_instances_on_ring_fires_when_a_part_is_off_ring():
+    """Pushing one part off the ring radius makes the oracle raise (green→red)."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_instances_on_ring
+
+    with hab.assembly_scratch_session():
+        a = _ring_assembly(6, radius=20.0)
+        a.instances[0].transform.values[3] += 5.0  # off the radius
+        with pytest.raises(AssertionError, match="off the ring"):
+            assert_instances_on_ring(a, 6, radius=20.0)
+
+
+def test_instances_on_ring_vacuity_guard():
+    """radius=0 stacks every part at the centre — the guard fires rather than
+    passing vacuously (the load-bearing guard for a ring)."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_instances_on_ring
+
+    with hab.assembly_scratch_session():
+        # build a degenerate stacked "ring" and ask the oracle to pass — it must not
+        hab.new_assembly("Stack")
+        part = make_6hb_design()
+        for _ in range(6):
+            hab.add_inline_instance(part)  # all at origin
+        from backend.api import assembly_state
+        a = assembly_state.get_or_404().model_copy(deep=True)
+        with pytest.raises(AssertionError, match="non-degeneracy"):
+            assert_instances_on_ring(a, 6, radius=0.0)
+
+
+# ── AF-11: build-spec faithfulness oracle (assert_spec_matches_calls) ──────────
+
+def test_spec_matches_calls_passes_on_a_faithful_build():
+    """A 6hb spec build matches the hand-call make_6hb_design()."""
+    from backend.api import headless_spec_build as hs
+    from tests.automation_harness import assert_spec_matches_calls
+    from tests.conftest import SIX_HB_CELLS, make_6hb_design
+
+    spec = {"lattice": "honeycomb", "ops": [
+        {"op": "bundle", "cells": [list(c) for c in SIX_HB_CELLS], "length_bp": 42, "name": "6hb"}]}
+    built = assert_spec_matches_calls(
+        lambda: hs.build_design(spec), make_6hb_design, kind="design")
+    assert len(built.helices) == 6
+
+
+def test_spec_matches_calls_fires_on_a_divergent_build():
+    """If the spec build differs from the hand build, the oracle raises (green→red)."""
+    from backend.api import headless_spec_build as hs
+    from tests.automation_harness import assert_spec_matches_calls
+    from tests.conftest import SIX_HB_CELLS, make_18hb_design
+
+    spec = {"lattice": "honeycomb", "ops": [
+        {"op": "bundle", "cells": [list(c) for c in SIX_HB_CELLS], "length_bp": 42}]}
+    with pytest.raises(AssertionError, match="did not produce the same canonical"):
+        assert_spec_matches_calls(
+            lambda: hs.build_design(spec), make_18hb_design, kind="design")
+
+
+def test_spec_matches_calls_vacuity_guard():
+    """An empty spec build trips the non-emptiness guard rather than passing."""
+    from backend.core.models import Design
+    from tests.automation_harness import assert_spec_matches_calls
+
+    with pytest.raises(AssertionError, match="empty design"):
+        assert_spec_matches_calls(Design, Design, kind="design")
+
+
+def test_spec_matches_calls_assembly_kind():
+    """The assembly kind compares canonical_assembly and guards on instances."""
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+    from backend.api import headless_spec_build as hs
+    from tests.automation_harness import assert_spec_matches_calls
+    from tests.conftest import SIX_HB_CELLS, make_6hb_design
+
+    beam = {"lattice": "honeycomb", "ops": [
+        {"op": "bundle", "cells": [list(c) for c in SIX_HB_CELLS], "length_bp": 42, "name": "6hb"}]}
+    spec = {"kind": "assembly", "name": "G", "parts": {"beam": beam},
+            "ops": [{"op": "place_grid", "part": "beam", "rows": 2, "cols": 2, "pitch": 10.0}]}
+
+    def hand():
+        with hab.assembly_scratch_session():
+            hab.new_assembly("G")
+            hab.place_grid(make_6hb_design(), 2, 2, pitch=10.0)
+            return assembly_state.get_or_404().model_copy(deep=True)
+
+    assert_spec_matches_calls(lambda: hs.build_assembly(spec), hand, kind="assembly")

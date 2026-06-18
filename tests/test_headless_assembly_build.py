@@ -18,6 +18,8 @@ from tests.automation_harness import (
     assert_assembly_roundtrip_stable,
     assert_binding_resolves,
     assert_gear_ratio,
+    assert_instances_on_grid,
+    assert_instances_on_ring,
     assert_mate_coincident,
     assert_polymer_chain,
     canonical_assembly,
@@ -621,6 +623,62 @@ def test_bind_overhangs_unknown_subdomain_404():
                 overhang_b_id="oh-B_3p", sub_domain_b_id="not-a-real-subdomain",
             )
         assert exc.value.status_code == 404
+
+
+# ── AF-10: parametric layout helpers (grid / ring) ───────────────────────────
+
+def test_place_grid_lands_on_lattice():
+    """place_grid drops rows×cols copies on the exact regular grid."""
+    with hab.assembly_scratch_session():
+        hab.new_assembly("Grid")
+        part = make_6hb_design()
+        hab.place_grid(part, 2, 3, pitch=15.0)
+        a = assembly_state.get_or_404()
+        assert len(a.instances) == 6
+        assert_instances_on_grid(a, 2, 3, pitch=15.0)
+
+
+def test_place_grid_distinct_row_pitch_and_roundtrips():
+    """A rectangular grid (distinct row/col pitch) lands on the lattice AND
+    survives a .nass round-trip with its 6 instances intact."""
+    with hab.assembly_scratch_session():
+        def build():
+            hab.new_assembly("GridRT")
+            hab.place_grid(make_6hb_design(), 2, 3, pitch=12.0, row_pitch=8.0)
+            return assembly_state.get_or_404().model_copy(deep=True)
+
+        reloaded = assert_assembly_roundtrip_stable(build)
+        assert len(reloaded.instances) == 6
+        assert_instances_on_grid(reloaded, 2, 3, pitch=12.0, row_pitch=8.0)
+
+
+def test_place_ring_lands_on_ring():
+    """place_ring drops n copies on the ring of the requested radius at even step."""
+    with hab.assembly_scratch_session():
+        hab.new_assembly("Ring")
+        hab.place_ring(make_6hb_design(), 6, radius=20.0)
+        a = assembly_state.get_or_404()
+        assert len(a.instances) == 6
+        assert_instances_on_ring(a, 6, radius=20.0)
+
+
+def test_place_ring_offset_center_plane_and_roundtrips():
+    """A ring in the XZ plane about an offset centre lands correctly AND survives a
+    .nass round-trip."""
+    with hab.assembly_scratch_session():
+        def build():
+            hab.new_assembly("RingRT")
+            hab.place_ring(
+                make_6hb_design(), 5, radius=14.0, plane="XZ",
+                center=(0.0, 30.0, 0.0),
+            )
+            return assembly_state.get_or_404().model_copy(deep=True)
+
+        reloaded = assert_assembly_roundtrip_stable(build)
+        assert len(reloaded.instances) == 5
+        assert_instances_on_ring(
+            reloaded, 5, radius=14.0, plane="XZ", center=(0.0, 30.0, 0.0),
+        )
 
 
 # ── Coverage flip ─────────────────────────────────────────────────────────────

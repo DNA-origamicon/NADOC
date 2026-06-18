@@ -310,6 +310,59 @@ def assert_assembly_roundtrip_stable(
     return reloaded
 
 
+# ── Build-spec faithfulness oracle (AF-11) ────────────────────────────────────
+
+def assert_spec_matches_calls(
+    build_from_spec: Callable[[], "object"],
+    build_by_hand: Callable[[], "object"],
+    *,
+    kind: str = "design",
+):
+    """The AF-11 acceptance oracle: a declarative build-spec produces the SAME
+    canonical structure as the equivalent hand-call wrapper sequence.
+
+    The build-spec interpreter (:mod:`backend.api.headless_spec_build`) must be a
+    *faithful façade* over the existing headless wrappers — it drives the real
+    ``hb.*`` / ``hab.*`` ops, it does not re-implement any of them.  This oracle is
+    what proves that: ``build_from_spec`` runs the interpreter on a spec, and
+    ``build_by_hand`` runs the equivalent sequence of wrapper calls directly; their
+    id/order-independent fingerprints (:func:`canonical_topology` for ``kind="design"``,
+    :func:`canonical_assembly` for ``kind="assembly"``) must be byte-for-byte equal.
+
+    An interpreter that dropped an op, mis-ordered the chain, mistranslated a
+    parameter, or quietly re-implemented an op with different behaviour fails here.
+    A non-emptiness guard (the spec built *something*) keeps it from passing
+    vacuously on a spec that builds nothing — the analog of
+    :func:`assert_inverse_pair`'s "forward really mutated" guard.
+
+    This is also the **golden pin** the backlog calls for: because the hand-call
+    reference is deterministic, "the spec matches the calls" is equivalently "the
+    spec always builds this one canonical structure".  Returns the spec-built object.
+    """
+    fp = canonical_topology if kind == "design" else canonical_assembly
+    spec_built = build_from_spec()
+    hand_built = build_by_hand()
+
+    if kind == "design":
+        assert getattr(spec_built, "helices", None), (
+            "the spec built an empty design (no helices) — this oracle would pass "
+            "vacuously; use a spec that actually constructs geometry."
+        )
+    else:
+        assert getattr(spec_built, "instances", None), (
+            "the spec built an empty assembly (no instances) — this oracle would pass "
+            "vacuously; use a spec that actually places parts."
+        )
+
+    a, b = fp(spec_built), fp(hand_built)
+    assert a == b, (
+        "the build-spec interpreter did not produce the same canonical structure as "
+        "the equivalent hand-call wrapper sequence — the spec was lowered to a "
+        "different build (a dropped/mis-ordered op or a mistranslated parameter)."
+    )
+    return spec_built
+
+
 # ── Mate-coincidence oracle (assembly joints) ─────────────────────────────────
 
 def assert_mate_coincident(
@@ -689,6 +742,198 @@ def assert_binding_resolves(
             f"binding joins one instance to itself ({binding.instance_a_id!r}); an "
             "assembly overhang binding is meant to be cross-part."
         )
+
+
+# ── Instance-layout oracles (parametric grid / ring placement) ────────────────
+
+def _instance_origin(inst):
+    """World origin (translation column) of a placed instance, as ``(x, y, z)``."""
+    v = inst.transform.values
+    return (float(v[3]), float(v[7]), float(v[11]))
+
+
+def _project_to_plane(x: float, y: float, z: float, plane: str):
+    """Project a world point onto a layout plane → ``(u, v)`` (mirrors
+    ``instance_layout._embed``).  ``XY`` → ``(x, y)``; ``XZ`` → ``(x, z)``;
+    ``YZ`` → ``(y, z)``."""
+    p = plane.upper()
+    if p == "XY":
+        return (x, y)
+    if p == "XZ":
+        return (x, z)
+    if p == "YZ":
+        return (y, z)
+    raise ValueError(f"plane must be one of XY/XZ/YZ, got {plane!r}")
+
+
+def _cluster_1d(values, tol: float):
+    """Greedily cluster sorted-1D values within ``tol``; return cluster centres."""
+    centres: list[float] = []
+    for val in sorted(values):
+        if centres and abs(val - centres[-1]) <= tol:
+            continue
+        centres.append(val)
+    return centres
+
+
+def assert_instances_on_grid(
+    assembly,
+    rows: int,
+    cols: int,
+    *,
+    pitch: float,
+    row_pitch: float | None = None,
+    plane: str = "XY",
+    tol_nm: float = 0.01,
+    min_pitch_nm: float = 0.05,
+    instance_ids=None,
+):
+    """Geometric lattice oracle: the placed instance origins form an exact
+    ``rows × cols`` regular grid.
+
+    The layout analog of :func:`assert_circular_disc` — it reads the *placed*
+    instance transforms (their world origins), not the layout spec, so it pins the
+    whole path ``spec → instance_layout → place_grid → add_instance → placed
+    geometry``.  The expected lattice is re-derived from the user-facing
+    parameters (``rows``/``cols``/``pitch``) as *properties* of the result, not by
+    re-running the placement formula, so a builder bug (wrong pitch, dropped slot,
+    transposed axes) is caught rather than mirrored:
+
+      1. **Right count.** Exactly ``rows · cols`` instances (filtered to
+         ``instance_ids`` if given).
+      2. **Regular spacing.** Projected onto ``plane``, the origins occupy exactly
+         ``cols`` distinct ``u`` values evenly spaced by ``pitch`` and ``rows``
+         distinct ``v`` values evenly spaced by ``row_pitch`` (default ``pitch``),
+         each within ``tol_nm``.
+      3. **Every cell filled.** The distinct ``(u, v)`` slot pairs number exactly
+         ``rows · cols`` — no two parts share a cell while another is empty.
+      4. **Non-degenerate (the can-go-red guard).** The requested pitch exceeds
+         ``min_pitch_nm``; a zero pitch would stack every copy and the "spacing ==
+         pitch" check would pass vacuously.  The analog of
+         :func:`assert_mate_coincident`'s separation guard.
+
+    Returns the ``(u_centres, v_centres)`` it measured.
+    """
+    rp = pitch if row_pitch is None else row_pitch
+    assert pitch > min_pitch_nm and rp > min_pitch_nm, (
+        f"requested pitch ({pitch}, {rp} nm) is below the non-degeneracy floor "
+        f"{min_pitch_nm} nm — the parts would stack and this oracle would pass "
+        "vacuously."
+    )
+
+    insts = [
+        i for i in assembly.instances
+        if instance_ids is None or i.id in set(instance_ids)
+    ]
+    assert len(insts) == rows * cols, (
+        f"grid placed {len(insts)} instances, expected {rows}×{cols} = {rows * cols}."
+    )
+
+    uv = [_project_to_plane(*_instance_origin(i), plane) for i in insts]
+    u_centres = _cluster_1d((u for u, _ in uv), tol_nm)
+    v_centres = _cluster_1d((v for _, v in uv), tol_nm)
+    assert len(u_centres) == cols, (
+        f"grid has {len(u_centres)} distinct column positions, expected {cols} "
+        f"(u={[round(c, 3) for c in u_centres]})."
+    )
+    assert len(v_centres) == rows, (
+        f"grid has {len(v_centres)} distinct row positions, expected {rows} "
+        f"(v={[round(c, 3) for c in v_centres]})."
+    )
+
+    for a, b in zip(u_centres, u_centres[1:]):
+        assert abs((b - a) - pitch) <= tol_nm, (
+            f"column spacing {b - a:.4f} nm ≠ pitch {pitch} nm (±{tol_nm}) — "
+            "the grid columns are not evenly spaced at the requested pitch."
+        )
+    for a, b in zip(v_centres, v_centres[1:]):
+        assert abs((b - a) - rp) <= tol_nm, (
+            f"row spacing {b - a:.4f} nm ≠ row_pitch {rp} nm (±{tol_nm}) — "
+            "the grid rows are not evenly spaced at the requested pitch."
+        )
+
+    def _nearest(centres, val):
+        return min(range(len(centres)), key=lambda k: abs(centres[k] - val))
+
+    slots = {(_nearest(u_centres, u), _nearest(v_centres, v)) for u, v in uv}
+    assert len(slots) == rows * cols, (
+        f"grid origins occupy {len(slots)} distinct cells, expected {rows * cols} "
+        "— some cell is doubled while another is empty."
+    )
+    return u_centres, v_centres
+
+
+def assert_instances_on_ring(
+    assembly,
+    n: int,
+    *,
+    radius: float,
+    plane: str = "XY",
+    center=(0.0, 0.0, 0.0),
+    tol_nm: float = 0.01,
+    angle_tol_deg: float = 1.0,
+    min_radius_nm: float = 0.5,
+    instance_ids=None,
+):
+    """Geometric lattice oracle: the placed instance origins lie on a ring of the
+    requested radius at an even angular step.
+
+    The ring analog of :func:`assert_instances_on_grid` — it reads the *placed*
+    instance origins and asserts, as properties re-derived from the user-facing
+    ``n``/``radius`` (not by re-running the placement formula):
+
+      1. **Right count.** Exactly ``n`` instances (filtered to ``instance_ids``).
+      2. **On the ring.** Every origin, projected onto ``plane`` and measured from
+         ``center``, is at distance ``radius`` within ``tol_nm``.
+      3. **Even angular step.** Sorted by angle, consecutive slots (including the
+         wrap from last back to first) differ by exactly ``360°/n`` within
+         ``angle_tol_deg``.
+      4. **Non-degenerate (the can-go-red guard).** ``radius`` exceeds
+         ``min_radius_nm``; a zero radius would stack every copy at ``center`` where
+         "distance == radius == 0" passes vacuously — the load-bearing guard for a
+         ring (the analog of :func:`assert_polymer_chain`'s ``min_delta`` guard).
+
+    Returns the per-slot radii it measured.
+    """
+    import math
+
+    assert radius > min_radius_nm, (
+        f"requested radius {radius} nm is below the non-degeneracy floor "
+        f"{min_radius_nm} nm — the parts would stack at the centre and this oracle "
+        "would pass vacuously."
+    )
+
+    insts = [
+        i for i in assembly.instances
+        if instance_ids is None or i.id in set(instance_ids)
+    ]
+    assert len(insts) == n, f"ring placed {len(insts)} instances, expected {n}."
+
+    cu, cv = _project_to_plane(*(float(c) for c in center), plane)
+    radii: list[float] = []
+    angles: list[float] = []
+    for i in insts:
+        u, v = _project_to_plane(*_instance_origin(i), plane)
+        du, dv = u - cu, v - cv
+        r = math.hypot(du, dv)
+        assert abs(r - radius) <= tol_nm, (
+            f"a ring instance is {r:.4f} nm from the centre, expected radius "
+            f"{radius} nm (±{tol_nm}) — it is off the ring."
+        )
+        radii.append(r)
+        angles.append(math.atan2(dv, du) % (2.0 * math.pi))
+
+    angles.sort()
+    step = 2.0 * math.pi / n
+    tol = math.radians(angle_tol_deg)
+    diffs = [b - a for a, b in zip(angles, angles[1:])]
+    diffs.append(angles[0] + 2.0 * math.pi - angles[-1])  # wrap last → first
+    for d in diffs:
+        assert abs(d - step) <= tol, (
+            f"ring angular step {math.degrees(d):.3f}° ≠ {math.degrees(step):.3f}° "
+            f"(±{angle_tol_deg}°) — the slots are not evenly spaced around the ring."
+        )
+    return radii
 
 
 # ── Inverse-pair oracle ───────────────────────────────────────────────────────

@@ -74,6 +74,7 @@ from backend.api.routes_assembly_polymerize import (
     PolymerizeAssemblyRequest,
     polymerize_assembly as _route_polymerize_assembly,
 )
+from backend.core.instance_layout import grid_translations, ring_translations
 from backend.core.models import Assembly, Design, Mat4x4
 
 _scratch_counter = itertools.count()
@@ -184,6 +185,69 @@ def add_file_instance(path: str, *, name: str = "Part", transform=None,
     if sha256 is not None:
         src["sha256"] = sha256
     return add_instance(src, name=name, transform=transform)
+
+
+def place_grid(
+    design: Design,
+    rows: int,
+    cols: int,
+    *,
+    pitch: float,
+    row_pitch: float | None = None,
+    plane: str = "XY",
+    center: bool = False,
+    name: str = "Part",
+) -> Assembly:
+    """Place ``rows × cols`` copies of *design* on a regular grid (AF-10).
+
+    A parametric-layout helper: it computes the per-slot world translations with
+    the pure :func:`backend.core.instance_layout.grid_translations` (slot ``(i, j)``
+    at ``(j·pitch, i·row_pitch)`` in the chosen ``plane``; ``center=True`` centres
+    the grid on the origin) and drives :func:`add_inline_instance` once per slot, so
+    every copy carries a real ``assembly-add-instance`` feature-log entry — the grid
+    is indistinguishable from clicking each part in.  ``row_pitch`` defaults to
+    ``pitch``.  Parts are translated only (identity orientation).
+
+    Pin the result with :func:`tests.automation_harness.assert_instances_on_grid`
+    (the placed instance origins land on the exact ``rows × cols`` lattice).
+    """
+    for idx, (x, y, z) in enumerate(grid_translations(
+        rows, cols, pitch=pitch, row_pitch=row_pitch, plane=plane, center=center,
+    )):
+        add_inline_instance(design, name=f"{name}_{idx}", transform=translation(x, y, z))
+    return assembly_state.get_or_404()
+
+
+def place_ring(
+    design: Design,
+    n: int,
+    *,
+    radius: float,
+    plane: str = "XY",
+    start_angle_deg: float = 0.0,
+    center=(0.0, 0.0, 0.0),
+    name: str = "Part",
+) -> Assembly:
+    """Place ``n`` copies of *design* evenly spaced on a ring (AF-10).
+
+    A parametric-layout helper: it computes the per-slot world translations with the
+    pure :func:`backend.core.instance_layout.ring_translations` (slot ``k`` at angle
+    ``start_angle_deg + k·360°/n`` on a circle of ``radius`` about ``center``, in the
+    chosen ``plane``) and drives :func:`add_inline_instance` once per slot, each with
+    its own feature-log entry.  Parts are translated only (identity orientation —
+    which way a part *faces* on the ring is an orientation convention this helper
+    does not pick).
+
+    Pin the result with :func:`tests.automation_harness.assert_instances_on_ring`
+    (the placed origins lie on the ring of the requested radius at the exact angular
+    step).
+    """
+    for idx, (x, y, z) in enumerate(ring_translations(
+        n, radius=radius, plane=plane, start_angle_deg=start_angle_deg,
+        center=tuple(float(v) for v in center),
+    )):
+        add_inline_instance(design, name=f"{name}_{idx}", transform=translation(x, y, z))
+    return assembly_state.get_or_404()
 
 
 def add_connector(instance_id: str, label: str, position, normal) -> Assembly:
