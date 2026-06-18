@@ -175,6 +175,7 @@ describe('initOxdnaDisplay controller', () => {
     const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
     const api = { getOxdnaRmsf: vi.fn().mockResolvedValue({
       ready: true, n_frames: 12, min_rmsf: 0.1, max_rmsf: 0.9, mean_rmsf: 0.5,
+      confidence: { n_frames: 12, rel_error: 0.2, preliminary: true }, production_running: true,
       positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0, rmsf: 0.1 }],
     }) }
     const ctrl = initOxdnaDisplay({ designRenderer, api })
@@ -182,6 +183,9 @@ describe('initOxdnaDisplay controller', () => {
     expect(r.ok).toBe(true)
     expect(r.min).toBe(0.1)
     expect(r.max).toBe(0.9)
+    expect(r.nFrames).toBe(12)                    // confidence passthrough
+    expect(r.confidence.preliminary).toBe(true)
+    expect(r.running).toBe(true)
     expect(designRenderer.applyFemPositions).toHaveBeenCalled()
     expect(designRenderer.applyScalarColors).toHaveBeenCalled()
     expect(ctrl.mode()).toBe('rmsf')

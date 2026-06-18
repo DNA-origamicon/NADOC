@@ -148,6 +148,44 @@ export function seedReady(job) {
   return job?.status === 'completed'
 }
 
+/** Pure: one-line confidence readout for a flexibility-map result.
+ *  `r` = the displayRmsf return ({ nFrames, confidence:{rel_error, preliminary}, running }).
+ *  Shows frames pooled + statistical RMSF error %, and a "Preliminary" warning for
+ *  short or still-running runs.  Returns { text, preliminary }. */
+export function flexConfidenceText(r) {
+  const c = r?.confidence || {}
+  const frames = c.n_frames ?? r?.nFrames ?? 0
+  const errTxt = c.rel_error != null ? ` · est. RMSF error ±${Math.round(c.rel_error * 100)}%` : ''
+  let warn = ''
+  if (c.preliminary) {
+    warn = r?.running ? ' · ⚠ Preliminary — production still running'
+                      : ' · ⚠ Preliminary — short run'
+  }
+  return { text: `${frames} frame${frames === 1 ? '' : 's'} pooled${errTxt}${warn}`, preliminary: !!c.preliminary }
+}
+
+/** Pure: a "Resuming from checkpoint" note when the current running stage was
+ *  resumed from its own checkpoint — so the progress bar resetting to 0 (the
+ *  resumed run measures itself 0→100%) isn't mistaken for a restart from scratch. */
+export function resumeNote(job) {
+  if (job?.status !== 'running') return ''
+  const cur = job?.stages?.[job.current_stage_idx]
+  return cur?.resumed ? 'Resuming from checkpoint' : ''
+}
+
+/** Pure: is this an incomplete job that can be resumed (killed/failed mid-run)?
+ *  A `stopped` job was interrupted (backend reconcile sets `current_stage_idx` to
+ *  the unfinished stage); a `failed` job can be re-run from where it failed. */
+export function isResumable(job) {
+  return ['stopped', 'failed'].includes(job?.status)
+}
+
+/** Pure: label for the start/resume button. A never-run `queued` job reads
+ *  "Start"; an interrupted (`stopped`/`failed`) job reads "Resume". */
+export function startButtonLabel(job) {
+  return isResumable(job) ? '↻ Resume' : '▶ Start'
+}
+
 /** Pure: list/detail status label + color — derives "production ready" + production states. */
 export function jobListStatus(job) {
   const ps = productionState(job)
@@ -438,7 +476,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       detailStatus.style.color = ls.color
     }
 
-    if (startBtn) startBtn.style.display = ['queued', 'stopped', 'failed'].includes(job.status) ? '' : 'none'
+    if (startBtn) {
+      startBtn.style.display = ['queued', 'stopped', 'failed'].includes(job.status) ? '' : 'none'
+      startBtn.textContent = startButtonLabel(job)
+    }
     if (stopBtn)  stopBtn.style.display  = job.status === 'running' ? '' : 'none'
     if (deleteBtn) deleteBtn.style.display = job.status === 'running' ? 'none' : ''
 
@@ -467,6 +508,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       const done = Math.round(frac * (cur.steps || 0))
       label = `Production: ${done.toLocaleString()} / ${(cur.steps || 0).toLocaleString()} steps`
     }
+    // Flag a resumed run so the reset bar reads as "continuing", not "restarted".
+    const note = resumeNote(job)
+    if (note) label = label ? `${note} · ${label}` : note
     // Estimated time to completion (current run — relax or production).
     const eta = job.status === 'running' ? formatEta(_progress?.eta_seconds) : ''
     if (eta) label = label ? `${label} · ETA ~${eta}` : `ETA ~${eta}`
@@ -562,14 +606,16 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     else _setProdStatus(prodReady ? 'Ready to run production from the relaxed structure.'
                                   : 'Production unlocks after relaxation completes.', _C.dim)
 
-    // Flexibility map (RMSF) — toggle unlocks only after a production run finishes.
+    // Flexibility map (RMSF) — unlocks as soon as a production run has STARTED
+    // (done OR running).  A mid-run map is preliminary; the confidence readout
+    // warns the user not to trust a short run.
     if (flexToggle && !_flexBusy) {
-      const ok = ps === 'done'
+      const ok = ps === 'done' || ps === 'running'
       flexToggle.disabled = !ok
       const lab = flexToggle.closest('label')
       if (lab) { lab.style.opacity = ok ? '1' : '0.5'; lab.style.cursor = ok ? 'pointer' : 'not-allowed' }
       if (!ok && flexStatus && oxdnaDisplay?.mode() !== 'rmsf') {
-        _setFlexStatus(ps === 'running' ? 'Running production…' : 'Waiting for production', _C.dim)
+        _setFlexStatus('Waiting for production', _C.dim)
       }
     }
 
@@ -674,7 +720,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       _setFlexBar('done')
       _setFlexLegend(r.min, r.max)
       flexScale.show(r.min, r.max)
-      _setFlexStatus(`Avg of production · ${r.n} bases coloured by RMSF`, _C.ok)
+      const conf = flexConfidenceText(r)
+      _setFlexStatus(`Avg of production · ${r.n} bases · ${conf.text}`,
+                     conf.preliminary ? _C.warn : _C.ok)
     } else {
       _setFlexBar('off')
       _setFlexLegend(null, null)
@@ -687,7 +735,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   flexToggle?.addEventListener('change', async () => {
     if (flexToggle.checked) {
       if (!_selectedId) { flexToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); return }
-      if (productionState(_selectedJob()) !== 'done') {
+      const ps = productionState(_selectedJob())
+      if (ps !== 'done' && ps !== 'running') {
         flexToggle.checked = false; _setFlexStatus('Waiting for production', _C.warn); return
       }
       if (displayToggle?.checked) _setDisplayOff()   // mutually exclusive with OxDNA display

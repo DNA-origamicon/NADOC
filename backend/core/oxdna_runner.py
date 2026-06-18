@@ -383,6 +383,55 @@ def _health_sample(stage_name: str, kind: str, res: OxdnaHealthResult,
     )
 
 
+def _starting_conf(
+    job: OxdnaJob,
+    workspace_dir: Path,
+    specs: list[OxdnaStageSpec],
+    idx: int,
+    start_idx: int,
+) -> Path:
+    """Resolve the starting configuration for stage ``idx``.
+
+    Normally the design conf (stage 0) or the previous stage's ``last_conf.dat``.
+    BUT when RESUMING the stage that was killed mid-run (``idx == start_idx`` and
+    that stage already wrote its own non-empty checkpoint ``last_conf.dat``),
+    continue from THAT checkpoint so the already-simulated time is kept rather
+    than restarting the stage from scratch (the "continue from partial frame"
+    resume behaviour).  oxDNA writes ``last_conf.dat`` periodically, so a non-empty
+    one means the kill happened after at least one checkpoint flush.
+    """
+    own_last = (job.stage_dir(workspace_dir, specs[idx].name) / "last_conf.dat").resolve()
+    if idx == start_idx and own_last.exists() and own_last.stat().st_size > 0:
+        return own_last
+    if idx == 0:
+        return (job.job_dir(workspace_dir) / "conf.dat").resolve()
+    return (job.stage_dir(workspace_dir, specs[idx - 1].name) / "last_conf.dat").resolve()
+
+
+def _archive_partial_outputs(stage_dir: Path) -> list[str]:
+    """Move a resumed stage's partial trajectory/energy aside before re-running.
+
+    oxDNA opens ``trajectory_file``/``energy_file`` in TRUNCATE mode, so the
+    frames already sampled by the interrupted run would be destroyed the instant
+    the resumed run starts.  Rename them to ``<stem>.rN.<suffix>`` (N = next free
+    index) so they survive and can still be pooled into the flexibility map /
+    composite trajectory.  ``last_conf.dat`` is NOT touched — it is the checkpoint
+    the resumed run reads from.  Returns the archived file names."""
+    archived: list[str] = []
+    for base in ("trajectory.dat", "energy.dat"):
+        src = stage_dir / base
+        if not src.exists() or src.stat().st_size == 0:
+            continue
+        stem, _, suffix = base.partition(".")
+        n = 1
+        while (stage_dir / f"{stem}.r{n}.{suffix}").exists():
+            n += 1
+        dst = stage_dir / f"{stem}.r{n}.{suffix}"
+        src.rename(dst)
+        archived.append(dst.name)
+    return archived
+
+
 # ── Main runner coroutine ─────────────────────────────────────────────────────
 
 async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> None:
@@ -417,11 +466,14 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
         stage_dir = job.stage_dir(workspace_dir, spec.name)
         stage_dir.mkdir(parents=True, exist_ok=True)
 
-        # Starting configuration: design conf for stage 0, else previous last_conf.
-        if idx == 0:
-            conf = (jd / "conf.dat").resolve()
-        else:
-            conf = (job.stage_dir(workspace_dir, specs[idx - 1].name) / "last_conf.dat").resolve()
+        conf = _starting_conf(job, workspace_dir, specs, idx, start_idx)
+        is_resume = conf == (stage_dir / "last_conf.dat").resolve()
+        if is_resume:
+            archived = _archive_partial_outputs(stage_dir)
+            job.stages[idx].resumed = True
+            logger.info("[%s] resuming stage %s from its own checkpoint last_conf.dat "
+                        "(archived partial outputs: %s)",
+                        job.job_id, spec.name, ", ".join(archived) or "none")
 
         input_path = stage_dir / "input.txt"
         forces = (jd / "forces.txt").resolve() if spec.external_forces else None

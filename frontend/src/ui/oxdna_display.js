@@ -140,7 +140,10 @@ export function initOxdnaDisplay({ designRenderer, api }) {
     _active = true
     _mode = 'rmsf'
     _jobId = jobId
-    return { ok: true, n: map.updates.length, min: map.min, max: map.max, mean: resp.mean_rmsf }
+    return {
+      ok: true, n: map.updates.length, min: map.min, max: map.max, mean: resp.mean_rmsf,
+      nFrames: resp.n_frames, confidence: resp.confidence, running: !!resp.production_running,
+    }
   }
 
   /**

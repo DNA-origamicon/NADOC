@@ -102,6 +102,27 @@ def _load_job(job_id: str) -> OxdnaJob:
     return reconcile_oxdna_status(job, _workspace())
 
 
+def _stage_trajectories(stage_dir: Path) -> list[Path]:
+    """All non-empty trajectory files for a stage, in CHRONOLOGICAL order.
+
+    A resumed stage archives its prior partial trajectory as ``trajectory.r1.dat``
+    (r2, …); the still-being-written run is ``trajectory.dat``.  Returns the
+    archived parts first (oldest → newest) then the current file, so the composite
+    player scrubs them in time order and the RMSF map pools every sampled frame
+    (nothing lost to a resume)."""
+    def _idx(p: Path) -> int:
+        try:
+            return int(p.name.split(".r")[1].split(".")[0])
+        except (IndexError, ValueError):
+            return 0
+    parts = sorted(stage_dir.glob("trajectory.r*.dat"), key=_idx)
+    out = [p for p in parts if p.stat().st_size > 0]
+    cur = stage_dir / "trajectory.dat"
+    if cur.exists() and cur.stat().st_size > 0:
+        out.append(cur)
+    return out
+
+
 def _jsonl_records(path: Path) -> list[dict]:
     import json
     if not path.exists():
@@ -364,26 +385,31 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
     returned, so the panel can deform the model to the average structure
     recoloured rigid→flexible.
 
-    Ready only once a production stage has finished (the toggle is gated on this).
+    Available as soon as a production run has STARTED (pools frames from done +
+    running production stages).  Short/in-progress runs are not blocked — instead
+    a ``confidence`` block (frames pooled + statistical RMSF error) and a
+    ``production_running`` flag are returned so the panel can warn the user not to
+    trust a short run.
     """
     from backend.core.models import Design
-    from backend.core.oxdna_health import production_rmsf
+    from backend.core.oxdna_health import production_rmsf, rmsf_confidence
 
     job = _load_job(job_id)
     prod_stages = [s for s in job.stages if s.kind == "production"]
     if not prod_stages:
         return {"ready": False, "reason": "no production run yet"}
-    done_prods = [s for s in prod_stages if s.status == "done"]
-    if not done_prods:
-        return {"ready": False, "reason": "waiting for production"}
 
     jd = job.job_dir(_workspace())
-    # Pool the trajectories of EVERY finished production run, so the flexibility
-    # map reflects all production runs associated with this job, not just the first.
-    trajs = [job.stage_dir(_workspace(), s.name) / "trajectory.dat" for s in done_prods]
-    trajs = [t for t in trajs if t.exists()]
+    # Pool the trajectories of EVERY production run that has written frames —
+    # done OR still running.  The map is available as soon as production has
+    # started; short/in-progress runs are flagged via the confidence metric
+    # below rather than blocked.
+    usable = [s for s in prod_stages if s.status in ("done", "running")]
+    trajs: list[Path] = []
+    for s in usable:
+        trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
     if not trajs:
-        return {"ready": False, "reason": "production trajectory not available yet"}
+        return {"ready": False, "reason": "production starting — no frames yet"}
 
     # Reference = the job's conf.dat (design geometry) — IDENTICAL to the OxDNA
     # display route's Kabsch reference, so the flexibility map and the relaxed
@@ -391,7 +417,12 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
     ref_conf = jd / "conf.dat"
 
     design = Design.model_validate_json((jd / "design.json").read_text())
-    return await run_in_threadpool(production_rmsf, design, trajs, ref_conf)
+    result = await run_in_threadpool(production_rmsf, design, trajs, ref_conf)
+    # Attach the confidence metric (frames pooled + statistical RMSF error) and
+    # whether production is still running, so the panel can warn "preliminary".
+    result["confidence"] = rmsf_confidence(result.get("n_frames", 0))
+    result["production_running"] = any(s.status == "running" for s in prod_stages)
+    return result
 
 
 @router.get("/oxdna/jobs/{job_id}/trajectory")
@@ -408,9 +439,12 @@ async def get_oxdna_trajectory(job_id: str) -> dict:
     jd = job.job_dir(_workspace())
     stages = []
     for st in job.stages:
-        traj = job.stage_dir(_workspace(), st.name) / "trajectory.dat"
-        if traj.exists():
-            stages.append((st.name, st.kind, traj))
+        # Include any archived resume parts (trajectory.r1.dat …) before the
+        # current trajectory.dat so a resumed stage scrubs in time order.
+        files = _stage_trajectories(job.stage_dir(_workspace(), st.name))
+        for k, traj in enumerate(files):
+            label = st.name if len(files) == 1 else f"{st.name} (part {k + 1})"
+            stages.append((label, st.kind, traj))
     if not stages:
         return {"ready": False, "reason": "no trajectory yet"}
 

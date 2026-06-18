@@ -253,6 +253,34 @@ def production_rmsf(
             "mean_rmsf": float(r.mean())}
 
 
+# Below this many pooled frames the flexibility map is flagged "preliminary"
+# (rel. error ≳ 10%).  RMSF converges slowly, so a short run is untrustworthy.
+RMSF_PRELIM_FRAMES = 50
+
+
+def rmsf_confidence(n_frames: int) -> dict:
+    """Statistical reliability of an RMSF map estimated from ``n_frames`` pooled
+    trajectory frames.
+
+    The relative standard error of an RMS/standard-deviation estimator from N
+    independent samples is ≈ ``1/sqrt(2N)``.  Trajectory frames are
+    autocorrelated, so treating them as independent is OPTIMISTIC — the true
+    error is at least this large; the value is a lower bound that still makes a
+    short run read as untrustworthy.  Below ``RMSF_PRELIM_FRAMES`` the map is
+    flagged ``preliminary`` so the user does not over-interpret it.
+
+    Returns ``{n_frames, rel_error (fraction or None), preliminary (bool)}``.
+    """
+    n = max(0, int(n_frames))
+    if n < 2:
+        return {"n_frames": n, "rel_error": None, "preliminary": True}
+    return {
+        "n_frames": n,
+        "rel_error": 1.0 / math.sqrt(2.0 * n),
+        "preliminary": n < RMSF_PRELIM_FRAMES,
+    }
+
+
 def composite_trajectory(
     design,
     stages,

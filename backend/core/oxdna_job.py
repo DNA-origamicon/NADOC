@@ -53,6 +53,7 @@ class OxdnaStageStatus:
     steps:  int
     status: str = "pending"   # pending / running / done / failed
     started_at: Optional[float] = None   # wall time the stage began running (for ETA)
+    resumed: bool = False     # this stage was resumed from its own checkpoint (relabel)
 
 
 @dataclass

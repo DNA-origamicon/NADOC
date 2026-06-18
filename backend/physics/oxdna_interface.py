@@ -697,7 +697,13 @@ def read_trajectory_frames_full(
             parts = data[i].split()
             if len(parts) < 9:
                 continue
-            vals = [float(x) for x in parts[:9]]
+            try:
+                vals = [float(x) for x in parts[:9]]
+            except ValueError:
+                # A frame still being written by a live oxDNA run can leave a
+                # half-flushed numeric token on the final line — skip it rather
+                # than crash the mid-run flexibility-map / trajectory read.
+                continue
             a1 = np.array(vals[3:6]); a3 = np.array(vals[6:9])
             m[key[:3]] = {
                 "backbone_position": np.array(vals[0:3]) * OXDNA_LENGTH_UNIT,

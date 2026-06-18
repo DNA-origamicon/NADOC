@@ -895,9 +895,10 @@ def test_oxdna_rmsd_not_ready_without_production(monkeypatch, tmp_path):
     assert "production" in body["reason"].lower()
 
 
-def test_oxdna_rmsf_waiting_for_production(monkeypatch, tmp_path):
-    """The flexibility-map (RMSF) endpoint is not ready until a production stage
-    has FINISHED — gating the panel's toggle with 'waiting for production'."""
+def test_oxdna_rmsf_gating_before_frames(monkeypatch, tmp_path):
+    """The flexibility-map (RMSF) endpoint reports why it isn't ready yet:
+    no production stage at all → 'no production run yet'; a started production
+    stage that hasn't written any frames → 'production starting — no frames yet'."""
     from fastapi.testclient import TestClient
     from backend.api.main import app
     from backend.core.oxdna_protocol import build_production_stage
@@ -909,14 +910,67 @@ def test_oxdna_rmsf_waiting_for_production(monkeypatch, tmp_path):
     job = new_oxdna_job("d", [s.to_status() for s in specs])
     job.save(tmp_path)
     r = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/rmsf").json()
-    assert r["ready"] is False and "production" in r["reason"].lower()
+    assert r["ready"] is False and r["reason"] == "no production run yet"
 
-    # Production stage present but still running → "waiting for production".
+    # Production stage present + running but no trajectory.dat written yet.
     job.stages.append(build_production_stage(steps=1000).to_status())
     job.stages[-1].status = "running"
     job.save(tmp_path)
     r2 = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/rmsf").json()
-    assert r2["ready"] is False and r2["reason"] == "waiting for production"
+    assert r2["ready"] is False and r2["reason"] == "production starting — no frames yet"
+
+
+def test_oxdna_rmsf_available_mid_run_with_confidence(monkeypatch, tmp_path, design, geometry):
+    """As soon as a STILL-RUNNING production stage has written frames, the map is
+    available (not blocked) and carries a confidence block flagging it preliminary."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    from backend.physics.oxdna_interface import write_configuration
+    from backend.core.oxdna_protocol import build_production_stage
+    import backend.api.routes_oxdna as routes_oxdna
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    specs = build_relaxation_stages()
+    prod = build_production_stage(steps=1000)
+    job = new_oxdna_job("d", [s.to_status() for s in specs] + [prod.to_status()])
+    # Production is RUNNING (killed/in-progress), not done.
+    job.stages[-1].status = "running"
+    job.save(tmp_path)
+
+    jd = job.job_dir(tmp_path)
+    jd.mkdir(parents=True, exist_ok=True)
+    (jd / "design.json").write_text(design.model_dump_json())
+    write_configuration(design, geometry, jd / "conf.dat", box_nm=80.0)
+    sdir = job.stage_dir(tmp_path, prod.name)
+    sdir.mkdir(parents=True, exist_ok=True)
+    _write_traj(design, geometry, sdir / "trajectory.dat", 3)
+    # An archived partial run from a prior resume must ALSO be pooled (no frames
+    # lost to the resume) — 2 archived + 3 current = 5 frames.
+    _write_traj(design, geometry, sdir / "trajectory.r1.dat", 2)
+
+    r = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/rmsf").json()
+    assert r["ready"] is True
+    assert r["n_frames"] == 5                        # 2 archived + 3 current pooled
+    assert r["production_running"] is True
+    assert r["confidence"]["n_frames"] == 5
+    assert r["confidence"]["preliminary"] is True   # 5 frames ≪ RMSF_PRELIM_FRAMES
+    assert r["confidence"]["rel_error"] > 0
+
+
+def test_rmsf_confidence_metric():
+    """Statistical confidence: rel-error shrinks with frames; preliminary flips off
+    once enough frames are pooled."""
+    from backend.core.oxdna_health import rmsf_confidence, RMSF_PRELIM_FRAMES
+
+    assert rmsf_confidence(0)["preliminary"] is True
+    assert rmsf_confidence(0)["rel_error"] is None
+    assert rmsf_confidence(1)["rel_error"] is None
+    few = rmsf_confidence(8)
+    many = rmsf_confidence(2000)
+    assert few["preliminary"] is True
+    assert many["preliminary"] is False
+    assert many["rel_error"] < few["rel_error"]            # more frames → tighter
+    assert rmsf_confidence(RMSF_PRELIM_FRAMES)["preliminary"] is False
 
 
 @pytest.mark.skipif(
@@ -1142,6 +1196,67 @@ def test_reconcile_keeps_running_when_process_still_alive(monkeypatch, tmp_path)
     out = runner.reconcile_oxdna_status(OxdnaJob.load(job.job_id, tmp_path), tmp_path)
     assert out.status == OxdnaStatus.running          # left running, not stopped
     assert OxdnaJob.load(job.job_id, tmp_path).status == OxdnaStatus.running
+
+
+def test_starting_conf_resumes_from_own_checkpoint(tmp_path):
+    """Resume continues from the killed stage's OWN checkpoint last_conf.dat
+    (keeps simulated progress), not the previous stage / design conf."""
+    from backend.core import oxdna_runner
+    specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100)
+    job = new_oxdna_job("d", [s.to_status() for s in specs])
+    job.save(tmp_path)
+
+    s0 = job.stage_dir(tmp_path, specs[0].name); s0.mkdir(parents=True, exist_ok=True)
+    (s0 / "last_conf.dat").write_text("prev\n")
+    s1 = job.stage_dir(tmp_path, specs[1].name); s1.mkdir(parents=True, exist_ok=True)
+    (s1 / "last_conf.dat").write_text("t 0\nb 1 1 1\nE 0 0 0\n")   # partial checkpoint
+
+    # Resuming AT the interrupted stage → its own checkpoint (progress kept).
+    assert oxdna_runner._starting_conf(job, tmp_path, specs, 1, 1) == (s1 / "last_conf.dat").resolve()
+    # A downstream stage (not the resume point) chains from the previous stage.
+    assert oxdna_runner._starting_conf(job, tmp_path, specs, 2, 1) == (s1 / "last_conf.dat").resolve()
+    # An EMPTY checkpoint is ignored → restart from the previous stage's last_conf.
+    (s1 / "last_conf.dat").write_text("")
+    assert oxdna_runner._starting_conf(job, tmp_path, specs, 1, 1) == (s0 / "last_conf.dat").resolve()
+    # Stage 0 with no checkpoint → the design conf.
+    (s0 / "last_conf.dat").unlink()
+    assert oxdna_runner._starting_conf(job, tmp_path, specs, 0, 0) == (job.job_dir(tmp_path) / "conf.dat").resolve()
+
+
+def test_archive_partial_outputs_preserves_frames(tmp_path):
+    """Resuming a stage archives its partial trajectory/energy (so the sampled
+    frames survive oxDNA's truncate-on-open) — last_conf is left as the checkpoint."""
+    from backend.core.oxdna_runner import _archive_partial_outputs
+    sdir = tmp_path / "5_production"; sdir.mkdir()
+    (sdir / "trajectory.dat").write_text("frames-A\n")
+    (sdir / "energy.dat").write_text("0 -1.5 0.5 -1.0\n")
+    (sdir / "last_conf.dat").write_text("checkpoint\n")
+
+    archived = _archive_partial_outputs(sdir)
+    assert set(archived) == {"trajectory.r1.dat", "energy.r1.dat"}
+    assert not (sdir / "trajectory.dat").exists()           # moved aside
+    assert (sdir / "trajectory.r1.dat").read_text() == "frames-A\n"
+    assert (sdir / "last_conf.dat").read_text() == "checkpoint\n"   # checkpoint untouched
+
+    # A second resume bumps the index; an empty file is skipped.
+    (sdir / "trajectory.dat").write_text("frames-B\n")
+    (sdir / "energy.dat").write_text("")                    # empty → not archived
+    archived2 = _archive_partial_outputs(sdir)
+    assert archived2 == ["trajectory.r2.dat"]
+    assert (sdir / "trajectory.r2.dat").read_text() == "frames-B\n"
+
+
+def test_stage_trajectories_chronological_order(tmp_path):
+    """_stage_trajectories returns archived resume parts (oldest→newest) then the
+    current trajectory.dat, skipping empties — so playback scrubs in time order."""
+    from backend.api.routes_oxdna import _stage_trajectories
+    sdir = tmp_path / "5_production"; sdir.mkdir()
+    (sdir / "trajectory.r1.dat").write_text("a\n")
+    (sdir / "trajectory.r2.dat").write_text("b\n")
+    (sdir / "trajectory.dat").write_text("c\n")
+    (sdir / "trajectory.r3.dat").write_text("")             # empty → skipped
+    names = [p.name for p in _stage_trajectories(sdir)]
+    assert names == ["trajectory.r1.dat", "trajectory.r2.dat", "trajectory.dat"]
 
 
 def test_reconcile_noop_for_terminal_job(tmp_path):

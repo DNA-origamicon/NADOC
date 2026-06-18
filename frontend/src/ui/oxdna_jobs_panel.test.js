@@ -19,7 +19,8 @@ import {
   formatProgress, latestHealth, detailStatusText, stageChips, jobDisplayName,
   productionState, jobListStatus, formatEta, seedReady, initOxdnaJobsPanel,
   jobIsActive, isRelaxRunning, isProductionRunning, makeSpinner,
-  productionRunCount, hasTrajectory,
+  productionRunCount, hasTrajectory, isResumable, startButtonLabel, flexConfidenceText,
+  resumeNote,
 } from './oxdna_jobs_panel.js'
 
 describe('formatEta', () => {
@@ -34,6 +35,43 @@ describe('formatEta', () => {
     expect(formatEta(null)).toBe('')
     expect(formatEta(-5)).toBe('')
     expect(formatEta(Infinity)).toBe('')
+  })
+})
+
+describe('resume button label (incomplete-job detection)', () => {
+  it('queued job reads Start; stopped/failed read Resume', () => {
+    expect(isResumable({ status: 'queued' })).toBe(false)
+    expect(isResumable({ status: 'stopped' })).toBe(true)
+    expect(isResumable({ status: 'failed' })).toBe(true)
+    expect(startButtonLabel({ status: 'queued' })).toContain('Start')
+    expect(startButtonLabel({ status: 'stopped' })).toContain('Resume')
+    expect(startButtonLabel({ status: 'failed' })).toContain('Resume')
+  })
+
+  it('resumeNote flags a running stage resumed from its checkpoint', () => {
+    const resumed = { status: 'running', current_stage_idx: 1, stages: [{ resumed: false }, { resumed: true }] }
+    const fresh = { status: 'running', current_stage_idx: 1, stages: [{ resumed: false }, { resumed: false }] }
+    expect(resumeNote(resumed).toLowerCase()).toContain('resuming from checkpoint')
+    expect(resumeNote(fresh)).toBe('')
+    expect(resumeNote({ status: 'completed', current_stage_idx: 1, stages: [{ resumed: true }] })).toBe('')
+  })
+})
+
+describe('flexConfidenceText', () => {
+  it('shows frames pooled + statistical error and flags preliminary', () => {
+    const trusted = flexConfidenceText({ confidence: { n_frames: 200, rel_error: 0.05, preliminary: false } })
+    expect(trusted.text).toContain('200 frames pooled')
+    expect(trusted.text).toContain('±5%')
+    expect(trusted.preliminary).toBe(false)
+
+    const short = flexConfidenceText({ confidence: { n_frames: 6, rel_error: 0.29, preliminary: true }, running: false })
+    expect(short.preliminary).toBe(true)
+    expect(short.text.toLowerCase()).toContain('preliminary')
+    expect(short.text.toLowerCase()).toContain('short run')
+  })
+  it('mid-run preliminary mentions production still running', () => {
+    const r = flexConfidenceText({ confidence: { n_frames: 8, rel_error: 0.25, preliminary: true }, running: true })
+    expect(r.text.toLowerCase()).toContain('still running')
   })
 })
 
@@ -307,7 +345,11 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     let mode = null
     return {
       displayJob: vi.fn(async () => { mode = 'relaxed'; return { ok: true, n: 5, stage: 's' } }),
-      displayRmsf: vi.fn(async () => { mode = 'rmsf'; return { ok: true, n: 5, min: 0.1, max: 1.4, mean: 0.7 } }),
+      displayRmsf: vi.fn(async () => {
+        mode = 'rmsf'
+        return { ok: true, n: 5, min: 0.1, max: 1.4, mean: 0.7, nFrames: 120,
+                 confidence: { n_frames: 120, rel_error: 0.064, preliminary: false }, running: false }
+      }),
       loadTrajectory: vi.fn(async () => {
         mode = 'trajectory'
         return { ok: true, n_frames: 6, markers: [{ frame: 3, kind: 'production' }],
@@ -452,11 +494,57 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect(disp.displayRmsf).toHaveBeenCalledWith('j3')
     expect($('oxdna-jobs-flex-bar').innerHTML.toLowerCase()).toContain('ready')   // ✓ check
     expect($('oxdna-jobs-flex-legend').innerHTML.toLowerCase()).toContain('flexible')
-    expect($('oxdna-jobs-flex-status').textContent.toLowerCase()).toContain('rmsf')
+    const status = $('oxdna-jobs-flex-status').textContent.toLowerCase()
+    expect(status).toContain('120 frames pooled')   // confidence readout
+    expect(status).not.toContain('preliminary')      // 120 frames → trustworthy
     // The workspace scale appears, seeded with the data min→max from displayRmsf.
     expect($('flex-scale').style.display).not.toBe('none')
     expect($('flex-scale-min').value).toBe('0.10')
     expect($('flex-scale-max').value).toBe('1.40')
+  })
+
+  it('a stopped (killed) job → Start button reads "Resume"', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jKilled', design_source_path: 'A.nadoc', status: 'stopped',
+      created_at: 1, current_stage_idx: 1, stages: relaxStages({ kind: 'production', status: 'running', steps: 5000 }) }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await selectFirstJob(panel)
+    const start = $('oxdna-jobs-start-btn')
+    expect(start.style.display).not.toBe('none')
+    expect(start.textContent).toContain('Resume')
+  })
+
+  it('flexibility map unlocks mid-run + flags the map preliminary while production runs', async () => {
+    const disp = fakeDisplay()
+    disp.displayRmsf = vi.fn(async () => ({
+      ok: true, n: 5, min: 0.2, max: 0.9, mean: 0.5, nFrames: 7,
+      confidence: { n_frames: 7, rel_error: 0.27, preliminary: true }, running: true,
+    }))
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jMid', design_source_path: 'A.nadoc', status: 'running',
+      created_at: 1, current_stage_idx: 3, stages: relaxStages({ kind: 'production', status: 'running', steps: 5000 }) }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    await selectFirstJob(panel)
+
+    const flex = $('oxdna-jobs-flex-toggle')
+    expect(flex.disabled).toBe(false)                 // unlocked while production runs
+    flex.checked = true
+    flex.dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+    expect(disp.displayRmsf).toHaveBeenCalledWith('jMid')
+    const status = $('oxdna-jobs-flex-status').textContent.toLowerCase()
+    expect(status).toContain('7 frames pooled')
+    expect(status).toContain('preliminary')
+    expect(status).toContain('still running')
+  })
+
+  it('a resumed running production labels the progress "Resuming from checkpoint"', async () => {
+    api.getOxdnaProgress.mockResolvedValue({ overall: 0.02, stage_fraction: 0.02 })
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jResumed', design_source_path: 'A.nadoc', status: 'running',
+      created_at: 1, current_stage_idx: 3,
+      stages: relaxStages({ kind: 'production', status: 'running', steps: 5000, resumed: true }) }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await selectFirstJob(panel)
+    expect($('oxdna-jobs-progress').textContent.toLowerCase()).toContain('resuming from checkpoint')
   })
 
   it('editing the workspace scale bounds recolours via oxdnaDisplay.recolorRmsf', async () => {
