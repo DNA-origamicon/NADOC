@@ -21,6 +21,7 @@ from backend.core.models import Direction, LatticeType
 from backend.core.validator import validate_design
 from tests.automation_harness import (
     assert_circular_disc,
+    assert_cluster_translated,
     assert_deformation_angle,
     assert_geometric_length_delta,
     assert_inverse_pair,
@@ -677,3 +678,80 @@ def test_deformation_flips_route_to_covered():
     rep = headless_coverage_report()
     covered = {r["endpoint"] for r in rep["covered_routes"]}
     assert "add_deformation" in covered
+
+
+# ── clusters (AF-15 Phase 1 — rigid-body grouping + DISPLAY-layer pose) ─────────
+# A cluster pose is a DISPLAY-layer rigid displacement applied by the geometry kernel,
+# never a topology edit (the three-layer law). canonical_topology is BLIND to it (like
+# loop/skip marks + bend/twist overlays), so assert_roundtrip_stable is necessary but
+# NOT load-bearing for the pose — the geometric assert_cluster_translated is, measuring
+# that the cluster's helix axes actually shift by the requested translation.
+
+def _bundle_two_helix_cluster():
+    """Active scratch: a 6hb bundle with a named cluster over its first 2 helices.
+    Returns (snapshot_before_pose, cluster_id)."""
+    hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+    design = design_state.get_or_404()
+    cluster_helix_ids = [design.helices[0].id, design.helices[1].id]
+    hb.add_cluster("armA", cluster_helix_ids)
+    cid = design_state.get_or_404().cluster_transforms[-1].id
+    return design_state.get_or_404().model_copy(deep=True), cid
+
+
+def test_add_cluster_creates_named_cluster():
+    """add_cluster creates a non-default cluster holding the requested helices."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        before, cid = _bundle_two_helix_cluster()
+        cluster = next(c for c in before.cluster_transforms if c.id == cid)
+        assert cluster.name == "armA" and not cluster.is_default
+        assert len(cluster.helix_ids) == 2
+        # identity pose at birth
+        assert cluster.translation == [0.0, 0.0, 0.0]
+        assert cluster.rotation == [0.0, 0.0, 0.0, 1.0]
+
+
+@pytest.mark.parametrize("translation", [[10.0, 0.0, 0.0], [0.0, -7.5, 3.0]])
+def test_transform_cluster_translates_only_cluster_geometry(translation):
+    """A pure-translation pose shifts the cluster's helix axes by exactly the vector,
+    and leaves every non-cluster helix put — proves the pose flows through the geometry
+    kernel (which canonical_topology can't show)."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        before, cid = _bundle_two_helix_cluster()
+        hb.transform_cluster(cid, translation=translation)
+        after = design_state.get_or_404()
+        moved = assert_cluster_translated(before, after, cid, translation=translation)
+        assert moved == 2  # only the two clustered helices
+
+
+def test_clustered_pose_survives_roundtrip():
+    """A built + clustered + posed design validates and survives a .nadoc round-trip
+    with the pose intact — re-running the geometric oracle on the reloaded design proves
+    persistence (canonical_topology is blind to the pose, so it can't)."""
+    def _build():
+        _before, cid = _bundle_two_helix_cluster()
+        hb.transform_cluster(cid, translation=[10.0, 0.0, 0.0])
+        return design_state.get_or_404().model_copy(deep=True)
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        posed = _build()
+        cid = posed.cluster_transforms[-1].id
+        reloaded = assert_roundtrip_stable(lambda: posed)
+        # the pose persisted as a field …
+        rc = next(c for c in reloaded.cluster_transforms if c.id == cid)
+        assert rc.translation == [10.0, 0.0, 0.0]
+        # … and still drives the geometry after the round-trip (vs an identity-pose base)
+        identity_base = reloaded.model_copy(update={
+            "cluster_transforms": [
+                c.model_copy(update={"translation": [0.0, 0.0, 0.0]}) if c.id == cid else c
+                for c in reloaded.cluster_transforms
+            ]
+        })
+        assert_cluster_translated(identity_base, reloaded, cid, translation=[10.0, 0.0, 0.0])
+
+
+def test_cluster_routes_flip_to_covered():
+    """The wrappers register POST /design/cluster + PATCH /design/cluster/{id} as
+    covered (function-identity), coverage 32 → 34."""
+    rep = headless_coverage_report()
+    covered = {r["endpoint"] for r in rep["covered_routes"]}
+    assert {"add_cluster", "update_cluster"} <= covered

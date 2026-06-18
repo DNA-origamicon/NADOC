@@ -18,11 +18,13 @@ a JSON spec, which this interpreter turns into a validated, replayable build.
 Helices are referenced in nick/ligate/loop_skip ops by lattice ``grid_pos``
 ``[row, col]`` (resolved to the runtime helix id here); assembly instances are
 referenced in ``mate`` ops by the spec's ``ref`` key, and the joints a ``mate``
-creates are referenced in ``gear``/``belt`` ops by the mate's optional ``ref`` key
-(both resolved to runtime ids here — a ``gear`` op drives ``hab.define_gear`` and a
-``belt`` op drives ``hab.define_belt``, the AF-9 wrappers, each coupling two revolute
-mate-joints — the gear at a constant ratio, the belt at the rim-radius ratio
-``radius_a / radius_b``).
+creates are referenced in ``gear``/``belt``/``polymerize`` ops by the mate's optional
+``ref`` key (all resolved to runtime ids here — a ``gear`` op drives
+``hab.define_gear`` and a ``belt`` op drives ``hab.define_belt``, the AF-9 wrappers,
+each coupling two revolute mate-joints — the gear at a constant ratio, the belt at the
+rim-radius ratio ``radius_a / radius_b``; a ``polymerize`` op drives ``hab.polymerize``,
+replicating a SINGLE seed mate into a chain of ``count`` identical parts marching along
+the seed's part-to-part offset).
 ``loop_skip`` ops drive ``hb.loop_skip`` (the AF-3 wrapper);
 ``bend``/``twist`` ops are *unscoped* geometric deformations driven through
 ``hb.add_bend`` / ``hb.add_twist`` (the AF-6 wrappers); ``circle_segment`` drives
@@ -193,6 +195,8 @@ def _run_assembly_op(
             joint_refs[p["joint_a"]], joint_refs[p["joint_b"]],
             radius_a=p["radius_a"], radius_b=p["radius_b"], name=p.get("name", "Belt"),
         )
+    elif op.op == "polymerize":
+        hab.polymerize(joint_refs[p["joint"]], p["count"], direction=p["direction"])
     else:  # unreachable — parse_assembly_spec rejects unknown ops
         raise BuildSpecError(f"unsupported assembly op {op.op!r}")
 

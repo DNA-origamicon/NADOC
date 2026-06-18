@@ -139,51 +139,79 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 8). AF-11 Phase 2 grammar growth (belt) shipped 2026-06-17._
+_Living pointer — each session overwrites this (step 8). AF-15 Phase 2 (cluster OBB enumerator + edge-alignment solver + collinearity oracle) shipped 2026-06-17._
 
-**▶ NEW BACKLOG ITEMS (2026-06-17, not yet started) — the kinematic-mechanism cluster (Tier 2), all sharing
-`backend/core/cluster_obb.py` (the Python OBB corner/edge enumerator — built JS-only today; whichever item
-lands first builds it). Dependency order: AF-15 → AF-14, capstone = the 4-bar parallelogram.**
-- **AF-15 — cluster rigid-transform wrapper + OBB-edge-alignment solver** (`add_cluster` / `update_cluster`
-  routes). *Sequences FIRST.* `hb.add_cluster` + `hb.transform_cluster` + a pure `align_edge_transform`
-  solver that poses a rigid bar so its chosen OBB edge lands on a target edge (design-layer analog of the
-  AF-8 connector-mate). Cluster transform = **DISPLAY-layer pose, never topology** (clean three-layer).
-  Oracle `assert_edges_collinear` (direction-AGNOSTIC); the antiparallel flip + endpoint-snap are ASK-FIRST.
-- **AF-14 — geometry-aware revolute-joint placement on hull-prism corners/edges** (`add_joint` route).
-  Headless `place_cluster_joint` + the kinematic selector: rank a cluster's OBB edges/corners by collision-free
-  **range of motion** vs. the other clusters (swept OBB–OBB SAT bisection). Principle = hinge-on-the-contact-edge
-  (door-jamb) maximises ROM. ROM oracle direction-AGNOSTIC (magnitude); which-body-moves + swing-sense ASK-FIRST.
-- **Capstone (after both)** — build the **4-bar parallelogram** headlessly: extrude 4 bars → cluster +
-  edge-align into a parallelogram → 4 revolute joints at the corners → assert 1-DOF ROM. First headless
-  kinematic mechanism; the concrete payload behind the AF-12 linkage discussion.
+**▶ NEXT — AF-14 Phase 1: `hb.place_cluster_joint` + corner/edge resolver + on-corner oracle.** AF-15 Phase 2
+SHIPPED the foundation everything else leans on: **`backend/core/cluster_obb.py`** now exists with the
+**equivariant OBB enumerator** (`cluster_obb(design, cluster_id) → OBB`; `OBB.edge_endpoints((axis,s1,s2))` /
+`OBB.corner(su,sv,sw)` / `OBB.edges()`) + the `align_edge_transform` solver, all parity-PROVEN by the
+equivariance test (`OBB(g·design)=g·OBB(design)`). **REUSE the OBB enumerator — do NOT rebuild it.** AF-14 Phase 1
+adds `hb.place_cluster_joint` (import the `add_joint` route handler from `routes_cluster_joints.py` + `AddJointBody`
+→ covered-by-identity, a REAL coverage flip 34→35, the first since AF-15 P1) + a pure helper
+`hull_prism_axis(design, cluster_id, *, face, corner|edge) → (axis_origin, axis_direction)` in `cluster_obb.py`
+that turns a named OBB corner/edge into the world axis the route expects. **Oracle:**
+`assert_joint_on_hull_corner(design, joint_id, *, face, corner|edge, tol_nm)` — the placed joint's world axis
+(re-derive via `_local_to_world_joint`) passes through the named corner / lies along the named edge of the
+**independently recomputed** OBB, with a can-go-red guard (a joint at a different corner fails). **Directionality:**
+placing a joint at a named edge/corner is direction-AGNOSTIC (the OBB edge is a line); only the *swing sense* is
+ASK-FIRST, and that's Phase 2's ROM, not Phase 1. Phase 1 needs no new geometric reasoning.
 
-**▶ NEXT — AF-11 Phase 2 (continue): finish the assembly relations cluster — `polymerize` is the next sub-op.**
-The relations cluster (`gear`/`belt`/`polymerize`/`bind_overhangs`) is now HALF done: **`gear` + `belt` SHIPPED.**
-The joint-`ref` namespace is fully laid down (the mate op carries an optional `ref`; the parser tracks
-`defined_joints: dict[ref→joint_type]` + rejects gear/belt-over-rigid; the driver tracks
-`joint_refs: dict[ref→runtime joint id]`, captured as `assembly_state.get_or_404().joints[-1].id` right after each
-`define_mate`). **`polymerize` reuses the joint-`ref` namespace** — it seeds off a SINGLE mate `ref` + a count:
-`{"op":"polymerize","joint":"<ref>","count":int,"direction":"forward"|"backward"}` driving `hab.polymerize(joint_id,
-count, direction=…)`. **The fixture gotcha:** the seed mate must be between source-IDENTICAL parts (the route 422s on
-`_sources_match` mismatch) → both `add_part` ops must reference the SAME `part` key, which the driver already reuses
-as ONE `Design` object — so a two-`add_part`-of-the-same-key + one revolute `mate` + `polymerize` spec works.
-**Oracle:** `assert_polymer_chain(before, after, seed_joint_id, *, count, direction)` (re-derives the seed mate's
-repeat `delta` from the seed pair ALONE, asserts the `count−2` new copies form the `delta`-power multiset, can-go-red
-guard on `‖delta‖`). `canonical_assembly` already fingerprints instances+joints and polymerize adds NO new top-level
-relation list, so `assert_spec_matches_calls` IS load-bearing here too (a dropped copy/joint fails the fingerprint) —
-pair it with `assert_polymer_chain` for the geometric progression. Then `bind_overhangs` remains (the heaviest —
-needs an OverhangSpec on the part design + `grid_pos` set; oracle `assert_binding_resolves`; canonical is BLIND to a
-broken ref so the resolve oracle is the load-bearing one).
+**▶ THEN — AF-14 Phase 2: `cluster_range_of_motion` + `rank_joint_candidates`** (swept OBB–OBB SAT bisection in
+`cluster_obb.py`; the swept-OBB intersection is the one genuinely new geometry to build). **ASK-FIRST** before
+building: which cluster is the moving body vs. the static frame, and the swing sense (+/− limit) — a directionality
+decision. The ROM magnitude oracle is direction-agnostic; the body/sense choice is not. **THEN the capstone** (own
+session): build the **4-bar parallelogram** headlessly — extrude 4 bars → `hb.add_cluster` each → `hb.align_cluster_edge`
+into a parallelogram (already works) → 4 revolute joints via `hb.place_cluster_joint` → assert 1-DOF ROM. First
+headless kinematic mechanism.
+
+**▶ GOTCHAS BANKED from AF-15 Phase 2 (read before AF-14):**
+- The OBB cross-section frame uses **PCA**, NOT `deformation._initial_cross_section_frame` (that one snaps u/v to
+  WORLD axes by the dominant tangent → not equivariant → edge keys jump after a pose). The PCA frame is
+  equivariant; its sign anchor is **positional** (first sorted-id helix with a clear u-projection), NOT an
+  argmax over offsets — a value-argmax ties on the 4 symmetric corners and float-rounding flips the frame after a
+  rotation (this bit once; the equivariance test catches it). **`cluster_obb` RAISES on a square footprint**
+  (ambiguous u/v, in-plane eigenvalue ratio < 1.10) and on < 2 helices — AF-14 fixtures must be **rectangular**
+  (the tests use a 2×3 / 2×6 SQUARE grid).
+- `OBB.half`/`axes`/`center` bound the helix **axis endpoints** (not the DNA surface) — fine for edge alignment
+  and joint placement; AF-14's ROM may want a surface pad (helix radius) for true clearance — decide then.
+
+**▶ DEFERRED — `bind_overhangs` (AF-11 Phase 2 last sub-op): PENDING FURTHER DEVELOPMENT.**
+Per user (2026-06-17): **overhang binding still needs work in general** before it's ready to expose to users
+through the build-spec grammar — do NOT add the `bind_overhangs` spec op until the underlying overhang-binding
+system is firmed up. The relations cluster (`gear`/`belt`/`polymerize`/`bind_overhangs`) is otherwise COMPLETE:
+**`gear` + `belt` + `polymerize` SHIPPED**; `bind_overhangs` parked here. When it's revived, the plan below holds.
+Drive `hab.bind_overhangs(inst_a, inst_b, *, overhang_a_id, sub_domain_a_id, overhang_b_id, sub_domain_b_id,
+binding_mode=…)` (AF-9 overhang-binding wrapper). **Spec shape (proposed):**
+`{"op":"bind_overhangs","instance_a":"<ref>","instance_b":"<ref>","overhang_a":…,"sub_domain_a":…,
+"overhang_b":…,"sub_domain_b":…,"binding_mode":…}` — it references two prior `add_part` instance `ref`s (the
+*instance* namespace `defined`, NOT the joint `ref` namespace gear/belt/polymerize use — bind couples
+overhangs, not joints). **The fixture gotcha (TWO traps):** (1) each part design needs `grid_pos` SET on its
+helices (the AF-5 `grid_pos=None` TypeError trap) AND an `OverhangSpec` (which auto-populates one sub-domain) —
+the inline `_BEAM_SPEC`/`make_6hb_design()` fixtures have NEITHER, so this sub-op needs a NEW part-spec fixture
+carrying overhangs (or a `bundle` + an overhang-extrude design op the grammar does NOT have yet — likely a NEW
+part-builder fixture in the test, not a new grammar op). (2) the spec must surface the runtime
+`(overhang_id, sub_domain_id)` of each part — these are generated at build time, so the driver must look them up
+on the built part design, not hard-code them; decide whether the spec names sub-domains by index/label or the
+driver resolves "the part's sole overhang". **Oracle:** `assert_binding_resolves(assembly, binding_id, *,
+require_cross_part=True)` is the LOAD-BEARING one — `canonical_assembly` (5-tuple, fingerprints `overhang_bindings`)
+catches a dropped/rewired binding, but `canonical_topology` is BLIND to a design's overhangs/sub-domains, so a
+round-trip that regenerated a sub-domain id while the binding kept its stale ref slips past the fingerprint —
+only `assert_binding_resolves` catches that. So pair `assert_spec_matches_calls` (structural) with
+`assert_binding_resolves` (referential integrity, the real proof).
 **Discipline:** the driver DRIVES the real `hab.*` wrappers — never re-implement — so coverage stays flat
 (composition sugar, 32; `test_spec_build_adds_no_coverage` guards it). **PICK THE ORACLE BY WHAT THE OP CHANGES (the
-load-bearing AF-11-P2 lesson, confirmed five times):** `assert_spec_matches_calls` is the golden pin ONLY when
+load-bearing AF-11-P2 lesson, confirmed seven times now):** `assert_spec_matches_calls` is the golden pin ONLY when
 `canonical_topology`/`canonical_assembly` can see the op's effect — load-bearing for strand-graph ops AND for
-fingerprinted top-level assembly relations (gears/belts/joints/instances, since AF-9), VACUOUS for overlays outside it
-(`loop_skip`→`geometric_nucleotide_count`, `bend`/`twist`→`assert_deformation_angle`). For relations ALSO pair it
-with the kinematic/semantic oracle (`assert_gear_ratio` / `assert_polymer_chain` / `assert_binding_resolves`) — the
-fingerprint catches a dropped/rewired relation, the semantic oracle catches one that's present-but-doesn't-work.
-**HOW:** mirror this session — `_ASSEMBLY_OP_KEYS` entry + parse branch + referential-integrity (resolve joint ref(s)
-to prior revolute mate(s)) + dispatch branch + grammar-rejection tests + a driver test using the op's own oracle.
+fingerprinted top-level assembly relations (gears/belts/joints/instances/polymer-chains/bindings, since AF-9),
+VACUOUS for overlays outside it (`loop_skip`→`geometric_nucleotide_count`, `bend`/`twist`→`assert_deformation_angle`).
+For relations ALSO pair it with the kinematic/semantic oracle (`assert_gear_ratio` / `assert_polymer_chain` /
+`assert_binding_resolves`) — the fingerprint catches a dropped/rewired relation, the semantic oracle catches one
+that's present-but-doesn't-work. **NEW lesson from polymerize:** NOT every relations sub-op needs the revolute gate —
+polymerize takes a SINGLE seed mate of ANY joint_type, so its referential-integrity branch omits the gate gear/belt
+enforce (`test_assembly_spec_polymerize_allows_rigid_seed` pins that). `bind_overhangs` references the *instance*
+namespace, not the joint one — a third referential-integrity shape.
+**HOW:** mirror this session — `_ASSEMBLY_OP_KEYS` entry + parse branch + referential-integrity (resolve the right
+ref namespace) + dispatch branch + grammar-rejection tests + a driver test using the op's own oracle.
 
 **▶ DEFERRED THIS SESSION — `apply_loop_skips` (design op).** Its route
 (`apply_loop_skips_from_deformations`) raises 400 unless the design has crossovers placed (cross-helix domain
@@ -506,19 +534,35 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
     the parallelogram arrangement.
 
   **Augment (Phase split — one per session):**
-  - [ ] **Phase 1 — cluster create/transform wrappers + round-trip pin.** `assert_roundtrip_stable` reuse:
-    a built+clustered+posed design validates and survives `.nadoc` save/load with an unchanged fingerprint.
-    NB `canonical_topology` *may be blind to the cluster pose* (a geometric overlay, like the AF-3 loop/skip
-    and AF-6 deformation lessons) — **verify which** before relying on it; if blind, pin the pose with a
-    geometric read of the transformed cluster centroid/extent instead (mirror `assert_on_deformed_frame`'s
-    "measure the placed geometry" approach). Coverage +2 (`add_cluster` + `update_cluster`).
-  - [ ] **Phase 2 — `align_edge_transform` solver + alignment oracle.**
+  - [x] **Phase 1 — cluster create/transform wrappers + round-trip pin. SHIPPED 2026-06-17.**
+    `hb.add_cluster(name, helix_ids, *, domain_ids=())` + `hb.transform_cluster(cluster_id, *, translation,
+    rotation, pivot, commit=True, log=False)` (import `add_cluster`/`update_cluster` → covered by identity).
+    **VERIFIED `canonical_topology` IS blind to the cluster pose** (it fingerprints helices by `axis_start` +
+    strands; cluster_transforms aren't in it — the AF-3 loop/skip / AF-6 deformation blind-spot confirmed for a
+    third overlay), so `assert_roundtrip_stable` is necessary-but-NOT-load-bearing for the pose. The load-bearing
+    augment is the NEW geometric oracle `assert_cluster_translated(before, after, cluster_id, *, translation)` —
+    it reads the cluster-posed helix axes via `deformed_helix_axes` and asserts (1) every cluster helix's
+    `start`/`end` shifted by exactly the translation, (2) only the cluster moved (non-cluster helices unchanged),
+    (3) `‖T‖ > min` can-go-red guard. **Direction-AGNOSTIC** (a pure world-space translation, no quaternion/pivot
+    convention → ASK-FIRST-safe; **rotation poses deliberately out of scope** — they ARE a directionality question,
+    deferred to Phase 2's edge-alignment flip/snap). Coverage **32 → 34** (`add_cluster` + `update_cluster`).
+    **`cluster_obb.py` was NOT built** — Phase 1 needs no OBB (a translation oracle reads posed axes directly);
+    the OBB enumerator is first needed by Phase 2's `align_edge_transform` + AF-14's ROM.
+  - [x] **Phase 2 — `align_edge_transform` solver + alignment oracle. SHIPPED 2026-06-17.**
+    NEW pure core `backend/core/cluster_obb.py` (the **equivariant OBB enumerator** — corners/edges keyed
+    `(axis, s1, s2)` — built from posed helix axes via a PCA cross-section frame, NOT
+    `_initial_cross_section_frame` which snaps to world axes and would not track a posed cluster; + the pure
+    `align_edge_transform` solver) + the `hb.align_cluster_edge` wrapper driving `transform_cluster` (coverage
+    UNCHANGED 34 — wraps no new route) + the reusable `assert_edges_collinear` oracle. **ASK-FIRST conventions
+    confirmed with the user (2026-06-17): minimal rotation / auto-flip (≤90° onto ±target_dir) / midpoint snap
+    (endpoints coincide) / roll left free.** The load-bearing pin proved equivariance
+    (`OBB(g·design)=g·OBB(design)`) — the property that makes an edge key refer to the same physical edge before
+    and after the solve. Tests: `tests/test_cluster_obb.py` (11) + 4 harness meta-tests. **`cluster_obb.py` is now
+    the shared foundation AF-14 reuses** (the OBB enumerator + a future swept-OBB SAT for ROM).
     `assert_edges_collinear(design, cluster_id, src_edge, target_edge, *, tol_nm, tol_deg)` — after the solved
     transform the two OBB edges are **collinear** (shared line: angle between directions ≈ 0/180° AND
     perpendicular distance < tol), with a can-go-red guard (the pre-align edges are skew/separated, so a no-op
-    solver fails). Collinearity is **direction-AGNOSTIC** (a line, not a ray) → ASK-FIRST-safe. **ASK-FIRST:**
-    the antiparallel **flip** (an edge aligns two ways) and whether endpoints must *coincide* (full snap) vs.
-    merely lie on the shared line — that picks an orientation/handedness, do not guess. The capstone
+    solver fails). Collinearity is **direction-AGNOSTIC** (a line, not a ray). The capstone
     integration test (its own session, after AF-14 Phase 2): build the **4-bar parallelogram headlessly** —
     extrude 4 bars, cluster + edge-align into a parallelogram, place 4 revolute joints at the corners — and
     assert (a) opposite bars' OBB edges are parallel (parallelogram closure) and (b) the assembled mechanism

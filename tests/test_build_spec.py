@@ -359,3 +359,64 @@ def test_assembly_spec_belt_missing_radius_raises():
     spec["ops"][-1] = {"op": "belt", "joint_a": "ja", "joint_b": "jb", "radius_a": 2.0}
     with pytest.raises(BuildSpecError, match="missing required field 'radius_b'"):
         parse_assembly_spec(spec)
+
+
+# ── polymerize op grammar (AF-11 Phase 2 — assembly relations cluster, sub-op 3) ─
+# Polymerize reuses the joint-``ref`` namespace too, but references a SINGLE seed mate
+# (not a pair) and — unlike gear/belt — accepts ANY joint_type (it replicates the seed
+# mate, it does not couple two revolute joints). So there is no revolute gate here.
+
+def _polymerize_ops(*, count=4, direction="forward", joint_type="rigid", extra=None):
+    """Two identical parts mated (ref ``seed``), then polymerized into a chain."""
+    ops = [
+        {"op": "add_part", "part": "beam", "ref": "A",
+         "connectors": [{"label": "t", "position": [5, 0, 0], "normal": [1, 0, 0]}]},
+        {"op": "add_part", "part": "beam", "ref": "B", "transform": [20, 0, 0],
+         "connectors": [{"label": "t", "position": [-5, 0, 0], "normal": [-1, 0, 0]}]},
+        {"op": "mate", "child": "B", "parent": "A", "child_label": "t", "parent_label": "t",
+         "joint_type": joint_type, "ref": "seed"},
+        {"op": "polymerize", "joint": "seed", "count": count, "direction": direction},
+    ]
+    if extra is not None:
+        ops[-1].update(extra)
+    return {"parts": {"beam": _BEAM}, "ops": ops}
+
+
+def test_assembly_spec_normalises_polymerize():
+    parsed = parse_assembly_spec(_polymerize_ops(count=5, direction="both"))
+    assert [o.op for o in parsed.ops] == ["add_part", "add_part", "mate", "polymerize"]
+    pm = parsed.ops[-1].params
+    assert pm["joint"] == "seed" and pm["count"] == 5 and pm["direction"] == "both"
+
+
+def test_assembly_spec_polymerize_defaults_direction():
+    spec = _polymerize_ops()
+    spec["ops"][-1] = {"op": "polymerize", "joint": "seed", "count": 4}
+    parsed = parse_assembly_spec(spec)
+    assert parsed.ops[-1].params["direction"] == "forward"
+
+
+def test_assembly_spec_polymerize_allows_rigid_seed():
+    # polymerize replicates the seed mate, so a RIGID seed is fine (no revolute gate)
+    parsed = parse_assembly_spec(_polymerize_ops(joint_type="rigid"))
+    assert parsed.ops[-1].op == "polymerize"
+
+
+@pytest.mark.parametrize("bad,match", [
+    # polymerize references a joint ref never defined by a mate
+    (_polymerize_ops(extra={"joint": "ghost"}), "was not defined by a prior mate ref"),
+    # count must be ≥ 2 (the seed pair)
+    (_polymerize_ops(count=1), "must be ≥ 2"),
+    # direction must be one of the three
+    (_polymerize_ops(direction="sideways"), "must be 'forward', 'backward', or 'both'"),
+])
+def test_assembly_spec_polymerize_rejects(bad, match):
+    with pytest.raises(BuildSpecError, match=match):
+        parse_assembly_spec(bad)
+
+
+def test_assembly_spec_polymerize_missing_count_raises():
+    spec = _polymerize_ops()
+    spec["ops"][-1] = {"op": "polymerize", "joint": "seed"}
+    with pytest.raises(BuildSpecError, match="missing required field 'count'"):
+        parse_assembly_spec(spec)

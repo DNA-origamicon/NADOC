@@ -27,6 +27,7 @@ from tests.automation_harness import (
     assert_deformation_angle,
     assert_gear_ratio,
     assert_mate_coincident,
+    assert_polymer_chain,
     assert_roundtrip_stable,
     assert_spec_matches_calls,
     canonical_topology,
@@ -512,10 +513,85 @@ def test_belted_spec_roundtrips_stable():
     assert reloaded.belt_paths[0].pulley_a.radius == 2.0
 
 
+# ── polymerize op (AF-11 Phase 2 — assembly relations cluster, sub-op 3) ───────
+# Polymerize replicates a SINGLE seed mate into a chain of identical parts. Like
+# gear/belt (and unlike loop_skip/bend/twist) the new copies + seam joints live in
+# canonical_assembly, so assert_spec_matches_calls is LOAD-BEARING (a dropped copy or
+# chain joint fails it). The geometric progression — that the copies actually march
+# along the seed mate's repeat delta — is the orthogonal pin assert_polymer_chain adds.
+
+def _polymerize_spec(*, count=4, direction="forward"):
+    """A seed pair of identical parts, rigidly mated (B snapped so the seed repeat
+    delta is a +10 nm X translation), then polymerized into a chain of ``count``.
+    Mirrors the AF-9 ``_polymer_seed_assembly`` hand fixture, declaratively."""
+    return {"kind": "assembly", "name": "P", "parts": {"beam": _BEAM_SPEC}, "ops": [
+        {"op": "add_part", "part": "beam", "ref": "A",
+         "connectors": [{"label": "t", "position": [5, 0, 0], "normal": [1, 0, 0]}]},
+        {"op": "add_part", "part": "beam", "ref": "B", "transform": [20, 0, 0],
+         "connectors": [{"label": "t", "position": [-5, 0, 0], "normal": [-1, 0, 0]}]},
+        {"op": "mate", "child": "B", "parent": "A", "child_label": "t",
+         "parent_label": "t", "ref": "seed"},
+        {"op": "polymerize", "joint": "seed", "count": count, "direction": direction},
+    ]}
+
+
+def test_polymerize_spec_matches_hand_calls():
+    """A polymerize spec builds the SAME canonical assembly as the equivalent hand
+    calls. Load-bearing here (like gear/belt, unlike loop_skip/bend/twist) —
+    canonical_assembly fingerprints instances + joints, so a dropped copy or replicated
+    chain joint would fail this."""
+    def hand():
+        with hab.assembly_scratch_session():
+            hab.new_assembly("P")
+            beam = make_6hb_design()
+            hab.add_inline_instance(beam, name="A")
+            hab.add_inline_instance(beam, name="B", transform=hab.translation(20, 0, 0))
+            a = assembly_state.get_or_404()
+            id_a, id_b = a.instances[0].id, a.instances[1].id
+            hab.add_connector(id_a, "t", position=[5, 0, 0], normal=[1, 0, 0])
+            hab.add_connector(id_b, "t", position=[-5, 0, 0], normal=[-1, 0, 0])
+            hab.define_mate(id_b, id_a, child_label="t", parent_label="t")
+            seed = assembly_state.get_or_404().joints[0].id
+            hab.polymerize(seed, count=4, direction="forward")
+            return assembly_state.get_or_404().model_copy(deep=True)
+
+    assert_spec_matches_calls(lambda: hs.build_assembly(_polymerize_spec()), hand, kind="assembly")
+
+
+@pytest.mark.parametrize("count", [4, 6])
+def test_polymerize_spec_lays_chain_on_repeat_lattice(count):
+    """The spec-built chain places count-2 copies on the seed mate's delta lattice —
+    proves count/direction flowed spec → parser → hab.polymerize and that the copies
+    are a geometric progression (which assert_spec_matches_calls, structure-only,
+    can't show: it sees that N instances exist, not that they march along the repeat)."""
+    a = hs.build_assembly(_polymerize_spec(count=count, direction="forward"))
+    assert len(a.instances) == count
+    seed = a.joints[0]  # the seed mate; polymerize appends the chain joints after it
+    seed_pair = {seed.instance_a_id, seed.instance_b_id}
+    before = a.model_copy(update={
+        "instances": [i for i in a.instances if i.id in seed_pair],
+        "joints": [seed],
+    })
+    delta = assert_polymer_chain(before, a, seed.id, count=count)
+    # the repeat is the +10 nm X translation the seed mate's connector snap produced
+    assert abs(float(delta[0, 3]) - 10.0) <= 0.01
+
+
+def test_polymerized_spec_roundtrips_stable():
+    """A spec-built polymer chain survives a .nass round-trip WITH all its copies +
+    replicated seam joints — canonical_assembly fingerprints them, so a dropped copy
+    would fail the round-trip oracle."""
+    with hab.assembly_scratch_session():
+        reloaded = assert_assembly_roundtrip_stable(
+            lambda: hs.build_assembly(_polymerize_spec(count=4)))
+    assert len(reloaded.instances) == 4
+    assert len(reloaded.joints) == 3  # seed mate + 2 replicated chain joints
+
+
 # ── coverage: this driver wraps no new route (composition-sugar item) ──────────
 
 def test_spec_build_adds_no_coverage():
     """AF-11 composes already-covered wrappers — like AF-10, it moves the oracle
     count, not the route-coverage count."""
     from tests.automation_harness import headless_coverage_report
-    assert headless_coverage_report()["covered"] == 32
+    assert headless_coverage_report()["covered"] == 34

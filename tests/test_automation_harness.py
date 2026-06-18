@@ -102,14 +102,15 @@ def test_coverage_report_shape_and_known_wrappers():
 def test_coverage_report_lists_real_backlog_routes():
     """A still-unwrapped backlog route shows up as uncovered.
 
-    AF-6 covered POST /design/deformation, so this re-points to /design/cluster
-    (cluster construction, a later AF candidate) — still unwrapped today.
+    AF-15 Phase 1 covered POST /design/cluster + PATCH /design/cluster/{id}, so this
+    re-points to /design/strand-end-resize (a drag-arrow resize op with a coord route
+    — headless-reachable, a later AF candidate) — still unwrapped today.
     """
     report = headless_coverage_report()
     covered_paths = {r["path"] for r in report["covered_routes"]}
     uncovered_paths = {r["path"] for r in report["uncovered_routes"]}
-    assert any(p.endswith("/design/cluster") for p in uncovered_paths)
-    assert not any(p.endswith("/design/cluster") for p in covered_paths)
+    assert any(p.endswith("/design/strand-end-resize") for p in uncovered_paths)
+    assert not any(p.endswith("/design/strand-end-resize") for p in covered_paths)
 
 
 def test_coverage_report_marks_af2_routes_covered():
@@ -1017,3 +1018,135 @@ def test_spec_matches_calls_assembly_kind():
             return assembly_state.get_or_404().model_copy(deep=True)
 
     assert_spec_matches_calls(lambda: hs.build_assembly(spec), hand, kind="assembly")
+
+
+# ── The cluster-pose oracle PASSES on a real translation and FIRES otherwise ───
+
+def _clustered_posed_design(translation):
+    """Active scratch: a 6hb with a 2-helix cluster posed by `translation`.
+    Returns (before_snapshot, after_design, cluster_id)."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from tests.conftest import SIX_HB_CELLS
+
+    hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+    design = design_state.get_or_404()
+    hb.add_cluster("armA", [design.helices[0].id, design.helices[1].id])
+    cid = design_state.get_or_404().cluster_transforms[-1].id
+    before = design_state.get_or_404().model_copy(deep=True)
+    hb.transform_cluster(cid, translation=translation)
+    return before, design_state.get_or_404(), cid
+
+
+def test_cluster_translated_passes_on_a_real_translation():
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_cluster_translated
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        before, after, cid = _clustered_posed_design([10.0, 0.0, 0.0])
+        assert assert_cluster_translated(before, after, cid, translation=[10.0, 0.0, 0.0]) == 2
+
+
+def test_cluster_translated_fires_when_geometry_did_not_move():
+    """Load-bearing red-test: claiming a translation the kernel didn't apply raises."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_cluster_translated
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        before, after, cid = _clustered_posed_design([10.0, 0.0, 0.0])
+        # really +10 X; asserting +10 Y → the cluster helices fail the shift check
+        with pytest.raises(AssertionError, match="did not translate"):
+            assert_cluster_translated(before, after, cid, translation=[0.0, 10.0, 0.0])
+
+
+def test_cluster_translated_vacuity_guard_on_zero_translation():
+    """Load-bearing red-test: a ~zero translation trips the can-go-red guard rather
+    than passing vacuously (every helix would read as 'unchanged')."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_cluster_translated
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        before, after, cid = _clustered_posed_design([10.0, 0.0, 0.0])
+        with pytest.raises(AssertionError, match="vacuously"):
+            assert_cluster_translated(before, after, cid, translation=[0.0, 0.0, 0.0])
+
+
+# ── AF-15 Phase 2: the edge-collinearity oracle PASSES on a real alignment, FIRES
+#    when the edges are left skew / on different lines ───────────────────────────
+
+def _two_bars_aligned():
+    """Active scratch SQUARE: two 2×3 clusters; align A's axial edge onto B's, then
+    return (design, a_id, b_id, src_edge, target_edge)."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+
+    hb.create_bundle(
+        [(r, c) for r in range(2) for c in range(6)],
+        32, lattice=LatticeType.SQUARE, name="grid",
+    )
+    d = design_state.get_or_404()
+    cols = {h.id: h.grid_pos[1] for h in d.helices if h.grid_pos}
+    hb.add_cluster("A", [h for h, c in cols.items() if c <= 2])
+    a = design_state.get_or_404().cluster_transforms[-1].id
+    hb.add_cluster("B", [h for h, c in cols.items() if c >= 3])
+    b = design_state.get_or_404().cluster_transforms[-1].id
+    src, tgt = ("w", 1, 1), ("w", -1, 1)
+    hb.align_cluster_edge(a, src, target_edge=(b, tgt))
+    return design_state.get_or_404(), a, b, src, tgt
+
+
+def test_edges_collinear_passes_on_a_real_alignment():
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_edges_collinear
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        d, a, b, src, tgt = _two_bars_aligned()
+        ang = assert_edges_collinear(d, a, src, target_edge=(b, tgt))
+        assert ang < 1.0
+
+
+def test_edges_collinear_fires_when_edges_left_skew():
+    """Load-bearing red-test: WITHOUT running the solver the two bars' edges are
+    parallel but on different lines → the on-line assertion raises."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from tests.automation_harness import assert_edges_collinear
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle(
+            [(r, c) for r in range(2) for c in range(6)],
+            32, lattice=LatticeType.SQUARE, name="grid",
+        )
+        d = design_state.get_or_404()
+        cols = {h.id: h.grid_pos[1] for h in d.helices if h.grid_pos}
+        hb.add_cluster("A", [h for h, c in cols.items() if c <= 2])
+        a = design_state.get_or_404().cluster_transforms[-1].id
+        hb.add_cluster("B", [h for h, c in cols.items() if c >= 3])
+        b = design_state.get_or_404().cluster_transforms[-1].id
+        # no align_cluster_edge → A and B sit apart in X
+        with pytest.raises(AssertionError, match="off the target line"):
+            assert_edges_collinear(design_state.get_or_404(), a, ("w", 1, 1),
+                                   target_edge=(b, ("w", -1, 1)))
+
+
+def test_edges_collinear_fires_on_wrong_direction():
+    """Load-bearing red-test: aligning to one line then checking against a line at a
+    different angle raises the parallelism assertion."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from tests.automation_harness import assert_edges_collinear
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle(
+            [(r, c) for r in range(2) for c in range(6)],
+            32, lattice=LatticeType.SQUARE, name="grid",
+        )
+        d = design_state.get_or_404()
+        hb.add_cluster("bar", [h.id for h in d.helices])
+        cid = design_state.get_or_404().cluster_transforms[-1].id
+        src = ("w", 1, 1)
+        # align onto a Z-ish line, then check against a 45° line → not collinear
+        hb.align_cluster_edge(cid, src, target_line=([4.0, 0.0, 0.0], [0.0, 0.0, 1.0]))
+        with pytest.raises(AssertionError, match="not collinear"):
+            assert_edges_collinear(design_state.get_or_404(), cid, src,
+                                   target_line=([4.0, 0.0, 0.0], [1.0, 0.0, 1.0]))

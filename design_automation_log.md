@@ -59,6 +59,9 @@ Pulled from the 2026-06-16 audit; each is a *proven* pattern already green in th
 | `assert_binding_resolves` (AF-9) | a metadata-only cross-part relation's endpoints resolve to live targets (survives round-trip; the gap `canonical_assembly` can't see) | `tests/automation_harness.py` | any metadata-only cross-part relation (overhang connections next) |
 | `assert_instances_on_grid` / `assert_instances_on_ring` (AF-10) | placed instance origins form an exact regular lattice (grid: count + even pitch + every cell; ring: on-radius + even `360°/n` step), measured on placed transforms, non-degeneracy guard | `tests/automation_harness.py` | any parametric instance-layout (radial-facing layouts, AF-11 DSL layout specs) |
 | `assert_spec_matches_calls` (AF-11) | a declarative build-spec is lowered to the SAME canonical structure as the equivalent hand-call wrapper sequence (`canonical_topology` design / `canonical_assembly` assembly), non-emptiness guard; doubles as the spec→fingerprint golden pin | `tests/automation_harness.py` | any interpreter/DSL/codegen that claims to be sugar over existing ops (AF-11 grammar growth) |
+| `assert_cluster_translated` (AF-15) | a cluster's DISPLAY-layer rigid-TRANSLATION pose actually shifts the cluster's helix geometry by the exact vector (read via `deformed_helix_axes`), only the cluster moves, `‖T‖>min` guard; the load-bearing pin where `canonical_topology` is blind to the pose overlay | `tests/automation_harness.py` | any cluster/group pose op that is a geometric overlay outside the strand graph (cluster transforms, plate layout) — measure the placed geometry, don't trust round-trip |
+| `assert_edges_collinear` (AF-15 P2) | a cluster's OBB edge shares one infinite line with a target edge/world line after the alignment solver — parallel-or-antiparallel directions (within `tol_deg`) AND both src endpoints on the target line (within `tol_nm`), recomputed on the POSED geometry; direction-AGNOSTIC, non-degeneracy guard | `tests/automation_harness.py`; `backend/core/cluster_obb.py` | any rigid-body edge/axis alignment (AF-14 joint-axis placement, the 4-bar parallelogram capstone) |
+| OBB equivariance `OBB(g·design)=g·OBB(design)` (AF-15 P2) | the cluster OBB frame rotates WITH the cluster (half preserved, axes rotate, centre moves) — so a named edge/corner refers to the same physical feature before/after a pose; PCA cross-section frame + **positional** sign anchor (NOT a value-argmax, which ties on symmetric corners) | `backend/core/cluster_obb.py`; `tests/test_cluster_obb.py::test_obb_is_equivariant` | any named-feature picker on a posed rigid body (AF-14 corner/edge joint anchors) |
 
 ---
 
@@ -597,6 +600,119 @@ spec passes pulley *radii* and the oracle asserts the *derived* `radius_a/radius
 parser dropped a radius or the driver swapped `radius_a`/`radius_b`, the belt test goes red while the gear test stays
 green. No ASK-FIRST violation: `define_belt` + `assert_gear_ratio` are AF-9's direction-agnostic (magnitude-only)
 machinery; this layer adds only parameter plumbing, reusing the gear's revolute-ref gate by widening one condition.**"
+
+**AF-11 — build-spec grammar growth (Phase 2): `polymerize` assembly op (relations cluster, sub-op 3)** ·
+_shape:_ grammar growth only — 1 new assembly op in the PURE parser `backend/core/build_spec.py`
+(`polymerize` allowed-key set `{op,joint,count,direction}` + a parse branch validating `count ≥ 2` and
+`direction ∈ {forward,backward,both}`) **reusing the gear/belt joint-`ref` namespace** but referencing a
+SINGLE seed mate (`joint`, not a pair) — and crucially **without** the revolute gate (polymerize replicates
+the seed mate, it does not couple two revolute joints, so a referential-integrity branch checks only that
+`joint` names a prior mate `ref` of ANY joint_type) + 1 dispatch branch in the driver
+`backend/api/headless_spec_build.py` driving the REAL AF-9 wrapper `hab.polymerize` (re-implements nothing —
+the driver resolves `joint_refs[p["joint"]]` and passes `count`/`direction`); `crud.py`/`assembly.py`/`main.js`
+LOC Δ = **0** · _headless-coverage Δ:_ **32 → 32** (UNCHANGED — composition sugar over the already-covered
+`polymerize_assembly` route; wraps no new route, moves the oracle count not coverage — verified by the
+still-passing `test_spec_build_adds_no_coverage`) · _oracle shipped:_ **no new oracle — reused BOTH
+`assert_spec_matches_calls` (AF-11, LOAD-BEARING) AND the geometric `assert_polymer_chain` (AF-9)**. Same
+deciding fact as gear/belt: polymerize's new copies + replicated seam joints are top-level
+instances/joints that `canonical_assembly` HAS fingerprinted since AF-7/8, so `assert_spec_matches_calls` is
+a real faithfulness pin (a dropped copy or chain joint fails it) — but necessary-not-sufficient: the
+fingerprint sees that N instances exist, NOT that they march along the seed's repeat. `assert_polymer_chain`
+is the orthogonal geometric pin — it re-derives the seed mate's repeat `delta = T_B @ inv(T_A)` from the seed
+pair alone (a synthetic seed-pair-only `before` projection of the spec-built assembly) and asserts the
+`count−2` copies form the exact `delta`-power multiset, with the assertion that the +10 nm-X repeat the
+connector snap produced is realised (parametrized count 4 + 6) · _tests:_ 7 new in `test_build_spec.py`
+(polymerize normalisation incl. `both`; defaults direction→forward; **allows a rigid seed** — the no-revolute-gate
+distinction from gear/belt; **3 rejections**: dangling joint ref, count<2, bad direction; missing `count`) + 4 new
+in `test_headless_spec_build.py` (polymerize spec ≡ hand-call canonical assembly; lays count−2 copies on the
++10 nm delta lattice for count 4 + 6; polymerized assembly round-trips stable WITH its 2 replicated joints);
+full suite **2444 passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** the grammar
+now lowers a declarative `{op:polymerize,joint,count,direction}` to the real AF-9 wrapper, and the spec-built
+chain is pinned BOTH structurally (`assert_spec_matches_calls` — load-bearing because the copies + seam joints
+live in `canonical_assembly`) AND geometrically (`assert_polymer_chain` — the copies actually sit on the seed
+mate's `delta`-power lattice, so a chain that's structurally present but laid off the repeat fails). The
+genuinely-new validation power over the gear/belt sub-ops is the recognition (and pinning) that polymerize
+takes a SINGLE seed `ref` and accepts ANY joint_type — the referential-integrity branch deliberately omits the
+revolute gate gear/belt enforce, and `test_assembly_spec_polymerize_allows_rigid_seed` pins that distinction so
+a future refactor can't silently over-constrain it. No ASK-FIRST violation: `hab.polymerize` +
+`assert_polymer_chain` are AF-9's direction-agnostic (re-derives the documented fwd/back split, measures placed
+geometry) machinery; this layer adds only parameter plumbing + the single-ref resolution.**"
+
+**AF-15 — cluster rigid-transform wrappers (Phase 1): `add_cluster` / `transform_cluster` + translation oracle** ·
+_shape:_ 2 wrappers in `backend/api/headless_build.py` (`add_cluster` imports `add_cluster` +
+`AddClusterBody`; `transform_cluster` imports `update_cluster` + `PatchClusterBody` from `routes_clusters` —
+exact route handlers, registers covered by function identity, NOT re-implemented) + 1 NEW reusable oracle
+`assert_cluster_translated` in `tests/automation_harness.py`; `crud.py`/`assembly.py`/`main.js` LOC Δ = **0**
+(all new code is the existing headless module + the harness) · _headless-coverage Δ:_ **32 → 34** (`POST
+/design/cluster` + `PATCH /design/cluster/{id}` flip to covered — the FIRST coverage gain since AF-9; AF-10/AF-11
+were all composition-sugar) · _oracle shipped:_ `assert_cluster_translated(design_before, design_after,
+cluster_id, *, translation, tol_nm=0.02, min_translation_nm=0.5)` — a **geometric** oracle: it reads the
+cluster-posed helix axes from `deformed_helix_axes` (the geometry kernel's posed output — clusters apply at
+geometry-compute time via `_apply_cluster_transforms_domain_aware`, never to the strand graph) on both designs and
+asserts (1) every helix in the cluster has its posed `start`/`end` displaced by exactly the requested translation,
+(2) every non-cluster helix is unchanged (the cluster-scoping property — the default catch-all cluster stays put),
+(3) `‖translation‖ > min_translation_nm` (can-go-red guard — a zero translation makes every helix trivially
+"unchanged" and the oracle pass vacuously). **Direction-AGNOSTIC** (a world-space translation is unambiguous — no
+quaternion sign / pivot / frame convention to reason about → stays clear of the ASK-FIRST DNA-directionality rule;
+**rotation poses deliberately out of scope**, they belong with Phase 2's edge-alignment flip/snap which IS a
+directionality decision) · _tests:_ 5 new in `test_headless_build.py` (add_cluster creates a named non-default
+identity-pose cluster; transform translates ONLY the cluster's 2 helices, parametrized over 2 vectors; clustered
+pose survives a `.nadoc` round-trip AND still drives geometry after reload — the persistence pin
+`canonical_topology` can't give; coverage flip) + 3 new in `test_automation_harness.py` (oracle passes on a real
+translation + **two load-bearing red-tests**: claiming a translation the kernel didn't apply raises "did not
+translate", and a zero translation trips the "vacuously" guard); repointed the AF-1 backlog-route coverage
+meta-test from `/design/cluster` (now covered) to `/design/strand-end-resize` (still uncovered), and bumped
+`test_spec_build_adds_no_coverage`'s expected count 32 → 34; full suite **2452 passed / 55 skipped**, no drop ·
+**"Validation gained, not just a passthrough:** before AF-15 there was no way to group + pose a rigid cluster
+headlessly, and — the deciding point — nothing could prove a cluster pose *flows into the geometry* or *persists*,
+because `canonical_topology` is BLIND to the cluster-transform overlay (it lives outside the strand graph, the
+third confirmed instance of that blind-spot after loop/skip and bend/twist), so `assert_roundtrip_stable` alone is
+vacuous for the pose. `assert_cluster_translated` closes that by measuring the real posed helix axes the geometry
+kernel emits (so a kernel that ignored the pose, mis-scaled it, applied it to the wrong frame, or leaked it onto
+non-cluster helices fails), with a can-go-red guard + two red-tests. It's the geometric spine Phase 2's
+`align_edge_transform` solver (and the 4-bar parallelogram capstone) pins itself against. The three-layer law is
+honoured exactly: the wrappers pose a DISPLAY-layer rigid body, the oracle reads DISPLAY-layer geometry, and the
+strand topology is never touched.**"
+
+---
+
+**AF-15 — cluster OBB enumerator + edge-alignment solver (Phase 2): `align_edge_transform` + `assert_edges_collinear`** ·
+_shape:_ **NEW pure core** `backend/core/cluster_obb.py` (the `OBB` dataclass + `cluster_obb(design, cluster_id)`
+equivariant enumerator with `edge_endpoints`/`corner`/`edges`, + the pure `align_edge_transform` solver — imports
+`deformation.deformed_helix_axes` + scipy `Rotation`, NOTHING from `backend.api`) + 1 wrapper
+`hb.align_cluster_edge` in `backend/api/headless_build.py` (calls the pure solver, then drives the already-covered
+`transform_cluster`) + 1 NEW reusable oracle `assert_edges_collinear` in `tests/automation_harness.py`;
+`crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (new code is one new core module + the existing headless module +
+the harness) · _headless-coverage Δ:_ **34 → 34** (UNCHANGED — `align_cluster_edge` wraps NO new route; it composes
+`transform_cluster`, so like AF-10/AF-11 it's a construction-sugar/solver item, the oracle is the deliverable, not a
+coverage flip — guarded by `test_align_cluster_edge_adds_no_coverage`) · _oracle shipped:_
+`assert_edges_collinear(design, cluster_id, src_edge, *, target_edge|target_line, tol_nm=0.05, tol_deg=1.0,
+min_len_nm=0.5)` — a **geometric** oracle: it recomputes the cluster's OBB on the POSED design and asserts the named
+src edge is collinear with the target — (1) directions parallel-or-antiparallel within `tol_deg`, (2) both src
+endpoints within `tol_nm` of the target line — with a non-degeneracy guard (edges longer than `min_len_nm`).
+**Direction-AGNOSTIC** (a line, not a ray — both senses pass → no ASK-FIRST violation). The deeper deliverable is the
+**equivariant OBB** itself, pinned by `test_obb_is_equivariant` (`OBB(g·design)=g·OBB(design)`): that property is what
+makes a named edge refer to the same physical edge before/after the solve, so the oracle measures the edge the solver
+intended · **ASK-FIRST conventions confirmed with the user (2026-06-17), NOT reasoned out:** minimal rotation /
+auto-flip (≤90° onto ±target_dir) / midpoint snap (endpoints coincide) / roll left free · _tests:_ 11 new in
+`test_cluster_obb.py` (OBB contains-snugly + right-handed-orthonormal + rejects degenerate/square footprints;
+**equivariance parametrized over translation / Z-rotation / general screw**; solver: two-bar edge-snap, angled
+world-line rotate+snap, align-to-rotated-bar 90°, auto-flip-to-minimal; coverage-unchanged guard) + 4 new in
+`test_automation_harness.py` (oracle passes on a real alignment + **three red-tests**: edges left skew raise "off the
+target line", wrong-angle raises "not collinear", and the equivariance pin doubles as the can-go-red proof); full
+suite **2466 passed / 55 skipped**, no drop · _cohesion:_ `cluster_obb.py`'s one reason to change = the cluster OBB
+geometry + edge-alignment math; dep surface = `deformed_helix_axes` + scipy `Rotation`, nothing from `backend.api` ·
+**"Validation gained, not just a passthrough:** before this, nothing could align two rigid clusters by their OBB edges
+headlessly, and — the load-bearing point — there was no Python OBB at all (it lived only in JS `joint_renderer.js`),
+so no headless geometry could pin a kinematic-cluster arrangement. `assert_edges_collinear` proves the solved pose
+actually lands the chosen edge on the target line (so a solver that mis-rotated, snapped to the wrong point, or
+left the edges skew fails), recomputed on the real posed geometry. The genuinely-new, reusable validation power is the
+**equivariant OBB** (`OBB(g·design)=g·OBB(design)`, proved) — the foundation AF-14's joint-axis placement and the 4-bar
+parallelogram capstone both build on; without provable equivariance a named edge/corner picker is untrustworthy under
+a pose. A subtle bug the equivariance test caught and banked: a value-argmax sign anchor ties on a rectangle's 4
+symmetric corners and float-rounding flips the frame after a rotation — fixed with a positional (sorted-id) anchor.
+Three-layer law honoured: the OBB READS the geometric layer (posed axes), the solver returns a DISPLAY-layer pose, the
+strand topology is never touched.**"
 
 ---
 

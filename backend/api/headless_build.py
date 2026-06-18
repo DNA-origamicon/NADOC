@@ -50,6 +50,12 @@ from backend.api.crud import (
     ligate_strand as _route_ligate,
     overhang_extrude as _route_overhang_extrude,
 )
+from backend.api.routes_clusters import (
+    AddClusterBody,
+    PatchClusterBody,
+    add_cluster as _route_add_cluster,
+    update_cluster as _route_update_cluster,
+)
 from backend.api.routes_deformation import (
     AddDeformationBody,
     add_deformation as _route_add_deformation,
@@ -528,3 +534,98 @@ def overhang_extrude(
         neighbor_col=neighbor_col, length_bp=length_bp,
     ))
     return design_state.get_or_404()
+
+
+# ── clusters (rigid-body grouping + DISPLAY-layer pose) ─────────────────────────
+
+def add_cluster(name: str, helix_ids, *, domain_ids=()) -> Design:
+    """Create a named rigid-body cluster of helices (POST /design/cluster).
+
+    A cluster groups helices into a rigid body that carries a DISPLAY-layer pose
+    (translation / rotation / pivot) — the gizmo, bend/twist, and relax all operate
+    on it.  The pose NEVER mutates topology (the three-layer law); it is applied at
+    geometry-compute time as a post-step rigid displacement.  Only the auto-created
+    default catch-all cluster surrenders helices to the new one (intentional clusters
+    are left intact).  Pushes undo.
+
+    The new cluster is the last entry in ``cluster_transforms`` — read its id from the
+    returned design (``design.cluster_transforms[-1].id``) to pose it with
+    :func:`transform_cluster`.
+    """
+    _route_add_cluster(AddClusterBody(
+        name=name, helix_ids=list(helix_ids), domain_ids=list(domain_ids),
+    ))
+    return design_state.get_or_404()
+
+
+def transform_cluster(
+    cluster_id: str,
+    *,
+    translation=None,
+    rotation=None,
+    pivot=None,
+    commit: bool = True,
+    log: bool = False,
+) -> Design:
+    """Pose a cluster by a rigid transform (PATCH /design/cluster/{cluster_id}).
+
+    ``translation`` is ``[x, y, z]`` nm; ``rotation`` a ``[x, y, z, w]`` unit
+    quaternion (Three.js / scipy convention); ``pivot`` the ``[x, y, z]`` rotation
+    centre.  A DISPLAY-layer pose: it is applied to the geometry kernel's output (via
+    :func:`backend.core.deformation.deformed_helix_axes` /
+    ``deformed_nucleotide_arrays``), never to the strand graph.  ``commit`` pushes the
+    change to the undo stack (the drag-end semantics — default ``True`` for an applied
+    pose); ``log`` (with ``commit``) records a ``cluster_op`` feature-log entry.
+    Mirrors the live gizmo-drag path.
+
+    Pin the result with :func:`tests.automation_harness.assert_cluster_translated`
+    (a pure-translation pose shifts the cluster's helix geometry by exactly the
+    requested vector; non-cluster helices stay put).
+    """
+    _route_update_cluster(cluster_id, PatchClusterBody(
+        translation=list(translation) if translation is not None else None,
+        rotation=list(rotation) if rotation is not None else None,
+        pivot=list(pivot) if pivot is not None else None,
+        commit=commit, log=log,
+    ))
+    return design_state.get_or_404()
+
+
+def align_cluster_edge(
+    cluster_id: str,
+    src_edge,
+    *,
+    target_edge=None,
+    target_line=None,
+    commit: bool = True,
+    log: bool = False,
+) -> Design:
+    """Pose a cluster so one of its OBB edges lands on a target edge / world line.
+
+    The high-value AF-15 Phase 2 op: the design-layer analog of the AF-8 assembly
+    connector-mate, but driven by **OBB edges** instead of named connectors — the
+    arrangement primitive behind the headless 4-bar-parallelogram kinematic mechanism
+    (cluster the rigid bars, then edge-align them into a parallelogram).
+
+    Solves the rigid transform with
+    :func:`backend.core.cluster_obb.align_edge_transform` (a PURE geometry solver —
+    minimal rotation / auto-flip / midpoint snap, per the user-fixed convention) and
+    drives :func:`transform_cluster` with it.  ``src_edge`` and ``target_edge``'s edge
+    key are ``(axis, s1, s2)`` OBB-edge names (see :class:`cluster_obb.OBB`); pass
+    exactly one of ``target_edge=(other_cluster_id, edge_key)`` /
+    ``target_line=(point, direction)``.
+
+    Pin the result with
+    :func:`tests.automation_harness.assert_edges_collinear` (the two edges share a
+    line — direction-agnostic).
+    """
+    from backend.core.cluster_obb import align_edge_transform
+
+    design = design_state.get_or_404()
+    quat, translation, pivot = align_edge_transform(
+        design, cluster_id, src_edge, target_edge=target_edge, target_line=target_line,
+    )
+    return transform_cluster(
+        cluster_id, translation=translation, rotation=quat, pivot=pivot,
+        commit=commit, log=log,
+    )

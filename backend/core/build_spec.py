@@ -20,12 +20,12 @@ The grammar is deliberately tiny (the "start small, grow it" of the backlog):
 * **design** ops — ``bundle`` · ``extrude`` · ``nick`` · ``ligate`` · ``loop_skip`` ·
   ``bend`` · ``twist`` · ``circle_segment``
 * **assembly** ops — ``add_part`` · ``place_grid`` · ``place_ring`` · ``mate`` ·
-  ``gear`` · ``belt``
+  ``gear`` · ``belt`` · ``polymerize``
 
 Helices are referenced declaratively by their lattice ``grid_pos`` ``[row, col]``
 (stable across id schemes), assembly instances by a spec-assigned ``ref`` key, and
-the joints a ``mate`` creates by an optional ``ref`` key a ``gear`` then couples — so
-a spec never needs a runtime-generated id.
+the joints a ``mate`` creates by an optional ``ref`` key a ``gear``/``belt``/
+``polymerize`` then references — so a spec never needs a runtime-generated id.
 """
 
 from __future__ import annotations
@@ -361,6 +361,7 @@ _ASSEMBLY_OP_KEYS = {
              "ref", "name", "axis_origin", "axis_direction", "min_limit", "max_limit"},
     "gear": {"op", "joint_a", "joint_b", "ratio", "invert", "name"},
     "belt": {"op", "joint_a", "joint_b", "radius_a", "radius_b", "name"},
+    "polymerize": {"op", "joint", "count", "direction"},
 }
 _CONNECTOR_KEYS = {"label", "position", "normal"}
 
@@ -455,6 +456,26 @@ def _parse_assembly_op(raw, *, where: str) -> BuildOp:
             raise BuildSpecError(f"{here}: 'radius_a'/'radius_b' must be > 0")
         if "name" in raw:
             p["name"] = _as_str(raw["name"], key="name", where=here)
+    elif op == "polymerize":
+        # Grow a linear chain of identical parts from a SINGLE seed mate (referenced
+        # by its ``ref`` key) — the chain marches along the seed mate's part-to-part
+        # offset.  count is the total chain length (the seed pair already counts as 2).
+        # Unlike gear/belt the seed mate may be ANY joint_type (rigid/revolute/…); the
+        # only seed requirement (the two mated parts share a source design) is enforced
+        # by the route at build time, not here.
+        p["joint"] = _as_str(_get(raw, "joint", where=here), key="joint", where=here)
+        p["count"] = _as_int(_get(raw, "count", where=here), key="count", where=here)
+        if p["count"] < 2:
+            raise BuildSpecError(
+                f"{here}: 'count' must be ≥ 2 (the seed pair is already 2 parts), "
+                f"got {p['count']}"
+            )
+        p["direction"] = _as_str(raw.get("direction", "forward"), key="direction", where=here)
+        if p["direction"] not in ("forward", "backward", "both"):
+            raise BuildSpecError(
+                f"{here}: 'direction' must be 'forward', 'backward', or 'both', "
+                f"got {p['direction']!r}"
+            )
     else:  # mate
         p["child"] = _as_str(_get(raw, "child", where=here), key="child", where=here)
         p["parent"] = _as_str(_get(raw, "parent", where=here), key="parent", where=here)
@@ -497,18 +518,23 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
             {"op": "gear", "joint_a": "<joint-key>", "joint_b": "<joint-key>",
              "ratio": num, "invert": bool},
             {"op": "belt", "joint_a": "<joint-key>", "joint_b": "<joint-key>",
-             "radius_a": num, "radius_b": num}
+             "radius_a": num, "radius_b": num},
+            {"op": "polymerize", "joint": "<joint-key>", "count": int,
+             "direction": "forward"|"backward"|"both"}
           ]
         }
 
     Beyond shape/type checks, the parser enforces **referential integrity**: every
     ``part`` names a defined part; every ``mate`` endpoint names an instance defined
     by a prior ``add_part`` ``ref``; each mate ``*_label`` names a connector that
-    endpoint actually declares; and every ``gear``/``belt`` ``joint_*`` names a joint
+    endpoint actually declares; every ``gear``/``belt`` ``joint_*`` names a joint
     defined by a prior ``mate`` ``ref`` **that is revolute** (a gear/belt couples two
-    revolute joints — the route 400s otherwise, caught here at parse time).  So a
-    structurally-impossible assembly fails at parse time, before any build runs.
-    Raises :class:`BuildSpecError` on any violation.
+    revolute joints — the route 400s otherwise, caught here at parse time); and a
+    ``polymerize`` ``joint`` names a joint defined by a prior ``mate`` ``ref`` (of
+    *any* joint_type — polymerize replicates a single seed mate; the route's own
+    requirement that the seed mate joins two source-identical parts is enforced at
+    build time).  So a structurally-impossible assembly fails at parse time, before
+    any build runs.  Raises :class:`BuildSpecError` on any violation.
     """
     if not isinstance(spec, dict):
         raise BuildSpecError(f"{where}: spec must be an object, got {type(spec).__name__}")
@@ -579,5 +605,12 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
                         f"{loc}: {opn.op} {side} {jref!r} mate must be 'revolute' "
                         f"(is {defined_joints[jref]!r}) — a {opn.op} couples two revolute joints"
                     )
+        if opn.op == "polymerize":
+            jref = p["joint"]
+            if jref not in defined_joints:
+                raise BuildSpecError(
+                    f"{loc}: polymerize joint {jref!r} was not defined by a prior "
+                    f"mate ref ({sorted(defined_joints)})"
+                )
 
     return AssemblySpec(name=name, parts=parts, ops=ops)

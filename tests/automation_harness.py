@@ -1283,6 +1283,194 @@ def assert_deformation_angle(
     return total
 
 
+# ── Cluster-pose oracle (rigid-translation, geometric) ────────────────────────
+
+def assert_cluster_translated(
+    design_before,
+    design_after,
+    cluster_id: str,
+    *,
+    translation,
+    tol_nm: float = 0.02,
+    min_translation_nm: float = 0.5,
+):
+    """Geometric oracle for a cluster rigid-TRANSLATION pose.
+
+    A :class:`~backend.core.models.ClusterRigidTransform` carries a DISPLAY-layer pose
+    (translation / rotation / pivot) that the geometry kernel applies as a post-step
+    rigid displacement of the cluster's helices — it never mutates the strand graph
+    (the three-layer law).  ``canonical_topology`` is therefore **blind** to a cluster
+    pose (the same blind-spot as loop/skip marks and bend/twist overlays), so
+    :func:`assert_roundtrip_stable` alone cannot prove a pose flowed into the geometry
+    or persisted — only measuring the placed geometry can.
+
+    Pass the design *before* the pose (cluster created, identity pose) and *after*
+    :func:`~backend.api.headless_build.transform_cluster` with a pure ``translation``
+    (identity rotation).  Reading the cluster-posed axes from
+    :func:`backend.core.deformation.deformed_helix_axes` on each design, this asserts:
+
+      1. **Cluster helices translated by exactly the request.** Every helix in
+         ``cluster_id`` has its posed ``start`` and ``end`` displaced by ``translation``
+         (within ``tol_nm``) — so a kernel that ignored the pose, scaled it, or applied
+         it to the wrong frame fails.
+      2. **Only the cluster moved.** Every helix *not* in the cluster is unchanged
+         (within ``tol_nm``) — the cluster-scoping property (a pose is local to its
+         cluster, the default catch-all cluster stays put).
+      3. **The pose was non-trivial (the can-go-red guard).** ``‖translation‖`` exceeds
+         ``min_translation_nm``; a zero translation would make every helix trivially
+         "unchanged" and the oracle pass vacuously.
+
+    **Direction-AGNOSTIC**: a world-space translation is unambiguous (no quaternion
+    sign / pivot / frame convention to reason about), so this stays clear of the
+    ASK-FIRST DNA-directionality rule.  Rotation poses (where the sign/pivot convention
+    *is* a directionality question) are deliberately out of scope here — they belong
+    with AF-15 Phase 2's edge-alignment solver.  Returns the number of cluster helices
+    measured.
+    """
+    import numpy as np
+
+    from backend.core.deformation import deformed_helix_axes
+
+    T = np.asarray(translation, dtype=float)
+    assert float(np.linalg.norm(T)) > min_translation_nm, (
+        f"requested translation is ~zero (‖T‖ = {float(np.linalg.norm(T)):.4f} nm < "
+        f"{min_translation_nm} nm) — every helix would read as 'unchanged' and this "
+        "oracle would pass vacuously (pose the cluster by a non-zero translation)."
+    )
+
+    cluster = next((c for c in design_after.cluster_transforms if c.id == cluster_id), None)
+    assert cluster is not None, f"no cluster {cluster_id!r} in design_after"
+    cluster_helix_ids = set(cluster.helix_ids)
+    assert cluster_helix_ids, f"cluster {cluster_id!r} has no helices — nothing to measure"
+
+    before_axes = {a["helix_id"]: a for a in deformed_helix_axes(design_before)}
+    after_axes = {a["helix_id"]: a for a in deformed_helix_axes(design_after)}
+
+    moved = 0
+    for hid, after_a in after_axes.items():
+        before_a = before_axes.get(hid)
+        assert before_a is not None, f"helix {hid} present after but not before the pose"
+        bs, be = np.asarray(before_a["start"]), np.asarray(before_a["end"])
+        as_, ae = np.asarray(after_a["start"]), np.asarray(after_a["end"])
+        if hid in cluster_helix_ids:
+            assert np.allclose(as_, bs + T, atol=tol_nm) and np.allclose(ae, be + T, atol=tol_nm), (
+                f"cluster helix {hid} did not translate by {list(translation)} nm: "
+                f"start {np.round(bs, 3)} → {np.round(as_, 3)} "
+                f"(expected {np.round(bs + T, 3)})."
+            )
+            moved += 1
+        else:
+            assert np.allclose(as_, bs, atol=tol_nm) and np.allclose(ae, be, atol=tol_nm), (
+                f"non-cluster helix {hid} moved {np.round(as_ - bs, 3)} nm — a cluster "
+                "pose must be local to its own helices."
+            )
+    assert moved == len(cluster_helix_ids), (
+        f"measured {moved} cluster helices but the cluster lists {len(cluster_helix_ids)} "
+        "— a cluster helix is missing from the posed geometry."
+    )
+    return moved
+
+
+def assert_edges_collinear(
+    design,
+    cluster_id: str,
+    src_edge,
+    *,
+    target_edge=None,
+    target_line=None,
+    tol_nm: float = 0.05,
+    tol_deg: float = 1.0,
+    min_len_nm: float = 0.5,
+):
+    """Geometric oracle for the AF-15 Phase 2 cluster OBB-edge alignment solver.
+
+    After :func:`~backend.api.headless_build.align_cluster_edge` poses ``cluster_id``,
+    this asserts the cluster's ``src_edge`` (an OBB edge ``(axis, s1, s2)``) is
+    **collinear** with the target — i.e. the two edges lie on one shared infinite
+    line.  Recomputes the cluster's OBB from the *posed* geometry
+    (:func:`backend.core.cluster_obb.cluster_obb`) so it measures where the edge really
+    landed, not where the solver claimed it would.  Two conditions:
+
+      1. **Parallel-or-antiparallel directions** — the angle between the src and
+         target edge directions is within ``tol_deg`` of 0° or 180° (collinearity is a
+         property of the *line*, so either sense passes).
+      2. **On the shared line** — both src-edge endpoints lie within ``tol_nm`` of the
+         target line (perpendicular distance), so the edges don't merely run parallel
+         on different lines.
+
+    **Direction-AGNOSTIC** (a line, not a ray — both senses pass), so this stays clear
+    of the ASK-FIRST DNA-directionality rule.  A non-degeneracy guard (both edges
+    longer than ``min_len_nm``) keeps it from passing vacuously on a collapsed OBB; the
+    geometric assertions themselves go red when a no-op / wrong-target solver leaves the
+    edges skew or off-line (the can-go-red property, exercised by the red-tests).
+
+    Target is one of ``target_edge=(other_cluster_id, edge_key)`` (another cluster's OBB
+    edge) or ``target_line=(point, direction)`` (a world line).  Returns the measured
+    angular deviation from collinear (degrees).
+    """
+    import math
+
+    import numpy as np
+
+    from backend.core.cluster_obb import cluster_obb
+
+    def _unit(x):
+        x = np.asarray(x, dtype=float)
+        n = float(np.linalg.norm(x))
+        assert n > 1e-12, "cannot normalise a ~zero direction"
+        return x / n
+
+    if target_edge is not None and target_line is not None:
+        raise ValueError("pass exactly one of target_edge / target_line, not both")
+
+    obb = cluster_obb(design, cluster_id)
+    p_lo, p_hi = obb.edge_endpoints(src_edge)
+    src_len = float(np.linalg.norm(p_hi - p_lo))
+    assert src_len > min_len_nm, (
+        f"src edge {src_edge} is degenerate (length {src_len:.3f} nm ≤ {min_len_nm} nm) "
+        "— a collapsed OBB would make collinearity vacuous."
+    )
+    src_dir = (p_hi - p_lo) / src_len
+
+    if target_edge is not None:
+        other_id, edge_key = target_edge
+        t_obb = cluster_obb(design, other_id)
+        q_lo, q_hi = t_obb.edge_endpoints(edge_key)
+        tgt_len = float(np.linalg.norm(q_hi - q_lo))
+        assert tgt_len > min_len_nm, (
+            f"target edge {edge_key} is degenerate (length {tgt_len:.3f} nm) — "
+            "collinearity would be vacuous."
+        )
+        tgt_point = (q_lo + q_hi) / 2.0
+        tgt_dir = (q_hi - q_lo) / tgt_len
+    elif target_line is not None:
+        point, direction = target_line
+        tgt_point = np.asarray(point, dtype=float)
+        tgt_dir = _unit(direction)
+    else:
+        raise ValueError("pass target_edge or target_line")
+
+    # (1) directions parallel or antiparallel.
+    cos_ang = abs(float(np.dot(src_dir, tgt_dir)))
+    ang = math.degrees(math.acos(min(1.0, cos_ang)))
+    assert ang < tol_deg, (
+        f"src edge is not collinear with the target: directions deviate {ang:.2f}° "
+        f"from parallel (tol {tol_deg}°) — the alignment rotation is wrong."
+    )
+
+    # (2) both src endpoints lie on the target line.
+    for p in (p_lo, p_hi):
+        d = p - tgt_point
+        perp = d - float(np.dot(d, tgt_dir)) * tgt_dir
+        dist = float(np.linalg.norm(perp))
+        assert dist < tol_nm, (
+            f"src endpoint {np.round(p, 3)} lies {dist:.3f} nm off the target line "
+            f"(tol {tol_nm} nm) — the edges are parallel but not on the same line "
+            "(the midpoint snap / translation is wrong)."
+        )
+    return ang
+
+
 # ── Headless-coverage audit ───────────────────────────────────────────────────
 
 _MUTATION_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
