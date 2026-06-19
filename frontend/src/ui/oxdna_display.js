@@ -100,7 +100,19 @@ export function framesToUpdates(keys, frame) {
   return updates
 }
 
-export function initOxdnaDisplay({ designRenderer, api }) {
+/** Build { [attachmentId]: number[16] } (row-major 4×4) from a /display response's
+ *  `proteins` list — the per-protein relaxed-pose transforms.  Pure. */
+export function proteinTransformMap(displayResponse) {
+  const out = {}
+  for (const p of (displayResponse?.proteins || [])) {
+    if (p?.attachment_id && Array.isArray(p.transform) && p.transform.length === 16) {
+      out[p.attachment_id] = p.transform
+    }
+  }
+  return out
+}
+
+export function initOxdnaDisplay({ designRenderer, api, proteinRenderer = null }) {
   let _active = false
   let _jobId = null
   let _mode = null     // 'relaxed' | 'rmsf' | 'trajectory'
@@ -119,6 +131,9 @@ export function initOxdnaDisplay({ designRenderer, api }) {
     }
     designRenderer.clearScalarColors?.()   // leaving a flexibility map → restore bead colours
     designRenderer.applyFemPositions(updates)
+    // Hybrid (protein) jobs: move each protein to its relaxed pose (design→relaxed
+    // rigid 4×4 from the backend); DNA-only jobs send no proteins → clears to design.
+    proteinRenderer?.applyOxdnaTransforms?.(proteinTransformMap(resp))
     _active = true
     _mode = 'relaxed'
     _jobId = jobId
@@ -202,6 +217,7 @@ export function initOxdnaDisplay({ designRenderer, api }) {
     if (!_active) return
     designRenderer?.clearScalarColors?.()
     designRenderer?.applyFemPositions(null)
+    proteinRenderer?.clearOxdnaTransforms?.()   // proteins back to design pose
     _active = false
     _mode = null
     _jobId = null

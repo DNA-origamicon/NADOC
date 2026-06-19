@@ -269,6 +269,10 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
     anchors_in = body.anchors or []
     relax_has_forces = bool(surface_in or anchors_in)
 
+    # Proteins present → an ANM-oxDNA (DNANM) hybrid run on the fork binary.
+    from backend.physics.oxdna_protein import has_proteins
+    protein = has_proteins(design)
+
     specs = build_relaxation_stages(
         mc_steps           = body.mc_steps,
         md_relax_steps     = body.md_relax_steps,
@@ -278,6 +282,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         salt_concentration = body.salt_concentration,
         min_bp_retained    = body.min_bp_retained,
         surface_present    = relax_has_forces,
+        protein            = protein,
     )
 
     job = new_oxdna_job(
@@ -835,7 +840,19 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
             conf_path, design, ref_conf,
             align_keys=[tuple(k) for k in anchor_keys], rotate=False, align=align)
     else:
-        full_map = read_configuration_unwrapped(conf_path, design, jd / "conf.dat", align=align)
+        ref_conf = jd / "conf.dat"
+        full_map = read_configuration_unwrapped(conf_path, design, ref_conf, align=align)
+
+    # Hybrid (protein) jobs: a per-protein rigid 4×4 (design pose → relaxed pose in
+    # the aligned display frame) the frontend applies to the protein render.
+    proteins = []
+    from backend.physics.oxdna_protein import has_proteins, protein_display_transforms
+    if has_proteins(design):
+        from backend.api.crud import _geometry_for_design
+        transforms = protein_display_transforms(
+            conf_path, ref_conf, design,
+            _geometry_for_design(design, compact_skips=True), align=align)
+        proteins = [{"attachment_id": aid, "transform": M} for aid, M in transforms.items()]
     # Render the true backbone site, not the oxDNA centre of mass — the CM sits
     # inward of the backbone, so rendering it collapses the apparent duplex.
     positions = [
@@ -858,6 +875,7 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
         "stage_name": stage_name,
         "n_positions": len(positions),
         "positions": positions,
+        "proteins": proteins,
     }
 
 

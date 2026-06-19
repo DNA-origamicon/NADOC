@@ -267,6 +267,42 @@ export function initAtomisticRenderer(scene) {
     endLiveTransform() { _state.live = null },
 
     /**
+     * Apply per-protein relaxed-pose transforms for the OxDNA display: each
+     * attachment's atoms (helix_id `__protein__{attachmentId}`) are rewritten by
+     * its rigid 4×4.  `transforms` = { [attachmentId]: number[16] } (ROW-MAJOR, as
+     * the backend emits); pass null/empty to restore every protein to its design
+     * pose (from cached coords).
+     */
+    applyOxdnaTransforms(transforms) {
+      const PFX = '__protein__'
+      const mats = {}
+      for (const id in (transforms || {})) {
+        const arr = transforms[id]
+        if (Array.isArray(arr) && arr.length === 16) mats[id] = new THREE.Matrix4().set(...arr)
+      }
+      const v = new THREE.Vector3()
+      const touched = new Set()
+      for (const [el, group] of Object.entries(_state.elementAtoms)) {
+        const mesh = _state.elementMeshes[el]
+        if (!mesh) continue
+        for (let i = 0; i < group.length; i++) {
+          const a = group[i]
+          const sid = (typeof a.helix_id === 'string' && a.helix_id.startsWith(PFX))
+            ? a.helix_id.slice(PFX.length) : null
+          const m = sid ? mats[sid] : null
+          v.set(a.x, a.y, a.z)
+          if (m) v.applyMatrix4(m)
+          mesh.setMatrixAt(i, sphereMatrix(_state.geom, v.x, v.y, v.z, _state.elementRadius[el]))
+          touched.add(mesh)
+        }
+      }
+      for (const mesh of touched) mesh.instanceMatrix.needsUpdate = true
+    },
+
+    /** Restore every protein to its design pose (clear OxDNA-display transforms). */
+    clearOxdnaTransforms() { this.applyOxdnaTransforms(null) },
+
+    /**
      * Switch display mode: 'off' | 'vdw' | 'ballstick'.
      * Re-uses cached atom data; no refetch.
      */

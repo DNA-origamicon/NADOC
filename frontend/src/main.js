@@ -1803,7 +1803,7 @@ async function main() {
   benchmarkPanel.mountNamd(document.getElementById('md-benchmark-mount'))
 
   // ── oxDNA relaxation panel + display (deforms NADOC model to relaxed CG) ──────
-  const oxdnaDisplay = initOxdnaDisplay({ designRenderer, api })
+  const oxdnaDisplay = initOxdnaDisplay({ designRenderer, api, proteinRenderer })
   const oxdnaPanel = initOxdnaJobsPanel({
     oxdnaDisplay, getWorkspacePath: () => _workspacePath,
     // The single production Run composes the independently-enabled elements.

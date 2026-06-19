@@ -239,17 +239,19 @@ def count_undefined_bases(
 # ── Topology writer ───────────────────────────────────────────────────────────
 
 
-def write_topology(design: Design, path: str | Path) -> None:
-    """
-    Write an oxDNA topology (.top) file for *design*.
+def topology_rows(design: Design) -> tuple[list[tuple[int, str, int, int]], int]:
+    """Build the per-nucleotide topology rows for *design*.
 
-    The nucleotide order used here must match the order in write_configuration.
-    Sequences are written as 'N' (unknown base) unless design strands carry a
-    sequence string.
+    Returns ``(rows, n_strands)`` where each row is
+    ``(strand_idx_1based, base, n3, n5)`` with **0-based** DNA particle indices
+    (``n3``/``n5`` = ``-1`` when there is no 3′/5′ neighbour).  The order matches
+    ``write_configuration``.  Extracted from ``write_topology`` so the hybrid
+    protein+DNA topology writer (``oxdna_protein``) can reuse it — there the DNA
+    particle indices are shifted by ``+N_protein`` because protein beads occupy
+    the leading indices in the ANM-oxDNA convention.
     """
     order = _strand_nucleotide_order(design)
-    n_nucleotides = len(order)
-    n_strands     = len(design.strands)
+    n_strands = len(design.strands)
 
     # Build per-nucleotide sequence lookup (key matches order tuple format).
     ls_lookup = _build_ls_lookup(design)
@@ -334,14 +336,29 @@ def write_topology(design: Design, path: str | Path) -> None:
                     else:
                         strand_idx_map[(domain.helix_id, bp, domain.direction.value, copy_k)] = si
 
-    lines = [f"{n_nucleotides} {n_strands}"]
+    rows: list[tuple[int, str, int, int]] = []
     for i, key in enumerate(order):
-        si    = strand_idx_map.get(key, 1)
-        base  = seq_lookup.get(key, 'N')
-        n3    = three_prime_nbr.get(i, -1)
-        n5    = five_prime_nbr.get(i, -1)
-        lines.append(f"{si} {base} {n3} {n5}")
+        rows.append((
+            strand_idx_map.get(key, 1),
+            seq_lookup.get(key, 'N'),
+            three_prime_nbr.get(i, -1),
+            five_prime_nbr.get(i, -1),
+        ))
+    return rows, n_strands
 
+
+def write_topology(design: Design, path: str | Path) -> None:
+    """
+    Write an oxDNA topology (.top) file for *design*.
+
+    The nucleotide order used here must match the order in write_configuration.
+    Sequences are written as 'N' (unknown base) unless design strands carry a
+    sequence string.
+    """
+    rows, n_strands = topology_rows(design)
+    lines = [f"{len(rows)} {n_strands}"]
+    for si, base, n3, n5 in rows:
+        lines.append(f"{si} {base} {n3} {n5}")
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -367,87 +384,116 @@ def write_configuration(
     box_nm   : simulation box edge length in nm.  Defaults to the maximum
                backbone position extent + 20 nm margin.
     """
-    # Build geometry lookup: (helix_id, bp_index, direction) → nuc dict.
-    geo_map: dict[tuple[str, int, str], dict] = {
-        (n["helix_id"], n["bp_index"], n["direction"]): n
-        for n in geometry
-    }
-
+    resolved_map = resolved_nuc_map(design, geometry)
     order = _strand_nucleotide_order(design)
 
-    # Resolve any missing geometry entries by extrapolating along the helix axis.
-    # For loop copies (4-tuple keys), geo_map won't have an entry; use the
-    # copy-aware helper that applies the fractional axial offset.
-    ls_lookup_conf = _build_ls_lookup(design)
-    resolved_map: dict[tuple, dict] = {}
-    for key in order:
-        nuc = geo_map.get(key[:3])  # geo_map always uses 3-tuple keys
-        if len(key) == 4:
-            # Loop copy: always recompute with fractional axial offset.
-            _h_id, _bp, _dir, _copy_k = key
-            _delta = ls_lookup_conf.get((_h_id, _bp), 0)
-            _n_copies = max(1, _delta + 1)
-            nuc = _compute_nuc_geometry_copy(design, _h_id, _bp, _dir, _copy_k, _n_copies)
-        else:
-            if nuc is None:
-                nuc = _compute_nuc_geometry(design, key[0], key[1], key[2])
-        if nuc is not None:
-            resolved_map[key] = nuc
-
     if box_nm is None:
-        # Size box from actual backbone position extents + 20 nm margin (10 nm per side).
-        # oxDNA handles positions outside [0, L] via PBC, so no centering is needed.
-        all_pos = np.array([n["backbone_position"] for n in resolved_map.values()], dtype=float)
-        if len(all_pos) > 0:
-            extents = all_pos.max(axis=0) - all_pos.min(axis=0)
-            box_nm = max(50.0, float(extents.max()) + 20.0)
-        else:
-            box_nm = 50.0
+        positions = [n["backbone_position"] for n in resolved_map.values()]
+        box_nm = box_nm_for_positions(positions)
 
-    box   = box_nm * NM_TO_OXDNA
-
+    box = box_nm * NM_TO_OXDNA
     lines = [
         "t = 0",
         f"b = {box:.6f} {box:.6f} {box:.6f}",
         "E = 0.000000 0.000000 0.000000",
     ]
-
     for key in order:
         nuc = resolved_map.get(key)
-        if nuc is None:
-            # Truly unresolvable — skip (should not happen after _compute_nuc_geometry).
-            ctr = box / 2.0
-            lines.append(f"{ctr:.6f} {ctr:.6f} {ctr:.6f}  1.0 0.0 0.0  0.0 0.0 1.0  0.0 0.0 0.0  0.0 0.0 0.0")
-            continue
-
-        # Position in oxDNA units (natural coordinates — no centering).
-        pos_nm = np.array(nuc["backbone_position"], dtype=float)
-        pos    = pos_nm * NM_TO_OXDNA
-
-        # a1 = base-normal (backbone → base direction, cross-strand).
-        a1 = np.array(nuc["base_normal"], dtype=float)
-        a1 /= np.linalg.norm(a1) + 1e-14
-
-        # a3 = 5′→3′ direction (axis_tangent for FORWARD, -axis_tangent for REVERSE).
-        tangent = np.array(nuc["axis_tangent"], dtype=float)
-        if nuc["direction"] == "FORWARD":
-            a3 = tangent
-        else:
-            a3 = -tangent
-        a3 /= np.linalg.norm(a3) + 1e-14
-
-        lines.append(
-            f"{pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}  "
-            f"{a1[0]:.6f} {a1[1]:.6f} {a1[2]:.6f}  "
-            f"{a3[0]:.6f} {a3[1]:.6f} {a3[2]:.6f}  "
-            "0.000000 0.000000 0.000000  "
-            "0.000000 0.000000 0.000000"
-        )
+        lines.append(nuc_conf_line(nuc) if nuc is not None else _conf_center_fallback(box))
 
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
+    """Resolve every nucleotide key to a geometry dict (extrapolating any missing
+    entries along the helix axis; loop copies get the fractional axial offset).
+
+    Extracted from ``write_configuration`` so the hybrid protein+DNA writer reuses
+    the identical DNA geometry resolution.
+    """
+    geo_map: dict[tuple[str, int, str], dict] = {
+        (n["helix_id"], n["bp_index"], n["direction"]): n for n in geometry
+    }
+    order = _strand_nucleotide_order(design)
+    ls_lookup_conf = _build_ls_lookup(design)
+    resolved_map: dict[tuple, dict] = {}
+    for key in order:
+        nuc = geo_map.get(key[:3])  # geo_map always uses 3-tuple keys
+        if len(key) == 4:
+            _h_id, _bp, _dir, _copy_k = key
+            _delta = ls_lookup_conf.get((_h_id, _bp), 0)
+            _n_copies = max(1, _delta + 1)
+            nuc = _compute_nuc_geometry_copy(design, _h_id, _bp, _dir, _copy_k, _n_copies)
+        elif nuc is None:
+            nuc = _compute_nuc_geometry(design, key[0], key[1], key[2])
+        if nuc is not None:
+            resolved_map[key] = nuc
+    return resolved_map
+
+
+def box_nm_for_positions(positions_nm: list) -> float:
+    """Box edge (nm) sizing a list of nm positions: max extent + 20 nm, ≥ 50 nm.
+    oxDNA handles positions outside [0, L] via PBC, so no centering is needed."""
+    all_pos = np.array(positions_nm, dtype=float)
+    if len(all_pos) == 0:
+        return 50.0
+    extents = all_pos.max(axis=0) - all_pos.min(axis=0)
+    return max(50.0, float(extents.max()) + 20.0)
+
+
+def nuc_conf_line(nuc: dict) -> str:
+    """The 15-float configuration line (oxDNA units) for one resolved nucleotide.
+    ``a1`` = base-normal, ``a3`` = 5′→3′ (axis tangent, negated for REVERSE)."""
+    pos = np.array(nuc["backbone_position"], dtype=float) * NM_TO_OXDNA
+    a1 = np.array(nuc["base_normal"], dtype=float)
+    a1 /= np.linalg.norm(a1) + 1e-14
+    tangent = np.array(nuc["axis_tangent"], dtype=float)
+    a3 = tangent if nuc["direction"] == "FORWARD" else -tangent
+    a3 /= np.linalg.norm(a3) + 1e-14
+    return (
+        f"{pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}  "
+        f"{a1[0]:.6f} {a1[1]:.6f} {a1[2]:.6f}  "
+        f"{a3[0]:.6f} {a3[1]:.6f} {a3[2]:.6f}  "
+        "0.000000 0.000000 0.000000  0.000000 0.000000 0.000000"
+    )
+
+
+def _conf_center_fallback(box: float) -> str:
+    """Box-centre placeholder line for a nucleotide with no resolvable geometry
+    (should not happen after ``resolved_nuc_map``)."""
+    ctr = box / 2.0
+    return f"{ctr:.6f} {ctr:.6f} {ctr:.6f}  1.0 0.0 0.0  0.0 0.0 1.0  0.0 0.0 0.0  0.0 0.0 0.0"
+
+
 # ── Configuration reader ──────────────────────────────────────────────────────
+
+
+def _protein_lead_offset(data_lines: list, order: list) -> int:
+    """Number of leading non-DNA particle lines in a configuration.
+
+    A hybrid ANM-oxDNA (DNANM) conf writes the protein beads FIRST, then the DNA
+    nucleotides, so it has ``N_protein + len(order)`` data lines.  A DNA-only conf
+    has exactly ``len(order)``.  The difference is the count of leading protein
+    lines to skip so the DNA keys line up with the trailing DNA lines.  Robust to
+    a truncated mid-write frame (clamped at 0)."""
+    return max(0, len(data_lines) - len(order))
+
+
+def read_protein_bead_positions(conf_path: str | Path, n_dna: int) -> list:
+    """The LEADING protein-bead positions (nm) of a hybrid conf — the first
+    ``total_data_lines - n_dna`` particle lines (protein beads precede the DNA in
+    the ANM-oxDNA convention).  Empty for a DNA-only conf.  ``n_dna`` =
+    ``len(_strand_nucleotide_order(design))``."""
+    lines = Path(conf_path).read_text(encoding="utf-8").splitlines()
+    data = [l for l in lines if l.strip() and not l.startswith(('t ', 'b ', 'E '))]
+    n_prot = max(0, len(data) - n_dna)
+    out = []
+    for ln in data[:n_prot]:
+        parts = ln.split()
+        if len(parts) >= 3:
+            out.append(np.array([float(parts[0]), float(parts[1]), float(parts[2])])
+                       * OXDNA_LENGTH_UNIT)
+    return out
 
 
 def read_configuration(
@@ -473,11 +519,15 @@ def read_configuration(
     # Skip the 3-line header.
     data_lines = [l for l in lines if l.strip() and not l.startswith(('t ', 'b ', 'E '))]
 
+    # Hybrid (DNANM) confs carry protein beads in the LEADING particle indices; the
+    # DNA nucleotides follow.  Skip the leading protein lines so DNA keys line up.
+    offset = _protein_lead_offset(data_lines, order)
+
     result: dict[tuple[str, int, str], np.ndarray] = {}
     for i, key in enumerate(order):
-        if i >= len(data_lines):
+        if offset + i >= len(data_lines):
             break
-        parts = data_lines[i].split()
+        parts = data_lines[offset + i].split()
         if len(parts) < 3:
             continue
         pos_oxdna = np.array([float(parts[0]), float(parts[1]), float(parts[2])])
@@ -514,12 +564,13 @@ def read_configuration_full(
     order = _strand_nucleotide_order(design)
     lines = Path(conf_path).read_text(encoding="utf-8").splitlines()
     data_lines = [l for l in lines if l.strip() and not l.startswith(('t ', 'b ', 'E '))]
+    offset = _protein_lead_offset(data_lines, order)   # skip leading protein beads (hybrid)
 
     result: dict[tuple[str, int, str], dict] = {}
     for i, key in enumerate(order):
-        if i >= len(data_lines):
+        if offset + i >= len(data_lines):
             break
-        parts = data_lines[i].split()
+        parts = data_lines[offset + i].split()
         if len(parts) < 9:
             continue
         vals = [float(x) for x in parts[:9]]
@@ -617,7 +668,8 @@ def unwrap_align_to_reference(
     align_keys: Optional[list] = None,
     rotate:     bool = True,
     align:      bool = True,
-) -> dict[tuple, dict]:
+    extra_points: Optional[list] = None,
+):
     """In-memory core of read_configuration_unwrapped: BFS-unwrap each bonded
     component to whole, box-shift it toward its reference image, then superpose
     onto *ref*.  Used for display AND per-frame RMSD.
@@ -672,10 +724,31 @@ def unwrap_align_to_reference(
             for k in comp:
                 placed[k] = placed[k] + shift
 
+    # Protein beads (extra_points): unwrap the protein as one rigid component and
+    # box-shift it toward the DNA assembly (it is tethered/near the DNA), so it
+    # rides through the SAME alignment transform below as the DNA.  Returned as a
+    # parallel list of nm positions in the aligned display frame.
+    placed_extra: list[np.ndarray] = []
+    if extra_points:
+        p0 = np.asarray(extra_points[0], dtype=float)
+        placed_extra = [np.asarray(p, dtype=float) - box * np.round(
+            (np.asarray(p, dtype=float) - p0) / box) for p in extra_points]
+        if placed:
+            dna_c = np.mean(list(placed.values()), axis=0)
+            prot_c = np.mean(placed_extra, axis=0)
+            eshift = box * np.round((dna_c - prot_c) / box)
+            placed_extra = [p + eshift for p in placed_extra]
+
+    def _ret(dna_dict: dict, xform=None):
+        if extra_points is None:
+            return dna_dict
+        ex = [xform(p) if xform else p for p in placed_extra]
+        return dna_dict, ex
+
     # No-align mode: structure is whole + on-screen, but left in its own frame
     # (don't re-pose onto the design — show where it actually settled).
     if not align:
-        return {k: {**relax[k], "backbone_position": placed[k]} for k in list(placed)}
+        return _ret({k: {**relax[k], "backbone_position": placed[k]} for k in list(placed)})
 
     # Superpose onto the reference frame over the chosen subset (the anchored
     # beads for a field run, else the whole assembly).
@@ -689,7 +762,8 @@ def unwrap_align_to_reference(
         # reorientation stays visible.  Orientation vectors are left untouched.
         T = (np.mean([ref[k]["backbone_position"] for k in subset], axis=0)
              - np.mean([placed[k] for k in subset], axis=0)) if subset else np.zeros(3)
-        return {k: {**relax[k], "backbone_position": placed[k] + T} for k in keys}
+        return _ret({k: {**relax[k], "backbone_position": placed[k] + T} for k in keys},
+                    xform=lambda p: p + T)
 
     # Rigid-body superpose (Kabsch) so diffusion + tumbling are removed and only
     # the internal relaxation shows.
@@ -709,9 +783,9 @@ def unwrap_align_to_reference(
                 "a1": R @ v["a1"],
                 "a3": R @ v["a3"],
             }
-        return out
+        return _ret(out, xform=lambda p: R @ (p - Pc) + Qc)
 
-    return {k: {**relax[k], "backbone_position": placed[k]} for k in keys}
+    return _ret({k: {**relax[k], "backbone_position": placed[k]} for k in keys})
 
 
 def read_trajectory_frames_full(
@@ -728,11 +802,12 @@ def read_trajectory_frames_full(
     for fi, s in enumerate(starts):
         e = starts[fi + 1] if fi + 1 < len(starts) else len(lines)
         data = [l for l in lines[s:e] if l.strip() and not l.startswith(("t ", "b ", "E "))]
+        offset = _protein_lead_offset(data, order)   # skip leading protein beads (hybrid)
         m: dict[tuple, dict] = {}
         for i, key in enumerate(order):
-            if i >= len(data):
+            if offset + i >= len(data):
                 break
-            parts = data[i].split()
+            parts = data[offset + i].split()
             if len(parts) < 9:
                 continue
             try:
@@ -823,6 +898,7 @@ def write_mutual_traps(
     stiff:  float = 1.0,
     r0:     float = 1.2,
     extra_text: str = "",
+    particle_offset: int = 0,
 ) -> int:
     """Write an oxDNA external-forces file with mutual traps for every designed
     Watson-Crick pair, and return the number of pairs trapped.
@@ -847,7 +923,9 @@ def write_mutual_traps(
 
     blocks: list[str] = []
     for key in pairs:
-        i, j = fwd[key], rev[key]
+        # particle_offset shifts DNA indices in a hybrid topology where protein
+        # beads occupy the leading particle indices (0..N_prot-1).
+        i, j = fwd[key] + particle_offset, rev[key] + particle_offset
         for a, b in ((i, j), (j, i)):   # symmetric: trap each toward the other
             blocks.append(
                 "{\n"

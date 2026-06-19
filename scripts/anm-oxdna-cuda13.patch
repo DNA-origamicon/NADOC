@@ -1,0 +1,1061 @@
+diff --git a/oxDNA/CMakeLists.txt b/oxDNA/CMakeLists.txt
+index 4aaa753..b9444fd 100644
+--- a/oxDNA/CMakeLists.txt
++++ b/oxDNA/CMakeLists.txt
+@@ -87,16 +87,16 @@ IF(CUDA)
+ 	INCLUDE_DIRECTORIES(${CUDA_INSTALL_PREFIX}/include/)
+ 	LINK_DIRECTORIES(${CUDA_INSTALL_PREFIX}/lib)
+ 	
+-	INCLUDE(select_compute_arch.cmake)
+-	
+-	IF(CUDA_COMMON_ARCH)
+-		CUDA_SELECT_NVCC_ARCH_FLAGS(ARCH_FLAGS Common)
+-	ELSE(CUDA_COMMON_ARCH)
+-		CUDA_SELECT_NVCC_ARCH_FLAGS(ARCH_FLAGS Auto)
+-	ENDIF(CUDA_COMMON_ARCH)
+-	
+-	MESSAGE(STATUS "Generating code for the following CUDA architectures: ${ARCH_FLAGS_readable}")
+-	LIST(APPEND CUDA_NVCC_FLAGS ${ARCH_FLAGS})
++	# CUDA13/CCCL compat: shadow patched CUB header (qualified data()/size()) before system include
++	LIST(APPEND CUDA_NVCC_FLAGS "-I${CMAKE_CURRENT_SOURCE_DIR}/cuda_compat")
++	# CUDA13: emit gencode as SEPARATE list tokens so the separable-compilation device-link
++	# step accepts them (CUDA_SELECT_NVCC_ARCH_FLAGS joins them into one string that nvcc -dlink
++	# rejects as "Unknown option '-gencode arch=...'"). Override the arch with -DOXDNA_CUDA_ARCH=NN.
++	IF(NOT OXDNA_CUDA_ARCH)
++		SET(OXDNA_CUDA_ARCH "75")
++	ENDIF()
++	MESSAGE(STATUS "Generating code for CUDA architecture sm_${OXDNA_CUDA_ARCH}")
++	LIST(APPEND CUDA_NVCC_FLAGS "-gencode" "arch=compute_${OXDNA_CUDA_ARCH},code=sm_${OXDNA_CUDA_ARCH}")
+ 	MESSAGE(STATUS "${CUDA_NVCC_FLAGS}")
+    
+ 	IF(G)
+diff --git a/oxDNA/src/CMakeLists.txt b/oxDNA/src/CMakeLists.txt
+index ebf4f3a..a184f53 100644
+--- a/oxDNA/src/CMakeLists.txt
++++ b/oxDNA/src/CMakeLists.txt
+@@ -245,6 +245,9 @@ IF(CUDA)
+ 		Utilities/Timings.cpp
+ 	)
+ 	
++	# CUDA13: cross-TU __global__ kernel launches (CUDA_sort.cu kernels called from backends)
++	# need relocatable device code + a device link step.
++	SET(CUDA_SEPARABLE_COMPILATION ON)
+ 	CUDA_ADD_EXECUTABLE(${exe_name} ${oxDNA_SOURCES} ${oxDNA_CUDASOURCES})
+ 	CUDA_ADD_EXECUTABLE(DNAnalysis ${DNAnalysis_SOURCES} Utilities/Timings.cpp)
+ ELSE()
+diff --git a/oxDNA/src/CUDA/Backends/CUDABaseBackend.cu b/oxDNA/src/CUDA/Backends/CUDABaseBackend.cu
+index 6a7aa5b..a1e2d31 100644
+--- a/oxDNA/src/CUDA/Backends/CUDABaseBackend.cu
++++ b/oxDNA/src/CUDA/Backends/CUDABaseBackend.cu
+@@ -177,7 +177,7 @@ void CUDABaseBackend<number, number4>::init_cuda() {
+ 	set_device(_device_number);
+ 	_device_prop = get_device_prop(_device_number);
+ 
+-	CUDA_SAFE_CALL( cudaThreadSetCacheConfig(cudaFuncCachePreferL1) );
++	CUDA_SAFE_CALL( cudaDeviceSetCacheConfig(cudaFuncCachePreferL1) );
+ 
+ 	number box_side = CONFIG_INFO->box->box_sides().x;
+ 	int N = *CONFIG_INFO->N;
+diff --git a/oxDNA/src/CUDA/Backends/CUDA_MD.cuh b/oxDNA/src/CUDA/Backends/CUDA_MD.cuh
+index 08219c2..c76b0d9 100644
+--- a/oxDNA/src/CUDA/Backends/CUDA_MD.cuh
++++ b/oxDNA/src/CUDA/Backends/CUDA_MD.cuh
+@@ -1,8 +1,8 @@
+ /* Verlet related constants */
+-__constant__ float MD_sqr_verlet_skin[1];
++static __constant__ float MD_sqr_verlet_skin[1];
+ /* System constants */
+-__constant__ int MD_N[1];
+-__constant__ float MD_dt[1];
++static __constant__ int MD_N[1];
++static __constant__ float MD_dt[1];
+ 
+ #include "../cuda_utils/CUDA_lr_common.cuh"
+ 
+diff --git a/oxDNA/src/CUDA/Backends/CUDA_mixed.cuh b/oxDNA/src/CUDA/Backends/CUDA_mixed.cuh
+index 8cf182e..c8dcd0c 100644
+--- a/oxDNA/src/CUDA/Backends/CUDA_mixed.cuh
++++ b/oxDNA/src/CUDA/Backends/CUDA_mixed.cuh
+@@ -1,7 +1,7 @@
+-__constant__ float MD_sqr_verlet_skin[1];
++static __constant__ float MD_sqr_verlet_skin[1];
+ /* System constants */
+-__constant__ int MD_N[1];
+-__constant__ float MD_dt[1];
++static __constant__ int MD_N[1];
++static __constant__ float MD_dt[1];
+ 
+ #include "../cuda_utils/CUDA_lr_common.cuh"
+ 
+diff --git a/oxDNA/src/CUDA/Backends/FFS_CUDA_MD.cuh b/oxDNA/src/CUDA/Backends/FFS_CUDA_MD.cuh
+index e9263dd..9407729 100644
+--- a/oxDNA/src/CUDA/Backends/FFS_CUDA_MD.cuh
++++ b/oxDNA/src/CUDA/Backends/FFS_CUDA_MD.cuh
+@@ -1,21 +1,21 @@
+ 
+ #include "../cuda_utils/CUDA_lr_common.cuh"
+ 
+-__constant__ float MD_F1_A[2];
+-__constant__ float MD_F1_BLOW[2];
+-__constant__ float MD_F1_R0[2];
+-__constant__ float MD_F1_BHIGH[2];
+-__constant__ float MD_F1_RLOW[2];
+-__constant__ float MD_F1_RHIGH[2];
+-__constant__ float MD_F1_RCHIGH[2];
++static __constant__ float MD_F1_A[2];
++static __constant__ float MD_F1_BLOW[2];
++static __constant__ float MD_F1_R0[2];
++static __constant__ float MD_F1_BHIGH[2];
++static __constant__ float MD_F1_RLOW[2];
++static __constant__ float MD_F1_RHIGH[2];
++static __constant__ float MD_F1_RCHIGH[2];
+ // 50 = 2 * 5 * 5
+-__constant__ float MD_F1_EPS[50];
++static __constant__ float MD_F1_EPS[50];
+ 
+-__constant__ float MD_F1_RCLOW[2];
+-__constant__ float MD_F1_SHIFT[50];
++static __constant__ float MD_F1_RCLOW[2];
++static __constant__ float MD_F1_SHIFT[50];
+ 
+ /* System constants */
+-__constant__ float MD_box_side[1];
++static __constant__ float MD_box_side[1];
+ 
+ // to be included from a common file one day...
+ template <typename number, typename number4>
+diff --git a/oxDNA/src/CUDA/Backends/FFS_MD_CUDAMixedBackend.cu b/oxDNA/src/CUDA/Backends/FFS_MD_CUDAMixedBackend.cu
+index b9c4a22..7bd75a2 100644
+--- a/oxDNA/src/CUDA/Backends/FFS_MD_CUDAMixedBackend.cu
++++ b/oxDNA/src/CUDA/Backends/FFS_MD_CUDAMixedBackend.cu
+@@ -401,7 +401,7 @@ void FFS_MD_CUDAMixedBackend::init(){
+ 	free(h_hb_pairs2);
+ 	free(h_hb_cutoffs);
+ 
+-	cudaThreadSynchronize();
++	cudaDeviceSynchronize();
+ }
+ 
+ SimpleConditions FFS_MD_CUDAMixedBackend::_get_simple_conditions(std::vector<parsed_condition> conditions, const char type[256]){
+@@ -687,7 +687,7 @@ void FFS_MD_CUDAMixedBackend::_eval_order_parameter_states(){
+ 	this->_cuda_interaction->_near_hb_op_precalc(this->_d_poss, this->_d_orientations, _d_hb_pairs1, _d_hb_pairs2, _d_nearhb_states, _n_hb_pairs, _d_region_is_nearhb,  _ffs_hb_precalc_kernel_cfg, _d_cuda_box);
+ 
+ 	this->_cuda_interaction->_dist_op_precalc(this->_d_poss, this->_d_orientations, _d_dist_pairs1, _d_dist_pairs2, _d_op_dists, _n_dist_pairs, _ffs_dist_precalc_kernel_cfg, _d_cuda_box);
+-	cudaThreadSynchronize();
++	cudaDeviceSynchronize();
+ }
+ 
+ void FFS_MD_CUDAMixedBackend::_eval_stop_conditions(SimpleConditions sc){
+@@ -702,7 +702,7 @@ void FFS_MD_CUDAMixedBackend::_eval_stop_conditions(SimpleConditions sc){
+ 
+ 	dist_op_eval<float, float4><<<_ffs_dist_eval_kernel_cfg.blocks, _ffs_dist_eval_kernel_cfg.threads_per_block>>>(_d_op_dists, _d_dist_region_lens, _d_dist_region_rows, sc.d_dist_cond_lens, sc.d_dist_cond_rows, sc.d_dist_cond_mags, sc.d_dist_cond_types, sc.d_ffs_stop, _n_dist_regions, sc.hb_cond_len);
+ 	CUT_CHECK_ERROR("dist_op_eval error");
+-	cudaThreadSynchronize();
++	cudaDeviceSynchronize();
+ 
+ 	CUDA_SAFE_CALL( cudaMemcpy(sc.h_ffs_stop, sc.d_ffs_stop, sc.stop_length * sizeof(bool), cudaMemcpyDeviceToHost) );
+ }
+diff --git a/oxDNA/src/CUDA/Backends/MD_CUDABackend.cu b/oxDNA/src/CUDA/Backends/MD_CUDABackend.cu
+index 0701340..f87a8ff 100644
+--- a/oxDNA/src/CUDA/Backends/MD_CUDABackend.cu
++++ b/oxDNA/src/CUDA/Backends/MD_CUDABackend.cu
+@@ -379,13 +379,13 @@ void MD_CUDABackend<number, number4>::sim_step(llint curr_step) {
+ 
+ 	this->_timer_first_step->resume();
+ 	_first_step();
+-	cudaThreadSynchronize();
++	cudaDeviceSynchronize();
+ 	this->_timer_first_step->pause();
+ 
+ 	_timer_sorting->resume();
+ 	if(this->_d_are_lists_old[0] && this->_sort_every > 0 && (this->_N_updates % this->_sort_every == 0)) {
+ 		_sort_particles();
+-		cudaThreadSynchronize();
++		cudaDeviceSynchronize();
+ 	}
+ 	_timer_sorting->pause();
+ 
+@@ -403,7 +403,7 @@ void MD_CUDABackend<number, number4>::sim_step(llint curr_step) {
+ 		}
+ 		this->_d_are_lists_old[0] = false;
+ 		this->_N_updates++;
+-		cudaThreadSynchronize();
++		cudaDeviceSynchronize();
+ 	}
+ 	this->_timer_lists->pause();
+ 
+@@ -419,12 +419,12 @@ void MD_CUDABackend<number, number4>::sim_step(llint curr_step) {
+ 		number energy = GpuUtils::sum_number4_to_double_on_GPU<number4>(_d_forces, this->_N);
+ 		this->_backend_info = Utils::sformat("\tCUDA_energy: %lf", energy / this->_N);
+ 	}
+-	cudaThreadSynchronize();
++	cudaDeviceSynchronize();
+ 	this->_timer_forces->pause();
+ 
+ 	this->_timer_thermostat->resume();
+ 	_thermalize(curr_step);
+-	cudaThreadSynchronize();
++	cudaDeviceSynchronize();
+ 	this->_timer_thermostat->pause();
+ 
+ 	this->_mytimer->pause();
+diff --git a/oxDNA/src/CUDA/CUDAUtils.cu b/oxDNA/src/CUDA/CUDAUtils.cu
+index 78714e8..05fda65 100644
+--- a/oxDNA/src/CUDA/CUDAUtils.cu
++++ b/oxDNA/src/CUDA/CUDAUtils.cu
+@@ -5,6 +5,7 @@
+  *      Author: lorenzo
+  */
+ 
++#include <cstdint>
+ #include "CUDAUtils.h"
+ #include <curand_kernel.h>
+ #include <thrust/reduce.h>
+@@ -45,7 +46,7 @@ void GpuUtils::print_device_array(T *v, int N) {
+ 		<<<1,1>>>
+ 		(v, N);
+ 	CUT_CHECK_ERROR("print_device_array error");
+-	cudaThreadSynchronize();
++	cudaDeviceSynchronize();
+ }
+ 
+ template<typename T>
+@@ -54,7 +55,7 @@ void GpuUtils::check_device_thresold(T *v, int N, int t) {
+ 		<<<1,1>>>
+ 		(v, N, t);
+ 	CUT_CHECK_ERROR("check_device_thresold error");
+-	cudaThreadSynchronize();
++	cudaDeviceSynchronize();
+ }
+ #endif
+ 
+diff --git a/oxDNA/src/CUDA/Interactions/CUDADNACTInteraction.cu b/oxDNA/src/CUDA/Interactions/CUDADNACTInteraction.cu
+index 7ae6744..52094d8 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDADNACTInteraction.cu
++++ b/oxDNA/src/CUDA/Interactions/CUDADNACTInteraction.cu
+@@ -470,7 +470,7 @@ void CUDADNACTInteraction<number, number4>::compute_forces(CUDABaseList<number,
+             this->_sum_edge_forces_torques(d_forces, d_torques);
+ 
+             // potential for removal here
+-            cudaThreadSynchronize();
++            cudaDeviceSynchronize();
+             CUT_CHECK_ERROR("forces_second_step error -- after non-bonded");
+ 
+             dnact_forces_edge_bonded<number, number4>
+diff --git a/oxDNA/src/CUDA/Interactions/CUDADNAInteraction.cu b/oxDNA/src/CUDA/Interactions/CUDADNAInteraction.cu
+index 9e1bde1..710284c 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDADNAInteraction.cu
++++ b/oxDNA/src/CUDA/Interactions/CUDADNAInteraction.cu
+@@ -161,7 +161,7 @@ void CUDADNAInteraction<number, number4>::compute_forces(CUDABaseList<number, nu
+ 				this->_sum_edge_forces_torques(d_forces, d_torques);
+ 
+ 				// potential for removal here
+-				cudaThreadSynchronize();
++				cudaDeviceSynchronize();
+ 				CUT_CHECK_ERROR("forces_second_step error -- after non-bonded");
+ 
+ 				dna_forces_edge_bonded<number, number4>
+diff --git a/oxDNA/src/CUDA/Interactions/CUDADNANMInteraction.cu b/oxDNA/src/CUDA/Interactions/CUDADNANMInteraction.cu
+index de510ad..12ed5be 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDADNANMInteraction.cu
++++ b/oxDNA/src/CUDA/Interactions/CUDADNANMInteraction.cu
+@@ -391,7 +391,7 @@ void CUDADNANMInteraction<number, number4>::compute_forces(CUDABaseList<number,
+             this->_sum_edge_forces_torques(d_forces, d_torques);
+ 
+             // potential for removal here
+-            cudaThreadSynchronize();
++            cudaDeviceSynchronize();
+             CUT_CHECK_ERROR("forces_second_step error -- after non-bonded");
+ 
+             dnanm_forces_edge_bonded<number, number4>
+diff --git a/oxDNA/src/CUDA/Interactions/CUDALJInteraction.cu b/oxDNA/src/CUDA/Interactions/CUDALJInteraction.cu
+index ecaf24c..cc7d338 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDALJInteraction.cu
++++ b/oxDNA/src/CUDA/Interactions/CUDALJInteraction.cu
+@@ -54,7 +54,7 @@ void CUDALJInteraction<number, number4>::compute_forces(CUDABaseList<number, num
+ 				this->_sum_edge_forces(d_forces);
+ 
+ 				// potential for removal here
+-				cudaThreadSynchronize();
++				cudaDeviceSynchronize();
+ 				CUT_CHECK_ERROR("forces_second_step error -- lj");
+ 			}
+ 			else {
+diff --git a/oxDNA/src/CUDA/Interactions/CUDAPatchyInteraction.cu b/oxDNA/src/CUDA/Interactions/CUDAPatchyInteraction.cu
+index e9c30f3..bde1a0c 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDAPatchyInteraction.cu
++++ b/oxDNA/src/CUDA/Interactions/CUDAPatchyInteraction.cu
+@@ -120,7 +120,7 @@ void CUDAPatchyInteraction<number, number4>::compute_forces(CUDABaseList<number,
+ 				this->_sum_edge_forces_torques(d_forces, d_torques);
+ 
+ 				// potential for removal here
+-				cudaThreadSynchronize();
++				cudaDeviceSynchronize();
+ 				CUT_CHECK_ERROR("forces_second_step error -- patchy");
+ 			}
+ 			else {
+diff --git a/oxDNA/src/CUDA/Interactions/CUDARNACTInteraction.cu b/oxDNA/src/CUDA/Interactions/CUDARNACTInteraction.cu
+index 21cb733..3fadbda 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDARNACTInteraction.cu
++++ b/oxDNA/src/CUDA/Interactions/CUDARNACTInteraction.cu
+@@ -678,7 +678,7 @@ void CUDARNACTInteraction<number, number4>::compute_forces(CUDABaseList<number,
+             this->_sum_edge_forces_torques(d_forces, d_torques);
+ 
+             // potential for removal here
+-            cudaThreadSynchronize();
++            cudaDeviceSynchronize();
+             CUT_CHECK_ERROR("forces_second_step error -- after non-bonded");
+ 
+             rnact_forces_edge_bonded<number, number4>
+diff --git a/oxDNA/src/CUDA/Interactions/CUDARNAInteraction.cu b/oxDNA/src/CUDA/Interactions/CUDARNAInteraction.cu
+index 6aa9607..552e861 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDARNAInteraction.cu
++++ b/oxDNA/src/CUDA/Interactions/CUDARNAInteraction.cu
+@@ -390,7 +390,7 @@ void CUDARNAInteraction<number, number4>::compute_forces(CUDABaseList<number, nu
+ 				this->_sum_edge_forces_torques(d_forces, d_torques);
+ 
+ 				// potential for removal here
+-				cudaThreadSynchronize();
++				cudaDeviceSynchronize();
+ 				CUT_CHECK_ERROR("forces_second_step error -- after non-bonded");
+ 
+ 				rna_forces_edge_bonded<number, number4>
+@@ -407,7 +407,7 @@ void CUDARNAInteraction<number, number4>::compute_forces(CUDABaseList<number, nu
+ 
+ 
+ 	//check here
+-	//cudaThreadSynchronize();
++	//cudaDeviceSynchronize();
+ 	//show_cuda_energy<number,number4><<<this->_launch_cfg.blocks, this->_launch_cfg.threads_per_block>>>(d_poss, d_orientations, d_forces, d_torques, d_bonds, this->_grooving);
+ 
+ 
+diff --git a/oxDNA/src/CUDA/Interactions/CUDARNANMInteraction.cu b/oxDNA/src/CUDA/Interactions/CUDARNANMInteraction.cu
+index 71a93d0..630c690 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDARNANMInteraction.cu
++++ b/oxDNA/src/CUDA/Interactions/CUDARNANMInteraction.cu
+@@ -627,7 +627,7 @@ void CUDARNANMInteraction<number, number4>::compute_forces(CUDABaseList<number,
+             this->_sum_edge_forces_torques(d_forces, d_torques);
+ 
+             // potential for removal here
+-            cudaThreadSynchronize();
++            cudaDeviceSynchronize();
+             CUT_CHECK_ERROR("forces_second_step error -- after non-bonded");
+ 
+             rnanm_forces_edge_bonded<number, number4>
+diff --git a/oxDNA/src/CUDA/Interactions/CUDATSPInteraction.cu b/oxDNA/src/CUDA/Interactions/CUDATSPInteraction.cu
+index 5bcfbca..73e56d8 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDATSPInteraction.cu
++++ b/oxDNA/src/CUDA/Interactions/CUDATSPInteraction.cu
+@@ -110,7 +110,7 @@ void CUDATSPInteraction<number, number4>::compute_forces(CUDABaseList<number, nu
+ 				this->_sum_edge_forces(d_forces);
+ 
+ 				// potential for removal here
+-				cudaThreadSynchronize();
++				cudaDeviceSynchronize();
+ 				CUT_CHECK_ERROR("forces_second_step error -- after non-bonded");
+ 
+ 				tsp_forces_edge_bonded<number, number4>
+diff --git a/oxDNA/src/CUDA/Interactions/CUDA_ACT.cuh b/oxDNA/src/CUDA/Interactions/CUDA_ACT.cuh
+index 8bc4578..ae5e96a 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDA_ACT.cuh
++++ b/oxDNA/src/CUDA/Interactions/CUDA_ACT.cuh
+@@ -1,26 +1,26 @@
+ /* System constants */
+ //added constants for DNACT
+-__constant__ float MD_pro_backbone_sigma;
+-__constant__ float MD_pro_backbone_rstar;
+-__constant__ float MD_pro_backbone_b;
+-__constant__ float MD_pro_backbone_rc;
+-
+-__constant__ float MD_pro_base_sigma;
+-__constant__ float MD_pro_base_rstar;
+-__constant__ float MD_pro_base_b;
+-__constant__ float MD_pro_base_rc;
+-
+-__constant__ float MD_pro_sigma;
+-__constant__ float MD_pro_rstar;
+-__constant__ float MD_pro_b;
+-__constant__ float MD_pro_rc;
+-
+-__constant__ float _kb;
+-__constant__ float _kt;
+-
+-__constant__ int _npro;
+-__constant__ int _ndna;
+-__constant__ int _offset;
++static __constant__ float MD_pro_backbone_sigma;
++static __constant__ float MD_pro_backbone_rstar;
++static __constant__ float MD_pro_backbone_b;
++static __constant__ float MD_pro_backbone_rc;
++
++static __constant__ float MD_pro_base_sigma;
++static __constant__ float MD_pro_base_rstar;
++static __constant__ float MD_pro_base_b;
++static __constant__ float MD_pro_base_rc;
++
++static __constant__ float MD_pro_sigma;
++static __constant__ float MD_pro_rstar;
++static __constant__ float MD_pro_b;
++static __constant__ float MD_pro_rc;
++
++static __constant__ float _kb;
++static __constant__ float _kt;
++
++static __constant__ int _npro;
++static __constant__ int _ndna;
++static __constant__ int _offset;
+ 
+ #include "../cuda_utils/CUDA_lr_common.cuh"
+ template<typename number, typename number4>
+diff --git a/oxDNA/src/CUDA/Interactions/CUDA_ACT_R.cuh b/oxDNA/src/CUDA/Interactions/CUDA_ACT_R.cuh
+index 48f04f4..fcbc050 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDA_ACT_R.cuh
++++ b/oxDNA/src/CUDA/Interactions/CUDA_ACT_R.cuh
+@@ -1,26 +1,26 @@
+ /* System constants */
+ //added constants for RNACT
+-__constant__ float MD_pro_backbone_sigma;
+-__constant__ float MD_pro_backbone_rstar;
+-__constant__ float MD_pro_backbone_b;
+-__constant__ float MD_pro_backbone_rc;
+-
+-__constant__ float MD_pro_base_sigma;
+-__constant__ float MD_pro_base_rstar;
+-__constant__ float MD_pro_base_b;
+-__constant__ float MD_pro_base_rc;
+-
+-__constant__ float MD_pro_sigma;
+-__constant__ float MD_pro_rstar;
+-__constant__ float MD_pro_b;
+-__constant__ float MD_pro_rc;
+-
+-__constant__ float _kb;
+-__constant__ float _kt;
+-
+-__constant__ int _npro;
+-__constant__ int _nrna;
+-__constant__ int _offset;
++static __constant__ float MD_pro_backbone_sigma;
++static __constant__ float MD_pro_backbone_rstar;
++static __constant__ float MD_pro_backbone_b;
++static __constant__ float MD_pro_backbone_rc;
++
++static __constant__ float MD_pro_base_sigma;
++static __constant__ float MD_pro_base_rstar;
++static __constant__ float MD_pro_base_b;
++static __constant__ float MD_pro_base_rc;
++
++static __constant__ float MD_pro_sigma;
++static __constant__ float MD_pro_rstar;
++static __constant__ float MD_pro_b;
++static __constant__ float MD_pro_rc;
++
++static __constant__ float _kb;
++static __constant__ float _kt;
++
++static __constant__ int _npro;
++static __constant__ int _nrna;
++static __constant__ int _offset;
+ 
+ #include "../cuda_utils/CUDA_lr_common.cuh"
+ template<typename number, typename number4>
+diff --git a/oxDNA/src/CUDA/Interactions/CUDA_ANM.cuh b/oxDNA/src/CUDA/Interactions/CUDA_ANM.cuh
+index 47a8847..0df629d 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDA_ANM.cuh
++++ b/oxDNA/src/CUDA/Interactions/CUDA_ANM.cuh
+@@ -1,23 +1,23 @@
+ /* System constants */
+ //added constants for DNANM
+-__constant__ float MD_pro_backbone_sigma;
+-__constant__ float MD_pro_backbone_rstar;
+-__constant__ float MD_pro_backbone_b;
+-__constant__ float MD_pro_backbone_rc;
+-
+-__constant__ float MD_pro_base_sigma;
+-__constant__ float MD_pro_base_rstar;
+-__constant__ float MD_pro_base_b;
+-__constant__ float MD_pro_base_rc;
+-
+-__constant__ float MD_pro_sigma;
+-__constant__ float MD_pro_rstar;
+-__constant__ float MD_pro_b;
+-__constant__ float MD_pro_rc;
+-
+-__constant__ int _npro;
+-__constant__ int _ndna;
+-__constant__ int _offset;
++static __constant__ float MD_pro_backbone_sigma;
++static __constant__ float MD_pro_backbone_rstar;
++static __constant__ float MD_pro_backbone_b;
++static __constant__ float MD_pro_backbone_rc;
++
++static __constant__ float MD_pro_base_sigma;
++static __constant__ float MD_pro_base_rstar;
++static __constant__ float MD_pro_base_b;
++static __constant__ float MD_pro_base_rc;
++
++static __constant__ float MD_pro_sigma;
++static __constant__ float MD_pro_rstar;
++static __constant__ float MD_pro_b;
++static __constant__ float MD_pro_rc;
++
++static __constant__ int _npro;
++static __constant__ int _ndna;
++static __constant__ int _offset;
+ 
+ #include "../cuda_utils/CUDA_lr_common.cuh"
+ 
+diff --git a/oxDNA/src/CUDA/Interactions/CUDA_ANM_R.cuh b/oxDNA/src/CUDA/Interactions/CUDA_ANM_R.cuh
+index 7db448f..c36a58c 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDA_ANM_R.cuh
++++ b/oxDNA/src/CUDA/Interactions/CUDA_ANM_R.cuh
+@@ -1,22 +1,22 @@
+ //added constants for RNANM
+-__constant__ float MD_pro_backbone_sigma;
+-__constant__ float MD_pro_backbone_rstar;
+-__constant__ float MD_pro_backbone_b;
+-__constant__ float MD_pro_backbone_rc;
+-
+-__constant__ float MD_pro_base_sigma;
+-__constant__ float MD_pro_base_rstar;
+-__constant__ float MD_pro_base_b;
+-__constant__ float MD_pro_base_rc;
+-
+-__constant__ float MD_pro_sigma;
+-__constant__ float MD_pro_rstar;
+-__constant__ float MD_pro_b;
+-__constant__ float MD_pro_rc;
+-
+-__constant__ int _npro;
+-__constant__ int _nrna;
+-__constant__ int _offset;
++static __constant__ float MD_pro_backbone_sigma;
++static __constant__ float MD_pro_backbone_rstar;
++static __constant__ float MD_pro_backbone_b;
++static __constant__ float MD_pro_backbone_rc;
++
++static __constant__ float MD_pro_base_sigma;
++static __constant__ float MD_pro_base_rstar;
++static __constant__ float MD_pro_base_b;
++static __constant__ float MD_pro_base_rc;
++
++static __constant__ float MD_pro_sigma;
++static __constant__ float MD_pro_rstar;
++static __constant__ float MD_pro_b;
++static __constant__ float MD_pro_rc;
++
++static __constant__ int _npro;
++static __constant__ int _nrna;
++static __constant__ int _offset;
+ 
+ 
+ #include "../cuda_utils/CUDA_lr_common.cuh"
+diff --git a/oxDNA/src/CUDA/Interactions/CUDA_DNA.cuh b/oxDNA/src/CUDA/Interactions/CUDA_DNA.cuh
+index e646a80..c5dbfed 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDA_DNA.cuh
++++ b/oxDNA/src/CUDA/Interactions/CUDA_DNA.cuh
+@@ -1,42 +1,42 @@
+ /* System constants */
+-__constant__ int MD_N[1];
+-__constant__ int MD_n_forces[1];
+-
+-__constant__ float MD_hb_multi[1];
+-__constant__ float MD_F1_A[2];
+-__constant__ float MD_F1_RC[2];
+-__constant__ float MD_F1_R0[2];
+-__constant__ float MD_F1_BLOW[2];
+-__constant__ float MD_F1_BHIGH[2];
+-__constant__ float MD_F1_RLOW[2];
+-__constant__ float MD_F1_RHIGH[2];
+-__constant__ float MD_F1_RCLOW[2];
+-__constant__ float MD_F1_RCHIGH[2];
++static __constant__ int MD_N[1];
++static __constant__ int MD_n_forces[1];
++
++static __constant__ float MD_hb_multi[1];
++static __constant__ float MD_F1_A[2];
++static __constant__ float MD_F1_RC[2];
++static __constant__ float MD_F1_R0[2];
++static __constant__ float MD_F1_BLOW[2];
++static __constant__ float MD_F1_BHIGH[2];
++static __constant__ float MD_F1_RLOW[2];
++static __constant__ float MD_F1_RHIGH[2];
++static __constant__ float MD_F1_RCLOW[2];
++static __constant__ float MD_F1_RCHIGH[2];
+ // 50 = 2 * 5 * 5
+-__constant__ float MD_F1_EPS[50];
+-__constant__ float MD_F1_SHIFT[50];
+-
+-__constant__ float MD_F2_K[2];
+-__constant__ float MD_F2_RC[2];
+-__constant__ float MD_F2_R0[2];
+-__constant__ float MD_F2_BLOW[2];
+-__constant__ float MD_F2_RLOW[2];
+-__constant__ float MD_F2_RCLOW[2];
+-__constant__ float MD_F2_BHIGH[2];
+-__constant__ float MD_F2_RCHIGH[2];
+-__constant__ float MD_F2_RHIGH[2];
+-
+-__constant__ float MD_F5_PHI_A[4];
+-__constant__ float MD_F5_PHI_B[4];
+-__constant__ float MD_F5_PHI_XC[4];
+-__constant__ float MD_F5_PHI_XS[4];
+-
+-__constant__ float MD_dh_RC[1];
+-__constant__ float MD_dh_RHIGH[1];
+-__constant__ float MD_dh_prefactor[1];
+-__constant__ float MD_dh_B[1];
+-__constant__ float MD_dh_minus_kappa[1];
+-__constant__ bool MD_dh_half_charged_ends[1];
++static __constant__ float MD_F1_EPS[50];
++static __constant__ float MD_F1_SHIFT[50];
++
++static __constant__ float MD_F2_K[2];
++static __constant__ float MD_F2_RC[2];
++static __constant__ float MD_F2_R0[2];
++static __constant__ float MD_F2_BLOW[2];
++static __constant__ float MD_F2_RLOW[2];
++static __constant__ float MD_F2_RCLOW[2];
++static __constant__ float MD_F2_BHIGH[2];
++static __constant__ float MD_F2_RCHIGH[2];
++static __constant__ float MD_F2_RHIGH[2];
++
++static __constant__ float MD_F5_PHI_A[4];
++static __constant__ float MD_F5_PHI_B[4];
++static __constant__ float MD_F5_PHI_XC[4];
++static __constant__ float MD_F5_PHI_XS[4];
++
++static __constant__ float MD_dh_RC[1];
++static __constant__ float MD_dh_RHIGH[1];
++static __constant__ float MD_dh_prefactor[1];
++static __constant__ float MD_dh_B[1];
++static __constant__ float MD_dh_minus_kappa[1];
++static __constant__ bool MD_dh_half_charged_ends[1];
+ 
+ #include "../cuda_utils/CUDA_lr_common.cuh"
+ 
+diff --git a/oxDNA/src/CUDA/Interactions/CUDA_LJ.cuh b/oxDNA/src/CUDA/Interactions/CUDA_LJ.cuh
+index 931cb24..6940be0 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDA_LJ.cuh
++++ b/oxDNA/src/CUDA/Interactions/CUDA_LJ.cuh
+@@ -1,11 +1,11 @@
+ /* System constants */
+-__constant__ int MD_N[1];
+-__constant__ int MD_n_forces[1];
+-__constant__ float MD_sqr_rcut[3];
+-__constant__ float MD_sqr_sigma[3];
+-__constant__ float MD_epsilon[3];
+-__constant__ float MD_E_cut[3];
+-__constant__ int MD_LJ_n[3];
++static __constant__ int MD_N[1];
++static __constant__ int MD_n_forces[1];
++static __constant__ float MD_sqr_rcut[3];
++static __constant__ float MD_sqr_sigma[3];
++static __constant__ float MD_epsilon[3];
++static __constant__ float MD_E_cut[3];
++static __constant__ int MD_LJ_n[3];
+ 
+ #include "../cuda_utils/CUDA_lr_common.cuh"
+ 
+diff --git a/oxDNA/src/CUDA/Interactions/CUDA_Patchy.cuh b/oxDNA/src/CUDA/Interactions/CUDA_Patchy.cuh
+index d986b6b..e3b7e99 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDA_Patchy.cuh
++++ b/oxDNA/src/CUDA/Interactions/CUDA_Patchy.cuh
+@@ -1,16 +1,16 @@
+ /* System constants */
+-__constant__ int MD_N[1];
+-__constant__ int MD_n_forces[1];
+-__constant__ float MD_sqr_tot_rcut[3];
+-__constant__ float MD_sigma[3];
+-__constant__ float MD_sqr_sigma[3];
+-__constant__ float MD_epsilon[3];
+-__constant__ float MD_E_cut[3];
+-__constant__ float MD_sqr_patch_rcut[1];
+-__constant__ float MD_patch_pow_alpha[1];
+-__constant__ float MD_patch_E_cut[3];
+-__constant__ int MD_N_patches[2];
+-__constant__ float4 MD_base_patches[2][CUDA_MAX_PATCHES];
++static __constant__ int MD_N[1];
++static __constant__ int MD_n_forces[1];
++static __constant__ float MD_sqr_tot_rcut[3];
++static __constant__ float MD_sigma[3];
++static __constant__ float MD_sqr_sigma[3];
++static __constant__ float MD_epsilon[3];
++static __constant__ float MD_E_cut[3];
++static __constant__ float MD_sqr_patch_rcut[1];
++static __constant__ float MD_patch_pow_alpha[1];
++static __constant__ float MD_patch_E_cut[3];
++static __constant__ int MD_N_patches[2];
++static __constant__ float4 MD_base_patches[2][CUDA_MAX_PATCHES];
+ /* texture reference for positions */
+ 
+ #include "../cuda_utils/CUDA_lr_common.cuh"
+diff --git a/oxDNA/src/CUDA/Interactions/CUDA_RNA.cuh b/oxDNA/src/CUDA/Interactions/CUDA_RNA.cuh
+index 1191c38..06562b2 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDA_RNA.cuh
++++ b/oxDNA/src/CUDA/Interactions/CUDA_RNA.cuh
+@@ -1,44 +1,44 @@
+ /* System constants */
+-__constant__ int MD_N[1];
+-__constant__ int MD_n_forces[1];
+-
+-__constant__ float MD_hb_multi[1];
+-__constant__ float MD_F1_A[2];
+-__constant__ float MD_F1_RC[2];
+-__constant__ float MD_F1_R0[2];
+-__constant__ float MD_F1_BLOW[2];
+-__constant__ float MD_F1_BHIGH[2];
+-__constant__ float MD_F1_RLOW[2];
+-__constant__ float MD_F1_RHIGH[2];
+-__constant__ float MD_F1_RCLOW[2];
+-__constant__ float MD_F1_RCHIGH[2];
++static __constant__ int MD_N[1];
++static __constant__ int MD_n_forces[1];
++
++static __constant__ float MD_hb_multi[1];
++static __constant__ float MD_F1_A[2];
++static __constant__ float MD_F1_RC[2];
++static __constant__ float MD_F1_R0[2];
++static __constant__ float MD_F1_BLOW[2];
++static __constant__ float MD_F1_BHIGH[2];
++static __constant__ float MD_F1_RLOW[2];
++static __constant__ float MD_F1_RHIGH[2];
++static __constant__ float MD_F1_RCLOW[2];
++static __constant__ float MD_F1_RCHIGH[2];
+ // 50 = 2 * 5 * 5
+-__constant__ float MD_F1_EPS[50];
+-__constant__ float MD_F1_SHIFT[50];
++static __constant__ float MD_F1_EPS[50];
++static __constant__ float MD_F1_SHIFT[50];
+ 
+-__constant__ float MD_F2_K[2];
+-__constant__ float MD_F2_RC[2];
+-__constant__ float MD_F2_R0[2];
+-__constant__ float MD_F2_BLOW[2];
+-__constant__ float MD_F2_RLOW[2];
+-__constant__ float MD_F2_RCLOW[2];
+-__constant__ float MD_F2_BHIGH[2];
+-__constant__ float MD_F2_RCHIGH[2];
+-__constant__ float MD_F2_RHIGH[2];
++static __constant__ float MD_F2_K[2];
++static __constant__ float MD_F2_RC[2];
++static __constant__ float MD_F2_R0[2];
++static __constant__ float MD_F2_BLOW[2];
++static __constant__ float MD_F2_RLOW[2];
++static __constant__ float MD_F2_RCLOW[2];
++static __constant__ float MD_F2_BHIGH[2];
++static __constant__ float MD_F2_RCHIGH[2];
++static __constant__ float MD_F2_RHIGH[2];
+ 
+-__constant__ float MD_F5_PHI_A[4];
+-__constant__ float MD_F5_PHI_B[4];
+-__constant__ float MD_F5_PHI_XC[4];
+-__constant__ float MD_F5_PHI_XS[4];
++static __constant__ float MD_F5_PHI_A[4];
++static __constant__ float MD_F5_PHI_B[4];
++static __constant__ float MD_F5_PHI_XC[4];
++static __constant__ float MD_F5_PHI_XS[4];
+ 
+ 
+ 
+-__constant__ float MD_dh_RC[1];
+-__constant__ float MD_dh_RHIGH[1];
+-__constant__ float MD_dh_prefactor[1];
+-__constant__ float MD_dh_B[1];
+-__constant__ float MD_dh_minus_kappa[1];
+-__constant__ bool MD_dh_half_charged_ends[1];
++static __constant__ float MD_dh_RC[1];
++static __constant__ float MD_dh_RHIGH[1];
++static __constant__ float MD_dh_prefactor[1];
++static __constant__ float MD_dh_B[1];
++static __constant__ float MD_dh_minus_kappa[1];
++static __constant__ bool MD_dh_half_charged_ends[1];
+ 
+ 
+ 
+@@ -298,7 +298,7 @@ struct CUDAModel {
+ };
+ 
+ 
+-__constant__ CUDAModel rnamodel;
++static __constant__ CUDAModel rnamodel;
+ 
+ 
+ 
+diff --git a/oxDNA/src/CUDA/Interactions/CUDA_TSP.cuh b/oxDNA/src/CUDA/Interactions/CUDA_TSP.cuh
+index 65a1653..54e86f3 100644
+--- a/oxDNA/src/CUDA/Interactions/CUDA_TSP.cuh
++++ b/oxDNA/src/CUDA/Interactions/CUDA_TSP.cuh
+@@ -1,21 +1,21 @@
+ /* System constants */
+-__constant__ int MD_N[1];
+-__constant__ int MD_N_stars[1];
+-__constant__ int MD_N_per_star[1];
+-__constant__ int MD_n_forces[1];
+-
+-__constant__ float MD_sqr_rfene[1];
+-__constant__ float MD_sqr_rfene_anchor[1];
+-__constant__ float MD_sqr_rcut[1];
+-__constant__ float MD_sqr_rep_rcut[1];
+-__constant__ float MD_TSP_lambda[1];
+-__constant__ int MD_TSP_n[1];
+-__constant__ bool MD_TSP_only_chains[1];
+-
+-__constant__ bool MD_yukawa_repulsion[1];
+-__constant__ float MD_TSP_yukawa_A[1];
+-__constant__ float MD_TSP_yukawa_xi[1];
+-__constant__ float MD_yukawa_E_cut[1];
++static __constant__ int MD_N[1];
++static __constant__ int MD_N_stars[1];
++static __constant__ int MD_N_per_star[1];
++static __constant__ int MD_n_forces[1];
++
++static __constant__ float MD_sqr_rfene[1];
++static __constant__ float MD_sqr_rfene_anchor[1];
++static __constant__ float MD_sqr_rcut[1];
++static __constant__ float MD_sqr_rep_rcut[1];
++static __constant__ float MD_TSP_lambda[1];
++static __constant__ int MD_TSP_n[1];
++static __constant__ bool MD_TSP_only_chains[1];
++
++static __constant__ bool MD_yukawa_repulsion[1];
++static __constant__ float MD_TSP_yukawa_A[1];
++static __constant__ float MD_TSP_yukawa_xi[1];
++static __constant__ float MD_yukawa_E_cut[1];
+ 
+ #include "../cuda_utils/CUDA_lr_common.cuh"
+ 
+diff --git a/oxDNA/src/CUDA/Lists/CUDABinVerletList.cu b/oxDNA/src/CUDA/Lists/CUDABinVerletList.cu
+index 61b21c3..f4c4500 100644
+--- a/oxDNA/src/CUDA/Lists/CUDABinVerletList.cu
++++ b/oxDNA/src/CUDA/Lists/CUDABinVerletList.cu
+@@ -133,7 +133,7 @@ void CUDABinVerletList<number, number4>::update(number4 *poss, number4 *list_pos
+ 		<<<_cells_kernel_cfg.blocks, _cells_kernel_cfg.threads_per_block>>>
+ 		(poss, this->_d_cells, this->_d_counters_cells, this->_d_cell_overflow);
+ 	CUT_CHECK_ERROR("fill_cells (BinVerlet) error");
+-	cudaThreadSynchronize();
++	cudaDeviceSynchronize();
+ 
+ 	if(this->_d_cell_overflow[0] == true) throw oxDNAException("A cell contains more than _max_n_per_cell (%d, %d, %d) particles. Please increase the value of max_density_multiplier (which defaults to 1) in the input file\n", _max_N_per_cell[0], _max_N_per_cell[1], _max_N_per_cell[2]);
+ 
+diff --git a/oxDNA/src/CUDA/Lists/CUDASimpleVerletList.cu b/oxDNA/src/CUDA/Lists/CUDASimpleVerletList.cu
+index 458049f..f05e1ce 100644
+--- a/oxDNA/src/CUDA/Lists/CUDASimpleVerletList.cu
++++ b/oxDNA/src/CUDA/Lists/CUDASimpleVerletList.cu
+@@ -148,11 +148,11 @@ void CUDASimpleVerletList<number, number4>::update(number4 *poss, number4 *list_
+ 		(poss, _d_cells, _d_counters_cells, _d_cell_overflow, this->_d_cuda_box);
+ 	CUT_CHECK_ERROR("fill_cells (SimpleVerlet) error");
+ 
+-	cudaThreadSynchronize();
++	cudaDeviceSynchronize();
+ 	if(_d_cell_overflow[0] == true) throw oxDNAException("A cell contains more than _max_n_per_cell (%d) particles. Please increase the value of max_density_multiplier (which defaults to 1) in the input file\n", _max_N_per_cell);
+ 
+ 	// texture binding for the number of particles contained in each cell
+-	cudaBindTexture(0, counters_cells_tex, _d_counters_cells, sizeof(int)*_N_cells);
++	CUDA_SAFE_CALL( cudaMemcpyToSymbol(counters_cells_ptr, &_d_counters_cells, sizeof(int*)) ); // was cudaBindTexture (removed in CUDA12+)
+ 
+ 	// for edge based approach
+ 	if(this->_use_edge) {
+@@ -179,7 +179,6 @@ void CUDASimpleVerletList<number, number4>::update(number4 *poss, number4 *list_
+ 		CUT_CHECK_ERROR("update_neigh_list (SimpleVerlet) error");
+ 	}
+ 
+-	cudaUnbindTexture(counters_cells_tex);
+ }
+ 
+ template class CUDASimpleVerletList<float, float4>;
+diff --git a/oxDNA/src/CUDA/Lists/CUDA_bin_verlet.cuh b/oxDNA/src/CUDA/Lists/CUDA_bin_verlet.cuh
+index e056147..0546576 100644
+--- a/oxDNA/src/CUDA/Lists/CUDA_bin_verlet.cuh
++++ b/oxDNA/src/CUDA/Lists/CUDA_bin_verlet.cuh
+@@ -5,20 +5,21 @@
+  *      Author: lorenzo
+  */
+ 
++#include <cstdint>
+ #include <cfloat>
+ 
+ #include "../cuda_utils/CUDA_lr_common.cuh"
+ 
+-__constant__ float bverlet_box_side[1];
+-__constant__ int bverlet_N[1];
+-__constant__ bool bverlet_AO_mixture[1];
++static __constant__ float bverlet_box_side[1];
++static __constant__ int bverlet_N[1];
++static __constant__ bool bverlet_AO_mixture[1];
+ 
+-__constant__ float bverlet_sqr_rverlet[3];
+-__constant__ float bverlet_rcell[3];
+-__constant__ int bverlet_N_cells_side[3];
+-__constant__ int bverlet_max_N_per_cell[3];
+-__constant__ int bverlet_cells_offset[3];
+-__constant__ int bverlet_counters_offset[3];
++static __constant__ float bverlet_sqr_rverlet[3];
++static __constant__ float bverlet_rcell[3];
++static __constant__ int bverlet_N_cells_side[3];
++static __constant__ int bverlet_max_N_per_cell[3];
++static __constant__ int bverlet_cells_offset[3];
++static __constant__ int bverlet_counters_offset[3];
+ 
+ template <typename number, typename number4>
+ __device__ number quad_minimum_image_dist(const number4 &r_i, const number4 &r_j) {
+diff --git a/oxDNA/src/CUDA/Lists/CUDA_simple_verlet.cuh b/oxDNA/src/CUDA/Lists/CUDA_simple_verlet.cuh
+index e99322e..910e8b3 100644
+--- a/oxDNA/src/CUDA/Lists/CUDA_simple_verlet.cuh
++++ b/oxDNA/src/CUDA/Lists/CUDA_simple_verlet.cuh
+@@ -5,13 +5,13 @@
+  *      Author: lorenzo
+  */
+ 
+-__constant__ float verlet_sqr_rverlet[1];
+-__constant__ int verlet_N[1];
++static __constant__ float verlet_sqr_rverlet[1];
++static __constant__ int verlet_N[1];
+ 
+-__constant__ int verlet_N_cells_side[3];
+-__constant__ int verlet_max_N_per_cell[1];
++static __constant__ int verlet_N_cells_side[3];
++static __constant__ int verlet_max_N_per_cell[1];
+ 
+-texture<int, 1, cudaReadModeElementType> counters_cells_tex;
++static __device__ int *counters_cells_ptr; // was a texture; migrated to __ldg for CUDA12+
+ 
+ __forceinline__ __device__ int neigh_cell(int3 index, int3 offset) {
+ 	// neighbour cell of this cell
+@@ -24,7 +24,7 @@ __forceinline__ __device__ int neigh_cell(int3 index, int3 offset) {
+ 
+ template<typename number, typename number4>
+ __device__ void update_cell_neigh_list(number4 *poss, int cell_ind, int *cells, number4 r, int *neigh, int &N_neigh, LR_bonds b, CUDABox<number, number4> *box) {
+-	int size = tex1Dfetch(counters_cells_tex, cell_ind);
++	int size = __ldg(&counters_cells_ptr[cell_ind]);
+ 	for(int i = 0; i < size; i++) {
+ 		int m = cells[cell_ind*verlet_max_N_per_cell[0] + i];
+ 		// no bonded neighbours in our list!
+@@ -121,7 +121,7 @@ __global__ void compress_matrix_neighs(int *matrix, int *nneighs, int *offsets,
+ 
+ template<typename number, typename number4>
+ __device__ void edge_update_cell_neigh_list(number4 *poss, int cell_ind, int *cells, number4 &r, int *neigh, int &N_n, LR_bonds b, int &N_n_no_doubles, CUDABox<number, number4> *box) {
+-	int size = tex1Dfetch(counters_cells_tex, cell_ind);
++	int size = __ldg(&counters_cells_ptr[cell_ind]);
+ 	for(int i = 0; i < size; i++) {
+ 		int m = cells[cell_ind * verlet_max_N_per_cell[0] + i];
+ 
+diff --git a/oxDNA/src/CUDA/Thermostats/CUDA_SRD.cuh b/oxDNA/src/CUDA/Thermostats/CUDA_SRD.cuh
+index 9286f02..c7ec882 100644
+--- a/oxDNA/src/CUDA/Thermostats/CUDA_SRD.cuh
++++ b/oxDNA/src/CUDA/Thermostats/CUDA_SRD.cuh
+@@ -1,16 +1,17 @@
++#include <cstdint>
+ #include <cfloat>
+ #include "../cuda_utils/CUDA_lr_common.cuh"
+ 
+-__constant__ float box_side[1];
+-__constant__ float rcell[1];
+-__constant__ int N_cells_side[1];
+-__constant__ int max_N_per_cell[1];
+-__constant__ int N_tot[1];
+-__constant__ int N_solvent[1];
++static __constant__ float box_side[1];
++static __constant__ float rcell[1];
++static __constant__ int N_cells_side[1];
++static __constant__ int max_N_per_cell[1];
++static __constant__ int N_tot[1];
++static __constant__ int N_solvent[1];
+ 
+-__constant__ float dt[1];
+-__constant__ float m_small[1];
+-__constant__ float sqrt_m_small[1];
++static __constant__ float dt[1];
++static __constant__ float m_small[1];
++static __constant__ float sqrt_m_small[1];
+ 
+ __forceinline__ __device__ int compute_cell_index(float4 &r) {
+ 	int cx = ((r.x/box_side[0] - floorf(r.x / box_side[0])) * (1.f - FLT_EPSILON)) * N_cells_side[0];
+diff --git a/oxDNA/src/CUDA/cuda_utils/cuda_device_utils.cu b/oxDNA/src/CUDA/cuda_utils/cuda_device_utils.cu
+index 6c4c986..783acd6 100644
+--- a/oxDNA/src/CUDA/cuda_utils/cuda_device_utils.cu
++++ b/oxDNA/src/CUDA/cuda_utils/cuda_device_utils.cu
+@@ -36,6 +36,6 @@ cudaDeviceProp get_device_prop(int device) {
+ 
+ cudaError_t set_device(int device) {
+ 	check_device_existance(device);
+-	cudaThreadExit();
++	cudaDeviceReset();
+ 	return cudaSetDevice(device);
+ }
+diff --git a/oxDNA/src/CUDA/cuda_utils/helper_cuda.h b/oxDNA/src/CUDA/cuda_utils/helper_cuda.h
+index d2aee89..30ed790 100644
+--- a/oxDNA/src/CUDA/cuda_utils/helper_cuda.h
++++ b/oxDNA/src/CUDA/cuda_utils/helper_cuda.h
+@@ -818,7 +818,7 @@ inline int gpuDeviceInit(int devID)
+     cudaDeviceProp deviceProp;
+     checkCudaErrors(cudaGetDeviceProperties(&deviceProp, devID));
+ 
+-    if (deviceProp.computeMode == cudaComputeModeProhibited)
++    if (false /* computeMode removed in CUDA13 */)
+     {
+         fprintf(stderr, "Error: device is running in <Compute Mode Prohibited>, no threads can use ::cudaSetDevice().\n");
+         return -1;
+@@ -851,7 +851,7 @@ inline int gpuGetMaxGflopsDeviceId()
+         cudaGetDeviceProperties(&deviceProp, current_device);
+ 
+         // If this GPU is not running on Compute Mode prohibited, then we can add it to the list
+-        if (deviceProp.computeMode != cudaComputeModeProhibited)
++        if (true /* computeMode removed in CUDA13 */)
+         {
+             if (deviceProp.major > 0 && deviceProp.major < 9999)
+             {
+@@ -870,7 +870,7 @@ inline int gpuGetMaxGflopsDeviceId()
+         cudaGetDeviceProperties(&deviceProp, current_device);
+ 
+         // If this GPU is not running on Compute Mode prohibited, then we can add it to the list
+-        if (deviceProp.computeMode != cudaComputeModeProhibited)
++        if (true /* computeMode removed in CUDA13 */)
+         {
+             if (deviceProp.major == 9999 && deviceProp.minor == 9999)
+             {
+@@ -881,7 +881,7 @@ inline int gpuGetMaxGflopsDeviceId()
+                 sm_per_multiproc = _ConvertSMVer2Cores(deviceProp.major, deviceProp.minor);
+             }
+ 
+-            int compute_perf  = deviceProp.multiProcessorCount * sm_per_multiproc * deviceProp.clockRate;
++            int compute_perf  = deviceProp.multiProcessorCount * sm_per_multiproc;
+ 
+             if (compute_perf  > max_compute_perf)
+             {
+diff --git a/oxDNA/src/Forces/GenericCentralForce.cpp b/oxDNA/src/Forces/GenericCentralForce.cpp
+index b4a2631..671e17c 100644
+--- a/oxDNA/src/Forces/GenericCentralForce.cpp
++++ b/oxDNA/src/Forces/GenericCentralForce.cpp
+@@ -5,6 +5,7 @@
+  *      Author: Lorenzo
+  */
+ 
++#include <cstdint>
+ #include "GenericCentralForce.h"
+ 
+ #include <cfloat>
+diff --git a/oxDNA/src/Observables/StructureFactor.cpp b/oxDNA/src/Observables/StructureFactor.cpp
+index 8535114..86bde2e 100644
+--- a/oxDNA/src/Observables/StructureFactor.cpp
++++ b/oxDNA/src/Observables/StructureFactor.cpp
+@@ -5,6 +5,7 @@
+  *      Author: Lorenzo
+  */
+ 
++#include <cstdint>
+ #include "StructureFactor.h"
+ 
+ #include <algorithm>
+diff --git a/oxDNA/src/defs.h b/oxDNA/src/defs.h
+index 6d19e7e..a43e7ef 100644
+--- a/oxDNA/src/defs.h
++++ b/oxDNA/src/defs.h
+@@ -61,6 +61,7 @@
+ #define A_V (-20)
+ #define A_DUMMY (-21)
+ 
++#include <cstdint>
+ #include <cmath>
+ #include <string>
+ #include <iostream>

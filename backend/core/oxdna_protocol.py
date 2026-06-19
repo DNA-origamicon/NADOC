@@ -77,6 +77,15 @@ class OxdnaStageSpec:
     forces_meta:          dict | None = None
     # Health gate (checked after the stage).
     min_bp_retained:      float = 0.0
+    # ── ANM-oxDNA hybrid (protein present) ──────────────────────────────────────
+    # interaction_type override (e.g. "DNANM" / "DNANM_relax"); None → "DNA2".
+    interaction:          str | None = None
+    # ANM parameter-file name in the job dir (the protein spring network); emitted
+    # as `parfile = <name>` only for hybrid stages.  Its presence marks a fork
+    # (anm-oxdna) stage, so the renderer also emits the keys that fork makes
+    # mandatory (refresh_vel for MC) and `relax_type` for DNANM_relax.
+    parfile:              str | None = None
+    relax_type:           str = "harmonic_force"   # DNANM_relax algorithm
 
     def to_status(self) -> OxdnaStageStatus:
         return OxdnaStageStatus(name=self.name, kind=self.kind, steps=self.steps)
@@ -98,6 +107,7 @@ def build_relaxation_stages(
     salt_concentration: float = 0.5,
     min_bp_retained:    float = 0.50,
     surface_present:    bool = False,
+    protein:            bool = False,
 ) -> list[OxdnaStageSpec]:
     """Return the ordered 3-stage standard relaxation spec list.
 
@@ -110,37 +120,57 @@ def build_relaxation_stages(
     always CPU — oxDNA's Monte Carlo backend is CPU-only — and the CUDA-built
     oxDNA binary runs the CPU backend fine.
     """
+    # ANM-oxDNA hybrid (protein present): the fork's DNANM interaction + the protein
+    # ANM parameter file on every stage; DNANM_relax (non-diverging backbone) for the
+    # MC/MD relax stages, plain DNANM for equil.  The protein traps (conjugation /
+    # anchors) are ABSOLUTE-coordinate forces → fix_diffusion off, and they persist
+    # through equil (in equil_forces.txt) so proteins don't drift off during the
+    # unbiased settle.  The bp-retention metric IS hybrid-aware (read_configuration's
+    # protein-lead offset), but the gate stays lenient (0) for protein jobs until the
+    # threshold is validated against the fork's HBList — the % is still recorded for
+    # the health readout.
+    parfile = "anm.par" if protein else None
+    relax_interaction = "DNANM_relax" if protein else None
+    equil_interaction = "DNANM" if protein else None
+    abs_forces = surface_present or protein
+    equil_external = surface_present or protein
+    equil_gate = 0.0 if protein else min_bp_retained
+    md_gate = 0.0 if protein else min_bp_retained
+
     return [
         OxdnaStageSpec(
             name="1_mc_relax", kind="mc", sim_type="MC", steps=mc_steps,
             backend="CPU",
             max_backbone_force=5.0, max_backbone_force_far=10.0,
             external_forces=True,          # mutual traps pull designed pairs together
-            absolute_forces=surface_present,   # + surface/anchors → fix_diffusion off
+            absolute_forces=abs_forces,    # + surface/anchors/protein → fix_diffusion off
             salt_concentration=salt_concentration, device=device,
             min_bp_retained=0.0,           # MC clears clashes; no bp gate yet
+            interaction=relax_interaction, parfile=parfile,
         ),
         OxdnaStageSpec(
             name="2_md_relax", kind="md_relax", sim_type="MD", steps=md_relax_steps,
             backend=backend, dt=0.002,
             max_backbone_force=5.0, max_backbone_force_far=10.0,
             external_forces=True,          # hold pairs while the backbone relaxes
-            absolute_forces=surface_present,
+            absolute_forces=abs_forces,
             salt_concentration=salt_concentration, device=device,
-            min_bp_retained=min_bp_retained,
+            min_bp_retained=md_gate,
+            interaction=relax_interaction, parfile=parfile,
         ),
         OxdnaStageSpec(
             name="3_equil", kind="equil", sim_type="MD", steps=equil_steps,
             backend=backend, dt=0.003,
             max_backbone_force=None, max_backbone_force_far=None,
-            # Unbiased (mutual traps dropped: confirm the pairs self-sustain), but a
-            # hard surface / anchors must persist so the structure equilibrates while
-            # still bound — those live in equil_forces.txt (no mutual traps).
-            external_forces=surface_present,
-            forces_file="equil_forces.txt" if surface_present else None,
-            absolute_forces=surface_present,
+            # Unbiased (DNA mutual traps dropped: confirm the pairs self-sustain), but a
+            # hard surface / anchors / protein tethers must persist so the structure
+            # equilibrates while still bound — those live in equil_forces.txt.
+            external_forces=equil_external,
+            forces_file="equil_forces.txt" if equil_external else None,
+            absolute_forces=abs_forces,
             salt_concentration=salt_concentration, device=device,
-            min_bp_retained=min_bp_retained,
+            min_bp_retained=equil_gate,
+            interaction=equil_interaction, parfile=parfile,
         ),
     ]
 
@@ -153,6 +183,7 @@ def render_stage_input(
     topology_name: str,
     conf_name:     str,
     forces_name:   str | None = None,
+    parfile_name:  str | None = None,
 ) -> str:
     """Render the oxDNA input-file text for *spec*.
 
@@ -198,10 +229,22 @@ def render_stage_input(
         lines.append(f"ensemble = {spec.ensemble}")
         lines.append(f"delta_translation = {spec.delta_translation}")
         lines.append(f"delta_rotation = {spec.delta_rotation}")
+        # The anm-oxdna fork makes refresh_vel mandatory (even for MC).
+        if spec.parfile:
+            lines.append("refresh_vel = true")
 
     # ── Interaction ─────────────────────────────────────────────────────────────
+    # Hybrid protein+DNA runs use the ANM-oxDNA fork's DNANM interaction (+ a
+    # parameter file for the protein spring network); DNANM_relax additionally
+    # takes a relax_type.  DNA-only runs stay on mainline DNA2.
     lines.append("")
-    lines.append("interaction_type = DNA2")
+    interaction = spec.interaction or "DNA2"
+    lines.append(f"interaction_type = {interaction}")
+    parfile = parfile_name or spec.parfile
+    if parfile:
+        lines.append(f"parfile = {parfile}")
+        if interaction == "DNANM_relax":
+            lines.append(f"relax_type = {spec.relax_type}")
     lines.append(f"salt_concentration = {spec.salt_concentration}")
 
     # ── Mutual-trap external forces (hold designed pairs during relaxation) ──────

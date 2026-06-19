@@ -121,6 +121,30 @@ def find_oxdna() -> Optional[str]:
     return None
 
 
+_OXDNA_ANM_CANDIDATES = [
+    os.path.expanduser("~/anm-oxdna/oxDNA/build_cuda/bin/oxDNA"),   # CUDA (preferred)
+    os.path.expanduser("~/anm-oxdna/oxDNA/build/bin/oxDNA"),        # CPU fallback
+]
+
+
+def find_oxdna_anm() -> Optional[str]:
+    """Return the ANM-oxDNA (``DNANM`` hybrid) binary path, or None if not found.
+
+    This is the SEPARATE fork (sulcgroup/anm-oxdna) used only when a design has
+    proteins — mainline oxDNA has no DNANM support.  Resolution: ``$OXDNA_ANM_BIN``
+    → conventional ``~/anm-oxdna/oxDNA/build_cuda/bin/oxDNA`` (CUDA) → ``…/build/``
+    (CPU).  Built by ``scripts/build-anm-oxdna.sh``.
+    """
+    override = os.environ.get("OXDNA_ANM_BIN", "").strip()
+    for candidate in ([override] if override else []) + _OXDNA_ANM_CANDIDATES:
+        found = shutil.which(candidate) or (
+            candidate if os.path.isfile(candidate) and os.access(candidate, os.X_OK) else None
+        )
+        if found:
+            return found
+    return None
+
+
 def find_dnanalysis() -> Optional[str]:
     """Return the DNAnalysis binary path (built alongside oxDNA), or None.
 
@@ -176,24 +200,55 @@ def prepare_oxdna_job(
     equil_forces.txt (the equil stage drops the mutual traps but keeps these).
     Returns the forces info dict (``n_anchored`` etc.) or an empty dict.
     """
+    from backend.physics.oxdna_protein import (
+        anm_par_text,
+        build_protein_blocks,
+        has_proteins,
+        hybrid_configuration_text,
+        hybrid_topology_text,
+        protein_bead_count,
+        protein_forces_text,
+    )
+
     jd = job.job_dir(workspace_dir)
     jd.mkdir(parents=True, exist_ok=True)
-    write_topology(design, jd / "topology.top")
-    write_configuration(design, geometry, jd / "conf.dat")
+
+    # ── Hybrid protein+DNA (ANM-oxDNA / DNANM) ──────────────────────────────────
+    # Protein beads occupy the LEADING particle indices, so the topology/conf are
+    # the hybrid writers' and every DNA particle index (mutual traps especially)
+    # is shifted by +N_protein.  An ANM parameter file + the protein tethers
+    # (conjugation springs / positional anchors) are written alongside.
+    protein = has_proteins(design)
+    prot_offset, prot_traps = 0, ""
+    if protein:
+        atts, blocks = build_protein_blocks(design, geometry)
+        prot_offset = protein_bead_count(blocks)
+        (jd / "topology.top").write_text(hybrid_topology_text(design, blocks), encoding="utf-8")
+        (jd / "conf.dat").write_text(
+            hybrid_configuration_text(design, geometry, blocks), encoding="utf-8")
+        (jd / "anm.par").write_text(anm_par_text(blocks), encoding="utf-8")
+        prot_traps = protein_forces_text(design, atts, blocks, geometry)
+    else:
+        write_topology(design, jd / "topology.top")
+        write_configuration(design, geometry, jd / "conf.dat")
+
     # Optional hard surface + anchors held throughout the relax (a structure relaxed
     # on a surface differs from one relaxed free).
     sa_text, info = "", {}
     if surface or anchors:
         sa_text, info = surface_anchor_forces_text(
             design, jd / "conf.dat", wall=surface, anchors=anchors, anchor_stiff=anchor_stiff)
-        # Always write the equil file when surface/anchors were requested — the equil
-        # stage's spec references it (build_relaxation_stages surface_present), so it
-        # must exist even if the selection resolved to nothing.
-        (jd / "equil_forces.txt").write_text(sa_text, encoding="utf-8")
+    # The equil stage drops the DNA mutual traps but keeps surface/anchors AND the
+    # protein tethers (so proteins don't drift off the structure during the unbiased
+    # settle).  Write it whenever either is present (the spec references it).
+    equil_extra = "\n".join(t for t in (sa_text, prot_traps) if t)
+    if surface or anchors or protein:
+        (jd / "equil_forces.txt").write_text(equil_extra, encoding="utf-8")
     # Mutual-trap external forces (hold designed WC pairs during the relax stages —
     # NADOC geometry starts the pairs outside oxDNA's H-bond range, so without this
-    # a free MD melts the structure) + the surface/anchor blocks (if any).
-    write_mutual_traps(design, jd / "forces.txt", extra_text=sa_text)
+    # a free MD melts the structure) + the surface/anchor + protein-tether blocks.
+    write_mutual_traps(design, jd / "forces.txt",
+                       extra_text=equil_extra, particle_offset=prot_offset)
     # Self-contained design snapshot for health checks (decoupled from live state).
     (jd / "design.json").write_text(design.model_dump_json())
     (jd / "stages_spec.json").write_text(
@@ -461,11 +516,16 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
     jd = job.job_dir(workspace_dir)
     logger.info("[%s] oxdna run_job starting; job_dir=%s", job.job_id, jd)
 
-    oxdna_bin = find_oxdna()
+    # Hybrid protein jobs (any DNANM stage → spec.parfile set) need the ANM-oxDNA
+    # fork; DNA-only jobs use mainline oxDNA.
+    is_hybrid = any(s.parfile for s in specs)
+    oxdna_bin = find_oxdna_anm() if is_hybrid else find_oxdna()
     if oxdna_bin is None:
         job.status = OxdnaStatus.failed
-        job.error = ("oxDNA binary not found. Set $OXDNA_BIN or install to "
-                     "~/oxDNA/build/bin/oxDNA.")
+        job.error = (
+            ("ANM-oxDNA (protein) binary not found. Set $OXDNA_ANM_BIN or run "
+             "scripts/build-anm-oxdna.sh.") if is_hybrid else
+            "oxDNA binary not found. Set $OXDNA_BIN or install to ~/oxDNA/build/bin/oxDNA.")
         job.save(workspace_dir)
         return
 
@@ -501,9 +561,13 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
         # Relax stages use the default mutual-trap forces.txt; a field stage points
         # spec.forces_file at its own field_forces_N.txt (uniform force + anchors).
         forces = (jd / (spec.forces_file or "forces.txt")).resolve() if spec.external_forces else None
+        # The ANM parameter file (hybrid stages) is resolved to an absolute path in
+        # the job dir, like topology/conf/forces (oxDNA runs with cwd=stage_dir).
+        parfile = str((jd / spec.parfile).resolve()) if spec.parfile else None
         input_path.write_text(
             render_stage_input(spec, str(topo), str(conf),
-                               forces_name=str(forces) if forces else None)
+                               forces_name=str(forces) if forces else None,
+                               parfile_name=parfile)
         )
 
         logger.info("[%s] stage %d/%d: %s (%s, %d steps)",
@@ -531,9 +595,13 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
             return
 
         # ── Health check + gate (oxDNA HBList ground truth when available) ────
+        # Mainline DNAnalysis can't parse a hybrid DNANM topology, so protein jobs
+        # use the geometric base-pair-retention metric (now hybrid-index-aware via
+        # read_configuration_full's protein-lead offset).
         res = run_oxdna_health_check(
             design, stage_dir, kind=spec.kind, min_bp_retained=spec.min_bp_retained,
-            topology_path=topo, dnanalysis_bin=find_dnanalysis(),
+            topology_path=topo,
+            dnanalysis_bin=None if is_hybrid else find_dnanalysis(),
             salt_concentration=spec.salt_concentration,
         )
         steps_per_s = spec.steps / elapsed

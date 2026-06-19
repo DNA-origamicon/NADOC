@@ -229,3 +229,18 @@ describe('initOxdnaDisplay controller', () => {
     expect(designRenderer.applyScalarColors).not.toHaveBeenCalled()
   })
 })
+
+describe('proteinTransformMap', () => {
+  it('extracts {attachmentId: 16-float} from a /display proteins list', async () => {
+    const { proteinTransformMap } = await import('./oxdna_display.js')
+    const M = Array.from({ length: 16 }, (_, i) => i)
+    const resp = { proteins: [{ attachment_id: 'a1', transform: M }] }
+    expect(proteinTransformMap(resp)).toEqual({ a1: M })
+  })
+  it('skips malformed / missing entries and tolerates no proteins', async () => {
+    const { proteinTransformMap } = await import('./oxdna_display.js')
+    expect(proteinTransformMap({})).toEqual({})
+    expect(proteinTransformMap({ proteins: [{ attachment_id: 'a', transform: [1, 2, 3] }] })).toEqual({})
+    expect(proteinTransformMap({ proteins: [{ transform: Array(16).fill(0) }] })).toEqual({})
+  })
+})
