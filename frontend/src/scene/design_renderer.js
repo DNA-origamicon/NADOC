@@ -43,6 +43,9 @@ export function initDesignRenderer(scene, storeRef) {
   const _glowLayer         = createGlowLayer(scene)
   // Undefined-bases highlight: red, ~2× the selection glow size
   const _undefinedGlowLayer = createGlowLayer(scene, 0xff3030, 5.6)
+  // oxDNA anchor highlight: purple, distinct from the green selection glow — marks the
+  // strands/clusters pinned as FIXED during an E-field (or other) run.
+  const _anchorGlowLayer    = createGlowLayer(scene, 0xb14aff, 3.6, 'anchorGlow')
   // Drill-v2 hover preview: yellow glow on the would-be-selected leaf (vs the green
   // selection glow). Larger than the green so its halo reads yellow over a selected
   // (green-glowing) strand. Named so gesture e2e can detect it.
@@ -302,6 +305,7 @@ export function initDesignRenderer(scene, storeRef) {
 
     _glowLayer.clear()          // stale entries after rebuild; selection_manager re-applies if needed
     _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
+    _anchorGlowLayer.clear()    // caller (anchor_glow) re-applies after a rebuild
     _previewGlowLayer.clear()   // hover preview is transient; never survives a rebuild
     if (_previewArcTube) _previewArcTube.visible = false
     if (_selectionArcTube) _selectionArcTube.visible = false
@@ -770,6 +774,10 @@ export function initDesignRenderer(scene, storeRef) {
     setUndefinedHighlight(entries) { _undefinedGlowLayer.setEntries(entries) },
     clearUndefinedHighlight()      { _undefinedGlowLayer.clear() },
 
+    /** Show purple glow over the backbone entries of oxDNA anchor (fixed) elements. */
+    setAnchorGlow(entries) { _anchorGlowLayer.setEntries(entries) },
+    clearAnchorGlow()      { _anchorGlowLayer.clear() },
+
     /**
      * Show emission-color glows for fluorophore beads.
      * @param {Array<{pos: THREE.Vector3, emissionColor: number}>} entries
@@ -784,6 +792,7 @@ export function initDesignRenderer(scene, storeRef) {
     refreshAllGlow() {
       _glowLayer.refresh()
       _undefinedGlowLayer.refresh()
+      _anchorGlowLayer.refresh()
       _previewGlowLayer.refresh()
       _fluoroGlowLayer.refresh()
     },

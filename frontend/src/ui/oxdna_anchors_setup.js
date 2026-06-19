@@ -21,7 +21,7 @@ import {
 
 const _C = { dim: '#8b949e', warn: '#e0a800' }
 
-export function initOxdnaAnchorsSetup({ getSelection = null } = {}) {
+export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null } = {}) {
   const toggle = document.getElementById('oxdna-anchors-toggle')
   const arrow  = document.getElementById('oxdna-anchors-arrow')
   const bodyEl = document.getElementById('oxdna-anchors-body')
@@ -57,7 +57,7 @@ export function initOxdnaAnchorsSetup({ getSelection = null } = {}) {
       const lbl = document.createElement('span'); lbl.textContent = anchorLabel(a)
       const x = document.createElement('span')
       x.textContent = '×'; x.style.cssText = 'cursor:pointer;color:#8b949e;font-weight:700'
-      x.addEventListener('click', () => { _anchors = removeAnchor(_anchors, anchorKey(a)); _renderAnchors() })
+      x.addEventListener('click', () => { _anchors = removeAnchor(_anchors, anchorKey(a)); _renderAnchors(); onChange?.(getAnchors()) })
       chip.append(lbl, x)
       listEl.appendChild(chip)
     }
@@ -72,10 +72,11 @@ export function initOxdnaAnchorsSetup({ getSelection = null } = {}) {
     const before = _anchors.length
     _anchors = addAnchors(_anchors, found)
     _renderAnchors()
+    onChange?.(getAnchors())
     return _anchors.length - before
   }
 
-  function clear() { _anchors = []; _renderAnchors() }
+  function clear() { _anchors = []; _renderAnchors(); onChange?.(getAnchors()) }
 
   // ── Section open/close ───────────────────────────────────────────────────────
   function _open_() {

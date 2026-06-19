@@ -27,9 +27,18 @@ import { rayPlaneVector } from './efield_math.js'
 const _ARROW_COLOR  = 0x4a9eff
 const _HANDLE_COLOR = 0x9ad1ff
 
+// Thick-arrow geometry (nm).  A solid cylinder shaft + cone head reads as a real
+// 3D arrow, unlike THREE.ArrowHelper's 1-px line shaft.
+const _SHAFT_R = 0.45
+const _HEAD_R  = 1.15
+const _UP      = new THREE.Vector3(0, 1, 0)
+
 export function initEfieldGizmo(scene, camera, canvas, controls) {
   let _group   = null               // named THREE.Group (test locator: 'efield-gizmo')
-  let _arrow   = null               // THREE.ArrowHelper
+  let _arrow   = null               // THREE.Group: thick shaft cylinder + cone head
+  let _shaft   = null
+  let _head    = null
+  let _arrowMat = null
   let _handle  = null               // tip sphere (drag target)
   let _onChange = null
   let _dragging = false
@@ -40,9 +49,20 @@ export function initEfieldGizmo(scene, camera, canvas, controls) {
   function _build() {
     _group = new THREE.Group()
     _group.name = 'efield-gizmo'
-    _arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), _origin, 1, _ARROW_COLOR, 0.6, 0.35)
+    // Emissive so the arrow reads as a bold solid even under flat lighting.
+    _arrowMat = new THREE.MeshStandardMaterial({
+      color: _ARROW_COLOR, emissive: _ARROW_COLOR, emissiveIntensity: 0.4,
+      roughness: 0.45, metalness: 0.0,
+    })
+    // Both primitives are unit-height along +Y, centred at their own origin; _sync
+    // scales/positions them so the shaft ends where the head begins.
+    _shaft = new THREE.Mesh(new THREE.CylinderGeometry(_SHAFT_R, _SHAFT_R, 1, 16), _arrowMat)
+    _head  = new THREE.Mesh(new THREE.ConeGeometry(_HEAD_R, 1, 20), _arrowMat)
+    _arrow = new THREE.Group()
+    _arrow.name = 'efield-gizmo-arrow'
+    _arrow.add(_shaft, _head)
     _handle = new THREE.Mesh(
-      new THREE.SphereGeometry(0.6, 16, 12),
+      new THREE.SphereGeometry(0.7, 16, 12),
       new THREE.MeshBasicMaterial({ color: _HANDLE_COLOR, depthTest: false }),
     )
     _handle.name = 'efield-gizmo-handle'
@@ -56,9 +76,15 @@ export function initEfieldGizmo(scene, camera, canvas, controls) {
     if (!_group) return
     const len = Math.max(_vec.length(), 1e-3)
     const dir = _vec.clone().normalize()
+    const headLen  = Math.min(Math.max(len * 0.28, 1.2), 4.0)
+    const shaftLen = Math.max(len - headLen, 0.01)
+    // Orient the whole arrow (+Y → field direction) and anchor it at the origin.
     _arrow.position.copy(_origin)
-    _arrow.setDirection(dir)
-    _arrow.setLength(len, Math.min(len * 0.25, 2.5), Math.min(len * 0.15, 1.2))
+    _arrow.quaternion.setFromUnitVectors(_UP, dir)
+    _shaft.scale.set(1, shaftLen, 1)
+    _shaft.position.set(0, shaftLen / 2, 0)
+    _head.scale.set(1, headLen, 1)
+    _head.position.set(0, shaftLen + headLen / 2, 0)
     _handle.position.copy(_origin).addScaledVector(dir, len)
   }
 
@@ -144,7 +170,8 @@ export function initEfieldGizmo(scene, camera, canvas, controls) {
 
   /** Recolour the arrow + tip handle (e.g. magnitude-graded blue→green→red). */
   function setColor(hex) {
-    _arrow?.setColor?.(new THREE.Color(hex))
+    _arrowMat?.color?.set(hex)
+    _arrowMat?.emissive?.set(hex)
     _handle?.material?.color?.set(hex)
   }
 
@@ -153,10 +180,12 @@ export function initEfieldGizmo(scene, camera, canvas, controls) {
     detach()
     if (_group) {
       _group.parent?.remove(_group)
-      _arrow?.dispose?.()
+      _shaft?.geometry?.dispose?.()
+      _head?.geometry?.dispose?.()
+      _arrowMat?.dispose?.()
       _handle?.geometry?.dispose?.()
       _handle?.material?.dispose?.()
-      _group = _arrow = _handle = null
+      _group = _arrow = _shaft = _head = _arrowMat = _handle = null
     }
   }
 

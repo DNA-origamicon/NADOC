@@ -189,6 +189,7 @@ import { initReprOptionSliders } from './ui/repr_option_sliders.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
 import { initBenchmarkPanel } from './ui/benchmark_panel.js'
+import { initAnchorGlow } from './scene/anchor_glow.js'
 import { initOxdnaDisplay } from './ui/oxdna_display.js'
 import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
 import { initEfieldGizmo } from './scene/efield_gizmo.js'
@@ -1817,7 +1818,19 @@ async function main() {
   // (appends a field stage to the panel's selected completed oxDNA job).
   let _viewToolButtons = null   // assigned at initViewToolButtons (further down)
   const efieldGizmo = initEfieldGizmo(scene, camera, canvas, controls)
-  const efieldSetup = initEfieldSetup({ gizmo: efieldGizmo })
+
+  // Purple halo over the anchored (fixed) elements while a field run is being set up.
+  // Shown only when the field is enabled AND there are anchors — the thick arrow shows
+  // the field direction, the purple glow shows what's pinned.  Both setups call
+  // _refreshAnchorGlow on change (never during construction → no TDZ on the consts below).
+  const anchorGlow = initAnchorGlow({ designRenderer, store })
+  const _refreshAnchorGlow = () => {
+    const fieldOn = efieldSetup?.isEnabled?.()
+    const anchors = oxdnaAnchorsSetup?.getAnchors?.() || []
+    anchorGlow.setAnchors(fieldOn && anchors.length ? anchors : [])
+  }
+
+  const efieldSetup = initEfieldSetup({ gizmo: efieldGizmo, onChange: _refreshAnchorGlow })
   if (import.meta.env.DEV) window.__nadocEfield = { setup: efieldSetup, gizmo: efieldGizmo }
 
   const oxdnaFloorSetup = initOxdnaFloorSetup({
@@ -1826,7 +1839,14 @@ async function main() {
     // fires on user interaction, so the lazy reference is safe.
     setSurfaceGrid: (cfg) => _viewToolButtons?.setSurfaceGrid?.(cfg),
   })
-  const oxdnaAnchorsSetup = initOxdnaAnchorsSetup({ getSelection: () => store.getState() })
+  const oxdnaAnchorsSetup = initOxdnaAnchorsSetup({
+    getSelection: () => store.getState(), onChange: _refreshAnchorGlow,
+  })
+  // Leaving the Dynamics tab drops the field gizmo (efield_setup) — clear the anchor
+  // halo too so it never lingers in other tabs.
+  window.addEventListener('nadoc:left-tab-change', (e) => {
+    if (e.detail?.activeTab !== 'dynamics') anchorGlow.clear()
+  })
   if (import.meta.env.DEV) window.__nadocOxdnaFloor = oxdnaFloorSetup
 
   const periodicMdOverlay = initPeriodicMdOverlay(scene)
