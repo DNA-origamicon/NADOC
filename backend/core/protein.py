@@ -427,3 +427,38 @@ def reverse_complement(seq: str) -> str:
     """Reverse-complement a DNA sequence (display-only handle sequence)."""
     from backend.core.sequences import complement_base
     return "".join(complement_base(b) for b in reversed(seq))
+
+
+def azide_attach_end(
+    nucs: list[dict], overhang_id: str, binder_strand_id: str, azide_end: str = "5p",
+) -> str:
+    """Which overhang end (``"free_end"`` | ``"root"``) the protein should anchor
+    to so its conjugation atom coincides with the binder's azide terminus.
+
+    The binder hybridizes the overhang antiparallel over the same bp range, so
+    its 5′/3′ termini are co-located with the overhang's two ends — but *which*
+    physical end (free tip vs bundle root) the 5′ (or 3′) terminus sits at depends
+    on the overhang's polarity.  Rather than reason about that convention, we
+    compare the binder terminus position to both overhang-end positions and pick
+    the nearer one (geometric, convention-free).  ``azide_end`` is ``"5p"`` or
+    ``"3p"``.  Falls back to ``"free_end"`` when geometry is unavailable.
+    """
+    want_5p = azide_end == "5p"
+    term = None
+    for n in nucs:
+        if n.get("strand_id") != binder_strand_id:
+            continue
+        if (want_5p and n.get("is_five_prime")) or (not want_5p and n.get("is_three_prime")):
+            term = n
+            break
+    free_tip, _ = resolve_overhang_anchor(nucs, overhang_id, "free_end")
+    root_tip, _ = resolve_overhang_anchor(nucs, overhang_id, "root")
+    if term is None or free_tip is None or root_tip is None:
+        return "free_end"
+    p = term.get("backbone_position") or term.get("base_position")
+    if p is None:
+        return "free_end"
+    p = np.asarray(p, dtype=float)
+    d_free = float(np.linalg.norm(p - free_tip))
+    d_root = float(np.linalg.norm(p - root_tip))
+    return "free_end" if d_free <= d_root else "root"

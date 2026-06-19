@@ -287,6 +287,80 @@ def test_placement_endpoint_places_protein_at_overhang(_clean_state):
     assert abs(c_after[0] - 2.5) < 1.5
 
 
+def test_azide_attach_end_picks_nearer_overhang_end():
+    from backend.core.protein import azide_attach_end
+    # Overhang "ov": root at z=0, free tip at z=2. Binder "bnd" antiparallel:
+    # its 5' terminus is co-located with the free tip (z=2), 3' with the root (z=0).
+    nucs = [
+        {"overhang_id": "ov", "backbone_position": [1, 0, 0], "axis_tangent": [0, 0, 1]},
+        {"overhang_id": "ov", "backbone_position": [1, 0, 2], "is_three_prime": True, "axis_tangent": [0, 0, 1]},
+        {"strand_id": "bnd", "backbone_position": [1, 0, 2], "is_five_prime": True},
+        {"strand_id": "bnd", "backbone_position": [1, 0, 0], "is_three_prime": True},
+    ]
+    assert azide_attach_end(nucs, "ov", "bnd", "5p") == "free_end"
+    assert azide_attach_end(nucs, "ov", "bnd", "3p") == "root"
+
+
+def _set_sequenced_overhang():
+    d = _design_with_overhang()
+    d = d.model_copy(update={"overhangs": [d.overhangs[0].model_copy(update={"sequence": "ACGTACGT"})]})
+    design_state.set_design(d)
+
+
+def test_conjugate_creates_binder_and_attachment(_clean_state):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    strands_before = {s.id for s in design_state.get_design().strands}
+
+    r = client.post("/api/design/protein/conjugate",
+                    json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "5p"})
+    assert r.status_code == 201, r.text
+    binder_id = r.json()["binder_strand_id"]
+
+    d = design_state.get_design()
+    # (1) the handle is a real overhang-binding domain
+    binder = next(s for s in d.strands if s.id == binder_id)
+    assert binder.id not in strands_before
+    assert binder.strand_type == StrandType.OH_BINDER
+    assert any(dom.binds_overhang_id == "oh_5p" for dom in binder.domains)
+    assert binder.sequence and len(binder.sequence) == 8        # RC of the 8-nt overhang
+    # (2) the protein is attached at the chosen site, asset embedded
+    assert len(d.protein_attachments) == 1
+    att = d.protein_attachments[0]
+    assert att.target.overhang_id == "oh_5p"
+    assert att.conjugation_atom_serial is not None
+    assert att.target.attach_end in ("free_end", "root")
+    assert any(a.id == asset_id for a in d.protein_assets)
+
+
+def test_conjugate_azide_end_flips_attach_end(_clean_state):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    r5 = client.post("/api/design/protein/conjugate",
+                     json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "5p"})
+    end5 = design_state.get_design().protein_attachments[-1].target.attach_end
+    client.post("/api/design/undo")
+    r3 = client.post("/api/design/protein/conjugate",
+                     json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "3p"})
+    end3 = design_state.get_design().protein_attachments[-1].target.attach_end
+    assert r5.status_code == 201 and r3.status_code == 201
+    assert {end5, end3} == {"free_end", "root"}      # the two azide ends land on opposite ends
+
+
+def test_conjugate_one_undo_reverts_binder_and_attachment(_clean_state):
+    _set_sequenced_overhang()
+    asset_id = _import_protein()
+    n_strands = len(design_state.get_design().strands)
+    client.post("/api/design/protein/conjugate",
+                json={"asset_id": asset_id, "overhang_id": "oh_5p", "azide_end": "5p"})
+    assert len(design_state.get_design().strands) == n_strands + 1
+    r = client.post("/api/design/undo")
+    assert r.status_code == 200, r.text
+    d = design_state.get_design()
+    assert len(d.strands) == n_strands                  # binder gone
+    assert len(d.protein_attachments) == 0              # attachment gone (single undo)
+
+
 def test_undo_import_removes_rendered_protein(_clean_state):
     # Free import → protein renders; undo → it disappears (no orphan at origin).
     client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"})

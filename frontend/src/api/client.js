@@ -1470,6 +1470,13 @@ export async function listProteinLibrary() {
   return _request('GET', '/design/protein/library')
 }
 
+/** Surface-accessible azide-oligo conjugation candidate residues for an asset.
+ *  Returns { asset_id, candidates:[{res_name,chain_id,res_seq,chemistry,
+ *  functional_atom_serial,x,y,z,accessible}] }. */
+export async function getConjugationCandidates(assetId) {
+  return _request('GET', `/design/protein/conjugation-candidates?asset_id=${encodeURIComponent(assetId)}`)
+}
+
 /** Remove a protein asset from the session library. */
 export async function deleteProteinAsset(assetId) {
   return _request('DELETE', `/design/protein/${assetId}`)
@@ -1487,6 +1494,21 @@ export async function createProteinAttachment(assetId, overhangId, opts = {}) {
   })
   if (json) _syncFromDesignResponse(json)
   return json   // carries attachment_id
+}
+
+/** Commit an azide-oligo conjugation into the design: creates the ssDNA handle
+ *  as an OH_BINDER strand bound to the overhang AND attaches the protein so its
+ *  conjugation residue sits at the chosen azide terminus. One undo step.
+ *  Returns json (carries attachment_id + binder_strand_id). */
+export async function conjugateProteinToOverhang({ assetId, overhangId, conjugationAtomSerial = null, azideEnd = '5p' }) {
+  const json = await _request('POST', '/design/protein/conjugate', {
+    asset_id: assetId,
+    overhang_id: overhangId,
+    conjugation_atom_serial: conjugationAtomSerial,
+    azide_end: azideEnd,
+  })
+  if (json) _syncFromDesignResponse(json)
+  return json
 }
 
 /** Update a protein attachment (pose / conjugation / handle / visibility). */

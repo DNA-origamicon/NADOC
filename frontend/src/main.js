@@ -97,6 +97,7 @@ import { initBeltPathPanel }       from './ui/belt_path_panel.js'
 import { initStrandAnimPanel }     from './ui/strand_anim_panel.js'
 import { openProteinAttachModal }  from './ui/protein_attach_modal.js'
 import { initProteinSubsystem }    from './scene/protein_subsystem.js'
+import { initConjugateManager }    from './ui/conjugate_manager.js'
 import { initUnfoldView }          from './scene/unfold_view.js'
 import { initCadnanoView }         from './scene/cadnano_view.js'
 import { initDeformView }          from './scene/deform_view.js'
@@ -1689,6 +1690,25 @@ async function main() {
     _bindingMenu.show(hit.bindingId, e.clientX, e.clientY)
   }, { capture: true })
 
+  // Right-click a rendered protein → "Conjugate protein to ssDNA…" → Conjugate Manager.
+  canvas.addEventListener('contextmenu', (e) => {
+    const rect = canvas.getBoundingClientRect()
+    const ndc = {
+      x:  ((e.clientX - rect.left) / rect.width)  * 2 - 1,
+      y: -((e.clientY - rect.top)  / rect.height) * 2 + 1,
+    }
+    const rc = new THREE.Raycaster()
+    rc.setFromCamera(ndc, camera)
+    const pick = proteinRenderer?.raycastPick?.(rc)
+    if (!pick) return
+    const attId = pick.atom?.helix_id?.replace('__protein__', '')
+    const assetId = store.getState().currentDesign?.protein_attachments?.find(a => a.id === attId)?.asset_id
+    if (!assetId) return
+    e.preventDefault()
+    e.stopPropagation()
+    conjugateManager.showConjugateMenu({ x: e.clientX, y: e.clientY, assetId })
+  }, { capture: true })
+
   // ── Unligated crossover markers (⚠ at midpoint of would-circularize crossovers) ─
   const unligatedCrossoverMarkers = initUnligatedCrossoverMarkers(scene)
   store.subscribe((newState, prevState) => {
@@ -1768,6 +1788,9 @@ async function main() {
   const proteinRenderer = proteinSubsystem.renderer
   const proteinGizmo = proteinSubsystem.gizmo
   const _refreshProteins = proteinSubsystem.refresh
+  // Conjugate Manager — isolated modal showing azide-oligo attachment sites on a
+  // protein. Opened from Tools ▸ Conjugate Manager… and the protein right-click.
+  const conjugateManager = initConjugateManager({ api, store })
 
   // ── MD overlay + panel ───────────────────────────────────────────────────────
   const mdOverlay         = initMdOverlay(scene)
@@ -3509,6 +3532,22 @@ async function main() {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
     openOverhangsManager()   // popup pulls preselect from store on its own
+  })
+
+  // Conjugate Manager — resolve which protein to show: the selected protein's
+  // asset, else the first imported library asset, else nudge the user to import.
+  document.getElementById('menu-tools-conjugate-manager')?.addEventListener('click', async () => {
+    const sel = store.getState().selectedObject
+    let assetId = null
+    if (sel?.type === 'protein') {
+      assetId = store.getState().currentDesign?.protein_attachments?.find(a => a.id === sel.id)?.asset_id
+    }
+    if (!assetId) {
+      const lib = await api.listProteinLibrary().catch(() => null)
+      assetId = lib?.assets?.[0]?.id ?? lib?.[0]?.id ?? null
+    }
+    if (!assetId) { showToast('Import a protein first (File ▸ Import PDB…).', { severity: 'error' }); return }
+    conjugateManager.open(assetId)
   })
 
   initAssemblyOverhangsManagerPopup({ store })

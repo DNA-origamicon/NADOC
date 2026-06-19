@@ -1227,6 +1227,7 @@ SnapshotOpKind = Literal[
     'protein-attach',
     'protein-attach-patch',
     'protein-attach-delete',
+    'protein-conjugate',
     'assembly-create-group',
     'assembly-ungroup',
     'assembly-patch-group',

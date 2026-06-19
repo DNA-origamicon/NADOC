@@ -148,6 +148,24 @@ def get_protein_atomistic(asset_id: str | None = Query(None)) -> dict:
     return atomistic_to_json(merged)
 
 
+@router.get("/design/protein/conjugation-candidates")
+def get_conjugation_candidates(asset_id: str = Query(...)) -> dict:
+    """Surface-accessible azide-oligo conjugation sites on a protein asset.
+
+    Read-only.  Returns the residues (Lys ε-amine / Cys thiol / N-terminal amine)
+    whose functional atom is solvent-exposed — the viable points for the two-step
+    SPAAC conjugation of an azide-modified oligo (see ``backend/core/conjugation``).
+    Coordinates are the asset's PDB/local frame, matching the ``?asset_id=``
+    atomistic preview render.
+    """
+    from backend.core.conjugation import find_conjugation_candidates
+
+    asset = _resolve_protein_asset(asset_id)
+    if asset is None:
+        raise HTTPException(404, detail=f"Protein asset {asset_id} not found.")
+    return {"asset_id": asset.id, "candidates": find_conjugation_candidates(asset)}
+
+
 # ── Protein attachments (anchor a protein to an overhang; display-only) ────────
 
 
@@ -215,6 +233,80 @@ def create_protein_attachment(body: ProteinAttachRequest) -> dict:
     )
     resp = _design_response(updated, report)
     resp["attachment_id"] = attachment.id
+    return resp
+
+
+class ProteinConjugateRequest(BaseModel):
+    asset_id: str
+    overhang_id: str
+    conjugation_atom_serial: Optional[int] = None
+    azide_end: Literal["5p", "3p"] = "5p"
+
+
+@router.post("/design/protein/conjugate", status_code=201)
+def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
+    """Commit an azide-oligo conjugation into the design (one undo step).
+
+    Creates the ssDNA handle as a real **overhang-binding domain** (an OH_BINDER
+    strand antiparallel to the overhang — ``make_binder_for_overhang``), and
+    attaches the protein so its selected conjugation residue coincides with the
+    binder terminus the user marked as the azide end (``azide_end`` → the nearer
+    overhang end, via ``azide_attach_end``).  The strand edit + the display-only
+    attachment land as a single feature-log entry.
+    """
+    from backend.core.lattice import make_binder_for_overhang
+    from backend.core.models import ProteinAttachment, ProteinTargetDesign
+    from backend.core.protein import azide_attach_end, reverse_complement
+
+    design = design_state.get_or_404()
+    asset = _resolve_protein_asset(body.asset_id)
+    if asset is None:
+        raise HTTPException(404, detail=f"Protein asset {body.asset_id} not found.")
+    spec = _find_ovhg_or_404(design, body.overhang_id)
+
+    # Build the binder once (deterministic id) so the appended strand and the
+    # geometry used to resolve the attach end refer to the same object.
+    try:
+        binder_design = make_binder_for_overhang(design, body.overhang_id)
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
+    existing_ids = {s.id for s in design.strands}
+    binder = next((s for s in binder_design.strands if s.id not in existing_ids), None)
+    if binder is None:
+        raise HTTPException(500, detail="Binder strand was not created.")
+
+    nucs = _geometry_for_helices(binder_design)
+    attach_end = azide_attach_end(nucs, body.overhang_id, binder.id, body.azide_end)
+
+    conj = body.conjugation_atom_serial
+    if conj is None:
+        conj = asset.default_conjugation_atom_serial
+    attachment = ProteinAttachment(
+        asset_id=asset.id,
+        target=ProteinTargetDesign(overhang_id=body.overhang_id, attach_end=attach_end),
+        conjugation_atom_serial=conj,
+        handle_sequence=reverse_complement(spec.sequence) if spec.sequence else None,
+    )
+
+    def _fn(d: Design) -> Design:
+        assets = d.protein_assets if any(a.id == asset.id for a in d.protein_assets) \
+            else [*d.protein_assets, asset]
+        return d.copy_with(
+            strands=[*d.strands, binder],
+            protein_assets=assets,
+            protein_attachments=[*d.protein_attachments, attachment],
+        )
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        "protein-conjugate",
+        f"Conjugate {asset.name} to {spec.label or body.overhang_id}",
+        {"asset_id": asset.id, "overhang_id": body.overhang_id, "azide_end": body.azide_end},
+        _fn,
+    )
+    from backend.api.crud import _design_response_with_geometry
+    resp = _design_response_with_geometry(updated, report)
+    resp["attachment_id"] = attachment.id
+    resp["binder_strand_id"] = binder.id
     return resp
 
 
