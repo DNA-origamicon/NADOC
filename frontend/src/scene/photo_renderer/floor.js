@@ -212,6 +212,20 @@ export function createFloor({ scene }) {
         textureHeight: Math.min(window.innerHeight * (window.devicePixelRatio ?? 1), 2048),
         color: new THREE.Color(settings.floorColor ?? '#888888'),
       })
+      // R4 (targeted isolation) — the Reflector runs a full nested scene render
+      // into its own framebuffer from inside onBeforeRender, mid-frame. That
+      // churns the shared renderer's WebGLState (render target, viewport,
+      // texture-unit bindings) AFTER the photo render override's per-frame
+      // resetState() has already run, so its state can bleed into the rest of
+      // the composer frame (the bloom/PBR-env desync class). Flush the state
+      // cache right after the reflection render so the continuing main-scene
+      // draw + post passes re-validate their bindings. Wrap (not replace) the
+      // built-in onBeforeRender so the reflection itself still renders.
+      const _reflectorOBR = _mesh.onBeforeRender
+      _mesh.onBeforeRender = function (renderer, ...rest) {
+        _reflectorOBR.call(this, renderer, ...rest)
+        renderer.resetState?.()
+      }
     } else {
       const mat = _makeMaterial(settings)
       _mesh = new THREE.Mesh(planeGeo, mat)

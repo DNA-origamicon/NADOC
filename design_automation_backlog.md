@@ -139,14 +139,36 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 8). **AF-13 Phase 1 — headless oxDNA job wrapper SHIPPED
-2026-06-18.** The **physical layer (Tier 5) is now open**: a script can relax a design through real oxDNA
-headlessly and recover the relaxed geometry, no browser, no GPU (mock binary in tests). NEW module
-`backend/api/headless_oxdna_build.py` (drives `create_oxdna_job`/`start_oxdna_job`/`append_oxdna_production`/
-`get_oxdna_display` by function-identity) + NEW `assert_relaxed_geometry_recovered` oracle + NEW separate
-`oxdna_coverage_report()` (3 `/oxdna` mutation routes covered; design/assembly count untouched at **35**). Full
-suite **2537 passed / 55 skipped**. Next: AF-13 Phase 2 (the relaxed-geometry MEASUREMENT oracle — end-to-end
-distance — the constraint primitive)._
+_Living pointer — each session overwrites this (step 8). **AF-13 Phase 3 — declarative constraint spec + pure
+REPORTING checker SHIPPED 2026-06-18.** A constraint is now a declarative object a closed loop can branch on:
+`parse_constraint_spec(spec)` validates `{measure:"end_to_end", landmarks:[a,b], target_nm, tol_nm,
+min_confidence?}` at PARSE time (raises `ConstraintSpecError` before any relaxation) and
+`check_relaxed_constraint(constraint, read_flexibility_map_dict)` REPORTS `{met, status∈{met,unmet,inconclusive},
+measured_nm, n_frames, min_confidence, confidence}` — both PURE in `backend/core/oxdna_health.py`, reusing P2's
+`measure_end_to_end`. The REPORTER counterpart to P2's *asserter* (`assert_relaxed_measurement`). **The
+load-bearing invariant: `met` is NEVER True below `min_confidence`** — a within-tolerance value on a 10-frame run
+reports `inconclusive`, not `met` (red-tested). Coverage unchanged (no route wrapped — pure core + composition
+over the P2 read path). Full suite **2574 passed / 55 skipped** (P2 baseline 2552). Next: **AF-13 Phase 4 —
+iterate-until-met loop** (the capstone), which branches on this checker's `status`._
+
+**▶ HARNESS NOW AVAILABLE (AF-13 P3, use it — do NOT rebuild):**
+- `from backend.core.oxdna_health import parse_constraint_spec, check_relaxed_constraint, ConstraintSpecError`.
+  `parse_constraint_spec(spec)` → normalised `{measure, landmarks:[(hid,bp,dir),…], target_nm, tol_nm,
+  min_confidence}` (landmarks → tuples, direction enum→str; **idempotent** on its own output; `min_confidence`
+  defaults to `RMSF_PRELIM_FRAMES`=50). `check_relaxed_constraint(constraint, relaxed_output)` takes a RAW or
+  parsed constraint (it re-parses) + the dict `hox.read_flexibility_map` returns (`{ready, positions,
+  confidence:{n_frames,…}}`) → the verdict dict. **It is PURE — `backend/core` takes the already-read dict and
+  never imports `headless_oxdna_build`** (the api read-wrapper); the *caller* fetches the map then hands it in.
+- **The three statuses:** `met` (n_frames ≥ min_confidence AND |measured−target| ≤ tol), `unmet` (enough frames,
+  out of tol), `inconclusive` (too few frames OR no production mean structure yet). `measured_nm` is still
+  reported when positions exist (so a loop watches convergence) but `met` follows `status` strictly.
+- **GOTCHAS banked:** (1) the confidence gate is the whole point — AF-13 P4's iterate loop MUST branch on
+  `status`, never on `measured_nm` alone, or it will converge on a noisy low-frame estimate. (2) tolerance
+  boundary is inclusive (`<=`); float-exact test values (target 4.5/tol 0.5 on a 5.0 nm measurement) avoid the
+  `4.6 → 0.40000…036 > 0.4` trap. (3) adding the next `measure_*` kind = add a `measure_*` fn next to
+  `measure_end_to_end`, add the name to `_CONSTRAINT_MEASURES`, and add a dispatch arm in `check_relaxed_constraint`
+  (currently it calls `measure_end_to_end` directly since parse pins the only measure). (4) the checker is NOT
+  wired into `build_spec.py` yet — P4 (or a small grammar-growth pass) lowers a design `constraints` block to it.
 
 **▶ HARNESS NOW AVAILABLE (full-sequencing feature, use it — do NOT rebuild):**
 - `from backend.api import headless_build as hb` → `hb.full_sequence(scaffold_name="M13mp18", *, custom_sequence=,
@@ -185,13 +207,47 @@ distance — the constraint primitive)._
   position map and **never written into `Design`**. AF-13 P1 exposes ONLY the read path. Phase 4's iterate loop
   will EDIT topology (a knob) and RE-RELAX — it must never write the relaxed coords back.
 
-**▶ NEXT — AF-13 Phase 2 (the constraint primitive):** a reusable `measure_*` over the relaxed structure, start
-with **end-to-end distance** between two landmark nucleotides → `assert_relaxed_measurement(job, measure_spec,
-target_nm, tol_nm, *, min_confidence)`. **ASK-FIRST** the landmark-specification convention (a nucleotide by
-`helix_id:bp:dir`? a strand terminus? a named cluster?) — directionality/topology, do not guess. Prefer
-`production_rmsf`'s noise-averaged mean structure (carry its `confidence`) over a single frame — note this needs
-an `append_production` run (AF-13 P1 already wraps it) so there are frames to pool. The stochastic oracle class
-(measured property within tol, GATED by the confidence metric, NOT exact equality) starts here.
+**▶ HARNESS NOW AVAILABLE (AF-13 P2, use it — do NOT rebuild):**
+- `from backend.core.oxdna_health import measure_end_to_end` — pure `(positions, landmark_a, landmark_b) →
+  distance_nm`. `positions` = the per-nucleotide list from `production_rmsf` (mean structure) OR the display
+  readback; each landmark = a `(helix_id, bp_index, direction)` tuple (direction may be the `Direction` enum or
+  its string value — normalised). Raises on empty map / identical landmarks / absent landmark (no silent 0/NaN).
+  This is the reusable `measure_*` primitive — add `measure_radius_of_gyration` / `measure_inter_helix_spacing`
+  / `measure_segment_angle` here the same way for the other constraint kinds.
+- `from backend.api import headless_oxdna_build as hox` → `hox.read_flexibility_map(job_id, ws)` drives the REAL
+  `GET /oxdna/jobs/{id}/rmsf` → `{ready, positions (mean backbone xyz per nuc), confidence:{n_frames, rel_error,
+  preliminary}, …}`. **Needs a prior `append_production` run** (returns `{ready:False}` until production frames
+  exist). The mean cancels thermal noise; prefer it over `read_relaxed_positions` (single frame) for measurement.
+- `from tests.automation_harness import assert_relaxed_measurement` — `(job, measure_spec, target_nm, tol_nm, *,
+  workspace, min_confidence=RMSF_PRELIM_FRAMES)`: status-completed + reads the mean structure + **confidence gate**
+  (≥ `min_confidence` pooled frames else "INCONCLUSIVE"-raise) + measured ∈ [target±tol]. `measure_spec =
+  {"measure":"end_to_end","landmarks":[a,b]}`. Returns `{measured_nm, target_nm, tol_nm, n_frames, confidence}`.
+- **GOTCHAS banked:** (1) **The shared `_MOCK_OXDNA` writes NO `trajectory.dat`** → the rmsf route has no frames
+  → `{ready:False}`. AF-13 P2's tests use a purpose-built `_MOCK_OXDNA_TRAJ` (in `test_headless_oxdna_build.py`)
+  that also emits a multi-frame `trajectory.dat` (frames = `max(1, steps//100)`, the input conf repeated). Reuse
+  it for any oxDNA test needing a mean structure. (2) **`ProductionRequest.steps` has a 1000 minimum** — to get a
+  *few*-frame (preliminary/low-confidence) run pass `steps=1000` (→10 frames), not <1000 (pydantic 422). (3) The
+  mock is identity (last_conf == input conf), so the relaxed mean reproduces the **design's own** end-to-end
+  (~0.002 nm gap) — the absolute target in the test is `measure_end_to_end(_geometry_for_design(design), a, b)`;
+  a real GPU run moves atoms so the target would be the user's desired distance. (4) `get_oxdna_rmsf` is a GET →
+  pinned by `hox._route_get_rmsf is routes_oxdna.get_oxdna_rmsf`, NOT the mutation-coverage count.
+
+**▶ NEXT — AF-13 Phase 4 (the capstone): iterate-until-met loop.** All the pieces now exist — compose them:
+given a PARAMETRIC design knob (a bend curvature via `hb.add_bend`, a loop/skip count, a length) + a constraint
+spec, loop: build design → relax + production (`hox.run_relaxation` + `append_production`) →
+`hox.read_flexibility_map` → `check_relaxed_constraint` → branch on `status` (NEVER on `measured_nm` alone — the
+P3 gotcha) → if `unmet`, adjust the knob and re-relax; if `inconclusive`, run a longer production; stop at `met`
+or budget exhausted. **Three-Layer Law (ASK-FIRST if any doubt):** vary TOPOLOGY (the knob edits `Design`),
+re-derive geometry, relax physics, READ the relaxed measurement — never write relaxed coords back. **Augment:**
+on the identity mock the measurement can't move, so a real convergence demo needs either a knob that changes the
+*design* end-to-end (a length/bend the geometry kernel reflects, measured pre-relax) or a stub relaxer that
+perturbs toward the target; the oracle is "the loop reaches `met` in ≤N iterations AND each step's verdict came
+from `check_relaxed_constraint` (confidence-gated)". Likely a NEW `headless_oxdna_build` loop driver +
+`assert_converges_to_constraint` harness oracle. Heavier than P3; its own session.
+
+**▶ Stragglers (unchanged):** `polymerize_periodic` (single-part `is_periodic_seam` + `derive_periodic_delta`
+Kabsch oracle — needs a periodic-seam fixture); `bind_overhangs` ASSEMBLY spec op (DEFERRED pending
+overhang-binding firming — do NOT build yet).
 
 **▶ HARNESS NOW AVAILABLE (AF-16, use it — do NOT rebuild):**
 - `from backend.api import headless_build as hb` → `hb.add_cluster(name, helix_ids, *, domain_ids=(), log=False)`.
@@ -252,12 +308,12 @@ load-bearing pin is the AF-3 per-helix `geometric_nucleotide_count` conservation
 `full_autostaple` build (which breaks+merges into a valid design). `apply_loop_skips` needs SQUARE + crossovers
 (`auto_crossover` provides them); a bare-bundle `apply_loop_skips` 400s (pinned by a red-test).
 
-**▶ NEXT — pick one (validation-first; Tier-2 cluster arc + AF-11 P2 grammar + AF-13 P1 oxDNA are done):**
-- **AF-13 Phase 2 — relaxed-geometry MEASUREMENT oracle (the constraint primitive)** — the recommended next item,
-  builds directly on AF-13 P1's `run_relaxation`/`read_relaxed_positions`. End-to-end distance between two landmark
-  nucleotides → `assert_relaxed_measurement`, carrying the `production_rmsf` confidence. **ASK-FIRST the landmark
-  convention** (directionality). See the Tier-5 reuse map (`oxdna_health.production_rmsf`/`rmsf_confidence`) + the
-  AF-13 P2 backlog entry.
+**▶ NEXT — pick one (validation-first; Tier-2 cluster arc + AF-11 P2 grammar + AF-13 P1/P2/P3 oxDNA are done):**
+- **AF-13 Phase 4 — iterate-until-met loop (the capstone)** — the recommended next item (top-of-file NEXT).
+  Composes `check_relaxed_constraint` (P3, branch on `status`) + `run_relaxation`/`append_production`/
+  `read_flexibility_map` (P1/P2) + a parametric topology knob (`hb.add_bend`/loop_skip/length) into a closed
+  build→relax→measure→adjust loop. Three-Layer Law: vary topology, read physics, never write relaxed coords back
+  (ASK-FIRST if any frame/sign doubt). Its own session.
 - **Stragglers:** `polymerize_periodic` (single-part `is_periodic_seam` + `derive_periodic_delta` Kabsch oracle —
   needs a periodic-seam fixture built via route-for-polymerization); `bind_overhangs` ASSEMBLY spec op (DEFERRED
   pending overhang-binding system firming — see below, do NOT build yet).
@@ -983,21 +1039,26 @@ readers `read_configuration_unwrapped` / `read_configuration_full` / `oxdna_back
   Physical-layer only — never written back to topology. NEW separate `oxdna_coverage_report()` (3 `/oxdna`
   mutation routes covered) keeps the design/assembly count untouched at 35.
 
-- [ ] **AF-13 (Phase 2) — relaxed-geometry MEASUREMENT oracle (the constraint primitive).** A reusable
-  `measure_*` over the relaxed structure — start with **end-to-end distance** between two landmark nucleotides;
-  generalize to R_g / inter-helix spacing / segment angle. Prefer `production_rmsf`'s noise-averaged mean
-  structure over a single frame, and carry its `confidence`. **Augment:** new oracle class
-  `assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *, min_confidence)` — on a known fixture (a
-  straight relaxed 6hb) the measured end-to-end ≈ expected contour length within tol, and the confidence (frames /
-  SE) is surfaced so a short run is flagged. **ASK-FIRST:** the landmark-specification convention (a nucleotide by
-  `helix_id:bp:dir`? a strand terminus? a named cluster?) — directionality/topology, do not guess.
+- [x] **AF-13 (Phase 2) — relaxed-geometry MEASUREMENT oracle (the constraint primitive). SHIPPED 2026-06-18.**
+  Landmark convention (ASK-FIRST answered by user): the raw **`(helix_id, bp_index, direction)` tuple** — most
+  primitive, indexes the relaxed-display + RMSF maps directly, no strand-polarity resolution. Pure
+  `measure_end_to_end(positions, a, b)` in `backend/core/oxdna_health.py` (Euclidean nm between two landmark
+  backbone sites; raises on empty/identical/absent). NEW read-wrapper `hox.read_flexibility_map(job_id, ws)`
+  drives the REAL `GET /oxdna/jobs/{id}/rmsf` → pooled noise-averaged mean structure + `confidence`. **Augment:**
+  `assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *, workspace, min_confidence)` — the first
+  STOCHASTIC-class oracle: status-completed + reads the mean structure + **confidence gate** (≥ `min_confidence`
+  pooled frames else INCONCLUSIVE-raise) + measured ∈ [target±tol]. On the identity-mock 6hb the relaxed mean
+  reproduces the design's own end-to-end to ~0.002 nm (pinned at tol 0.1). Coverage unchanged (rmsf is a GET).
 
-- [ ] **AF-13 (Phase 3) — declarative constraint spec + checker.** A constraint object
-  `{"measure":"end_to_end","landmarks":[a,b],"target_nm":50,"tol_nm":5,"min_confidence":…}` + a PURE checker
-  (`backend/core/…`) evaluating it against a job's relaxed output → `{met, measured_nm, confidence}`. Slots into
-  the AF-11 build-spec grammar as a `constraints` block on a design. **Augment:** the checker returns met
-  True/False correctly on fixtures bracketing the tolerance, and **cannot report "met" below `min_confidence`**
-  (returns "inconclusive — run longer" instead — the confidence gate is the load-bearing guard).
+- [x] **AF-13 (Phase 3) — declarative constraint spec + checker. SHIPPED 2026-06-18.** `parse_constraint_spec`
+  (PURE validate/normalise → `ConstraintSpecError` at parse time) + `check_relaxed_constraint(constraint,
+  read_flexibility_map_dict)` REPORTING `{met, status∈{met,unmet,inconclusive}, measured_nm, n_frames,
+  min_confidence, confidence}` — both in `backend/core/oxdna_health.py`, reusing P2's `measure_end_to_end`.
+  The REPORTER counterpart to P2's *asserter*. **Load-bearing guard pinned:** `met` is NEVER True below
+  `min_confidence`, even when the value is within tolerance (the confidence gate, now a returned status). 20 pure
+  tests (13 rejection cases + idempotency + tolerance bracket + the low-frame-never-met red-test) + 2 real-run
+  integration tests (`_MOCK_OXDNA_TRAJ` → `read_flexibility_map` → checker). Coverage UNCHANGED (no route wrapped).
+  Slots into the AF-11 grammar as a design `constraints` block (not yet wired into `build_spec.py` — P4 will).
 
 - [ ] **AF-13 (Phase 4, capstone — the eventual goal) — iterate-until-met loop.** Given a PARAMETRIC design knob
   (a bend curvature via `hb.add_bend`, a loop/skip count, a length) + a constraint: build design → relax (oxDNA) →
@@ -1008,6 +1069,31 @@ readers `read_configuration_unwrapped` / `read_configuration_full` / `oxdna_back
   which knobs may vary, the search strategy (bisection / gradient / grid), and how stochastic re-run variance is
   separated from knob effect — all design decisions. Large; decompose further when reached. Builds on Phases 1–3 +
   the AF-11 build-spec interpreter + the AF-6 deformation wrappers.
+
+### Tier F — frontend display subsystems (no REST route; JS-controller API + vitest-oracle augment)
+
+**What's different here.** These subsystems are driven entirely client-side (a JS controller exposed on
+`window.__*`), so the augment is **vitest oracles reading real Three.js state**, NOT a `headless_build`
+wrapper. The anti-shovel rule still bites: assert the setter drove the *object* (a scene-graph light, a
+`material.metalness`, a `pass.enabled`, a `camera.fov`), never `getSettings()` (which just echoes stored
+intent → a passthrough). Bound by `FEATURE_DEVELOPMENT.md` — lands in the subsystem module + its
+`*.test.js`, never a god-file.
+
+- [x] **AF-PHOTO (P-A + P-B) — photomode option-coverage + effect oracles. SHIPPED 2026-06-18.** `frontend/src/scene/photo_renderer.test.js` (39 tests): P-A drives each setter and asserts the REAL object (renderer.toneMapping/exposure, scene-graph lights, `material.metalness`, `camera.fov`, composer `pass.enabled` via the new `getComposerState()`); P-B is the automation contract (getSettings is a copy; a 21-case table proves every option is settable through the API + every key persists). Shipped alongside the R1–R5 render fixes from the audit (tone mapping + exposure, Sun-sole, env re-bake isolation, emissive bloom clamp, Reflector state isolation). Remaining: P-C GPU-truth e2e → `MV-PHOTO-1`/`MV-PHOTO-2` (manual-validation debt). Below is the original intake item.
+- [ ] **AF-PHOTO — photomode option-coverage + effect oracles.** Photo mode
+  ([frontend/src/scene/photo_renderer.js](frontend/src/scene/photo_renderer.js), ~1588 ln, ~45 setters on
+  `window.__photoRenderer`) has **zero test coverage**; no automated proof any option takes effect, nor that
+  the full option surface is reachable + persisted programmatically. **Enabling fact:** the controller can be
+  built in jsdom with a real scene/camera + fake renderer and `activate({environment:'off'})`; the
+  `EffectComposer` + passes *construct* without GL (only `.render()` / PMREM baking need WebGL), so even
+  `bloomPass.enabled` / inscatter uniforms are vitest-assertable. **Phases:** (P-A) table-driven per-setter
+  effect oracles in a new `photo_renderer.test.js` — see catalogue in `photo_mode_audit_plan.md` Part 3;
+  (P-B) automation-contract oracles — setter⇄`getSettings` completeness + full profile round-trip; (P-C,
+  MV-debt) GPU-truth e2e incl. the **yellow/purple no-tint regression** that guards the R1–R3 render fixes.
+  **Validation gained, not a passthrough:** first proof photomode options reach the GPU-facing objects + the
+  whole surface round-trips. Plan + per-setter table + the R1–R5 render-bug remediation in
+  **`photo_mode_audit_plan.md`** (repo root, from the 2026-06-18 audit). Two MV rows queued:
+  `MV-PHOTO-1` (no-tint regression render), `MV-PHOTO-2` (mid-session env-change garbage-frame guard).
 
 ### Appendix — genuinely UI-only (route these to manual-validation debt, NOT here)
 

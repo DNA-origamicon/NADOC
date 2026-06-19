@@ -281,6 +281,339 @@ def rmsf_confidence(n_frames: int) -> dict:
     }
 
 
+# ── Relaxed-structure measurements (the constraint primitives, AF-13 P2) ───────
+# Pure geometric measurements over a relaxed/mean position map — the building
+# blocks of constraint-driven design ("make these two ends 50 nm apart").  Each
+# takes the per-nucleotide position list produced by ``production_rmsf`` (mean
+# structure) or the OxDNA-display readback (single relaxed frame): a list of
+# ``{helix_id, bp_index, direction, backbone_position:[x,y,z]}`` dicts.  A
+# landmark is the ``(helix_id, bp_index, direction)`` key of one nucleotide
+# (the addressing convention chosen for AF-13 — the raw geometry key, so no
+# strand-polarity/terminus resolution is needed here).  Read-only over the
+# Physical layer; nothing here writes a relaxed coordinate back into topology.
+
+def _landmark_key(landmark) -> tuple:
+    """Normalise a ``(helix_id, bp_index, direction)`` landmark to a hashable key.
+
+    ``direction`` may arrive as a ``Direction`` enum or its string value; both
+    map to the same key, matching the keys produced from a position map below.
+    """
+    hid, bp, direction = landmark
+    return (hid, int(bp), getattr(direction, "value", direction))
+
+
+def measure_end_to_end(positions, landmark_a, landmark_b) -> float:
+    """Euclidean end-to-end distance (nm) between two landmark nucleotides'
+    backbone sites in a relaxed/mean position map.
+
+    ``positions`` is the per-nucleotide list from :func:`production_rmsf` (the
+    noise-averaged mean structure — preferred) or the OxDNA display readback (a
+    single relaxed frame).  ``landmark_a`` / ``landmark_b`` are
+    ``(helix_id, bp_index, direction)`` keys.
+
+    Raises ``ValueError`` on an empty map, an identical pair (a trivially-zero
+    measurement), or a landmark absent from the map — so a mis-addressed or
+    dropped landmark fails loudly rather than returning a silent 0/NaN.
+    """
+    if not positions:
+        raise ValueError("measure_end_to_end: empty position map")
+    lookup = {
+        (p["helix_id"], int(p["bp_index"]),
+         getattr(p["direction"], "value", p["direction"])): p["backbone_position"]
+        for p in positions
+    }
+    ka, kb = _landmark_key(landmark_a), _landmark_key(landmark_b)
+    if ka == kb:
+        raise ValueError(
+            f"measure_end_to_end: the two landmarks are identical ({ka}) — "
+            "end-to-end distance would be trivially 0")
+    for k in (ka, kb):
+        if k not in lookup:
+            raise ValueError(
+                f"measure_end_to_end: landmark {k} is not a nucleotide of the "
+                "position map")
+    a = np.asarray(lookup[ka], dtype=float)
+    b = np.asarray(lookup[kb], dtype=float)
+    return float(np.linalg.norm(a - b))
+
+
+def _backbone_lookup(positions):
+    """{(helix_id, bp_index, direction): np.array backbone_position} for a
+    production_rmsf-style / display position list."""
+    return {
+        (p["helix_id"], int(p["bp_index"]),
+         getattr(p["direction"], "value", p["direction"])):
+            np.asarray(p["backbone_position"], dtype=float)
+        for p in positions
+    }
+
+
+def measure_field_response(
+    field_positions,
+    reference_positions,
+    field_dir,
+    anchor_keys,
+    *,
+    anchor_tol_nm: float = 1.0,
+    min_free_proj_nm: float = 0.5,
+) -> dict:
+    """Quantify how a structure responded to an electric-field stage, vs a
+    field-off reference — the anti-shovel oracle for the E-field feature.
+
+    ``field_positions`` / ``reference_positions`` are per-nucleotide position
+    lists (the :func:`production_rmsf` mean structure, or a display readback).
+    ``anchor_keys`` is the iterable of anchored ``(helix_id, bp_index, direction)``
+    keys (the parts pinned by traps); ``field_dir`` is the field direction.
+
+    The verdict ``passed`` asserts a *physical property*, not an HTTP status: the
+    anchored nucleotides barely moved (held by their traps, ≤ ``anchor_tol_nm``)
+    AND the free nucleotides displaced, on average, ALONG the field direction
+    (≥ ``min_free_proj_nm``).  It fails if the anchors didn't hold or the structure
+    didn't deflect the right way.
+
+    Returns ``{anchored_max_drift_nm, anchored_mean_drift_nm, free_mean_disp_nm,
+    free_proj_along_field_nm, n_anchored, n_free, passed, reason}``.  Raises on a
+    zero field direction or no free nucleotides to measure."""
+    fmap = _backbone_lookup(field_positions)
+    rmap = _backbone_lookup(reference_positions)
+    fdir = np.asarray(field_dir, dtype=float)
+    fnorm = float(np.linalg.norm(fdir))
+    if fnorm <= 1e-9:
+        raise ValueError("measure_field_response: field_dir is ~zero")
+    fdir = fdir / fnorm
+    anchor_set = {_landmark_key(tuple(k)[:3]) for k in anchor_keys}
+
+    anchored_drifts: list[float] = []
+    free_disps: list[float] = []
+    free_projs: list[float] = []
+    for key, fpos in fmap.items():
+        if key not in rmap:
+            continue
+        disp = fpos - rmap[key]
+        dist = float(np.linalg.norm(disp))
+        if key in anchor_set:
+            anchored_drifts.append(dist)
+        else:
+            free_disps.append(dist)
+            free_projs.append(float(np.dot(disp, fdir)))
+
+    if not free_disps:
+        raise ValueError("measure_field_response: no free (non-anchored) nucleotides to measure")
+
+    anchored_max = max(anchored_drifts) if anchored_drifts else 0.0
+    anchored_mean = float(np.mean(anchored_drifts)) if anchored_drifts else 0.0
+    free_mean = float(np.mean(free_disps))
+    free_proj = float(np.mean(free_projs))
+
+    held = anchored_max <= anchor_tol_nm
+    deflected = free_proj >= min_free_proj_nm
+    reasons = []
+    if not held:
+        reasons.append(f"anchors drifted {anchored_max:.2f} nm > {anchor_tol_nm} nm tol")
+    if not deflected:
+        reasons.append(f"free motion along field {free_proj:.2f} nm < {min_free_proj_nm} nm min")
+    return {
+        "anchored_max_drift_nm": anchored_max,
+        "anchored_mean_drift_nm": anchored_mean,
+        "free_mean_disp_nm": free_mean,
+        "free_proj_along_field_nm": free_proj,
+        "n_anchored": len(anchored_drifts),
+        "n_free": len(free_disps),
+        "passed": held and deflected,
+        "reason": "; ".join(reasons) or "anchors held; structure deflected along the field",
+    }
+
+
+def field_response_from_confs(
+    design,
+    field_conf_path,
+    reference_conf_path,
+    *,
+    field_dir,
+    anchors=None,
+    anchor_keys=None,
+    **kw,
+) -> dict:
+    """:func:`measure_field_response` driven straight from two oxDNA configuration
+    files — the reusable validation entry point for the E-field flow.
+
+    ``field_conf_path`` is the configuration after the field stage; ``reference_conf_path``
+    is the field-off (relaxed) configuration the field stage started from.  Pass
+    either ``anchors`` (descriptors — resolved here to keys) or ``anchor_keys``
+    directly.  Positions are the raw CM backbone positions (NOT Kabsch-aligned —
+    aligning would remove the very field-driven motion we measure; the anchored
+    region IS the common frame)."""
+    from backend.physics.oxdna_interface import (
+        read_configuration_full,
+        resolve_anchor_particles,
+    )
+
+    if anchor_keys is None:
+        _parts, anchor_keys = resolve_anchor_particles(design, anchors or [])
+
+    def _to_positions(path):
+        fm = read_configuration_full(path, design)
+        return [{"helix_id": k[0], "bp_index": k[1], "direction": k[2],
+                 "backbone_position": v["backbone_position"]} for k, v in fm.items()]
+
+    return measure_field_response(
+        _to_positions(field_conf_path), _to_positions(reference_conf_path),
+        field_dir, anchor_keys, **kw)
+
+
+# ── Declarative relaxed-structure constraints (AF-13 P3) ───────────────────────
+# A constraint is a *declarative* statement about the relaxed structure, e.g.
+# "the two ends are 50 nm ± 5 nm apart, certified by >= 50 pooled frames".  It
+# slots into the AF-11 build-spec grammar as a design ``constraints`` block.
+# ``parse_constraint_spec`` validates it (PURE, no oxDNA run) and
+# ``check_relaxed_constraint`` *REPORTS* whether a relaxed output meets it — it
+# does NOT assert (that is the oracle ``assert_relaxed_measurement``'s job).  The
+# distinction matters: a closed-loop builder (AF-13 P4 iterate-until-met) needs a
+# verdict to branch on, not a test that raises.  The load-bearing invariant is
+# the confidence gate: ``met`` is NEVER True on an under-sampled run, even if the
+# measured value happens to land within tolerance.  Physical-layer only.
+
+class ConstraintSpecError(ValueError):
+    """Raised when a declarative relaxed-structure constraint spec is malformed."""
+
+
+_CONSTRAINT_MEASURES = frozenset({"end_to_end"})
+_CONSTRAINT_KEYS = frozenset(
+    {"measure", "landmarks", "target_nm", "tol_nm", "min_confidence"})
+
+
+def _validate_landmark(lm, *, which: str) -> tuple:
+    if not isinstance(lm, (list, tuple)) or len(lm) != 3:
+        raise ConstraintSpecError(
+            f"constraint landmark {which} must be a (helix_id, bp_index, "
+            f"direction) triple, got {lm!r}")
+    hid, bp, direction = lm
+    try:
+        bp_int = int(bp)
+    except (TypeError, ValueError):
+        raise ConstraintSpecError(
+            f"constraint landmark {which}: bp_index must be an integer, got {bp!r}")
+    return (hid, bp_int, getattr(direction, "value", direction))
+
+
+def _require_number(value, name: str, *, positive: bool = False) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) \
+            or not math.isfinite(value):
+        raise ConstraintSpecError(
+            f"constraint {name} must be a finite number, got {value!r}")
+    if positive and value <= 0:
+        raise ConstraintSpecError(
+            f"constraint {name} must be positive, got {value!r}")
+    if not positive and value < 0:
+        raise ConstraintSpecError(
+            f"constraint {name} must be non-negative, got {value!r}")
+    return float(value)
+
+
+def parse_constraint_spec(spec) -> dict:
+    """Validate + normalise a declarative relaxed-structure constraint (PURE — no
+    execution, no oxDNA run).
+
+    Shape::
+
+        {"measure": "end_to_end", "landmarks": [a, b],
+         "target_nm": 50, "tol_nm": 5, "min_confidence": 50}
+
+    where each landmark is a ``(helix_id, bp_index, direction)`` key (``direction``
+    a :class:`Direction` enum or its string value).  ``min_confidence`` is optional
+    (defaults to :data:`RMSF_PRELIM_FRAMES`) — the minimum pooled production frames
+    required before a ``met`` verdict can be certified.  Raises
+    :class:`ConstraintSpecError` on any malformed field, so a bad constraint fails
+    at parse time *before* any expensive relaxation runs.  Idempotent on its own
+    normalised output.
+    """
+    if not isinstance(spec, dict):
+        raise ConstraintSpecError(
+            f"constraint spec must be a dict, got {type(spec).__name__}")
+    unknown = set(spec) - _CONSTRAINT_KEYS
+    if unknown:
+        raise ConstraintSpecError(
+            f"constraint spec has unknown key(s): {sorted(unknown)}")
+    measure = spec.get("measure")
+    if measure not in _CONSTRAINT_MEASURES:
+        raise ConstraintSpecError(
+            f"constraint measure must be one of {sorted(_CONSTRAINT_MEASURES)}, "
+            f"got {measure!r}")
+    landmarks = spec.get("landmarks")
+    if not isinstance(landmarks, (list, tuple)) or len(landmarks) != 2:
+        raise ConstraintSpecError(
+            f"constraint '{measure}' needs exactly 2 landmarks, got {landmarks!r}")
+    a = _validate_landmark(landmarks[0], which="a")
+    b = _validate_landmark(landmarks[1], which="b")
+    if a == b:
+        raise ConstraintSpecError(
+            f"constraint landmarks are identical ({a}) — the measurement is "
+            "trivially 0")
+    target = _require_number(spec.get("target_nm"), "target_nm")
+    tol = _require_number(spec.get("tol_nm"), "tol_nm", positive=True)
+    min_conf = spec.get("min_confidence", RMSF_PRELIM_FRAMES)
+    if isinstance(min_conf, bool) or not isinstance(min_conf, int) or min_conf < 1:
+        raise ConstraintSpecError(
+            f"constraint min_confidence must be an integer >= 1, got {min_conf!r}")
+    return {"measure": measure, "landmarks": [a, b], "target_nm": target,
+            "tol_nm": tol, "min_confidence": int(min_conf)}
+
+
+def check_relaxed_constraint(constraint, relaxed_output) -> dict:
+    """REPORT (do not assert) whether a relaxed structure meets a declarative
+    constraint — the AF-13 P3 reporter that AF-13 P4's iterate-until-met loop and
+    the AF-11 grammar's ``constraints`` block consume.
+
+    ``constraint`` is a constraint spec (raw or already parsed — it is normalised
+    via :func:`parse_constraint_spec`).  ``relaxed_output`` is the dict returned by
+    :func:`~backend.api.headless_oxdna_build.read_flexibility_map` (the production
+    mean structure): ``{ready, positions, confidence:{n_frames,...}, ...}``.
+
+    Returns ``{met, status, measured_nm, target_nm, tol_nm, n_frames,
+    min_confidence, confidence}`` where ``status`` is one of:
+
+    - ``"met"``          — ``n_frames >= min_confidence`` AND ``|measured −
+      target| <= tol``;
+    - ``"unmet"``        — enough frames pooled, BUT the measurement is out of
+      tolerance;
+    - ``"inconclusive"`` — too few frames pooled (or no production mean structure
+      yet) to certify.  **The load-bearing guard: ``met`` is NEVER True here, even
+      if the measured value is within tolerance — run a longer production.**
+
+    The measured value is still reported when positions exist (so a closed loop
+    can watch it converge), but ``met`` follows ``status`` strictly.
+    *Physical-layer only*: reads relaxed geometry, never writes it back.
+    """
+    c = parse_constraint_spec(constraint)
+    landmark_a, landmark_b = c["landmarks"]
+    target, tol, min_conf = c["target_nm"], c["tol_nm"], c["min_confidence"]
+
+    out = relaxed_output or {}
+    confidence = out.get("confidence") or {}
+    n_frames = confidence.get("n_frames")
+    if n_frames is None:
+        n_frames = out.get("n_frames", 0)
+    n_frames = int(n_frames or 0)
+    positions = out.get("positions") or []
+    has_structure = bool(out.get("ready")) and bool(positions)
+
+    measured = None
+    if has_structure:
+        # parse_constraint_spec already pins measure == "end_to_end".
+        measured = measure_end_to_end(positions, landmark_a, landmark_b)
+
+    if not has_structure or n_frames < min_conf:
+        status, met = "inconclusive", False
+    elif abs(measured - target) <= tol:
+        status, met = "met", True
+    else:
+        status, met = "unmet", False
+
+    return {"met": met, "status": status, "measured_nm": measured,
+            "target_nm": target, "tol_nm": tol, "n_frames": n_frames,
+            "min_confidence": min_conf, "confidence": confidence}
+
+
 def composite_trajectory(
     design,
     stages,

@@ -1304,6 +1304,7 @@ def _precompute_arm_frames(
 def deformed_nucleotide_arrays(
     helix: "Helix",
     design: "Design",
+    compact_skips: bool = False,
 ) -> dict:
     """
     Return nucleotide positions for *helix* with all deformation ops applied.
@@ -1324,7 +1325,7 @@ def deformed_nucleotide_arrays(
     helix    = effective_helix_for_geometry(helix, design)
     clusters = _clusters_for_helix(design, helix.id)
 
-    arrs = nucleotide_positions_arrays(helix)  # vectorised straight geometry
+    arrs = nucleotide_positions_arrays(helix, compact_skips=compact_skips)  # vectorised straight geometry
 
     if not design.deformations and not clusters:
         return arrs

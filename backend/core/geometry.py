@@ -125,7 +125,7 @@ def _frame_from_helix_axis(axis_vec: np.ndarray) -> np.ndarray:
     return np.column_stack([x_hat, y_hat, z_hat])
 
 
-def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
+def nucleotide_positions(helix: Helix, compact_skips: bool = False) -> List[NucleotidePosition]:
     """
     Compute 3D positions for every nucleotide on both strands of *helix*.
 
@@ -148,6 +148,15 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
     global bp index; loop positions use the same bp_index as their companion
     to allow the renderer to pair them correctly.
     LoopSkip.bp_index values stored on the helix are also global.
+
+    *compact_skips* (default False — rendering/default behaviour unchanged):
+    when True, a skip does NOT advance the axial+twist counter, so the flanking
+    nucleotides sit one normal bp apart instead of leaving a 2×-rise gap. This is
+    the physically correct representation of a deletion for molecular dynamics (a
+    deleted bp simply doesn't exist; its neighbours are covalently/base-paired
+    adjacent). Used only by the oxDNA export path, where the gap would otherwise
+    appear as a backbone bond stretched past oxDNA's FENE divergence. bp_index
+    labels are unchanged — only positions move.
     """
     start    = helix.axis_start.to_array()
     end      = helix.axis_end.to_array()
@@ -212,15 +221,18 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
             axis_tangent=axis_hat,
         ))
 
+    eff_i = 0  # compacted axial+twist index (only consulted when compact_skips)
     for local_i in range(helix.length_bp):
         global_bp = local_i + helix.bp_start
         delta = ls_map.get(global_bp, 0)
-        axis_point = start + axis_hat * (local_i * BDNA_RISE_PER_BP)
+        idx = eff_i if compact_skips else local_i
+        axis_point = start + axis_hat * (idx * BDNA_RISE_PER_BP)
 
         if delta <= -1:
             # Skip (any negative delta): omit this bp entirely.
-            # Axial position counter still advances — the gap is bridged by
-            # a longer backbone bond in the strand graph topology.
+            # Default: axial position counter still advances — the gap is bridged
+            # by a longer backbone bond in the strand graph topology.
+            # compact_skips: eff_i does NOT advance, closing the gap.
             continue
         elif delta >= 1:
             # Loop (any positive delta): emit delta+1 nucleotides at this bp,
@@ -228,16 +240,17 @@ def nucleotide_positions(helix: Helix) -> List[NucleotidePosition]:
             n_copies = delta + 1
             for k in range(n_copies):
                 offset = (k - (n_copies - 1) / 2.0) * BDNA_RISE_PER_BP
-                _emit(axis_point + axis_hat * offset, local_i, global_bp)
+                _emit(axis_point + axis_hat * offset, idx, global_bp)
         else:
-            _emit(axis_point, local_i, global_bp)
+            _emit(axis_point, idx, global_bp)
+        eff_i += 1
 
     return results
 
 
 # ── Vectorised position array API ──────────────────────────────────────────────
 
-def nucleotide_positions_arrays(helix: Helix) -> dict:
+def nucleotide_positions_arrays(helix: Helix, compact_skips: bool = False) -> dict:
     """
     Vectorised nucleotide position computation.
 
@@ -275,8 +288,11 @@ def nucleotide_positions_arrays(helix: Helix) -> dict:
 
     if helix.loop_skips:
         # Rare slow path — fall back to the scalar loop and convert.
+        # compact_skips is honoured here (the fast path below has no skips to
+        # compact, so it needs no flag).
         return _nuc_arrays_from_list(helix.id, helix.bp_start,
-                                     nucleotide_positions(helix), axis_hat)
+                                     nucleotide_positions(helix, compact_skips=compact_skips),
+                                     axis_hat)
 
     # ── Fast path: no loop/skips ─────────────────────────────────────────────
     N = helix.length_bp

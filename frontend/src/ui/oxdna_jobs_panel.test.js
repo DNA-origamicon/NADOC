@@ -20,8 +20,63 @@ import {
   productionState, jobListStatus, formatEta, seedReady, initOxdnaJobsPanel,
   jobIsActive, isRelaxRunning, isProductionRunning, makeSpinner,
   productionRunCount, hasTrajectory, isResumable, startButtonLabel, flexConfidenceText,
-  resumeNote,
+  resumeNote, groupJobsByParent, fieldChildTitle, deleteConfirmMessage, samplingState,
 } from './oxdna_jobs_panel.js'
+
+describe('samplingState (flex-map gating: production OR field)', () => {
+  it('treats a field run as a sampling run', () => {
+    expect(samplingState({ stages: [{ kind: 'field', status: 'done' }] })).toBe('done')
+    expect(samplingState({ stages: [{ kind: 'field', status: 'running' }] })).toBe('running')
+  })
+  it('still covers production and ignores relaxation stages', () => {
+    expect(samplingState({ stages: [{ kind: 'production', status: 'done' }] })).toBe('done')
+    expect(samplingState({ stages: [{ kind: 'equil', status: 'done' }] })).toBe('none')
+    expect(samplingState({ stages: [] })).toBe('none')
+  })
+})
+
+describe('deleteConfirmMessage', () => {
+  it('warns about cascade when a relaxed parent has field children', () => {
+    const m = deleteConfirmMessage({ job_id: 'P' }, 3)
+    expect(m.message).toMatch(/3 electric-field runs/)
+    expect(m.message).toMatch(/all 3 field runs/)
+    expect(m.confirmLabel).toBe('Delete all (4)')
+  })
+  it('singular wording for one child', () => {
+    expect(deleteConfirmMessage({ job_id: 'P' }, 1).message).toMatch(/1 electric-field run\b/)
+  })
+  it('plain warning for a field child or a childless job', () => {
+    expect(deleteConfirmMessage({ parent_job_id: 'P' }, 0).title).toBe('Delete field run')
+    expect(deleteConfirmMessage({ job_id: 'P' }, 0).title).toBe('Delete oxDNA job')
+  })
+})
+
+describe('groupJobsByParent', () => {
+  it('nests field children under their relaxed parent, numbered by run order', () => {
+    const jobs = [
+      { job_id: 'P', created_at: 100 },
+      { job_id: 'F2', parent_job_id: 'P', created_at: 220 },
+      { job_id: 'F1', parent_job_id: 'P', created_at: 210 },
+      { job_id: 'Q', created_at: 50 },
+    ]
+    const groups = groupJobsByParent(jobs)
+    expect(groups.map(g => g.parent.job_id)).toEqual(['P', 'Q'])    // top order preserved
+    expect(groups[0].children.map(c => c.job.job_id)).toEqual(['F1', 'F2'])  // by created_at
+    expect(groups[0].children.map(c => c.index)).toEqual([1, 2])    // numbered
+    expect(groups[1].children).toEqual([])
+  })
+  it('an orphan child (parent absent) shows as its own top row', () => {
+    const groups = groupJobsByParent([{ job_id: 'F', parent_job_id: 'gone', created_at: 1 }])
+    expect(groups.map(g => g.parent.job_id)).toEqual(['F'])
+  })
+})
+
+describe('fieldChildTitle', () => {
+  it('summarizes the field params for the hover tooltip', () => {
+    const t = fieldChildTitle({ efield: { force_pN: 2.5, dir: [0, 0, 1], n_anchored: 12 } })
+    expect(t).toBe('E-field 2.5 pN/nt · dir (0.00, 0.00, 1.00) · 12 anchored')
+  })
+})
 
 describe('formatEta', () => {
   it('formats seconds / minutes / hours', () => {
@@ -385,8 +440,19 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await selectFirstJob(panel)
     expect($('oxdna-jobs-prod-btn').disabled).toBe(false)     // production ready
-    expect($('oxdna-jobs-flex-toggle').disabled).toBe(true)   // no production run yet
-    expect($('oxdna-jobs-flex-status').textContent.toLowerCase()).toContain('waiting for production')
+    expect($('oxdna-jobs-flex-toggle').disabled).toBe(true)   // no production/field run yet
+    expect($('oxdna-jobs-flex-status').textContent.toLowerCase()).toContain('waiting for a production or field run')
+  })
+
+  it('selecting a job dispatches nadoc:oxdna-job-selected (so the E-field Run button reacts)', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jSel', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 3, stages: relaxStages() }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    const spy = vi.fn()
+    window.addEventListener('nadoc:oxdna-job-selected', spy)
+    await selectFirstJob(panel)
+    expect(spy).toHaveBeenCalled()
+    window.removeEventListener('nadoc:oxdna-job-selected', spy)
   })
 
   it('while production runs → both Relax and Production greyed; bar shows steps + ETA', async () => {

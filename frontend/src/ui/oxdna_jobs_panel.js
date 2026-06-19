@@ -21,6 +21,7 @@ import { filterJobsForPart } from './md_jobs_panel.js'
 import { initFlexScale } from './flex_scale.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
+import { showConfirm } from './primitives/confirm.js'
 import * as api from '../api/client.js'
 
 const POLL_MS = 1500
@@ -111,6 +112,19 @@ export function productionRunCount(job) {
   return (job?.stages || []).filter(s => s.kind === 'production').length
 }
 
+/** Pure: latest SAMPLING-stage state — 'none'|'running'|'done'|'failed' — over
+ *  production AND electric-field stages.  The flexibility map (RMSF) pools either,
+ *  so its toggle is gated on this (not productionState, which is production-only). */
+export function samplingState(job) {
+  const ss = (job?.stages || []).filter(s => s.kind === 'production' || s.kind === 'field')
+  const last = ss.length ? ss[ss.length - 1] : null
+  if (!last) return 'none'
+  if (last.status === 'done')   return 'done'
+  if (last.status === 'failed') return 'failed'
+  if (last.status === 'running' || last.status === 'pending') return 'running'
+  return 'none'
+}
+
 /** Pure: does the job have any trajectory data to scrub (≥1 stage started)? */
 export function hasTrajectory(job) {
   return (job?.stages || []).some(s => s.status === 'done' || s.status === 'running')
@@ -194,6 +208,59 @@ export function jobListStatus(job) {
   if (ps === 'done')    return { label: 'production done', color: _C.ok }
   if (ps === 'failed')  return { label: 'production failed', color: _C.err }
   return { label: job?.status ?? 'unknown', color: _STATUS_COLOR[job?.status] || _C.dim }
+}
+
+/** Pure: group jobs into relaxed parents + their electric-field children.
+ *  Returns [{ parent, children: [{ job, index }] }] preserving the input order of
+ *  top-level jobs; children are ordered by created_at and numbered 1..N (run
+ *  order).  A field child whose parent isn't in the list shows as its own top
+ *  row (orphan fallback). */
+export function groupJobsByParent(jobs) {
+  const ids = new Set((jobs || []).map(j => j.job_id))
+  const childrenOf = new Map()
+  const tops = []
+  for (const j of jobs || []) {
+    const pid = j.parent_job_id
+    if (pid && ids.has(pid)) {
+      if (!childrenOf.has(pid)) childrenOf.set(pid, [])
+      childrenOf.get(pid).push(j)
+    } else {
+      tops.push(j)
+    }
+  }
+  return tops.map(parent => ({
+    parent,
+    children: (childrenOf.get(parent.job_id) || [])
+      .slice().sort((a, b) => a.created_at - b.created_at)
+      .map((job, i) => ({ job, index: i + 1 })),
+  }))
+}
+
+/** Pure: the confirm-dialog copy for deleting a job.  A relaxed parent with
+ *  field children warns that the children go too (cascade); a field child / a
+ *  childless job gets a plain permanent-delete warning. */
+export function deleteConfirmMessage(job, nChildren = 0) {
+  if (job?.parent_job_id) {
+    return { title: 'Delete field run', confirmLabel: 'Delete',
+      message: 'This electric-field run and its results will be permanently deleted. This cannot be undone.' }
+  }
+  if (nChildren > 0) {
+    const s = nChildren === 1 ? '' : 's'
+    return { title: 'Delete relaxation + field runs', confirmLabel: `Delete all (${nChildren + 1})`,
+      message: `This relaxed job has ${nChildren} electric-field run${s} branched from it.\n\n` +
+        `Deleting it will permanently delete the relaxation AND all ${nChildren} field run${s}. This cannot be undone.` }
+  }
+  return { title: 'Delete oxDNA job', confirmLabel: 'Delete',
+    message: 'This oxDNA job and its results will be permanently deleted. This cannot be undone.' }
+}
+
+/** Pure: hover title for an E-field child sub-item (its field params). */
+export function fieldChildTitle(job) {
+  const e = job?.efield || {}
+  const dir = Array.isArray(e.dir) ? e.dir.map(n => (+n).toFixed(2)).join(', ') : '—'
+  const pN = e.force_pN != null ? e.force_pN : '?'
+  const na = e.n_anchored != null ? e.n_anchored : '?'
+  return `E-field ${pN} pN/nt · dir (${dir}) · ${na} anchored`
 }
 
 export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null } = {}) {
@@ -430,37 +497,50 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       return
     }
     listEl.innerHTML = ''
-    for (const job of jobs) {
-      const row = document.createElement('div')
-      row.style.cssText =
-        `display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:4px;` +
-        `font-size:11px;${job.job_id === _selectedId ? 'background:#2a3a4a;' : ''}`
-      const ls = jobListStatus(job)
-      // A running/queued job spins; finished jobs show a static status dot.
-      let indicator
-      if (jobIsActive(job)) {
-        indicator = makeSpinner(ls.color, 10)
-      } else {
-        indicator = document.createElement('span')
-        indicator.textContent = '●'
-        indicator.style.color = ls.color
-      }
-      const label = document.createElement('span')
-      label.style.flex = '1'
-      label.textContent = jobDisplayName(job)
-      const st = document.createElement('span')
-      st.style.color = ls.color
-      st.textContent = ls.label
-      row.append(indicator, label, st)
-      row.addEventListener('click', async () => {
-        _selectedId = job.job_id
-        _progress = await api.getOxdnaProgress(job.job_id).catch(() => null)
-        _renderList()
-        _renderDetail(job)
-        _scheduleNextPoll()
-      })
-      listEl.appendChild(row)
+    for (const { parent, children } of groupJobsByParent(jobs)) {
+      listEl.appendChild(_jobRow(parent, {}))
+      for (const { job, index } of children) listEl.appendChild(_jobRow(job, { isChild: true, index }))
     }
+  }
+
+  // One job row (parent relaxation, or an indented numbered E-field child).
+  function _jobRow(job, { isChild = false, index = 0 }) {
+    const row = document.createElement('div')
+    row.dataset.jobId = job.job_id
+    row.style.cssText =
+      `display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:4px;` +
+      `font-size:11px;${isChild ? 'padding-left:18px;' : ''}` +
+      `${job.job_id === _selectedId ? 'background:#2a3a4a;' : ''}`
+    const ls = jobListStatus(job)
+    const indicator = jobIsActive(job)
+      ? makeSpinner(ls.color, 10)
+      : Object.assign(document.createElement('span'), { textContent: '●' })
+    if (!jobIsActive(job)) indicator.style.color = ls.color
+
+    const label = document.createElement('span')
+    label.style.flex = '1'
+    if (isChild) {
+      // Electric bolt icon + numbered label; hover reveals the field params.
+      const bolt = document.createElement('span')
+      bolt.textContent = '⚡'
+      bolt.style.cssText = 'font-weight:700;color:#f2c641;margin-right:3px'
+      label.append(bolt, document.createTextNode(`Field ${index}`))
+      row.title = fieldChildTitle(job)
+    } else {
+      label.textContent = jobDisplayName(job)
+    }
+    const st = document.createElement('span')
+    st.style.color = ls.color
+    st.textContent = ls.label
+    row.append(indicator, label, st)
+    row.addEventListener('click', async () => {
+      _selectedId = job.job_id
+      _progress = await api.getOxdnaProgress(job.job_id).catch(() => null)
+      _renderList()
+      _renderDetail(job)
+      _scheduleNextPoll()
+    })
+    return row
   }
 
   // ── Detail ─────────────────────────────────────────────────────────────────
@@ -493,6 +573,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _renderProgress(job)
     _renderTimeline(job)
     _renderHealth(job)
+    _emitJobSelected()   // let the E-field section re-evaluate its Run button
+  }
+
+  // Notify the E-field setup section that the selected job (or its status)
+  // changed, so its "Run field" button enables the moment a completed relaxed
+  // job is selected — without the user having to hover the button.
+  function _emitJobSelected() {
+    window.dispatchEvent(new CustomEvent('nadoc:oxdna-job-selected'))
   }
 
   function _renderProgress(job) {
@@ -501,12 +589,13 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     const cur = job.stages?.[idx]
     let barPct = formatProgress(job, _progress).pct
     let label = ''
-    // During a production run, show steps completed out of the production total.
-    if (productionState(job) === 'running' && cur?.kind === 'production') {
+    // During a production OR electric-field run, show steps completed out of total.
+    if (job.status === 'running' && (cur?.kind === 'production' || cur?.kind === 'field')) {
       const frac = _progress?.stage_fraction ?? 0
       barPct = Math.round(frac * 100)
       const done = Math.round(frac * (cur.steps || 0))
-      label = `Production: ${done.toLocaleString()} / ${(cur.steps || 0).toLocaleString()} steps`
+      const noun = cur.kind === 'field' ? 'Field' : 'Production'
+      label = `${noun}: ${done.toLocaleString()} / ${(cur.steps || 0).toLocaleString()} steps`
     }
     // Flag a resumed run so the reset bar reads as "continuing", not "restarted".
     const note = resumeNote(job)
@@ -610,12 +699,13 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     // (done OR running).  A mid-run map is preliminary; the confidence readout
     // warns the user not to trust a short run.
     if (flexToggle && !_flexBusy) {
-      const ok = ps === 'done' || ps === 'running'
+      // Flex map pools production OR field trajectories → gate on samplingState.
+      const ok = samplingState(job) === 'done' || samplingState(job) === 'running'
       flexToggle.disabled = !ok
       const lab = flexToggle.closest('label')
       if (lab) { lab.style.opacity = ok ? '1' : '0.5'; lab.style.cursor = ok ? 'pointer' : 'not-allowed' }
       if (!ok && flexStatus && oxdnaDisplay?.mode() !== 'rmsf') {
-        _setFlexStatus('Waiting for production', _C.dim)
+        _setFlexStatus('Waiting for a production or field run', _C.dim)
       }
     }
 
@@ -721,7 +811,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       _setFlexLegend(r.min, r.max)
       flexScale.show(r.min, r.max)
       const conf = flexConfidenceText(r)
-      _setFlexStatus(`Avg of production · ${r.n} bases · ${conf.text}`,
+      _setFlexStatus(`Avg structure · ${r.n} bases · ${conf.text}`,
                      conf.preliminary ? _C.warn : _C.ok)
     } else {
       _setFlexBar('off')
@@ -735,9 +825,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   flexToggle?.addEventListener('change', async () => {
     if (flexToggle.checked) {
       if (!_selectedId) { flexToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); return }
-      const ps = productionState(_selectedJob())
-      if (ps !== 'done' && ps !== 'running') {
-        flexToggle.checked = false; _setFlexStatus('Waiting for production', _C.warn); return
+      const ss = samplingState(_selectedJob())
+      if (ss !== 'done' && ss !== 'running') {
+        flexToggle.checked = false; _setFlexStatus('Waiting for a production or field run', _C.warn); return
       }
       if (displayToggle?.checked) _setDisplayOff()   // mutually exclusive with OxDNA display
       if (trajToggle?.checked) _setTrajOff()
@@ -845,11 +935,21 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   })
   deleteBtn?.addEventListener('click', async () => {
     if (!_selectedId) return
-    await api.deleteOxdnaJob(_selectedId)
-    if (oxdnaDisplay?.activeJobId() === _selectedId) _allDisplaysOff()
+    const job = _selectedJob()
+    // Deleting a relaxed parent cascades to its field children — warn with the count.
+    const nChildren = job && !job.parent_job_id
+      ? _jobs.filter(j => j.parent_job_id === _selectedId).length : 0
+    const { title, message, confirmLabel } = deleteConfirmMessage(job, nChildren)
+    const ok = await showConfirm({ title, message, danger: true, confirmLabel })
+    if (!ok) return
+    const r = await api.deleteOxdnaJob(_selectedId)
+    const deletedIds = Array.isArray(r?.deleted) ? r.deleted : [_selectedId]
+    const active = oxdnaDisplay?.activeJobId()
+    if (active && deletedIds.includes(active)) _allDisplaysOff()
     _selectedId = null
     if (detailEl) detailEl.style.display = 'none'
     _updateButtons(null)
+    _emitJobSelected()
     _fetchJobs()
   })
 
@@ -908,6 +1008,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _selectedId = null
     if (detailEl) detailEl.style.display = 'none'
     _updateButtons(null)
+    _emitJobSelected()
     if (_collapsed) _renderList()   // re-filter cached jobs to the new path
     else _fetchJobs()               // fresh fetch + re-filter
   })
@@ -916,5 +1017,5 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   _checkAvailable()
   if (!_collapsed) _onOpen()
 
-  return { refresh: _fetchJobs }
+  return { refresh: _fetchJobs, getSelectedJob: _selectedJob }
 }

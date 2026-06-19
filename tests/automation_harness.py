@@ -32,6 +32,7 @@ from backend.api.headless_build import scratch_session
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.design_geometry import _geometry_for_design
 from backend.core.models import Design
+from backend.core.oxdna_health import RMSF_PRELIM_FRAMES
 from backend.core.validator import validate_design
 
 
@@ -2066,6 +2067,70 @@ def assert_relaxed_geometry_recovered(job, design: Design, workspace, *,
         f"(missing {len(design_keys - recovered_keys)}, extra "
         f"{len(recovered_keys - design_keys)})")
     return display
+
+
+def assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,
+                               workspace, min_confidence=RMSF_PRELIM_FRAMES):
+    """Tier-5 constraint primitive: a *measured* geometric property of the
+    relaxed, **noise-averaged** structure lies within ``tol_nm`` of ``target_nm``,
+    **gated by confidence** — the first stochastic-class oracle.
+
+    Unlike the deterministic Tiers 0–4 (exact fingerprints / analytic geometry),
+    a relaxed measurement is a property of a thermally-fluctuating ensemble, so it
+    is asserted *within a tolerance* and is only trustworthy once enough frames
+    have been pooled.  The oracle therefore:
+
+    1. requires the job to have ``completed`` (the status guard);
+    2. reads the production **mean structure** via
+       :func:`~backend.api.headless_oxdna_build.read_flexibility_map` (pooled,
+       PBC-unwrapped, Kabsch-aligned) — preferred over a single frame because the
+       mean cancels thermal noise;
+    3. **the confidence gate** — if fewer than ``min_confidence`` production
+       frames were pooled the measurement is *inconclusive* and the oracle raises
+       (a too-short run cannot certify a target; this is the load-bearing guard
+       AF-13 Phase 3's checker formalises as "met requires confidence");
+    4. computes the measurement (currently ``end_to_end`` — the Euclidean
+       distance between two ``(helix_id, bp_index, direction)`` landmark
+       nucleotides) with the pure :func:`measure_end_to_end`, and asserts it is
+       within ``tol_nm`` of ``target_nm``.
+
+    ``measure_spec`` is ``{"measure": "end_to_end", "landmarks": [a, b]}`` where
+    each landmark is a ``(helix_id, bp_index, direction)`` key.  Returns
+    ``{measured_nm, target_nm, tol_nm, n_frames, confidence}`` so callers can
+    surface the value + how trustworthy it is.
+
+    *Physical-layer only*: it reads relaxed geometry, it never writes it back to
+    ``Design``.
+    """
+    from backend.api import headless_oxdna_build as hox
+    from backend.core.oxdna_health import measure_end_to_end
+
+    status = getattr(job.status, "value", str(job.status))
+    assert status == "completed", (
+        f"oxDNA job did not reach completed (status={status!r}); error={job.error!r}")
+
+    rmsf = hox.read_flexibility_map(job.job_id, workspace)
+    assert rmsf.get("ready") is True, (
+        "no production mean structure available — run append_production before "
+        f"measuring (rmsf route: {rmsf.get('reason')!r})")
+    confidence = rmsf.get("confidence") or {}
+    n_frames = confidence.get("n_frames", rmsf.get("n_frames", 0))
+    assert n_frames >= min_confidence, (
+        f"relaxed measurement is INCONCLUSIVE — only {n_frames} production "
+        f"frame(s) pooled (need >= {min_confidence}); run a longer production to "
+        "certify the target (the confidence gate)")
+
+    kind = measure_spec.get("measure")
+    assert kind == "end_to_end", (
+        f"assert_relaxed_measurement: unsupported measure {kind!r} "
+        "(only 'end_to_end' is implemented)")
+    landmark_a, landmark_b = measure_spec["landmarks"]
+    measured = measure_end_to_end(rmsf["positions"], landmark_a, landmark_b)
+    assert abs(measured - target_nm) <= tol_nm, (
+        f"relaxed end-to-end {measured:.3f} nm is not within {tol_nm} nm of the "
+        f"target {target_nm} nm (off by {abs(measured - target_nm):.3f} nm)")
+    return {"measured_nm": measured, "target_nm": target_nm, "tol_nm": tol_nm,
+            "n_frames": n_frames, "confidence": confidence}
 
 
 _MUTATION_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})

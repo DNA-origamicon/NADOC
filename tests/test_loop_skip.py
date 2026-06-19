@@ -175,6 +175,34 @@ def test_skip_bp_index_absent():
     assert 7 not in skipped_bps
 
 
+def test_skip_leaves_axial_gap_by_default():
+    """Default (gap model): the bp flanking a skip are 2× rise apart along the axis."""
+    h = _make_helix("h0", length_bp=10, loop_skips=[LoopSkip(bp_index=5, delta=-1)])
+    nucs = {n.bp_index: n for n in nucleotide_positions(h)
+            if n.direction == Direction.FORWARD}
+    gap = abs(nucs[6].position[2] - nucs[4].position[2])
+    assert abs(gap - 2 * BDNA_RISE_PER_BP) < 1e-6
+
+
+def test_compact_skips_closes_axial_gap():
+    """compact_skips=True (oxDNA path): the bp flanking a skip are ONE rise apart —
+    the deletion is removed, not left as a stretched gap.  bp_index labels unchanged."""
+    h = _make_helix("h0", length_bp=10, loop_skips=[LoopSkip(bp_index=5, delta=-1)])
+    nucs = {n.bp_index: n for n in nucleotide_positions(h, compact_skips=True)
+            if n.direction == Direction.FORWARD}
+    assert 5 not in nucs                       # skipped bp still absent
+    gap = abs(nucs[6].position[2] - nucs[4].position[2])
+    assert abs(gap - BDNA_RISE_PER_BP) < 1e-6  # gap closed to one normal bp
+    # Twist is compacted too: bp 6 sits at the angle of the 5th emitted column,
+    # i.e. exactly one twist step past bp 4 (not two).
+    import numpy as np
+    def angle(n):
+        return np.arctan2(n.position[1] - h.axis_start.y, n.position[0] - h.axis_start.x)
+    step_before = angle(nucs[4]) - angle(nucs[3])
+    step_across = angle(nucs[6]) - angle(nucs[4])
+    assert abs(((step_across - step_before + np.pi) % (2 * np.pi)) - np.pi) < 1e-6
+
+
 def test_loop_bp_index_present_twice():
     """A loop bp_index should appear for both FORWARD and REVERSE, twice each."""
     h = _make_helix("h0", length_bp=14, loop_skips=[LoopSkip(bp_index=7, delta=+1)])

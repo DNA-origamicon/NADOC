@@ -569,6 +569,9 @@ def read_configuration_unwrapped(
     conf_path:      str | Path,
     design:         Design,
     reference_path: str | Path,
+    *,
+    align_keys: Optional[list] = None,
+    rotate:     bool = True,
 ) -> dict[tuple[str, int, str], dict]:
     """Read a relaxed oxDNA config and undo periodic-boundary wrapping for display.
 
@@ -600,7 +603,8 @@ def read_configuration_unwrapped(
     box = _parse_box_nm(conf_path)
     if box is None or not np.all(box > 0):
         return relax
-    return unwrap_align_to_reference(relax, ref, design, box)
+    return unwrap_align_to_reference(relax, ref, design, box,
+                                     align_keys=align_keys, rotate=rotate)
 
 
 def unwrap_align_to_reference(
@@ -608,10 +612,20 @@ def unwrap_align_to_reference(
     ref:   dict[tuple, dict],
     design: Design,
     box:   np.ndarray,
+    *,
+    align_keys: Optional[list] = None,
+    rotate:     bool = True,
 ) -> dict[tuple, dict]:
     """In-memory core of read_configuration_unwrapped: BFS-unwrap each bonded
-    component to whole, box-shift it toward its reference image, then Kabsch-align
-    the whole assembly onto *ref*.  Used for display AND per-frame RMSD."""
+    component to whole, box-shift it toward its reference image, then superpose
+    onto *ref*.  Used for display AND per-frame RMSD.
+
+    ``align_keys`` restricts the superposition to a subset of nucleotides (e.g. a
+    field run's ANCHORED beads — the fixed reference points); ``None`` uses the
+    whole assembly.  ``rotate=False`` does a TRANSLATION-ONLY fit (match the subset
+    centroid to its reference, no rotation), so a field-induced reorientation of
+    the rest stays visible — the anchored region is a positional, not rotational,
+    reference."""
     # Adjacency: backbone bonds + designed WC pairs (3-tuple keys present in relax).
     adj: dict[tuple, list[tuple]] = {k: [] for k in relax}
     for a, b in backbone_bond_pairs(design):
@@ -651,13 +665,25 @@ def unwrap_align_to_reference(
             for k in comp:
                 placed[k] = placed[k] + shift
 
-    # Rigid-body superpose (Kabsch) the whole assembly onto the reference frame,
-    # so diffusion + tumbling are removed and only the internal relaxation shows.
+    # Superpose onto the reference frame over the chosen subset (the anchored
+    # beads for a field run, else the whole assembly).
     keys = list(placed)
-    ref_all = [k for k in keys if k in ref]
-    if len(ref_all) >= 3:
-        P = np.array([placed[k] for k in ref_all])               # relaxed (mobile)
-        Q = np.array([ref[k]["backbone_position"] for k in ref_all])  # reference (target)
+    align_set = {tuple(k)[:3] for k in align_keys} if align_keys else None
+    subset = [k for k in keys if (align_set is None or k in align_set) and k in ref]
+
+    if not rotate:
+        # Translation-only: match the subset centroid to its reference (anchored
+        # region = fixed POSITION) without rotating — the rest's field-induced
+        # reorientation stays visible.  Orientation vectors are left untouched.
+        T = (np.mean([ref[k]["backbone_position"] for k in subset], axis=0)
+             - np.mean([placed[k] for k in subset], axis=0)) if subset else np.zeros(3)
+        return {k: {**relax[k], "backbone_position": placed[k] + T} for k in keys}
+
+    # Rigid-body superpose (Kabsch) so diffusion + tumbling are removed and only
+    # the internal relaxation shows.
+    if len(subset) >= 3:
+        P = np.array([placed[k] for k in subset])               # relaxed (mobile)
+        Q = np.array([ref[k]["backbone_position"] for k in subset])  # reference (target)
         Pc, Qc = P.mean(0), Q.mean(0)
         H = (P - Pc).T @ (Q - Qc)
         U, _, Vt = np.linalg.svd(H)
@@ -852,6 +878,197 @@ def backbone_bond_pairs(design: Design) -> list[tuple[tuple, tuple]]:
         for a, b in zip(seq_keys, seq_keys[1:]):
             pairs.append((a, b))
     return pairs
+
+
+# ── Electric-field forces (uniform string force + anchor traps) ─────────────────
+
+OXDNA_FORCE_PN: float = 48.63  # 1 oxDNA simulation force unit ≈ 48.63 pN
+# Anchor-trap stiffness (oxDNA units).  Chosen high so an anchored nucleotide is
+# EFFECTIVELY IMMOBILE: trap thermal jitter scales as ⟨dx²⟩≈kT/stiff, so 1000
+# pins each anchored bead to ~0.03 nm RMS (≈10× below normal bead motion) while
+# staying MD-stable at the field stage's dt (dt·√stiff≈0.16 ≪ 2).  Empirically
+# verified on 1hb_efield_test: drift 0.35 nm @5 → 0.027 nm @1000, run still completes.
+DEFAULT_ANCHOR_STIFF: float = 1000.0
+
+
+def pn_to_oxdna_force(pn: float) -> float:
+    """Force per nucleotide: pN → oxDNA simulation force units."""
+    return float(pn) / OXDNA_FORCE_PN
+
+
+def _normalize3(v) -> list[float]:
+    a = np.asarray(v, dtype=float)
+    n = float(np.linalg.norm(a))
+    return (a / n).tolist() if n > 1e-12 else [0.0, 0.0, 0.0]
+
+
+def _strand_nucleotide_provenance(design: Design) -> list[dict]:
+    """Like :func:`_strand_nucleotide_order` but tags each nucleotide with the
+    strand / domain / overhang it came from, in the SAME order (so the list index
+    IS the 0-based oxDNA particle index).  Lets anchor selections (cluster /
+    domain / overhang) resolve to particle indices without re-deriving the
+    topology traversal."""
+    ls_lookup = _build_ls_lookup(design)
+    prov: list[dict] = []
+    for strand in design.strands:
+        for di, domain in enumerate(strand.domains):
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp)
+            bp_range = (range(lo, hi + 1) if domain.direction == Direction.FORWARD
+                        else range(hi, lo - 1, -1))
+            for bp in bp_range:
+                delta = ls_lookup.get((domain.helix_id, bp), 0)
+                if delta <= -1:
+                    continue
+                n_copies = max(1, delta + 1)
+                for k in range(n_copies):
+                    key = ((domain.helix_id, bp, domain.direction.value)
+                           if n_copies == 1
+                           else (domain.helix_id, bp, domain.direction.value, k))
+                    prov.append({
+                        "particle":     len(prov),
+                        "strand_id":    strand.id,
+                        "domain_index": di,
+                        "helix_id":     domain.helix_id,
+                        "bp":           bp,
+                        "direction":    domain.direction.value,
+                        "overhang_id":  domain.overhang_id,
+                        "key":          key,
+                    })
+    return prov
+
+
+def resolve_anchor_particles(
+    design: Design, anchors: list[dict]
+) -> tuple[list[int], list[tuple]]:
+    """Resolve anchor descriptors to (sorted particle indices, their keys).
+
+    Descriptor kinds (the three scopes the UI offers — overhang recommended):
+      ``{'kind':'overhang', 'id': <overhang_id>}`` → nucleotides of the domains
+          whose ``overhang_id`` matches (the surface-tethered overhang).
+      ``{'kind':'cluster',  'id': <cluster_id>}``  → nucleotides on any helix in
+          the cluster's ``helix_ids``.
+      ``{'kind':'domain', 'strand_id'|'strandId', 'domain_index'|'domainIndex'}``
+          → that one domain's nucleotides.
+
+    Unknown ids / kinds contribute nothing, so a stale selection silently drops
+    rather than raising.  Particle indices match the topology / configuration
+    order (:func:`_strand_nucleotide_order`)."""
+    prov = _strand_nucleotide_provenance(design)
+    cluster_helices = {c.id: set(c.helix_ids) for c in design.cluster_transforms}
+    selected: dict[int, tuple] = {}
+    for a in anchors or []:
+        kind = a.get("kind")
+        if kind == "overhang":
+            oid = a.get("id")
+            for p in prov:
+                if p["overhang_id"] == oid:
+                    selected[p["particle"]] = p["key"]
+        elif kind == "cluster":
+            helset = cluster_helices.get(a.get("id"), set())
+            for p in prov:
+                if p["helix_id"] in helset:
+                    selected[p["particle"]] = p["key"]
+        elif kind == "domain":
+            sid = a.get("strand_id", a.get("strandId"))
+            didx = a.get("domain_index", a.get("domainIndex"))
+            for p in prov:
+                if p["strand_id"] == sid and p["domain_index"] == didx:
+                    selected[p["particle"]] = p["key"]
+    parts = sorted(selected)
+    return parts, [selected[i] for i in parts]
+
+
+def read_cm_positions_oxdna(conf_path: str | Path) -> list[list[float]]:
+    """Per-particle centre-of-mass positions (oxDNA simulation units, topology
+    order) parsed from a configuration file — the first three numbers of each
+    particle line.  Used as anchor-trap rest positions so an anchor pins a
+    nucleotide to exactly where it sits at the start of the field stage."""
+    lines = Path(conf_path).read_text().splitlines()
+    out: list[list[float]] = []
+    for ln in lines[3:]:  # skip the t= / b= / E= header
+        parts = ln.split()
+        if len(parts) < 3:
+            continue
+        out.append([float(parts[0]), float(parts[1]), float(parts[2])])
+    return out
+
+
+def field_string_block(field_oxdna: float, field_dir) -> str:
+    """An oxDNA ``string`` force (constant ``field_oxdna`` along ``field_dir``)
+    applied to EVERY nucleotide (``particle = -1``).  A uniform electric field
+    acts equally on each (uniformly-charged) backbone bead.  Anchored nucleotides
+    feel the field too, but their high-stiffness traps hold them immobile against
+    it (oxDNA's ConstantRateForce rejects range particle-specs, so excluding
+    anchors from the field isn't viable — and the trap dominates regardless)."""
+    dx, dy, dz = _normalize3(field_dir)
+    return ("{\n"
+            "type = string\n"
+            "particle = -1\n"
+            f"F0 = {field_oxdna:.6g}\n"
+            "rate = 0\n"
+            f"dir = {dx:.6g},{dy:.6g},{dz:.6g}\n"
+            "}\n")
+
+
+def anchor_trap_block(particle: int, pos0, stiff: float) -> str:
+    """A static harmonic ``trap`` pinning ``particle`` to ``pos0`` (oxDNA units).
+    ``rate = 0`` → the trap does not move; ``dir`` is the (unused) move direction."""
+    x, y, z = float(pos0[0]), float(pos0[1]), float(pos0[2])
+    return ("{\n"
+            "type = trap\n"
+            f"particle = {particle}\n"
+            f"pos0 = {x:.6g},{y:.6g},{z:.6g}\n"
+            f"stiff = {stiff:.6g}\n"
+            "rate = 0\n"
+            "dir = 1,0,0\n"
+            "}\n")
+
+
+def write_field_forces(
+    path: str | Path,
+    design: Design,
+    conf_path: str | Path,
+    *,
+    field_oxdna: float,
+    field_dir,
+    anchors: list[dict],
+    anchor_stiff: float = DEFAULT_ANCHOR_STIFF,
+) -> dict:
+    """Write the external-forces file for an electric-field stage: one uniform
+    ``string`` force on all nucleotides + a static ``trap`` pinning every anchored
+    nucleotide to its position in ``conf_path`` (the configuration the field stage
+    starts from).
+
+    Anchors are required — an unanchored uniform force nets a centre-of-mass drift
+    that streams the whole structure across the periodic box (see
+    ``memory/project_oxdna_efield.md`` GOTCHA 1).  Raises ``ValueError`` if the
+    anchor selection resolves to zero nucleotides.
+
+    Returns ``{n_anchored, n_total, field_oxdna, dir, anchor_particles}``."""
+    particles, anchor_keys = resolve_anchor_particles(design, anchors)
+    if not particles:
+        raise ValueError(
+            "an electric-field stage needs ≥1 anchor; the selection resolved to "
+            "no nucleotides (without an anchor the field just drifts the whole "
+            "structure across the box)")
+    cm = read_cm_positions_oxdna(conf_path)
+    n_total = len(cm)
+    blocks: list[str] = [field_string_block(field_oxdna, field_dir)]
+    for p in particles:
+        if p < n_total:
+            blocks.append(anchor_trap_block(p, cm[p], anchor_stiff))
+    Path(path).write_text("\n".join(blocks), encoding="utf-8")
+    return {
+        "n_anchored": len(particles),
+        "n_total": n_total,
+        "field_oxdna": float(field_oxdna),
+        "dir": _normalize3(field_dir),
+        "anchor_particles": particles,
+        # 3-tuple nucleotide keys (helix, bp, direction) of the anchored beads —
+        # the display uses these as a positional (non-rotational) alignment frame.
+        "anchor_keys": [list(k[:3]) for k in anchor_keys],
+    }
 
 
 # ── oxDNA runner ──────────────────────────────────────────────────────────────

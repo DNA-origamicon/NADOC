@@ -241,6 +241,7 @@ def _geometry_for_helices(
     design: Design,
     helix_ids: frozenset[str] | None = None,
     include_linker_helices: bool = False,
+    compact_skips: bool = False,
 ) -> list[dict]:
     """Compute nucleotide geometry for *design*.
 
@@ -337,7 +338,7 @@ def _geometry_for_helices(
         if helix.id.startswith("__lnk__") and not include_linker_helices:
             continue   # virtual linker helices have no real geometry (per-design:
                        # bridge nucs come from _emit_bridge_nucs below instead)
-        arrs = deformed_nucleotide_arrays(helix, design)
+        arrs = deformed_nucleotide_arrays(helix, design, compact_skips=compact_skips)
         arrs = apply_overhang_rotation_if_needed(arrs, helix, design)
         _emit_arrs(arrs, arrs['helix_id'])
 
@@ -508,8 +509,13 @@ def _emit_bridge_nucs(design: Design, nuc_info: dict, result: list[dict]) -> Non
                 })
 
 
-def _geometry_for_design(design: Design, include_linker_helices: bool = False) -> list[dict]:
-    return _geometry_for_helices(design, include_linker_helices=include_linker_helices)
+def _geometry_for_design(
+    design: Design,
+    include_linker_helices: bool = False,
+    compact_skips: bool = False,
+) -> list[dict]:
+    return _geometry_for_helices(
+        design, include_linker_helices=include_linker_helices, compact_skips=compact_skips)
 
 
 def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:

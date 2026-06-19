@@ -133,6 +133,19 @@ export function makeMaterial(repr, presetName, vertexColors = false, opacity = 1
   return mat
 }
 
+// R5 — bloom-blowout guard. The fluorophore slider (0..100) drives BOTH the
+// bead's self-emission (this material) AND the per-fluorophore PointLight
+// (illumination/reflections, scaled by _FLUORO_LIGHT_GAIN in photo_renderer.js).
+// The PointLight keeps the full 0..100 range the user asked for. But the
+// SELF-EMISSION feeds UnrealBloomPass, which runs in linear HDR *before*
+// OutputPass tone mapping — so a maxed slider blooms the whole bead into a
+// screen-wide yellow/purple wash that filmic tone mapping alone can't tame
+// (bloom samples the pre-tonemap value). We therefore cap the emissive that
+// feeds bloom at a still-very-bright ceiling; typical use (≈1..10) is untouched,
+// only pathological values are bounded. Single tunable spot — raise if a user
+// genuinely wants a stronger glow than this. (PointLight intensity is NOT capped.)
+export const FLUORO_EMISSIVE_MAX = 25.0
+
 /**
  * Build an emissive fluorophore material.
  * Raster: per-instance color drives emission via an onBeforeCompile patch.
@@ -146,7 +159,7 @@ export function makeFluorophoreEmissive(intensity = 5.0, vertexColors = false) {
     color: 0xffffff,
     vertexColors,
     emissive: new THREE.Color(0xffffff),
-    emissiveIntensity: intensity,
+    emissiveIntensity: Math.min(intensity, FLUORO_EMISSIVE_MAX),
     roughness: 0.40, metalness: 0.0,
   })
   // Raster patch: replace the emissive-map chunk so totalEmissiveRadiance comes

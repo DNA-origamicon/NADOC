@@ -41,14 +41,18 @@ from backend.api import routes_oxdna
 from backend.api import state as design_state
 from backend.api.routes_oxdna import (
     CreateOxdnaJobRequest,
+    FieldRequest,
     ProductionRequest,
+    append_oxdna_field as _route_append_field,
     append_oxdna_production as _route_append_production,
     create_oxdna_job as _route_create_oxdna_job,
     get_oxdna_display as _route_get_display,
+    get_oxdna_rmsf as _route_get_rmsf,
     start_oxdna_job as _route_start_job,
 )
 from backend.core.models import Design
 from backend.core.oxdna_job import OxdnaJob, OxdnaStatus
+from backend.physics.oxdna_interface import DEFAULT_ANCHOR_STIFF
 
 _scratch_counter = itertools.count()
 
@@ -149,6 +153,18 @@ def append_production(job_id: str, workspace, *, steps: int = 1000) -> dict:
         )
 
 
+def append_field(job_id: str, workspace, *, field_pN: float, dir, anchors: list[dict],
+                 steps: int = 2000, anchor_stiff: float = DEFAULT_ANCHOR_STIFF) -> dict:
+    """Append an electric-field stage to a completed job (mirrors
+    ``POST /oxdna/jobs/{id}/field``).  ``anchors`` are descriptors resolved to
+    pinned nucleotides (e.g. ``{'kind':'domain','strand_id':…,'domain_index':0}``
+    or ``{'kind':'overhang','id':…}``)."""
+    with _use_workspace(workspace):
+        return asyncio.run(_route_append_field(job_id, FieldRequest(
+            field_pN=field_pN, dir=list(dir), anchors=anchors,
+            steps=steps, anchor_stiff=anchor_stiff)))
+
+
 def read_relaxed_positions(job_id: str, workspace) -> dict:
     """Read the last relaxed frame back as a position list (mirrors
     ``GET /oxdna/jobs/{id}/display``).
@@ -159,6 +175,26 @@ def read_relaxed_positions(job_id: str, workspace) -> dict:
     """
     with _use_workspace(workspace):
         return asyncio.run(_route_get_display(job_id))
+
+
+def read_flexibility_map(job_id: str, workspace) -> dict:
+    """Read the noise-averaged mean structure + RMSF flexibility map of a job's
+    production run (mirrors ``GET /oxdna/jobs/{id}/rmsf``).
+
+    Pools every production-trajectory frame, PBC-unwraps + Kabsch-aligns each to
+    the design reference, and returns the per-nucleotide MEAN backbone position
+    plus a ``confidence`` block (``{n_frames, rel_error, preliminary}``) — the
+    statistical reliability of the map given how many frames were pooled.  Prefer
+    this over the single relaxed frame (:func:`read_relaxed_positions`) for a
+    *measurement*: the mean cancels thermal noise and the confidence flags a
+    too-short run.  Requires a prior :func:`append_production` run (the rmsf route
+    returns ``{ready: False}`` until production frames exist).
+
+    Returns ``{ready, positions, confidence, n_frames, …}`` — *Physical-layer
+    only*; the mean positions are never written back into topology.
+    """
+    with _use_workspace(workspace):
+        return asyncio.run(_route_get_rmsf(job_id))
 
 
 # ── Polling + one-call orchestration ──────────────────────────────────────────
@@ -196,3 +232,43 @@ def run_relaxation(design: Design, workspace, *, timeout: float = 30.0,
     job_id = info["job_id"]
     start_relaxation(job_id, workspace)
     return wait_for_terminal(job_id, workspace, timeout=timeout)
+
+
+def run_field(design: Design, workspace, *, field_pN: float, dir, anchors: list[dict],
+              timeout: float = 30.0, field_steps: int = 2000, **relax_params) -> OxdnaJob:
+    """One-call headless field run: relax → append a field stage → poll to terminal.
+
+    Returns the terminal :class:`OxdnaJob`.  If relaxation does not complete it
+    returns that job unchanged (no field stage appended).  ``relax_params`` forward
+    to :func:`create_job`; ``anchors`` are anchor descriptors (see
+    :func:`append_field`)."""
+    parent = run_relaxation(design, workspace, timeout=timeout, **relax_params)
+    if parent.status != OxdnaStatus.completed:
+        return parent
+    child = append_field(parent.job_id, workspace, field_pN=field_pN, dir=dir,
+                         anchors=anchors, steps=field_steps)
+    return wait_for_terminal(child["job_id"], workspace, timeout=timeout)
+
+
+def run_field_validation(design: Design, workspace, *, field_pN: float, dir,
+                         anchors: list[dict], timeout: float = 30.0,
+                         field_steps: int = 2000, **relax_params) -> dict:
+    """End-to-end automatable field validation: relax → field → measure the
+    deflection oracle.  Returns ``{"job": OxdnaJob, "response": dict | None}``
+    where ``response`` is :func:`field_response_from_confs` over the field stage's
+    ``last_conf`` vs the prior (relaxed) stage's — i.e. did the anchors hold and
+    the rest deflect ALONG the field.  ``response`` is None if the run did not
+    complete or there is no pre-field stage to reference."""
+    job = run_field(design, workspace, field_pN=field_pN, dir=dir, anchors=anchors,
+                    timeout=timeout, field_steps=field_steps, **relax_params)
+    if job.status != OxdnaStatus.completed or not job.stages:
+        return {"job": job, "response": None}
+    from backend.core.oxdna_health import field_response_from_confs
+    ws = Path(workspace)
+    # ``job`` is the field CHILD: its field stage's last_conf vs its seed conf.dat
+    # (the relaxed structure the field started from) — the field-off reference.
+    field_conf = job.stage_dir(ws, job.stages[-1].name) / "last_conf.dat"
+    ref_conf = job.job_dir(ws) / "conf.dat"
+    response = field_response_from_confs(
+        design, field_conf, ref_conf, field_dir=list(dir), anchors=anchors)
+    return {"job": job, "response": response}

@@ -33,13 +33,19 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
 from backend.core.oxdna_job import OxdnaJob, OxdnaStatus, new_oxdna_job
-from backend.core.oxdna_protocol import build_production_stage, build_relaxation_stages
+from backend.core.oxdna_protocol import (
+    build_field_stage,
+    build_production_stage,
+    build_relaxation_stages,
+)
 from backend.core.oxdna_runner import (
+    _latest_relaxed_conf,
+    _load_snapshot_design,
     find_oxdna,
     is_running,
     job_progress,
@@ -51,9 +57,14 @@ from backend.core.oxdna_runner import (
     stop_job,
 )
 from backend.physics.oxdna_interface import (
+    DEFAULT_ANCHOR_STIFF,
+    _strand_nucleotide_order,
     count_undefined_bases,
     oxdna_backbone_site,
+    pn_to_oxdna_force,
     read_configuration_unwrapped,
+    write_configuration,
+    write_field_forces,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,10 +95,44 @@ class ProductionRequest(BaseModel):
                        description="Unbiased MD production steps")
 
 
+class AnchorRef(BaseModel):
+    """An anchor selection: one cluster / domain / overhang held fixed during a
+    field stage.  Accepts the frontend's camelCase keys (strandId/domainIndex)."""
+    model_config = ConfigDict(populate_by_name=True)
+    kind:         str
+    id:           Optional[str] = None
+    strand_id:    Optional[str] = Field(None, alias="strandId")
+    domain_index: Optional[int] = Field(None, alias="domainIndex")
+
+
+class FieldRequest(BaseModel):
+    field_pN:     float = Field(..., gt=0.0, description="Force per nucleotide (pN)")
+    dir:          list[float] = Field(..., min_length=3, max_length=3,
+                                      description="Field direction (auto-normalized)")
+    anchors:      list[AnchorRef] = Field(default_factory=list)
+    steps:        int = Field(2_000_000, ge=1000, le=200_000_000,
+                              description="Field MD steps")
+    anchor_stiff: float = Field(DEFAULT_ANCHOR_STIFF, gt=0.0,
+                                description="oxDNA trap stiffness per anchored nucleotide "
+                                            "(default pins anchors effectively immobile)")
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _workspace() -> Path:
     return _WORKSPACE_DIR
+
+
+def _design_ref_conf(job_dir: Path, design) -> Path:
+    """Path to an origin-frame DESIGN-geometry configuration for a job, generated
+    + cached as ``design_ref.dat``.  Used as the alignment reference for a field
+    run's display so the anchor maps to its design position (the job's own
+    ``conf.dat`` is the relaxation-drifted seed and would display far off-origin)."""
+    ref = job_dir / "design_ref.dat"
+    if not ref.exists():
+        from backend.api.crud import _geometry_for_design
+        write_configuration(design, _geometry_for_design(design), ref)
+    return ref
 
 
 def _load_job(job_id: str) -> OxdnaJob:
@@ -205,8 +250,16 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
     # Build geometry + write the self-contained job dir (threadpool — file I/O).
     try:
         from backend.api.crud import _geometry_for_design
-        geometry = _geometry_for_design(design)
-        job.n_nucleotides = len(geometry)
+        # compact_skips=True: place flanking nucleotides one normal bp apart across
+        # each deletion instead of leaving a 2×-rise gap, so oxDNA doesn't start with
+        # backbone bonds stretched past its FENE divergence (~0.85 nm) at every skip.
+        geometry = _geometry_for_design(design, compact_skips=True)
+        # Count the nucleotides oxDNA actually simulates (the strand-order list),
+        # NOT len(geometry): the geometry endpoint emits a slot for every position
+        # in each helix's full lattice grid — including thousands of empty sites on
+        # imported cadnano helices that span the whole grid — which over-counts the
+        # real system size (e.g. 33,716 grid slots vs 14,774 actual nucleotides).
+        job.n_nucleotides = len(_strand_nucleotide_order(design))
         await run_in_threadpool(prepare_oxdna_job, design, geometry, job, _workspace(), specs)
     except Exception as exc:  # noqa: BLE001
         logger.error("create_oxdna_job: prepare FAILED for %s: %s", job.job_id, exc, exc_info=True)
@@ -306,6 +359,83 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
     return {"ok": True, "job_id": job_id, "status": "running", "production_steps": body.steps}
 
 
+@router.post("/oxdna/jobs/{job_id}/field")
+async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
+    """Spawn an electric-field run as a CHILD job branched from a relaxed parent.
+
+    Each field run is its own job seeded from the parent's relaxed structure (its
+    ``conf.dat`` = the parent's latest relaxed ``last_conf``), so the user can go
+    back to one relaxed job and fan out several independent field runs.  The child
+    runs a single ``field``-kind stage with a uniform per-nucleotide force + anchor
+    traps; it links to the parent via ``parent_job_id`` and records the field
+    params in ``efield`` (for the list sub-item hover).
+
+    Anchors are required: an unanchored uniform force nets a centre-of-mass drift
+    that streams the whole structure across the periodic box."""
+    parent = _load_job(job_id)
+    if parent.parent_job_id:
+        raise HTTPException(400, "Run electric-field branches from a relaxed job, not from another field run.")
+    if is_running(job_id) or parent.status != OxdnaStatus.completed:
+        raise HTTPException(400, "An electric-field run requires a completed relaxation job.")
+    if find_oxdna() is None:
+        raise HTTPException(400, "oxDNA binary not found.")
+    if not body.anchors:
+        raise HTTPException(
+            400, "An electric-field run needs ≥1 anchor (without one the field "
+            "just drifts the whole structure across the box).")
+
+    ws = _workspace()
+    pjd = parent.job_dir(ws)
+    design = _load_snapshot_design(pjd)
+    if design is None:
+        raise HTTPException(500, "design.json snapshot missing; cannot resolve anchors.")
+    relaxed_conf, _stage = _latest_relaxed_conf(parent, ws)
+    if relaxed_conf is None:
+        raise HTTPException(400, "No relaxed configuration to seed the field run from.")
+
+    field_oxdna = pn_to_oxdna_force(body.field_pN)
+    anchors = [a.model_dump(by_alias=False) for a in body.anchors]
+    stage = build_field_stage(
+        name="1_field", field_oxdna=field_oxdna, field_dir=body.dir,
+        forces_file="field_forces.txt", steps=body.steps,
+        backend=parent.backend, device=parent.device,
+        salt_concentration=parent.salt_concentration,
+    )
+    child = new_oxdna_job(
+        design_name=f"{parent.design_name} · field",
+        stages=[stage.to_status()],
+        n_nucleotides=parent.n_nucleotides, device=parent.device,
+        backend=parent.backend, salt_concentration=parent.salt_concentration,
+        design_source_path=parent.design_source_path, parent_job_id=parent.job_id,
+        efield={"force_pN": body.field_pN, "force_oxdna": field_oxdna, "dir": list(body.dir)},
+    )
+
+    import json
+    from dataclasses import asdict
+    cjd = child.job_dir(ws)
+    cjd.mkdir(parents=True, exist_ok=True)
+    shutil.copy(pjd / "topology.top", cjd / "topology.top")
+    shutil.copy(pjd / "design.json", cjd / "design.json")
+    shutil.copy(relaxed_conf, cjd / "conf.dat")
+    try:
+        info = write_field_forces(
+            cjd / "field_forces.txt", design, cjd / "conf.dat",
+            field_oxdna=field_oxdna, field_dir=body.dir,
+            anchors=anchors, anchor_stiff=body.anchor_stiff,
+        )
+    except ValueError as exc:
+        shutil.rmtree(cjd, ignore_errors=True)
+        raise HTTPException(400, str(exc))
+    child.efield["n_anchored"] = info["n_anchored"]
+    child.efield["anchor_keys"] = info["anchor_keys"]   # display aligns on these (positional frame)
+    child.n_nucleotides = info["n_total"]
+    (cjd / "stages_spec.json").write_text(json.dumps([asdict(stage)], indent=2))
+    child.status = OxdnaStatus.queued
+    child.save(ws)
+    start_job(child, ws, [stage])
+    return child.to_dict()
+
+
 @router.post("/oxdna/jobs/{job_id}/stop")
 async def stop_oxdna_job(job_id: str) -> dict:
     job = _load_job(job_id)
@@ -320,13 +450,28 @@ async def stop_oxdna_job(job_id: str) -> dict:
 
 @router.delete("/oxdna/jobs/{job_id}")
 async def delete_oxdna_job(job_id: str) -> dict:
+    """Delete a job and, if it is a relaxed parent, ALL of its electric-field
+    children (a field run is its own job branched from the parent — orphaning the
+    children would leave undeletable, design-detached jobs).  Refuses if the job
+    or any of its children is still running."""
+    ws = _workspace()
     job = _load_job(job_id)
     if is_running(job_id) or job.status == OxdnaStatus.running:
         raise HTTPException(400, "Stop the oxDNA job before deleting it")
-    job_dir = job.job_dir(_workspace())
-    if job_dir.exists():
-        shutil.rmtree(job_dir)
-    return {"ok": True, "job_id": job_id, "deleted": str(job_dir)}
+
+    children = [j for j in OxdnaJob.list_jobs(ws) if j.parent_job_id == job_id]
+    for c in children:
+        if is_running(c.job_id) or c.status == OxdnaStatus.running:
+            raise HTTPException(
+                400, f"Stop the running field run ({c.job_id}) before deleting its parent.")
+
+    deleted: list[str] = []
+    for j in (*children, job):
+        jd = j.job_dir(ws)
+        if jd.exists():
+            shutil.rmtree(jd)
+        deleted.append(j.job_id)
+    return {"ok": True, "job_id": job_id, "deleted": deleted, "n_children": len(children)}
 
 
 @router.get("/oxdna/jobs/{job_id}/health")
@@ -353,9 +498,10 @@ async def get_oxdna_rmsd(job_id: str) -> dict:
     from backend.core.oxdna_health import production_rmsd
 
     job = _load_job(job_id)
-    prod_idx = next((i for i, s in enumerate(job.stages) if s.kind == "production"), None)
+    prod_idx = next((i for i, s in enumerate(job.stages)
+                     if s.kind in ("production", "field")), None)
     if prod_idx is None:
-        return {"ready": False, "reason": "no production run yet"}
+        return {"ready": False, "reason": "no production or field run yet"}
 
     jd = job.job_dir(_workspace())
     traj = job.stage_dir(_workspace(), job.stages[prod_idx].name) / "trajectory.dat"
@@ -395,13 +541,17 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
     from backend.core.oxdna_health import production_rmsf, rmsf_confidence
 
     job = _load_job(job_id)
-    prod_stages = [s for s in job.stages if s.kind == "production"]
+    # Sampling stages whose trajectory the flexibility map pools: production runs
+    # AND electric-field runs (a field child has a single `field` stage — its
+    # trajectory is just as valid a fluctuation sample about the field-deflected
+    # mean as a production run is about the relaxed mean).
+    prod_stages = [s for s in job.stages if s.kind in ("production", "field")]
     if not prod_stages:
-        return {"ready": False, "reason": "no production run yet"}
+        return {"ready": False, "reason": "no production or field run yet"}
 
     jd = job.job_dir(_workspace())
-    # Pool the trajectories of EVERY production run that has written frames —
-    # done OR still running.  The map is available as soon as production has
+    # Pool the trajectories of EVERY sampling run that has written frames —
+    # done OR still running.  The map is available as soon as sampling has
     # started; short/in-progress runs are flagged via the confidence metric
     # below rather than blocked.
     usable = [s for s in prod_stages if s.status in ("done", "running")]
@@ -409,7 +559,7 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
     for s in usable:
         trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
     if not trajs:
-        return {"ready": False, "reason": "production starting — no frames yet"}
+        return {"ready": False, "reason": "sampling starting — no frames yet"}
 
     # Reference = the job's conf.dat (design geometry) — IDENTICAL to the OxDNA
     # display route's Kabsch reference, so the flexibility map and the relaxed
@@ -486,9 +636,23 @@ async def get_oxdna_display(job_id: str) -> dict:
         raise HTTPException(500, "design.json snapshot missing for this job")
     design = Design.model_validate_json(snap.read_text())
 
-    # Unwrap PBC + Kabsch-align to the design location (oxDNA wraps coords into the
-    # box and the molecule diffuses/tumbles; raw coords scatter it off-screen).
-    full_map = read_configuration_unwrapped(conf_path, design, jd / "conf.dat")
+    # Unwrap PBC, then align to the design location.  For a field run the ANCHORED
+    # beads are a POSITIONAL-ONLY reference (translate the anchor onto its design
+    # spot, NO rotation) so the field-induced reorientation we're studying stays
+    # visible; otherwise the whole assembly is Kabsch-superposed (drift + tumbling
+    # removed).  Either way the PBC unwrap stops the structure scattering off-screen.
+    anchor_keys = (job.efield or {}).get("anchor_keys")
+    if anchor_keys:
+        # CRITICAL: align to the DESIGN geometry (origin frame), NOT the job's
+        # conf.dat — for a field child conf.dat IS the parent's relaxed last_conf,
+        # which the relaxation MD has diffused tens of nm from the origin, so
+        # anchoring onto it would display the whole structure way off-screen.
+        ref_conf = _design_ref_conf(jd, design)
+        full_map = read_configuration_unwrapped(
+            conf_path, design, ref_conf,
+            align_keys=[tuple(k) for k in anchor_keys], rotate=False)
+    else:
+        full_map = read_configuration_unwrapped(conf_path, design, jd / "conf.dat")
     # Render the true backbone site, not the oxDNA centre of mass — the CM sits
     # inward of the backbone, so rendering it collapses the apparent duplex.
     positions = [

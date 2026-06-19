@@ -62,6 +62,11 @@ class OxdnaStageSpec:
     newtonian_steps:      int = 53
     # Mutual-trap external forces holding designed WC pairs together (relax aid).
     external_forces:      bool = False
+    # External-forces filename in the job dir; None → the default "forces.txt"
+    # (mutual traps).  A field stage points this at its own field_forces_N.txt.
+    forces_file:          str | None = None
+    # Electric-field record (field stages only): {'dir':[x,y,z], 'force_oxdna':f}.
+    efield:               dict | None = None
     # Health gate (checked after the stage).
     min_bp_retained:      float = 0.0
 
@@ -209,6 +214,12 @@ def render_stage_input(
     lines.append("time_scale = linear")
     lines.append(f"print_conf_interval = {print_conf_interval}")
     lines.append(f"print_energy_every = {print_energy_every}")
+    # Raise oxDNA's I/O-rate safety valve.  Its default (max_io = 1 MB/s) aborts a
+    # run that writes too fast — harmless for the small designs the protocol was
+    # tuned on, but a large imported structure writes ~MB-scale trajectory frames
+    # and trips it mid-stage (the run "fails" with the structure perfectly healthy).
+    # 1000 MB/s still catches a genuine runaway while never false-aborting.
+    lines.append("max_io = 1000.0")
 
     return "\n".join(lines) + "\n"
 
@@ -236,6 +247,40 @@ def build_production_stage(
         backend=backend, dt=0.005,
         max_backbone_force=None, max_backbone_force_far=None,
         external_forces=False,
+        salt_concentration=salt_concentration, device=device,
+        min_bp_retained=0.0,
+    )
+
+
+DEFAULT_FIELD_STEPS: int = 2_000_000
+
+
+def build_field_stage(
+    *,
+    name:               str,
+    field_oxdna:        float,
+    field_dir:          list[float],
+    forces_file:        str,
+    steps:              int = DEFAULT_FIELD_STEPS,
+    backend:            str = "CUDA",
+    device:             str = "0",
+    salt_concentration: float = 0.5,
+) -> OxdnaStageSpec:
+    """An electric-field MD stage: unbiased dynamics (standard FENE, no force cap)
+    plus the field/anchor external-forces file ``forces_file`` — a uniform per-
+    nucleotide ``string`` force + anchor ``trap``s, written by
+    ``oxdna_interface.write_field_forces``.
+
+    No base-pair gate: the field deliberately deflects the structure (and the
+    deflected end may fray), so retention is a readout, not a pass/fail gate.
+    Continues from the previous (relaxed) stage's ``last_conf.dat`` like a
+    production run."""
+    return OxdnaStageSpec(
+        name=name, kind="field", sim_type="MD", steps=steps,
+        backend=backend, dt=0.005,
+        max_backbone_force=None, max_backbone_force_far=None,
+        external_forces=True, forces_file=forces_file,
+        efield={"dir": list(field_dir), "force_oxdna": float(field_oxdna)},
         salt_concentration=salt_concentration, device=device,
         min_bp_retained=0.0,
     )

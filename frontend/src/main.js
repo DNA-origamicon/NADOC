@@ -189,6 +189,8 @@ import { initRepresentationSwitcher } from './ui/representation_switcher.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
 import { initOxdnaDisplay } from './ui/oxdna_display.js'
 import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
+import { initEfieldGizmo } from './scene/efield_gizmo.js'
+import { initEfieldSetup } from './ui/efield_setup.js'
 import { createPhotoRenderer } from './scene/photo_renderer.js'
 import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
@@ -1771,7 +1773,16 @@ async function main() {
 
   // ── oxDNA relaxation panel + display (deforms NADOC model to relaxed CG) ──────
   const oxdnaDisplay = initOxdnaDisplay({ designRenderer, api })
-  initOxdnaJobsPanel({ oxdnaDisplay, getWorkspacePath: () => _workspacePath })
+  const oxdnaPanel = initOxdnaJobsPanel({ oxdnaDisplay, getWorkspacePath: () => _workspacePath })
+  // E-field setup: direction/magnitude arrow gizmo + anchor picker + Run field
+  // (appends a field stage to the panel's selected completed oxDNA job).
+  const efieldGizmo = initEfieldGizmo(scene, camera, canvas, controls)
+  const efieldSetup = initEfieldSetup({
+    store, gizmo: efieldGizmo, getSelection: () => store.getState(),
+    getSelectedJob: () => oxdnaPanel?.getSelectedJob?.(),
+    onRan: () => oxdnaPanel?.refresh?.(),
+  })
+  if (import.meta.env.DEV) window.__nadocEfield = { setup: efieldSetup, gizmo: efieldGizmo }
 
   const periodicMdOverlay = initPeriodicMdOverlay(scene)
   initPeriodicMdPanel(store, {

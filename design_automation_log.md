@@ -69,6 +69,8 @@ Pulled from the 2026-06-16 audit; each is a *proven* pattern already green in th
 | `assert_recommended_hinge` (AF-14 P3) | the #1 of a cluster's ranked hinge-edge recommendations is NOT parallel to the helical (`w`) axis (a fold, not a barrel-roll), is the LONGEST such non-axial edge, and is corner-anchored (stored `axis_origin` coincides with an edge endpoint, not the midpoint) — all re-measured on the independent equivariant OBB; direction-AGNOSTIC; can-go-red on an axial edge ranked first or a midpoint anchor | `tests/automation_harness.py`; `backend/core/cluster_obb.py` (`recommend_hinge_joints`) | any heuristic feature-ranker on an OBB (hinge/anchor recommenders); the corner-vs-midpoint anchor check reusable for any "named point on a named edge" placement |
 | `assert_fully_sequenced` (full-sequencing feature) | a design carries a complete, *correct* sequence: zero undefined bases (same `count_undefined_bases` gate every export / `create_oxdna_job` path enforces, reference strands excluded) AND every scaffold-paired staple base is the `complement_base` of its scaffold base (walked independently of the assignment code, so a wrong-base fill fails, not just an `'N'`); non-vacuity guards on both; can-go-red on an unsequenced design or a corrupted staple base | `tests/automation_harness.py`; `backend/api/headless_build.py` (`full_sequence`/`assign_staple_sequences`) | any op that must leave a design fully + correctly sequenced (export readiness, the AF-13 oxDNA fixture, future autostaple-sequence checks) |
 | `assert_relaxed_geometry_recovered` (AF-13 P1) | a headless oxDNA relaxation reached `completed` AND its relaxed last frame reads back (display route → `read_configuration_unwrapped`, PBC-unwrapped + Kabsch-aligned) into a full per-nucleotide position map: exactly one *finite* position per design nucleotide, every `(helix_id, bp, dir)` key a real key of the design's geometry (set-equal); the first **physical-layer** oracle (Tier 5), Three-Layer-clean (reads relaxed geometry, never writes it to `Design`); can-go-red on a non-completed job or a wrong nucleotide count | `tests/automation_harness.py`; `backend/api/headless_oxdna_build.py` (`run_relaxation`/`read_relaxed_positions`) | any physical-layer (oxDNA) headless run + geometry-recovery check (AF-13 P2 measurement/constraint oracles build on it) |
+| `measure_end_to_end` + `assert_relaxed_measurement` (AF-13 P2) | the **first STOCHASTIC-class oracle**: a *measured* geometric property of the relaxed, **noise-averaged** mean structure (pooled production frames, PBC-unwrapped + Kabsch-aligned via `production_rmsf`) lies within `tol_nm` of a target — **gated by confidence** (≥ `min_confidence` pooled frames, else INCONCLUSIVE, the Phase-3 "met requires confidence" seed). `measure_end_to_end(positions, a, b)` is the pure reusable primitive: Euclidean nm between two `(helix_id, bp_index, direction)` landmark backbone sites (raises on empty/identical/absent — no silent 0/NaN). Physical-layer only (reads relaxed geometry, never writes it back). Can-go-red on a wrong target, too-few frames (confidence gate), or no production run | `tests/automation_harness.py` (`assert_relaxed_measurement`); `backend/core/oxdna_health.py` (`measure_end_to_end`); `backend/api/headless_oxdna_build.py` (`read_flexibility_map`) | any relaxed-structure measurement/constraint (R_g, inter-helix spacing, segment angle — add a `measure_*` + a `measure_spec` kind); AF-13 P3 declarative constraint checker + P4 iterate-until-met both build on this |
+| `parse_constraint_spec` + `check_relaxed_constraint` (AF-13 P3) | a declarative relaxed-structure constraint `{measure, landmarks, target_nm, tol_nm, min_confidence}` is validated at parse time (PURE, raises `ConstraintSpecError` before any run) and then *REPORTED* against a `read_flexibility_map` mean-structure dict → `{met, status∈{met,unmet,inconclusive}, measured_nm, n_frames, …}`. The REPORTER counterpart to P2's *asserter* (returns a verdict a closed loop branches on, doesn't raise); **load-bearing invariant: `met` is NEVER True below `min_confidence`** even when the value is within tolerance (the confidence gate, now a returned status). Reuses `measure_end_to_end`; `backend/core`-pure (takes the read dict, never imports the api read-wrapper). Can-go-red on a malformed spec, a tolerance-bracket flip, or a within-tol low-frame run reporting met | `backend/core/oxdna_health.py` (`parse_constraint_spec`/`check_relaxed_constraint`/`ConstraintSpecError`) | the AF-11 grammar's design `constraints` block; AF-13 P4 iterate-until-met (branch on `status`); any future `measure_*` constraint kind (R_g/spacing/angle — add to `_CONSTRAINT_MEASURES` + the dispatch) |
 
 ---
 
@@ -996,6 +998,76 @@ the spine the AF-13 P2+ measurement/constraint oracles (the stochastic measured-
 themselves against — the physical-layer analog of what AF-1 did for designs and AF-7 for assemblies. No ASK-FIRST
 violation: Phase 1 exposes ONLY the read path and asserts a count/coverage property, no geometry/directionality
 reasoning (the landmark-direction question is deferred to Phase 2, where the backlog flags it ASK-FIRST).**"
+
+---
+
+**AF-13 — relaxed-geometry MEASUREMENT oracle (Phase 2: the constraint primitive)** · _shape:_ **service + oracle
+push** — pure `measure_end_to_end(positions, a, b)` in `backend/core/oxdna_health.py` (the reusable `measure_*`
+primitive; Euclidean nm between two landmark backbone sites; raises on empty/identical/absent) + 1 read-wrapper
+`read_flexibility_map(job_id, ws)` in `backend/api/headless_oxdna_build.py` (drives the REAL `get_oxdna_rmsf`
+route handler — registers covered by function identity — for the pooled noise-averaged mean structure +
+`confidence`) + 1 reusable oracle `assert_relaxed_measurement` in `tests/automation_harness.py`;
+`crud.py`/`assembly.py`/`main.js` LOC Δ = **0** (all new code is a pure core fn + the existing headless module +
+the harness) · _headless-coverage Δ:_ **UNCHANGED** (oxDNA mutation routes still 3; `get_oxdna_rmsf` is a
+read-only GET, like `get_oxdna_display` — excluded from the *mutation* audit, pinned instead by the
+import-identity test `hox._route_get_rmsf is routes_oxdna.get_oxdna_rmsf`) · _landmark convention (ASK-FIRST,
+answered by user):_ the raw **`(helix_id, bp_index, direction)` tuple** — most primitive, indexes the
+relaxed-display + RMSF maps directly, no strand-polarity/terminus resolution (a strand-terminus convenience layer
+can sit on top later) · _oracle shipped:_ `assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,
+workspace, min_confidence=RMSF_PRELIM_FRAMES)` — the **first STOCHASTIC-class oracle**: status-completed guard +
+reads the production mean structure (preferred over a single frame — the mean cancels thermal noise) + **the
+confidence gate** (≥ `min_confidence` pooled frames, else INCONCLUSIVE-raise — a too-short run cannot certify a
+target; the load-bearing guard AF-13 P3 formalises) + measured ∈ [target ± tol]. `measure_spec =
+{"measure":"end_to_end","landmarks":[a,b]}` · _tests:_ 3 pure in `test_oxdna_relaxation.py` (exact distance +
+order-independence; Direction-enum/str normalisation; rejects empty/identical/absent) + 5 in
+`test_headless_oxdna_build.py` driving a purpose-built trajectory-writing mock (mean+confidence readback;
+end-to-end matches the design's own e2e to ~0.002 nm at tol 0.1; **3 load-bearing red-tests**: wrong target raises
+"not within", 10 pooled frames < 50 raises "INCONCLUSIVE", no production run raises "no production mean
+structure") + 1 import-identity assert; full suite **2552 passed / 55 skipped**, no drop ·
+**"Validation gained, not just a passthrough:** before AF-13 P2 there was no way to *measure* a property of a
+relaxed structure headlessly, and AF-13 P1 only proved geometry reads back — nothing asserted a
+user-meaningful physical quantity (an end-to-end distance) is correct *and trustworthy*. `assert_relaxed_measurement`
+closes that: it measures the noise-averaged mean structure (not a single noisy frame) and asserts the value within
+tolerance ONLY when enough frames are pooled — the confidence gate is genuinely new validation power, because a
+measured-property oracle without it would certify a target from a 1-frame run that's pure thermal noise. On the
+identity-mock fixture the relaxed mean reproduces the design's own end-to-end to ~0.002 nm (a 0.1 nm pin), proving
+the whole physical-layer measurement pipeline (drive production → pool → mean → address two landmarks → Euclidean
+distance) is faithful; the 3 red-tests prove the green can go red on a wrong target, too-few frames, and a missing
+production run. It is the stochastic-oracle spine AF-13 P3's declarative constraint checker + P4's iterate-until-met
+loop both build on. No ASK-FIRST violation: the landmark convention was asked + answered (raw tuple), and the
+measurement is a direction-agnostic Euclidean magnitude — no bend/sign/frame reasoning.**"
+
+**AF-13 Phase 3 — declarative constraint spec + pure REPORTING checker** · _shape:_ **service + oracle push** —
+2 pure HTTP-free fns in `backend/core/oxdna_health.py` (`parse_constraint_spec` validates+normalises a
+`{measure, landmarks, target_nm, tol_nm, min_confidence}` spec, raising `ConstraintSpecError` at parse time;
+`check_relaxed_constraint(constraint, relaxed_output)` REPORTS `{met, status, measured_nm, target_nm, tol_nm,
+n_frames, min_confidence, confidence}` by reusing the P2 `measure_end_to_end` primitive over the
+`read_flexibility_map` mean-structure dict) — NO route wrapped, `backend/api`/`backend/core` boundary respected
+(the checker takes the already-read relaxed dict, never imports the api read-wrapper);
+`crud.py`/`assembly.py`/`main.js` LOC Δ = **0** · _headless-coverage Δ:_ **UNCHANGED** (composition over P2's
+already-pinned read path + pure core math; wraps no new route — like AF-10/AF-11 it moves the oracle/primitive
+count, not coverage) · _oracle/augment shipped:_ the **confidence-gated constraint REPORTER** itself
+(`check_relaxed_constraint`) + its can-go-red test set — distinct from P2's *asserter* (`assert_relaxed_measurement`,
+which raises in a test): the checker returns a verdict an automated loop branches on, with `status ∈
+{met, unmet, inconclusive}` and the **load-bearing invariant `met` is NEVER True below `min_confidence`**. Pinned
+by (a) 13 parametrized `parse_constraint_spec` rejections (bad dict/key/measure/landmark-count/identical/bp_index/
+triple/target/tol/min_confidence) + idempotency + default-min_confidence; (b) the met/unmet tolerance bracket
+(target 4.5 tol 0.5 → met at |Δ|=0.5; target 4.4 → unmet at 0.6); (c) **the confidence-gate red-test** — a value
+squarely within tolerance but only 10 frames pooled reports `inconclusive`/`met=False` (flip the guard and it goes
+red); (d) two integration tests driving a REAL `_MOCK_OXDNA_TRAJ` run → `read_flexibility_map` → checker (60-frame
+→ met; 1000-step/10-frame → inconclusive-not-met), proving the checker consumes the actual relaxed-output dict
+shape and the gate fires on a genuine under-sampled production · _tests:_ 20 new in `test_oxdna_relaxation.py`
+(pure) + 2 new in `test_headless_oxdna_build.py` (real-run integration); full suite **2574 passed / 55 skipped**,
+no drop (P2 baseline was 2552) · **"Validation gained, not just a passthrough:** before P3 there was only the
+*asserting* oracle (P2's `assert_relaxed_measurement`, which raises inside a test); nothing gave a closed-loop
+builder a *verdict to branch on* with the safety guarantee that it cannot certify `met` from an under-sampled
+run. `check_relaxed_constraint` is that contract — a pure, tested decision function whose load-bearing,
+red-tested invariant is "never report met below `min_confidence`, even when the value is within tolerance." That
+is the exact guard AF-13 P4's iterate-until-met loop needs to avoid converging on thermal noise, and the
+`parse_constraint_spec` rejection set is itself new validation power (a malformed constraint fails at parse time,
+before any expensive relaxation runs). It slots into the AF-11 build-spec grammar as a design `constraints`
+block. No ASK-FIRST: reuses P2's already-cleared landmark convention + direction-agnostic Euclidean measure;
+this layer adds only spec validation + the confidence-gated met/unmet/inconclusive decision.**"
 
 ---
 

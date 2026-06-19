@@ -103,6 +103,7 @@ export function createPhotoRenderer(sceneCtx) {
     bloomStrength: 0.5,
     bloomRadius:   0.4,
     bloomThreshold: 0.85,
+    exposure:   1.0,    // filmic tone-mapping exposure (renderer.toneMappingExposure)
     fov:        null,   // null = keep current
     ortho:      false,
     pathTracing: false,
@@ -154,6 +155,15 @@ export function createPhotoRenderer(sceneCtx) {
   let _envSourceHDR    = null       // DataTexture loaded by RGBELoader (raster source)
   let _envTexture      = null       // PMREM-baked texture currently in scene.environment
   let _savedSceneEnv   = undefined  // pre-photo-mode scene.environment
+
+  // Tone-mapping state — saved on activate, restored on deactivate. The live
+  // editor renders with NoToneMapping; photo mode switches the shared renderer
+  // to filmic tone mapping so HDR highlights (metallic env reflections, emissive
+  // fluorophores) roll off gracefully instead of hard-clipping and smearing
+  // saturated colour through Bloom. OutputPass reads renderer.toneMapping +
+  // toneMappingExposure, so no per-material change is needed.
+  let _savedToneMapping = null
+  let _savedExposure    = 1.0
 
   // ── Sun light (independent of preset rig) ────────────────────────────────
   let _sunGroup = null   // THREE.Group at scene root; holds the sun DirectionalLight
@@ -318,7 +328,11 @@ export function createPhotoRenderer(sceneCtx) {
   }
 
   function _applyEnvToScene() {
-    scene.environment = _envTexture
+    // Sun = sole light source: when the Sun is on, image-based lighting must not
+    // contribute, so the scene's environment map is dropped (the HDRI may still
+    // show as a *background* via _applyBackground — that's a backdrop, not a
+    // light on the geometry). Sun off → environment reflections resume.
+    scene.environment = _settings.sun ? null : _envTexture
     _applyBackground()
   }
 
@@ -357,6 +371,15 @@ export function createPhotoRenderer(sceneCtx) {
     if (!_active) return
     _disposeEnvTexture()
     _envTexture = _bakeEnvFor(renderer)
+    // PMREMGenerator churns the renderer's GL state (its own render targets +
+    // texture-unit bindings). The composer was built at activate time and is NOT
+    // rebuilt here — rebuilding would construct a composer AFTER this bake, which
+    // re-triggers the documented "bloom additive paints garbage tint" bug (the
+    // 2026-05-27 rebuild attempt was reverted for exactly this). Instead, flush
+    // the state cache right now so the lingering bake state can't bleed a colored
+    // garbage frame into the next composer.render (the per-frame reset in the
+    // render override is the steady-state guard; this is the one-shot bake guard).
+    renderer.resetState?.()
     _applyEnvToScene()
     console.log(`[photo] setEnvironment(${mode}) → ${_settings.environmentName || 'off'}`)
     showToast(`Environment: ${_settings.environmentName || 'off'}`, 2200)
@@ -481,6 +504,9 @@ export function createPhotoRenderer(sceneCtx) {
 
   function _spawnFluoroLights() {
     _clearFluoroLights()
+    // Sun = sole light source → no fluorophore PointLights (the emissive glow of
+    // the fluorophore beads themselves is a material property and is unaffected).
+    if (_settings.sun) return
     const mesh = _fluoroMesh()
     if (!mesh || !mesh.isInstancedMesh) return
     if (!_fluoroLightGroup) {
@@ -517,6 +543,8 @@ export function createPhotoRenderer(sceneCtx) {
   // Also rebuilds if instance count changed under us.
   function _syncFluoroLights() {
     if (!_settings.fluorophoreEmissive) return
+    // Sun-sole: keep no fluorophore PointLights alive while the sun owns the scene.
+    if (_settings.sun) { if (_fluoroLights.length) _clearFluoroLights(); return }
     const mesh = _fluoroMesh()
     if (!mesh || !mesh.isInstancedMesh) {
       if (_fluoroLights.length) _clearFluoroLights()
@@ -638,11 +666,13 @@ export function createPhotoRenderer(sceneCtx) {
     }
   }
 
-  // When the Sun is enabled it becomes the single light source: hide the entire
-  // preset studio rig (its ambient + hemisphere + directional lights) so only
-  // the sun illuminates the scene. Restored to visible when the sun is off.
-  // (Image-based lighting from the Environment dropdown is independent and still
-  // applies — turn the environment off too for a pure single-light look.)
+  // When the Sun is enabled it becomes the TRULY single light source: hide the
+  // entire preset studio rig (ambient + directional lights). Image-based
+  // lighting (scene.environment) and fluorophore PointLights are also dropped —
+  // see _applyEnvToScene (IBL) and _spawnFluoroLights/_syncFluoroLights (fluoro)
+  // — so the sun is the only thing illuminating the geometry. All restored when
+  // the sun is off. (A metallic rep under sun-only will read dark: metals need
+  // an environment to reflect; that's expected with no IBL.)
   function _applyRigVisibility() {
     if (_photoGroup) _photoGroup.visible = !_settings.sun
   }
@@ -655,6 +685,10 @@ export function createPhotoRenderer(sceneCtx) {
     // Sun on → suppress the preset rig; sun off → bring it back. Covers entry
     // (called from activate) and every sun setter.
     _applyRigVisibility()
+    // Sun-sole also gates image-based lighting + fluorophore PointLights. Re-run
+    // both each time the sun toggles so they drop (sun on) / resume (sun off).
+    _applyEnvToScene()
+    if (_settings.fluorophoreEmissive) _spawnFluoroLights()
     if (!_settings.sun) {
       _disposeSunGroup()
       // Sun is off → preset rig reclaims the single-key shadow.
@@ -872,6 +906,14 @@ export function createPhotoRenderer(sceneCtx) {
     _savedBgAlpha   = renderer.getClearAlpha()
     _savedSceneEnv  = scene.environment
 
+    // Switch the shared renderer to filmic tone mapping for the duration of
+    // photo mode (restored in deactivate). Without this, HDR values clip at 1.0
+    // and Bloom smears the clipped primaries into large yellow/purple washes.
+    _savedToneMapping = renderer.toneMapping
+    _savedExposure    = renderer.toneMappingExposure
+    renderer.toneMapping         = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = _settings.exposure
+
     // Save and optionally override FOV
     if (_settings.fov != null) {
       camera.fov = _settings.fov
@@ -949,6 +991,13 @@ export function createPhotoRenderer(sceneCtx) {
     scene.background  = _savedBgAlpha === 0 ? null : _savedBgColor.clone()
     scene.environment = _savedSceneEnv ?? null
     _disposeEnvTexture()
+
+    // Restore the live editor's tone mapping (it renders with NoToneMapping).
+    if (_savedToneMapping != null) {
+      renderer.toneMapping         = _savedToneMapping
+      renderer.toneMappingExposure = _savedExposure
+      _savedToneMapping = null
+    }
 
     // Dispose composer
     _composerHandle?.dispose()
@@ -1217,6 +1266,14 @@ export function createPhotoRenderer(sceneCtx) {
     camera.updateProjectionMatrix()
   }
 
+  // Master exposure for filmic tone mapping. Higher = brighter before roll-off.
+  function setExposure(v) {
+    _settings.exposure = v
+    if (!_active) return
+    renderer.toneMappingExposure = v
+    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+  }
+
   function enablePathTracing(enabled) {
     _settings.pathTracing = enabled
     if (!_active) return
@@ -1227,6 +1284,27 @@ export function createPhotoRenderer(sceneCtx) {
   function onSamplesUpdate(cb) { _onSamplesUpdate = cb }
 
   function getSampleCount() { return _ptSamples }
+
+  // Diagnostic: the live enabled-state of the post-processing passes, read from
+  // the actual composer (NOT _settings — which is only the stored intent). Used
+  // by the photo_renderer tests to prove a setter reached the GPU-facing pass,
+  // and handy from window.__photoRenderer when debugging a stuck effect. Returns
+  // null before activate (no composer yet).
+  function getComposerState() {
+    const h = _composerHandle
+    if (!h) return null
+    return {
+      bloom:          !!h.bloomPass?.enabled,
+      bloomStrength:  h.bloomPass?.strength,
+      bloomRadius:    h.bloomPass?.radius,
+      bloomThreshold: h.bloomPass?.threshold,
+      ssao:           !!h.ssaoPass?.enabled,
+      mist:           !!h.inscatterPass?.enabled,
+      toneMapping:    renderer.toneMapping,
+      exposure:       renderer.toneMappingExposure,
+    }
+  }
+
   function isPathTracingBuilding() { return _ptBuilding }
   function isPathTracingEnabled()  { return _ptEnabled }
   function isActive()              { return _active }
@@ -1288,6 +1366,9 @@ export function createPhotoRenderer(sceneCtx) {
       preserveDrawingBuffer: true,
     })
     offRenderer.setPixelRatio(1)
+    // Match the live preview's filmic tone mapping so exports don't clip/wash.
+    offRenderer.toneMapping         = THREE.ACESFilmicToneMapping
+    offRenderer.toneMappingExposure = _settings.exposure
     offRenderer.setSize(tileW, tileH, false)
     offRenderer.shadowMap.enabled = _shadowRigApplied
     if (_shadowRigApplied) offRenderer.shadowMap.type = THREE.PCFSoftShadowMap
@@ -1427,6 +1508,9 @@ export function createPhotoRenderer(sceneCtx) {
       preserveDrawingBuffer: true,
     })
     offRenderer.setPixelRatio(1)
+    // Match the live preview's filmic tone mapping so exports don't clip/wash.
+    offRenderer.toneMapping         = THREE.ACESFilmicToneMapping
+    offRenderer.toneMappingExposure = _settings.exposure
     offRenderer.setSize(tileW, tileH, false)
     offRenderer.shadowMap.enabled = _shadowRigApplied
     if (_shadowRigApplied) offRenderer.shadowMap.type = THREE.PCFSoftShadowMap
@@ -1566,6 +1650,8 @@ export function createPhotoRenderer(sceneCtx) {
     setSSAO,
     setBloom,
     setFOV,
+    setExposure,
+    getComposerState,
     enablePathTracing,
     onSamplesUpdate,
     getSampleCount,

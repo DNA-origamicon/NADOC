@@ -72,6 +72,12 @@ class OxdnaJob:
     salt_concentration:  float                   = 0.5      # molar
     health_samples:      list[OxdnaHealthSample] = field(default_factory=list)
     design_source_path:  Optional[str]           = None
+    # Electric-field branches: a field run is its own job seeded from a relaxed
+    # parent's structure.  ``parent_job_id`` links a field child to its relaxed
+    # parent (None for a normal relaxation job); ``efield`` records the field
+    # params for the list sub-item hover ({force_pN, force_oxdna, dir, n_anchored}).
+    parent_job_id:       Optional[str]           = None
+    efield:              Optional[dict]          = None
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -109,6 +115,8 @@ class OxdnaJob:
             OxdnaHealthSample(**h) for h in data.get("health_samples", [])
         ]
         data.setdefault("design_source_path", None)
+        data.setdefault("parent_job_id", None)
+        data.setdefault("efield", None)
         return cls(**data)
 
     @classmethod
@@ -140,6 +148,8 @@ def new_oxdna_job(
     backend: str = "CUDA",
     salt_concentration: float = 0.5,
     design_source_path: Optional[str] = None,
+    parent_job_id: Optional[str] = None,
+    efield: Optional[dict] = None,
 ) -> OxdnaJob:
     return OxdnaJob(
         job_id             = uuid.uuid4().hex[:12],
@@ -152,4 +162,6 @@ def new_oxdna_job(
         backend            = backend,
         salt_concentration = salt_concentration,
         design_source_path = design_source_path,
+        parent_job_id      = parent_job_id,
+        efield             = efield,
     )

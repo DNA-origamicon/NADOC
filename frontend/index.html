@@ -3464,6 +3464,62 @@
                 </div>
               </div>
 
+              <!-- Electric field setup (direction/magnitude gizmo + anchors) -->
+              <div style="margin-bottom:6px;border-top:1px solid #21262d;padding-top:6px">
+                <div id="efield-toggle" style="cursor:pointer;user-select:none;font-size:var(--text-xs);color:#c9d1d9;display:flex;align-items:center;gap:4px;font-weight:600">
+                  <span id="efield-arrow" class="icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down" style="color:var(--color-text-dim)"></span><span>Electric field</span>
+                </div>
+                <div id="efield-body" style="display:none;margin-top:6px">
+                  <!-- magnitude (canonical: force per nucleotide in pN) -->
+                  <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
+                    <label for="efield-mag" style="font-size:var(--text-xs);color:#8b949e">Force / nt (pN)</label>
+                    <input id="efield-mag" type="number" value="0" min="0" step="0.01"
+                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  </div>
+                  <!-- direction (x,y,z; bound to the scene arrow gizmo) -->
+                  <div style="display:flex;align-items:center;gap:4px;margin-top:5px">
+                    <span style="font-size:var(--text-xs);color:#8b949e">Direction</span>
+                    <input id="efield-dir-x" type="number" step="0.1" title="x" style="width:46px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <input id="efield-dir-y" type="number" step="0.1" title="y" style="width:46px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <input id="efield-dir-z" type="number" step="0.1" title="z" style="width:46px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  </div>
+                  <!-- V/m helper (fills the pN field via an editable effective charge) -->
+                  <div style="margin-top:5px">
+                    <div id="efield-vpm-toggle" style="cursor:pointer;user-select:none;font-size:var(--text-xs);color:#8b949e;display:flex;align-items:center;gap:4px">
+                      <span id="efield-vpm-arrow" style="display:inline-block;transition:transform .15s">▸</span><span>from field (V/m)</span>
+                    </div>
+                    <div id="efield-vpm-body" style="display:none;margin-top:4px;display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
+                      <label for="efield-vpm" style="font-size:var(--text-xs);color:#8b949e">E (V/m)</label>
+                      <input id="efield-vpm" type="number" step="1000" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                      <label for="efield-qeff" style="font-size:var(--text-xs);color:#8b949e" title="Effective backbone charge (e/phosphate); ~0.25 after Manning condensation">q_eff (e)</label>
+                      <input id="efield-qeff" type="number" step="0.05" min="0" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                      <span></span>
+                      <button id="efield-vpm-apply" style="font-size:var(--text-xs);padding:3px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Compute pN</button>
+                    </div>
+                  </div>
+                  <!-- anchors (clusters / domains / overhangs held fixed) -->
+                  <div style="margin-top:7px">
+                    <div style="display:flex;align-items:center;gap:5px">
+                      <button id="efield-anchor-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Add selection as anchor</button>
+                      <button id="efield-anchor-clear" style="font-size:var(--text-xs);padding:4px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
+                    </div>
+                    <div id="efield-anchors-list" style="margin-top:5px"></div>
+                  </div>
+                  <!-- run: appends a field stage to the selected completed oxDNA job -->
+                  <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center;margin-top:7px">
+                    <label for="efield-steps" style="font-size:var(--text-xs);color:#8b949e">Field steps</label>
+                    <input id="efield-steps" type="number" value="2000000" min="1000" max="200000000" step="1000000"
+                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  </div>
+                  <button id="efield-run-btn" disabled
+                          title="Append an electric-field MD stage to the selected completed oxDNA job"
+                          style="width:100%;font-size:var(--text-xs);padding:5px;margin-top:6px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
+                    ⚡ Run field
+                  </button>
+                  <div id="efield-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:14px"></div>
+                </div>
+              </div>
+
               <!-- show-all toggle -->
               <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
                 <input id="oxdna-jobs-show-all" type="checkbox"> Show jobs for all designs
@@ -4279,6 +4335,12 @@
               <div id="photo-bloom-strength-row" style="display:none;align-items:center;gap:6px;margin-left:20px;color:#8b949e">
                 Intensity
                 <input id="photo-bloom-strength" type="range" min="0.1" max="2" step="0.05" value="0.5"
+                       style="flex:1;accent-color:#58a6ff">
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;color:#8b949e"
+                   title="Filmic (ACES) tone-mapping exposure. Higher = brighter before highlights roll off. Tames the metallic/emissive + Bloom blow-out.">
+                Exposure
+                <input id="photo-exposure" type="range" min="0.1" max="3" step="0.05" value="1"
                        style="flex:1;accent-color:#58a6ff">
               </div>
             </div>

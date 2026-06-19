@@ -476,7 +476,9 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
                         job.job_id, spec.name, ", ".join(archived) or "none")
 
         input_path = stage_dir / "input.txt"
-        forces = (jd / "forces.txt").resolve() if spec.external_forces else None
+        # Relax stages use the default mutual-trap forces.txt; a field stage points
+        # spec.forces_file at its own field_forces_N.txt (uniform force + anchors).
+        forces = (jd / (spec.forces_file or "forces.txt")).resolve() if spec.external_forces else None
         input_path.write_text(
             render_stage_input(spec, str(topo), str(conf),
                                forces_name=str(forces) if forces else None)

@@ -33,7 +33,7 @@ from backend.physics.oxdna_interface import (
     write_configuration,
 )
 
-from tests.conftest import make_6hb_design
+from tests.conftest import make_6hb_design, make_18hb_design
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -132,6 +132,97 @@ def test_render_equil_has_no_force_cap():
 def test_expected_energy_lines():
     specs = build_relaxation_stages(md_relax_steps=10_000)
     assert expected_energy_lines(specs[1]) == 100
+
+
+def test_render_raises_io_rate_limit():
+    # Every stage must lift oxDNA's max_io safety valve, else a large design's
+    # MB-scale trajectory frames trip the 1 MB/s default and abort a healthy run.
+    specs = build_relaxation_stages()
+    for spec in specs:
+        txt = render_stage_input(spec, "t", "c")
+        assert "max_io = 1000.0" in txt
+
+
+# ── Large-structure validation (imported-cadnano-scale designs) ────────────────
+#
+# Regression guards for the 2026-06-18 "cadnano imports blow up" fixes, exercised
+# at imported scale (an 18-helix bundle, ~14k nucleotides, the size of VoltronCore)
+# rather than the tiny 6hb the protocol was originally tuned on.
+
+# oxDNA2 FENE backbone potential diverges at r0+Δ = (0.7525+0.25) length units;
+# a bond at/over this can't be evaluated (only the force-cap keeps oxDNA alive),
+# so an unrelaxed config should never START a bond past it.
+_FENE_MAX_NM = (0.7525 + 0.25) * 0.8518  # ≈ 0.854 nm
+
+
+def _large_skipped_design(n_skips_per_helix: int = 6):
+    """18-helix bundle (~14k nt) with skips peppered down each helix — a
+    deletion-heavy, imported-cadnano-scale structure."""
+    from backend.core.models import LoopSkip
+    d = make_18hb_design(388)
+    for h in d.helices:
+        step = h.length_bp // (n_skips_per_helix + 1)
+        h.loop_skips = [LoopSkip(bp_index=h.bp_start + step * (k + 1), delta=-1)
+                        for k in range(n_skips_per_helix)]
+    return d
+
+
+def _intra_backbone_bond_lengths_nm(design, *, compact_skips):
+    from backend.api.crud import _geometry_for_design
+    from backend.physics.oxdna_interface import backbone_bond_pairs
+    geo = _geometry_for_design(design, compact_skips=compact_skips)
+    pos = {(n["helix_id"], n["bp_index"], n["direction"]): np.asarray(n["backbone_position"])
+           for n in geo}
+    out = []
+    for a, b in backbone_bond_pairs(design):
+        if a[0] != b[0] or a[:3] not in pos or b[:3] not in pos:
+            continue  # intra-helix only (this bundle has no crossovers)
+        out.append(float(np.linalg.norm(pos[a[:3]] - pos[b[:3]])))
+    return np.asarray(out)
+
+
+def test_large_structure_skip_compaction_no_fene_violation():
+    """At imported scale: every intra-helix backbone bond — INCLUDING the ones
+    that span a deletion — stays inside oxDNA's FENE-valid range once skips are
+    compacted, so the structure doesn't start the relaxation already torn."""
+    design = _large_skipped_design()
+
+    compacted = _intra_backbone_bond_lengths_nm(design, compact_skips=True)
+    assert len(compacted) > 13_000                 # genuinely large
+    assert compacted.max() < _FENE_MAX_NM          # no bond past FENE divergence
+
+    # Meaningfulness: WITHOUT compaction the deletions leave ~2×-rise gaps that
+    # DO violate FENE — proving the test exercises the gap the fix removes.
+    default = _intra_backbone_bond_lengths_nm(design, compact_skips=False)
+    assert default.max() > _FENE_MAX_NM
+    assert (default > _FENE_MAX_NM).sum() >= 18 * 6  # ~one stretched bond per skip
+
+
+def test_large_structure_oxdna_files_self_consistent(tmp_path):
+    """Topology N, configuration data lines, and the strand-order count must all
+    agree for a large skipped design — the mismatch class behind the 33,716-vs-
+    14,774 miscount.  Geometry slots (empty lattice) must NOT leak into the run."""
+    from backend.api.crud import _geometry_for_design
+    from backend.physics.oxdna_interface import (
+        _strand_nucleotide_order, write_topology,
+    )
+    design = _large_skipped_design()
+    for h in design.helices:
+        h.length_bp += 40                            # imported-helix empty lattice tail
+
+    n_order = len(_strand_nucleotide_order(design))
+    n_geom = len(_geometry_for_design(design, compact_skips=True))
+    assert n_geom > n_order                          # empty lattice slots exist (must not leak)
+
+    top = tmp_path / "topology.top"
+    write_topology(design, top)
+    header_n = int(top.read_text().splitlines()[0].split()[0])
+    assert header_n == n_order                       # topology counts real nucleotides
+
+    conf = tmp_path / "conf.dat"
+    write_configuration(design, _geometry_for_design(design, compact_skips=True), conf)
+    data_lines = [ln for ln in conf.read_text().splitlines()[3:] if ln.strip()]
+    assert len(data_lines) == n_order                # conf matches topology exactly
 
 
 # ── Mutual-trap external forces (relax aid so the structure holds) ─────────────
@@ -311,6 +402,159 @@ def test_production_rmsf_pools_multiple_trajectories(design, geometry, tmp_path)
     assert pooled["n_frames"] == 5            # 2 + 3 frames across both runs
 
 
+# ── measure_end_to_end (the AF-13 P2 constraint primitive — pure geometry) ─────
+
+def _pos(hid, bp, direction, xyz):
+    return {"helix_id": hid, "bp_index": bp, "direction": direction,
+            "backbone_position": list(xyz)}
+
+
+
+
+def test_measure_end_to_end_distance():
+    """Euclidean distance (nm) between two landmark nucleotides' backbone sites."""
+    from backend.core.oxdna_health import measure_end_to_end
+    positions = [
+        _pos(0, 0, "forward", (0.0, 0.0, 0.0)),
+        _pos(0, 9, "forward", (3.0, 4.0, 0.0)),     # 3-4-5 triangle → 5.0 nm
+        _pos(1, 0, "reverse", (0.0, 0.0, 10.0)),
+    ]
+    d = measure_end_to_end(positions, (0, 0, "forward"), (0, 9, "forward"))
+    assert abs(d - 5.0) < 1e-9
+    # Order-independent.
+    assert abs(measure_end_to_end(positions, (0, 9, "forward"),
+                                  (0, 0, "forward")) - 5.0) < 1e-9
+
+
+def test_measure_end_to_end_normalises_direction_enum():
+    """A landmark may name its direction as a Direction enum or its string value."""
+    from backend.core.models import Direction
+    from backend.core.oxdna_health import measure_end_to_end
+    # The map keys its direction as the enum's string value ("FORWARD").
+    positions = [_pos(0, 0, Direction.FORWARD.value, (0.0, 0.0, 0.0)),
+                 _pos(0, 5, Direction.FORWARD.value, (0.0, 0.0, 2.0))]
+    d = measure_end_to_end(positions, (0, 0, Direction.FORWARD),
+                           (0, 5, Direction.FORWARD))
+    assert abs(d - 2.0) < 1e-9
+
+
+def test_measure_end_to_end_rejects_bad_input():
+    """Empty map, identical landmarks, and an absent landmark each raise."""
+    from backend.core.oxdna_health import measure_end_to_end
+    positions = [_pos(0, 0, "forward", (0.0, 0.0, 0.0)),
+                 _pos(0, 5, "forward", (1.0, 0.0, 0.0))]
+    with pytest.raises(ValueError, match="empty"):
+        measure_end_to_end([], (0, 0, "forward"), (0, 5, "forward"))
+    with pytest.raises(ValueError, match="identical"):
+        measure_end_to_end(positions, (0, 0, "forward"), (0, 0, "forward"))
+    with pytest.raises(ValueError, match="not a nucleotide"):
+        measure_end_to_end(positions, (0, 0, "forward"), (9, 9, "forward"))
+
+
+# ── parse_constraint_spec + check_relaxed_constraint (AF-13 P3 — pure) ─────────
+
+_LANDMARKS = [(0, 0, "forward"), (0, 9, "forward")]   # → 5.0 nm in _CONSTR_POS
+
+
+def _constr(**over) -> dict:
+    spec = {"measure": "end_to_end", "landmarks": _LANDMARKS,
+            "target_nm": 5.0, "tol_nm": 0.5, "min_confidence": 50}
+    spec.update(over)
+    return spec
+
+
+def _relaxed(n_frames, *, ready=True):
+    """A synthetic read_flexibility_map output: landmarks 5.0 nm apart (3-4-5)."""
+    positions = [_pos(0, 0, "forward", (0.0, 0.0, 0.0)),
+                 _pos(0, 9, "forward", (3.0, 4.0, 0.0))]
+    return {"ready": ready, "positions": positions if ready else [],
+            "confidence": {"n_frames": n_frames, "preliminary": n_frames < 50}}
+
+
+def test_parse_constraint_spec_normalises():
+    from backend.core.models import Direction
+    from backend.core.oxdna_health import parse_constraint_spec
+    c = parse_constraint_spec(_constr(
+        landmarks=[(0, 0, Direction.FORWARD), (1, 3, Direction.REVERSE)]))
+    assert c["landmarks"] == [(0, 0, "FORWARD"), (1, 3, "REVERSE")]
+    assert c["target_nm"] == 5.0 and c["tol_nm"] == 0.5 and c["min_confidence"] == 50
+    # Idempotent on its own output.
+    assert parse_constraint_spec(c) == c
+
+
+def test_parse_constraint_spec_default_min_confidence():
+    from backend.core.oxdna_health import RMSF_PRELIM_FRAMES, parse_constraint_spec
+    c = parse_constraint_spec({"measure": "end_to_end", "landmarks": _LANDMARKS,
+                               "target_nm": 5.0, "tol_nm": 0.5})
+    assert c["min_confidence"] == RMSF_PRELIM_FRAMES
+
+
+@pytest.mark.parametrize("spec, match", [
+    ("nope", "must be a dict"),
+    ({"measure": "end_to_end", "landmarks": _LANDMARKS, "target_nm": 5.0,
+      "tol_nm": 0.5, "bogus": 1}, "unknown key"),
+    (_constr(measure="radius"), "measure must be one of"),
+    (_constr(landmarks=[(0, 0, "forward")]), "needs exactly 2 landmarks"),
+    (_constr(landmarks=[(0, 0, "forward"), (0, 0, "forward")]), "identical"),
+    (_constr(landmarks=[(0, "x", "forward"), (0, 9, "forward")]), "bp_index must be"),
+    (_constr(landmarks=[(0, 0), (0, 9, "forward")]), "must be a .*triple"),
+    (_constr(target_nm="far"), "target_nm must be a finite number"),
+    (_constr(target_nm=-1.0), "target_nm must be non-negative"),
+    (_constr(tol_nm=0.0), "tol_nm must be positive"),
+    (_constr(tol_nm=-0.5), "tol_nm must be positive"),
+    (_constr(min_confidence=0), "min_confidence must be an integer"),
+    (_constr(min_confidence=2.5), "min_confidence must be an integer"),
+])
+def test_parse_constraint_spec_rejects(spec, match):
+    from backend.core.oxdna_health import ConstraintSpecError, parse_constraint_spec
+    with pytest.raises(ConstraintSpecError, match=match):
+        parse_constraint_spec(spec)
+
+
+def test_check_constraint_met():
+    """Enough frames + within tolerance → met."""
+    from backend.core.oxdna_health import check_relaxed_constraint
+    r = check_relaxed_constraint(_constr(target_nm=5.0, tol_nm=0.5), _relaxed(60))
+    assert r["status"] == "met" and r["met"] is True
+    assert abs(r["measured_nm"] - 5.0) < 1e-9
+    assert r["n_frames"] == 60 and r["min_confidence"] == 50
+
+
+def test_check_constraint_unmet():
+    """Enough frames but out of tolerance → unmet (met False), value still reported."""
+    from backend.core.oxdna_health import check_relaxed_constraint
+    r = check_relaxed_constraint(_constr(target_nm=10.0, tol_nm=0.5), _relaxed(60))
+    assert r["status"] == "unmet" and r["met"] is False
+    assert abs(r["measured_nm"] - 5.0) < 1e-9
+
+
+def test_check_constraint_tolerance_bracket():
+    """The met/unmet boundary is |measured − target| <= tol (measured = 5.0)."""
+    from backend.core.oxdna_health import check_relaxed_constraint
+    on = check_relaxed_constraint(_constr(target_nm=4.5, tol_nm=0.5), _relaxed(60))
+    off = check_relaxed_constraint(_constr(target_nm=4.4, tol_nm=0.5), _relaxed(60))
+    assert on["status"] == "met"          # |5.0 − 4.5| = 0.5 <= 0.5
+    assert off["status"] == "unmet"       # |5.0 − 4.4| = 0.6 >  0.5
+
+
+def test_check_constraint_low_confidence_never_met():
+    """THE LOAD-BEARING GUARD: too few frames → inconclusive, met False — even
+    though the measured value is squarely within tolerance."""
+    from backend.core.oxdna_health import check_relaxed_constraint
+    r = check_relaxed_constraint(_constr(target_nm=5.0, tol_nm=0.5), _relaxed(10))
+    assert r["status"] == "inconclusive" and r["met"] is False
+    assert abs(r["measured_nm"] - 5.0) < 1e-9      # within tol, yet NOT met
+    assert r["n_frames"] == 10
+
+
+def test_check_constraint_no_production_inconclusive():
+    """No production mean structure yet → inconclusive, met False, no measurement."""
+    from backend.core.oxdna_health import check_relaxed_constraint
+    r = check_relaxed_constraint(_constr(), _relaxed(0, ready=False))
+    assert r["status"] == "inconclusive" and r["met"] is False
+    assert r["measured_nm"] is None
+
+
 def test_composite_trajectory(design, geometry, tmp_path):
     """Composite trajectory concatenates stages, sends keys once, flat float
     frames, and a transition marker at each stage boundary."""
@@ -373,6 +617,52 @@ def test_oxdna_continue_production_unique_stage(monkeypatch, tmp_path):
     prod_names = [s.name for s in reloaded.stages if s.kind == "production"]
     assert prod_names == ["4_production", "5_production"]   # second run, unique name
     assert reloaded.status == OxdnaStatus.running
+
+
+def test_delete_parent_cascades_to_field_children(monkeypatch, tmp_path):
+    """Deleting a relaxed parent also deletes every electric-field child job."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes_oxdna
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(routes_oxdna, "is_running", lambda jid: False)
+
+    parent = new_oxdna_job("d", [])
+    parent.status = OxdnaStatus.completed
+    parent.save(tmp_path)
+    children = []
+    for _ in range(2):
+        c = new_oxdna_job("d · field", [], parent_job_id=parent.job_id)
+        c.status = OxdnaStatus.completed
+        c.save(tmp_path)
+        children.append(c)
+
+    r = TestClient(app).delete(f"/api/oxdna/jobs/{parent.job_id}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["n_children"] == 2
+    assert set(body["deleted"]) == {parent.job_id, children[0].job_id, children[1].job_id}
+    for j in (parent, *children):
+        assert not j.job_dir(tmp_path).exists()
+
+
+def test_delete_parent_blocked_when_a_child_is_running(monkeypatch, tmp_path):
+    """A running field child blocks deleting its parent (nothing is removed)."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes_oxdna
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    parent = new_oxdna_job("d", []); parent.status = OxdnaStatus.completed; parent.save(tmp_path)
+    child = new_oxdna_job("d · field", [], parent_job_id=parent.job_id)
+    child.status = OxdnaStatus.running; child.save(tmp_path)
+    monkeypatch.setattr(routes_oxdna, "is_running", lambda jid: jid == child.job_id)
+
+    r = TestClient(app).delete(f"/api/oxdna/jobs/{parent.job_id}")
+    assert r.status_code == 400
+    assert parent.job_dir(tmp_path).exists()          # nothing deleted
+    assert child.job_dir(tmp_path).exists()
 
 
 def test_oxdna_trajectory_not_ready_without_frames(monkeypatch, tmp_path):
@@ -804,6 +1094,31 @@ def test_oxdna_create_rejects_unsequenced(monkeypatch, tmp_path):
     assert "sequence" in r.json()["detail"].lower()
 
 
+def test_oxdna_create_counts_strand_nucleotides_not_lattice(monkeypatch, tmp_path):
+    """n_nucleotides must be the simulated nucleotide count (strand order), NOT
+    len(geometry): the geometry endpoint emits a slot for every lattice position
+    in each helix's full length_bp grid, so a helix with empty sites (the norm for
+    imported cadnano designs) would over-count the real oxDNA system size."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    from backend.api.crud import _geometry_for_design
+    from backend.physics.oxdna_interface import _strand_nucleotide_order
+    import backend.api.routes_oxdna as routes_oxdna
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    d = _sequence_for_oxdna(make_6hb_design())
+    d.helices[0].length_bp += 60          # add empty lattice slots (no strands there)
+    _set_active_design(d)
+
+    n_strand = len(_strand_nucleotide_order(d))
+    n_geom = len(_geometry_for_design(d))
+    assert n_geom > n_strand              # empty slots inflate the geometry count
+
+    created = TestClient(app).post("/api/oxdna/jobs", json={"backend": "CPU", "autostart": False})
+    assert created.status_code == 200, created.text
+    assert created.json()["n_nucleotides"] == n_strand
+
+
 def _full_seq(strand, base="A"):
     n = sum(abs(d.end_bp - d.start_bp) + 1 for d in strand.domains)
     return base * n
@@ -910,14 +1225,14 @@ def test_oxdna_rmsf_gating_before_frames(monkeypatch, tmp_path):
     job = new_oxdna_job("d", [s.to_status() for s in specs])
     job.save(tmp_path)
     r = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/rmsf").json()
-    assert r["ready"] is False and r["reason"] == "no production run yet"
+    assert r["ready"] is False and r["reason"] == "no production or field run yet"
 
     # Production stage present + running but no trajectory.dat written yet.
     job.stages.append(build_production_stage(steps=1000).to_status())
     job.stages[-1].status = "running"
     job.save(tmp_path)
     r2 = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/rmsf").json()
-    assert r2["ready"] is False and r2["reason"] == "production starting — no frames yet"
+    assert r2["ready"] is False and r2["reason"] == "sampling starting — no frames yet"
 
 
 def test_oxdna_rmsf_available_mid_run_with_confidence(monkeypatch, tmp_path, design, geometry):
@@ -1301,3 +1616,249 @@ def test_md_create_with_bad_oxdna_seed_returns_400(monkeypatch, tmp_path):
         "oxdna_job_id": "does_not_exist",
     })
     assert r.status_code == 400
+
+
+# ── Electric-field forces + anchors + oracle (oxDNA E-field) ──────────────────
+
+def test_pn_to_oxdna_force():
+    from backend.physics.oxdna_interface import pn_to_oxdna_force, OXDNA_FORCE_PN
+    assert pn_to_oxdna_force(OXDNA_FORCE_PN) == pytest.approx(1.0)
+    assert pn_to_oxdna_force(0) == 0.0
+
+
+def test_resolve_anchor_particles_domain_cluster_unknown(design):
+    from backend.physics.oxdna_interface import (
+        resolve_anchor_particles, _strand_nucleotide_order)
+    order = _strand_nucleotide_order(design)
+    # Domain anchor → exactly that domain's nucleotides, valid sorted indices.
+    s0 = design.strands[0]
+    dom = s0.domains[0]
+    n_expected = abs(dom.end_bp - dom.start_bp) + 1
+    parts, keys = resolve_anchor_particles(
+        design, [{"kind": "domain", "strand_id": s0.id, "domain_index": 0}])
+    assert len(parts) == n_expected == len(keys)
+    assert parts == sorted(parts)
+    assert all(0 <= p < len(order) for p in parts)
+    # Cluster anchor → all nucleotides on the cluster's helices.
+    ct = design.cluster_transforms[0]
+    cparts, _ = resolve_anchor_particles(design, [{"kind": "cluster", "id": ct.id}])
+    expected_cluster = sum(1 for k in order if k[0] in set(ct.helix_ids))
+    assert len(cparts) == expected_cluster > 0
+    # Unknown id / kind → nothing (stale selection drops silently, no raise).
+    assert resolve_anchor_particles(design, [{"kind": "overhang", "id": "nope"}]) == ([], [])
+    assert resolve_anchor_particles(design, [{"kind": "bogus"}]) == ([], [])
+
+
+def test_write_field_forces(design, geometry, tmp_path):
+    from backend.physics.oxdna_interface import (
+        write_field_forces, write_configuration, resolve_anchor_particles,
+        pn_to_oxdna_force)
+    conf = tmp_path / "conf.dat"
+    write_configuration(design, geometry, conf)
+    s0 = design.strands[0]
+    anchors = [{"kind": "domain", "strand_id": s0.id, "domain_index": 0}]
+    parts, _ = resolve_anchor_particles(design, anchors)
+    f_ox = pn_to_oxdna_force(2.0)
+    out = tmp_path / "field_forces.txt"
+    info = write_field_forces(out, design, conf, field_oxdna=f_ox,
+                              field_dir=[0, 0, 5], anchors=anchors)
+    text = out.read_text()
+    import re
+    # One uniform field string force over all particles (anchored beads feel it
+    # too but their stiff traps hold them — oxDNA rejects range particle-specs).
+    assert text.count("type = string") == 1
+    assert "particle = -1" in text
+    assert f"F0 = {f_ox:.6g}" in text
+    assert "dir = 0,0,1" in text                       # direction normalized
+    # One static trap per anchored nucleotide, with the immobile default stiffness.
+    assert text.count("type = trap") == len(parts) == info["n_anchored"]
+    from backend.physics.oxdna_interface import DEFAULT_ANCHOR_STIFF
+    assert DEFAULT_ANCHOR_STIFF >= 500     # immobile, not the old soft 5.0
+    assert f"stiff = {DEFAULT_ANCHOR_STIFF:.6g}" in text
+    trap_particles = set(map(int, re.findall(r"type = trap\nparticle = (\d+)", text)))
+    assert trap_particles == set(parts)
+
+
+def test_write_field_forces_returns_anchor_keys(design, geometry, tmp_path):
+    """write_field_forces returns the anchored 3-tuple keys (the display's
+    positional-alignment frame), one per anchored nucleotide."""
+    from backend.physics.oxdna_interface import write_field_forces, write_configuration
+    conf = tmp_path / "conf.dat"; write_configuration(design, geometry, conf)
+    s0 = design.strands[0]
+    info = write_field_forces(tmp_path / "f.txt", design, conf, field_oxdna=0.04,
+                              field_dir=[1, 0, 0],
+                              anchors=[{"kind": "domain", "strand_id": s0.id, "domain_index": 0}])
+    assert len(info["anchor_keys"]) == info["n_anchored"]
+    k0 = info["anchor_keys"][0]
+    assert len(k0) == 3 and k0[2] in ("FORWARD", "REVERSE")   # [helix, bp, direction]
+
+
+def test_unwrap_anchor_positional_no_rotation():
+    """Field-run display alignment: anchored beads are a POSITIONAL reference
+    (translated onto their design spot) but NOT a rotational one — a swing of the
+    rest is preserved, not Kabsch-aligned away."""
+    from backend.physics.oxdna_interface import unwrap_align_to_reference
+    from backend.core.models import Design
+    box = np.array([100.0, 100.0, 100.0])
+
+    def nuc(p):
+        return {"backbone_position": np.array(p, float),
+                "a1": np.array([1.0, 0, 0]), "a3": np.array([0, 0, 1.0])}
+
+    kA = ("hA", 0, "FORWARD"); kB = ("hB", 0, "FORWARD"); kF = ("hF", 0, "FORWARD")
+    ref = {kA: nuc([0, 0, 0]), kB: nuc([2, 0, 0]), kF: nuc([10, 0, 0])}
+    # whole thing drifted +7 in x; the free bead ALSO swung +5 in y.
+    relax = {kA: nuc([7, 0, 0]), kB: nuc([9, 0, 0]), kF: nuc([17, 5, 0])}
+
+    out = unwrap_align_to_reference(relax, ref, Design(), box,
+                                    align_keys=[kA, kB], rotate=False)
+    # Anchors land back on their reference positions (drift removed = positional ref).
+    assert np.allclose(out[kA]["backbone_position"], [0, 0, 0], atol=1e-6)
+    assert np.allclose(out[kB]["backbone_position"], [2, 0, 0], atol=1e-6)
+    # The free bead's +y swing is PRESERVED (ref 10 + swing 5), not aligned away.
+    assert np.allclose(out[kF]["backbone_position"], [10, 5, 0], atol=1e-6)
+    # rotate=False leaves orientation vectors untouched.
+    assert np.allclose(out[kF]["a1"], [1, 0, 0])
+
+
+def test_field_display_aligns_to_design_not_drifted_seed(design, geometry, monkeypatch, tmp_path):
+    """A field run's display must anchor onto the DESIGN geometry (origin frame),
+    NOT the job's conf.dat — which is the relaxation-drifted seed.  A seed shifted
+    far from origin must still display with the anchor at its design position."""
+    import shutil
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes_oxdna
+    from backend.core.oxdna_protocol import build_field_stage
+    from backend.core.constants import NM_TO_OXDNA
+    from backend.physics.oxdna_interface import (
+        write_configuration, read_configuration_full, resolve_anchor_particles)
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    s0 = design.strands[0]
+    anchors = [{"kind": "domain", "strand_id": s0.id, "domain_index": 0}]
+    parts, keys = resolve_anchor_particles(design, anchors)
+    akeys = [list(k[:3]) for k in keys]
+
+    stage = build_field_stage(name="1_field", field_oxdna=0.04, field_dir=[1, 0, 0],
+                              forces_file="field_forces.txt", steps=2000)
+    job = new_oxdna_job("d · field", [stage.to_status()], parent_job_id="P0",
+                        efield={"force_pN": 2.0, "dir": [1, 0, 0],
+                                "n_anchored": len(parts), "anchor_keys": akeys})
+    job.stages[0].status = "done"; job.status = OxdnaStatus.completed; job.current_stage_idx = 1
+    job.save(tmp_path)
+    jd = job.job_dir(tmp_path); (jd / "design.json").write_text(design.model_dump_json())
+    sd = job.stage_dir(tmp_path, "1_field"); sd.mkdir(parents=True, exist_ok=True)
+
+    # conf.dat (the relaxed seed) + last_conf = design geometry shifted +30 oxDNA
+    # units in x — i.e. the relaxation diffused the structure far from origin.
+    write_configuration(design, geometry, jd / "conf.dat", box_nm=80.0)
+    SHIFT_OX = 30.0
+    lines = (jd / "conf.dat").read_text().splitlines()
+    shifted = lines[:3]
+    for ln in lines[3:]:
+        if not ln.strip():
+            shifted.append(ln); continue
+        p = ln.split(); p[0] = f"{float(p[0]) + SHIFT_OX:.6f}"; shifted.append(" ".join(p))
+    (jd / "conf.dat").write_text("\n".join(shifted) + "\n")
+    shutil.copy(jd / "conf.dat", sd / "last_conf.dat")
+
+    disp = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/display").json()
+    pos = {(p["helix_id"], p["bp_index"], p["direction"]): np.array(p["backbone_position"])
+           for p in disp["positions"]}
+    dref = tmp_path / "dg.dat"; write_configuration(design, geometry, dref, box_nm=80.0)
+    gm = read_configuration_full(dref, design)
+    aset = {tuple(k) for k in akeys}
+    design_ac = np.mean([gm[k]["backbone_position"] for k in aset], axis=0)
+    disp_ac = np.mean([pos[k] for k in aset if k in pos], axis=0)
+    # Anchor displays at the DESIGN position (~0), not the +30-oxDNA-unit drift.
+    assert np.linalg.norm(disp_ac - design_ac) < 1.0
+    assert abs(disp_ac[0] - design_ac[0]) < (SHIFT_OX / NM_TO_OXDNA) / 2
+
+
+def test_write_field_forces_requires_anchor(design, geometry, tmp_path):
+    from backend.physics.oxdna_interface import write_field_forces, write_configuration
+    conf = tmp_path / "conf.dat"
+    write_configuration(design, geometry, conf)
+    with pytest.raises(ValueError, match="needs ≥1 anchor"):
+        write_field_forces(tmp_path / "f.txt", design, conf, field_oxdna=0.04,
+                           field_dir=[1, 0, 0], anchors=[])
+
+
+def test_build_field_stage_and_render():
+    from backend.core.oxdna_protocol import build_field_stage, render_stage_input
+    st = build_field_stage(name="4_field", field_oxdna=0.04, field_dir=[1, 0, 0],
+                           forces_file="field_forces_4.txt", steps=5000)
+    assert st.kind == "field" and st.sim_type == "MD"
+    assert st.external_forces is True
+    assert st.forces_file == "field_forces_4.txt"
+    assert st.max_backbone_force is None               # standard FENE, no cap
+    assert st.min_bp_retained == 0.0                   # field deflects → no bp gate
+    assert st.efield["force_oxdna"] == 0.04 and st.efield["dir"] == [1, 0, 0]
+    txt = render_stage_input(st, "t.top", "c.dat", forces_name=st.forces_file)
+    assert "external_forces = true" in txt
+    assert "external_forces_file = field_forces_4.txt" in txt
+    assert "max_backbone_force" not in txt
+
+
+def test_measure_field_response_pass_and_fail():
+    """The oracle asserts a physical property: anchors held + free moved ALONG the
+    field.  It must go green when that holds and red on either failure mode."""
+    from backend.core.oxdna_health import measure_field_response
+    ref = [_pos(0, 0, "forward", (0, 0, 0)),   # anchor
+           _pos(0, 1, "forward", (1, 0, 0)),   # anchor
+           _pos(0, 8, "forward", (8, 0, 0)),   # free
+           _pos(0, 9, "forward", (9, 0, 0))]   # free
+    anchors = [(0, 0, "forward"), (0, 1, "forward")]
+
+    # Anchors held, free displaced +2 nm along +z → passes.
+    moved = [_pos(0, 0, "forward", (0, 0, 0)), _pos(0, 1, "forward", (1, 0, 0)),
+             _pos(0, 8, "forward", (8, 0, 2)), _pos(0, 9, "forward", (9, 0, 2))]
+    r = measure_field_response(moved, ref, [0, 0, 1], anchors)
+    assert r["passed"] is True
+    assert r["anchored_max_drift_nm"] == pytest.approx(0.0)
+    assert r["free_proj_along_field_nm"] == pytest.approx(2.0)
+    assert r["n_anchored"] == 2 and r["n_free"] == 2
+
+    # Free moved OPPOSITE the field → fails (deflection check).
+    against = [_pos(0, 0, "forward", (0, 0, 0)), _pos(0, 1, "forward", (1, 0, 0)),
+               _pos(0, 8, "forward", (8, 0, -2)), _pos(0, 9, "forward", (9, 0, -2))]
+    assert measure_field_response(against, ref, [0, 0, 1], anchors)["passed"] is False
+
+    # Anchors dragged far → fails (anchor-held check).
+    drifted = [_pos(0, 0, "forward", (0, 0, 5)), _pos(0, 1, "forward", (1, 0, 5)),
+               _pos(0, 8, "forward", (8, 0, 2)), _pos(0, 9, "forward", (9, 0, 2))]
+    r3 = measure_field_response(drifted, ref, [0, 0, 1], anchors)
+    assert r3["passed"] is False
+    assert r3["anchored_max_drift_nm"] == pytest.approx(5.0)
+
+
+def test_rmsf_route_works_for_a_field_run(design, geometry, monkeypatch, tmp_path):
+    """The flexibility map (RMSF) pools a field run's trajectory, not just
+    production — a field CHILD job's /rmsf returns a ready map."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes_oxdna
+    from backend.core.oxdna_protocol import build_field_stage
+    from backend.physics.oxdna_interface import write_configuration
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    stage = build_field_stage(name="1_field", field_oxdna=0.04, field_dir=[1, 0, 0],
+                              forces_file="field_forces.txt", steps=2000)
+    job = new_oxdna_job("d · field", [stage.to_status()], parent_job_id="P0")
+    job.stages[0].status = "done"
+    job.status = OxdnaStatus.completed
+    job.current_stage_idx = 1
+    job.save(tmp_path)
+    jd = job.job_dir(tmp_path)
+    (jd / "design.json").write_text(design.model_dump_json())
+    write_configuration(design, geometry, jd / "conf.dat", box_nm=80.0)
+    sd = job.stage_dir(tmp_path, "1_field"); sd.mkdir(parents=True, exist_ok=True)
+    _write_traj(design, geometry, sd / "trajectory.dat", n_frames=3)
+
+    r = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/rmsf")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ready"] is True
+    assert body["n_frames"] == 3
+    assert len(body["positions"]) > 0

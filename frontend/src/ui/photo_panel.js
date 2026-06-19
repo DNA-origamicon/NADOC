@@ -170,6 +170,7 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   const bloomChk     = _el('photo-bloom')
   const bloomRow     = _el('photo-bloom-strength-row')
   const bloomStrIn   = _el('photo-bloom-strength')
+  const exposureIn   = _el('photo-exposure')
   const resSel       = _el('photo-res-preset')
   const resWIn       = _el('photo-res-w')
   const resHIn       = _el('photo-res-h')
@@ -211,6 +212,7 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     if (s.bgType)    photoRenderer.setBackground(s.bgType, s.bgColor ?? '#ffffff')
     if (s.ssao  !== undefined) photoRenderer.setSSAO(s.ssao)
     if (s.bloom !== undefined) photoRenderer.setBloom(s.bloom, s.bloomStrength, s.bloomRadius, s.bloomThreshold)
+    if (s.exposure !== undefined) photoRenderer.setExposure(s.exposure)
     if (s.fov   != null)       photoRenderer.setFOV(s.fov)
     if (s.fluorophoreEmissive !== undefined) {
       photoRenderer.setFluorophoreEmissive(s.fluorophoreEmissive, s.fluorophoreIntensity ?? 5)
@@ -703,6 +705,9 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   bloomStrIn?.addEventListener('input', () => {
     photoRenderer.setBloom(bloomChk?.checked ?? false, parseFloat(bloomStrIn.value) || 0.5)
   })
+  exposureIn?.addEventListener('input', () => {
+    photoRenderer.setExposure(parseFloat(exposureIn.value) || 1.0)
+  })
 
   // Resolution
   resSel?.addEventListener('change', () => {
@@ -822,6 +827,7 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     if (bloomChk) bloomChk.checked = s.bloom
     if (bloomRow) bloomRow.style.display = s.bloom ? '' : 'none'
     if (bloomStrIn) bloomStrIn.value = s.bloomStrength
+    if (exposureIn && s.exposure !== undefined) exposureIn.value = s.exposure
     if (fovSlider) {
       fovSlider.value = s.fov ?? sceneCtx.camera.fov
       if (fovLabel) fovLabel.textContent = `${Math.round(s.fov ?? sceneCtx.camera.fov)}°`
