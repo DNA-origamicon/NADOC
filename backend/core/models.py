@@ -1474,6 +1474,40 @@ class DesignAnimation(BaseModel):
     keyframes: List[AnimationKeyframe] = Field(default_factory=list)
 
 
+class OxdnaHardwareDefault(BaseModel):
+    """Best oxDNA hardware config for one machine, discovered by the Benchmark button.
+
+    ``device`` is the CUDA index (oxDNA ``CUDA_device``); ``backend`` is "CPU" or
+    "CUDA".  ``proxy_nucleotides`` records the size of the synthetic system the
+    timing was measured on (it may be capped below the real design — see the
+    no-silent-caps note in benchmark.py), so the stored default stays auditable.
+    """
+    backend: str = "CPU"          # "CPU" | "CUDA"
+    device: str = "0"             # CUDA device index
+    steps_per_s: Optional[float] = None
+    benchmarked_at: str = ""
+    proxy_nucleotides: Optional[int] = None
+
+
+class NamdHardwareDefault(BaseModel):
+    """Best NAMD hardware config for one machine (Benchmark button).
+
+    ``threads`` is the NAMD ``+p`` count; ``devices`` is the ``+devices`` GPU list
+    ("" = CPU-only).  ``ns_per_day`` is the measured throughput on the proxy system.
+    """
+    threads: int = 1
+    devices: str = ""             # "" = CPU-only; "0" / "0,1" for GPU
+    ns_per_day: Optional[float] = None
+    benchmarked_at: str = ""
+    proxy_nucleotides: Optional[int] = None
+
+
+class HardwareBenchmark(BaseModel):
+    """Per-machine benchmark result bundle (oxDNA + NAMD)."""
+    oxdna: Optional[OxdnaHardwareDefault] = None
+    namd: Optional[NamdHardwareDefault] = None
+
+
 class DesignMetadata(BaseModel):
     """Freeform metadata attached to a design."""
     name: str = "Untitled"
@@ -1486,6 +1520,11 @@ class DesignMetadata(BaseModel):
     # panel offers it as a generative building block, not a fixed footprint. A real
     # field (not freeform) so it survives a load→save round-trip through the app.
     primitive_kind: Optional[str] = None
+    # Best simulation hardware config per machine, keyed by socket.gethostname().
+    # Written by the Dynamics-panel Benchmark button; lets each of the user's two
+    # computers keep its own optimal cores/threads/GPU defaults while the .nadoc
+    # file stays portable.  Typed field → survives a load→save round-trip.
+    hardware_defaults: Dict[str, HardwareBenchmark] = Field(default_factory=dict)
 
 
 class TmSettings(BaseModel):

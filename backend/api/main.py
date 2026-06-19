@@ -52,6 +52,7 @@ from backend.api.routes_export_structure import router as export_structure_route
 from backend.api.routes_extensions import router as extensions_router
 from backend.api.routes_feature_log import router as feature_log_router
 from backend.api.routes_sequences import router as sequences_router
+from backend.api.routes_benchmark import router as benchmark_router
 from backend.api.routes_flexible_segments import router as flexible_segments_router
 from backend.api.routes_loop_skip import router as loop_skip_router
 from backend.api.routes_md import router as md_router
@@ -138,6 +139,7 @@ app.include_router(assembly_validation_router, prefix="/api")
 app.include_router(assembly_workspace_router, prefix="/api")
 app.include_router(md_router,          prefix="/api")
 app.include_router(oxdna_router,       prefix="/api")
+app.include_router(benchmark_router,   prefix="/api")
 app.include_router(primitives_router,  prefix="/api")
 app.include_router(protein_router,     prefix="/api")
 app.include_router(ws_router)          # WebSocket routes have no /api prefix

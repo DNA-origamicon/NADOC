@@ -187,6 +187,7 @@ import { initMdPanel }    from './ui/md_panel.js'
 import { initReprOptionSliders } from './ui/repr_option_sliders.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
+import { initBenchmarkPanel } from './ui/benchmark_panel.js'
 import { initOxdnaDisplay } from './ui/oxdna_display.js'
 import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
 import { initEfieldGizmo } from './scene/efield_gizmo.js'
@@ -1772,6 +1773,11 @@ async function main() {
   const mdOverlay         = initMdOverlay(scene)
   const mdDisplayController = initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
   initMdJobsPanel({ mdDisplayController, getWorkspacePath: () => _workspacePath })
+
+  // ── Benchmark controls (auto-tune oxDNA/NAMD hardware config per machine) ─────
+  const benchmarkPanel = initBenchmarkPanel({ api, getWorkspacePath: () => _workspacePath })
+  benchmarkPanel.mountOxdna(document.getElementById('oxdna-benchmark-mount'))
+  benchmarkPanel.mountNamd(document.getElementById('md-benchmark-mount'))
 
   // ── oxDNA relaxation panel + display (deforms NADOC model to relaxed CG) ──────
   const oxdnaDisplay = initOxdnaDisplay({ designRenderer, api })

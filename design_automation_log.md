@@ -71,6 +71,7 @@ Pulled from the 2026-06-16 audit; each is a *proven* pattern already green in th
 | `assert_relaxed_geometry_recovered` (AF-13 P1) | a headless oxDNA relaxation reached `completed` AND its relaxed last frame reads back (display route → `read_configuration_unwrapped`, PBC-unwrapped + Kabsch-aligned) into a full per-nucleotide position map: exactly one *finite* position per design nucleotide, every `(helix_id, bp, dir)` key a real key of the design's geometry (set-equal); the first **physical-layer** oracle (Tier 5), Three-Layer-clean (reads relaxed geometry, never writes it to `Design`); can-go-red on a non-completed job or a wrong nucleotide count | `tests/automation_harness.py`; `backend/api/headless_oxdna_build.py` (`run_relaxation`/`read_relaxed_positions`) | any physical-layer (oxDNA) headless run + geometry-recovery check (AF-13 P2 measurement/constraint oracles build on it) |
 | `measure_end_to_end` + `assert_relaxed_measurement` (AF-13 P2) | the **first STOCHASTIC-class oracle**: a *measured* geometric property of the relaxed, **noise-averaged** mean structure (pooled production frames, PBC-unwrapped + Kabsch-aligned via `production_rmsf`) lies within `tol_nm` of a target — **gated by confidence** (≥ `min_confidence` pooled frames, else INCONCLUSIVE, the Phase-3 "met requires confidence" seed). `measure_end_to_end(positions, a, b)` is the pure reusable primitive: Euclidean nm between two `(helix_id, bp_index, direction)` landmark backbone sites (raises on empty/identical/absent — no silent 0/NaN). Physical-layer only (reads relaxed geometry, never writes it back). Can-go-red on a wrong target, too-few frames (confidence gate), or no production run | `tests/automation_harness.py` (`assert_relaxed_measurement`); `backend/core/oxdna_health.py` (`measure_end_to_end`); `backend/api/headless_oxdna_build.py` (`read_flexibility_map`) | any relaxed-structure measurement/constraint (R_g, inter-helix spacing, segment angle — add a `measure_*` + a `measure_spec` kind); AF-13 P3 declarative constraint checker + P4 iterate-until-met both build on this |
 | `parse_constraint_spec` + `check_relaxed_constraint` (AF-13 P3) | a declarative relaxed-structure constraint `{measure, landmarks, target_nm, tol_nm, min_confidence}` is validated at parse time (PURE, raises `ConstraintSpecError` before any run) and then *REPORTED* against a `read_flexibility_map` mean-structure dict → `{met, status∈{met,unmet,inconclusive}, measured_nm, n_frames, …}`. The REPORTER counterpart to P2's *asserter* (returns a verdict a closed loop branches on, doesn't raise); **load-bearing invariant: `met` is NEVER True below `min_confidence`** even when the value is within tolerance (the confidence gate, now a returned status). Reuses `measure_end_to_end`; `backend/core`-pure (takes the read dict, never imports the api read-wrapper). Can-go-red on a malformed spec, a tolerance-bracket flip, or a within-tol low-frame run reporting met | `backend/core/oxdna_health.py` (`parse_constraint_spec`/`check_relaxed_constraint`/`ConstraintSpecError`) | the AF-11 grammar's design `constraints` block; AF-13 P4 iterate-until-met (branch on `status`); any future `measure_*` constraint kind (R_g/spacing/angle — add to `_CONSTRAINT_MEASURES` + the dispatch) |
+| `assert_relax_honors_hardware_default` (AF-17) | a benchmarked hardware default *reaches the simulation*: a headless relaxation tuned from `metadata.hardware_defaults` runs on the recommended `backend`/`device` (read off `OxdnaJob.backend`/`.device`), with a CPU/"0" fallback when nothing was benchmarked. Baseline-fallback + tuned-honoured + non-vacuity (requested ≠ CPU fallback) structure; GPU-free (mock binary ignores the declared backend). The bridge that connects the auto-tuner's output to an actual run — nothing else proves the stored config is consumed (the apply route only wrote metadata the frontend pre-fills). Can-go-red on a bridge that hard-codes CPU, or a vacuous CPU/0 request | `tests/automation_harness.py` (`assert_relax_honors_hardware_default`); `backend/core/benchmark.py` (`resolve_oxdna_relax_config`); `backend/api/headless_oxdna_build.py` (`run_oxdna_benchmark`/`apply_oxdna_benchmark`/`run_relaxation_tuned`) | AF-13 P4 iterate-until-met (relax each iteration on the fastest discovered backend via `run_relaxation_tuned`); any "stored config → run parameter" bridge (a NAMD `run_relaxation_tuned` analog, future per-machine sim defaults) |
 
 ---
 
@@ -1068,6 +1069,41 @@ is the exact guard AF-13 P4's iterate-until-met loop needs to avoid converging o
 before any expensive relaxation runs). It slots into the AF-11 build-spec grammar as a design `constraints`
 block. No ASK-FIRST: reuses P2's already-cleared landmark convention + direction-agnostic Euclidean measure;
 this layer adds only spec validation + the confidence-gated met/unmet/inconclusive decision.**"
+
+---
+
+**AF-17 — headless simulation Benchmark access + relaxation auto-tune bridge** · _shape:_ **service + headless
+wrappers** — 1 pure fn in `backend/core/benchmark.py` (`resolve_oxdna_relax_config(hw)` maps a stored
+`HardwareBenchmark` → the `{backend, device}` a relaxation should use, CPU/"0" fallback when none; PURE, no I/O /
+no hostname lookup — the caller selects the slot) + 3 wrappers in `backend/api/headless_oxdna_build.py`
+(`run_oxdna_benchmark` drives the REAL `benchmark_runner.run_oxdna_trials` sweep inline against a size-matched
+synthetic proxy, injectable `runner=`/`configs=` so the CUDA branch is exercisable GPU-free; `apply_oxdna_benchmark`
+writes a recommendation into a COPY of the design's `metadata.hardware_defaults[hostname]`, mirroring the apply
+route on a passed design; `run_relaxation_tuned` resolves that default → backend/device → `run_relaxation`, the
+bridge for the iterate-until-met loop) + 1 reusable oracle `assert_relax_honors_hardware_default` in
+`tests/automation_harness.py`; `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** · _headless-coverage Δ:_ **UNCHANGED**
+(the benchmark routes are `/benchmark/*`, outside the design/assembly mutation audit; the sweep wrapper drives the
+runner functions directly, not a route handler — like AF-10/AF-11 this moves the oracle count, not coverage) ·
+_oracle shipped:_ `assert_relax_honors_hardware_default(design, workspace, *, backend, device="0", **params)` — a
+**physical-layer bridge** oracle: (1) baseline — `run_relaxation_tuned` on a design with NO benchmarked default must
+complete on the CPU/"0" fallback (also proving the non-CPU result below comes from the stored default, not a
+constant); (2) tuned — apply `{backend, device}`, relax again, assert the terminal `OxdnaJob` carries that exact
+backend/device (the metadata flowed benchmark→`hardware_defaults`→relaxation config, read straight off
+`OxdnaJob.backend`/`.device`); (3) non-vacuity — the requested config must differ from the CPU fallback, so the
+oracle is only meaningful for a non-default config (`backend="CUDA"`, `device="1"`). GPU-free: the mock binary
+ignores the declared backend · _tests:_ 7 new in `test_headless_oxdna_build.py` (pure resolve+fallback; headless
+sweep produces a well-formed recommendation; injected 2-config grid drives the real pick-best → CUDA wins;
+the bridge oracle green; full producer→apply→relax chain; **two load-bearing red-tests**: a bridge that hard-codes
+CPU raises "did not honour the benchmarked default", and a vacuous CPU/0 request is rejected); full suite **2678
+passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** before AF-17 the Benchmark button's
+auto-tuned config was written to `metadata.hardware_defaults` and read ONLY by the frontend to pre-fill the panel —
+**no backend path consumed it into a run**, so nothing proved the discovered device ever reaches oxDNA, and an
+automated loop had no way to run a benchmark or relax on its result. `assert_relax_honors_hardware_default` closes
+that end-to-end: it proves a stored hardware default flows benchmark→metadata→relaxation backend/device (CUDA:1
+lands in the oxDNA job; an un-tuned design falls back to CPU), with a non-vacuity guard + a red-test proving a
+bridge that ignored the default goes red. That is the exact capability AF-13 P4's iterate-until-met loop needs to
+relax on the fastest discovered backend instead of a hard-coded CPU default. No ASK-FIRST: this is hardware-config
+plumbing (backend/device strings), not DNA topology/geometry — zero sign/frame reasoning.**"
 
 ---
 

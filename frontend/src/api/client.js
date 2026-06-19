@@ -2951,6 +2951,35 @@ export async function flattenAssemblyLoadAsDesign() {
   return _syncFromDesignResponse(json)
 }
 
+// ── Simulation hardware benchmark ──────────────────────────────────────────────
+// Auto-tune oxDNA/NAMD hardware settings for the current machine.  All return plain
+// dicts (not design responses), so they don't sync the store; apply mutates the
+// active design server-side (metadata only).
+
+export async function benchmarkHardware() {
+  return _request('GET', '/benchmark/hardware')
+}
+
+export async function startOxdnaBenchmark(body = {}) {
+  return _request('POST', '/benchmark/oxdna', body)
+}
+
+export async function startNamdBenchmark(body = {}) {
+  return _request('POST', '/benchmark/namd', body)
+}
+
+export async function getBenchmark(id) {
+  return _request('GET', `/benchmark/${id}`)
+}
+
+export async function applyBenchmark(id, body = {}) {
+  return _request('POST', `/benchmark/${id}/apply`, body)
+}
+
+export async function cancelBenchmark(id) {
+  return _request('POST', `/benchmark/${id}/cancel`)
+}
+
 // ── Re-exports ────────────────────────────────────────────────────────────────
 // Animation / keyframe / assembly-configuration endpoints live in their own
 // module to keep this file readable. Re-exported here so existing callers

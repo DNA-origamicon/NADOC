@@ -139,17 +139,40 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 8). **AF-13 Phase 3 — declarative constraint spec + pure
-REPORTING checker SHIPPED 2026-06-18.** A constraint is now a declarative object a closed loop can branch on:
-`parse_constraint_spec(spec)` validates `{measure:"end_to_end", landmarks:[a,b], target_nm, tol_nm,
-min_confidence?}` at PARSE time (raises `ConstraintSpecError` before any relaxation) and
-`check_relaxed_constraint(constraint, read_flexibility_map_dict)` REPORTS `{met, status∈{met,unmet,inconclusive},
-measured_nm, n_frames, min_confidence, confidence}` — both PURE in `backend/core/oxdna_health.py`, reusing P2's
-`measure_end_to_end`. The REPORTER counterpart to P2's *asserter* (`assert_relaxed_measurement`). **The
-load-bearing invariant: `met` is NEVER True below `min_confidence`** — a within-tolerance value on a 10-frame run
-reports `inconclusive`, not `met` (red-tested). Coverage unchanged (no route wrapped — pure core + composition
-over the P2 read path). Full suite **2574 passed / 55 skipped** (P2 baseline 2552). Next: **AF-13 Phase 4 —
-iterate-until-met loop** (the capstone), which branches on this checker's `status`._
+_Living pointer — each session overwrites this (step 8). **AF-17 — simulation Benchmark headless access + the
+relaxation auto-tune bridge SHIPPED 2026-06-19.** The Benchmark feature is now reachable by feature automation:
+`hox.run_oxdna_benchmark(design, ws, *, configs=, runner=, steps=)` runs the REAL sweep headlessly (size-matched
+synthetic proxy → `benchmark_runner.run_oxdna_trials` → recommendation), `hox.apply_oxdna_benchmark(design, rec)`
+persists it into `metadata.hardware_defaults[hostname]`, and `hox.run_relaxation_tuned(design, ws, **params)`
+resolves that default → `{backend, device}` (pure `benchmark.resolve_oxdna_relax_config`) and relaxes on it — the
+bridge so AF-13 P4's iterate loop relaxes on the fastest discovered backend, not hard-coded CPU. Oracle
+`assert_relax_honors_hardware_default` proves the stored config reaches the `OxdnaJob` (CUDA:1 lands; un-tuned →
+CPU fallback), with a hard-coded-CPU red-test. Coverage unchanged (benchmark routes are outside the design/assembly
+audit; the sweep drives runner fns directly). Full suite **2678 passed / 55 skipped**, no drop. Next: **AF-13 Phase
+4 — iterate-until-met loop** (the capstone), which now relaxes each iteration via `run_relaxation_tuned`._
+
+**▶ HARNESS NOW AVAILABLE (AF-17, use it — do NOT rebuild):**
+- `from backend.api import headless_oxdna_build as hox`. **Auto-tune a relaxation:** `hox.run_relaxation_tuned(
+  design, ws, *, hostname=None, **relax_params) → terminal OxdnaJob` — resolves `metadata.hardware_defaults[host]`
+  → backend/device and relaxes on it (CPU/"0" fallback when none). Explicit `backend=`/`device=` in `**params`
+  override. **This is what AF-13 P4 should call per iteration** instead of `run_relaxation` (which is hard-coded
+  CPU by the caller). **Run a benchmark headlessly:** `hox.run_oxdna_benchmark(design, ws, *, steps=, configs=,
+  runner=) → result dict` (carries `["recommendation"] = {backend, device, steps_per_s, proxy_nucleotides}`,
+  `["note"]`, `["state"]`). **Persist it:** `hox.apply_oxdna_benchmark(design, recommendation, *, hostname=) →
+  new Design` (a COPY; original untouched). Pure read side: `from backend.core.benchmark import
+  resolve_oxdna_relax_config` `(HardwareBenchmark | None) → {backend, device}`.
+- `from tests.automation_harness import assert_relax_honors_hardware_default` — `(design, ws, *, backend,
+  device="0", **params) → tuned OxdnaJob`: pass a design with NO `hardware_defaults` for this host and a NON-CPU
+  config; it proves the baseline falls back to CPU AND the applied default reaches the job's `backend`/`device`.
+- **GOTCHAS banked:** (1) `run_oxdna_trials` rmtree's its workdir on exit, so `run_oxdna_benchmark` runs in a
+  `ws/benchmark_runs/<id>` SUBDIR — never hand it the bare workspace or it wipes a sibling relaxation's job dir.
+  (2) `run_oxdna_trials` calls `find_oxdna()` BEFORE the injected `runner`, so even a stub-runner test needs
+  `$OXDNA_BIN` set (the `mock_oxdna` fixture). (3) the per-trial label passed to `runner` is `bench-<id>-<i>`
+  (config INDEX, not the config label) — key any stub timing off the trailing index. (4) **this dev box HAS a
+  GPU** (RTX 2080 SUPER), so the real `oxdna_config_grid` includes a CUDA trial and `pick_best_oxdna` returns
+  CUDA on the mock (tie-break prefers CUDA) — a producer test must be backend-agnostic (`in {"CPU","CUDA"}`), not
+  assume CPU. (5) the mock binary ignores the declared backend, so requesting CUDA headlessly completes GPU-free —
+  that's what makes the bridge oracle testable without a real device.
 
 **▶ HARNESS NOW AVAILABLE (AF-13 P3, use it — do NOT rebuild):**
 - `from backend.core.oxdna_health import parse_constraint_spec, check_relaxed_constraint, ConstraintSpecError`.

@@ -2133,6 +2133,69 @@ def assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,
             "n_frames": n_frames, "confidence": confidence}
 
 
+def assert_relax_honors_hardware_default(design: Design, workspace, *,
+                                         backend: str, device: str = "0", **params):
+    """Tier-5 bridge oracle: a benchmarked hardware default actually *reaches the
+    simulation* — a headless relaxation tuned from ``metadata.hardware_defaults``
+    runs on the recommended ``backend``/``device``, with a safe CPU fallback when
+    nothing was benchmarked.
+
+    The Benchmark button discovers the fastest config and writes it to the design's
+    metadata, but until now that value was only read by the *frontend* to pre-fill the
+    panel — **no backend path consumed it into a run**, so nothing proved the chosen
+    device ever reaches oxDNA.  This oracle closes that gap end-to-end:
+
+    1. **Baseline / fallback** — ``run_relaxation_tuned`` on ``design`` *before* applying
+       any default must complete on the portable ``CPU``/``"0"`` fallback (so ``design``
+       must carry no ``hardware_defaults`` entry for this host; this also proves the
+       non-CPU result below comes from the stored default, not a constant);
+    2. **Tuned** — apply the recommendation ``{backend, device}``
+       (:func:`~backend.api.headless_oxdna_build.apply_oxdna_benchmark`), relax again,
+       and assert the terminal :class:`~backend.core.oxdna_job.OxdnaJob` carries that
+       exact ``backend``/``device`` — i.e. the metadata flowed
+       benchmark→``hardware_defaults``→relaxation config;
+    3. **Non-vacuity** — the requested config must DIFFER from the CPU fallback
+       (otherwise a bridge that ignored the default would pass), so this oracle is only
+       meaningful for a non-default config (e.g. ``backend="CUDA"`` / ``device="1"``).
+
+    ``params`` forward to ``run_relaxation_tuned`` (``min_bp_retained`` / step counts).
+    Returns the tuned terminal job.  *Physical-layer only*: reads the run's config, never
+    writes relaxed geometry into ``Design``.
+    """
+    from backend.api import headless_oxdna_build as hox
+    from backend.core import hardware
+
+    if (backend, device) == ("CPU", "0"):
+        raise AssertionError(
+            "assert_relax_honors_hardware_default is vacuous for the CPU/0 fallback — "
+            "request a non-default config (e.g. backend='CUDA', device='1')")
+
+    host = hardware.hostname()
+    if design.metadata.hardware_defaults.get(host) is not None:
+        raise AssertionError(
+            "design already carries a hardware default for this host — pass a design "
+            "with no benchmarked default so the baseline fallback is meaningful")
+
+    base = hox.run_relaxation_tuned(design, workspace, **params)
+    base_status = getattr(base.status, "value", str(base.status))
+    assert base_status == "completed", (
+        f"baseline relaxation did not complete (status={base_status!r}); "
+        f"error={base.error!r}")
+    assert (base.backend, base.device) == ("CPU", "0"), (
+        f"expected the CPU/0 fallback with no benchmarked default, got "
+        f"{base.backend}/{base.device}")
+
+    tuned_design = hox.apply_oxdna_benchmark(design, {"backend": backend, "device": device})
+    job = hox.run_relaxation_tuned(tuned_design, workspace, **params)
+    status = getattr(job.status, "value", str(job.status))
+    assert status == "completed", (
+        f"tuned relaxation did not complete (status={status!r}); error={job.error!r}")
+    assert (job.backend, job.device) == (backend, device), (
+        f"relaxation did not honour the benchmarked default: requested "
+        f"{backend}/{device}, but the job ran {job.backend}/{job.device}")
+    return job
+
+
 _MUTATION_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 

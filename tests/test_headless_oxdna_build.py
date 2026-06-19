@@ -463,3 +463,114 @@ def test_check_relaxed_constraint_inconclusive_on_low_frames(sequenced_6hb, tmp_
     assert r["status"] == "inconclusive" and r["met"] is False
     assert r["n_frames"] == 10
     assert abs(r["measured_nm"] - target) < 0.5      # within tol, yet NOT met
+
+
+# ── Benchmark access for feature automation (the relaxation auto-tune bridge) ──
+# Makes the simulation Benchmark headlessly runnable + its result consumable by a
+# relaxation, so AF-13 P4's iterate-until-met loop relaxes on the fastest discovered
+# backend instead of a hard-coded CPU default.
+
+from backend.core import benchmark as _bench
+from tests.automation_harness import assert_relax_honors_hardware_default
+
+
+def test_resolve_oxdna_relax_config_reads_default():
+    """The pure bridge maps a stored HardwareBenchmark → {backend, device}, with a
+    CPU/0 fallback when nothing was benchmarked on this machine."""
+    from backend.core.models import HardwareBenchmark, OxdnaHardwareDefault
+
+    assert _bench.resolve_oxdna_relax_config(None) == {"backend": "CPU", "device": "0"}
+    assert _bench.resolve_oxdna_relax_config(HardwareBenchmark()) == {
+        "backend": "CPU", "device": "0"}                    # NAMD-only slot still falls back
+    hw = HardwareBenchmark(oxdna=OxdnaHardwareDefault(backend="CUDA", device="1"))
+    assert _bench.resolve_oxdna_relax_config(hw) == {"backend": "CUDA", "device": "1"}
+
+
+def test_run_oxdna_benchmark_produces_recommendation(tmp_path, mock_oxdna):
+    """Headless sweep end-to-end against the mock binary: builds a size-matched proxy,
+    runs every config in this machine's real grid, and returns a well-formed
+    recommendation (CPU on a no-GPU box, CUDA where a device exists). The benchmark
+    builds its own sequenced proxy, so the input design need not be sequenced."""
+    result = hox.run_oxdna_benchmark(make_6hb_design(), tmp_path, steps=200)
+    assert result["state"] == "completed", result["error"]
+    rec = result["recommendation"]
+    assert rec is not None and rec["backend"] in {"CPU", "CUDA"}
+    assert rec["steps_per_s"] and rec["steps_per_s"] > 0
+    assert result["proxy_nucleotides"] and result["proxy_nucleotides"] > 0
+    assert result["note"]                                   # the no-silent-caps note
+    # The sweep cleans up its own workdir (rmtree in the runner's finally).
+    assert not (tmp_path / "benchmark_runs").exists() or \
+        not any((tmp_path / "benchmark_runs").iterdir())
+
+
+def test_run_oxdna_benchmark_picks_winner_from_injected_grid(tmp_path, mock_oxdna):
+    """With an injected runner + a two-config grid (CPU + a synthetic CUDA device),
+    the sweep runs BOTH trials through the REAL orchestration + pick-best path — the
+    GPU-free way to exercise the CUDA branch on a no-GPU box. run_oxdna_trials labels
+    each trial ``bench-<id>-<i>`` (i = config index), so slowing trial 0 (CPU) makes
+    CUDA win on measured steps/s. (find_oxdna still resolves via $OXDNA_BIN, hence
+    mock_oxdna, even though the stub launches nothing.)"""
+    import asyncio
+
+    async def _stub(_bin, _input, stage_dir, _log, label):
+        (stage_dir / "last_conf.dat").write_text("t = 0\nb = 1 1 1\nE = 0 0 0\n")
+        if label.endswith("-0"):
+            await asyncio.sleep(0.05)
+        return 0, ""
+
+    grid = [
+        _bench.OxdnaTrialConfig(label="CPU", backend="CPU", device="0"),
+        _bench.OxdnaTrialConfig(label="CUDA:0", backend="CUDA", device="0"),
+    ]
+    result = hox.run_oxdna_benchmark(make_6hb_design(), tmp_path, steps=200,
+                                     configs=grid, runner=_stub)
+    assert result["state"] == "completed", result["error"]
+    assert len(result["results"]) == 2
+    assert result["recommendation"]["backend"] == "CUDA"
+
+
+def test_relax_honors_benchmarked_backend(sequenced_6hb, tmp_path, mock_oxdna):
+    """THE BRIDGE: a benchmarked default flows benchmark→metadata→relaxation. A
+    design tuned to CUDA:1 relaxes on CUDA:1; an un-tuned design falls back to CPU.
+    The mock binary ignores the declared backend, so this is GPU-free."""
+    job = assert_relax_honors_hardware_default(
+        sequenced_6hb, tmp_path, backend="CUDA", device="1", min_bp_retained=0.0)
+    assert job.backend == "CUDA" and job.device == "1"
+
+
+def test_run_oxdna_benchmark_then_apply_then_relax(sequenced_6hb, tmp_path, mock_oxdna):
+    """The full producer→consumer chain: run a real (mock-binary) sweep, apply its
+    recommendation to the design, and relax_tuned honours it — the exact pipeline the
+    iterate-until-met loop uses to auto-tune its relaxations."""
+    result = hox.run_oxdna_benchmark(sequenced_6hb, tmp_path, steps=200)
+    rec = result["recommendation"]
+    tuned = hox.apply_oxdna_benchmark(sequenced_6hb, rec)
+    job = hox.run_relaxation_tuned(tuned, tmp_path, min_bp_retained=0.0)
+    assert job.status is OxdnaStatus.completed, job.error
+    assert (job.backend, job.device) == (rec["backend"], rec["device"])
+
+
+def test_bridge_oracle_fires_when_default_ignored(sequenced_6hb, tmp_path, mock_oxdna,
+                                                  monkeypatch):
+    """Red-test: a bridge that ignores the stored default (hard-codes CPU) makes the
+    oracle raise — proving the green can go red."""
+    real = hox.run_relaxation_tuned
+
+    def _broken(design, workspace, **params):
+        params.pop("hostname", None)
+        params["backend"] = "CPU"          # ignore the benchmarked default
+        params["device"] = "0"
+        return real(design, workspace, **params)
+
+    monkeypatch.setattr(hox, "run_relaxation_tuned", _broken)
+    with pytest.raises(AssertionError, match="did not honour the benchmarked default"):
+        assert_relax_honors_hardware_default(
+            sequenced_6hb, tmp_path, backend="CUDA", device="1", min_bp_retained=0.0)
+
+
+def test_bridge_oracle_rejects_vacuous_cpu_request(sequenced_6hb, tmp_path):
+    """The non-vacuity guard: requesting the CPU/0 fallback config is rejected (a
+    bridge that ignored the default would pass it)."""
+    with pytest.raises(AssertionError, match="vacuous"):
+        assert_relax_honors_hardware_default(
+            sequenced_6hb, tmp_path, backend="CPU", device="0", min_bp_retained=0.0)

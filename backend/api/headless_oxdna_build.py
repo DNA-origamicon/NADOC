@@ -272,3 +272,109 @@ def run_field_validation(design: Design, workspace, *, field_pN: float, dir,
     response = field_response_from_confs(
         design, field_conf, ref_conf, field_dir=list(dir), anchors=anchors)
     return {"job": job, "response": response}
+
+
+# ── Hardware benchmark: auto-tune the relaxation backend headlessly ────────────
+
+def run_oxdna_benchmark(design: Design, workspace, *, steps: int | None = None,
+                        configs=None, runner=None) -> dict:
+    """Headless oxDNA hardware benchmark: build a size-matched synthetic proxy, sweep
+    the candidate hardware configs, and return the result dict (carries
+    ``recommendation`` ``{backend, device, steps_per_s, …}``).
+
+    Drives the REAL trial orchestration (``benchmark_runner.run_oxdna_trials`` — the
+    same sweep the ``POST /benchmark/oxdna`` route runs in a background thread) inline,
+    so a script / AI builder can auto-tune *this* machine without a browser.  The proxy
+    is a sequenced 6hb sized ≈ the design's nucleotide count (never the real design —
+    avoids solvating a huge structure), so even an empty design yields a valid sweep.
+
+    ``configs`` defaults to the real per-machine grid (CPU + one CUDA trial per visible
+    device); pass an explicit list to sweep a fixed grid.  ``runner`` is the injectable
+    launcher seam (``run_oxdna_trials``'s ``runner=``) so a test sweeps with a stub and
+    no GPU.  ``steps`` overrides the per-trial step count.  Requires ``find_oxdna()`` to
+    resolve a binary (``$OXDNA_BIN``) unless a ``runner`` is injected that needs none.
+
+    Feed ``result["recommendation"]`` to :func:`apply_oxdna_benchmark` to persist it in
+    a design, then :func:`run_relaxation_tuned` to relax on the discovered backend.
+    """
+    from backend.core import benchmark as bench
+    from backend.core import benchmark_runner as br
+    from backend.core import hardware
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.physics.oxdna_interface import _strand_nucleotide_order
+
+    n_target = len(_strand_nucleotide_order(design))
+    syn, plan = br.build_synthetic_design(n_target, max_nt=bench.OXDNA_MAX_NT)
+    geometry = _geometry_for_design(syn)
+    if configs is None:
+        configs = bench.oxdna_config_grid(hardware.enumerate_cuda_devices())
+
+    state = br.BenchmarkState(
+        benchmark_id=br.new_benchmark_id(),
+        engine="oxdna",
+        trials_total=len(configs),
+        proxy_nucleotides=plan["proxy_nucleotides"],
+        requested_nucleotides=plan["requested_nucleotides"],
+        note=bench.extrapolate_note(
+            plan["proxy_nucleotides"], plan["requested_nucleotides"], capped=plan["capped"]),
+    )
+    # A dedicated subdir — ``run_oxdna_trials`` rmtree's its workdir on exit, so it must
+    # NOT be the bare workspace (that would wipe a sibling relaxation's job dir).
+    workdir = Path(workspace) / "benchmark_runs" / state.benchmark_id
+    kw = {} if steps is None else {"steps": steps}
+    asyncio.run(br.run_oxdna_trials(state, syn, geometry, configs, workdir,
+                                    runner=runner, **kw))
+    return state.to_dict()
+
+
+def apply_oxdna_benchmark(design: Design, recommendation: dict, *,
+                          hostname: str | None = None) -> Design:
+    """Write an oxDNA benchmark ``recommendation`` into a COPY of ``design`` under
+    ``metadata.hardware_defaults[hostname]`` and return it (the original is untouched).
+
+    Mirrors ``POST /benchmark/{id}/apply`` but on a passed design rather than the active
+    session state, so a headless tuner can persist the discovered config and then relax
+    with it.  ``hostname`` defaults to this machine's name (``hardware.hostname()``) —
+    the key :func:`run_relaxation_tuned` reads back.  Preserves any existing NAMD slot
+    for the host.
+    """
+    from backend.core import hardware
+    from backend.core.models import HardwareBenchmark, OxdnaHardwareDefault
+
+    host = hostname or hardware.hostname()
+    out = design.model_copy(deep=True)
+    slot = out.metadata.hardware_defaults.get(host) or HardwareBenchmark()
+    slot.oxdna = OxdnaHardwareDefault(
+        backend=recommendation["backend"],
+        device=recommendation.get("device", "0"),
+        steps_per_s=recommendation.get("steps_per_s"),
+        proxy_nucleotides=recommendation.get("proxy_nucleotides"),
+    )
+    out.metadata.hardware_defaults[host] = slot
+    return out
+
+
+def run_relaxation_tuned(design: Design, workspace, *, hostname: str | None = None,
+                         timeout: float = 30.0, **params) -> OxdnaJob:
+    """One-call headless relaxation that HONOURS the design's benchmarked hardware
+    default: resolve ``metadata.hardware_defaults[hostname]`` → ``{backend, device}``
+    (:func:`benchmark.resolve_oxdna_relax_config`) and feed it to :func:`run_relaxation`,
+    so the run uses the fastest config the Benchmark discovered on this machine — and a
+    portable ``CPU`` run when none was benchmarked.
+
+    This is the bridge AF-13 P4's iterate-until-met loop uses to relax on the fastest
+    discovered backend instead of a hard-coded CPU default.  Explicit ``backend`` /
+    ``device`` in ``params`` override the resolved values; everything else forwards to
+    :func:`create_job` (``mc_steps`` / ``md_relax_steps`` / ``equil_steps`` /
+    ``min_bp_retained`` / …).
+    """
+    from backend.core import benchmark as bench
+    from backend.core import hardware
+
+    host = hostname or hardware.hostname()
+    cfg = bench.resolve_oxdna_relax_config(design.metadata.hardware_defaults.get(host))
+    for key in ("backend", "device"):
+        if key in params:
+            cfg[key] = params.pop(key)
+    return run_relaxation(design, workspace, timeout=timeout,
+                          backend=cfg["backend"], device=cfg["device"], **params)
