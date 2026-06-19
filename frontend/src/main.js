@@ -191,6 +191,8 @@ import { initOxdnaDisplay } from './ui/oxdna_display.js'
 import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
 import { initEfieldGizmo } from './scene/efield_gizmo.js'
 import { initEfieldSetup } from './ui/efield_setup.js'
+import { initOxdnaFloorSetup } from './ui/oxdna_floor_setup.js'
+import { initOxdnaAnchorsSetup } from './ui/oxdna_anchors_setup.js'
 import { createPhotoRenderer } from './scene/photo_renderer.js'
 import { initPhotoMode }      from './scene/photo_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
@@ -1773,16 +1775,30 @@ async function main() {
 
   // ── oxDNA relaxation panel + display (deforms NADOC model to relaxed CG) ──────
   const oxdnaDisplay = initOxdnaDisplay({ designRenderer, api })
-  const oxdnaPanel = initOxdnaJobsPanel({ oxdnaDisplay, getWorkspacePath: () => _workspacePath })
+  const oxdnaPanel = initOxdnaJobsPanel({
+    oxdnaDisplay, getWorkspacePath: () => _workspacePath,
+    // The single production Run composes the independently-enabled elements.
+    getRunElements: () => ({
+      field: efieldSetup?.getFieldSpec?.(),
+      surface: oxdnaFloorSetup?.getSurfaceSpec?.(),
+      anchors: oxdnaAnchorsSetup?.getAnchors?.() || [],
+    }),
+  })
   // E-field setup: direction/magnitude arrow gizmo + anchor picker + Run field
   // (appends a field stage to the panel's selected completed oxDNA job).
+  let _viewToolButtons = null   // assigned at initViewToolButtons (further down)
   const efieldGizmo = initEfieldGizmo(scene, camera, canvas, controls)
-  const efieldSetup = initEfieldSetup({
-    store, gizmo: efieldGizmo, getSelection: () => store.getState(),
-    getSelectedJob: () => oxdnaPanel?.getSelectedJob?.(),
-    onRan: () => oxdnaPanel?.refresh?.(),
-  })
+  const efieldSetup = initEfieldSetup({ gizmo: efieldGizmo })
   if (import.meta.env.DEV) window.__nadocEfield = { setup: efieldSetup, gizmo: efieldGizmo }
+
+  const oxdnaFloorSetup = initOxdnaFloorSetup({
+    // The hard-surface card drives the shared View grid (renders the wall + flips
+    // the grid button on).  _viewToolButtons is created later in main(); this only
+    // fires on user interaction, so the lazy reference is safe.
+    setSurfaceGrid: (cfg) => _viewToolButtons?.setSurfaceGrid?.(cfg),
+  })
+  const oxdnaAnchorsSetup = initOxdnaAnchorsSetup({ getSelection: () => store.getState() })
+  if (import.meta.env.DEV) window.__nadocOxdnaFloor = oxdnaFloorSetup
 
   const periodicMdOverlay = initPeriodicMdOverlay(scene)
   initPeriodicMdPanel(store, {
@@ -3693,7 +3709,7 @@ async function main() {
   // Extracted to ui/view_tool_buttons.js. Owns length-heatmap + grid state; the
   // shared undefined-highlight flag lives in scene/undefined_highlight.js
   // (_undefinedHighlight, constructed below) and is reached via lazy arrows.
-  initViewToolButtons({
+  _viewToolButtons = initViewToolButtons({
     store, scene, designRenderer, expandedSpacing,
     setMenuToggle: _setMenuToggle,
     refreshUndefinedHighlight: () => _undefinedHighlight.refresh(),

@@ -72,23 +72,78 @@ export function rayPlaneVector(rayOrigin, rayDir, planeNormal, planePoint) {
   ]
 }
 
+// ── Anchor-bond tension (the ACTUAL destructive axis) ────────────────────────
+// A uniform field puts force `f` on every one of the n_total nucleotides; the
+// anchors are the only thing reacting it, so the whole NET force (n_total·f)
+// funnels through the held bonds — peak tension ≈ net / n_anchored (a hanging-
+// chain effect: every base pulls, the load concentrates at the held region).
+// This is what blew up a real field run, and it scales WITH n_total (not 1/n_total
+// — that would be the local per-base stress, a different, non-fatal failure mode).
+//
+// Thresholds are on tension at the worst anchor bond (pN):
+//   < SAFE     : elastic, below the dsDNA B→S overstretch (~65 pN) — green
+//   SAFE..DISRUPT : straining the anchor (green → red)
+//   >= DISRUPT : past the 5-oxDNA-unit relaxation backbone cap (243 pN); the
+//                uncapped field-stage FENE diverges here → the structure explodes
+export const EFIELD_ANCHOR_SAFE_PN    = 50    // anchor-bond tension stays elastic below this
+export const EFIELD_ANCHOR_DISRUPT_PN = 243   // 5 oxDNA force units; beyond → FENE divergence / blow-up
+
+/** True when we know enough to grade tension: a real structure size + ≥1 anchor. */
+function _ctxKnown(ctx) {
+  return !!ctx && _num(ctx.nTotal) > 0 && _num(ctx.nAnchored) >= 1
+}
+/** Load amplification: net field force / anchor bonds = n_total / n_anchored. */
+export function anchorAmplification(nTotal, nAnchored) {
+  const N = _num(nTotal), n = Math.max(1, _num(nAnchored))
+  return N > 0 ? N / n : 1
+}
+/** Peak anchor-bond tension (pN) for a per-nt force `pN` on this structure. */
+export function anchorTensionPn(pN, nTotal, nAnchored) {
+  return Math.max(0, _num(pN)) * anchorAmplification(nTotal, nAnchored)
+}
+/** Per-nt force (pN) whose anchor tension just reaches `tensionPn`. */
+function _pnForTension(tensionPn, ctx) {
+  const A = anchorAmplification(ctx?.nTotal, ctx?.nAnchored)
+  return A > 0 ? tensionPn / A : tensionPn
+}
+/** Per-nt force (pN) at the elastic/strong boundary for this structure. */
+export function safePnFor(ctx)    { return _pnForTension(EFIELD_ANCHOR_SAFE_PN, ctx) }
+/** Per-nt force (pN) at the disrupt (blow-up) boundary for this structure. */
+export function disruptPnFor(ctx) { return _pnForTension(EFIELD_ANCHOR_DISRUPT_PN, ctx) }
+
 // ── Display length ⇄ magnitude mapping ───────────────────────────────────────
 // The gizmo arrow's world length encodes magnitude on a coarse linear scale (the
 // numeric input is the precise control).  A minimum length keeps the direction
 // arrow visible at zero field.  These are DISPLAY-only constants (nm of arrow).
-export const EFIELD_NM_PER_PN  = 4    // world nm of arrow per pN
+export const EFIELD_NM_PER_PN  = 4    // world nm of arrow per pN (structure-blind fallback)
 export const EFIELD_MIN_LEN_NM = 2    // floor so direction stays visible at 0 pN
 export const EFIELD_MAX_LEN_NM = 60   // cap so a huge field doesn't fill the scene
 
 const _clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x))
 
-/** Arrow world length (nm) for a given force-per-nucleotide (pN). */
-export function arrowLenForPn(pN) {
-  return _clamp(EFIELD_MIN_LEN_NM + EFIELD_NM_PER_PN * Math.abs(_num(pN)), EFIELD_MIN_LEN_NM, EFIELD_MAX_LEN_NM)
+/**
+ * nm-of-arrow per pN for a given structure context.  Scales the drag so the FULL
+ * arrow length corresponds to the disrupt force FOR THIS DESIGN — i.e. a moderate
+ * arrow is a moderate fraction of "enough to destroy it", instead of a fixed
+ * (structure-blind) 4 nm/pN where 2 pN looks tame on a 14 k-nt structure it rips.
+ * Falls back to the flat constant when context is unknown.
+ */
+export function nmPerPnFor(ctx) {
+  if (!_ctxKnown(ctx)) return EFIELD_NM_PER_PN
+  const dPn = disruptPnFor(ctx)
+  if (!(dPn > 0)) return EFIELD_NM_PER_PN
+  return _clamp((EFIELD_MAX_LEN_NM - EFIELD_MIN_LEN_NM) / dPn, 0.02, 1e6)
+}
+
+/** Arrow world length (nm) for a force-per-nucleotide (pN). `nmPerPn` defaults to
+ *  the structure-blind constant; pass nmPerPnFor(ctx) for structure-aware scaling. */
+export function arrowLenForPn(pN, nmPerPn = EFIELD_NM_PER_PN) {
+  return _clamp(EFIELD_MIN_LEN_NM + _num(nmPerPn, EFIELD_NM_PER_PN) * Math.abs(_num(pN)), EFIELD_MIN_LEN_NM, EFIELD_MAX_LEN_NM)
 }
 /** Inverse: force-per-nucleotide (pN) implied by an arrow world length (nm). */
-export function pnForArrowLen(lenNm) {
-  return Math.max(0, (_num(lenNm) - EFIELD_MIN_LEN_NM) / EFIELD_NM_PER_PN)
+export function pnForArrowLen(lenNm, nmPerPn = EFIELD_NM_PER_PN) {
+  const s = _num(nmPerPn, EFIELD_NM_PER_PN)
+  return s > 0 ? Math.max(0, (_num(lenNm) - EFIELD_MIN_LEN_NM) / s) : 0
 }
 
 // ── Magnitude → colour grading (gizmo arrow feedback) ────────────────────────
@@ -127,6 +182,42 @@ export function fieldZone(pN) {
   if (f <= EFIELD_PN_GOOD) return 'good'
   if (f < EFIELD_PN_DISRUPT) return 'strong'
   return 'disrupt'
+}
+
+// ── Structure-aware grading (anchor-bond tension) ────────────────────────────
+// Same blue→green→red feedback, but graded on anchor-bond tension (∝ n_total /
+// n_anchored) instead of raw per-nt force, so a "moderate" arrow on a big, lightly
+// anchored structure correctly reads red.  `ctx = {nTotal, nAnchored}`.  When ctx
+// is unknown (no anchors yet / no job), these fall back to the per-nt heuristic.
+
+/** Zone for a per-nt force given structure context: 'low'|'good'|'strong'|'disrupt'.
+ *  'low' stays intensive (per-nt too weak to deflect anything); the destructive
+ *  boundaries are on anchor-bond tension. */
+export function fieldZoneFor(pN, ctx) {
+  const f = Math.max(0, _num(pN))
+  if (!_ctxKnown(ctx)) return fieldZone(f)
+  // Destructive grading FIRST: with amplification a "negligible" per-nt force can
+  // already strain the anchor (e.g. 0.1 pN/nt on VoltronCore = 92 pN/bond), so the
+  // tension verdict outranks the intensive too-weak floor.
+  const T = anchorTensionPn(f, ctx.nTotal, ctx.nAnchored)
+  if (T >= EFIELD_ANCHOR_DISRUPT_PN) return 'disrupt'
+  if (T >= EFIELD_ANCHOR_SAFE_PN) return 'strong'
+  if (f < EFIELD_PN_LOW) return 'low'        // safe AND too weak to deflect anything
+  return 'good'
+}
+
+/** Gizmo colour (0xRRGGBB) graded on anchor-bond tension for this structure.
+ *  blue (negligible) → green (elastic) → red (will blow the run up). */
+export function fieldColorForHex(pN, ctx) {
+  const f = Math.max(0, _num(pN))
+  if (!_ctxKnown(ctx)) return fieldColorHex(f)
+  const T = anchorTensionPn(f, ctx.nTotal, ctx.nAnchored)
+  if (T >= EFIELD_ANCHOR_DISRUPT_PN) return _mix(_RED, _RED, 0)
+  if (T >= EFIELD_ANCHOR_SAFE_PN) {
+    return _mix(_GREEN, _RED, (T - EFIELD_ANCHOR_SAFE_PN) / (EFIELD_ANCHOR_DISRUPT_PN - EFIELD_ANCHOR_SAFE_PN))
+  }
+  if (f <= EFIELD_PN_LOW) return _mix(_BLUE, _BLUE, 0)  // safe AND negligible
+  return _mix(_GREEN, _GREEN, 0)
 }
 
 // ── Anchor descriptors (clusters / domains / overhangs) ──────────────────────

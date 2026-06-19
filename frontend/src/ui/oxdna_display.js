@@ -107,10 +107,12 @@ export function initOxdnaDisplay({ designRenderer, api }) {
   let _rmsfResp = null // cached /rmsf payload so the scale can recolour without re-fetching
   let _traj = null     // cached /trajectory payload {keys, frames, markers, n_frames, stages}
 
-  /** Fetch the latest relaxed frame for jobId and deform the model to it. */
-  async function displayJob(jobId) {
+  /** Fetch the latest relaxed frame for jobId and deform the model to it.
+   *  `align` (default true) superposes onto the design pose; false shows the
+   *  structure in its own simulation frame (e.g. settled on a hard surface). */
+  async function displayJob(jobId, align = true) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
-    const resp = await api.getOxdnaDisplay(jobId)
+    const resp = await api.getOxdnaDisplay(jobId, align)
     const updates = toFemUpdates(resp)
     if (!updates.length) {
       return { ok: false, reason: resp?.ready === false ? 'no relaxed frame yet' : 'empty' }

@@ -167,6 +167,34 @@ describe('initViewToolButtons', () => {
     expect(api).toBeTruthy()
   })
 
+  it('setSurfaceGrid places + shows the grid at the surface plane and activates the button', () => {
+    const { buttons } = mountVtDom()
+    const deps = makeDeps()
+    // A structure spanning x:[0,10] y:[0,4] z:[0,6].
+    deps.designRenderer.getBackboneEntries = vi.fn(() => [
+      { pos: { x: 0, y: 0, z: 0 } },
+      { pos: { x: 10, y: 4, z: 6 } },
+    ])
+    const api = initViewToolButtons(deps)
+    const grid = deps.scene.add.mock.calls[0][0]
+    expect(grid.visible).toBe(false)
+
+    api.setSurfaceGrid({ enabled: true, axis: '-y', offsetNm: 1 })
+    expect(grid.visible).toBe(true)
+    expect(api.isGridOn()).toBe(true)
+    // −Y side: plane at bbox.min.y − offset, centred in x/z.
+    expect(grid.position.y).toBeCloseTo(-1)
+    expect(grid.position.x).toBeCloseTo(5)
+    expect(grid.position.z).toBeCloseTo(3)
+    expect(buttons.grid.classList.contains('active')).toBe(true)
+
+    // Turning the surface off resets the grid to origin and hides it.
+    api.setSurfaceGrid({ enabled: false })
+    expect(grid.visible).toBe(false)
+    expect(grid.position.y).toBeCloseTo(0)
+    expect(buttons.grid.classList.contains('active')).toBe(false)
+  })
+
   it('overhangNames click flips the store flag and sets the menu pill', () => {
     const { buttons } = mountVtDom()
     const deps = makeDeps({ showOverhangNames: false })

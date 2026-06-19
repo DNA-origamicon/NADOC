@@ -1,0 +1,100 @@
+/**
+ * Anchors setup UI — the shared "Anchors" sub-section of the oxDNA panel
+ * (Dynamics tab).  Lets the user mark overhangs / domains / clusters as FIXED
+ * strands (traps) held in place during a run, independent of whether an electric
+ * field or a hard surface is enabled.
+ *
+ * The anchor set feeds the consolidated production run (the panel reads it via
+ * getAnchors()).  A field requires ≥1 anchor (an unanchored uniform force drifts
+ * the whole structure); a surface or a plain run can use anchors or not.
+ *
+ * Display-layer only.  Anchor helpers are shared with the E-field math module
+ * (scene/efield_math.js) — "fix these nucleotides" is the same concept.
+ *
+ * Factory: initOxdnaAnchorsSetup({ getSelection }) → { getAnchors,
+ *   addSelectedAnchors, clear, refresh }.
+ */
+
+import {
+  resolveSelectionAnchors, anchorKey, anchorLabel, addAnchors, removeAnchor,
+} from '../scene/efield_math.js'
+
+const _C = { dim: '#8b949e', warn: '#e0a800' }
+
+export function initOxdnaAnchorsSetup({ getSelection = null } = {}) {
+  const toggle = document.getElementById('oxdna-anchors-toggle')
+  const arrow  = document.getElementById('oxdna-anchors-arrow')
+  const bodyEl = document.getElementById('oxdna-anchors-body')
+  const noop = { getAnchors: () => [], addSelectedAnchors: () => 0, clear: () => {}, refresh: () => {} }
+  if (!toggle || !bodyEl) return noop
+
+  const addBtn   = document.getElementById('oxdna-anchors-add')
+  const clearBtn = document.getElementById('oxdna-anchors-clear')
+  const listEl   = document.getElementById('oxdna-anchors-list')
+  const statusEl = document.getElementById('oxdna-anchors-status')
+
+  let _open    = false
+  let _anchors = []
+
+  function getAnchors() { return _anchors.slice() }
+
+  function _setStatus(text, color = _C.dim) {
+    if (statusEl) { statusEl.textContent = text; statusEl.style.color = color }
+  }
+
+  function _renderAnchors() {
+    if (statusEl) {
+      const n = _anchors.length
+      _setStatus(n ? `${n} fixed strand${n === 1 ? '' : 's'}.` : 'No anchors — runs are free unless you add fixed strands.')
+    }
+    if (!listEl) return
+    listEl.innerHTML = ''
+    for (const a of _anchors) {
+      const chip = document.createElement('span')
+      chip.dataset.key = anchorKey(a)
+      chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin:2px 4px 2px 0;padding:2px 6px;' +
+        'background:#1c2733;border:1px solid #30363d;border-radius:10px;font-size:var(--text-xs);color:#c9d1d9'
+      const lbl = document.createElement('span'); lbl.textContent = anchorLabel(a)
+      const x = document.createElement('span')
+      x.textContent = '×'; x.style.cssText = 'cursor:pointer;color:#8b949e;font-weight:700'
+      x.addEventListener('click', () => { _anchors = removeAnchor(_anchors, anchorKey(a)); _renderAnchors() })
+      chip.append(lbl, x)
+      listEl.appendChild(chip)
+    }
+  }
+
+  function addSelectedAnchors() {
+    const found = resolveSelectionAnchors(getSelection ? getSelection() : null)
+    if (!found.length) {
+      _setStatus('Select an overhang, domain, or cluster first.', _C.warn)
+      return 0
+    }
+    const before = _anchors.length
+    _anchors = addAnchors(_anchors, found)
+    _renderAnchors()
+    return _anchors.length - before
+  }
+
+  function clear() { _anchors = []; _renderAnchors() }
+
+  // ── Section open/close ───────────────────────────────────────────────────────
+  function _open_() {
+    _open = true
+    bodyEl.style.display = ''
+    if (arrow) arrow.classList.remove('is-collapsed')
+    _renderAnchors()
+  }
+  function _close_() {
+    _open = false
+    bodyEl.style.display = 'none'
+    if (arrow) arrow.classList.add('is-collapsed')
+  }
+  toggle.addEventListener('click', () => { _open ? _close_() : _open_() })
+  _close_()
+
+  addBtn?.addEventListener('click', addSelectedAnchors)
+  clearBtn?.addEventListener('click', clear)
+  _renderAnchors()
+
+  return { getAnchors, addSelectedAnchors, clear, refresh: _renderAnchors }
+}

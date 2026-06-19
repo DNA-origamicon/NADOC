@@ -3,10 +3,13 @@ import {
   OXDNA_FORCE_PN, DEFAULT_Q_EFF,
   pnToOxdna, oxdnaToPn, fieldVpmToPn, pnToFieldVpm,
   vecLen, scaleVec, normalize, rayPlaneVector,
-  arrowLenForPn, pnForArrowLen, EFIELD_MAX_LEN_NM,
+  arrowLenForPn, pnForArrowLen, EFIELD_MAX_LEN_NM, EFIELD_MIN_LEN_NM, EFIELD_NM_PER_PN,
   resolveSelectionAnchors, anchorKey, anchorLabel, dedupeAnchors, addAnchors, removeAnchor,
   buildFieldSpec, fieldSpecReady,
   fieldColorHex, fieldZone, EFIELD_PN_LOW, EFIELD_PN_GOOD, EFIELD_PN_DISRUPT,
+  anchorAmplification, anchorTensionPn, safePnFor, disruptPnFor,
+  nmPerPnFor, fieldZoneFor, fieldColorForHex,
+  EFIELD_ANCHOR_SAFE_PN, EFIELD_ANCHOR_DISRUPT_PN,
 } from './efield_math.js'
 
 describe('force-unit conversions', () => {
@@ -168,5 +171,97 @@ describe('field spec + ready gate', () => {
     expect(fieldSpecReady(buildFieldSpec({ ...base, pN: 0 }))).toBe(false)
     expect(fieldSpecReady(buildFieldSpec({ ...base, dir: [0, 0, 0] }))).toBe(false)
     expect(fieldSpecReady(buildFieldSpec({ ...base, anchors: [] }))).toBe(false)
+  })
+})
+
+describe('anchor-bond tension (the destructive axis)', () => {
+  // VoltronCore: 14774 nt, 16 anchors, 2.227 pN/nt → ~2055 pN/bond → blow-up.
+  const VC = { nTotal: 14774, nAnchored: 16 }
+
+  it('amplification = n_total / n_anchored, multiplying WITH n_total (not 1/n)', () => {
+    expect(anchorAmplification(14774, 16)).toBeCloseTo(923.375, 3)
+    // bigger structure, same anchors → MORE tension, not less
+    expect(anchorAmplification(30000, 16)).toBeGreaterThan(anchorAmplification(14774, 16))
+    // more anchors → less tension
+    expect(anchorAmplification(14774, 160)).toBeLessThan(anchorAmplification(14774, 16))
+    expect(anchorAmplification(0, 16)).toBe(1)       // unknown size → no amplification
+    expect(anchorAmplification(100, 0)).toBe(100)    // guards n_anchored≥1
+  })
+
+  it('reproduces the VoltronCore tension that blew up (~2055 pN ≫ 243)', () => {
+    const T = anchorTensionPn(2.227, VC.nTotal, VC.nAnchored)
+    expect(T).toBeGreaterThan(2000)
+    expect(T).toBeGreaterThan(EFIELD_ANCHOR_DISRUPT_PN)
+  })
+
+  it('safe/disrupt per-nt forces invert the tension thresholds', () => {
+    expect(anchorTensionPn(safePnFor(VC), VC.nTotal, VC.nAnchored)).toBeCloseTo(EFIELD_ANCHOR_SAFE_PN, 6)
+    expect(anchorTensionPn(disruptPnFor(VC), VC.nTotal, VC.nAnchored)).toBeCloseTo(EFIELD_ANCHOR_DISRUPT_PN, 6)
+    // VoltronCore's safe per-nt is tiny — well under the 2.227 the user picked
+    expect(safePnFor(VC)).toBeLessThan(0.1)
+    expect(disruptPnFor(VC)).toBeLessThan(0.3)
+  })
+})
+
+describe('structure-aware zone + colour', () => {
+  const VC = { nTotal: 14774, nAnchored: 16 }
+
+  it('the 2.227 pN/nt that read green now reads disrupt on VoltronCore', () => {
+    expect(fieldZone(2.227)).toBe('good')                 // old per-nt model: looked fine
+    expect(fieldZoneFor(2.227, VC)).toBe('disrupt')       // tension model: will blow up
+  })
+
+  it('zone partitions on tension; tiny anchored structure tolerates more per-nt', () => {
+    // small structure: safe per-nt (~8 pN) sits above the deflect floor, so a real
+    // 'good' window exists; VoltronCore's safe per-nt (~0.05) is below it — no green.
+    const small = { nTotal: 100, nAnchored: 16 }  // amp 6.25 → safe@8pN, disrupt@38.9pN
+    expect(fieldZoneFor(0, small)).toBe('low')
+    expect(fieldZoneFor(4, small)).toBe('good')                          // T=25 (<50)
+    expect(fieldZoneFor((safePnFor(small) + disruptPnFor(small)) / 2, small)).toBe('strong')
+    expect(fieldZoneFor(disruptPnFor(small) * 2, small)).toBe('disrupt')
+    // a negligible-looking per-nt force is already strong on the big structure
+    expect(fieldZoneFor(0.1, VC)).toBe('strong')                         // T≈92
+    // same per-nt force is fine on a 100-nt structure, fatal on a 14k one
+    expect(fieldZoneFor(1, small)).toBe('good')
+    expect(fieldZoneFor(1, VC)).toBe('disrupt')
+  })
+
+  it('falls back to the per-nt heuristic when context is unknown', () => {
+    expect(fieldZoneFor(2.227, null)).toBe(fieldZone(2.227))
+    expect(fieldZoneFor(2.227, { nTotal: 0, nAnchored: 0 })).toBe(fieldZone(2.227))
+    expect(fieldColorForHex(5, null)).toBe(fieldColorHex(5))
+  })
+
+  it('colour goes green→red as tension crosses safe→disrupt', () => {
+    const RED = 0xdc3c32
+    const small = { nTotal: 100, nAnchored: 16 }
+    expect(fieldColorForHex(disruptPnFor(VC) * 2, VC)).toBe(RED)        // ≥ disrupt → solid red
+    const good = fieldColorForHex(4, small)                            // T=25 (<50) AND f>floor → green
+    expect((good >> 8) & 0xff).toBeGreaterThan(good & 0xff)            // green channel dominates blue
+  })
+})
+
+describe('structure-aware drag scaling', () => {
+  const VC = { nTotal: 14774, nAnchored: 16 }
+
+  it('unknown context keeps the flat 4 nm/pN', () => {
+    expect(nmPerPnFor(null)).toBe(EFIELD_NM_PER_PN)
+    expect(nmPerPnFor({ nTotal: 0, nAnchored: 0 })).toBe(EFIELD_NM_PER_PN)
+  })
+
+  it('full arrow length maps to the disrupt force for this design', () => {
+    const scale = nmPerPnFor(VC)
+    // dragging to the disrupt per-nt saturates the arrow at MAX
+    expect(arrowLenForPn(disruptPnFor(VC), scale)).toBeCloseTo(EFIELD_MAX_LEN_NM, 6)
+    // and the user's old "small arrow" 2.227 pN now pins past MAX (clamped) → clearly red zone
+    expect(arrowLenForPn(2.227, scale)).toBe(EFIELD_MAX_LEN_NM)
+    // round-trips with the same scale
+    expect(pnForArrowLen(arrowLenForPn(0.1, scale), scale)).toBeCloseTo(0.1, 6)
+  })
+
+  it('a lightly-anchored big structure compresses the usable drag range', () => {
+    // more anchors → larger disrupt force → gentler (smaller) nm/pN scale
+    expect(nmPerPnFor({ nTotal: 14774, nAnchored: 160 }))
+      .toBeLessThan(nmPerPnFor({ nTotal: 14774, nAnchored: 16 }))
   })
 })

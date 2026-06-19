@@ -41,6 +41,7 @@ from backend.core.oxdna_protocol import (
     render_stage_input,
 )
 from backend.physics.oxdna_interface import (
+    surface_anchor_forces_text,
     write_configuration,
     write_mutual_traps,
     write_topology,
@@ -157,27 +158,48 @@ def prepare_oxdna_job(
     job:           OxdnaJob,
     workspace_dir: Path,
     specs:         list[OxdnaStageSpec],
-) -> None:
+    *,
+    surface:       dict | None = None,
+    anchors:       list[dict] | None = None,
+    anchor_stiff:  float = 1000.0,
+) -> dict:
     """Write topology.top, conf.dat, design.json, and stages_spec.json into job dir.
 
     ``geometry`` is the per-nucleotide geometry list (from the geometry route /
     ``_geometry_for_design``) used to seed the initial oxDNA configuration.
     ``specs`` is persisted so the job can resume (rebuild input files) after a
     server restart without re-deriving protocol parameters.
+
+    ``surface`` / ``anchors`` (optional) make the structure relax WHILE bound to a
+    hard surface and/or with fixed strands: the repulsion plane + anchor traps are
+    appended to forces.txt (alongside the mutual traps) and also written to
+    equil_forces.txt (the equil stage drops the mutual traps but keeps these).
+    Returns the forces info dict (``n_anchored`` etc.) or an empty dict.
     """
     jd = job.job_dir(workspace_dir)
     jd.mkdir(parents=True, exist_ok=True)
     write_topology(design, jd / "topology.top")
     write_configuration(design, geometry, jd / "conf.dat")
+    # Optional hard surface + anchors held throughout the relax (a structure relaxed
+    # on a surface differs from one relaxed free).
+    sa_text, info = "", {}
+    if surface or anchors:
+        sa_text, info = surface_anchor_forces_text(
+            design, jd / "conf.dat", wall=surface, anchors=anchors, anchor_stiff=anchor_stiff)
+        # Always write the equil file when surface/anchors were requested — the equil
+        # stage's spec references it (build_relaxation_stages surface_present), so it
+        # must exist even if the selection resolved to nothing.
+        (jd / "equil_forces.txt").write_text(sa_text, encoding="utf-8")
     # Mutual-trap external forces (hold designed WC pairs during the relax stages —
     # NADOC geometry starts the pairs outside oxDNA's H-bond range, so without this
-    # a free MD melts the structure).
-    write_mutual_traps(design, jd / "forces.txt")
+    # a free MD melts the structure) + the surface/anchor blocks (if any).
+    write_mutual_traps(design, jd / "forces.txt", extra_text=sa_text)
     # Self-contained design snapshot for health checks (decoupled from live state).
     (jd / "design.json").write_text(design.model_dump_json())
     (jd / "stages_spec.json").write_text(
         json.dumps([asdict(s) for s in specs], indent=2)
     )
+    return info
 
 
 def load_stage_specs(job_dir: Path) -> list[OxdnaStageSpec]:

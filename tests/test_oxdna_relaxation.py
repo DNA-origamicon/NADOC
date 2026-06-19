@@ -727,6 +727,13 @@ def test_read_configuration_unwrapped(design, geometry, tmp_path):
     assert rmsd < 0.5, rmsd
     assert np.allclose(U.mean(0), O.mean(0), atol=0.5)
 
+    # align=False: the structure is made WHOLE (not exploded) but left in its own
+    # frame — still rotated relative to the design (no Kabsch re-pose).
+    noal = read_configuration_unwrapped(wrapped, design, orig, align=False)
+    N = np.array([noal[k]["backbone_position"] for k in orig_map])
+    assert (N.max(0) - N.min(0)).max() < (O.max(0) - O.min(0)).max() * 1.5  # gathered, not exploded
+    assert float(np.sqrt(((N - O) ** 2).sum(1).mean())) > 1.0               # NOT superposed onto design
+
 
 def test_oxdna_backbone_site_widens_duplex():
     """oxdna_backbone_site reconstructs the true backbone from the CM, which sits
@@ -1647,6 +1654,37 @@ def test_resolve_anchor_particles_domain_cluster_unknown(design):
     # Unknown id / kind → nothing (stale selection drops silently, no raise).
     assert resolve_anchor_particles(design, [{"kind": "overhang", "id": "nope"}]) == ([], [])
     assert resolve_anchor_particles(design, [{"kind": "bogus"}]) == ([], [])
+
+
+def test_field_anchor_preview_route(design, monkeypatch, tmp_path):
+    """POST .../field/anchor-preview resolves a selection to n_total/n_anchored —
+    the inputs the gizmo grades anchor-bond tension on — without starting a run."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes_oxdna
+    from backend.physics.oxdna_interface import (
+        resolve_anchor_particles, _strand_nucleotide_order)
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    job = new_oxdna_job("d", [])
+    job.status = OxdnaStatus.completed
+    job.save(tmp_path)
+    (job.job_dir(tmp_path) / "design.json").write_text(design.model_dump_json())
+
+    s0 = design.strands[0]
+    client = TestClient(app)
+    # camelCase keys (the frontend's) are accepted via AnchorRef aliases.
+    r = client.post(f"/api/oxdna/jobs/{job.job_id}/field/anchor-preview",
+                    json={"anchors": [{"kind": "domain", "strandId": s0.id, "domainIndex": 0}]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    parts, _ = resolve_anchor_particles(
+        design, [{"kind": "domain", "strand_id": s0.id, "domain_index": 0}])
+    assert body["n_total"] == len(_strand_nucleotide_order(design))
+    assert body["n_anchored"] == len(parts) > 0
+    # Empty selection → zero anchored (gizmo then falls back to per-nt grading).
+    r2 = client.post(f"/api/oxdna/jobs/{job.job_id}/field/anchor-preview", json={"anchors": []})
+    assert r2.status_code == 200 and r2.json()["n_anchored"] == 0
 
 
 def test_write_field_forces(design, geometry, tmp_path):

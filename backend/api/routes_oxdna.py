@@ -42,6 +42,7 @@ from backend.core.oxdna_protocol import (
     build_field_stage,
     build_production_stage,
     build_relaxation_stages,
+    build_run_stage,
 )
 from backend.core.oxdna_runner import (
     _latest_relaxed_conf,
@@ -63,8 +64,10 @@ from backend.physics.oxdna_interface import (
     oxdna_backbone_site,
     pn_to_oxdna_force,
     read_configuration_unwrapped,
+    resolve_anchor_particles,
     write_configuration,
     write_field_forces,
+    write_run_forces,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,6 +90,12 @@ class CreateOxdnaJobRequest(BaseModel):
     min_bp_retained:    float = Field(0.50, ge=0.0, le=1.0,
                                       description="Base-pair retention gate for the MD relax/equil stages")
     autostart:          bool  = Field(True)
+    # Relax-on-a-surface: optional hard surface ({dir, offset_nm, stiff}) + fixed
+    # strands held throughout relaxation.  NO electric field here — a field-relaxed
+    # structure is not how it would settle, so the field is production-only.
+    surface:            Optional[dict]     = Field(None)
+    anchors:            list[dict]         = Field(default_factory=list)
+    anchor_stiff:       float              = Field(DEFAULT_ANCHOR_STIFF, gt=0.0)
     design_source_path: Optional[str] = Field(None, description="Workspace path of the active design")
 
 
@@ -115,6 +124,36 @@ class FieldRequest(BaseModel):
     anchor_stiff: float = Field(DEFAULT_ANCHOR_STIFF, gt=0.0,
                                 description="oxDNA trap stiffness per anchored nucleotide "
                                             "(default pins anchors effectively immobile)")
+
+
+class FieldElement(BaseModel):
+    """The electric-field element of a composed run (uniform per-nucleotide force)."""
+    field_pN: float = Field(..., gt=0.0, description="Force per nucleotide (pN)")
+    dir:      list[float] = Field(..., min_length=3, max_length=3,
+                                  description="Field direction (auto-normalized)")
+
+
+class SurfaceElement(BaseModel):
+    """The hard-surface element of a composed run (one-sided repulsion plane).
+
+    ``dir`` is the plane's outward normal (the structure rests on the side ``dir``
+    points toward); the plane's absolute height is derived from the structure's
+    extent along ``dir`` at run start, nudged by ``offset_nm``."""
+    dir:       list[float] = Field(..., min_length=3, max_length=3)
+    offset_nm: float = Field(0.0, description="nm of clearance the surface sits beyond "
+                                              "the structure's lowest point")
+    stiff:     float = Field(5.0, gt=0.0, description="Repulsion-plane stiffness (oxDNA units)")
+
+
+class RunRequest(BaseModel):
+    """A consolidated production run: unbiased MD plus any combination of an electric
+    field, a hard surface, and anchor traps (each independent/optional).  Branches a
+    child job seeded from the relaxed parent so runs can be fanned out + compared."""
+    steps:        int = Field(2_000_000, ge=1000, le=200_000_000)
+    field:        Optional[FieldElement] = None
+    surface:      Optional[SurfaceElement] = None
+    anchors:      list[AnchorRef] = Field(default_factory=list)
+    anchor_stiff: float = Field(DEFAULT_ANCHOR_STIFF, gt=0.0)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -225,6 +264,11 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             "sequences) before starting an oxDNA relaxation.",
         )
 
+    # Relax-on-a-surface elements (field excluded by design).
+    surface_in = body.surface if (body.surface and float(body.surface.get("stiff", 0)) > 0) else None
+    anchors_in = body.anchors or []
+    relax_has_forces = bool(surface_in or anchors_in)
+
     specs = build_relaxation_stages(
         mc_steps           = body.mc_steps,
         md_relax_steps     = body.md_relax_steps,
@@ -233,6 +277,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         device             = body.device,
         salt_concentration = body.salt_concentration,
         min_bp_retained    = body.min_bp_retained,
+        surface_present    = relax_has_forces,
     )
 
     job = new_oxdna_job(
@@ -260,7 +305,9 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         # imported cadnano helices that span the whole grid — which over-counts the
         # real system size (e.g. 33,716 grid slots vs 14,774 actual nucleotides).
         job.n_nucleotides = len(_strand_nucleotide_order(design))
-        await run_in_threadpool(prepare_oxdna_job, design, geometry, job, _workspace(), specs)
+        await run_in_threadpool(
+            prepare_oxdna_job, design, geometry, job, _workspace(), specs,
+            surface=surface_in, anchors=anchors_in, anchor_stiff=body.anchor_stiff)
     except Exception as exc:  # noqa: BLE001
         logger.error("create_oxdna_job: prepare FAILED for %s: %s", job.job_id, exc, exc_info=True)
         job.status = OxdnaStatus.failed
@@ -436,6 +483,137 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     return child.to_dict()
 
 
+@router.post("/oxdna/jobs/{job_id}/run")
+async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
+    """Spawn a CONSOLIDATED production run as a child job branched from a relaxed
+    parent.  The run is unbiased MD plus any combination of independently-enabled
+    elements: an electric field, a hard surface (repulsion plane), and anchor traps.
+
+    Like the E-field run, each call seeds a fresh child from the parent's relaxed
+    structure, so the user can fan out runs (field-only / surface-only / both /
+    +anchors) and compare them side by side.
+
+    A field with no anchors is rejected: an unanchored uniform force nets a
+    centre-of-mass drift that streams the whole structure across the periodic box."""
+    parent = _load_job(job_id)
+    if parent.parent_job_id:
+        raise HTTPException(400, "Run production from a relaxed job, not from another run.")
+    if is_running(job_id) or parent.status != OxdnaStatus.completed:
+        raise HTTPException(400, "A production run requires a completed relaxation job.")
+    if find_oxdna() is None:
+        raise HTTPException(400, "oxDNA binary not found.")
+    if body.field and not body.anchors:
+        raise HTTPException(
+            400, "An electric field needs ≥1 anchor (without one the field just "
+            "drifts the whole structure across the box). Add a fixed strand in the "
+            "Anchors card, or disable the field.")
+
+    ws = _workspace()
+    pjd = parent.job_dir(ws)
+    design = _load_snapshot_design(pjd)
+    if design is None:
+        raise HTTPException(500, "design.json snapshot missing; cannot resolve anchors.")
+    relaxed_conf, _stage = _latest_relaxed_conf(parent, ws)
+    if relaxed_conf is None:
+        raise HTTPException(400, "No relaxed configuration to seed the run from.")
+
+    # Resolve the enabled elements into the writer's input dicts.
+    field_in = None
+    efield_rec = None
+    if body.field:
+        f_oxdna = pn_to_oxdna_force(body.field.field_pN)
+        field_in = {"force_oxdna": f_oxdna, "dir": body.field.dir}
+        efield_rec = {"dir": list(body.field.dir), "force_oxdna": f_oxdna,
+                      "force_pN": body.field.field_pN}
+    wall_in = None
+    if body.surface:
+        wall_in = {"dir": body.surface.dir, "offset_nm": body.surface.offset_nm,
+                   "stiff": body.surface.stiff}
+    anchors = [a.model_dump(by_alias=False) for a in body.anchors]
+    has_forces = bool(field_in or wall_in or anchors)
+
+    stage = build_run_stage(
+        name="1_production", steps=body.steps,
+        external_forces=has_forces,
+        forces_file="run_forces.txt" if has_forces else None,
+        efield=efield_rec,
+        forces_meta={"has_field": bool(field_in), "has_surface": bool(wall_in)},
+        # repulsion plane / anchor traps are absolute-coordinate forces → disable
+        # oxDNA's COM diffusion-fix so it doesn't shift them into the structure.
+        absolute_forces=bool(wall_in or anchors),
+        backend=parent.backend, device=parent.device,
+        salt_concentration=parent.salt_concentration,
+    )
+
+    label = " · ".join(
+        x for x in ("field" if field_in else "", "surface" if wall_in else "",
+                    "anchored" if anchors and not field_in else "") if x) or "production"
+    child = new_oxdna_job(
+        design_name=f"{parent.design_name} · {label}",
+        stages=[stage.to_status()],
+        n_nucleotides=parent.n_nucleotides, device=parent.device,
+        backend=parent.backend, salt_concentration=parent.salt_concentration,
+        design_source_path=parent.design_source_path, parent_job_id=parent.job_id,
+        efield=efield_rec or {},
+    )
+
+    import json
+    from dataclasses import asdict
+    cjd = child.job_dir(ws)
+    cjd.mkdir(parents=True, exist_ok=True)
+    shutil.copy(pjd / "topology.top", cjd / "topology.top")
+    shutil.copy(pjd / "design.json", cjd / "design.json")
+    shutil.copy(relaxed_conf, cjd / "conf.dat")
+
+    info = {"n_anchored": 0, "n_total": parent.n_nucleotides, "anchor_keys": [],
+            "field": None, "wall": None}
+    if has_forces:
+        try:
+            info = write_run_forces(
+                cjd / "run_forces.txt", design, cjd / "conf.dat",
+                field=field_in, wall=wall_in, anchors=anchors,
+                anchor_stiff=body.anchor_stiff,
+            )
+        except ValueError as exc:
+            shutil.rmtree(cjd, ignore_errors=True)
+            raise HTTPException(400, str(exc))
+    if efield_rec is not None:
+        child.efield["n_anchored"] = info["n_anchored"]
+        child.efield["anchor_keys"] = info["anchor_keys"]
+    child.n_nucleotides = info["n_total"]
+    (cjd / "stages_spec.json").write_text(json.dumps([asdict(stage)], indent=2))
+    child.status = OxdnaStatus.queued
+    child.save(ws)
+    start_job(child, ws, [stage])
+    return child.to_dict()
+
+
+class AnchorPreviewRequest(BaseModel):
+    anchors: list[AnchorRef] = Field(default_factory=list)
+
+
+@router.post("/oxdna/jobs/{job_id}/field/anchor-preview")
+async def preview_oxdna_field_anchors(job_id: str, body: AnchorPreviewRequest) -> dict:
+    """Resolve an anchor selection to particle counts WITHOUT starting a run.
+
+    The gizmo colour/scale grades the anchor-bond tension
+    ``T = (force/nt) × n_total / n_anchored`` (the quantity that actually blew up
+    a field run — the net field force funnels through the held bonds).  ``n_total``
+    the panel already knows (the parent job's ``n_nucleotides``); ``n_anchored``
+    needs the same backend resolution the real run uses, so the panel calls this on
+    every anchor add/clear (cheap; no oxDNA, no files)."""
+    parent = _load_job(job_id)
+    design = _load_snapshot_design(parent.job_dir(_workspace()))
+    if design is None:
+        raise HTTPException(500, "design.json snapshot missing; cannot resolve anchors.")
+    anchors = [a.model_dump(by_alias=False) for a in body.anchors]
+    particles, _keys = resolve_anchor_particles(design, anchors)
+    return {
+        "n_total": len(_strand_nucleotide_order(design)),
+        "n_anchored": len(particles),
+    }
+
+
 @router.post("/oxdna/jobs/{job_id}/stop")
 async def stop_oxdna_job(job_id: str) -> dict:
     job = _load_job(job_id)
@@ -607,12 +785,17 @@ async def get_oxdna_trajectory(job_id: str) -> dict:
 
 
 @router.get("/oxdna/jobs/{job_id}/display")
-async def get_oxdna_display(job_id: str) -> dict:
+async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
     """Return the last relaxed frame as an applyFemPositions update list.
 
     Reads the latest completed stage's ``last_conf.dat`` against the job's design
     snapshot.  ``nx/ny/nz`` carry the relaxed a1 (base-normal) so the deformed
     NADOC model orients faithfully.
+
+    ``align=true`` (default) Kabsch-superposes the relaxed structure onto the
+    design pose (drift + tumbling removed).  ``align=false`` shows it in its own
+    simulation frame — how it actually settled (e.g. resting on a hard surface),
+    lined up with the surface grid instead of re-posed onto the free design.
     """
     job = _load_job(job_id)
     jd = job.job_dir(_workspace())
@@ -650,9 +833,9 @@ async def get_oxdna_display(job_id: str) -> dict:
         ref_conf = _design_ref_conf(jd, design)
         full_map = read_configuration_unwrapped(
             conf_path, design, ref_conf,
-            align_keys=[tuple(k) for k in anchor_keys], rotate=False)
+            align_keys=[tuple(k) for k in anchor_keys], rotate=False, align=align)
     else:
-        full_map = read_configuration_unwrapped(conf_path, design, jd / "conf.dat")
+        full_map = read_configuration_unwrapped(conf_path, design, jd / "conf.dat", align=align)
     # Render the true backbone site, not the oxDNA centre of mass — the CM sits
     # inward of the backbone, so rendering it collapses the apparent duplex.
     positions = [

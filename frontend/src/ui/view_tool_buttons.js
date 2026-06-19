@@ -76,10 +76,66 @@ export function initViewToolButtons({
     _lenLegend?.classList.remove('visible')
   }
 
-  // Grid helper
+  // Grid helper — the View "grid" toggle AND the hard-surface visualization. When
+  // a hard surface is enabled in the oxDNA panel, the same grid is turned on and
+  // re-placed at that surface plane (so the grid the user sees is the wall the
+  // simulation uses); the View button still toggles it independently.
   const _gridHelper = new THREE.GridHelper(500, 50, 0x21262d, 0x1a1f27)
   _gridHelper.visible = false
   scene.add(_gridHelper)
+  let _surfaceDriven = false      // grid currently positioned by a hard surface
+  const _GRID_DEFAULT_NORMAL = new THREE.Vector3(0, 1, 0)   // GridHelper lies in XZ
+  // Outward normals per floor side (same convention as the Hard surface card).
+  const _AXIS_NORMALS = {
+    '-y': [0, 1, 0], '+y': [0, -1, 0], '-x': [1, 0, 0],
+    '+x': [-1, 0, 0], '-z': [0, 0, 1], '+z': [0, 0, -1],
+  }
+
+  function _designBBox() {
+    const box = new THREE.Box3()
+    let any = false
+    for (const e of designRenderer.getBackboneEntries?.() ?? []) {
+      if (e.pos) { box.expandByPoint(new THREE.Vector3(e.pos.x, e.pos.y, e.pos.z)); any = true }
+    }
+    return any ? box : null
+  }
+
+  function _placeSurfaceGrid(axis, offsetNm) {
+    const box = _designBBox()
+    if (!box) return false
+    const p = box.getCenter(new THREE.Vector3())
+    const off = Number(offsetNm) || 0
+    switch (axis) {
+      case '-y': p.y = box.min.y - off; break
+      case '+y': p.y = box.max.y + off; break
+      case '-x': p.x = box.min.x - off; break
+      case '+x': p.x = box.max.x + off; break
+      case '-z': p.z = box.min.z - off; break
+      case '+z': p.z = box.max.z + off; break
+      default: return false
+    }
+    const n = _AXIS_NORMALS[axis] || _AXIS_NORMALS['-y']
+    _gridHelper.quaternion.setFromUnitVectors(_GRID_DEFAULT_NORMAL, new THREE.Vector3(n[0], n[1], n[2]))
+    _gridHelper.position.copy(p)
+    return true
+  }
+
+  // Public: the Hard surface card drives this on enable / axis / offset change.
+  function setSurfaceGrid({ enabled, axis = '-y', offsetNm = 0 } = {}) {
+    if (enabled) {
+      _surfaceDriven = true
+      _placeSurfaceGrid(axis, offsetNm)
+      _gridHelper.visible = true
+    } else if (_surfaceDriven) {
+      // The surface that was driving the grid was turned off → reset to the plain
+      // origin reference grid and hide it (it was the surface viz).
+      _surfaceDriven = false
+      _gridHelper.visible = false
+      _gridHelper.position.set(0, 0, 0)
+      _gridHelper.quaternion.identity()
+    }
+    _syncVtButtons()
+  }
 
   function _syncVtButtons() {
     const { showSequences, showOverhangNames, unfoldActive, cadnanoActive, deformVisuActive } = store.getState()
@@ -167,5 +223,7 @@ export function initViewToolButtons({
     applyLengthHeatmap: _applyLengthHeatmap,
     clearLengthHeatmap: _clearLengthHeatmap,
     isLengthHeatmapOn: () => _lengthHeatmapOn,
+    setSurfaceGrid,
+    isGridOn: () => _gridHelper.visible,
   }
 }

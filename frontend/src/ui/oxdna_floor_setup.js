@@ -1,0 +1,101 @@
+/**
+ * Hard-surface (oxDNA repulsion plane) setup UI — the "Hard surface" sub-section
+ * of the oxDNA panel (Dynamics tab).  An independently-addable element of the
+ * consolidated production run: an "Apply" checkbox + an axis-aligned floor side
+ * (reusing photo-mode's six-axis convention) + offset + repulsion stiffness.
+ *
+ * The structure rests on the side the chosen normal points toward; the plane's
+ * absolute height is derived backend-side from the structure's extent.  Anchors
+ * (tethers) are a SEPARATE element (the Anchors card) — a bare surface is a valid
+ * steric wall on its own.
+ *
+ * Display-layer only.  Geometry/spec math lives in scene/oxdna_floor_math.js
+ * (pure, unit-tested); this module is DOM wiring.
+ *
+ * Factory: initOxdnaFloorSetup({ onChange }) → { getSurfaceSpec, isEnabled,
+ *   refresh }.  getSurfaceSpec() → { dir, offsetNm, stiff, enabled }.
+ */
+
+import { floorSurfaceSpec, formatOffsetNm } from '../scene/oxdna_floor_math.js'
+
+export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null } = {}) {
+  const toggle = document.getElementById('oxdna-floor-toggle')
+  const arrow  = document.getElementById('oxdna-floor-arrow')
+  const bodyEl = document.getElementById('oxdna-floor-body')
+  const noop = { getSurfaceSpec: () => null, isEnabled: () => false, refresh: () => {} }
+  if (!toggle || !bodyEl) return noop
+
+  const enableChk = document.getElementById('oxdna-floor-enable')
+  const controls  = document.getElementById('oxdna-floor-controls')
+  const axisSel   = document.getElementById('oxdna-floor-axis')
+  const offsetIn  = document.getElementById('oxdna-floor-offset')
+  const offsetLbl = document.getElementById('oxdna-floor-offset-label')
+  const stiffIn   = document.getElementById('oxdna-floor-stiff')
+  const statusEl  = document.getElementById('oxdna-floor-ready')
+
+  let _open    = false
+  let _enabled = false
+
+  function getSurfaceSpec() {
+    const spec = floorSurfaceSpec({
+      axis: axisSel?.value || '-y',
+      offsetNm: parseFloat(offsetIn?.value || '0'),
+      stiff: parseFloat(stiffIn?.value || '0'),
+    })
+    return spec ? { ...spec, enabled: _enabled } : null
+  }
+  function isEnabled() { return _enabled }
+
+  function _setStatus(text, color = '#8b949e') {
+    if (statusEl) { statusEl.textContent = text; statusEl.style.color = color }
+  }
+  function _syncControlsVisibility() {
+    if (controls) controls.style.display = _enabled ? 'flex' : 'none'
+  }
+  // Drive the shared View grid to render (and visually represent) the surface.
+  function _pushGrid() {
+    setSurfaceGrid?.({
+      enabled: _enabled,
+      axis: axisSel?.value || '-y',
+      offsetNm: parseFloat(offsetIn?.value || '0'),
+    })
+  }
+
+  function _renderStatus() {
+    onChange?.()
+    _pushGrid()
+    if (!_enabled) { _setStatus('Off — tick "Apply" to add a surface to the run.'); return }
+    const spec = getSurfaceSpec()
+    if (!spec || !(spec.stiff > 0)) { _setStatus('Set a stiffness > 0.'); return }
+    const side = axisSel?.options?.[axisSel.selectedIndex]?.textContent?.trim() || ''
+    _setStatus(`Surface on · ${side} · ${formatOffsetNm(spec.offsetNm)} clearance.`, '#e0a800')
+  }
+
+  // ── Section open/close ───────────────────────────────────────────────────────
+  function _open_() {
+    _open = true
+    bodyEl.style.display = ''
+    if (arrow) arrow.classList.remove('is-collapsed')
+    _syncControlsVisibility(); _renderStatus()
+  }
+  function _close_() {
+    _open = false
+    bodyEl.style.display = 'none'
+    if (arrow) arrow.classList.add('is-collapsed')
+  }
+  toggle.addEventListener('click', () => { _open ? _close_() : _open_() })
+  _close_()
+
+  // ── Inputs ───────────────────────────────────────────────────────────────────
+  enableChk?.addEventListener('change', () => {
+    _enabled = !!enableChk.checked; _syncControlsVisibility(); _renderStatus()
+  })
+  axisSel?.addEventListener('change', _renderStatus)
+  offsetIn?.addEventListener('input', () => {
+    if (offsetLbl) offsetLbl.textContent = formatOffsetNm(offsetIn.value)
+    _renderStatus()
+  })
+  stiffIn?.addEventListener('input', _renderStatus)
+
+  return { getSurfaceSpec, isEnabled, refresh: _renderStatus }
+}

@@ -263,7 +263,7 @@ export function fieldChildTitle(job) {
   return `E-field ${pN} pN/nt · dir (${dir}) · ${na} anchored`
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -299,6 +299,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   const timelineEl = document.getElementById('oxdna-jobs-timeline')
   const healthEl   = document.getElementById('oxdna-jobs-health')
   const displayToggle = document.getElementById('oxdna-jobs-display-toggle')
+  const alignToggle   = document.getElementById('oxdna-jobs-align-toggle')
   const displayStatus = document.getElementById('oxdna-jobs-display-status')
   const flexToggle    = document.getElementById('oxdna-jobs-flex-toggle')
   const flexStatus    = document.getElementById('oxdna-jobs-flex-status')
@@ -359,6 +360,21 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     if (advBody) advBody.style.display = _advOpen ? '' : 'none'
     if (advArrow) advArrow.style.transform = _advOpen ? 'rotate(90deg)' : ''
   })
+
+  // Jobs + Health cards: simple collapse (start open).
+  for (const [tid, bid, aid] of [
+    ['oxdna-jobs-list-toggle',   'oxdna-jobs-list-body',   'oxdna-jobs-list-arrow'],
+    ['oxdna-jobs-health-toggle', 'oxdna-jobs-health-body', 'oxdna-jobs-health-arrow'],
+  ]) {
+    const t = document.getElementById(tid)
+    const bd = document.getElementById(bid)
+    const ar = document.getElementById(aid)
+    t?.addEventListener('click', () => {
+      const open = bd && bd.style.display !== 'none'
+      if (bd) bd.style.display = open ? 'none' : ''
+      ar?.classList.toggle('is-collapsed', open)
+    })
+  }
 
   // ── Availability ─────────────────────────────────────────────────────────
   async function _checkAvailable() {
@@ -456,6 +472,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       autostart:          true,
       design_source_path: _currentPartPath(),
     }
+    // Relax-on-a-surface: a structure relaxed free settles differently than one
+    // bound to a surface, so relaxation carries the hard surface + anchors too —
+    // but NOT the electric field (a field-relaxed structure isn't how it'd settle).
+    const el = getRunElements?.() || {}
+    if (el.surface?.enabled) {
+      body.surface = { dir: el.surface.dir, offset_nm: el.surface.offsetNm, stiff: el.surface.stiff }
+    }
+    if (el.anchors?.length) body.anchors = el.anchors
     const job = await api.createOxdnaJob(body).catch(() => null)
     _launching = false
     _updateButtons(_selectedJob())
@@ -544,6 +568,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   }
 
   // ── Detail ─────────────────────────────────────────────────────────────────
+  // Hide the detail block AND clear the now-relocated loading bar + health card
+  // (they live outside #oxdna-jobs-detail, so detail's display:none can't hide them).
+  function _hideDetail() {
+    if (detailEl) detailEl.style.display = 'none'
+    if (progressEl) progressEl.innerHTML = ''
+    if (healthEl) healthEl.innerHTML = ''
+  }
+
   function _renderDetail(job) {
     if (!detailEl) return
     detailEl.style.display = ''
@@ -735,16 +767,37 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   prodBtn?.addEventListener('click', async () => {
     if (!_selectedId || prodBtn.disabled) return
     const steps = parseInt(prodStepsInput?.value || '5000000', 10)
+
+    // Compose the run from the independently-enabled elements (field / surface /
+    // anchors).  Each is optional — with none enabled this is a plain production.
+    const el = getRunElements?.() || {}
+    const body = { steps }
+    if (el.field?.enabled && el.field.field_pN > 0) {
+      body.field = { field_pN: el.field.field_pN, dir: el.field.dir }
+    }
+    if (el.surface?.enabled) {
+      body.surface = { dir: el.surface.dir, offset_nm: el.surface.offsetNm, stiff: el.surface.stiff }
+    }
+    if (el.anchors?.length) body.anchors = el.anchors
+    // A field with no anchors drifts the whole structure — block before the POST.
+    if (body.field && !body.anchors) {
+      _setProdStatus('Field needs ≥1 anchor — add a fixed strand in the Anchors card, or disable the field.', _C.err)
+      return
+    }
+
     prodBtn.disabled = true
     if (runBtn) runBtn.disabled = true     // grey out both immediately on press
-    _setProdStatus('Starting production run…', _C.accent)
-    const r = await api.appendOxdnaProduction(_selectedId, { steps })
-    if (r?.status === 'running') {
-      showToast('oxDNA production started', 'ok')
-      _setProdStatus('Production running…', _C.warn)
+    const what = [body.field && 'field', body.surface && 'surface', body.anchors && 'anchors'].filter(Boolean).join(' + ') || 'production'
+    _setProdStatus(`Starting run (${what})…`, _C.accent)
+    // The consolidated run branches a CHILD job from the relaxed parent (success =
+    // the child dict carries a job_id; it starts queued/running in the background).
+    const r = await api.appendOxdnaRun(_selectedId, body)
+    if (r && (r.job_id || r.ok)) {
+      showToast('oxDNA run started', 'ok')
+      _setProdStatus(`Run started (${what}) — see the new sub-item.`, _C.warn)
       await _fetchJobs()
     } else {
-      _setProdStatus(api.lastErrorMessage?.() || 'Failed to start production (see console)', _C.err)
+      _setProdStatus(api.lastErrorMessage?.() || 'Failed to start run (see console)', _C.err)
       prodBtn.disabled = false
     }
   })
@@ -947,7 +1000,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     const active = oxdnaDisplay?.activeJobId()
     if (active && deletedIds.includes(active)) _allDisplaysOff()
     _selectedId = null
-    if (detailEl) detailEl.style.display = 'none'
+    _hideDetail()
     _updateButtons(null)
     _emitJobSelected()
     _fetchJobs()
@@ -956,10 +1009,17 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // ── OxDNA display toggle ───────────────────────────────────────────────────
   async function _refreshDisplay() {
     if (!_selectedId || !oxdnaDisplay) return
-    const r = await oxdnaDisplay.displayJob(_selectedId)
-    _setDisplayStatus(r.ok ? `Showing relaxed positions (${r.stage || ''}, ${r.n} nt)` : (r.reason || 'no data'),
+    const align = alignToggle ? alignToggle.checked : true
+    const r = await oxdnaDisplay.displayJob(_selectedId, align)
+    const frame = align ? '' : ', own frame'
+    _setDisplayStatus(r.ok ? `Showing relaxed positions (${r.stage || ''}, ${r.n} nt${frame})` : (r.reason || 'no data'),
                       r.ok ? _C.ok : _C.warn)
   }
+  // Re-fetch with the new alignment whenever the Align toggle flips (only while the
+  // relaxed display is on).
+  alignToggle?.addEventListener('change', () => {
+    if (displayToggle?.checked && oxdnaDisplay?.mode() === 'relaxed') _refreshDisplay()
+  })
   function _setDisplayOff() {
     if (oxdnaDisplay?.mode() === 'relaxed') oxdnaDisplay.stopAndRestore()
     if (displayToggle) displayToggle.checked = false
@@ -1006,7 +1066,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   window.addEventListener('nadoc:workspace-path-change', () => {
     if (oxdnaDisplay?.isActive()) _allDisplaysOff()
     _selectedId = null
-    if (detailEl) detailEl.style.display = 'none'
+    _hideDetail()
     _updateButtons(null)
     _emitJobSelected()
     if (_collapsed) _renderList()   // re-filter cached jobs to the new path

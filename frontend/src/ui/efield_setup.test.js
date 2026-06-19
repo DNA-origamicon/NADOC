@@ -1,30 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { initEfieldSetup } from './efield_setup.js'
-import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 
+// Spec-only contract: magnitude + direction + V/m + enable checkbox + gizmo.
+// Anchors + run live elsewhere now (Anchors card + the panel's single Run button).
 const IDS = {
   'efield-toggle': 'div', 'efield-arrow': 'span', 'efield-body': 'div',
-  'efield-mag': 'input',
+  'efield-enable': 'input', 'efield-mag': 'input',
   'efield-dir-x': 'input', 'efield-dir-y': 'input', 'efield-dir-z': 'input',
   'efield-vpm-toggle': 'div', 'efield-vpm-arrow': 'span', 'efield-vpm-body': 'div',
   'efield-vpm': 'input', 'efield-qeff': 'input', 'efield-vpm-apply': 'button',
-  'efield-anchor-add': 'button', 'efield-anchor-clear': 'button',
-  'efield-anchors-list': 'div', 'efield-ready': 'div',
-  'efield-steps': 'input', 'efield-run-btn': 'button',
+  'efield-ready': 'div',
 }
-
-// api/client.js is dynamically imported; stub the field POST + error reader.
-// The POST returns the new CHILD job dict (job_id + status "queued" + efield) —
-// exactly what the /field route returns; runField must treat that as success.
-vi.mock('../api/client.js', () => ({
-  appendOxdnaField: vi.fn(async () => ({
-    job_id: 'child999', parent_job_id: 'abcd1234', status: 'queued',
-    efield: { force_pN: 2, dir: [0, 0, 1], n_anchored: 1 },
-  })),
-  lastErrorMessage: () => 'stub error',
-}))
-import * as apiClient from '../api/client.js'
 
 function makeGizmo() {
   let vec = [0, 1, 0], active = false, onChange = null
@@ -46,19 +33,12 @@ function setInput(el, value) {
 }
 
 describe('initEfieldSetup', () => {
-  let els, store, gizmo, api, selectedJob, onRan
+  let els, gizmo, api
 
   beforeEach(() => {
     els = mountIds(IDS)
-    store = createMockStore({ multiSelectedOverhangIds: [], multiSelectedDomainIds: [], selectedObject: null })
     gizmo = makeGizmo()
-    selectedJob = null
-    onRan = vi.fn()
-    apiClient.appendOxdnaField.mockClear()
-    api = initEfieldSetup({
-      store, gizmo, getSelection: () => store.getState(),
-      getSelectedJob: () => selectedJob, onRan,
-    })
+    api = initEfieldSetup({ gizmo })
   })
   afterEach(() => clearDom())
 
@@ -71,6 +51,18 @@ describe('initEfieldSetup', () => {
     els['efield-toggle'].click()
     expect(els['efield-body'].style.display).toBe('none')
     expect(gizmo.detach).toHaveBeenCalled()
+  })
+
+  it('the enable checkbox flips the spec.enabled flag', () => {
+    expect(api.getFieldSpec().enabled).toBe(false)
+    expect(api.isEnabled()).toBe(false)
+    els['efield-enable'].checked = true
+    els['efield-enable'].dispatchEvent(new Event('change'))
+    expect(api.getFieldSpec().enabled).toBe(true)
+    // isEnabled additionally requires a positive magnitude.
+    expect(api.isEnabled()).toBe(false)
+    setInput(els['efield-mag'], 2)
+    expect(api.isEnabled()).toBe(true)
   })
 
   it('magnitude input drives the gizmo and the field spec', () => {
@@ -96,46 +88,6 @@ describe('initEfieldSetup', () => {
     expect(api.getFieldSpec().field_pN).toBeCloseTo(0.0400544, 5)
   })
 
-  it('Add anchor reads the current selection; ready gate needs force + dir + anchor', () => {
-    els['efield-toggle'].click()
-    setInput(els['efield-mag'], 1)
-    // no anchor yet → not ready
-    expect(els['efield-ready'].textContent).toMatch(/Not ready/)
-
-    store.setState({ multiSelectedOverhangIds: ['o1', 'o2'] })
-    const added = api.addSelectedAnchors()
-    expect(added).toBe(2)
-    expect(api.getAnchors().map(a => a.id).sort()).toEqual(['o1', 'o2'])
-    // Spec is now complete; without a selected job the gate asks for one.
-    expect(els['efield-ready'].textContent).not.toMatch(/Not ready/)
-    expect(els['efield-ready'].textContent).toMatch(/Field set|Ready/)
-  })
-
-  it('Add with nothing selected warns and adds nothing', () => {
-    els['efield-toggle'].click()
-    const added = api.addSelectedAnchors()
-    expect(added).toBe(0)
-    expect(api.getAnchors()).toHaveLength(0)
-    expect(els['efield-ready'].textContent).toMatch(/Select an overhang/)
-  })
-
-  it('a chip remove ✕ drops that anchor', () => {
-    els['efield-toggle'].click()
-    store.setState({ multiSelectedOverhangIds: ['o1', 'o2'] })
-    api.addSelectedAnchors()
-    const x = els['efield-anchors-list'].querySelector('[data-key="overhang:o1"] span:last-child')
-    x.click()
-    expect(api.getAnchors().map(a => a.id)).toEqual(['o2'])
-  })
-
-  it('Clear removes all anchors', () => {
-    els['efield-toggle'].click()
-    store.setState({ multiSelectedOverhangIds: ['o1'] })
-    api.addSelectedAnchors()
-    els['efield-anchor-clear'].click()
-    expect(api.getAnchors()).toHaveLength(0)
-  })
-
   it('a gizmo drag updates the magnitude (length → pN)', () => {
     els['efield-toggle'].click()
     gizmo._fireDrag([0, 10, 0])   // 10 nm arrow → (10-2)/4 = 2 pN
@@ -143,89 +95,22 @@ describe('initEfieldSetup', () => {
     expect(els['efield-mag'].value).toBe('2')
   })
 
-  // ── Run field (panel↔efield handoff) ─────────────────────────────────────
-  function makeRunnable() {
+  it('ready line reflects enable + magnitude + anchor reminder', () => {
     els['efield-toggle'].click()
+    expect(els['efield-ready'].textContent).toMatch(/tick "Apply"/i)
+    els['efield-enable'].checked = true
+    els['efield-enable'].dispatchEvent(new Event('change'))
+    expect(els['efield-ready'].textContent).toMatch(/force per nucleotide/i)
     setInput(els['efield-mag'], 2)
-    setInput(els['efield-dir-x'], 0)
-    setInput(els['efield-dir-y'], 0)
-    setInput(els['efield-dir-z'], 1)
-    store.setState({ multiSelectedOverhangIds: ['o1'] })
-    api.addSelectedAnchors()
-  }
-
-  it('Run button is disabled until field is ready AND a completed job is selected', () => {
-    makeRunnable()
-    // ready spec but no job → disabled
-    expect(els['efield-run-btn'].disabled).toBe(true)
-    expect(els['efield-ready'].textContent).toMatch(/select a completed oxDNA job/i)
-    // a still-running job → disabled
-    selectedJob = { job_id: 'abcd1234', status: 'running' }
-    api.refresh()
-    expect(els['efield-run-btn'].disabled).toBe(true)
-    // completed job → enabled
-    selectedJob = { job_id: 'abcd1234', status: 'completed' }
-    api.refresh()
-    expect(els['efield-run-btn'].disabled).toBe(false)
-    expect(els['efield-ready'].textContent).toMatch(/Ready/)
+    expect(els['efield-ready'].textContent).toMatch(/needs ≥1 anchor/i)
   })
 
-  it('Run posts the field spec to the selected completed job and refreshes the panel', async () => {
-    makeRunnable()
-    selectedJob = { job_id: 'abcd1234', status: 'completed' }
-    api.refresh()
-    const ok = await api.runField()
-    expect(ok).toBe(true)
-    expect(apiClient.appendOxdnaField).toHaveBeenCalledTimes(1)
-    const [jobId, body] = apiClient.appendOxdnaField.mock.calls[0]
-    expect(jobId).toBe('abcd1234')
-    expect(body.field_pN).toBe(2)
-    expect(body.dir[2]).toBeCloseTo(1)
-    expect(body.anchors.map(a => a.id)).toEqual(['o1'])
-    expect(onRan).toHaveBeenCalled()
-  })
-
-  it('Run is a no-op when the field is not ready (no anchor)', async () => {
+  it('a strong magnitude warns it can disrupt the DNA', () => {
     els['efield-toggle'].click()
-    setInput(els['efield-mag'], 2)
-    selectedJob = { job_id: 'abcd1234', status: 'completed' }
-    const ok = await api.runField()
-    expect(ok).toBe(false)
-    expect(apiClient.appendOxdnaField).not.toHaveBeenCalled()
-  })
-
-  it('reacts to the panel selection event — Run enables when a completed parent is selected', () => {
-    makeRunnable()
-    expect(els['efield-run-btn'].disabled).toBe(true)                 // no job selected yet
-    selectedJob = { job_id: 'parent1', status: 'completed' }
-    window.dispatchEvent(new CustomEvent('nadoc:oxdna-job-selected')) // panel notifies on click
-    expect(els['efield-run-btn'].disabled).toBe(false)               // Run enabled, no hover needed
-    expect(els['efield-ready'].textContent).toMatch(/Ready/)
-  })
-
-  it('runField is a no-op on a field child even if invoked directly (defensive)', async () => {
-    makeRunnable()
-    selectedJob = { job_id: 'c', status: 'completed', parent_job_id: 'p' }
-    const ok = await api.runField()
-    expect(ok).toBe(false)
-    expect(apiClient.appendOxdnaField).not.toHaveBeenCalled()
-  })
-
-  it('a completed FIELD child cannot itself be branched (must pick the relaxed parent)', () => {
-    makeRunnable()
-    selectedJob = { job_id: 'child999', status: 'completed', parent_job_id: 'abcd1234' }
-    api.refresh()
-    expect(els['efield-run-btn'].disabled).toBe(true)
-    expect(els['efield-ready'].textContent).toMatch(/parent relaxed job/i)
-  })
-
-  it('magnitude grades the gizmo colour and warns when strong enough to disrupt', () => {
-    els['efield-toggle'].click()
-    setInput(els['efield-mag'], 5)
-    expect(gizmo.setColor).toHaveBeenCalled()
+    els['efield-enable'].checked = true
+    els['efield-enable'].dispatchEvent(new Event('change'))
     setInput(els['efield-mag'], 100)            // ≥ disrupt threshold
-    store.setState({ multiSelectedOverhangIds: ['o1'] })
-    api.addSelectedAnchors()
     expect(els['efield-ready'].textContent).toMatch(/disrupt/i)
+    expect(gizmo.setColor).toHaveBeenCalled()
   })
 })

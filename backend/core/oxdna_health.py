@@ -424,6 +424,53 @@ def measure_field_response(
     }
 
 
+def measure_wall_response(
+    positions,
+    wall_dir,
+    position_nm,
+    *,
+    penetration_tol_nm: float = 0.5,
+) -> dict:
+    """Quantify whether a structure stays on the allowed side of a hard surface —
+    the anti-shovel oracle for the hard-surface feature.
+
+    ``positions`` is a per-nucleotide position list (the :func:`production_rmsf`
+    mean structure, or a display readback, in nm).  The plane is
+    ``wall_dir·r + position_nm = 0`` with the structure confined to the
+    ``wall_dir·r + position_nm >= 0`` side, so the per-nucleotide *clearance* is
+    ``wall_dir·r + position_nm`` (≥ 0 = above the surface, < 0 = penetrating).
+
+    The verdict ``passed`` asserts a *physical property*, not an HTTP status: no
+    nucleotide penetrates the surface by more than ``penetration_tol_nm``.  Returns
+    ``{min_clearance_nm, mean_clearance_nm, n_below, n_total, passed, reason}``.
+    Raises on a zero wall direction or empty positions."""
+    pmap = _backbone_lookup(positions)
+    wdir = np.asarray(wall_dir, dtype=float)
+    wnorm = float(np.linalg.norm(wdir))
+    if wnorm <= 1e-9:
+        raise ValueError("measure_wall_response: wall_dir is ~zero")
+    wdir = wdir / wnorm
+    if not pmap:
+        raise ValueError("measure_wall_response: no nucleotides to measure")
+
+    clearances = [float(np.dot(pos, wdir) + position_nm) for pos in pmap.values()]
+    min_clear = min(clearances)
+    mean_clear = float(np.mean(clearances))
+    n_below = sum(1 for c in clearances if c < -penetration_tol_nm)
+    passed = min_clear >= -penetration_tol_nm
+    reason = (f"{n_below} nucleotide(s) penetrate the surface "
+              f"(min clearance {min_clear:.2f} nm < -{penetration_tol_nm} nm)"
+              if not passed else "all nucleotides rest on or above the surface")
+    return {
+        "min_clearance_nm": min_clear,
+        "mean_clearance_nm": mean_clear,
+        "n_below": n_below,
+        "n_total": len(clearances),
+        "passed": passed,
+        "reason": reason,
+    }
+
+
 def field_response_from_confs(
     design,
     field_conf_path,

@@ -572,6 +572,7 @@ def read_configuration_unwrapped(
     *,
     align_keys: Optional[list] = None,
     rotate:     bool = True,
+    align:      bool = True,
 ) -> dict[tuple[str, int, str], dict]:
     """Read a relaxed oxDNA config and undo periodic-boundary wrapping for display.
 
@@ -604,7 +605,7 @@ def read_configuration_unwrapped(
     if box is None or not np.all(box > 0):
         return relax
     return unwrap_align_to_reference(relax, ref, design, box,
-                                     align_keys=align_keys, rotate=rotate)
+                                     align_keys=align_keys, rotate=rotate, align=align)
 
 
 def unwrap_align_to_reference(
@@ -615,10 +616,16 @@ def unwrap_align_to_reference(
     *,
     align_keys: Optional[list] = None,
     rotate:     bool = True,
+    align:      bool = True,
 ) -> dict[tuple, dict]:
     """In-memory core of read_configuration_unwrapped: BFS-unwrap each bonded
     component to whole, box-shift it toward its reference image, then superpose
     onto *ref*.  Used for display AND per-frame RMSD.
+
+    ``align=False`` stops after the unwrap + box-shift (the structure is made whole
+    and kept on-screen) but does NOT superpose onto the reference — the display
+    then shows the relaxed structure in its OWN simulation frame (e.g. how it
+    actually settled against a hard surface), not re-posed onto the design.
 
     ``align_keys`` restricts the superposition to a subset of nucleotides (e.g. a
     field run's ANCHORED beads — the fixed reference points); ``None`` uses the
@@ -664,6 +671,11 @@ def unwrap_align_to_reference(
             shift = box * np.round((oc - rc) / box)
             for k in comp:
                 placed[k] = placed[k] + shift
+
+    # No-align mode: structure is whole + on-screen, but left in its own frame
+    # (don't re-pose onto the design — show where it actually settled).
+    if not align:
+        return {k: {**relax[k], "backbone_position": placed[k]} for k in list(placed)}
 
     # Superpose onto the reference frame over the chosen subset (the anchored
     # beads for a field run, else the whole assembly).
@@ -810,6 +822,7 @@ def write_mutual_traps(
     *,
     stiff:  float = 1.0,
     r0:     float = 1.2,
+    extra_text: str = "",
 ) -> int:
     """Write an oxDNA external-forces file with mutual traps for every designed
     Watson-Crick pair, and return the number of pairs trapped.
@@ -846,7 +859,13 @@ def write_mutual_traps(
                 "PBC = 1\n"
                 "}\n"
             )
-    Path(path).write_text("\n".join(blocks), encoding="utf-8")
+    text = "\n".join(blocks)
+    # Append shared hard-surface / anchor blocks (relax-on-a-surface): the mutual
+    # traps hold WC pairs while the repulsion plane + anchors keep the structure
+    # bound during the same relax stage.
+    if extra_text:
+        text = (text + "\n" + extra_text) if text else extra_text
+    Path(path).write_text(text, encoding="utf-8")
     return len(pairs)
 
 
@@ -1068,6 +1087,130 @@ def write_field_forces(
         # 3-tuple nucleotide keys (helix, bp, direction) of the anchored beads —
         # the display uses these as a positional (non-rotational) alignment frame.
         "anchor_keys": [list(k[:3]) for k in anchor_keys],
+    }
+
+
+def repulsion_plane_block(stiff: float, plane_dir, position: float) -> str:
+    """An oxDNA ``repulsion_plane`` external force — a one-sided hard wall.
+
+    The plane is ``dir·r + position = 0``; particles are confined to the half-space
+    where ``dir·r + position >= 0`` (the side ``dir`` points toward).  A particle that
+    crosses to the forbidden side feels ``F = -stiff·(dir·r + position)·dir`` pushing
+    it back; zero force on the allowed side.  ``particle = -1`` applies it to every
+    nucleotide, so the whole structure rests on the surface."""
+    dx, dy, dz = _normalize3(plane_dir)
+    return ("{\n"
+            "type = repulsion_plane\n"
+            "particle = -1\n"
+            f"stiff = {float(stiff):.6g}\n"
+            f"dir = {dx:.6g},{dy:.6g},{dz:.6g}\n"
+            f"position = {float(position):.6g}\n"
+            "}\n")
+
+
+def wall_position_from_extent(cm_positions, wall_dir, offset_oxdna: float = 0.0):
+    """Derive the repulsion-plane ``position`` scalar so the wall sits just past the
+    structure's lowest point along ``wall_dir`` (everything in oxDNA units).
+
+    ``cm_positions`` are the centre-of-mass positions (oxDNA units, e.g. from
+    :func:`read_cm_positions_oxdna`).  The plane is placed at the minimum projection
+    onto ``wall_dir`` minus ``offset_oxdna`` (a positive offset gives the structure
+    clearance above the surface), so the whole structure starts on the allowed side.
+
+    Returns ``(position, min_proj)`` where ``position = offset_oxdna - min_proj`` makes
+    ``dir·r + position >= 0`` for every nucleotide at the seed configuration."""
+    dx, dy, dz = _normalize3(wall_dir)
+    projs = [p[0] * dx + p[1] * dy + p[2] * dz for p in cm_positions]
+    min_proj = min(projs) if projs else 0.0
+    return offset_oxdna - min_proj, min_proj
+
+
+def write_run_forces(
+    path: str | Path,
+    design: Design,
+    conf_path: str | Path,
+    *,
+    field: dict | None = None,
+    wall: dict | None = None,
+    anchors: list[dict] | None = None,
+    anchor_stiff: float = DEFAULT_ANCHOR_STIFF,
+) -> dict:
+    """Write the external-forces file for a composed production run: any combination
+    of a uniform ``string`` field (all nucleotides), a ``repulsion_plane`` hard
+    surface (all nucleotides), and ``trap`` anchors pinning selected nucleotides.
+
+    ``field`` is ``{"force_oxdna": f, "dir": [x,y,z]}`` or None; ``wall`` is
+    ``{"dir": [x,y,z], "offset_nm": d, "stiff": s}`` or None; ``anchors`` is the
+    anchor-descriptor list.  Each element is independent — pass only the ones the
+    user enabled.  Anchor traps pin to each particle's position in ``conf_path``
+    (the configuration the run starts from).
+
+    Returns ``{n_anchored, n_total, anchor_particles, anchor_keys, field, wall,
+    has_forces}`` (``field``/``wall`` are the resolved meta dicts, or None)."""
+    sa_text, info = surface_anchor_forces_text(
+        design, conf_path, wall=wall, anchors=anchors, anchor_stiff=anchor_stiff)
+
+    field_text = ""
+    field_meta = None
+    if field:
+        f_oxdna = float(field.get("force_oxdna", 0.0))
+        if f_oxdna > 0:
+            field_text = field_string_block(f_oxdna, field.get("dir"))
+            field_meta = {"force_oxdna": f_oxdna, "dir": _normalize3(field.get("dir"))}
+
+    parts = [t for t in (field_text, sa_text) if t]   # field first, then wall + anchors
+    Path(path).write_text("\n".join(parts), encoding="utf-8")
+    return {**info, "field": field_meta, "has_forces": bool(parts)}
+
+
+def surface_anchor_forces_text(
+    design: Design,
+    conf_path: str | Path,
+    *,
+    wall: dict | None = None,
+    anchors: list[dict] | None = None,
+    anchor_stiff: float = DEFAULT_ANCHOR_STIFF,
+) -> tuple[str, dict]:
+    """Compose the hard-surface ``repulsion_plane`` + anchor ``trap`` block text —
+    the part shared by the relax-stage forces and the production-run forces (a
+    structure relaxed on a surface differs from one relaxed free, so relaxation
+    carries these too; only the electric field is production-only).
+
+    The wall plane is placed from the structure's extent in ``conf_path`` and the
+    anchor traps pin to their positions there.  Returns ``(text, info)`` where
+    ``info`` = ``{n_anchored, n_total, anchor_particles, anchor_keys, wall}``."""
+    anchors = anchors or []
+    if anchors:
+        particles, anchor_keys = resolve_anchor_particles(design, anchors)
+    else:
+        particles, anchor_keys = [], []
+    cm = read_cm_positions_oxdna(conf_path)
+    n_total = len(cm)
+
+    blocks: list[str] = []
+    wall_meta = None
+    if wall:
+        stiff = float(wall.get("stiff", 0.0))
+        if stiff > 0:
+            offset_nm = float(wall.get("offset_nm", 0.0))
+            position, min_proj = wall_position_from_extent(
+                cm, wall.get("dir"), offset_nm * NM_TO_OXDNA)
+            blocks.append(repulsion_plane_block(stiff, wall.get("dir"), position))
+            wall_meta = {
+                "dir": _normalize3(wall.get("dir")), "stiff": stiff,
+                "offset_nm": offset_nm, "position": position, "min_proj": min_proj,
+            }
+
+    for p in particles:
+        if p < n_total:
+            blocks.append(anchor_trap_block(p, cm[p], anchor_stiff))
+
+    return "\n".join(blocks), {
+        "n_anchored": len(particles),
+        "n_total": n_total,
+        "anchor_particles": particles,
+        "anchor_keys": [list(k[:3]) for k in anchor_keys],
+        "wall": wall_meta,
     }
 
 

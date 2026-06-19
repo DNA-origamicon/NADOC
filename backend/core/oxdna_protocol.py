@@ -65,8 +65,16 @@ class OxdnaStageSpec:
     # External-forces filename in the job dir; None → the default "forces.txt"
     # (mutual traps).  A field stage points this at its own field_forces_N.txt.
     forces_file:          str | None = None
+    # True when the forces file uses ABSOLUTE-coordinate forces (repulsion_plane /
+    # trap anchors).  Those are incompatible with oxDNA's COM diffusion-fix, which
+    # periodically recenters coordinates by a box vector — shifting the structure
+    # into the wall (a catastrophic spurious repulsion).  Renders fix_diffusion=false.
+    absolute_forces:      bool = False
     # Electric-field record (field stages only): {'dir':[x,y,z], 'force_oxdna':f}.
     efield:               dict | None = None
+    # Composed-run record (consolidated production): {'field':{...}|None,
+    # 'wall':{...}|None, 'n_anchored':int} — what external elements this run carried.
+    forces_meta:          dict | None = None
     # Health gate (checked after the stage).
     min_bp_retained:      float = 0.0
 
@@ -89,6 +97,7 @@ def build_relaxation_stages(
     device:             str = "0",
     salt_concentration: float = 0.5,
     min_bp_retained:    float = 0.50,
+    surface_present:    bool = False,
 ) -> list[OxdnaStageSpec]:
     """Return the ordered 3-stage standard relaxation spec list.
 
@@ -107,6 +116,7 @@ def build_relaxation_stages(
             backend="CPU",
             max_backbone_force=5.0, max_backbone_force_far=10.0,
             external_forces=True,          # mutual traps pull designed pairs together
+            absolute_forces=surface_present,   # + surface/anchors → fix_diffusion off
             salt_concentration=salt_concentration, device=device,
             min_bp_retained=0.0,           # MC clears clashes; no bp gate yet
         ),
@@ -115,6 +125,7 @@ def build_relaxation_stages(
             backend=backend, dt=0.002,
             max_backbone_force=5.0, max_backbone_force_far=10.0,
             external_forces=True,          # hold pairs while the backbone relaxes
+            absolute_forces=surface_present,
             salt_concentration=salt_concentration, device=device,
             min_bp_retained=min_bp_retained,
         ),
@@ -122,7 +133,12 @@ def build_relaxation_stages(
             name="3_equil", kind="equil", sim_type="MD", steps=equil_steps,
             backend=backend, dt=0.003,
             max_backbone_force=None, max_backbone_force_far=None,
-            external_forces=False,         # unbiased: confirm the pairs self-sustain
+            # Unbiased (mutual traps dropped: confirm the pairs self-sustain), but a
+            # hard surface / anchors must persist so the structure equilibrates while
+            # still bound — those live in equil_forces.txt (no mutual traps).
+            external_forces=surface_present,
+            forces_file="equil_forces.txt" if surface_present else None,
+            absolute_forces=surface_present,
             salt_concentration=salt_concentration, device=device,
             min_bp_retained=min_bp_retained,
         ),
@@ -193,6 +209,11 @@ def render_stage_input(
         lines.append("")
         lines.append("external_forces = true")
         lines.append(f"external_forces_file = {forces_name}")
+        # Absolute-position forces (hard surface / anchor traps) need the COM
+        # diffusion-fix OFF — otherwise oxDNA recenters coordinates mid-run and the
+        # wall/traps (fixed in absolute space) suddenly cut through the structure.
+        if spec.absolute_forces:
+            lines.append("fix_diffusion = false")
 
     # ── Relaxation force caps (modified backbone potential) ─────────────────────
     if spec.max_backbone_force is not None:
@@ -280,7 +301,41 @@ def build_field_stage(
         backend=backend, dt=0.005,
         max_backbone_force=None, max_backbone_force_far=None,
         external_forces=True, forces_file=forces_file,
+        absolute_forces=True,          # anchor traps are absolute → fix_diffusion off
         efield={"dir": list(field_dir), "force_oxdna": float(field_oxdna)},
+        salt_concentration=salt_concentration, device=device,
+        min_bp_retained=0.0,
+    )
+
+
+def build_run_stage(
+    *,
+    name:               str,
+    steps:              int = DEFAULT_PRODUCTION_STEPS,
+    external_forces:    bool = False,
+    forces_file:        str | None = None,
+    efield:             dict | None = None,
+    forces_meta:        dict | None = None,
+    absolute_forces:    bool = False,
+    backend:            str = "CUDA",
+    device:             str = "0",
+    salt_concentration: float = 0.5,
+) -> OxdnaStageSpec:
+    """A consolidated production MD stage that may carry any combination of external
+    elements (uniform field, hard-surface repulsion plane, anchor traps) via
+    ``forces_file`` — written by ``oxdna_interface.write_run_forces``.
+
+    Kind is ``"production"`` so the trajectory pools into the flexibility map / RMSD
+    like any production run.  ``efield`` is set when a field element is present (so
+    the display's anchor-alignment frame still resolves); ``forces_meta`` records the
+    full set of enabled elements.  No base-pair gate — production is sampling, and a
+    field/surface deliberately deforms the structure."""
+    return OxdnaStageSpec(
+        name=name, kind="production", sim_type="MD", steps=steps,
+        backend=backend, dt=0.005,
+        max_backbone_force=None, max_backbone_force_far=None,
+        external_forces=external_forces, forces_file=forces_file,
+        efield=efield, forces_meta=forces_meta, absolute_forces=absolute_forces,
         salt_concentration=salt_concentration, device=device,
         min_bp_retained=0.0,
     )

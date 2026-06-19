@@ -3419,6 +3419,9 @@
               <!-- availability badge -->
               <div id="oxdna-jobs-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
 
+              <!-- loading bar: the running job's progress, above the launch buttons -->
+              <div id="oxdna-jobs-progress" style="margin-bottom:6px"></div>
+
               <!-- launch (current design): Relax + Production side by side (mirrors MD) -->
               <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
                 <button id="oxdna-jobs-run-btn" disabled
@@ -3438,12 +3441,25 @@
               </div>
               <div id="oxdna-jobs-prod-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
 
-              <!-- advanced drawer -->
-              <div style="margin-bottom:6px">
-                <div id="oxdna-jobs-adv-toggle" style="cursor:pointer;user-select:none;font-size:var(--text-xs);color:#8b949e;display:flex;align-items:center;gap:4px">
-                  <span id="oxdna-jobs-adv-arrow" style="display:inline-block;transition:transform .15s">▸</span><span>Advanced</span>
+              <!-- ── Jobs (collapsible card — list of runs) ─────────────────── -->
+              <div class="ox-card">
+                <div id="oxdna-jobs-list-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="oxdna-jobs-list-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Jobs</span>
                 </div>
-                <div id="oxdna-jobs-adv-body" style="display:none;margin-top:5px;display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
+                <div id="oxdna-jobs-list-body" class="ox-card__body">
+                  <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
+                    <input id="oxdna-jobs-show-all" type="checkbox"> Show jobs for all designs
+                  </label>
+                  <div id="oxdna-jobs-list" style="max-height:140px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
+                </div>
+              </div>
+
+              <!-- ── Advanced (collapsible card) ──────────────────────────── -->
+              <div class="ox-card">
+                <div id="oxdna-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e">
+                  <span id="oxdna-jobs-adv-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Advanced</span>
+                </div>
+                <div id="oxdna-jobs-adv-body" class="ox-card__body" style="display:none;display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
                   <label style="font-size:var(--text-xs);color:#8b949e">Backend</label>
                   <select id="oxdna-jobs-backend" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
                     <option value="CUDA">CUDA (GPU)</option>
@@ -3464,12 +3480,68 @@
                 </div>
               </div>
 
-              <!-- Electric field setup (direction/magnitude gizmo + anchors) -->
-              <div style="margin-bottom:6px;border-top:1px solid #21262d;padding-top:6px">
-                <div id="efield-toggle" style="cursor:pointer;user-select:none;font-size:var(--text-xs);color:#c9d1d9;display:flex;align-items:center;gap:4px;font-weight:600">
-                  <span id="efield-arrow" class="icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down" style="color:var(--color-text-dim)"></span><span>Electric field</span>
+              <!-- ── Anchors (collapsible card — fixed strands, shared) ────── -->
+              <div class="ox-card">
+                <div id="oxdna-anchors-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="oxdna-anchors-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Anchors</span>
                 </div>
-                <div id="efield-body" style="display:none;margin-top:6px">
+                <div id="oxdna-anchors-body" class="ox-card__body" style="display:none">
+                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">Fixed strands held in place during the run (tethers / clamps). Used by the field and surface, or on their own. A field needs at least one.</div>
+                  <div style="display:flex;align-items:center;gap:5px">
+                    <button id="oxdna-anchors-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Add selection as anchor</button>
+                    <button id="oxdna-anchors-clear" style="font-size:var(--text-xs);padding:4px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
+                  </div>
+                  <div id="oxdna-anchors-list" style="margin-top:5px"></div>
+                  <div id="oxdna-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+                </div>
+              </div>
+
+              <!-- ── Hard surface / floor (collapsible card) ──────────────── -->
+              <div class="ox-card">
+                <div id="oxdna-floor-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="oxdna-floor-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Hard surface</span>
+                </div>
+                <div id="oxdna-floor-body" class="ox-card__body" style="display:none">
+                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">A repulsion plane the structure can't pass through. Add anchors (above) to bind a floppy structure to it.</div>
+                  <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px">
+                    <input type="checkbox" id="oxdna-floor-enable"> Apply a hard surface to the run
+                  </label>
+                  <div id="oxdna-floor-controls" style="display:none;flex-direction:column;gap:5px">
+                    <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                      <span style="min-width:46px" title="Which side the surface sits on. −Y = below.">Side</span>
+                      <select id="oxdna-floor-axis" style="flex:1;background:#161b22;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+                        <option value="-y" selected>−Y (below)</option>
+                        <option value="+y">+Y (above)</option>
+                        <option value="-x">−X (left)</option>
+                        <option value="+x">+X (right)</option>
+                        <option value="-z">−Z (front)</option>
+                        <option value="+z">+Z (back)</option>
+                      </select>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                      <span style="min-width:46px" title="nm of clearance the surface sits beyond the structure's lowest point">Offset</span>
+                      <input id="oxdna-floor-offset" type="range" min="-20" max="20" step="0.1" value="0" style="flex:1;accent-color:#58a6ff">
+                      <span id="oxdna-floor-offset-label" style="color:#c9d1d9;min-width:42px;text-align:right">0.0 nm</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                      <span style="min-width:46px" title="Repulsion-plane stiffness (oxDNA units)">Stiffness</span>
+                      <input id="oxdna-floor-stiff" type="number" value="5" min="0.1" step="0.5" style="flex:1;min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    </div>
+                  </div>
+                  <div id="oxdna-floor-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:14px"></div>
+                </div>
+              </div>
+
+              <!-- ── Electric field (collapsible card) ─────────────────────── -->
+              <div class="ox-card">
+                <div id="efield-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="efield-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Electric field</span>
+                </div>
+                <div id="efield-body" class="ox-card__body" style="display:none">
+                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">A uniform force on every nucleotide. Needs ≥1 anchor (Anchors card) or it drifts the whole structure.</div>
+                  <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px">
+                    <input type="checkbox" id="efield-enable"> Apply an electric field to the run
+                  </label>
                   <!-- magnitude (canonical: force per nucleotide in pN) -->
                   <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
                     <label for="efield-mag" style="font-size:var(--text-xs);color:#8b949e">Force / nt (pN)</label>
@@ -3497,43 +3569,24 @@
                       <button id="efield-vpm-apply" style="font-size:var(--text-xs);padding:3px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Compute pN</button>
                     </div>
                   </div>
-                  <!-- anchors (clusters / domains / overhangs held fixed) -->
-                  <div style="margin-top:7px">
-                    <div style="display:flex;align-items:center;gap:5px">
-                      <button id="efield-anchor-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Add selection as anchor</button>
-                      <button id="efield-anchor-clear" style="font-size:var(--text-xs);padding:4px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
-                    </div>
-                    <div id="efield-anchors-list" style="margin-top:5px"></div>
-                  </div>
-                  <!-- run: appends a field stage to the selected completed oxDNA job -->
-                  <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center;margin-top:7px">
-                    <label for="efield-steps" style="font-size:var(--text-xs);color:#8b949e">Field steps</label>
-                    <input id="efield-steps" type="number" value="2000000" min="1000" max="200000000" step="1000000"
-                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                  </div>
-                  <button id="efield-run-btn" disabled
-                          title="Append an electric-field MD stage to the selected completed oxDNA job"
-                          style="width:100%;font-size:var(--text-xs);padding:5px;margin-top:6px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
-                    ⚡ Run field
-                  </button>
-                  <div id="efield-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:14px"></div>
+                  <div id="efield-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:7px;min-height:14px"></div>
                 </div>
               </div>
 
-              <!-- show-all toggle -->
-              <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
-                <input id="oxdna-jobs-show-all" type="checkbox"> Show jobs for all designs
-              </label>
-
-              <!-- scrollable jobs list -->
-              <div id="oxdna-jobs-list" style="max-height:140px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;padding:3px;margin-bottom:6px"></div>
+              <!-- ── Health (collapsible card — selected run's metrics) ─────── -->
+              <div class="ox-card">
+                <div id="oxdna-jobs-health-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="oxdna-jobs-health-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Health</span>
+                </div>
+                <div id="oxdna-jobs-health-body" class="ox-card__body">
+                  <div id="oxdna-jobs-health"></div>
+                </div>
+              </div>
 
               <!-- detail -->
               <div id="oxdna-jobs-detail" style="display:none">
                 <div id="oxdna-jobs-detail-status" style="font-size:var(--text-xs);margin-bottom:4px;min-height:14px"></div>
-                <div id="oxdna-jobs-progress" style="margin-bottom:6px"></div>
                 <div id="oxdna-jobs-timeline" style="margin-bottom:4px"></div>
-                <div id="oxdna-jobs-health"></div>
                 <div id="oxdna-jobs-detail-error" style="display:none;font-size:var(--text-xs);color:#d9534f;margin-top:5px"></div>
                 <div style="display:flex;gap:5px;margin-top:6px">
                   <button id="oxdna-jobs-start-btn" style="display:none;flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Start</button>
@@ -3543,6 +3596,10 @@
                 <!-- display toggle -->
                 <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:pointer">
                   <input id="oxdna-jobs-display-toggle" type="checkbox"> OxDNA display
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px;margin-left:18px;cursor:pointer"
+                       title="On: superpose the relaxed structure onto the design pose. Off: show it in its own simulation frame — how it actually settled (e.g. resting on the hard surface), lined up with the surface grid.">
+                  <input id="oxdna-jobs-align-toggle" type="checkbox" checked> Align to design pose
                 </label>
                 <div id="oxdna-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                 <!-- Flexibility map (avg production structure recoloured by per-base RMSF; unlocks after a production run) -->

@@ -307,6 +307,35 @@
   display: none;
 }
 
+/* Collapsible sub-section "cards" in the oxDNA / Dynamics panel
+   (Advanced / Hard surface / Electric field). A stylized box that shows just
+   its title bar when collapsed and expands to contain its controls. */
+.ox-card {
+  border: var(--border-thin) solid var(--color-border-default);
+  border-radius: 6px;
+  background: rgba(177, 186, 196, 0.03);
+  margin-bottom: var(--space-3);
+  overflow: hidden;
+}
+.ox-card:last-child { margin-bottom: 0; }
+.ox-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  background: rgba(177, 186, 196, 0.05);
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+.ox-card__header:hover { background: rgba(177, 186, 196, 0.09); }
+.ox-card__chevron { width: 12px; height: 12px; color: var(--color-text-dim); }
+.ox-card__title { flex: 1; }
+.ox-card__body { padding: 8px; }
+
 /* Smooth dropdown / submenu reveal */
 .dropdown,
 .submenu {
