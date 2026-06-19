@@ -366,7 +366,7 @@ def test_api_relax_is_revertable():
     assert _ct(design_state.get_or_404(), "cl_a").translation == [0.0, 0.0, 0.0]
 
 
-def test_api_relax_is_deletable_keeps_state():
+def test_api_relax_is_deletable_rolls_back_pose():
     design_state.set_design(_hinge_design())
     n0 = len(design_state.get_or_404().feature_log)
     client.post("/api/design/flexible-relax", json={
@@ -375,9 +375,10 @@ def test_api_relax_is_deletable_keeps_state():
     rd = client.delete(f"/api/design/features/{n0}")
     assert rd.status_code == 200, rd.text
     d = design_state.get_or_404()
-    # Row forgotten, but the relaxed pose is kept (app-wide delete convention).
+    # Option-1 delete: the relax row AND its pose roll back (flexible-relax is a
+    # non-replayable snapshot op, so deleting it restores the pre-relax pose).
     assert len(d.feature_log) == n0
-    assert _ct(d, "cl_a").translation == [5.0, 0.0, 0.0]
+    assert _ct(d, "cl_a").translation == [0.0, 0.0, 0.0]
 
 
 def test_api_relax_undo_redo():

@@ -2048,13 +2048,21 @@ export async function rollbackLastFeature() {
   return _syncFromDesignResponse(json)
 }
 
-export async function deleteFeature(index, subIndex = null) {
+export async function deleteFeature(index, subIndex = null, { cascade = false } = {}) {
   // subIndex targets a single sub-step inside a Fine Routing cluster; omit it
   // (or pass null) to delete the whole top-level entry.
-  const path = subIndex == null
-    ? `/design/features/${index}`
-    : `/design/features/${index}?sub_index=${subIndex}`
+  const params = []
+  if (subIndex != null) params.push(`sub_index=${subIndex}`)
+  if (cascade) params.push('cascade=true')
+  const path = params.length
+    ? `/design/features/${index}?${params.join('&')}`
+    : `/design/features/${index}`
   const json = await _request('DELETE', path)
+  // Deleting a topology-producing op whose later entries depend on it returns a
+  // (non-mutating) decision payload instead of a design — the caller shows the
+  // dependent list and re-calls with {cascade:true} or reverts. Pass it through
+  // untouched (no design to sync).
+  if (json?.needs_cascade_decision) return json
   // Backend now picks between the fast-path responses (cluster_only /
   // positions_only) and the embedded full-geometry response so a cluster_op
   // deletion lands in the lean path. Caller is expected to invoke

@@ -8268,9 +8268,168 @@ def _delete_routing_child(design: "Design", log: list, index: int, entry, child_
     return resp
 
 
+def _feature_label(entry) -> str:
+    """Short human label for a feature-log entry (used to list dependents)."""
+    ft = getattr(entry, 'feature_type', '')
+    if ft == 'snapshot':
+        return getattr(entry, 'label', None) or getattr(entry, 'op_kind', 'op')
+    if ft == 'routing-cluster':
+        return getattr(entry, 'label', None) or 'Fine Routing'
+    if ft == 'deformation':
+        op = getattr(entry, 'op_snapshot', None)
+        return op.type.capitalize() if op and getattr(op, 'type', None) else 'Deformation'
+    if ft == 'cluster_op':
+        return 'Cluster move'
+    if ft == 'cluster_create':
+        return getattr(entry, 'name', None) or 'Create cluster'
+    if ft == 'overhang_rotation':
+        return 'Overhang rotation'
+    return ft or 'feature'
+
+
+def _build_entry_info(entry, design):
+    """Summarize one feature-log entry for dependency analysis.
+
+    Decodes snapshot pre/post to compute the ids it added/modified; resolves the
+    pre-existing ids a delta entry consumes. See
+    :mod:`backend.core.feature_dependencies`.
+    """
+    from backend.core.feature_dependencies import (
+        EntryInfo, REPLAYABLE_SNAPSHOT_OPS, snapshot_delta, delta_entry_targets,
+    )
+    from backend.core.models import SnapshotLogEntry as _SnapEntry
+
+    ft = entry.feature_type
+    if ft == 'snapshot':
+        reconstructable = (not entry.evicted) and (entry.op_kind in REPLAYABLE_SNAPSHOT_OPS)
+        added: set = set()
+        modified: set = set()
+        try:
+            if entry.design_snapshot_gz_b64 and entry.post_state_gz_b64:
+                pre = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
+                post = design_state.decode_design_snapshot(entry.post_state_gz_b64)
+                added, modified = snapshot_delta(pre, post)
+        except Exception:
+            added, modified = set(), set()
+        # An extrusion's pre-existing inputs == the ids it modified in place
+        # (e.g. the helix a continuation extended). New-bundle segments modify
+        # nothing → empty targets → independent.
+        targets = modified if reconstructable else None
+        return EntryInfo(added=added, modified=modified, targets=targets,
+                         reconstructable=reconstructable)
+
+    if ft == 'routing-cluster':
+        added, modified = set(), set()
+        try:
+            if entry.pre_state_gz_b64 and entry.post_state_gz_b64 and not entry.evicted:
+                pre = design_state.decode_design_snapshot(entry.pre_state_gz_b64)
+                post = design_state.decode_design_snapshot(entry.post_state_gz_b64)
+                added, modified = snapshot_delta(pre, post)
+        except Exception:
+            added, modified = set(), set()
+        # Fine-Routing rollback-on-a-new-base is deferred → never a survivor.
+        return EntryInfo(added=added, modified=modified, targets=None,
+                         reconstructable=False)
+
+    # Overlay delta (deformation / cluster_op / cluster_create / overhang_rotation):
+    # always reconstructable by seek; depends only on the ids it targets.
+    return EntryInfo(added=set(), modified=set(),
+                     targets=delta_entry_targets(entry, design),
+                     reconstructable=True)
+
+
+def _delete_snapshot_feature(design: Design, log: list, index: int, entry, cascade: bool) -> dict:
+    """Option-1 surgical delete of a topology-producing snapshot entry.
+
+    Computes the entry's dependents (later entries that can't survive its
+    removal). With dependents and ``cascade=False``, returns a
+    ``needs_cascade_decision`` payload (no mutation). Otherwise removes the
+    entry (+ dependents on cascade), reconstructs the design by threading the
+    entry's PRE-state forward through the surviving replayable extrusions, and
+    re-seeks so overlay deltas rebuild on top. Pushes undo via ``set_design``.
+    """
+    from backend.core.feature_dependencies import analyze_dependents
+    from backend.core.models import SnapshotLogEntry as _SnapEntry
+    from backend.core.validator import validate_design
+
+    # Earlier entries can never be dependents, so only summarize index..end.
+    infos: list = [None] * len(log)
+    for j in range(index, len(log)):
+        infos[j] = _build_entry_info(log[j], design)
+
+    deps = analyze_dependents(infos, index)
+
+    if deps and not cascade:
+        return {
+            "needs_cascade_decision": True,
+            "target_index": index,
+            "target_label": _feature_label(entry),
+            "dependents": [{"index": j, "label": _feature_label(log[j])} for j in deps],
+        }
+
+    if entry.evicted or not entry.design_snapshot_gz_b64:
+        raise HTTPException(
+            410,
+            detail="This feature's snapshot was evicted to free space, so its "
+                   "geometry can't be rolled back. Revert instead.",
+        )
+
+    removal = {index} | set(deps)
+    state = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
+
+    new_entries: list = list(log[:index])
+    for j in range(index + 1, len(log)):
+        if j in removal:
+            continue
+        e = log[j]
+        if isinstance(e, _SnapEntry):
+            # Replayable extrusion survivor: re-derive on the threaded base so
+            # its geometry reflects the now-deleted predecessor's absence.
+            pre_b64, pre_sz = design_state.encode_design_snapshot(state)
+            try:
+                state = _edit_dispatch_run(e.op_kind, state, e.params)
+            except (HTTPException, ValidationError, ValueError) as exc:
+                raise HTTPException(
+                    409,
+                    detail=f"Could not surgically delete: '{_feature_label(e)}' "
+                           f"could not be re-applied without the deleted feature. "
+                           f"Revert to before it instead.",
+                ) from exc
+            post_b64, post_sz = design_state.encode_design_snapshot(state)
+            new_entries.append(e.model_copy(update={
+                'design_snapshot_gz_b64': pre_b64, 'snapshot_size_bytes': pre_sz,
+                'post_state_gz_b64': post_b64, 'post_state_size_bytes': post_sz,
+                'evicted': False,
+            }))
+        else:
+            # Overlay delta survivor — carry unchanged; seek rebuilds its effect.
+            new_entries.append(e)
+
+    base = state.copy_with(feature_log=new_entries)
+    updated = _seek_feature_log(base, -1)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_replace_response(design, updated, report)
+
+
 @router.delete("/design/features/{index}", status_code=200)
-def delete_feature(index: int, sub_index: int | None = None) -> dict:
+def delete_feature(index: int, sub_index: int | None = None, cascade: bool = False) -> dict:
     """Remove the feature at the given log index (0-based) and reconstruct state.
+
+    **Delete = roll back this op's geometry (option-1 semantics).** Deleting a
+    topology-producing snapshot entry removes both the log row AND the geometry
+    that op created, keeping any later entries that don't depend on it. When
+    later entries DO depend on it (built on its geometry, or non-replayable
+    auto-ops baked on top of it), the call returns ``needs_cascade_decision``
+    listing those dependents WITHOUT mutating the design; the client then either
+    cascades (``?cascade=true`` → delete the entry + all its dependents) or
+    reverts. See :mod:`backend.core.feature_dependencies`.
+
+    Pure overlay deltas (deformation / cluster_op / cluster_create /
+    overhang_rotation) already roll back on delete — ``_seek_feature_log``
+    rebuilds them from the surviving log — so they keep their existing path.
+    Fine-Routing clusters still keep their geometry on delete (their surgical
+    rollback is deferred along with auto-op re-derivation).
 
     ``sub_index`` (optional, query param) targets a single sub-step inside a
     Fine Routing cluster: the named child is removed surgically and the rest of
@@ -8283,6 +8442,7 @@ def delete_feature(index: int, sub_index: int | None = None) -> dict:
       cursor resets to -2 (empty state).
     Pushes to the undo stack.
     """
+    from backend.core.models import SnapshotLogEntry as _SnapEntry
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -8304,6 +8464,12 @@ def delete_feature(index: int, sub_index: int | None = None) -> dict:
             raise HTTPException(400, detail=f"sub_index {sub_index} out of range (cluster has {n_children} sub-steps).")
         return _delete_routing_child(design, log, index, entry, sub_index)
 
+    # Topology-producing snapshot ops (extrusions, auto-*, circle, protein,
+    # assembly): option-1 surgical delete — roll back this op's geometry and
+    # keep independent later ops, or list dependents for a cascade decision.
+    if isinstance(entry, _SnapEntry):
+        return _delete_snapshot_feature(design, log, index, entry, cascade)
+
     new_log = [e for e in log if e.id != entry.id]
 
     # Adjust the cursor so the active window remains consistent after removal.
@@ -8319,28 +8485,10 @@ def delete_feature(index: int, sub_index: int | None = None) -> dict:
 
     temp = design.copy_with(feature_log=new_log)
 
-    # Delete vs. revert: by design, deleting a snapshot entry forgets the log
-    # row but KEEPS the current geometry (revert is what rolls topology back) —
-    # e.g. deleting an auto-break entry keeps the nicks. The one exception is
-    # `bundle-create`, the ROOT "initial extrusion": its pre-state is the empty
-    # workspace and nothing precedes it, so keeping the geometry leaves orphaned
-    # helices with no creating op in the log (they then persist on save/reload).
-    # Deleting it must clear what it created. Substitute its PRE-state (empty)
-    # topology here; _seek_feature_log's snapshot-seek can't, since the entry
-    # carrying that topology is the one being removed.
-    from backend.core.models import SnapshotLogEntry as _SnapEntry
-    if (
-        isinstance(entry, _SnapEntry)
-        and entry.op_kind == 'bundle-create'
-        and not entry.evicted
-        and entry.design_snapshot_gz_b64
-    ):
-        try:
-            _pre_design = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
-        except Exception:
-            _pre_design = None
-        if _pre_design is not None:
-            temp = _topology_substitute(temp, _pre_design)
+    # Reaching here means a delta / overlay entry (deformation / cluster_op /
+    # cluster_create / overhang_rotation) — `_seek_feature_log` already rolls
+    # these back by rebuilding them from the surviving log. (Topology-producing
+    # snapshot entries took the `_delete_snapshot_feature` path above.)
 
     # If the deleted entry was a cluster_op and the cluster has no remaining ops
     # in new_log, _seek_feature_log won't know to reset it (the cluster won't appear

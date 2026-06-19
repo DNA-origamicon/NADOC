@@ -113,16 +113,21 @@ def test_revert_after_simulated_refresh():
 # ── Test 4: deleting a snapshot entry is allowed and does not alter the design ─
 
 
-def test_delete_snapshot_entry_allowed_does_not_change_design():
+def test_delete_snapshot_entry_rolls_back_geometry():
+    # Option-1 semantics: deleting a topology-producing snapshot entry rolls its
+    # geometry back (was: kept the nicks). Here auto-break is the only entry, so
+    # deleting it restores the un-nicked strands.
+    pre_autobreak = _strands_signature(design_state.get_or_404())
     client.post("/api/design/auto-break")
     post_autobreak = _strands_signature(design_state.get_or_404())
+    assert post_autobreak != pre_autobreak  # autobreak actually nicked something
 
     r = client.delete("/api/design/features/0")
     assert r.status_code == 200, r.text
     after_delete = design_state.get_or_404()
 
     assert after_delete.feature_log == []
-    assert _strands_signature(after_delete) == post_autobreak
+    assert _strands_signature(after_delete) == pre_autobreak  # geometry rolled back
 
 
 # ── Test 4b: deleting the root bundle-create entry CLEARS the geometry ────────
@@ -156,6 +161,72 @@ def test_delete_bundle_create_entry_clears_geometry():
     assert after.feature_log == []
     assert after.helices == []
     assert after.strands == []
+
+
+# ── Test 4c: option-1 surgical delete + dependent listing / cascade ───────────
+
+
+def _fresh_bundle():
+    design_state.close_session()
+    r = client.post(
+        "/api/design/bundle",
+        json={"cells": [[0, 0]], "length_bp": 42, "name": "B", "plane": "XY",
+              "lattice_type": "HONEYCOMB"},
+    )
+    assert r.status_code == 201, r.text
+
+
+def _seg(col):
+    r = client.post("/api/design/bundle-segment", json={
+        "cells": [[0, col]], "length_bp": 21, "plane": "XY", "offset_nm": 14.0,
+    })
+    assert r.status_code == 201, r.text
+
+
+def test_delete_independent_parallel_extrusion_survives():
+    # Two parallel segments on different cells; deleting the first keeps the
+    # second (independent + replayable → surgical delete, not a cascade).
+    _fresh_bundle(); _seg(1); _seg(2)
+    assert len(design_state.get_or_404().helices) == 3
+    r = client.delete("/api/design/features/1")
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert not j.get("needs_cascade_decision")
+    after = design_state.get_or_404()
+    assert len(after.helices) == 2  # seg1 removed, seg2 survived
+
+
+def test_delete_extrusion_with_dependent_auto_op_lists_then_cascades():
+    # auto-break after a segment depends on it (non-replayable, baked on top).
+    _fresh_bundle(); _seg(1); client.post("/api/design/auto-break")
+    helices_before = len(design_state.get_or_404().helices)
+
+    # First call: no cascade → reports the dependent WITHOUT mutating.
+    r = client.delete("/api/design/features/1")
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j.get("needs_cascade_decision") is True
+    dep_idxs = [d["index"] for d in j["dependents"]]
+    assert 2 in dep_idxs
+    assert len(design_state.get_or_404().helices) == helices_before  # unchanged
+
+    # Cascade → removes the segment and the dependent auto-break.
+    r = client.delete("/api/design/features/1?cascade=true")
+    assert r.status_code == 200, r.text
+    after = design_state.get_or_404()
+    assert [getattr(e, "op_kind", e.feature_type) for e in after.feature_log] == ["bundle-create"]
+    assert len(after.helices) == 1
+
+
+def test_delete_last_extrusion_rolls_back_and_undo_restores():
+    _fresh_bundle(); _seg(1)
+    assert len(design_state.get_or_404().helices) == 2
+    r = client.delete("/api/design/features/1")
+    assert r.status_code == 200, r.text
+    assert len(design_state.get_or_404().helices) == 1
+    r = client.post("/api/design/undo")
+    assert r.status_code == 200, r.text
+    assert len(design_state.get_or_404().helices) == 2  # delete is undoable
 
 
 # ── Test 5: revert truncates the log; undo restores both design and log ──────

@@ -18,6 +18,7 @@
 import { showPersistentToast, dismissToast } from './toast.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { showConfirm } from './primitives/confirm.js'
+import { showDependentsDecision } from './primitives/dependents_dialog.js'
 import { editFeature, isEditable as _isOpEditable } from './edit_feature_popover.js'
 
 // Fine Routing sub-steps with no captured diff (legacy clusters) can still be
@@ -906,7 +907,18 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
         } else if (_partInstanceId && _partPatchFn) {
           _partPatchFn(d => { d.feature_log?.splice(i, 1) })
         } else {
-          api.deleteFeature(i)
+          // Active-design delete: roll back this op's geometry. If later
+          // features depend on it, the backend returns a (non-mutating)
+          // decision payload → offer cascade-delete or revert.
+          const resp = await api.deleteFeature(i)
+          if (resp?.needs_cascade_decision) {
+            const choice = await showDependentsDecision({
+              targetLabel: resp.target_label,
+              dependents: resp.dependents || [],
+            })
+            if (choice === 'cascade') await api.deleteFeature(i, null, { cascade: true })
+            else if (choice === 'revert') await api.revertToBeforeFeature(i)
+          }
         }
       })
 

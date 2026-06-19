@@ -378,6 +378,57 @@ def test_delete_attachment_clears_render(_clean_state):
     assert len(client.get("/api/design/protein/atomistic").json()["atoms"]) == 0
 
 
+def test_delete_protein_import_feature_clears_render(_clean_state):
+    # Deleting the protein-import feature-log row must remove the imported
+    # protein from the view (it's a root op: the asset/attachment it created
+    # have no other creating entry in the log).
+    client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"})
+    d = design_state.get_design()
+    assert d.feature_log[-1].op_kind == "protein-import"
+    idx = len(d.feature_log) - 1
+    r = client.delete(f"/api/design/features/{idx}")
+    assert r.status_code == 200, r.text
+    after = design_state.get_design()
+    assert len(after.protein_attachments) == 0
+    assert len(after.protein_assets) == 0
+    assert len(client.get("/api/design/protein/atomistic").json()["atoms"]) == 0
+
+
+def test_delete_last_protein_import_keeps_earlier(_clean_state):
+    # Two imports; deleting the LAST import row surgically removes just it and
+    # keeps the earlier protein (it has no later dependents).
+    client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth1"})
+    client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth2"})
+    assert len(design_state.get_design().protein_attachments) == 2
+    last_idx = len(design_state.get_design().feature_log) - 1
+    r = client.delete(f"/api/design/features/{last_idx}")
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert not j.get("needs_cascade_decision")
+    after = design_state.get_design()
+    assert len(after.protein_attachments) == 1
+    assert len(after.protein_assets) == 1
+    assert len(client.get("/api/design/protein/atomistic").json()["atoms"]) == 9
+
+
+def test_delete_earlier_protein_import_lists_dependent(_clean_state):
+    # protein-import is non-reconstructable, so a later import baked on top is a
+    # dependent: deleting the first lists the second instead of silently
+    # corrupting (design unchanged until the user cascades).
+    client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth1"})
+    first_idx = len(design_state.get_design().feature_log) - 1
+    client.post("/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth2"})
+    r = client.delete(f"/api/design/features/{first_idx}")
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j.get("needs_cascade_decision") is True
+    assert len(design_state.get_design().protein_attachments) == 2  # unchanged
+    # Cascade clears both.
+    r = client.delete(f"/api/design/features/{first_idx}?cascade=true")
+    assert r.status_code == 200, r.text
+    assert len(design_state.get_design().protein_attachments) == 0
+
+
 def test_patch_visible_false_hides_protein(_clean_state):
     asset_id = _import_protein()
     att_id = client.post("/api/design/protein/attachments",
