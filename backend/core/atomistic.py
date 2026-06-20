@@ -870,10 +870,27 @@ def _atomistic_domain_bp_range(domain, strand: Strand):
     return range(domain.start_bp, domain.end_bp + step, step)
 
 
+def _append_protein_atoms(model: AtomisticModel, design: Design) -> AtomisticModel:
+    """Append world-placed protein-attachment atoms (Part B / MD) to *model*.
+
+    Proteins enter the Physical/export layer only — display/export, never DNA
+    topology.  Serials continue past the DNA atoms; bonds use the same 0-based
+    serial space.  No-op when the design has no visible protein attachment.
+    """
+    from backend.core.protein import build_protein_attachment_atoms
+    p_atoms, p_bonds, _ = build_protein_attachment_atoms(design, serial_start=len(model.atoms))
+    if not p_atoms:
+        return model
+    model.atoms.extend(p_atoms)
+    model.bonds.extend(p_bonds)
+    return model
+
+
 def build_atomistic_model(
     design: Design,
     exclude_helix_ids: set[str] | None = None,
     nuc_pos_override: "dict[tuple[str, int, str], _np.ndarray] | None" = None,
+    include_proteins: bool = False,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -895,7 +912,7 @@ def build_atomistic_model(
     if nuc_pos_override is None:
         ref_model = atomistic_model_from_reference(design, exclude_helix_ids)
         if ref_model is not None:
-            return ref_model
+            return _append_protein_atoms(ref_model, design) if include_proteins else ref_model
 
     from backend.core.deformation import effective_helix_for_geometry
     from backend.core.lattice import position_linker_virtual_helices
@@ -1277,7 +1294,10 @@ def build_atomistic_model(
     from backend.core.deformation import apply_deformations_to_atoms
     apply_deformations_to_atoms(atoms, design)
 
-    return AtomisticModel(atoms=atoms, bonds=bonds)
+    model = AtomisticModel(atoms=atoms, bonds=bonds)
+    if include_proteins:
+        model = _append_protein_atoms(model, design)
+    return model
 
 
 # ── Crossover interpolation helpers ──────────────────────────────────────────

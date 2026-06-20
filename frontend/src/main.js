@@ -192,6 +192,7 @@ import { initBenchmarkPanel } from './ui/benchmark_panel.js'
 import { initAnchorGlow } from './scene/anchor_glow.js'
 import { initOxdnaDisplay } from './ui/oxdna_display.js'
 import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
+import { initMdEngines }   from './ui/md_engines.js'
 import { initEfieldGizmo } from './scene/efield_gizmo.js'
 import { initEfieldSetup } from './ui/efield_setup.js'
 import { initOxdnaFloorSetup } from './ui/oxdna_floor_setup.js'
@@ -1813,6 +1814,15 @@ async function main() {
       surface: oxdnaFloorSetup?.getSurfaceSpec?.(),
       anchors: oxdnaAnchorsSetup?.getAnchors?.() || [],
     }),
+    // Clicking a job echoes its run conditions into every card (field arrow,
+    // surface, anchor chips + 3D glow) — what was used during that run.
+    applyRunConfig: (cfg) => {
+      // The field arrow shows for a field run whether or not the card is open,
+      // so don't force the card open — just echo the run's field into it.
+      efieldSetup?.applyConfig?.(cfg.field)
+      oxdnaFloorSetup?.applyConfig?.(cfg.surface)
+      oxdnaAnchorsSetup?.applyConfig?.(cfg.anchors)
+    },
   })
   // E-field setup: direction/magnitude arrow gizmo + anchor picker + Run field
   // (appends a field stage to the panel's selected completed oxDNA job).
@@ -6433,6 +6443,12 @@ async function main() {
     const { showLinkerConfigModal } = await import('./ui/linker_config_modal.js')
     showLinkerConfigModal({ readOnly: true })
   })
+
+  // MD Engines: Help-menu install/status panel + sidebar install gates.
+  const mdEngines = initMdEngines({ api })
+  mdEngines.mountSidebarGates()
+  mdEngines.refresh()
+  document.getElementById('menu-help-md-engines')?.addEventListener('click', () => mdEngines.showStatusModal())
 
   initCreateSeam({ store, api })
 

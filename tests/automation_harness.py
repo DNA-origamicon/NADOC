@@ -2089,21 +2089,35 @@ def assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,
        frames were pooled the measurement is *inconclusive* and the oracle raises
        (a too-short run cannot certify a target; this is the load-bearing guard
        AF-13 Phase 3's checker formalises as "met requires confidence");
-    4. computes the measurement (currently ``end_to_end`` — the Euclidean
+    4. computes the measurement and asserts it is within ``tol_nm`` of
+       ``target_nm``.  Four measures are implemented: ``end_to_end`` (the Euclidean
        distance between two ``(helix_id, bp_index, direction)`` landmark
-       nucleotides) with the pure :func:`measure_end_to_end`, and asserts it is
-       within ``tol_nm`` of ``target_nm``.
+       nucleotides, via :func:`measure_end_to_end`), ``radius_of_gyration``
+       (the whole-structure compactness over ALL nucleotides — no landmarks — via
+       :func:`measure_radius_of_gyration`), ``segment_angle`` (the bend angle in
+       DEGREES at the middle of three landmarks, via :func:`measure_segment_angle`),
+       and ``inter_helix_spacing`` (the radial centre-to-centre nm gap between the
+       axes of the two helices named by the landmarks, via
+       :func:`measure_inter_helix_spacing`).
 
-    ``measure_spec`` is ``{"measure": "end_to_end", "landmarks": [a, b]}`` where
-    each landmark is a ``(helix_id, bp_index, direction)`` key.  Returns
-    ``{measured_nm, target_nm, tol_nm, n_frames, confidence}`` so callers can
-    surface the value + how trustworthy it is.
+    ``measure_spec`` is ``{"measure": "end_to_end", "landmarks": [a, b]}`` /
+    ``{"measure": "segment_angle", "landmarks": [a, b, c]}`` (each landmark a
+    ``(helix_id, bp_index, direction)`` key, ``b`` the angle vertex) or
+    ``{"measure": "radius_of_gyration"}`` (no landmarks).  For the angular measure
+    ``target_nm``/``tol_nm`` carry DEGREES (the field names are kept for backward
+    compatibility).  Returns ``{measured_nm, target_nm, tol_nm, n_frames,
+    confidence}`` so callers can surface the value + how trustworthy it is.
 
     *Physical-layer only*: it reads relaxed geometry, it never writes it back to
     ``Design``.
     """
     from backend.api import headless_oxdna_build as hox
-    from backend.core.oxdna_health import measure_end_to_end
+    from backend.core.oxdna_health import (
+        measure_end_to_end,
+        measure_inter_helix_spacing,
+        measure_radius_of_gyration,
+        measure_segment_angle,
+    )
 
     status = getattr(job.status, "value", str(job.status))
     assert status == "completed", (
@@ -2121,14 +2135,37 @@ def assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,
         "certify the target (the confidence gate)")
 
     kind = measure_spec.get("measure")
-    assert kind == "end_to_end", (
-        f"assert_relaxed_measurement: unsupported measure {kind!r} "
-        "(only 'end_to_end' is implemented)")
-    landmark_a, landmark_b = measure_spec["landmarks"]
-    measured = measure_end_to_end(rmsf["positions"], landmark_a, landmark_b)
+    unit = "nm"
+    if kind == "end_to_end":
+        landmark_a, landmark_b = measure_spec["landmarks"]
+        measured = measure_end_to_end(rmsf["positions"], landmark_a, landmark_b)
+        label = "end-to-end"
+    elif kind == "radius_of_gyration":
+        measured = measure_radius_of_gyration(rmsf["positions"])
+        label = "radius of gyration"
+    elif kind == "segment_angle":
+        # Angular measure → target_nm/tol_nm carry DEGREES (the field names are kept
+        # for backward compatibility); the vertex is the middle landmark.
+        landmark_a, landmark_b, landmark_c = measure_spec["landmarks"]
+        measured = measure_segment_angle(
+            rmsf["positions"], landmark_a, landmark_b, landmark_c)
+        label, unit = "segment angle", "deg"
+    elif kind == "inter_helix_spacing":
+        # Each landmark names a helix (any nucleotide on it); the measure groups
+        # every site of that helix to fit its axis, then the radial centre-to-centre
+        # spacing in nm.
+        landmark_a, landmark_b = measure_spec["landmarks"]
+        measured = measure_inter_helix_spacing(
+            rmsf["positions"], landmark_a, landmark_b)
+        label = "inter-helix spacing"
+    else:
+        raise AssertionError(
+            f"assert_relaxed_measurement: unsupported measure {kind!r} "
+            "(implemented: 'end_to_end', 'radius_of_gyration', 'segment_angle')")
     assert abs(measured - target_nm) <= tol_nm, (
-        f"relaxed end-to-end {measured:.3f} nm is not within {tol_nm} nm of the "
-        f"target {target_nm} nm (off by {abs(measured - target_nm):.3f} nm)")
+        f"relaxed {label} {measured:.3f} {unit} is not within {tol_nm} {unit} of "
+        f"the target {target_nm} {unit} (off by {abs(measured - target_nm):.3f} "
+        f"{unit})")
     return {"measured_nm": measured, "target_nm": target_nm, "tol_nm": tol_nm,
             "n_frames": n_frames, "confidence": confidence}
 
@@ -2194,6 +2231,69 @@ def assert_relax_honors_hardware_default(design: Design, workspace, *,
         f"relaxation did not honour the benchmarked default: requested "
         f"{backend}/{device}, but the job ran {job.backend}/{job.device}")
     return job
+
+
+def assert_converges_to_constraint(result, *, target_nm, tol_nm,
+                                   min_confidence=RMSF_PRELIM_FRAMES):
+    """AF-13 Phase 4 capstone oracle: a closed build→relax→measure→adjust loop
+    (:func:`~backend.api.headless_oxdna_build.iterate_to_constraint`) *converged* a
+    parametric topology knob to a relaxed-structure target — and got there honestly,
+    with **every** verdict certified by the P3 confidence gate.
+
+    ``result`` is the dict :func:`iterate_to_constraint` returns.  Asserts:
+
+    1. the loop reached ``status == "met"`` within its iteration budget (an
+       unreachable target / exhausted run raises — the can-go-red guard);
+    2. the **winning** verdict is genuinely ``met`` AND was pooled from
+       ``>= min_confidence`` frames — the loop did not declare victory on a noisy,
+       under-sampled estimate (the load-bearing AF-13 P3 gate, now enforced across a
+       *closed loop* rather than a single read);
+    3. **no** intermediate iteration ever flipped ``met`` below ``min_confidence``
+       frames either (the gate held on every step, not just the last);
+    4. the final measured value is within ``tol_nm`` of ``target_nm``;
+    5. **non-vacuity** — the FIRST attempt was NOT already ``met``, so the run
+       actually exercised the adjust loop (a knob that started on-target would prove
+       nothing about convergence).
+
+    *Physical-layer only*: reads the loop's verdicts, never the relaxed coordinates.
+    Returns ``result`` so callers can chain on it.
+    """
+    assert isinstance(result, dict) and "status" in result, (
+        f"assert_converges_to_constraint expects an iterate_to_constraint result "
+        f"dict, got {result!r}")
+    history = result.get("iterations") or []
+    assert history, "iterate loop ran zero iterations — nothing was attempted"
+
+    assert result["status"] == "met", (
+        f"iterate loop did not converge (status={result['status']!r} after "
+        f"{len(history)} iteration(s)); final verdict={result.get('verdict')!r}")
+
+    final = result.get("verdict")
+    assert final and final.get("status") == "met" and final.get("met") is True, (
+        f"loop reported converged but the final verdict is not a clean 'met': "
+        f"{final!r}")
+    assert final["n_frames"] >= min_confidence, (
+        f"loop declared the target met on only {final['n_frames']} pooled frame(s) "
+        f"(< {min_confidence}) — the confidence gate was bypassed on the winning "
+        "verdict")
+    assert abs(final["measured_nm"] - target_nm) <= tol_nm, (
+        f"final measured {final['measured_nm']:.3f} nm is not within {tol_nm} nm of "
+        f"the target {target_nm} nm (off by {abs(final['measured_nm'] - target_nm):.3f})")
+
+    for i, step in enumerate(history):
+        v = step.get("verdict")
+        if v and v.get("met"):
+            assert v["n_frames"] >= min_confidence, (
+                f"iteration {i} flipped 'met' on only {v['n_frames']} frame(s) "
+                f"(< {min_confidence}) — the confidence gate must hold on EVERY "
+                "step, not just the last")
+
+    first = history[0].get("verdict")
+    assert first is not None and first.get("status") != "met", (
+        "loop converged on the FIRST attempt — the initial knob already met the "
+        "constraint, so this run does not exercise the adjust loop (vacuous); start "
+        "from a knob that is off-target")
+    return result
 
 
 _MUTATION_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})

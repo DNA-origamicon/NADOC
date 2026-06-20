@@ -24,6 +24,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import re
+import shutil
 import threading
 import time
 import traceback
@@ -38,6 +39,15 @@ from backend.core.models import Assembly, Design
 _FLUSH_DEBOUNCE_S = 3.0
 # How often the flush thread wakes to check for new revisions.
 _POLL_INTERVAL_S = 1.0
+
+# Startup pruning bounds.  The session cache is crash-recovery scratch, not an
+# archive: without a cap it accrued one ~2 MB sub-dir per document/tab/test ever
+# opened (790+ → 180 MB → +6 s on every boot, growing forever, since restore()
+# loads and validates each one).  Prune before restore so each boot only pays for
+# recent work: drop anything untouched for _MAX_AGE_DAYS, then keep at most
+# _MAX_DOCS of whatever survives (most-recently-modified wins).
+_MAX_AGE_DAYS = 7
+_MAX_DOCS = 50
 
 _DESIGN_FILE = "active_design.nadoc"
 _ASSEMBLY_FILE = "active_assembly.nass"
@@ -83,6 +93,7 @@ def start(workspace_dir: Path) -> None:
         traceback.print_exc()
         return
 
+    _prune()
     restore()
 
     # Baseline bookkeeping to the post-restore revisions so we don't immediately
@@ -107,6 +118,55 @@ def stop() -> None:
         _flush(force=True)
     except Exception:
         traceback.print_exc()
+
+
+# ── Prune (startup) ──────────────────────────────────────────────────────────
+
+def _doc_mtime(sub: Path) -> float:
+    """Freshness of a cached doc — newest mtime among its files (0.0 if empty)."""
+    mtimes = [p.stat().st_mtime for p in sub.iterdir() if p.is_file()]
+    return max(mtimes) if mtimes else 0.0
+
+
+def _prune(now: float | None = None) -> int:
+    """Delete stale/excess cached docs before restore.  Returns the count removed.
+
+    Two bounds, applied in order to the per-doc sub-dirs:
+      1. age — drop any doc untouched for more than ``_MAX_AGE_DAYS``;
+      2. count — of whatever survives, keep only the ``_MAX_DOCS`` freshest.
+
+    Best-effort: a sub-dir that won't stat/delete is logged and skipped, never
+    fatal to startup.
+    """
+    if _session_dir is None or not _session_dir.is_dir():
+        return 0
+    if now is None:
+        now = time.time()
+
+    dated: list[tuple[float, Path]] = []
+    for sub in _session_dir.iterdir():
+        if sub.is_dir():
+            try:
+                dated.append((_doc_mtime(sub), sub))
+            except OSError:
+                traceback.print_exc()
+
+    cutoff = now - _MAX_AGE_DAYS * 86400.0
+    survivors = [(m, s) for (m, s) in dated if m >= cutoff]
+    doomed = [s for (m, s) in dated if m < cutoff]
+
+    # Count cap: keep the freshest _MAX_DOCS survivors, evict the rest.
+    survivors.sort(key=lambda t: t[0], reverse=True)
+    doomed += [s for (_m, s) in survivors[_MAX_DOCS:]]
+
+    removed = 0
+    for sub in doomed:
+        try:
+            shutil.rmtree(sub)
+            removed += 1
+        except OSError:
+            traceback.print_exc()
+    return removed
 
 
 # ── Restore (startup) ────────────────────────────────────────────────────────

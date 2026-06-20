@@ -160,15 +160,27 @@ def _find_top_dir() -> Path:
     )
 
 
-def _pick_ff(top_dir: Path) -> str:
-    """Return the name of the best available force field for DNA."""
-    for ff in _FF_CANDIDATES:
+def _pick_ff(top_dir: Path, *, require_protein: bool = False) -> str:
+    """Return the name of the best available force field for DNA (+ protein).
+
+    When ``require_protein`` is set (the design carries proteins), the AMBER
+    fallbacks are BLOCKED: amber99sb-ildn needs careful DNA/protein terminus
+    handling and NADOC's DNA terminus convention is tuned for CHARMM36.  Only
+    the charmm36 variants (which define both DNA and protein residues) qualify;
+    if none is installed we raise rather than silently mix force fields.
+    """
+    candidates = (
+        [ff for ff in _FF_CANDIDATES if ff.startswith("charmm")]
+        if require_protein else _FF_CANDIDATES
+    )
+    for ff in candidates:
         if (top_dir / f"{ff}.ff").is_dir():
             return ff
     available = [p.name for p in top_dir.iterdir() if p.name.endswith(".ff")]
     raise RuntimeError(
         f"No supported force field found in {top_dir}.\n"
-        f"Expected one of: {_FF_CANDIDATES}\n"
+        + ("Protein designs require CHARMM36 (AMBER fallback blocked).\n" if require_protein else "")
+        + f"Expected one of: {candidates}\n"
         f"Available: {available}"
     )
 
@@ -186,7 +198,7 @@ def _pick_ff(top_dir: Path) -> str:
 # §2c  GROMACS-SPECIFIC PDB BUILDER
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _build_gromacs_input_pdb(design: "Design", ff: str, box_margin_nm: float = 2.0, *, use_deformed: bool = True, nuc_pos_override=None) -> str:
+def _build_gromacs_input_pdb(design: "Design", ff: str, box_margin_nm: float = 2.0, *, use_deformed: bool = True, nuc_pos_override=None, include_proteins: bool = False) -> str:
     """
     Generate a PDB for pdb2gmx with residues in correct 5'→3' traversal order.
 
@@ -214,7 +226,7 @@ def _build_gromacs_input_pdb(design: "Design", ff: str, box_margin_nm: float = 2
 
     if not use_deformed:
         design = design.model_copy(update={"deformations": [], "cluster_transforms": []})
-    model = build_atomistic_model(design, nuc_pos_override=nuc_pos_override)
+    model = build_atomistic_model(design, nuc_pos_override=nuc_pos_override, include_proteins=include_proteins)
     atoms = model.atoms
     bonds = model.bonds
     atom_map = {a.serial: a for a in atoms}
@@ -2581,9 +2593,11 @@ def build_gromacs_package(
     solvate      : if True, add TIP3P water + MgCl2 ions (server-side)
     ion_conc_mM  : MgCl2 concentration in mM (default: 10.0)
     """
+    from backend.physics.oxdna_protein import has_proteins
+    _has_protein = has_proteins(design)
     gmx     = _find_gmx()
     top_dir = _find_top_dir()
-    ff      = _pick_ff(top_dir)
+    ff      = _pick_ff(top_dir, require_protein=_has_protein)
     ff_dir  = top_dir / f"{ff}.ff"
     name    = (package_name or design.metadata.name or "design").replace(" ", "_")
 
@@ -2629,7 +2643,7 @@ def build_gromacs_package(
         # position within each chain so pdb2gmx generates the right sequential
         # backbone bonds (standard export_pdb appends them at chain end, which
         # causes pdb2gmx to create wrong direct bonds across the crossover).
-        adapted = _build_gromacs_input_pdb(design, ff, box_margin_nm=2.0, use_deformed=use_deformed, nuc_pos_override=nuc_pos_override)
+        adapted = _build_gromacs_input_pdb(design, ff, box_margin_nm=2.0, use_deformed=use_deformed, nuc_pos_override=nuc_pos_override, include_proteins=_has_protein)
         input_pdb = tmpdir / "input.pdb"
         input_pdb.write_text(adapted)
 

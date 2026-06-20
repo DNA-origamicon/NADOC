@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
@@ -58,5 +58,22 @@ describe('initOxdnaAnchorsSetup', () => {
     store.setState({ multiSelectedOverhangIds: ['oX'] })
     els['oxdna-anchors-add'].click()
     expect(api.getAnchors().map(a => a.id)).toEqual(['oX'])
+  })
+
+  it('applyConfig replaces the anchor set + notifies onChange (job-select echo)', () => {
+    const onChange = vi.fn()
+    const a = initOxdnaAnchorsSetup({ getSelection: () => store.getState(), onChange })
+    a.applyConfig([
+      { kind: 'overhang', id: 'o1' },
+      { kind: 'domain', strandId: 's1', domainIndex: 2 },
+    ])
+    expect(a.getAnchors()).toHaveLength(2)
+    expect(els['oxdna-anchors-list'].querySelector('[data-key="domain:s1:2"]')).toBeTruthy()
+    expect(onChange).toHaveBeenLastCalledWith(a.getAnchors())
+    // A second apply replaces (not appends); empty clears.
+    a.applyConfig([{ kind: 'cluster', id: 'c9' }])
+    expect(a.getAnchors().map(x => x.id)).toEqual(['c9'])
+    a.applyConfig([])
+    expect(a.getAnchors()).toHaveLength(0)
   })
 })

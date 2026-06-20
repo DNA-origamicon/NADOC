@@ -141,6 +141,46 @@ describe('initOxdnaDisplay controller', () => {
     expect(ctrl.activeJobId()).toBe(null)
   })
 
+  it('a displayJob fetch that resolves AFTER stopAndRestore does not re-apply positions', async () => {
+    // Reproduces the "toggle off but sim positions stay" desync: the live-follow
+    // poll's displayJob is in flight when the user turns the display off.
+    const resp = { ready: true, stage_name: 's', positions: [{ helix_id: 'h0', bp_index: 0,
+      direction: 'FORWARD', backbone_position: [7, 7, 7], nx: 1, ny: 0, nz: 0 }] }
+    const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
+    const api = { getOxdnaDisplay: vi.fn().mockResolvedValue(resp) }
+    const ctrl = initOxdnaDisplay({ designRenderer, api })
+    await ctrl.displayJob('job0')       // display is on, showing job0
+    expect(ctrl.isActive()).toBe(true)
+
+    // Now a live-follow poll's displayJob is in flight when the user toggles off.
+    let release
+    api.getOxdnaDisplay = vi.fn().mockReturnValue(new Promise((res) => { release = () => res(resp) }))
+    const p = ctrl.displayJob('job0')   // fetch in flight
+    ctrl.stopAndRestore()               // user toggles off mid-flight
+    release()
+    const r = await p
+    expect(r.ok).toBe(false)            // the late fetch bailed (superseded)
+    expect(ctrl.isActive()).toBe(false)
+    // applyFemPositions(null) from stopAndRestore is the LAST call — no re-apply after it.
+    expect(designRenderer.applyFemPositions).toHaveBeenLastCalledWith(null)
+  })
+
+  it('switching to a job with no relaxed frame clears the previous job\'s stale overlay', async () => {
+    const respA = { ready: true, stage_name: 's', positions: [{ helix_id: 'h0', bp_index: 0,
+      direction: 'FORWARD', backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0 }] }
+    const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
+    const api = { getOxdnaDisplay: vi.fn().mockResolvedValue(respA) }
+    const ctrl = initOxdnaDisplay({ designRenderer, api })
+    await ctrl.displayJob('jobA')
+    expect(ctrl.activeJobId()).toBe('jobA')
+
+    api.getOxdnaDisplay = vi.fn().mockResolvedValue({ ready: false, positions: [] })
+    const r = await ctrl.displayJob('jobB')   // jobB has no frame yet
+    expect(r.ok).toBe(false)
+    expect(ctrl.isActive()).toBe(false)       // stale jobA overlay cleared
+    expect(designRenderer.applyFemPositions).toHaveBeenLastCalledWith(null)
+  })
+
   it('loadTrajectory caches frames and showFrame deforms to a given frame', async () => {
     const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
     const traj = {

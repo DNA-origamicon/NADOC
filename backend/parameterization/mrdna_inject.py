@@ -5,7 +5,7 @@ This module is the most architecturally fragile part of the pipeline.
 It patches mrdna's SegmentModel to use atomistic-derived crossover potentials
 instead of the hard-coded defaults.
 
-HOW MRDNA BUILDS CROSSOVER POTENTIALS (as of the version in /tmp/mrdna-tool)
+HOW MRDNA BUILDS CROSSOVER POTENTIALS (as of the checkout at $MRDNA_TOOL_PATH, default ~/mrdna-tool)
 ------------------------------------------------------------------------------
 mrdna.segmentmodel.SegmentModel.__init__ calls _generate_bead_model(), which
 calls add_crossover_potentials() for every crossover connection.  That function
@@ -51,7 +51,7 @@ FRAGILITY NOTES
 UPDATING THIS MODULE
 --------------------
 If mrdna's crossover potential code changes, diff against:
-  /tmp/mrdna-tool/mrdna/segmentmodel.py  lines 3314-3376 (add_crossover_potentials)
+  $MRDNA_TOOL_PATH/mrdna/segmentmodel.py  lines 3314-3376 (add_crossover_potentials)
 and update the r0 match threshold and dihedral detection accordingly.
 """
 
@@ -221,7 +221,8 @@ def build_patched_model(
     model_params["hj_equilibrium_angle"] = override.hj_equilibrium_angle_deg
 
     import sys
-    _mrdna_path = "/tmp/mrdna-tool"
+    from backend.core.mrdna_bridge import mrdna_tool_path
+    _mrdna_path = mrdna_tool_path()
     if _mrdna_path not in sys.path:
         sys.path.insert(0, _mrdna_path)
 
@@ -301,8 +302,10 @@ class PatchedSegmentModel:
         model_kwargs["hj_equilibrium_angle"] = ovr.hj_equilibrium_angle_deg
 
         import sys
-        if "/tmp/mrdna-tool" not in sys.path:
-            sys.path.insert(0, "/tmp/mrdna-tool")
+        from backend.core.mrdna_bridge import mrdna_tool_path
+        _mrdna_path = mrdna_tool_path()
+        if _mrdna_path not in sys.path:
+            sys.path.insert(0, _mrdna_path)
 
         from mrdna.segmentmodel import SegmentModel
 
@@ -402,8 +405,10 @@ def mrdna_model_from_nadoc_parameterized(
         )
 
     import sys
-    if "/tmp/mrdna-tool" not in sys.path:
-        sys.path.insert(0, "/tmp/mrdna-tool")
+    from backend.core.mrdna_bridge import mrdna_tool_path
+    _mrdna_path = mrdna_tool_path()
+    if _mrdna_path not in sys.path:
+        sys.path.insert(0, _mrdna_path)
 
     from mrdna.readers.segmentmodel_from_lists import model_from_basepair_stack_3prime
     from backend.core.mrdna_bridge import _build_nt_arrays

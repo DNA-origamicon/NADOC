@@ -127,11 +127,32 @@ def test_multiple_field_children_from_one_parent(sequenced_6hb, tmp_path, mock_o
     from backend.core.oxdna_job import OxdnaJob
     children = [OxdnaJob.load(i, tmp_path) for i in ids]
     assert all(c.parent_job_id == parent.job_id for c in children)
-    # Running a field from a field child is refused.
-    from fastapi import HTTPException
-    with pytest.raises(HTTPException) as exc:
-        hox.append_field(ids[0], tmp_path, field_pN=2.0, dir=[0, 0, 1], anchors=[anchor])
-    assert exc.value.status_code == 400
+    # A field run CAN now be chained off a completed field child — it seeds from
+    # that child's end state, giving a relax → field1 → field2 lineage.
+    grandchild = hox.append_field(ids[0], tmp_path, field_pN=2.0, dir=[0, 0, 1], anchors=[anchor])
+    hox.wait_for_terminal(grandchild["job_id"], tmp_path)
+    assert OxdnaJob.load(grandchild["job_id"], tmp_path).parent_job_id == ids[0]
+
+
+def test_run_config_persisted_for_panel_cards(sequenced_6hb, tmp_path, mock_oxdna):
+    """Both the relaxation parent and an E-field child store run_config so the
+    panel can repopulate its cards when the job is selected."""
+    from backend.core.oxdna_job import OxdnaJob
+    d = sequenced_6hb
+    parent = hox.run_relaxation(d, tmp_path, min_bp_retained=0.0)
+    prc = OxdnaJob.load(parent.job_id, tmp_path).run_config
+    assert prc and prc["kind"] == "relax"
+    assert prc["mc_steps"] and prc["md_relax_steps"] and prc["equil_steps"]
+    assert prc["min_bp_retained"] == 0.0
+
+    anchor = {"kind": "domain", "strand_id": d.strands[0].id, "domain_index": 0}
+    info = hox.append_field(parent.job_id, tmp_path, field_pN=3.0, dir=[1, 0, 0],
+                            anchors=[anchor])
+    crc = OxdnaJob.load(info["job_id"], tmp_path).run_config
+    assert crc and crc["kind"] == "field"
+    assert crc["field"]["field_pN"] == 3.0 and crc["field"]["dir"] == [1, 0, 0]
+    # Anchor descriptors stored camelCase so the Anchors card re-renders chips.
+    assert crc["anchors"] == [{"kind": "domain", "strandId": d.strands[0].id, "domainIndex": 0}]
 
 
 def test_run_field_rejects_no_anchor(sequenced_6hb, tmp_path, mock_oxdna):
@@ -357,6 +378,38 @@ def _design_end_to_end(design, a, b):
     return measure_end_to_end(_geometry_for_design(design), a, b)
 
 
+def _design_radius_of_gyration(design):
+    """Expected R_g: the design's OWN whole-structure radius of gyration (identity
+    mock relaxation → the relaxed mean reproduces the design geometry)."""
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.oxdna_health import measure_radius_of_gyration
+    return measure_radius_of_gyration(_geometry_for_design(design))
+
+
+def _angle_landmarks(design):
+    """Three landmark keys along ONE helix strand (same direction, spread bp) so a
+    straight duplex reads ~180° and a bend at the middle drops below it.  Returns
+    (a, b, c) with b the angle vertex."""
+    from backend.core.design_geometry import _geometry_for_design
+    geom = _geometry_for_design(design)
+    # Group by (helix_id, direction); pick the first group with >= 3 nucleotides.
+    groups = {}
+    for p in geom:
+        groups.setdefault((p["helix_id"], p["direction"]), []).append(p)
+    strand = next(g for g in groups.values() if len(g) >= 3)
+    strand.sort(key=lambda p: p["bp_index"])
+    a, b, c = strand[0], strand[len(strand) // 2], strand[-1]
+    return tuple((p["helix_id"], p["bp_index"], p["direction"]) for p in (a, b, c))
+
+
+def _design_segment_angle(design, a, b, c):
+    """Expected segment angle: the design's OWN three-landmark bend angle (identity
+    mock relaxation → the relaxed mean reproduces the design geometry)."""
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.oxdna_health import measure_segment_angle
+    return measure_segment_angle(_geometry_for_design(design), a, b, c)
+
+
 def _relaxed_with_production(design, workspace, *, steps):
     """Relax → append a production run of `steps` → return the terminal job."""
     job = hox.run_relaxation(design, workspace, min_bp_retained=0.0)
@@ -389,6 +442,61 @@ def test_assert_relaxed_measurement_end_to_end(sequenced_6hb, tmp_path, mock_oxd
         target, 0.1, workspace=tmp_path, min_confidence=50)
     assert result["n_frames"] == 60
     assert abs(result["measured_nm"] - target) < 0.1     # observed gap ~0.002 nm
+
+
+def test_assert_relaxed_measurement_radius_of_gyration(sequenced_6hb, tmp_path,
+                                                       mock_oxdna_traj):
+    """The whole-structure radius_of_gyration measure flows through the SAME
+    oracle (no landmarks), certified against the design's own R_g."""
+    target = _design_radius_of_gyration(sequenced_6hb)
+    assert target > 1.0                                  # non-degenerate structure
+    job = _relaxed_with_production(sequenced_6hb, tmp_path, steps=6000)
+    result = assert_relaxed_measurement(
+        job, {"measure": "radius_of_gyration"},
+        target, 0.1, workspace=tmp_path, min_confidence=50)
+    assert result["n_frames"] == 60
+    assert abs(result["measured_nm"] - target) < 0.1     # identity mock → ~0 gap
+
+
+def test_relaxed_measurement_radius_of_gyration_fires_on_wrong_target(
+        sequenced_6hb, tmp_path, mock_oxdna_traj):
+    """An R_g target the relaxed structure doesn't match raises the tolerance check."""
+    target = _design_radius_of_gyration(sequenced_6hb)
+    job = _relaxed_with_production(sequenced_6hb, tmp_path, steps=6000)
+    with pytest.raises(AssertionError, match="not within"):
+        assert_relaxed_measurement(
+            job, {"measure": "radius_of_gyration"},
+            target + 20.0, 0.5, workspace=tmp_path, min_confidence=50)
+
+
+def test_assert_relaxed_measurement_segment_angle(sequenced_6hb, tmp_path, mock_oxdna_traj):
+    """The three-landmark segment_angle measure (degrees) flows through the SAME
+    oracle, certified against the straight bundle's own ~180° bend angle (identity
+    mock → the relaxed mean reproduces the design geometry)."""
+    a, b, c = _angle_landmarks(sequenced_6hb)
+    target = _design_segment_angle(sequenced_6hb, a, b, c)
+    assert target > 160.0                                 # a straight duplex is ~175°
+    job = _relaxed_with_production(sequenced_6hb, tmp_path, steps=6000)
+    # tol in DEGREES; a few degrees absorbs the oxDNA backbone-site convention vs the
+    # design-geometry one (an angle near 180° is sensitive to sub-Å offsets).
+    result = assert_relaxed_measurement(
+        job, {"measure": "segment_angle", "landmarks": [a, b, c]},
+        target, 3.0, workspace=tmp_path, min_confidence=50)
+    assert result["n_frames"] == 60
+    assert abs(result["measured_nm"] - target) < 3.0
+
+
+def test_relaxed_measurement_segment_angle_fires_on_wrong_target(
+        sequenced_6hb, tmp_path, mock_oxdna_traj):
+    """A segment-angle target the relaxed structure doesn't match raises the
+    tolerance check (the message reports degrees, not nm)."""
+    a, b, c = _angle_landmarks(sequenced_6hb)
+    target = _design_segment_angle(sequenced_6hb, a, b, c)
+    job = _relaxed_with_production(sequenced_6hb, tmp_path, steps=6000)
+    with pytest.raises(AssertionError, match="not within"):
+        assert_relaxed_measurement(
+            job, {"measure": "segment_angle", "landmarks": [a, b, c]},
+            target - 60.0, 1.0, workspace=tmp_path, min_confidence=50)
 
 
 # ── Red-tests: the measurement oracle CAN go red ───────────────────────────────
@@ -574,3 +682,233 @@ def test_bridge_oracle_rejects_vacuous_cpu_request(sequenced_6hb, tmp_path):
     with pytest.raises(AssertionError, match="vacuous"):
         assert_relax_honors_hardware_default(
             sequenced_6hb, tmp_path, backend="CPU", device="0", min_bp_retained=0.0)
+
+
+# ── AF-13 Phase 4: the iterate-until-met loop (the capstone) ───────────────────
+# Composes build (a bend-curvature TOPOLOGY knob) → relax → production → measure →
+# adjust into a CLOSED loop that converges the knob to a relaxed-structure
+# end-to-end target.  The identity mock can't move atoms, so the relaxed mean
+# reproduces the DESIGN geometry — meaning the bend (a real topology edit) is what
+# moves the measured end-to-end, exactly as a real GPU run's physics would.  Probed
+# monotone profile: kappa 0 -> 13.74 nm, 2.0 -> 12.64, 2.5 -> 12.04, 3.0 -> 11.33.
+
+from backend.api import headless_build as hb
+from backend.api import state as design_state
+from backend.core.models import LatticeType
+from tests.automation_harness import assert_converges_to_constraint
+
+_BEND_CELLS = [[0, 0], [0, 1]]
+_BEND_LENGTH = 42
+_BEND_LANDMARKS = (("h_XY_0_0", 0, "FORWARD"), ("h_XY_0_1", 41, "REVERSE"))
+
+
+def _build_bent_bundle(knob):
+    """build_fn: a fully-sequenced 2-helix bundle bent by ``knob['kappa']`` deg/bp.
+    The bend curves the bundle so its fixed-index end-to-end shrinks with curvature;
+    the landmark keys are stable across all curvatures (topology is unchanged)."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(_BEND_CELLS, _BEND_LENGTH, lattice=LatticeType.HONEYCOMB)
+        if knob["kappa"] > 1e-9:
+            hb.add_bend(2, _BEND_LENGTH - 3, curvature_deg_per_bp=knob["kappa"])
+        return _sequence_for_oxdna(design_state.get_or_404())
+
+
+def _bisect_kappa(target):
+    """adjust_fn: bisection on curvature.  end-to-end DECREASES monotonically with
+    kappa, so a measurement above target needs MORE bend (raise lo), below needs
+    LESS (lower hi).  Only ever called on an ``unmet`` verdict."""
+    def adjust(knob, verdict):
+        lo, hi, k = knob["lo"], knob["hi"], knob["kappa"]
+        if verdict["measured_nm"] > target:    # too straight → bend more
+            lo = k
+        else:                                  # too bent → bend less
+            hi = k
+        return {"kappa": (lo + hi) / 2, "lo": lo, "hi": hi}
+    return adjust
+
+
+def _e2e_constraint(target, *, tol=0.5, min_confidence=50):
+    a, b = _BEND_LANDMARKS
+    return {"measure": "end_to_end", "landmarks": [list(a), list(b)],
+            "target_nm": target, "tol_nm": tol, "min_confidence": min_confidence}
+
+
+def test_segment_angle_captures_bend():
+    """THE LOAD-BEARING AUGMENT: segment_angle actually measures curvature — three
+    collinear landmarks along a STRAIGHT bundle read ~180°, and the SAME landmarks
+    on a bundle bent at the middle read strictly (and substantially) less.  Pure
+    geometry (no oxDNA): proves the measure reflects real bending, not a constant.
+    Direction-agnostic (an arccos magnitude) — no frame/sign reasoning."""
+    straight = _build_bent_bundle({"kappa": 0.0})
+    bent = _build_bent_bundle({"kappa": 3.0})
+    a, b, c = _angle_landmarks(straight)
+    straight_angle = _design_segment_angle(straight, a, b, c)
+    bent_angle = _design_segment_angle(bent, a, b, c)
+    # ~175°, not exactly 180: backbone sites spiral around the helix axis, so three
+    # backbone landmarks are on a helical path, not a straight line.
+    assert straight_angle > 170.0
+    assert bent_angle < straight_angle - 40.0          # the bend folds the segment
+    assert 0.0 < bent_angle < 180.0                    # a real interior angle
+
+
+def test_iterate_converges_to_constraint(tmp_path, mock_oxdna_traj):
+    """THE CAPSTONE: the closed loop bisects the bend curvature until the relaxed
+    end-to-end lands within tolerance of the target — every verdict confidence-gated
+    via check_relaxed_constraint."""
+    target = 12.0
+    result = hox.iterate_to_constraint(
+        _build_bent_bundle, _bisect_kappa(target), _e2e_constraint(target),
+        tmp_path, initial_knob={"kappa": 2.0, "lo": 0.0, "hi": 4.0},
+        max_iterations=8, production_steps=6000, min_bp_retained=0.0)
+    assert_converges_to_constraint(result, target_nm=target, tol_nm=0.5,
+                                   min_confidence=50)
+    assert result["status"] == "met"
+    assert 2.0 < result["knob"]["kappa"] < 3.0    # converged between the two brackets
+    assert len(result["iterations"]) <= 5         # a few bisection steps
+    # every iteration was conclusive in one well-sampled production round
+    assert all(it["production_rounds"] == 1 for it in result["iterations"])
+
+
+def test_iterate_grows_production_on_inconclusive(tmp_path, mock_oxdna_traj):
+    """The 'inconclusive → run a longer production' branch: a run that starts
+    under-sampled pools MORE production (not a knob change) until the confidence gate
+    clears.  The knob starts on-target, so once confident it is immediately met and
+    the adjust_fn is never called."""
+    target = 12.037                               # kappa=2.5 lands here
+
+    def _no_adjust(knob, verdict):
+        raise AssertionError("adjust_fn must not be called on an inconclusive/met loop")
+
+    result = hox.iterate_to_constraint(
+        _build_bent_bundle, _no_adjust,
+        _e2e_constraint(target, tol=0.5, min_confidence=25), tmp_path,
+        initial_knob={"kappa": 2.5, "lo": 0.0, "hi": 4.0}, max_iterations=3,
+        production_steps=1000,        # 10 frames/round → needs ≥3 rounds for 25
+        max_production_rounds=8, min_bp_retained=0.0)
+    assert result["status"] == "met"
+    assert result["iterations"][0]["production_rounds"] >= 3   # pooled multiple runs
+    assert result["verdict"]["n_frames"] >= 25
+
+
+# ── Red-tests: the convergence oracle CAN go red ───────────────────────────────
+
+def test_iterate_oracle_fires_on_exhaustion(tmp_path, mock_oxdna_traj):
+    """A target no curvature can reach (> the straight ~13.74 nm end-to-end) → the
+    loop exhausts its budget without ever meeting it, and the oracle raises."""
+    target = 20.0
+    result = hox.iterate_to_constraint(
+        _build_bent_bundle, _bisect_kappa(target),
+        _e2e_constraint(target, tol=0.3), tmp_path,
+        initial_knob={"kappa": 2.0, "lo": 0.0, "hi": 4.0}, max_iterations=4,
+        production_steps=6000, min_bp_retained=0.0)
+    assert result["status"] == "exhausted"
+    with pytest.raises(AssertionError, match="did not converge"):
+        assert_converges_to_constraint(result, target_nm=target, tol_nm=0.3,
+                                       min_confidence=50)
+
+
+def test_iterate_oracle_fires_on_vacuous_convergence(tmp_path, mock_oxdna_traj):
+    """The non-vacuity guard: if the initial knob ALREADY meets the constraint, the
+    loop 'converges' on attempt 0 with no adjustment work — the oracle rejects it."""
+    target = 12.037                               # kappa=2.5 meets it immediately
+    result = hox.iterate_to_constraint(
+        _build_bent_bundle, _bisect_kappa(target),
+        _e2e_constraint(target, tol=0.5), tmp_path,
+        initial_knob={"kappa": 2.5, "lo": 0.0, "hi": 4.0}, max_iterations=4,
+        production_steps=6000, min_bp_retained=0.0)
+    assert result["status"] == "met"              # it DID meet — but on attempt 0
+    with pytest.raises(AssertionError, match="vacuous|FIRST attempt"):
+        assert_converges_to_constraint(result, target_nm=target, tol_nm=0.5,
+                                       min_confidence=50)
+
+
+def test_iterate_rejects_bad_constraint(tmp_path):
+    """A malformed constraint raises at parse time — before any relaxation runs (no
+    mock binary needed: it fails fast)."""
+    from backend.core.oxdna_health import ConstraintSpecError
+
+    def _build(knob):
+        raise AssertionError("build_fn called despite a malformed constraint")
+
+    with pytest.raises(ConstraintSpecError):
+        hox.iterate_to_constraint(
+            _build, lambda k, v: k, {"measure": "bogus", "landmarks": []},
+            tmp_path, initial_knob={"kappa": 0.0})
+
+
+# ── inter_helix_spacing — the first axis-grouping relaxed-structure measure ─────
+# Each landmark only NAMES a helix; the measure groups all of that helix's backbone
+# sites to fit its axis, then the radial centre-to-centre spacing in nm.
+
+def _row_bundle():
+    """A straight 3-in-a-row SQUARE bundle (2.25 nm lattice pitch) + its three
+    helix ids sorted, for the inter-helix-spacing tests."""
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle([[0, 0], [0, 1], [0, 2]], 32, lattice=LatticeType.SQUARE)
+        design = _sequence_for_oxdna(design_state.get_or_404())
+    from backend.core.design_geometry import _geometry_for_design
+    by_h = {}
+    for p in _geometry_for_design(design):
+        by_h.setdefault(p["helix_id"], []).append(p)
+    hids = sorted(by_h)
+
+    def landmark(hid):
+        p = by_h[hid][0]
+        return (p["helix_id"], p["bp_index"], p["direction"])
+
+    return design, hids, landmark
+
+
+def _design_inter_helix_spacing(design, a, b):
+    """Expected spacing: the design's OWN fit-axis radial gap (identity mock
+    relaxation → the relaxed mean reproduces the design geometry)."""
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.oxdna_health import measure_inter_helix_spacing
+    return measure_inter_helix_spacing(_geometry_for_design(design), a, b)
+
+
+def test_inter_helix_spacing_captures_separation():
+    """THE LOAD-BEARING AUGMENT: inter_helix_spacing tracks real helix separation,
+    not a constant.  On a straight 3-in-a-row SQUARE bundle the two adjacent pairs
+    read the same lattice pitch (~2.25 nm), and the skip-one pair reads ~twice that —
+    proving the measure reflects actual geometry.  Pure geometry (no oxDNA); a
+    magnitude, so direction-agnostic (no frame/sign reasoning)."""
+    design, hids, lm = _row_bundle()
+    assert len(hids) == 3
+    adj01 = _design_inter_helix_spacing(design, lm(hids[0]), lm(hids[1]))
+    adj12 = _design_inter_helix_spacing(design, lm(hids[1]), lm(hids[2]))
+    skip = _design_inter_helix_spacing(design, lm(hids[0]), lm(hids[2]))
+    assert adj01 > 1.0                       # a physical lattice pitch (~2.25 nm)
+    assert abs(adj01 - adj12) < 0.05         # uniform lattice → equal adjacent gaps
+    assert skip > adj01 + 1.0                # tracks separation, not a constant
+    assert abs(skip - 2 * adj01) < 0.1       # a straight row → ~twice the pitch
+
+
+def test_assert_relaxed_measurement_inter_helix_spacing(tmp_path, mock_oxdna_traj):
+    """The two-landmark inter_helix_spacing measure (nm) flows through the SAME
+    oracle, certified against the bundle's own adjacent-helix spacing (identity mock
+    → the relaxed mean reproduces the design geometry)."""
+    design, hids, lm = _row_bundle()
+    a, b = lm(hids[0]), lm(hids[1])
+    target = _design_inter_helix_spacing(design, a, b)
+    assert target > 1.0                                  # non-degenerate spacing
+    job = _relaxed_with_production(design, tmp_path, steps=6000)
+    result = assert_relaxed_measurement(
+        job, {"measure": "inter_helix_spacing", "landmarks": [a, b]},
+        target, 0.1, workspace=tmp_path, min_confidence=50)
+    assert result["n_frames"] == 60
+    assert abs(result["measured_nm"] - target) < 0.1     # identity mock → ~0 gap
+
+
+def test_relaxed_measurement_inter_helix_spacing_fires_on_wrong_target(
+        tmp_path, mock_oxdna_traj):
+    """A spacing target the relaxed structure doesn't match raises the tolerance
+    check (the message reports nm)."""
+    design, hids, lm = _row_bundle()
+    a, b = lm(hids[0]), lm(hids[1])
+    target = _design_inter_helix_spacing(design, a, b)
+    job = _relaxed_with_production(design, tmp_path, steps=6000)
+    with pytest.raises(AssertionError, match="not within"):
+        assert_relaxed_measurement(
+            job, {"measure": "inter_helix_spacing", "landmarks": [a, b]},
+            target + 5.0, 0.5, workspace=tmp_path, min_confidence=50)

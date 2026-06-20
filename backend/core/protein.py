@@ -429,6 +429,102 @@ def reverse_complement(seq: str) -> str:
     return "".join(complement_base(b) for b in reversed(seq))
 
 
+def _protein_chain_tag(idx: int) -> str:
+    """Unique per-protein-chain id (``PA``, ``PB`` … ``PAA``).
+
+    The leading ``P`` keeps protein chains from colliding with DNA chain ids
+    (pure ``A``..``Z`` / ``AA``..) and lets the PSF/psfgen writers recognise a
+    protein segment by prefix.  Distinct from the DNA strand→chain map.
+    """
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    if idx < 26:
+        return "P" + letters[idx]
+    return "P" + letters[idx // 26 - 1] + letters[idx % 26]
+
+
+def build_protein_attachment_atoms(
+    design,
+    serial_start: int = 0,
+    geometry: list[dict] | None = None,
+) -> tuple[list, list[tuple[int, int]], int]:
+    """All-atom :class:`~backend.core.atomistic.Atom` records for every VISIBLE
+    protein attachment, world-placed by the SAME transform the renderer + oxDNA
+    path use (``compose_protein_world_transform``).
+
+    Returns ``(atoms, bonds, next_serial)``.  Atoms carry a distinct protein
+    chain id (``PA``/``PB``…) and the ``__protein__{attachment_id}`` sentinel in
+    ``helix_id``/``strand_id`` so the PDB/PSF/psfgen exporters treat them as
+    protein segments without colliding with DNA helices.  ``bonds`` are
+    distance-inferred heavy-atom pairs (0-based model serials) so the
+    pure-Python PSF path can build protein angles/dihedrals from the graph.
+
+    Coordinates are nm (matching the DNA atomistic model); the PDB/PSF writers
+    convert to Å on output.  ``geometry`` (the ``_geometry_for_design`` nucleotide
+    list) is only needed for overhang-anchored attachments; it is computed lazily
+    when omitted.
+    """
+    from backend.core.atomistic import Atom
+
+    attachments = [
+        a for a in getattr(design, "protein_attachments", [])
+        if getattr(a, "visible", True)
+    ]
+    if not attachments:
+        return [], [], serial_start
+
+    assets = {a.id: a for a in getattr(design, "protein_assets", [])}
+    needs_geometry = any(
+        getattr(att.target, "overhang_id", None) is not None for att in attachments
+    )
+    if geometry is None and needs_geometry:
+        from backend.core.design_geometry import _geometry_for_design
+        geometry = _geometry_for_design(design)
+
+    atoms: list = []
+    bonds: list[tuple[int, int]] = []
+    serial = serial_start
+    chain_idx = 0
+    for att in attachments:
+        asset = assets.get(att.asset_id)
+        if asset is None or not asset.atoms:
+            continue
+        overhang_id = getattr(att.target, "overhang_id", None)
+        if overhang_id is not None and geometry is not None:
+            tip, outward = resolve_overhang_anchor(
+                geometry, overhang_id, getattr(att.target, "attach_end", "free_end"))
+            world = compose_protein_world_transform(asset, att, tip, outward)
+        else:
+            world = compose_protein_world_transform(asset, att)
+
+        sentinel = f"{PROTEIN_SENTINEL_PREFIX}{att.id}"
+        chain_tag: dict[str, str] = {}
+        base_serial = serial
+        for a in asset.atoms:
+            tag = chain_tag.get(a.chain_id)
+            if tag is None:
+                tag = _protein_chain_tag(chain_idx)
+                chain_tag[a.chain_id] = tag
+                chain_idx += 1
+            p = world @ np.array([a.x, a.y, a.z, 1.0])
+            atoms.append(Atom(
+                serial=serial,
+                name=a.name,
+                element=a.element,
+                residue=a.res_name,
+                chain_id=tag,
+                seq_num=a.res_seq,
+                x=float(p[0]), y=float(p[1]), z=float(p[2]),
+                strand_id=sentinel,
+                helix_id=sentinel,
+                bp_index=0,
+                direction="FORWARD",
+            ))
+            serial += 1
+        for i, j in infer_bonds_by_distance(asset):
+            bonds.append((base_serial + int(i), base_serial + int(j)))
+    return atoms, bonds, serial
+
+
 def azide_attach_end(
     nucs: list[dict], overhang_id: str, binder_strand_id: str, azide_end: str = "5p",
 ) -> str:

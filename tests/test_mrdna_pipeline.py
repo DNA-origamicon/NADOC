@@ -56,14 +56,15 @@ _has_u6hb    = _U6HB_PSF.exists() and _U6HB_DCD.exists() and _U6HB_PDB.exists()
 _has_mrdna   = False
 try:
     import sys
-    sys.path.insert(0, "/tmp/mrdna-tool")
+    from backend.core.mrdna_bridge import mrdna_tool_path
+    sys.path.insert(0, mrdna_tool_path())
     import mrdna  # noqa: F401
     _has_mrdna = True
 except ImportError:
     pass
 
 skip_no_u6hb  = pytest.mark.skipif(not _has_u6hb,  reason="U6hb PSF/DCD not found at /tmp")
-skip_no_mrdna = pytest.mark.skipif(not _has_mrdna, reason="mrdna not installed at /tmp/mrdna-tool")
+skip_no_mrdna = pytest.mark.skipif(not _has_mrdna, reason="mrdna not installed (set $MRDNA_TOOL_PATH or use ~/mrdna-tool)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -229,7 +230,8 @@ class TestSyntheticRoundTrip:
         Uses 2hb_xover_val.nadoc (small: ~2 helices, ~100 bp, fast mrdna init).
         """
         import sys
-        sys.path.insert(0, "/tmp/mrdna-tool")
+        from backend.core.mrdna_bridge import mrdna_tool_path
+        sys.path.insert(0, mrdna_tool_path())
 
         design_path = EXAMPLES / "2hb_xover_val.nadoc"
         if not design_path.exists():

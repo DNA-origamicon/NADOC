@@ -36,7 +36,7 @@ export function initEfieldSetup({ gizmo, onChange = null } = {}) {
   const arrow  = document.getElementById('efield-arrow')
   const bodyEl = document.getElementById('efield-body')
   if (!toggle || !bodyEl) {
-    return { getFieldSpec: () => ({ field_pN: 0, dir: [0, 1, 0], enabled: false }), isEnabled: () => false, refresh: () => {} }
+    return { getFieldSpec: () => ({ field_pN: 0, dir: [0, 1, 0], enabled: false }), isEnabled: () => false, refresh: () => {}, applyConfig: () => {} }
   }
 
   const enableChk  = document.getElementById('efield-enable')
@@ -57,6 +57,9 @@ export function initEfieldSetup({ gizmo, onChange = null } = {}) {
   let _pN      = 0
   let _qEff    = DEFAULT_Q_EFF
   let _enabled = false
+  // True while a selected oxDNA job applied (or is applying) a field — keeps the
+  // direction arrow visible even when the card is collapsed.
+  let _jobFieldActive = false
 
   if (qeffInput) qeffInput.value = String(DEFAULT_Q_EFF)
   if (dirX) dirX.value = '0'
@@ -138,29 +141,67 @@ export function initEfieldSetup({ gizmo, onChange = null } = {}) {
     _syncInputsFromGizmo(); _syncVpm(); _renderReady()
   })
 
-  // ── Section open/close (mounts the gizmo only while editing) ───────────────
+  // ── Gizmo visibility ───────────────────────────────────────────────────────
+  // Show the arrow when the card is open (editing) OR a selected job applied a
+  // field — so clicking a field run reveals its direction arrow even with the
+  // card collapsed.  Detach only when neither holds.
+  function _syncGizmo() {
+    if (_open || _jobFieldActive) {
+      gizmo?.attach?.([0, 0, 0])
+      _pushToGizmo()
+    } else {
+      gizmo?.detach?.()
+    }
+  }
+
+  // ── Section open/close (the body; the gizmo follows _syncGizmo) ─────────────
   function _open_() {
     _open = true
     bodyEl.style.display = ''
     if (arrow) arrow.classList.remove('is-collapsed')
-    gizmo?.attach?.([0, 0, 0])
-    _pushToGizmo(); _renderReady()
+    _syncGizmo(); _renderReady()
   }
   function _close_() {
     _open = false
     bodyEl.style.display = 'none'
     if (arrow) arrow.classList.add('is-collapsed')
-    gizmo?.detach?.()
+    _syncGizmo()   // keep the arrow if a field job is still selected
   }
   toggle.addEventListener('click', () => { _open ? _close_() : _open_() })
   _close_()   // start collapsed
 
-  // Drop the gizmo when leaving the Dynamics tab so it never lingers in other tabs.
+  // Drop the gizmo when leaving the Dynamics tab so it never lingers in other tabs
+  // (including the job-selected arrow shown with the card collapsed).
   window.addEventListener('nadoc:left-tab-change', (e) => {
-    if (e.detail?.activeTab !== 'dynamics' && _open) _close_()
+    if (e.detail?.activeTab !== 'dynamics') {
+      _jobFieldActive = false
+      if (_open) _close_()
+      else _syncGizmo()
+    }
   })
 
   function refresh() { _renderReady() }
 
-  return { getFieldSpec, isEnabled, refresh }
+  // Repopulate the card from a stored field record ({field_pN, dir} or null) so
+  // selecting an oxDNA field run shows that run's magnitude + direction (and, with
+  // {open:true}, reveals the direction arrow gizmo).  A null record turns the field
+  // off (the card reflects "no field" for plain/surface/relax jobs).
+  function applyConfig(field, { open = false } = {}) {
+    _enabled = !!field
+    _jobFieldActive = !!field          // arrow stays visible for a field job, card open or not
+    if (enableChk) enableChk.checked = _enabled
+    if (field) {
+      _pN = Math.max(0, parseFloat(field.field_pN) || 0)
+      if (magInput) magInput.value = _fmtPn(_pN)
+      const d = normalize(Array.isArray(field.dir) && field.dir.length === 3 ? field.dir : [0, 1, 0])
+      if (dirX) dirX.value = String(+d[0].toFixed(3))
+      if (dirY) dirY.value = String(+d[1].toFixed(3))
+      if (dirZ) dirZ.value = String(+d[2].toFixed(3))
+    }
+    if (open && field && !_open) _open_()
+    else { _syncGizmo(); _renderReady() }
+    _syncVpm()
+  }
+
+  return { getFieldSpec, isEnabled, refresh, applyConfig }
 }

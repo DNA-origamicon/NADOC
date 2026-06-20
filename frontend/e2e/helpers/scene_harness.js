@@ -16,7 +16,10 @@
  */
 import { expect } from '@playwright/test'
 
-const API = 'http://localhost:8000/api'
+// Backend base URL. Defaults to the user's dev server (:8000) for ad-hoc spec
+// runs; the isolated smoke config sets NADOC_E2E_API_BASE to its throwaway
+// backend so the gate never touches the user's running server.
+const API = (process.env.NADOC_E2E_API_BASE || 'http://127.0.0.1:8000') + '/api'
 
 /**
  * Collect browser console errors + uncaught page errors into an array.

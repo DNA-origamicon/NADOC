@@ -18,6 +18,9 @@ from backend.core.pdb_export import _chain_char, _cryst1_record, _h36
 
 _FF_DIR = Path(__file__).parent.parent / "data" / "forcefield"
 _TOP_ALL36_NA = _FF_DIR / "top_all36_na.rtf"
+_TOP_ALL36_PROT = _FF_DIR / "top_all36_prot.rtf"
+
+from backend.core.protein import PROTEIN_SENTINEL_PREFIX
 
 _RESNAME_TO_CHARMM = {
     "DA": "ADE",
@@ -25,6 +28,42 @@ _RESNAME_TO_CHARMM = {
     "DG": "GUA",
     "DT": "THY",
 }
+
+# Imported-PDB protein residue names → CHARMM36 protein RTF residue names.
+# Histidine defaults to the (neutral, δ-protonated) HSD; AMBER/alt protonation
+# names collapse to their CHARMM standard so psfgen finds a residue definition.
+_PROT_RESNAME_TO_CHARMM = {
+    "HIS": "HSD", "HID": "HSD", "HIE": "HSE", "HIP": "HSP",
+    "CYX": "CYS", "CYM": "CYS",
+    "ASH": "ASP", "GLH": "GLU", "LYN": "LYS", "ARN": "ARG",
+    "MSE": "MET", "SEC": "CYS",
+}
+
+# psfgen atom/residue aliases for heavy-atom-only PDBs (CHARMM-GUI convention):
+# HIS→HSD, ILE CD1→CD, C-terminal OXT→OT2.  Applied before reading any segment.
+_PROT_PDBALIASES = [
+    "pdbalias residue HIS HSD",
+    "pdbalias residue HID HSD",
+    "pdbalias residue HIE HSE",
+    "pdbalias residue HIP HSP",
+    "pdbalias residue MSE MET",
+    "pdbalias atom ILE CD1 CD",
+    "pdbalias atom * OXT OT2",
+    "pdbalias atom * O OT1",
+]
+
+
+def _is_protein_atom(atom: Atom) -> bool:
+    """True when an atomistic atom belongs to a protein attachment (sentinel)."""
+    return atom.helix_id.startswith(PROTEIN_SENTINEL_PREFIX)
+
+
+def _psfgen_prot_segid(index: int) -> str:
+    """Unique 4-char psfgen segname for the *index*-th protein chain (``P000``…)."""
+    a = _B36[(index // 1296) % 36]
+    b = _B36[(index // 36) % 36]
+    c = _B36[index % 36]
+    return f"P{a}{b}{c}"
 
 _ATOM_TO_CHARMM = {
     "OP1": "O1P",
@@ -41,12 +80,20 @@ class CharmmTopologyBuild:
 
 
 # psfgen ships *inside* the NAMD tarball (top-level, next to namd3), so the
-# conventional NAMD install dirs are also psfgen candidates.
-_PSFGEN_CANDIDATES = [
-    str(Path.home() / "Applications" / "NAMD_3.0.2" / "psfgen"),
-    str(Path.home() / "Applications" / "NAMD_3.0.2_Linux-x86_64-multicore-CUDA" / "psfgen"),
-    str(Path.home() / "Applications" / "NAMD_3.0.2_Linux-x86_64-multicore" / "psfgen"),
-]
+# conventional NAMD install dirs are also psfgen candidates.  Globbed (not
+# version-pinned) so a newer NAMD release is found without a code change;
+# CUDA builds sort first.  See docs/namd_setup.md.
+def _namd_install_dirs() -> list[str]:
+    import glob
+    dirs = sorted(glob.glob(str(Path.home() / "Applications" / "NAMD_*")), reverse=True)
+    dirs.sort(key=lambda d: 0 if "cuda" in os.path.basename(d).lower() else 1)  # stable: CUDA first
+    return dirs
+
+
+def _psfgen_candidates() -> list[str]:
+    """psfgen candidate paths — globbed at CALL time (psfgen ships inside the NAMD
+    tarball), so a NAMD installed after server start is detected without a restart."""
+    return ["psfgen", *(str(Path(d) / "psfgen") for d in _namd_install_dirs())]
 
 
 def _resolve_psfgen(candidate: str | None) -> str | None:
@@ -67,7 +114,7 @@ def find_psfgen() -> str:
     See ``docs/namd_setup.md``.
     """
     override = os.environ.get("NADOC_PSFGEN_BIN", "").strip()
-    candidates = ([override] if override else []) + ["psfgen", *_PSFGEN_CANDIDATES]
+    candidates = ([override] if override else []) + _psfgen_candidates()
     for candidate in candidates:
         found = _resolve_psfgen(candidate)
         if found:
@@ -87,10 +134,14 @@ def _pdb_atom_name(name: str, element: str) -> str:
 
 
 def _psfgen_resname(atom: Atom) -> str:
+    if _is_protein_atom(atom):
+        return _PROT_RESNAME_TO_CHARMM.get(atom.residue, atom.residue)
     return _RESNAME_TO_CHARMM.get(atom.residue, atom.residue)
 
 
 def _psfgen_atom_name(atom: Atom) -> str:
+    if _is_protein_atom(atom):
+        return atom.name  # protein atom names (CHARMM aliases applied via pdbalias)
     return _ATOM_TO_CHARMM.get(atom.name, atom.name)
 
 
@@ -144,11 +195,17 @@ def _write_segment_pdbs(
     ]
     segments: list[dict] = []
     serial = 1
-    for seg_index, (chain_id, atoms) in enumerate(
-        sorted(atoms_by_chain.items(), key=lambda item: item[0])
-    ):
+    dna_seg_index = 0
+    prot_seg_index = 0
+    for chain_id, atoms in sorted(atoms_by_chain.items(), key=lambda item: item[0]):
         atoms = sorted(atoms, key=lambda a: (a.seq_num, a.serial))
-        segid = _psfgen_segid(seg_index)   # unique 4-char psfgen segname (no [:4] collisions)
+        is_protein = _is_protein_atom(atoms[0])
+        if is_protein:
+            segid = _psfgen_prot_segid(prot_seg_index)
+            prot_seg_index += 1
+        else:
+            segid = _psfgen_segid(dna_seg_index)   # unique 4-char segname (no [:4] collisions)
+            dna_seg_index += 1
         residues = sorted({a.seq_num for a in atoms})
         if not residues:
             continue
@@ -179,6 +236,8 @@ def _write_segment_pdbs(
             "last_resid": residues[-1],
             "n_residues": len(residues),
             "n_atoms_input": len(atoms),
+            "is_protein": is_protein,
+            "resids": residues,
         })
 
     full_lines.append("END")
@@ -186,16 +245,33 @@ def _write_segment_pdbs(
 
 
 def _psfgen_script(segments: list[dict], output_prefix: Path) -> str:
+    has_protein = any(seg.get("is_protein") for seg in segments)
     lines = [
         "package require psfgen",
         "resetpsf",
         f"topology {_TOP_ALL36_NA}",
     ]
+    if has_protein:
+        lines.append(f"topology {_TOP_ALL36_PROT}")
+        lines.extend(_PROT_PDBALIASES)
     for seg in segments:
         segid = seg["segid"]
         path = seg["path"]
         first = seg["first_resid"]
         last = seg["last_resid"]
+        if seg.get("is_protein"):
+            # Protein segment: psfgen builds peptide angles/dihedrals from the RTF;
+            # standard NTER/CTER termini (the RTF DEFA), no DNA DEO5/DEOX patches.
+            lines.extend([
+                f"segment {segid} {{",
+                "  first NTER",
+                "  last CTER",
+                "  auto angles dihedrals",
+                f"  pdb {path}",
+                "}",
+                f"coordpdb {path} {segid}",
+            ])
+            continue
         lines.extend([
             f"segment {segid} {{",
             "  first 5TER",
@@ -240,6 +316,10 @@ def build_charmm_psfgen_topology(
     if not _TOP_ALL36_NA.exists():
         raise RuntimeError(f"Missing CHARMM NA topology file: {_TOP_ALL36_NA}")
     psfgen = psfgen_path or find_psfgen()
+    if atomistic_model is None:
+        # include_proteins so any visible protein attachment becomes its own
+        # psfgen protein segment (Part B); no-op for protein-free designs.
+        atomistic_model = build_atomistic_model(design, include_proteins=True)
     with tempfile.TemporaryDirectory(prefix="nadoc_psfgen_") as raw_tmp:
         tmpdir = Path(raw_tmp)
         segments, input_pdb = _write_segment_pdbs(design, tmpdir, atomistic_model)

@@ -1,7 +1,24 @@
 import { describe, it, expect } from 'vitest'
 import {
   floorNormal, floorSurfaceSpec, floorSpecReady, formatOffsetNm, FLOOR_AXIS_NORMALS,
+  axisForNormal,
 } from './oxdna_floor_math.js'
+
+describe('axisForNormal', () => {
+  it('inverts floorNormal for every side', () => {
+    for (const axis of Object.keys(FLOOR_AXIS_NORMALS)) {
+      expect(axisForNormal(floorNormal(axis))).toBe(axis)
+    }
+  })
+  it('picks the closest side for an off-axis / non-unit vector', () => {
+    expect(axisForNormal([0, 3.2, 0])).toBe('-y')   // points up → floor below
+    expect(axisForNormal([0.1, 0.9, 0])).toBe('-y')
+  })
+  it('returns null for a missing/zero vector', () => {
+    expect(axisForNormal(null)).toBeNull()
+    expect(axisForNormal([0, 0, 0])).toBeNull()
+  })
+})
 
 describe('floorNormal', () => {
   it('returns the outward unit normal for each side', () => {

@@ -57,6 +57,12 @@ _FF_FILES = [
     "toppar_water_ions_cufix.str",
 ]
 
+# CHARMM36m protein force field — bundled only when the design carries proteins.
+_PROTEIN_FF_FILES = [
+    "top_all36_prot.rtf",
+    "par_all36m_prot.prm",
+]
+
 
 # ── Pure helpers (PSF completion, AI prompt, NAMD config rendering) ───────────
 # Moved verbatim to backend/core/namd_helpers.py (Refactor 10-A).
@@ -70,7 +76,7 @@ def build_namd_package(design: Design) -> bytes:
     name = (design.metadata.name or "design").replace(" ", "_")
     prefix = f"{name}_namd_complete/"
 
-    model = build_atomistic_model(design)
+    model = build_atomistic_model(design, include_proteins=True)
     pdb_text = export_pdb(design, model=model)
     identity_json = export_identity_json(design, model=model)
     identity_tsv = export_identity_tsv(design, model=model)
@@ -82,17 +88,21 @@ def build_namd_package(design: Design) -> bytes:
     dry_restraints = export_dry_implicit_restraints(design, model=model)
 
     try:
-        psf_text = complete_psf(design)
+        psf_text = complete_psf(design, model=model)
     except Exception as exc:
         # Fall back to stub PSF with a warning header if parmed fails
-        stub = export_psf(design)
+        stub = export_psf(design, model=model)
         psf_text = (
             "! WARNING: parmed PSF completion failed — using stub PSF\n"
             f"! Error: {exc}\n"
             + stub
         )
 
-    conf_text   = _render_namd_conf(name)
+    from backend.core.protein_enm import build_protein_extrabonds
+    extrabonds_text = build_protein_extrabonds(design, model)
+    has_protein = bool(extrabonds_text)
+
+    conf_text   = _render_namd_conf(name, has_protein=has_protein)
     readme_text = _README.format(name=name)
     prompt_text = _AI_PROMPT.replace("{name}", name)
 
@@ -112,8 +122,13 @@ def build_namd_package(design: Design) -> bytes:
         zf.writestr(prefix + "namd.conf",                conf_text)
         zf.writestr(prefix + "README.txt",               readme_text)
         zf.writestr(prefix + "AI_ASSISTANT_PROMPT.txt",  prompt_text)
+        if has_protein:
+            zf.writestr(prefix + "extrabonds.txt", extrabonds_text)
 
-        for ff_file in _FF_FILES:
+        ff_files = list(_FF_FILES)
+        if has_protein:
+            ff_files += _PROTEIN_FF_FILES
+        for ff_file in ff_files:
             ff_path = _FF_DIR / ff_file
             zf.writestr(prefix + f"forcefield/{ff_file}", ff_path.read_bytes())
 

@@ -16,7 +16,7 @@
  *   refresh }.  getSurfaceSpec() → { dir, offsetNm, stiff, enabled }.
  */
 
-import { floorSurfaceSpec, formatOffsetNm } from '../scene/oxdna_floor_math.js'
+import { floorSurfaceSpec, formatOffsetNm, axisForNormal } from '../scene/oxdna_floor_math.js'
 
 export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null } = {}) {
   const toggle = document.getElementById('oxdna-floor-toggle')
@@ -97,5 +97,22 @@ export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null } =
   })
   stiffIn?.addEventListener('input', _renderStatus)
 
-  return { getSurfaceSpec, isEnabled, refresh: _renderStatus }
+  // Repopulate the card from a stored surface spec ({dir, offset_nm, stiff} or
+  // null) so selecting an oxDNA job shows the hard surface that run used.  A null
+  // spec turns the surface off.  Maps the stored normal back to an axis side.
+  function applyConfig(surface) {
+    _enabled = !!surface
+    if (enableChk) enableChk.checked = _enabled
+    if (surface) {
+      const axis = axisForNormal(surface.dir)
+      if (axis && axisSel) axisSel.value = axis
+      if (offsetIn && surface.offset_nm != null) offsetIn.value = String(surface.offset_nm)
+      if (offsetLbl && surface.offset_nm != null) offsetLbl.textContent = formatOffsetNm(surface.offset_nm)
+      if (stiffIn && surface.stiff != null) stiffIn.value = String(surface.stiff)
+    }
+    _syncControlsVisibility()
+    _renderStatus()
+  }
+
+  return { getSurfaceSpec, isEnabled, refresh: _renderStatus, applyConfig }
 }

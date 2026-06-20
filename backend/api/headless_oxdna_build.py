@@ -109,6 +109,7 @@ def create_job(
     md_relax_steps: int = 100,
     equil_steps: int = 100,
     min_bp_retained: float = 0.0,
+    max_relax_retries: int = 0,
     design_source_path: str | None = None,
 ) -> dict:
     """Create + prepare a 3-stage relaxation job from ``design`` (mirrors
@@ -118,9 +119,12 @@ def create_job(
     panel triggers.  ``min_bp_retained`` defaults to ``0.0`` because the mock binary
     does not actually relax (it copies the input conf), so the base-pair-retention
     gate must be off for headless orchestration tests; a real GPU run should raise
-    it back to ~0.5.  Requires ``find_oxdna()`` to resolve a binary (set
-    ``$OXDNA_BIN``), and ``design`` to be fully sequenced (oxDNA rejects undefined
-    bases).
+    it back to ~0.5.  ``max_relax_retries`` defaults to ``0`` (no escalate-and-retry)
+    for the same reason — headless runs are deterministic short validation passes, and
+    the equil-readiness escalation would otherwise spin to exhaustion on the mock's
+    unrelaxed conf; a real headless relaxation can pass a positive budget.  Requires
+    ``find_oxdna()`` to resolve a binary (set ``$OXDNA_BIN``), and ``design`` to be
+    fully sequenced (oxDNA rejects undefined bases).
     """
     body = CreateOxdnaJobRequest(
         backend=backend,
@@ -130,6 +134,7 @@ def create_job(
         md_relax_steps=md_relax_steps,
         equil_steps=equil_steps,
         min_bp_retained=min_bp_retained,
+        max_relax_retries=max_relax_retries,
         autostart=autostart,
         design_source_path=design_source_path,
     )
@@ -378,3 +383,107 @@ def run_relaxation_tuned(design: Design, workspace, *, hostname: str | None = No
             cfg[key] = params.pop(key)
     return run_relaxation(design, workspace, timeout=timeout,
                           backend=cfg["backend"], device=cfg["device"], **params)
+
+
+# ── Constraint-driven design: the iterate-until-met loop (AF-13 Phase 4) ───────
+
+def _pool_until_conclusive(job, workspace, parsed_constraint, *, production_steps,
+                           max_production_rounds, timeout):
+    """Append production runs to ``job`` (pooling more frames each round) until the
+    constraint verdict is conclusive (``met``/``unmet``) or the round budget is
+    exhausted.  Returns ``(verdict, n_rounds)``.
+
+    The flexibility-map route pools EVERY production stage's frames, so each extra
+    round raises the pooled-frame count toward ``min_confidence`` — this is the
+    concrete "run a longer production" response to an ``inconclusive`` verdict.
+    """
+    from backend.core.oxdna_health import check_relaxed_constraint
+
+    verdict = None
+    for r in range(1, max_production_rounds + 1):
+        append_production(job.job_id, workspace, steps=production_steps)
+        wait_for_terminal(job.job_id, workspace, timeout=timeout)
+        rmsf = read_flexibility_map(job.job_id, workspace)
+        verdict = check_relaxed_constraint(parsed_constraint, rmsf)
+        if verdict["status"] != "inconclusive":
+            return verdict, r
+    return verdict, max_production_rounds
+
+
+def iterate_to_constraint(build_fn, adjust_fn, constraint, workspace, *,
+                          initial_knob, max_iterations: int = 8,
+                          production_steps: int = 6000,
+                          max_production_rounds: int = 8, timeout: float = 30.0,
+                          tuned: bool = False, **relax_params) -> dict:
+    """Closed **build → relax → measure → adjust** loop that drives a parametric
+    design knob until a relaxed-structure constraint is met (AF-13 Phase 4 — the
+    capstone of the physical-layer tier).
+
+    Each outer iteration:
+
+    1. ``build_fn(knob)`` edits **topology** (the knob — e.g. a bend curvature via
+       :func:`headless_build.add_bend`, a loop/skip count, a length) and returns a
+       fully-sequenced :class:`~backend.core.models.Design`;
+    2. it is relaxed headlessly (:func:`run_relaxation`, or
+       :func:`run_relaxation_tuned` when ``tuned=True`` — relax on the machine's
+       benchmarked backend) and a production run is appended;
+    3. the **production mean structure** is read (:func:`read_flexibility_map`) and
+       the constraint is REPORTED on it via
+       :func:`~backend.core.oxdna_health.check_relaxed_constraint`;
+    4. the loop branches on the verdict **status** (never the raw measured value —
+       the load-bearing AF-13 P3 confidence gate):
+
+       - ``met``          → return ``{"status": "met", ...}`` immediately;
+       - ``unmet``        → ``adjust_fn(knob, verdict)`` picks the next knob, rebuild;
+       - ``inconclusive`` → too few frames pooled; append MORE production to the
+         SAME job (:func:`_pool_until_conclusive`) until conclusive or the round
+         budget runs out — a longer production, NOT a knob change.  If it stays
+         inconclusive after ``max_production_rounds`` the loop stops (it cannot
+         certify a verdict, so it must not blindly adjust the knob).
+
+    ``adjust_fn(knob, verdict) -> next_knob`` is the caller's domain knowledge of
+    how the knob maps to the measure (e.g. bisection on curvature); the driver is
+    deliberately measure-agnostic.  ``constraint`` is a raw AF-13 P3 spec (validated
+    once up-front via :func:`~backend.core.oxdna_health.parse_constraint_spec`, so a
+    malformed constraint fails before any expensive run).
+
+    Returns ``{status, knob, job, iterations, verdict}`` where ``status`` is
+    ``"met"`` or ``"exhausted"``, ``iterations`` is the per-attempt history
+    (``{knob, verdict, job_id, production_rounds}``), and ``verdict`` is the final
+    verdict dict.
+
+    **Three-Layer Law (load-bearing).** The knob varies *topology*; geometry is
+    re-derived; physics is relaxed; the measurement is *read* from the relaxed mean
+    structure.  The relaxed coordinates are **never written back into ``Design``** —
+    only the scalar verdict steers the next topology edit.  Composes already-covered
+    wrappers (wraps no new route), so the oxDNA coverage count is unchanged.
+    """
+    from backend.core.oxdna_health import parse_constraint_spec
+
+    parsed = parse_constraint_spec(constraint)
+    relax = run_relaxation_tuned if tuned else run_relaxation
+    knob = initial_knob
+    history: list[dict] = []
+    job = None
+    for _ in range(max_iterations):
+        design = build_fn(knob)
+        job = relax(design, workspace, timeout=timeout, **relax_params)
+        if job.status != OxdnaStatus.completed:
+            history.append({"knob": knob, "verdict": None, "job_id": job.job_id,
+                            "production_rounds": 0, "error": job.error})
+            break
+        verdict, rounds = _pool_until_conclusive(
+            job, workspace, parsed, production_steps=production_steps,
+            max_production_rounds=max_production_rounds, timeout=timeout)
+        history.append({"knob": knob, "verdict": verdict, "job_id": job.job_id,
+                        "production_rounds": rounds})
+        status = verdict["status"] if verdict else "inconclusive"
+        if status == "met":
+            return {"status": "met", "knob": knob, "job": job,
+                    "iterations": history, "verdict": verdict}
+        if status == "inconclusive":
+            break  # could not gather enough confidence — cannot steer the knob
+        knob = adjust_fn(knob, verdict)  # unmet → move the knob and rebuild
+    return {"status": "exhausted", "knob": knob, "job": job,
+            "iterations": history,
+            "verdict": history[-1]["verdict"] if history else None}

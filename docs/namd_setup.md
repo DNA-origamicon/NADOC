@@ -30,13 +30,18 @@ resolves the binary in this order:
 1. **`$NADOC_NAMD_BIN`** — explicit override. Absolute path to a `namd3` binary,
    or a name resolvable on `$PATH`. Use this for non-standard install locations.
 2. **`namd3`** on `$PATH`.
-3. Conventional installs under `~/Applications/`:
-   - `~/Applications/NAMD_3.0.2/namd3`
-   - `~/Applications/NAMD_3.0.2_Linux-x86_64-multicore-CUDA/namd3`  ← GPU build
+3. Conventional installs under `~/Applications/`. The path is **globbed**
+   (`~/Applications/NAMD_*/namd3`), so any NAMD version matches — no code change
+   needed to upgrade — and a CUDA/GPU build sorts ahead of a CPU-only build:
+   - `~/Applications/NAMD_3.0.2_Linux-x86_64-multicore-CUDA/namd3`  ← GPU build (preferred)
    - `~/Applications/NAMD_3.0.2_Linux-x86_64-multicore/namd3`        ← CPU build
+   - …a newer `~/Applications/NAMD_3.0.3…/namd3` would be picked up automatically.
 
 If none resolve, the MD sidebar reports NAMD missing and job creation refuses
 early (before the expensive solvation step).
+
+See [external_tools.md](external_tools.md) for the full environment-variable
+reference shared across all simulation back-ends.
 
 ### Which build do I need?
 
@@ -113,6 +118,16 @@ tight, or fall back to the CPU build for oversized systems.
 
 4. Restart the NADOC backend (`just dev`) and reopen the MD sidebar — the
    "missing" warning should be gone.
+
+### Let NADOC finish the install for you
+
+You still have to do the license-gated download by hand, but NADOC can take it
+from there. In the app, **Help ▸ MD Engines** → NAMD row → **Download…** → after
+you've downloaded the tarball, click **Check download & install**: NADOC scans
+`~/Downloads`, verifies the file is the right package (correct build, and that it
+actually contains `namd3`), extracts it to `~/Applications/`, and confirms
+detection — no manual `tar`/path setup. psfgen comes with it. A freshly-installed
+NAMD is detected without restarting the backend.
 
 ### Non-standard location
 

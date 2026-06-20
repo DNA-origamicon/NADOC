@@ -28,6 +28,7 @@ from backend.core.models import Design
 from backend.physics.oxdna_interface import (
     backbone_bond_pairs,
     count_hbonds,
+    oxdna_backbone_site,
     read_configuration_full,
 )
 
@@ -48,6 +49,29 @@ BP_FORMED_CUTOFF_NM: float = 0.8
 # clash / over-stretch.  Healthy CG backbone bonds are ~0.6–0.8 nm.
 BACKBONE_CLASH_NM: float = 1.5
 
+# ── FENE backbone-bond limit (oxDNA2) ─────────────────────────────────────────
+# oxDNA's backbone is a FENE spring between the BACKBONE SITES of consecutive
+# nucleotides (NOT the centres of mass the .dat stores — the site sits ~0.34 units
+# outward, so a CM–CM distance badly under-reads the real bond length).  The FENE
+# potential is only defined out to ``r0 + delta``; beyond that oxDNA aborts the run
+# with "Distance between bonded neighbors … exceeds acceptable values".  The relax
+# stages cap the backbone force (``max_backbone_force``) so an over-stretched bond
+# is held by a finite linear spring instead of diverging — but a stage that REMOVES
+# the cap (a bare-FENE equil) then dies at config load on the first over-limit bond.
+#
+# Calibrated against oxDNA's own report on the VoltronCore equil crash: oxDNA aborted
+# on a bond it measured at 1.024 units; the site-based metric below independently put
+# that same bond at 1.024 (exactly one bond over r_max), while a CM-based metric
+# mis-reported 880 "over" bonds.  So the site-based distance is the one that predicts
+# the abort.
+FENE_R0_OXDNA2:   float = 0.7564           # oxDNA units (model.h FENE_R0_OXDNA2)
+FENE_DELTA:       float = 0.25             # oxDNA units (FENE_DELTA)
+FENE_RMAX_UNITS:  float = FENE_R0_OXDNA2 + FENE_DELTA   # ≈ 1.0064 — the hard cliff
+# A bond at/over this is "not equil-ready": below the cliff with a margin for the
+# first velocity-refresh kick (~0.025 units observed) that can tip a borderline bond
+# over r_max before the integrator ever runs a step.
+FENE_SAFE_MAX_UNITS: float = 0.98
+
 
 @dataclass
 class OxdnaHealthResult:
@@ -57,6 +81,14 @@ class OxdnaHealthResult:
     energy_converged:     bool = False
     max_backbone_stretch: float | None = None
     n_clashes:            int = 0
+    # FENE equil-readiness (site-based, oxDNA units): the longest backbone bond and
+    # how many exceed oxDNA's FENE cliff.  ``fene_safe`` is False when an uncapped
+    # (bare-FENE) stage would risk aborting at config load.  Advisory — drives the
+    # runner's escalate-and-retry, NOT the ``passed`` gate (a capped equil tolerates
+    # a residual over-stretch, so this never on its own fails a stage).
+    max_backbone_fene_units: float | None = None
+    n_fene_over:          int = 0
+    fene_safe:            bool = True
     passed:               bool = True
     reason:               str = ""
     error:                str | None = None
@@ -337,6 +369,29 @@ def measure_end_to_end(positions, landmark_a, landmark_b) -> float:
     return float(np.linalg.norm(a - b))
 
 
+def measure_radius_of_gyration(positions) -> float:
+    """Radius of gyration (nm) of a relaxed/mean position map — the whole
+    structure's overall compactness, ``sqrt(mean_i |r_i − r_cm|²)`` over every
+    nucleotide's backbone site.
+
+    Unlike :func:`measure_end_to_end` (two landmarks), R_g is a single scalar over
+    ALL positions and so takes no landmarks — it captures global swelling/collapse
+    that a point-pair distance cannot (a structure can hold its end-to-end while
+    its bulk balloons).  ``positions`` is the per-nucleotide list from
+    :func:`production_rmsf` (the noise-averaged mean structure — preferred) or the
+    OxDNA display readback (a single relaxed frame).
+
+    Raises ``ValueError`` on an empty map (so a dropped/empty readback fails loudly
+    rather than returning a silent 0/NaN).
+    """
+    if not positions:
+        raise ValueError("measure_radius_of_gyration: empty position map")
+    pts = np.array(
+        [np.asarray(p["backbone_position"], dtype=float) for p in positions])
+    cm = pts.mean(axis=0)
+    return float(np.sqrt(((pts - cm) ** 2).sum(axis=1).mean()))
+
+
 def _backbone_lookup(positions):
     """{(helix_id, bp_index, direction): np.array backbone_position} for a
     production_rmsf-style / display position list."""
@@ -346,6 +401,140 @@ def _backbone_lookup(positions):
             np.asarray(p["backbone_position"], dtype=float)
         for p in positions
     }
+
+
+def measure_segment_angle(positions, landmark_a, landmark_b, landmark_c) -> float:
+    """Interior bend angle (DEGREES) at the middle landmark ``b`` of the three-point
+    chain ``a — b — c`` in a relaxed/mean position map.
+
+    The vertex is ``landmark_b``; the angle is the one between the two legs ``b→a``
+    and ``b→c`` (``arccos((a−b)·(c−b) / (|a−b||c−b|))``).  Three collinear landmarks
+    along a straight duplex give ~180°; a bend at ``b`` drops it below 180° in
+    proportion to the curvature — so this is the natural measure for "how sharply is
+    this segment kinked."  It is a pure **magnitude** (an ``arccos``), so it is
+    direction-/handedness-agnostic — there is no sign or frame convention to get
+    wrong (no Three-Layer ASK-FIRST concern).
+
+    Unlike :func:`measure_end_to_end` / :func:`measure_radius_of_gyration` (both nm),
+    this returns **degrees** — the first non-length constraint measure.  Each landmark
+    is a ``(helix_id, bp_index, direction)`` key into ``positions`` (the per-nucleotide
+    list from :func:`production_rmsf` or the display readback).
+
+    Raises ``ValueError`` on an empty map, any landmark absent from the map, any two
+    landmarks coinciding (a degenerate zero-length leg), or a leg of zero length — so
+    a mis-addressed or collapsed measurement fails loudly rather than returning a
+    silent 0/NaN.
+    """
+    if not positions:
+        raise ValueError("measure_segment_angle: empty position map")
+    lookup = _backbone_lookup(positions)
+    ka = _landmark_key(landmark_a)
+    kb = _landmark_key(landmark_b)
+    kc = _landmark_key(landmark_c)
+    if len({ka, kb, kc}) != 3:
+        raise ValueError(
+            f"measure_segment_angle: landmarks must be three distinct nucleotides, "
+            f"got a={ka}, b={kb}, c={kc} — the angle would be degenerate")
+    for k in (ka, kb, kc):
+        if k not in lookup:
+            raise ValueError(
+                f"measure_segment_angle: landmark {k} is not a nucleotide of the "
+                "position map")
+    b = lookup[kb]
+    leg_a = lookup[ka] - b      # b → a
+    leg_c = lookup[kc] - b      # b → c
+    na = float(np.linalg.norm(leg_a))
+    nc = float(np.linalg.norm(leg_c))
+    if na < 1e-12 or nc < 1e-12:
+        raise ValueError(
+            "measure_segment_angle: a leg has ~zero length — coincident landmarks")
+    cos_theta = float(np.dot(leg_a, leg_c) / (na * nc))
+    cos_theta = max(-1.0, min(1.0, cos_theta))      # guard arccos domain
+    return float(np.degrees(np.arccos(cos_theta)))
+
+
+def _fit_helix_axis(points):
+    """Fit a straight axis line to a helix's backbone sites: return
+    ``(centroid, unit_direction)``.
+
+    The backbone sites spiral around the central axis at the backbone radius, so a
+    plain centroid lands ON the axis (the spiral cancels over a turn) and the
+    principal direction (largest singular vector of the centred points) is the axis
+    direction.  Raises ``ValueError`` if the points are coincident (no axis to fit).
+    """
+    pts = np.asarray(points, dtype=float)
+    centroid = pts.mean(axis=0)
+    _, sv, vh = np.linalg.svd(pts - centroid, full_matrices=False)
+    if sv[0] < 1e-9:
+        raise ValueError(
+            "_fit_helix_axis: backbone sites are coincident — no axis to fit")
+    return centroid, vh[0]
+
+
+def measure_inter_helix_spacing(positions, landmark_a, landmark_b) -> float:
+    """Centre-to-centre spacing (nm) between the axes of the two helices named by
+    ``landmark_a`` / ``landmark_b`` in a relaxed/mean position map.
+
+    Unlike the point-landmark measures (:func:`measure_end_to_end`,
+    :func:`measure_segment_angle`), this is the first measure that needs **helix-axis
+    grouping**: each landmark only *identifies a helix* (via its ``helix_id``); ALL of
+    that helix's backbone sites are gathered and a straight axis is fit to each
+    (:func:`_fit_helix_axis`).  The spacing is then the separation of the two axis
+    **centroids** measured *perpendicular to the common (mean) axis direction* — the
+    radial gap, with the axial offset removed.
+
+    This is deliberately NOT the minimal distance between the two infinite axis lines:
+    two near-parallel helices with a slight relative tilt have infinite lines that
+    nearly intersect far away (distance → 0), so that notion is fragile in exactly the
+    near-parallel regime inter-helix spacing means.  Anchoring at the centroids and
+    projecting out the common-axis component is exact for parallel helices and robust
+    to the small tilts of a relaxed bundle.  It is a pure **magnitude** (a length), so
+    it is direction-/handedness-agnostic — no sign or frame convention to get wrong.
+
+    Returns nm (the field name ``target_nm``/``tol_nm`` is literal here, unlike the
+    angular :func:`measure_segment_angle`).  Each landmark is a
+    ``(helix_id, bp_index, direction)`` key into ``positions`` (the per-nucleotide
+    list from :func:`production_rmsf` or the display readback).
+
+    Raises ``ValueError`` on an empty map, a landmark absent from the map, two
+    landmarks naming the SAME helix (spacing to itself is undefined), or a named helix
+    with fewer than two nucleotides (no axis to fit) — so a mis-addressed measurement
+    fails loudly rather than returning a silent 0/NaN.
+    """
+    if not positions:
+        raise ValueError("measure_inter_helix_spacing: empty position map")
+    lookup = _backbone_lookup(positions)
+    ka = _landmark_key(landmark_a)
+    kb = _landmark_key(landmark_b)
+    for k in (ka, kb):
+        if k not in lookup:
+            raise ValueError(
+                f"measure_inter_helix_spacing: landmark {k} is not a nucleotide of "
+                "the position map")
+    hid_a, hid_b = ka[0], kb[0]
+    if hid_a == hid_b:
+        raise ValueError(
+            f"measure_inter_helix_spacing: both landmarks are on the same helix "
+            f"({hid_a!r}) — inter-helix spacing needs two distinct helices")
+    by_helix = {}
+    for p in positions:
+        by_helix.setdefault(p["helix_id"], []).append(
+            np.asarray(p["backbone_position"], dtype=float))
+    for hid in (hid_a, hid_b):
+        if len(by_helix.get(hid, [])) < 2:
+            raise ValueError(
+                f"measure_inter_helix_spacing: helix {hid!r} has fewer than two "
+                "nucleotides — cannot fit an axis")
+    c_a, d_a = _fit_helix_axis(by_helix[hid_a])
+    c_b, d_b = _fit_helix_axis(by_helix[hid_b])
+    if float(np.dot(d_a, d_b)) < 0.0:           # PCA sign is arbitrary — align them
+        d_b = -d_b
+    mean_dir = d_a + d_b
+    n = float(np.linalg.norm(mean_dir))
+    mean_dir = d_a if n < 1e-9 else mean_dir / n
+    w = c_b - c_a
+    perp = w - float(np.dot(w, mean_dir)) * mean_dir    # drop the axial component
+    return float(np.linalg.norm(perp))
 
 
 def measure_field_response(
@@ -524,7 +713,17 @@ class ConstraintSpecError(ValueError):
     """Raised when a declarative relaxed-structure constraint spec is malformed."""
 
 
-_CONSTRAINT_MEASURES = frozenset({"end_to_end"})
+_CONSTRAINT_MEASURES = frozenset(
+    {"end_to_end", "radius_of_gyration", "segment_angle", "inter_helix_spacing"})
+# How many landmarks each measure consumes.  0 = whole-structure (no landmarks).
+# NB: target_nm/tol_nm carry the measure's native unit — nm for length measures
+# (end_to_end, radius_of_gyration, inter_helix_spacing), DEGREES for the angular
+# segment_angle (the field names are kept for backward compatibility).  For
+# inter_helix_spacing the two landmarks each only NAME a helix (any nucleotide on
+# it); the measure groups every site of that helix to fit its axis.
+_MEASURE_LANDMARK_COUNT = {
+    "end_to_end": 2, "radius_of_gyration": 0, "segment_angle": 3,
+    "inter_helix_spacing": 2}
 _CONSTRAINT_KEYS = frozenset(
     {"measure", "landmarks", "target_nm", "tol_nm", "min_confidence"})
 
@@ -557,6 +756,24 @@ def _require_number(value, name: str, *, positive: bool = False) -> float:
     return float(value)
 
 
+def _dispatch_measure(measure: str, positions, landmarks):
+    """Compute the named relaxed-structure measure from a position map + the
+    parsed (already-validated) landmark list.  Adding a new ``measure_*`` kind =
+    add it to :data:`_CONSTRAINT_MEASURES` + :data:`_MEASURE_LANDMARK_COUNT` and a
+    branch here."""
+    if measure == "end_to_end":
+        return measure_end_to_end(positions, landmarks[0], landmarks[1])
+    if measure == "radius_of_gyration":
+        return measure_radius_of_gyration(positions)
+    if measure == "segment_angle":
+        return measure_segment_angle(
+            positions, landmarks[0], landmarks[1], landmarks[2])
+    if measure == "inter_helix_spacing":
+        return measure_inter_helix_spacing(positions, landmarks[0], landmarks[1])
+    raise ConstraintSpecError(  # unreachable — parse pins the measure
+        f"no measurement implemented for {measure!r}")
+
+
 def parse_constraint_spec(spec) -> dict:
     """Validate + normalise a declarative relaxed-structure constraint (PURE — no
     execution, no oxDNA run).
@@ -586,23 +803,34 @@ def parse_constraint_spec(spec) -> dict:
         raise ConstraintSpecError(
             f"constraint measure must be one of {sorted(_CONSTRAINT_MEASURES)}, "
             f"got {measure!r}")
-    landmarks = spec.get("landmarks")
-    if not isinstance(landmarks, (list, tuple)) or len(landmarks) != 2:
-        raise ConstraintSpecError(
-            f"constraint '{measure}' needs exactly 2 landmarks, got {landmarks!r}")
-    a = _validate_landmark(landmarks[0], which="a")
-    b = _validate_landmark(landmarks[1], which="b")
-    if a == b:
-        raise ConstraintSpecError(
-            f"constraint landmarks are identical ({a}) — the measurement is "
-            "trivially 0")
+    n_landmarks = _MEASURE_LANDMARK_COUNT[measure]
+    landmarks_in = spec.get("landmarks")
+    if n_landmarks == 0:
+        # Whole-structure measure (e.g. radius_of_gyration): no landmarks allowed.
+        if landmarks_in:
+            raise ConstraintSpecError(
+                f"constraint '{measure}' takes no landmarks (it measures the whole "
+                f"structure), got {landmarks_in!r}")
+        landmarks = []
+    else:
+        if not isinstance(landmarks_in, (list, tuple)) \
+                or len(landmarks_in) != n_landmarks:
+            raise ConstraintSpecError(
+                f"constraint '{measure}' needs exactly {n_landmarks} landmarks, "
+                f"got {landmarks_in!r}")
+        landmarks = [_validate_landmark(lm, which=chr(ord("a") + i))
+                     for i, lm in enumerate(landmarks_in)]
+        if len(set(landmarks)) != len(landmarks):
+            raise ConstraintSpecError(
+                f"constraint landmarks are identical ({landmarks[0]}) — the "
+                "measurement is trivially 0")
     target = _require_number(spec.get("target_nm"), "target_nm")
     tol = _require_number(spec.get("tol_nm"), "tol_nm", positive=True)
     min_conf = spec.get("min_confidence", RMSF_PRELIM_FRAMES)
     if isinstance(min_conf, bool) or not isinstance(min_conf, int) or min_conf < 1:
         raise ConstraintSpecError(
             f"constraint min_confidence must be an integer >= 1, got {min_conf!r}")
-    return {"measure": measure, "landmarks": [a, b], "target_nm": target,
+    return {"measure": measure, "landmarks": landmarks, "target_nm": target,
             "tol_nm": tol, "min_confidence": int(min_conf)}
 
 
@@ -632,7 +860,6 @@ def check_relaxed_constraint(constraint, relaxed_output) -> dict:
     *Physical-layer only*: reads relaxed geometry, never writes it back.
     """
     c = parse_constraint_spec(constraint)
-    landmark_a, landmark_b = c["landmarks"]
     target, tol, min_conf = c["target_nm"], c["tol_nm"], c["min_confidence"]
 
     out = relaxed_output or {}
@@ -646,8 +873,7 @@ def check_relaxed_constraint(constraint, relaxed_output) -> dict:
 
     measured = None
     if has_structure:
-        # parse_constraint_spec already pins measure == "end_to_end".
-        measured = measure_end_to_end(positions, landmark_a, landmark_b)
+        measured = _dispatch_measure(c["measure"], positions, c["landmarks"])
 
     if not has_structure or n_frames < min_conf:
         status, met = "inconclusive", False
@@ -696,8 +922,13 @@ def composite_trajectory(
     key_list = list(dict.fromkeys(k[:3] for k in _strand_nucleotide_order(design)))
 
     # Read + align every stage's frames first (so we know the natural counts).
+    # A stage tuple is ``(name, kind, path)`` or ``(name, kind, path, marker_label)``
+    # — the optional label overrides the default ``→ {kind}`` boundary tick (used to
+    # number runs across a multi-job lineage, e.g. "→ field 1" / "→ field 2").
     per_stage: list[dict] = []
-    for name, kind, path in stages:
+    for item in stages:
+        name, kind, path = item[0], item[1], item[2]
+        marker_label = item[3] if len(item) > 3 else None
         frames = read_trajectory_frames_full(path, design)
         box = _parse_box_nm(path)
         aligned = [
@@ -705,7 +936,18 @@ def composite_trajectory(
              if box is not None and np.all(box > 0) else fr)
             for fr in frames
         ]
-        per_stage.append({"name": name, "kind": kind, "frames": aligned})
+        per_stage.append({"name": name, "kind": kind, "frames": aligned,
+                          "marker_label": marker_label})
+
+    # oxDNA's first trajectory write lands at step ``print_conf_interval`` (not
+    # t=0), so the seed configuration — the simulation's actual first frame — is
+    # never in any trajectory.dat.  Prepend it to the first non-empty stage so the
+    # player starts on the true starting structure (the last written frame already
+    # lands on the final step, and the per-stage stride keeps both endpoints).
+    for s in per_stage:
+        if s["frames"]:
+            s["frames"].insert(0, ref)
+            break
 
     total = sum(len(s["frames"]) for s in per_stage)
     if total == 0:
@@ -730,7 +972,8 @@ def composite_trajectory(
         keep = max(1, round(len(f) * max_frames / total)) if total > max_frames else len(f)
         picked = _stride_pick(f, keep)
         if out_frames:  # a transition into this stage (skip the very first frame)
-            markers.append({"frame": len(out_frames), "label": f"→ {s['kind']}",
+            markers.append({"frame": len(out_frames),
+                            "label": s.get("marker_label") or f"→ {s['kind']}",
                             "kind": s["kind"], "stage_name": s["name"]})
         out_stages.append({"name": s["name"], "kind": s["kind"], "n_frames": len(picked)})
         for fr in picked:
@@ -772,6 +1015,38 @@ def max_backbone_stretch(
         if d > clash_nm:
             n_clash += 1
     return (max_d, n_clash)
+
+
+def backbone_fene_stretch(
+    design: Design,
+    full_map: dict[tuple[str, int, str], dict],
+    *,
+    rmax_units: float = FENE_RMAX_UNITS,
+) -> tuple[float, int]:
+    """Return (longest backbone-bond length in oxDNA units, count over *rmax_units*).
+
+    Measures the distance between the reconstructed BACKBONE SITES of consecutive
+    bonded nucleotides — the exact quantity oxDNA's FENE term checks — so the result
+    predicts whether a bare-FENE (uncapped) stage will abort at config load.  This is
+    distinct from ``max_backbone_stretch`` (CM–CM distance, in nm), which sits inward
+    of the real backbone and badly under-reads the bond length.
+    """
+    pairs = backbone_bond_pairs(design)
+    max_u = 0.0
+    n_over = 0
+    for a, b in pairs:
+        pa = full_map.get(a)
+        pb = full_map.get(b)
+        if pa is None or pb is None:
+            continue
+        sa = oxdna_backbone_site(pa["backbone_position"], pa["a1"], pa["a3"])
+        sb = oxdna_backbone_site(pb["backbone_position"], pb["a1"], pb["a3"])
+        d_units = float(np.linalg.norm(sa - sb)) / OXDNA_LENGTH_UNIT
+        if d_units > max_u:
+            max_u = d_units
+        if d_units >= rmax_units:
+            n_over += 1
+    return (max_u, n_over)
 
 
 # ── top-level stage health check ──────────────────────────────────────────────
@@ -832,6 +1107,15 @@ def run_oxdna_health_check(
     res.max_backbone_stretch = max_d
     res.n_clashes = n_clash
 
+    # FENE equil-readiness (site-based, oxDNA units): does an uncapped next stage risk
+    # aborting at config load?  Advisory — surfaced in the reason + used by the runner
+    # to escalate-and-retry the relax; it does NOT set ``passed`` (a capped equil is
+    # robust to a residual over-stretch).
+    max_fene, n_fene = backbone_fene_stretch(design, full_map)
+    res.max_backbone_fene_units = max_fene
+    res.n_fene_over = n_fene
+    res.fene_safe = max_fene < FENE_SAFE_MAX_UNITS
+
     samples = parse_energy_dat(stage_dir / "energy.dat")
     if samples:
         res.potential_energy = samples[-1][1]
@@ -855,4 +1139,10 @@ def run_oxdna_health_check(
         else:
             res.passed = True
             res.reason = f"base-pair retention {frac:.0%}"
+            if not res.fene_safe:
+                res.reason += (
+                    f"; {n_fene} backbone bond(s) over-stretched "
+                    f"(max {max_fene:.3f} units, FENE cliff {FENE_RMAX_UNITS:.3f}) — "
+                    f"not equil-ready"
+                )
     return res

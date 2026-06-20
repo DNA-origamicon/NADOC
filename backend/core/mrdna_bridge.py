@@ -34,7 +34,25 @@ from backend.core.sequences import _build_loop_skip_map, domain_bp_range
 _NM_TO_ANGSTROM = 10.0
 
 
-_MRDNA_TOOL_PATH = os.environ.get("MRDNA_TOOL_PATH", "/home/jojo/Work/mrdna-tool")
+def mrdna_tool_path() -> str:
+    """Canonical location of the mrdna source checkout (editable-installed).
+
+    Single source of truth shared by every mrdna consumer (this module, the
+    ``/ws/mrdna-relax`` clone-on-first-use in ``api/ws.py``, and the
+    ``parameterization/mrdna_inject.py`` importers).
+
+    Resolution: ``$MRDNA_TOOL_PATH`` override → conventional ``~/mrdna-tool``.
+    The default is HOME-relative and PERSISTENT — matching the ``~/oxDNA`` /
+    ``~/anm-oxdna`` house convention — so the checkout survives reboots instead
+    of being re-cloned every boot (the previous ``/tmp/mrdna-tool`` default was
+    wiped on restart; the older ``/home/jojo/...`` default was another machine's
+    home and never resolved here).
+    """
+    override = os.environ.get("MRDNA_TOOL_PATH", "").strip()
+    return override or os.path.expanduser("~/mrdna-tool")
+
+
+_MRDNA_TOOL_PATH = mrdna_tool_path()
 
 
 def _ensure_mrdna() -> None:

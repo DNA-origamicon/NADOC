@@ -139,17 +139,79 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 8). **AF-17 — simulation Benchmark headless access + the
-relaxation auto-tune bridge SHIPPED 2026-06-19.** The Benchmark feature is now reachable by feature automation:
-`hox.run_oxdna_benchmark(design, ws, *, configs=, runner=, steps=)` runs the REAL sweep headlessly (size-matched
-synthetic proxy → `benchmark_runner.run_oxdna_trials` → recommendation), `hox.apply_oxdna_benchmark(design, rec)`
-persists it into `metadata.hardware_defaults[hostname]`, and `hox.run_relaxation_tuned(design, ws, **params)`
-resolves that default → `{backend, device}` (pure `benchmark.resolve_oxdna_relax_config`) and relaxes on it — the
-bridge so AF-13 P4's iterate loop relaxes on the fastest discovered backend, not hard-coded CPU. Oracle
-`assert_relax_honors_hardware_default` proves the stored config reaches the `OxdnaJob` (CUDA:1 lands; un-tuned →
-CPU fallback), with a hard-coded-CPU red-test. Coverage unchanged (benchmark routes are outside the design/assembly
-audit; the sweep drives runner fns directly). Full suite **2678 passed / 55 skipped**, no drop. Next: **AF-13 Phase
-4 — iterate-until-met loop** (the capstone), which now relaxes each iteration via `run_relaxation_tuned`._
+_Living pointer — each session overwrites this (step 8). **`inter_helix_spacing` MEASURE KIND SHIPPED 2026-06-19**
+(the FIRST axis-grouping measure — closes the last of the four planned `measure_*` kinds): `from
+backend.core.oxdna_health import measure_inter_helix_spacing` — `measure_inter_helix_spacing(positions, a, b)` returns
+the radial centre-to-centre **nm** gap between the axes of the two helices NAMED by landmarks `a`/`b` (each landmark
+only identifies a helix via its `helix_id`; bp_index/direction are otherwise unused). It groups ALL of each named
+helix's backbone sites, fits an axis via `_fit_helix_axis` (centroid + PCA principal direction), aligns the two PCA
+directions (`d_a·d_b<0`→flip d_b), and returns the centroid separation projected **perpendicular to the mean axis**.
+KEY DESIGN DECISION (banked): do NOT use the minimal infinite-line distance — for near-parallel helices with a slight
+relative tilt the infinite axes nearly intersect far away → distance collapses to ~0 (verified empirically: a real
+bundle's adjacent pair read 0.07 nm via line-line vs the true 2.25 nm); the perpendicular-to-mean-axis projection is
+exact for parallel helices and robust to relaxed-bundle tilt. Wired in identically to segment_angle:
+`_CONSTRAINT_MEASURES` + `_MEASURE_LANDMARK_COUNT["inter_helix_spacing"]=2` (reuses the 2-landmark arity) +
+`_dispatch_measure` arm + `assert_relaxed_measurement` branch (**unit stays nm — no degrees wart**). Load-bearing
+augment `test_inter_helix_spacing_captures_separation`: a straight 3-in-a-row SQUARE bundle (`[[0,0],[0,1],[0,2]]`,
+2.25 nm pitch) reads equal adjacent gaps and a skip-one gap ~2× — tracks real separation, not a constant. GOTCHA: the
+SQUARE-row fixture gives a clean linear 2.25/4.5/2.25 nm profile (HONEYCOMB does NOT — adjacent 2.245, skip-one 3.90,
+not 2×); use SQUARE for the linear-row augment. Suite **2755 passed / 55 skipped**. ↓ The AF-13 P4 capstone summary
+follows. ↓_
+
+_**AF-13 PHASE 4 — THE ITERATE-UNTIL-MET CAPSTONE SHIPPED
+2026-06-19.** The whole Tier-5 spine is now closed: `hox.iterate_to_constraint(build_fn, adjust_fn, constraint, ws,
+*, initial_knob, max_iterations=8, production_steps=6000, max_production_rounds=8, tuned=False, **relax_params)` runs
+the closed build→relax→production→measure→adjust loop and returns `{status: "met"|"exhausted", knob, job,
+iterations:[{knob, verdict, job_id, production_rounds}], verdict}`. It branches on the P3 verdict **status** (NEVER
+the raw `measured_nm`): `met`→return; `unmet`→`adjust_fn(knob, verdict)` picks the next knob + rebuild;
+`inconclusive`→`_pool_until_conclusive` appends MORE production to the SAME job (the rmsf route pools every
+production stage → frames accumulate) until the confidence gate clears or `max_production_rounds` runs out (then it
+stops — it must not steer the knob on an uncertain verdict). `tuned=True` relaxes via `run_relaxation_tuned` (AF-17).
+Oracle `assert_converges_to_constraint(result, *, target_nm, tol_nm, min_confidence)` proves convergence + that the
+confidence gate held on EVERY `met` verdict + non-vacuity (first attempt off-target). Composition-sugar: wraps no new
+route → oxDNA coverage flat; god-files (crud/assembly/main.js) Δ=0. Full suite **2732 passed / 55 skipped**, no drop._
+
+**▶ HARNESS NOW AVAILABLE (AF-13 P4, use it — do NOT rebuild):**
+- `from backend.api import headless_oxdna_build as hox` → `hox.iterate_to_constraint(...)`. `build_fn(knob)→Design`
+  must return a FULLY-SEQUENCED design (oxDNA 400s on undefined bases). `adjust_fn(knob, verdict)→next_knob` is the
+  caller's domain knowledge of how the knob maps to the measure — only ever called on `unmet`. `constraint` is a raw
+  AF-13 P3 spec (validated once up-front via `parse_constraint_spec`, so a malformed spec raises `ConstraintSpecError`
+  before any run — pinned by `test_iterate_rejects_bad_constraint`).
+- `from tests.automation_harness import assert_converges_to_constraint` — `(result, *, target_nm, tol_nm,
+  min_confidence=RMSF_PRELIM_FRAMES)`. Asserts status=="met" + winning verdict confidence-gated + NO step flipped
+  `met` below `min_confidence` + final within tol + **first attempt NOT already met** (non-vacuity). Can-go-red:
+  exhausted run (`test_iterate_oracle_fires_on_exhaustion`, unreachable target), vacuous (`..._on_vacuous_convergence`,
+  initial knob on-target).
+- **The augment fixture (reuse this for any mock-binary convergence demo):** a **bend-curvature knob** on a 2-helix
+  HONEYCOMB bundle (`_build_bent_bundle`/`_bisect_kappa` in `test_headless_oxdna_build.py`). KEY INSIGHT: the identity
+  mock can't move atoms, so the relaxed mean reproduces the DESIGN geometry — therefore a **topology** knob (the bend)
+  is what moves the measured end-to-end, *not* the relaxation. Probed monotone profile (deg/bp→nm): 0→13.74, 2.0→12.64,
+  2.5→12.04, 3.0→11.33; **landmarks stay stable across curvatures because a bend is a deformation overlay, not a
+  topology change** (fixed `(helix_id, bp_index, direction)` keys). Bisection converges in ~3 iterations.
+- **GOTCHAS banked:** (1) the inner production-growth loop relies on the rmsf route pooling EVERY production stage's
+  frames — `append_production(steps=1000)` adds 10 frames/round (`_MOCK_OXDNA_TRAJ`, `max(1,steps//100)`), so
+  `min_confidence=25` needs ≥3 rounds (`test_iterate_grows_production_on_inconclusive`). (2) The oracle's non-vacuity
+  guard means a convergence demo MUST start off-target — for the `met`-on-attempt-0 case (the inconclusive test) assert
+  on `result` fields directly, NOT via `assert_converges_to_constraint`. (3) NO ASK-FIRST was needed: the loop is
+  direction-AGNOSTIC end-to-end — curvature is a magnitude, end-to-end is Euclidean, the bend wrapper is AF-6's cleared
+  machinery; zero frame/sign reasoning entered the driver or the fixture.
+
+**▶ NEXT — pick one (the Tier-5 oxDNA spine is COMPLETE; all four planned `measure_*` kinds — `end_to_end`,
+`radius_of_gyration`, `segment_angle`, `inter_helix_spacing` — DONE; remaining work is grammar wiring + stragglers):**
+- **Wire `check_relaxed_constraint` into the AF-11 grammar** (the recommended next — the LAST un-wired P3 gotcha #4).
+  `build_spec.py` gets a design `constraints` block (a list of constraint specs) → `headless_spec_build.py` lowers it
+  to `hox.iterate_to_constraint` (or just `check_relaxed_constraint` for a pass/fail gate without a knob). **All four
+  measure kinds get the grammar path for free** the moment the block parses. Validation augment: a spec with a
+  `constraints` block builds + reports the same verdict as a hand-built `check_relaxed_constraint` call
+  (`assert_spec_matches_calls` is BLIND to a physical-layer verdict, so the load-bearing pin is a direct
+  verdict-equality, not the fingerprint). DECIDE FIRST: does the grammar just *attach + report* constraints, or does
+  it *drive* the iterate loop (needs a knob spec)? Probably start with attach+report (no knob), defer the knob.
+- **Adding any further `measure_*` is now fully templated.** Point-landmark measure = name + arity +
+  `_dispatch_measure` arm + `assert_relaxed_measurement` branch + analytic pins (reuse segment_angle as template).
+  An axis/helix-grouping measure = same tail + a `_fit_helix_axis`-style grouping core (reuse inter_helix_spacing).
+  No remaining measure needs new arity machinery.
+- **Stragglers (unchanged):** `polymerize_periodic` (single-part `is_periodic_seam` + `derive_periodic_delta` Kabsch
+  oracle — needs a periodic-seam fixture); `bind_overhangs` ASSEMBLY spec op (DEFERRED pending overhang-binding firming).
 
 **▶ HARNESS NOW AVAILABLE (AF-17, use it — do NOT rebuild):**
 - `from backend.api import headless_oxdna_build as hox`. **Auto-tune a relaxation:** `hox.run_relaxation_tuned(
@@ -1083,15 +1145,17 @@ readers `read_configuration_unwrapped` / `read_configuration_full` / `oxdna_back
   integration tests (`_MOCK_OXDNA_TRAJ` → `read_flexibility_map` → checker). Coverage UNCHANGED (no route wrapped).
   Slots into the AF-11 grammar as a design `constraints` block (not yet wired into `build_spec.py` — P4 will).
 
-- [ ] **AF-13 (Phase 4, capstone — the eventual goal) — iterate-until-met loop.** Given a PARAMETRIC design knob
-  (a bend curvature via `hb.add_bend`, a loop/skip count, a length) + a constraint: build design → relax (oxDNA) →
-  measure → if unmet, adjust the knob → re-relax → … until met or budget exhausted. **Three-Layer Law:** vary
-  TOPOLOGY only; never write oxDNA output back. **Augment:** on a fixture where the knob monotonically maps to the
-  measurement (mock binary returns a deterministic geometry as a function of the knob → the *search* is testable
-  without a GPU), assert the loop converges into the tolerance band in ≤ N iterations. **ASK-FIRST (heavily):**
-  which knobs may vary, the search strategy (bisection / gradient / grid), and how stochastic re-run variance is
-  separated from knob effect — all design decisions. Large; decompose further when reached. Builds on Phases 1–3 +
-  the AF-11 build-spec interpreter + the AF-6 deformation wrappers.
+- [x] **AF-13 (Phase 4, capstone — the eventual goal) — iterate-until-met loop. SHIPPED 2026-06-19.**
+  `hox.iterate_to_constraint(build_fn, adjust_fn, constraint, ws, *, initial_knob, …)` — the closed
+  build→relax→production→measure→adjust loop. Branches on the AF-13 P3 verdict **status** (never the raw measured
+  value): `met`→return; `unmet`→`adjust_fn(knob, verdict)` rebuild; `inconclusive`→`_pool_until_conclusive`
+  appends MORE production to the SAME job (pooling frames) until the confidence gate clears, NOT a knob change.
+  `tuned=True` relaxes via `run_relaxation_tuned` (AF-17 bridge). Oracle `assert_converges_to_constraint` proves
+  the loop converged AND every `met` verdict was confidence-gated (≥`min_confidence` frames) AND non-vacuously
+  (first attempt was off-target). Augment fixture = a **bend-curvature knob** on a 2-helix bundle (probed monotone:
+  κ 0→13.74 nm, 2.5→12.04, 3→11.33; landmarks stable since topology is unchanged) + a bisection `adjust_fn`;
+  identity mock reproduces the design geometry so the *bend* moves the measured end-to-end. Three-Layer-clean (knob
+  edits topology, relaxed coords never written back). Composition-sugar (wraps no new route → oxDNA coverage flat).
 
 ### Tier F — frontend display subsystems (no REST route; JS-controller API + vitest-oracle augment)
 

@@ -70,8 +70,11 @@ Pulled from the 2026-06-16 audit; each is a *proven* pattern already green in th
 | `assert_fully_sequenced` (full-sequencing feature) | a design carries a complete, *correct* sequence: zero undefined bases (same `count_undefined_bases` gate every export / `create_oxdna_job` path enforces, reference strands excluded) AND every scaffold-paired staple base is the `complement_base` of its scaffold base (walked independently of the assignment code, so a wrong-base fill fails, not just an `'N'`); non-vacuity guards on both; can-go-red on an unsequenced design or a corrupted staple base | `tests/automation_harness.py`; `backend/api/headless_build.py` (`full_sequence`/`assign_staple_sequences`) | any op that must leave a design fully + correctly sequenced (export readiness, the AF-13 oxDNA fixture, future autostaple-sequence checks) |
 | `assert_relaxed_geometry_recovered` (AF-13 P1) | a headless oxDNA relaxation reached `completed` AND its relaxed last frame reads back (display route → `read_configuration_unwrapped`, PBC-unwrapped + Kabsch-aligned) into a full per-nucleotide position map: exactly one *finite* position per design nucleotide, every `(helix_id, bp, dir)` key a real key of the design's geometry (set-equal); the first **physical-layer** oracle (Tier 5), Three-Layer-clean (reads relaxed geometry, never writes it to `Design`); can-go-red on a non-completed job or a wrong nucleotide count | `tests/automation_harness.py`; `backend/api/headless_oxdna_build.py` (`run_relaxation`/`read_relaxed_positions`) | any physical-layer (oxDNA) headless run + geometry-recovery check (AF-13 P2 measurement/constraint oracles build on it) |
 | `measure_end_to_end` + `assert_relaxed_measurement` (AF-13 P2) | the **first STOCHASTIC-class oracle**: a *measured* geometric property of the relaxed, **noise-averaged** mean structure (pooled production frames, PBC-unwrapped + Kabsch-aligned via `production_rmsf`) lies within `tol_nm` of a target — **gated by confidence** (≥ `min_confidence` pooled frames, else INCONCLUSIVE, the Phase-3 "met requires confidence" seed). `measure_end_to_end(positions, a, b)` is the pure reusable primitive: Euclidean nm between two `(helix_id, bp_index, direction)` landmark backbone sites (raises on empty/identical/absent — no silent 0/NaN). Physical-layer only (reads relaxed geometry, never writes it back). Can-go-red on a wrong target, too-few frames (confidence gate), or no production run | `tests/automation_harness.py` (`assert_relaxed_measurement`); `backend/core/oxdna_health.py` (`measure_end_to_end`); `backend/api/headless_oxdna_build.py` (`read_flexibility_map`) | any relaxed-structure measurement/constraint (R_g, inter-helix spacing, segment angle — add a `measure_*` + a `measure_spec` kind); AF-13 P3 declarative constraint checker + P4 iterate-until-met both build on this |
+| `measure_segment_angle` (segment_angle measure) | the first ANGULAR + first 3-landmark relaxed-structure measure: the interior bend angle (degrees) at the middle of three `(helix_id, bp_index, direction)` landmark backbone sites (`arccos` magnitude → direction-agnostic), pinned to closed-form angles + leg-order-invariant + raising on empty/coincident/absent/zero-leg; flows through the existing `check_relaxed_constraint`/`assert_relaxed_measurement` (confidence gate + tolerance bracket, now in degrees); the load-bearing `captures_bend` augment proves it tracks a real topology bend (straight ~175° → bent ~119° on the SAME landmarks), not a constant | `backend/core/oxdna_health.py` (`measure_segment_angle`); `tests/test_oxdna_relaxation.py`; `tests/test_headless_oxdna_build.py` | any relaxed-structure ANGULAR constraint (inter-segment kink, hinge opening); the 3-landmark arity path is now proven for any future n-landmark `measure_*` |
+| `measure_inter_helix_spacing` (inter_helix_spacing measure) | the first measure needing **helix-axis grouping** (vs the point-landmark measures): each of the two landmarks only NAMES a helix (via `helix_id`); ALL of that helix's backbone sites are gathered and a straight axis fit (`_fit_helix_axis` = centroid + PCA principal direction). The spacing is the **radial centre-to-centre gap** = the centroid separation projected *perpendicular to the common (mean) axis direction*, with PCA sign aligned (`d_a·d_b<0`→flip). Deliberately NOT the minimal infinite-line distance (which collapses to ~0 for near-parallel tilted axes — the fragile regime spacing means); exact for parallel helices, robust to relaxed-bundle tilt, magnitude→direction-agnostic. In nm (no unit wart). Pinned to analytic parallel/staggered/tilted values + raising on empty/same-helix/absent/single-site; flows through `check_relaxed_constraint`/`assert_relaxed_measurement` unchanged. Load-bearing `captures_separation` augment: a straight 3-in-a-row SQUARE bundle reads equal adjacent gaps (~2.25 nm) and a skip-one gap ~2× — tracks real geometry, not a constant | `backend/core/oxdna_health.py` (`measure_inter_helix_spacing`/`_fit_helix_axis`); `tests/test_oxdna_relaxation.py`; `tests/test_headless_oxdna_build.py` | any relaxed-structure spacing/clearance constraint (bundle compaction, duplex–duplex gap); the axis-grouping pattern (group-by-helix → fit axis → relate axes) reusable for any helix-axis measure |
 | `parse_constraint_spec` + `check_relaxed_constraint` (AF-13 P3) | a declarative relaxed-structure constraint `{measure, landmarks, target_nm, tol_nm, min_confidence}` is validated at parse time (PURE, raises `ConstraintSpecError` before any run) and then *REPORTED* against a `read_flexibility_map` mean-structure dict → `{met, status∈{met,unmet,inconclusive}, measured_nm, n_frames, …}`. The REPORTER counterpart to P2's *asserter* (returns a verdict a closed loop branches on, doesn't raise); **load-bearing invariant: `met` is NEVER True below `min_confidence`** even when the value is within tolerance (the confidence gate, now a returned status). Reuses `measure_end_to_end`; `backend/core`-pure (takes the read dict, never imports the api read-wrapper). Can-go-red on a malformed spec, a tolerance-bracket flip, or a within-tol low-frame run reporting met | `backend/core/oxdna_health.py` (`parse_constraint_spec`/`check_relaxed_constraint`/`ConstraintSpecError`) | the AF-11 grammar's design `constraints` block; AF-13 P4 iterate-until-met (branch on `status`); any future `measure_*` constraint kind (R_g/spacing/angle — add to `_CONSTRAINT_MEASURES` + the dispatch) |
 | `assert_relax_honors_hardware_default` (AF-17) | a benchmarked hardware default *reaches the simulation*: a headless relaxation tuned from `metadata.hardware_defaults` runs on the recommended `backend`/`device` (read off `OxdnaJob.backend`/`.device`), with a CPU/"0" fallback when nothing was benchmarked. Baseline-fallback + tuned-honoured + non-vacuity (requested ≠ CPU fallback) structure; GPU-free (mock binary ignores the declared backend). The bridge that connects the auto-tuner's output to an actual run — nothing else proves the stored config is consumed (the apply route only wrote metadata the frontend pre-fills). Can-go-red on a bridge that hard-codes CPU, or a vacuous CPU/0 request | `tests/automation_harness.py` (`assert_relax_honors_hardware_default`); `backend/core/benchmark.py` (`resolve_oxdna_relax_config`); `backend/api/headless_oxdna_build.py` (`run_oxdna_benchmark`/`apply_oxdna_benchmark`/`run_relaxation_tuned`) | AF-13 P4 iterate-until-met (relax each iteration on the fastest discovered backend via `run_relaxation_tuned`); any "stored config → run parameter" bridge (a NAMD `run_relaxation_tuned` analog, future per-machine sim defaults) |
+| `iterate_to_constraint` + `assert_converges_to_constraint` (AF-13 P4) | **the Tier-5 capstone**: a CLOSED build→relax→production→measure→adjust loop *converges* a parametric **topology** knob to a relaxed-structure target — and does so HONESTLY (every `met` verdict was confidence-gated). The driver branches on the P3 verdict **status** (`met`/`unmet`/`inconclusive`), never the raw `measured_nm`: `unmet`→`adjust_fn` picks the next knob, `inconclusive`→append MORE production to the same job (pooling frames) until the gate clears. The oracle asserts convergence + the confidence gate held on EVERY step (not just the last) + final-within-tol + **non-vacuity** (first attempt off-target). Three-Layer-clean (knob edits topology; relaxed coords read, never written back). Can-go-red on an exhausted run (unreachable target) or a vacuous attempt-0 win | `tests/automation_harness.py` (`assert_converges_to_constraint`); `backend/api/headless_oxdna_build.py` (`iterate_to_constraint`/`_pool_until_conclusive`) | constraint-driven design (the AF-11 `constraints` block lowered to the loop); any closed search over a topology knob with a stochastic, confidence-gated oracle (more `measure_*` kinds, multi-knob search) |
 
 ---
 
@@ -1104,6 +1107,125 @@ lands in the oxDNA job; an un-tuned design falls back to CPU), with a non-vacuit
 bridge that ignored the default goes red. That is the exact capability AF-13 P4's iterate-until-met loop needs to
 relax on the fastest discovered backend instead of a hard-coded CPU default. No ASK-FIRST: this is hardware-config
 plumbing (backend/device strings), not DNA topology/geometry — zero sign/frame reasoning.**"
+
+---
+
+**AF-13 Phase 4 — iterate-until-met loop (the Tier-5 CAPSTONE)** · _shape:_ **composition driver** — 1 loop driver
+`iterate_to_constraint` + 1 helper `_pool_until_conclusive` in `backend/api/headless_oxdna_build.py` (composes the
+already-covered `run_relaxation`/`run_relaxation_tuned` + `append_production` + `read_flexibility_map` wrappers +
+the pure `parse_constraint_spec`/`check_relaxed_constraint`; re-implements NOTHING) + 1 reusable oracle
+`assert_converges_to_constraint` in `tests/automation_harness.py`; `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** ·
+_oxDNA-coverage Δ:_ **UNCHANGED** (wraps no new route — composition-sugar over covered wrappers + a pure-core
+reporter, like AF-10/AF-11; moves the oracle count, not the coverage count) · _oracle shipped:_
+`assert_converges_to_constraint(result, *, target_nm, tol_nm, min_confidence=RMSF_PRELIM_FRAMES)` — asserts the loop
+reached `status=="met"` within budget, the **winning** verdict is `met` AND pooled from ≥`min_confidence` frames, NO
+intermediate iteration flipped `met` below the gate, the final measured value is within `tol_nm`, and — the
+non-vacuity guard — the FIRST attempt was NOT already met (so the adjust loop was actually exercised). The driver
+branches on the P3 verdict **status**, never the raw `measured_nm`; on `inconclusive` it appends MORE production to
+the same job (the rmsf route pools every production stage → frames accumulate) until the gate clears, NOT a knob
+change · _tests:_ 5 new in `test_headless_oxdna_build.py` (bend-curvature knob + bisection converges + oracle passes;
+inconclusive→grow-production with the knob held on-target so the adjust_fn must never fire; **two load-bearing
+red-tests**: an unreachable target exhausts and the oracle raises "did not converge"; an attempt-0 win raises the
+non-vacuity guard; + a fail-fast `ConstraintSpecError` on a malformed constraint before any run); full suite **2732
+passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** before P4 the pieces existed
+(P1 relax, P2 measure, P3 confidence-gated checker, AF-6 deformation knobs, AF-17 tuned relax) but nothing proved
+they COMPOSE into a closed constraint-driven design loop that actually converges. `assert_converges_to_constraint` is
+the first proof that a build→relax→measure→adjust loop drives a parametric topology knob into a relaxed-structure
+tolerance band — AND that it never cheats the confidence gate on ANY step (the load-bearing P3 property, now enforced
+across a closed loop instead of a single read), with red-tests proving an unreachable target exhausts rather than
+falsely declaring met and that an already-on-target start is rejected as vacuous. The augment's key trick (reusable):
+the identity mock can't move atoms, so a real TOPOLOGY knob (a bend) is what moves the measured geometry, making the
+SEARCH testable GPU-free; a bend keeps landmark keys stable (it's a deformation overlay, not a topology change). No
+ASK-FIRST: the driver + fixture are direction-AGNOSTIC end-to-end (curvature magnitude + Euclidean distance + AF-6's
+already-cleared bend wrapper) — zero new sign/frame reasoning. This closes the Tier-5 physical-layer spine: the
+text-to-DNA goal's constraint-driven-design capstone.**"
+
+**measure_* growth — `radius_of_gyration` (whole-structure constraint kind)** · _shape:_ **service + oracle growth**
+— 1 new pure measure `measure_radius_of_gyration(positions)` next to `measure_end_to_end` in
+`backend/core/oxdna_health.py` + the grammar generalised to **measure-dependent landmark arity**
+(`_MEASURE_LANDMARK_COUNT = {end_to_end:2, radius_of_gyration:0}`; `parse_constraint_spec` now accepts a
+landmark-less whole-structure measure and REJECTS landmarks passed to one) + a `_dispatch_measure` arm wired into
+`check_relaxed_constraint` + `assert_relaxed_measurement` (harness) branched to dispatch on the measure kind;
+`crud.py`/`assembly.py`/`main.js` LOC Δ = **0** · _oxDNA-coverage Δ:_ **UNCHANGED** (wraps no new route — a pure-core
+measure + grammar growth; moves the oracle count, not the coverage count) · _oracle shipped:_
+`measure_radius_of_gyration(positions)` — the pure reusable primitive: `sqrt(mean_i |r_i − r_cm|²)` over ALL
+nucleotide backbone sites (no landmarks), pinned to closed-form values (two points at ±5 nm → R_g 5.0; cube corners →
+sqrt(3)·a) and raising on an empty map; it now flows through the EXISTING `check_relaxed_constraint` (confidence gate +
+tolerance bracket unchanged) and `assert_relaxed_measurement` (status guard + confidence gate) — so the AF-13 P4
+iterate loop + the AF-11 `constraints` block get R_g **for free** the moment they target it · _tests:_ 5 new in
+`test_oxdna_relaxation.py` (analytic R_g; empty-raises; parse no-landmarks normalises + idempotent; parse rejects
+landmarks-on-rg; `check_relaxed_constraint` dispatches rg with the confidence gate + tolerance bracket) + 2 new in
+`test_headless_oxdna_build.py` (rg through the harness oracle on a real run; **load-bearing red-test**: a wrong R_g
+target raises "not within"); full suite **2739 passed / 55 skipped**, no drop · **"Validation gained, not just a
+passthrough:** before this, the ONLY relaxed-structure constraint was a two-landmark end-to-end distance — nothing
+could certify a structure's *overall* size/compactness, which a point-pair distance is blind to (a structure can hold
+its end-to-end while its bulk swells or collapses). `measure_radius_of_gyration` adds that whole-structure measure, and
+— the genuinely-new structural power — the constraint grammar now supports **measure-dependent landmark arity** (a
+landmark-less measure parses; landmarks passed to one are rejected), so every future `measure_*` kind (inter-helix
+spacing, segment angle) slots in by adding a name + arity + one dispatch arm rather than rewriting the parser. The
+red-test proves the oracle goes red on a wrong target. No ASK-FIRST: R_g is a translation/rotation-invariant scalar
+magnitude — zero sign/frame/handedness reasoning.**"
+
+**measure_* growth — `segment_angle` (the first 3-landmark / non-length constraint kind)** · _shape:_ **service +
+oracle growth** — 1 new pure measure `measure_segment_angle(positions, a, b, c)` next to `measure_end_to_end` /
+`measure_radius_of_gyration` in `backend/core/oxdna_health.py` (the interior bend angle in DEGREES at the middle
+landmark `b` of the chain a–b–c, `arccos((a−b)·(c−b)/(|a−b||c−b|))`, arccos-domain-clamped) + the name added to
+`_CONSTRAINT_MEASURES` + `_MEASURE_LANDMARK_COUNT["segment_angle"]=3` (exercising the **3-landmark arity** for the
+first time — `{0,2}`→`{0,2,3}`; the AF-13-P3 arity generalisation accepted it with zero parser changes) + a
+`_dispatch_measure` arm + an `assert_relaxed_measurement` (harness) branch that reports the right **unit** (`deg`,
+not `nm`, in the failure message); `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** · _oxDNA-coverage Δ:_ **UNCHANGED**
+(wraps no new route — a pure-core measure + grammar growth; moves the oracle count, not the coverage count) · _oracle
+shipped:_ `measure_segment_angle` — the pure reusable primitive: pinned to closed-form angles (right angle → 90°,
+collinear → 180°, 60° wedge → 60°; leg-order-about-the-vertex-invariant) + raising on empty map / coincident pair /
+absent landmark / zero-length leg; it flows through the EXISTING `check_relaxed_constraint` (confidence gate +
+tolerance bracket unchanged, now in degrees) and `assert_relaxed_measurement`. **The LOAD-BEARING augment is
+`test_segment_angle_captures_bend`** — three collinear landmarks along a STRAIGHT bundle read ~175° and the SAME
+landmarks on a bundle bent at the middle read strictly < (here 119°, a >55° drop): the geometric proof the measure
+actually tracks curvature, not a constant · _tests:_ 6 new in `test_oxdna_relaxation.py` (analytic 90/180/60 +
+leg-swap invariance; rejects empty/coincident/absent; parse 3-landmarks normalises + idempotent; parse rejects
+2-landmarks-for-segment_angle [parametrized]; `check_relaxed_constraint` dispatches segment_angle with the confidence
+gate + tolerance bracket) + 3 new in `test_headless_oxdna_build.py` (segment_angle through the harness oracle on a
+real run, certified against the design's own angle with a 3° tol absorbing the oxDNA-vs-design backbone-site
+convention; **load-bearing geometric augment** `captures_bend` straight-vs-bent; **red-test**: a wrong angle target
+raises "not within"); full suite **2747 passed / 55 skipped**, no drop · **"Validation gained, not just a
+passthrough:** before this every relaxed-structure constraint was a *length* (`end_to_end` nm, `radius_of_gyration`
+nm) — nothing could certify a structure's *shape/curvature*, which a distance scalar is blind to (a bundle can hold
+its end-to-end while kinking sharply at the middle). `measure_segment_angle` adds the first ANGULAR measure, and —
+the genuinely-new structural power — `captures_bend` proves the angle actually responds to a topology bend
+(straight ~175° → bent 119° on the SAME landmarks) rather than reading a constant; the red-test proves it goes red
+on a wrong target. It also exercises the 3-landmark arity (the arity generalisation's first non-{0,2} consumer,
+proving that path was real, not speculative), so segment angle slots into the iterate loop + the AF-11 `constraints`
+block for free. No ASK-FIRST: an `arccos` is a magnitude — zero sign/frame/handedness reasoning.**"
+
+**measure_* growth — `inter_helix_spacing` (the first axis-grouping constraint kind)** · _shape:_ **service +
+oracle growth** — 1 new pure measure `measure_inter_helix_spacing(positions, a, b)` + a private `_fit_helix_axis`
+helper in `backend/core/oxdna_health.py` + the name added to `_CONSTRAINT_MEASURES` + `_MEASURE_LANDMARK_COUNT
+["inter_helix_spacing"]=2` (reuses the existing 2-landmark arity) + a `_dispatch_measure` arm + an
+`assert_relaxed_measurement` (harness) branch (unit stays **nm** — no degrees wart); `crud.py`/`assembly.py`/`main.js`
+LOC Δ = **0** · _oxDNA-coverage Δ:_ **UNCHANGED** (wraps no new route — a pure-core measure + dispatch growth; moves
+the oracle count, not the coverage count) · _oracle shipped:_ `measure_inter_helix_spacing` — the first measure that
+**groups by helix and fits an axis**: each landmark only NAMES a helix (via `helix_id`), ALL of that helix's backbone
+sites are gathered, `_fit_helix_axis` fits a centroid + PCA principal direction, and the spacing is the centroid
+separation projected *perpendicular to the common (mean) axis* (PCA sign aligned). Deliberately NOT the minimal
+infinite-line distance — that collapses to ~0 for near-parallel tilted axes (the fragile regime spacing means); this
+form is exact for parallel helices and robust to relaxed-bundle tilt. Pinned to analytic parallel/axially-staggered/
+slightly-tilted values + raising on empty / same-helix / absent-landmark / single-site-helix; flows through the
+EXISTING `check_relaxed_constraint` + `assert_relaxed_measurement` unchanged · _tests:_ 5 new in
+`test_oxdna_relaxation.py` (analytic parallel 2.5 nm + symmetry; axial-stagger + tilt-robustness; rejects
+empty/same-helix/absent/single-site; parse 2-landmarks normalises + idempotent; `check_relaxed_constraint` dispatches
+it with the confidence gate + tolerance bracket) + 3 new in `test_headless_oxdna_build.py` (**load-bearing geometric
+augment** `captures_separation`: a straight 3-in-a-row SQUARE bundle reads equal adjacent gaps ~2.25 nm and a skip-one
+gap ~2×; the measure through the harness oracle on a real run; **red-test**: a wrong spacing target raises "not
+within"); full suite **2755 passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** before
+this every relaxed-structure measure was either a point-to-point quantity (`end_to_end`, `segment_angle`) or a
+whole-structure scalar (`radius_of_gyration`) — nothing could certify the *radial packing* of a bundle, the property
+that says whether helices relaxed to their lattice spacing or splayed/collapsed. `measure_inter_helix_spacing` adds
+that, and — the genuinely-new structural power — it introduces the **axis-grouping pattern** (group sites by helix →
+fit an axis → relate two axes), which no prior measure needed; the `captures_separation` augment proves it tracks real
+separation (adjacent vs skip-one, ~2× on a straight row) rather than a constant, and the red-test proves it goes red on
+a wrong target. The design note that the infinite-line distance is fragile near-parallel (and is rejected in favour of
+the perpendicular-to-mean-axis projection) is itself banked validation knowledge. No ASK-FIRST: a length magnitude with
+sign-aligned axes — zero handedness/frame reasoning.**"
 
 ---
 

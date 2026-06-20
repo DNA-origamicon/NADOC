@@ -113,4 +113,49 @@ describe('initEfieldSetup', () => {
     expect(els['efield-ready'].textContent).toMatch(/disrupt/i)
     expect(gizmo.setColor).toHaveBeenCalled()
   })
+
+  it('applyConfig repopulates magnitude + direction and enables the field', () => {
+    api.applyConfig({ field_pN: 5, dir: [1, 0, 0] }, { open: true })
+    expect(els['efield-enable'].checked).toBe(true)
+    expect(parseFloat(els['efield-mag'].value)).toBe(5)
+    expect(parseFloat(els['efield-dir-x'].value)).toBeCloseTo(1, 3)
+    expect(parseFloat(els['efield-dir-y'].value)).toBeCloseTo(0, 3)
+    const spec = api.getFieldSpec()
+    expect(spec.enabled).toBe(true)
+    expect(spec.field_pN).toBe(5)
+    expect(spec.dir[0]).toBeCloseTo(1, 3)
+    expect(api.isEnabled()).toBe(true)
+    expect(gizmo.attach).toHaveBeenCalled()       // open:true reveals the arrow
+  })
+
+  it('applyConfig shows the arrow for a field job even with the card collapsed', () => {
+    expect(els['efield-body'].style.display).toBe('none')   // card starts collapsed
+    api.applyConfig({ field_pN: 5, dir: [1, 0, 0] })          // no { open: true }
+    expect(els['efield-body'].style.display).toBe('none')     // card stays collapsed
+    expect(gizmo.attach).toHaveBeenCalled()                   // …but the arrow shows
+    expect(gizmo.isActive()).toBe(true)
+  })
+
+  it('applyConfig(null) hides the arrow when the card is collapsed', () => {
+    api.applyConfig({ field_pN: 5, dir: [1, 0, 0] })   // arrow on, card collapsed
+    expect(gizmo.isActive()).toBe(true)
+    api.applyConfig(null)                               // a non-field job selected
+    expect(gizmo.detach).toHaveBeenCalled()
+    expect(gizmo.isActive()).toBe(false)
+  })
+
+  it('leaving the Dynamics tab drops the job-selected arrow', () => {
+    api.applyConfig({ field_pN: 5, dir: [1, 0, 0] })   // arrow on via a field job
+    expect(gizmo.isActive()).toBe(true)
+    window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', { detail: { activeTab: 'design' } }))
+    expect(gizmo.isActive()).toBe(false)
+  })
+
+  it('applyConfig(null) turns the field off', () => {
+    api.applyConfig({ field_pN: 5, dir: [1, 0, 0] }, { open: true })
+    api.applyConfig(null)
+    expect(els['efield-enable'].checked).toBe(false)
+    expect(api.isEnabled()).toBe(false)
+    expect(api.getFieldSpec().enabled).toBe(false)
+  })
 })

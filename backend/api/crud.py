@@ -8297,7 +8297,6 @@ def _build_entry_info(entry, design):
     from backend.core.feature_dependencies import (
         EntryInfo, REPLAYABLE_SNAPSHOT_OPS, snapshot_delta, delta_entry_targets,
     )
-    from backend.core.models import SnapshotLogEntry as _SnapEntry
 
     ft = entry.feature_type
     if ft == 'snapshot':

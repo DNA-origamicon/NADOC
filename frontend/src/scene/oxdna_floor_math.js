@@ -29,6 +29,22 @@ export function floorNormal(axis) {
   return n ? n.slice() : null
 }
 
+/** Inverse of floorNormal: the floor side ('-y', '+x', …) whose outward normal
+ * best matches `dir` (largest dot product).  Used to re-select the axis dropdown
+ * when a stored surface spec is loaded back into the card.  Returns null for a
+ * missing/zero vector. */
+export function axisForNormal(dir) {
+  if (!Array.isArray(dir)) return null
+  const len = Math.hypot(_num(dir[0]), _num(dir[1]), _num(dir[2]))
+  if (len < 0.5) return null
+  let best = null, bestDot = -Infinity
+  for (const [axis, n] of Object.entries(FLOOR_AXIS_NORMALS)) {
+    const dot = (n[0] * dir[0] + n[1] * dir[1] + n[2] * dir[2]) / len
+    if (dot > bestDot) { bestDot = dot; best = axis }
+  }
+  return best
+}
+
 const _num = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0)
 
 /**

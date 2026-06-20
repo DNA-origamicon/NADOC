@@ -218,6 +218,15 @@ rm -rf .venv frontend/node_modules
 
 ## What about the heavy simulation features?
 
-Atomistic export, NAMD, GROMACS, and the OpenMM checker need extra external
-tools that are **not** required to design origami and try out NADOC. Ignore
-them for now — the core app works without them.
+Atomistic export, NAMD, GROMACS, oxDNA, mrdna, and the OpenMM checker need extra
+external tools that are **not** required to design origami and try out NADOC.
+Ignore them for now — the core app works without them.
+
+When you do want them, each installs once per machine and NADOC auto-detects it
+(or you point an environment variable at a non-standard location):
+
+- **oxDNA** (coarse-grained MD — relax, E-field, protein-DNA) — see [docs/oxdna_setup.md](docs/oxdna_setup.md)
+- **NAMD 3 + psfgen** (atomistic MD) — see [docs/namd_setup.md](docs/namd_setup.md)
+- **mrdna + ARBD** (coarse-grained relax) — see [docs/mrdna_setup.md](docs/mrdna_setup.md)
+- **All the environment variables** (oxDNA, ANM-oxDNA, NAMD, GROMACS, mrdna,
+  workspace) in one place — see [docs/external_tools.md](docs/external_tools.md)

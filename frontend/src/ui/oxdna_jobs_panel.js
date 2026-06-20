@@ -74,6 +74,17 @@ export function latestHealth(job) {
   return hs && hs.length ? hs[hs.length - 1] : null
 }
 
+/** Pure: which health snapshot the cards should show. While a stage is RUNNING,
+ *  the live snapshot from /progress (`progress.live_health`) ticks every poll;
+ *  otherwise fall back to the last persisted end-of-stage sample. This is what
+ *  stops the cards freezing mid-stage. */
+export function healthForDisplay(job, progress) {
+  if (job?.status === 'running' && progress && progress.live_health) {
+    return progress.live_health
+  }
+  return latestHealth(job)
+}
+
 /** Pure: the detail status line text for a job — the begin/monitor/finish readout. */
 export function detailStatusText(job, progress) {
   const { pct, done, total } = formatProgress(job, progress)
@@ -210,48 +221,131 @@ export function jobListStatus(job) {
   return { label: job?.status ?? 'unknown', color: _STATUS_COLOR[job?.status] || _C.dim }
 }
 
-/** Pure: group jobs into relaxed parents + their electric-field children.
- *  Returns [{ parent, children: [{ job, index }] }] preserving the input order of
- *  top-level jobs; children are ordered by created_at and numbered 1..N (run
- *  order).  A field child whose parent isn't in the list shows as its own top
- *  row (orphan fallback). */
-export function groupJobsByParent(jobs) {
-  const ids = new Set((jobs || []).map(j => j.job_id))
+/** Pure: flatten the job set into a pre-order render list, following the
+ *  parent_job_id chain to ANY depth (relax → field1 → field2 → …).  Returns
+ *  [{ job, depth, index }] where depth 0 = a root relaxation and depth≥1 = a
+ *  field/production child (indent by depth); `index` is the GLOBAL run number
+ *  (1..N) of a child among all non-root jobs in created_at order, so chained runs
+ *  read Field 1 → Field 2 → … regardless of nesting.  Roots are newest first;
+ *  children oldest first (run order).  An orphan child (parent absent) is treated
+ *  as its own root. */
+export function flattenJobTree(jobs) {
+  const list = jobs || []
+  const ids = new Set(list.map(j => j.job_id))
   const childrenOf = new Map()
-  const tops = []
-  for (const j of jobs || []) {
+  const roots = []
+  for (const j of list) {
     const pid = j.parent_job_id
     if (pid && ids.has(pid)) {
       if (!childrenOf.has(pid)) childrenOf.set(pid, [])
       childrenOf.get(pid).push(j)
     } else {
-      tops.push(j)
+      roots.push(j)
     }
   }
-  return tops.map(parent => ({
-    parent,
-    children: (childrenOf.get(parent.job_id) || [])
-      .slice().sort((a, b) => a.created_at - b.created_at)
-      .map((job, i) => ({ job, index: i + 1 })),
-  }))
+  // Global run numbering: every non-root job by created_at ascending.
+  const runNo = new Map()
+  list.filter(j => j.parent_job_id && ids.has(j.parent_job_id))
+    .slice().sort((a, b) => (a.created_at || 0) - (b.created_at || 0))
+    .forEach((j, i) => runNo.set(j.job_id, i + 1))
+  const out = []
+  const visit = (job, depth) => {
+    out.push({ job, depth, index: runNo.get(job.job_id) || 0 })
+    for (const k of (childrenOf.get(job.job_id) || [])
+      .slice().sort((a, b) => (a.created_at || 0) - (b.created_at || 0))) {
+      visit(k, depth + 1)
+    }
+  }
+  roots.slice().sort((a, b) => (b.created_at || 0) - (a.created_at || 0)).forEach(r => visit(r, 0))
+  return out
+}
+
+/** Pure: the set of ALL descendant job ids (children, grandchildren, …) of jobId,
+ *  for the delete-cascade warning count. */
+export function descendantIds(jobs, jobId) {
+  const childrenOf = new Map()
+  for (const j of jobs || []) {
+    const pid = j.parent_job_id
+    if (pid) {
+      if (!childrenOf.has(pid)) childrenOf.set(pid, [])
+      childrenOf.get(pid).push(j.job_id)
+    }
+  }
+  const out = new Set()
+  const stack = [...(childrenOf.get(jobId) || [])]
+  while (stack.length) {
+    const id = stack.pop()
+    if (out.has(id)) continue
+    out.add(id)
+    for (const c of (childrenOf.get(id) || [])) stack.push(c)
+  }
+  return out
 }
 
 /** Pure: the confirm-dialog copy for deleting a job.  A relaxed parent with
  *  field children warns that the children go too (cascade); a field child / a
  *  childless job gets a plain permanent-delete warning. */
 export function deleteConfirmMessage(job, nChildren = 0) {
-  if (job?.parent_job_id) {
-    return { title: 'Delete field run', confirmLabel: 'Delete',
-      message: 'This electric-field run and its results will be permanently deleted. This cannot be undone.' }
-  }
+  const isChild = !!job?.parent_job_id
   if (nChildren > 0) {
     const s = nChildren === 1 ? '' : 's'
+    if (isChild) {
+      return { title: 'Delete field run + branches', confirmLabel: `Delete all (${nChildren + 1})`,
+        message: `This field run has ${nChildren} electric-field run${s} chained off it.\n\n` +
+          `Deleting it will permanently delete it AND all ${nChildren} field run${s}. This cannot be undone.` }
+    }
     return { title: 'Delete relaxation + field runs', confirmLabel: `Delete all (${nChildren + 1})`,
       message: `This relaxed job has ${nChildren} electric-field run${s} branched from it.\n\n` +
         `Deleting it will permanently delete the relaxation AND all ${nChildren} field run${s}. This cannot be undone.` }
   }
+  if (isChild) {
+    return { title: 'Delete field run', confirmLabel: 'Delete',
+      message: 'This electric-field run and its results will be permanently deleted. This cannot be undone.' }
+  }
   return { title: 'Delete oxDNA job', confirmLabel: 'Delete',
     message: 'This oxDNA job and its results will be permanently deleted. This cannot be undone.' }
+}
+
+/** Pure: normalize a job's stored run conditions into the values the panel cards
+ *  echo when the job is selected.  Reads `job.run_config` (surface / anchors /
+ *  field / steps / bp-gate) plus the top-level backend/device/salt, falling back
+ *  to the stage list for step counts and to `efield` for the field direction on
+ *  jobs saved before run_config existed.  Returns:
+ *    { advanced:{backend,device,salt,mcSteps,mdSteps,equilSteps,bpGate}|null,
+ *      field:{field_pN,dir}|null, surface:{dir,offset_nm,stiff}|null,
+ *      anchors:[…descriptors], prodSteps:number|null }
+ *  `advanced` is null for an E-field/run child (it has no relaxation controls). */
+export function runConfigForJob(job) {
+  const rc = job?.run_config || {}
+  const stages = job?.stages || []
+  const stepOf = (kind) => {
+    const s = stages.find(st => st.kind === kind)
+    return s?.steps ?? null
+  }
+  const isChild = !!job?.parent_job_id
+  const advanced = isChild ? null : {
+    backend:    rc.backend ?? job?.backend ?? 'CUDA',
+    device:     rc.device ?? job?.device ?? '0',
+    salt:       rc.salt_concentration ?? job?.salt_concentration ?? null,
+    mcSteps:    rc.mc_steps ?? stepOf('mc'),
+    mdSteps:    rc.md_relax_steps ?? stepOf('md_relax'),
+    equilSteps: rc.equil_steps ?? stepOf('equil'),
+    bpGate:     rc.min_bp_retained ?? null,
+  }
+  // Field: prefer run_config.field; fall back to the efield record (older field
+  // children stored {force_pN, dir} there before run_config existed).
+  let field = rc.field ?? null
+  const ef = job?.efield
+  if (!field && ef && ef.force_pN != null && Array.isArray(ef.dir)) {
+    field = { field_pN: ef.force_pN, dir: ef.dir }
+  }
+  return {
+    advanced,
+    field,
+    surface:   rc.surface ?? null,
+    anchors:   rc.anchors ?? [],
+    prodSteps: rc.steps ?? stepOf('production') ?? null,
+  }
 }
 
 /** Pure: hover title for an E-field child sub-item (its field params). */
@@ -263,7 +357,7 @@ export function fieldChildTitle(job) {
   return `E-field ${pN} pN/nt · dir (${dir}) · ${na} anchored`
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -328,6 +422,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   let _seeding    = false
   let _flexBusy   = false
   let _trajBusy   = false
+  let _lastFrameIndex = null   // last live frame the relaxed display was refreshed to
+  let _displayBaseText = ''    // base display-status text (countdown appended while running)
+  let _displayBaseColor = _C.ok
 
   // Trajectory player (play/pause + scrub slider); seeks drive the display frame.
   const trajPlayer = initOxdnaTrajectoryPlayer({
@@ -428,9 +525,23 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
         if (sel) {
           _progress = await api.getOxdnaProgress(_selectedId).catch(() => null)
           _renderDetail(sel)
-          if (oxdnaDisplay?.isActive() && sel.status === 'completed') {
-            // Refresh deformed view once the run finishes.
-            _refreshDisplay()
+          // Relaxed display follows the run live: pull a new frame whenever the
+          // sim writes one (frame_index advances) or the job finishes; between
+          // frames just tick the "next frame ~Xs" countdown.  Gate on the toggle
+          // (user intent) not the controller's active flag, so a job switched to
+          // before it has written a frame still gets followed once it does.
+          if (displayToggle?.checked && oxdnaDisplay
+              && oxdnaDisplay.mode() !== 'rmsf' && oxdnaDisplay.mode() !== 'trajectory') {
+            if (sel.status === 'completed') {
+              _refreshDisplay()
+            } else if (sel.status === 'running') {
+              const fi = _progress?.frame_index
+              if (fi != null && fi !== _lastFrameIndex) {
+                _refreshDisplay()   // _refreshDisplay syncs _lastFrameIndex
+              } else {
+                _renderDisplayStatus()   // tick the countdown only
+              }
+            }
           }
         }
       }
@@ -521,19 +632,18 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       return
     }
     listEl.innerHTML = ''
-    for (const { parent, children } of groupJobsByParent(jobs)) {
-      listEl.appendChild(_jobRow(parent, {}))
-      for (const { job, index } of children) listEl.appendChild(_jobRow(job, { isChild: true, index }))
+    for (const { job, depth, index } of flattenJobTree(jobs)) {
+      listEl.appendChild(_jobRow(job, { isChild: depth > 0, index, depth }))
     }
   }
 
-  // One job row (parent relaxation, or an indented numbered E-field child).
-  function _jobRow(job, { isChild = false, index = 0 }) {
+  // One job row (parent relaxation, or a depth-indented numbered E-field child).
+  function _jobRow(job, { isChild = false, index = 0, depth = 0 }) {
     const row = document.createElement('div')
     row.dataset.jobId = job.job_id
     row.style.cssText =
       `display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:4px;` +
-      `font-size:11px;${isChild ? 'padding-left:18px;' : ''}` +
+      `font-size:11px;${depth ? `padding-left:${6 + depth * 14}px;` : ''}` +
       `${job.job_id === _selectedId ? 'background:#2a3a4a;' : ''}`
     const ls = jobListStatus(job)
     const indicator = jobIsActive(job)
@@ -562,9 +672,36 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       _progress = await api.getOxdnaProgress(job.job_id).catch(() => null)
       _renderList()
       _renderDetail(job)
+      _applyRunControls(job)   // echo this run's conditions into every card
+      // If the "OxDNA display" toggle is on, follow it to the newly-selected job
+      // (re-deform the model to THIS job's relaxed positions, not the old one's).
+      if (displayToggle?.checked && oxdnaDisplay?.mode() !== 'rmsf' && oxdnaDisplay?.mode() !== 'trajectory') {
+        _lastFrameIndex = null
+        await _refreshDisplay()
+      }
       _scheduleNextPoll()
     })
     return row
+  }
+
+  // Repopulate the panel's own relaxation/production inputs AND the external
+  // Hard-surface / Anchors / E-field cards with the conditions this job ran with,
+  // so clicking a job shows exactly what it used.  Fired only on an explicit row
+  // click (never on a status poll, which would clobber the user mid-edit).
+  function _applyRunControls(job) {
+    const cfg = runConfigForJob(job)
+    if (cfg.advanced) {
+      const a = cfg.advanced
+      if (backendSel && a.backend) backendSel.value = a.backend
+      if (deviceInput && a.device != null) { deviceInput.value = a.device; deviceInput.dataset.userSet = '1' }
+      if (saltInput && a.salt != null) saltInput.value = String(a.salt)
+      if (mcStepsInput && a.mcSteps != null) mcStepsInput.value = String(a.mcSteps)
+      if (mdStepsInput && a.mdSteps != null) mdStepsInput.value = String(a.mdSteps)
+      if (equilStepsInput && a.equilSteps != null) equilStepsInput.value = String(a.equilSteps)
+      if (bpGateInput && a.bpGate != null) bpGateInput.value = String(a.bpGate)
+    }
+    if (prodStepsInput && cfg.prodSteps != null) prodStepsInput.value = String(cfg.prodSteps)
+    applyRunConfig?.(cfg, job)
   }
 
   // ── Detail ─────────────────────────────────────────────────────────────────
@@ -656,7 +793,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
 
   function _renderHealth(job) {
     if (!healthEl) return
-    const h = latestHealth(job)
+    const h = healthForDisplay(job, _progress)
     const cards = [
       ['Base pairs', h?.bp_retained_fraction != null ? `${Math.round(h.bp_retained_fraction * 100)}%` : '—',
         h && h.bp_retained_fraction != null && h.bp_retained_fraction < 0.8 ? _C.warn : _C.ok],
@@ -989,9 +1126,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   deleteBtn?.addEventListener('click', async () => {
     if (!_selectedId) return
     const job = _selectedJob()
-    // Deleting a relaxed parent cascades to its field children — warn with the count.
-    const nChildren = job && !job.parent_job_id
-      ? _jobs.filter(j => j.parent_job_id === _selectedId).length : 0
+    // Deleting a job cascades to its full descendant subtree (chained runs) — warn
+    // with the count.
+    const nChildren = job ? descendantIds(_jobs, _selectedId).size : 0
     const { title, message, confirmLabel } = deleteConfirmMessage(job, nChildren)
     const ok = await showConfirm({ title, message, danger: true, confirmLabel })
     if (!ok) return
@@ -1012,8 +1149,27 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     const align = alignToggle ? alignToggle.checked : true
     const r = await oxdnaDisplay.displayJob(_selectedId, align)
     const frame = align ? '' : ', own frame'
-    _setDisplayStatus(r.ok ? `Showing relaxed positions (${r.stage || ''}, ${r.n} nt${frame})` : (r.reason || 'no data'),
-                      r.ok ? _C.ok : _C.warn)
+    _displayBaseText = r.ok ? `Showing relaxed positions (${r.stage || ''}, ${r.n} nt${frame})` : (r.reason || 'no data')
+    _displayBaseColor = r.ok ? _C.ok : _C.warn
+    // Mark the frame we're now showing so the live-follow poll only re-fetches
+    // when the sim writes a newer one.
+    _lastFrameIndex = _progress?.frame_index ?? null
+    _renderDisplayStatus()
+  }
+
+  // Render the display-status line: the base "Showing relaxed positions …" text,
+  // plus a "next frame ~Xs" countdown while the selected job is still running (the
+  // relaxed display follows the run, refreshing each time the sim writes a frame).
+  function _renderDisplayStatus() {
+    let text = _displayBaseText
+    let color = _displayBaseColor
+    if (displayToggle?.checked && oxdnaDisplay?.mode() === 'relaxed'
+        && _selectedJob()?.status === 'running') {
+      const eta = formatEta(_progress?.next_frame_eta_seconds)
+      text = `${text || 'Following live'} · next frame ${eta ? `~${eta}` : '…'}`
+      color = _C.accent
+    }
+    _setDisplayStatus(text, color)
   }
   // Re-fetch with the new alignment whenever the Align toggle flips (only while the
   // relaxed display is on).
@@ -1021,8 +1177,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     if (displayToggle?.checked && oxdnaDisplay?.mode() === 'relaxed') _refreshDisplay()
   })
   function _setDisplayOff() {
-    if (oxdnaDisplay?.mode() === 'relaxed') oxdnaDisplay.stopAndRestore()
+    // Always restore (and bump the controller's epoch) so an in-flight relaxed
+    // fetch from the live-follow poll / a job switch can't re-apply positions
+    // after we've turned the display off.  Only ever called for the relaxed
+    // overlay (flex/traj are mutually exclusive), so this never kills those.
+    oxdnaDisplay?.stopAndRestore()
     if (displayToggle) displayToggle.checked = false
+    _lastFrameIndex = null
+    _displayBaseText = ''
     _setDisplayStatus('Display off', _C.dim)
   }
   // Turn off whichever overlay is active (relaxed display / flexibility map /

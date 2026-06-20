@@ -36,7 +36,7 @@ test-all:
 # in assembly_exit_cleanup.spec.js — teardown is where #34's const-reassignment
 # bug escaped, so it's now in the gate) (~1.5 min, NOT per-iteration).
 smoke:
-    cd frontend && npx playwright test smoke.spec.js assembly_exit_cleanup.spec.js
+    cd frontend && npx playwright test --config playwright.smoke.config.js smoke.spec.js assembly_exit_cleanup.spec.js
 
 # Start Vite frontend dev server (requires FastAPI running separately)
 frontend:

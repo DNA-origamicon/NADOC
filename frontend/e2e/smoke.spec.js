@@ -16,6 +16,11 @@ import { trackConsoleErrors, loadScaffoldedPart } from './helpers/scene_harness.
 // small enough (~22 KB) to keep the gate fast.
 const SMOKE_DESIGN = '26hb_platform_v3.nadoc'
 
+// Backend base for the direct-API legs. Defaults to :8000; the isolated smoke
+// config sets NADOC_E2E_API_BASE to its throwaway backend so these calls hit the
+// test server, never the user's running one.
+const API_BASE = process.env.NADOC_E2E_API_BASE || 'http://127.0.0.1:8000'
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Hover a CSS-based dropdown menu by menu label text, then click a dropdown item. */
@@ -84,7 +89,7 @@ test.describe('File > New Part dialog', () => {
   // to empty before each test so New opens the modal here, deterministically,
   // regardless of what the dev server (or another spec) left loaded.
   test.beforeEach(async ({ page, request }) => {
-    await request.post('http://localhost:8000/api/design', {
+    await request.post(`${API_BASE}/api/design`, {
       data: { name: 'smoke-reset', lattice_type: 'HONEYCOMB' },
     })
     await page.goto('/')
@@ -209,7 +214,7 @@ test.describe('Command palette', () => {
 
 test.describe('API', () => {
   test('GET /api/design returns a valid design', async ({ request }) => {
-    const resp = await request.get('http://localhost:8000/api/design')
+    const resp = await request.get(`${API_BASE}/api/design`)
     expect(resp.status()).toBe(200)
     const body = await resp.json()
     expect(body).toHaveProperty('design')
@@ -219,7 +224,7 @@ test.describe('API', () => {
   })
 
   test('POST /api/design creates a new empty design', async ({ request }) => {
-    const resp = await request.post('http://localhost:8000/api/design', {
+    const resp = await request.post(`${API_BASE}/api/design`, {
       data: { name: 'Playwright Test Design', lattice_type: 'HONEYCOMB' },
     })
     expect(resp.status()).toBe(201)
@@ -230,10 +235,10 @@ test.describe('API', () => {
 
   test('GET /api/design/geometry returns geometry data', async ({ request }) => {
     // First create a fresh design
-    await request.post('http://localhost:8000/api/design', {
+    await request.post(`${API_BASE}/api/design`, {
       data: { name: 'geo-test', lattice_type: 'HONEYCOMB' },
     })
-    const resp = await request.get('http://localhost:8000/api/design/geometry')
+    const resp = await request.get(`${API_BASE}/api/design/geometry`)
     expect(resp.status()).toBe(200)
     const body = await resp.json()
     // Geometry response shape: { helix_axes: [...], nucleotides: [...] }
@@ -273,7 +278,7 @@ test.describe('Console-error gate', () => {
     // absolute path so it resolves regardless of which CWD the server was started
     // from (`just dev` from repo root vs. Playwright's webServer from frontend/).
     const designPath = path.resolve(process.cwd(), '..', 'Examples', SMOKE_DESIGN)
-    const loadResp = await request.post('http://localhost:8000/api/design/load', {
+    const loadResp = await request.post(`${API_BASE}/api/design/load`, {
       data: { path: designPath },
     })
     expect(loadResp.status(), `failed to load ${SMOKE_DESIGN}`).toBe(200)

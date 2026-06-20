@@ -196,12 +196,25 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
 
 # ── NAMD binary discovery ─────────────────────────────────────────────────────
 
-_NAMD_CANDIDATES = [
-    "namd3",
-    os.path.expanduser("~/Applications/NAMD_3.0.2/namd3"),
-    os.path.expanduser("~/Applications/NAMD_3.0.2_Linux-x86_64-multicore-CUDA/namd3"),
-    os.path.expanduser("~/Applications/NAMD_3.0.2_Linux-x86_64-multicore/namd3"),
-]
+def _namd_install_dirs() -> list[str]:
+    """Conventional NAMD install dirs (``~/Applications/NAMD_*``), any version.
+
+    Globbed rather than version-pinned so a newer NAMD release (e.g. ``NAMD_3.0.3``)
+    is found without a code change.  CUDA/GPU builds sort first so they are
+    preferred over CPU-only builds; within a build type, higher version strings
+    sort first.  See ``docs/namd_setup.md``.
+    """
+    import glob
+    dirs = sorted(glob.glob(os.path.expanduser("~/Applications/NAMD_*")), reverse=True)
+    dirs.sort(key=lambda d: 0 if "cuda" in os.path.basename(d).lower() else 1)  # stable: CUDA first
+    return dirs
+
+
+def _namd_candidates() -> list[str]:
+    """NAMD3 candidate paths — globbed at CALL time so a NAMD installed *after* the
+    server started (e.g. via the MD Engines install flow) is detected without a
+    restart."""
+    return ["namd3", *(os.path.join(d, "namd3") for d in _namd_install_dirs())]
 
 _GMX_CANDIDATES = ["gmx", "gmx_mpi", "gmx_d"]
 
@@ -224,7 +237,7 @@ def find_namd() -> str:
     See ``docs/namd_setup.md`` for install guidance (WSL + GPU notes included).
     """
     override = os.environ.get("NADOC_NAMD_BIN", "").strip()
-    candidates = ([override] if override else []) + _NAMD_CANDIDATES
+    candidates = ([override] if override else []) + _namd_candidates()
     for candidate in candidates:
         found = _resolve_namd(candidate)
         if found:

@@ -28,16 +28,22 @@ import shutil
 import signal
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Optional
 
 from backend.core.models import Design
-from backend.core.oxdna_health import OxdnaHealthResult, run_oxdna_health_check
+from backend.core.oxdna_health import (
+    FENE_RMAX_UNITS,
+    OxdnaHealthResult,
+    run_oxdna_health_check,
+)
 from backend.core.oxdna_job import OxdnaHealthSample, OxdnaJob, OxdnaStatus
 from backend.core.oxdna_protocol import (
     OxdnaStageSpec,
+    escalate_md_relax_spec,
     expected_energy_lines,
+    print_conf_interval,
     render_stage_input,
 )
 from backend.physics.oxdna_interface import (
@@ -349,35 +355,131 @@ def _stage_energy_lines(stage_dir: Path) -> int:
         return 0
 
 
+def _live_health_snapshot(design, stage_dir: Path, steps_per_s: float | None) -> dict:
+    """Health readout for a stage *while it is still running* — computed on demand
+    from the partial stage outputs (oxDNA writes ``energy.dat`` ~100×/stage and
+    ``trajectory.dat`` ~10×/stage), so the panel's four cards tick live instead of
+    freezing at the previous stage's end-of-stage sample.
+
+    Cheap fields (potential energy, steps/s) come from ``energy.dat``; base-pair
+    retention + max backbone clash use the latest COMPLETE trajectory frame
+    (``read_trajectory_frames_full`` tolerates a half-written final frame).  All
+    reads are best-effort — any parse hiccup leaves that field ``None`` (shown as
+    "—") rather than breaking the poll.  Advisory only; the end-of-stage
+    ``run_oxdna_health_check`` remains the authoritative gate.
+    """
+    from backend.core.oxdna_health import (
+        base_pair_retention,
+        max_backbone_stretch,
+        parse_energy_dat,
+    )
+    from backend.physics.oxdna_interface import read_trajectory_frames_full
+
+    out: dict = {
+        "bp_retained_fraction": None, "potential_energy": None,
+        "max_backbone_clash": None, "steps_per_s": steps_per_s,
+    }
+    try:
+        samples = parse_energy_dat(stage_dir / "energy.dat")
+        if samples:
+            out["potential_energy"] = samples[-1][1]
+    except Exception:
+        pass
+    try:
+        frames = read_trajectory_frames_full(stage_dir / "trajectory.dat", design)
+        if frames:
+            frame = frames[-1]
+            out["bp_retained_fraction"] = base_pair_retention(design, frame)[0]
+            out["max_backbone_clash"] = max_backbone_stretch(design, frame)[0]
+    except Exception:
+        pass
+    return out
+
+
+# ETA rate classes: MC is CPU Monte-Carlo (slow, and a "step" is a sweep); MD-family
+# stages (md_relax / equil / production) are CUDA-preferred and far faster.  The two are
+# NOT inter-convertible — extrapolating one class's steps/s onto the other's step count
+# is what produced the ">100 h" ETA shown during the MC stage (slow MC rate × 1e6 MD
+# steps).  ETA estimates each remaining stage with a rate for ITS OWN class.
+def _rate_class(kind: str) -> str:
+    return "mc" if kind == "mc" else "md"
+
+
+# Rough steps/s used to SEED a class's ETA before a same-class stage has been observed
+# (i.e. estimating the MD stages while still in MC).  Replaced by the real observed rate
+# the moment a stage of that class runs, so the seed only governs the first stage's view.
+def _default_stage_rate(spec: OxdnaStageSpec, backend: str) -> float:
+    if _rate_class(spec.kind) == "mc":
+        return 5.0                                   # CPU Monte-Carlo sweeps/s
+    return 1000.0 if (backend or "").upper() == "CUDA" else 400.0   # MD steps/s
+
+
 def job_progress(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> dict:
-    """Return overall + current-stage progress fractions + an ETA for the panel."""
+    """Return overall + current-stage progress fractions + an ETA + a live health
+    snapshot for the panel."""
     n = len(job.stages)
     done = sum(1 for s in job.stages if s.status == "done")
     idx = job.current_stage_idx
     stage_frac = 0.0
     eta_seconds: float | None = None
+    next_frame_eta_seconds: float | None = None
+    frame_index: int | None = None
+    live_health: dict | None = None
     if 0 <= idx < n and idx < len(specs):
         st = job.stages[idx]
         if st.status == "running":
-            lines = _stage_energy_lines(job.stage_dir(workspace_dir, st.name))
+            stage_dir = job.stage_dir(workspace_dir, st.name)
+            lines = _stage_energy_lines(stage_dir)
             stage_frac = min(1.0, lines / max(1, expected_energy_lines(specs[idx])))
 
-            # ── ETA to finish the current run (current + pending stages) ──────────
-            # Rate from the live current stage; fall back to the last MD steps/s.
+            # ── ETA: sum each remaining stage estimated with ITS OWN rate class ───
+            # Mixing the slow MC rate with the (1e6-step) MD stages is the bug that
+            # showed ">100 h" during MC — estimate per class (MC vs MD-family) instead.
             steps_done = stage_frac * specs[idx].steps
-            rate = None
+            live_rate = None
             if st.started_at and steps_done > 0:
-                rate = steps_done / max(1e-6, time.time() - st.started_at)
-            if not rate or rate <= 0:
-                for h in reversed(job.health_samples):
-                    if h.steps_per_s:
-                        rate = h.steps_per_s
-                        break
-            if rate and rate > 0:
-                remaining = (specs[idx].steps - steps_done) + sum(
-                    specs[j].steps for j in range(idx + 1, len(specs))
-                )
-                eta_seconds = max(0.0, remaining / rate)
+                live_rate = steps_done / max(1e-6, time.time() - st.started_at)
+
+            # Observed steps/s by rate-class from finished stages' health samples …
+            kind_by_name = {s.name: s.kind for s in specs}
+            rate_by_class: dict[str, float] = {}
+            for h in job.health_samples:
+                if h.steps_per_s and h.steps_per_s > 0:
+                    cls = _rate_class(kind_by_name.get(h.stage, ""))
+                    rate_by_class[cls] = h.steps_per_s
+            # … plus the live rate of the stage currently running (covers same-class
+            # pending stages, e.g. equil after md_relax).
+            if live_rate and live_rate > 0:
+                rate_by_class[_rate_class(specs[idx].kind)] = live_rate
+
+            def _seconds(j: int, steps_remaining: float) -> float:
+                cls = _rate_class(specs[j].kind)
+                r = rate_by_class.get(cls) or _default_stage_rate(specs[j], job.backend)
+                return steps_remaining / r if r > 0 else 0.0
+
+            eta_seconds = max(0.0, _seconds(idx, specs[idx].steps - steps_done) + sum(
+                _seconds(j, specs[j].steps) for j in range(idx + 1, len(specs))
+            ))
+
+            # ── Time to the next DISPLAY frame (last_conf/trajectory write) ───────
+            # The relaxed display follows the run live; a new frame lands every
+            # print_conf_interval steps.  Estimate the wait to the next one from the
+            # current stage's rate so the panel can count it down.
+            interval = print_conf_interval(specs[idx])
+            frame_index = int(steps_done // interval)
+            steps_to_next = (frame_index + 1) * interval - steps_done
+            steps_to_next = min(steps_to_next, specs[idx].steps - steps_done)
+            cur_rate = (live_rate if live_rate and live_rate > 0
+                        else rate_by_class.get(_rate_class(specs[idx].kind))
+                        or _default_stage_rate(specs[idx], job.backend))
+            if cur_rate and cur_rate > 0:
+                next_frame_eta_seconds = max(0.0, steps_to_next / cur_rate)
+
+            # ── Live health snapshot (advisory; cards tick mid-stage) ─────────────
+            design = _load_snapshot_design(job.job_dir(workspace_dir))
+            if design is not None:
+                live_health = _live_health_snapshot(
+                    design, stage_dir, live_rate or rate_by_class.get(_rate_class(specs[idx].kind)))
     overall = (done + stage_frac) / n if n else 0.0
     return {
         "overall": overall,
@@ -386,6 +488,9 @@ def job_progress(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]
         "current_stage_idx": idx,
         "stage_fraction": stage_frac,
         "eta_seconds": eta_seconds,
+        "next_frame_eta_seconds": next_frame_eta_seconds,
+        "frame_index": frame_index,
+        "live_health": live_health,
     }
 
 
@@ -454,6 +559,7 @@ def _health_sample(stage_name: str, kind: str, res: OxdnaHealthResult,
         bp_retained_fraction = res.bp_retained_fraction,
         potential_energy     = res.potential_energy,
         max_backbone_clash   = res.max_backbone_stretch,
+        max_backbone_fene    = res.max_backbone_fene_units,
         steps_per_s          = steps_per_s,
         passed               = res.passed,
         reason               = res.reason or (res.error or ""),
@@ -509,6 +615,61 @@ def _archive_partial_outputs(stage_dir: Path) -> list[str]:
     return archived
 
 
+# ── Escalate-and-retry a stuck relax ──────────────────────────────────────────
+
+def _persist_specs(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> None:
+    """Re-write stages_spec.json so a server restart resumes with the (escalated) specs."""
+    (job.job_dir(workspace_dir) / "stages_spec.json").write_text(
+        json.dumps([asdict(s) for s in specs], indent=2)
+    )
+
+
+def _reset_stage_outputs(stage_dir: Path) -> None:
+    """Delete a stage's run outputs so a re-run starts fresh (not a checkpoint resume).
+
+    Clearing ``last_conf.dat`` in particular makes ``_starting_conf`` fall back to the
+    PREVIOUS stage's conf instead of resuming this stage's own (stale, differently-
+    parameterised) checkpoint."""
+    for name in ("last_conf.dat", "energy.dat", "trajectory.dat", "input.txt"):
+        f = stage_dir / name
+        try:
+            if f.exists():
+                f.unlink()
+        except OSError:
+            pass
+
+
+def _escalate_relax_and_rewind(
+    job: OxdnaJob,
+    workspace_dir: Path,
+    specs: list[OxdnaStageSpec],
+    relax_idx: int,
+    base_relax_spec: OxdnaStageSpec,
+) -> None:
+    """Spend one retry: replace the md_relax spec with an escalated copy, clear the
+    relax stage (and every later stage) so they re-run fresh, and rewind the job to
+    the relax stage.  ``base_relax_spec`` is the pristine (un-escalated) spec so
+    escalation is derived from the original, never compounded."""
+    job.relax_retries += 1
+    specs[relax_idx] = escalate_md_relax_spec(base_relax_spec, job.relax_retries)
+    # Reset the relax stage's status object to the escalated step count + clear it and
+    # every downstream stage so nothing stale is mistaken for "done"/resumable.
+    for i in range(relax_idx, len(specs)):
+        job.stages[i].status     = "pending"
+        job.stages[i].started_at = None
+        job.stages[i].resumed    = False
+        job.stages[i].steps      = specs[i].steps
+        _reset_stage_outputs(job.stage_dir(workspace_dir, specs[i].name))
+    job.current_stage_idx = relax_idx
+    _persist_specs(job, workspace_dir, specs)
+    job.save(workspace_dir)
+    logger.info("[%s] relax not equil-ready → escalating md_relax (attempt %d/%d): "
+                "steps=%d dt=%s cap=%s; rewinding to %s",
+                job.job_id, job.relax_retries, job.max_relax_retries,
+                specs[relax_idx].steps, specs[relax_idx].dt,
+                specs[relax_idx].max_backbone_force, specs[relax_idx].name)
+
+
 # ── Main runner coroutine ─────────────────────────────────────────────────────
 
 async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> None:
@@ -541,9 +702,17 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
     job.save(workspace_dir)
 
     start_idx = job.current_stage_idx
-    for idx, spec in enumerate(specs):
-        if idx < start_idx:
-            continue
+    # The md_relax stage is the escalation target: if it finishes but leaves the
+    # structure not equil-ready (a backbone bond past oxDNA's FENE cliff), we re-run
+    # IT with stronger parameters rather than letting the (capped, but still) equil
+    # settle a strained structure — or, historically, crash an uncapped one.  Keep a
+    # pristine copy so escalation is derived from the original, never compounded.
+    relax_idx = next((i for i, s in enumerate(specs) if s.kind == "md_relax"), None)
+    base_relax_spec = replace(specs[relax_idx]) if relax_idx is not None else None
+
+    idx = start_idx
+    while idx < len(specs):
+        spec = specs[idx]
 
         stage_dir = job.stage_dir(workspace_dir, spec.name)
         stage_dir.mkdir(parents=True, exist_ok=True)
@@ -588,6 +757,17 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
             raise asyncio.CancelledError
 
         if rc != 0:
+            # A stage crashed.  If it's at/after the relax stage and retry budget
+            # remains, escalate the relax and retry the hand-off (the canonical case:
+            # a standard-potential stage aborting at config load on a residual
+            # over-stretched backbone bond).
+            if (relax_idx is not None and idx >= relax_idx
+                    and job.relax_retries < job.max_relax_retries):
+                logger.info("[%s] %s crashed (rc=%d) → retry via escalated relax",
+                            job.job_id, spec.name, rc)
+                _escalate_relax_and_rewind(job, workspace_dir, specs, relax_idx, base_relax_spec)
+                idx = relax_idx
+                continue
             job.stages[idx].status = "failed"
             job.status = OxdnaStatus.failed
             job.error = f"oxDNA failed for {spec.name} (rc={rc}). See {spec.name}/oxdna.log"
@@ -627,9 +807,41 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
             job.save(workspace_dir)
             return
 
+        # ── FENE equil-readiness gate (escalate-and-retry) ───────────────────
+        # md_relax passed its bp gate but left a backbone bond past oxDNA's FENE
+        # cliff: the structure isn't ready for the standard-potential equil.  Spend a
+        # retry on an escalated relax; once the budget is exhausted, stop with a clear
+        # failure rather than equilibrating a strained structure.
+        if spec.kind == "md_relax" and not res.fene_safe:
+            if job.relax_retries < job.max_relax_retries:
+                _escalate_relax_and_rewind(
+                    job, workspace_dir, specs, relax_idx, base_relax_spec)
+                idx = relax_idx
+                continue
+            if job.max_relax_retries > 0:
+                job.stages[idx].status = "failed"
+                job.status = OxdnaStatus.failed
+                mx = res.max_backbone_fene_units or 0.0
+                job.error = (
+                    f"Relaxation could not bring all backbone bonds within oxDNA's "
+                    f"FENE range after {job.max_relax_retries} escalating attempt(s) "
+                    f"({res.n_fene_over} bond(s) over-stretched, longest {mx:.3f} units "
+                    f"vs the {FENE_RMAX_UNITS:.3f} cliff). The structure is over-strained "
+                    f"— relaxing without the surface/anchor traps, lowering dt, or "
+                    f"simplifying the geometry is the likely fix."
+                )
+                job.save(workspace_dir)
+                return
+            # max_relax_retries == 0 → legacy behaviour: proceed to the (capped) equil,
+            # which tolerates the residual over-stretch rather than crashing.
+            logger.info("[%s] %s not equil-ready (%d over-stretched) but retries "
+                        "disabled → proceeding to capped equil",
+                        job.job_id, spec.name, res.n_fene_over)
+
         job.stages[idx].status = "done"
         job.current_stage_idx = idx + 1
         job.save(workspace_dir)
+        idx += 1
 
     logger.info("[%s] all stages completed", job.job_id)
     job.status = OxdnaStatus.completed

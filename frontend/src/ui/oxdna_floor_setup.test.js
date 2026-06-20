@@ -73,4 +73,24 @@ describe('initOxdnaFloorSetup', () => {
       expect.objectContaining({ enabled: true, offsetNm: 4 }))
     expect(a.isEnabled()).toBe(true)
   })
+
+  it('applyConfig repopulates the card from a stored surface spec', () => {
+    api.applyConfig({ dir: [0, -1, 0], offset_nm: 2.5, stiff: 8 })
+    expect(els['oxdna-floor-enable'].checked).toBe(true)
+    expect(els['oxdna-floor-axis'].value).toBe('+y')   // normal points down → +y side
+    expect(els['oxdna-floor-offset'].value).toBe('2.5')
+    expect(els['oxdna-floor-offset-label'].textContent).toBe('2.5 nm')
+    expect(els['oxdna-floor-stiff'].value).toBe('8')
+    const spec = api.getSurfaceSpec()
+    expect(spec.enabled).toBe(true)
+    expect(spec.dir).toEqual([0, -1, 0])
+  })
+
+  it('applyConfig(null) turns the surface off', () => {
+    api.applyConfig({ dir: [0, 1, 0], offset_nm: 1, stiff: 5 })
+    api.applyConfig(null)
+    expect(els['oxdna-floor-enable'].checked).toBe(false)
+    expect(api.isEnabled()).toBe(false)
+    expect(api.getSurfaceSpec().enabled).toBe(false)
+  })
 })

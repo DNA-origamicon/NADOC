@@ -89,6 +89,12 @@ class CreateOxdnaJobRequest(BaseModel):
                                       description="Stage 3 short unbiased equilibration steps")
     min_bp_retained:    float = Field(0.50, ge=0.0, le=1.0,
                                       description="Base-pair retention gate for the MD relax/equil stages")
+    max_relax_retries:  int   = Field(3, ge=0, le=5,
+                                      description="Auto-retry budget: if md_relax leaves the structure "
+                                                  "not equil-ready (a backbone bond past oxDNA's FENE "
+                                                  "cliff), re-run it with escalated parameters up to this "
+                                                  "many times before failing. 0 → proceed straight to the "
+                                                  "capped equil.")
     autostart:          bool  = Field(True)
     # Relax-on-a-surface: optional hard surface ({dir, offset_nm, stiff}) + fixed
     # strands held throughout relaxation.  NO electric field here — a field-relaxed
@@ -184,6 +190,27 @@ def _load_job(job_id: str) -> OxdnaJob:
     # Recover a finished run whose runner thread died (e.g. backend restart) so
     # the completed production is recognised (Show RMSD / NAMD seed unlock).
     return reconcile_oxdna_status(job, _workspace())
+
+
+def _lineage_jobs(job: OxdnaJob) -> list[OxdnaJob]:
+    """The selected job's ancestor chain, ROOT first → … → selected, following
+    ``parent_job_id``.  A field/production child is seeded from its parent's end
+    state, so the whole chain is one continuous trajectory (relax → field1 →
+    field2 → …).  Stops at the first missing/unloadable ancestor."""
+    ws = _workspace()
+    chain = [job]
+    seen = {job.job_id}
+    cur = job
+    while cur.parent_job_id and cur.parent_job_id not in seen:
+        try:
+            parent = OxdnaJob.load(cur.parent_job_id, ws)
+        except Exception:  # noqa: BLE001 — missing/torn ancestor: show what we have
+            break
+        chain.append(parent)
+        seen.add(parent.job_id)
+        cur = parent
+    chain.reverse()
+    return chain
 
 
 def _stage_trajectories(stage_dir: Path) -> list[Path]:
@@ -292,6 +319,22 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         backend            = body.backend,
         salt_concentration = body.salt_concentration,
         design_source_path = body.design_source_path,
+        max_relax_retries  = body.max_relax_retries,
+        # Echo the relaxation conditions so selecting this job repopulates the
+        # Advanced / Hard surface / Anchors cards with what the run used.
+        run_config         = {
+            "kind":               "relax",
+            "backend":            body.backend,
+            "device":             body.device,
+            "salt_concentration": body.salt_concentration,
+            "mc_steps":           body.mc_steps,
+            "md_relax_steps":     body.md_relax_steps,
+            "equil_steps":        body.equil_steps,
+            "min_bp_retained":    body.min_bp_retained,
+            "max_relax_retries":  body.max_relax_retries,
+            "surface":            surface_in,
+            "anchors":            anchors_in,
+        },
     )
     job.status = OxdnaStatus.preparing
     job.save(_workspace())
@@ -415,20 +458,20 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
 async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     """Spawn an electric-field run as a CHILD job branched from a relaxed parent.
 
-    Each field run is its own job seeded from the parent's relaxed structure (its
-    ``conf.dat`` = the parent's latest relaxed ``last_conf``), so the user can go
-    back to one relaxed job and fan out several independent field runs.  The child
-    runs a single ``field``-kind stage with a uniform per-nucleotide force + anchor
-    traps; it links to the parent via ``parent_job_id`` and records the field
-    params in ``efield`` (for the list sub-item hover).
+    Each field run is its own job seeded from the parent's end state (its
+    ``conf.dat`` = the parent's latest ``last_conf``), so the user can fan out
+    several independent field runs OR chain them — branching a fresh field run
+    off a completed field child seeds from that child's final structure, giving a
+    continuous relax → field1 → field2 → … lineage.  The child runs a single
+    ``field``-kind stage with a uniform per-nucleotide force + anchor traps; it
+    links to its parent via ``parent_job_id`` and records the field params in
+    ``efield`` (for the list sub-item hover).
 
     Anchors are required: an unanchored uniform force nets a centre-of-mass drift
     that streams the whole structure across the periodic box."""
     parent = _load_job(job_id)
-    if parent.parent_job_id:
-        raise HTTPException(400, "Run electric-field branches from a relaxed job, not from another field run.")
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
-        raise HTTPException(400, "An electric-field run requires a completed relaxation job.")
+        raise HTTPException(400, "An electric-field run requires a completed job to seed from.")
     if find_oxdna() is None:
         raise HTTPException(400, "oxDNA binary not found.")
     if not body.anchors:
@@ -460,6 +503,13 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
         backend=parent.backend, salt_concentration=parent.salt_concentration,
         design_source_path=parent.design_source_path, parent_job_id=parent.job_id,
         efield={"force_pN": body.field_pN, "force_oxdna": field_oxdna, "dir": list(body.dir)},
+        run_config={
+            "kind":    "field",
+            "steps":   body.steps,
+            "field":   {"field_pN": body.field_pN, "dir": list(body.dir)},
+            "surface": None,
+            "anchors": [a.model_dump(by_alias=True, exclude_none=True) for a in body.anchors],
+        },
     )
 
     import json
@@ -494,15 +544,15 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     parent.  The run is unbiased MD plus any combination of independently-enabled
     elements: an electric field, a hard surface (repulsion plane), and anchor traps.
 
-    Like the E-field run, each call seeds a fresh child from the parent's relaxed
-    structure, so the user can fan out runs (field-only / surface-only / both /
-    +anchors) and compare them side by side.
+    Like the E-field run, each call seeds a fresh child from the parent's end
+    state, so the user can fan out runs (field-only / surface-only / both /
+    +anchors) and compare them side by side, OR chain them — branching off a
+    completed child seeds from that child's final structure for a continuous
+    multi-run lineage.
 
     A field with no anchors is rejected: an unanchored uniform force nets a
     centre-of-mass drift that streams the whole structure across the periodic box."""
     parent = _load_job(job_id)
-    if parent.parent_job_id:
-        raise HTTPException(400, "Run production from a relaxed job, not from another run.")
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
         raise HTTPException(400, "A production run requires a completed relaxation job.")
     if find_oxdna() is None:
@@ -560,6 +610,14 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         backend=parent.backend, salt_concentration=parent.salt_concentration,
         design_source_path=parent.design_source_path, parent_job_id=parent.job_id,
         efield=efield_rec or {},
+        run_config={
+            "kind":    "run",
+            "steps":   body.steps,
+            "field":   {"field_pN": body.field.field_pN, "dir": list(body.field.dir)} if body.field else None,
+            "surface": {"dir": body.surface.dir, "offset_nm": body.surface.offset_nm,
+                        "stiff": body.surface.stiff} if body.surface else None,
+            "anchors": [a.model_dump(by_alias=True, exclude_none=True) for a in body.anchors],
+        },
     )
 
     import json
@@ -633,28 +691,41 @@ async def stop_oxdna_job(job_id: str) -> dict:
 
 @router.delete("/oxdna/jobs/{job_id}")
 async def delete_oxdna_job(job_id: str) -> dict:
-    """Delete a job and, if it is a relaxed parent, ALL of its electric-field
-    children (a field run is its own job branched from the parent — orphaning the
-    children would leave undeletable, design-detached jobs).  Refuses if the job
-    or any of its children is still running."""
+    """Delete a job and ALL of its descendant runs (field/production children
+    chain off their parent's end state — orphaning them would leave undeletable,
+    design-detached jobs).  Cascades to any depth (relax → field1 → field2 → …).
+    Refuses if the job or any descendant is still running."""
     ws = _workspace()
     job = _load_job(job_id)
     if is_running(job_id) or job.status == OxdnaStatus.running:
         raise HTTPException(400, "Stop the oxDNA job before deleting it")
 
-    children = [j for j in OxdnaJob.list_jobs(ws) if j.parent_job_id == job_id]
-    for c in children:
-        if is_running(c.job_id) or c.status == OxdnaStatus.running:
+    # Collect the full descendant subtree (children, grandchildren, …) so a chained
+    # lineage is removed as a unit.
+    all_jobs = OxdnaJob.list_jobs(ws)
+    children_of: dict[str, list[OxdnaJob]] = {}
+    for j in all_jobs:
+        if j.parent_job_id:
+            children_of.setdefault(j.parent_job_id, []).append(j)
+    descendants: list[OxdnaJob] = []
+    stack = list(children_of.get(job_id, []))
+    while stack:
+        d = stack.pop()
+        descendants.append(d)
+        stack.extend(children_of.get(d.job_id, []))
+
+    for d in descendants:
+        if is_running(d.job_id) or d.status == OxdnaStatus.running:
             raise HTTPException(
-                400, f"Stop the running field run ({c.job_id}) before deleting its parent.")
+                400, f"Stop the running child run ({d.job_id}) before deleting its ancestor.")
 
     deleted: list[str] = []
-    for j in (*children, job):
+    for j in (*descendants, job):
         jd = j.job_dir(ws)
         if jd.exists():
             shutil.rmtree(jd)
         deleted.append(j.job_id)
-    return {"ok": True, "job_id": job_id, "deleted": deleted, "n_children": len(children)}
+    return {"ok": True, "job_id": job_id, "deleted": deleted, "n_children": len(descendants)}
 
 
 @router.get("/oxdna/jobs/{job_id}/health")
@@ -760,24 +831,42 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
 
 @router.get("/oxdna/jobs/{job_id}/trajectory")
 async def get_oxdna_trajectory(job_id: str) -> dict:
-    """Composite scrub-able trajectory: every stage that wrote a trajectory.dat
-    (relaxation stages + all production runs), each frame PBC-unwrapped +
-    Kabsch-aligned to the design reference, downsampled, with stage-boundary
-    markers.  Feeds the View-trajectory play/pause + slider in the panel.
+    """Composite scrub-able trajectory for the WHOLE lineage: every stage of the
+    selected job AND all of its ancestors (relax → field1 → field2 → …), each
+    frame PBC-unwrapped + Kabsch-aligned to the design reference, downsampled,
+    with a labelled tick at every stage/run boundary.  A field/production child is
+    seeded from its parent's end state, so the ancestor chain plays as one
+    continuous trajectory.  Feeds the View-trajectory play/pause + slider.
     """
     from backend.core.models import Design
     from backend.core.oxdna_health import composite_trajectory
 
     job = _load_job(job_id)
     jd = job.job_dir(_workspace())
+    ws = _workspace()
+
+    # Walk root → … → selected; concatenate every job's stages in time order.  A
+    # boundary into a non-root child (a new field/production run) gets a numbered
+    # tick label so relax → field1 → field2 are visually distinguishable.
+    chain = _lineage_jobs(job)
     stages = []
-    for st in job.stages:
-        # Include any archived resume parts (trajectory.r1.dat …) before the
-        # current trajectory.dat so a resumed stage scrubs in time order.
-        files = _stage_trajectories(job.stage_dir(_workspace(), st.name))
-        for k, traj in enumerate(files):
-            label = st.name if len(files) == 1 else f"{st.name} (part {k + 1})"
-            stages.append((label, st.kind, traj))
+    run_no = 0
+    for j in chain:
+        is_root = j.parent_job_id is None
+        if not is_root:
+            run_no += 1
+        first_of_job = True
+        for st in j.stages:
+            # Include any archived resume parts (trajectory.r1.dat …) before the
+            # current trajectory.dat so a resumed stage scrubs in time order.
+            files = _stage_trajectories(j.stage_dir(ws, st.name))
+            for k, traj in enumerate(files):
+                label = st.name if len(files) == 1 else f"{st.name} (part {k + 1})"
+                marker = None
+                if first_of_job and not is_root:
+                    marker = f"→ {st.kind} {run_no}"
+                    first_of_job = False
+                stages.append((label, st.kind, traj, marker))
     if not stages:
         return {"ready": False, "reason": "no trajectory yet"}
 
@@ -785,7 +874,11 @@ async def get_oxdna_trajectory(job_id: str) -> dict:
     if not snap.exists():
         raise HTTPException(500, "design.json snapshot missing for this job")
     design = Design.model_validate_json(snap.read_text())
-    result = await run_in_threadpool(composite_trajectory, design, stages, jd / "conf.dat")
+    # Align the whole lineage to ONE origin frame (design geometry), the same
+    # reference the field display uses — NOT the job's conf.dat (a field child's
+    # conf.dat is the parent's drifted relaxed structure, off-origin).
+    ref = _design_ref_conf(jd, design)
+    result = await run_in_threadpool(composite_trajectory, design, stages, ref)
     return {"ready": result["n_frames"] > 0, **result}
 
 

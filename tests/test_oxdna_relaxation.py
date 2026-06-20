@@ -10,6 +10,7 @@ without a real oxDNA install.
 
 from __future__ import annotations
 
+import math
 import stat
 import time
 
@@ -63,6 +64,26 @@ def test_job_roundtrip(tmp_path):
     assert loaded.n_nucleotides == 42
 
 
+def test_run_config_roundtrip(tmp_path):
+    # run_config carries the conditions echoed back into the panel cards on select.
+    rc = {
+        "kind": "relax", "backend": "CUDA", "device": "0",
+        "salt_concentration": 0.6, "mc_steps": 500, "md_relax_steps": 7000,
+        "equil_steps": 800, "min_bp_retained": 0.4,
+        "surface": {"dir": [0, 1, 0], "offset_nm": 2.0, "stiff": 5.0},
+        "anchors": [{"kind": "overhang", "id": "oh1"},
+                    {"kind": "domain", "strandId": "s1", "domainIndex": 2}],
+    }
+    job = new_oxdna_job("demo", [], run_config=rc)
+    job.save(tmp_path)
+    loaded = OxdnaJob.load(job.job_id, tmp_path)
+    assert loaded.run_config == rc
+    # Old jobs (no run_config in job.json) load with run_config=None.
+    job2 = new_oxdna_job("old", [])
+    job2.save(tmp_path)
+    assert OxdnaJob.load(job2.job_id, tmp_path).run_config is None
+
+
 def test_list_jobs(tmp_path):
     for i in range(3):
         new_oxdna_job(f"d{i}", []).save(tmp_path)
@@ -78,10 +99,13 @@ def test_stage_specs_shape():
     assert specs[0].backend == "CPU" and specs[0].sim_type == "MC"
     assert specs[1].backend == "CUDA" and specs[1].sim_type == "MD"
     assert specs[2].backend == "CUDA" and specs[2].sim_type == "MD"
-    # Modified-backbone force cap on mc+md_relax, removed (standard FENE) on equil.
+    # Strong modified-backbone force cap on mc+md_relax (clears clashes); equil keeps a
+    # LARGE cap (transparent to healthy bonds, but no fatal FENE divergence on a residual
+    # over-stretched bond — the equil-readiness fix).
     assert specs[0].max_backbone_force == 5.0
     assert specs[1].max_backbone_force == 5.0
-    assert specs[2].max_backbone_force is None
+    assert specs[2].max_backbone_force == 50.0
+    assert specs[2].max_backbone_force_far == 100.0
     # Standard defaults.
     assert specs[0].steps == 1_000
     assert specs[1].steps == 1_000_000
@@ -122,10 +146,15 @@ def test_render_mc_input_standard_keys():
     assert "dt = " not in txt
 
 
-def test_render_equil_has_no_force_cap():
+def test_render_equil_has_large_force_cap():
+    # The equil keeps a LARGE backbone-force cap (not removed): standard FENE for healthy
+    # bonds, but a finite linear spring — never a fatal divergence — for a residual
+    # over-stretched bond.  (Previously the cap was removed, which crashed equil at config
+    # load on any bond past oxDNA's FENE cliff.)
     specs = build_relaxation_stages(equil_steps=5_000)
     txt = render_stage_input(specs[2], "t", "c")
-    assert "max_backbone_force" not in txt
+    assert "max_backbone_force = 50.0" in txt
+    assert "max_backbone_force_far = 100.0" in txt
     assert "sim_type = MD" in txt
 
 
@@ -297,6 +326,103 @@ def test_job_progress_eta(tmp_path):
     assert 20 < prog["eta_seconds"] < 80
 
 
+def test_print_conf_interval():
+    """The display-frame cadence is ~100 frames per stage (mirrors render_stage_input)."""
+    from backend.core.oxdna_protocol import print_conf_interval
+    specs = build_relaxation_stages(mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000)
+    assert print_conf_interval(specs[1]) == 1_000
+
+
+def test_job_progress_next_frame_eta(tmp_path):
+    """While a stage runs, job_progress estimates the wait to the next written
+    display frame (print_conf_interval steps) from the live rate, and reports which
+    frame index is currently shown."""
+    from backend.core.oxdna_runner import job_progress
+
+    specs = build_relaxation_stages(mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000)
+    job = new_oxdna_job("d", [s.to_status() for s in specs])
+    job.current_stage_idx = 1
+    job.stages[0].status = "done"
+    job.stages[1].status = "running"
+    job.stages[1].started_at = time.time() - 10.0       # 10 s into md_relax
+    job.save(tmp_path)
+    sd = job.stage_dir(tmp_path, job.stages[1].name)
+    sd.mkdir(parents=True, exist_ok=True)
+    (sd / "energy.dat").write_text("\n".join("0 -1 0.5 -0.5" for _ in range(30)) + "\n")
+
+    prog = job_progress(job, tmp_path, specs)
+    # 30% of 100k = 30k steps; interval 1k → 30 frames written, next at 31k → 1k away.
+    assert prog["frame_index"] == 30
+    # 30k steps in 10 s → 3000 st/s; 1k more steps → ~0.33 s to the next frame.
+    assert prog["next_frame_eta_seconds"] is not None
+    assert 0.1 < prog["next_frame_eta_seconds"] < 1.0
+
+
+def test_job_progress_eta_mc_stage_excludes_mc_rate_from_md(tmp_path):
+    """During the MC stage the ETA must NOT extrapolate the slow CPU Monte-Carlo rate
+    onto the 1e6-step MD stages (the ">100 h" bug).  MC steps/s and MD steps/s are
+    different units at vastly different speeds, so each class is estimated separately."""
+    from backend.core.oxdna_runner import job_progress
+
+    specs = build_relaxation_stages(mc_steps=1000, md_relax_steps=1_000_000,
+                                    equil_steps=100_000, backend="CUDA")
+    job = new_oxdna_job("d", [s.to_status() for s in specs], backend="CUDA")
+    job.current_stage_idx = 0
+    job.stages[0].status = "running"
+    job.stages[0].started_at = time.time() - 100.0      # 100 s into MC at ~2.5 st/s
+    job.save(tmp_path)
+    sd = job.stage_dir(tmp_path, job.stages[0].name)
+    sd.mkdir(parents=True, exist_ok=True)
+    # 25 of 100 expected energy lines → 25% of 1000 MC steps = 250 steps in 100 s ≈ 2.5/s.
+    (sd / "energy.dat").write_text("\n".join("0 -1 0.5 -0.5" for _ in range(25)) + "\n")
+
+    prog = job_progress(job, tmp_path, specs)
+    # The OLD code did (remaining ≈ 1.1e6 steps) / 2.5 st/s ≈ 122 h.  The MD stages must
+    # be seeded at the MD-class default (CUDA ~1000 st/s), so the whole ETA is well under
+    # an hour: MC tail ~300 s + MD 1e6/1000 + equil 1e5/1000 ≈ 19 min.
+    assert prog["eta_seconds"] is not None
+    assert prog["eta_seconds"] < 3600, f"ETA {prog['eta_seconds']/3600:.1f} h — MC rate leaked into MD"
+
+
+def test_live_health_snapshot_energy_only(design, tmp_path):
+    """Live snapshot fills the cheap fields from energy.dat and degrades to None
+    for the trajectory-derived fields when no trajectory has been written yet."""
+    from backend.core.oxdna_runner import _live_health_snapshot
+
+    (tmp_path / "energy.dat").write_text("0 -2.0 0.3 -1.7\n0 -2.5 0.3 -2.2\n")
+    snap = _live_health_snapshot(design, tmp_path, 1234.0)
+    assert snap["potential_energy"] == pytest.approx(-2.5)   # last energy line's U
+    assert snap["steps_per_s"] == 1234.0
+    assert snap["bp_retained_fraction"] is None              # no trajectory.dat
+    assert snap["max_backbone_clash"] is None
+
+
+def test_job_progress_live_health_while_running(design, geometry, tmp_path):
+    """A running stage reports a live_health snapshot (all four cards) computed
+    from the partial energy.dat + trajectory.dat — so the panel ticks mid-stage."""
+    from backend.core.oxdna_runner import job_progress
+
+    specs = build_relaxation_stages(mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000)
+    job = new_oxdna_job("d", [s.to_status() for s in specs])
+    job.current_stage_idx = 1
+    job.stages[0].status = "done"
+    job.stages[1].status = "running"
+    job.stages[1].started_at = time.time() - 10.0
+    job.save(tmp_path)
+    (job.job_dir(tmp_path) / "design.json").write_text(design.model_dump_json())
+    sd = job.stage_dir(tmp_path, job.stages[1].name)
+    sd.mkdir(parents=True, exist_ok=True)
+    (sd / "energy.dat").write_text("\n".join("0 -1.23 0.5 -0.73" for _ in range(30)) + "\n")
+    _write_traj(design, geometry, sd / "trajectory.dat", 3)
+
+    lh = job_progress(job, tmp_path, specs)["live_health"]
+    assert lh is not None
+    assert lh["potential_energy"] == pytest.approx(-1.23)
+    assert lh["steps_per_s"] is not None and lh["steps_per_s"] > 0
+    assert lh["bp_retained_fraction"] is not None   # from the latest trajectory frame
+    assert lh["max_backbone_clash"] is not None
+
+
 def test_production_rmsd(design, geometry, tmp_path):
     """Production RMSD: per-frame backbone RMSD vs the relaxed reference, with each
     frame PBC-unwrapped + Kabsch-aligned (so rigid drift contributes ~0)."""
@@ -451,6 +577,69 @@ def test_measure_end_to_end_rejects_bad_input():
         measure_end_to_end(positions, (0, 0, "forward"), (9, 9, "forward"))
 
 
+def test_measure_radius_of_gyration_analytic():
+    """R_g of a symmetric point set matches the closed-form value.
+
+    Two points at ±5 nm on the x-axis: centre of mass at the origin, each 5 nm
+    away → R_g = sqrt((5² + 5²)/2) = 5.0.  Eight corners of a cube of half-side a
+    centred at the origin sit at distance sqrt(3)·a → R_g = sqrt(3)·a."""
+    from backend.core.oxdna_health import measure_radius_of_gyration
+    pair = [_pos(0, 0, "forward", (-5.0, 0.0, 0.0)),
+            _pos(0, 1, "forward", (5.0, 0.0, 0.0))]
+    assert abs(measure_radius_of_gyration(pair) - 5.0) < 1e-9
+    a = 2.0
+    cube = [_pos(0, i, "forward", (sx * a, sy * a, sz * a))
+            for i, (sx, sy, sz) in enumerate(
+                [(x, y, z) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)])]
+    assert abs(measure_radius_of_gyration(cube) - math.sqrt(3) * a) < 1e-9
+
+
+def test_measure_radius_of_gyration_rejects_empty():
+    """An empty position map raises (not a silent 0)."""
+    from backend.core.oxdna_health import measure_radius_of_gyration
+    with pytest.raises(ValueError, match="empty"):
+        measure_radius_of_gyration([])
+
+
+def test_measure_segment_angle_analytic():
+    """The bend angle at the middle landmark matches closed-form values, and is a
+    pure magnitude (leg order about the vertex is irrelevant).
+
+    Vertex b at the origin; a on +x, c on +y → a right angle (90°).  Three collinear
+    points → 180°.  A 60° wedge (legs at 0° and 60°) → 60°."""
+    from backend.core.oxdna_health import measure_segment_angle
+    right = [_pos(0, 0, "forward", (1.0, 0.0, 0.0)),     # a
+             _pos(0, 1, "forward", (0.0, 0.0, 0.0)),     # b (vertex)
+             _pos(0, 2, "forward", (0.0, 1.0, 0.0))]     # c
+    keys = ((0, 0, "forward"), (0, 1, "forward"), (0, 2, "forward"))
+    assert abs(measure_segment_angle(right, *keys) - 90.0) < 1e-9
+    # Swapping the two legs about the vertex leaves the magnitude unchanged.
+    assert abs(measure_segment_angle(right, keys[2], keys[1], keys[0]) - 90.0) < 1e-9
+    straight = [_pos(0, 0, "forward", (-3.0, 0.0, 0.0)),
+                _pos(0, 1, "forward", (0.0, 0.0, 0.0)),
+                _pos(0, 2, "forward", (5.0, 0.0, 0.0))]
+    assert abs(measure_segment_angle(straight, *keys) - 180.0) < 1e-9
+    wedge = [_pos(0, 0, "forward", (1.0, 0.0, 0.0)),
+             _pos(0, 1, "forward", (0.0, 0.0, 0.0)),
+             _pos(0, 2, "forward", (0.5, math.sqrt(3) / 2, 0.0))]
+    assert abs(measure_segment_angle(wedge, *keys) - 60.0) < 1e-9
+
+
+def test_measure_segment_angle_rejects_bad_input():
+    """Empty map, a coincident landmark pair, and an absent landmark each raise."""
+    from backend.core.oxdna_health import measure_segment_angle
+    positions = [_pos(0, 0, "forward", (1.0, 0.0, 0.0)),
+                 _pos(0, 1, "forward", (0.0, 0.0, 0.0)),
+                 _pos(0, 2, "forward", (0.0, 1.0, 0.0))]
+    keys = ((0, 0, "forward"), (0, 1, "forward"), (0, 2, "forward"))
+    with pytest.raises(ValueError, match="empty"):
+        measure_segment_angle([], *keys)
+    with pytest.raises(ValueError, match="distinct"):
+        measure_segment_angle(positions, keys[0], keys[1], keys[0])
+    with pytest.raises(ValueError, match="not a nucleotide"):
+        measure_segment_angle(positions, keys[0], keys[1], (9, 9, "forward"))
+
+
 # ── parse_constraint_spec + check_relaxed_constraint (AF-13 P3 — pure) ─────────
 
 _LANDMARKS = [(0, 0, "forward"), (0, 9, "forward")]   # → 5.0 nm in _CONSTR_POS
@@ -489,12 +678,47 @@ def test_parse_constraint_spec_default_min_confidence():
     assert c["min_confidence"] == RMSF_PRELIM_FRAMES
 
 
+def test_parse_constraint_spec_radius_of_gyration_no_landmarks():
+    """radius_of_gyration is a whole-structure measure — it parses with no
+    landmarks (and normalises to an empty landmark list)."""
+    from backend.core.oxdna_health import parse_constraint_spec
+    c = parse_constraint_spec({"measure": "radius_of_gyration",
+                               "target_nm": 8.0, "tol_nm": 0.5})
+    assert c["measure"] == "radius_of_gyration" and c["landmarks"] == []
+    assert c["target_nm"] == 8.0
+    assert parse_constraint_spec(c) == c          # idempotent
+
+
+def test_parse_constraint_spec_radius_of_gyration_rejects_landmarks():
+    """Passing landmarks to a whole-structure measure is a spec error."""
+    from backend.core.oxdna_health import ConstraintSpecError, parse_constraint_spec
+    with pytest.raises(ConstraintSpecError, match="takes no landmarks"):
+        parse_constraint_spec({"measure": "radius_of_gyration", "landmarks": _LANDMARKS,
+                               "target_nm": 8.0, "tol_nm": 0.5})
+
+
+_ANGLE_LANDMARKS = [(0, 0, "forward"), (0, 5, "forward"), (0, 9, "forward")]
+
+
+def test_parse_constraint_spec_segment_angle_three_landmarks():
+    """segment_angle is the first three-landmark measure — the arity generalisation
+    accepts exactly 3 (target_nm/tol_nm carry degrees for an angle)."""
+    from backend.core.oxdna_health import parse_constraint_spec
+    c = parse_constraint_spec({"measure": "segment_angle", "landmarks": _ANGLE_LANDMARKS,
+                               "target_nm": 90.0, "tol_nm": 5.0})
+    assert c["measure"] == "segment_angle" and len(c["landmarks"]) == 3
+    assert c["landmarks"] == [(0, 0, "forward"), (0, 5, "forward"), (0, 9, "forward")]
+    assert parse_constraint_spec(c) == c          # idempotent
+
+
 @pytest.mark.parametrize("spec, match", [
     ("nope", "must be a dict"),
     ({"measure": "end_to_end", "landmarks": _LANDMARKS, "target_nm": 5.0,
       "tol_nm": 0.5, "bogus": 1}, "unknown key"),
     (_constr(measure="radius"), "measure must be one of"),
     (_constr(landmarks=[(0, 0, "forward")]), "needs exactly 2 landmarks"),
+    ({"measure": "segment_angle", "landmarks": _LANDMARKS, "target_nm": 90.0,
+      "tol_nm": 5.0}, "needs exactly 3 landmarks"),
     (_constr(landmarks=[(0, 0, "forward"), (0, 0, "forward")]), "identical"),
     (_constr(landmarks=[(0, "x", "forward"), (0, 9, "forward")]), "bp_index must be"),
     (_constr(landmarks=[(0, 0), (0, 9, "forward")]), "must be a .*triple"),
@@ -555,6 +779,144 @@ def test_check_constraint_no_production_inconclusive():
     assert r["measured_nm"] is None
 
 
+def test_check_constraint_radius_of_gyration_dispatches():
+    """check_relaxed_constraint dispatches the whole-structure radius_of_gyration
+    measure (no landmarks) — the two synthetic points 5 nm apart give R_g 2.5 nm —
+    and the confidence gate + tolerance bracket apply exactly as for end_to_end."""
+    from backend.core.oxdna_health import check_relaxed_constraint
+    rg_spec = {"measure": "radius_of_gyration", "target_nm": 2.5, "tol_nm": 0.1,
+               "min_confidence": 50}
+    met = check_relaxed_constraint(rg_spec, _relaxed(60))      # points at 0 and 5 nm
+    assert met["status"] == "met" and met["met"] is True
+    assert abs(met["measured_nm"] - 2.5) < 1e-9                # R_g of {0, 5} = 2.5
+    # Confidence gate still governs: same value, too few frames → inconclusive.
+    weak = check_relaxed_constraint(rg_spec, _relaxed(10))
+    assert weak["status"] == "inconclusive" and weak["met"] is False
+    # Out of tolerance → unmet.
+    off = check_relaxed_constraint({**rg_spec, "target_nm": 8.0}, _relaxed(60))
+    assert off["status"] == "unmet" and off["met"] is False
+
+
+def test_check_constraint_segment_angle_dispatches():
+    """check_relaxed_constraint dispatches the three-landmark segment_angle measure
+    (degrees) — a right-angle triple gives 90° — with the same confidence gate +
+    tolerance bracket as the length measures."""
+    from backend.core.oxdna_health import check_relaxed_constraint
+    positions = [_pos(0, 0, "forward", (1.0, 0.0, 0.0)),
+                 _pos(0, 1, "forward", (0.0, 0.0, 0.0)),     # vertex
+                 _pos(0, 2, "forward", (0.0, 1.0, 0.0))]
+    well = {"ready": True, "positions": positions,
+            "confidence": {"n_frames": 60, "preliminary": False}}
+    weak = {"ready": True, "positions": positions,
+            "confidence": {"n_frames": 10, "preliminary": True}}
+    spec = {"measure": "segment_angle",
+            "landmarks": [(0, 0, "forward"), (0, 1, "forward"), (0, 2, "forward")],
+            "target_nm": 90.0, "tol_nm": 1.0, "min_confidence": 50}      # degrees
+    met = check_relaxed_constraint(spec, well)
+    assert met["status"] == "met" and met["met"] is True
+    assert abs(met["measured_nm"] - 90.0) < 1e-9                # 90° right angle
+    # Confidence gate still governs: same value, too few frames → inconclusive.
+    assert check_relaxed_constraint(spec, weak)["status"] == "inconclusive"
+    # Out of tolerance → unmet.
+    off = check_relaxed_constraint({**spec, "target_nm": 45.0}, well)
+    assert off["status"] == "unmet" and off["met"] is False
+
+
+# ── measure_inter_helix_spacing (the first axis-grouping measure — pure geometry) ─
+
+def test_measure_inter_helix_spacing_analytic():
+    """Spacing = radial centre-to-centre gap between two fit helix axes.
+
+    Two helices' backbone sites run parallel along +z, offset 2.5 nm in x → the
+    perpendicular spacing is 2.5 nm.  A landmark on each helix only NAMES the helix;
+    all of that helix's sites are gathered to fit the axis."""
+    from backend.core.oxdna_health import measure_inter_helix_spacing
+    positions = (
+        [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(4)] +
+        [_pos(1, i, "forward", (2.5, 0.0, float(i))) for i in range(4)])
+    d = measure_inter_helix_spacing(positions, (0, 0, "forward"), (1, 0, "forward"))
+    assert abs(d - 2.5) < 1e-9
+    # Symmetric in the two helices.
+    assert abs(measure_inter_helix_spacing(
+        positions, (1, 3, "forward"), (0, 2, "forward")) - 2.5) < 1e-9
+
+
+def test_measure_inter_helix_spacing_ignores_axial_offset_and_tilt():
+    """The axial component is projected out (an end-staggered pair still reads its
+    radial gap), and a small relative tilt does not collapse the spacing the way an
+    infinite-line distance would."""
+    from backend.core.oxdna_health import measure_inter_helix_spacing
+    # Helix 0 along +z at x=0; helix 1 along +z at x=3, shifted +5 nm in z (axial
+    # stagger) — the radial gap is still 3.0 nm.
+    staggered = (
+        [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(5)] +
+        [_pos(1, i, "forward", (3.0, 0.0, 5.0 + float(i))) for i in range(5)])
+    assert abs(measure_inter_helix_spacing(
+        staggered, (0, 0, "forward"), (1, 0, "forward")) - 3.0) < 1e-9
+    # Helix 1 tilted slightly toward helix 0 (its infinite axis would nearly meet
+    # helix 0's far away → ~0); the perpendicular-to-mean-axis spacing stays ~3 nm.
+    tilted = (
+        [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(11)] +
+        [_pos(1, i, "forward", (3.0 - 0.02 * i, 0.0, float(i))) for i in range(11)])
+    s = measure_inter_helix_spacing(tilted, (0, 0, "forward"), (1, 0, "forward"))
+    assert 2.7 < s < 3.0          # tilt nudges it, but it does NOT collapse to 0
+
+
+def test_measure_inter_helix_spacing_rejects_bad_input():
+    """Empty map, two landmarks on the same helix, an absent landmark, and a helix
+    with a single nucleotide each raise (not a silent 0)."""
+    from backend.core.oxdna_health import measure_inter_helix_spacing
+    positions = (
+        [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(3)] +
+        [_pos(1, i, "forward", (2.0, 0.0, float(i))) for i in range(3)] +
+        [_pos(2, 0, "forward", (5.0, 0.0, 0.0))])      # helix 2: one site only
+    with pytest.raises(ValueError, match="empty"):
+        measure_inter_helix_spacing([], (0, 0, "forward"), (1, 0, "forward"))
+    with pytest.raises(ValueError, match="same helix"):
+        measure_inter_helix_spacing(positions, (0, 0, "forward"), (0, 2, "forward"))
+    with pytest.raises(ValueError, match="not a nucleotide"):
+        measure_inter_helix_spacing(positions, (0, 0, "forward"), (9, 9, "forward"))
+    with pytest.raises(ValueError, match="fewer than two"):
+        measure_inter_helix_spacing(positions, (0, 0, "forward"), (2, 0, "forward"))
+
+
+def test_parse_constraint_spec_inter_helix_spacing_two_landmarks():
+    """inter_helix_spacing is a two-landmark nm measure (each landmark names a
+    helix) — it parses with exactly 2 landmarks, like end_to_end."""
+    from backend.core.oxdna_health import parse_constraint_spec
+    c = parse_constraint_spec({"measure": "inter_helix_spacing",
+                               "landmarks": _LANDMARKS, "target_nm": 2.5,
+                               "tol_nm": 0.2})
+    assert c["measure"] == "inter_helix_spacing" and len(c["landmarks"]) == 2
+    assert c["target_nm"] == 2.5
+    assert parse_constraint_spec(c) == c          # idempotent
+
+
+def test_check_constraint_inter_helix_spacing_dispatches():
+    """check_relaxed_constraint dispatches the axis-grouping inter_helix_spacing
+    measure (nm) with the same confidence gate + tolerance bracket as the other
+    measures — two parallel helices 2.5 nm apart give a 2.5 nm spacing."""
+    from backend.core.oxdna_health import check_relaxed_constraint
+    positions = (
+        [_pos(0, i, "forward", (0.0, 0.0, float(i))) for i in range(4)] +
+        [_pos(1, i, "forward", (2.5, 0.0, float(i))) for i in range(4)])
+    well = {"ready": True, "positions": positions,
+            "confidence": {"n_frames": 60, "preliminary": False}}
+    weak = {"ready": True, "positions": positions,
+            "confidence": {"n_frames": 10, "preliminary": True}}
+    spec = {"measure": "inter_helix_spacing",
+            "landmarks": [(0, 0, "forward"), (1, 0, "forward")],
+            "target_nm": 2.5, "tol_nm": 0.1, "min_confidence": 50}
+    met = check_relaxed_constraint(spec, well)
+    assert met["status"] == "met" and met["met"] is True
+    assert abs(met["measured_nm"] - 2.5) < 1e-9
+    # Confidence gate still governs.
+    assert check_relaxed_constraint(spec, weak)["status"] == "inconclusive"
+    # Out of tolerance → unmet.
+    off = check_relaxed_constraint({**spec, "target_nm": 5.0}, well)
+    assert off["status"] == "unmet" and off["met"] is False
+
+
 def test_composite_trajectory(design, geometry, tmp_path):
     """Composite trajectory concatenates stages, sends keys once, flat float
     frames, and a transition marker at each stage boundary."""
@@ -564,13 +926,13 @@ def test_composite_trajectory(design, geometry, tmp_path):
     p = tmp_path / "prod.dat";   _write_traj(design, geometry, p, 3)
     stages = [("3_equil", "equil", e), ("4_production", "production", p)]
     r = composite_trajectory(design, stages, ref)
-    assert r["n_frames"] == 5                       # 2 + 3
+    assert r["n_frames"] == 6                       # seed t=0 + 2 + 3
     M = r["n_nucleotides"]
     assert M > 0 and len(r["keys"]) == M
     assert all(len(f) == 6 * M for f in r["frames"])  # 6 floats (bb xyz + a1) per key
     assert [s["kind"] for s in r["stages"]] == ["equil", "production"]
     assert len(r["markers"]) == 1                   # one transition equil→production
-    assert r["markers"][0]["frame"] == 2 and r["markers"][0]["kind"] == "production"
+    assert r["markers"][0]["frame"] == 3 and r["markers"][0]["kind"] == "production"
 
 
 def test_composite_trajectory_downsamples_keeping_each_stage(design, geometry, tmp_path):
@@ -665,6 +1027,31 @@ def test_delete_parent_blocked_when_a_child_is_running(monkeypatch, tmp_path):
     assert child.job_dir(tmp_path).exists()
 
 
+def test_delete_cascades_through_a_chained_lineage(monkeypatch, tmp_path):
+    """Deleting a root removes its full descendant subtree, not just direct
+    children — a chained relax → field1 → field2 all goes at once."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes_oxdna
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(routes_oxdna, "is_running", lambda jid: False)
+
+    root = new_oxdna_job("d", []); root.status = OxdnaStatus.completed; root.save(tmp_path)
+    f1 = new_oxdna_job("d · field", [], parent_job_id=root.job_id)
+    f1.status = OxdnaStatus.completed; f1.save(tmp_path)
+    f2 = new_oxdna_job("d · field", [], parent_job_id=f1.job_id)   # grandchild
+    f2.status = OxdnaStatus.completed; f2.save(tmp_path)
+
+    r = TestClient(app).delete(f"/api/oxdna/jobs/{root.job_id}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["n_children"] == 2                                  # f1 + f2
+    assert set(body["deleted"]) == {root.job_id, f1.job_id, f2.job_id}
+    for j in (root, f1, f2):
+        assert not j.job_dir(tmp_path).exists()
+
+
 def test_oxdna_trajectory_not_ready_without_frames(monkeypatch, tmp_path):
     """GET /trajectory degrades gracefully when no stage has written a trajectory."""
     from fastapi.testclient import TestClient
@@ -677,6 +1064,52 @@ def test_oxdna_trajectory_not_ready_without_frames(monkeypatch, tmp_path):
     r = TestClient(app).get(f"/api/oxdna/jobs/{job.job_id}/trajectory")
     assert r.status_code == 200
     assert r.json()["ready"] is False
+
+
+def test_oxdna_trajectory_walks_full_lineage(monkeypatch, tmp_path, design, geometry):
+    """GET /trajectory on a chained child shows the WHOLE lineage: the root
+    relaxation's stages THEN every ancestor field run, in time order, with a
+    run-numbered tick at each child boundary (relax → field1 → field2)."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes_oxdna
+    from backend.core.oxdna_protocol import build_field_stage
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+
+    def _field_child(name, parent_id):
+        stage = build_field_stage(name="1_field", field_oxdna=0.04, field_dir=[1, 0, 0],
+                                  forces_file="field_forces.txt", steps=2000)
+        j = new_oxdna_job(name, [stage.to_status()], parent_job_id=parent_id)
+        j.stages[0].status = "done"; j.status = OxdnaStatus.completed; j.current_stage_idx = 1
+        j.save(tmp_path)
+        jd = j.job_dir(tmp_path)
+        (jd / "design.json").write_text(design.model_dump_json())
+        sd = j.stage_dir(tmp_path, "1_field"); sd.mkdir(parents=True, exist_ok=True)
+        _write_traj(design, geometry, sd / "trajectory.dat", n_frames=3)
+        return j
+
+    # Root relaxation with a single done stage (4 written frames).
+    root = new_oxdna_job("d", [s.to_status() for s in build_relaxation_stages()])
+    root.stages[0].status = "done"; root.status = OxdnaStatus.completed
+    root.save(tmp_path)
+    rjd = root.job_dir(tmp_path)
+    (rjd / "design.json").write_text(design.model_dump_json())
+    rsd = root.stage_dir(tmp_path, root.stages[0].name); rsd.mkdir(parents=True, exist_ok=True)
+    _write_traj(design, geometry, rsd / "trajectory.dat", n_frames=4)
+
+    field1 = _field_child("d · field", root.job_id)
+    field2 = _field_child("d · field", field1.job_id)   # chained OFF field1
+
+    r = TestClient(app).get(f"/api/oxdna/jobs/{field2.job_id}/trajectory")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ready"] is True
+    # seed t=0 (1) + root stage (4) + field1 (3) + field2 (3) = 11
+    assert body["n_frames"] == 11
+    # Three stages → two boundary ticks, both run-numbered.
+    labels = [m["label"] for m in body["markers"]]
+    assert labels == ["→ field 1", "→ field 2"]
 
 
 # ── PBC unwrap for display ────────────────────────────────────────────────────
@@ -873,7 +1306,11 @@ def test_runner_end_to_end(design, geometry, tmp_path, mock_oxdna):
     # not bp quality (the gate is covered by test_runner_gate_fails_on_melted).
     specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100,
                                     min_bp_retained=0.0)
-    job = new_oxdna_job("6hb", [s.to_status() for s in specs], n_nucleotides=len(geometry))
+    # retries=0: the mock copies the UNRELAXED conf (never equil-ready), so the escalate
+    # loop would otherwise spin to exhaustion — this test validates ORCHESTRATION, and
+    # the capped equil completes the under-relaxed structure without crashing.
+    job = new_oxdna_job("6hb", [s.to_status() for s in specs], n_nucleotides=len(geometry),
+                        max_relax_retries=0)
     oxdna_runner.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
 
     # Files staged.
@@ -949,6 +1386,92 @@ for ln in lines:
     assert "retention" in (done.error or "")
 
 
+# ── FENE equil-readiness + escalate-and-retry ─────────────────────────────────
+
+def test_escalate_md_relax_spec_schedule():
+    """Each retry is longer + smaller dt + a stronger cap, derived from the ORIGINAL
+    spec (never compounded)."""
+    from backend.core.oxdna_protocol import escalate_md_relax_spec
+
+    base = build_relaxation_stages(md_relax_steps=1000)[1]
+    a1 = escalate_md_relax_spec(base, 1)
+    a2 = escalate_md_relax_spec(base, 2)
+    a3 = escalate_md_relax_spec(base, 3)
+    assert (a1.steps, a2.steps, a3.steps) == (3000, 6000, 10000)
+    assert a1.dt == a2.dt == a3.dt == 0.001
+    assert (a1.max_backbone_force, a2.max_backbone_force, a3.max_backbone_force) == (20.0, 50.0, 100.0)
+    assert a3.max_backbone_force_far == 200.0
+    # Derived from base, not compounded: base is untouched.
+    assert base.steps == 1000 and base.dt == 0.002
+
+
+def test_backbone_fene_stretch_is_site_based(design, geometry, tmp_path):
+    """The FENE metric measures backbone-SITE distance (oxDNA units) — the quantity
+    oxDNA's FENE term checks — so ideal NADOC geometry (which oxDNA needs relaxed)
+    reads over the cliff, where a CM-based metric would falsely read it safe."""
+    from backend.core.oxdna_health import (
+        FENE_RMAX_UNITS,
+        backbone_fene_stretch,
+        max_backbone_stretch,
+    )
+    from backend.core.constants import OXDNA_LENGTH_UNIT
+
+    conf = tmp_path / "conf.dat"
+    write_configuration(design, geometry, conf)
+    full_map = read_configuration_full(conf, design)
+
+    max_units, n_over = backbone_fene_stretch(design, full_map)
+    assert max_units > FENE_RMAX_UNITS and n_over > 0   # ideal geometry is NOT equil-ready
+    # CM-based distance (max_backbone_stretch, nm → units) sits well under the cliff —
+    # it would falsely call the same structure safe.
+    cm_units = max_backbone_stretch(design, full_map)[0] / OXDNA_LENGTH_UNIT
+    assert cm_units < max_units
+
+
+def test_health_check_flags_not_equil_ready(design, geometry, tmp_path):
+    """run_oxdna_health_check reports fene_safe=False (with a reason note) on an
+    unrelaxed structure, while still PASSING the bp gate (fene drives the retry, not
+    the pass/fail of the stage itself)."""
+    from backend.core.oxdna_health import run_oxdna_health_check
+
+    stage = tmp_path / "2_md_relax"
+    stage.mkdir()
+    write_configuration(design, geometry, stage / "last_conf.dat")
+    (stage / "energy.dat").write_text("0 -1.0 0.5 -0.5\n")
+
+    res = run_oxdna_health_check(design, stage, kind="md_relax", min_bp_retained=0.0)
+    assert res.passed is True            # bp gate (0.0) clears
+    assert res.fene_safe is False        # but not ready for an uncapped equil
+    assert res.n_fene_over > 0
+    assert "over-stretched" in res.reason
+
+
+def test_runner_retries_then_fails_when_not_equil_ready(design, geometry, tmp_path, mock_oxdna):
+    """When md_relax never reaches equil-readiness, the runner escalates the relax up
+    to the budget, then fails with a FENE diagnostic — exercising escalate + rewind +
+    spec persistence.  (The mock copies the unrelaxed conf, so it is never safe.)"""
+    from backend.core import oxdna_runner
+
+    specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100,
+                                    min_bp_retained=0.0)
+    job = new_oxdna_job("6hb", [s.to_status() for s in specs], n_nucleotides=len(geometry),
+                        max_relax_retries=2)
+    oxdna_runner.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
+    job.status = OxdnaStatus.queued
+    job.save(tmp_path)
+    oxdna_runner.start_job(job, tmp_path, specs)
+
+    done = _wait_terminal(job.job_id, tmp_path)
+    assert done.status == OxdnaStatus.failed
+    assert done.relax_retries == 2                 # spent the full budget
+    assert done.stages[1].status == "failed"       # md_relax is the stuck stage
+    assert "FENE" in (done.error or "") or "over-stretched" in (done.error or "")
+    # The relax spec was escalated (attempt 2 → 6× steps) and persisted for resume.
+    persisted = oxdna_runner.load_stage_specs(job.job_dir(tmp_path))
+    assert persisted[1].steps == 600 and persisted[1].dt == 0.001
+    assert done.stages[1].steps == 600
+
+
 # ── Real-binary end-to-end (auto-skips when oxDNA is not installed) ────────────
 # Validates begin → monitor → finish statuses with the actual oxDNA executable:
 # the MC (CPU) + MD (CUDA/CPU) stages, live progress, per-stage health, and a
@@ -1009,7 +1532,11 @@ def test_runner_real_binary_status_lifecycle(design, geometry, tmp_path):
     # test, and bp quality by the manual long run + HBList calibration.
     specs = build_relaxation_stages(mc_steps=500, md_relax_steps=5000, equil_steps=2000,
                                     backend="CPU", min_bp_retained=0.0)
-    job = new_oxdna_job("6hb_real", [s.to_status() for s in specs], n_nucleotides=len(geom))
+    # retries=0: a short real run is intentionally under-relaxed (not equil-ready); this
+    # test validates the STATUS LIFECYCLE, and the capped equil completes it without an
+    # escalate loop.  The retry path has its own dedicated test.
+    job = new_oxdna_job("6hb_real", [s.to_status() for s in specs], n_nucleotides=len(geom),
+                        max_relax_retries=0)
     oxdna_runner.prepare_oxdna_job(sequenced, geom, job, tmp_path, specs)
     job.status = OxdnaStatus.queued
     job.save(tmp_path)
@@ -1335,7 +1862,7 @@ def test_oxdna_http_lifecycle(monkeypatch, tmp_path):
 
     created = client.post("/api/oxdna/jobs", json={
         "backend": "CPU", "mc_steps": 500, "md_relax_steps": 5000, "equil_steps": 2000,
-        "min_bp_retained": 0.0, "autostart": True,
+        "min_bp_retained": 0.0, "max_relax_retries": 0, "autostart": True,
     })
     assert created.status_code == 200, created.text
     job_id = created.json()["job_id"]

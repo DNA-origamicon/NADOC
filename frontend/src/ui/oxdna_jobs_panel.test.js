@@ -20,8 +20,86 @@ import {
   productionState, jobListStatus, formatEta, seedReady, initOxdnaJobsPanel,
   jobIsActive, isRelaxRunning, isProductionRunning, makeSpinner,
   productionRunCount, hasTrajectory, isResumable, startButtonLabel, flexConfidenceText,
-  resumeNote, groupJobsByParent, fieldChildTitle, deleteConfirmMessage, samplingState,
+  resumeNote, flattenJobTree, descendantIds, fieldChildTitle, deleteConfirmMessage, samplingState,
+  runConfigForJob, healthForDisplay,
 } from './oxdna_jobs_panel.js'
+
+describe('healthForDisplay (live mid-stage vs end-of-stage sample)', () => {
+  const sample = { bp_retained_fraction: 0.9, potential_energy: -1.4, steps_per_s: 2000 }
+  const live   = { bp_retained_fraction: 0.5, potential_energy: -0.8, steps_per_s: 1500 }
+
+  it('uses the live snapshot from progress while the job is running', () => {
+    const job = { status: 'running', health_samples: [sample] }
+    expect(healthForDisplay(job, { live_health: live })).toBe(live)
+  })
+  it('falls back to the last persisted sample when not running', () => {
+    const job = { status: 'completed', health_samples: [sample] }
+    expect(healthForDisplay(job, { live_health: live })).toBe(sample)
+  })
+  it('falls back to the last sample when running but progress has no live_health', () => {
+    const job = { status: 'running', health_samples: [sample] }
+    expect(healthForDisplay(job, { live_health: null })).toBe(sample)
+    expect(healthForDisplay(job, null)).toBe(sample)
+  })
+  it('returns null when there is nothing to show', () => {
+    expect(healthForDisplay({ status: 'running', health_samples: [] }, null)).toBeNull()
+  })
+})
+
+describe('runConfigForJob (echoes a run\'s conditions into the cards)', () => {
+  it('extracts the relaxation advanced settings + surface + anchors', () => {
+    const job = {
+      backend: 'CPU', device: '1', salt_concentration: 0.6,
+      run_config: {
+        kind: 'relax', mc_steps: 500, md_relax_steps: 7000, equil_steps: 800,
+        min_bp_retained: 0.4, surface: { dir: [0, 1, 0], offset_nm: 2, stiff: 5 },
+        anchors: [{ kind: 'overhang', id: 'o1' }],
+      },
+    }
+    const cfg = runConfigForJob(job)
+    expect(cfg.advanced).toMatchObject({
+      backend: 'CPU', device: '1', salt: 0.6,
+      mcSteps: 500, mdSteps: 7000, equilSteps: 800, bpGate: 0.4,
+    })
+    expect(cfg.surface).toEqual({ dir: [0, 1, 0], offset_nm: 2, stiff: 5 })
+    expect(cfg.anchors).toEqual([{ kind: 'overhang', id: 'o1' }])
+    expect(cfg.field).toBeNull()
+  })
+
+  it('a field child has no advanced block and carries field + anchors', () => {
+    const job = {
+      parent_job_id: 'p1',
+      run_config: { kind: 'field', steps: 2000, field: { field_pN: 3, dir: [1, 0, 0] },
+                    anchors: [{ kind: 'domain', strandId: 's1', domainIndex: 2 }] },
+    }
+    const cfg = runConfigForJob(job)
+    expect(cfg.advanced).toBeNull()
+    expect(cfg.field).toEqual({ field_pN: 3, dir: [1, 0, 0] })
+    expect(cfg.anchors).toEqual([{ kind: 'domain', strandId: 's1', domainIndex: 2 }])
+    expect(cfg.prodSteps).toBe(2000)
+  })
+
+  it('falls back to stages + efield for jobs saved before run_config existed', () => {
+    const job = {
+      parent_job_id: 'p1', efield: { force_pN: 4, dir: [0, 0, 1] },
+      stages: [{ kind: 'field', steps: 5000 }],
+    }
+    const cfg = runConfigForJob(job)
+    expect(cfg.field).toEqual({ field_pN: 4, dir: [0, 0, 1] })
+  })
+
+  it('falls back to stage steps for an old relaxation job', () => {
+    const job = {
+      backend: 'CUDA',
+      stages: [{ kind: 'mc', steps: 1000 }, { kind: 'md_relax', steps: 50000 },
+               { kind: 'equil', steps: 2000 }],
+    }
+    const cfg = runConfigForJob(job)
+    expect(cfg.advanced.mcSteps).toBe(1000)
+    expect(cfg.advanced.mdSteps).toBe(50000)
+    expect(cfg.advanced.equilSteps).toBe(2000)
+  })
+})
 
 describe('samplingState (flex-map gating: production OR field)', () => {
   it('treats a field run as a sampling run', () => {
@@ -51,23 +129,59 @@ describe('deleteConfirmMessage', () => {
   })
 })
 
-describe('groupJobsByParent', () => {
-  it('nests field children under their relaxed parent, numbered by run order', () => {
+describe('flattenJobTree', () => {
+  it('nests field children under their parent, numbered by run order, roots newest first', () => {
     const jobs = [
       { job_id: 'P', created_at: 100 },
       { job_id: 'F2', parent_job_id: 'P', created_at: 220 },
       { job_id: 'F1', parent_job_id: 'P', created_at: 210 },
       { job_id: 'Q', created_at: 50 },
     ]
-    const groups = groupJobsByParent(jobs)
-    expect(groups.map(g => g.parent.job_id)).toEqual(['P', 'Q'])    // top order preserved
-    expect(groups[0].children.map(c => c.job.job_id)).toEqual(['F1', 'F2'])  // by created_at
-    expect(groups[0].children.map(c => c.index)).toEqual([1, 2])    // numbered
-    expect(groups[1].children).toEqual([])
+    const rows = flattenJobTree(jobs)
+    // P (newest root) + its children by created_at, then Q.
+    expect(rows.map(r => r.job.job_id)).toEqual(['P', 'F1', 'F2', 'Q'])
+    expect(rows.map(r => r.depth)).toEqual([0, 1, 1, 0])
+    expect(rows.map(r => r.index)).toEqual([0, 1, 2, 0])   // global run numbers
   })
-  it('an orphan child (parent absent) shows as its own top row', () => {
-    const groups = groupJobsByParent([{ job_id: 'F', parent_job_id: 'gone', created_at: 1 }])
-    expect(groups.map(g => g.parent.job_id)).toEqual(['F'])
+  it('pre-order flattens a chained lineage with increasing depth', () => {
+    const jobs = [
+      { job_id: 'R', created_at: 100 },
+      { job_id: 'A', parent_job_id: 'R', created_at: 110 },
+      { job_id: 'B', parent_job_id: 'A', created_at: 120 },   // grandchild
+    ]
+    const rows = flattenJobTree(jobs)
+    expect(rows.map(r => r.job.job_id)).toEqual(['R', 'A', 'B'])
+    expect(rows.map(r => r.depth)).toEqual([0, 1, 2])
+    expect(rows.map(r => r.index)).toEqual([0, 1, 2])
+  })
+  it('an orphan child (parent absent) is treated as its own root', () => {
+    const rows = flattenJobTree([{ job_id: 'F', parent_job_id: 'gone', created_at: 1 }])
+    expect(rows.map(r => r.job.job_id)).toEqual(['F'])
+    expect(rows[0].depth).toBe(0)
+  })
+})
+
+describe('descendantIds', () => {
+  it('collects the full subtree (children + grandchildren)', () => {
+    const jobs = [
+      { job_id: 'R' },
+      { job_id: 'A', parent_job_id: 'R' },
+      { job_id: 'B', parent_job_id: 'A' },
+      { job_id: 'C', parent_job_id: 'R' },
+      { job_id: 'X' },   // unrelated
+    ]
+    expect([...descendantIds(jobs, 'R')].sort()).toEqual(['A', 'B', 'C'])
+    expect([...descendantIds(jobs, 'A')]).toEqual(['B'])
+    expect([...descendantIds(jobs, 'X')]).toEqual([])
+  })
+})
+
+describe('deleteConfirmMessage (chained child)', () => {
+  it('warns about cascade when a field child has its own branches', () => {
+    const m = deleteConfirmMessage({ job_id: 'F', parent_job_id: 'P' }, 2)
+    expect(m.title).toBe('Delete field run + branches')
+    expect(m.confirmLabel).toBe('Delete all (3)')
+    expect(m.message).toMatch(/2 electric-field runs/)
   })
 })
 

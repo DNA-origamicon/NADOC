@@ -31,7 +31,7 @@ and spawns oxDNA.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from backend.core.oxdna_job import OxdnaStageStatus
 
@@ -95,6 +95,18 @@ class OxdnaStageSpec:
 DEFAULT_MC_STEPS:       int = 1_000        # 10²–10⁴ per docs
 DEFAULT_MD_RELAX_STEPS: int = 1_000_000    # ~1e6 per docs
 DEFAULT_EQUIL_STEPS:    int = 100_000      # short unbiased settle
+
+# The equil stage keeps a LARGE backbone-force cap rather than removing it entirely.
+# A bare-FENE equil aborts at config load if the relax left even ONE backbone bond
+# past oxDNA's FENE cliff (~1.006 units) — the velocity refresh on the first step can
+# tip a borderline bond over.  A cap this high is transparent to a healthy bond (its
+# FENE force near equilibrium is << 50, so the cap never engages and the equil is
+# physically identical to the uncapped one), but it replaces the divergence with a
+# finite linear spring for a residual over-stretched bond, so the stage runs instead
+# of crashing.  This is the robustness half of the equil-readiness fix; the runner's
+# escalate-and-retry is the quality half (it tries to remove the over-stretch first).
+DEFAULT_EQUIL_BACKBONE_FORCE:     float = 50.0
+DEFAULT_EQUIL_BACKBONE_FORCE_FAR: float = 100.0
 
 
 def build_relaxation_stages(
@@ -161,7 +173,10 @@ def build_relaxation_stages(
         OxdnaStageSpec(
             name="3_equil", kind="equil", sim_type="MD", steps=equil_steps,
             backend=backend, dt=0.003,
-            max_backbone_force=None, max_backbone_force_far=None,
+            # Large cap (not None): standard FENE for healthy bonds, but never a fatal
+            # divergence on a residual over-stretched bond (see DEFAULT_EQUIL_BACKBONE_FORCE).
+            max_backbone_force=DEFAULT_EQUIL_BACKBONE_FORCE,
+            max_backbone_force_far=DEFAULT_EQUIL_BACKBONE_FORCE_FAR,
             # Unbiased (DNA mutual traps dropped: confirm the pairs self-sustain), but a
             # hard surface / anchors / protein tethers must persist so the structure
             # equilibrates while still bound — those live in equil_forces.txt.
@@ -173,6 +188,39 @@ def build_relaxation_stages(
             interaction=equil_interaction, parfile=parfile,
         ),
     ]
+
+
+# ── Escalation schedule (retry a stuck relax harder) ──────────────────────────
+# When md_relax finishes but leaves a backbone bond past oxDNA's FENE cliff, the
+# structure isn't equil-ready.  Re-running the SAME parameters lands in the same
+# plateau (the over-stretch is a stable strained state, not slow convergence), so a
+# retry must ESCALATE: more steps (give it time), a smaller timestep (stability under
+# the stronger pull), and a HIGHER force cap (the cap is why an over-stretched bond
+# stays put — raising it lets the backbone spring pull the bond back within FENE
+# range instead of holding it stretched).  Keyed by attempt number (1-based).
+_RELAX_ESCALATION: dict[int, dict] = {
+    1: {"steps_mult": 3,  "dt": 0.001, "cap": 20.0},
+    2: {"steps_mult": 6,  "dt": 0.001, "cap": 50.0},
+    3: {"steps_mult": 10, "dt": 0.001, "cap": 100.0},
+}
+MAX_RELAX_RETRIES: int = 3
+
+
+def escalate_md_relax_spec(base: OxdnaStageSpec, attempt: int) -> OxdnaStageSpec:
+    """Return a more aggressive copy of an md_relax spec for retry *attempt* (1-based).
+
+    *base* must be the ORIGINAL (un-escalated) md_relax spec so escalation does not
+    compound across retries — the caller keeps a pristine copy and re-derives each
+    attempt from it.  Longer + smaller dt + stronger backbone-force cap (see
+    ``_RELAX_ESCALATION``)."""
+    e = _RELAX_ESCALATION.get(attempt, _RELAX_ESCALATION[max(_RELAX_ESCALATION)])
+    return replace(
+        base,
+        steps=int(base.steps * e["steps_mult"]),
+        dt=e["dt"],
+        max_backbone_force=e["cap"],
+        max_backbone_force_far=e["cap"] * 2.0,
+    )
 
 
 # ── Input-file generation ─────────────────────────────────────────────────────
@@ -197,7 +245,7 @@ def render_stage_input(
     runner can derive live progress from the energy.dat line count.
     """
     print_energy_every = max(1, spec.steps // 100)
-    print_conf_interval = max(1, spec.steps // 10)
+    conf_interval = print_conf_interval(spec)
     is_md = spec.sim_type == "MD"
 
     lines: list[str] = []
@@ -276,7 +324,7 @@ def render_stage_input(
     # ── Output cadence ──────────────────────────────────────────────────────────
     lines.append("")
     lines.append("time_scale = linear")
-    lines.append(f"print_conf_interval = {print_conf_interval}")
+    lines.append(f"print_conf_interval = {conf_interval}")
     lines.append(f"print_energy_every = {print_energy_every}")
     # Raise oxDNA's I/O-rate safety valve.  Its default (max_io = 1 MB/s) aborts a
     # run that writes too fast — harmless for the small designs the protocol was
@@ -388,3 +436,12 @@ def expected_energy_lines(spec: OxdnaStageSpec) -> int:
     """How many energy.dat lines a completed stage should produce (~progress denom)."""
     print_energy_every = max(1, spec.steps // 100)
     return max(1, spec.steps // print_energy_every)
+
+
+def print_conf_interval(spec: OxdnaStageSpec) -> int:
+    """Steps between trajectory / last_conf writes — i.e. how often the relaxed
+    display gets a fresh frame.  Mirrors ``render_stage_input`` (~100 frames/stage,
+    matching the energy-sample cadence) so the View-trajectory player has a dense
+    scrub track; the composite endpoint downsamples across stages to its own cap.
+    Used by the progress endpoint to estimate time to the next frame update."""
+    return max(1, spec.steps // 100)

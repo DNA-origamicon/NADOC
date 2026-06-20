@@ -303,8 +303,14 @@ mrdna -d sim_full design.json
 
 These are only needed when the bridge is imported from a Python environment that has NumPy ≥ 2.0 (e.g. the NADOC `.venv`). The miniforge environment with NumPy 1.26 does not need these.
 
+> NADOC's coarse-relax auto-clones mrdna to **`$MRDNA_TOOL_PATH`** (default
+> `~/mrdna-tool`, a persistent location), applies these patches automatically,
+> and editable-installs it. You only run the steps below manually for a
+> standalone/dev install. Point `$MRDNA_TOOL_PATH` at any existing checkout to
+> reuse it. See [external_tools.md](external_tools.md).
+
 ```bash
-MRDNA=/tmp/mrdna-tool
+MRDNA="${MRDNA_TOOL_PATH:-$HOME/mrdna-tool}"
 
 # Patch 7: np.in1d removed in NumPy 2.0 → use np.isin
 sed -i 's/np\.in1d(/np.isin(/g' \

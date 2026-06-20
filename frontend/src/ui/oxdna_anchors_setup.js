@@ -25,7 +25,7 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null } =
   const toggle = document.getElementById('oxdna-anchors-toggle')
   const arrow  = document.getElementById('oxdna-anchors-arrow')
   const bodyEl = document.getElementById('oxdna-anchors-body')
-  const noop = { getAnchors: () => [], addSelectedAnchors: () => 0, clear: () => {}, refresh: () => {} }
+  const noop = { getAnchors: () => [], addSelectedAnchors: () => 0, clear: () => {}, refresh: () => {}, applyConfig: () => {} }
   if (!toggle || !bodyEl) return noop
 
   const addBtn   = document.getElementById('oxdna-anchors-add')
@@ -78,6 +78,15 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null } =
 
   function clear() { _anchors = []; _renderAnchors(); onChange?.(getAnchors()) }
 
+  // Replace the anchor set from a stored list of descriptors so selecting an
+  // oxDNA job shows exactly the strands that run held fixed (chips + 3D glow via
+  // onChange).  Deduped through addAnchors; an empty/missing list clears.
+  function applyConfig(anchors) {
+    _anchors = addAnchors([], anchors || [])
+    _renderAnchors()
+    onChange?.(getAnchors())
+  }
+
   // ── Section open/close ───────────────────────────────────────────────────────
   function _open_() {
     _open = true
@@ -97,5 +106,5 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null } =
   clearBtn?.addEventListener('click', clear)
   _renderAnchors()
 
-  return { getAnchors, addSelectedAnchors, clear, refresh: _renderAnchors }
+  return { getAnchors, addSelectedAnchors, clear, refresh: _renderAnchors, applyConfig }
 }

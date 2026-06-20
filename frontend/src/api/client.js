@@ -1950,6 +1950,10 @@ async function _oxdnaJSON(method, path, body = undefined) {
 export const lastErrorMessage    = ()            => store.getState().lastError?.message ?? null
 
 export const oxdnaAvailable      = ()            => _oxdnaJSON('GET',  '/oxdna/available')
+/** MD-engine status report (oxDNA/NAMD/GROMACS/… availability + GPU + toolchain). */
+export const enginesStatus       = ()            => _oxdnaJSON('GET',  '/engines/status')
+/** Scan ~/Downloads for a user-downloaded NAMD tarball ({candidates, best}). */
+export const scanNamdDownload    = ()            => _oxdnaJSON('GET',  '/engines/namd/scan-download')
 export const createOxdnaJob      = (body)        => _oxdnaJSON('POST', '/oxdna/jobs', body)
 export const listOxdnaJobs       = ()            => _oxdnaJSON('GET',  '/oxdna/jobs')
 export const getOxdnaJob         = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}`)

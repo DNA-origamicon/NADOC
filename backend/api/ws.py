@@ -3,8 +3,9 @@ API layer — WebSocket handlers for MD trajectory streaming and mrdna CG relaxa
 
 Routes
 ──────
-  /ws/md-run       — GROMACS trajectory streamer (load / seek / get_latest)
-  /ws/mrdna-relax  — one-shot mrdna CG relaxation pipeline
+  /ws/md-run         — GROMACS trajectory streamer (load / seek / get_latest)
+  /ws/mrdna-relax    — one-shot mrdna CG relaxation pipeline
+  /ws/engines/install — auto-build a source MD engine (oxDNA / ANM fork), streamed
 
 (XPBD physics + FEM solver routes were removed 2026-05-10; archived under
 `archive/physics_xpbd_fem/`. See archive README for context.)
@@ -865,9 +866,11 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
         await _prog("building_model", 0)
 
         def _build_model():
+            import shutil
             import subprocess
             import sys
-            _MRDNA_PATH = "/tmp/mrdna-tool"
+            from backend.core.mrdna_bridge import mrdna_tool_path
+            _MRDNA_PATH = mrdna_tool_path()
             _MRDNA_REPO = "https://gitlab.engr.illinois.edu/tbgl/tools/mrdna"
             _PATCHES = [
                 ("mrdna/readers/segmentmodel_from_lists.py", "s/np\\.in1d(/np.isin(/g"),
@@ -887,7 +890,7 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
                         ["sed", "-i", expr, os.path.join(_MRDNA_PATH, rel_path)],
                         check=True,
                     )
-                uv = os.path.expanduser("~/.local/bin/uv")
+                uv = shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
                 subprocess.run(
                     [uv, "pip", "install", "-e", _MRDNA_PATH, "--no-deps", "-q"],
                     check=True, capture_output=True,
@@ -927,7 +930,8 @@ async def mrdna_relax_ws(websocket: WebSocket) -> None:
 
             def _extract():
                 import sys
-                sys.path.insert(0, "/tmp/mrdna-tool")
+                from backend.core.mrdna_bridge import mrdna_tool_path
+                sys.path.insert(0, mrdna_tool_path())
                 from backend.core.mrdna_bridge import nuc_pos_override_from_mrdna_coarse
                 from backend.core.geometry import nucleotide_positions
 
@@ -1068,4 +1072,63 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
     except WebSocketDisconnect:
         pass
     except Exception:
+        pass
+
+
+# ── MD-engine auto-install WebSocket ──────────────────────────────────────────
+
+
+@router.websocket("/ws/engines/install")
+async def engines_install_ws(websocket: WebSocket) -> None:
+    """Auto-build a source MD engine (oxDNA / ANM-oxDNA fork), streaming progress.
+
+    Protocol
+    ────────
+    Client → Server (once), either:
+      {"engine": "oxdna" | "oxdna_anm"}                 — auto-build from source
+      {"engine": "namd", "archive_path": "/path.tar.gz"} — finish a downloaded package
+    Server → Client:
+      {"type": "progress", "stage": str, "pct": int}
+      {"type": "log",      "line": str}
+      {"type": "complete", "engine": str, "path": str}
+      {"type": "error",    "message": str}   — bad request, or build/extract failed;
+                                               the UI then shows the manual steps.
+
+    Thin wrapper over `engine_install.run_install` / `engine_artifact.install_namd_archive`
+    (FEATURE_DEVELOPMENT sprout rule — the logic lives in the modules, not here).
+    """
+    from backend.core.engine_install import InstallError, run_install
+    from backend.core.engine_artifact import ArtifactError, install_namd_archive
+    from backend.core.engines import installable_engine_keys
+
+    await websocket.accept()
+    try:
+        req = await websocket.receive_json() or {}
+        engine = req.get("engine")
+        archive_path = req.get("archive_path")
+        try:
+            if archive_path:
+                # Finish a downloaded package (currently NAMD only).
+                if engine != "namd":
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"No downloaded-package install for {engine!r}.",
+                    })
+                    return
+                await install_namd_archive(archive_path, websocket.send_json)
+            elif engine in installable_engine_keys():
+                await run_install(engine, websocket.send_json)
+            else:
+                await websocket.send_json({
+                    "type": "error",
+                    "message": f"{engine!r} cannot be auto-installed here.",
+                })
+        except (InstallError, ArtifactError) as exc:
+            await websocket.send_json({"type": "error", "message": str(exc)})
+        except Exception as exc:  # toolchain missing, OSError, bad tar, …
+            await websocket.send_json({
+                "type": "error",
+                "message": f"Install could not run: {exc}",
+            })
+    except WebSocketDisconnect:
         pass

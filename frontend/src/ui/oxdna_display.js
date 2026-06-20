@@ -118,15 +118,30 @@ export function initOxdnaDisplay({ designRenderer, api, proteinRenderer = null }
   let _mode = null     // 'relaxed' | 'rmsf' | 'trajectory'
   let _rmsfResp = null // cached /rmsf payload so the scale can recolour without re-fetching
   let _traj = null     // cached /trajectory payload {keys, frames, markers, n_frames, stages}
+  // Monotonic token: bumped by every display call AND by stopAndRestore, so an
+  // async fetch (live-follow poll / job-switch) that resolves AFTER the overlay
+  // was turned off or superseded by a newer call bails instead of re-applying
+  // stale positions (the "toggle off but sim positions stay" desync).
+  let _epoch = 0
 
   /** Fetch the latest relaxed frame for jobId and deform the model to it.
    *  `align` (default true) superposes onto the design pose; false shows the
    *  structure in its own simulation frame (e.g. settled on a hard surface). */
   async function displayJob(jobId, align = true) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
+    const epoch = ++_epoch
     const resp = await api.getOxdnaDisplay(jobId, align)
+    if (epoch !== _epoch) return { ok: false, reason: 'superseded' }   // off/newer call won
     const updates = toFemUpdates(resp)
     if (!updates.length) {
+      // Switching to a job with no relaxed frame yet: clear any stale overlay left
+      // from a previously-displayed job so we don't keep showing its positions.
+      if (_active && _jobId !== jobId) {
+        designRenderer.applyFemPositions(null)
+        designRenderer.clearScalarColors?.()
+        proteinRenderer?.clearOxdnaTransforms?.()
+        _active = false; _mode = null; _jobId = null
+      }
       return { ok: false, reason: resp?.ready === false ? 'no relaxed frame yet' : 'empty' }
     }
     designRenderer.clearScalarColors?.()   // leaving a flexibility map → restore bead colours
@@ -146,7 +161,9 @@ export function initOxdnaDisplay({ designRenderer, api, proteinRenderer = null }
    */
   async function displayRmsf(jobId) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
+    const epoch = ++_epoch
     const resp = await api.getOxdnaRmsf(jobId)
+    if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     const map = rmsfColorMap(resp)
     if (!map) {
       return { ok: false, reason: resp?.reason || 'not ready' }
@@ -184,7 +201,9 @@ export function initOxdnaDisplay({ designRenderer, api, proteinRenderer = null }
    */
   async function loadTrajectory(jobId) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
+    const epoch = ++_epoch
     const resp = await api.getOxdnaTrajectory(jobId)
+    if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     if (!resp?.ready || !Array.isArray(resp.frames) || !resp.frames.length) {
       return { ok: false, reason: resp?.reason || 'no trajectory yet' }
     }
@@ -214,6 +233,7 @@ export function initOxdnaDisplay({ designRenderer, api, proteinRenderer = null }
 
   /** Clear the overlay (positions + colours) and restore the design. */
   function stopAndRestore() {
+    _epoch++   // cancel any in-flight display fetch so it can't re-apply after we restore
     if (!_active) return
     designRenderer?.clearScalarColors?.()
     designRenderer?.applyFemPositions(null)
