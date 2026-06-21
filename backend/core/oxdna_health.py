@@ -887,6 +887,95 @@ def check_relaxed_constraint(constraint, relaxed_output) -> dict:
             "min_confidence": min_conf, "confidence": confidence}
 
 
+def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames: int = 200):
+    """Shared core for the composite trajectory: read every stage's frames,
+    PBC-unwrap + Kabsch-align each to the design reference, prepend the seed frame,
+    and downsample per stage (≥1 each) to ≤ ``max_frames``.
+
+    Returns ``(key_list, ordered_frames, out_stages, markers)`` where
+    ``ordered_frames`` is the list of FULL per-nucleotide dicts (key →
+    {backbone_position, a1, a3}) in composite-frame order — the same order the flat
+    ``frames`` list uses. Used by ``composite_trajectory`` (flattens to CG floats)
+    and by the per-frame atomistic/surface builders (rebuild from each full dict).
+    """
+    from backend.physics.oxdna_interface import (
+        _parse_box_nm,
+        _strand_nucleotide_order,
+        read_configuration_full,
+        read_trajectory_frames_full,
+        unwrap_align_to_reference,
+    )
+    ref = read_configuration_full(reference_conf_path, design)
+    key_list = list(dict.fromkeys(k[:3] for k in _strand_nucleotide_order(design)))
+
+    # A stage tuple is ``(name, kind, path)`` or ``(name, kind, path, marker_label)``.
+    per_stage: list[dict] = []
+    for item in stages:
+        name, kind, path = item[0], item[1], item[2]
+        marker_label = item[3] if len(item) > 3 else None
+        frames = read_trajectory_frames_full(path, design)
+        box = _parse_box_nm(path)
+        aligned = [
+            (unwrap_align_to_reference(fr, ref, design, box)
+             if box is not None and np.all(box > 0) else fr)
+            for fr in frames
+        ]
+        per_stage.append({"name": name, "kind": kind, "frames": aligned,
+                          "marker_label": marker_label})
+
+    # oxDNA's first trajectory write lands at print_conf_interval (not t=0); prepend
+    # the seed configuration so the player starts on the true starting structure.
+    for s in per_stage:
+        if s["frames"]:
+            s["frames"].insert(0, ref)
+            break
+
+    total = sum(len(s["frames"]) for s in per_stage)
+    if total == 0:
+        return key_list, [], [], []
+
+    def _stride_pick(items: list, keep: int) -> list:
+        if keep >= len(items) or keep <= 0:
+            return items
+        return [items[round(i * (len(items) - 1) / (keep - 1))] for i in range(keep)] \
+            if keep > 1 else [items[0]]
+
+    ordered_frames: list[dict] = []
+    out_stages: list[dict] = []
+    markers: list[dict] = []
+    for s in per_stage:
+        f = s["frames"]
+        if not f:
+            continue
+        keep = max(1, round(len(f) * max_frames / total)) if total > max_frames else len(f)
+        picked = _stride_pick(f, keep)
+        if ordered_frames:  # a transition into this stage (skip the very first frame)
+            markers.append({"frame": len(ordered_frames),
+                            "label": s.get("marker_label") or f"→ {s['kind']}",
+                            "kind": s["kind"], "stage_name": s["name"]})
+        out_stages.append({"name": s["name"], "kind": s["kind"], "n_frames": len(picked)})
+        ordered_frames.extend(picked)
+
+    return key_list, ordered_frames, out_stages, markers
+
+
+def _flatten_cg_frame(frame: dict, key_list) -> list:
+    """Flatten one full per-nucleotide frame dict to the compact CG float list
+    (backbone site x,y,z + a1 nx,ny,nz per key)."""
+    from backend.physics.oxdna_interface import oxdna_backbone_site
+    flat: list[float] = []
+    for key in key_list:
+        v = frame.get(key)
+        if v is None:
+            flat.extend((0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+            continue
+        bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
+        a1 = v["a1"]
+        flat.extend((float(bb[0]), float(bb[1]), float(bb[2]),
+                     float(a1[0]), float(a1[1]), float(a1[2])))
+    return flat
+
+
 def composite_trajectory(
     design,
     stages,
@@ -910,88 +999,139 @@ def composite_trajectory(
       ``markers``= [{frame, label, kind, stage_name}]      (transition at each
                    stage's first composite-frame; the very first frame is omitted)
     """
-    from backend.physics.oxdna_interface import (
-        _parse_box_nm,
-        _strand_nucleotide_order,
-        oxdna_backbone_site,
-        read_configuration_full,
-        read_trajectory_frames_full,
-        unwrap_align_to_reference,
-    )
-    ref = read_configuration_full(reference_conf_path, design)
-    key_list = list(dict.fromkeys(k[:3] for k in _strand_nucleotide_order(design)))
-
-    # Read + align every stage's frames first (so we know the natural counts).
-    # A stage tuple is ``(name, kind, path)`` or ``(name, kind, path, marker_label)``
-    # — the optional label overrides the default ``→ {kind}`` boundary tick (used to
-    # number runs across a multi-job lineage, e.g. "→ field 1" / "→ field 2").
-    per_stage: list[dict] = []
-    for item in stages:
-        name, kind, path = item[0], item[1], item[2]
-        marker_label = item[3] if len(item) > 3 else None
-        frames = read_trajectory_frames_full(path, design)
-        box = _parse_box_nm(path)
-        aligned = [
-            (unwrap_align_to_reference(fr, ref, design, box)
-             if box is not None and np.all(box > 0) else fr)
-            for fr in frames
-        ]
-        per_stage.append({"name": name, "kind": kind, "frames": aligned,
-                          "marker_label": marker_label})
-
-    # oxDNA's first trajectory write lands at step ``print_conf_interval`` (not
-    # t=0), so the seed configuration — the simulation's actual first frame — is
-    # never in any trajectory.dat.  Prepend it to the first non-empty stage so the
-    # player starts on the true starting structure (the last written frame already
-    # lands on the final step, and the per-stage stride keeps both endpoints).
-    for s in per_stage:
-        if s["frames"]:
-            s["frames"].insert(0, ref)
-            break
-
-    total = sum(len(s["frames"]) for s in per_stage)
-    if total == 0:
+    key_list, ordered, out_stages, markers = _aligned_downsampled_frames(
+        design, stages, reference_conf_path, max_frames)
+    if not ordered:
         return {"n_frames": 0, "n_nucleotides": len(key_list),
                 "keys": [list(k) for k in key_list], "frames": [],
                 "stages": [], "markers": []}
-
-    # Per-stage downsample budget (proportional, ≥1 frame per non-empty stage).
-    def _stride_pick(items: list, keep: int) -> list:
-        if keep >= len(items) or keep <= 0:
-            return items
-        return [items[round(i * (len(items) - 1) / (keep - 1))] for i in range(keep)] \
-            if keep > 1 else [items[0]]
-
-    out_frames: list[list[float]] = []
-    out_stages: list[dict] = []
-    markers: list[dict] = []
-    for s in per_stage:
-        f = s["frames"]
-        if not f:
-            continue
-        keep = max(1, round(len(f) * max_frames / total)) if total > max_frames else len(f)
-        picked = _stride_pick(f, keep)
-        if out_frames:  # a transition into this stage (skip the very first frame)
-            markers.append({"frame": len(out_frames),
-                            "label": s.get("marker_label") or f"→ {s['kind']}",
-                            "kind": s["kind"], "stage_name": s["name"]})
-        out_stages.append({"name": s["name"], "kind": s["kind"], "n_frames": len(picked)})
-        for fr in picked:
-            flat: list[float] = []
-            for key in key_list:
-                v = fr.get(key)
-                if v is None:
-                    flat.extend((0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
-                    continue
-                bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
-                a1 = v["a1"]
-                flat.extend((float(bb[0]), float(bb[1]), float(bb[2]),
-                             float(a1[0]), float(a1[1]), float(a1[2])))
-            out_frames.append(flat)
-
+    out_frames = [_flatten_cg_frame(fr, key_list) for fr in ordered]
     return {"n_frames": len(out_frames), "n_nucleotides": len(key_list),
             "keys": [list(k) for k in key_list], "frames": out_frames,
             "stages": out_stages, "markers": markers}
+
+
+def _count_dat_frames(path) -> int:
+    """Count configurations in an oxDNA trajectory .dat by its frame headers
+    (each frame starts with a ``t = …`` line). Cheap — no coordinate parsing."""
+    try:
+        with open(path) as fh:
+            return sum(1 for line in fh if line.startswith("t "))
+    except OSError:
+        return 0
+
+
+def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
+    """Lightweight metadata for the composite trajectory — ``{n_frames, markers,
+    stages, n_nucleotides}`` — WITHOUT reading/aligning any coordinates. Replicates
+    composite_trajectory's seed-prepend + per-stage downsample using only frame
+    COUNTS, so n_frames + marker frame indices match the full composite exactly.
+    Lets the trajectory-keyframe slider size itself in milliseconds instead of
+    downloading the multi-MB trajectory."""
+    from backend.physics.oxdna_interface import _strand_nucleotide_order
+
+    key_list = list(dict.fromkeys(k[:3] for k in _strand_nucleotide_order(design)))
+    per_stage = []
+    for item in stages:
+        name, kind, path = item[0], item[1], item[2]
+        marker_label = item[3] if len(item) > 3 else None
+        per_stage.append({"name": name, "kind": kind,
+                          "count": _count_dat_frames(path), "marker_label": marker_label})
+    # Seed frame is prepended to the first non-empty stage (mirrors the composite).
+    for s in per_stage:
+        if s["count"] > 0:
+            s["count"] += 1
+            break
+
+    total = sum(s["count"] for s in per_stage)
+    if total == 0:
+        return {"n_frames": 0, "n_nucleotides": len(key_list), "stages": [], "markers": []}
+
+    out_n = 0
+    out_stages: list[dict] = []
+    markers: list[dict] = []
+    for s in per_stage:
+        c = s["count"]
+        if c <= 0:
+            continue
+        keep = max(1, round(c * max_frames / total)) if total > max_frames else c
+        if out_n:
+            markers.append({"frame": out_n, "label": s.get("marker_label") or f"→ {s['kind']}",
+                            "kind": s["kind"], "stage_name": s["name"]})
+        out_stages.append({"name": s["name"], "kind": s["kind"], "n_frames": keep})
+        out_n += keep
+    return {"n_frames": out_n, "n_nucleotides": len(key_list),
+            "stages": out_stages, "markers": markers}
+
+
+def _frame_atomistic_overrides(design, frame: dict):
+    """Build (nuc_pos_override, axis_override) for one composite-trajectory full
+    frame, so build_atomistic_model places atoms at the relaxed CG geometry.
+    Reconstructs the true backbone site from the oxDNA CM (a1/a3) and derives the
+    deformed centerline so bent helices keep their twist (same recipe as the
+    cg→atomistic NAMD-seed path)."""
+    from backend.physics.oxdna_interface import oxdna_backbone_site
+    from backend.core.cg_to_atomistic import deformed_helix_axes
+    nuc_pos_override = {
+        key: oxdna_backbone_site(rec["backbone_position"], rec["a1"], rec["a3"])
+        for key, rec in frame.items()
+        if rec.get("backbone_position") is not None
+        and rec.get("a1") is not None and rec.get("a3") is not None
+    }
+    axis_override = deformed_helix_axes(design, frame, sigma=2.0)
+    return nuc_pos_override, axis_override
+
+
+def composite_trajectory_atomistic(design, stages, reference_conf_path,
+                                   frame_indices, max_frames: int = 200) -> dict:
+    """Per-frame atomistic flat-XYZ for the requested composite-frame indices.
+    Returns ``{ "<idx>": [x0,y0,z0, …] }`` — the SAME wire format as
+    ``/design/features/atomistic-batch`` (atom-serial order, nm). Frame indices
+    match ``composite_trajectory``'s ``frames`` ordering exactly."""
+    from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
+    _, ordered, _, _ = _aligned_downsampled_frames(
+        design, stages, reference_conf_path, max_frames)
+    out: dict[str, list] = {}
+    for idx in sorted(set(int(i) for i in frame_indices)):
+        if idx < 0 or idx >= len(ordered):
+            continue
+        nuc_pos_override, axis_override = _frame_atomistic_overrides(design, ordered[idx])
+        model = build_atomistic_model(
+            design, nuc_pos_override=nuc_pos_override, axis_override=axis_override)
+        out[str(idx)] = atomistic_positions_flat(model)
+    return out
+
+
+def composite_trajectory_surface(design, stages, reference_conf_path, frame_indices,
+                                 color_mode: str = "strand", probe_radius: float = 0.28,
+                                 grid_spacing: float = 0.20, radius_inflate: float = 1.30,
+                                 smooth: int = 15, max_frames: int = 200) -> dict:
+    """Per-frame molecular surface for the requested composite-frame indices.
+    Returns ``{ "<idx>": {vertices, faces, vertex_colors?} }`` — the SAME wire
+    format as ``/design/features/surface-batch``. Topology can vary per frame
+    (marching cubes); the frontend rebuilds the buffer on a count change."""
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
+    _, ordered, _, _ = _aligned_downsampled_frames(
+        design, stages, reference_conf_path, max_frames)
+    out: dict[str, dict] = {}
+    for idx in sorted(set(int(i) for i in frame_indices)):
+        if idx < 0 or idx >= len(ordered):
+            continue
+        nuc_pos_override, axis_override = _frame_atomistic_overrides(design, ordered[idx])
+        model = build_atomistic_model(
+            design, nuc_pos_override=nuc_pos_override, axis_override=axis_override)
+        mesh = compute_surface(model.atoms, grid_spacing=grid_spacing,
+                               probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
+        mesh = smooth_mesh(mesh, iterations=smooth)
+        entry = {"vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
+                 "faces": [int(f) for f in mesh.faces.ravel()]}
+        if color_mode == "strand":
+            vc = surface_to_json(mesh, design, color_mode="strand").get("vertex_colors")
+            if vc:
+                entry["vertex_colors"] = [round(float(c), 4) for c in vc]
+        out[str(idx)] = entry
+    return out
 
 
 def max_backbone_stretch(

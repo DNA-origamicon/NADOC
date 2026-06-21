@@ -23,6 +23,8 @@ import { initFlexScale } from './flex_scale.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import { showConfirm } from './primitives/confirm.js'
+import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
+import { formatJobTime } from '../scene/trajectory_range.js'
 import * as api from '../api/client.js'
 
 const POLL_MS = 1500
@@ -456,6 +458,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   let _progress   = null
   let _pollTimer  = null
   let _listSig    = null   // last-rendered list signature (avoids spinner-restart churn)
+  let _legendEl   = null   // status-symbol legend, inserted once after the list
   let _collapsed  = getSectionCollapsed('dynamics', 'oxdna-jobs-panel', true)
   let _advOpen    = false
   let _available  = false
@@ -673,40 +676,52 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       return
     }
     listEl.innerHTML = ''
+    let rootNo = 0
     for (const { job, depth, index } of flattenJobTree(jobs)) {
-      listEl.appendChild(_jobRow(job, { isChild: depth > 0, index, depth }))
+      if (depth === 0) rootNo += 1
+      listEl.appendChild(_jobRow(job, { isChild: depth > 0, index, depth, listIndex: rootNo }))
     }
+    if (!_legendEl) { _legendEl = makeStatusLegend(); listEl.after(_legendEl) }
   }
 
-  // One job row (parent relaxation, or a depth-indented numbered E-field child).
-  function _jobRow(job, { isChild = false, index = 0, depth = 0 }) {
+  // One job row: [N] name · timestamp · status-symbol (parent relaxation, or a
+  // depth-indented numbered E-field child).
+  function _jobRow(job, { isChild = false, index = 0, depth = 0, listIndex = 0 }) {
     const row = document.createElement('div')
     row.dataset.jobId = job.job_id
     row.style.cssText =
       `display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:4px;` +
       `font-size:11px;${depth ? `padding-left:${6 + depth * 14}px;` : ''}` +
       `${job.job_id === _selectedId ? 'background:#2a3a4a;' : ''}`
-    const ls = jobListStatus(job)
-    const indicator = jobIsActive(job)
-      ? makeSpinner(ls.color, 10)
-      : Object.assign(document.createElement('span'), { textContent: '●' })
-    if (!jobIsActive(job)) indicator.style.color = ls.color
+    const badge = statusBadge(statusKeyFor('oxdna', job.status, productionState(job)))
+
+    // Leading list index (root jobs only; children show their run number).
+    const idx = document.createElement('span')
+    idx.textContent = isChild ? '' : `[${listIndex}]`
+    idx.style.cssText = `flex-shrink:0;color:${_C.dim};font-family:var(--font-mono)`
 
     const label = document.createElement('span')
-    label.style.flex = '1'
+    label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
     if (isChild) {
-      // Numbered run label + element indicators ([A]nchors / [H]ard surface /
-      // [E]-field); hover reveals the run params.  No lightning bolt — the [E]
-      // tag denotes the electric field instead.
       label.textContent = runRowLabel(job, index)
       row.title = runChildTitle(job)
     } else {
       label.textContent = jobDisplayName(job)
     }
-    const st = document.createElement('span')
-    st.style.color = ls.color
-    st.textContent = ls.label
-    row.append(indicator, label, st)
+
+    const ts = document.createElement('span')
+    ts.textContent = formatJobTime(job.created_at)
+    ts.style.cssText = `flex-shrink:0;color:${_C.dim};font-size:10px;font-family:var(--font-mono)`
+
+    // Status symbol: animated spinner while active, else the badge shape.
+    const sym = jobIsActive(job)
+      ? makeSpinner(badge.color, 10)
+      : Object.assign(document.createElement('span'), { textContent: badge.symbol })
+    sym.style.flexShrink = '0'
+    sym.title = badge.label
+    if (!jobIsActive(job)) sym.style.color = badge.color
+
+    row.append(idx, label, ts, sym)
     row.addEventListener('click', () => { _selectJob(job.job_id) })
     return row
   }

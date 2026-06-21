@@ -1521,6 +1521,38 @@ async function main() {
     // generic "Working…" auto-popup so the panel's "Rendering Animation"
     // popup stays in front.
     onFetchGeometryBatch:   (positions, opts) => api.getGeometryBatch(positions, opts),
+    // Trajectory keyframes: fetch a job's composite trajectory (all frames + stage
+    // markers, aligned to the design) once per job — oxDNA or NAMD/MD by engine.
+    onFetchTrajectory:      (jobId, engine) => engine === 'namd'
+      ? api.getMdTrajectory(jobId)
+      : api.getOxdnaTrajectory(jobId),
+    // Heavy reps following a trajectory: per-frame atomistic / surface for a
+    // downsampled subset of frame indices (same wire format as the batch calls).
+    // oxDNA reconstructs the design's atoms; NAMD renders its own heavy atoms.
+    onFetchTrajectoryAtomistic: (jobId, frameIndices, engine) => engine === 'namd'
+      ? api.getMdFramesAtomistic(jobId, frameIndices)
+      : api.getOxdnaFramesAtomistic(jobId, frameIndices),
+    onFetchTrajectorySurface:   (jobId, frameIndices, engine) => {
+      if (engine === 'namd') {
+        return api.getMdFramesSurface(jobId, frameIndices, {
+          probe_radius: _atomSurface.getSurfaceProbeRadius(),
+        })
+      }
+      const { surfaceColorMode } = store.getState()
+      return api.getOxdnaFramesSurface(jobId, frameIndices, {
+        color_mode: surfaceColorMode,
+        probe_radius: _atomSurface.getSurfaceProbeRadius(),
+      })
+    },
+    // Restore the DESIGN atom set in the atomistic renderer after a NAMD
+    // trajectory segment swapped in the MD model's own atoms (Phase 2b).
+    onRestoreDesignAtomistic: () => {
+      const mode = atomisticRenderer.getMode?.()
+      if (mode && mode !== 'off') {
+        _atomSurface.invalidateAtomCache()
+        _atomSurface.applyAtomisticMode(mode)
+      }
+    },
     onFetchAtomisticBatch:  (positions, opts) => api.getAtomisticBatch(positions, opts),
     getAtomisticRenderer:   () => atomisticRenderer,
     onFetchSurfaceBatch: (positions, opts) => {
@@ -6111,6 +6143,8 @@ async function main() {
         resolve(idx)
       })
     }),
+    // Used by trajectory keyframes to filter oxDNA jobs to the active design.
+    getWorkspacePath: () => _workspacePath,
   })
 
   // ── Photo mode + export representation → scene/photo_mode.js (#70) ───────────

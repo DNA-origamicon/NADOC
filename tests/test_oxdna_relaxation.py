@@ -1005,6 +1005,72 @@ def test_composite_trajectory_downsamples_keeping_each_stage(design, geometry, t
     assert len(r["markers"]) == 1
 
 
+def test_composite_trajectory_meta_matches_full(design, geometry, tmp_path):
+    """The lightweight meta (frame-count only, no coordinate read) reports the SAME
+    n_frames + marker frame indices as the full composite — so the trajectory-slider
+    sizes itself without downloading the multi-MB trajectory."""
+    from backend.core.oxdna_health import composite_trajectory, composite_trajectory_meta
+    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
+    e = tmp_path / "equil.dat";  _write_traj(design, geometry, e, 5)
+    p = tmp_path / "prod.dat";   _write_traj(design, geometry, p, 7)
+    stages = [("3_equil", "equil", e), ("4_production", "production", p)]
+    full = composite_trajectory(design, stages, ref)
+    meta = composite_trajectory_meta(design, stages)
+    assert meta["n_frames"] == full["n_frames"]
+    assert [m["frame"] for m in meta["markers"]] == [m["frame"] for m in full["markers"]]
+    assert [m["label"] for m in meta["markers"]] == [m["label"] for m in full["markers"]]
+    assert meta["n_nucleotides"] == full["n_nucleotides"]
+
+
+def test_composite_trajectory_meta_downsample_matches_full(design, geometry, tmp_path):
+    """Meta matches the full composite under downsampling too (per-stage stride)."""
+    from backend.core.oxdna_health import composite_trajectory, composite_trajectory_meta
+    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
+    a = tmp_path / "a.dat"; _write_traj(design, geometry, a, 30)
+    b = tmp_path / "b.dat"; _write_traj(design, geometry, b, 30)
+    stages = [("3_equil", "equil", a), ("4_production", "production", b)]
+    full = composite_trajectory(design, stages, ref, max_frames=8)
+    meta = composite_trajectory_meta(design, stages, max_frames=8)
+    assert meta["n_frames"] == full["n_frames"]
+    assert [m["frame"] for m in meta["markers"]] == [m["frame"] for m in full["markers"]]
+
+
+def test_composite_trajectory_atomistic_matches_design_atoms(design, geometry, tmp_path):
+    """Per-frame atomistic for trajectory keyframes returns the SAME flat-XYZ
+    length (atom count × 3) as the design's atomistic-batch — same atom ordering —
+    for exactly the requested composite-frame indices."""
+    from backend.core.oxdna_health import composite_trajectory, composite_trajectory_atomistic
+    from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
+    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
+    e = tmp_path / "equil.dat";  _write_traj(design, geometry, e, 3)
+    stages = [("3_equil", "equil", e)]
+    ct = composite_trajectory(design, stages, ref)
+    n = ct["n_frames"]
+    assert n >= 2
+
+    ref_floats = len(atomistic_positions_flat(build_atomistic_model(design)))
+    out = composite_trajectory_atomistic(design, stages, ref, [0, n - 1, n + 99, -3])
+    assert sorted(out.keys()) == ["0", str(n - 1)]            # out-of-range dropped
+    for v in out.values():
+        assert len(v) == ref_floats                          # atom order matches design
+
+
+def test_composite_trajectory_surface_shape(design, geometry, tmp_path):
+    """Per-frame surface for trajectory keyframes returns surface-batch-shaped
+    entries (flat verts + int faces, optional strand colours)."""
+    from backend.core.oxdna_health import composite_trajectory, composite_trajectory_surface
+    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
+    e = tmp_path / "equil.dat";  _write_traj(design, geometry, e, 3)
+    stages = [("3_equil", "equil", e)]
+    n = composite_trajectory(design, stages, ref)["n_frames"]
+    out = composite_trajectory_surface(design, stages, ref, [0, n - 1], smooth=3)
+    assert sorted(out.keys()) == ["0", str(n - 1)]
+    for v in out.values():
+        assert len(v["vertices"]) > 0 and len(v["vertices"]) % 3 == 0
+        assert len(v["faces"]) > 0 and len(v["faces"]) % 3 == 0
+        assert "vertex_colors" in v                          # default color_mode='strand'
+
+
 def test_oxdna_continue_production_unique_stage(monkeypatch, tmp_path):
     """A completed job that already has a production run can start ANOTHER; it
     appends a uniquely-named production stage (continues from the last run)."""

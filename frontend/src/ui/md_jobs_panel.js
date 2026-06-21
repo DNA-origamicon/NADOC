@@ -16,6 +16,7 @@ import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progres
 import { showToast } from './toast.js'
 import { docKey, docHeaders } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
+import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
 const _C = {
@@ -171,6 +172,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   let _displayMeta  = null
   let _prewarmKey   = null
   let _listSig      = null   // last-rendered list signature (avoids spinner-restart churn)
+  let _legendEl     = null   // status-symbol legend, inserted once after the list
   let _inheritedSeedShown = null  // oxDNA job id whose seed positions are currently displayed
   let _mdFrameShown = false       // has a real MD frame been displayed for the current display job?
   const _metricsByJob = new Map()
@@ -916,7 +918,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       listEl.appendChild(empty)
       return
     }
-    jobs.slice(0, 8).forEach(job => {
+    jobs.slice(0, 8).forEach((job, i) => {
       const row = document.createElement('div')
       const isSelected = job.job_id === _selectedId
       row.style.cssText = [
@@ -925,17 +927,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         `border:1px solid ${isSelected ? _C.border : 'transparent'}`,
       ].join(';')
       row.addEventListener('click', () => _selectJob(job.job_id))
+      const sb = statusBadge(statusKeyFor('namd', job.status))
 
-      // Active jobs get a spinner; idle/terminal get a colored status dot.
-      if (mdJobIsActive(job)) {
-        const spin = makeSpinner(_statusColor(job.status), 10)
-        spin.style.flexShrink = '0'
-        row.appendChild(spin)
-      } else {
-        const dot = document.createElement('span')
-        dot.style.cssText = `width:7px;height:7px;border-radius:50%;flex-shrink:0;background:${_statusColor(job.status)}`
-        row.appendChild(dot)
-      }
+      // Leading list index.
+      const idx = document.createElement('span')
+      idx.textContent = `[${i + 1}]`
+      idx.style.cssText = `flex-shrink:0;font-size:10px;color:${_C.dim};font-family:var(--font-mono)`
+      row.appendChild(idx)
 
       const name = document.createElement('span')
       name.style.cssText = `flex:1;font-size:var(--text-xs);color:${_C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap`
@@ -954,17 +952,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
       // Timestamp (HH:MM today, else MM-DD HH:MM)
       const ts = document.createElement('span')
-      ts.style.cssText = `font-size:10px;color:${_C.dim};flex-shrink:0;margin-right:4px;font-family:var(--font-mono)`
+      ts.style.cssText = `font-size:10px;color:${_C.dim};flex-shrink:0;font-family:var(--font-mono)`
       ts.textContent = _fmtJobTime(job.created_at)
       row.appendChild(ts)
 
-      const chip = document.createElement('span')
-      chip.style.cssText = `font-size:10px;color:${_statusColor(job.status)};flex-shrink:0`
-      chip.textContent = job.status
-      row.appendChild(chip)
+      // Status symbol: spinner while active, else the badge shape (tooltip = label).
+      const sym = mdJobIsActive(job)
+        ? makeSpinner(sb.color, 10)
+        : Object.assign(document.createElement('span'), { textContent: sb.symbol })
+      sym.style.flexShrink = '0'
+      sym.title = sb.label
+      if (!mdJobIsActive(job)) sym.style.color = sb.color
+      row.appendChild(sym)
 
       listEl.appendChild(row)
     })
+    if (!_legendEl) { _legendEl = makeStatusLegend(); listEl.after(_legendEl) }
   }
 
   // ── Job selection + WS subscription ───────────────────────────────────────

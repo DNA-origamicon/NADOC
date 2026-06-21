@@ -189,6 +189,125 @@ def _latest_display_segment(job: MdJob) -> tuple[Optional[str], Optional[Path]]:
     return None, None
 
 
+def _md_segment_dcds(job: MdJob) -> list[tuple[str, str, Path]]:
+    """Every segment that has written a DCD, in run order → (name, stage, dcd_path).
+    Picks each segment's newest trajectory file (mirrors _latest_display_segment's
+    per-segment preference for continuation DCDs)."""
+    package_dir = job.package_dir(_workspace())
+    output_dir = package_dir / "output"
+    out: list[tuple[str, str, Path]] = []
+    for seg in job.segments:
+        dcds = [
+            d for d in (
+                *output_dir.glob(f"{seg.name}.cont*.dcd"),
+                output_dir / f"{seg.name}.dcd",
+                package_dir / f"{seg.name}.dcd",
+            )
+            if d.exists() and d.stat().st_size > 0
+        ]
+        if dcds:
+            out.append((seg.name, getattr(seg, "stage", "md") or "md",
+                        max(dcds, key=lambda d: d.stat().st_mtime)))
+    return out
+
+
+@router.get("/md/jobs/{job_id}/trajectory")
+async def get_md_job_trajectory(job_id: str) -> dict:
+    """Composite scrub-able NAMD trajectory (every written segment, CG/nadoc beads)
+    for an animation trajectory keyframe — SAME payload shape as the oxDNA
+    /trajectory endpoint ({ready, n_frames, keys, frames, markers, stages}), so the
+    animation player's trajectory path is reused unchanged. Deforms the active
+    design (like the live Display-MD toggle)."""
+    from backend.core.md_trajectory import md_composite_trajectory
+
+    job = _load_job(job_id)
+    package_dir = job.package_dir(_workspace())
+    psf = package_dir / f"{job.name_stem}.psf"
+    ref = package_dir / f"{job.name_stem}.pdb"
+    if not psf.exists() or not ref.exists():
+        return {"ready": False, "reason": "topology/reference not found"}
+    segments = _md_segment_dcds(job)
+    if not segments:
+        return {"ready": False, "reason": "no trajectory yet"}
+    design = design_state.get_or_404()
+    result = await run_in_threadpool(md_composite_trajectory, psf, segments, ref, design)
+    return {"ready": result["n_frames"] > 0, **result}
+
+
+@router.get("/md/jobs/{job_id}/trajectory-meta")
+async def get_md_job_trajectory_meta(job_id: str) -> dict:
+    """Frame count + segment markers for the NAMD composite WITHOUT reading
+    coordinates (DCD header only) — sizes the trajectory-keyframe slider instantly.
+    Indices match GET /md/jobs/{id}/trajectory exactly."""
+    from backend.core.md_trajectory import md_composite_meta
+
+    job = _load_job(job_id)
+    package_dir = job.package_dir(_workspace())
+    if not (package_dir / f"{job.name_stem}.psf").exists():
+        return {"ready": False, "reason": "topology not found"}
+    segments = _md_segment_dcds(job)
+    if not segments:
+        return {"ready": False, "reason": "no trajectory yet"}
+    result = await run_in_threadpool(md_composite_meta, segments)
+    return {"ready": result["n_frames"] > 0, **result}
+
+
+class MdFramesAtomisticBody(BaseModel):
+    frame_indices: list[int]
+
+
+class MdFramesSurfaceBody(BaseModel):
+    frame_indices: list[int]
+    probe_radius: float = 0.28
+    grid_spacing: float = 0.20
+    radius_inflate: float = 1.30
+    smooth: int = 15
+
+
+def _md_traj_inputs(job_id: str):
+    """(psf, ref_pdb, segments, design) for a job's composite — shared by the MD
+    trajectory + per-frame atomistic/surface routes. Returns None when the
+    topology/reference or any DCD is missing."""
+    job = _load_job(job_id)
+    package_dir = job.package_dir(_workspace())
+    psf = package_dir / f"{job.name_stem}.psf"
+    ref = package_dir / f"{job.name_stem}.pdb"
+    if not psf.exists() or not ref.exists():
+        return None
+    segments = _md_segment_dcds(job)
+    if not segments:
+        return None
+    return psf, ref, segments, design_state.get_or_404()
+
+
+@router.post("/md/jobs/{job_id}/frames-atomistic")
+async def md_frames_atomistic_route(job_id: str, body: MdFramesAtomisticBody) -> dict:
+    """Per-frame DNA heavy atoms for NAMD trajectory frame indices (Phase 2b) —
+    {idx: {atoms, bonds}}. The NAMD model's own atoms, rendered directly."""
+    from backend.core.md_trajectory import md_frames_atomistic
+
+    inputs = _md_traj_inputs(job_id)
+    if inputs is None:
+        return {}
+    psf, ref, segments, design = inputs
+    return await run_in_threadpool(md_frames_atomistic, psf, segments, ref, design, body.frame_indices)
+
+
+@router.post("/md/jobs/{job_id}/frames-surface")
+async def md_frames_surface_route(job_id: str, body: MdFramesSurfaceBody) -> dict:
+    """Per-frame molecular surface from the NAMD DNA heavy atoms (Phase 2b) —
+    surface-batch shape {idx: {vertices, faces}}."""
+    from backend.core.md_trajectory import md_frames_surface
+
+    inputs = _md_traj_inputs(job_id)
+    if inputs is None:
+        return {}
+    psf, ref, segments, design = inputs
+    return await run_in_threadpool(
+        md_frames_surface, psf, segments, ref, design, body.frame_indices,
+        body.probe_radius, body.grid_spacing, body.radius_inflate, body.smooth)
+
+
 def _display_dcd_freq(steps: int) -> int:
     return max(100, min(10_000, int(steps) // 50))
 

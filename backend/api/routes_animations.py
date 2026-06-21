@@ -56,6 +56,11 @@ class CreateKeyframeBody(BaseModel):
     hold_duration_s: float = 1.0
     transition_duration_s: float = 0.5
     easing: str = "ease-in-out"
+    is_trajectory: bool = False
+    trajectory_job_id: Optional[str] = None
+    trajectory_engine: str = "oxdna"
+    trajectory_frame_start: Optional[int] = None
+    trajectory_frame_end: Optional[int] = None
     spin_axis: Optional[str] = None
     spin_rotations: float = 0.0
     spin_invert: bool = False
@@ -77,6 +82,11 @@ class PatchKeyframeBody(BaseModel):
     hold_duration_s: Optional[float] = None
     transition_duration_s: Optional[float] = None
     easing: Optional[str] = None
+    is_trajectory: Optional[bool] = None
+    trajectory_job_id: Optional[str] = None
+    trajectory_engine: Optional[str] = None
+    trajectory_frame_start: Optional[int] = None
+    trajectory_frame_end: Optional[int] = None
     spin_axis: Optional[str] = None
     spin_rotations: Optional[float] = None
     spin_invert: Optional[bool] = None
@@ -163,6 +173,11 @@ def create_keyframe(anim_id: str, body: CreateKeyframeBody) -> dict:
         hold_duration_s=body.hold_duration_s,
         transition_duration_s=body.transition_duration_s,
         easing=body.easing,
+        is_trajectory=body.is_trajectory,
+        trajectory_job_id=body.trajectory_job_id,
+        trajectory_engine=body.trajectory_engine,
+        trajectory_frame_start=body.trajectory_frame_start,
+        trajectory_frame_end=body.trajectory_frame_end,
         spin_axis=body.spin_axis,
         spin_rotations=body.spin_rotations,
         spin_invert=body.spin_invert,

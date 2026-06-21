@@ -4128,9 +4128,14 @@
             </div>
             <!-- Keyframe list -->
             <div id="animation-kf-list" style="margin-bottom:6px"></div>
-            <button id="animation-add-kf-btn" class="panel-action-btn" style="width:100%;margin-bottom:8px">
-              + Add Keyframe
-            </button>
+            <div style="display:flex;gap:6px;margin-bottom:8px">
+              <button id="animation-add-kf-btn" class="panel-action-btn" style="flex:1;margin-bottom:0">
+                + Add Keyframe
+              </button>
+              <button id="animation-add-trajectory-btn" class="panel-action-btn" style="flex:1;margin-bottom:0" title="Add a keyframe that plays a range of frames from an oxDNA trajectory">
+                + Add Trajectory
+              </button>
+            </div>
             <!-- Playback controls — media bar (skip / play / skip / loop / rev) -->
             <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:6px">
               <button id="anim-skip-start-btn" class="panel-action-btn" style="width:auto;padding:3px 8px;margin-bottom:0;font-size:13px;line-height:1" title="Skip to start">⏮</button>

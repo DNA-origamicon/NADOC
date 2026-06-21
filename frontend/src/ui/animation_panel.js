@@ -22,6 +22,11 @@
 import { openKeyframeTextPopup } from './keyframe_text_popup.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel, setOpProgressFraction } from './op_progress.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { filterJobsForPart, makeSpinner } from './md_jobs_panel.js'
+import { jobDisplayName, productionState } from './oxdna_jobs_panel.js'
+import { statusBadge, statusKeyFor } from './job_status_symbol.js'
+import { markerPositions } from './oxdna_trajectory_player.js'
+import { formatJobTime } from '../scene/trajectory_range.js'
 
 // Build a one-line label for a feature-log entry as shown in the keyframe
 // State dropdown. Mirrors the wording the user sees in the Feature Log tab.
@@ -71,7 +76,28 @@ function _strandAnimSummary(strandAnimPhi, design) {
   return parts.join(', ')
 }
 
-export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature }) {
+/**
+ * Pure: oxDNA + MD job lists → one unified list of trajectory-dropdown entries
+ * (`{...job, id, engine}`), filtered to a part path. BOTH engines key their job id
+ * as `job_id` (NOT `id`) — reading `j.id` yields undefined option values, leaving
+ * the dropdown unselectable ("no trajectory yet"). Exported for regression testing.
+ */
+export function normalizeTrajJobs(oxJobs, mdJobs, partPath) {
+  const out = []
+  if (Array.isArray(oxJobs)) {
+    for (const j of filterJobsForPart(oxJobs, partPath || null, false)) {
+      out.push({ ...j, id: j.job_id, engine: 'oxdna' })
+    }
+  }
+  if (Array.isArray(mdJobs)) {
+    for (const j of filterJobsForPart(mdJobs, partPath || null, false)) {
+      out.push({ ...j, id: j.job_id, engine: 'namd' })
+    }
+  }
+  return out
+}
+
+export function initAnimationPanel(store, { player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature, getWorkspacePath }) {
   const panelEl    = document.getElementById('animation-panel')
   const heading    = document.getElementById('animation-panel-heading')
   const arrow      = document.getElementById('animation-panel-arrow')
@@ -85,6 +111,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
   const deleteAnimBtn = document.getElementById('animation-delete-btn')
   const kfListEl      = document.getElementById('animation-kf-list')
   const addKfBtn   = document.getElementById('animation-add-kf-btn')
+  const addTrajBtn = document.getElementById('animation-add-trajectory-btn')
   const playPauseBtn   = document.getElementById('anim-playpause-btn')
   const skipStartBtn   = document.getElementById('anim-skip-start-btn')
   const skipEndBtn     = document.getElementById('anim-skip-end-btn')
@@ -404,6 +431,210 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     await api.updateKeyframe(_activeAnimId, kf.id, { binding_states: cur })
   }
 
+  // ── Trajectory keyframes (oxDNA trajectory playback) ─────────────────────────
+  // Per-job metadata cache {nFrames, markers} so re-rendering a row doesn't
+  // re-download the (potentially large) trajectory each time the store changes.
+  const _trajMetaCache = new Map()
+
+  /** Patch one keyframe (design or part-context mode; assembly unsupported). */
+  async function _patchKf(kf, patch) {
+    if (!_activeAnimId) return
+    if (_partMode) {
+      await _partPatchFn(d => {
+        const a = d.animations?.find(a => a.id === _activeAnimId)
+        if (!a) return
+        const k = a.keyframes?.find(k => k.id === kf.id)
+        if (k) Object.assign(k, patch)
+      })
+    } else {
+      await _api(api.updateKeyframe, api.updateAssemblyKeyframe)(_activeAnimId, kf.id, patch)
+    }
+  }
+
+  /** oxDNA + NAMD jobs for the active design (filtered by workspace path),
+   *  normalized to {id, engine, design_source_path, created_at, design_name}. */
+  async function _trajJobsForDesign() {
+    const path = getWorkspacePath ? getWorkspacePath() : null
+    const [ox, md] = await Promise.all([
+      api.listOxdnaJobs().catch(() => null),
+      api.listMdJobs().catch(() => null),
+    ])
+    return normalizeTrajJobs(ox, md, path)
+  }
+
+  /** Fetch {nFrames, markers} for a job's composite trajectory (per engine), via the
+   *  lightweight META endpoint (no coordinate download — instant). Caches only
+   *  SUCCESSES, so a transient failure can retry on the next selection instead of
+   *  sticking on "no trajectory yet". The full frame data is fetched at play/bake. */
+  async function _trajMeta(jobId, engine) {
+    if (!jobId) return null
+    if (_trajMetaCache.has(jobId)) return _trajMetaCache.get(jobId)
+    const fetcher = engine === 'namd' ? api.getMdTrajectoryMeta : api.getOxdnaTrajectoryMeta
+    const resp = await fetcher(jobId).catch(() => null)
+    if (!resp?.ready || !(resp.n_frames > 0)) return null   // not cached → retryable
+    const meta = { nFrames: resp.n_frames, markers: resp.markers || [] }
+    _trajMetaCache.set(jobId, meta)
+    return meta
+  }
+
+  /**
+   * Build the trajectory State controls for a trajectory keyframe: an oxDNA-job
+   * dropdown + a start/end frame range with stage-marker ticks. Populated
+   * asynchronously; returns the container synchronously.
+   */
+  function _makeTrajectoryControls(kf) {
+    const wrap = document.createElement('div')
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:4px;padding-left:18px'
+
+    // Job dropdown row
+    const jobRow = document.createElement('div')
+    jobRow.style.cssText = 'display:flex;align-items:center;gap:5px'
+    const jobLbl = document.createElement('span')
+    jobLbl.textContent = 'Traj'
+    jobLbl.title = 'oxDNA job whose trajectory this keyframe plays'
+    jobLbl.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
+    const jobSel = document.createElement('select')
+    jobSel.style.cssText = [
+      'flex:1;min-width:0;box-sizing:border-box',
+      'background:#0d1117;border:1px solid #30363d;border-radius:3px',
+      'color:#c9d1d9;padding:3px 3px;font-size:var(--text-xs)',
+    ].join(';')
+    jobSel.addEventListener('keydown', e => e.stopPropagation())
+    jobRow.append(jobLbl, jobSel)
+
+    // Range row: ticks strip + start slider + end slider + label
+    const rangeWrap = document.createElement('div')
+    rangeWrap.style.cssText = 'display:flex;flex-direction:column;gap:2px'
+    const ticks = document.createElement('div')
+    ticks.style.cssText = 'position:relative;height:6px;margin:0 6px'
+    const startRange = document.createElement('input')
+    const endRange   = document.createElement('input')
+    for (const r of [startRange, endRange]) {
+      r.type = 'range'; r.min = '0'; r.max = '0'; r.disabled = true
+      r.style.cssText = 'width:100%;margin:0;accent-color:#c050d0'
+      r.addEventListener('keydown', e => e.stopPropagation())
+    }
+    const rangeLbl = document.createElement('div')
+    rangeLbl.style.cssText = 'font-size:var(--text-xs);color:#8b949e;text-align:center;display:flex;align-items:center;justify-content:center;gap:5px;min-height:14px'
+    rangeLbl.textContent = '—'
+    rangeWrap.append(ticks, startRange, endRange, rangeLbl)
+
+    // Heavy-rep notice: atomistic/surface reps re-build each frame → slower.
+    const heavyNote = document.createElement('div')
+    heavyNote.textContent = 'Atomistic / surface reps re-build each frame — playback + export are slower.'
+    heavyNote.style.cssText = 'font-size:var(--text-xs);color:#6e7681;font-style:italic;line-height:1.3'
+
+    wrap.append(jobRow, rangeWrap, heavyNote)
+
+    function _renderTicks(markers, nFrames) {
+      ticks.innerHTML = ''
+      for (const m of markerPositions(markers, nFrames)) {
+        const t = document.createElement('div')
+        t.title = `${m.label}${m.stage_name ? ` (${m.stage_name})` : ''}`
+        t.style.cssText =
+          `position:absolute;top:0;left:${m.pct}%;width:2px;height:100%;` +
+          'transform:translateX(-1px);background:#6e7681;pointer-events:auto;cursor:help'
+        ticks.appendChild(t)
+      }
+    }
+
+    function _setLabel(s, e, n) {
+      rangeLbl.textContent = n > 0 ? `frames ${s}–${e} / ${n}` : 'no trajectory yet'
+    }
+
+    // Spinner + message while the (potentially large) trajectory downloads.
+    function _setLoading(text) {
+      rangeLbl.innerHTML = ''
+      rangeLbl.appendChild(makeSpinner('#c050d0', 10))
+      const t = document.createElement('span'); t.textContent = text
+      rangeLbl.appendChild(t)
+    }
+
+    // Fetch + apply trajectory metadata with a loading spinner in between.
+    async function _loadMeta(jobId, engine) {
+      if (!jobId) { _setLabel(0, 0, 0); return }
+      _setLoading('Loading trajectory…')
+      await _applyMeta(await _trajMeta(jobId, engine))
+    }
+
+    // Apply trajectory metadata to the slider (enable + set bounds + values).
+    async function _applyMeta(meta) {
+      if (!meta || meta.nFrames < 2) {
+        startRange.disabled = endRange.disabled = true
+        startRange.max = endRange.max = '0'
+        _renderTicks([], 0)
+        _setLabel(0, 0, meta?.nFrames ?? 0)
+        return
+      }
+      const n = meta.nFrames
+      const s0 = Number.isFinite(kf.trajectory_frame_start) ? Math.max(0, Math.min(n - 1, kf.trajectory_frame_start)) : 0
+      const e0 = Number.isFinite(kf.trajectory_frame_end)   ? Math.max(0, Math.min(n - 1, kf.trajectory_frame_end))   : n - 1
+      startRange.max = endRange.max = String(n - 1)
+      startRange.value = String(s0); endRange.value = String(e0)
+      startRange.disabled = endRange.disabled = false
+      _renderTicks(meta.markers, n)
+      _setLabel(s0, e0, n)
+    }
+
+    startRange.addEventListener('input', async () => {
+      let s = parseInt(startRange.value, 10) || 0
+      let e = parseInt(endRange.value, 10) || 0
+      if (s > e) { e = s; endRange.value = String(e) }
+      _setLabel(s, e, parseInt(startRange.max, 10) + 1)
+      await _patchKf(kf, { trajectory_frame_start: s, trajectory_frame_end: e })
+    })
+    endRange.addEventListener('input', async () => {
+      let s = parseInt(startRange.value, 10) || 0
+      let e = parseInt(endRange.value, 10) || 0
+      if (e < s) { s = e; startRange.value = String(s) }
+      _setLabel(s, e, parseInt(endRange.max, 10) + 1)
+      await _patchKf(kf, { trajectory_frame_start: s, trajectory_frame_end: e })
+    })
+
+    // Async populate: jobs dropdown (with timestamps), then meta for the selected job.
+    ;(async () => {
+      jobSel.innerHTML = ''
+      const loadingOpt = document.createElement('option')
+      loadingOpt.value = ''; loadingOpt.textContent = 'Loading jobs…'
+      jobSel.appendChild(loadingOpt)
+      const jobs = await _trajJobsForDesign()
+      jobSel.innerHTML = ''
+      const none = document.createElement('option')
+      none.value = ''; none.textContent = jobs.length ? '— select job —' : '— no oxDNA / NAMD jobs —'
+      jobSel.appendChild(none)
+      jobs.forEach((j, i) => {
+        const o = document.createElement('option')
+        const when = formatJobTime(j.created_at)
+        const tag = j.engine === 'namd' ? 'MD' : 'oxDNA'
+        const key = statusKeyFor(j.engine, j.status, j.engine === 'oxdna' ? productionState(j) : null)
+        const sym = statusBadge(key).symbol
+        o.value = j.id
+        o.dataset.engine = j.engine
+        o.textContent = `[${i + 1}] [${tag}] ${sym} ${jobDisplayName(j)}${when ? ` · ${when}` : ''}`
+        jobSel.appendChild(o)
+      })
+      jobSel.value = kf.trajectory_job_id ?? ''
+      await _loadMeta(kf.trajectory_job_id ?? null, kf.trajectory_engine)
+    })()
+
+    jobSel.addEventListener('change', async () => {
+      const jobId = jobSel.value || null
+      const engine = jobSel.selectedOptions[0]?.dataset.engine || 'oxdna'
+      // New job → reset range to full span on next meta apply.
+      await _patchKf(kf, {
+        trajectory_job_id: jobId, trajectory_engine: engine,
+        trajectory_frame_start: null, trajectory_frame_end: null,
+      })
+      kf.trajectory_job_id = jobId
+      kf.trajectory_engine = engine
+      kf.trajectory_frame_start = null
+      kf.trajectory_frame_end = null
+      await _loadMeta(jobId, engine)
+    })
+
+    return wrap
+  }
+
   /** One-time "Bind/Unbind poses" section: authored open/closed hinge angles. */
   function _makeBindingPosesSection(design) {
     const drivers = _drivers(design)
@@ -485,14 +716,17 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     const strandAnimPhi = (kf.strand_anim_phi && Object.keys(kf.strand_anim_phi).length > 0)
       ? kf.strand_anim_phi : null
     const isStrandAnim = !!strandAnimPhi
+    // Trajectory keyframe: plays an oxDNA trajectory range. Flagged at creation
+    // (is_trajectory) so it renders as a trajectory row even before a job is picked.
+    const isTrajectory = !isStrandAnim && (!!kf.is_trajectory || kf.trajectory_job_id != null)
 
     const row = document.createElement('div')
     row.dataset.kfId = kf.id
     row.style.cssText = [
       'display:flex;flex-direction:column;gap:4px',
       'padding:5px 6px;border-radius:4px',
-      // Magenta accent (matches the OH-binder strand color) marks strand-anim kfs.
-      isStrandAnim
+      // Purple accent marks special keyframes (strand-anim + trajectory).
+      (isStrandAnim || isTrajectory)
         ? 'border:1px solid #c050d0;border-left:3px solid #c050d0;margin-bottom:3px'
         : 'border:1px solid #21262d;margin-bottom:3px',
     ].join(';')
@@ -619,6 +853,13 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       saBadge.title = 'Strand-animation keyframe (un/hybridization φ)'
       saBadge.style.cssText = 'font-size:var(--text-xs);color:#c050d0;background:#1a0a1f;border:1px solid #c050d0;border-radius:3px;padding:0 3px;flex-shrink:0'
     }
+    let trajBadge = null
+    if (isTrajectory) {
+      trajBadge = document.createElement('span')
+      trajBadge.textContent = 'Trajectory'
+      trajBadge.title = 'Trajectory keyframe (plays an oxDNA trajectory range)'
+      trajBadge.style.cssText = 'font-size:var(--text-xs);color:#c050d0;background:#1a0a1f;border:1px solid #c050d0;border-radius:3px;padding:0 3px;flex-shrink:0'
+    }
     if (_assemblyMode && jointCount > 0) {
       const jBadge = document.createElement('span')
       jBadge.textContent = `Joints: ${jointCount}`
@@ -626,6 +867,8 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       topRow.append(handle, badge, spacer, jBadge, textBtn, delBtn)
     } else if (saBadge) {
       topRow.append(handle, badge, spacer, saBadge, textBtn, delBtn)
+    } else if (trajBadge) {
+      topRow.append(handle, badge, spacer, trajBadge, textBtn, delBtn)
     } else {
       topRow.append(handle, badge, spacer, textBtn, delBtn)
     }
@@ -789,7 +1032,12 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     cfgLbl.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
     cfgRow.appendChild(cfgLbl)
 
-    if (isStrandAnim) {
+    if (isTrajectory) {
+      // Trajectory job picker + frame-range slider replaces the State selector.
+      cfgRow.style.cssText = 'display:flex;flex-direction:column;gap:4px;align-items:stretch'
+      cfgLbl.style.cssText = 'font-size:var(--text-xs);color:#c050d0;flex-shrink:0'
+      cfgRow.appendChild(_makeTrajectoryControls(kf))
+    } else if (isStrandAnim) {
       // Read-only summary in place of the feature-log/config selector.
       const saState = document.createElement('span')
       saState.textContent = _strandAnimSummary(strandAnimPhi, store.getState().currentDesign)
@@ -916,7 +1164,7 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     // A driver is an OverhangBinding (WC pair) or a linker (overhang_connection).
     let bindingsRow = null
     const bindDesign = _bindingsDesign()
-    const bindings = isStrandAnim ? [] : _drivers(bindDesign)
+    const bindings = (isStrandAnim || isTrajectory) ? [] : _drivers(bindDesign)
     if (bindings.length) {
       bindingsRow = document.createElement('div')
       bindingsRow.style.cssText = 'display:flex;flex-direction:column;gap:3px;padding-left:18px'
@@ -980,6 +1228,33 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       })
     } else {
       await _api(api.createKeyframe, api.createAssemblyKeyframe)(_activeAnimId, kfData)
+    }
+  })
+
+  // Add a trajectory keyframe (design / part-context only — oxDNA jobs are a
+  // design concept). Plays an oxDNA trajectory range; the job + frame range are
+  // chosen on the row after creation.
+  addTrajBtn?.addEventListener('click', async () => {
+    if (!_activeAnimId || _assemblyMode) return
+    const anim    = _getAnimations().find(a => a.id === _activeAnimId)
+    const isFirst = !anim?.keyframes?.length
+    const kfData = {
+      camera_pose_id:        null,
+      feature_log_index:     null,
+      transition_duration_s: isFirst ? 0.0 : 1.0,
+      hold_duration_s:       2.0,
+      easing:                'linear',
+      is_trajectory:         true,
+      trajectory_engine:     'oxdna',
+      trajectory_job_id:     null,
+    }
+    if (_partMode) {
+      await _partPatchFn(d => {
+        const a = d.animations?.find(a => a.id === _activeAnimId)
+        if (a) a.keyframes = [...(a.keyframes ?? []), { id: crypto.randomUUID(), ...kfData }]
+      })
+    } else {
+      await api.createKeyframe(_activeAnimId, kfData)
     }
   })
 
@@ -1132,13 +1407,16 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (evt.type === 'baking') {
       // Geometry/atomistic batch fetch in progress — disable play button and show progress bar
       if (playPauseBtn) { playPauseBtn.disabled = true; playPauseBtn.textContent = '…' }
-      _showBakingBar(evt.hasSlow ? 'Preparing (loading model…)' : 'Preparing…')
+      const prepMsg = evt.hasSlow
+        ? 'Building atomistic / surface frames — this can take a while…'
+        : 'Preparing frames…'
+      _showBakingBar(prepMsg)
       // Centred popup with frame-by-frame progress + Cancel button.
       // Skipped during export — exportBtn already showed its own
       // "Exporting Animation" popup with its own cancel handler.
       if (!_exportInFlight) {
         _bakeProgressOpen = true
-        showOpProgress('Rendering Animation', 'Preparing…', {
+        showOpProgress('Rendering Animation', prepMsg, {
           onCancel: () => { player.cancelBake?.() },
         })
       }
@@ -1299,6 +1577,14 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
     if (_assemblyMode === active) return
     _assemblyMode = active
     if (active) { _partMode = false; _partDesign = null; _partPatchFn = null }
+    // Trajectory keyframes are design-only (oxDNA jobs belong to designs).
+    if (addTrajBtn) {
+      addTrajBtn.disabled = active
+      addTrajBtn.style.opacity = active ? '0.4' : ''
+      addTrajBtn.title = active
+        ? 'Trajectory keyframes are available in the design editor only'
+        : 'Add a keyframe that plays a range of frames from an oxDNA trajectory'
+    }
     player.stop()
     _rebuildSelect(_getAnimations())
   }

@@ -244,6 +244,46 @@ def _stage_trajectories(stage_dir: Path) -> list[Path]:
     return out
 
 
+def _composite_inputs(job: OxdnaJob):
+    """Assemble (design, stages, ref) for a job's WHOLE-LINEAGE composite trajectory
+    (root → … → selected, every stage in time order, numbered boundary labels).
+    Shared by the trajectory + per-frame atomistic/surface routes. Returns
+    (design, [], None) when no stage has written a trajectory yet.
+
+    The whole lineage aligns to ONE origin frame (design geometry) — the same
+    reference the field display uses, NOT the job's conf.dat (a field child's
+    conf.dat is the parent's drifted relaxed structure, off-origin)."""
+    from backend.core.models import Design
+
+    jd = job.job_dir(_workspace())
+    ws = _workspace()
+    chain = _lineage_jobs(job)
+    stages: list = []
+    run_no = 0
+    for j in chain:
+        is_root = j.parent_job_id is None
+        if not is_root:
+            run_no += 1
+        first_of_job = True
+        for st in j.stages:
+            files = _stage_trajectories(j.stage_dir(ws, st.name))
+            for k, traj in enumerate(files):
+                label = st.name if len(files) == 1 else f"{st.name} (part {k + 1})"
+                marker = None
+                if first_of_job and not is_root:
+                    marker = f"→ {st.kind} {run_no}"
+                    first_of_job = False
+                stages.append((label, st.kind, traj, marker))
+    if not stages:
+        return None, [], None
+    snap = jd / "design.json"
+    if not snap.exists():
+        raise HTTPException(500, "design.json snapshot missing for this job")
+    design = Design.model_validate_json(snap.read_text())
+    ref = _design_ref_conf(jd, design)
+    return design, stages, ref
+
+
 def _jsonl_records(path: Path) -> list[dict]:
     import json
     if not path.exists():
@@ -849,48 +889,76 @@ async def get_oxdna_trajectory(job_id: str) -> dict:
     seeded from its parent's end state, so the ancestor chain plays as one
     continuous trajectory.  Feeds the View-trajectory play/pause + slider.
     """
-    from backend.core.models import Design
     from backend.core.oxdna_health import composite_trajectory
 
     job = _load_job(job_id)
-    jd = job.job_dir(_workspace())
-    ws = _workspace()
-
-    # Walk root → … → selected; concatenate every job's stages in time order.  A
-    # boundary into a non-root child (a new field/production run) gets a numbered
-    # tick label so relax → field1 → field2 are visually distinguishable.
-    chain = _lineage_jobs(job)
-    stages = []
-    run_no = 0
-    for j in chain:
-        is_root = j.parent_job_id is None
-        if not is_root:
-            run_no += 1
-        first_of_job = True
-        for st in j.stages:
-            # Include any archived resume parts (trajectory.r1.dat …) before the
-            # current trajectory.dat so a resumed stage scrubs in time order.
-            files = _stage_trajectories(j.stage_dir(ws, st.name))
-            for k, traj in enumerate(files):
-                label = st.name if len(files) == 1 else f"{st.name} (part {k + 1})"
-                marker = None
-                if first_of_job and not is_root:
-                    marker = f"→ {st.kind} {run_no}"
-                    first_of_job = False
-                stages.append((label, st.kind, traj, marker))
+    design, stages, ref = _composite_inputs(job)
     if not stages:
         return {"ready": False, "reason": "no trajectory yet"}
-
-    snap = jd / "design.json"
-    if not snap.exists():
-        raise HTTPException(500, "design.json snapshot missing for this job")
-    design = Design.model_validate_json(snap.read_text())
-    # Align the whole lineage to ONE origin frame (design geometry), the same
-    # reference the field display uses — NOT the job's conf.dat (a field child's
-    # conf.dat is the parent's drifted relaxed structure, off-origin).
-    ref = _design_ref_conf(jd, design)
     result = await run_in_threadpool(composite_trajectory, design, stages, ref)
     return {"ready": result["n_frames"] > 0, **result}
+
+
+@router.get("/oxdna/jobs/{job_id}/trajectory-meta")
+async def get_oxdna_trajectory_meta(job_id: str) -> dict:
+    """Frame count + stage markers for the composite trajectory WITHOUT downloading
+    coordinates — lets the trajectory-keyframe slider size itself instantly. Indices
+    match GET /oxdna/jobs/{id}/trajectory exactly."""
+    from backend.core.oxdna_health import composite_trajectory_meta
+
+    job = _load_job(job_id)
+    design, stages, _ = _composite_inputs(job)
+    if not stages:
+        return {"ready": False, "reason": "no trajectory yet"}
+    result = await run_in_threadpool(composite_trajectory_meta, design, stages)
+    return {"ready": result["n_frames"] > 0, **result}
+
+
+class OxdnaFramesAtomisticBody(BaseModel):
+    frame_indices: list[int]
+
+
+class OxdnaFramesSurfaceBody(BaseModel):
+    frame_indices: list[int]
+    color_mode: str = "strand"
+    probe_radius: float = 0.28
+    grid_spacing: float = 0.20
+    radius_inflate: float = 1.30
+    smooth: int = 15
+
+
+@router.post("/oxdna/jobs/{job_id}/frames-atomistic")
+async def oxdna_frames_atomistic(job_id: str, body: OxdnaFramesAtomisticBody) -> dict:
+    """Per-frame ATOMISTIC coordinates for the given composite-trajectory frame
+    indices (same wire format as /design/features/atomistic-batch). Used by the
+    animation player to make the atomistic rep follow a trajectory keyframe.
+    Heavy — one full all-atom rebuild per frame — so callers pass a downsampled
+    index set. Indices match GET /oxdna/jobs/{id}/trajectory frame ordering."""
+    from backend.core.oxdna_health import composite_trajectory_atomistic
+
+    job = _load_job(job_id)
+    design, stages, ref = _composite_inputs(job)
+    if not stages:
+        return {}
+    return await run_in_threadpool(
+        composite_trajectory_atomistic, design, stages, ref, body.frame_indices)
+
+
+@router.post("/oxdna/jobs/{job_id}/frames-surface")
+async def oxdna_frames_surface(job_id: str, body: OxdnaFramesSurfaceBody) -> dict:
+    """Per-frame molecular SURFACE meshes for the given composite-trajectory frame
+    indices (same wire format as /design/features/surface-batch). Heaviest path
+    (all-atom rebuild + marching cubes per frame) — callers downsample hard."""
+    from backend.core.oxdna_health import composite_trajectory_surface
+
+    job = _load_job(job_id)
+    design, stages, ref = _composite_inputs(job)
+    if not stages:
+        return {}
+    return await run_in_threadpool(
+        composite_trajectory_surface, design, stages, ref, body.frame_indices,
+        body.color_mode, body.probe_radius, body.grid_spacing,
+        body.radius_inflate, body.smooth)
 
 
 @router.get("/oxdna/jobs/{job_id}/display")

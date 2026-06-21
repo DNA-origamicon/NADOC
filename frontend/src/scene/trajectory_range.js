@@ -1,0 +1,86 @@
+/**
+ * Pure helpers for mapping a trajectory keyframe's [start,end] frame range onto
+ * playback progress. Used by the animation player (to pick which trajectory frame
+ * to show at a given moment) and by the panel's range slider.
+ *
+ * A trajectory keyframe plays frames frameStart → frameEnd across its hold window;
+ * progress p ∈ [0,1] is "how far through the hold are we". start may be > end
+ * (reverse playback of the range) — the math handles either order.
+ */
+
+/** Clamp an integer frame index to [0, nFrames-1]. nFrames<1 → 0. */
+export function clampFrame(i, nFrames) {
+  const n = Math.max(0, (nFrames | 0))
+  if (n < 1) return 0
+  return Math.max(0, Math.min(n - 1, Math.round(Number.isFinite(i) ? i : 0)))
+}
+
+/**
+ * Frame index to show at progress p ∈ [0,1] through a [start,end] range.
+ * Rounds to the nearest whole frame; clamps p to [0,1]. Returns start when
+ * start===end. Does NOT clamp to a frame count — callers pass already-valid
+ * start/end (see clampRange) or clamp the result with clampFrame.
+ */
+export function frameAtProgress(start, end, p) {
+  const s = Math.round(Number.isFinite(start) ? start : 0)
+  const e = Math.round(Number.isFinite(end) ? end : s)
+  const q = Math.max(0, Math.min(1, Number.isFinite(p) ? p : 0))
+  return Math.round(s + (e - s) * q)
+}
+
+/**
+ * Normalize a (start,end) pair against a known frame count: each clamped to
+ * [0,nFrames-1]; missing/NaN start→0, missing end→last frame. Order preserved
+ * (start may exceed end). Returns {start, end}.
+ */
+export function clampRange(start, end, nFrames) {
+  const n = Math.max(0, (nFrames | 0))
+  if (n < 1) return { start: 0, end: 0 }
+  const s = Number.isFinite(start) ? clampFrame(start, n) : 0
+  const e = Number.isFinite(end) ? clampFrame(end, n) : n - 1
+  return { start: s, end: e }
+}
+
+/**
+ * Pick ≤ maxCount evenly-spaced integer frame indices spanning [start,end]
+ * (inclusive, order-insensitive), for baking heavy reps (atomistic/surface) at a
+ * downsampled subset of the playable range. Always includes both endpoints.
+ */
+export function strideIndices(start, end, maxCount) {
+  const s = Math.min(start, end) | 0
+  const e = Math.max(start, end) | 0
+  const span = e - s
+  if (span <= 0) return [s]
+  const n = Math.max(1, Math.min(maxCount | 0, span + 1))
+  if (n <= 1) return [s]
+  const out = []
+  for (let i = 0; i < n; i++) out.push(Math.round(s + (span * i) / (n - 1)))
+  return [...new Set(out)].sort((a, b) => a - b)
+}
+
+/** Nearest value in `keys` (array of ints) to `idx`; null for an empty list. */
+export function nearestOf(keys, idx) {
+  if (!Array.isArray(keys) || !keys.length) return null
+  let best = keys[0]
+  let bestD = Math.abs(keys[0] - idx)
+  for (const k of keys) {
+    const d = Math.abs(k - idx)
+    if (d < bestD) { bestD = d; best = k }
+  }
+  return best
+}
+
+const _MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * Format a job's created_at (unix SECONDS) as a short local "Mon D HH:MM" stamp
+ * for the trajectory-job dropdown, so the user can tell same-named runs apart.
+ * Returns '' for a missing/invalid value.
+ */
+export function formatJobTime(unixSeconds) {
+  if (!Number.isFinite(unixSeconds)) return ''
+  const d = new Date(unixSeconds * 1000)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${_MONTHS[d.getMonth()]} ${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}

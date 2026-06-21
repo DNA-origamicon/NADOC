@@ -1971,10 +1971,32 @@ export const getOxdnaDisplay     = (id, align = true) => _oxdnaJSON('GET',  `/ox
 export const getOxdnaRmsd        = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsd`)
 export const getOxdnaRmsf         = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsf`)
 export const getOxdnaTrajectory  = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory`)
+/** Frame count + stage markers only (no coordinates) — sizes the trajectory slider fast. */
+export const getOxdnaTrajectoryMeta = (id)       => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory-meta`)
+/** Per-frame ATOMISTIC coords for trajectory frame indices (atomistic-batch wire
+ *  format). Heavy — pass a downsampled index set. */
+export const getOxdnaFramesAtomistic = (id, frameIndices) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-atomistic`, { frame_indices: frameIndices })
+/** Per-frame SURFACE meshes for trajectory frame indices (surface-batch wire format). */
+export const getOxdnaFramesSurface = (id, frameIndices, params = {}) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-surface`, { frame_indices: frameIndices, ...params })
 
 /** Create a NAMD MD job (routes_md.py).  Pass {oxdna_job_id} to seed the run
  *  from a completed oxDNA job's relaxed coordinates instead of ideal B-DNA. */
 export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)
+/** List NAMD/MD jobs (for the trajectory-keyframe dropdown). */
+export const listMdJobs          = ()            => _oxdnaJSON('GET',  '/md/jobs')
+/** Composite NAMD trajectory ({keys, frames, markers, stages}) — same shape as
+ *  getOxdnaTrajectory, so the animation trajectory path is shared. */
+export const getMdTrajectory     = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory`)
+/** Frame count + segment markers only (no coordinates) — sizes the trajectory slider fast. */
+export const getMdTrajectoryMeta = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory-meta`)
+/** Per-frame NAMD heavy atoms ({idx:{atoms,bonds}}) for trajectory frame indices. */
+export const getMdFramesAtomistic = (id, frameIndices) =>
+  _oxdnaJSON('POST', `/md/jobs/${id}/frames-atomistic`, { frame_indices: frameIndices })
+/** Per-frame NAMD surface ({idx:{vertices,faces}}) for trajectory frame indices. */
+export const getMdFramesSurface = (id, frameIndices, params = {}) =>
+  _oxdnaJSON('POST', `/md/jobs/${id}/frames-surface`, { frame_indices: frameIndices, ...params })
 
 // ── Cluster rigid transforms ──────────────────────────────────────────────────
 

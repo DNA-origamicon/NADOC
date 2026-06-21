@@ -25,6 +25,8 @@ import * as THREE from 'three'
 
 import { clampQuatToJointBounds } from './assembly_revolute_math.js'
 import { findBinderStrand } from './overhang_strand_anim.js'
+import { frameAtProgress, clampRange, strideIndices, nearestOf } from './trajectory_range.js'
+import { framesToUpdates } from '../ui/oxdna_display.js'
 
 // ── Easing functions ─────────────────────────────────────────────────────────
 function _ease(t, curve) {
@@ -48,7 +50,7 @@ function _ease(t, curve) {
  * @param {function(number[]): Promise} [opts.onFetchGeometryBatch] — fetches geometry for multiple feature-log positions
  * @param {function(object): void} [opts.onEvent]          — receives player events
  */
-export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, getOverhangUnzipOverlay, getMultiOverhangStrandAnim, getDesignGeometry, onFetchGeometryBatch, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate }) {
+export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl, getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs, getOverhangUnzipOverlay, getMultiOverhangStrandAnim, getDesignGeometry, onFetchGeometryBatch, onFetchTrajectory, onFetchTrajectoryAtomistic, onFetchTrajectorySurface, onRestoreDesignAtomistic, onFetchAtomisticBatch, getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate }) {
   let _raf          = null
   let _playing      = false
   let _direction    = 1       // 1 = forward, -1 = reverse
@@ -74,6 +76,24 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
   // Pre-baked surface vertex arrays: Map<featureLogIndex, number[]>
   // Each value is a flat [x,y,z, ...] vertex array (same order as the live mesh).
   let _bakedSurface   = new Map()
+  // Pre-fetched oxDNA trajectories for trajectory keyframes: Map<jobId, {keys, frames, n_frames}>
+  let _bakedTrajectories = new Map()
+  // Per-frame heavy reps for trajectory keyframes, downsampled:
+  //   Map<jobId, { keys:int[], byIdx:Map<frameIdx, data> }>  (CG-frame-index → atomistic/surface)
+  let _bakedTrajAtom = new Map()
+  let _bakedTrajSurf = new Map()
+  // Caps on how many frames per job get heavy-rep reconstruction (each is a full
+  // all-atom rebuild ± marching cubes on the backend — expensive). Display snaps
+  // to the nearest baked frame.
+  const _TRAJ_ATOM_MAX = 40
+  const _TRAJ_SURF_MAX = 20
+  // True while the atomistic renderer holds a NAMD trajectory's OWN atoms (swapped
+  // in via update()), so the design atom buffer must be restored before any
+  // design/oxDNA atomistic apply (which addresses the renderer by design serial).
+  let _mdAtomsActive  = false
+  // Last NAMD atom-frame key applied (jobId:idx), so update() isn't rebuilt every
+  // display frame while snapped to the same baked frame. Reset on swap-away/stop.
+  let _lastMdAtomKey  = null
   let _baking         = false
 
   // Joint update callback — set by play() when assemblyActive
@@ -271,6 +291,19 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         toState.fov      = prevState.fov   // hold fov across spin
       }
 
+      // Trajectory keyframe: play frames [start,end] of an oxDNA job across this
+      // segment's hold window (transition window = camera lead-in). The frame data
+      // is fetched into _bakedTrajectories during baking; resolve start/end against
+      // the fetched frame count here so an out-of-range saved value can't break it.
+      let trajectory = null
+      if (kf.trajectory_job_id) {
+        const traj = _bakedTrajectories.get(kf.trajectory_job_id)
+        const nFrames = traj?.frames?.length ?? 0
+        const { start, end } = clampRange(kf.trajectory_frame_start, kf.trajectory_frame_end, nFrames)
+        trajectory = { jobId: kf.trajectory_job_id, engine: kf.trajectory_engine || 'oxdna',
+                       frameStart: start, frameEnd: end, nFrames }
+      }
+
       segments.push({
         kfId:                kf.id,
         fromFeatureLogIndex: prevFLI,
@@ -282,6 +315,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         toState,
         easing:              kf.easing ?? 'ease-in-out',
         spin,
+        trajectory,
         text: (kf.text && kf.text.trim()) ? {
           text:        kf.text,
           fontFamily:  kf.text_font_family  ?? 'sans-serif',
@@ -401,7 +435,18 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       // and surface only when those reps are visible). Frontend reports
       // progress as (units complete) / (units total).
       const unitsPerPos = 1 + (atomisticActive ? 1 : 0) + (surfaceActive ? 1 : 0)
-      const totalUnits  = positions.length * unitsPerPos
+      // Unique trajectory jobs referenced by keyframes — fetched once each.
+      // jobId → engine ('oxdna' | 'namd'); job ids are unique UUIDs across engines.
+      const trajJobMap = new Map()
+      for (const kf of animation.keyframes) {
+        if (kf.trajectory_job_id) trajJobMap.set(kf.trajectory_job_id, kf.trajectory_engine || 'oxdna')
+      }
+      const trajJobIds = [...trajJobMap.keys()]
+      // CG trajectory = 1 unit/job; heavy-rep trajectory = 1 unit/job per active
+      // rep (one batched request returns all that job's downsampled frames).
+      const heavyRepsPerJob = (atomisticActive ? 1 : 0) + (surfaceActive ? 1 : 0)
+      const totalUnits  = positions.length * unitsPerPos + trajJobIds.length
+                        + trajJobIds.length * heavyRepsPerJob
       let doneUnits = 0
       const _tick = () => {
         doneUnits += 1
@@ -417,8 +462,25 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       _bakedStates    = new Map()
       _bakedAtomistic = new Map()
       _bakedSurface   = new Map()
+      _bakedTrajectories = new Map()
+      _bakedTrajAtom  = new Map()
+      _bakedTrajSurf  = new Map()
 
       const tasks = []
+      // Trajectory fetches — one per unique oxDNA job. Aligned + cached, so all
+      // scrubbing during playback is purely client-side (no per-frame HTTP).
+      for (const jobId of trajJobIds) {
+        tasks.push(
+          (onFetchTrajectory ? onFetchTrajectory(jobId, trajJobMap.get(jobId)) : Promise.resolve(null))
+            .then(resp => {
+              if (resp?.ready && Array.isArray(resp.frames) && resp.frames.length) {
+                _bakedTrajectories.set(jobId, resp)
+              }
+              _tick()
+            })
+            .catch(err => { if (err?.name !== 'AbortError') _tick() })
+        )
+      }
       for (const pos of positions) {
         // CG geometry — always.
         tasks.push(
@@ -459,6 +521,53 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
       }
 
       await Promise.all(tasks)
+
+      // Phase 2 — heavy-rep trajectory frames (atomistic/surface). Needs each job's
+      // trajectory frame count (known now), so it runs after Phase 1. Each job's
+      // playable range is reconstructed at a downsampled subset of frames (caps
+      // above); playback snaps to the nearest baked frame. Reserved units are
+      // always ticked (even when skipped) so the progress bar still completes.
+      if (heavyRepsPerJob && trajJobIds.length) {
+        const _bakedFramesFromMap = (map) => {
+          const byIdx = new Map()
+          for (const [k, v] of Object.entries(map || {})) byIdx.set(parseInt(k, 10), v)
+          return { keys: [...byIdx.keys()].sort((a, b) => a - b), byIdx }
+        }
+        const heavyTasks = []
+        for (const jobId of trajJobIds) {
+          const engine = trajJobMap.get(jobId)
+          const traj = _bakedTrajectories.get(jobId)
+          const nFrames = traj?.frames?.length ?? 0
+          let lo = Infinity, hi = -Infinity
+          for (const kf of animation.keyframes) {
+            if (kf.trajectory_job_id !== jobId) continue
+            const { start, end } = clampRange(kf.trajectory_frame_start, kf.trajectory_frame_end, nFrames)
+            lo = Math.min(lo, start, end); hi = Math.max(hi, start, end)
+          }
+          if (nFrames < 1 || !Number.isFinite(lo)) {
+            if (atomisticActive) _tick()
+            if (surfaceActive) _tick()
+            continue
+          }
+          if (atomisticActive) {
+            const idx = strideIndices(lo, hi, _TRAJ_ATOM_MAX)
+            heavyTasks.push(
+              (onFetchTrajectoryAtomistic ? onFetchTrajectoryAtomistic(jobId, idx, engine) : Promise.resolve(null))
+                .then(map => { if (map) _bakedTrajAtom.set(jobId, _bakedFramesFromMap(map)); _tick() })
+                .catch(err => { if (err?.name !== 'AbortError') _tick() })
+            )
+          }
+          if (surfaceActive) {
+            const idx = strideIndices(lo, hi, _TRAJ_SURF_MAX)
+            heavyTasks.push(
+              (onFetchTrajectorySurface ? onFetchTrajectorySurface(jobId, idx, engine) : Promise.resolve(null))
+                .then(map => { if (map) _bakedTrajSurf.set(jobId, _bakedFramesFromMap(map)); _tick() })
+                .catch(err => { if (err?.name !== 'AbortError') _tick() })
+            )
+          }
+        }
+        await Promise.all(heavyTasks)
+      }
     } finally {
       _baking = false
       _bakeAbort = null
@@ -709,6 +818,13 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
 
   // ── Apply at time ────────────────────────────────────────────────────────────
 
+  /** Restore the design atom buffer if a NAMD trajectory segment swapped in MD
+   *  atoms — must run before any design/oxDNA atomistic apply (which addresses
+   *  the renderer by design serial). Cheap no-op when MD atoms aren't active. */
+  function _ensureDesignAtoms() {
+    if (_mdAtomsActive) { onRestoreDesignAtomistic?.(); _mdAtomsActive = false; _lastMdAtomKey = null }
+  }
+
   /** Apply the interpolated state for a given elapsed time. */
   function _applyAt(elapsed) {
     if (!_schedule.length) return
@@ -756,6 +872,56 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
         }
       }
       controls.update()
+    }
+
+    // Trajectory keyframe — geometry comes from a pre-fetched oxDNA trajectory,
+    // not the design state. The frame range plays across the HOLD window; during
+    // the transition window the model is frozen at the range's first frame while
+    // the camera (handled above) leads in. Skips all design-geometry / cluster /
+    // binding lerps for this segment. Physical/display-state only.
+    if (seg.trajectory) {
+      const traj = _bakedTrajectories.get(seg.trajectory.jobId)
+      if (traj?.frames?.length) {
+        const holdSpan = seg.endT - transEnd
+        const p = elapsed < transEnd
+          ? 0
+          : holdSpan > 0 ? Math.min(1, Math.max(0, (elapsed - transEnd) / holdSpan)) : 1
+        const fIdx = Math.max(0, Math.min(
+          traj.frames.length - 1,
+          frameAtProgress(seg.trajectory.frameStart, seg.trajectory.frameEnd, p),
+        ))
+        getDesignRenderer?.()?.applyFemPositions?.(framesToUpdates(traj.keys, traj.frames[fIdx]))
+
+        // Heavy reps follow the trajectory too, snapped to the nearest baked frame.
+        if (getAtomisticRenderer?.()?.getMode?.() !== 'off') {
+          const baked = _bakedTrajAtom.get(seg.trajectory.jobId)
+          const nk = baked ? nearestOf(baked.keys, fIdx) : null
+          const data = nk != null ? baked.byIdx.get(nk) : null
+          if (data) {
+            if (seg.trajectory.engine === 'namd') {
+              // NAMD: the frame carries its OWN heavy-atom set — swap it in (only
+              // when the snapped frame actually changed; update() rebuilds meshes).
+              const key = `${seg.trajectory.jobId}:${nk}`
+              if (key !== _lastMdAtomKey) {
+                getAtomisticRenderer().update?.({ atoms: data.atoms, bonds: data.bonds || [] })
+                _lastMdAtomKey = key
+              }
+              _mdAtomsActive = true
+            } else {
+              // oxDNA: flat XYZ in design-serial order over the design atom buffer.
+              _ensureDesignAtoms()
+              getAtomisticRenderer().applyPositionLerp(data, data, 0, null, [], null)
+            }
+          }
+        }
+        if (getSurfaceRenderer?.()?.getMode?.() !== 'off') {
+          const baked = _bakedTrajSurf.get(seg.trajectory.jobId)
+          const nk = baked ? nearestOf(baked.keys, fIdx) : null
+          const data = nk != null ? baked.byIdx.get(nk) : null
+          if (data) getSurfaceRenderer().applyPositionLerp(data, data, 0)
+        }
+      }
+      return
     }
 
     // Cluster configs
@@ -838,6 +1004,7 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     const fromAtom = _bakedAtomistic.get(fromFeatureLogIndex)
     const toAtom   = _bakedAtomistic.get(toFeatureLogIndex)
     if (fromAtom && toAtom) {
+      _ensureDesignAtoms()   // a prior NAMD segment may have swapped in MD atoms
       getAtomisticRenderer?.()?.applyPositionLerp(
         fromAtom, toAtom, t,
         _liveAtomistic, clusterTransforms, clusterHelixIds,
@@ -1037,6 +1204,10 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     // positions and hides any displacement-mode synthetic invaders.
     getMultiOverhangStrandAnim?.()?.clear?.()
 
+    // Clear any trajectory-keyframe display override (applyFemPositions) so the
+    // model reverts to its live design geometry. No-op if no trajectory played.
+    if (_bakedTrajectories.size) getDesignRenderer?.()?.applyFemPositions?.(null)
+
     // Restore assembly joints to pre-play values if callback is set
     if (_onJointUpdate && _liveJointValues) {
       for (const [jointId, val] of Object.entries(_liveJointValues)) {
@@ -1055,6 +1226,11 @@ export function initAnimationPlayer({ camera, controls, getCameraPoses, getDesig
     _bakedAtomistic  = new Map()
     _liveAtomistic   = null
     _bakedSurface    = new Map()
+    _bakedTrajectories = new Map()
+    _bakedTrajAtom   = new Map()
+    _bakedTrajSurf   = new Map()
+    _mdAtomsActive   = false
+    _lastMdAtomKey   = null
     _baking          = false
     _onJointUpdate   = null
     _liveJointValues = null

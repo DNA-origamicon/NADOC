@@ -1449,6 +1449,20 @@ class AnimationKeyframe(BaseModel):
     # overhang_unzip_overlay path. The two coexist on disjoint beads.
     strand_anim_phi: dict[str, float] = Field(default_factory=dict)
 
+    # Trajectory keyframe: instead of lerping geometry between design states, play
+    # a RANGE of frames [start, end] from a simulation trajectory (oxDNA, later
+    # NAMD/MD) across this keyframe's hold window. Physical/display-state only —
+    # applied via designRenderer.applyFemPositions, never written to topology.
+    # is_trajectory marks this as a trajectory keyframe (the UI shows a job picker
+    # + frame-range slider instead of the feature-log/config State row). The job
+    # may be unselected (trajectory_job_id=None) right after creation, so the flag
+    # — not the job id — is the discriminator.
+    is_trajectory: bool = False
+    trajectory_job_id: Optional[str] = None
+    trajectory_engine: Literal["oxdna", "namd"] = "oxdna"
+    trajectory_frame_start: Optional[int] = None
+    trajectory_frame_end: Optional[int] = None
+
     # Spin = camera orbits the model centroid for the full keyframe duration.
     # Mutually exclusive with camera_pose_id at the UI layer.
     spin_axis: Optional[Literal["x", "y", "z"]] = None

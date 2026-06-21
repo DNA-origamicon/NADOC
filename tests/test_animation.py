@@ -334,6 +334,52 @@ def test_keyframe_strand_anim_phi_patch_clears():
     assert kf2["strand_anim_phi"] == {}
 
 
+# ── Trajectory keyframes (oxDNA trajectory playback) ─────────────────────────
+
+def test_keyframe_trajectory_create_patch_roundtrip():
+    """A trajectory keyframe carries is_trajectory + job id + frame range; create
+    and patch both persist them."""
+    design_state.set_design(_demo_design())
+    a = client.post("/api/design/animations", json={"name": "A"})
+    anim_id = a.json()["design"]["animations"][-1]["id"]
+
+    k = client.post(
+        f"/api/design/animations/{anim_id}/keyframes",
+        json={"is_trajectory": True, "trajectory_engine": "oxdna"},
+    )
+    assert k.status_code == 200, k.text
+    anim = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)
+    kf = anim["keyframes"][-1]
+    assert kf["is_trajectory"] is True
+    assert kf["trajectory_engine"] == "oxdna"
+    assert kf["trajectory_job_id"] is None
+
+    p = client.patch(
+        f"/api/design/animations/{anim_id}/keyframes/{kf['id']}",
+        json={"trajectory_job_id": "job-7", "trajectory_frame_start": 3,
+              "trajectory_frame_end": 88},
+    )
+    assert p.status_code == 200, p.text
+    anim = next(an for an in p.json()["design"]["animations"] if an["id"] == anim_id)
+    kf2 = next(x for x in anim["keyframes"] if x["id"] == kf["id"])
+    assert kf2["trajectory_job_id"] == "job-7"
+    assert kf2["trajectory_frame_start"] == 3
+    assert kf2["trajectory_frame_end"] == 88
+
+
+def test_keyframe_trajectory_defaults():
+    """A normal keyframe is not a trajectory keyframe; trajectory fields default."""
+    design_state.set_design(_demo_design())
+    a = client.post("/api/design/animations", json={"name": "A"})
+    anim_id = a.json()["design"]["animations"][-1]["id"]
+    k = client.post(f"/api/design/animations/{anim_id}/keyframes", json={})
+    anim = next(an for an in k.json()["design"]["animations"] if an["id"] == anim_id)
+    kf = anim["keyframes"][-1]
+    assert kf["is_trajectory"] is False
+    assert kf["trajectory_job_id"] is None
+    assert kf["trajectory_frame_start"] is None
+
+
 # ── Overhang strand_anim_setup endpoint ──────────────────────────────────────
 
 def _demo_design_with_overhang():
