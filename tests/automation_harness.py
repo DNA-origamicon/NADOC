@@ -2296,6 +2296,62 @@ def assert_converges_to_constraint(result, *, target_nm, tol_nm,
     return result
 
 
+def assert_spec_constraints_reported(spec_result, hand_verdicts, *, measured_tol=1e-6):
+    """AF-13-grammar oracle: a design spec's ``constraints`` block reports the SAME
+    relaxed-structure verdicts as the equivalent hand-driven
+    :func:`~backend.core.oxdna_health.check_relaxed_constraint` calls.
+
+    ``spec_result`` is the dict
+    :func:`~backend.api.headless_spec_build.build_and_check_design` returns
+    (``{"design", "verdicts"}``); ``hand_verdicts`` is the verdict list computed
+    independently — build the same design by hand, relax it by hand, and call
+    ``check_relaxed_constraint`` with the runtime-id landmarks.
+
+    This is the **load-bearing** pin for the constraint grammar path, because
+    :func:`assert_spec_matches_calls` is *blind* to a physical-layer verdict — the
+    canonical-topology fingerprint cannot see whether a constraint was attached,
+    resolved, or reported at all.  Only verdict-equality proves the grammar lowered the
+    ``constraints`` block faithfully: that it resolved each landmark's ``grid_pos`` to
+    the right helix, evaluated the right measure, and applied the confidence gate the
+    same way a hand call does.  Asserts, per constraint (spec order):
+
+    * same ``status`` (``met`` / ``unmet`` / ``inconclusive``) and ``met`` flag;
+    * same ``measured_nm`` (within ``measured_tol``; ``None`` only matches ``None``).
+
+    A **non-vacuity guard** requires at least one verdict (a spec with an empty
+    ``constraints`` block reports nothing and would pass vacuously).  Goes red when the
+    grammar drops a constraint (count mismatch), resolves a landmark to the wrong helix
+    (measured diverges), or reports a different status.  Returns the spec verdict list.
+    """
+    assert isinstance(spec_result, dict) and "verdicts" in spec_result, (
+        f"assert_spec_constraints_reported expects a build_and_check_design result "
+        f"dict, got {spec_result!r}")
+    spec_verdicts = spec_result["verdicts"]
+    assert spec_verdicts, (
+        "the spec reported no constraint verdicts — this oracle would pass vacuously; "
+        "use a spec that actually carries a 'constraints' block")
+    assert len(spec_verdicts) == len(hand_verdicts), (
+        f"constraint count mismatch: the spec reported {len(spec_verdicts)} verdict(s) "
+        f"but the hand build reported {len(hand_verdicts)} — a constraint was dropped "
+        "or duplicated in the lowering")
+    for i, (sv, hv) in enumerate(zip(spec_verdicts, hand_verdicts)):
+        assert sv["status"] == hv["status"], (
+            f"constraint {i}: spec status {sv['status']!r} != hand status "
+            f"{hv['status']!r} — the grammar reported a different verdict")
+        assert sv["met"] == hv["met"], (
+            f"constraint {i}: spec met={sv['met']} != hand met={hv['met']}")
+        sm, hm = sv["measured_nm"], hv["measured_nm"]
+        if sm is None or hm is None:
+            assert sm == hm, (
+                f"constraint {i}: spec measured {sm!r} != hand measured {hm!r}")
+        else:
+            assert abs(sm - hm) <= measured_tol, (
+                f"constraint {i}: spec measured {sm:.4f} != hand measured {hm:.4f} "
+                f"(off by {abs(sm - hm):.4g}) — a landmark resolved to the wrong helix "
+                "or the wrong measure ran")
+    return spec_verdicts
+
+
 _MUTATION_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 

@@ -1545,3 +1545,53 @@ def test_fully_sequenced_oracle_fires_on_wrong_complement():
         broken = sequenced.model_copy(update={"strands": patched})
         with pytest.raises(AssertionError, match="WC complement"):
             assert_fully_sequenced(broken)
+
+
+# ── assert_spec_constraints_reported (AF-13 P3 → grammar) ──────────────────────
+# Pure oracle tests: the verdict dicts are fabricated (the shape check_relaxed_constraint
+# returns), so these pin the comparison logic without an oxDNA run.
+
+def _verdict(status="met", met=True, measured=4.2):
+    return {"met": met, "status": status, "measured_nm": measured, "target_nm": 4.0,
+            "tol_nm": 1.0, "n_frames": 60, "min_confidence": 50, "confidence": {}}
+
+
+def test_spec_constraints_reported_passes_on_matching_verdicts():
+    from tests.automation_harness import assert_spec_constraints_reported
+    spec_result = {"design": object(), "verdicts": [_verdict(), _verdict("unmet", False, 9.0)]}
+    hand = [_verdict(), _verdict("unmet", False, 9.0)]
+    assert assert_spec_constraints_reported(spec_result, hand) == spec_result["verdicts"]
+
+
+def test_spec_constraints_reported_fires_on_status_mismatch():
+    """Red-test: the grammar reporting a different status than the hand check raises
+    (e.g. a landmark resolved to the wrong helix flipping met→unmet)."""
+    from tests.automation_harness import assert_spec_constraints_reported
+    spec_result = {"verdicts": [_verdict("met", True, 4.2)]}
+    with pytest.raises(AssertionError, match="different verdict"):
+        assert_spec_constraints_reported(spec_result, [_verdict("unmet", False, 9.0)])
+
+
+def test_spec_constraints_reported_fires_on_measured_divergence():
+    """Red-test: same status but a divergent measured value (a landmark resolved to
+    the wrong helix) raises."""
+    from tests.automation_harness import assert_spec_constraints_reported
+    spec_result = {"verdicts": [_verdict("met", True, 4.2)]}
+    with pytest.raises(AssertionError, match="wrong helix"):
+        assert_spec_constraints_reported(spec_result, [_verdict("met", True, 6.8)])
+
+
+def test_spec_constraints_reported_fires_on_count_mismatch():
+    """Red-test: a dropped constraint (fewer verdicts than the hand build) raises."""
+    from tests.automation_harness import assert_spec_constraints_reported
+    spec_result = {"verdicts": [_verdict()]}
+    with pytest.raises(AssertionError, match="count mismatch"):
+        assert_spec_constraints_reported(spec_result, [_verdict(), _verdict()])
+
+
+def test_spec_constraints_reported_vacuity_guard():
+    """Red-test: an empty verdict list (a spec with no constraints block) would pass
+    vacuously — the non-vacuity guard fires instead."""
+    from tests.automation_harness import assert_spec_constraints_reported
+    with pytest.raises(AssertionError, match="no constraint verdicts"):
+        assert_spec_constraints_reported({"verdicts": []}, [])

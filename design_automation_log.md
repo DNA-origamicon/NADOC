@@ -75,6 +75,7 @@ Pulled from the 2026-06-16 audit; each is a *proven* pattern already green in th
 | `parse_constraint_spec` + `check_relaxed_constraint` (AF-13 P3) | a declarative relaxed-structure constraint `{measure, landmarks, target_nm, tol_nm, min_confidence}` is validated at parse time (PURE, raises `ConstraintSpecError` before any run) and then *REPORTED* against a `read_flexibility_map` mean-structure dict → `{met, status∈{met,unmet,inconclusive}, measured_nm, n_frames, …}`. The REPORTER counterpart to P2's *asserter* (returns a verdict a closed loop branches on, doesn't raise); **load-bearing invariant: `met` is NEVER True below `min_confidence`** even when the value is within tolerance (the confidence gate, now a returned status). Reuses `measure_end_to_end`; `backend/core`-pure (takes the read dict, never imports the api read-wrapper). Can-go-red on a malformed spec, a tolerance-bracket flip, or a within-tol low-frame run reporting met | `backend/core/oxdna_health.py` (`parse_constraint_spec`/`check_relaxed_constraint`/`ConstraintSpecError`) | the AF-11 grammar's design `constraints` block; AF-13 P4 iterate-until-met (branch on `status`); any future `measure_*` constraint kind (R_g/spacing/angle — add to `_CONSTRAINT_MEASURES` + the dispatch) |
 | `assert_relax_honors_hardware_default` (AF-17) | a benchmarked hardware default *reaches the simulation*: a headless relaxation tuned from `metadata.hardware_defaults` runs on the recommended `backend`/`device` (read off `OxdnaJob.backend`/`.device`), with a CPU/"0" fallback when nothing was benchmarked. Baseline-fallback + tuned-honoured + non-vacuity (requested ≠ CPU fallback) structure; GPU-free (mock binary ignores the declared backend). The bridge that connects the auto-tuner's output to an actual run — nothing else proves the stored config is consumed (the apply route only wrote metadata the frontend pre-fills). Can-go-red on a bridge that hard-codes CPU, or a vacuous CPU/0 request | `tests/automation_harness.py` (`assert_relax_honors_hardware_default`); `backend/core/benchmark.py` (`resolve_oxdna_relax_config`); `backend/api/headless_oxdna_build.py` (`run_oxdna_benchmark`/`apply_oxdna_benchmark`/`run_relaxation_tuned`) | AF-13 P4 iterate-until-met (relax each iteration on the fastest discovered backend via `run_relaxation_tuned`); any "stored config → run parameter" bridge (a NAMD `run_relaxation_tuned` analog, future per-machine sim defaults) |
 | `iterate_to_constraint` + `assert_converges_to_constraint` (AF-13 P4) | **the Tier-5 capstone**: a CLOSED build→relax→production→measure→adjust loop *converges* a parametric **topology** knob to a relaxed-structure target — and does so HONESTLY (every `met` verdict was confidence-gated). The driver branches on the P3 verdict **status** (`met`/`unmet`/`inconclusive`), never the raw `measured_nm`: `unmet`→`adjust_fn` picks the next knob, `inconclusive`→append MORE production to the same job (pooling frames) until the gate clears. The oracle asserts convergence + the confidence gate held on EVERY step (not just the last) + final-within-tol + **non-vacuity** (first attempt off-target). Three-Layer-clean (knob edits topology; relaxed coords read, never written back). Can-go-red on an exhausted run (unreachable target) or a vacuous attempt-0 win | `tests/automation_harness.py` (`assert_converges_to_constraint`); `backend/api/headless_oxdna_build.py` (`iterate_to_constraint`/`_pool_until_conclusive`) | constraint-driven design (the AF-11 `constraints` block lowered to the loop); any closed search over a topology knob with a stochastic, confidence-gated oracle (more `measure_*` kinds, multi-knob search) |
+| `assert_spec_constraints_reported` (AF-13 P5 — grammar `constraints` block) | a design spec's declarative `constraints` block is lowered to the SAME per-constraint `check_relaxed_constraint` verdict (status + `met` + `measured_nm`) a hand-driven call yields — the load-bearing pin where `assert_spec_matches_calls` is BLIND (the canonical-topology fingerprint cannot see whether a physical-layer constraint was attached, its grid_pos landmark resolved to the right helix, or reported at all). Non-vacuity + count-mismatch guards; the driver resolves each landmark's `grid_pos`→runtime id, relaxes ONCE, then reports every constraint. Can-go-red on a wrong-helix resolution (measured diverges), a dropped constraint (count), a flipped status, or an empty block (vacuity) | `tests/automation_harness.py` (`assert_spec_constraints_reported`); `backend/core/build_spec.py` (`constraints` grammar); `backend/api/headless_spec_build.py` (`build_and_check_design`/`check_design_constraints`) | any declarative→physical-layer lowering whose effect the structure fingerprint can't see (the iterate-loop knob clause next; future `measure_*` constraint kinds get the grammar path for free) |
 
 ---
 
@@ -1227,6 +1228,40 @@ a wrong target. The design note that the infinite-line distance is fragile near-
 the perpendicular-to-mean-axis projection) is itself banked validation knowledge. No ASK-FIRST: a length magnitude with
 sign-aligned axes — zero handedness/frame reasoning.**"
 
+**AF-13 P5 — design `constraints` block wired into the AF-11 grammar (attach + report, no knob)** · _shape:_
+**grammar growth + composition driver** — the pure parser `backend/core/build_spec.py` gains an optional top-level
+`constraints` list on a design spec (`DesignSpec.constraints`; each constraint a `{measure, landmarks, target_nm,
+tol_nm, min_confidence}` whose landmarks name a helix by **grid_pos** `{helix:[r,c], bp_index, direction}`), validated
+at parse time by handing the cell-normalised constraint to the AF-13 P3 `parse_constraint_spec` (so a malformed
+constraint fails BEFORE any build/relax) + 2 driver fns in `backend/api/headless_spec_build.py`
+(`build_and_check_design(spec, ws, *, steps, tuned, **relax_params) → {design, verdicts}` and the lower-level
+`check_design_constraints` — resolve each landmark's grid_pos → runtime id up front (fail-fast), relax ONCE +
+production, then `check_relaxed_constraint` per constraint; drives the already-covered `hox.run_relaxation`/
+`append_production`/`read_flexibility_map`, re-implements nothing) + 1 reusable oracle
+`assert_spec_constraints_reported` in `tests/automation_harness.py`; `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** ·
+_oxDNA-coverage Δ:_ **UNCHANGED, 36** (wraps no new route — composition sugar over covered wrappers + a pure-core
+reporter, like AF-10/AF-11/P4; `test_spec_build_adds_no_coverage` still asserts 36) · _oracle shipped:_
+`assert_spec_constraints_reported(spec_result, hand_verdicts, *, measured_tol=1e-6)` — asserts the grammar's
+`constraints` path reports the SAME per-constraint verdict (status + `met` + `measured_nm` within tol; `None` only
+matches `None`) a hand-driven `check_relaxed_constraint` does, with a non-vacuity guard (≥1 verdict) + count-mismatch
+guard. **It is load-bearing because `assert_spec_matches_calls` is BLIND to a physical-layer verdict** — the
+canonical-topology fingerprint cannot see whether a constraint was attached, its landmark resolved to the right helix,
+or it was reported at all; only verdict-equality proves the lowering is faithful · _tests:_ 2 grammar-normalisation +
+7 grammar rejections (unknown measure, wrong landmark arity, landmarks-on-`radius_of_gyration`, non-positive tol,
+landmark missing a field, typo'd field, constraints-not-a-list) in `test_build_spec.py` + 4 driver tests in
+`test_headless_spec_build.py` (no-constraints → empty verdicts + no oxDNA run; `radius_of_gyration` reports == hand;
+`end_to_end` grid_pos landmarks RESOLVE + report == hand; unknown grid_pos fails fast before any relaxation) + 5
+oracle tests in `test_automation_harness.py` (passes on matching verdicts + **four load-bearing red-tests**: status
+mismatch, measured divergence (wrong-helix), count mismatch, empty-list vacuity); full suite **2920 passed / 55
+skipped**, no drop · **"Validation gained, not just a passthrough:** before this the AF-13 P3 `check_relaxed_constraint`
+reporter existed but was un-wired — a design spec could not carry a relaxed-structure constraint, so nothing proved a
+*declarative* constraint is lowered to the same verdict a hand call yields. `assert_spec_constraints_reported` closes
+that: it proves the grammar resolves each grid_pos landmark to the correct runtime helix, runs the right measure, and
+applies the confidence gate identically to a hand-driven check — the exact guarantee text-to-DNA's constraint clauses
+rest on, and the property `assert_spec_matches_calls` is structurally blind to. All four `measure_*` kinds get the
+grammar path for free (the parser dispatches on the measure name). The four red-tests prove the green can go red. No
+ASK-FIRST: grid_pos→id resolution is a lookup, the measures are magnitudes — zero frame/sign reasoning.**"
+
 ---
 
 ## Lessons (anti-patterns banked — read before building)
@@ -1641,3 +1676,23 @@ _(none yet — first session. Candidates the audit already suggests:)_
 ## Difficulties ledger (genuinely-stuck items + why)
 
 _(none yet.)_
+
+---
+
+## Ledger audit log
+
+**2026-06-21 — validity + goal-alignment sweep (no code touched, ledger-only).** Re-checked every backlog item
+against its REST route / harness fn and against the two stated goals (automated validation testing;
+eventual text-to-design). **Verified live (route/fn exists):** `routes_primitives.py` (GET-only — confirms
+AF-12's "no placement route" premise is still true), `periodic_polymer.py` (AF-9 straggler), `routes_cluster_joints.add_joint`
++ `routes_clusters.add_cluster/update_cluster` (AF-14/AF-15), `cluster_obb.recommend_hinge_joints`,
+`headless_oxdna_build.{run_relaxation_tuned,iterate_to_constraint}`, `headless_spec_build.build_and_check_design`
+(has constraints attach+report; **no knob clause** → AF-13 P5 knob genuinely open). **Conclusions:** (1) nothing in
+the backlog is dead or off-goal — every open item maps to a live route/fn and to a goal; (2) stale parent
+checkboxes corrected in the backlog (AF-14/AF-15/AF-PHOTO → `[x]`; AF-9 → `[x]` with the `polymerize_periodic`
+straggler still open); (3) ~5 superseded `▶ NEXT`/capstone handoff pointers (directing the next session to
+already-shipped AF-13 P4 / AF-16 / 4-bar capstone / AF-14 P2) pruned — durable `▶ HARNESS NOW AVAILABLE` blocks
+kept. **Open, validated work, priority order:** AF-13 P5 knob clause (constraint-driven text-to-design bridge) >
+AF-12 primitives-in-build-spec > `polymerize_periodic` > assembly-level `constraints` + `bind_overhangs` (both
+correctly deferred — blocked on an assembly headless-oxDNA path / overhang-binding firming). See the backlog's
+`## Next-session handoff` audit banner for the full finding.

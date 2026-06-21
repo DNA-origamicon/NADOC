@@ -139,37 +139,69 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 8). **`inter_helix_spacing` MEASURE KIND SHIPPED 2026-06-19**
-(the FIRST axis-grouping measure — closes the last of the four planned `measure_*` kinds): `from
-backend.core.oxdna_health import measure_inter_helix_spacing` — `measure_inter_helix_spacing(positions, a, b)` returns
-the radial centre-to-centre **nm** gap between the axes of the two helices NAMED by landmarks `a`/`b` (each landmark
-only identifies a helix via its `helix_id`; bp_index/direction are otherwise unused). It groups ALL of each named
-helix's backbone sites, fits an axis via `_fit_helix_axis` (centroid + PCA principal direction), aligns the two PCA
-directions (`d_a·d_b<0`→flip d_b), and returns the centroid separation projected **perpendicular to the mean axis**.
-KEY DESIGN DECISION (banked): do NOT use the minimal infinite-line distance — for near-parallel helices with a slight
-relative tilt the infinite axes nearly intersect far away → distance collapses to ~0 (verified empirically: a real
-bundle's adjacent pair read 0.07 nm via line-line vs the true 2.25 nm); the perpendicular-to-mean-axis projection is
-exact for parallel helices and robust to relaxed-bundle tilt. Wired in identically to segment_angle:
-`_CONSTRAINT_MEASURES` + `_MEASURE_LANDMARK_COUNT["inter_helix_spacing"]=2` (reuses the 2-landmark arity) +
-`_dispatch_measure` arm + `assert_relaxed_measurement` branch (**unit stays nm — no degrees wart**). Load-bearing
-augment `test_inter_helix_spacing_captures_separation`: a straight 3-in-a-row SQUARE bundle (`[[0,0],[0,1],[0,2]]`,
-2.25 nm pitch) reads equal adjacent gaps and a skip-one gap ~2× — tracks real separation, not a constant. GOTCHA: the
-SQUARE-row fixture gives a clean linear 2.25/4.5/2.25 nm profile (HONEYCOMB does NOT — adjacent 2.245, skip-one 3.90,
-not 2×); use SQUARE for the linear-row augment. Suite **2755 passed / 55 skipped**. ↓ The AF-13 P4 capstone summary
-follows. ↓_
+> **■ LEDGER AUDIT 2026-06-21 (validity + goal-alignment sweep).** Every backlog item was re-checked against
+> its REST route / harness fn (all exist — see the probes in `design_automation_log.md`) and against the two
+> stated goals (automated validation testing; eventual text-to-design). **Findings:**
+> 1. **No item is dead or off-goal.** Every open item still maps to a live route/function AND to a goal.
+>    `routes_primitives.py` confirms AF-12's premise (GET-only catalog, no placement route → the gap is real);
+>    `periodic_polymer.py` backs the AF-9 straggler; `headless_spec_build.py` has constraints attach+report but
+>    NO knob clause yet (AF-13 P5 knob = genuinely open).
+> 2. **Stale checkboxes fixed:** AF-14, AF-15, AF-PHOTO were fully shipped but left `[ ]` → now `[x]`. AF-9 has
+>    all four sub-ops shipped; only the `polymerize_periodic` straggler is open.
+> 3. **Handoff pruned:** ~5 superseded `▶ NEXT`/capstone pointers that directed the next session to
+>    ALREADY-SHIPPED work (AF-13 P4, AF-16, the 4-bar capstone, AF-14 P2) were removed — they contradicted the
+>    shipped state. The `▶ HARNESS NOW AVAILABLE` do-not-rebuild reference blocks (with banked gotchas) were KEPT.
+> 4. **Genuinely-open, validated work, priority order:** (a) **AF-13 P5 KNOB clause** — lower a constraint+knob
+>    spec to `iterate_to_constraint`; the constraint-driven text-to-design bridge, highest goal value. (b) **AF-12
+>    primitives in the build-spec** (`from_primitive`/`from_file`) — reference saved validated parts by name; the
+>    other text-to-design rung. (c) **`polymerize_periodic`** straggler (niche). (d) Assembly-level `constraints`
+>    + the `bind_overhangs` spec op — both correctly DEFERRED (no assembly headless-oxDNA path; overhang-binding
+>    not yet firmed). Nothing below needs deleting; the loop is healthy and converging on the two goals.
 
-_**AF-13 PHASE 4 — THE ITERATE-UNTIL-MET CAPSTONE SHIPPED
-2026-06-19.** The whole Tier-5 spine is now closed: `hox.iterate_to_constraint(build_fn, adjust_fn, constraint, ws,
-*, initial_knob, max_iterations=8, production_steps=6000, max_production_rounds=8, tuned=False, **relax_params)` runs
-the closed build→relax→production→measure→adjust loop and returns `{status: "met"|"exhausted", knob, job,
-iterations:[{knob, verdict, job_id, production_rounds}], verdict}`. It branches on the P3 verdict **status** (NEVER
-the raw `measured_nm`): `met`→return; `unmet`→`adjust_fn(knob, verdict)` picks the next knob + rebuild;
-`inconclusive`→`_pool_until_conclusive` appends MORE production to the SAME job (the rmsf route pools every
-production stage → frames accumulate) until the confidence gate clears or `max_production_rounds` runs out (then it
-stops — it must not steer the knob on an uncertain verdict). `tuned=True` relaxes via `run_relaxation_tuned` (AF-17).
-Oracle `assert_converges_to_constraint(result, *, target_nm, tol_nm, min_confidence)` proves convergence + that the
-confidence gate held on EVERY `met` verdict + non-vacuity (first attempt off-target). Composition-sugar: wraps no new
-route → oxDNA coverage flat; god-files (crud/assembly/main.js) Δ=0. Full suite **2732 passed / 55 skipped**, no drop._
+_Living pointer — each session overwrites this (step 8). **AF-13 P5 — the design `constraints` block is now WIRED
+INTO THE AF-11 GRAMMAR (attach + report, no knob) — SHIPPED 2026-06-21.** A design spec may carry an optional
+top-level `constraints` list; each is an AF-13 P3 `{measure, landmarks, target_nm, tol_nm, min_confidence}` whose
+landmarks name a helix by **grid_pos** (`{helix:[r,c], bp_index, direction}`). The pure parser
+`backend/core/build_spec.py` validates it at parse time (hands the cell-normalised constraint to
+`parse_constraint_spec`, so a malformed constraint raises `BuildSpecError` BEFORE any build/relax), and the driver
+`backend.api.headless_spec_build.build_and_check_design(spec, ws, *, steps=6000, tuned=False, **relax_params) →
+{design, verdicts}` lowers it: resolve each landmark's grid_pos→runtime id (fail-fast), relax ONCE + production, then
+`check_relaxed_constraint` per constraint. **All four `measure_*` kinds get the grammar path for free** (the reporter
+dispatches on the measure name). DECISION banked: started with **attach + report (no knob)** as recommended; the
+knob-driven `iterate_to_constraint` clause is the deferred next step. Coverage flat (36, composition sugar);
+god-files Δ=0. Suite **2920 passed / 55 skipped**._
+
+**▶ HARNESS NOW AVAILABLE (AF-13 P5, use it — do NOT rebuild):**
+- `from backend.api import headless_spec_build as hs` → `hs.build_and_check_design(spec, workspace, *, steps=6000,
+  tuned=False, **relax_params) → {"design": Design, "verdicts": [verdict,…]}`. Spec must build a FULLY-SEQUENCED
+  design for the relaxation (e.g. `bundle → auto_scaffold → full_autostaple`; verified 0 undefined bases). With NO
+  `constraints` block → `verdicts == []` and **no oxDNA run** (workspace untouched). `tuned=True` relaxes on the
+  benchmarked hardware default (AF-17). Lower-level: `hs.check_design_constraints(design, parsed.constraints, ws, …)`.
+- `from tests.automation_harness import assert_spec_constraints_reported` — `(spec_result, hand_verdicts, *,
+  measured_tol=1e-6)`: asserts the grammar reports the SAME per-constraint verdict (status + `met` + `measured_nm`) a
+  hand-driven `check_relaxed_constraint` yields, with non-vacuity + count-mismatch guards. **Load-bearing because
+  `assert_spec_matches_calls` is BLIND to a physical-layer verdict** (the fingerprint can't see a constraint at all).
+  Can-go-red: status mismatch, measured divergence (wrong-helix resolution), count mismatch, empty-list vacuity.
+- **GOTCHAS banked:** (1) a constraint landmark is `{helix:[r,c], bp_index, direction}` (grid_pos, like nick/ligate),
+  NOT a runtime id — the driver resolves it; `radius_of_gyration` takes NO landmarks. (2) The cell is normalised to a
+  `(r,c)` TUPLE before handing to `parse_constraint_spec` so the `(hid,bp,dir)` triple stays hashable (it dedups
+  landmarks with `set()` — a raw `[r,c]` list would `TypeError`). (3) The mock relaxation is identity, so the relaxed
+  mean reproduces the DESIGN geometry → the spec and hand verdicts are deterministic + equal; use wide `tol` to get a
+  clean `met` for the augment. (4) Reuse `_MOCK_OXDNA_TRAJ` (multi-frame; `steps=6000`→60 frames clears the
+  confidence gate); import the CONSTANT not the fixture (F811).
+
+**▶ NEXT — pick one (the design `constraints` block is wired; remaining grammar work + stragglers):**
+- **The KNOB clause (recommended next):** extend the grammar to lower a constraint + a parametric *knob spec* to the
+  closed `hox.iterate_to_constraint` loop (not just `check_relaxed_constraint`). Needs a spec shape for the knob (a
+  bend curvature / loop_skip count / length to vary) + an `adjust_fn` the grammar synthesises from the knob→measure
+  relation. Augment: a spec converges to the target (reuse `assert_converges_to_constraint`) GPU-free on the identity
+  mock via a TOPOLOGY knob (the bend fixture `_build_bent_bundle`/`_bisect_kappa`). **ASK-FIRST** only if a knob's
+  sign/sense is ambiguous (the magnitude convergence itself is direction-agnostic).
+- **Assembly `constraints`** — `build_and_check_design` is design-only; an assembly spec's parts could carry
+  constraints (parsed today, IGNORED by the assembly driver). Wire an assembly-level relaxed constraint if/when an
+  assembly headless oxDNA path exists (none yet).
+- **Stragglers (unchanged):** `polymerize_periodic` (single-part `is_periodic_seam` + `derive_periodic_delta` Kabsch
+  oracle — needs a periodic-seam fixture); `bind_overhangs` ASSEMBLY spec op (DEFERRED pending overhang-binding firming).
 
 **▶ HARNESS NOW AVAILABLE (AF-13 P4, use it — do NOT rebuild):**
 - `from backend.api import headless_oxdna_build as hox` → `hox.iterate_to_constraint(...)`. `build_fn(knob)→Design`
@@ -196,16 +228,9 @@ route → oxDNA coverage flat; god-files (crud/assembly/main.js) Δ=0. Full suit
   direction-AGNOSTIC end-to-end — curvature is a magnitude, end-to-end is Euclidean, the bend wrapper is AF-6's cleared
   machinery; zero frame/sign reasoning entered the driver or the fixture.
 
-**▶ NEXT — pick one (the Tier-5 oxDNA spine is COMPLETE; all four planned `measure_*` kinds — `end_to_end`,
-`radius_of_gyration`, `segment_angle`, `inter_helix_spacing` — DONE; remaining work is grammar wiring + stragglers):**
-- **Wire `check_relaxed_constraint` into the AF-11 grammar** (the recommended next — the LAST un-wired P3 gotcha #4).
-  `build_spec.py` gets a design `constraints` block (a list of constraint specs) → `headless_spec_build.py` lowers it
-  to `hox.iterate_to_constraint` (or just `check_relaxed_constraint` for a pass/fail gate without a knob). **All four
-  measure kinds get the grammar path for free** the moment the block parses. Validation augment: a spec with a
-  `constraints` block builds + reports the same verdict as a hand-built `check_relaxed_constraint` call
-  (`assert_spec_matches_calls` is BLIND to a physical-layer verdict, so the load-bearing pin is a direct
-  verdict-equality, not the fingerprint). DECIDE FIRST: does the grammar just *attach + report* constraints, or does
-  it *drive* the iterate loop (needs a knob spec)? Probably start with attach+report (no knob), defer the knob.
+**▶ REFERENCE (the Tier-5 oxDNA spine is COMPLETE; all four planned `measure_*` kinds — `end_to_end`,
+`radius_of_gyration`, `segment_angle`, `inter_helix_spacing` — DONE; the design `constraints` block is now WIRED, AF-13
+P5 above — the live ▶ NEXT is the top-of-file handoff):**
 - **Adding any further `measure_*` is now fully templated.** Point-landmark measure = name + arity +
   `_dispatch_measure` arm + `assert_relaxed_measurement` branch + analytic pins (reuse segment_angle as template).
   An axis/helix-grouping measure = same tail + a `_fit_helix_axis`-style grouping core (reuse inter_helix_spacing).
@@ -252,8 +277,8 @@ route → oxDNA coverage flat; god-files (crud/assembly/main.js) Δ=0. Full suit
   boundary is inclusive (`<=`); float-exact test values (target 4.5/tol 0.5 on a 5.0 nm measurement) avoid the
   `4.6 → 0.40000…036 > 0.4` trap. (3) adding the next `measure_*` kind = add a `measure_*` fn next to
   `measure_end_to_end`, add the name to `_CONSTRAINT_MEASURES`, and add a dispatch arm in `check_relaxed_constraint`
-  (currently it calls `measure_end_to_end` directly since parse pins the only measure). (4) the checker is NOT
-  wired into `build_spec.py` yet — P4 (or a small grammar-growth pass) lowers a design `constraints` block to it.
+  (currently it calls `measure_end_to_end` directly since parse pins the only measure). (4) the checker is now
+  wired into `build_spec.py` by AF-13 P5 — a design `constraints` block lowers to `hs.build_and_check_design`.
 
 **▶ HARNESS NOW AVAILABLE (full-sequencing feature, use it — do NOT rebuild):**
 - `from backend.api import headless_build as hb` → `hb.full_sequence(scaffold_name="M13mp18", *, custom_sequence=,
@@ -317,22 +342,8 @@ route → oxDNA coverage flat; god-files (crud/assembly/main.js) Δ=0. Full suit
   a real GPU run moves atoms so the target would be the user's desired distance. (4) `get_oxdna_rmsf` is a GET →
   pinned by `hox._route_get_rmsf is routes_oxdna.get_oxdna_rmsf`, NOT the mutation-coverage count.
 
-**▶ NEXT — AF-13 Phase 4 (the capstone): iterate-until-met loop.** All the pieces now exist — compose them:
-given a PARAMETRIC design knob (a bend curvature via `hb.add_bend`, a loop/skip count, a length) + a constraint
-spec, loop: build design → relax + production (`hox.run_relaxation` + `append_production`) →
-`hox.read_flexibility_map` → `check_relaxed_constraint` → branch on `status` (NEVER on `measured_nm` alone — the
-P3 gotcha) → if `unmet`, adjust the knob and re-relax; if `inconclusive`, run a longer production; stop at `met`
-or budget exhausted. **Three-Layer Law (ASK-FIRST if any doubt):** vary TOPOLOGY (the knob edits `Design`),
-re-derive geometry, relax physics, READ the relaxed measurement — never write relaxed coords back. **Augment:**
-on the identity mock the measurement can't move, so a real convergence demo needs either a knob that changes the
-*design* end-to-end (a length/bend the geometry kernel reflects, measured pre-relax) or a stub relaxer that
-perturbs toward the target; the oracle is "the loop reaches `met` in ≤N iterations AND each step's verdict came
-from `check_relaxed_constraint` (confidence-gated)". Likely a NEW `headless_oxdna_build` loop driver +
-`assert_converges_to_constraint` harness oracle. Heavier than P3; its own session.
-
-**▶ Stragglers (unchanged):** `polymerize_periodic` (single-part `is_periodic_seam` + `derive_periodic_delta`
-Kabsch oracle — needs a periodic-seam fixture); `bind_overhangs` ASSEMBLY spec op (DEFERRED pending
-overhang-binding firming — do NOT build yet).
+_[AUDIT 2026-06-21: removed the superseded "▶ NEXT — AF-13 Phase 4" pointer here — P4 SHIPPED 2026-06-19. The
+live open work is the top-of-file handoff (P5 knob clause + stragglers).]_
 
 **▶ HARNESS NOW AVAILABLE (AF-16, use it — do NOT rebuild):**
 - `from backend.api import headless_build as hb` → `hb.add_cluster(name, helix_ids, *, domain_ids=(), log=False)`.
@@ -375,11 +386,7 @@ overhang-binding firming — do NOT build yet).
   cross-section edge would make the demo use the AF-14-P3 rule, but it's cosmetic (the linkage oracle is
   direction-agnostic).
 
-**▶ AF-16 — headless cluster creation + a loggable `cluster_create` feature-log entry.** `add_cluster` builds the
-cluster but emits NO feature-log entry (no `ClusterCreateLogEntry` type exists), so a design's construction
-history can't record "create the bars." Needs a NEW Pydantic model (in `models.py`, added to the
-`FeatureLogEntry` union) + route wiring + `hb.add_cluster(log=…)`. Heavier than AF-14 P3 (a real model + union
-change, not a pure selector). Closes the last gap in the generated 4-bar part's feature log. See the AF-16 entry.
+_[AUDIT 2026-06-21: removed the superseded "▶ AF-16" NEXT pointer here — AF-16 SHIPPED 2026-06-18.]_
 
 **▶ AF-11 P2 design grammar DONE — the bulk-routing + apply_loop_skips ops are built + validated.** 4 new design
 ops in `build_spec.py` (`auto_scaffold {op,seamless}` / `auto_crossover {op}` / `full_autostaple
@@ -393,15 +400,8 @@ load-bearing pin is the AF-3 per-helix `geometric_nucleotide_count` conservation
 `full_autostaple` build (which breaks+merges into a valid design). `apply_loop_skips` needs SQUARE + crossovers
 (`auto_crossover` provides them); a bare-bundle `apply_loop_skips` 400s (pinned by a red-test).
 
-**▶ NEXT — pick one (validation-first; Tier-2 cluster arc + AF-11 P2 grammar + AF-13 P1/P2/P3 oxDNA are done):**
-- **AF-13 Phase 4 — iterate-until-met loop (the capstone)** — the recommended next item (top-of-file NEXT).
-  Composes `check_relaxed_constraint` (P3, branch on `status`) + `run_relaxation`/`append_production`/
-  `read_flexibility_map` (P1/P2) + a parametric topology knob (`hb.add_bend`/loop_skip/length) into a closed
-  build→relax→measure→adjust loop. Three-Layer Law: vary topology, read physics, never write relaxed coords back
-  (ASK-FIRST if any frame/sign doubt). Its own session.
-- **Stragglers:** `polymerize_periodic` (single-part `is_periodic_seam` + `derive_periodic_delta` Kabsch oracle —
-  needs a periodic-seam fixture built via route-for-polymerization); `bind_overhangs` ASSEMBLY spec op (DEFERRED
-  pending overhang-binding system firming — see below, do NOT build yet).
+_[AUDIT 2026-06-21: removed the superseded "▶ NEXT — pick one" pointer here (recommended AF-13 Phase 4, SHIPPED
+2026-06-19). Current open work = top-of-file handoff.]_
 
 **▶ HARNESS NOW AVAILABLE (AF-14 P2, use it — do NOT rebuild):**
 - `from backend.core.cluster_obb import obb_sweep_rom, cluster_range_of_motion, rank_joint_candidates`.
@@ -421,15 +421,8 @@ load-bearing pin is the AF-3 per-helix `geometric_nucleotide_count` conservation
   contact-sensitive hinge is the edge **nearest** the neighbour (`_near_w_edge` in the test): one swing sense
   drives A's bulk straight into B, ROM grows monotonically with the gap (≈156°→275° over gaps 1–4 nm).
 
-**▶ NEXT — THE CAPSTONE (its own session): the headless 4-bar parallelogram, the first headless kinematic
-mechanism.** All pieces now exist — compose them: extrude 4 rectangular bars (`hb.create_bundle`/`hb.extrude`)
-→ `hb.add_cluster` each → `hb.align_cluster_edge` (AF-15 P2) into a parallelogram → 4 revolute joints via
-`hb.place_cluster_joint` (AF-14 P1, edge mode at the corners) → assert it's a working 1-DOF mechanism via
-`cluster_range_of_motion`/`assert_range_of_motion` (AF-14 P2) at each hinge. **ASK-FIRST** the same body/sense
-question per joint if any swing convention is ambiguous, but the ROM magnitude check itself is direction-agnostic.
-Mind the GOTCHA above: bars must be rectangular (square footprint → `cluster_obb` raises) and hinge geometry must
-keep the swing reach in range. This is the AF-12 linkage-mobility (Grübler) demo the per-joint geometry was built
-toward — the validation is "the assembled mechanism has the expected DOF / each joint's ROM is finite-and-nonzero."
+_[AUDIT 2026-06-21: removed the superseded "▶ NEXT — THE CAPSTONE 4-bar parallelogram" pointer — SHIPPED
+2026-06-17 (`tests/test_parallelogram_linkage.py`, AF-15 P2 sub-item).]_
 
 **▶ HARNESS (AF-14 P1, use it — do NOT rebuild):**
 - `from backend.api import headless_build as hb` → `hb.place_cluster_joint(cluster_id, *, edge=(axis,s1,s2) |
@@ -446,21 +439,8 @@ toward — the validation is "the assembled mechanism has the expected DOF / eac
   round-trip test proves this), recomputes the OBB, asserts collinear-with-edge / through-corner.
   Direction-AGNOSTIC. Can-go-red on a different edge/corner.
 
-**▶ NEXT — AF-14 Phase 2: `cluster_range_of_motion` + `rank_joint_candidates` (the geometry-aware selector).**
-`cluster_range_of_motion(design, cluster_id, axis, *, obstacles=all_other_clusters) → ROM_deg` via **swept OBB–OBB
-SAT bisection** in `cluster_obb.py` (the swept-OBB intersection is the ONE genuinely new geometry to build — the
-OBB enumerator + `hull_prism_axis` already exist). `rank_joint_candidates(design, cluster_id, *, target_rom_deg=…)`
-enumerates `OBB.edges()`/corners and ranks by ROM. **Oracle:** `assert_range_of_motion(design, cluster_id, axis,
-expected_deg, *, tol_deg)` — on a fixture with a known obstacle at a known offset the swing-to-contact matches the
-analytic angle, with TWO can-go-red guards (no-obstacle → full angular limit; obstacle moved into the path strictly
-reduces it). Magnitude → direction-AGNOSTIC. **ASK-FIRST before building** (per CLAUDE.md): which cluster is the
-moving body vs. the static frame, and the swing *sense* (which limit is +/−) — a directionality decision, don't
-guess. The ROM magnitude is direction-agnostic; the body/sense choice is not.
-
-**▶ THEN the capstone** (its own session, after Phase 2): build the **4-bar parallelogram** headlessly — extrude 4
-bars → `hb.add_cluster` each → `hb.align_cluster_edge` into a parallelogram (already works) → 4 revolute joints via
-`hb.place_cluster_joint` (now available) → assert 1-DOF ROM via `cluster_range_of_motion`. First headless kinematic
-mechanism.
+_[AUDIT 2026-06-21: removed the superseded "▶ NEXT — AF-14 Phase 2" and "▶ THEN the capstone" pointers — AF-14 P2
+SHIPPED 2026-06-17 and the 4-bar capstone SHIPPED 2026-06-17.]_
 
 **▶ GOTCHAS BANKED from AF-14 Phase 1 (read before Phase 2):**
 - `cluster_obb` RAISES on a square footprint (ambiguous u/v, in-plane eigenvalue ratio < 1.10) and on < 2 helices —
@@ -754,7 +734,7 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
   un-deformed design). **Direction-AGNOSTIC** (magnitude only → no ASK-FIRST sign/frame reasoning needed;
   the signed-curvature oracle the backlog floated was *not* built, deliberately). Coverage 18→19.
 
-- [ ] **AF-14 — geometry-aware revolute-joint placement on hull-prism corners/edges** (route
+- [x] **AF-14 — geometry-aware revolute-joint placement on hull-prism corners/edges. ALL 3 PHASES SHIPPED (P1 2026-06-17, P2 2026-06-17, P3 2026-06-18 — see sub-items).** (route
   `POST /design/cluster/{cluster_id}/joint`, handler `add_joint` in `routes_cluster_joints.py`; currently
   gizmo-only — the user clicks a face on the cluster's hull-surface approximation, the frontend computes a
   world axis, the route converts it to the cluster's LOCAL frame). **No headless wrapper exists** → uncovered.
@@ -887,7 +867,7 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
   creates a cluster *without* logging leaves no entry. **This is what makes the generated 4-bar part's feature log
   truly complete** (today its cluster-creation step is unrepresentable).
 
-- [ ] **AF-15 — cluster rigid-transform wrapper + OBB-edge-alignment solver** (routes `POST /design/cluster`
+- [x] **AF-15 — cluster rigid-transform wrapper + OBB-edge-alignment solver. BOTH PHASES + 4-BAR CAPSTONE SHIPPED 2026-06-17 (see sub-items).** (routes `POST /design/cluster`
   = `add_cluster`, `PATCH /design/cluster/{cluster_id}` = `update_cluster` in `routes_clusters.py`; both
   uncovered). **Sequences BEFORE AF-14 Phase 2 and the linkage demo** — you arrange the rigid bars, *then*
   hinge them. This is the design-layer analog of the AF-8 assembly connector-mate, but driven by **OBB edges**
@@ -973,7 +953,7 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
   resolve uses) within tol, plus a non-triviality guard (mated part origins must be separated, else
   coincidence is vacuous). Also enriched `canonical_assembly`'s joint key with the mated parts' source
   fingerprints (id-independent). Coverage 23→25.
-- [ ] **AF-9 (Phase 3) — gears / belts / overhang-bindings / polymerize wrappers.** Multi-op; one sub-op
+- [x] **AF-9 (Phase 3) — gears / belts / overhang-bindings / polymerize wrappers. ALL 4 SUB-OPS SHIPPED 2026-06-17; only the `polymerize_periodic` straggler remains (sub-item below).** Multi-op; one sub-op
   per session. **Augment:** each resolve-invariant (gear ratio holds, belt tangent length, polymerized chain
   count + seam geometry via `derive_periodic_delta`).
   - [x] **gears — SHIPPED 2026-06-17.** `hab.define_gear(joint_a_id, joint_b_id, *, ratio, invert=…)`
@@ -1143,7 +1123,7 @@ readers `read_configuration_unwrapped` / `read_configuration_full` / `oxdna_back
   `min_confidence`, even when the value is within tolerance (the confidence gate, now a returned status). 20 pure
   tests (13 rejection cases + idempotency + tolerance bracket + the low-frame-never-met red-test) + 2 real-run
   integration tests (`_MOCK_OXDNA_TRAJ` → `read_flexibility_map` → checker). Coverage UNCHANGED (no route wrapped).
-  Slots into the AF-11 grammar as a design `constraints` block (not yet wired into `build_spec.py` — P4 will).
+  Wired into the AF-11 grammar as a design `constraints` block by AF-13 P5 (`build_and_check_design`).
 
 - [x] **AF-13 (Phase 4, capstone — the eventual goal) — iterate-until-met loop. SHIPPED 2026-06-19.**
   `hox.iterate_to_constraint(build_fn, adjust_fn, constraint, ws, *, initial_knob, …)` — the closed
@@ -1157,6 +1137,17 @@ readers `read_configuration_unwrapped` / `read_configuration_full` / `oxdna_back
   identity mock reproduces the design geometry so the *bend* moves the measured end-to-end. Three-Layer-clean (knob
   edits topology, relaxed coords never written back). Composition-sugar (wraps no new route → oxDNA coverage flat).
 
+- [x] **AF-13 (Phase 5) — design `constraints` block wired into the AF-11 grammar (attach + report, no knob).
+  SHIPPED 2026-06-21.** A design spec carries an optional top-level `constraints` list (AF-13 P3 specs; landmarks
+  name a helix by **grid_pos** `{helix:[r,c], bp_index, direction}`), validated at parse time by `build_spec.py` (via
+  `parse_constraint_spec` — a malformed constraint raises `BuildSpecError` BEFORE any build/relax). Driver
+  `hs.build_and_check_design(spec, ws, *, steps, tuned, **relax_params) → {design, verdicts}` resolves each landmark's
+  grid_pos→runtime id (fail-fast), relaxes ONCE + production, then `check_relaxed_constraint` per constraint. All four
+  `measure_*` kinds get the path for free. Oracle `assert_spec_constraints_reported` proves the grammar reports the
+  SAME verdict a hand-driven `check_relaxed_constraint` does — load-bearing because `assert_spec_matches_calls` is
+  blind to a physical-layer verdict. Composition-sugar (coverage flat, 36; god-files Δ=0). The knob-driven
+  `iterate_to_constraint` grammar clause is the deferred next step.
+
 ### Tier F — frontend display subsystems (no REST route; JS-controller API + vitest-oracle augment)
 
 **What's different here.** These subsystems are driven entirely client-side (a JS controller exposed on
@@ -1167,7 +1158,7 @@ intent → a passthrough). Bound by `FEATURE_DEVELOPMENT.md` — lands in the su
 `*.test.js`, never a god-file.
 
 - [x] **AF-PHOTO (P-A + P-B) — photomode option-coverage + effect oracles. SHIPPED 2026-06-18.** `frontend/src/scene/photo_renderer.test.js` (39 tests): P-A drives each setter and asserts the REAL object (renderer.toneMapping/exposure, scene-graph lights, `material.metalness`, `camera.fov`, composer `pass.enabled` via the new `getComposerState()`); P-B is the automation contract (getSettings is a copy; a 21-case table proves every option is settable through the API + every key persists). Shipped alongside the R1–R5 render fixes from the audit (tone mapping + exposure, Sun-sole, env re-bake isolation, emissive bloom clamp, Reflector state isolation). Remaining: P-C GPU-truth e2e → `MV-PHOTO-1`/`MV-PHOTO-2` (manual-validation debt). Below is the original intake item.
-- [ ] **AF-PHOTO — photomode option-coverage + effect oracles.** Photo mode
+- [x] **AF-PHOTO — photomode option-coverage + effect oracles. P-A + P-B SHIPPED 2026-06-18 (row above); only P-C (GPU-truth e2e) remains and is routed to manual-validation debt as `MV-PHOTO-1`/`MV-PHOTO-2`, NOT an active AF item.** Photo mode
   ([frontend/src/scene/photo_renderer.js](frontend/src/scene/photo_renderer.js), ~1588 ln, ~45 setters on
   `window.__photoRenderer`) has **zero test coverage**; no automated proof any option takes effect, nor that
   the full option surface is reachable + persisted programmatically. **Enabling fact:** the controller can be

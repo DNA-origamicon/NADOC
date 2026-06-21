@@ -34,6 +34,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from backend.core.models import Direction, LatticeType
+from backend.core.oxdna_health import ConstraintSpecError, parse_constraint_spec
 
 
 class BuildSpecError(ValueError):
@@ -58,10 +59,14 @@ class BuildOp:
 
 @dataclass
 class DesignSpec:
-    """A parsed design spec: a lattice + an ordered op list (first op is a bundle)."""
+    """A parsed design spec: a lattice + an ordered op list (first op is a bundle),
+    plus an optional list of declarative relaxed-structure ``constraints`` (AF-13 P3
+    specs — physical-layer pass/fail gates the driver REPORTS against an oxDNA run;
+    each landmark names a helix by ``grid_pos`` the driver resolves at build time)."""
 
     lattice: LatticeType
     ops: list[BuildOp]
+    constraints: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -311,6 +316,61 @@ def _parse_design_op(raw, *, where: str) -> BuildOp:
     return BuildOp(op=op, params=p)
 
 
+# ── declarative relaxed-structure constraints (AF-13 P3 → grammar) ─────────────
+
+_CONSTRAINT_FIELD_KEYS = {"measure", "landmarks", "target_nm", "tol_nm", "min_confidence"}
+_LANDMARK_KEYS = {"helix", "bp_index", "direction"}
+
+
+def _parse_constraint_landmark(raw, *, where: str) -> tuple:
+    """A constraint landmark ``{helix: [r,c], bp_index, direction}`` → the AF-13 P3
+    ``(hid, bp, direction)`` triple, with ``hid`` carrying the **grid_pos tuple**
+    (the driver resolves it to a runtime helix id at build time).  The cell is a
+    tuple so the whole triple stays hashable — ``parse_constraint_spec`` dedups the
+    landmark list with ``set()``."""
+    if not isinstance(raw, dict):
+        raise BuildSpecError(
+            f"{where}: a landmark must be an object {{helix, bp_index, direction}}, "
+            f"got {raw!r}"
+        )
+    _require_keys(raw, _LANDMARK_KEYS, where=where)
+    cell = _as_cell(_get(raw, "helix", where=where), where=where)
+    bp = _as_int(_get(raw, "bp_index", where=where), key="bp_index", where=where)
+    if bp < 0:
+        raise BuildSpecError(f"{where}: 'bp_index' must be ≥ 0")
+    direction = _as_direction(_get(raw, "direction", where=where), where=where)
+    return (cell, bp, direction.value)
+
+
+def _parse_design_constraint(raw, *, where: str) -> dict:
+    """Validate one declarative relaxed-structure constraint → a normalised AF-13 P3
+    constraint dict (landmark hids = grid_pos tuples, resolved by the driver).
+
+    Shape::
+
+        {"measure": "end_to_end",
+         "landmarks": [{"helix": [r,c], "bp_index": int, "direction": "forward"}, …],
+         "target_nm": num, "tol_nm": num, "min_confidence": int}
+
+    The landmark cells are normalised here, then the whole constraint is handed to
+    :func:`backend.core.oxdna_health.parse_constraint_spec` for the measure /
+    landmark-arity / number / dedup checks (so a bad constraint fails at PARSE time,
+    before any oxDNA run).  ``radius_of_gyration`` takes no landmarks."""
+    if not isinstance(raw, dict):
+        raise BuildSpecError(f"{where}: each constraint must be an object, got {raw!r}")
+    _require_keys(raw, _CONSTRAINT_FIELD_KEYS, where=where)
+    landmarks = [
+        _parse_constraint_landmark(lm, where=f"{where}.landmarks[{i}]")
+        for i, lm in enumerate(raw.get("landmarks") or [])
+    ]
+    core_spec = {k: v for k, v in raw.items() if k != "landmarks"}
+    core_spec["landmarks"] = landmarks
+    try:
+        return parse_constraint_spec(core_spec)
+    except ConstraintSpecError as e:
+        raise BuildSpecError(f"{where}: {e}") from e
+
+
 def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
     """Validate a design spec dict → :class:`DesignSpec` (lattice + ordered op list).
 
@@ -335,6 +395,12 @@ def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
             {"op": "auto_crossover"},
             {"op": "full_autostaple", "scaffold_name": str, …},
             {"op": "apply_loop_skips"}
+          ],
+          "constraints": [                 # optional, AF-13 P3 relaxed-structure gates
+            {"measure": "end_to_end",
+             "landmarks": [{"helix": [r,c], "bp_index": int, "direction": "forward"},
+                           {"helix": [r,c], "bp_index": int, "direction": "forward"}],
+             "target_nm": num, "tol_nm": num, "min_confidence": int}
           ]
         }
 
@@ -357,12 +423,20 @@ def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
     deformation ops (and, on SQUARE, the periodic skips) into concrete loop/skip
     marks — it requires crossovers already placed (so it follows ``auto_crossover``
     or ``full_autostaple`` in the op list).  All four need existing helices/strands,
-    so none may be the first op.  Raises :class:`BuildSpecError` on any grammar
-    violation.
+    so none may be the first op.
+
+    An optional top-level ``constraints`` list carries declarative *relaxed-structure*
+    gates (AF-13 P3): each is a ``{measure, landmarks, target_nm, tol_nm,
+    min_confidence}`` spec whose landmarks name a helix by ``grid_pos`` (resolved to a
+    runtime helix id by the driver).  They are validated here (via
+    :func:`~backend.core.oxdna_health.parse_constraint_spec`) so a malformed
+    constraint fails at parse time, and are *REPORTED* — not executed — by the driver
+    :func:`backend.api.headless_spec_build.build_and_check_design` against an oxDNA
+    relaxation.  Raises :class:`BuildSpecError` on any grammar violation.
     """
     if not isinstance(spec, dict):
         raise BuildSpecError(f"{where}: spec must be an object, got {type(spec).__name__}")
-    _require_keys(spec, {"kind", "lattice", "ops"}, where=where)
+    _require_keys(spec, {"kind", "lattice", "ops", "constraints"}, where=where)
     kind = spec.get("kind", "design")
     if kind != "design":
         raise BuildSpecError(f"{where}: 'kind' must be 'design', got {kind!r}")
@@ -386,7 +460,14 @@ def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
             f"{where}: 'circle_segment' requires a 'square' lattice (the chord "
             f"profile assumes the SQUARE column pitch), got {lattice.value.lower()!r}"
         )
-    return DesignSpec(lattice=lattice, ops=ops)
+    raw_constraints = spec.get("constraints") or []
+    if not isinstance(raw_constraints, list):
+        raise BuildSpecError(f"{where}: 'constraints' must be a list")
+    constraints = [
+        _parse_design_constraint(c, where=f"{where}.constraints[{i}]")
+        for i, c in enumerate(raw_constraints)
+    ]
+    return DesignSpec(lattice=lattice, ops=ops, constraints=constraints)
 
 
 # ── assembly grammar ──────────────────────────────────────────────────────────

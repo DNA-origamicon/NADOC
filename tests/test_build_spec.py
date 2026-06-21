@@ -124,6 +124,37 @@ def test_design_spec_routing_ops_defaults():
     assert parsed.ops[2].params["scaffold_name"] == "M13mp18"
 
 
+def test_design_spec_normalises_constraints():
+    """A design spec's optional ``constraints`` block parses + normalises to AF-13 P3
+    constraint dicts (landmark hids = grid_pos tuples the driver resolves)."""
+    parsed = parse_design_spec({
+        "lattice": "honeycomb",
+        "ops": [{"op": "bundle", "cells": [[0, 0]], "length_bp": 42}],
+        "constraints": [
+            {"measure": "end_to_end",
+             "landmarks": [{"helix": [0, 0], "bp_index": 0, "direction": "forward"},
+                           {"helix": [0, 0], "bp_index": 40, "direction": "FORWARD"}],
+             "target_nm": 13.6, "tol_nm": 0.5},
+            {"measure": "radius_of_gyration", "target_nm": 4.0, "tol_nm": 1.0,
+             "min_confidence": 25},
+        ],
+    })
+    assert len(parsed.constraints) == 2
+    c0 = parsed.constraints[0]
+    assert c0["measure"] == "end_to_end"
+    # landmark helix cells normalised to (row, col) tuples; direction → string value
+    assert c0["landmarks"] == [((0, 0), 0, "FORWARD"), ((0, 0), 40, "FORWARD")]
+    assert c0["min_confidence"] == 50            # AF-13 P3 default (RMSF_PRELIM_FRAMES)
+    # radius_of_gyration takes no landmarks; explicit min_confidence honoured
+    assert parsed.constraints[1]["landmarks"] == []
+    assert parsed.constraints[1]["min_confidence"] == 25
+
+
+def test_design_spec_defaults_to_no_constraints():
+    parsed = parse_design_spec({"ops": [{"op": "bundle", "cells": [[0, 1]], "length_bp": 42}]})
+    assert parsed.constraints == []
+
+
 # ── design grammar: rejections ────────────────────────────────────────────────
 
 @pytest.mark.parametrize("bad,match", [
@@ -190,6 +221,37 @@ def test_design_spec_routing_ops_defaults():
     # auto_crossover takes no params
     ({"ops": [{"op": "bundle", "cells": [[0, 0]], "length_bp": 42},
               {"op": "auto_crossover", "density": 1.0}]}, "unknown field"),
+    # constraint with an unknown measure
+    ({"ops": [{"op": "bundle", "cells": [[0, 0]], "length_bp": 42}],
+      "constraints": [{"measure": "wibble", "landmarks": [], "target_nm": 1, "tol_nm": 1}]},
+     "measure must be one of"),
+    # end_to_end needs exactly 2 landmarks (one given)
+    ({"ops": [{"op": "bundle", "cells": [[0, 0]], "length_bp": 42}],
+      "constraints": [{"measure": "end_to_end", "target_nm": 1, "tol_nm": 1,
+                       "landmarks": [{"helix": [0, 0], "bp_index": 0, "direction": "forward"}]}]},
+     "needs exactly 2 landmarks"),
+    # radius_of_gyration takes no landmarks
+    ({"ops": [{"op": "bundle", "cells": [[0, 0]], "length_bp": 42}],
+      "constraints": [{"measure": "radius_of_gyration", "target_nm": 1, "tol_nm": 1,
+                       "landmarks": [{"helix": [0, 0], "bp_index": 0, "direction": "forward"}]}]},
+     "takes no landmarks"),
+    # constraint tol must be positive
+    ({"ops": [{"op": "bundle", "cells": [[0, 0]], "length_bp": 42}],
+      "constraints": [{"measure": "radius_of_gyration", "target_nm": 4, "tol_nm": 0}]},
+     "tol_nm must be positive"),
+    # constraint landmark missing a field
+    ({"ops": [{"op": "bundle", "cells": [[0, 0]], "length_bp": 42}],
+      "constraints": [{"measure": "end_to_end", "target_nm": 1, "tol_nm": 1,
+                       "landmarks": [{"helix": [0, 0], "bp_index": 0},
+                                     {"helix": [0, 0], "bp_index": 40, "direction": "forward"}]}]},
+     "missing required field 'direction'"),
+    # constraint with a typo'd field
+    ({"ops": [{"op": "bundle", "cells": [[0, 0]], "length_bp": 42}],
+      "constraints": [{"measure": "radius_of_gyration", "target_nm": 4, "tol_nm": 1,
+                       "min_confidance": 50}]}, "unknown field"),
+    # constraints must be a list
+    ({"ops": [{"op": "bundle", "cells": [[0, 0]], "length_bp": 42}],
+      "constraints": {"measure": "radius_of_gyration"}}, "must be a list"),
 ])
 def test_design_spec_rejects_malformed(bad, match):
     with pytest.raises(BuildSpecError, match=match):

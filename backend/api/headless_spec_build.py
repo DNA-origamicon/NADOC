@@ -52,6 +52,7 @@ from __future__ import annotations
 from backend.api import assembly_state
 from backend.api import headless_assembly_build as hab
 from backend.api import headless_build as hb
+from backend.api import headless_oxdna_build as hox
 from backend.api import state as design_state
 from backend.core.build_spec import (
     AssemblySpec,
@@ -62,6 +63,8 @@ from backend.core.build_spec import (
     parse_design_spec,
 )
 from backend.core.models import Assembly, Design, LatticeType
+from backend.core.oxdna_health import check_relaxed_constraint
+from backend.core.oxdna_job import OxdnaStatus
 
 
 # ── design interpreter ────────────────────────────────────────────────────────
@@ -151,8 +154,98 @@ def build_design(spec) -> Design:
     :func:`tests.automation_harness.assert_roundtrip_stable` (survives a ``.nadoc``
     round-trip) and :func:`~tests.automation_harness.assert_spec_matches_calls` (builds
     the same canonical topology as the equivalent hand-call sequence).
+
+    Any ``constraints`` block on the spec is validated (at parse time) but **not
+    evaluated** here — reporting a relaxed-structure constraint needs an oxDNA run and
+    a workspace, so use :func:`build_and_check_design` for that.
     """
     return _build_design_from_parsed(parse_design_spec(spec))
+
+
+# ── declarative relaxed-structure constraints (AF-13 P3 → grammar) ─────────────
+
+def _resolve_helix_in(design: Design, grid_pos) -> str:
+    """``design``'s helix at ``grid_pos`` → its runtime id (the constraint-landmark
+    analog of :func:`_resolve_helix_id`, but against a *given* design, not the active
+    session — a spec-built design is returned as a standalone copy)."""
+    for h in design.helices:
+        if h.grid_pos is not None and tuple(h.grid_pos) == tuple(grid_pos):
+            return h.id
+    raise BuildSpecError(
+        f"constraint references grid position {list(grid_pos)} — no helix is there"
+    )
+
+
+def _resolve_constraint(constraint: dict, design: Design) -> dict:
+    """Resolve a parsed constraint's grid_pos landmark hids → runtime helix ids of
+    ``design`` → a constraint dict ready for :func:`check_relaxed_constraint`."""
+    landmarks = [(_resolve_helix_in(design, cell), bp, direction)
+                 for (cell, bp, direction) in constraint["landmarks"]]
+    return {**constraint, "landmarks": landmarks}
+
+
+def check_design_constraints(
+    design: Design,
+    constraints: list[dict],
+    workspace,
+    *,
+    steps: int = 6000,
+    tuned: bool = False,
+    **relax_params,
+) -> list[dict]:
+    """REPORT each declarative relaxed-structure constraint against ONE oxDNA run.
+
+    Relaxes ``design`` once (then a ``steps``-long production stage to pool frames for
+    the confidence gate), reads the production mean structure, and reports every
+    constraint's verdict via :func:`check_relaxed_constraint` (the AF-13 P3 reporter).
+    All constraints share the single relaxation — they describe the same structure.
+    Returns the verdict list in spec order (``[]`` when there are no constraints, so no
+    oxDNA run happens).  ``tuned=True`` relaxes on the benchmarked hardware default
+    (AF-17 :func:`hox.run_relaxation_tuned`); ``relax_params`` forward to the relaxer
+    (e.g. ``min_bp_retained``, ``backend``).  *Physical-layer only* — reads relaxed
+    geometry, never writes it back to ``Design`` (the Three-Layer Law).
+    """
+    if not constraints:
+        return []
+    # Resolve every landmark's grid_pos → runtime id up front, so a constraint that
+    # names a cell no op created fails fast — before an expensive relaxation runs.
+    resolved = [_resolve_constraint(c, design) for c in constraints]
+    relax = hox.run_relaxation_tuned if tuned else hox.run_relaxation
+    job = relax(design, workspace, **relax_params)
+    if job.status is OxdnaStatus.completed:
+        hox.append_production(job.job_id, workspace, steps=steps)
+        job = hox.wait_for_terminal(job.job_id, workspace)
+    relaxed_output = hox.read_flexibility_map(job.job_id, workspace)
+    return [check_relaxed_constraint(c, relaxed_output) for c in resolved]
+
+
+def build_and_check_design(
+    spec,
+    workspace,
+    *,
+    steps: int = 6000,
+    tuned: bool = False,
+    **relax_params,
+) -> dict:
+    """Build a design from a spec, then REPORT its ``constraints`` block against a
+    relaxed-structure run → ``{"design": Design, "verdicts": [verdict, …]}``.
+
+    The grammar's physical-layer entry point: it lowers a design spec's optional
+    ``constraints`` list to :func:`check_relaxed_constraint` verdicts (one per
+    constraint, spec order), each a pass/fail/inconclusive gate on the oxDNA-relaxed
+    structure.  This is the *attach + report* path (no knob); the closed
+    iterate-until-met loop (:func:`hox.iterate_to_constraint`) is the knob-driven
+    counterpart, deferred.  Build with no constraints and ``verdicts`` is empty (no
+    oxDNA run).  Pin with
+    :func:`tests.automation_harness.assert_spec_constraints_reported` (the spec path
+    reports the SAME verdicts a hand-driven :func:`check_relaxed_constraint` does —
+    ``assert_spec_matches_calls`` is blind to a physical-layer verdict).
+    """
+    parsed = parse_design_spec(spec)
+    design = _build_design_from_parsed(parsed)
+    verdicts = check_design_constraints(
+        design, parsed.constraints, workspace, steps=steps, tuned=tuned, **relax_params)
+    return {"design": design, "verdicts": verdicts}
 
 
 # ── assembly interpreter ──────────────────────────────────────────────────────

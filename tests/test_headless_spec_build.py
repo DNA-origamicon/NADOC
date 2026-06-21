@@ -11,6 +11,7 @@ re-implementation).  The faithfulness pin is the new reusable oracle
 from __future__ import annotations
 
 import math
+import stat
 
 import pytest
 from fastapi import HTTPException
@@ -18,10 +19,13 @@ from fastapi import HTTPException
 from backend.api import assembly_state
 from backend.api import headless_assembly_build as hab
 from backend.api import headless_build as hb
+from backend.api import headless_oxdna_build as hox
 from backend.api import headless_spec_build as hs
 from backend.api import state as design_state
 from backend.core.build_spec import BuildSpecError
 from backend.core.models import LatticeType
+from backend.core.oxdna_health import check_relaxed_constraint
+from backend.core.oxdna_job import OxdnaStatus
 from tests.automation_harness import (
     assert_assembly_roundtrip_stable,
     assert_circular_disc,
@@ -30,12 +34,17 @@ from tests.automation_harness import (
     assert_mate_coincident,
     assert_polymer_chain,
     assert_roundtrip_stable,
+    assert_spec_constraints_reported,
     assert_spec_matches_calls,
     canonical_topology,
     geometric_nucleotide_count,
     roundtrip_nadoc,
 )
 from tests.conftest import SIX_HB_CELLS, TEETH_CELLS, TEETH_PASSES, make_6hb_design
+# The multi-frame mock oxDNA binary source (a constant, not a fixture — a cross-module
+# fixture import trips ruff F811; the same pattern test_headless_oxdna_build uses to
+# borrow _MOCK_OXDNA from test_oxdna_relaxation).
+from tests.test_headless_oxdna_build import _MOCK_OXDNA_TRAJ
 
 _CELLS = [list(c) for c in SIX_HB_CELLS]
 
@@ -719,6 +728,106 @@ def test_polymerized_spec_roundtrips_stable():
             lambda: hs.build_assembly(_polymerize_spec(count=4)))
     assert len(reloaded.instances) == 4
     assert len(reloaded.joints) == 3  # seed mate + 2 replicated chain joints
+
+
+# ── declarative relaxed-structure constraints (AF-13 P3 → grammar) ─────────────
+# build_and_check_design lowers a design spec's `constraints` block to
+# check_relaxed_constraint verdicts against an oxDNA relaxation.  Against the mock
+# (identity "relaxation" → the mean structure reproduces the design geometry) the
+# verdicts are deterministic, so the spec path's verdict must equal a hand-driven
+# check_relaxed_constraint — the load-bearing pin, because assert_spec_matches_calls
+# (the canonical fingerprint) is blind to a physical-layer verdict.
+
+@pytest.fixture
+def mock_oxdna_traj(tmp_path, monkeypatch):
+    """The multi-frame mock oxDNA binary (frames = steps//100) bound via $OXDNA_BIN —
+    a production run pools frames into a mean structure + confidence."""
+    p = tmp_path / "mock_oxdna_traj.py"
+    p.write_text(_MOCK_OXDNA_TRAJ)
+    p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    monkeypatch.setenv("OXDNA_BIN", str(p))
+    return p
+
+
+# A fully-sequenced (M13 scaffold + WC staples) 6hb the spec produces — oxDNA rejects
+# any undefined base, so the design must be routed + sequenced (full_autostaple).
+_SEQUENCED_OPS = [
+    {"op": "bundle", "cells": _CELLS, "length_bp": 42, "name": "6hb"},
+    {"op": "auto_scaffold"},
+    {"op": "full_autostaple", "scaffold_name": "M13mp18"},
+]
+
+
+def _hand_verdict(design, constraint, workspace, *, steps=6000):
+    """Relax `design` by hand → report one constraint (runtime-id landmarks) — the
+    independent reference the grammar's reported verdict must match."""
+    job = hox.run_relaxation(design, workspace, min_bp_retained=0.0)
+    assert job.status is OxdnaStatus.completed, job.error
+    hox.append_production(job.job_id, workspace, steps=steps)
+    hox.wait_for_terminal(job.job_id, workspace)
+    rmsf = hox.read_flexibility_map(job.job_id, workspace)
+    return check_relaxed_constraint(constraint, rmsf)
+
+
+def test_build_and_check_no_constraints_skips_relaxation():
+    """A spec with no `constraints` block reports no verdicts and runs no oxDNA (the
+    workspace is never touched), so it needs no mock binary."""
+    result = hs.build_and_check_design(
+        {"lattice": "honeycomb", "ops": _SEQUENCED_OPS}, "/no/such/workspace")
+    assert result["verdicts"] == []
+    assert len(result["design"].helices) == 6
+
+
+def test_build_and_check_reports_radius_of_gyration(tmp_path, mock_oxdna_traj):
+    """The grammar's `constraints` block reports the SAME radius_of_gyration verdict a
+    hand-driven check_relaxed_constraint does — the load-bearing pin (the canonical
+    fingerprint cannot see a physical-layer verdict)."""
+    constraint = {"measure": "radius_of_gyration", "target_nm": 100.0, "tol_nm": 200.0}
+    spec = {"lattice": "honeycomb", "ops": _SEQUENCED_OPS, "constraints": [constraint]}
+    spec_result = hs.build_and_check_design(
+        spec, tmp_path, steps=6000, min_bp_retained=0.0)
+    # hand reference: same build, relax by hand, report the same (landmark-free) constraint
+    hand = _hand_verdict(
+        hs.build_design({"lattice": "honeycomb", "ops": _SEQUENCED_OPS}),
+        constraint, tmp_path)
+    assert_spec_constraints_reported(spec_result, [hand])
+    # the wide tolerance certifies a met verdict at full confidence (6000 // 100 frames)
+    assert spec_result["verdicts"][0]["status"] == "met"
+    assert spec_result["verdicts"][0]["n_frames"] == 60
+
+
+def test_build_and_check_resolves_end_to_end_landmarks(tmp_path, mock_oxdna_traj):
+    """end_to_end landmarks name a helix by grid_pos; the driver resolves them to the
+    built design's runtime helix ids and reports the same verdict a hand check (with
+    runtime-id landmarks) does — proving landmark resolution, not just attach+report."""
+    spec_lm = [{"helix": [0, 1], "bp_index": 0, "direction": "forward"},
+               {"helix": [0, 1], "bp_index": 40, "direction": "forward"}]
+    constraint = {"measure": "end_to_end", "landmarks": spec_lm,
+                  "target_nm": 100.0, "tol_nm": 200.0}
+    spec = {"lattice": "honeycomb", "ops": _SEQUENCED_OPS, "constraints": [constraint]}
+    spec_result = hs.build_and_check_design(
+        spec, tmp_path, steps=6000, min_bp_retained=0.0)
+    # hand reference: resolve grid (0,1) → runtime id on a hand build, same bp landmarks
+    hand_design = hs.build_design({"lattice": "honeycomb", "ops": _SEQUENCED_OPS})
+    hid = next(h.id for h in hand_design.helices if tuple(h.grid_pos) == (0, 1))
+    hand_constraint = {"measure": "end_to_end", "target_nm": 100.0, "tol_nm": 200.0,
+                       "landmarks": [(hid, 0, "FORWARD"), (hid, 40, "FORWARD")]}
+    hand = _hand_verdict(hand_design, hand_constraint, tmp_path)
+    assert_spec_constraints_reported(spec_result, [hand])
+    # the spec landmark resolved to a real, non-degenerate measurement
+    assert spec_result["verdicts"][0]["measured_nm"] > 1.0
+
+
+def test_build_and_check_unknown_grid_pos_raises(tmp_path):
+    """A constraint landmark naming a grid cell no op created fails FAST (before any
+    oxDNA run, so no mock binary is needed) — the analog of nick/ligate's
+    unknown-grid_pos guard."""
+    constraint = {"measure": "end_to_end", "target_nm": 1.0, "tol_nm": 1.0,
+                  "landmarks": [{"helix": [9, 9], "bp_index": 0, "direction": "forward"},
+                                {"helix": [9, 9], "bp_index": 5, "direction": "forward"}]}
+    spec = {"lattice": "honeycomb", "ops": _SEQUENCED_OPS, "constraints": [constraint]}
+    with pytest.raises(BuildSpecError, match="no helix is there"):
+        hs.build_and_check_design(spec, tmp_path, min_bp_retained=0.0)
 
 
 # ── coverage: this driver wraps no new route (composition-sugar item) ──────────
