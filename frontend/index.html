@@ -3703,60 +3703,77 @@
                 <div id="md-jobs-display-status" style="font-size:10px;color:#484f58;margin-top:2px;min-height:12px"></div>
               </div>
 
-              <!-- Advanced disclosure -->
-              <div id="md-jobs-adv-toggle"
-                   style="font-size:var(--text-xs);color:#8b949e;cursor:pointer;user-select:none;margin-bottom:4px;display:flex;align-items:center;gap:4px">
-                <span id="md-jobs-adv-arrow" style="display:inline-block;transition:transform 0.15s">▶</span>
-                <span>Advanced</span>
-              </div>
-              <div id="md-jobs-adv-body" style="display:none;margin-bottom:8px;padding:6px;background:#0d1117;border:1px solid #21262d;border-radius:4px">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:var(--text-xs)">
-                  <label style="color:#8b949e;align-self:center">Threads</label>
-                  <input id="md-jobs-threads" type="number" value="16" min="1"
-                         style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                  <label style="color:#8b949e;align-self:center">CUDA device</label>
-                  <input id="md-jobs-devices" type="text" value="0"
-                         style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                  <label style="color:#8b949e;align-self:center">Salt</label>
-                  <select id="md-jobs-salt-mode"
-                          style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <option value="screening">Auto screening</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                  <label style="color:#8b949e;align-self:center">Mg (mM)</label>
-                  <input id="md-jobs-mg" type="number" value="12.5" min="0" step="0.5"
-                         style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                  <label style="color:#8b949e;align-self:center">NaCl (mM)</label>
-                  <input id="md-jobs-nacl" type="number" value="0" min="0" step="10"
-                         style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                  <label style="color:#8b949e;align-self:center">Padding (nm)</label>
-                  <input id="md-jobs-padding" type="number" value="1.2" min="0.5" step="0.1"
-                         style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                  <label style="color:#8b949e;align-self:center">Min. steps</label>
-                  <input id="md-jobs-minsteps" type="number" value="10000" min="100" step="1000"
-                         style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                </div>
-                <label style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
-                  <input id="md-jobs-autostart" type="checkbox" checked style="accent-color:#3fb950">
-                  Start immediately
-                </label>
-              </div>
-
-              <!-- ── Benchmark (auto-tune threads/devices for this machine) ──── -->
+              <!-- ── Benchmark (self-rendered collapsible card — auto-tune threads/devices) ── -->
               <div id="md-benchmark-mount" style="margin-bottom:8px"></div>
 
-              <!-- Job list -->
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;margin-top:4px">
-                <div style="font-size:var(--text-xs);color:#8b949e">Jobs</div>
-                <label style="display:flex;align-items:center;gap:5px;font-size:10px;color:#8b949e;cursor:pointer">
-                  <input id="md-jobs-show-all" type="checkbox" style="accent-color:#58a6ff">
-                  Show all
-                </label>
+              <!-- ── Jobs (collapsible card — list of runs) ─────────────────── -->
+              <div class="ox-card">
+                <div id="md-jobs-list-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="md-jobs-list-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Jobs</span>
+                </div>
+                <div id="md-jobs-list-body" class="ox-card__body">
+                  <label style="display:flex;align-items:center;gap:5px;font-size:10px;color:#8b949e;cursor:pointer;margin-bottom:4px">
+                    <input id="md-jobs-show-all" type="checkbox" style="accent-color:#58a6ff">
+                    Show jobs for all designs
+                  </label>
+                  <div id="md-jobs-list" style="max-height:160px;overflow-y:auto;scrollbar-width:thin"></div>
+                </div>
               </div>
-              <div id="md-jobs-list" style="margin-bottom:6px;max-height:160px;overflow-y:auto;scrollbar-width:thin"></div>
+
+              <!-- ── Advanced (collapsible card) ──────────────────────────── -->
+              <div class="ox-card">
+                <div id="md-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e">
+                  <span id="md-jobs-adv-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Advanced</span>
+                </div>
+                <div id="md-jobs-adv-body" class="ox-card__body" style="display:none">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center">Threads</label>
+                    <input id="md-jobs-threads" type="number" value="16" min="1"
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center">CUDA device</label>
+                    <input id="md-jobs-devices" type="text" value="0"
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center">Salt</label>
+                    <select id="md-jobs-salt-mode"
+                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                      <option value="screening">Auto screening</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    <label style="color:#8b949e;align-self:center">Mg (mM)</label>
+                    <input id="md-jobs-mg" type="number" value="12.5" min="0" step="0.5"
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center">NaCl (mM)</label>
+                    <input id="md-jobs-nacl" type="number" value="0" min="0" step="10"
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center">Padding (nm)</label>
+                    <input id="md-jobs-padding" type="number" value="1.2" min="0.5" step="0.1"
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center">Min. steps</label>
+                    <input id="md-jobs-minsteps" type="number" value="10000" min="100" step="1000"
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  </div>
+                  <label style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
+                    <input id="md-jobs-autostart" type="checkbox" checked style="accent-color:#3fb950">
+                    Start immediately
+                  </label>
+                </div>
+              </div>
 
               <!-- Active job detail -->
               <div id="md-jobs-detail" style="display:none">
+                <!-- ── Health (collapsible card — selected run's metrics; sits right
+                     below the Advanced card) ── -->
+                <div class="ox-card" style="margin-bottom:6px">
+                  <div id="md-jobs-health-toggle" class="ox-card__header" style="color:#c9d1d9">
+                    <span id="md-jobs-health-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Health</span>
+                    <span id="md-jobs-health-spinner" style="margin-left:auto;display:inline-flex;align-items:center"></span>
+                  </div>
+                  <div id="md-jobs-health-body" class="ox-card__body">
+                    <div id="md-jobs-metrics"
+                         style="display:grid;grid-template-columns:1fr 1fr;gap:4px"></div>
+                  </div>
+                </div>
+
                 <!-- Status + run controls -->
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
                   <div id="md-jobs-detail-status" style="flex:1;font-size:var(--text-xs);color:#8b949e"></div>
@@ -3782,10 +3799,6 @@
                 <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:3px">Stage timeline</div>
                 <div id="md-jobs-timeline"
                      style="font-size:10px;font-family:var(--font-mono);background:#0d1117;border:1px solid #21262d;border-radius:3px;padding:5px;margin-bottom:6px;max-height:160px;overflow-y:auto"></div>
-
-                <!-- Metric cards -->
-                <div id="md-jobs-metrics"
-                     style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px"></div>
 
                 <div id="md-jobs-frame-controls"
                      style="display:flex;align-items:center;gap:5px;margin-bottom:6px">

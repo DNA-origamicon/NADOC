@@ -370,6 +370,8 @@ def write_configuration(
     geometry: list[dict],
     path: str | Path,
     box_nm: float | None = None,
+    *,
+    oxdna_native_seed: bool = False,
 ) -> None:
     """
     Write an oxDNA configuration (.dat) file.
@@ -383,8 +385,15 @@ def write_configuration(
     path     : output file path.
     box_nm   : simulation box edge length in nm.  Defaults to the maximum
                backbone position extent + 20 nm margin.
+    oxdna_native_seed : when True, slide each centre-of-mass inward along its base
+               normal (:func:`oxdna_native_seed_map`) so designed WC pairs START
+               bonded at oxDNA's native duplex width instead of NADOC's wide B-DNA —
+               eliminates the startup "collapse"/melt of a relaxation seed.  Off by
+               default so display/reference/export configs keep raw NADOC geometry.
     """
     resolved_map = resolved_nuc_map(design, geometry)
+    if oxdna_native_seed:
+        resolved_map = oxdna_native_seed_map(design, resolved_map)
     order = _strand_nucleotide_order(design)
 
     if box_nm is None:
@@ -429,6 +438,71 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
         if nuc is not None:
             resolved_map[key] = nuc
     return resolved_map
+
+
+# oxDNA's base (H-bond) interaction site sits at CM + POS_BASE·a1 (model.h
+# POS_BASE = 0.4 oxDNA units); the .dat position IS the centre of mass.
+_POS_BASE_NM: float = 0.4 * OXDNA_LENGTH_UNIT   # ≈ 0.341 nm
+
+# Target base-site separation (nm) for the oxDNA-native seed.  oxDNA2's hydrogen-
+# bond equilibrium sits at ~0.37 nm — the separation a relaxed duplex settles at
+# on this machine (measured, §18 of project_oxdna_relaxation).  NADOC's idealised
+# B-DNA seeds the pair ~1.25 nm apart (HELIX_RADIUS = 1.0 nm), far outside oxDNA's
+# ~0.34 nm bonding range, so a free MD melts every designed pair at startup.
+OXDNA_NATIVE_HBOND_NM: float = 0.37
+
+
+def oxdna_native_seed_map(
+    design: Design, resolved_map: dict[tuple, dict]
+) -> dict[tuple, dict]:
+    """Return a copy of *resolved_map* with every nucleotide centre-of-mass slid
+    inward along its base normal so designed Watson-Crick pairs START at oxDNA's
+    native bonding geometry (base sites ~0.37 nm apart, backbone ~1.63 nm wide)
+    instead of NADOC's wide idealised B-DNA (~1.25 nm base-site separation, outside
+    oxDNA's H-bond range).
+
+    The shift is a single uniform distance ``delta`` along each nucleotide's own
+    ``base_normal`` (a1) — a1 points cross-strand toward the partner, so ``+delta·a1``
+    narrows the duplex and lands the reconstructed backbone at oxDNA's native width.
+    ``delta`` is derived from THIS design's median designed-pair base-site
+    separation, so it adapts to the lattice (HC/SQ) automatically.  Applying the
+    SAME shift to paired AND unpaired nucleotides keeps every backbone bond length
+    intact (no paired↔unpaired discontinuity), so it introduces no over-stretch — in
+    fact it REMOVES the FENE over-stretch NADOC's wide seed carries.
+
+    Physical-layer only: this is the oxDNA simulation's STARTING configuration,
+    never written back into Design topology.  Orientation (a1/a3) is untouched.
+    Returns the map unchanged when there are no designed pairs to seed.
+    """
+    a1_of: dict[tuple, np.ndarray] = {}
+    for key, nuc in resolved_map.items():
+        a1 = np.asarray(nuc["base_normal"], dtype=float)
+        a1_of[key] = a1 / (np.linalg.norm(a1) + 1e-14)
+
+    fwd = {(k[0], k[1]) for k in resolved_map if k[2] == "FORWARD"}
+    rev = {(k[0], k[1]) for k in resolved_map if k[2] == "REVERSE"}
+    seps: list[float] = []
+    for hid, bp in fwd & rev:
+        f = resolved_map[(hid, bp, "FORWARD")]
+        r = resolved_map[(hid, bp, "REVERSE")]
+        f_base = np.asarray(f["backbone_position"], float) + _POS_BASE_NM * a1_of[(hid, bp, "FORWARD")]
+        r_base = np.asarray(r["backbone_position"], float) + _POS_BASE_NM * a1_of[(hid, bp, "REVERSE")]
+        seps.append(float(np.linalg.norm(f_base - r_base)))
+    if not seps:
+        return resolved_map
+
+    delta = max(0.0, (float(np.median(seps)) - OXDNA_NATIVE_HBOND_NM) / 2.0)
+    if delta == 0.0:
+        return resolved_map
+
+    out: dict[tuple, dict] = {}
+    for key, nuc in resolved_map.items():
+        shifted = dict(nuc)
+        shifted["backbone_position"] = (
+            np.asarray(nuc["backbone_position"], float) + delta * a1_of[key]
+        )
+        out[key] = shifted
+    return out
 
 
 def box_nm_for_positions(positions_nm: list) -> float:

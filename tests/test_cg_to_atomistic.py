@@ -646,3 +646,97 @@ def test_oxdna_length_unit_round_trip_is_reciprocal():
     from backend.core.constants import OXDNA_LENGTH_UNIT
 
     assert OXDNA_LENGTH_UNIT * NM_TO_OXDNA == pytest.approx(1.0, abs=1e-12)
+
+
+# ── Deformed-axis reconstruction (oxDNA→NAMD seed de-clashing) ────────────────
+
+
+def _heavy_clash_count(model, cutoff_nm: float = 0.20) -> int:
+    """Cross-residue heavy-atom pairs closer than *cutoff_nm* (model coords are nm)."""
+    from scipy.spatial import cKDTree
+
+    pts, keys = [], []
+    for a in model.atoms:
+        nm = (a.name or "")
+        if nm.lstrip("0123456789")[:1] == "H":
+            continue
+        pts.append([a.x, a.y, a.z])
+        keys.append((a.helix_id, a.bp_index, a.direction))
+    pts = np.array(pts)
+    tree = cKDTree(pts)
+    return sum(1 for i, j in tree.query_pairs(cutoff_nm) if keys[i] != keys[j])
+
+
+def _ideal_full_map(design):
+    """Ideal-geometry full_map ({(h,bp,dir): {backbone_position, a1, a3}}) via a
+    synthetic conf round-trip."""
+    import tempfile
+    from backend.physics.oxdna_interface import read_configuration_full
+
+    with tempfile.TemporaryDirectory() as td:
+        conf = Path(td) / "ideal.dat"
+        _write_synthetic_conf(design, conf)
+        return read_configuration_full(conf, design)
+
+
+class TestDeformedHelixAxes:
+    def test_covers_all_bps_with_unit_tangents_on_centerline(self):
+        from backend.core.cg_to_atomistic import deformed_helix_axes
+
+        design = _small_design()
+        full = _ideal_full_map(design)
+        axes = deformed_helix_axes(design, full, sigma=2.0)
+        assert axes, "expected at least one helix axis"
+        # every paired bp present is covered; tangents are unit; axis sits at the
+        # FWD/REV centre.
+        for (h_id, bp), (pt, tang) in axes.items():
+            assert np.linalg.norm(tang) == pytest.approx(1.0, abs=1e-6)
+            f = full.get((h_id, bp, "FORWARD"))
+            r = full.get((h_id, bp, "REVERSE"))
+            if f is not None and r is not None:
+                mid = 0.5 * (f["backbone_position"] + r["backbone_position"])
+                assert np.linalg.norm(pt - mid) < 0.6  # near the centerline (post-smoothing)
+
+    def test_deformed_axis_slashes_clashes_on_a_displaced_helix(self):
+        """The payoff: when a helix is displaced from its ideal straight axis (as a
+        relaxed CG structure is), the straight-axis placer corrupts its frames and
+        piles atoms together; the deformed axis measures the radial correctly and
+        removes the bulk of those clashes."""
+        from backend.core.cg_to_atomistic import deformed_helix_axes
+        from backend.core.atomistic import build_atomistic_model
+        from backend.physics.oxdna_interface import oxdna_backbone_site
+
+        from tests.conftest import make_6hb_design
+
+        design = make_6hb_design()   # fully base-paired → the axis covers every bp
+        full = _ideal_full_map(design)
+        # Bend every helix into an arc: displace each nucleotide transverse to the
+        # helix by an amount growing with bp (∝ bp²) — a relaxed origami curls like
+        # this.  Against the ideal STRAIGHT axis the displacement grows to several nm,
+        # swamping the true radial and corrupting every frame; the deformed axis
+        # tracks the arc and keeps the radial correct.
+        bent = {}
+        for k, rec in full.items():
+            r = dict(rec)
+            bp = k[1]
+            r["backbone_position"] = (
+                np.asarray(rec["backbone_position"], float)
+                + np.array([0.012 * bp * bp, 0.0, 0.0]))
+            bent[k] = r
+
+        pos_override = {
+            k: oxdna_backbone_site(r["backbone_position"], r["a1"], r["a3"])
+            for k, r in bent.items()
+        }
+        axis_override = deformed_helix_axes(design, bent, sigma=2.0)
+
+        straight = build_atomistic_model(design, nuc_pos_override=pos_override)
+        deformed = build_atomistic_model(
+            design, nuc_pos_override=pos_override, axis_override=axis_override)
+
+        n_straight = _heavy_clash_count(straight)
+        n_deformed = _heavy_clash_count(deformed)
+        # The deformed axis must cut clashes substantially (on the real bent 6hb seed
+        # it was a ~9x reduction; a uniform synthetic bend gives ~2x — gate at 0.7x as
+        # a robust, non-flaky regression guard that the mechanism works).
+        assert n_deformed < 0.7 * n_straight, (n_straight, n_deformed)

@@ -891,6 +891,7 @@ def build_atomistic_model(
     exclude_helix_ids: set[str] | None = None,
     nuc_pos_override: "dict[tuple[str, int, str], _np.ndarray] | None" = None,
     include_proteins: bool = False,
+    axis_override: "dict[tuple[str, int], tuple[_np.ndarray, _np.ndarray]] | None" = None,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -1074,9 +1075,22 @@ def build_atomistic_model(
                     base_char = seq_map.get(_seq_key, "N")
                     residue   = _BASE_CHAR_TO_RESIDUE.get(base_char, "DT")
 
-                    # Compute helix axis point for radial correction
+                    # Compute helix axis point for radial correction.  An optional
+                    # axis_override supplies a DEFORMED (curved) centerline point +
+                    # local tangent per (helix, bp): when seeding from a relaxed CG
+                    # structure the radial direction (hence the helical phase) must be
+                    # measured against the BENT axis, not the ideal straight one —
+                    # otherwise a helix displaced from its ideal axis makes the global
+                    # displacement swamp the true radial, destroying the twist and
+                    # piling adjacent nucleotides together (the seed-clash bug).
                     ax_start, ax_hat, bp_start = _helix_axis_cache[h_id]
                     axis_pt = ax_start + (bp - bp_start) * BDNA_RISE_PER_BP * ax_hat
+                    if axis_override is not None:
+                        _ov = axis_override.get((h_id, bp))
+                        if _ov is not None:
+                            import dataclasses as _dc
+                            axis_pt = _ov[0]
+                            nuc_pos = _dc.replace(nuc_pos, axis_tangent=_ov[1])
 
                     origin, R = _atom_frame(nuc_pos, direction, axis_point=axis_pt,
                                             helix_direction=helix.direction)

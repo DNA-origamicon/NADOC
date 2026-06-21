@@ -54,16 +54,21 @@ def is_running(job_id: str) -> bool:
     return handle is not None and handle.thread.is_alive()
 
 
-def _external_process_running(job: MdJob) -> bool:
-    """Detect a detached/restarted NAMD process that the in-memory registry lost."""
+def _external_pid(job: MdJob) -> Optional[int]:
+    """PID of a detached/restarted NAMD process for this job's current segment, found
+    by scanning /proc for the stage conf in a NAMD command line — or None.
+
+    Matching by the stage conf name (not a stored PID) is self-verifying: it cannot
+    mistake a recycled PID for ours, so it is safe to signal.  Returns the PID so the
+    caller can both detect AND stop/re-adopt the orphan."""
     if not (0 <= job.current_segment_idx < len(job.segments)):
-        return False
+        return None
     seg = job.segments[job.current_segment_idx]
     needle = f"{seg.name}.conf".encode()
     try:
         proc_dirs = list(Path("/proc").iterdir())
     except OSError:
-        return False
+        return None
     for proc_dir in proc_dirs:
         if not proc_dir.name.isdigit():
             continue
@@ -73,8 +78,16 @@ def _external_process_running(job: MdJob) -> bool:
             continue
         lower = cmdline.lower()
         if needle in cmdline and (b"namd" in lower or b"srun" in lower):
-            return True
-    return False
+            try:
+                return int(proc_dir.name)
+            except ValueError:
+                return None
+    return None
+
+
+def _external_process_running(job: MdJob) -> bool:
+    """Detect a detached/restarted NAMD process that the in-memory registry lost."""
+    return _external_pid(job) is not None
 
 
 def _log_completed(log_path: Path) -> bool:
@@ -103,6 +116,38 @@ def _segment_outputs_complete(output_dir: Path, segment_name: str) -> bool:
     return all((output_dir / f"{segment_name}.{ext}").exists() for ext in ("coor", "vel", "xsc"))
 
 
+# A preparing job whose prep_progress sidecar hasn't been touched in this many
+# seconds has lost its background prep task (server restart / crash) — the 1 Hz
+# heartbeat would otherwise keep it fresh.  Generous enough to survive GC pauses.
+_PREP_STALE_S = 30.0
+
+
+def _reconcile_preparing(job: MdJob, workspace_dir: Path) -> MdJob:
+    """Fail a 'preparing' job whose background prep task is gone.
+
+    Background preparation streams a `prep_progress.json` heartbeat every second;
+    if that sidecar is missing or stale the worker died (e.g. the dev server
+    reloaded mid-solvation), so the job would otherwise sit in `preparing`
+    forever.  Mark it failed with an actionable message instead.
+    """
+    from backend.core.md_prep_progress import PREP_PROGRESS_FILENAME  # noqa: PLC0415
+
+    sidecar = job.job_dir(workspace_dir) / PREP_PROGRESS_FILENAME
+    try:
+        age = time.time() - sidecar.stat().st_mtime
+    except FileNotFoundError:
+        age = None
+    if age is None or age > _PREP_STALE_S:
+        job.status = MdStatus.failed
+        job.error = (
+            "Preparation was interrupted — its background task is no longer "
+            "running (the server likely restarted or ran out of memory during "
+            "solvation). Delete this job and start it again."
+        )
+        job.save(workspace_dir)
+    return job
+
+
 def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
     """Repair stale running state after server/runner interruption.
 
@@ -110,6 +155,8 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
     health, or status, finish that post-processing step and leave the job stopped
     so the user can explicitly resume the next pending segment.
     """
+    if job.status == MdStatus.preparing:
+        return _reconcile_preparing(job, workspace_dir)
     if job.status != MdStatus.running or is_running(job.job_id) or _external_process_running(job):
         return job
     if not (0 <= job.current_segment_idx < len(job.segments)):
@@ -303,8 +350,13 @@ async def _run_namd_async(
     threads: int,
     devices: str,
     job_id: Optional[str] = None,
+    on_spawn=None,
 ) -> tuple[int, Optional[int]]:
-    """Run NAMD asynchronously; return (returncode, pid)."""
+    """Run NAMD asynchronously; return (returncode, pid).
+
+    ``on_spawn(pid)`` is invoked right after the process starts (and ``on_spawn(None)``
+    when it exits) so the caller can persist the PID to job.json — that PID survives a
+    server restart and lets ``stop_job`` signal an orphaned run."""
     cmd = [
         *_core_binding_prefix(threads),
         namd_bin,
@@ -326,6 +378,9 @@ async def _run_namd_async(
         pid = proc.pid
         if job_id:
             _ACTIVE_PIDS[job_id] = pid
+        if on_spawn:
+            try: on_spawn(pid)
+            except Exception: pass  # noqa: E722,S110 — persistence must never break the run
         try:
             rc = await proc.wait()
         except asyncio.CancelledError:
@@ -334,6 +389,9 @@ async def _run_namd_async(
         finally:
             if job_id:
                 _ACTIVE_PIDS.pop(job_id, None)
+            if on_spawn:
+                try: on_spawn(None)
+                except Exception: pass  # noqa: E722,S110
     return rc, pid
 
 
@@ -415,6 +473,12 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     _, segments = segments_from_manifest(manifest_path)
     logger.info("[%s] Loaded manifest: %d segments, min=%s", job.job_id, len(segments), min_name)
 
+    # Persist the live NAMD PID to job.json on every spawn, so a server restart can
+    # still signal the orphaned process (see stop_job's restart fallback).
+    def _persist_pid(p: Optional[int]) -> None:
+        job.namd_pid = p
+        job.save(workspace_dir)
+
     # ── Minimization ─────────────────────────────────────────────────────────
 
     min_coor = output_dir / f"{min_name}.coor"
@@ -425,7 +489,8 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
 
         min_log = package_dir / f"{min_name}.log"
         rc, pid = await _run_namd_async(
-            namd_bin, min_name, package_dir, min_log, job.threads, job.devices, job.job_id
+            namd_bin, min_name, package_dir, min_log, job.threads, job.devices, job.job_id,
+            on_spawn=_persist_pid,
         )
         if rc != 0:
             logger.error("[%s] Minimization failed rc=%d; log=%s", job.job_id, rc, min_log)
@@ -456,7 +521,8 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
 
         seg_log = package_dir / f"{spec.name}.log"
         rc, pid = await _run_namd_async(
-            namd_bin, spec.name, package_dir, seg_log, job.threads, job.devices, job.job_id
+            namd_bin, spec.name, package_dir, seg_log, job.threads, job.devices, job.job_id,
+            on_spawn=_persist_pid,
         )
 
         # Check if we were cancelled while NAMD was running
@@ -585,7 +651,13 @@ def start_job(job: MdJob, workspace_dir: Path) -> None:
 
 
 def stop_job(job_id: str, workspace_dir: Path) -> bool:
-    """Cancel the running task for job_id.  Returns True if a task was found."""
+    """Cancel the running task for job_id.  Returns True if a task was found.
+
+    Two paths: (1) the normal in-process path cancels the runner task + kills its
+    process group; (2) the ORPHAN path — after a server restart the in-memory registry
+    is empty but a detached NAMD may still be running — finds the orphan's PID
+    (persisted ``namd_pid``, verified against /proc, falling back to a /proc scan by
+    stage conf), kills it, and marks the job stopped on disk so it stays controllable."""
     handle = _RUNNING.get(job_id)
     if handle and handle.thread.is_alive():
         pid = _ACTIVE_PIDS.get(job_id)
@@ -594,4 +666,31 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
         if handle.loop is not None and handle.task is not None:
             handle.loop.call_soon_threadsafe(handle.task.cancel)
         return True
-    return False
+
+    # Orphan fallback: no live runner thread, but a detached process may persist.
+    try:
+        job = MdJob.load(job_id, workspace_dir)
+    except Exception:  # noqa: BLE001
+        return False
+    if job.status != MdStatus.running:
+        return False
+    # Prefer the self-verifying /proc match (also confirms a persisted PID is still ours).
+    pid = _external_pid(job)
+    if pid is None and job.namd_pid and _pid_is_namd(job.namd_pid):
+        pid = job.namd_pid
+    if pid is None:
+        return False
+    _kill_process_group(pid)
+    job.status = MdStatus.stopped
+    job.namd_pid = None
+    job.save(workspace_dir)
+    return True
+
+
+def _pid_is_namd(pid: int) -> bool:
+    """True if /proc/<pid> is a live NAMD process (guards against a recycled PID)."""
+    try:
+        cmdline = (Path("/proc") / str(pid) / "cmdline").read_bytes().lower()
+    except OSError:
+        return False
+    return b"namd" in cmdline or b"srun" in cmdline

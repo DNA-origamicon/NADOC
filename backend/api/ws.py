@@ -1019,6 +1019,7 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
     """
     from backend.api.assembly import _WORKSPACE_DIR
     from backend.core.md_job import MdJob, MdStatus
+    from backend.core.md_prep_progress import read_prep_progress
     from backend.core.namd_metrics import parse_namd_log
     from backend.core.namd_runner import reconcile_job_status
 
@@ -1035,6 +1036,13 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
                 break
 
             payload = job.to_dict()
+
+            # While preparing, attach the live solvation/ENM progress snapshot
+            # (phase, fraction, ETA, stall warning) the background worker writes.
+            if job.status == MdStatus.preparing:
+                prep = read_prep_progress(job.job_dir(_WORKSPACE_DIR))
+                if prep is not None:
+                    payload["prep_progress"] = prep
 
             # Attach live NAMD log metrics for the current segment when running
             if job.status == MdStatus.running and 0 <= job.current_segment_idx < len(job.segments):
@@ -1067,7 +1075,8 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
             if job.status in (MdStatus.completed, MdStatus.failed, MdStatus.stopped):
                 break
 
-            await asyncio.sleep(3.0)
+            # Poll faster while preparing so the solvation progress bar is smooth.
+            await asyncio.sleep(1.0 if job.status == MdStatus.preparing else 3.0)
 
     except WebSocketDisconnect:
         pass

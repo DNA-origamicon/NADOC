@@ -15,6 +15,7 @@ import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_sta
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progress.js'
 import { showToast } from './toast.js'
 import { docKey, docHeaders } from '../shared/doc_id.js'
+import { resetControlsToDefaults } from './form_defaults.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
 const _C = {
@@ -61,10 +62,50 @@ export function seededBadge(job) {
   return job?.seed_oxdna_job_id ? 'oxDNA seeded' : ''
 }
 
+/** Pure: is the job in an in-progress state (a spinner should show)? */
+export function mdJobIsActive(job) {
+  return ['queued', 'preparing', 'running'].includes(job?.status)
+}
+
+/** A spinning circular activity indicator (shared CSS class .nadoc-spinner). */
+export function makeSpinner(color = 'currentColor', size = 11) {
+  const s = document.createElement('span')
+  s.className = 'nadoc-spinner'
+  s.style.width = s.style.height = `${size}px`
+  if (color) s.style.color = color
+  s.setAttribute('aria-hidden', 'true')
+  return s
+}
+
+/** Pure: does a job have at least one measurable health/metric sample yet?  Used to
+ *  decide between a "Calculating…" spinner and the metric cards in the Health card. */
+export function mdHasMetrics(job, persisted = null) {
+  if (job?.health_samples?.length) return true
+  if (job?.live_metrics && job.live_metrics.temperature_k != null) return true
+  return persisted != null && (persisted.temperature_k != null || persisted.ns_per_day != null)
+}
+
+/** Pure: a stable signature of the job list so _renderList can skip a rebuild when
+ *  nothing visible changed — otherwise the row spinners' CSS animation restarts on
+ *  every poll (visible stutter).  Mirrors the oxDNA panel. */
+export function mdListSignature(jobs, selectedId) {
+  return (jobs ?? [])
+    .map(j => `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}`)
+    .join('|') + `#${selectedId ?? ''}`
+}
+
+/** Pure: should the Display-MD toggle fall back to the inherited oxDNA-seed
+ *  positions?  True when the run was oxDNA-seeded AND no MD trajectory frame has
+ *  been written yet (the display meta isn't ready) — so the toggle shows the
+ *  structure the MD started from instead of nothing. */
+export function mdShouldShowInheritedSeed(job, displayMeta) {
+  return !!job?.seed_oxdna_job_id && !displayMeta?.ready
+}
+
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null } = {}) {
+export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -100,6 +141,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const progressEl  = document.getElementById('md-jobs-progress')
   const timelineEl  = document.getElementById('md-jobs-timeline')
   const metricsEl   = document.getElementById('md-jobs-metrics')
+  const healthToggle  = document.getElementById('md-jobs-health-toggle')
+  const healthBody    = document.getElementById('md-jobs-health-body')
+  const healthArrow   = document.getElementById('md-jobs-health-arrow')
+  const healthSpinner = document.getElementById('md-jobs-health-spinner')
   const loadFramesBtn = document.getElementById('md-jobs-load-frames-btn')
   const deleteBtn     = document.getElementById('md-jobs-delete-btn')
   const prodBox       = document.getElementById('md-jobs-production')
@@ -125,7 +170,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   let _displayKey   = null
   let _displayMeta  = null
   let _prewarmKey   = null
+  let _listSig      = null   // last-rendered list signature (avoids spinner-restart churn)
+  let _inheritedSeedShown = null  // oxDNA job id whose seed positions are currently displayed
+  let _mdFrameShown = false       // has a real MD frame been displayed for the current display job?
   const _metricsByJob = new Map()
+
+  // Health card: simple collapse (starts open).
+  healthToggle?.addEventListener('click', () => {
+    const open = healthBody && healthBody.style.display !== 'none'
+    if (healthBody) healthBody.style.display = open ? 'none' : ''
+    healthArrow?.classList.toggle('is-collapsed', open)
+  })
 
   if (showAllToggle) showAllToggle.checked = localStorage.getItem(_SHOW_ALL_KEY) === '1'
 
@@ -140,12 +195,24 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (!_collapsed) _onOpen()
   })
 
-  // ── Advanced drawer ────────────────────────────────────────────────────────
+  // ── Advanced drawer (collapsible card) ──────────────────────────────────────
   advToggle?.addEventListener('click', () => {
     _advOpen = !_advOpen
     if (advBody) advBody.style.display = _advOpen ? '' : 'none'
     if (advArrow) advArrow.style.transform = _advOpen ? 'rotate(90deg)' : ''
   })
+
+  // ── Jobs card: simple collapse (starts open), mirrors the oxDNA panel ───────
+  {
+    const t = document.getElementById('md-jobs-list-toggle')
+    const bd = document.getElementById('md-jobs-list-body')
+    const ar = document.getElementById('md-jobs-list-arrow')
+    t?.addEventListener('click', () => {
+      const open = bd && bd.style.display !== 'none'
+      if (bd) bd.style.display = open ? 'none' : ''
+      ar?.classList.toggle('is-collapsed', open)
+    })
+  }
 
   function _applySaltMode() {
     const screening = (saltModeSel?.value ?? 'screening') === 'screening'
@@ -244,9 +311,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     return !!pane && !pane.hidden
   }
 
-  function _setDisplayStatus(text, color = _C.dim) {
+  function _setDisplayStatus(text, color = _C.dim, loading = false) {
     if (!displayStatus) return
-    displayStatus.textContent = text
+    displayStatus.innerHTML = ''
+    if (loading) {
+      const sp = makeSpinner(color, 9)
+      sp.style.cssText += ';margin-right:5px;vertical-align:middle'
+      displayStatus.appendChild(sp)
+    }
+    displayStatus.appendChild(document.createTextNode(text))
     displayStatus.style.color = color
   }
 
@@ -269,7 +342,23 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (progressEl) progressEl.textContent = ''
     if (timelineEl) timelineEl.textContent = ''
     if (metricsEl) metricsEl.textContent = ''
+    _setHealthSpinner(false)
     _renderProductionControls(null)
+  }
+
+  // Reset every MD INPUT back to its index.html default — used when a design is
+  // closed or a different one is opened, so the panel doesn't carry the previous
+  // design's (or last-selected job's) settings.  Threads is re-seeded from the
+  // host autodetect (clear _threadsInit so the next engine check re-applies it),
+  // and salt-mode visibility is re-synced.
+  function _resetControlsToDefaults() {
+    resetControlsToDefaults([
+      presetSel, threadsInput, devicesInput, saltModeSel, mgInput, naclInput,
+      paddingInput, minstepsInput, autostartChk, prodStepsInput, prodContinueChk,
+    ])
+    _threadsInit = false
+    _applySaltMode()
+    _checkEngines()
   }
 
   function _currentPartPath() {
@@ -401,6 +490,39 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     return job?.status === 'queued' || job?.status === 'preparing' || job?.status === 'running'
   }
 
+  // Show the oxDNA-seed positions a seeded MD run inherited (reuses the oxDNA display
+  // controller — both deform the same model via applyFemPositions).  Returns true if
+  // it showed (or is already showing) them.  Idempotent: re-applies only on first show.
+  async function _showInheritedSeed(job) {
+    const oxd = getOxdnaDisplay?.()
+    const seedId = job?.seed_oxdna_job_id
+    if (!seedId || !oxd?.displayJob) { _clearInheritedSeed(); return false }
+    if (_inheritedSeedShown === seedId) {
+      _setDisplayStatus(`Inherited oxDNA-seed positions — no MD frame yet (${job.status})`, _C.accent)
+      return true
+    }
+    _clearInheritedSeed()   // switching seeds → drop the previous overlay first
+    _setDisplayStatus('Loading inherited oxDNA-seed positions…', _C.muted, true)
+    const r = await oxd.displayJob(seedId, true).catch(() => null)
+    if (r?.ok) {
+      _inheritedSeedShown = seedId
+      _setDisplayStatus(
+        `Inherited oxDNA-seed positions (${r.stage || ''}${r.n ? `, ${r.n} nt` : ''}) — no MD frame yet`,
+        _C.accent)
+      return true
+    }
+    return false   // seed has no relaxed frame either → fall through to "waiting"
+  }
+
+  // restore=true → also clear the model back to native (used on stop / job switch).
+  // restore=false → just drop the flag: a real MD frame has already overwritten the
+  // seed overlay, so restoring would wrongly flash the model back to native.
+  function _clearInheritedSeed(restore = true) {
+    if (!_inheritedSeedShown) return
+    if (restore) getOxdnaDisplay?.()?.stopAndRestore?.()
+    _inheritedSeedShown = null
+  }
+
   async function _refreshMdDisplay() {
     if (!displayToggle?.checked) return
     if (!_isDynamicsTabVisible()) {
@@ -418,6 +540,21 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       return
     }
 
+    // Display job changed → reset frame tracking + drop any stale seed overlay.
+    if (job.job_id !== _displayJobId) {
+      _mdFrameShown = false
+      _clearInheritedSeed()
+    }
+
+    // Seeded run that hasn't shown a real MD frame yet → show the INHERITED oxDNA-seed
+    // positions (the structure MD started from) as a placeholder.  NAMD creates its DCD
+    // file immediately (so `ready` flips true with zero frames), so we gate on "no MD
+    // frame displayed yet", NOT on `ready` — otherwise the seed never shows.  The first
+    // streamed MD frame clears this overlay (see the md-display-state listener).
+    if (job.seed_oxdna_job_id && !_mdFrameShown) {
+      await _showInheritedSeed(job)
+    }
+
     try {
       const d = await _fetchDisplayMeta(job.job_id)
       if (!d) throw new Error('Could not load MD display metadata')
@@ -425,16 +562,24 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       if (!d.ready || !d.config_path) {
         _displayJobId = job.job_id
         _displayKey = null
-        _setDisplayStatus(`Waiting for trajectory output (${job.status})`, _C.warn)
+        // Seed placeholder already on screen (if seeded) → leave it; else say waiting.
+        if (!_inheritedSeedShown) {
+          _setDisplayStatus(`Waiting for trajectory output (${job.status})`, _C.warn, true)
+        }
         return
       }
 
+      // The DCD exists.  Stream MD frames — the first real frame overwrites the seed
+      // placeholder and clears the overlay flag (md-display-state 'frame').  Until then
+      // the inherited positions stay visible (an empty DCD yields no 'frame' event).
       const key = `${d.config_path}|${d.trajectory_path ?? ''}|${d.segment_name ?? ''}`
       const forceReload = key !== _displayKey || job.job_id !== _displayJobId
       const live = _jobNeedsLiveDisplay(job)
       _displayJobId = job.job_id
       _displayKey = key
-      _setDisplayStatus(forceReload ? `Loading ${d.segment_name ?? 'latest MD segment'}...` : `Refreshing ${d.segment_name ?? 'latest frame'}...`, _C.muted)
+      if (!_inheritedSeedShown) {
+        _setDisplayStatus(forceReload ? `Loading ${d.segment_name ?? 'latest MD segment'}...` : `Refreshing ${d.segment_name ?? 'latest frame'}...`, _C.muted, forceReload)
+      }
       mdDisplayController.displayLatest(d.config_path, { forceReload, live })
       if (!live) {
         clearInterval(_displayTimer)
@@ -485,7 +630,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     clearInterval(_prewarmTimer)
     _prewarmTimer = null
     clearInterval(_displayTimer)
-    _setDisplayStatus('Searching for current MD output...', _C.muted)
+    _setDisplayStatus('Searching for current MD output...', _C.muted, true)
     _fetchJobs()
     _refreshMdDisplay()
     _displayTimer = setInterval(_refreshMdDisplay, 15000)
@@ -497,6 +642,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _displayJobId = null
     _displayKey = null
     if (displayToggle) displayToggle.checked = false
+    _mdFrameShown = false
+    _clearInheritedSeed()             // drop any inherited oxDNA-seed overlay too (restore native)
     mdDisplayController?.stopAndRestore?.()
     _setDisplayStatus(status, _C.dim)
     if (_isDynamicsTabVisible()) _startMdPrewarm()
@@ -517,6 +664,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   window.addEventListener('nadoc:workspace-path-change', () => {
     _clearSelectedJob()
+    _resetControlsToDefaults()   // drop the previous design's MD settings
     _renderList()
     if (displayToggle?.checked) _refreshMdDisplay()
     else _refreshMdPrewarm(true)
@@ -611,9 +759,28 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     const state = evt.detail?.state
     const message = evt.detail?.message
     if (!message) return
-    if (state === 'error') _setDisplayStatus(`Display failed: ${message}`, _C.err)
-    else if (state === 'frame') _setDisplayStatus(message, _C.accent)
-    else _setDisplayStatus(message, _C.muted)
+    // A real MD frame just landed → it overwrote any inherited-seed placeholder, so
+    // drop that overlay (flag only — the frame is already on screen; restoring would
+    // flash to native) and remember we've shown a frame so we stop re-showing the seed.
+    if (state === 'frame') {
+      _clearInheritedSeed(false)
+      _mdFrameShown = true
+    }
+    // A frame/ready state means data is on screen → drop the loading spinner; the
+    // 'loading' state (trajectory still being fetched/streamed) keeps it spinning.
+    if (state === 'error') _setDisplayStatus(`Display failed: ${message}`, _C.err, false)
+    else if (state === 'frame') _setDisplayStatus(message, _C.accent, false)
+    else if (state === 'ready') _setDisplayStatus(message, _C.muted, false)
+    else _setDisplayStatus(message, _C.muted, true)   // 'loading'
+  })
+
+  // A job created elsewhere (the oxDNA panel's "Use as NAMD seed") must show up
+  // here even when this panel is already open — `_revealMdPanel` only refreshes
+  // on a collapse→expand, so without this the new preparing job never appears.
+  window.addEventListener('nadoc:md-job-created', async (evt) => {
+    const jobId = evt.detail?.jobId
+    await _fetchJobs()
+    if (jobId) _selectJob(jobId)
   })
 
   // ── Relax button ──────────────────────────────────────────────────────────
@@ -641,7 +808,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     console.log(`[${_ts()}] md-jobs: Relax clicked`, payload)
     if (detailEl) detailEl.style.display = ''
     _showPreparingProgress(payload)
-    showOpProgress('Relax', 'Solvating structure… (60–120 s)', { indeterminate: true })
+    // The POST now returns immediately (job enters 'preparing'); the live
+    // solvation bar + ETA is driven by the websocket into the job detail, so the
+    // modal only covers the brief create round-trip.
+    showOpProgress('Relax', 'Creating job…', { indeterminate: true })
 
     try {
       console.log(`[${_ts()}] md-jobs: POST /api/md/jobs`)
@@ -680,7 +850,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       }
 
       console.log(`[${_ts()}] md-jobs: job created OK job_id=${job.job_id} status=${job.status}`)
-      showToast(`Relaxation queued: ${job.job_id}`, 'ok')
+      showToast(`Preparing: ${job.job_id}`, 'ok')
       await _fetchJobs()
       _selectJob(job.job_id)
     } catch (err) {
@@ -696,15 +866,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // ── Stop button ────────────────────────────────────────────────────────────
   startBtn?.addEventListener('click', async () => {
     if (!_selectedId) return
-    // oxDNA-seeded jobs are already relaxed — let the user skip the NAMD
-    // relaxation ladder and jump straight to Start Production instead.
-    const sel = _jobs.find(j => j.job_id === _selectedId)
-    if (sel?.seed_oxdna_job_id && !window.confirm(
-      'This structure was relaxed by oxDNA, so the NAMD relaxation can be skipped — '
-      + 'you can press "Start Production" to minimize and produce directly from the '
-      + 'seeded structure.\n\nRun the full NAMD relaxation anyway?')) {
-      return
-    }
+    // oxDNA-seeded jobs run the SAME restrained relaxation ladder, starting from
+    // the seeded (oxDNA-relaxed) structure — they no longer skip it (jumping
+    // straight to unrestrained production blew the structure up).
     console.log(`[${_ts()}] md-jobs: start ${_selectedId}`)
     try {
       const r = await fetch(`/api/md/jobs/${_selectedId}/start`, { method: 'POST' })
@@ -736,8 +900,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // ── Job list rendering ─────────────────────────────────────────────────────
   function _renderList() {
     if (!listEl) return
-    listEl.innerHTML = ''
     const jobs = _visibleJobs()
+    // Skip the rebuild when nothing visible changed, so the row spinners' CSS
+    // animation doesn't restart on every poll (visible stutter).
+    const sig = mdListSignature(jobs.slice(0, 8), _selectedId)
+    if (sig === _listSig && listEl.childElementCount) return
+    _listSig = sig
+    listEl.innerHTML = ''
     if (!jobs.length) {
       const empty = document.createElement('div')
       empty.style.cssText = `font-size:var(--text-xs);color:${_C.dim};padding:4px 0`
@@ -757,9 +926,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       ].join(';')
       row.addEventListener('click', () => _selectJob(job.job_id))
 
-      const dot = document.createElement('span')
-      dot.style.cssText = `width:7px;height:7px;border-radius:50%;flex-shrink:0;background:${_statusColor(job.status)}`
-      row.appendChild(dot)
+      // Active jobs get a spinner; idle/terminal get a colored status dot.
+      if (mdJobIsActive(job)) {
+        const spin = makeSpinner(_statusColor(job.status), 10)
+        spin.style.flexShrink = '0'
+        row.appendChild(spin)
+      } else {
+        const dot = document.createElement('span')
+        dot.style.cssText = `width:7px;height:7px;border-radius:50%;flex-shrink:0;background:${_statusColor(job.status)}`
+        row.appendChild(dot)
+      }
 
       const name = document.createElement('span')
       name.style.cssText = `flex:1;font-size:var(--text-xs);color:${_C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap`
@@ -933,8 +1109,58 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     `
   }
 
+  // Human-friendly "time left" from a seconds estimate.
+  function _fmtEta(secs) {
+    if (secs == null || !isFinite(secs) || secs < 0) return ''
+    const s = Math.round(secs)
+    if (s < 60) return `~${s}s left`
+    const m = Math.floor(s / 60)
+    const r = s % 60
+    return r ? `~${m}m ${r}s left` : `~${m}m left`
+  }
+
+  // Live solvation/ENM progress while a job is preparing — driven by the
+  // `prep_progress` snapshot the backend streams (phase, fraction, ETA, stall
+  // warning).  Replaces the old indeterminate "Preparing package" spinner so the
+  // user can tell a slow run from a hung one.
+  function _renderPrepProgress(job) {
+    const p = job.prep_progress
+    if (!p) {
+      progressEl.innerHTML = `
+        <div style="margin-bottom:3px">Preparing package…</div>
+        <div style="height:7px;background:${_C.bg2};border:1px solid ${_C.border};border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:8%;background:${_C.accent};transition:width 0.3s"></div>
+        </div>`
+      return
+    }
+    const pct = Math.max(0, Math.min(100, (p.fraction ?? 0) * 100))
+    const phaseNo = (p.phase_index ?? 0) + 1
+    const eta = _fmtEta(p.eta_seconds)
+    const right = [`${pct.toFixed(0)}%`, eta].filter(Boolean).join(' · ')
+    const warn = p.warning
+      ? `<div style="margin-top:4px;font-size:10px;color:${_C.warn}">⚠ ${p.warning}</div>`
+      : ''
+    progressEl.innerHTML = `
+      <div style="display:flex;justify-content:space-between;gap:6px;margin-bottom:3px">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.message || p.label || 'Preparing…'}</span>
+        <span style="font-family:var(--font-mono);color:${_C.text};flex-shrink:0">${right}</span>
+      </div>
+      <div style="height:7px;background:${_C.bg2};border:1px solid ${_C.border};border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${p.warning ? _C.warn : _C.accent};transition:width 0.3s"></div>
+      </div>
+      <div style="margin-top:3px;font-size:10px;color:${_C.muted}">
+        Step ${phaseNo} of ${p.n_phases ?? '?'} · ${p.label ?? ''}
+      </div>
+      ${warn}
+    `
+  }
+
   function _renderProgress(job, live) {
     if (!progressEl) return
+    if (job.status === 'preparing') {
+      _renderPrepProgress(job)
+      return
+    }
     const segments = job.segments ?? []
     const total = segments.length
     const done = segments.filter(s => s.status === 'done').length
@@ -951,9 +1177,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       ? `${pct}% overall · ${done}/${total} segments${segPct}`
       : job.status === 'preparing' ? 'Preparing package' : 'No staged run yet'
     const stage = active ? `${_timelineStage(active)} · ${active.percent}%` : job.status
+    // A spinner on the progress line while active — most useful during "Preparing
+    // package", when the bar can't move yet.  (.nadoc-spinner CSS drives the spin.)
+    const spin = mdJobIsActive(job)
+      ? `<span class="nadoc-spinner" aria-hidden="true" style="width:9px;height:9px;color:${_C.warn};flex-shrink:0"></span>`
+      : ''
     progressEl.innerHTML = `
-      <div style="display:flex;justify-content:space-between;gap:6px;margin-bottom:3px">
-        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${stage}</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:3px">
+        <span style="display:flex;align-items:center;gap:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${spin}<span style="overflow:hidden;text-overflow:ellipsis">${stage}</span></span>
         <span style="font-family:var(--font-mono);color:${_C.text};flex-shrink:0">${label}</span>
       </div>
       <div style="height:7px;background:${_C.bg2};border:1px solid ${_C.border};border-radius:3px;overflow:hidden">
@@ -1109,10 +1340,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       const allDone   = segs.every(s => s.status === 'done')
       const anyFailed = segs.some(s => s.status === 'failed')
       const anyRun    = segs.some(s => s.status === 'running')
-      const stageStat = document.createElement('span')
-      stageStat.style.cssText = `color:${anyFailed ? _C.err : allDone ? _C.ok : anyRun ? _C.warn : _C.dim};margin-left:4px`
-      stageStat.textContent = anyFailed ? '✗' : allDone ? '✓' : anyRun ? '…' : ''
-      row.appendChild(stageStat)
+      if (anyRun) {
+        // Spinning circle next to the stage currently running.
+        const spin = makeSpinner(_C.warn, 10)
+        spin.style.marginLeft = '4px'
+        row.appendChild(spin)
+      } else {
+        const stageStat = document.createElement('span')
+        stageStat.style.cssText = `color:${anyFailed ? _C.err : allDone ? _C.ok : _C.dim};margin-left:4px`
+        stageStat.textContent = anyFailed ? '✗' : allDone ? '✓' : ''
+        row.appendChild(stageStat)
+      }
 
       timelineEl.appendChild(row)
     })
@@ -1128,14 +1366,47 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
   }
 
+  /** Header spinner on the Health card: spins while the job is computing its first
+   *  metrics, so the (empty) card doesn't just look idle. */
+  function _setHealthSpinner(active) {
+    if (!healthSpinner) return
+    const on = healthSpinner.dataset.on === '1'
+    if (active && !on) {
+      healthSpinner.innerHTML = ''
+      healthSpinner.appendChild(makeSpinner(_C.warn, 10))
+      healthSpinner.dataset.on = '1'
+    } else if (!active && on) {
+      healthSpinner.innerHTML = ''
+      healthSpinner.dataset.on = '0'
+    }
+  }
+
   // ── Metric cards ──────────────────────────────────────────────────────────
   function _renderMetrics(job, live) {
     if (!metricsEl) return
-    metricsEl.innerHTML = ''
 
     const health = job.health_samples?.[job.health_samples.length - 1]
     const persisted = _latestRecord(_metricsByJob.get(job.job_id) ?? [])
-    const scalar = live ?? persisted ?? {}
+    const liveMx = live ?? (job.live_metrics ?? null)
+    const hasMetrics = mdHasMetrics({ ...job, live_metrics: liveMx }, persisted)
+    _setHealthSpinner(mdJobIsActive(job) && !hasMetrics)
+
+    // Active but no measurable metric yet → a "Calculating…" placeholder with a
+    // spinner instead of a grid of dashes (NAMD emits its first ENERGY line only
+    // after minimization warms up).
+    if (mdJobIsActive(job) && !hasMetrics) {
+      metricsEl.innerHTML = ''
+      const wait = document.createElement('div')
+      wait.style.cssText = `grid-column:1 / -1;display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:${_C.muted};padding:4px 2px`
+      wait.appendChild(makeSpinner(_C.muted, 11))
+      wait.appendChild(document.createTextNode(
+        job.status === 'preparing' ? 'Preparing simulation…' : 'Waiting for first metrics…'))
+      metricsEl.appendChild(wait)
+      return
+    }
+    metricsEl.innerHTML = ''
+
+    const scalar = liveMx ?? persisted ?? {}
     const pressure = scalar?.pressure_avg_bar ?? scalar?.gpressure_avg_bar ?? scalar?.pressure_bar ?? null
     const pressureTitle = scalar?.pressure_avg_bar != null
       ? `PRESSAVG ${_fmt(scalar.pressure_avg_bar, 2, ' bar')}${scalar.pressure_bar != null ? ` · instant ${_fmt(scalar.pressure_bar, 2, ' bar')}` : ''}`
@@ -1155,14 +1426,20 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       { label: 'Latest',     value: health ? _shortStage(health.stage) : (persisted?.stage ? _shortStage(persisted.stage) : '—'), color: _C.muted },
     ]
 
+    const jobActive = mdJobIsActive(job)
     cards.forEach(({ label, value, color, wcTrend, title }) => {
       const card = document.createElement('div')
       card.style.cssText = `background:${_C.bg2};border:1px solid ${_C.border};border-radius:3px;padding:4px 6px;position:relative`
       if (title) card.title = title
-      card.innerHTML = `
-        <div style="font-size:9px;color:${_C.muted};margin-bottom:1px">${label}</div>
-        <div style="font-size:11px;color:${color};font-weight:600;font-family:var(--font-mono)">${value}</div>
-      `
+      // A still-pending value (—) on a running job shows a small spinner so the user
+      // knows that card is being calculated, not stuck.
+      const pending = jobActive && String(value).replace(/[⚠\s]/g, '') === '—'
+      card.innerHTML = `<div style="font-size:9px;color:${_C.muted};margin-bottom:1px">${label}</div>`
+      const valEl = document.createElement('div')
+      valEl.style.cssText = `font-size:11px;color:${color};font-weight:600;font-family:var(--font-mono);display:flex;align-items:center;min-height:13px`
+      if (pending) valEl.appendChild(makeSpinner(_C.muted, 9))
+      else valEl.textContent = value
+      card.appendChild(valEl)
       if (wcTrend) {
         card.style.cursor = 'default'
         const trend = _buildWcTrendTooltip(job, health)

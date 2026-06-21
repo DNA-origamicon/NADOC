@@ -1797,7 +1797,13 @@ async function main() {
   // ── MD overlay + panel ───────────────────────────────────────────────────────
   const mdOverlay         = initMdOverlay(scene)
   const mdDisplayController = initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
-  initMdJobsPanel({ mdDisplayController, getWorkspacePath: () => _workspacePath })
+  // getOxdnaDisplay is a lazy getter (oxdnaDisplay is declared below at ~1808): a
+  // seeded MD run with no MD frame yet shows the inherited oxDNA-seed positions via it.
+  initMdJobsPanel({
+    mdDisplayController,
+    getWorkspacePath: () => _workspacePath,
+    getOxdnaDisplay: () => oxdnaDisplay,
+  })
 
   // ── Benchmark controls (auto-tune oxDNA/NAMD hardware config per machine) ─────
   const benchmarkPanel = initBenchmarkPanel({ api, getWorkspacePath: () => _workspacePath })

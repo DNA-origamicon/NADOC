@@ -286,6 +286,7 @@ def write_aksimentiev_enm_files(
     base_k: float = 0.5,
     scales: tuple[float, ...] = (0.5, 0.1, 0.01),
     cut_ang: float = 8.0,
+    progress=None,
 ) -> dict[str, object]:
     """Write tutorial-style base-ring ENM extraBonds files for all k scales.
 
@@ -334,11 +335,16 @@ def write_aksimentiev_enm_files(
         dists = np.empty(0, dtype=float)
 
     n_bonds = int(len(lo))
+    if progress is not None:
+        progress("enm", 0.5, "Writing elastic-network restraint files…")
     a_str = [f"{int(a):10d}{int(b):10d}" for a, b in zip(lo.tolist(), hi.tolist())]
     d_str = [f"{d:10.3g}\n" for d in dists.tolist()]
 
     files: dict[str, int] = {}
-    for k in scales:
+    for ki, k in enumerate(scales):
+        if progress is not None:
+            progress("enm", 0.5 + 0.5 * (ki / max(1, len(scales))),
+                     "Writing elastic-network restraint files…")
         filename = f"{name_stem}_k{k:g}.enm.extra"
         path = package_dir / filename
         k_col = f"{f'{k:.6g}':>10s}"
@@ -493,6 +499,7 @@ def prepare_mgh_slow_release(
     require_full_topology: bool = False,
     seed: int = 42,
     atomistic_model=None,
+    progress=None,
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Build the solvated package and all stage configs in job_dir.
 
@@ -522,6 +529,7 @@ def prepare_mgh_slow_release(
         require_full_topology = require_full_topology,
         seed            = seed,
         atomistic_model = atomistic_model,
+        progress        = progress,
     )
 
     # Extract ZIP — inner folder is "{name}_namd_solvated/"
@@ -549,11 +557,15 @@ def prepare_mgh_slow_release(
     mgh_extrabonds = (package_dir / "mgh_extrabonds.txt").exists()
 
     # Write restraint references and Aksimentiev-style ENM files.
+    if progress is not None:
+        progress("enm", None, "Building elastic-network restraints…")
     pdb_path = package_dir / f"{name_stem}.pdb"
     write_restraints_pdb(pdb_path, package_dir / "restraints_dna_heavy.pdb")
-    enm_report = write_aksimentiev_enm_files(pdb_path, package_dir, name_stem)
+    enm_report = write_aksimentiev_enm_files(pdb_path, package_dir, name_stem, progress=progress)
 
     # Create output dir
+    if progress is not None:
+        progress("finalize", None, "Writing simulation configs…")
     (package_dir / "output").mkdir(exist_ok=True)
 
     # Build segment list

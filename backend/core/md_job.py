@@ -85,7 +85,12 @@ class MdJob:
         jd.mkdir(parents=True, exist_ok=True)
         data = asdict(self)
         data["status"] = self.status.value
-        (jd / "job.json").write_text(json.dumps(data, indent=2))
+        # Atomic write (temp + rename): background preparation writes job.json
+        # while the status websocket reads it every 3 s — a torn read would crash
+        # the socket with a JSON decode error.
+        tmp = jd / "job.json.tmp"
+        tmp.write_text(json.dumps(data, indent=2))
+        tmp.replace(jd / "job.json")
 
     @classmethod
     def load(cls, job_id: str, workspace_dir: Path) -> "MdJob":

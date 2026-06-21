@@ -48,9 +48,24 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import time
 import zipfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
+
+# progress(phase_key, frac_within_phase | None, message) — see md_prep_progress.
+# frac=None just enters/holds an opaque phase that the heartbeat time-fills.
+ProgressCb = Callable[[str, Optional[float], str], None]
+
+
+def _emit(progress: Optional[ProgressCb], key: str, frac: Optional[float], msg: str = "") -> None:
+    """Call the optional progress callback, swallowing any callback error."""
+    if progress is None:
+        return
+    try:
+        progress(key, frac, msg)
+    except Exception:
+        pass
 
 if TYPE_CHECKING:
     from backend.core.atomistic import AtomisticModel
@@ -166,7 +181,69 @@ def _run(cmd: list, cwd: Optional[Path] = None, stdin: str = "") -> subprocess.C
     return result
 
 
-def _parse_gro(gro_text: str) -> tuple[list[_Water], tuple[float, float, float]]:
+def _run_watched(
+    cmd: list,
+    cwd: Optional[Path] = None,
+    *,
+    hard_timeout_s: Optional[float] = None,
+) -> subprocess.CompletedProcess:
+    """Like :func:`_run` but enforces a hard wall-clock cap.
+
+    If the process runs longer than ``hard_timeout_s`` it is killed and a
+    RuntimeError is raised — this is the "gone on longer than it should have"
+    safety net for a hung GROMACS step (the prep job is then marked failed with
+    a clear message instead of blocking forever).
+    """
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    t0 = time.monotonic()
+    out = err = ""
+    try:
+        while True:
+            try:
+                out, err = proc.communicate(timeout=2.0)
+                break
+            except subprocess.TimeoutExpired:
+                if hard_timeout_s is not None and (time.monotonic() - t0) > hard_timeout_s:
+                    proc.kill()
+                    try:
+                        proc.communicate(timeout=10)
+                    except Exception:
+                        pass
+                    raise RuntimeError(
+                        f"GROMACS step exceeded {hard_timeout_s:.0f} s and was aborted "
+                        f"(likely hung): {' '.join(str(c) for c in cmd)}"
+                    )
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"Command failed: {' '.join(str(c) for c in cmd)}\n"
+            f"stderr:\n{(err or '')[-3000:]}"
+        )
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+
+
+def _gmx_hard_timeout_s(pdb_text: str) -> float:
+    """Generous wall cap for a GROMACS solvation step, scaled by DNA atom count.
+
+    Legitimate large-box solvation can take a minute or two; the cap only exists
+    to catch a truly stuck process, so it sits well above any realistic runtime.
+    """
+    n_atoms = sum(1 for ln in pdb_text.splitlines() if ln.startswith(("ATOM", "HETATM")))
+    return max(600.0, n_atoms * 0.05)
+
+
+def _parse_gro(
+    gro_text: str,
+    progress: Optional[ProgressCb] = None,
+) -> tuple[list[_Water], tuple[float, float, float]]:
     """Parse a GROMACS GRO file; return (water_list, (bx, by, bz) in nm).
 
     Only SOL residues are collected; DNA residues are ignored.
@@ -195,7 +272,12 @@ def _parse_gro(gro_text: str) -> tuple[list[_Water], tuple[float, float, float]]
     sol_buf: dict[str, tuple[float, float, float]] = {}
     waters: list[_Water] = []
 
-    for line in lines[2:-1]:
+    body = lines[2:-1]
+    n_body = len(body) or 1
+    for li, line in enumerate(body):
+        if progress is not None and (li & 0x3FFFF) == 0:  # every ~262k lines
+            _emit(progress, "assemble", 0.4 * (li / n_body),
+                  "Reading solvated water positions…")
         if len(line) < 44:
             continue
         resname  = line[5:10].strip()
@@ -226,17 +308,20 @@ def _gmx_solvate(
     pdb_text: str,
     padding_nm: float,
     tmpdir: Path,
+    progress: Optional[ProgressCb] = None,
 ) -> tuple[list[_Water], tuple[float, float, float]]:
     """Place TIP3P water around the DNA using GROMACS.
 
     Returns (waters, (bx, by, bz)) where positions are in nm.
     """
     gmx = _find_gmx()
+    hard_timeout = _gmx_hard_timeout_s(pdb_text)
 
     (tmpdir / "dry.pdb").write_text(pdb_text)
 
     # editconf: centre structure in a rectangular box with given padding
-    _run([
+    _emit(progress, "solvate", None, "Building solvation box (gmx editconf)…")
+    _run_watched([
         gmx, "editconf",
         "-f", "dry.pdb",
         "-o", "dry.gro",
@@ -244,19 +329,20 @@ def _gmx_solvate(
         "-d", str(padding_nm),
         "-bt", "triclinic",
         "-nobackup",
-    ], cwd=tmpdir)
+    ], cwd=tmpdir, hard_timeout_s=hard_timeout)
 
     # solvate: fill box with pre-equilibrated TIP3P water (spc216.gro geometry)
-    _run([
+    _emit(progress, "solvate", None, "Adding TIP3P water (gmx solvate)…")
+    _run_watched([
         gmx, "solvate",
         "-cp", "dry.gro",
         "-cs", "spc216.gro",
         "-o", "solvated.gro",
         "-nobackup",
-    ], cwd=tmpdir)
+    ], cwd=tmpdir, hard_timeout_s=hard_timeout)
 
     gro_text = (tmpdir / "solvated.gro").read_text()
-    return _parse_gro(gro_text)
+    return _parse_gro(gro_text, progress=progress)
 
 
 def _gmx_solvate_periodic(
@@ -803,6 +889,7 @@ def _place_ions_mixed(
     n_cl: int,
     seed: int = 42,
     mg_hexahydrate: bool = False,
+    progress: Optional[ProgressCb] = None,
 ) -> tuple[
     list[_Water],
     list[tuple[float, float, float]],
@@ -812,7 +899,7 @@ def _place_ions_mixed(
 ]:
     """Replace waters with Na+, Mg2+/MGH, and Cl- ions."""
     if mg_hexahydrate:
-        return _place_ions_mixed_mgh(waters, n_na, n_mg, n_cl, seed=seed)
+        return _place_ions_mixed_mgh(waters, n_na, n_mg, n_cl, seed=seed, progress=progress)
 
     rng = random.Random(seed)
     total_ions = n_na + n_mg + n_cl
@@ -880,6 +967,7 @@ def _place_ions_mixed_mgh(
     n_mg: int,
     n_cl: int,
     seed: int = 42,
+    progress: Optional[ProgressCb] = None,
 ) -> tuple[
     list[_Water],
     list[tuple[float, float, float]],
@@ -889,51 +977,84 @@ def _place_ions_mixed_mgh(
 ]:
     """Replace waters with Na+, MGH clusters, and Cl- ions.
 
-    Each MGH cluster removes six waters and adds one 19-atom Mg(H2O)6 residue.
+    Each MGH cluster takes one water site as the Mg center plus (up to) five
+    nearby waters that are removed to vacate room for the idealized Mg(H2O)6
+    residue — six waters per cluster.  Na+/Cl- then take random remaining sites.
+
+    Performance: a single shuffled draw order + one cKDTree drives selection in
+    ~O(n_ions·log n_water).  The previous implementation rebuilt a ``tuple`` of
+    the entire (millions-strong) available-water set on *every* ion and sorted
+    all waters per Mg cluster — quadratic, taking tens of minutes and freezing
+    the progress bar on origami-scale systems (e.g. VoltronCore, ~1.5 M waters).
     """
-    rng = random.Random(seed)
-    waters_by_idx = {i: w for i, w in enumerate(waters)}
-    available = set(waters_by_idx)
+    import numpy as np  # noqa: PLC0415
+    from scipy.spatial import cKDTree  # noqa: PLC0415
+
+    n = len(waters)
     total_replaced = n_na + n_cl + 6 * n_mg
-    if total_replaced > len(waters):
+    if total_replaced > n:
         raise RuntimeError(
-            f"Not enough water molecules ({len(waters)}) to place {n_mg} MGH "
+            f"Not enough water molecules ({n}) to place {n_mg} MGH "
             f"clusters plus {n_na + n_cl} monatomic ions."
         )
 
-    def pop_random() -> int:
-        idx = rng.choice(tuple(available))
-        available.remove(idx)
+    _emit(progress, "assemble", 0.5, "Placing Mg(H₂O)₆ clusters + ions…")
+
+    pos = np.empty((n, 3), dtype=float)
+    for i, w in enumerate(waters):
+        pos[i, 0] = w.ox
+        pos[i, 1] = w.oy
+        pos[i, 2] = w.oz
+    tree = cKDTree(pos) if n_mg else None
+
+    rng = random.Random(seed)
+    order = list(range(n))
+    rng.shuffle(order)
+    cursor = 0
+    claimed = bytearray(n)   # 0/1 flag per water; O(1) membership, no giant tuples
+
+    def next_unclaimed() -> int:
+        nonlocal cursor
+        while claimed[order[cursor]]:
+            cursor += 1
+        idx = order[cursor]
+        cursor += 1
+        claimed[idx] = 1
         return idx
 
-    def water_pos(idx: int) -> tuple[float, float, float]:
-        w = waters_by_idx[idx]
-        return (w.ox, w.oy, w.oz)
+    def water_xyz(idx: int) -> tuple[float, float, float]:
+        return (float(pos[idx, 0]), float(pos[idx, 1]), float(pos[idx, 2]))
 
+    # ── Mg(H2O)6 clusters: center water + 5 nearest unclaimed waters ──────────
+    _K = 16   # query margin so 5 unclaimed neighbours are virtually always found
     mgh_clusters: list[_MgHexahydrate] = []
-    for _ in range(n_mg):
-        idx = pop_random()
-        mg = water_pos(idx)
-        mx, my, mz = mg
-        nearest = sorted(
-            available,
-            key=lambda j: (waters_by_idx[j].ox - mx) ** 2
-            + (waters_by_idx[j].oy - my) ** 2
-            + (waters_by_idx[j].oz - mz) ** 2,
-        )[:5]
-        for j in nearest:
-            available.remove(j)
-        mgh_clusters.append(_ideal_mgh_cluster(mg))
+    for m in range(n_mg):
+        center = next_unclaimed()
+        removed = 0
+        if tree is not None:
+            _, idxs = tree.query(pos[center], k=min(n, _K))
+            for j in np.atleast_1d(idxs):
+                j = int(j)
+                if j == center or claimed[j]:
+                    continue
+                claimed[j] = 1
+                removed += 1
+                if removed == 5:
+                    break
+        # Top up from the shuffled order if the local cloud was already crowded.
+        while removed < 5 and cursor < n:
+            next_unclaimed()
+            removed += 1
+        mgh_clusters.append(_ideal_mgh_cluster(water_xyz(center)))
+        if progress is not None and n_mg and (m & 0xFF) == 0:
+            _emit(progress, "assemble", 0.5 + 0.02 * (m / n_mg), "Placing Mg(H₂O)₆ clusters…")
 
-    na_pos: list[tuple[float, float, float]] = []
-    for _ in range(n_na):
-        na_pos.append(water_pos(pop_random()))
+    # ── Monatomic Na+ / Cl- from the remaining sites ──────────────────────────
+    na_pos = [water_xyz(next_unclaimed()) for _ in range(n_na)]
+    cl_pos = [water_xyz(next_unclaimed()) for _ in range(n_cl)]
 
-    cl_pos: list[tuple[float, float, float]] = []
-    for _ in range(n_cl):
-        cl_pos.append(water_pos(pop_random()))
-
-    remaining = [waters_by_idx[i] for i in sorted(available)]
+    _emit(progress, "assemble", 0.54, "Finalising ion placement…")
+    remaining = [w for i, w in enumerate(waters) if not claimed[i]]
     return remaining, na_pos, [], cl_pos, mgh_clusters
 
 
@@ -1033,6 +1154,7 @@ def _extend_psf(
     cl_pos: list[tuple[float, float, float]],
     mg_pos: list[tuple[float, float, float]] | None = None,
     mgh_clusters: list[_MgHexahydrate] | None = None,
+    progress: Optional[ProgressCb] = None,
 ) -> str:
     """Extend a complete DNA PSF with TIP3P water and ions.
 
@@ -1049,7 +1171,11 @@ def _extend_psf(
 
     serial = base_serial
 
+    n_waters = len(waters) or 1
     for wi, w in enumerate(waters):
+        if progress is not None and (wi & 0x1FFFF) == 0:  # every ~131k waters
+            _emit(progress, "assemble", 0.55 + 0.2 * (wi / n_waters),
+                  "Building solvated topology (PSF)…")
         s_oh2 = serial + 1
         s_h1  = serial + 2
         s_h2  = serial + 3
@@ -1279,6 +1405,7 @@ def _build_solvated_pdb(
     base_serial: int,
     mg_pos: list[tuple[float, float, float]] | None = None,
     mgh_clusters: list[_MgHexahydrate] | None = None,
+    progress: Optional[ProgressCb] = None,
 ) -> str:
     """Build a PDB with DNA ATOM records + water/ion HETATM records.
 
@@ -1305,7 +1432,11 @@ def _build_solvated_pdb(
 
     serial = base_serial
 
+    n_waters = len(waters) or 1
     for wi, w in enumerate(waters):
+        if progress is not None and (wi & 0x1FFFF) == 0:  # every ~131k waters
+            _emit(progress, "assemble", 0.78 + 0.2 * (wi / n_waters),
+                  "Writing solvated structure (PDB)…")
         s_oh2 = serial + 1
         s_h1  = serial + 2
         s_h2  = serial + 3
@@ -1626,6 +1757,7 @@ def build_namd_solvated_package(
     require_full_topology: bool = False,
     seed: int = 42,
     atomistic_model: "AtomisticModel | None" = None,
+    progress: Optional[ProgressCb] = None,
 ) -> bytes:
     """Return raw ZIP bytes of a complete NAMD explicit-solvent package.
 
@@ -1666,6 +1798,7 @@ def build_namd_solvated_package(
     # heavy-atom Python PSF for compatibility; strict mode uses psfgen so the
     # topology has hydrogens and CHARMM terminal/deoxy patches.
     topology_metadata: dict = {"topology_builder": "nadoc_legacy_heavy_atom_psf"}
+    _emit(progress, "topology", None, "Building DNA topology (PSF/PDB)…")
     if require_full_topology:
         topology_build = build_charmm_psfgen_topology(design, atomistic_model=atomistic_model)
         dna_pdb = topology_build.pdb_text
@@ -1689,15 +1822,17 @@ def build_namd_solvated_package(
         tmpdir = Path(_tmpdir)
 
         # 2. GROMACS solvation → water positions + solvated box dimensions
-        waters, box_nm = _gmx_solvate(dna_pdb, padding_nm, tmpdir)
+        waters, box_nm = _gmx_solvate(dna_pdb, padding_nm, tmpdir, progress=progress)
 
     # 3. Count DNA net charge (1 phosphate = -1 charge) and calculate ion counts
+    _emit(progress, "assemble", 0.5, "Placing neutralising ions…")
     dna_charge = _count_dna_charge(dna_pdb)
     n_na, n_mg, n_cl = _ion_counts_mixed(len(waters), dna_charge, ion_conc_mM, mg_conc_mM, box_nm)
 
     # 4. Place ions (replace water molecules)
     waters, na_pos, mg_pos, cl_pos, mgh_clusters = _place_ions_mixed(
-        waters, n_na, n_mg, n_cl, seed=seed, mg_hexahydrate=mg_hexahydrate
+        waters, n_na, n_mg, n_cl, seed=seed, mg_hexahydrate=mg_hexahydrate,
+        progress=progress,
     )
 
     # 5. Find last DNA atom serial for sequential numbering
@@ -1713,7 +1848,8 @@ def build_namd_solvated_package(
 
     # 6. Build solvated PSF
     solvated_psf = _extend_psf(
-        dna_psf, waters, na_pos, cl_pos, mg_pos=mg_pos, mgh_clusters=mgh_clusters
+        dna_psf, waters, na_pos, cl_pos, mg_pos=mg_pos, mgh_clusters=mgh_clusters,
+        progress=progress,
     )
     final_audit = audit_psf(
         solvated_psf,
@@ -1737,6 +1873,7 @@ def build_namd_solvated_package(
         dna_n_atoms,
         mg_pos=mg_pos,
         mgh_clusters=mgh_clusters,
+        progress=progress,
     )
     mgh_extrabonds = _mgh_extrabonds(
         dna_n_atoms,
@@ -1746,7 +1883,10 @@ def build_namd_solvated_package(
         len(mgh_clusters),
     )
 
-    # 8. Render NAMD conf
+    # 8. Render NAMD conf + package ZIP (cheap tail of the assemble phase; the
+    # 'finalize' phase is reserved for the caller's config/manifest writes that
+    # come after the elastic-network step).
+    _emit(progress, "assemble", 0.99, "Packaging solvated system…")
     namd_conf = _render_solvated_namd_conf(
         name,
         box_nm,

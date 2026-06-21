@@ -60,3 +60,65 @@ describe('filterJobsForPart', () => {
     expect(filterJobsForPart(jobs, null, true)).toEqual(jobs)
   })
 })
+
+import { mdJobIsActive, makeSpinner, mdHasMetrics, mdListSignature } from './md_jobs_panel.js'
+
+describe('mdJobIsActive', () => {
+  it('is true for in-progress statuses, false otherwise', () => {
+    for (const s of ['queued', 'preparing', 'running']) {
+      expect(mdJobIsActive({ status: s })).toBe(true)
+    }
+    for (const s of ['completed', 'failed', 'stopped']) {
+      expect(mdJobIsActive({ status: s })).toBe(false)
+    }
+    expect(mdJobIsActive(null)).toBe(false)
+  })
+})
+
+describe('makeSpinner', () => {
+  it('builds a .nadoc-spinner span sized + colored', () => {
+    const s = makeSpinner('#e3b341', 10)
+    expect(s.className).toBe('nadoc-spinner')
+    expect(s.style.width).toBe('10px')
+    expect(s.style.height).toBe('10px')
+    expect(s.getAttribute('aria-hidden')).toBe('true')
+  })
+})
+
+describe('mdHasMetrics', () => {
+  it('detects health samples, live temperature, or a persisted metric', () => {
+    expect(mdHasMetrics({ health_samples: [{ stage: 'x' }] })).toBe(true)
+    expect(mdHasMetrics({ live_metrics: { temperature_k: 301 } })).toBe(true)
+    expect(mdHasMetrics({}, { ns_per_day: 12 })).toBe(true)
+    expect(mdHasMetrics({}, null)).toBe(false)
+    expect(mdHasMetrics({ live_metrics: { temperature_k: null } }, null)).toBe(false)
+  })
+})
+
+describe('mdListSignature', () => {
+  it('changes on status, segment, selection; stable otherwise', () => {
+    const jobs = [{ job_id: 'a', status: 'running', current_segment_idx: 1 }]
+    const base = mdListSignature(jobs, 'a')
+    expect(mdListSignature(jobs, 'a')).toBe(base)                                   // stable
+    expect(mdListSignature([{ ...jobs[0], status: 'completed' }], 'a')).not.toBe(base)
+    expect(mdListSignature([{ ...jobs[0], current_segment_idx: 2 }], 'a')).not.toBe(base)
+    expect(mdListSignature(jobs, 'b')).not.toBe(base)                               // selection
+  })
+})
+
+import { mdShouldShowInheritedSeed } from './md_jobs_panel.js'
+
+describe('mdShouldShowInheritedSeed', () => {
+  it('true only when oxDNA-seeded AND no MD frame written yet', () => {
+    // seeded + no MD trajectory → show inherited oxDNA-seed positions
+    expect(mdShouldShowInheritedSeed({ seed_oxdna_job_id: 'ox1' }, { ready: false })).toBe(true)
+    expect(mdShouldShowInheritedSeed({ seed_oxdna_job_id: 'ox1' }, null)).toBe(true)
+    expect(mdShouldShowInheritedSeed({ seed_oxdna_job_id: 'ox1' }, {})).toBe(true)
+    // seeded but MD already has a frame → MD positions take over
+    expect(mdShouldShowInheritedSeed({ seed_oxdna_job_id: 'ox1' }, { ready: true })).toBe(false)
+    // not seeded → never inherited
+    expect(mdShouldShowInheritedSeed({ seed_oxdna_job_id: null }, { ready: false })).toBe(false)
+    expect(mdShouldShowInheritedSeed({}, { ready: false })).toBe(false)
+    expect(mdShouldShowInheritedSeed(null, null)).toBe(false)
+  })
+})

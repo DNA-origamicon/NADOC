@@ -50,6 +50,63 @@ def geometry(design):
     return _geometry_for_design(design)
 
 
+# ── oxdna-native seed (designed pairs start bonded; no startup collapse) ───────
+
+def test_oxdna_native_seed_bonds_pairs_at_frame_zero(tmp_path, design, geometry):
+    """The native seed must land every designed WC pair inside oxDNA's H-bond range
+    at frame 0 (bp≈0→~1.0) AND clear the FENE backbone over-stretch that NADOC's
+    wide geometry carries — the regression oracle for option 1."""
+    from backend.physics.oxdna_interface import write_configuration, read_configuration_full
+    from backend.core.oxdna_health import base_pair_retention, backbone_fene_stretch
+
+    wide = tmp_path / "wide.dat"
+    native = tmp_path / "native.dat"
+    write_configuration(design, geometry, wide, box_nm=80.0)
+    write_configuration(design, geometry, native, box_nm=80.0, oxdna_native_seed=True)
+
+    fm_wide = read_configuration_full(wide, design)
+    fm_native = read_configuration_full(native, design)
+
+    # NADOC wide geometry: pairs start unbonded; native seed: bonded at frame 0.
+    assert base_pair_retention(design, fm_wide)[0] < 0.05
+    assert base_pair_retention(design, fm_native)[0] > 0.95
+
+    # The wide seed starts with backbone bonds past oxDNA's FENE cliff; native clears them.
+    assert backbone_fene_stretch(design, fm_wide)[1] > 0
+    assert backbone_fene_stretch(design, fm_native)[1] == 0
+
+
+def test_oxdna_native_seed_preserves_orientation(tmp_path, design, geometry):
+    """Only the centre of mass moves — a1/a3 (base normal + 5′→3′) are untouched."""
+    import numpy as np
+    from backend.physics.oxdna_interface import write_configuration, read_configuration_full
+
+    wide = tmp_path / "wide.dat"
+    native = tmp_path / "native.dat"
+    write_configuration(design, geometry, wide, box_nm=80.0)
+    write_configuration(design, geometry, native, box_nm=80.0, oxdna_native_seed=True)
+    fm_wide = read_configuration_full(wide, design)
+    fm_native = read_configuration_full(native, design)
+    for key, w in fm_wide.items():
+        n = fm_native[key]
+        assert np.allclose(w["a1"], n["a1"], atol=1e-6)
+        assert np.allclose(w["a3"], n["a3"], atol=1e-6)
+        # the CM actually moved inward (non-trivial shift)
+        assert np.linalg.norm(w["backbone_position"] - n["backbone_position"]) > 0.1
+
+
+def test_oxdna_native_seed_map_noop_without_pairs(design):
+    """No designed pairs (single strand) → the seed map is returned unchanged."""
+    from backend.physics.oxdna_interface import resolved_nuc_map, oxdna_native_seed_map
+    from backend.api.crud import _geometry_for_design
+
+    rmap = resolved_nuc_map(design, _geometry_for_design(design))
+    # keep only FORWARD nucleotides → no (helix, bp) has both strands
+    fwd_only = {k: v for k, v in rmap.items() if k[2] == "FORWARD"}
+    out = oxdna_native_seed_map(design, fwd_only)
+    assert out is fwd_only
+
+
 # ── oxdna_job: persistence round-trip ─────────────────────────────────────────
 
 def test_job_roundtrip(tmp_path):
@@ -1457,6 +1514,11 @@ def test_runner_retries_then_fails_when_not_equil_ready(design, geometry, tmp_pa
     job = new_oxdna_job("6hb", [s.to_status() for s in specs], n_nucleotides=len(geometry),
                         max_relax_retries=2)
     oxdna_runner.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
+    # prepare_oxdna_job now writes an oxDNA-native (FENE-safe) seed; this test needs an
+    # over-stretched start so the mock (which just copies the seed) never reaches
+    # equil-readiness — overwrite conf.dat with the raw NADOC-wide geometry.
+    from backend.physics.oxdna_interface import write_configuration
+    write_configuration(design, geometry, job.job_dir(tmp_path) / "conf.dat")
     job.status = OxdnaStatus.queued
     job.save(tmp_path)
     oxdna_runner.start_job(job, tmp_path, specs)
@@ -1964,6 +2026,41 @@ def test_build_namd_seed_uses_snapshot_and_backbone_site(tmp_path, geometry):
     assert bb_sep > cm_sep, f"backbone {bb_sep:.2f} not wider than CM {cm_sep:.2f}"
 
 
+def test_build_namd_seed_recenters_far_from_origin_conf(tmp_path):
+    """oxDNA does not fix the centre of mass, so a relaxed conf can sit hundreds of
+    nm out (COM diffusion).  build_namd_seed must recenter the model on the origin —
+    otherwise the exported PDB's 8-char coordinate fields overflow and the downstream
+    ENM base-ring scan finds no atoms (the seed→NAMD 'No DNA base-ring atoms' bug)."""
+    from backend.core.constants import NM_TO_OXDNA
+    from backend.core.oxdna_runner import build_namd_seed
+
+    design = _sequence_for_oxdna(make_6hb_design())
+    geom = __import__("backend.api.crud", fromlist=["_geometry_for_design"])._geometry_for_design(design)
+    job = _stage_a_relaxed_job(tmp_path, design, geom)
+
+    # Shove the staged last_conf.dat +600 nm along every axis (mimics COM diffusion).
+    conf = job.stage_dir(tmp_path, job.stages[-1].name) / "last_conf.dat"
+    shift = 600.0 * NM_TO_OXDNA
+    out = []
+    for i, line in enumerate(conf.read_text().splitlines()):
+        if i < 3 or not line.strip():
+            out.append(line)
+            continue
+        v = line.split()
+        v[0] = f"{float(v[0]) + shift:.6f}"
+        v[1] = f"{float(v[1]) + shift:.6f}"
+        v[2] = f"{float(v[2]) + shift:.6f}"
+        out.append(" ".join(v))
+    conf.write_text("\n".join(out) + "\n")
+
+    seed = build_namd_seed(job.job_id, tmp_path)
+    pts = np.array([[a.x, a.y, a.z] for a in seed.atomistic_model.atoms])
+    # Recentered near the origin (not ~600 nm out) → PDB coords stay well within the
+    # ±9999 Å (~1000 nm) an 8-char coordinate field can hold.
+    assert np.abs(pts).max() < 100.0, float(np.abs(pts).max())
+    assert np.allclose(pts.mean(axis=0), 0.0, atol=1e-6)
+
+
 def test_build_namd_seed_missing_conf_raises(tmp_path, geometry):
     """No relaxed last_conf.dat yet → a clear FileNotFoundError (the route maps
     this to a 400)."""
@@ -2045,6 +2142,56 @@ def test_reconcile_keeps_running_when_process_still_alive(monkeypatch, tmp_path)
     out = runner.reconcile_oxdna_status(OxdnaJob.load(job.job_id, tmp_path), tmp_path)
     assert out.status == OxdnaStatus.running          # left running, not stopped
     assert OxdnaJob.load(job.job_id, tmp_path).status == OxdnaStatus.running
+
+
+def test_stop_orphan_kills_external_pid_and_marks_stopped(monkeypatch, tmp_path):
+    """An oxDNA run orphaned by a server restart (no in-memory runner) must still be
+    stoppable: stop_job finds the detached PID via /proc and kills it."""
+    import backend.core.oxdna_runner as runner
+    specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100)
+    job = new_oxdna_job("d", [s.to_status() for s in specs])
+    job.status = OxdnaStatus.running
+    job.save(tmp_path)
+    killed = []
+    monkeypatch.setattr(runner, "_external_oxdna_pid", lambda j, w: 5151)
+    monkeypatch.setattr(runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+
+    assert runner.stop_job(job.job_id, tmp_path) is True
+    assert killed == [5151]
+    reloaded = OxdnaJob.load(job.job_id, tmp_path)
+    assert reloaded.status == OxdnaStatus.stopped
+    assert reloaded.oxdna_pid is None
+
+
+def test_stop_orphan_falls_back_to_persisted_pid(monkeypatch, tmp_path):
+    """When the /proc scan misses, stop_job uses the persisted oxdna_pid (verified live)."""
+    import backend.core.oxdna_runner as runner
+    specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100)
+    job = new_oxdna_job("d", [s.to_status() for s in specs])
+    job.status = OxdnaStatus.running
+    job.oxdna_pid = 8888
+    job.save(tmp_path)
+    killed = []
+    monkeypatch.setattr(runner, "_external_oxdna_pid", lambda j, w: None)
+    monkeypatch.setattr(runner, "_pid_is_oxdna", lambda pid: True)
+    monkeypatch.setattr(runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+
+    assert runner.stop_job(job.job_id, tmp_path) is True
+    assert killed == [8888]
+
+
+def test_stop_no_orphan_returns_false(monkeypatch, tmp_path):
+    """No live runner, no /proc match, no persisted PID → nothing to stop."""
+    import backend.core.oxdna_runner as runner
+    specs = build_relaxation_stages(mc_steps=100, md_relax_steps=100, equil_steps=100)
+    job = new_oxdna_job("d", [s.to_status() for s in specs])
+    job.status = OxdnaStatus.running
+    job.save(tmp_path)
+    killed = []
+    monkeypatch.setattr(runner, "_external_oxdna_pid", lambda j, w: None)
+    monkeypatch.setattr(runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+    assert runner.stop_job(job.job_id, tmp_path) is False
+    assert killed == []
 
 
 def test_starting_conf_resumes_from_own_checkpoint(tmp_path):

@@ -120,6 +120,86 @@ def _smooth_cg_positions_per_domain(
     return smoothed
 
 
+def deformed_helix_axes(
+    design: Design,
+    full_map: dict[tuple[str, int, str], dict],
+    sigma: float = 2.0,
+) -> dict[tuple[str, int], tuple[np.ndarray, np.ndarray]]:
+    """Per-(helix, bp) deformed centerline point + local tangent from a relaxed CG map.
+
+    The atomistic placer derives each nucleotide's radial direction (hence its
+    helical phase) from ``backbone - axis_point``.  By default ``axis_point`` is the
+    helix's IDEAL straight axis; once a helix has bent/shifted in the relaxed CG
+    structure, that straight reference makes the global displacement swamp the true
+    radial — the twist collapses and adjacent nucleotides pile up (the seed-clash
+    bug).  This returns the BENT centerline so the radial is measured correctly.
+
+    Centerline per bp = midpoint of the two paired strands' centres of mass (which
+    straddle the helix axis); built only from base-paired bps (a single strand's CM
+    sits off-axis), then linearly filled across the helix's bp span, Gaussian
+    smoothed, and differentiated for the local tangent.  The tangent is sign-aligned
+    to the helix's original axis direction so FORWARD/REVERSE polarity is preserved.
+    Helices with fewer than two paired bps are omitted (fall back to the straight
+    axis).  Physical-layer only — never written back into topology.
+    """
+    axis_dir = {}
+    for h in design.helices:
+        d = np.array([h.axis_end.x - h.axis_start.x,
+                      h.axis_end.y - h.axis_start.y,
+                      h.axis_end.z - h.axis_start.z], dtype=float)
+        n = np.linalg.norm(d)
+        axis_dir[h.id] = d / n if n > 1e-9 else np.array([0.0, 0.0, 1.0])
+
+    by_helix: dict[str, dict[int, dict[str, np.ndarray]]] = {}
+    for (h_id, bp, dr), rec in full_map.items():
+        by_helix.setdefault(h_id, {}).setdefault(bp, {})[dr] = np.asarray(
+            rec["backbone_position"], dtype=float)
+
+    out: dict[tuple[str, int], tuple[np.ndarray, np.ndarray]] = {}
+    for h_id, bpmap in by_helix.items():
+        paired_bp: list[int] = []
+        paired_pt: list[np.ndarray] = []
+        for bp in sorted(bpmap):
+            dd = bpmap[bp]
+            if "FORWARD" in dd and "REVERSE" in dd:
+                paired_bp.append(bp)
+                paired_pt.append(0.5 * (dd["FORWARD"] + dd["REVERSE"]))
+        if len(paired_bp) < 2:
+            continue
+        kb = np.array(paired_bp)
+        kp = np.array(paired_pt)
+        core_bps = np.arange(paired_bp[0], paired_bp[-1] + 1)
+        axis = np.stack([np.interp(core_bps, kb, kp[:, c]) for c in range(3)], axis=1)
+        if sigma > 0 and len(core_bps) >= 3:
+            axis = gaussian_filter1d(axis, sigma=sigma, axis=0, mode="nearest")
+        tang = np.gradient(axis, axis=0)
+        tn = np.linalg.norm(tang, axis=1, keepdims=True)
+        tang = tang / np.where(tn < 1e-9, 1.0, tn)
+        # Sign-align to the helix's original axis direction (no FWD/REV flip).
+        if axis_dir.get(h_id) is not None and float(np.dot(tang.mean(axis=0), axis_dir[h_id])) < 0:
+            tang = -tang
+
+        # Cover EVERY bp present on the helix — single-stranded overhang ends sit
+        # OUTSIDE the paired range, and without an axis there they fall back to the
+        # straight ideal axis and re-clash.  Extrapolate the smoothed centerline
+        # straight along its end tangent (an overhang continues the helix), one
+        # centerline-rise step per bp.
+        step0 = axis[1] - axis[0]
+        stepN = axis[-1] - axis[-2]
+        lo = min(bpmap)
+        hi = max(bpmap)
+        for bp in range(lo, hi + 1):
+            if bp < paired_bp[0]:
+                pt, tg = axis[0] + (bp - paired_bp[0]) * step0, tang[0]
+            elif bp > paired_bp[-1]:
+                pt, tg = axis[-1] + (bp - paired_bp[-1]) * stepN, tang[-1]
+            else:
+                idx = bp - paired_bp[0]
+                pt, tg = axis[idx], tang[idx]
+            out[(h_id, int(bp))] = (pt, tg)
+    return out
+
+
 def build_atomistic_model_from_cg_spline(
     design: Design,
     conf_path: str | Path,
@@ -152,9 +232,22 @@ def build_atomistic_model_from_cg_spline(
     -------
     AtomisticModel with CG-informed backbone positions.
     """
-    cg_positions = read_backbone_positions(conf_path, design)
-    pos_override = _smooth_cg_positions_per_domain(design, cg_positions, sigma=sigma)
-    return build_atomistic_model(design, nuc_pos_override=pos_override)
+    full_map = read_configuration_full(conf_path, design)
+    # RAW backbone sites (no per-nucleotide smoothing): the override supplies each
+    # nucleotide's radial DIRECTION (its helical phase) relative to the deformed
+    # axis below; Gaussian-smoothing the per-nucleotide positions flattens the
+    # spiral and collapses the ~34°/bp twist, stacking adjacent nucleotides (clash).
+    # The axis (not the per-nucleotide phase) is what gets smoothed.
+    pos_override = {
+        key: oxdna_backbone_site(rec["backbone_position"], rec["a1"], rec["a3"])
+        for key, rec in full_map.items()
+    }
+    # Deformed centerline so the placer measures each nucleotide's radial (helical
+    # phase) against the BENT axis, not the ideal straight one — without this a
+    # displaced helix collapses the twist and piles atoms together (seed clashes).
+    axis_override = deformed_helix_axes(design, full_map, sigma=sigma)
+    return build_atomistic_model(
+        design, nuc_pos_override=pos_override, axis_override=axis_override)
 
 
 def read_backbone_positions(

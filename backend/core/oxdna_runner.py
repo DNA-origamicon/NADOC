@@ -85,11 +85,19 @@ def _external_oxdna_running(job: OxdnaJob, workspace_dir: Path) -> bool:
     Scans /proc for a process whose command line references this job's directory
     AND is the oxDNA binary.  Mirrors namd_runner._external_process_running.
     """
+    return _external_oxdna_pid(job, workspace_dir) is not None
+
+
+def _external_oxdna_pid(job: OxdnaJob, workspace_dir: Path) -> Optional[int]:
+    """PID of a detached/restarted oxDNA process for this job, found by scanning /proc
+    for the job dir in an oxDNA command line — or None.  Matching by the job dir (not a
+    stored PID) is self-verifying, so the PID is safe to signal; returned so the caller
+    can both detect AND stop the orphan after a server restart."""
     needle = str(job.job_dir(workspace_dir).resolve()).encode()
     try:
         proc_dirs = list(Path("/proc").iterdir())
     except OSError:
-        return False
+        return None
     for proc_dir in proc_dirs:
         if not proc_dir.name.isdigit():
             continue
@@ -98,8 +106,11 @@ def _external_oxdna_running(job: OxdnaJob, workspace_dir: Path) -> bool:
         except OSError:
             continue
         if needle in cmdline and b"oxdna" in cmdline.lower():
-            return True
-    return False
+            try:
+                return int(proc_dir.name)
+            except ValueError:
+                return None
+    return None
 
 
 # ── oxDNA binary discovery ────────────────────────────────────────────────────
@@ -231,12 +242,13 @@ def prepare_oxdna_job(
         prot_offset = protein_bead_count(blocks)
         (jd / "topology.top").write_text(hybrid_topology_text(design, blocks), encoding="utf-8")
         (jd / "conf.dat").write_text(
-            hybrid_configuration_text(design, geometry, blocks), encoding="utf-8")
+            hybrid_configuration_text(design, geometry, blocks, oxdna_native_seed=True),
+            encoding="utf-8")
         (jd / "anm.par").write_text(anm_par_text(blocks), encoding="utf-8")
         prot_traps = protein_forces_text(design, atts, blocks, geometry)
     else:
         write_topology(design, jd / "topology.top")
-        write_configuration(design, geometry, jd / "conf.dat")
+        write_configuration(design, geometry, jd / "conf.dat", oxdna_native_seed=True)
 
     # Optional hard surface + anchors held throughout the relax (a structure relaxed
     # on a surface differs from one relaxed free).
@@ -334,6 +346,22 @@ def build_namd_seed(job_id: str, workspace_dir: Path) -> NamdSeed:
     from backend.core.cg_to_atomistic import build_atomistic_model_from_cg_spline
 
     model = build_atomistic_model_from_cg_spline(design, conf_path)
+
+    # Recenter the seed on the origin.  oxDNA does NOT fix the centre of mass, so a
+    # relaxed conf can sit hundreds of nm out (COM diffusion over the run); the
+    # reconstruction faithfully reproduces that absolute position.  Absolute position
+    # is irrelevant for a boxed MD seed, but the exported PDB's 8-char coordinate
+    # fields overflow past ~±1000 Å — the file silently corrupts and the downstream
+    # ENM base-ring scan finds no atoms.  Translate every atom by the model centroid.
+    if model.atoms:
+        import numpy as _np
+        cx, cy, cz = _np.mean(
+            [[a.x, a.y, a.z] for a in model.atoms], axis=0).tolist()
+        for a in model.atoms:
+            a.x -= cx
+            a.y -= cy
+            a.z -= cz
+
     return NamdSeed(
         design          = design,
         atomistic_model = model,
@@ -341,6 +369,27 @@ def build_namd_seed(job_id: str, workspace_dir: Path) -> NamdSeed:
         conf_path       = conf_path,
         source_job_id   = job_id,
     )
+
+
+def assert_namd_seed_available(job_id: str, workspace_dir: Path) -> None:
+    """Cheap precheck that a NAMD seed CAN be built from this oxDNA job.
+
+    Verifies the job exists and has both a ``design.json`` snapshot and a relaxed
+    ``last_conf.dat`` — WITHOUT the expensive atomistic reconstruction.  Lets the
+    create-job route reject a bad ``oxdna_job_id`` with a fast 400 before any work
+    is queued, while the real (slow) :func:`build_namd_seed` runs in the
+    background.  Raises FileNotFoundError with a user-facing message otherwise.
+    """
+    job = OxdnaJob.load(job_id, workspace_dir)   # FileNotFoundError if unknown
+    if _load_snapshot_design(job.job_dir(workspace_dir)) is None:
+        raise FileNotFoundError(
+            f"oxDNA job {job_id} has no design.json snapshot; cannot build a NAMD seed."
+        )
+    conf_path, _ = _latest_relaxed_conf(job, workspace_dir)
+    if conf_path is None:
+        raise FileNotFoundError(
+            f"oxDNA job {job_id} has no relaxed last_conf.dat yet; run a relaxation first."
+        )
 
 
 # ── Progress ──────────────────────────────────────────────────────────────────
@@ -502,8 +551,13 @@ async def _run_oxdna_async(
     stage_dir: Path,
     log_path:  Path,
     job_id:    str,
+    on_spawn=None,
 ) -> tuple[int, Optional[int]]:
-    """Run oxDNA on *input_path* with cwd=stage_dir; return (returncode, pid)."""
+    """Run oxDNA on *input_path* with cwd=stage_dir; return (returncode, pid).
+
+    ``on_spawn(pid)`` fires right after the process starts (and ``on_spawn(None)`` on
+    exit) so the caller can persist the PID to job.json — surviving a server restart so
+    ``stop_job`` can signal an orphaned run."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("w") as log_fh:
         proc = await asyncio.create_subprocess_exec(
@@ -515,6 +569,9 @@ async def _run_oxdna_async(
         )
         pid = proc.pid
         _ACTIVE_PIDS[job_id] = pid
+        if on_spawn:
+            try: on_spawn(pid)
+            except Exception: pass  # noqa: E722,S110 — persistence must never break the run
         try:
             rc = await proc.wait()
         except asyncio.CancelledError:
@@ -522,6 +579,9 @@ async def _run_oxdna_async(
             raise
         finally:
             _ACTIVE_PIDS.pop(job_id, None)
+            if on_spawn:
+                try: on_spawn(None)
+                except Exception: pass  # noqa: E722,S110
     return rc, pid
 
 
@@ -698,6 +758,12 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
         return
 
     topo = (jd / "topology.top").resolve()
+    # Persist the live oxDNA PID to job.json on every spawn, so a server restart can
+    # still signal the orphaned process (see stop_job's restart fallback).
+    def _persist_pid(p: Optional[int]) -> None:
+        job.oxdna_pid = p
+        job.save(workspace_dir)
+
     job.status = OxdnaStatus.running
     job.save(workspace_dir)
 
@@ -748,7 +814,8 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
 
         t0 = time.time()
         log_path = stage_dir / "oxdna.log"
-        rc, pid = await _run_oxdna_async(oxdna_bin, input_path, stage_dir, log_path, job.job_id)
+        rc, pid = await _run_oxdna_async(oxdna_bin, input_path, stage_dir, log_path, job.job_id,
+                                         on_spawn=_persist_pid)
         elapsed = max(1e-6, time.time() - t0)
 
         if asyncio.current_task().cancelled():
@@ -888,8 +955,22 @@ def start_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -
     thread.start()
 
 
+def _pid_is_oxdna(pid: int) -> bool:
+    """True if /proc/<pid> is a live oxDNA process (guards against a recycled PID)."""
+    try:
+        cmdline = (Path("/proc") / str(pid) / "cmdline").read_bytes().lower()
+    except OSError:
+        return False
+    return b"oxdna" in cmdline
+
+
 def stop_job(job_id: str, workspace_dir: Path) -> bool:
-    """Cancel the running task for job_id. Returns True if a task was found."""
+    """Cancel the running task for job_id. Returns True if a task was found.
+
+    Like NAMD: the in-process path cancels the runner task + kills its group; the
+    ORPHAN path (server restarted → registry empty, but a detached oxDNA may still be
+    running) finds the orphan via /proc (self-verifying) or the persisted ``oxdna_pid``,
+    kills it, and marks the job stopped so it stays controllable."""
     handle = _RUNNING.get(job_id)
     if handle and handle.thread.is_alive():
         pid = _ACTIVE_PIDS.get(job_id)
@@ -898,7 +979,24 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
         if handle.loop is not None and handle.task is not None:
             handle.loop.call_soon_threadsafe(handle.task.cancel)
         return True
-    return False
+
+    # Orphan fallback: no live runner thread, but a detached process may persist.
+    try:
+        job = OxdnaJob.load(job_id, workspace_dir)
+    except Exception:  # noqa: BLE001
+        return False
+    if job.status != OxdnaStatus.running:
+        return False
+    pid = _external_oxdna_pid(job, workspace_dir)
+    if pid is None and job.oxdna_pid and _pid_is_oxdna(job.oxdna_pid):
+        pid = job.oxdna_pid
+    if pid is None:
+        return False
+    _kill_process_group(pid)
+    job.status = OxdnaStatus.stopped
+    job.oxdna_pid = None
+    job.save(workspace_dir)
+    return True
 
 
 def reconcile_oxdna_status(

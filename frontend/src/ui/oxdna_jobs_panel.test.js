@@ -21,7 +21,7 @@ import {
   jobIsActive, isRelaxRunning, isProductionRunning, makeSpinner,
   productionRunCount, hasTrajectory, isResumable, startButtonLabel, flexConfidenceText,
   resumeNote, flattenJobTree, descendantIds, fieldChildTitle, deleteConfirmMessage, samplingState,
-  runConfigForJob, healthForDisplay,
+  runConfigForJob, healthForDisplay, runElements, runIndicatorTags, runRowLabel, runChildTitle,
 } from './oxdna_jobs_panel.js'
 
 describe('healthForDisplay (live mid-stage vs end-of-stage sample)', () => {
@@ -189,6 +189,48 @@ describe('fieldChildTitle', () => {
   it('summarizes the field params for the hover tooltip', () => {
     const t = fieldChildTitle({ efield: { force_pN: 2.5, dir: [0, 0, 1], n_anchored: 12 } })
     expect(t).toBe('E-field 2.5 pN/nt · dir (0.00, 0.00, 1.00) · 12 anchored')
+  })
+})
+
+describe('runElements / runIndicatorTags / runRowLabel (run job-name indicators)', () => {
+  const fieldJob = { parent_job_id: 'p', run_config: { kind: 'run', field: { field_pN: 3, dir: [1, 0, 0] }, anchors: [{ kind: 'overhang', id: 'o1' }] } }
+  const surfaceOnly = { parent_job_id: 'p', run_config: { kind: 'run', surface: { dir: [0, 1, 0], offset_nm: 2, stiff: 5 } } }
+  const anchorsOnly = { parent_job_id: 'p', run_config: { kind: 'run', anchors: [{ kind: 'cluster', id: 'c1' }] } }
+  const plain = { parent_job_id: 'p', run_config: { kind: 'run' } }
+
+  it('detects which elements a run added', () => {
+    expect(runElements(fieldJob)).toEqual({ anchors: true, surface: false, field: true })
+    expect(runElements(surfaceOnly)).toEqual({ anchors: false, surface: true, field: false })
+    expect(runElements(anchorsOnly)).toEqual({ anchors: true, surface: false, field: false })
+    expect(runElements(plain)).toEqual({ anchors: false, surface: false, field: false })
+  })
+
+  it('falls back to efield.n_anchored for old field children without run_config anchors', () => {
+    const old = { parent_job_id: 'p', efield: { force_pN: 4, dir: [0, 0, 1], n_anchored: 8 }, stages: [{ kind: 'field' }] }
+    expect(runElements(old)).toEqual({ anchors: true, surface: false, field: true })
+  })
+
+  it('orders indicator tags [A][H][E]', () => {
+    const all = { parent_job_id: 'p', run_config: { kind: 'run', field: { field_pN: 3, dir: [1, 0, 0] }, surface: { dir: [0, 1, 0], offset_nm: 2, stiff: 5 }, anchors: [{ kind: 'overhang', id: 'o1' }] } }
+    expect(runIndicatorTags(all)).toBe('[A][H][E]')
+    expect(runIndicatorTags(surfaceOnly)).toBe('[H]')
+    expect(runIndicatorTags(anchorsOnly)).toBe('[A]')
+    expect(runIndicatorTags(fieldJob)).toBe('[A][E]')
+    expect(runIndicatorTags(plain)).toBe('')
+  })
+
+  it('builds a "Run N" row label with indicators (no lightning bolt)', () => {
+    expect(runRowLabel(fieldJob, 2)).toBe('Run 2 [A][E]')
+    expect(runRowLabel(plain, 1)).toBe('Run 1')
+    expect(runRowLabel(fieldJob, 3)).not.toContain('⚡')
+  })
+
+  it('hover title describes a field run via fieldChildTitle, else its elements', () => {
+    const f = { parent_job_id: 'p', efield: { force_pN: 3, dir: [1, 0, 0], n_anchored: 5 }, run_config: { kind: 'run', field: { field_pN: 3, dir: [1, 0, 0] }, anchors: [{ kind: 'overhang' }] } }
+    expect(runChildTitle(f)).toMatch(/^E-field /)
+    expect(runChildTitle(surfaceOnly)).toBe('Production run · hard surface')
+    expect(runChildTitle(anchorsOnly)).toBe('Production run · 1 anchored')
+    expect(runChildTitle(plain)).toBe('Production run')
   })
 })
 

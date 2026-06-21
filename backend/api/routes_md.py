@@ -19,9 +19,11 @@ GET   /md/jobs/{job_id}/display     latest displayable NADOC MD trajectory
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import shutil
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
@@ -41,12 +43,23 @@ from backend.core.md_protocols import (
     prepare_equilibrium_aware_namd,
     segments_from_manifest,
 )
+from backend.core.md_prep_progress import (
+    PrepTracker,
+    build_prep_phases,
+    clear_prep_progress,
+    design_size_factor,
+    write_prep_progress,
+)
 from backend.core.namd_runner import default_threads, find_gmx, find_namd, is_running, reconcile_job_status, start_job, stop_job
 
 logger = logging.getLogger(__name__)
 
 
 router = APIRouter(tags=["md"])
+
+# Background preparation tasks, kept referenced so the event loop doesn't GC them
+# mid-run (asyncio only holds weak references to tasks).
+_PREP_TASKS: set[asyncio.Task] = set()
 
 
 # ── Request/response models ────────────────────────────────────────────────────
@@ -282,12 +295,19 @@ def _production_ready_checkpoint(job: MdJob) -> tuple[Optional[int], Optional[Se
 
 
 def _seed_production_available(job: MdJob) -> bool:
-    """An oxDNA-seeded job whose solvated package is built can run production
-    directly from the seeded structure (minimize-then-produce), skipping the
-    NAMD relaxation ladder.  True only when the package manifest exists."""
-    if not job.seed_oxdna_job_id:
-        return False
-    return (job.package_dir(_workspace()) / "manifest.json").exists()
+    """Always False — an oxDNA-seeded job must run the restrained NAMD relaxation
+    ladder before production; it can no longer jump straight to unrestrained
+    production from the seed.
+
+    The old shortcut (minimize-then-produce, skipping the ENM ladder) blew up:
+    oxDNA relaxes only the COARSE structure, and reconstructing all-atom coords
+    from it leaves residual steric strain (sidechains, fresh solvent, the ~10%
+    oxDNA-vs-B-DNA duplex-width mismatch).  Jumping to unrestrained 310 K NPT
+    exceeded the velocity limit within ~200 steps ("atoms moving too fast").  The
+    seed's value is a better *global* starting shape for the SAME restrained ladder
+    (00_min ENM → k0.5 → k0.1 → k0.01 → release), which the relaxation start runs
+    from the seeded solvated PDB — not skipping atomistic relaxation."""
+    return False
 
 
 def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
@@ -547,12 +567,31 @@ def _append_production_segments(
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
+def _sequenced_base_count(design) -> int:
+    return sum(
+        sum(1 for c in (s.sequence or "") if c.upper() in "ACGT")
+        for s in design.strands
+    )
+
+
+_NO_SEQUENCE_MSG = (
+    "Design has no sequence assigned — every nucleotide would be written as "
+    "thymine (THY), making the topology physically meaningless. "
+    "Assign a scaffold sequence (e.g. M13mp18) and staple sequences before "
+    "starting an MD run."
+)
+
+
 @router.post("/md/jobs")
 async def create_md_job(body: CreateJobRequest) -> dict:
-    """Prepare a new MD job from the current active design.
+    """Create a new MD job and prepare it (solvation + config gen) in the background.
 
-    Runs GROMACS solvation + NAMD config generation (60-120 s).
-    Returns the job immediately with status=preparing; upgrade to queued on success.
+    Returns immediately with status=``preparing`` and a ``job_id``.  The caller
+    subscribes to ``/ws/md-jobs/{job_id}`` to watch a live, ETA-bearing progress
+    bar (the ``prep_progress`` field) while solvation runs, and to learn whether
+    prep ended in ``queued`` (success) or ``failed``.  Previously this endpoint
+    blocked for the whole 60-120 s+ preparation, so the UI could only show an
+    indeterminate spinner with no ETA and no way to detect a hung run.
     """
     if body.protocol not in SUPPORTED_PROTOCOLS:
         raise HTTPException(400, f"Unknown protocol: {body.protocol!r}")
@@ -568,56 +607,36 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         ion_conc_mM = 0.0
         mg_conc_mM = 12.5
 
-    # NAMD seed (Phase 2): when an oxDNA job is named, build the starting
-    # structure from THAT job's own design.json + relaxed last_conf (not the live
-    # editor design — they can differ).  The relaxed coords feed NAMD so the
-    # all-atom run begins pre-relaxed instead of from ideal B-DNA.
-    seed_model = None
-    seed_job_id = None
-    if body.oxdna_job_id:
-        from backend.core.oxdna_runner import build_namd_seed  # noqa: PLC0415
+    # Engine availability is cheap — fail fast (synchronously) so the user gets a
+    # 400 instead of a job that immediately fails in the background.
+    try:
+        logger.info("create_md_job: NAMD=%s", find_namd())
+        logger.info("create_md_job: GROMACS=%s", find_gmx())
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc))
+
+    seeded = bool(body.oxdna_job_id)
+    if seeded:
+        # The seed's design lives on disk (oxDNA job snapshot); it is resolved in
+        # the background worker so its (slow) reconstruction shows on the progress
+        # bar.  A cheap up-front existence check still rejects a bad oxdna_job_id
+        # with a fast 400 before any work is queued.
+        from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
         try:
-            seed = await run_in_threadpool(build_namd_seed, body.oxdna_job_id, _workspace())
+            await run_in_threadpool(assert_namd_seed_available, body.oxdna_job_id, _workspace())
         except FileNotFoundError as exc:
             raise HTTPException(400, str(exc))
-        design = seed.design
-        seed_model = seed.atomistic_model
-        seed_job_id = body.oxdna_job_id
-        logger.info("create_md_job: seeding from oxDNA job %s (stage %s)",
-                    body.oxdna_job_id, seed.stage_name)
+        design = None
+        name = "design"               # provisional; replaced once the seed builds
+        size_factor = 1.0
     else:
+        # The active design is request-scoped (doc session contextvar), so it must
+        # be captured here on the request thread, not in the background worker.
         design = design_state.get_or_404()
-    name = (design.metadata.name or "design").replace(" ", "_")
-
-    # Sequence check — must happen before the expensive solvation step.
-    # An unsequenced design silently produces all-THY atoms, which makes psfgen
-    # build a valid-looking PSF/PDB that is physically wrong (WC pairs = 0 at
-    # every health check because build_wc_pairs finds no complementary residue pairs).
-    sequenced_bases = sum(
-        sum(1 for c in (s.sequence or "") if c.upper() in "ACGT")
-        for s in design.strands
-    )
-    if sequenced_bases == 0:
-        raise HTTPException(
-            400,
-            "Design has no sequence assigned — every nucleotide would be written as "
-            "thymine (THY), making the topology physically meaningless. "
-            "Assign a scaffold sequence (e.g. M13mp18) and staple sequences before "
-            "starting an MD run.",
-        )
-
-    # Check both NAMD and GROMACS are available before the expensive solvation step
-    try:
-        namd_path = find_namd()
-        logger.info("create_md_job: NAMD=%s", namd_path)
-    except RuntimeError as exc:
-        raise HTTPException(400, str(exc))
-
-    try:
-        gmx_path = find_gmx()
-        logger.info("create_md_job: GROMACS=%s", gmx_path)
-    except RuntimeError as exc:
-        raise HTTPException(400, str(exc))
+        if _sequenced_base_count(design) == 0:
+            raise HTTPException(400, _NO_SEQUENCE_MSG)
+        name = (design.metadata.name or "design").replace(" ", "_")
+        size_factor = design_size_factor(design)
 
     job = new_job(
         design_name    = name,
@@ -627,15 +646,83 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         threads        = body.threads,
         devices        = body.devices,
         design_source_path = body.design_source_path,
-        seed_oxdna_job_id  = seed_job_id,
+        seed_oxdna_job_id  = body.oxdna_job_id if seeded else None,
     )
     job.status = MdStatus.preparing
     job.save(_workspace())
-    logger.info("create_md_job: job_id=%s design=%s protocol=%s", job.job_id, name, body.protocol)
+    logger.info("create_md_job: job_id=%s design=%s protocol=%s seeded=%s",
+                job.job_id, name, body.protocol, seeded)
 
-    # Run GROMACS solvation + config gen in threadpool (blocking, 60-120 s)
+    tracker = PrepTracker(
+        build_prep_phases(seeded=seeded, size_factor=size_factor),
+        clock=time.monotonic,
+    )
+    write_prep_progress(job.job_dir(_workspace()), tracker.snapshot())
+
+    task = asyncio.create_task(_prepare_job_bg(
+        job_id      = job.job_id,
+        body        = body,
+        design      = design,
+        seeded      = seeded,
+        ion_conc_mM = ion_conc_mM,
+        mg_conc_mM  = mg_conc_mM,
+        tracker     = tracker,
+    ))
+    _PREP_TASKS.add(task)
+    task.add_done_callback(_PREP_TASKS.discard)
+
+    return job.to_dict()
+
+
+async def _prepare_job_bg(
+    *,
+    job_id: str,
+    body: CreateJobRequest,
+    design,
+    seeded: bool,
+    ion_conc_mM: float,
+    mg_conc_mM: float,
+    tracker: PrepTracker,
+) -> None:
+    """Background preparation: build seed (if any) → solvate → ENM → configs.
+
+    Streams progress into ``{job_dir}/prep_progress.json`` via a 1 Hz heartbeat
+    so the status websocket can render a live bar + ETA.  On any failure the job
+    is marked ``failed`` with the error; on success ``queued`` (+ autostart).
+    """
+    ws = _workspace()
+    job_dir = MdJob.load(job_id, ws).job_dir(ws)
+
+    async def _heartbeat() -> None:
+        try:
+            while not tracker.is_done():
+                write_prep_progress(job_dir, tracker.snapshot())
+                await asyncio.sleep(1.0)
+        except asyncio.CancelledError:
+            pass
+
+    hb = asyncio.create_task(_heartbeat())
+
     try:
-        logger.info("create_md_job: starting %s for %s", body.protocol, job.job_id)
+        seed_model = None
+        if seeded:
+            from backend.core.oxdna_runner import build_namd_seed  # noqa: PLC0415
+            tracker.report("seed", None, "Reconstructing relaxed atomic model…")
+            seed = await run_in_threadpool(build_namd_seed, body.oxdna_job_id, ws)
+            local_design = seed.design
+            seed_model = seed.atomistic_model
+            seed_name = (local_design.metadata.name or "design").replace(" ", "_")
+            job = MdJob.load(job_id, ws)
+            job.design_name = seed_name
+            job.save(ws)
+            logger.info("prep %s: seeded from oxDNA job %s (stage %s)",
+                        job_id, body.oxdna_job_id, seed.stage_name)
+        else:
+            local_design = design
+
+        if _sequenced_base_count(local_design) == 0:
+            raise RuntimeError(_NO_SEQUENCE_MSG)
+
         prepare = (
             prepare_equilibrium_aware_namd
             if body.protocol == EQUILIBRIUM_AWARE_PROTOCOL
@@ -643,24 +730,33 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         )
         package_subdir, name_stem, segments = await run_in_threadpool(
             prepare,
-            design,
-            job.job_dir(_workspace()),
-            ion_conc_mM    = ion_conc_mM,
-            mg_conc_mM     = mg_conc_mM,
-            salt_mode      = body.salt_mode,
-            padding_nm     = body.padding_nm,
-            minimize_steps = body.minimize_steps,
+            local_design,
+            job_dir,
+            ion_conc_mM     = ion_conc_mM,
+            mg_conc_mM      = mg_conc_mM,
+            salt_mode       = body.salt_mode,
+            padding_nm      = body.padding_nm,
+            minimize_steps  = body.minimize_steps,
             atomistic_model = seed_model,
+            progress        = tracker.report,
         )
-        logger.info("create_md_job: preparation done; package=%s name_stem=%s segments=%d",
-                    package_subdir, name_stem, len(segments))
+        logger.info("prep %s: done; package=%s name_stem=%s segments=%d",
+                    job_id, package_subdir, name_stem, len(segments))
     except Exception as exc:
-        logger.error("create_md_job: preparation FAILED for %s: %s", job.job_id, exc, exc_info=True)
+        logger.error("prep %s: FAILED: %s", job_id, exc, exc_info=True)
+        tracker.fail(str(exc))
+        hb.cancel()
+        job = MdJob.load(job_id, ws)
         job.status = MdStatus.failed
-        job.error  = f"Preparation failed: {exc}"
-        job.save(_workspace())
-        return job.to_dict()
+        job.error = f"Preparation failed: {exc}"
+        job.save(ws)
+        clear_prep_progress(job_dir)
+        return
 
+    tracker.finish()
+    hb.cancel()
+
+    job = MdJob.load(job_id, ws)
     job.package_subdir = package_subdir
     job.name_stem      = name_stem
     job.segments       = [
@@ -674,13 +770,12 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         for s in segments
     ]
     job.status = MdStatus.queued
-    job.save(_workspace())
+    job.save(ws)
+    clear_prep_progress(job_dir)
 
     if body.autostart:
-        logger.info("create_md_job: autostart=True, launching %s", job.job_id)
-        start_job(job, _workspace())
-
-    return job.to_dict()
+        logger.info("prep %s: autostart=True, launching", job_id)
+        start_job(job, ws)
 
 
 @router.get("/md/jobs")
@@ -711,20 +806,13 @@ async def get_md_job_display(job_id: str) -> dict:
     ready = manifest.exists() and dcd_path is not None
     busy = job.status in {MdStatus.running, MdStatus.preparing}
 
-    # oxDNA-seeded jobs can skip the NAMD relaxation and produce straight from
-    # the seeded structure when no relaxation checkpoint exists yet.
-    from_seed = (
-        ready_spec is None and continue_spec is None
-        and _seed_production_available(job) and not busy
-    )
-    production_ready = (ready_spec is not None or from_seed) and not busy
+    # Seeded jobs no longer skip relaxation — they run the restrained ladder from
+    # the seed, then produce from its checkpoint like any job (from_seed removed).
+    from_seed = False
+    production_ready = ready_spec is not None and not busy
     if ready_spec is not None:
         production_checkpoint = ready_spec.name
         production_warning = ready_warning
-    elif from_seed:
-        production_checkpoint = "oxDNA seed (minimize → produce)"
-        production_warning = ("Relaxation skipped: the oxDNA-seeded structure is minimized "
-                              "then produced unrestrained. Watch the first frames for instability.")
     else:
         production_checkpoint = None
         production_warning = ""

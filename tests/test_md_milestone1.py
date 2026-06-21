@@ -581,47 +581,32 @@ class TestProductionAppend:
         (package_dir / "output").mkdir()
         return job
 
-    def test_seeded_job_produces_from_seed_without_relaxation(
+    def test_seeded_job_must_relax_before_production(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A seeded job with no relaxation checkpoint can still start production:
-        the first segment minimizes + heats the seeded structure (no checkpoint
-        restart files), later segments continue normally."""
+        """A seeded job with no relaxation checkpoint can NO LONGER produce directly
+        from the seed (the minimize-then-unrestrained shortcut blew up).  It must run
+        the restrained relaxation ladder first, so production 400s without a
+        checkpoint — exactly like an unseeded job."""
         routes_md = self._routes_md(tmp_path, monkeypatch)
-        assert routes_md._seed_production_available(self._seeded_job(tmp_path)) is True
+        assert routes_md._seed_production_available(self._seeded_job(tmp_path)) is False
 
         job = self._seeded_job(tmp_path)
-        segments = routes_md._append_production_segments(job, 1000)
-        assert [int(s.percent) for s in segments] == [10, 50, 100]
+        with pytest.raises(Exception) as exc:
+            routes_md._append_production_segments(job, 1000)
+        assert getattr(exc.value, "status_code", None) == 400
 
-        package_dir = job.package_dir(tmp_path)
-        first = (package_dir / f"{segments[0].name}.conf").read_text()
-        # From-seed: starts from the solvated PDB, minimizes + reinit velocities,
-        # and does NOT continue from a checkpoint restart.
-        assert "minimize           4800" in first
-        assert "reinitvels         310" in first
-        assert "coordinates        S.pdb" in first
-        assert "binCoordinates" not in first
-        # Later split-segments DO continue from the previous restart (normal conf).
-        later = (package_dir / f"{segments[1].name}.conf").read_text()
-        assert "binCoordinates" in later
-        assert "minimize" not in later
-
-        manifest = json.loads((package_dir / "manifest.json").read_text())
-        assert manifest["production_extension"]["from_seed"] is True
-
-    def test_display_meta_marks_seeded_job_production_ready(
+    def test_display_meta_seeded_job_not_production_ready_without_checkpoint(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """The /display meta the panel reads must report production_ready +
-        production_from_seed for a seeded job, so the button enables."""
+        """The /display meta must NOT mark a seeded job production-ready before it has
+        a relaxation checkpoint — it has to run the ladder first (no from-seed skip)."""
         import asyncio
         routes_md = self._routes_md(tmp_path, monkeypatch)
         job = self._seeded_job(tmp_path)
         meta = asyncio.run(routes_md.get_md_job_display(job.job_id))
-        assert meta["production_ready"] is True
-        assert meta["production_from_seed"] is True
-        assert "seed" in (meta["production_checkpoint"] or "").lower()
+        assert meta["production_ready"] is False
+        assert meta["production_from_seed"] is False
 
     def test_unseeded_job_without_checkpoint_still_blocks_production(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
@@ -638,6 +623,61 @@ class TestProductionAppend:
 
 
 # ── namd_runner (pure helpers only) ──────────────────────────────────────────
+
+class TestOrphanStop:
+    """A NAMD run orphaned by a server restart (no in-memory runner thread) must still
+    be stoppable from the UI: stop_job finds the detached PID and kills it."""
+
+    def _running_job(self, tmp_path: Path):
+        from backend.core.md_job import MdSegmentStatus, MdStatus, new_job
+        job = new_job(design_name="S", protocol="equilibrium_aware",
+                      name_stem="S", package_subdir="package/S")
+        job.segments = [MdSegmentStatus(name="S_01", stage="x", percent=10, steps=100)]
+        job.current_segment_idx = 0
+        job.status = MdStatus.running
+        job.save(tmp_path)
+        return job
+
+    def test_stop_orphan_kills_external_pid_and_marks_stopped(self, tmp_path, monkeypatch):
+        from backend.core import namd_runner
+        from backend.core.md_job import MdJob, MdStatus
+
+        job = self._running_job(tmp_path)
+        killed = []
+        monkeypatch.setattr(namd_runner, "_external_pid", lambda j: 4242)
+        monkeypatch.setattr(namd_runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+
+        assert namd_runner.stop_job(job.job_id, tmp_path) is True
+        assert killed == [4242]
+        reloaded = MdJob.load(job.job_id, tmp_path)
+        assert reloaded.status == MdStatus.stopped
+        assert reloaded.namd_pid is None
+
+    def test_stop_orphan_falls_back_to_persisted_pid(self, tmp_path, monkeypatch):
+        from backend.core import namd_runner
+
+        job = self._running_job(tmp_path)
+        job.namd_pid = 7777
+        job.save(tmp_path)
+        killed = []
+        monkeypatch.setattr(namd_runner, "_external_pid", lambda j: None)   # /proc scan misses
+        monkeypatch.setattr(namd_runner, "_pid_is_namd", lambda pid: True)  # but persisted PID is ours
+        monkeypatch.setattr(namd_runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+
+        assert namd_runner.stop_job(job.job_id, tmp_path) is True
+        assert killed == [7777]
+
+    def test_stop_no_orphan_returns_false_without_killing(self, tmp_path, monkeypatch):
+        from backend.core import namd_runner
+
+        job = self._running_job(tmp_path)
+        killed = []
+        monkeypatch.setattr(namd_runner, "_external_pid", lambda j: None)
+        monkeypatch.setattr(namd_runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+        # no persisted PID, no /proc match → nothing to kill
+        assert namd_runner.stop_job(job.job_id, tmp_path) is False
+        assert killed == []
+
 
 class TestFindNamd:
     def test_finds_installed_binary(self) -> None:
@@ -748,3 +788,50 @@ class TestFindNamd:
         assert "resume to continue" in (reconciled.error or "")
         assert "D_01_production_p50" in (output_dir / "metrics.jsonl").read_text()
         assert "D_01_production_p50" in (output_dir / "health.jsonl").read_text()
+
+
+class TestReconcilePreparing:
+    """A 'preparing' job whose background prep task died must self-heal to failed."""
+
+    def _preparing_job(self, tmp_path):
+        from backend.core.md_job import MdStatus, new_job
+        job = new_job("P", "equilibrium_aware", "", "")
+        job.status = MdStatus.preparing
+        job.save(tmp_path)
+        return job
+
+    def test_stale_sidecar_marks_failed(self, tmp_path, monkeypatch):
+        import time as _time
+        from backend.core.md_job import MdStatus
+        from backend.core.md_prep_progress import write_prep_progress, PREP_PROGRESS_FILENAME
+        import backend.core.namd_runner as runner
+
+        job = self._preparing_job(tmp_path)
+        write_prep_progress(job.job_dir(tmp_path), {"phase": "solvate", "fraction": 0.3})
+        # Backdate the sidecar well past the stale threshold (task is gone).
+        sidecar = job.job_dir(tmp_path) / PREP_PROGRESS_FILENAME
+        old = _time.time() - (runner._PREP_STALE_S + 60)
+        import os
+        os.utime(sidecar, (old, old))
+
+        out = runner.reconcile_job_status(job, tmp_path)
+        assert out.status == MdStatus.failed
+        assert "interrupted" in (out.error or "").lower()
+
+    def test_missing_sidecar_marks_failed(self, tmp_path):
+        from backend.core.md_job import MdStatus
+        import backend.core.namd_runner as runner
+
+        job = self._preparing_job(tmp_path)  # no sidecar written at all
+        out = runner.reconcile_job_status(job, tmp_path)
+        assert out.status == MdStatus.failed
+
+    def test_fresh_sidecar_left_preparing(self, tmp_path):
+        from backend.core.md_job import MdStatus
+        from backend.core.md_prep_progress import write_prep_progress
+        import backend.core.namd_runner as runner
+
+        job = self._preparing_job(tmp_path)
+        write_prep_progress(job.job_dir(tmp_path), {"phase": "solvate", "fraction": 0.3})
+        out = runner.reconcile_job_status(job, tmp_path)
+        assert out.status == MdStatus.preparing  # live heartbeat → untouched

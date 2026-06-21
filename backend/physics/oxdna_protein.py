@@ -216,6 +216,7 @@ def hybrid_topology_text(
 
 def hybrid_configuration_text(
     design: Design, geometry: list[dict], blocks: list[Block], box_nm: float | None = None,
+    *, oxdna_native_seed: bool = False,
 ) -> str:
     """Full hybrid configuration: header + protein bead lines FIRST + DNA lines.
 
@@ -223,8 +224,15 @@ def hybrid_configuration_text(
     starts outside it; protein and DNA share the one box (oxDNA PBC needs a single
     box).  Protein lines lead so their indices are ``0..N_prot-1`` (the topology
     and trap convention).
+
+    ``oxdna_native_seed`` slides the DNA centres of mass to oxDNA's native bonding
+    geometry (:func:`~backend.physics.oxdna_interface.oxdna_native_seed_map`) so the
+    DNA pairs start bonded; protein beads are unaffected.
     """
+    from backend.physics.oxdna_interface import oxdna_native_seed_map
     resolved = resolved_nuc_map(design, geometry)
+    if oxdna_native_seed:
+        resolved = oxdna_native_seed_map(design, resolved)
     order = _strand_nucleotide_order(design)
     if box_nm is None:
         dna_pos = [n["backbone_position"] for n in resolved.values()]

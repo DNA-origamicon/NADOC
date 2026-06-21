@@ -16,6 +16,7 @@
  */
 
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { resetControlsToDefaults } from './form_defaults.js'
 import { showToast } from './toast.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
 import { initFlexScale } from './flex_scale.js'
@@ -357,6 +358,46 @@ export function fieldChildTitle(job) {
   return `E-field ${pN} pN/nt · dir (${dir}) · ${na} anchored`
 }
 
+/** Pure: which extra elements a consolidated run added — anchors / hard surface /
+ *  electric field.  Reads `run_config` (with an `efield` fallback for older field
+ *  children that predate run_config). */
+export function runElements(job) {
+  const cfg = runConfigForJob(job)
+  const field = !!cfg.field
+  const surface = !!cfg.surface
+  const anchors = (Array.isArray(cfg.anchors) && cfg.anchors.length > 0) ||
+                  (job?.efield?.n_anchored > 0)
+  return { anchors, surface, field }
+}
+
+/** Pure: bracketed indicator tags for a run's added elements, in the order
+ *  [A]nchors · [H]ard surface · [E]-field (e.g. "[A][H][E]").  Empty string for a
+ *  plain production run. */
+export function runIndicatorTags(job) {
+  const el = runElements(job)
+  return (el.anchors ? '[A]' : '') + (el.surface ? '[H]' : '') + (el.field ? '[E]' : '')
+}
+
+/** Pure: list-row label for a run child — "Run N" plus its element indicators.
+ *  No lightning-bolt icon: the [E] tag denotes the electric field instead. */
+export function runRowLabel(job, index) {
+  const tags = runIndicatorTags(job)
+  return `Run ${index}${tags ? ' ' + tags : ''}`
+}
+
+/** Pure: hover title for a run child describing its added elements. */
+export function runChildTitle(job) {
+  const el = runElements(job)
+  if (el.field) return fieldChildTitle(job)
+  const parts = []
+  if (el.surface) parts.push('hard surface')
+  if (el.anchors) {
+    const n = job?.efield?.n_anchored || runConfigForJob(job).anchors?.length || 0
+    parts.push(n ? `${n} anchored` : 'anchored')
+  }
+  return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
+}
+
 export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
@@ -654,12 +695,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     const label = document.createElement('span')
     label.style.flex = '1'
     if (isChild) {
-      // Electric bolt icon + numbered label; hover reveals the field params.
-      const bolt = document.createElement('span')
-      bolt.textContent = '⚡'
-      bolt.style.cssText = 'font-weight:700;color:#f2c641;margin-right:3px'
-      label.append(bolt, document.createTextNode(`Field ${index}`))
-      row.title = fieldChildTitle(job)
+      // Numbered run label + element indicators ([A]nchors / [H]ard surface /
+      // [E]-field); hover reveals the run params.  No lightning bolt — the [E]
+      // tag denotes the electric field instead.
+      label.textContent = runRowLabel(job, index)
+      row.title = runChildTitle(job)
     } else {
       label.textContent = jobDisplayName(job)
     }
@@ -667,21 +707,29 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     st.style.color = ls.color
     st.textContent = ls.label
     row.append(indicator, label, st)
-    row.addEventListener('click', async () => {
-      _selectedId = job.job_id
-      _progress = await api.getOxdnaProgress(job.job_id).catch(() => null)
-      _renderList()
-      _renderDetail(job)
-      _applyRunControls(job)   // echo this run's conditions into every card
-      // If the "OxDNA display" toggle is on, follow it to the newly-selected job
-      // (re-deform the model to THIS job's relaxed positions, not the old one's).
-      if (displayToggle?.checked && oxdnaDisplay?.mode() !== 'rmsf' && oxdnaDisplay?.mode() !== 'trajectory') {
-        _lastFrameIndex = null
-        await _refreshDisplay()
-      }
-      _scheduleNextPoll()
-    })
+    row.addEventListener('click', () => { _selectJob(job.job_id) })
     return row
+  }
+
+  // Select a job by id: pull its progress, render list + detail, echo its run
+  // conditions into every card (field arrow / surface / anchors), and follow the
+  // OxDNA display to it.  Used by row clicks AND by auto-selecting a freshly
+  // started run so the new list item is selected.
+  async function _selectJob(jobId) {
+    const job = _jobs.find(j => j.job_id === jobId)
+    if (!job) return
+    _selectedId = jobId
+    _progress = await api.getOxdnaProgress(jobId).catch(() => null)
+    _renderList()
+    _renderDetail(job)
+    _applyRunControls(job)   // echo this run's conditions into every card
+    // If the "OxDNA display" toggle is on, follow it to the newly-selected job
+    // (re-deform the model to THIS job's relaxed positions, not the old one's).
+    if (displayToggle?.checked && oxdnaDisplay?.mode() !== 'rmsf' && oxdnaDisplay?.mode() !== 'trajectory') {
+      _lastFrameIndex = null
+      await _refreshDisplay()
+    }
+    _scheduleNextPoll()
   }
 
   // Repopulate the panel's own relaxation/production inputs AND the external
@@ -702,6 +750,28 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     }
     if (prodStepsInput && cfg.prodSteps != null) prodStepsInput.value = String(cfg.prodSteps)
     applyRunConfig?.(cfg, job)
+  }
+
+  // No job selected → clear the run cards so the E-field arrow (and surface /
+  // anchor glow) don't linger from a previously-selected field run.  The arrow is
+  // only shown when a field has been applied to the *current* job.
+  function _clearRunCards() {
+    applyRunConfig?.({ advanced: null, field: null, surface: null, anchors: [] }, null)
+  }
+
+  // Reset every relaxation/production INPUT back to its index.html default — used
+  // when a design is closed or a different one is opened, so the panel doesn't
+  // carry the previous design's (or last-selected job's) settings.  Also clears
+  // the run cards (field/surface/anchors) and drops the device "user set" flag so
+  // the recommended device re-applies.
+  function _resetControlsToDefaults() {
+    resetControlsToDefaults([
+      backendSel, deviceInput, saltInput, mcStepsInput, mdStepsInput,
+      equilStepsInput, bpGateInput, prodStepsInput,
+    ])
+    if (deviceInput) delete deviceInput.dataset.userSet
+    _clearRunCards()
+    _checkAvailable()   // re-apply the recommended device into the now-default field
   }
 
   // ── Detail ─────────────────────────────────────────────────────────────────
@@ -933,6 +1003,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       showToast('oxDNA run started', 'ok')
       _setProdStatus(`Run started (${what}) — see the new sub-item.`, _C.warn)
       await _fetchJobs()
+      // Select the new run so its list item is highlighted and every card (incl.
+      // the E-field arrow) reflects the run that was just started.
+      if (r.job_id) await _selectJob(r.job_id)
     } else {
       _setProdStatus(api.lastErrorMessage?.() || 'Failed to start run (see console)', _C.err)
       prodBtn.disabled = false
@@ -1090,6 +1163,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       _setSeedStatus('NAMD seed job created — see Molecular Dynamics below.', _C.ok)
       showToast('NAMD seed job created from relaxed oxDNA structure', 'ok')
       _revealMdPanel()
+      // Refresh the MD panel even if it was already open (reveal only refreshes
+      // on a collapse→expand), so the new preparing job appears + is selected.
+      window.dispatchEvent(new CustomEvent('nadoc:md-job-created', { detail: { jobId: job.job_id } }))
     } else {
       const detail = job?.error || api.lastErrorMessage?.()
       _setSeedStatus(detail || 'Failed to create NAMD seed (see console)', _C.err)
@@ -1139,6 +1215,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _selectedId = null
     _hideDetail()
     _updateButtons(null)
+    _clearRunCards()   // drop the E-field arrow / anchor glow of the deleted job
     _emitJobSelected()
     _fetchJobs()
   })
@@ -1229,6 +1306,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     if (oxdnaDisplay?.isActive()) _allDisplaysOff()
     _selectedId = null
     _hideDetail()
+    _resetControlsToDefaults()   // drop the previous design's relaxation/run settings
     _updateButtons(null)
     _emitJobSelected()
     if (_collapsed) _renderList()   // re-filter cached jobs to the new path

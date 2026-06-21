@@ -170,13 +170,23 @@ def _workspace() -> Path:
 
 def _design_ref_conf(job_dir: Path, design) -> Path:
     """Path to an origin-frame DESIGN-geometry configuration for a job, generated
-    + cached as ``design_ref.dat``.  Used as the alignment reference for a field
-    run's display so the anchor maps to its design position (the job's own
-    ``conf.dat`` is the relaxation-drifted seed and would display far off-origin)."""
+    + cached as ``design_ref.dat``.  Used as the alignment reference for EVERY
+    display path (relaxed display, flexibility map, trajectory, field run) so the
+    relaxed structure always superposes onto the design pose at the origin.
+
+    A CHILD job (production / field run) is seeded from its parent's relaxed
+    ``last_conf.dat``, which the relaxation MD has diffused tens of nm off-origin,
+    so the child's own ``conf.dat`` is NOT a valid design-pose reference (aligning
+    to it displays the whole structure far below/away from the design).  This
+    regenerates a clean origin-frame reference from the job's design snapshot.
+
+    Geometry uses ``compact_skips=True`` to match exactly what ``prepare_oxdna_job``
+    wrote into a root job's ``conf.dat`` (deletions collapsed to one bp), so a root
+    job's alignment is byte-for-byte unchanged by routing through this helper."""
     ref = job_dir / "design_ref.dat"
     if not ref.exists():
         from backend.api.crud import _geometry_for_design
-        write_configuration(design, _geometry_for_design(design), ref)
+        write_configuration(design, _geometry_for_design(design, compact_skips=True), ref)
     return ref
 
 
@@ -815,12 +825,13 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
     if not trajs:
         return {"ready": False, "reason": "sampling starting — no frames yet"}
 
-    # Reference = the job's conf.dat (design geometry) — IDENTICAL to the OxDNA
-    # display route's Kabsch reference, so the flexibility map and the relaxed
-    # display sit in the same place.
-    ref_conf = jd / "conf.dat"
-
+    # Reference = the origin-frame DESIGN geometry — IDENTICAL to the OxDNA display
+    # route's Kabsch reference, so the flexibility map and the relaxed display sit
+    # in the same place.  Must be _design_ref_conf (not the job's conf.dat): for a
+    # field/production child conf.dat is the parent's drifted relaxed structure.
     design = Design.model_validate_json((jd / "design.json").read_text())
+    ref_conf = _design_ref_conf(jd, design)
+
     result = await run_in_threadpool(production_rmsf, design, trajs, ref_conf)
     # Attach the confidence metric (frames pooled + statistical RMSF error) and
     # whether production is still running, so the panel can warn "preliminary".
@@ -933,7 +944,12 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
             conf_path, design, ref_conf,
             align_keys=[tuple(k) for k in anchor_keys], rotate=False, align=align)
     else:
-        ref_conf = jd / "conf.dat"
+        # Align to the origin-frame DESIGN geometry, NOT the job's own conf.dat —
+        # for a production/field CHILD, conf.dat is the parent's relaxation-drifted
+        # last_conf (tens of nm off-origin), so aligning to it would render the
+        # structure far from the design.  _design_ref_conf is identical to a root
+        # job's conf.dat, so root jobs are unaffected.
+        ref_conf = _design_ref_conf(jd, design)
         full_map = read_configuration_unwrapped(conf_path, design, ref_conf, align=align)
 
     # Hybrid (protein) jobs: a per-protein rigid 4×4 (design pose → relaxed pose in
