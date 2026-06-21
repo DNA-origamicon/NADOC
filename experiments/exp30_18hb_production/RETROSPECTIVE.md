@@ -197,3 +197,38 @@ so far. **[APPLIED]** = done (safe, reversible). **[PROPOSE]** = needs user sign
 - On COMPLETED: write REPORT.md (full health curve + the k=0 survival) and CronDelete both
   crons. No new safe code change. Open user items unchanged (merge resolution; next-run
   ladder-compression + CG-logging from ANALYSIS.md).
+
+## 2026-06-19 21:17 (k=0 p50 ~94%, final stage; incident post-mortem)
+
+- **OPERATIONAL INCIDENT (resolved): a `git clean` during your two-computer rebase wiped
+  all untracked artifacts** — `scripts/{run,monitor,watchdog}_18hb.*` and the entire
+  `experiments/exp30_18hb_production/` dir. The MD run survived only because `workspace/`
+  is gitignored (job dir, checkpoints, DCDs untouched). For ~1 h, visibility + OS-level
+  auto-resume were down; I recreated the scripts and a self-contained monitor, then your
+  rebase/restore settled and the stack is green again (monitor OK, 1 watchdog, 3 scripts).
+  - **[PROPOSE — do this] track the tooling**: `experiments/exp30…` and `scripts/*_18hb.*`
+    are still untracked (`git check-ignore` confirms NOT ignored) → the next `git clean`
+    wipes them again. Commit them, or move under a gitignored dir. Single biggest
+    resilience gap exposed this run.
+  - **[PROPOSE] make the monitor namd_runner-independent** (inline xsc-parse + pgrep) so a
+    refactor/rebase of `namd_runner` internals can't break visibility — the rebase
+    transiently removed `_read_xsc_step`/`_segment_process_running` and broke imports.
+- **Run nearly done & k=0 holding:** C1'=99.4%, WC=77.9% steady through 432k→902k of k=0
+  p50; 0 crashes in 5 days. Remaining: finish p50 + k=0 p100 → **ETA ~half a day**.
+- **Disk ~9 GB end-margin** (15 GB free, ~1.26M steps left ≈ 6 GB). Clears the 8 GB guard;
+  watch the final p100 but a clean finish fits.
+- On COMPLETED: write REPORT.md (full health curve + k=0 survival) and CronDelete both crons.
+
+## 2026-06-20 09:17 (k=0 p100 ~67%, FINAL segment; success secured)
+
+- **Production success effectively confirmed:** 11/11 gates passed; C1' held 98.9–100% the
+  whole ladder *including true k=0* (no melt), WC 95→78 (above every threshold incl. the
+  relaxed 75 at k=0). 18hb is the large-bundle favorable case exp29 predicted. Only the
+  last ~4h of the final segment remain.
+- Disk ~10 GB end-margin (12 GB free, ~0.4M steps ≈ 2 GB left). Clears the guard.
+- **On COMPLETED** (next p100 finish): write REPORT.md (full health curve + throughput +
+  the GPU-resident/resume/topology fixes + the incident) and CronDelete both crons; the
+  monitor verdict flips to COMPLETED when run_job writes status=completed.
+- Carry-forward for next runs (from ANALYSIS.md + this run's incidents): (1) compress the
+  restrained ladder ~5–10× and reallocate to k=0; (2) commit/track the exp tooling so a
+  `git clean` can't wipe it; (3) optional offline PME/PE throughput experiment.

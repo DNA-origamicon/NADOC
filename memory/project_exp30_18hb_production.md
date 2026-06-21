@@ -5,6 +5,11 @@ metadata:
   type: project
 ---
 
+**COMPLETED 2026-06-20 — FULL SUCCESS: 12/12 health gates passed, C1' held 99–100%
+through true k=0 (no melt), WC 95→78. ~6.1 days, 0 crashes. Final report:
+experiments/exp30_18hb_production/REPORT.md.** Confirms exp29's prediction that a large
+salted bundle survives true k=0 where 2hb/6hb melted.
+
 Unattended production MD run of `workspace/18hb.nadoc` (224-strand 18-helix bundle,
 no extra bases) launched 2026-06-14. Job id in `experiments/exp30_18hb_production/JOB_ID`
 (e29d1e5d5ace). Protocol `equilibrium_aware_namd` = mgh_slow_release ENM ladder
