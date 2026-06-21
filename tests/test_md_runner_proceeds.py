@@ -124,10 +124,13 @@ def _install_fakes(
     )
 
     async def fake_namd(
-        namd_bin, conf_name, package_dir, log_path, threads, devices, job_id=None
+        namd_bin, conf_name, package_dir, log_path, threads, devices, job_id=None,
+        on_spawn=None,
     ):
         if recorder is not None:
             recorder.append(conf_name)
+        if on_spawn is not None:
+            on_spawn(4242)
         out = package_dir / "output"
         out.mkdir(exist_ok=True)
         # A resume conf (<seg>.resumeN) keeps the segment's outputName, so its
