@@ -6,6 +6,7 @@ import {
   resolveDefaultPlane,
   dropdownStateForMode,
   axesVisibleForDesign,
+  latticeLengthStepBp,
 } from './extrude_panel_logic.js'
 
 describe('resolveDefaultPlane', () => {
@@ -47,3 +48,15 @@ describe('axesVisibleForDesign', () => {
     expect(axesVisibleForDesign({ helices: [] }, true)).toBe(false)
   })
 })
+
+describe('latticeLengthStepBp', () => {
+  it('steps by 8 bp on the square lattice', () => {
+    expect(latticeLengthStepBp('SQUARE')).toBe(8)
+  })
+  it('steps by 7 bp on honeycomb (and any non-square default)', () => {
+    expect(latticeLengthStepBp('HONEYCOMB')).toBe(7)
+    expect(latticeLengthStepBp(null)).toBe(7)
+    expect(latticeLengthStepBp(undefined)).toBe(7)
+  })
+})
+

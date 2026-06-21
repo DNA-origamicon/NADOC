@@ -1241,6 +1241,12 @@
       border-color: #58a6ff; color: #58a6ff;
       background: rgba(88,166,255,0.10);
     }
+    .xover-mode-btn:disabled {
+      opacity: 0.4; color: #484f58; border-color: #21262d;
+      background: transparent; cursor: not-allowed;
+    }
+    /* Coloring array in Representation Options: all modes, 2-up grid. */
+    .repr-color-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 
     /* ── Default-value marker on range sliders ──────────────────────── */
     .slider-wrap {
@@ -5238,6 +5244,17 @@
             Representation Options <span id="slab-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
           </h2>
           <div id="slab-body" style="display:none">
+            <div class="xover-mode-row" id="repr-coloring-row">
+              <label>Coloring</label>
+              <div class="repr-color-btns">
+                <button class="xover-mode-btn" id="repr-color-strand">Strand color</button>
+                <button class="xover-mode-btn" id="repr-color-base">Base color</button>
+                <button class="xover-mode-btn" id="repr-color-cluster">Cluster color</button>
+                <button class="xover-mode-btn" id="repr-color-overhang-only">Overhang highlight</button>
+                <button class="xover-mode-btn" id="repr-color-cpk">Atomic (CPK)</button>
+                <button class="xover-mode-btn" id="repr-color-source">By part / source</button>
+              </div>
+            </div>
             <div class="slider-row" id="repr-bead-radius-row" style="display:none">
               <label>Bead radius (nm)</label>
               <span class="val" id="sv-bead-radius">0.10</span>
@@ -5262,13 +5279,6 @@
               <label>Atom radius scale</label>
               <span class="val" id="sv-atom-vdw-scale">1.00</span>
               <input type="range" id="sl-atom-vdw-scale" min="0.50" max="1.50" step="0.05" value="1.00">
-            </div>
-            <div class="xover-mode-row" id="repr-atom-color-row" style="display:none">
-              <label>Coloring</label>
-              <div class="xover-mode-btns">
-                <button class="xover-mode-btn active" id="atom-color-cpk">CPK</button>
-                <button class="xover-mode-btn"        id="atom-color-strand">Strand</button>
-              </div>
             </div>
 
             <!-- Surface Options (shown only when surface mode is active) -->

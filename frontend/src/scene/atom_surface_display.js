@@ -31,7 +31,7 @@ export function regionSurfaceSignature(design) {
 
 export function initAtomSurfaceDisplay({
   scene, store, api, designRenderer, atomisticRenderer, surfaceRenderer,
-  unfoldView, overhangLinkArcs, setColoringMode,
+  unfoldView, overhangLinkArcs,
 }) {
   // ── Per-region overlay renderers (mixed representation) ─────────────────────
   // A focal domain/strand/cluster can be pinned to surface / vdw / ballstick; the
@@ -54,10 +54,12 @@ export function initAtomSurfaceDisplay({
   let _regionSurfaceSig   = null
   let _regionSurfaceTimer = null
 
-  // Atomistic-only option rows (shown only while atomistic mode is active)
+  // Atomistic-only option rows (shown only while atomistic mode is active).
+  // Coloring for atomistic now lives in the unified Representation-Options
+  // coloring array (ui/coloring_options_panel.js), so only the radius slider
+  // remains here.
   const _atomisticSliderRowIds = [
     'repr-atom-radius-row',
-    'repr-atom-color-row',
   ]
 
   function _setSurfacePanelVisible(visible) {
@@ -231,15 +233,6 @@ export function initAtomSurfaceDisplay({
       atomisticRenderer.setColorMode('strand', strandMap)
     }
   }
-
-  // Side-panel atomistic colour buttons — quick CPK ↔ Strand toggle that drives
-  // the global coloringMode (so both menu and panel stay in sync).
-  document.getElementById('atom-color-cpk')?.addEventListener('click', () => {
-    setColoringMode('cpk')
-  })
-  document.getElementById('atom-color-strand')?.addEventListener('click', () => {
-    setColoringMode('strand')
-  })
 
   // Keep atom + surface strand colours in sync when groups/colors change.
   // Always refresh regardless of CPK/strand mode so extra-base coloring stays current.

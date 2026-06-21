@@ -45,11 +45,19 @@ export function planExportRepUpgrade(state) {
 
 export function initPhotoMode({
   store, api, sceneCtx, photoRenderer, assemblyRenderer, designRenderer,
-  bluntEnds, assemblyJointRenderer, viewCube, player,
+  bluntEnds, assemblyJointRenderer, viewCube, player, originAxes,
 }) {
   const { scene, renderer } = sceneCtx
 
   let _photoPanelCtrl = null
+
+  // Pre-photo visibility of the world-origin XYZ triad, restored on exit. The
+  // triad is an editor orientation aid and must not appear in a publication
+  // render; it also has a real failure mode if left on — its `toneMapped:false`
+  // line material interacts with the bloom pass on the ANGLE/D3D11 backend to
+  // paint a black square at the origin's screen position (Windows-only, never
+  // reproduced on desktop GL). Hiding it both cleans the figure and dodges that.
+  let _savedOriginAxesVisible = null
 
   // The assembly's `export_representation` is applied to ALL instances only for
   // the duration of a photo-mode PNG/video render, then the working reps are
@@ -192,6 +200,13 @@ export function initPhotoMode({
     // Suppress annotation overlays that don't belong in publication renders.
     // Design-mode renderer (no-op in assembly mode):
     designRenderer.setAxisArrowsVisible(false)
+    // World-origin triad: hide for the clean render (and to avoid the bloom black
+    // square on ANGLE/D3D11). Save prior visibility so a user who had it on/off
+    // gets the same back on exit.
+    if (originAxes) {
+      _savedOriginAxesVisible = originAxes.visible
+      originAxes.visible = false
+    }
     bluntEnds?.setVisible(false)
     // Assembly-mode counterparts: per-instance helix axis arrows + helix-id
     // labels + overhang-name sprites + active-instance BoxHelper, plus the
@@ -211,14 +226,21 @@ export function initPhotoMode({
     store.setState({ photoActive: true })
   }
 
-  function _photoModeExit() {
+  function _photoModeExit({ skipTabRestore = false } = {}) {
     // Idempotent: safe to call from any teardown path (file close/open/new,
     // assembly enter) even when photo mode isn't active — just no-op.
+    // `skipTabRestore` lets a caller that's already driving the sidebar (e.g.
+    // the tab strip switching to a different tab) suppress the feature-log
+    // restore so the user lands on the tab they actually clicked.
     if (!photoRenderer.isActive()) return
     photoRenderer.deactivate()
 
     // Restore annotation overlays to their pre-photo-mode state.
     designRenderer.setAxisArrowsVisible(true)
+    if (originAxes && _savedOriginAxesVisible !== null) {
+      originAxes.visible = _savedOriginAxesVisible
+      _savedOriginAxesVisible = null
+    }
     const tf = store.getState().toolFilters
     bluntEnds?.setVisible(tf?.bluntEnds ?? true)
     assemblyRenderer.setPhotoMode(false)
@@ -234,7 +256,7 @@ export function initPhotoMode({
       // No design loaded — hide photo pane and the panel itself.
       document.getElementById('tab-content-photo').hidden = true
       leftPanel.classList.add('hidden')
-    } else {
+    } else if (!skipTabRestore) {
       // Design loaded — restore normal tab state via the sidebar controller.
       window.__leftSidebar?.setActiveTab('feature-log')
     }

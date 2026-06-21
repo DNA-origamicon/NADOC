@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   supportedColoringSet, nextColoringMode, COLORING_SUPPORT,
   reprMenuState, coloringFallbackMode,
+  coloringOptionStates, COLORING_ORDER, COLORING_LABELS,
 } from './coloring_modes.js'
 
 describe('supportedColoringSet', () => {
@@ -80,5 +81,38 @@ describe('coloringFallbackMode', () => {
     // surface in assembly mode adds 'source'; 'base' still unsupported → strand
     expect(coloringFallbackMode('surface', 'base', true)).toBe('strand')
     expect(coloringFallbackMode('surface', 'source', true)).toBeNull()
+  })
+})
+
+describe('coloringOptionStates', () => {
+  it('returns every mode in fixed order, regardless of repr', () => {
+    const states = coloringOptionStates('full', false, 'strand')
+    expect(states.map(s => s.mode)).toEqual(COLORING_ORDER)
+    expect(states.map(s => s.label)).toEqual(COLORING_ORDER.map(m => COLORING_LABELS[m]))
+  })
+  it('enables only the modes the representation supports', () => {
+    // cylinders supports strand/cluster/overhang-only — base/cpk/source disabled.
+    const byMode = Object.fromEntries(
+      coloringOptionStates('cylinders', false, 'strand').map(s => [s.mode, s.enabled]))
+    expect(byMode.strand).toBe(true)
+    expect(byMode.cluster).toBe(true)
+    expect(byMode['overhang-only']).toBe(true)
+    expect(byMode.base).toBe(false)
+    expect(byMode.cpk).toBe(false)
+    expect(byMode.source).toBe(false)
+  })
+  it('hull-prism disables everything', () => {
+    expect(coloringOptionStates('hull-prism', false, 'strand').every(s => !s.enabled)).toBe(true)
+  })
+  it('marks active only when the mode is the current AND supported', () => {
+    const cpkActive = coloringOptionStates('vdw', false, 'cpk').find(s => s.mode === 'cpk')
+    expect(cpkActive).toMatchObject({ enabled: true, active: true })
+    // 'source' is unsupported in design mode → never active even if it were current.
+    const src = coloringOptionStates('vdw', false, 'source').find(s => s.mode === 'source')
+    expect(src).toMatchObject({ enabled: false, active: false })
+  })
+  it('source becomes enabled for surface in assembly mode', () => {
+    const src = coloringOptionStates('surface', true, 'source').find(s => s.mode === 'source')
+    expect(src).toMatchObject({ enabled: true, active: true })
   })
 })

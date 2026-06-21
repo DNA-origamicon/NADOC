@@ -36,6 +36,18 @@ export function dropdownStateForMode(mode, contextPlane, defaultPlane) {
 }
 
 /**
+ * The lattice-aware step (in bp) the extrude length should change by when the user
+ * presses the arrow keys in the length field. Honeycomb crossovers repeat every 7 bp
+ * (21/3) and square every 8 bp (32/4), so stepping by 7/8 keeps the length on the
+ * lattice's natural crossover period.
+ * @param {('SQUARE'|'HONEYCOMB'|string|null|undefined)} latticeType
+ * @returns {number} 8 for SQUARE, 7 otherwise
+ */
+export function latticeLengthStepBp(latticeType) {
+  return latticeType === 'SQUARE' ? 8 : 7
+}
+
+/**
  * Whether the world-origin XYZ axis triad should be shown for a given design.
  * The triad marks the origin of an EMPTY part so the user has an orientation
  * reference before extruding. A populated part or an assembly hides it (its own

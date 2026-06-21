@@ -32,6 +32,7 @@ import {
   squareCellWorldPos,
 } from './slice_plane/lattice_math.js'
 import { translateFootprint, validParityCandidates } from './primitive_placement_logic.js'
+import { latticeLengthStepBp } from '../ui/extrude_panel_logic.js'
 
 // Default grid extents when no design is loaded.
 // Origin (0,0) is at the world origin; row/col indices start at 0.
@@ -1677,8 +1678,18 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     }
   }
 
+  // Drive the length field's native step so BOTH the keyboard arrow keys AND the
+  // spinner buttons increment by the lattice's crossover period — 7 bp on honeycomb,
+  // 8 bp on square (scaled by RISE in nm units) — instead of the HTML default of 1.
+  function _applyLengthStep() {
+    if (!_sliceLengthInput) return
+    const stepBp = latticeLengthStepBp(_isSquareLattice() ? 'SQUARE' : 'HONEYCOMB')
+    const unit   = _sliceUnitSelect?.value ?? 'bp'
+    _sliceLengthInput.step = unit === 'bp' ? String(stepBp) : (stepBp * RISE).toFixed(3)
+  }
+
   if (_sliceLengthInput) _sliceLengthInput.addEventListener('input', () => { _updateSliceTotalBp(); _updatePreview() })
-  if (_sliceUnitSelect)  _sliceUnitSelect.addEventListener('change', () => { _updateSliceTotalBp(); _updatePreview() })
+  if (_sliceUnitSelect)  _sliceUnitSelect.addEventListener('change', () => { _applyLengthStep(); _updateSliceTotalBp(); _updatePreview() })
   if (_sliceScaffoldRec) _sliceScaffoldRec.addEventListener('click', e => {
     const btn = e.target.closest('.rec-chip')
     if (!btn || !_sliceLengthInput) return
@@ -1811,6 +1822,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _updatePosition()
       if (!readOnly) {
         _buildLattice()
+        _applyLengthStep()   // lattice now known → step arrows/spinner by 7 (HC) / 8 (SQ)
         _setDirSign(1)   // new bundle / segment defaults to +axis
       } else {
         _hidePreview()
@@ -1887,6 +1899,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         // cells while the user is still selecting; the preview appears once they
         // enter a non-zero length.
         if (_sliceLengthInput) _sliceLengthInput.value = '0'
+        _applyLengthStep()
         _refreshExtrudeUi()
       } else {
         _hidePreview()
@@ -2041,6 +2054,26 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     /** Current plane and offset getters (used by cadnano_view to save/restore state). */
     getPlane()  { return _plane },
     getPlaneOffset() { return _offset },
+
+    /**
+     * World-space unit normal of the current lattice grid (deformed-aware).
+     * For axis-aligned planes this is the plane's ±X/±Y/±Z; in a deformed bundle
+     * it's the local axis direction. Used by the 'n' camera-snap shortcut.
+     */
+    getPlaneNormalWorld() {
+      return _deformedFrame
+        ? new THREE.Vector3(..._deformedFrame.axis_dir).normalize()
+        : PLANE_CFG[_plane].normal.clone()
+    },
+
+    /** A sensible camera "up" for viewing the grid face-on (deformed-aware). */
+    getPlaneUpWorld() {
+      if (_deformedFrame) return new THREE.Vector3(..._deformedFrame.frame_up).normalize()
+      // Match view-cube convention: Y-axis views roll up to +Z, others to +Y.
+      return Math.abs(PLANE_CFG[_plane].normal.y) > 0.5
+        ? new THREE.Vector3(0, 0, 1)
+        : new THREE.Vector3(0, 1, 0)
+    },
 
     /**
      * Override plane dimensions for cadnano mode.

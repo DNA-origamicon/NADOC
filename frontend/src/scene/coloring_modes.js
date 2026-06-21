@@ -15,6 +15,38 @@ export const COLORING_SUPPORT = {
   'hull-prism': new Set(),
 }
 
+/** Human-readable labels for every coloring mode (single source of truth). */
+export const COLORING_LABELS = {
+  strand:          'Strand color',
+  base:            'Base color',
+  cluster:         'Cluster color',
+  'overhang-only': 'Overhang highlight',
+  cpk:             'Atomic (CPK)',
+  source:          'By part / source',
+}
+
+/** Fixed display order for the full coloring array (sidebar + cycling). */
+export const COLORING_ORDER = ['strand', 'base', 'cluster', 'overhang-only', 'cpk', 'source']
+
+/**
+ * The full coloring array for the Representation-Options sidebar: every mode,
+ * each tagged with whether `repr` supports it (`enabled` → clickable; otherwise
+ * rendered grayed/disabled) and whether it is the current selection (`active`,
+ * only set when also enabled).
+ *
+ * @param {string} repr
+ * @param {boolean} assemblyActive
+ * @param {string} activeMode  the current coloringMode
+ * @returns {{mode:string,label:string,enabled:boolean,active:boolean}[]}
+ */
+export function coloringOptionStates(repr, assemblyActive, activeMode) {
+  const supported = supportedColoringSet(repr, assemblyActive)
+  return COLORING_ORDER.map(mode => {
+    const enabled = supported.has(mode)
+    return { mode, label: COLORING_LABELS[mode], enabled, active: enabled && mode === activeMode }
+  })
+}
+
 /**
  * Coloring modes available for `repr`, accounting for the assembly atomistic path
  * (per-atom cpk/strand/cluster + per-source tint; no 'base').

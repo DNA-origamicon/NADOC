@@ -186,6 +186,7 @@ import { initPeriodicMdOverlay }    from './scene/periodic_md_overlay.js'
 import { initPeriodicMdPanel }      from './ui/periodic_md_panel.js'
 import { initMdPanel }    from './ui/md_panel.js'
 import { initReprOptionSliders } from './ui/repr_option_sliders.js'
+import { initColoringOptionsPanel } from './ui/coloring_options_panel.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
 import { initBenchmarkPanel } from './ui/benchmark_panel.js'
@@ -1896,7 +1897,6 @@ async function main() {
   _atomSurface = initAtomSurfaceDisplay({
     scene, store, api, designRenderer, atomisticRenderer, surfaceRenderer,
     unfoldView, overhangLinkArcs,
-    setColoringMode: (m) => _setColoringMode(m),
   })
   const _applySurfaceMode           = _atomSurface.applySurfaceMode
   const _applyAtomisticMode         = _atomSurface.applyAtomisticMode
@@ -2150,8 +2150,14 @@ async function main() {
   let _extrudePanel = null
   const slicePlane = initSlicePlane(scene, camera, canvas, controls, {
     onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, newBundle, latticeType = 'HONEYCOMB', deformedFrame, refHelixId, sourceBp = null, strandFilter = 'both', ligateAdjacent = true }) => {
+      // A "new bundle" only RESETS the workspace when it's empty. With a part
+      // already present, an empty-space extrude adds the new bundle additively (a
+      // fresh, disconnected set of helices in the SAME design) via the bundle-
+      // segment route, so repeated extrudes never wipe existing structure.
+      const freshBundle = newBundle && (store.getState().currentDesign?.helices?.length ?? 0) === 0
+
       let result
-      if (newBundle) {
+      if (freshBundle) {
         // Preserve the user's design name across bundle creation — _fileName is set
         // by the "New Design" modal or by opening a file; fall back to the current
         // design's metadata name, then to nothing (server default).
@@ -2162,13 +2168,14 @@ async function main() {
       } else if (continuationMode) {
         result = await api.addBundleContinuation({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent })
       } else {
+        // Slice-plane segment AND empty-space "new bundle" on a populated design.
         result = await api.addBundleSegment({ cells, lengthBp, plane, offsetNm, strandFilter, ligateAdjacent })
       }
       if (!result) {
         const err = store.getState().lastError
-        throw new Error(err?.message ?? (newBundle ? 'Bundle creation failed' : 'Segment extrusion failed'))
+        throw new Error(err?.message ?? (freshBundle ? 'Bundle creation failed' : 'Segment extrusion failed'))
       }
-      if (newBundle) {
+      if (freshBundle) {
         // Record plane and helix creation order for the unfold view.
         const newHelices = store.getState().currentDesign?.helices?.slice(-cells.length) ?? []
         store.setState({ currentPlane: plane, unfoldHelixOrder: newHelices.map(h => h.id) })
@@ -2503,20 +2510,11 @@ async function main() {
   // pops a minimal menu whose only item, "Extrude", which opens the Extrude panel
   // in new-bundle mode — the same flow as Tools → Extrude.
   async function _startEmptySpaceExtrude() {
-    const { currentDesign, assemblyActive } = store.getState()
+    const { assemblyActive } = store.getState()
     if (assemblyActive) return
-    // The new-bundle flow (POST /design/bundle) resets to an empty design before
-    // building, so completing it discards the current part. Guard against silently
-    // wiping a populated part.
-    if ((currentDesign?.helices?.length ?? 0) > 0) {
-      const ok = await showConfirm({
-        title: 'Start a new bundle?',
-        message: 'Extruding from empty space starts a fresh bundle and replaces the current part. Continue?',
-        confirmLabel: 'New bundle',
-        danger: true,
-      })
-      if (!ok) return
-    }
+    // On an empty workspace this starts a fresh bundle; on a populated part the
+    // extrude is additive (onExtrude routes new-bundle → bundle-segment), so the
+    // existing structure is preserved and no destructive confirm is needed.
     _extrudePanel?.activate('newBundle')
   }
 
@@ -2597,6 +2595,10 @@ async function main() {
     _welcomeScreen?.classList.add('hidden')
     _setMenusEnabled(true)
     _setLeftPanelEnabled(true)
+    // A freshly loaded part defaults to the Feature Log tab (regardless of
+    // which tab was last persisted). selectTab preserves the user's
+    // collapsed/expanded preference — it just picks the tab.
+    window.__leftSidebar?.selectTab?.('feature-log')
     _setRightPanelEnabled(true)
     _setFilterStripEnabled(true)
     const spreadsheetPanel = document.getElementById('spreadsheet-panel')
@@ -3619,11 +3621,8 @@ async function main() {
     document.getElementById('menu-view-coloring-overhang-only')?.classList.toggle('is-checked', mode === 'overhang-only')
     document.getElementById('menu-view-coloring-cpk')    ?.classList.toggle('is-checked', mode === 'cpk')
     document.getElementById('menu-view-coloring-source') ?.classList.toggle('is-checked', mode === 'source')
-    // Side-panel atom-color buttons mirror the (atomistic-relevant) modes.
-    const cpkBtn    = document.getElementById('atom-color-cpk')
-    const strandBtn = document.getElementById('atom-color-strand')
-    cpkBtn   ?.classList.toggle('active', mode === 'cpk')
-    strandBtn?.classList.toggle('active', mode === 'strand')
+    // The sidebar coloring array (ui/coloring_options_panel.js) mirrors the
+    // active mode on its own via a store.coloringMode subscription.
   }
   document.getElementById('menu-view-coloring-strand') ?.addEventListener('click', () => _setColoringMode('strand'))
   document.getElementById('menu-view-coloring-base')   ?.addEventListener('click', () => _setColoringMode('base'))
@@ -3807,11 +3806,14 @@ async function main() {
     const body    = document.getElementById('slab-body')
     const arrow   = document.getElementById('slab-arrow')
     if (!heading || !body || !arrow) return
-    heading.addEventListener('click', () => {
-      const open = body.style.display !== 'none'
-      body.style.display = open ? 'none' : 'block'
-      arrow.classList.toggle('is-collapsed', open)
-    })
+    const setOpen = (open) => {
+      body.style.display = open ? 'block' : 'none'
+      arrow.classList.toggle('is-collapsed', !open)
+    }
+    heading.addEventListener('click', () => setOpen(body.style.display === 'none'))
+    // Switching representation surfaces this section's options, so auto-expand it
+    // whenever the representation changes (it starts collapsed by default).
+    window.addEventListener('nadoc:representation-change', () => setOpen(true))
   })()
 
   // ── Orbit safety ──────────────────────────────────────────────────────────────
@@ -3933,6 +3935,7 @@ async function main() {
     slicePlane, expandedSpacing, debugOverlay, measurementTool, selectionManager,
     extrudePanel: _extrudePanel, deformView, crossSectionMinimap, sliceHighlighter,
     primitiveLibrary: _primitiveLibrary,
+    viewCube, camera, controls,
     isUnfoldActive:           _isUnfoldActive,
     isDeformActive,
     captureCurrentCamera,
@@ -5862,6 +5865,11 @@ async function main() {
       function setActiveTab(tabId) {
         if (leftPanel.classList.contains('locked-hidden')) return
         if (!TABS.includes(tabId)) return
+        // Switching to any tab other than Photo leaves photo mode (the render
+        // override is in-memory only and otherwise stays installed). Pass
+        // skipTabRestore so the exit doesn't yank us back to feature-log — the
+        // switch below lands us on the tab the user actually clicked.
+        if (tabId !== 'photo') _photoMode.exit({ skipTabRestore: true })
         const wasOnAnimations = !collapsed && activeTab === 'scene'
         if (collapsed) {
           collapsed = false
@@ -5873,6 +5881,24 @@ async function main() {
         }
         const nowOnAnimations = !collapsed && activeTab === 'scene'
         if (wasOnAnimations && !nowOnAnimations) _leaveAnimationsTab()
+        _render()
+        window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
+          detail: { activeTab, collapsed },
+        }))
+        _persist()
+      }
+
+      // Make `tabId` the active tab WITHOUT the click-toggle semantics
+      // (clicking the active tab collapses; this never collapses). Preserves
+      // the user's collapsed/expanded preference. Used to default a freshly
+      // loaded part to the Feature Log tab regardless of which tab was last
+      // persisted.
+      function selectTab(tabId) {
+        if (!TABS.includes(tabId)) return
+        if (activeTab === tabId) { _render(); return }
+        const wasOnAnimations = !collapsed && activeTab === 'scene'
+        activeTab = tabId
+        if (wasOnAnimations) _leaveAnimationsTab()
         _render()
         window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
           detail: { activeTab, collapsed },
@@ -5900,6 +5926,7 @@ async function main() {
       // Expose the controller for assembly-mode entry/exit handlers and tests.
       _leftSidebar = {
         setActiveTab,
+        selectTab,
         toggleCollapsed,
         getActiveTab: () => activeTab,
         isCollapsed:  () => collapsed,
@@ -6097,7 +6124,7 @@ async function main() {
   // post-init, on file close/new/open / assembly-enter).
   const _photoMode = initPhotoMode({
     store, api, sceneCtx, photoRenderer, assemblyRenderer, designRenderer,
-    bluntEnds, assemblyJointRenderer, viewCube, player: animPlayer,
+    bluntEnds, assemblyJointRenderer, viewCube, player: animPlayer, originAxes,
   })
 
   // Save/Save-As dispatch factory (ui/file_io.js initFileSave, extraction #60).
@@ -6337,6 +6364,17 @@ async function main() {
   })
   const _reprOptionSliders = _reprOptionSlidersCtrl.updateForRepr
 
+  // ── Coloring array in Representation Options → ui/coloring_options_panel.js ────
+  // The full coloring grid in the sidebar: enabled modes clickable, unsupported
+  // ones grayed. Driven on repr change via the switcher's availability hub
+  // (updateColoringOptions, called from _updateColoringMenuAvailability) and
+  // self-syncs its active highlight off store.coloringMode. Inits BEFORE the
+  // switcher so the initial 'full' availability call can reach it.
+  const _coloringOptionsPanel = initColoringOptionsPanel({
+    store,
+    onSelect: _setColoringMode,
+  })
+
   // ── Unified representation switcher → ui/representation_switcher.js ────────────
   // Owns the seven-representation radio, the Coloring-menu availability matrix,
   // the F1…F7 hotkeys, and `_setRepresentation`. Inits AFTER `_reprOptionSliders`
@@ -6362,6 +6400,7 @@ async function main() {
     setCGVisible: _setCGVisible,
     setColoringMode: _setColoringMode,
     reprOptionSliders: _reprOptionSliders,
+    updateColoringOptions: _coloringOptionsPanel.updateForRepr,
     getLastDetailLevel: () => _lastDetailLevel,
     setLastDetailLevel: (v) => { _lastDetailLevel = v },
     setLodMode: (v) => { _lodMode = v },

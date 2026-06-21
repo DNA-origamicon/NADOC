@@ -38,12 +38,14 @@
 import { registerShortcut, dispatchKeyEvent } from '../input/shortcuts.js'
 import { showToast } from './toast.js'
 import { nextTabLevel } from '../scene/selection_level.js'
+import { nearestWorkspaceAxis, signedAlong } from '../scene/axis_snap.js'
 
 export function initKeyboardShortcuts(deps) {
   const {
     store, api,
     slicePlane, expandedSpacing, debugOverlay, measurementTool, selectionManager,
     extrudePanel, deformView, crossSectionMinimap, sliceHighlighter, primitiveLibrary,
+    viewCube, camera, controls,
     isUnfoldActive, isDeformActive,
     captureCurrentCamera, frameSelectionOrAll,
     setMenuToggle,
@@ -382,6 +384,27 @@ export function initKeyboardShortcuts(deps) {
     description: 'Frame selection (or fit all if no selection)',
     blockedInInput: true,
     handler() { frameSelectionOrAll() },
+  })
+
+  // 'n' — snap camera onto an orthographic-ish view. In the Extrude tool (slice
+  // plane up), snap to the lattice grid's normal so you're looking at it
+  // face-on; otherwise snap to whichever signed world axis the camera is already
+  // nearest. Both reuse the view-cube's bounding-box-aware snap animation.
+  registerShortcut({
+    key: 'n', ctrl: false,
+    description: 'Snap camera to nearest workspace axis (or lattice grid normal in Extrude)',
+    blockedInInput: true,
+    handler() {
+      if (!viewCube) return
+      const fromDir = camera.position.clone().sub(controls.target)
+      if (extrudePanel?.isActive() && slicePlane.isVisible()) {
+        const normal = signedAlong(slicePlane.getPlaneNormalWorld(), fromDir)
+        viewCube.snapToNormal(normal, slicePlane.getPlaneUpWorld())
+      } else {
+        const { normal, up } = nearestWorkspaceAxis(fromDir)
+        viewCube.snapToNormal(normal, up)
+      }
+    },
   })
 
   registerShortcut({

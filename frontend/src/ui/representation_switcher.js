@@ -14,7 +14,7 @@
 // and the coloring-mode setter (`setColoringMode`) remain in main.js and are
 // injected.
 
-import { supportedColoringSet, nextColoringMode, reprMenuState, coloringFallbackMode } from '../scene/coloring_modes.js'
+import { supportedColoringSet, nextColoringMode, reprMenuState, coloringFallbackMode, COLORING_LABELS as _COLORING_LABELS } from '../scene/coloring_modes.js'
 import { showToast } from './toast.js'
 import { showConfirm } from './primitives/confirm.js'
 import { registerShortcut } from '../input/shortcuts.js'
@@ -54,16 +54,9 @@ const _REPR_LABELS = {
   ballstick:    'Ball & Stick',
 }
 
-// Friendly labels for coloring modes — used for the toast shown when an
-// F-key cycles coloring (the menu is closed, so the toast is the feedback).
-const _COLORING_LABELS = {
-  strand:          'Strand color',
-  base:            'Base color',
-  cluster:         'Cluster color',
-  'overhang-only': 'Overhang highlight',
-  cpk:             'Atomic (CPK)',
-  source:          'By part / source',
-}
+// Coloring-mode labels (e.g. for the toast shown when an F-key cycles coloring
+// while the menu is closed) come from the single source in coloring_modes.js,
+// imported above as _COLORING_LABELS.
 
 /**
  * Initialise the representation switcher: wires the menu click handlers, the
@@ -87,6 +80,7 @@ export function initRepresentationSwitcher({
   setCGVisible,
   setColoringMode,
   reprOptionSliders,
+  updateColoringOptions = () => {},
   getLastDetailLevel,
   setLastDetailLevel,
   setLodMode,
@@ -160,6 +154,9 @@ export function initRepresentationSwitcher({
     const fallback = coloringFallbackMode(
       activeRepr, store.getState().coloringMode || 'strand', assemblyActive)
     if (fallback) setColoringMode(fallback)
+    // Mirror the same availability matrix onto the sidebar coloring array (runs
+    // after any fallback so its active highlight reflects the final mode).
+    updateColoringOptions(activeRepr)
   }
 
   async function _setRepresentation(repr) {

@@ -56,8 +56,7 @@ const DOM = [
   'sl-surface-probe', 'sv-surface-probe',
   'surface-color-strand', 'surface-color-uniform',
   'sl-atom-vdw-scale', 'sv-atom-vdw-scale',
-  'atom-color-cpk', 'atom-color-strand',
-  'repr-atom-radius-row', 'repr-atom-color-row',
+  'repr-atom-radius-row',
 ]
 
 function makeDeps(overrides = {}) {
@@ -71,7 +70,6 @@ function makeDeps(overrides = {}) {
     surfaceRenderer: makeSurfaceStub(),
     unfoldView: { setArcsVisible: vi.fn(), refreshArcVisibility: vi.fn() },
     overhangLinkArcs: { setVisible: vi.fn() },
-    setColoringMode: vi.fn(),
     _root: root,
     ...overrides,
   }
@@ -127,12 +125,11 @@ describe('initAtomSurfaceDisplay', () => {
     expect(panel.style.display).toBe('none')
   })
 
-  it('setAtomisticSlidersVisible toggles both atom rows', () => {
+  it('setAtomisticSlidersVisible toggles the atom radius row', () => {
     mountIds(DOM)
     const api = initAtomSurfaceDisplay(makeDeps())
     api.setAtomisticSlidersVisible(false)
     expect(document.getElementById('repr-atom-radius-row').style.display).toBe('none')
-    expect(document.getElementById('repr-atom-color-row').style.display).toBe('none')
     api.setAtomisticSlidersVisible(true)
     expect(document.getElementById('repr-atom-radius-row').style.display).toBe('')
   })
@@ -179,16 +176,6 @@ describe('initAtomSurfaceDisplay', () => {
     sl.value = '1.25'
     sl.dispatchEvent(new Event('input'))
     expect(deps.atomisticRenderer.setVdwScale).toHaveBeenCalledWith(1.25)
-  })
-
-  it('atom-color buttons drive injected setColoringMode', () => {
-    mountIds(DOM)
-    const deps = makeDeps()
-    initAtomSurfaceDisplay(deps)
-    document.getElementById('atom-color-cpk').click()
-    expect(deps.setColoringMode).toHaveBeenCalledWith('cpk')
-    document.getElementById('atom-color-strand').click()
-    expect(deps.setColoringMode).toHaveBeenCalledWith('strand')
   })
 
   it('setCGVisible drives helix root + arcs + link-arc visibility', () => {
