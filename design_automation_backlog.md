@@ -1148,6 +1148,26 @@ readers `read_configuration_unwrapped` / `read_configuration_full` / `oxdna_back
   blind to a physical-layer verdict. Composition-sugar (coverage flat, 36; god-files Δ=0). The knob-driven
   `iterate_to_constraint` grammar clause is the deferred next step.
 
+- [x] **AF-ATOM (Phase 1) — atomistic-display validation oracle + queryable route + `/validate-atomistic`
+  skill. SHIPPED 2026-06-21.** Every element the oxDNA-display **atomistic** rep draws (each bond stick, each
+  atom sphere) is now measurable, so a stretched / hidden / clashing element is queryable, not just visible.
+  `backend/core/atomistic_validation.py`: `audit_bonds(design, frame)` reconstructs the model with the SAME
+  `build_atomistic_model(frame_override=…)` the renderer uses (so audited bonds ARE rendered bonds — identical
+  serial pairs) and classifies every bond `rigid | linker | backbone | bridge`, flagging **rigid-stamp
+  violations** (frame-invariant bonds ≠ template = a placer bug; the *load-bearing* oracle), over-stretched
+  bonds (the long sticks the screenshot shows), bonds the renderer **hides** (>1 nm — drawn as nothing but
+  listed), clashes, and non-finite atoms.  `latest_job_for_design` / `relaxed_frame_for_job` / `audit_oxdna_job`
+  give the headless entry point; route `POST /oxdna/jobs/{id}/display-atomistic-audit` makes the live app's
+  displayed frame queryable; CLI `scripts/audit_atomistic.py` (`just audit-atomistic`) + the `validate-atomistic`
+  skill drive it (default `workspace/6hb_sim_tests.nadoc` latest job). Tests: `tests/test_atomistic_validation.py`
+  (8) — stamp-invariance, over-stretch/hidden/clash/non-finite detectors, class partition, job entry point,
+  route. **Real-job finding (job c1299e0b07b5):** stamp clean (18 279 rigid bonds, max Δ 0.0000 Å, 0
+  violations → placer correct), but **1005 backbone O3'→P bonds at mean 1.0 nm / max 3.16 nm** — oxDNA's
+  one-bead-per-nucleotide frames don't enforce all-atom backbone continuity, so the sticks genuinely stretch
+  (the screenshot). **Validation gained, not a passthrough:** first programmatic proof of which atomistic bonds
+  are real vs over-stretched vs renderer-hidden, and that the rigid stamp is frame-invariant — a number no
+  HTTP-200 or eyeball gives.  **Deferred → Tier F (AF-ATOM P2) + the backbone-closure feature below.**
+
 ### Tier F — frontend display subsystems (no REST route; JS-controller API + vitest-oracle augment)
 
 **What's different here.** These subsystems are driven entirely client-side (a JS controller exposed on
@@ -1156,6 +1176,42 @@ wrapper. The anti-shovel rule still bites: assert the setter drove the *object* 
 `material.metalness`, a `pass.enabled`, a `camera.fov`), never `getSettings()` (which just echoes stored
 intent → a passthrough). Bound by `FEATURE_DEVELOPMENT.md` — lands in the subsystem module + its
 `*.test.js`, never a god-file.
+
+- [x] **AF-ATOM (Phase 2) — renderer↔audit parity. SHIPPED 2026-06-21.** `frontend/src/scene/atomistic_renderer.test.js`
+  (+1, now 4): drives a bond set with known lengths through `applyPositionLerp` and asserts, by decomposing each
+  bond InstancedMesh instance matrix, that the renderer zero-scales (hides) EXACTLY the >`_MAX_BOND_NM` (1 nm)
+  bonds — the same set the backend audit reports as `hidden_by_renderer` (both use the 1 nm cutoff) — and draws
+  every other stick at its true atom-distance (scaleY). **Validation gained:** the on-screen sticks are now tied
+  to the audited model bond-for-bond, so a renderer regression (wrong cutoff/transform) is caught, not invisible.
+  Original intake below.
+- [ ] **AF-ATOM (Phase 2, original intake) — renderer↔audit parity.** AF-ATOM P1 validates the atomistic *model*; the *render* parity is now P2 (shipped, above).
+  `atomistic_renderer.applyPositionLerp` hides bonds > `_MAX_BOND_NM` (1 nm) by zero-scaling the bond
+  InstancedMesh instance. **Enabling fact:** the renderer can be built in jsdom with a real model + fake GL;
+  the bond InstancedMesh `setMatrixAt` scales are readable. **Oracle:** drive a frame with N known >1 nm bonds,
+  assert the renderer zero-scaled EXACTLY those N instances (the `hidden_by_renderer` set from the backend
+  audit) and drew all others at a finite length spanning the correct two atom positions — closing "the stick
+  you see is the bond the audit measured, and the bond you DON'T see is hidden, not lost." Anti-shovel: assert
+  the InstancedMesh matrix (the real object), never a settings echo. Lands in
+  `frontend/src/scene/atomistic_renderer.test.js`. **Validation gained:** first proof the render matches the
+  audited model bond-for-bond — today a renderer regression (wrong cutoff, wrong transform) is invisible.
+- [ ] **AF-ATOM (Phase 3) — per-atom sphere coverage oracle.** Assert every drawn atom-sphere instance's
+  radius (element→VDW) + color (element→CPK) matches the model's element mapping, so no atom renders with the
+  wrong size/color. Lower priority than P2 (spheres are less bug-prone than bonds). Lands in the renderer test.
+- [x] **AF-ATOM-CLOSURE — display-time backbone closure (the FIX for the stretched O3'→P sticks). SHIPPED
+  2026-06-21** (user-authorized the geometry fix).  Root cause (measured): the stretch is **systematic, not
+  fraying** — on the real 6hb_sim_tests relaxed frame the sequential O3'→P gaps are ideal 0.166 nm but relaxed
+  **median 0.91 nm / 95% > 0.6 nm**, because oxDNA's per-nucleotide CG frames don't enforce all-atom backbone
+  continuity, so each rigidly-stamped O3'(i) misses P(i+1).  Fix: `atomistic._close_sequential_backbone`, gated
+  on `frame_override` + `close_backbone=True` (DISPLAY path only — design/PDB/NAMD-seed byte-identical), re-seats
+  only the phosphate linker (O3'/P/O5'/OP1/OP2) between the rigid C3'(i)/C5'(i+1) anchors via the validated
+  `_interpolate_backbone_bridge` (linear, ~0.01 s for ~1000 bonds — 2000× faster than the L-BFGS bridge and
+  slightly better; the ribose ring + base never move, so the rigid-stamp invariant holds).  **Audit-verified
+  (the oracle IS the acceptance test):** backbone mean 1.005→0.185 nm, max **3.155→0.806 nm**, **hidden-by-
+  renderer 266→0** (the whole backbone now draws connected — no long sticks, none silently hidden), rigid-stamp
+  still 0 violations.  Residual: ~744 mild over-stretches (0.20–0.81 nm) + clashes at genuinely-frayed/tightly-
+  packed regions — inherent to un-minimised CG→all-atom display, honestly surfaced by the audit (a full display
+  minimisation would be the next step; out of scope).  Pins: `tests/test_atomistic_validation.py::test_backbone_
+  closure_connects_and_preserves_rigid` + the P1 audit on the real job.  **Live visual is human-eye → MV-OXREPS.**
 
 - [x] **AF-PHOTO (P-A + P-B) — photomode option-coverage + effect oracles. SHIPPED 2026-06-18.** `frontend/src/scene/photo_renderer.test.js` (39 tests): P-A drives each setter and asserts the REAL object (renderer.toneMapping/exposure, scene-graph lights, `material.metalness`, `camera.fov`, composer `pass.enabled` via the new `getComposerState()`); P-B is the automation contract (getSettings is a copy; a 21-case table proves every option is settable through the API + every key persists). Shipped alongside the R1–R5 render fixes from the audit (tone mapping + exposure, Sun-sole, env re-bake isolation, emissive bloom clamp, Reflector state isolation). Remaining: P-C GPU-truth e2e → `MV-PHOTO-1`/`MV-PHOTO-2` (manual-validation debt). Below is the original intake item.
 - [x] **AF-PHOTO — photomode option-coverage + effect oracles. P-A + P-B SHIPPED 2026-06-18 (row above); only P-C (GPU-truth e2e) remains and is routed to manual-validation debt as `MV-PHOTO-1`/`MV-PHOTO-2`, NOT an active AF item.** Photo mode

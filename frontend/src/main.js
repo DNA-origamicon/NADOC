@@ -1844,7 +1844,28 @@ async function main() {
   benchmarkPanel.mountNamd(document.getElementById('md-benchmark-mount'))
 
   // ── oxDNA relaxation panel + display (deforms NADOC model to relaxed CG) ──────
-  const oxdnaDisplay = initOxdnaDisplay({ designRenderer, api, proteinRenderer })
+  const oxdnaDisplay = initOxdnaDisplay({
+    designRenderer, api, proteinRenderer,
+    getAtomisticRenderer: () => atomisticRenderer,
+    getSurfaceRenderer:   () => surfaceRenderer,   // const declared ~1918 (resolved lazily)
+    getCurrentRepr:       () => _currentRepr,       // let declared ~2976 (resolved lazily)
+    // Toggle-off / job-switch: rebuild the atomistic + surface meshes from the
+    // live design so they drop the oxDNA overlay (mirrors the animation player's
+    // stop handler).
+    onRestoreDesignHeavy: () => {
+      if (atomisticRenderer.getMode?.() !== 'off') {
+        _atomSurface.invalidateAtomCache()
+        _atomSurface.applyAtomisticMode(atomisticRenderer.getMode())
+      }
+      if (_atomSurface.getSurfaceMode?.() !== 'off') {
+        _atomSurface.invalidateSurfaceCache()
+        _atomSurface.applySurfaceMode(_atomSurface.getSurfaceMode())
+      }
+    },
+  })
+  // When the scene representation changes while an oxDNA overlay is active, re-apply
+  // the current frame to the freshly-built atomistic/surface mesh.
+  window.addEventListener('nadoc:representation-change', () => oxdnaDisplay.reapplyForRepr())
   const oxdnaPanel = initOxdnaJobsPanel({
     oxdnaDisplay, getWorkspacePath: () => _workspacePath,
     // The single production Run composes the independently-enabled elements.

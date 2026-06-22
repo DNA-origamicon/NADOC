@@ -451,6 +451,17 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   const trajSlider    = document.getElementById('oxdna-jobs-traj-slider')
   const trajMarkers   = document.getElementById('oxdna-jobs-traj-markers')
   const trajLabel     = document.getElementById('oxdna-jobs-traj-label')
+  const heavyGranSel  = document.getElementById('oxdna-jobs-heavy-granularity')
+  const heavyWarn     = document.getElementById('oxdna-jobs-heavy-warn')
+
+  // Atomistic/surface reconstruction detail (coarse=snap to downsampled bake /
+  // fine=rebuild every frame). Applies to all three displays; only visible effect
+  // when the scene is in an atomistic or surface representation.
+  heavyGranSel?.addEventListener('change', () => {
+    const g = heavyGranSel.value === 'fine' ? 'fine' : 'coarse'
+    oxdnaDisplay?.setGranularity?.(g)
+    if (heavyWarn) heavyWarn.style.display = g === 'fine' ? 'block' : 'none'
+  })
 
   // ── State ──────────────────────────────────────────────────────────────────
   let _jobs       = []

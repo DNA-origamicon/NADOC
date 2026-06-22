@@ -40,6 +40,17 @@ let _vdwScale     = 1.0      // multiplier on VdW / ball radii
 let _strandColors = new Map()  // strand_id → hex number (used when _colorMode==='strand')
 let _baseColors   = new Map()  // "strand_id:bp_index:direction" → hex (used when _colorMode==='base')
 
+// Spurious-bond guard for position overlays (applyPositionLerp) — now a BACKSTOP,
+// not the primary fix. The oxDNA→atomistic reconstruction stamps each nucleotide by
+// its own relaxed rigid frame (a1/a3) and covers loop/insertion copies, so the
+// long cross-structure bonds it used to hide no longer occur in the normal path.
+// This cutoff stays only to absorb a pathological frame (e.g. a stranded atom from a
+// design whose insertion copies a future code path doesn't yet frame): real DNA
+// bonds are ≤~0.2 nm, so any bond longer than this is HIDDEN (zero-scale instance)
+// rather than drawn as a line spanning the structure.
+const _MAX_BOND_NM = 1.0
+const _HIDDEN_BOND = new THREE.Matrix4().makeScale(0, 0, 0)
+
 // ── Renderer factory ──────────────────────────────────────────────────────────
 
 export function initAtomisticRenderer(scene) {
@@ -483,6 +494,11 @@ export function initAtomisticRenderer(scene) {
           const { a, b } = _state.bondAtomPairs[i]
           const [ax, ay, az] = _atomXYZ(a.helix_id, a.serial)
           const [bx, by, bz] = _atomXYZ(b.helix_id, b.serial)
+          const dx = bx - ax, dy = by - ay, dz = bz - az
+          if (dx * dx + dy * dy + dz * dz > _MAX_BOND_NM * _MAX_BOND_NM) {
+            _state.bondMesh.setMatrixAt(i, _HIDDEN_BOND)   // over-stretched → hide, don't span the model
+            continue
+          }
           const m = bondMatrix(_state.geom, ax, ay, az, bx, by, bz, BOND_RADIUS)
           if (m) _state.bondMesh.setMatrixAt(i, m)
         }

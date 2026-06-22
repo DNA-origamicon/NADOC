@@ -1071,6 +1071,166 @@ def test_composite_trajectory_surface_shape(design, geometry, tmp_path):
         assert "vertex_colors" in v                          # default color_mode='strand'
 
 
+def test_production_rmsf_average_frame_opt_in(design, geometry, tmp_path):
+    """include_average_frame=True adds an `average_frame` map ({key:{backbone_position,
+    a1, a3}}) shaped like the relaxed full_map; default omits it (wire route stays lean)."""
+    from backend.core.oxdna_health import production_rmsf
+    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
+    t = tmp_path / "p.dat";     _write_traj(design, geometry, t, 3)
+
+    assert "average_frame" not in production_rmsf(design, t, ref)            # default off
+
+    r = production_rmsf(design, t, ref, include_average_frame=True)
+    af = r["average_frame"]
+    assert len(af) == len(r["positions"])                                    # one per nuc
+    key, rec = next(iter(af.items()))
+    assert len(key) == 3 and isinstance(key[0], str)                         # (hid, bp, dir)
+    assert {"backbone_position", "a1", "a3"} <= set(rec)
+    assert len(rec["a1"]) == 3 and len(rec["a3"]) == 3
+
+
+def test_frame_atomistic_flat_matches_design_atoms(design, geometry, tmp_path):
+    """A single per-nuc frame (here the rmsf average) reconstructs to the SAME
+    flat-XYZ length as the design's own atomistic-batch — proving the relaxed /
+    rmsf display reuses the identical atom ordering the trajectory frames use."""
+    from backend.core.oxdna_health import production_rmsf, frame_atomistic_flat
+    from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
+    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
+    t = tmp_path / "p.dat";     _write_traj(design, geometry, t, 2)
+    frame = production_rmsf(design, t, ref, include_average_frame=True)["average_frame"]
+
+    ref_floats = len(atomistic_positions_flat(build_atomistic_model(design)))
+    data = frame_atomistic_flat(design, frame)
+    assert len(data) == ref_floats
+
+
+def test_frame_surface_json_shape(design, geometry, tmp_path):
+    """A single per-nuc frame reconstructs to a surface-batch-shaped mesh entry."""
+    from backend.core.oxdna_health import production_rmsf, frame_surface_json
+    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
+    t = tmp_path / "p.dat";     _write_traj(design, geometry, t, 2)
+    frame = production_rmsf(design, t, ref, include_average_frame=True)["average_frame"]
+
+    v = frame_surface_json(design, frame, smooth=3)
+    assert len(v["vertices"]) > 0 and len(v["vertices"]) % 3 == 0
+    assert len(v["faces"]) > 0 and len(v["faces"]) % 3 == 0
+    assert "vertex_colors" in v                                              # strand colours
+
+
+def _ideal_frame_override(design, geometry, tmp_path, *, copies=False):
+    """Write + read the design's OWN ideal oxDNA configuration → a frame_override
+    map ``{key: (CM, a1, a3)}`` (the input the rigid-frame placer consumes)."""
+    import numpy as np
+    from backend.physics.oxdna_interface import write_configuration, read_configuration_full
+    conf = tmp_path / "ideal.dat"
+    write_configuration(design, geometry, conf, box_nm=200.0)
+    frames = read_configuration_full(conf, design, copies=copies)
+    return {k: (np.asarray(r["backbone_position"]), np.asarray(r["a1"]),
+                np.asarray(r["a3"])) for k, r in frames.items()}
+
+
+def test_rigid_frame_calibration_buckets_exact():
+    """The empirical calibration covers all four (strand_dir, helix_is_forward)
+    buckets and each (Q, c) is a near-exact constant — the internal residual assert
+    in _rigid_frame_calibration guards a silent drift; here we pin the bucket set and
+    that every Q is a proper rotation (orthonormal, det +1)."""
+    import numpy as np
+    from backend.core.atomistic import _rigid_frame_calibration
+    calib = _rigid_frame_calibration()
+    assert set(calib) == {("FORWARD", True), ("REVERSE", True),
+                          ("FORWARD", False), ("REVERSE", False)}
+    for _bucket, (Q, c) in calib.items():
+        assert np.allclose(Q @ Q.T, np.eye(3), atol=1e-9)            # orthonormal
+        assert abs(float(np.linalg.det(Q)) - 1.0) < 1e-9            # proper rotation
+        assert c.shape == (3,)
+
+
+def test_rigid_frame_placer_reproduces_design_build(design, geometry, tmp_path):
+    """Stamping each nucleotide by its OWN ideal oxDNA frame reproduces the
+    validated build_atomistic_model(design) EXACTLY: identical atom count, identical
+    serial→(name,element,residue) mapping AND bond list (so the renderer's
+    serial-keyed bond list stays valid), and per-atom positions to <0.01 Å.  This is
+    the calibration correctness proof — the placer is byte-faithful on ideal input,
+    so on a relaxed frame it only moves atoms by the genuine relaxation."""
+    import numpy as np
+    from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
+    ref = build_atomistic_model(design)
+    # close_backbone=False isolates the rigid STAMP (the display path additionally
+    # re-seats the phosphate linker for backbone continuity — tested separately).
+    placed = build_atomistic_model(
+        design, frame_override=_ideal_frame_override(design, geometry, tmp_path),
+        close_backbone=False)
+
+    assert len(ref.atoms) == len(placed.atoms)
+    assert ref.bonds == placed.bonds
+    for a, b in zip(ref.atoms, placed.atoms):
+        assert (a.serial, a.name, a.element, a.residue) == \
+               (b.serial, b.name, b.element, b.residue)
+    rf = np.array(atomistic_positions_flat(ref)).reshape(-1, 3)
+    pf = np.array(atomistic_positions_flat(placed)).reshape(-1, 3)
+    assert float(np.linalg.norm(rf - pf, axis=1).max()) < 1e-3       # <0.01 Å
+
+
+def test_rigid_frame_placer_is_rigid_under_reorientation(design, geometry, tmp_path):
+    """The placer's orientation comes from a1/a3 (NOT re-derived from position vs a
+    fitted axis — the old bug that turned MC noise into a crossing-bond mesh).  Proof:
+    rotating EVERY input frame by a common rotation rotates the whole atomistic model
+    by exactly that rotation.  Also pins determinism (identical input → identical
+    output bytes)."""
+    import numpy as np
+    from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
+    fo = _ideal_frame_override(design, geometry, tmp_path)
+    base = np.array(atomistic_positions_flat(
+        build_atomistic_model(design, frame_override=fo))).reshape(-1, 3)
+
+    # A fixed rotation (≈37° about a tilted axis), applied to every frame's CM+a1+a3.
+    ax = np.array([1.0, 2.0, 3.0]); ax /= np.linalg.norm(ax)
+    th = 0.65
+    K = np.array([[0, -ax[2], ax[1]], [ax[2], 0, -ax[0]], [-ax[1], ax[0], 0]])
+    Rg = np.eye(3) + np.sin(th) * K + (1 - np.cos(th)) * (K @ K)
+    rot = {k: (Rg @ cm, Rg @ a1, Rg @ a3) for k, (cm, a1, a3) in fo.items()}
+    rotated = np.array(atomistic_positions_flat(
+        build_atomistic_model(design, frame_override=rot))).reshape(-1, 3)
+
+    assert float(np.abs(rotated - base @ Rg.T).max()) < 1e-4         # whole model rigidly rotated
+
+    again = atomistic_positions_flat(build_atomistic_model(design, frame_override=fo))
+    assert again == atomistic_positions_flat(                        # deterministic
+        build_atomistic_model(design, frame_override=fo))
+
+
+def test_frame_atomistic_handles_insertion_design(tmp_path):
+    """A loop insertion (delta=+1) emits two nucleotide COPIES at one bp, and the
+    relaxed frame surfaces them under 4-tuple keys (copies=True).  The display
+    reconstruction (axis-derived, copies collapsed to their 3-tuple base) must accept
+    that frame WITHOUT crashing and return the SAME flat-XYZ length as the design's
+    atomistic build (atom ordering intact).  (Per-copy relaxed positioning is not done
+    by the display path — copies beyond the first sit near the base; the renderer's
+    >1 nm cutoff backstops any residual long bond.)"""
+    import numpy as np
+    from backend.core.models import LoopSkip
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
+    from backend.core.oxdna_health import frame_atomistic_flat
+
+    base = make_6hb_design(42)
+    h0 = base.helices[0]
+    design = base.model_copy(update={
+        "helices": [h0.model_copy(update={"loop_skips": [LoopSkip(bp_index=20, delta=1)]}),
+                    *base.helices[1:]]})
+    geometry = _geometry_for_design(design)
+
+    fo_all = _ideal_frame_override(design, geometry, tmp_path, copies=True)
+    assert any(len(k) == 4 for k in fo_all)                          # copies surfaced as 4-tuples
+
+    ref_floats = len(atomistic_positions_flat(build_atomistic_model(design)))
+    flat = frame_atomistic_flat(design, {
+        k: {"backbone_position": cm, "a1": a1, "a3": a3}
+        for k, (cm, a1, a3) in fo_all.items()})
+    assert len(flat) == ref_floats                                  # same atom ordering, no crash
+    assert all(np.isfinite(flat))                                   # every atom placed finitely
+
+
 def test_oxdna_continue_production_unique_stage(monkeypatch, tmp_path):
     """A completed job that already has a production run can start ANOTHER; it
     appends a uniquely-named production stage (continues from the last run)."""

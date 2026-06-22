@@ -214,6 +214,7 @@ def production_rmsf(
     design,
     production_traj_path,
     reference_conf_path,
+    include_average_frame: bool = False,
 ) -> dict:
     """Per-NUCLEOTIDE average position + RMSF (root-mean-square fluctuation, nm)
     over a production trajectory — the flexibility map.
@@ -231,6 +232,15 @@ def production_rmsf(
     Returns {ready, n_frames, positions:[{helix_id, bp_index, direction,
     backbone_position:[mean xyz], nx, ny, nz (mean a1), rmsf}], min_rmsf,
     max_rmsf, mean_rmsf}.
+
+    When ``include_average_frame`` is set, also returns ``average_frame`` — a
+    per-nucleotide ``{key: {backbone_position(mean CM), a1, a3}}`` dict in the
+    SAME shape the relaxed-display ``full_map`` uses, so the heavy-rep
+    reconstruction (``frame_atomistic_flat`` / ``frame_surface_json``) can build
+    atomistic/surface for the average ("flexibility map") structure. The mean is
+    taken over the raw oxDNA CM + a1 + a3 (not the backbone site) because the
+    reconstruction re-derives the backbone site and the deformed centerline from
+    the CM, exactly as it does for a trajectory frame.
     """
     from backend.physics.oxdna_interface import (
         _parse_box_nm,
@@ -255,9 +265,12 @@ def production_rmsf(
             n_frames += 1
             for k, v in aligned.items():
                 bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
-                slot = acc.setdefault(k, {"pos": [], "a1": []})
+                slot = acc.setdefault(k, {"pos": [], "a1": [], "cm": [], "a3": []})
                 slot["pos"].append(bb)
                 slot["a1"].append(v["a1"])
+                if include_average_frame:
+                    slot["cm"].append(np.asarray(v["backbone_position"], dtype=float))
+                    slot["a3"].append(np.asarray(v["a3"], dtype=float))
 
     if n_frames == 0 or not acc:
         return {"ready": False, "n_frames": 0, "positions": [],
@@ -265,6 +278,7 @@ def production_rmsf(
 
     positions: list[dict] = []
     rmsfs: list[float] = []
+    average_frame: dict = {}
     for (hid, bp, direction), slot in acc.items():
         P = np.array(slot["pos"])                      # (F, 3)
         mean_pos = P.mean(axis=0)
@@ -278,11 +292,21 @@ def production_rmsf(
             "rmsf": rmsf,
         })
         rmsfs.append(rmsf)
+        if include_average_frame:
+            cmm = np.array(slot["cm"]).mean(axis=0)
+            a3m = np.array(slot["a3"]).mean(axis=0)
+            a3m = a3m / (np.linalg.norm(a3m) + 1e-14)
+            average_frame[(hid, bp, direction)] = {
+                "backbone_position": cmm, "a1": a1m, "a3": a3m,
+            }
 
     r = np.array(rmsfs)
-    return {"ready": True, "n_frames": n_frames, "positions": positions,
-            "min_rmsf": float(r.min()), "max_rmsf": float(r.max()),
-            "mean_rmsf": float(r.mean())}
+    out = {"ready": True, "n_frames": n_frames, "positions": positions,
+           "min_rmsf": float(r.min()), "max_rmsf": float(r.max()),
+           "mean_rmsf": float(r.mean())}
+    if include_average_frame:
+        out["average_frame"] = average_frame
+    return out
 
 
 # Below this many pooled frames the flexibility map is flagged "preliminary"
@@ -887,7 +911,8 @@ def check_relaxed_constraint(constraint, relaxed_output) -> dict:
             "min_confidence": min_conf, "confidence": confidence}
 
 
-def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames: int = 200):
+def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames: int = 200,
+                                *, copies: bool = False):
     """Shared core for the composite trajectory: read every stage's frames,
     PBC-unwrap + Kabsch-align each to the design reference, prepend the seed frame,
     and downsample per stage (≥1 each) to ≤ ``max_frames``.
@@ -895,8 +920,9 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     Returns ``(key_list, ordered_frames, out_stages, markers)`` where
     ``ordered_frames`` is the list of FULL per-nucleotide dicts (key →
     {backbone_position, a1, a3}) in composite-frame order — the same order the flat
-    ``frames`` list uses. Used by ``composite_trajectory`` (flattens to CG floats)
-    and by the per-frame atomistic/surface builders (rebuild from each full dict).
+    ``frames`` list uses. Used by ``composite_trajectory`` (flattens to CG floats,
+    3-tuple keys) and by the per-frame atomistic/surface builders (which pass
+    ``copies=True`` so loop-insertion copies carry their own relaxed rigid frame).
     """
     from backend.physics.oxdna_interface import (
         _parse_box_nm,
@@ -905,7 +931,7 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
         read_trajectory_frames_full,
         unwrap_align_to_reference,
     )
-    ref = read_configuration_full(reference_conf_path, design)
+    ref = read_configuration_full(reference_conf_path, design, copies=copies)
     key_list = list(dict.fromkeys(k[:3] for k in _strand_nucleotide_order(design)))
 
     # A stage tuple is ``(name, kind, path)`` or ``(name, kind, path, marker_label)``.
@@ -913,7 +939,7 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     for item in stages:
         name, kind, path = item[0], item[1], item[2]
         marker_label = item[3] if len(item) > 3 else None
-        frames = read_trajectory_frames_full(path, design)
+        frames = read_trajectory_frames_full(path, design, copies=copies)
         box = _parse_box_nm(path)
         aligned = [
             (unwrap_align_to_reference(fr, ref, design, box)
@@ -1065,21 +1091,78 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
 
 
 def _frame_atomistic_overrides(design, frame: dict):
-    """Build (nuc_pos_override, axis_override) for one composite-trajectory full
-    frame, so build_atomistic_model places atoms at the relaxed CG geometry.
-    Reconstructs the true backbone site from the oxDNA CM (a1/a3) and derives the
-    deformed centerline so bent helices keep their twist (same recipe as the
-    cg→atomistic NAMD-seed path)."""
+    """Build (nuc_pos_override, axis_override) for one relaxed/trajectory frame.
+
+    Positions each nucleotide at its true backbone site reconstructed from the oxDNA
+    CM (``oxdna_backbone_site``), and supplies a Gaussian-smoothed DEFORMED helix
+    centerline so the all-atom base orientation is derived against the BENT axis
+    (``_atom_frame`` measures the radial vs the centerline) — the validated
+    reconstruction the NAMD-seed path uses.
+
+    NOTE — why NOT the per-nucleotide oxDNA a1/a3 rigid-frame placer: that placer
+    (``build_atomistic_model(frame_override=…)``, the 2026-06-21 first cut) collapsed
+    base pairs on real relaxed frames (WC C1'–C1' 0.48 nm vs 0.94 nm here) because
+    oxDNA's relaxed a1 does not map onto the all-atom base direction the calibration
+    assumed.  The axis-derived path below reproduces correct B-DNA pairing/stacking,
+    so DISPLAY uses it; the long sequential O3'→P bonds are handled separately by
+    ``close_backbone=True`` (display-only backbone closure), which made the σ
+    per-domain position smoother (a prior band-aid) unnecessary."""
     from backend.physics.oxdna_interface import oxdna_backbone_site
     from backend.core.cg_to_atomistic import deformed_helix_axes
+    # Collapse loop-insertion copies to their 3-tuple base (last copy wins) — both the
+    # backbone-site override and deformed_helix_axes are keyed by (helix, bp, dir).
+    frame3 = {key[:3]: rec for key, rec in frame.items()
+              if rec.get("backbone_position") is not None
+              and rec.get("a1") is not None and rec.get("a3") is not None}
     nuc_pos_override = {
         key: oxdna_backbone_site(rec["backbone_position"], rec["a1"], rec["a3"])
-        for key, rec in frame.items()
-        if rec.get("backbone_position") is not None
-        and rec.get("a1") is not None and rec.get("a3") is not None
+        for key, rec in frame3.items()
     }
-    axis_override = deformed_helix_axes(design, frame, sigma=2.0)
+    axis_override = deformed_helix_axes(design, frame3, sigma=2.0)
     return nuc_pos_override, axis_override
+
+
+def build_display_model(design, frame: dict):
+    """The canonical relaxed-frame DISPLAY reconstruction — ONE builder shared by the
+    atomistic/surface display sinks AND the validation audit, so what's measured is
+    exactly what's drawn.  Axis-derived base placement (correct WC pairing/stacking)
+    + display-only backbone closure (connected O3'→P).  Atom serial ordering is
+    identical to ``build_atomistic_model(design)`` (overrides change positions, never
+    topology), so the renderer's serial-keyed bond list stays valid."""
+    from backend.core.atomistic import build_atomistic_model
+    nuc_pos_override, axis_override = _frame_atomistic_overrides(design, frame)
+    return build_atomistic_model(
+        design, nuc_pos_override=nuc_pos_override, axis_override=axis_override,
+        close_backbone=True, relaxed_oxdna_phase=True)
+
+
+def frame_atomistic_flat(design, frame: dict) -> list:
+    """Atomistic flat-XYZ (atom-serial order, nm) for ONE per-nucleotide frame
+    ``{key: {backbone_position(CM), a1, a3}}`` — the SAME wire format as
+    ``/design/features/atomistic-batch``. Shared sink for the composite trajectory
+    AND the single relaxed-display / rmsf-average frames."""
+    from backend.core.atomistic import atomistic_positions_flat
+    return atomistic_positions_flat(build_display_model(design, frame))
+
+
+def frame_surface_json(design, frame: dict, color_mode: str = "strand",
+                       probe_radius: float = 0.28, grid_spacing: float = 0.20,
+                       radius_inflate: float = 1.30, smooth: int = 15) -> dict:
+    """Molecular surface ``{vertices, faces, vertex_colors?}`` for ONE per-nucleotide
+    frame — the SAME wire format as ``/design/features/surface-batch``. Shared sink
+    for the composite trajectory AND the single relaxed/rmsf frames."""
+    from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
+    model = build_display_model(design, frame)
+    mesh = compute_surface(model.atoms, grid_spacing=grid_spacing,
+                           probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
+    mesh = smooth_mesh(mesh, iterations=smooth)
+    entry = {"vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
+             "faces": [int(f) for f in mesh.faces.ravel()]}
+    if color_mode == "strand":
+        vc = surface_to_json(mesh, design, color_mode="strand").get("vertex_colors")
+        if vc:
+            entry["vertex_colors"] = [round(float(c), 4) for c in vc]
+    return entry
 
 
 def composite_trajectory_atomistic(design, stages, reference_conf_path,
@@ -1088,17 +1171,13 @@ def composite_trajectory_atomistic(design, stages, reference_conf_path,
     Returns ``{ "<idx>": [x0,y0,z0, …] }`` — the SAME wire format as
     ``/design/features/atomistic-batch`` (atom-serial order, nm). Frame indices
     match ``composite_trajectory``'s ``frames`` ordering exactly."""
-    from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
     _, ordered, _, _ = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames)
+        design, stages, reference_conf_path, max_frames, copies=True)
     out: dict[str, list] = {}
     for idx in sorted(set(int(i) for i in frame_indices)):
         if idx < 0 or idx >= len(ordered):
             continue
-        nuc_pos_override, axis_override = _frame_atomistic_overrides(design, ordered[idx])
-        model = build_atomistic_model(
-            design, nuc_pos_override=nuc_pos_override, axis_override=axis_override)
-        out[str(idx)] = atomistic_positions_flat(model)
+        out[str(idx)] = frame_atomistic_flat(design, ordered[idx])
     return out
 
 
@@ -1110,27 +1189,15 @@ def composite_trajectory_surface(design, stages, reference_conf_path, frame_indi
     Returns ``{ "<idx>": {vertices, faces, vertex_colors?} }`` — the SAME wire
     format as ``/design/features/surface-batch``. Topology can vary per frame
     (marching cubes); the frontend rebuilds the buffer on a count change."""
-    from backend.core.atomistic import build_atomistic_model
-    from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
     _, ordered, _, _ = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames)
+        design, stages, reference_conf_path, max_frames, copies=True)
     out: dict[str, dict] = {}
     for idx in sorted(set(int(i) for i in frame_indices)):
         if idx < 0 or idx >= len(ordered):
             continue
-        nuc_pos_override, axis_override = _frame_atomistic_overrides(design, ordered[idx])
-        model = build_atomistic_model(
-            design, nuc_pos_override=nuc_pos_override, axis_override=axis_override)
-        mesh = compute_surface(model.atoms, grid_spacing=grid_spacing,
-                               probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
-        mesh = smooth_mesh(mesh, iterations=smooth)
-        entry = {"vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
-                 "faces": [int(f) for f in mesh.faces.ravel()]}
-        if color_mode == "strand":
-            vc = surface_to_json(mesh, design, color_mode="strand").get("vertex_colors")
-            if vc:
-                entry["vertex_colors"] = [round(float(c), 4) for c in vc]
-        out[str(idx)] = entry
+        out[str(idx)] = frame_surface_json(
+            design, ordered[idx], color_mode, probe_radius, grid_spacing,
+            radius_inflate, smooth)
     return out
 
 

@@ -38,6 +38,10 @@ test-all:
 smoke:
     cd frontend && npx playwright test --config playwright.smoke.config.js smoke.spec.js assembly_exit_cleanup.spec.js
 
+# Audit the atomistic ball-and-stick display of an oxDNA job's relaxed frame (default 6hb_sim_tests, latest job)
+audit-atomistic *ARGS:
+    uv run python scripts/audit_atomistic.py {{ARGS}}
+
 # Start Vite frontend dev server (requires FastAPI running separately)
 frontend:
     cd frontend && npm run dev -- --host 0.0.0.0

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
-import { toFemUpdates, viridisHex, rmsfColorMap, framesToUpdates, initOxdnaDisplay } from './oxdna_display.js'
+import { toFemUpdates, viridisHex, rmsfColorMap, framesToUpdates, initOxdnaDisplay, repKind } from './oxdna_display.js'
+
+const tick = () => new Promise((r) => setTimeout(r, 0))
 
 describe('framesToUpdates', () => {
   it('zips the shared key list with a flat frame into applyFemPositions updates', () => {
@@ -267,6 +269,147 @@ describe('initOxdnaDisplay controller', () => {
     expect(r.ok).toBe(false)
     expect(r.reason).toBe('waiting for production')
     expect(designRenderer.applyScalarColors).not.toHaveBeenCalled()
+  })
+})
+
+describe('repKind', () => {
+  it('maps scene representations to the renderer that drives them', () => {
+    expect(repKind('vdw')).toBe('atomistic')
+    expect(repKind('ballstick')).toBe('atomistic')
+    expect(repKind('surface')).toBe('surface')
+    expect(repKind('full')).toBe('cg')
+    expect(repKind('beads')).toBe('cg')
+    expect(repKind('cylinders')).toBe('cg')
+    expect(repKind(undefined)).toBe('cg')
+  })
+})
+
+describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
+  function makeHeavyDeps(repr = 'ballstick') {
+    const state = { repr }
+    const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
+    const atom = { getMode: () => 'ballstick', applyPositionLerp: vi.fn(), update: vi.fn() }
+    const surf = { getMode: () => (state.repr === 'surface' ? 'on' : 'off'), applyPositionLerp: vi.fn() }
+    const onRestoreDesignHeavy = vi.fn()
+    const api = {
+      getOxdnaDisplay: vi.fn().mockResolvedValue({ ready: true, stage_name: 's',
+        positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0 }] }),
+      getOxdnaDisplayAtomistic: vi.fn().mockResolvedValue({ ready: true, atomistic: [1, 2, 3, 4, 5, 6], topology_hash: 'jobtopo', n_atoms: 2 }),
+      getOxdnaAtomisticModel: vi.fn().mockResolvedValue({ topology_hash: 'jobtopo',
+        atoms: [{ serial: 0, element: 'C', strand_id: 's', residue: 'DT' }, { serial: 1, element: 'O', strand_id: 's', residue: 'DT' }], bonds: [[0, 1]] }),
+      getOxdnaDisplaySurface:   vi.fn().mockResolvedValue({ ready: true, surface: { vertices: [0, 0, 0, 1, 1, 1], faces: [0, 1, 2] } }),
+      getOxdnaRmsf: vi.fn().mockResolvedValue({ ready: true, n_frames: 5, min_rmsf: 0.1, max_rmsf: 0.9, mean_rmsf: 0.5,
+        positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0, rmsf: 0.5 }] }),
+      getOxdnaRmsfAtomistic: vi.fn().mockResolvedValue({ ready: true, atomistic: [7, 8, 9] }),
+      getOxdnaTrajectory: vi.fn().mockResolvedValue({ ready: true, n_frames: 5, keys: [['h0', 0, 'FORWARD']],
+        frames: [[0, 0, 0, 1, 0, 0], [1, 0, 0, 1, 0, 0], [2, 0, 0, 1, 0, 0], [3, 0, 0, 1, 0, 0], [4, 0, 0, 1, 0, 0]] }),
+      getOxdnaFramesAtomistic: vi.fn().mockImplementation((id, idxs) =>
+        Promise.resolve(Object.fromEntries(idxs.map((i) => [String(i), [i, i, i]])))),
+      getOxdnaFramesSurface: vi.fn().mockImplementation((id, idxs) =>
+        Promise.resolve(Object.fromEntries(idxs.map((i) => [String(i), { vertices: [i, i, i], faces: [0, 1, 2] }])))),
+    }
+    const ctrl = initOxdnaDisplay({
+      designRenderer, api, atom, surf, onRestoreDesignHeavy,
+      getAtomisticRenderer: () => atom, getSurfaceRenderer: () => surf,
+      getCurrentRepr: () => state.repr,
+    })
+    return { ctrl, api, atom, surf, designRenderer, onRestoreDesignHeavy, state }
+  }
+
+  it('relaxed display REBUILDS the renderer from the job topology, then overlays atoms', async () => {
+    const { ctrl, api, atom } = makeHeavyDeps('ballstick')
+    await ctrl.displayJob('job1')
+    await tick()
+    expect(api.getOxdnaDisplayAtomistic).toHaveBeenCalledWith('job1', true)
+    // The renderer is rebuilt from the JOB's own atoms/bonds (not the loaded design),
+    // so the serial-indexed relaxed positions land on the right atoms (no scramble).
+    expect(api.getOxdnaAtomisticModel).toHaveBeenCalledWith('job1')
+    expect(atom.update).toHaveBeenCalledWith({
+      atoms: [{ serial: 0, element: 'C', strand_id: 's', residue: 'DT' }, { serial: 1, element: 'O', strand_id: 's', residue: 'DT' }],
+      bonds: [[0, 1]],
+    })
+    expect(atom.applyPositionLerp).toHaveBeenCalledWith([1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6], 0, null, [], null)
+  })
+
+  it('rebuilds the job topology only ONCE per job (cached across frames)', async () => {
+    const { ctrl, api } = makeHeavyDeps('ballstick')
+    await ctrl.displayJob('job1'); await tick()
+    await ctrl.displayJob('job1'); await tick()      // same job again
+    expect(api.getOxdnaAtomisticModel).toHaveBeenCalledTimes(1)
+  })
+
+  it('relaxed display in surface rep pushes a reconstructed mesh', async () => {
+    const { ctrl, api, surf } = makeHeavyDeps('surface')
+    await ctrl.displayJob('job1')
+    await tick()
+    expect(api.getOxdnaDisplaySurface).toHaveBeenCalledWith('job1', true)
+    const data = { vertices: [0, 0, 0, 1, 1, 1], faces: [0, 1, 2] }
+    expect(surf.applyPositionLerp).toHaveBeenCalledWith(data, data, 0)
+  })
+
+  it('flexibility map drives the atomistic rep from the average structure', async () => {
+    const { ctrl, api, atom } = makeHeavyDeps('vdw')
+    await ctrl.displayRmsf('jobF')
+    await tick()
+    expect(api.getOxdnaRmsfAtomistic).toHaveBeenCalledWith('jobF')
+    expect(atom.applyPositionLerp).toHaveBeenCalledWith([7, 8, 9], [7, 8, 9], 0, null, [], null)
+  })
+
+  it('coarse trajectory bakes ONCE per job then snaps scrubs to the nearest baked frame', async () => {
+    const { ctrl, api, atom } = makeHeavyDeps('ballstick')
+    await ctrl.loadTrajectory('jobT')           // showFrame(0) fires a bake
+    await tick()
+    expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledTimes(1)   // one downsampled bake
+    const bakedIdxs = api.getOxdnaFramesAtomistic.mock.calls[0][1]
+    expect(bakedIdxs[0]).toBe(0)
+    expect(bakedIdxs[bakedIdxs.length - 1]).toBe(4)               // spans the range
+    atom.applyPositionLerp.mockClear()
+    ctrl.showFrame(3)
+    await tick()
+    expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledTimes(1)   // NO refetch — served from cache
+    expect(atom.applyPositionLerp).toHaveBeenCalled()
+  })
+
+  it('fine granularity reconstructs the EXACT scrubbed frame on demand', async () => {
+    const { ctrl, api } = makeHeavyDeps('ballstick')
+    ctrl.setGranularity('fine')
+    await ctrl.loadTrajectory('jobT')
+    await tick()
+    api.getOxdnaFramesAtomistic.mockClear()
+    ctrl.showFrame(2)
+    await tick()
+    expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledWith('jobT', [2])
+  })
+
+  it('stopAndRestore rebuilds the design heavy reps; a late reconstruction does not re-apply', async () => {
+    const { ctrl, api, atom, onRestoreDesignHeavy } = makeHeavyDeps('ballstick')
+    await ctrl.displayJob('job1')       // heavy overlay applied
+    await tick()
+    expect(atom.applyPositionLerp).toHaveBeenCalledTimes(1)
+    // A re-apply (e.g. rep change) is now in flight when the user toggles off.
+    let release
+    api.getOxdnaDisplayAtomistic = vi.fn().mockReturnValue(
+      new Promise((res) => { release = () => res({ ready: true, atomistic: [9, 9, 9] }) }))
+    ctrl.reapplyForRepr()               // pending reconstruction
+    atom.applyPositionLerp.mockClear()
+    ctrl.stopAndRestore()               // toggle off mid-reconstruction
+    expect(onRestoreDesignHeavy).toHaveBeenCalledTimes(1)   // overlay → design rebuilt
+    expect(ctrl.isActive()).toBe(false)
+    release()                           // late reconstruction resolves…
+    await tick()
+    expect(atom.applyPositionLerp).not.toHaveBeenCalled()   // …but is discarded (superseded)
+  })
+
+  it('reapplyForRepr re-overlays the current frame onto a freshly-built rep', async () => {
+    const { ctrl, api, surf, state } = makeHeavyDeps('ballstick')
+    await ctrl.loadTrajectory('jobT')
+    await tick()
+    // User switches the scene to surface — the new mesh needs the oxDNA overlay.
+    state.repr = 'surface'
+    ctrl.reapplyForRepr()
+    await tick()
+    expect(api.getOxdnaFramesSurface).toHaveBeenCalled()
+    expect(surf.applyPositionLerp).toHaveBeenCalled()
   })
 })
 

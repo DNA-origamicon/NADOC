@@ -1980,6 +1980,23 @@ export const getOxdnaFramesAtomistic = (id, frameIndices) =>
 /** Per-frame SURFACE meshes for trajectory frame indices (surface-batch wire format). */
 export const getOxdnaFramesSurface = (id, frameIndices, params = {}) =>
   _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-surface`, { frame_indices: frameIndices, ...params })
+/** All-atom flat-XYZ for the relaxed-display structure ({ready, atomistic:[x,y,z,…]}) —
+ *  lets the OxDNA-display toggle drive the atomistic rep, not just CG beads. */
+export const getOxdnaDisplayAtomistic = (id, align = true) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/display-atomistic?align=${align ? 'true' : 'false'}`)
+/** The JOB design's atomistic model ({atoms, bonds, topology_hash}) — for rebuilding the
+ *  renderer from the topology the relaxed positions belong to (loaded design may differ). */
+export const getOxdnaAtomisticModel = (id) =>
+  _oxdnaJSON('GET', `/oxdna/jobs/${id}/atomistic-model`)
+/** Molecular surface for the relaxed-display structure ({ready, surface:{vertices,faces,…}}). */
+export const getOxdnaDisplaySurface = (id, align = true, params = {}) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/display-surface?align=${align ? 'true' : 'false'}`, params)
+/** All-atom flat-XYZ for the flexibility-map AVERAGE structure ({ready, atomistic:[…]}). */
+export const getOxdnaRmsfAtomistic = (id) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/rmsf-atomistic`)
+/** Molecular surface for the flexibility-map AVERAGE structure ({ready, surface:{…}}). */
+export const getOxdnaRmsfSurface = (id, params = {}) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/rmsf-surface`, params)
 
 /** Create a NAMD MD job (routes_md.py).  Pass {oxdna_job_id} to seed the run
  *  from a completed oxDNA job's relaxed coordinates instead of ideal B-DNA. */

@@ -961,6 +961,61 @@ async def oxdna_frames_surface(job_id: str, body: OxdnaFramesSurfaceBody) -> dic
         body.radius_inflate, body.smooth)
 
 
+def _relaxed_full_map(job, align: bool, *, copies: bool = False):
+    """Shared relaxed-frame reader for the display + display-atomistic/surface
+    routes. Returns ``(design, full_map, stage_name, conf_path, ref_conf)`` where
+    ``full_map`` is ``{(hid,bp,dir): {backbone_position(CM), a1, a3}}`` — the same
+    per-nucleotide shape the heavy-rep reconstruction consumes. ``full_map`` is
+    None when no stage has a ``last_conf.dat`` yet.
+
+    ``copies=True`` (atomistic/surface reconstruction only) additionally keys
+    loop-insertion copies under their own 4-tuple key so the rigid-frame placer
+    gives each copy its own relaxed frame.  The CG ``/display`` route keeps the
+    default 3-tuple map (it unpacks ``(hid,bp,dir)``)."""
+    jd = job.job_dir(_workspace())
+
+    # Pick the latest stage with a last_conf.dat (prefer the most-advanced done stage).
+    conf_path = None
+    stage_name = None
+    for st in reversed(job.stages):
+        cand = job.stage_dir(_workspace(), st.name) / "last_conf.dat"
+        if cand.exists():
+            conf_path = cand
+            stage_name = st.name
+            break
+
+    if conf_path is None:
+        return (None, None, None, None, None)
+
+    from backend.core.models import Design
+    snap = jd / "design.json"
+    if not snap.exists():
+        raise HTTPException(500, "design.json snapshot missing for this job")
+    design = Design.model_validate_json(snap.read_text())
+
+    # Unwrap PBC, then align to the design location.  For a field run the ANCHORED
+    # beads are a POSITIONAL-ONLY reference (translate the anchor onto its design
+    # spot, NO rotation) so the field-induced reorientation we're studying stays
+    # visible; otherwise the whole assembly is Kabsch-superposed (drift + tumbling
+    # removed).  Either way the PBC unwrap stops the structure scattering off-screen.
+    anchor_keys = (job.efield or {}).get("anchor_keys")
+    # CRITICAL: align to the DESIGN geometry (origin frame), NOT the job's conf.dat
+    # — for a field/production child conf.dat IS the parent's relaxation-drifted
+    # last_conf (tens of nm off-origin), so aligning to it would render the
+    # structure far from the design. _design_ref_conf is identical to a root job's
+    # conf.dat, so root jobs are unaffected.
+    ref_conf = _design_ref_conf(jd, design)
+    if anchor_keys:
+        full_map = read_configuration_unwrapped(
+            conf_path, design, ref_conf,
+            align_keys=[tuple(k) for k in anchor_keys], rotate=False, align=align,
+            copies=copies)
+    else:
+        full_map = read_configuration_unwrapped(conf_path, design, ref_conf,
+                                                align=align, copies=copies)
+    return (design, full_map, stage_name, conf_path, ref_conf)
+
+
 @router.get("/oxdna/jobs/{job_id}/display")
 async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
     """Return the last relaxed frame as an applyFemPositions update list.
@@ -975,50 +1030,9 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
     lined up with the surface grid instead of re-posed onto the free design.
     """
     job = _load_job(job_id)
-    jd = job.job_dir(_workspace())
-
-    # Pick the latest stage with a last_conf.dat (prefer the most-advanced done stage).
-    conf_path = None
-    stage_name = None
-    for st in reversed(job.stages):
-        cand = job.stage_dir(_workspace(), st.name) / "last_conf.dat"
-        if cand.exists():
-            conf_path = cand
-            stage_name = st.name
-            break
-
-    if conf_path is None:
+    design, full_map, stage_name, conf_path, ref_conf = _relaxed_full_map(job, align)
+    if full_map is None:
         return {"job_id": job.job_id, "ready": False, "positions": [], "stage_name": None}
-
-    from backend.core.models import Design
-    snap = jd / "design.json"
-    if not snap.exists():
-        raise HTTPException(500, "design.json snapshot missing for this job")
-    design = Design.model_validate_json(snap.read_text())
-
-    # Unwrap PBC, then align to the design location.  For a field run the ANCHORED
-    # beads are a POSITIONAL-ONLY reference (translate the anchor onto its design
-    # spot, NO rotation) so the field-induced reorientation we're studying stays
-    # visible; otherwise the whole assembly is Kabsch-superposed (drift + tumbling
-    # removed).  Either way the PBC unwrap stops the structure scattering off-screen.
-    anchor_keys = (job.efield or {}).get("anchor_keys")
-    if anchor_keys:
-        # CRITICAL: align to the DESIGN geometry (origin frame), NOT the job's
-        # conf.dat — for a field child conf.dat IS the parent's relaxed last_conf,
-        # which the relaxation MD has diffused tens of nm from the origin, so
-        # anchoring onto it would display the whole structure way off-screen.
-        ref_conf = _design_ref_conf(jd, design)
-        full_map = read_configuration_unwrapped(
-            conf_path, design, ref_conf,
-            align_keys=[tuple(k) for k in anchor_keys], rotate=False, align=align)
-    else:
-        # Align to the origin-frame DESIGN geometry, NOT the job's own conf.dat —
-        # for a production/field CHILD, conf.dat is the parent's relaxation-drifted
-        # last_conf (tens of nm off-origin), so aligning to it would render the
-        # structure far from the design.  _design_ref_conf is identical to a root
-        # job's conf.dat, so root jobs are unaffected.
-        ref_conf = _design_ref_conf(jd, design)
-        full_map = read_configuration_unwrapped(conf_path, design, ref_conf, align=align)
 
     # Hybrid (protein) jobs: a per-protein rigid 4×4 (design pose → relaxed pose in
     # the aligned display frame) the frontend applies to the protein render.
@@ -1054,6 +1068,158 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
         "positions": positions,
         "proteins": proteins,
     }
+
+
+class OxdnaSurfaceBody(BaseModel):
+    color_mode: str = "strand"
+    probe_radius: float = 0.28
+    grid_spacing: float = 0.20
+    radius_inflate: float = 1.30
+    smooth: int = 15
+
+
+@router.post("/oxdna/jobs/{job_id}/display-atomistic")
+async def get_oxdna_display_atomistic(job_id: str, align: bool = True) -> dict:
+    """All-atom coordinates for the relaxed-display (last-frame) structure — the
+    atomistic counterpart of GET /oxdna/jobs/{id}/display. Lets the OxDNA-display
+    toggle drive the atomistic rep, not just CG beads. ``atomistic`` is a flat
+    [x0,y0,z0,…] list in JOB-design atom-serial order.
+
+    ``topology_hash`` identifies the JOB's design snapshot.  The flat positions are
+    serial-indexed against the JOB topology — which may differ from the design now
+    loaded in the app (edited after the job ran).  The frontend MUST compare this
+    hash to the atoms it is rendering and rebuild from GET .../atomistic-model on a
+    mismatch; blindly overlaying these positions on a different topology maps every
+    serial to the wrong atom (scrambled colours/bonds/positions)."""
+    from backend.core.oxdna_health import frame_atomistic_flat
+    from backend.core.atomistic import atomistic_reference_topology_hash
+
+    job = _load_job(job_id)
+    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True)
+    if full_map is None:
+        return {"job_id": job.job_id, "ready": False}
+    data = await run_in_threadpool(frame_atomistic_flat, design, full_map)
+    return {"job_id": job.job_id, "ready": True, "stage_name": stage_name,
+            "atomistic": data, "topology_hash": atomistic_reference_topology_hash(design),
+            "n_atoms": len(data) // 3}
+
+
+@router.get("/oxdna/jobs/{job_id}/atomistic-model")
+async def get_oxdna_atomistic_model(job_id: str) -> dict:
+    """The JOB design's full atomistic model (atoms + bonds, in design positions) so
+    the frontend can REBUILD the renderer from the topology the relaxed positions
+    belong to — when the app's loaded design has diverged from the job snapshot.
+    Same serial space as display-atomistic's flat positions (both build from the job
+    design), so a rebuild + applyPositionLerp aligns bond-for-bond."""
+    from backend.core.atomistic import (build_atomistic_model, atomistic_to_json,
+                                         atomistic_reference_topology_hash)
+    from backend.core.models import Design
+    job = _load_job(job_id)
+    snap = job.job_dir(_workspace()) / "design.json"
+    if not snap.exists():
+        raise HTTPException(500, "design.json snapshot missing for this job")
+    design = Design.model_validate_json(snap.read_text())
+    model = await run_in_threadpool(build_atomistic_model, design)
+    out = atomistic_to_json(model)
+    out["topology_hash"] = atomistic_reference_topology_hash(design)
+    return out
+
+
+@router.post("/oxdna/jobs/{job_id}/display-surface")
+async def get_oxdna_display_surface(job_id: str, body: OxdnaSurfaceBody,
+                                    align: bool = True) -> dict:
+    """Molecular surface mesh for the relaxed-display structure — the surface
+    counterpart of GET /oxdna/jobs/{id}/display. ``surface`` = {vertices, faces,
+    vertex_colors?} (same wire format as /design/features/surface-batch)."""
+    from backend.core.oxdna_health import frame_surface_json
+
+    job = _load_job(job_id)
+    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True)
+    if full_map is None:
+        return {"job_id": job.job_id, "ready": False}
+    data = await run_in_threadpool(
+        frame_surface_json, design, full_map, body.color_mode, body.probe_radius,
+        body.grid_spacing, body.radius_inflate, body.smooth)
+    return {"job_id": job.job_id, "ready": True, "stage_name": stage_name, "surface": data}
+
+
+@router.post("/oxdna/jobs/{job_id}/display-atomistic-audit")
+async def get_oxdna_display_atomistic_audit(job_id: str, align: bool = True) -> dict:
+    """Validation audit of the atomistic display for the relaxed-display frame — the
+    programmatic counterpart of what the ball-and-stick / VDW representation DRAWS
+    under the OxDNA-display toggle.  Every bond (stick) is measured + classified
+    (rigid / linker / backbone / bridge); the report flags rigid-stamp violations
+    (placer bugs — expect 0), over-stretched bonds (the long sticks on screen),
+    bonds the renderer HIDES (>1 nm — drawn as nothing, but listed here so they are
+    still queryable), atom clashes, and stranded atoms.  Same copy-aware relaxed
+    frame the display-atomistic route uses, so the audited bonds ARE the rendered
+    bonds (same serial pairs)."""
+    from backend.core.atomistic_validation import audit_bonds
+
+    job = _load_job(job_id)
+    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True)
+    if full_map is None:
+        return {"job_id": job.job_id, "ready": False}
+    report = await run_in_threadpool(audit_bonds, design, full_map)
+    report.update({"job_id": job.job_id, "ready": True, "stage_name": stage_name})
+    return report
+
+
+def _rmsf_average_frame(job):
+    """Shared average-structure reader for the rmsf-atomistic/surface routes.
+    Returns ``(design, average_frame)`` where ``average_frame`` is the per-nuc
+    ``{key:{backbone_position(mean CM), a1, a3}}`` dict; ``average_frame`` is None
+    when no sampling frames exist yet (mirrors GET /rmsf's not-ready paths)."""
+    from backend.core.models import Design
+    from backend.core.oxdna_health import production_rmsf
+
+    prod_stages = [s for s in job.stages if s.kind in ("production", "field")]
+    if not prod_stages:
+        return (None, None)
+    jd = job.job_dir(_workspace())
+    usable = [s for s in prod_stages if s.status in ("done", "running")]
+    trajs: list[Path] = []
+    for s in usable:
+        trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
+    if not trajs:
+        return (None, None)
+    design = Design.model_validate_json((jd / "design.json").read_text())
+    ref_conf = _design_ref_conf(jd, design)
+    result = production_rmsf(design, trajs, ref_conf, include_average_frame=True)
+    if not result.get("ready"):
+        return (design, None)
+    return (design, result.get("average_frame") or None)
+
+
+@router.post("/oxdna/jobs/{job_id}/rmsf-atomistic")
+async def get_oxdna_rmsf_atomistic(job_id: str) -> dict:
+    """All-atom coordinates for the flexibility-map AVERAGE structure — the
+    atomistic counterpart of GET /oxdna/jobs/{id}/rmsf. Lets the flexibility-map
+    toggle drive the atomistic rep."""
+    from backend.core.oxdna_health import frame_atomistic_flat
+
+    job = _load_job(job_id)
+    design, frame = await run_in_threadpool(_rmsf_average_frame, job)
+    if frame is None:
+        return {"job_id": job.job_id, "ready": False}
+    data = await run_in_threadpool(frame_atomistic_flat, design, frame)
+    return {"job_id": job.job_id, "ready": True, "atomistic": data}
+
+
+@router.post("/oxdna/jobs/{job_id}/rmsf-surface")
+async def get_oxdna_rmsf_surface(job_id: str, body: OxdnaSurfaceBody) -> dict:
+    """Molecular surface for the flexibility-map AVERAGE structure — the surface
+    counterpart of GET /oxdna/jobs/{id}/rmsf."""
+    from backend.core.oxdna_health import frame_surface_json
+
+    job = _load_job(job_id)
+    design, frame = await run_in_threadpool(_rmsf_average_frame, job)
+    if frame is None:
+        return {"job_id": job.job_id, "ready": False}
+    data = await run_in_threadpool(
+        frame_surface_json, design, frame, body.color_mode, body.probe_radius,
+        body.grid_spacing, body.radius_inflate, body.smooth)
+    return {"job_id": job.job_id, "ready": True, "surface": data}
 
 
 @router.get("/oxdna/available")

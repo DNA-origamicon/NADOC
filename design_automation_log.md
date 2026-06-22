@@ -1264,6 +1264,70 @@ ASK-FIRST: grid_pos→id resolution is a lookup, the measures are magnitudes —
 
 ---
 
+**AF-ATOM P1 — atomistic-display validation oracle + queryable route + `/validate-atomistic` skill** · _shape:_
+**new `backend/core` validation module + sub-router route + CLI + skill** — `backend/core/atomistic_validation.py`
+(`audit_bonds`, `audit_oxdna_job`, `latest_job_for_design`, `relaxed_frame_for_job`), route
+`POST /oxdna/jobs/{id}/display-atomistic-audit` in `routes_oxdna.py` (a sub-router, not a god-file), CLI
+`scripts/audit_atomistic.py` + `just audit-atomistic`, skill `.claude/skills/validate-atomistic/`; `crud.py`/
+`assembly.py`/`main.js` LOC Δ = **0** · _what it validates:_ every bond + atom the oxDNA-display **atomistic** rep
+draws — reconstructs with the SAME `build_atomistic_model(frame_override=…)` the renderer uses (audited bonds ARE
+rendered bonds, identical serial pairs), classifies `rigid|linker|backbone|bridge`, flags rigid-stamp violations
+(frame-invariant bonds ≠ template = placer bug), over-stretched bonds, renderer-hidden bonds (>1 nm), clashes,
+non-finite atoms · _oracle shipped:_ `audit_bonds` + the `rigid_stamp_max_dev_nm`/`n_rigid_stamp_violations`
+invariant; _tests:_ `tests/test_atomistic_validation.py` (8) — stamp-invariance under an arbitrary frame, over-
+stretch+hidden/clash/non-finite detectors, class partition, job entry point, route · _real-job result_ (6hb_sim_tests
+job c1299e0b07b5): stamp clean (18 279 rigid bonds, max Δ 0.0000 Å, 0 violations) but 1005 backbone O3'→P bonds at
+mean 1.0 nm/max 3.16 nm (CG→atomistic backbone discontinuity, the screenshot) · full suite green, ruff clean ·
+**"Validation gained, not just a passthrough:** before this nothing could say WHICH atomistic bonds are real vs
+over-stretched vs renderer-hidden, nor prove the rigid-frame stamp is frame-invariant — the audit is a property of
+the reconstructed geometry, not an HTTP-200. It cleanly separates a placer bug (rigid-stamp violation) from inherent
+relaxation geometry (backbone stretch), which is the distinction the screenshot couldn't give. No ASK-FIRST: all
+measurements are bond-length magnitudes + a template-equality check — zero frame/sign/polarity reasoning. Deferred
+to AF-ATOM P2 (renderer↔audit parity) + AF-ATOM-CLOSURE (the backbone-closure fix, which is ASK-FIRST geometry).**"
+
+---
+
+**AF-ATOM P2 + AF-ATOM-CLOSURE — renderer↔audit parity + the backbone-closure fix** · _shape:_ **vitest parity
+oracle + display-only geometry fix** (no god-file; `atomistic.py` + `atomistic_renderer.test.js`) · _P2:_
+`frontend/src/scene/atomistic_renderer.test.js` (+1) decomposes each bond InstancedMesh instance matrix and asserts
+the renderer hides EXACTLY the >`_MAX_BOND_NM` bonds (== the backend audit's `hidden_by_renderer`, same 1 nm cutoff)
+and draws every other at its true atom distance · _CLOSURE:_ root cause measured (sequential O3'→P gaps relaxed
+**median 0.91 nm** vs ideal 0.166 — systematic, oxDNA CG frames don't enforce all-atom backbone continuity);
+`atomistic._close_sequential_backbone` (gated `frame_override` + `close_backbone=True`, DISPLAY-only, design/PDB/
+NAMD byte-identical) re-seats only the phosphate linker between rigid C3'/C5' anchors via the validated
+`_interpolate_backbone_bridge` · _oracle result (the audit IS the acceptance test):_ backbone mean 1.005→0.185 nm,
+max 3.155→**0.806 nm**, **hidden-by-renderer 266→0**, rigid-stamp still 0 violations · _tests:_
+`test_atomistic_validation.py::test_backbone_closure_connects_and_preserves_rigid` (closure shortens the worst
+backbone stick, rigid ring/base atoms byte-identical, design path unaffected by the flag) + the previous stamp
+test now uses `close_backbone=False` to isolate the pure stamp; full backend **2946 passed / 55 skipped**, frontend
+**1623**, ruff clean · **"Validation gained, not just a passthrough:** P2 ties the on-screen sticks to the audited
+model bond-for-bond (a renderer regression is now caught, not invisible); CLOSURE is a *fix* whose acceptance test
+IS the P1 audit — it shipped only because the audit showed hidden-bonds 266→0 and backbone max 3.16→0.81 nm with the
+rigid stamp still clean. ASK-FIRST was satisfied: the user authorized the geometry fix, the root cause was MEASURED
+(not reasoned), and the fix reuses validated bridge geometry + moves only linker atoms (rigid invariant preserved,
+oracle-checked).**"
+
+---
+
+**AF-ATOM P1b — inter-base geometry in the audit + base-collapse FIX (rigid placer → axis-derived)** · _what it
+caught:_ P1's audit checked bond lengths + intra-residue rigidity but NOT whether nucleotides are correctly POSITIONED
+relative to each other, so it was blind to the rigid-frame placer (AF first-cut) CRUSHING base pairs on real relaxed
+frames (WC C1'-C1' median **0.48** vs 0.94 nm; raw oxDNA CG is a perfect duplex → a reconstruction bug) · _root
+cause:_ oxDNA's relaxed a1 doesn't map onto the all-atom base direction the rigid calibration assumed — measured: on
+the SAME frame the axis-derived path AND the NAMD-seed spline both give 0.94 (correct), the rigid placer 0.48 ·
+_fix:_ `oxdna_health.build_display_model` (axis-derived + display-only `close_backbone`) is now the ONE builder for
+the atomistic/surface display sinks AND the audit; the rigid placer (`frame_override`) is kept as an
+exact-on-ideal capability, marked SUPERSEDED FOR DISPLAY · _oracle added:_ `_base_geometry` (WC + stacking C1'-C1' +
+`wc_collapsed`, factored into `ok`) — the metric that would have caught it · _audit after fix:_ WC 0.48→**0.94 (OK)**,
+stacking 0.47, hidden 266→4, stamp 0 violations · _tests:_ `test_base_geometry_detects_collapse` + 3 updated; backend
+**2947**, frontend **1623** · **"Validation gained, not just a passthrough:** the audit now measures INTER-nucleotide
+geometry, not just bond lengths — it catches the 'internally-rigid but mis-placed nucleotide' class the length checks
+miss, and it was the load-bearing tool that isolated the collapse (raw-CG-correct vs reconstruction-wrong, and WHICH
+path) and proved the fix. No ASK-FIRST: C1'-C1' are magnitudes; the path was chosen by MEASUREMENT (0.48 vs 0.94), not
+by reasoning about a1/polarity.**"
+
+---
+
 ## Lessons (anti-patterns banked — read before building)
 
 _(none yet — first session. Candidates the audit already suggests:)_

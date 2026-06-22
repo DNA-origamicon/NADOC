@@ -3640,6 +3640,21 @@
                   </div>
                   <div id="oxdna-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
                 </div>
+                <!-- Heavy-rep (atomistic/surface) reconstruction detail for ALL three
+                     displays above. Only matters when the scene is in an atomistic or
+                     surface representation; CG beads ignore it. -->
+                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:8px"
+                       title="When the scene is in an atomistic or surface representation, oxDNA frames are rebuilt into that heavy geometry. Coarse snaps the trajectory to a downsampled set of pre-built frames (fast). Fine rebuilds the exact frame on every step (accurate, but can be very slow on large designs).">
+                  Atomistic/surface detail:
+                  <select id="oxdna-jobs-heavy-granularity"
+                          style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                    <option value="coarse">Coarse — snap to downsampled frames (fast)</option>
+                    <option value="fine">Fine — rebuild every frame (slow)</option>
+                  </select>
+                </label>
+                <div id="oxdna-jobs-heavy-warn" style="display:none;font-size:9px;color:#d29922;margin-top:2px">
+                  Fine mode rebuilds the full atomistic/surface geometry every frame — playback &amp; scrubbing can be very slow. Toggle the display off any time to cancel.
+                </div>
                 <!-- NAMD seed handoff (enabled once relaxation completes) -->
                 <button id="oxdna-jobs-seed-btn" disabled
                         title="Start a NAMD all-atom run from this relaxed structure instead of ideal B-DNA"

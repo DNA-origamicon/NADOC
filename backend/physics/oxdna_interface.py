@@ -617,7 +617,9 @@ def read_configuration(
 def read_configuration_full(
     conf_path: str | Path,
     design:    Design,
-) -> dict[tuple[str, int, str], dict]:
+    *,
+    copies:    bool = False,
+) -> dict[tuple, dict]:
     """
     Read an oxDNA configuration (.dat) and return position + orientation per nuc.
 
@@ -633,7 +635,13 @@ def read_configuration_full(
         "a1":                np.ndarray (3,) unit (backbone→base, cross-strand),
         "a3":                np.ndarray (3,) unit (5′→3′ along chain),
     }
-    For loop copies the last copy wins (matches ``read_configuration``).
+    By default loop copies the last copy wins (matches ``read_configuration``).
+    With ``copies=True`` each loop-insertion copy is kept under its own 4-tuple key
+    (helix_id, bp_index, direction_str, copy_k) — used by the atomistic/surface
+    display reconstruction so insertion copies get their own relaxed rigid frame
+    instead of sitting at the design position (the long-bond artifact).  Designs
+    without insertions are unaffected (``_strand_nucleotide_order`` emits only
+    3-tuples there), so this is a no-op for them.
     """
     order = _strand_nucleotide_order(design)
     lines = Path(conf_path).read_text(encoding="utf-8").splitlines()
@@ -651,7 +659,7 @@ def read_configuration_full(
         pos_nm = np.array(vals[0:3]) * OXDNA_LENGTH_UNIT
         a1 = np.array(vals[3:6])
         a3 = np.array(vals[6:9])
-        result[key[:3]] = {
+        result[key if copies else key[:3]] = {
             "backbone_position": pos_nm,
             "a1": a1 / (np.linalg.norm(a1) + 1e-14),
             "a3": a3 / (np.linalg.norm(a3) + 1e-14),
@@ -698,7 +706,8 @@ def read_configuration_unwrapped(
     align_keys: Optional[list] = None,
     rotate:     bool = True,
     align:      bool = True,
-) -> dict[tuple[str, int, str], dict]:
+    copies:     bool = False,
+) -> dict[tuple, dict]:
     """Read a relaxed oxDNA config and undo periodic-boundary wrapping for display.
 
     oxDNA writes coordinates wrapped into the simulation box [0, L), so an intact
@@ -724,8 +733,8 @@ def read_configuration_unwrapped(
     Returns the same shape as ``read_configuration_full`` (positions nm + a1 + a3);
     the a1/a3 orientation vectors are rotated by the same alignment.
     """
-    relax = read_configuration_full(conf_path, design)
-    ref = read_configuration_full(reference_path, design)
+    relax = read_configuration_full(conf_path, design, copies=copies)
+    ref = read_configuration_full(reference_path, design, copies=copies)
     box = _parse_box_nm(conf_path)
     if box is None or not np.all(box > 0):
         return relax
@@ -765,8 +774,19 @@ def unwrap_align_to_reference(
         if a in relax and b in relax:
             adj[a].append(b)
             adj[b].append(a)
-    fwd = {(k[0], k[1]): k for k in relax if k[2] == "FORWARD"}
-    rev = {(k[0], k[1]): k for k in relax if k[2] == "REVERSE"}
+    # Loop-insertion copies (4-tuple keys, copies=True): tie each copy to its base
+    # 3-tuple (or the previous copy) so it joins the same connected component as its
+    # sibling and rides the same unwrap/box-shift/superpose transform.
+    for k in relax:
+        if len(k) == 4:
+            base = k[:3] if k[3] == 0 else (k[0], k[1], k[2], k[3] - 1)
+            if base in relax:
+                adj[k].append(base)
+                adj[base].append(k)
+    # WC pairs only between the canonical 3-tuple nucleotides (copies are unpaired
+    # loop bases — keying them here would collide multiple copies onto one (h,bp)).
+    fwd = {(k[0], k[1]): k for k in relax if len(k) == 3 and k[2] == "FORWARD"}
+    rev = {(k[0], k[1]): k for k in relax if len(k) == 3 and k[2] == "REVERSE"}
     for hb in set(fwd) & set(rev):
         a, b = fwd[hb], rev[hb]
         adj[a].append(b)
@@ -865,10 +885,13 @@ def unwrap_align_to_reference(
 def read_trajectory_frames_full(
     traj_path: str | Path,
     design:    Design,
-) -> list[dict[tuple[str, int, str], dict]]:
+    *,
+    copies:    bool = False,
+) -> list[dict[tuple, dict]]:
     """Parse every frame of an oxDNA trajectory (.dat) into a list of per-nucleotide
     maps (same shape as read_configuration_full: position nm + a1 + a3).  Frames are
-    split on the ``t = …`` header lines."""
+    split on the ``t = …`` header lines.  ``copies=True`` keeps loop-insertion copies
+    under their own 4-tuple key (see ``read_configuration_full``)."""
     order = _strand_nucleotide_order(design)
     lines = Path(traj_path).read_text(encoding="utf-8").splitlines()
     starts = [i for i, l in enumerate(lines) if l.startswith("t ")]
@@ -892,7 +915,7 @@ def read_trajectory_frames_full(
                 # than crash the mid-run flexibility-map / trajectory read.
                 continue
             a1 = np.array(vals[3:6]); a3 = np.array(vals[6:9])
-            m[key[:3]] = {
+            m[key if copies else key[:3]] = {
                 "backbone_position": np.array(vals[0:3]) * OXDNA_LENGTH_UNIT,
                 "a1": a1 / (np.linalg.norm(a1) + 1e-14),
                 "a3": a3 / (np.linalg.norm(a3) + 1e-14),

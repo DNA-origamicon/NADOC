@@ -58,6 +58,7 @@ from backend.core.atomistic_helpers import (
 )
 from backend.core.atomistic_minimisers import (
     _atom_pos,
+    _interpolate_backbone_bridge,
     _minimize_1_extra_base,
     _minimize_2_extra_base,
     _minimize_3_extra_base,
@@ -624,6 +625,167 @@ def _atom_frame(
     return origin, R
 
 
+# ── Rigid-frame stamping from an oxDNA per-nucleotide frame ────────────────────
+# For DISPLAY of a relaxed oxDNA structure (or a trajectory frame) each nucleotide
+# is a rigid body with a full orientation frame (a1, a3 from the .dat, a2 = a3×a1).
+# Rather than re-deriving the base orientation from position − axis_point (which
+# amplifies the coarse-grained MC positional noise into a mesh of crossing,
+# over-stretched backbone bonds), we stamp the all-atom template by the oxDNA frame
+# directly: world = origin + R·local with  R = F·Q,  origin = backbone_site + F·c,
+# where F = [a1 a2 a3] and (Q, c) is a single fixed calibration per
+# (strand_direction, helix_is_forward) bucket.  This is exact and deterministic:
+# no axis fitting, no smoothing, no seed-clash, and it covers every nucleotide.
+#
+# (Q, c) are derived EMPIRICALLY (never hand-derived — the locked _PHASE_* / frame
+# constants are honored) by fitting, on a clean ideal duplex whose oxDNA frame is
+# known, the constant that makes this placer reproduce build_atomistic_model's own
+# (validated) atom placement to machine precision.  See _rigid_frame_calibration.
+
+def _oxdna_frame_basis(
+    cm_nm: _np.ndarray, a1: _np.ndarray, a3: _np.ndarray,
+) -> tuple[_np.ndarray, _np.ndarray]:
+    """Return (F, backbone_site) for an oxDNA nucleotide given its centre-of-mass
+    (the .dat position) and the a1/a3 unit vectors.  a1 is orthonormalised against
+    a3 (defensive — relaxed oxDNA frames are orthonormal to ~1e-6, but a stray drift
+    must not skew the stamp), a2 = a3 × a1, F = [a1 | a2 | a3].  The backbone site
+    is oxDNA's true phosphate position (CM is inward of it).  Used identically by
+    the calibration fit and the runtime placer so the two stay self-consistent."""
+    from backend.physics.oxdna_interface import oxdna_backbone_site
+    a3 = a3 / (_np.linalg.norm(a3) + 1e-14)
+    a1 = a1 - _np.dot(a1, a3) * a3
+    a1 = a1 / (_np.linalg.norm(a1) + 1e-14)
+    a2 = _np.cross(a3, a1)
+    F = _np.column_stack([a1, a2, a3])
+    return F, oxdna_backbone_site(cm_nm, a1, a3)
+
+
+@_functools.lru_cache(maxsize=1)
+def _rigid_frame_calibration() -> dict:
+    """Fit the constant rigid transform (Q rotation, c offset) per
+    (strand_direction, helix_is_forward) bucket that maps an oxDNA particle frame to
+    the all-atom template stamping build_atomistic_model produces.
+
+    Method (empirical, machine-precision):  build a clean ideal duplex (no
+    crossovers / insertions) spanning all four buckets, write + read its oxDNA
+    configuration so each nucleotide has a known (CM, a1, a3), and read its
+    KNOWN-GOOD atom placement from build_atomistic_model(design).  For each
+    nucleotide recover (R_kg, origin_kg) by Kabsch between the template-local atom
+    coordinates and the built world coordinates, then  Q = Fᵀ·R_kg,
+    c = Fᵀ·(origin_kg − backbone_site).  Q is residue-independent (the frame is set
+    by the sugar-phosphate, not the base) and constant within a bucket; we average
+    + re-orthonormalise (SVD).  The 4-bucket split mirrors _atom_frame's only
+    direction branches (the REVERSE-strand P azimuthal correction differs for a
+    FORWARD helix vs a REVERSE/None helix).  Asserts the per-nucleotide residual is
+    negligible, so a silent calibration drift can never ship."""
+    from backend.core.models import Helix, Strand, Domain, Vec3, Design, LatticeType
+    from backend.core.design_geometry import _geometry_for_design
+    from backend.physics.oxdna_interface import write_configuration, read_configuration_full
+    import tempfile as _tempfile, os as _os
+
+    L = 14
+    rise = BDNA_RISE_PER_BP
+
+    def _helix(idx: str, direction: Direction) -> Helix:
+        return Helix(id=idx, direction=direction, length_bp=L, bp_start=0,
+                     axis_start=Vec3(x=float(idx_x[idx]), y=0.0, z=0.0),
+                     axis_end=Vec3(x=float(idx_x[idx]), y=0.0, z=L * rise))
+
+    idx_x = {"h0": 0.0, "h1": 3.0}
+    helices = [_helix("h0", Direction.FORWARD), _helix("h1", Direction.REVERSE)]
+    strands: list[Strand] = []
+    # One forward + one reverse single-domain strand on each helix → all 4 buckets.
+    for hid in ("h0", "h1"):
+        strands.append(Strand(id=f"{hid}_f", strand_type=StrandType.SCAFFOLD,
+                              domains=[Domain(helix_id=hid, start_bp=0, end_bp=L - 1,
+                                              direction=Direction.FORWARD)]))
+        strands.append(Strand(id=f"{hid}_r", strand_type=StrandType.STAPLE,
+                              domains=[Domain(helix_id=hid, start_bp=L - 1, end_bp=0,
+                                              direction=Direction.REVERSE)]))
+    design = Design(helices=helices, strands=strands, lattice_type=LatticeType.HONEYCOMB)
+
+    geom = _geometry_for_design(design)
+    tf = _tempfile.NamedTemporaryFile(suffix=".dat", delete=False).name
+    try:
+        write_configuration(design, geom, tf)
+        frames = read_configuration_full(tf, design)
+    finally:
+        _os.unlink(tf)
+
+    model = build_atomistic_model(design)
+    hdir = {h.id: h.direction for h in design.helices}
+
+    # Group built atoms by nucleotide (helix, bp, dir); each carries .name/.residue.
+    groups: dict[tuple, list] = {}
+    for a in model.atoms:
+        if a.helix_id is None or a.bp_index is None:
+            continue
+        groups.setdefault((a.helix_id, a.bp_index, a.direction), []).append(a)
+
+    def _local(residue: str, direction: Direction) -> dict:
+        d = {n: _np.array([x, y, z]) for n, _e, x, y, z in _SUGAR}
+        base = BASE_TEMPLATES if direction == Direction.FORWARD else BASE_TEMPLATES_REV
+        for n, _e, x, y, z in base[residue][0]:
+            d[n] = _np.array([x, y, z])
+        return d
+
+    def _kabsch(P: _np.ndarray, W: _np.ndarray) -> tuple[_np.ndarray, _np.ndarray]:
+        Pc, Wc = P.mean(0), W.mean(0)
+        H = (P - Pc).T @ (W - Wc)
+        U, _S, Vt = _np.linalg.svd(H)
+        D = _np.sign(_np.linalg.det(Vt.T @ U.T))
+        R = Vt.T @ _np.diag([1.0, 1.0, D]) @ U.T
+        return R, Wc - R @ Pc
+
+    acc: dict[tuple, dict] = {}
+    for key, atoms in groups.items():
+        if key not in frames:
+            continue
+        h_id, _bp, dstr = key
+        direction = Direction.FORWARD if dstr == "FORWARD" else Direction.REVERSE
+        tl = _local(atoms[0].residue, direction)
+        names = [a.name for a in atoms if a.name in tl]
+        if len(names) != len(set(names)) or len(names) < 6:
+            continue  # duplicate copy or extra-base residue: skip
+        wmap = {a.name: _np.array([a.x, a.y, a.z]) for a in atoms}
+        P = _np.array([tl[n] for n in names])
+        W = _np.array([wmap[n] for n in names])
+        R_kg, t_kg = _kabsch(P, W)
+        F, bb = _oxdna_frame_basis(frames[key]["backbone_position"],
+                                   frames[key]["a1"], frames[key]["a3"])
+        bucket = (dstr, hdir[h_id] == Direction.FORWARD)
+        slot = acc.setdefault(bucket, {"M": [], "c": []})
+        slot["M"].append(F.T @ R_kg)
+        slot["c"].append(F.T @ (t_kg - bb))
+
+    calib: dict[tuple, tuple] = {}
+    for bucket, slot in acc.items():
+        Ms = _np.array(slot["M"])
+        U, _S, Vt = _np.linalg.svd(Ms.mean(0))
+        Q = U @ Vt
+        cmean = _np.array(slot["c"]).mean(0)
+        m_res = max(float(_np.linalg.norm(M - Q)) for M in Ms)
+        c_res = max(float(_np.linalg.norm(c - cmean)) for c in slot["c"])
+        assert m_res < 1e-6 and c_res < 1e-6, (
+            f"rigid-frame calibration drift in bucket {bucket}: "
+            f"rotation residual {m_res:.2e}, offset residual {c_res:.2e} nm")
+        calib[bucket] = (Q, cmean)
+    return calib
+
+
+def _oxdna_rigid_frame(
+    cm_nm: _np.ndarray, a1: _np.ndarray, a3: _np.ndarray,
+    direction: Direction, helix_direction: "Direction | None",
+) -> tuple[_np.ndarray, _np.ndarray]:
+    """Stamp position: return (origin, R) placing the nucleotide's template so its
+    atoms land at the oxDNA-relaxed rigid pose (CM + a1/a3).  origin = backbone_site
+    + F·c, R = F·Q with (Q, c) the calibrated per-bucket constant."""
+    F, bb = _oxdna_frame_basis(_np.asarray(cm_nm, float),
+                               _np.asarray(a1, float), _np.asarray(a3, float))
+    Q, c = _rigid_frame_calibration()[(direction.value,
+                                       helix_direction == Direction.FORWARD)]
+    return bb + F @ c, F @ Q
+
+
 def crossover_geometry_diagnostics(design: Design) -> dict:
     """Report crossover linker spans without changing the design.
 
@@ -895,6 +1057,9 @@ def build_atomistic_model(
     nuc_pos_override: "dict[tuple[str, int, str], _np.ndarray] | None" = None,
     include_proteins: bool = False,
     axis_override: "dict[tuple[str, int], tuple[_np.ndarray, _np.ndarray]] | None" = None,
+    frame_override: "dict[tuple, tuple[_np.ndarray, _np.ndarray, _np.ndarray]] | None" = None,
+    close_backbone: bool = False,
+    relaxed_oxdna_phase: bool = False,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -1078,25 +1243,63 @@ def build_atomistic_model(
                     base_char = seq_map.get(_seq_key, "N")
                     residue   = _BASE_CHAR_TO_RESIDUE.get(base_char, "DT")
 
-                    # Compute helix axis point for radial correction.  An optional
-                    # axis_override supplies a DEFORMED (curved) centerline point +
-                    # local tangent per (helix, bp): when seeding from a relaxed CG
-                    # structure the radial direction (hence the helical phase) must be
-                    # measured against the BENT axis, not the ideal straight one —
-                    # otherwise a helix displaced from its ideal axis makes the global
-                    # displacement swamp the true radial, destroying the twist and
-                    # piling adjacent nucleotides together (the seed-clash bug).
-                    ax_start, ax_hat, bp_start = _helix_axis_cache[h_id]
-                    axis_pt = ax_start + (bp - bp_start) * BDNA_RISE_PER_BP * ax_hat
-                    if axis_override is not None:
-                        _ov = axis_override.get((h_id, bp))
-                        if _ov is not None:
-                            import dataclasses as _dc
-                            axis_pt = _ov[0]
-                            nuc_pos = _dc.replace(nuc_pos, axis_tangent=_ov[1])
+                    # frame_override: stamp the template by an oxDNA rigid frame
+                    # (CM, a1, a3) directly, instead of deriving orientation from the
+                    # axis.  SUPERSEDED FOR DISPLAY (2026-06-21): on real RELAXED
+                    # frames this COLLAPSES base pairs (WC C1'–C1' ~0.48 vs 0.94 nm)
+                    # because oxDNA's relaxed a1 does not map onto the all-atom base
+                    # direction the calibration assumes.  The display sinks use the
+                    # axis-derived path (oxdna_health.build_display_model); this branch
+                    # is retained only as an exact-on-ideal-geometry capability (the
+                    # rigid-placer pins in test_oxdna_relaxation.py) and the validation
+                    # oracle's wc_collapsed check guards against any re-introduction.
+                    _fo = None
+                    if frame_override is not None:
+                        _fo = frame_override.get((h_id, bp, dir_str, copy_k))
+                        if _fo is None and copy_k == 0:
+                            _fo = frame_override.get((h_id, bp, dir_str))
+                    if _fo is not None:
+                        origin, R = _oxdna_rigid_frame(
+                            _fo[0], _fo[1], _fo[2], direction, helix.direction)
+                    else:
+                        # Apply CG position override for copy 0 only (NAMD-seed path).
+                        if nuc_pos_override is not None and copy_k == 0:
+                            cg_pos = nuc_pos_override.get((h_id, bp, dir_str))
+                            if cg_pos is not None:
+                                import dataclasses as _dc
+                                nuc_pos = _dc.replace(nuc_pos, position=cg_pos)
 
-                    origin, R = _atom_frame(nuc_pos, direction, axis_point=axis_pt,
-                                            helix_direction=helix.direction)
+                        # Compute helix axis point for radial correction.  An optional
+                        # axis_override supplies a DEFORMED (curved) centerline point +
+                        # local tangent per (helix, bp): when seeding from a relaxed CG
+                        # structure the radial direction (hence the helical phase) must be
+                        # measured against the BENT axis, not the ideal straight one —
+                        # otherwise a helix displaced from its ideal axis makes the global
+                        # displacement swamp the true radial, destroying the twist and
+                        # piling adjacent nucleotides together (the seed-clash bug).
+                        ax_start, ax_hat, bp_start = _helix_axis_cache[h_id]
+                        axis_pt = ax_start + (bp - bp_start) * BDNA_RISE_PER_BP * ax_hat
+                        if axis_override is not None:
+                            _ov = axis_override.get((h_id, bp))
+                            if _ov is not None:
+                                import dataclasses as _dc
+                                axis_pt = _ov[0]
+                                nuc_pos = _dc.replace(nuc_pos, axis_tangent=_ov[1])
+
+                        # Reverse-strand azimuthal correction: the design geometry
+                        # places the reverse strand at fwd ± minor_groove (±150°),
+                        # SIGN by the helix's LATTICE direction (geometry.py), and
+                        # _atom_frame undoes that per-direction.  But oxDNA relaxation
+                        # erases the lattice-location distinction — it relaxes BOTH
+                        # helix types to a real B-DNA duplex at the SAME physical groove
+                        # angle (raw CG: FORWARD ≡ REVERSE helices).  So the relaxed
+                        # DISPLAY reconstruction must apply the UNIFORM (forward) branch;
+                        # using the per-lattice-direction branch collapses REVERSE-helix
+                        # WC pairs (C1'–C1' 0.96 → 0.72 nm).  Design/PDB/seed builds
+                        # (relaxed_oxdna_phase=False) keep the real per-direction branch.
+                        _hd = Direction.FORWARD if relaxed_oxdna_phase else helix.direction
+                        origin, R = _atom_frame(nuc_pos, direction, axis_point=axis_pt,
+                                                helix_direction=_hd)
 
                     # ── Sugar + phosphate atoms ───────────────────────────────
                     sugar_name_to_serial: dict[str, int] = {}
@@ -1305,6 +1508,20 @@ def build_atomistic_model(
         exclude_helix_ids  = exclude_helix_ids,
     )
 
+    # ── DISPLAY-ONLY: close the sequential backbone (relaxed-frame reconstruction) ─
+    # oxDNA's per-nucleotide CG frames do NOT enforce all-atom backbone continuity,
+    # so reconstructing consecutive nucleotides leaves the O3′(i)→P(i+1) stick
+    # stretched (~0.9 nm median on a real relaxed 6hb vs 0.16 nm ideal) — the long
+    # bonds in the ball-and-stick view.  Opt-in via close_backbone=True (the relaxed
+    # DISPLAY sinks only): re-seat just the phosphate linker (O3′/P/O5′/OP1/OP2)
+    # between the rigid C3′(i)/C5′(i+1) anchors so the backbone draws CONNECTED.
+    # Crossover / skip / extra-base junctions were bridged above and are not
+    # same-helix-consecutive, so they are left untouched; the ring + base atoms never
+    # move.  DEFAULT False → the design / PDB-export / NAMD-seed builds are
+    # byte-identical (the seed is minimised by NAMD; it must NOT be pre-closed).
+    if close_backbone:
+        _close_sequential_backbone(atoms, bonds)
+
     # ── Apply deformations (bend/twist) and cluster rigid transforms ──────────
     # All atom positions above are placed in straight (undeformed) geometry.
     # This final pass rotates/translates every atom to match the deformed 3-D view.
@@ -1315,6 +1532,37 @@ def build_atomistic_model(
     if include_proteins:
         model = _append_protein_atoms(model, design)
     return model
+
+
+def _close_sequential_backbone(atoms: list[Atom], bonds: list[tuple[int, int]]) -> None:
+    """DISPLAY-ONLY backbone closure for the oxDNA-frame reconstruction.
+
+    For every SEQUENTIAL O3′(i)→P(i+1) backbone bond (same helix, same direction,
+    consecutive bp — i.e. a continuous strand run, NOT a crossover/skip/extra-base
+    junction, which are bridged elsewhere), linearly re-seat the phosphate linker
+    atoms (O3′, P, O5′, OP1, OP2) between the rigid C3′(i) and C5′(i+1) anchors via
+    ``_interpolate_backbone_bridge``.  Distributes the CG-vs-all-atom spacing
+    mismatch evenly across the 4 linker bonds (~span/4 each) instead of leaving one
+    impossible ~0.9 nm O3′→P stick, so the backbone renders connected.  The ribose
+    ring + base atoms are never touched (the rigid-stamp invariant holds).  Cheap
+    (pure interpolation, ~0.01 s for ~1000 bonds), so it runs every display frame."""
+    by_res: dict[tuple, dict[str, int]] = {}
+    for a in atoms:
+        by_res.setdefault((a.strand_id, a.seq_num), {})[a.name] = a.serial
+    seen: set[tuple] = set()
+    for i, j in bonds:
+        a, b = atoms[i], atoms[j]
+        if {a.name, b.name} != {"O3'", "P"}:
+            continue
+        src, dst = (a, b) if a.name == "O3'" else (b, a)
+        if not (src.helix_id == dst.helix_id and src.direction == dst.direction
+                and abs(src.bp_index - dst.bp_index) == 1):
+            continue   # crossover / skip / extra-base bridge — already handled
+        key = ((src.strand_id, src.seq_num), (dst.strand_id, dst.seq_num))
+        if key in seen:
+            continue
+        seen.add(key)
+        _interpolate_backbone_bridge(atoms, by_res[key[0]], by_res[key[1]])
 
 
 # ── Crossover interpolation helpers ──────────────────────────────────────────

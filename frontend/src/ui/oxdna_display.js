@@ -17,6 +17,8 @@
  * Factory: initOxdnaDisplay({ designRenderer, api }) → controller.
  */
 
+import { strideIndices, nearestOf } from '../scene/trajectory_range.js'
+
 /**
  * Pure mapping: a /oxdna/jobs/{id}/display response → applyFemPositions updates.
  * Returns [] for a not-ready / empty response.  Kept pure for unit testing.
@@ -112,7 +114,30 @@ export function proteinTransformMap(displayResponse) {
   return out
 }
 
-export function initOxdnaDisplay({ designRenderer, api, proteinRenderer = null }) {
+/**
+ * Pure: which renderer a scene representation drives.
+ *   vdw / ballstick → 'atomistic'   (atomistic_renderer)
+ *   surface         → 'surface'     (surface_renderer)
+ *   everything else (full/beads/cylinders/hull/…) → 'cg'  (helix beads/slabs)
+ * Decides whether an oxDNA display overlay needs a heavy-rep reconstruction.
+ */
+export function repKind(repr) {
+  if (repr === 'vdw' || repr === 'ballstick') return 'atomistic'
+  if (repr === 'surface') return 'surface'
+  return 'cg'
+}
+
+// Heavy-rep "coarse" bake caps (per job): reconstruct atomistic at ≤40 frames /
+// surface at ≤20, snap the scrubber to the nearest baked frame. "fine" bypasses
+// these and reconstructs the exact frame on demand (slow — gated by a warning).
+const _COARSE_ATOM_CAP = 40
+const _COARSE_SURF_CAP = 20
+
+export function initOxdnaDisplay({
+  designRenderer, api, proteinRenderer = null,
+  getAtomisticRenderer = null, getSurfaceRenderer = null,
+  getCurrentRepr = null, onRestoreDesignHeavy = null,
+}) {
   let _active = false
   let _jobId = null
   let _mode = null     // 'relaxed' | 'rmsf' | 'trajectory'
@@ -123,6 +148,141 @@ export function initOxdnaDisplay({ designRenderer, api, proteinRenderer = null }
   // was turned off or superseded by a newer call bails instead of re-applying
   // stale positions (the "toggle off but sim positions stay" desync).
   let _epoch = 0
+
+  // ── Heavy reps (atomistic / surface) ───────────────────────────────────────
+  // The CG overlay above is applied via designRenderer.applyFemPositions; when the
+  // scene is in an atomistic or surface representation we ALSO reconstruct that
+  // heavy geometry from the same relaxed/rmsf/trajectory frame and push it into
+  // the atomistic/surface renderer (display-state only, never topology).
+  let _align = true          // last align flag from displayJob (relaxed only)
+  let _frameIdx = 0          // current trajectory frame (for re-apply on rep change)
+  let _granularity = 'coarse'  // 'coarse' = downsample+snap | 'fine' = exact frame
+  let _heavyActive = false   // a heavy overlay is up → restore design reps on stop
+  // A second monotonic token: bumped on every heavy apply so only the LATEST
+  // reconstruction (rapid scrub / rep toggle) wins — out-of-order fetches bail.
+  let _heavyToken = 0
+  // Per-job coarse bakes: {keys:[idx…], byIdx:Map<idx,data>}. Cleared on job
+  // switch / granularity flip / stop.
+  let _bakedAtom = null
+  let _bakedSurf = null
+  // jobId whose atomistic ATOMS/BONDS the renderer currently holds.  The relaxed
+  // positions are serial-indexed against the JOB's design snapshot, which can differ
+  // from the design now loaded in the app (edited after the job ran) — applying them
+  // onto the active-design atoms maps every serial to the wrong atom (scrambled
+  // colours/bonds/positions).  So before overlaying any oxDNA atomistic frame we
+  // REBUILD the renderer from the job's own atomistic model (once per job).
+  let _atomTopoJob = null
+
+  function _repKind() { return repKind(getCurrentRepr?.()) }
+
+  /** Ensure the atomistic renderer holds the JOB's topology (atoms+bonds), so the
+   *  relaxed positions line up serial-for-serial.  Returns false if it could not. */
+  async function _ensureJobAtomistic(ar, epoch) {
+    if (_atomTopoJob === _jobId) return true            // already rebuilt for this job
+    const model = await api.getOxdnaAtomisticModel(_jobId)
+    if (epoch !== _epoch) return false
+    if (!model?.atoms?.length) return false
+    ar.update({ atoms: model.atoms, bonds: model.bonds || [] })
+    _atomTopoJob = _jobId
+    _heavyActive = true                                 // restore design reps on stop
+    return true
+  }
+
+  async function _pushAtomistic(arr, epoch, live) {
+    const ar = getAtomisticRenderer?.()
+    if (!ar || ar.getMode?.() === 'off' || !Array.isArray(arr) || !arr.length) return
+    if (!(await _ensureJobAtomistic(ar, epoch))) return
+    if (live && !live()) return
+    ar.applyPositionLerp(arr, arr, 0, null, [], null)
+    _heavyActive = true
+  }
+  function _pushSurface(data) {
+    const sr = getSurfaceRenderer?.()
+    if (!sr || sr.getMode?.() === 'off' || !data?.vertices?.length) return
+    sr.applyPositionLerp(data, data, 0)
+    _heavyActive = true
+  }
+
+  function _toBake(resp) {
+    const byIdx = new Map()
+    for (const k of Object.keys(resp || {})) byIdx.set(Number(k), resp[k])
+    return { keys: [...byIdx.keys()].sort((a, b) => a - b), byIdx }
+  }
+
+  /** Ensure the coarse downsampled bake for the active trajectory job exists for
+   *  `kind`. One fetch per job; epoch-guarded so a toggle-off discards it. */
+  async function _ensureCoarseBake(kind, epoch) {
+    const n = _traj?.n_frames || _traj?.frames?.length || 0
+    if (n <= 0) return
+    if (kind === 'atomistic' && !_bakedAtom) {
+      const idxs = strideIndices(0, n - 1, _COARSE_ATOM_CAP)
+      const resp = await api.getOxdnaFramesAtomistic(_jobId, idxs)
+      if (epoch !== _epoch) return
+      _bakedAtom = _toBake(resp)
+    } else if (kind === 'surface' && !_bakedSurf) {
+      const idxs = strideIndices(0, n - 1, _COARSE_SURF_CAP)
+      const resp = await api.getOxdnaFramesSurface(_jobId, idxs)
+      if (epoch !== _epoch) return
+      _bakedSurf = _toBake(resp)
+    }
+  }
+
+  /** Reconstruct + apply the heavy rep for the CURRENT mode/frame (no-op in CG).
+   *  Token-guarded: only the newest call applies, so rapid scrubbing / rep flips
+   *  never paint a stale frame. */
+  async function _applyHeavy() {
+    if (!_active || !_jobId) return
+    const kind = _repKind()
+    if (kind === 'cg') return
+    const epoch = _epoch
+    const token = ++_heavyToken
+    const live = () => epoch === _epoch && token === _heavyToken
+    try {
+      if (_mode === 'relaxed') {
+        if (kind === 'atomistic') {
+          const r = await api.getOxdnaDisplayAtomistic(_jobId, _align)
+          if (live() && r?.ready) await _pushAtomistic(r.atomistic, epoch, live)
+        } else {
+          const r = await api.getOxdnaDisplaySurface(_jobId, _align)
+          if (live() && r?.ready) _pushSurface(r.surface)
+        }
+      } else if (_mode === 'rmsf') {
+        if (kind === 'atomistic') {
+          const r = await api.getOxdnaRmsfAtomistic(_jobId)
+          if (live() && r?.ready) await _pushAtomistic(r.atomistic, epoch, live)
+        } else {
+          const r = await api.getOxdnaRmsfSurface(_jobId)
+          if (live() && r?.ready) _pushSurface(r.surface)
+        }
+      } else if (_mode === 'trajectory') {
+        const idx = _frameIdx
+        if (_granularity === 'fine') {
+          if (kind === 'atomistic') {
+            const r = await api.getOxdnaFramesAtomistic(_jobId, [idx])
+            if (live()) await _pushAtomistic(r?.[String(idx)], epoch, live)
+          } else {
+            const r = await api.getOxdnaFramesSurface(_jobId, [idx])
+            if (live()) _pushSurface(r?.[String(idx)])
+          }
+        } else {
+          await _ensureCoarseBake(kind, epoch)
+          if (!live()) return
+          const b = kind === 'atomistic' ? _bakedAtom : _bakedSurf
+          if (!b || !b.keys.length) return
+          const nk = nearestOf(b.keys, idx)
+          const data = nk != null ? b.byIdx.get(nk) : null
+          if (kind === 'atomistic') await _pushAtomistic(data, epoch, live); else _pushSurface(data)
+        }
+      }
+    } catch { /* transient fetch failure → leave heavy rep as-is */ }
+  }
+
+  function _restoreHeavy() {
+    if (_heavyActive) { onRestoreDesignHeavy?.(); _heavyActive = false }
+    _bakedAtom = null
+    _bakedSurf = null
+    _atomTopoJob = null   // next job display rebuilds the renderer from its own topology
+  }
 
   /** Fetch the latest relaxed frame for jobId and deform the model to it.
    *  `align` (default true) superposes onto the design pose; false shows the
@@ -152,6 +312,8 @@ export function initOxdnaDisplay({ designRenderer, api, proteinRenderer = null }
     _active = true
     _mode = 'relaxed'
     _jobId = jobId
+    _align = align
+    _applyHeavy()   // atomistic/surface follow when the scene is in a heavy rep
     return { ok: true, n: updates.length, stage: resp.stage_name }
   }
 
@@ -174,6 +336,7 @@ export function initOxdnaDisplay({ designRenderer, api, proteinRenderer = null }
     _active = true
     _mode = 'rmsf'
     _jobId = jobId
+    _applyHeavy()   // atomistic/surface follow when the scene is in a heavy rep
     return {
       ok: true, n: map.updates.length, min: map.min, max: map.max, mean: resp.mean_rmsf,
       nFrames: resp.n_frames, confidence: resp.confidence, running: !!resp.production_running,
@@ -208,6 +371,8 @@ export function initOxdnaDisplay({ designRenderer, api, proteinRenderer = null }
       return { ok: false, reason: resp?.reason || 'no trajectory yet' }
     }
     _traj = resp
+    _bakedAtom = null     // new job → drop the previous job's heavy bakes
+    _bakedSurf = null
     designRenderer.clearScalarColors?.()
     _active = true
     _mode = 'trajectory'
@@ -221,7 +386,28 @@ export function initOxdnaDisplay({ designRenderer, api, proteinRenderer = null }
     if (_mode !== 'trajectory' || !_traj || !designRenderer) return
     const n = _traj.frames.length
     const idx = Math.max(0, Math.min(n - 1, i | 0))
+    _frameIdx = idx
     designRenderer.applyFemPositions(framesToUpdates(_traj.keys, _traj.frames[idx]))
+    _applyHeavy()   // atomistic/surface follow the scrub (coarse=snap, fine=exact)
+  }
+
+  /** Switch heavy-rep reconstruction granularity. 'fine' rebuilds the exact frame
+   *  on every scrub (accurate, can be very slow); 'coarse' snaps to a downsampled
+   *  bake. Re-applies the current frame in the new granularity. */
+  function setGranularity(g) {
+    const next = g === 'fine' ? 'fine' : 'coarse'
+    if (next === _granularity) return
+    _granularity = next
+    _bakedAtom = null   // coarse bakes are granularity-specific → drop
+    _bakedSurf = null
+    if (_active) _applyHeavy()
+  }
+
+  /** Re-apply the current overlay's heavy rep after the scene representation
+   *  changed (the new atomistic/surface mesh is built from the design — overlay it
+   *  with the active oxDNA frame). No-op when nothing is displayed. */
+  function reapplyForRepr() {
+    if (_active) _applyHeavy()
   }
 
   /** Re-fetch the current job's frame (e.g. after a stage completes). */
@@ -234,10 +420,12 @@ export function initOxdnaDisplay({ designRenderer, api, proteinRenderer = null }
   /** Clear the overlay (positions + colours) and restore the design. */
   function stopAndRestore() {
     _epoch++   // cancel any in-flight display fetch so it can't re-apply after we restore
+    _heavyToken++   // and any in-flight heavy reconstruction
     if (!_active) return
     designRenderer?.clearScalarColors?.()
     designRenderer?.applyFemPositions(null)
     proteinRenderer?.clearOxdnaTransforms?.()   // proteins back to design pose
+    _restoreHeavy()   // atomistic/surface back to the plain design (rebuild from design)
     _active = false
     _mode = null
     _jobId = null
@@ -253,6 +441,9 @@ export function initOxdnaDisplay({ designRenderer, api, proteinRenderer = null }
     showFrame,
     refresh,
     stopAndRestore,
+    setGranularity,
+    reapplyForRepr,
+    granularity: () => _granularity,
     isActive: () => _active,
     mode: () => _mode,
     activeJobId: () => _jobId,
