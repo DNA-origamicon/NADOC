@@ -1862,6 +1862,10 @@ async function main() {
         _atomSurface.applySurfaceMode(_atomSurface.getSurfaceMode())
       }
     },
+    // A heavy (atomistic/surface) frame rebuild started/finished — forward to the
+    // panel so it can show a "building…" spinner instead of looking frozen.
+    onHeavyStatus: (d) => window.dispatchEvent(
+      new CustomEvent('nadoc:oxdna-heavy-status', { detail: d })),
   })
   // When the scene representation changes while an oxDNA overlay is active, re-apply
   // the current frame to the freshly-built atomistic/surface mesh.

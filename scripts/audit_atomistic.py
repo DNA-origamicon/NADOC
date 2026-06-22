@@ -10,9 +10,14 @@ atoms.  Read-only.
     uv run python scripts/audit_atomistic.py 18hb2                 # another design stem
     uv run python scripts/audit_atomistic.py 6hb_sim_tests <job_id>
     uv run python scripts/audit_atomistic.py --json               # machine-readable
+    uv run python scripts/audit_atomistic.py --trajectory          # audit View-trajectory frames
+    uv run python scripts/audit_atomistic.py 6hb_sim_tests <job> --trajectory --json
 
-The oracle lives in backend/core/atomistic_validation.py (reusable + unit-tested);
-this is the thin CLI the `validate-atomistic` skill calls.
+``--trajectory`` audits a SAMPLING of the View-trajectory scrub (whole lineage), not
+just the single relaxed frame — proving the forward/reverse-phase + closure + identity
+invariants hold on every frame.  The oracle lives in
+backend/core/atomistic_validation.py (reusable + unit-tested); this is the thin CLI the
+`validate-atomistic` skill calls.
 """
 import json
 import sys
@@ -23,13 +28,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from backend.api.assembly import _WORKSPACE_DIR
 from backend.core.oxdna_job import OxdnaJob
 from backend.core.models import Design
-from backend.core.atomistic_validation import latest_job_for_design, audit_oxdna_job
+from backend.core.atomistic_validation import (
+    latest_job_for_design, audit_oxdna_job, audit_trajectory_frames)
 
 
 def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     as_json = "--json" in sys.argv
     no_align = "--no-align" in sys.argv
+    trajectory = "--trajectory" in sys.argv
     stem = args[0] if args else "6hb_sim_tests"
     job_id = args[1] if len(args) > 1 else None
     ws = Path(_WORKSPACE_DIR)
@@ -43,6 +50,9 @@ def main() -> int:
     snap = job.job_dir(ws) / "design.json"
     design = Design.model_validate_json(snap.read_text())
 
+    if trajectory:
+        return _run_trajectory(stem, job, design, ws, as_json)
+
     report = audit_oxdna_job(design, job, ws, align=not no_align)
     if as_json:
         print(json.dumps(report, indent=2))
@@ -54,6 +64,48 @@ def main() -> int:
 
     _print_human(stem, report)
     return 0 if report["ok"] else 1
+
+
+def _run_trajectory(stem: str, job, design, ws: Path, as_json: bool) -> int:
+    """Audit a sampling of the composite View-trajectory frames (whole lineage)."""
+    from backend.api.routes_oxdna import _composite_inputs
+    design, stages, ref = _composite_inputs(job)
+    if not stages:
+        print(f"job {job.job_id}: no trajectory yet")
+        return 2
+    report = audit_trajectory_frames(design, stages, ref)
+    report["job_id"] = job.job_id
+    if as_json:
+        print(json.dumps(report, indent=2))
+        return 0 if report.get("ok") else 1
+    if not report.get("ready"):
+        print(f"job {job.job_id}: not ready — {report.get('reason')}")
+        return 2
+    _print_trajectory(stem, report)
+    return 0 if report["ok"] else 1
+
+
+def _print_trajectory(stem: str, r: dict) -> None:
+    s = r["summary"]
+    print(f"=== trajectory display audit · {stem} · job {r['job_id']} ===")
+    print(f"composite frames={r['n_frames']}  audited={s['n_audited']} {r['audited_frames']}")
+    print(f"VERDICT: {'ALL FRAMES SOUND' if r['ok'] else 'REGRESSION'}  "
+          f"(invariants_ok={s['all_invariants_ok']}, identity_preserved={s['identity_preserved']})")
+    rng = s["wc_c1c1_median_range"]
+    print(f"  WC C1'-C1' median range: {rng[0]}–{rng[1]} nm [B-DNA ~1.05]")
+    print(f"  max rigid-stamp violations: {s['max_rigid_stamp_violations']}  "
+          f"any wc-collapsed: {s['any_wc_collapsed']}  "
+          f"any forward/reverse-imbalanced: {s['any_wc_helix_imbalanced']}  "
+          f"any over-stretched: {s['any_over_stretched']}  max clashes: {s['max_clashes']}")
+    if s["failed_frames"]:
+        print(f"  FAILED frames: {s['failed_frames']}")
+    print("\nper frame:")
+    for f in r["frames"]:
+        flag = "OK " if f["invariants_ok"] else "BAD"
+        print(f"  [{flag}] frame {f['frame']:4d}  WC={f['wc_c1c1_median']} nm  "
+              f"stampΔ={f['rigid_stamp_max_dev_nm']*10:.3f}Å  "
+              f"stamp_viol={f['n_rigid_stamp_violations']}  invalid={f['n_invalid_bonds']}  "
+              f"clash={f['n_clashes']}  fwd/rev_imbal={f['wc_helix_imbalanced']}")
 
 
 def _print_human(stem: str, r: dict) -> None:

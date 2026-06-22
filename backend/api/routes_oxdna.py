@@ -1165,6 +1165,35 @@ async def get_oxdna_display_atomistic_audit(job_id: str, align: bool = True) -> 
     return report
 
 
+class OxdnaTrajectoryAuditBody(BaseModel):
+    frame_indices: list[int] | None = None
+    max_audit: int = 8
+
+
+@router.post("/oxdna/jobs/{job_id}/trajectory-audit")
+async def get_oxdna_trajectory_audit(
+        job_id: str, body: OxdnaTrajectoryAuditBody = OxdnaTrajectoryAuditBody()) -> dict:
+    """Per-frame validation audit of the View-trajectory scrub — the programmatic
+    counterpart of the atomistic display measured across a SAMPLING of composite
+    trajectory frames (whole lineage), not just the single relaxed frame.  Each frame
+    is reconstructed through the same shared sink the scrubber uses, so the settled
+    invariants (rigid-stamp integrity, balanced forward/reverse phase, un-collapsed
+    bases, preserved identity) are asserted to hold on EVERY frame.  ``frame_indices``
+    audits exactly those composite-frame indices; omit it to evenly sample
+    ``max_audit`` frames.  ``summary.all_invariants_ok`` is the pass signal."""
+    from backend.core.atomistic_validation import audit_trajectory_frames
+
+    job = _load_job(job_id)
+    design, stages, ref = _composite_inputs(job)
+    if not stages:
+        return {"job_id": job.job_id, "ready": False, "reason": "no trajectory yet"}
+    report = await run_in_threadpool(
+        audit_trajectory_frames, design, stages, ref, body.frame_indices,
+        max_audit=body.max_audit)
+    report["job_id"] = job.job_id
+    return report
+
+
 def _rmsf_average_frame(job):
     """Shared average-structure reader for the rmsf-atomistic/surface routes.
     Returns ``(design, average_frame)`` where ``average_frame`` is the per-nuc

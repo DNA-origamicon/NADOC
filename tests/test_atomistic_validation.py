@@ -317,6 +317,160 @@ def test_latest_job_for_design_and_ready_false(design, tmp_path):
     assert rep["ready"] is False
 
 
+def _write_trajectory(design, geoms, path, box_nm=200.0):
+    """Concatenate one oxDNA frame per geometry into a multi-frame trajectory.dat
+    (frames split on the ``t = …`` header, exactly like a real oxDNA run)."""
+    from backend.physics.oxdna_interface import write_configuration
+    text = ""
+    for i, geo in enumerate(geoms):
+        one = path.parent / f"_f{i}.dat"
+        write_configuration(design, geo, one, box_nm=box_nm)
+        text += one.read_text()
+    path.write_text(text)
+
+
+def test_sample_frame_indices():
+    """Even endpoint-inclusive sampling, deduped; k>=n audits all, k<=1 audits frame 0."""
+    from backend.core.atomistic_validation import _sample_frame_indices
+    assert _sample_frame_indices(0, 5) == []
+    assert _sample_frame_indices(4, 10) == [0, 1, 2, 3]        # k>=n → every frame
+    assert _sample_frame_indices(10, 1) == [0]
+    s = _sample_frame_indices(100, 5)
+    assert s[0] == 0 and s[-1] == 99 and len(s) == 5          # endpoints + even spread
+
+
+def test_audit_trajectory_frames_clean(design, tmp_path):
+    """Every composite frame of a clean (ideal) trajectory satisfies the per-frame
+    invariants the single relaxed-display audit pins — proving forward/reverse phase,
+    backbone closure, and identity hold on EVERY scrubbed frame, not just frame 0."""
+    from backend.core.atomistic_validation import audit_trajectory_frames
+
+    geo = _geometry_for_design(design)
+    ref = tmp_path / "ref.dat"
+    from backend.physics.oxdna_interface import write_configuration
+    write_configuration(design, geo, ref, box_nm=200.0)
+    traj = tmp_path / "trajectory.dat"
+    _write_trajectory(design, [geo, geo, geo], traj)            # 3 ideal frames (+seed → 4)
+
+    r = audit_trajectory_frames(design, [("prod", "production", str(traj))], str(ref))
+    assert r["ready"] is True
+    assert r["n_frames"] == 4                                   # seed prepend + 3 traj frames
+    assert len(r["frames"]) == r["summary"]["n_audited"] == 4   # all audited (≤ max_audit)
+    s = r["summary"]
+    assert s["all_invariants_ok"] is True and r["ok"] is True
+    assert s["identity_preserved"] is True
+    assert s["max_rigid_stamp_violations"] == 0
+    assert s["any_wc_collapsed"] is False
+    assert s["any_wc_helix_imbalanced"] is False
+    assert s["any_over_stretched"] is False
+    lo, hi = s["wc_c1c1_median_range"]
+    assert lo is not None and 0.85 < lo and hi < 1.25           # B-DNA WC band on every frame
+    # The forward/reverse phase balance the settled fix guarantees holds PER frame.
+    for f in r["frames"]:
+        assert f["wc_c1c1_forward_helix_median"] is not None
+        assert f["wc_c1c1_reverse_helix_median"] is not None
+
+
+def test_audit_trajectory_frames_catches_bad_frame(design, tmp_path):
+    """A corrupted frame (every REVERSE nucleotide crushed onto its FORWARD partner →
+    collapsed base pairs, the exact failure mode the rigid-placer base-collapse bug
+    produced) trips a genuine per-frame invariant: invariants_ok=False on that frame,
+    summary.all_invariants_ok=False + any_wc_collapsed, the frame is in failed_frames —
+    while clean frames still pass.  (Mild over-stretch is NOT a gate — raw CG frames
+    carry it inherently; only true soundness breaks fail a frame.)"""
+    import copy
+    from backend.core.atomistic_validation import audit_trajectory_frames
+    from backend.physics.oxdna_interface import write_configuration
+
+    geo = _geometry_for_design(design)
+    ref = tmp_path / "ref.dat"
+    write_configuration(design, geo, ref, box_nm=200.0)
+
+    bad = copy.deepcopy(geo)
+    fwd = {(n["helix_id"], n["bp_index"]): n["backbone_position"]
+           for n in bad if n["direction"] == "FORWARD"}
+    for n in bad:                                              # crush REVERSE onto FORWARD partner
+        if n["direction"] == "REVERSE" and (n["helix_id"], n["bp_index"]) in fwd:
+            n["backbone_position"] = list(fwd[(n["helix_id"], n["bp_index"])])
+    traj = tmp_path / "trajectory.dat"
+    _write_trajectory(design, [geo, bad, geo], traj)           # frames: seed, good, BAD, good
+
+    r = audit_trajectory_frames(design, [("prod", "production", str(traj))], str(ref))
+    assert r["ready"] is True and r["n_frames"] == 4
+    assert r["summary"]["all_invariants_ok"] is False and r["ok"] is False
+    assert r["summary"]["any_wc_collapsed"] is True
+    assert r["summary"]["failed_frames"]                        # at least the corrupted frame
+    bad_frames = [f for f in r["frames"] if not f["invariants_ok"]]
+    assert bad_frames and all(f["wc_collapsed"] for f in bad_frames)
+    # The clean frames are unaffected — the audit is genuinely per-frame.
+    good_frames = [f for f in r["frames"] if f["invariants_ok"]]
+    assert good_frames and all(f["n_rigid_stamp_violations"] == 0 for f in good_frames)
+
+
+def test_audit_trajectory_frames_explicit_indices(design, tmp_path):
+    """frame_indices audits exactly those composite-frame indices (clamped to range)."""
+    from backend.core.atomistic_validation import audit_trajectory_frames
+    from backend.physics.oxdna_interface import write_configuration
+
+    geo = _geometry_for_design(design)
+    ref = tmp_path / "ref.dat"
+    write_configuration(design, geo, ref, box_nm=200.0)
+    traj = tmp_path / "trajectory.dat"
+    _write_trajectory(design, [geo, geo, geo], traj)
+
+    r = audit_trajectory_frames(design, [("prod", "production", str(traj))], str(ref),
+                                frame_indices=[0, 2, 99])      # 99 out of range → dropped
+    assert r["audited_frames"] == [0, 2]
+    assert [f["frame"] for f in r["frames"]] == [0, 2]
+
+
+def test_audit_trajectory_frames_not_ready(design, tmp_path):
+    """No trajectory → ready False, no crash."""
+    from backend.core.atomistic_validation import audit_trajectory_frames
+    from backend.physics.oxdna_interface import write_configuration
+    ref = tmp_path / "ref.dat"
+    write_configuration(design, _geometry_for_design(design), ref, box_nm=200.0)
+    empty = tmp_path / "empty.dat"
+    empty.write_text("")
+    r = audit_trajectory_frames(design, [("prod", "production", str(empty))], str(ref))
+    assert r["ready"] is False and r["n_frames"] == 0
+
+
+def test_trajectory_audit_route(design, tmp_path, monkeypatch):
+    """POST /oxdna/jobs/{id}/trajectory-audit audits the composite View-trajectory and
+    returns per-frame invariant reports — the programmatic counterpart of the scrub."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes_oxdna
+    from backend.core.oxdna_job import new_oxdna_job, OxdnaStageStatus
+    from backend.physics.oxdna_interface import write_configuration
+
+    ws = tmp_path
+    (ws / "oxdna_jobs").mkdir()
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", ws)
+
+    stage = OxdnaStageStatus(name="4_production", kind="production", steps=10, status="done")
+    job = new_oxdna_job("sim", [stage], design_source_path="sim.nadoc")
+    job.save(ws)
+    sd = job.stage_dir(ws, "4_production"); sd.mkdir(parents=True, exist_ok=True)
+    geo = _geometry_for_design(design)
+    write_configuration(design, geo, sd / "last_conf.dat", box_nm=200.0)
+    _write_trajectory(design, [geo, geo], sd / "trajectory.dat")
+    (job.job_dir(ws) / "design.json").write_text(design.model_dump_json())
+
+    resp = TestClient(app).post(f"/api/oxdna/jobs/{job.job_id}/trajectory-audit")
+    assert resp.status_code == 200
+    r = resp.json()
+    assert r["ready"] is True and r["job_id"] == job.job_id
+    assert r["n_frames"] >= 2 and r["frames"]
+    assert r["summary"]["all_invariants_ok"] is True
+    assert r["summary"]["identity_preserved"] is True
+    # An explicit index subset is honoured through the route too.
+    resp2 = TestClient(app).post(f"/api/oxdna/jobs/{job.job_id}/trajectory-audit",
+                                 json={"frame_indices": [0]})
+    assert resp2.json()["audited_frames"] == [0]
+
+
 def test_display_atomistic_audit_route(design, tmp_path, monkeypatch):
     """POST /oxdna/jobs/{id}/display-atomistic-audit returns the bond audit for the
     displayed frame — the programmatic counterpart of the rendered ball-and-stick."""

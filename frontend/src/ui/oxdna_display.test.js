@@ -291,6 +291,7 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     const atom = { getMode: () => 'ballstick', applyPositionLerp: vi.fn(), update: vi.fn() }
     const surf = { getMode: () => (state.repr === 'surface' ? 'on' : 'off'), applyPositionLerp: vi.fn() }
     const onRestoreDesignHeavy = vi.fn()
+    const onHeavyStatus = vi.fn()
     const api = {
       getOxdnaDisplay: vi.fn().mockResolvedValue({ ready: true, stage_name: 's',
         positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0 }] }),
@@ -309,11 +310,11 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
         Promise.resolve(Object.fromEntries(idxs.map((i) => [String(i), { vertices: [i, i, i], faces: [0, 1, 2] }])))),
     }
     const ctrl = initOxdnaDisplay({
-      designRenderer, api, atom, surf, onRestoreDesignHeavy,
+      designRenderer, api, atom, surf, onRestoreDesignHeavy, onHeavyStatus,
       getAtomisticRenderer: () => atom, getSurfaceRenderer: () => surf,
       getCurrentRepr: () => state.repr,
     })
-    return { ctrl, api, atom, surf, designRenderer, onRestoreDesignHeavy, state }
+    return { ctrl, api, atom, surf, designRenderer, onRestoreDesignHeavy, onHeavyStatus, state }
   }
 
   it('relaxed display REBUILDS the renderer from the job topology, then overlays atoms', async () => {
@@ -355,19 +356,34 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     expect(atom.applyPositionLerp).toHaveBeenCalledWith([7, 8, 9], [7, 8, 9], 0, null, [], null)
   })
 
-  it('coarse trajectory bakes ONCE per job then snaps scrubs to the nearest baked frame', async () => {
+  it('coarse trajectory fetches grid cells LAZILY (one frame per visit), never a big upfront batch, and caches revisits', async () => {
     const { ctrl, api, atom } = makeHeavyDeps('ballstick')
-    await ctrl.loadTrajectory('jobT')           // showFrame(0) fires a bake
+    await ctrl.loadTrajectory('jobT')           // showFrame(0) → fetch ONLY the nearest grid cell
     await tick()
-    expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledTimes(1)   // one downsampled bake
-    const bakedIdxs = api.getOxdnaFramesAtomistic.mock.calls[0][1]
-    expect(bakedIdxs[0]).toBe(0)
-    expect(bakedIdxs[bakedIdxs.length - 1]).toBe(4)               // spans the range
-    atom.applyPositionLerp.mockClear()
-    ctrl.showFrame(3)
+    expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledTimes(1)
+    expect(api.getOxdnaFramesAtomistic.mock.calls[0][1]).toEqual([0])   // one frame — NOT a 40-frame bake
+    api.getOxdnaFramesAtomistic.mockClear()
+    ctrl.showFrame(3)                            // a new grid cell → one more single-frame fetch
     await tick()
-    expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledTimes(1)   // NO refetch — served from cache
+    expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledTimes(1)
+    expect(api.getOxdnaFramesAtomistic.mock.calls[0][1]).toEqual([3])
+    api.getOxdnaFramesAtomistic.mockClear()
+    ctrl.showFrame(0)                            // revisit a cached cell → NO refetch
+    await tick()
+    expect(api.getOxdnaFramesAtomistic).not.toHaveBeenCalled()
     expect(atom.applyPositionLerp).toHaveBeenCalled()
+  })
+
+  it('reports heavy-status (building true→false) around an uncached coarse rebuild, and false on stop', async () => {
+    const { ctrl, onHeavyStatus } = makeHeavyDeps('ballstick')
+    await ctrl.loadTrajectory('jobT')           // showFrame(0) → uncached cell → building true then false
+    await tick()
+    const flags = onHeavyStatus.mock.calls.map((c) => c[0].building)
+    expect(flags).toContain(true)
+    expect(flags[flags.length - 1]).toBe(false)   // cleared when the rebuild finished
+    onHeavyStatus.mockClear()
+    ctrl.stopAndRestore()                        // toggle-off mid-anything always clears the spinner
+    expect(onHeavyStatus).toHaveBeenCalledWith({ building: false, kind: null, mode: expect.anything() })
   })
 
   it('fine granularity reconstructs the EXACT scrubbed frame on demand', async () => {
@@ -398,6 +414,47 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     release()                           // late reconstruction resolves…
     await tick()
     expect(atom.applyPositionLerp).not.toHaveBeenCalled()   // …but is discarded (superseded)
+  })
+
+  it('prebuildHeavy builds every coarse grid cell once (for smooth playback), reporting progress', async () => {
+    const { ctrl, api } = makeHeavyDeps('ballstick')
+    await ctrl.loadTrajectory('jobT')           // showFrame(0) caches grid cell 0
+    await tick()
+    api.getOxdnaFramesAtomistic.mockClear()
+    const progress = []
+    const r = await ctrl.prebuildHeavy((done, total) => progress.push([done, total]))
+    expect(r.ok).toBe(true)
+    // n_frames=5 → grid is [0..4]; cell 0 already cached → 4 more single-frame builds.
+    expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledTimes(4)
+    expect(api.getOxdnaFramesAtomistic.mock.calls.every((c) => c[1].length === 1)).toBe(true)
+    expect(progress[progress.length - 1]).toEqual([5, 5])   // all cells built
+    // A second prebuild is a no-op (everything cached).
+    api.getOxdnaFramesAtomistic.mockClear()
+    await ctrl.prebuildHeavy(() => {})
+    expect(api.getOxdnaFramesAtomistic).not.toHaveBeenCalled()
+  })
+
+  it('prebuildHeavy is a no-op for the CG rep (frames are instant — nothing to bake)', async () => {
+    const { ctrl, api, state } = makeHeavyDeps('ballstick')
+    await ctrl.loadTrajectory('jobT'); await tick()
+    state.repr = 'full'                          // CG
+    api.getOxdnaFramesAtomistic.mockClear()
+    const r = await ctrl.prebuildHeavy(() => {})
+    expect(r).toEqual({ ok: true, n: 0 })
+    expect(api.getOxdnaFramesAtomistic).not.toHaveBeenCalled()
+  })
+
+  it('setPlaying(true) forces COARSE even when granularity is fine (no per-tick fine rebuild stalls the loop)', async () => {
+    const { ctrl, api } = makeHeavyDeps('ballstick')
+    ctrl.setGranularity('fine')
+    await ctrl.loadTrajectory('jobT'); await tick()
+    ctrl.setPlaying(true)
+    api.getOxdnaFramesAtomistic.mockClear()
+    ctrl.showFrame(2)                            // would be a fine [2] fetch when paused…
+    await tick()
+    // …but while playing it snaps to the coarse grid cell instead (cell 2 here).
+    expect(api.getOxdnaFramesAtomistic.mock.calls.every((c) => c[1].length === 1)).toBe(true)
+    ctrl.setPlaying(false)
   })
 
   it('reapplyForRepr re-overlays the current frame onto a freshly-built rep', async () => {

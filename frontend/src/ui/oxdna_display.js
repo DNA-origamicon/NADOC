@@ -127,16 +127,18 @@ export function repKind(repr) {
   return 'cg'
 }
 
-// Heavy-rep "coarse" bake caps (per job): reconstruct atomistic at ≤40 frames /
-// surface at ≤20, snap the scrubber to the nearest baked frame. "fine" bypasses
-// these and reconstructs the exact frame on demand (slow — gated by a warning).
-const _COARSE_ATOM_CAP = 40
-const _COARSE_SURF_CAP = 20
+// Heavy-rep "coarse" snap-GRID size (per job): the scrubber snaps to the nearest of
+// this many evenly-spaced frames, and each grid frame is reconstructed + cached LAZILY
+// on first visit (one all-atom rebuild ≈ several seconds — so a small grid, fetched one
+// frame at a time, NOT a big upfront bake that would block for minutes). "fine" bypasses
+// the grid and reconstructs the exact scrubbed frame on demand (slowest — warning-gated).
+const _COARSE_ATOM_CAP = 12
+const _COARSE_SURF_CAP = 8
 
 export function initOxdnaDisplay({
   designRenderer, api, proteinRenderer = null,
   getAtomisticRenderer = null, getSurfaceRenderer = null,
-  getCurrentRepr = null, onRestoreDesignHeavy = null,
+  getCurrentRepr = null, onRestoreDesignHeavy = null, onHeavyStatus = null,
 }) {
   let _active = false
   let _jobId = null
@@ -157,6 +159,8 @@ export function initOxdnaDisplay({
   let _align = true          // last align flag from displayJob (relaxed only)
   let _frameIdx = 0          // current trajectory frame (for re-apply on rep change)
   let _granularity = 'coarse'  // 'coarse' = downsample+snap | 'fine' = exact frame
+  let _playing = false       // play loop running → force coarse (every frame must be instant)
+  let _prebuildToken = 0     // bumped to cancel an in-flight prebuildHeavy
   let _heavyActive = false   // a heavy overlay is up → restore design reps on stop
   // A second monotonic token: bumped on every heavy apply so only the LATEST
   // reconstruction (rapid scrub / rep toggle) wins — out-of-order fetches bail.
@@ -203,28 +207,81 @@ export function initOxdnaDisplay({
     _heavyActive = true
   }
 
-  function _toBake(resp) {
-    const byIdx = new Map()
-    for (const k of Object.keys(resp || {})) byIdx.set(Number(k), resp[k])
-    return { keys: [...byIdx.keys()].sort((a, b) => a - b), byIdx }
+  // Heavy reconstruction is slow (one all-atom rebuild per frame). Announce when one
+  // is in flight so the panel can show a "building…" spinner instead of looking frozen.
+  function _setHeavyBusy(building, kind) {
+    onHeavyStatus?.({ building, kind, mode: _mode })
   }
 
-  /** Ensure the coarse downsampled bake for the active trajectory job exists for
-   *  `kind`. One fetch per job; epoch-guarded so a toggle-off discards it. */
-  async function _ensureCoarseBake(kind, epoch) {
+  /** Ensure the coarse snap-grid for the active trajectory job is DEFINED for `kind`
+   *  (cheap — just the index list; frames are fetched lazily on visit). Returns the
+   *  bake object {grid:[idx…], byIdx:Map<idx,data>} or null. */
+  function _ensureGrid(kind) {
     const n = _traj?.n_frames || _traj?.frames?.length || 0
-    if (n <= 0) return
-    if (kind === 'atomistic' && !_bakedAtom) {
-      const idxs = strideIndices(0, n - 1, _COARSE_ATOM_CAP)
-      const resp = await api.getOxdnaFramesAtomistic(_jobId, idxs)
-      if (epoch !== _epoch) return
-      _bakedAtom = _toBake(resp)
-    } else if (kind === 'surface' && !_bakedSurf) {
-      const idxs = strideIndices(0, n - 1, _COARSE_SURF_CAP)
-      const resp = await api.getOxdnaFramesSurface(_jobId, idxs)
-      if (epoch !== _epoch) return
-      _bakedSurf = _toBake(resp)
+    if (n <= 0) return null
+    if (kind === 'atomistic') {
+      if (!_bakedAtom) _bakedAtom = { grid: strideIndices(0, n - 1, _COARSE_ATOM_CAP), byIdx: new Map() }
+      return _bakedAtom
     }
+    if (!_bakedSurf) _bakedSurf = { grid: strideIndices(0, n - 1, _COARSE_SURF_CAP), byIdx: new Map() }
+    return _bakedSurf
+  }
+
+  /** Lazily fetch + cache ONE coarse-grid frame's heavy data. One network rebuild per
+   *  distinct grid cell (then served from cache on revisits). Epoch-guarded. */
+  async function _coarseFrame(kind, gridIdx, epoch) {
+    const bake = kind === 'atomistic' ? _bakedAtom : _bakedSurf
+    if (bake.byIdx.has(gridIdx)) return bake.byIdx.get(gridIdx)
+    const resp = kind === 'atomistic'
+      ? await api.getOxdnaFramesAtomistic(_jobId, [gridIdx])
+      : await api.getOxdnaFramesSurface(_jobId, [gridIdx])
+    if (epoch !== _epoch) return null
+    const data = resp?.[String(gridIdx)] || null
+    if (data) bake.byIdx.set(gridIdx, data)
+    return data
+  }
+
+  /** Mark playback on/off. While on, the heavy path forces coarse (every played frame
+   *  must hit a cached grid cell), and turning it off cancels an in-flight prebuild. */
+  function setPlaying(on) {
+    _playing = !!on
+    if (!on) _prebuildToken++   // stop prebuildHeavy if it's still grinding
+  }
+
+  /** Pre-build EVERY coarse playback frame for the active heavy rep so the play loop
+   *  runs smoothly instead of stalling one slow rebuild at a time. No-op for CG (frames
+   *  are instant). Reports progress via onProgress(done, total). The first cell is built
+   *  alone (warms the server-side alignment cache), then the rest a few at a time so a
+   *  dozen all-atom rebuilds overlap. Returns {ok, n}; ok=false if cancelled. */
+  async function prebuildHeavy(onProgress) {
+    if (_mode !== 'trajectory') return { ok: true, n: 0 }
+    const kind = _repKind()
+    if (kind === 'cg') return { ok: true, n: 0 }   // CG plays instantly — nothing to bake
+    const bake = _ensureGrid(kind)
+    if (!bake || !bake.grid.length) return { ok: false, n: 0 }
+    const epoch = _epoch
+    const token = ++_prebuildToken
+    const live = () => epoch === _epoch && token === _prebuildToken
+    const total = bake.grid.length
+    let done = bake.grid.filter((g) => bake.byIdx.has(g)).length
+    onProgress?.(done, total)
+    const todo = bake.grid.filter((g) => !bake.byIdx.has(g))
+    if (todo.length) {                       // first cell alone → warms the alignment cache
+      await _coarseFrame(kind, todo[0], epoch)
+      if (!live()) return { ok: false, n: total }
+      done++; onProgress?.(done, total)
+    }
+    const rest = todo.slice(1)
+    let next = 0
+    const worker = async () => {
+      while (next < rest.length && live()) {
+        const g = rest[next++]
+        await _coarseFrame(kind, g, epoch)
+        if (live()) { done++; onProgress?.(done, total) }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(3, rest.length) }, worker))
+    return { ok: live(), n: total }
   }
 
   /** Reconstruct + apply the heavy rep for the CURRENT mode/frame (no-op in CG).
@@ -237,6 +294,17 @@ export function initOxdnaDisplay({
     const epoch = _epoch
     const token = ++_heavyToken
     const live = () => epoch === _epoch && token === _heavyToken
+    // During playback, force coarse even if the dropdown says fine — a fine rebuild per
+    // tick (~seconds each) would stall the loop; play steps the pre-built coarse frames.
+    const useFine = _granularity === 'fine' && !_playing
+    // Skip the spinner only when a trajectory grid cell is already cached (instant).
+    let busy = true
+    if (_mode === 'trajectory' && !useFine) {
+      const bake = _ensureGrid(kind)
+      const g = bake ? nearestOf(bake.grid, _frameIdx) : null
+      busy = !(bake && g != null && bake.byIdx.has(g))
+    }
+    if (busy) _setHeavyBusy(true, kind)
     try {
       if (_mode === 'relaxed') {
         if (kind === 'atomistic') {
@@ -256,7 +324,7 @@ export function initOxdnaDisplay({
         }
       } else if (_mode === 'trajectory') {
         const idx = _frameIdx
-        if (_granularity === 'fine') {
+        if (useFine) {
           if (kind === 'atomistic') {
             const r = await api.getOxdnaFramesAtomistic(_jobId, [idx])
             if (live()) await _pushAtomistic(r?.[String(idx)], epoch, live)
@@ -265,16 +333,17 @@ export function initOxdnaDisplay({
             if (live()) _pushSurface(r?.[String(idx)])
           }
         } else {
-          await _ensureCoarseBake(kind, epoch)
-          if (!live()) return
-          const b = kind === 'atomistic' ? _bakedAtom : _bakedSurf
-          if (!b || !b.keys.length) return
-          const nk = nearestOf(b.keys, idx)
-          const data = nk != null ? b.byIdx.get(nk) : null
+          const bake = _ensureGrid(kind)
+          if (!bake || !bake.grid.length) return
+          const g = nearestOf(bake.grid, idx)
+          if (g == null) return
+          const data = await _coarseFrame(kind, g, epoch)   // cached → instant; else one rebuild
+          if (!live() || !data) return
           if (kind === 'atomistic') await _pushAtomistic(data, epoch, live); else _pushSurface(data)
         }
       }
-    } catch { /* transient fetch failure → leave heavy rep as-is */ }
+    } catch { /* transient fetch failure → leave heavy rep as-is */
+    } finally { if (busy && live()) _setHeavyBusy(false, kind) }
   }
 
   function _restoreHeavy() {
@@ -421,6 +490,9 @@ export function initOxdnaDisplay({
   function stopAndRestore() {
     _epoch++   // cancel any in-flight display fetch so it can't re-apply after we restore
     _heavyToken++   // and any in-flight heavy reconstruction
+    _prebuildToken++   // and any in-flight playback prebuild
+    _playing = false
+    _setHeavyBusy(false, null)   // clear any "building…" spinner the cancelled fetch left up
     if (!_active) return
     designRenderer?.clearScalarColors?.()
     designRenderer?.applyFemPositions(null)
@@ -442,6 +514,8 @@ export function initOxdnaDisplay({
     refresh,
     stopAndRestore,
     setGranularity,
+    setPlaying,
+    prebuildHeavy,
     reapplyForRepr,
     granularity: () => _granularity,
     isActive: () => _active,

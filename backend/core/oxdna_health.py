@@ -911,6 +911,30 @@ def check_relaxed_constraint(constraint, relaxed_output) -> dict:
             "min_confidence": min_conf, "confidence": confidence}
 
 
+# Reading + PBC-unwrapping + Kabsch-aligning a whole multi-stage trajectory is the
+# dominant cost of EVERY trajectory request (≈14 s for a 199-frame 6hb).  The CG
+# composite, each per-frame atomistic/surface fetch, and the audit all re-derived it
+# from scratch — so scrubbing an atomistic trajectory paid it once PER frame.  The
+# aligned frames depend only on the immutable stage/reference files, so memoize them
+# keyed by a (path,size,mtime) signature: a completed job aligns once; a still-writing
+# job's signature changes as files grow, so it re-aligns (stays live-correct).
+_ALIGNED_CACHE = None   # lazily-created collections.OrderedDict[cache_key -> result]
+_ALIGNED_CACHE_MAX = 6
+
+
+def _aligned_cache_key(stages, reference_conf_path, max_frames, copies):
+    import os
+    sig = []
+    for item in (*stages, ("__ref__", "", reference_conf_path)):
+        path = item[2]
+        try:
+            st = os.stat(path)
+            sig.append((str(path), st.st_size, st.st_mtime_ns))
+        except OSError:
+            sig.append((str(path), -1, -1))
+    return (tuple(sig), int(max_frames), bool(copies))
+
+
 def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames: int = 200,
                                 *, copies: bool = False):
     """Shared core for the composite trajectory: read every stage's frames,
@@ -923,7 +947,23 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     ``frames`` list uses. Used by ``composite_trajectory`` (flattens to CG floats,
     3-tuple keys) and by the per-frame atomistic/surface builders (which pass
     ``copies=True`` so loop-insertion copies carry their own relaxed rigid frame).
+
+    Result is memoized by file signature (see ``_ALIGNED_CACHE``) — repeated frame
+    requests for the same (completed) job reuse the alignment instead of redoing it.
     """
+    global _ALIGNED_CACHE
+    from collections import OrderedDict
+    if _ALIGNED_CACHE is None:
+        _ALIGNED_CACHE = OrderedDict()
+    cache_key = _aligned_cache_key(stages, reference_conf_path, max_frames, copies)
+    hit = _ALIGNED_CACHE.get(cache_key)
+    if hit is not None:
+        try:
+            _ALIGNED_CACHE.move_to_end(cache_key)   # LRU touch (tolerate a concurrent evict)
+        except KeyError:
+            pass
+        return hit
+
     from backend.physics.oxdna_interface import (
         _parse_box_nm,
         _strand_nucleotide_order,
@@ -960,6 +1000,15 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     if total == 0:
         return key_list, [], [], []
 
+    def _store(result):
+        _ALIGNED_CACHE[cache_key] = result
+        try:
+            while len(_ALIGNED_CACHE) > _ALIGNED_CACHE_MAX:
+                _ALIGNED_CACHE.popitem(last=False)   # evict oldest (tolerate concurrent pop)
+        except KeyError:
+            pass
+        return result
+
     def _stride_pick(items: list, keep: int) -> list:
         if keep >= len(items) or keep <= 0:
             return items
@@ -982,7 +1031,7 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
         out_stages.append({"name": s["name"], "kind": s["kind"], "n_frames": len(picked)})
         ordered_frames.extend(picked)
 
-    return key_list, ordered_frames, out_stages, markers
+    return _store((key_list, ordered_frames, out_stages, markers))
 
 
 def _flatten_cg_frame(frame: dict, key_list) -> list:

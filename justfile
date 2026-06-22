@@ -42,6 +42,10 @@ smoke:
 audit-atomistic *ARGS:
     uv run python scripts/audit_atomistic.py {{ARGS}}
 
+# Audit a sampling of the View-trajectory frames (whole lineage) — per-frame invariants, not just frame 0
+audit-trajectory *ARGS:
+    uv run python scripts/audit_atomistic.py --trajectory {{ARGS}}
+
 # Start Vite frontend dev server (requires FastAPI running separately)
 frontend:
     cd frontend && npm run dev -- --host 0.0.0.0

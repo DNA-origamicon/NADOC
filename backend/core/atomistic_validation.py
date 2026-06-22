@@ -365,3 +365,137 @@ def audit_oxdna_job(design, job, workspace: Path, *, align: bool = True, **kw) -
     report = audit_bonds(design, frame, **kw)
     report.update({"ready": True, "job_id": job.job_id, "stage_name": stage_name})
     return report
+
+
+# ── Per-frame trajectory audit ────────────────────────────────────────────────
+# The View-trajectory scrubber shows EVERY composite-trajectory frame through the
+# same display reconstruction (build_display_model via _aligned_downsampled_frames),
+# so the forward/reverse-phase + backbone-closure + identity invariants the single
+# relaxed-display audit pins must hold on every frame — not just frame 0.  This
+# audits a sampling of those frames programmatically so a per-frame regression is
+# queryable, not eyeball-only.
+
+def _sample_frame_indices(n: int, k: int) -> list[int]:
+    """Evenly-spaced frame indices over [0, n-1] (always including the endpoints),
+    deduped.  ``k>=n`` audits every frame; ``k<=1`` audits only frame 0."""
+    if n <= 0:
+        return []
+    if k >= n:
+        return list(range(n))
+    if k <= 1:
+        return [0]
+    return sorted({round(i * (n - 1) / (k - 1)) for i in range(k)})
+
+
+# A trajectory frame is INVARIANT-sound when the RECONSTRUCTION-CORRECTNESS signals
+# hold — exactly the settled fixes that must survive on every scrubbed frame:
+#   • the rigid stamp is exact (placer correct),
+#   • the bases are not crushed onto their partners (wc_collapsed False),
+#   • the forward/reverse phase is balanced (wc_helix_imbalanced False),
+#   • the atom/bond identity matches the design build, and
+#   • no atom is non-finite (a degenerate frame).
+# Over-stretched bonds + clashes are deliberately NOT a gate: a raw (un-minimised) CG
+# trajectory frame inherently carries 100s of mild 0.3–1.0 nm backbone over-stretches
+# (the renderer hides the >1 nm ones; the single-frame relaxed audit shows the same)
+# and a folded structure has sub-Å junction contacts.  These are surfaced as
+# per-frame COUNTS (quality metrics) so an explosion is visible, but a frame is not
+# failed for the inherent raw-CG roughness the user already validated visually.
+def _frame_invariants_ok(rep: dict, ref_atoms: int, ref_bonds: int) -> bool:
+    bg = rep["base_geometry"]
+    return bool(
+        rep["n_rigid_stamp_violations"] == 0
+        and not rep["bad_atoms"]
+        and not bg["wc_collapsed"]
+        and not bg["wc_helix_imbalanced"]
+        and rep["n_atoms"] == ref_atoms
+        and rep["n_bonds"] == ref_bonds
+    )
+
+
+def _slim_frame_report(idx: int, rep: dict, ref_atoms: int, ref_bonds: int) -> dict:
+    """Compact one full :func:`audit_bonds` report to the per-frame fields the
+    trajectory audit asserts on (drop the bulky bond lists, keep a few examples)."""
+    bg = rep["base_geometry"]
+    return {
+        "frame": idx,
+        "invariants_ok": _frame_invariants_ok(rep, ref_atoms, ref_bonds),
+        "ok": rep["ok"],
+        "identity_ok": rep["n_atoms"] == ref_atoms and rep["n_bonds"] == ref_bonds,
+        "n_atoms": rep["n_atoms"],
+        "n_bonds": rep["n_bonds"],
+        "n_rigid_stamp_violations": rep["n_rigid_stamp_violations"],
+        "rigid_stamp_max_dev_nm": rep["rigid_stamp_max_dev_nm"],
+        "wc_c1c1_median": bg["wc_c1c1"]["median"],
+        "wc_c1c1_forward_helix_median": bg["wc_c1c1_forward_helix_median"],
+        "wc_c1c1_reverse_helix_median": bg["wc_c1c1_reverse_helix_median"],
+        "stacking_c1c1_median": bg["stacking_c1c1"]["median"],
+        "wc_collapsed": bg["wc_collapsed"],
+        "wc_helix_imbalanced": bg["wc_helix_imbalanced"],
+        "n_invalid_bonds": rep["n_invalid_bonds"],
+        "n_hidden_by_renderer": rep["n_hidden_by_renderer"],
+        "n_clashes": len(rep["clashes"]),
+        "n_bad_atoms": len(rep["bad_atoms"]),
+        "invalid_bonds": rep["invalid_bonds"][:5],
+    }
+
+
+def _summarize_frames(frames: list[dict]) -> dict:
+    wc = [f["wc_c1c1_median"] for f in frames if f["wc_c1c1_median"] is not None]
+    return {
+        "n_audited": len(frames),
+        "all_invariants_ok": all(f["invariants_ok"] for f in frames),
+        "identity_preserved": all(f["identity_ok"] for f in frames),
+        "max_rigid_stamp_violations": max((f["n_rigid_stamp_violations"] for f in frames), default=0),
+        "any_wc_collapsed": any(f["wc_collapsed"] for f in frames),
+        "any_wc_helix_imbalanced": any(f["wc_helix_imbalanced"] for f in frames),
+        "any_over_stretched": any(f["n_invalid_bonds"] > 0 for f in frames),
+        "wc_c1c1_median_range": [min(wc), max(wc)] if wc else [None, None],
+        "max_clashes": max((f["n_clashes"] for f in frames), default=0),
+        "failed_frames": [f["frame"] for f in frames if not f["invariants_ok"]],
+    }
+
+
+def audit_trajectory_frames(design, stages, reference_conf_path,
+                            frame_indices: Optional[list[int]] = None, *,
+                            max_audit: int = 8, max_frames: int = 200, **kw) -> dict:
+    """Audit a SAMPLING of composite-trajectory frames — the per-frame counterpart of
+    :func:`audit_bonds`.  Reconstructs each requested frame through the SAME shared
+    sink the View-trajectory scrubber uses (``_aligned_downsampled_frames`` →
+    ``build_display_model``) and reports, per frame: rigid-stamp integrity, WC/stacking
+    C1'-C1' geometry, forward/reverse phase balance, over-stretched/hidden bonds,
+    clashes, and atom/bond identity vs the design build.
+
+    ``stages`` is the same ``[(name, kind, traj_path[, marker])]`` list the trajectory
+    routes assemble (whole lineage).  ``frame_indices=None`` evenly samples
+    ``max_audit`` frames across the whole composite (endpoints included); an explicit
+    list audits exactly those composite-frame indices (clamped to range).
+
+    Returns ``{ready, n_frames, audited_frames, frames:[…per-frame…], summary}``.
+    ``summary.all_invariants_ok`` is the assertable pass criterion: every audited
+    frame has 0 stamp violations, balanced forward/reverse phase, un-collapsed bases,
+    no non-finite atom, and preserved identity — proving the settled fixes hold on
+    EVERY frame, not only the relaxed display frame.  (Over-stretch + clash counts are
+    reported per frame as quality metrics, not a gate — see ``_frame_invariants_ok``.)"""
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.oxdna_health import _aligned_downsampled_frames
+
+    _, ordered, _, _ = _aligned_downsampled_frames(
+        design, stages, reference_conf_path, max_frames, copies=True)
+    n = len(ordered)
+    if n == 0:
+        return {"ready": False, "reason": "no trajectory frames", "n_frames": 0}
+
+    ref = build_atomistic_model(design)
+    ref_atoms, ref_bonds = len(ref.atoms), len(ref.bonds)
+
+    if frame_indices is None:
+        idxs = _sample_frame_indices(n, max_audit)
+    else:
+        idxs = sorted({i for i in (int(x) for x in frame_indices) if 0 <= i < n})
+
+    frames = [_slim_frame_report(idx, audit_bonds(design, ordered[idx], **kw),
+                                 ref_atoms, ref_bonds)
+              for idx in idxs]
+    summary = _summarize_frames(frames)
+    return {"ready": True, "n_frames": n, "audited_frames": idxs,
+            "frames": frames, "summary": summary, "ok": summary["all_invariants_ok"]}

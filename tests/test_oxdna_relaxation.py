@@ -992,6 +992,30 @@ def test_composite_trajectory(design, geometry, tmp_path):
     assert r["markers"][0]["frame"] == 3 and r["markers"][0]["kind"] == "production"
 
 
+def test_aligned_frames_cached_by_file_signature(design, geometry, tmp_path):
+    """The expensive read+PBC-unwrap+Kabsch-align of a whole trajectory is memoized by
+    file signature: a second call on the SAME (immutable) files reuses the aligned
+    frames (no re-align), but rewriting a file (new size/mtime) invalidates it. This is
+    what stops an atomistic scrub from paying the ~14 s alignment on every frame."""
+    import backend.core.oxdna_health as H
+    H._ALIGNED_CACHE = None                          # isolate from other tests
+    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
+    p = tmp_path / "prod.dat";   _write_traj(design, geometry, p, 3)
+    stages = [("4_production", "production", p)]
+
+    r1 = H._aligned_downsampled_frames(design, stages, ref, copies=True)
+    r2 = H._aligned_downsampled_frames(design, stages, ref, copies=True)
+    assert r2[1] is r1[1]                             # same ordered-frames object → served from cache
+    # A different `copies` flag is a distinct entry (different reconstruction needs).
+    assert H._aligned_downsampled_frames(design, stages, ref, copies=False)[1] is not r1[1]
+
+    # Rewriting the trajectory (more frames → new size/mtime) invalidates the entry.
+    _write_traj(design, geometry, p, 5)
+    r3 = H._aligned_downsampled_frames(design, stages, ref, copies=True)
+    assert r3[1] is not r1[1]
+    assert len(r3[1]) == 6                            # seed + 5 frames (re-read, not stale)
+
+
 def test_composite_trajectory_downsamples_keeping_each_stage(design, geometry, tmp_path):
     """Downsampling to a small cap keeps ≥1 frame per stage + the boundary marker."""
     from backend.core.oxdna_health import composite_trajectory

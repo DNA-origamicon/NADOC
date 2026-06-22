@@ -73,4 +73,38 @@ describe('initOxdnaTrajectoryPlayer', () => {
     expect(markersEl.innerHTML).toBe('')
     expect(slider.disabled).toBe(true)
   })
+
+  it('with onBeforePlay, play awaits the pre-build (spinner shown) before the loop starts', async () => {
+    let release
+    const onBeforePlay = vi.fn(() => new Promise((r) => { release = () => r(true) }))
+    const onPlayStateChange = vi.fn()
+    const p = initOxdnaTrajectoryPlayer({ playBtn, slider, onBeforePlay, onPlayStateChange, fps: 10 })
+    p.setTrajectory(5, [])
+    p.play()
+    await Promise.resolve()
+    expect(onBeforePlay).toHaveBeenCalledTimes(1)
+    expect(p.isPlaying()).toBe(false)            // not playing yet — still pre-building
+    expect(playBtn.textContent).toBe('⏳')        // spinner while preparing
+    expect(onPlayStateChange).not.toHaveBeenCalled()
+    release()                                     // pre-build finished
+    await Promise.resolve(); await Promise.resolve()
+    expect(p.isPlaying()).toBe(true)
+    expect(onPlayStateChange).toHaveBeenCalledWith(true)
+    p.stop()
+  })
+
+  it('clicking again while preparing cancels — the loop never starts when the pre-build resolves', async () => {
+    let release
+    const onBeforePlay = vi.fn(() => new Promise((r) => { release = () => r(true) }))
+    const p = initOxdnaTrajectoryPlayer({ playBtn, slider, onBeforePlay, fps: 10 })
+    p.setTrajectory(5, [])
+    p.play()
+    await Promise.resolve()
+    p.pause()                                     // user clicks again mid-prepare → cancel
+    release()
+    await Promise.resolve(); await Promise.resolve()
+    expect(p.isPlaying()).toBe(false)             // the resolved prepare did NOT start the loop
+    expect(playBtn.textContent).toBe('▶')
+    p.stop()
+  })
 })

@@ -480,11 +480,31 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   let _lastFrameIndex = null   // last live frame the relaxed display was refreshed to
   let _displayBaseText = ''    // base display-status text (countdown appended while running)
   let _displayBaseColor = _C.ok
+  // Trajectory status: base summary text, OR a "building…" / "preparing playback…"
+  // overlay while a heavy reconstruction is in flight (declared here, before the player
+  // init below, because the player's onBeforePlay callback reads _trajPrep).
+  let _trajBaseText = '', _trajBaseColor = _C.ok, _heavyBuildKind = null, _trajPrep = null
 
   // Trajectory player (play/pause + scrub slider); seeks drive the display frame.
+  // Heavy reps (atomistic/surface) rebuild each frame slowly, so PLAY first pre-builds
+  // every coarse playback frame (spinner + "building k/N"), then runs the loop smoothly.
   const trajPlayer = initOxdnaTrajectoryPlayer({
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
     onSeek: (i) => oxdnaDisplay?.showFrame(i),
+    onBeforePlay: async () => {
+      if (!oxdnaDisplay) return true
+      oxdnaDisplay.setPlaying(true)
+      const r = await oxdnaDisplay.prebuildHeavy((done, total) => {
+        _trajPrep = total > 1 ? { done, total } : null   // total≤1 = CG (instant) → no notice
+        _renderTrajStatus()
+      })
+      _trajPrep = null
+      _renderTrajStatus()
+      return r?.ok !== false
+    },
+    onPlayStateChange: (playing) => {
+      if (!playing) { oxdnaDisplay?.setPlaying(false); _trajPrep = null; _renderTrajStatus() }
+    },
   })
 
   // Workspace colour-scale widget (middle-right); editing its bounds re-colours
@@ -1127,16 +1147,41 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   })
 
   // ── View trajectory (scrub composite relaxation + all production runs) ──────
-  function _setTrajStatus(text, color = _C.dim) {
+  function _setTrajStatusEl(text, color = _C.dim) {
     if (trajStatus) { trajStatus.textContent = text; trajStatus.style.color = color }
+  }
+  // Status line shows the trajectory summary, OR a "building…" notice while a heavy
+  // (atomistic/surface) frame reconstruction is in flight (those take several seconds
+  // each — without this the panel looks frozen). _heavyBuildKind is set by the
+  // oxdna-heavy-status event the display controller fires around each rebuild.
+  function _setTrajStatus(text, color = _C.ok) { _trajBaseText = text; _trajBaseColor = color; _renderTrajStatus() }
+  function _renderTrajStatus() {
+    if (_trajPrep) {
+      _setTrajStatusEl(
+        `⏳ Preparing playback… building frame ${_trajPrep.done}/${_trajPrep.total} ` +
+        `(heavy reps build once, then play smoothly)`, _C.accent)
+    } else if (_heavyBuildKind && oxdnaDisplay?.mode() === 'trajectory') {
+      const what = _heavyBuildKind === 'surface' ? 'surface' : 'atomistic'
+      _setTrajStatusEl(`⏳ Building ${what} frame… (heavy — a few seconds; coarse caches as you scrub)`, _C.accent)
+    } else {
+      _setTrajStatusEl(_trajBaseText, _trajBaseColor)
+    }
   }
   function _setTrajOff() {
     trajPlayer.stop()
     if (oxdnaDisplay?.mode() === 'trajectory') oxdnaDisplay.stopAndRestore()
     if (trajToggle) trajToggle.checked = false
     if (trajControls) trajControls.style.display = 'none'
+    _heavyBuildKind = null
+    _trajPrep = null
     _setTrajStatus('', _C.dim)
   }
+  // Heavy reconstruction in/out → flip the building notice (trajectory mode only).
+  window.addEventListener('nadoc:oxdna-heavy-status', (e) => {
+    const d = e.detail || {}
+    _heavyBuildKind = d.building ? d.kind : null
+    _renderTrajStatus()
+  })
   async function _refreshTraj() {
     if (!_selectedId || !oxdnaDisplay) return
     _trajBusy = true
