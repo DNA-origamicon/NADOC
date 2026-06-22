@@ -93,6 +93,13 @@ export function resolveAtomColor(ctx, atom, sel, multiIds, hasSelection) {
   const el  = atom.element
   const cpk = ELEMENTS[el]?.color ?? DEFAULT_ELEMENT.color
   if (hasSelection) return colorForAtom(ctx, atom, sel, multiIds)
+  // Scalar overlay (e.g. oxDNA flexibility map): when present and nothing is
+  // selected, an atom's nucleotide colour wins over CPK/strand so the heavy rep
+  // shows the SAME rigid→flexible ramp as the beads.  Keyed by helix:bp:dir.
+  if (ctx.scalarColors) {
+    const c = ctx.scalarColors.get(`${atom.helix_id}:${atom.bp_index}:${atom.direction}`)
+    if (c != null) return c
+  }
   const isXb = !!atom.aux_helix_id  // extra-base: always strand-coloured
   if (ctx.colorMode === 'strand' || isXb) {
     return ctx.strandColors.get(atom.strand_id) ?? cpk

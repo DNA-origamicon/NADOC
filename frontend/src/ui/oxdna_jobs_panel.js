@@ -484,6 +484,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // overlay while a heavy reconstruction is in flight (declared here, before the player
   // init below, because the player's onBeforePlay callback reads _trajPrep).
   let _trajBaseText = '', _trajBaseColor = _C.ok, _heavyBuildKind = null, _trajPrep = null
+  let _flexBaseText = '', _flexBaseColor = _C.dim
 
   // Trajectory player (play/pause + scrub slider); seeks drive the display frame.
   // Heavy reps (atomistic/surface) rebuild each frame slowly, so PLAY first pre-builds
@@ -1068,8 +1069,22 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   })
 
   // ── Flexibility map (production avg structure recoloured by per-base RMSF) ───
+  // Like the trajectory status, the flex line shows its base summary OR a "building…"
+  // notice while a heavy (atomistic/surface) reconstruction of the AVERAGE structure is
+  // in flight (those take several seconds each — without this the panel looks frozen).
   function _setFlexStatus(text, color = _C.dim) {
-    if (flexStatus) { flexStatus.textContent = text; flexStatus.style.color = color }
+    _flexBaseText = text; _flexBaseColor = color; _renderFlexStatus()
+  }
+  function _renderFlexStatus() {
+    if (!flexStatus) return
+    if (_heavyBuildKind && oxdnaDisplay?.mode() === 'rmsf') {
+      const what = _heavyBuildKind === 'surface' ? 'surface' : 'atomistic'
+      flexStatus.textContent = `⏳ Building ${what} average structure… (heavy — a few seconds)`
+      flexStatus.style.color = _C.accent
+    } else {
+      flexStatus.textContent = _flexBaseText
+      flexStatus.style.color = _flexBaseColor
+    }
   }
   function _setFlexBar(state) {
     // state: 'computing' (indeterminate stripe) | 'done' | 'off'
@@ -1176,11 +1191,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _trajPrep = null
     _setTrajStatus('', _C.dim)
   }
-  // Heavy reconstruction in/out → flip the building notice (trajectory mode only).
+  // Heavy reconstruction in/out → flip the building notice. The display controller
+  // fires this around every atomistic/surface rebuild in ANY mode; _renderTraj/Flex
+  // each gate on their own mode so only the active overlay's status line reacts.
   window.addEventListener('nadoc:oxdna-heavy-status', (e) => {
     const d = e.detail || {}
     _heavyBuildKind = d.building ? d.kind : null
     _renderTrajStatus()
+    _renderFlexStatus()
   })
   async function _refreshTraj() {
     if (!_selectedId || !oxdnaDisplay) return

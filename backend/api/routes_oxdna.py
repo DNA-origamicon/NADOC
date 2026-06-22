@@ -1196,28 +1196,34 @@ async def get_oxdna_trajectory_audit(
 
 def _rmsf_average_frame(job):
     """Shared average-structure reader for the rmsf-atomistic/surface routes.
-    Returns ``(design, average_frame)`` where ``average_frame`` is the per-nuc
-    ``{key:{backbone_position(mean CM), a1, a3}}`` dict; ``average_frame`` is None
-    when no sampling frames exist yet (mirrors GET /rmsf's not-ready paths)."""
+    Returns ``(design, average_frame, rmsf_by_key)`` where ``average_frame`` is the
+    per-nuc ``{key:{backbone_position(mean CM), a1, a3}}`` dict and ``rmsf_by_key``
+    maps ``(helix_id, bp_index, direction) → rmsf`` (nm) so the surface can be
+    coloured by flexibility.  Both are None when no sampling frames exist yet
+    (mirrors GET /rmsf's not-ready paths)."""
     from backend.core.models import Design
     from backend.core.oxdna_health import production_rmsf
 
     prod_stages = [s for s in job.stages if s.kind in ("production", "field")]
     if not prod_stages:
-        return (None, None)
+        return (None, None, None)
     jd = job.job_dir(_workspace())
     usable = [s for s in prod_stages if s.status in ("done", "running")]
     trajs: list[Path] = []
     for s in usable:
         trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
     if not trajs:
-        return (None, None)
+        return (None, None, None)
     design = Design.model_validate_json((jd / "design.json").read_text())
     ref_conf = _design_ref_conf(jd, design)
     result = production_rmsf(design, trajs, ref_conf, include_average_frame=True)
     if not result.get("ready"):
-        return (design, None)
-    return (design, result.get("average_frame") or None)
+        return (design, None, None)
+    rmsf_by_key = {
+        (p["helix_id"], p["bp_index"], p["direction"]): p["rmsf"]
+        for p in result.get("positions", [])
+    }
+    return (design, result.get("average_frame") or None, rmsf_by_key)
 
 
 @router.post("/oxdna/jobs/{job_id}/rmsf-atomistic")
@@ -1228,7 +1234,7 @@ async def get_oxdna_rmsf_atomistic(job_id: str) -> dict:
     from backend.core.oxdna_health import frame_atomistic_flat
 
     job = _load_job(job_id)
-    design, frame = await run_in_threadpool(_rmsf_average_frame, job)
+    design, frame, _ = await run_in_threadpool(_rmsf_average_frame, job)
     if frame is None:
         return {"job_id": job.job_id, "ready": False}
     data = await run_in_threadpool(frame_atomistic_flat, design, frame)
@@ -1238,16 +1244,17 @@ async def get_oxdna_rmsf_atomistic(job_id: str) -> dict:
 @router.post("/oxdna/jobs/{job_id}/rmsf-surface")
 async def get_oxdna_rmsf_surface(job_id: str, body: OxdnaSurfaceBody) -> dict:
     """Molecular surface for the flexibility-map AVERAGE structure — the surface
-    counterpart of GET /oxdna/jobs/{id}/rmsf."""
+    counterpart of GET /oxdna/jobs/{id}/rmsf.  Always coloured by per-vertex RMSF
+    (``vertex_rmsf``) so the mesh shows the same rigid→flexible ramp as the beads."""
     from backend.core.oxdna_health import frame_surface_json
 
     job = _load_job(job_id)
-    design, frame = await run_in_threadpool(_rmsf_average_frame, job)
+    design, frame, rmsf_by_key = await run_in_threadpool(_rmsf_average_frame, job)
     if frame is None:
         return {"job_id": job.job_id, "ready": False}
     data = await run_in_threadpool(
-        frame_surface_json, design, frame, body.color_mode, body.probe_radius,
-        body.grid_spacing, body.radius_inflate, body.smooth)
+        frame_surface_json, design, frame, "rmsf", body.probe_radius,
+        body.grid_spacing, body.radius_inflate, body.smooth, rmsf_by_key)
     return {"job_id": job.job_id, "ready": True, "surface": data}
 
 

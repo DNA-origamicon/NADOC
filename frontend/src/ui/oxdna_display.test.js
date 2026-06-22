@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { toFemUpdates, viridisHex, rmsfColorMap, framesToUpdates, initOxdnaDisplay, repKind } from './oxdna_display.js'
+import { toFemUpdates, viridisHex, rmsfColorMap, framesToUpdates, initOxdnaDisplay, repKind, rmsfToVertexColors } from './oxdna_display.js'
 
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
@@ -95,6 +95,25 @@ describe('rmsfColorMap', () => {
     expect(map.colorByKey['h0:1:FORWARD']).toBe(viridisHex(1))   // 1.5 → top of window
     expect(map.min).toBe(0)                                       // data range, not bounds
     expect(map.max).toBe(2)
+  })
+})
+
+describe('rmsfToVertexColors', () => {
+  it('maps per-vertex RMSF onto the viridis ramp (3 RGB floats per vertex)', () => {
+    const col = rmsfToVertexColors([0, 0.5, 1], 0, 1)
+    expect(col).toBeInstanceOf(Float32Array)
+    expect(col.length).toBe(9)
+    // lo end = viridis[0] (#440154), hi end = viridis[4] (#fde725).
+    expect(col[0]).toBeCloseTo(0x44 / 255, 5)
+    expect(col[6]).toBeCloseTo(0xfd / 255, 5)
+    expect(col[8]).toBeCloseTo(0x25 / 255, 5)
+  })
+  it('clamps out-of-range values and tolerates a zero-width scale', () => {
+    const clamped = rmsfToVertexColors([-5, 5], 0, 1)            // both clamp to endpoints
+    expect(clamped[0]).toBeCloseTo(0x44 / 255, 5)               // ≤lo → dark purple
+    expect(clamped[3]).toBeCloseTo(0xfd / 255, 5)               // ≥hi → yellow
+    const flat = rmsfToVertexColors([0.5], 1, 1)                // span 0 → t=0
+    expect(flat[0]).toBeCloseTo(0x44 / 255, 5)
   })
 })
 
@@ -288,8 +307,10 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
   function makeHeavyDeps(repr = 'ballstick') {
     const state = { repr }
     const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
-    const atom = { getMode: () => 'ballstick', applyPositionLerp: vi.fn(), update: vi.fn() }
-    const surf = { getMode: () => (state.repr === 'surface' ? 'on' : 'off'), applyPositionLerp: vi.fn() }
+    const atom = { getMode: () => 'ballstick', applyPositionLerp: vi.fn(), update: vi.fn(),
+                   applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
+    const surf = { getMode: () => (state.repr === 'surface' ? 'on' : 'off'), applyPositionLerp: vi.fn(),
+                   applyScalarVertexColors: vi.fn() }
     const onRestoreDesignHeavy = vi.fn()
     const onHeavyStatus = vi.fn()
     const api = {
@@ -302,6 +323,7 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
       getOxdnaRmsf: vi.fn().mockResolvedValue({ ready: true, n_frames: 5, min_rmsf: 0.1, max_rmsf: 0.9, mean_rmsf: 0.5,
         positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0, rmsf: 0.5 }] }),
       getOxdnaRmsfAtomistic: vi.fn().mockResolvedValue({ ready: true, atomistic: [7, 8, 9] }),
+      getOxdnaRmsfSurface: vi.fn().mockResolvedValue({ ready: true, surface: { vertices: [0, 0, 0, 1, 1, 1, 2, 2, 2], faces: [0, 1, 2], vertex_rmsf: [0.1, 0.5, 0.9] } }),
       getOxdnaTrajectory: vi.fn().mockResolvedValue({ ready: true, n_frames: 5, keys: [['h0', 0, 'FORWARD']],
         frames: [[0, 0, 0, 1, 0, 0], [1, 0, 0, 1, 0, 0], [2, 0, 0, 1, 0, 0], [3, 0, 0, 1, 0, 0], [4, 0, 0, 1, 0, 0]] }),
       getOxdnaFramesAtomistic: vi.fn().mockImplementation((id, idxs) =>
@@ -348,12 +370,79 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     expect(surf.applyPositionLerp).toHaveBeenCalledWith(data, data, 0)
   })
 
-  it('flexibility map drives the atomistic rep from the average structure', async () => {
+  it('flexibility map drives the atomistic rep AND recolours atoms by RMSF', async () => {
     const { ctrl, api, atom } = makeHeavyDeps('vdw')
     await ctrl.displayRmsf('jobF')
     await tick()
     expect(api.getOxdnaRmsfAtomistic).toHaveBeenCalledWith('jobF')
     expect(atom.applyPositionLerp).toHaveBeenCalledWith([7, 8, 9], [7, 8, 9], 0, null, [], null)
+    // Atoms get the SAME viridis ramp as the beads: a colorByKey keyed by helix:bp:dir.
+    expect(atom.applyScalarColors).toHaveBeenCalled()
+    const cmap = atom.applyScalarColors.mock.calls.at(-1)[0]
+    expect(cmap).toHaveProperty('h0:0:FORWARD')
+  })
+
+  it('flexibility map colours the surface mesh by per-vertex RMSF (scalar, not strand)', async () => {
+    const { ctrl, api, surf } = makeHeavyDeps('surface')
+    await ctrl.displayRmsf('jobF')
+    await tick()
+    expect(api.getOxdnaRmsfSurface).toHaveBeenCalledWith('jobF')
+    const pushed = surf.applyPositionLerp.mock.calls.at(-1)[0]
+    expect(pushed.scalar).toBe(true)                          // forces viridis through any colour mode
+    expect(pushed.vertex_colors).toBeInstanceOf(Float32Array)
+    expect(pushed.vertex_colors.length).toBe(3 * 3)           // 3 verts × RGB
+  })
+
+  it('flex map is cached across toggle-off → re-toggle is instant (no re-fetch)', async () => {
+    const { ctrl, api } = makeHeavyDeps('full')   // CG so no heavy rebuild noise
+    await ctrl.displayRmsf('jobF')
+    await tick()
+    expect(api.getOxdnaRmsf).toHaveBeenCalledTimes(1)
+    ctrl.stopAndRestore()                          // user toggles the flex map OFF
+    await ctrl.displayRmsf('jobF')                 // …then ON again
+    await tick()
+    expect(api.getOxdnaRmsf).toHaveBeenCalledTimes(1)   // served from cache — NOT recomputed
+    // refresh() forces a re-fetch (production may have advanced).
+    await ctrl.refresh()
+    expect(api.getOxdnaRmsf).toHaveBeenCalledTimes(2)
+  })
+
+  it('recolorRmsf re-applies the new scale to the active atomistic overlay (no re-fetch)', async () => {
+    const { ctrl, api, atom } = makeHeavyDeps('vdw')
+    await ctrl.displayRmsf('jobF')
+    await tick()
+    api.getOxdnaRmsfAtomistic.mockClear()
+    atom.applyScalarColors.mockClear()
+    expect(ctrl.recolorRmsf(0.2, 0.6)).toBe(true)
+    expect(atom.applyScalarColors).toHaveBeenCalled()        // recoloured in place…
+    expect(api.getOxdnaRmsfAtomistic).not.toHaveBeenCalled() // …without re-fetching positions
+  })
+
+  it('recolorRmsf recolours the active surface overlay from cached per-vertex RMSF', async () => {
+    const { ctrl, surf } = makeHeavyDeps('surface')
+    await ctrl.displayRmsf('jobF')
+    await tick()
+    expect(ctrl.recolorRmsf(0.2, 0.6)).toBe(true)
+    expect(surf.applyScalarVertexColors).toHaveBeenCalled()
+    expect(surf.applyScalarVertexColors.mock.calls.at(-1)[0]).toBeInstanceOf(Float32Array)
+  })
+
+  it('leaving the flex map clears the atomistic scalar overlay (no stale RMSF on the design)', async () => {
+    const { ctrl, atom } = makeHeavyDeps('vdw')
+    await ctrl.displayRmsf('jobF')
+    await tick()
+    ctrl.stopAndRestore()
+    expect(atom.clearScalarColors).toHaveBeenCalled()
+  })
+
+  it('flexibility-map heavy reconstruction reports build status (true→false), so the panel can show a spinner', async () => {
+    const { ctrl, onHeavyStatus } = makeHeavyDeps('vdw')
+    await ctrl.displayRmsf('jobF')
+    await tick()
+    const flags = onHeavyStatus.mock.calls.map((c) => c[0].building)
+    expect(flags).toContain(true)                        // announced while rebuilding the avg structure
+    expect(flags[flags.length - 1]).toBe(false)          // cleared when done (no frozen panel)
+    expect(onHeavyStatus.mock.calls.some((c) => c[0].mode === 'rmsf')).toBe(true)
   })
 
   it('coarse trajectory fetches grid cells LAZILY (one frame per visit), never a big upfront batch, and caches revisits', async () => {

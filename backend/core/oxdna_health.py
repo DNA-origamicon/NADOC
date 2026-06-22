@@ -1194,12 +1194,34 @@ def frame_atomistic_flat(design, frame: dict) -> list:
     return atomistic_positions_flat(build_display_model(design, frame))
 
 
+def _vertex_rmsf(mesh, atoms, rmsf_by_key: dict) -> list:
+    """Per-vertex RMSF (nm) via nearest-atom KD-tree lookup — each surface vertex
+    inherits the RMSF of its closest atom's nucleotide so the frontend can colour
+    the mesh by the SAME viridis ramp/scale as the beads. Mirrors
+    ``surface._assign_vertex_strand_ids`` but resolves to the flexibility value."""
+    import numpy as np
+    from scipy.spatial import cKDTree
+
+    pos = np.array([[a.x, a.y, a.z] for a in atoms], dtype=np.float64)
+    tree = cKDTree(pos)
+    _, nn = tree.query(mesh.vertices, workers=-1)
+    out: list[float] = []
+    for i in nn:
+        a = atoms[int(i)]
+        d = a.direction.value if hasattr(a.direction, "value") else a.direction
+        out.append(round(float(rmsf_by_key.get((a.helix_id, a.bp_index, d), 0.0)), 5))
+    return out
+
+
 def frame_surface_json(design, frame: dict, color_mode: str = "strand",
                        probe_radius: float = 0.28, grid_spacing: float = 0.20,
-                       radius_inflate: float = 1.30, smooth: int = 15) -> dict:
-    """Molecular surface ``{vertices, faces, vertex_colors?}`` for ONE per-nucleotide
-    frame — the SAME wire format as ``/design/features/surface-batch``. Shared sink
-    for the composite trajectory AND the single relaxed/rmsf frames."""
+                       radius_inflate: float = 1.30, smooth: int = 15,
+                       rmsf_by_key: dict | None = None) -> dict:
+    """Molecular surface ``{vertices, faces, vertex_colors?|vertex_rmsf?}`` for ONE
+    per-nucleotide frame — the SAME wire format as ``/design/features/surface-batch``.
+    Shared sink for the composite trajectory AND the single relaxed/rmsf frames.
+    ``color_mode='rmsf'`` (with ``rmsf_by_key``) emits a per-vertex RMSF list so the
+    flexibility map colours the surface the same way it colours the beads."""
     from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
     model = build_display_model(design, frame)
     mesh = compute_surface(model.atoms, grid_spacing=grid_spacing,
@@ -1207,7 +1229,9 @@ def frame_surface_json(design, frame: dict, color_mode: str = "strand",
     mesh = smooth_mesh(mesh, iterations=smooth)
     entry = {"vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
              "faces": [int(f) for f in mesh.faces.ravel()]}
-    if color_mode == "strand":
+    if color_mode == "rmsf" and rmsf_by_key:
+        entry["vertex_rmsf"] = _vertex_rmsf(mesh, model.atoms, rmsf_by_key)
+    elif color_mode == "strand":
         vc = surface_to_json(mesh, design, color_mode="strand").get("vertex_colors")
         if vc:
             entry["vertex_colors"] = [round(float(c), 4) for c in vc]

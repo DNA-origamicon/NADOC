@@ -83,6 +83,22 @@ export function rmsfColorMap(resp, loBound, hiBound) {
   return { updates, colorByKey, min: dataLo, max: dataHi }
 }
 
+/** Pure: per-vertex RMSF floats → flat RGB Float32Array (0-1), viridis over
+ *  [lo,hi] (values outside clamp).  Lets the surface use the SAME ramp/scale as
+ *  the beads + atomistic.  Kept pure for unit testing. */
+export function rmsfToVertexColors(rmsf, lo, hi) {
+  const span = hi - lo
+  const out = new Float32Array((rmsf?.length || 0) * 3)
+  for (let i = 0; i < (rmsf?.length || 0); i++) {
+    const t = span > 1e-9 ? (rmsf[i] - lo) / span : 0
+    const hex = viridisHex(t)
+    out[i * 3]     = ((hex >> 16) & 0xFF) / 255
+    out[i * 3 + 1] = ((hex >> 8) & 0xFF) / 255
+    out[i * 3 + 2] = (hex & 0xFF) / 255
+  }
+  return out
+}
+
 /**
  * Pure: turn one composite-trajectory frame (flat float list) + the shared key
  * list into applyFemPositions updates.  keys = [[helix,bp,dir], …]; frame holds
@@ -176,8 +192,24 @@ export function initOxdnaDisplay({
   // colours/bonds/positions).  So before overlaying any oxDNA atomistic frame we
   // REBUILD the renderer from the job's own atomistic model (once per job).
   let _atomTopoJob = null
+  // Flexibility-map cache + scale, KEPT across toggle-off so re-toggling the same
+  // job shows the already-computed map instantly (no recompute).  _rmsfBounds is the
+  // active RMSF colour scale shared by beads + atomistic + surface (null = data
+  // min→max).  _lastSurfRmsf holds the active flex-surface per-vertex RMSF so the
+  // scale widget can recolour the mesh without a re-fetch.
+  let _rmsfCache = null     // {jobId, resp}
+  let _rmsfBounds = null    // {lo,hi} | null
+  let _lastSurfRmsf = null  // number[] | null
 
   function _repKind() { return repKind(getCurrentRepr?.()) }
+
+  /** Active RMSF colour scale: the user's widget range, else the design's full range. */
+  function _activeBounds() {
+    if (_rmsfBounds) return _rmsfBounds
+    const lo = Number.isFinite(_rmsfResp?.min_rmsf) ? _rmsfResp.min_rmsf : 0
+    const hi = Number.isFinite(_rmsfResp?.max_rmsf) ? _rmsfResp.max_rmsf : 0
+    return { lo, hi }
+  }
 
   /** Ensure the atomistic renderer holds the JOB's topology (atoms+bonds), so the
    *  relaxed positions line up serial-for-serial.  Returns false if it could not. */
@@ -192,17 +224,28 @@ export function initOxdnaDisplay({
     return true
   }
 
-  async function _pushAtomistic(arr, epoch, live) {
+  async function _pushAtomistic(arr, epoch, live, colorByKey = null) {
     const ar = getAtomisticRenderer?.()
     if (!ar || ar.getMode?.() === 'off' || !Array.isArray(arr) || !arr.length) return
     if (!(await _ensureJobAtomistic(ar, epoch))) return
     if (live && !live()) return
     ar.applyPositionLerp(arr, arr, 0, null, [], null)
+    // Flexibility map → recolour atoms by RMSF; any other mode → drop the overlay.
+    if (colorByKey) ar.applyScalarColors?.(colorByKey)
+    else ar.clearScalarColors?.()
     _heavyActive = true
   }
-  function _pushSurface(data) {
+  function _pushSurface(data, rmsf = false) {
     const sr = getSurfaceRenderer?.()
     if (!sr || sr.getMode?.() === 'off' || !data?.vertices?.length) return
+    if (rmsf && Array.isArray(data.vertex_rmsf)) {
+      const { lo, hi } = _activeBounds()
+      data.vertex_colors = rmsfToVertexColors(data.vertex_rmsf, lo, hi)
+      data.scalar = true                 // force the viridis colours through any colour mode
+      _lastSurfRmsf = data.vertex_rmsf   // cache for live scale recolour
+    } else {
+      _lastSurfRmsf = null
+    }
     sr.applyPositionLerp(data, data, 0)
     _heavyActive = true
   }
@@ -317,10 +360,14 @@ export function initOxdnaDisplay({
       } else if (_mode === 'rmsf') {
         if (kind === 'atomistic') {
           const r = await api.getOxdnaRmsfAtomistic(_jobId)
-          if (live() && r?.ready) await _pushAtomistic(r.atomistic, epoch, live)
+          if (live() && r?.ready) {
+            const { lo, hi } = _activeBounds()
+            const cmap = rmsfColorMap(_rmsfResp, lo, hi)   // same ramp/scale as the beads
+            await _pushAtomistic(r.atomistic, epoch, live, cmap?.colorByKey || null)
+          }
         } else {
           const r = await api.getOxdnaRmsfSurface(_jobId)
-          if (live() && r?.ready) _pushSurface(r.surface)
+          if (live() && r?.ready) _pushSurface(r.surface, true)   // colour by per-vertex RMSF
         }
       } else if (_mode === 'trajectory') {
         const idx = _frameIdx
@@ -347,10 +394,15 @@ export function initOxdnaDisplay({
   }
 
   function _restoreHeavy() {
+    // Drop the flex-map overlay BEFORE the design rebuild — otherwise the scalar
+    // colours (keyed by helix:bp:dir, which the design's own atoms also match)
+    // would repaint the restored design atoms by stale RMSF.
+    getAtomisticRenderer?.()?.clearScalarColors?.()
     if (_heavyActive) { onRestoreDesignHeavy?.(); _heavyActive = false }
     _bakedAtom = null
     _bakedSurf = null
     _atomTopoJob = null   // next job display rebuilds the renderer from its own topology
+    _lastSurfRmsf = null
   }
 
   /** Fetch the latest relaxed frame for jobId and deform the model to it.
@@ -390,16 +442,25 @@ export function initOxdnaDisplay({
    * Fetch the production flexibility map for jobId, deform the model to the
    * average structure, and recolour beads by RMSF (rigid→flexible).
    */
-  async function displayRmsf(jobId) {
+  async function displayRmsf(jobId, { refetch = false } = {}) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
-    const resp = await api.getOxdnaRmsf(jobId)
-    if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
+    // Re-use the cached flex map for this job (instant re-toggle) unless a refetch
+    // is forced (e.g. refresh after more production frames accumulated).
+    let resp
+    if (!refetch && _rmsfCache && _rmsfCache.jobId === jobId) {
+      resp = _rmsfCache.resp
+    } else {
+      resp = await api.getOxdnaRmsf(jobId)
+      if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
+    }
     const map = rmsfColorMap(resp)
     if (!map) {
       return { ok: false, reason: resp?.reason || 'not ready' }
     }
+    _rmsfCache = { jobId, resp }   // keep across toggle-off
     _rmsfResp = resp
+    _rmsfBounds = null             // fresh display → default data-range scale
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _active = true
@@ -422,7 +483,20 @@ export function initOxdnaDisplay({
     if (_mode !== 'rmsf' || !_rmsfResp || !designRenderer) return false
     const map = rmsfColorMap(_rmsfResp, lo, hi)
     if (!map) return false
+    _rmsfBounds = { lo: Number.isFinite(lo) ? lo : _activeBounds().lo,
+                    hi: Number.isFinite(hi) ? hi : _activeBounds().hi }
     designRenderer.applyScalarColors(map.colorByKey)
+    // Keep the active heavy rep in sync with the scale (no re-fetch).
+    const kind = _repKind()
+    if (kind === 'atomistic') {
+      const ar = getAtomisticRenderer?.()
+      if (ar && ar.getMode?.() !== 'off') ar.applyScalarColors?.(map.colorByKey)
+    } else if (kind === 'surface' && _lastSurfRmsf) {
+      const sr = getSurfaceRenderer?.()
+      if (sr && sr.getMode?.() !== 'off') {
+        sr.applyScalarVertexColors?.(rmsfToVertexColors(_lastSurfRmsf, _rmsfBounds.lo, _rmsfBounds.hi))
+      }
+    }
     return true
   }
 
@@ -483,7 +557,8 @@ export function initOxdnaDisplay({
   async function refresh() {
     if (!_active || !_jobId) return { ok: false, reason: 'not active' }
     if (_mode === 'trajectory') return loadTrajectory(_jobId)
-    return _mode === 'rmsf' ? displayRmsf(_jobId) : displayJob(_jobId)
+    // refresh re-fetches: more production frames may have accumulated → bypass cache.
+    return _mode === 'rmsf' ? displayRmsf(_jobId, { refetch: true }) : displayJob(_jobId)
   }
 
   /** Clear the overlay (positions + colours) and restore the design. */

@@ -1141,6 +1141,27 @@ def test_frame_surface_json_shape(design, geometry, tmp_path):
     assert "vertex_colors" in v                                              # strand colours
 
 
+def test_frame_surface_json_rmsf_emits_per_vertex_flexibility(design, geometry, tmp_path):
+    """color_mode='rmsf' returns one RMSF value per surface vertex (nearest-atom
+    flexibility), NOT strand colours — so the frontend can paint the mesh with the
+    same viridis ramp/scale as the beads. Each value sits in the design's RMSF
+    range and there is exactly one per vertex (len/3)."""
+    from backend.core.oxdna_health import production_rmsf, frame_surface_json
+    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
+    t = tmp_path / "p.dat";     _write_traj(design, geometry, t, 3)
+    res = production_rmsf(design, t, ref, include_average_frame=True)
+    frame = res["average_frame"]
+    rmsf_by_key = {(p["helix_id"], p["bp_index"], p["direction"]): p["rmsf"]
+                   for p in res["positions"]}
+
+    v = frame_surface_json(design, frame, color_mode="rmsf", smooth=3, rmsf_by_key=rmsf_by_key)
+    assert "vertex_colors" not in v                                          # NOT strand-coloured
+    vr = v["vertex_rmsf"]
+    assert len(vr) == len(v["vertices"]) // 3                                # one per vertex
+    lo, hi = res["min_rmsf"], res["max_rmsf"]
+    assert all(lo - 1e-6 <= x <= hi + 1e-6 for x in vr)                      # within the data range
+
+
 def _ideal_frame_override(design, geometry, tmp_path, *, copies=False):
     """Write + read the design's OWN ideal oxDNA configuration → a frame_override
     map ``{key: (CM, a1, a3)}`` (the input the rigid-frame placer consumes)."""

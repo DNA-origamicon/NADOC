@@ -239,6 +239,10 @@ export function initSurfaceRenderer(scene) {
    */
   function applyPositionLerp(fromData, toData, t) {
     if (!_mesh || !fromData || !toData) return
+    // Scalar overlay (oxDNA flexibility map): a single colour-baked frame — always
+    // rebuild so the per-vertex viridis colours land even if the vertex count
+    // happens to match the current mesh (the in-place lerp never touches colour).
+    if (toData.scalar) { _rebuildTopology(toData); return }
     const fromV = fromData.vertices
     const toV   = toData.vertices
 
@@ -286,7 +290,9 @@ export function initSurfaceRenderer(scene) {
     newGeo.setIndex(new THREE.BufferAttribute(new Uint32Array(data.faces), 1))
     newGeo.computeVertexNormals()
 
-    if (_colorMode === 'strand' && data.vertex_colors) {
+    // `scalar` (flexibility map) shows its baked viridis colours regardless of the
+    // user's strand/uniform colour mode; otherwise strand colours need strand mode.
+    if ((data.scalar || _colorMode === 'strand') && data.vertex_colors) {
       newGeo.setAttribute('color',
         new THREE.BufferAttribute(new Float32Array(data.vertex_colors), 3))
       if (!_mesh.material.vertexColors) {
@@ -305,6 +311,22 @@ export function initSurfaceRenderer(scene) {
     oldGeo.dispose()
   }
 
+  /**
+   * Recolour the live mesh in place from a per-vertex RGB array (Float 0-1, 3 per
+   * vertex) — used by the oxDNA flexibility map so dragging the RMSF scale recolours
+   * the surface without a re-fetch.  No-op without a mesh.
+   */
+  function applyScalarVertexColors(colArr) {
+    if (!_mesh || !colArr) return
+    const arr = colArr instanceof Float32Array ? colArr : new Float32Array(colArr)
+    _mesh.geometry.setAttribute('color', new THREE.BufferAttribute(arr, 3))
+    if (!_mesh.material.vertexColors) {
+      _mesh.material.vertexColors = true
+      _mesh.material.color.setHex(0xFFFFFF)
+      _mesh.material.needsUpdate = true
+    }
+  }
+
   /** Return 'on' when a surface mesh is displayed, 'off' otherwise. */
   function getMode() { return _mode }
 
@@ -320,5 +342,5 @@ export function initSurfaceRenderer(scene) {
   }
 
   return { update, setColorMode, setOpacity, dispose, applyPositionLerp, getMode,
-           applyStrandColors, getMesh, strandIdAt }
+           applyStrandColors, applyScalarVertexColors, getMesh, strandIdAt }
 }

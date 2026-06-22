@@ -39,6 +39,7 @@ let _colorMode    = 'cpk'    // 'cpk' | 'strand' | 'base'
 let _vdwScale     = 1.0      // multiplier on VdW / ball radii
 let _strandColors = new Map()  // strand_id → hex number (used when _colorMode==='strand')
 let _baseColors   = new Map()  // "strand_id:bp_index:direction" → hex (used when _colorMode==='base')
+let _scalarColors = null       // "helix:bp:dir" → hex; oxDNA flexibility-map overlay (null = off)
 
 // Spurious-bond guard for position overlays (applyPositionLerp) — now a BACKSTOP,
 // not the primary fix. The oxDNA→atomistic reconstruction stamps each nucleotide by
@@ -167,7 +168,8 @@ export function initAtomisticRenderer(scene) {
   // Extracting `_colorMode` / `_strandColors` / `_baseColors` themselves is
   // Pass 14+ scope per Pass 12-B's surface map.
   function _colorCtx() {
-    return { colorMode: _colorMode, strandColors: _strandColors, baseColors: _baseColors }
+    return { colorMode: _colorMode, strandColors: _strandColors, baseColors: _baseColors,
+             scalarColors: _scalarColors }
   }
 
   function _applyColors(sel, multiIds) {
@@ -368,6 +370,25 @@ export function initAtomisticRenderer(scene) {
       _colorMode    = mode
       _strandColors = strandColors instanceof Map ? strandColors : new Map()
       if (baseColors instanceof Map) _baseColors = baseColors
+      _applyColors(_state.lastSel, _state.lastMulti)
+    },
+
+    /**
+     * Overlay a scalar colour map (e.g. the oxDNA flexibility map) keyed by
+     * "helix:bp:dir" → hex.  When set and nothing is selected, each atom takes its
+     * nucleotide's colour, so ball-and-stick / VdW shows the same rigid→flexible
+     * ramp as the beads.  Accepts a Map or a plain object; repaints in place.
+     */
+    applyScalarColors(map) {
+      _scalarColors = map instanceof Map ? map
+        : (map && typeof map === 'object' ? new Map(Object.entries(map)) : null)
+      _applyColors(_state.lastSel, _state.lastMulti)
+    },
+
+    /** Drop the scalar overlay → atoms return to CPK/strand/base colouring. */
+    clearScalarColors() {
+      if (!_scalarColors) return
+      _scalarColors = null
       _applyColors(_state.lastSel, _state.lastMulti)
     },
 
