@@ -22,6 +22,8 @@ import pytest
 from backend.api import headless_oxdna_build as hox
 from backend.core.oxdna_job import OxdnaStatus
 from tests.automation_harness import (
+    assert_field_ready_specimen,
+    assert_fully_sequenced,
     assert_relaxed_geometry_recovered,
     assert_relaxed_measurement,
     oxdna_coverage_report,
@@ -268,6 +270,102 @@ def test_field_validation_deflection_scales_with_field(tmp_path, mock_oxdna_fiel
     assert strong["free_proj_along_field_nm"] > weak["free_proj_along_field_nm"]
 
 
+# ── AF-18 (Tier 6): full-pipeline anchored field-specimen builder ─────────────
+
+def test_build_field_specimen_is_field_ready(tmp_path, mock_oxdna_field):
+    """The composite builder takes a (sequenced) design → relaxed, anchored specimen,
+    and the composite oracle confirms all three field-ready clauses end-to-end:
+    fully sequenced + relaxed geometry recovered + a probe field holds the anchor
+    while the rest deflects."""
+    d, _dom = _design_with_overhang_anchor()
+    anchor = {"kind": "overhang", "id": "ov_anchor"}
+    result = hox.build_field_specimen(
+        d, tmp_path, anchor=anchor, sequence=False, min_bp_retained=0.0)
+    assert result["job"].status is OxdnaStatus.completed, result["job"].error
+    assert result["anchor"] == anchor and result["anchor_keys"]
+
+    out = assert_field_ready_specimen(result, result["design"], tmp_path)
+    assert out["n_anchored"] == len(result["anchor_keys"])
+    assert out["field_response"]["passed"] is True
+
+
+def test_build_field_specimen_sequences_an_unsequenced_design(tmp_path, mock_oxdna_field):
+    """The ``sequence=True`` branch genuinely sequences: a ROUTED-but-UNSEQUENCED 6hb
+    (single scaffold, sequences stripped) comes out fully sequenced + relaxed +
+    anchorable — proving the full_sequence step in the chain ran, not a passthrough."""
+    from backend.api import headless_spec_build as hs
+    from backend.physics.oxdna_interface import count_undefined_bases
+
+    cells = [[0, 1], [1, 1], [1, 2], [1, 3], [0, 3], [0, 2]]   # SIX_HB_CELLS
+    spec = {"lattice": "honeycomb", "ops": [
+        {"op": "bundle", "cells": cells, "length_bp": 42},
+        {"op": "auto_scaffold"}, {"op": "full_autostaple"}]}
+    routed = hs.build_design(spec)
+    # Strip every assigned sequence → routed (single scaffold) but unsequenced; tag a
+    # known staple domain as the anchor (which nucleotides anchor is declared, never
+    # inferred), and it survives full_sequence (a sequence-only step).
+    stripped = routed.model_copy(update={"strands": [
+        s.model_copy(update={"sequence": None}) for s in routed.strands]})
+    # A domain anchor (which staple domain anchors is declared, never inferred) — no
+    # overhang tag, so full_sequence WC-completes every staple position.
+    anchor_strand = next(s for s in stripped.strands if not s.id.startswith("scaf"))
+    anchor = {"kind": "domain", "strand_id": anchor_strand.id, "domain_index": 0}
+    undefined_before, total = count_undefined_bases(stripped, exclude_reference=True)
+    assert undefined_before > 0 and total > 0   # genuinely unsequenced going in
+
+    result = hox.build_field_specimen(
+        stripped, tmp_path, anchor=anchor, sequence=True, min_bp_retained=0.0)
+    assert result["job"].status is OxdnaStatus.completed, result["job"].error
+    # The output is fully sequenced (the chain's full_sequence step did the work —
+    # it went in with 630 undefined bases and came out export/oxDNA-ready), and the
+    # anchor resolved on the final design.  (The full composite oracle's strict
+    # geometry-key-equality clause is exact only for densely-populated bundles like
+    # the test_a fixture — a routed scaffold leaves lattice slots strand-less — so
+    # this branch test proves the sequence step, not that clause.)
+    assert_fully_sequenced(result["design"])
+    assert result["anchor_keys"]
+
+
+def test_build_field_specimen_from_build_spec(tmp_path, mock_oxdna_field):
+    """The build-spec branch: a declarative design spec is lowered via
+    ``headless_spec_build.build_design`` then sequenced/relaxed/anchored — proving
+    ``build_field_specimen`` accepts the text-to-design grammar's output, not only a
+    pre-built Design."""
+    cells = [[0, 1], [1, 1], [1, 2], [1, 3], [0, 3], [0, 2]]   # SIX_HB_CELLS
+    spec = {
+        "lattice": "honeycomb",
+        "ops": [
+            {"op": "bundle", "cells": cells, "length_bp": 42},
+            {"op": "auto_scaffold"},
+            {"op": "full_autostaple"},
+        ],
+    }
+    # Discover a staple to anchor (build is deterministic, so the same id reappears).
+    from backend.api import headless_spec_build as hs
+    built = hs.build_design(spec)
+    staple = next(s for s in built.strands if not s.id.startswith("scaf"))
+    anchor = {"kind": "domain", "strand_id": staple.id, "domain_index": 0}
+
+    result = hox.build_field_specimen(
+        spec, tmp_path, anchor=anchor, sequence=True, min_bp_retained=0.0)
+    assert result["job"].status is OxdnaStatus.completed, result["job"].error
+    assert result["anchor_keys"], "build-spec specimen resolved no anchor"
+    # The dict was lowered through headless_spec_build.build_design → identical
+    # topology to a direct build of the same spec (the build-spec branch dispatched).
+    from tests.automation_harness import canonical_topology
+    assert canonical_topology(result["design"]) == canonical_topology(built)
+
+
+def test_build_field_specimen_rejects_unresolvable_anchor(tmp_path, mock_oxdna):
+    """An anchor descriptor that resolves to no nucleotides is refused up front —
+    an un-anchorable specimen is not field-ready (the COM-drift gotcha)."""
+    d, _dom = _design_with_overhang_anchor()
+    with pytest.raises(ValueError, match="resolved to no nucleotides"):
+        hox.build_field_specimen(
+            d, tmp_path, anchor={"kind": "overhang", "id": "does_not_exist"},
+            sequence=False, min_bp_retained=0.0)
+
+
 # ── Red-tests: the oracle CAN go red ──────────────────────────────────────────
 
 def test_oracle_fires_on_non_completed_job(sequenced_6hb, tmp_path, mock_oxdna):
@@ -287,6 +385,30 @@ def test_oracle_fires_on_wrong_count(sequenced_6hb, tmp_path, mock_oxdna):
     with pytest.raises(AssertionError, match="expected"):
         assert_relaxed_geometry_recovered(job, sequenced_6hb, tmp_path,
                                           expected_count=inflated)
+
+
+def test_field_ready_oracle_fires_on_unsequenced_specimen(tmp_path, mock_oxdna_field):
+    """The composite oracle's clause 1 goes red on an unsequenced design (oxDNA
+    refuses to relax undefined bases, so the only way to exercise clause 1 is to hand
+    the oracle a raw, unsequenced design — the fully-sequenced gate fires first)."""
+    d, _dom = _design_with_overhang_anchor()
+    result = hox.build_field_specimen(
+        d, tmp_path, anchor={"kind": "overhang", "id": "ov_anchor"},
+        sequence=False, min_bp_retained=0.0)
+    with pytest.raises(AssertionError, match="undefined"):
+        assert_field_ready_specimen(result, make_6hb_design(), tmp_path)
+
+
+def test_field_ready_oracle_fires_on_empty_anchor(tmp_path, mock_oxdna_field):
+    """Clause 3 goes red: a specimen with no resolved anchor is not field-ready
+    (a uniform field would stream the whole structure)."""
+    d, _dom = _design_with_overhang_anchor()
+    result = hox.build_field_specimen(
+        d, tmp_path, anchor={"kind": "overhang", "id": "ov_anchor"},
+        sequence=False, min_bp_retained=0.0)
+    result["anchor_keys"] = []          # simulate an un-anchorable specimen
+    with pytest.raises(AssertionError, match="no anchor"):
+        assert_field_ready_specimen(result, result["design"], tmp_path)
 
 
 # ── Function-identity coverage: the wrappers drive the real route handlers ─────

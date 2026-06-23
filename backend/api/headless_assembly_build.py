@@ -72,7 +72,9 @@ from backend.api.routes_assembly_overhangs import (
 )
 from backend.api.routes_assembly_polymerize import (
     PolymerizeAssemblyRequest,
+    PolymerizePeriodicRequest,
     polymerize_assembly as _route_polymerize_assembly,
+    polymerize_periodic_assembly as _route_polymerize_periodic_assembly,
 )
 from backend.core.instance_layout import grid_translations, ring_translations
 from backend.core.models import Assembly, Design, Mat4x4
@@ -247,6 +249,76 @@ def place_ring(
         center=tuple(float(v) for v in center),
     )):
         add_inline_instance(design, name=f"{name}_{idx}", transform=translation(x, y, z))
+    return assembly_state.get_or_404()
+
+
+def place_file_grid(
+    path: str,
+    rows: int,
+    cols: int,
+    *,
+    pitch: float,
+    row_pitch: float | None = None,
+    plane: str = "XY",
+    center: bool = False,
+    name: str = "Part",
+    sha256: str | None = None,
+) -> Assembly:
+    """Place ``rows × cols`` copies of a saved ``.nadoc`` primitive on a grid by file
+    REFERENCE (AF-12 follow-up).
+
+    The file-backed twin of :func:`place_grid`: identical per-slot world translations
+    (:func:`backend.core.instance_layout.grid_translations`), but each slot drives
+    :func:`add_file_instance` (a ``PartSourceFile`` referencing ``path``) instead of
+    embedding the design — so a validated, hand-authored primitive travels as *one path
+    reference per slot*, not ``rows · cols`` embedded copies, and a later edit to the saved
+    file flows to every copy.  ``row_pitch`` defaults to ``pitch``; parts are translated
+    only (identity orientation).
+
+    Pin the result with :func:`tests.automation_harness.assert_instances_on_grid` (the
+    placed origins land on the exact lattice) **and**
+    :func:`~tests.automation_harness.assert_instances_from_file` (every slot resolves to
+    the saved primitive's validated topology — a property the lattice oracle is blind to).
+    """
+    for idx, (x, y, z) in enumerate(grid_translations(
+        rows, cols, pitch=pitch, row_pitch=row_pitch, plane=plane, center=center,
+    )):
+        add_file_instance(
+            path, name=f"{name}_{idx}", transform=translation(x, y, z), sha256=sha256)
+    return assembly_state.get_or_404()
+
+
+def place_file_ring(
+    path: str,
+    n: int,
+    *,
+    radius: float,
+    plane: str = "XY",
+    start_angle_deg: float = 0.0,
+    center=(0.0, 0.0, 0.0),
+    name: str = "Part",
+    sha256: str | None = None,
+) -> Assembly:
+    """Place ``n`` copies of a saved ``.nadoc`` primitive evenly on a ring by file
+    REFERENCE (AF-12 follow-up).
+
+    The file-backed twin of :func:`place_ring`: identical per-slot world translations
+    (:func:`backend.core.instance_layout.ring_translations`), but each slot drives
+    :func:`add_file_instance` so the validated saved design travels as a path reference
+    per slot, not ``n`` embedded copies.  Parts are translated only (identity orientation
+    — which way a part faces on the ring is a convention this helper does not pick).
+
+    Pin with :func:`tests.automation_harness.assert_instances_on_ring` (origins on the
+    ring at the even angular step) **and**
+    :func:`~tests.automation_harness.assert_instances_from_file` (every slot resolves to
+    the saved primitive's topology).
+    """
+    for idx, (x, y, z) in enumerate(ring_translations(
+        n, radius=radius, plane=plane, start_angle_deg=start_angle_deg,
+        center=tuple(float(v) for v in center),
+    )):
+        add_file_instance(
+            path, name=f"{name}_{idx}", transform=translation(x, y, z), sha256=sha256)
     return assembly_state.get_or_404()
 
 
@@ -446,6 +518,39 @@ def polymerize(
         count=count,
         direction=direction,
         additional_instance_ids=list(additional_instance_ids or []),
+    ))
+    return assembly_state.get_or_404()
+
+
+def polymerize_periodic(
+    instance_id: str,
+    count: int,
+    *,
+    direction: str = "forward",
+) -> Assembly:
+    """Grow a polymer from a SINGLE periodic part (POST /assembly/polymerize-periodic).
+
+    Unlike :func:`polymerize` (which replicates a *hand-defined* seed mate between two
+    instances), this grows ``count`` total copies from ONE seed instance whose repeat
+    transform is **derived** from its ``is_periodic_seam`` forced ligations — the
+    end-to-end seam the user marked in the cadnano periodic-boundary view — via
+    :func:`backend.core.periodic_polymer.derive_periodic_delta` (a Kabsch fit of the
+    near-seam axis geometry onto the far-seam axis geometry, so no mate is needed).
+    Copy ``k`` is placed at ``T_seed @ delta**k``; consecutive copies are tied by
+    synthesized rigid seam joints (``seam0:3p`` → ``seam0:5p``) carrying a replicated
+    ``mate_relative_transform`` so the chain re-resolves on part edits and is
+    feature-logged / undoable.  ``direction`` is ``"forward"`` / ``"backward"`` /
+    ``"both"``.  The route 422s unless the part carries a resolvable periodic seam, and
+    400s on ``count < 2``.  Records an ``assembly-polymerize-periodic`` feature-log entry.
+
+    Pin the result with :func:`tests.automation_harness.assert_periodic_chain_tiles`
+    (the derived repeat unit tiles the chain seamlessly at every junction + the chain is
+    a single repeating unit — geometry ``canonical_assembly`` is blind to).
+    """
+    _route_polymerize_periodic_assembly(PolymerizePeriodicRequest(
+        instance_id=instance_id,
+        count=count,
+        direction=direction,
     ))
     return assembly_state.get_or_404()
 

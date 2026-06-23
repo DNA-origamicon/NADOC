@@ -614,5 +614,6 @@ def test_align_cluster_edge_adds_no_coverage():
     covered = {r["endpoint"] for r in rep["covered_routes"]}
     assert "update_cluster" in covered  # what align_cluster_edge drives
     # AF-14 Phase 1's place_cluster_joint flipped add_joint → covered (34 → 35);
-    # the full_sequence feature later flipped assign_staple_sequences (35 → 36).
-    assert rep["covered"] == 36
+    # the full_sequence feature later flipped assign_staple_sequences (35 → 36);
+    # the periodic straggler flipped polymerize_periodic_assembly (36 → 37).
+    assert rep["covered"] == 37

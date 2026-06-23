@@ -279,6 +279,69 @@ def run_field_validation(design: Design, workspace, *, field_pN: float, dir,
     return {"job": job, "response": response}
 
 
+def build_field_specimen(spec_or_design, workspace, *, anchor: dict,
+                         overhang: dict | None = None, sequence: bool = True,
+                         scaffold_name: str = "M13mp18", timeout: float = 30.0,
+                         **relax_params) -> dict:
+    """Compose the entire build→field-ready chain into ONE headless call (AF-18,
+    Tier 6): a design → (optional overhang) → fully sequenced → relaxed → with a
+    designated field **anchor** resolved to pinned nucleotides.  Returns
+    ``{"design": Design, "job": OxdnaJob, "anchor_keys": [...], "anchor": dict}`` —
+    a specimen ready to run an electric-field experiment (subject it to a field with
+    :func:`append_field` / :func:`run_field`, anchoring ``anchor``).
+
+    ``spec_or_design`` is either a ready :class:`~backend.core.models.Design` (used
+    as-is, deep-copied) or a declarative build-spec dict (lowered via
+    :func:`headless_spec_build.build_design`, which does any routing the spec
+    describes).  The topological/geometric steps run in an isolated scratch session
+    (the active design + undo history are untouched):
+
+    1. **overhang** — if ``overhang`` is given, extrude it (``hb.overhang_extrude``).
+       The overhang's nucleotides are a **spec input** the caller provides; this
+       wrapper never *infers* which nucleotides form the overhang geometrically
+       (the ASK-FIRST DNA-topology rule).
+    2. **sequence** — ``hb.full_sequence`` so the design carries a complete sequence
+       (oxDNA rejects any undefined base); pass ``sequence=False`` if the input is
+       already fully sequenced.
+    3. **anchor** — resolve the ``anchor`` descriptor (overhang / cluster / domain,
+       see :func:`append_field`) to particle indices + keys via
+       :func:`resolve_anchor_particles` on the *final* design.  Raises ``ValueError``
+       if it resolves to nothing — an un-anchorable specimen would just stream across
+       the box under a uniform field (the COM-drift gotcha), so it is not field-ready.
+    4. **relax** — :func:`run_relaxation` (physical layer; relaxed coords are read
+       back as a position map, never written into ``Design`` — the Three-Layer Law).
+
+    ``relax_params`` forward to :func:`create_job` (``min_bp_retained`` / step counts
+    / ``backend`` / …).  Pin the result with
+    :func:`tests.automation_harness.assert_field_ready_specimen`.
+    """
+    from backend.api import headless_build as hb
+    from backend.physics.oxdna_interface import resolve_anchor_particles
+
+    if isinstance(spec_or_design, Design):
+        base = spec_or_design.model_copy(deep=True)
+    else:
+        from backend.api import headless_spec_build as hs
+        base = hs.build_design(spec_or_design)
+
+    with hb.scratch_session(base.lattice_type):
+        design_state.set_design(base)
+        if overhang is not None:
+            hb.overhang_extrude(**overhang)
+        if sequence:
+            hb.full_sequence(scaffold_name=scaffold_name)
+        design = design_state.get_or_404().model_copy(deep=True)
+
+    parts, anchor_keys = resolve_anchor_particles(design, [anchor])
+    if not parts:
+        raise ValueError(
+            f"build_field_specimen: anchor {anchor!r} resolved to no nucleotides — "
+            "the specimen cannot be anchored for a field run")
+
+    job = run_relaxation(design, workspace, timeout=timeout, **relax_params)
+    return {"design": design, "job": job, "anchor_keys": anchor_keys, "anchor": anchor}
+
+
 # ── Hardware benchmark: auto-tune the relaxation backend headlessly ────────────
 
 def run_oxdna_benchmark(design: Design, workspace, *, steps: int | None = None,

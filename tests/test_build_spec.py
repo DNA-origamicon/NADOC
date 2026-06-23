@@ -414,17 +414,24 @@ def test_assembly_spec_parses_file_part():
     # extra keys on a file part are rejected (catches a half-inline/half-file typo)
     ({"parts": {"h": {"from_file": "x.nadoc", "lattice": "honeycomb"}},
       "ops": [{"op": "add_part", "part": "h"}]}, "unknown field"),
-    # a file part cannot be placed by place_grid / place_ring (one instance, by ref)
-    ({"parts": {"h": {"from_file": "x.nadoc"}},
-      "ops": [{"op": "place_grid", "part": "h", "rows": 2, "cols": 2, "pitch": 10}]},
-     "can only be placed with 'add_part'"),
-    ({"parts": {"h": {"from_file": "x.nadoc"}},
-      "ops": [{"op": "place_ring", "part": "h", "n": 4, "radius": 12}]},
-     "can only be placed with 'add_part'"),
 ])
 def test_assembly_spec_file_part_rejects(bad, match):
     with pytest.raises(BuildSpecError, match=match):
         parse_assembly_spec(bad)
+
+
+@pytest.mark.parametrize("op", [
+    {"op": "place_grid", "part": "h", "rows": 2, "cols": 2, "pitch": 10},
+    {"op": "place_ring", "part": "h", "n": 4, "radius": 12},
+])
+def test_assembly_spec_file_part_accepts_layout_ops(op):
+    """AF-12 follow-up: a file-backed part may now be placed by place_grid/place_ring
+    (the driver loops add_file_instance per slot), not only add_part — so it parses
+    cleanly instead of being rejected."""
+    parsed = parse_assembly_spec(
+        {"parts": {"h": {"from_file": "x.nadoc"}}, "ops": [op]})
+    assert parsed.parts["h"] == FilePart(path="x.nadoc")
+    assert parsed.ops[0].op == op["op"]
 
 
 @pytest.mark.parametrize("bad,match", [

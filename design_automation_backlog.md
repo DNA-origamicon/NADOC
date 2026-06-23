@@ -34,6 +34,16 @@ properties of the relaxed structure, and eventually iterate the design until a u
 property within tolerance, **gated by the confidence metric** (frames pooled / RMSF SE), not exact
 equality — and is the concrete bridge from Tier 4's text-to-DNA grammar to *constraint-driven* design.
 
+**Tier 6** extends Tier 5's physical-layer spine from *static* relaxed-structure properties to **time-resolved
+electric-field response**: build a design end-to-end (route + sequence + overhang + anchor), subject it to an
+E-field, and *measure how it aligns over time* — extracting an **equilibration timeline** (τ to plateau) and a
+**non-destructive operating window** (aligns without melting), then **automatically sweeping field intensity ×
+direction across many origami designs**. Same stochastic, confidence-gated oracle class as Tier 5, now over a
+*trajectory* not a single mean structure. The capstone (AF-23) is the user's stated goal: automated cross-design
+exploration of which fields align which structures, on what timescale, without ripping them apart. A parallel
+sub-track (AF-21/22, gated on an **oxpy rebuild**, `-DPython=ON`) adds a persistent in-process engine for *live*
+field steering — the "play with it in real time" capability — proven equivalent to the validated batch engine.
+
 ---
 
 ## Target shape (where new code lands — NOT the god-files)
@@ -158,23 +168,123 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 >    + the `bind_overhangs` spec op — both correctly DEFERRED (no assembly headless-oxDNA path; overhang-binding
 >    not yet firmed). Nothing below needs deleting; the loop is healthy and converging on the two goals.
 
-_Living pointer — each session overwrites this (step 8). **AF-12 Phase 1 — build from a saved validated primitive
-(`from_file`) — SHIPPED 2026-06-22.** An assembly spec's `parts` library entry may now be `{"from_file": "<path>"}`
-(reference a saved validated `.nadoc` by path) instead of an inline design spec. Pure parser
-`backend/core/build_spec.py` (`FilePart`/`_parse_part`) discriminates it by the `from_file` key, validates it (non-empty
-string path, no extra keys), restricts file parts to `add_part` (place_grid/place_ring → parse-time reject); interpreter
-`headless_spec_build.py` lowers it to the already-covered `hab.add_file_instance(path)` (validated design travels as a
-REFERENCE, not an embedded copy), re-implements nothing. Coverage flat (36 — wraps no new route); god-files Δ=0. Oracle
-NEW `assert_part_from_file` (below). Suite **2985 passed / 55 skipped** (+10 tests). NO ASK-FIRST (path resolution +
-topology fingerprint, no directionality)._
+> **★ NEW PRIORITY TRACK 2026-06-22 — Tier 6: time-resolved E-field response (user request).** Scoped this session
+> into six ranked loops (see `### Tier 6` below), capstone last. **Goal:** automate build→route→sequence→overhang→
+> anchor → subject to an E-field → measure helical alignment + base-pairing *over time* → automatically sweep field
+> intensity × direction across many origami, finding which fields align which structures on what timescale WITHOUT
+> melting them. **This is the new top priority** — work it ahead of the AF-12/13 stragglers below. **Order + why
+> validation-first:** **AF-18** (full-pipeline anchored field-specimen builder) → **AF-19** (equilibration-timeline
+> τ + non-melt oracle — the key new physical observable) → **AF-20** (field sweep + |E|↔τ correlation map) → then the
+> oxpy *interactive* sub-track **AF-21** (persistent in-process engine — **oxpy ✅ BUILT + venv-wired 2026-06-23**,
+> `import oxpy` ready; see the Tier 6 as-built note) → **AF-22** (live field-steering + field-following oracle) →
+> **AF-23 CAPSTONE** (cross-design
+> automated campaign). **De-risk note:** AF-18→20 + AF-23's batch path ride the ALREADY-SHIPPED field child-job +
+> `_FIELD_MOCK_OXDNA` (no GPU, no oxpy) — only AF-21/22 need the oxpy build. Each loop ships one reusable oracle per
+> the anti-shovel contract. **AF-18 SHIPPED 2026-06-23. ▶ START: AF-19** (equilibration-timeline τ + non-melt oracle).
+
+_Living pointer — each session overwrites this (step 8). **AF-18 full-pipeline anchored field-specimen builder — SHIPPED
+2026-06-23.** ONE headless call composes the whole build→field-ready chain: `hox.build_field_specimen(spec_or_design, ws,
+*, anchor, overhang=None, sequence=True, **relax_params) → {design, job, anchor_keys, anchor}`. Input is a ready `Design`
+(deep-copied) OR a build-spec dict (lowered via `hs.build_design`). In a `hb.scratch_session`: optional
+`hb.overhang_extrude(**overhang)` → optional `hb.full_sequence` → capture design; then `resolve_anchor_particles` the
+`anchor` descriptor on the FINAL design (raises if it resolves to nothing) → `run_relaxation`. NEW composite oracle
+`assert_field_ready_specimen(result, design, ws)` = fully-sequenced + relaxed-geometry-recovered + anchorable (a short
+PROBE field child holds the anchor while the free part deflects along the field). Coverage FLAT 37 (pure COMPOSITION of
+covered wrappers — no new route). Net +6 tests (suite 3008→3014, 55 skipped). **ASK-FIRST honoured:** overhang/anchor
+nucleotides are caller-supplied descriptors, never inferred geometrically; probe measures magnitudes only. The Tier-6
+specimen spine AF-19/20/23 build on._
+
+**▶ HARNESS NOW AVAILABLE (AF-18 field-specimen builder, use it — do NOT rebuild):**
+- `from backend.api import headless_oxdna_build as hox` → `hox.build_field_specimen(spec_or_design, ws, *, anchor,
+  overhang=None, sequence=True, scaffold_name="M13mp18", timeout=30.0, **relax_params) → {design, job, anchor_keys,
+  anchor}`. `spec_or_design` = a ready `Design` (deep-copied) OR a build-spec dict (lowered via `hs.build_design` — same
+  grammar AF-11/12 use). `anchor` is the SAME descriptor `append_field`/`resolve_anchor_particles` take
+  (`{"kind":"overhang","id":…}` / `{"kind":"cluster","id":…}` / `{"kind":"domain","strand_id":…,"domain_index":…}`).
+  Raises `ValueError` if the anchor resolves to no nucleotides. Pass `min_bp_retained=0.0` for the mock binary.
+- **Augment = NEW `from tests.automation_harness import assert_field_ready_specimen`** — `(result, design, ws, *,
+  field_pN=4.0, field_dir=(0,0,1), …)`: composes fully-sequenced + relaxed-geometry-recovered + a PROBE field child
+  (branched off `result["job"]`, anchoring `result["anchor"]`) that holds the anchor while the free part deflects along
+  the field. Run under the **deflecting** mock (`mock_oxdna_field`/`_FIELD_MOCK_OXDNA`), not the plain `mock_oxdna`.
+- **GOTCHAS banked (read before AF-19):** (1) `assert_relaxed_geometry_recovered`'s key-set-equality is EXACT only for
+  DENSELY-populated bundles — a routed `auto_scaffold`+`full_autostaple` 6hb has geom 756 ⊃ oxDNA-order 630 (126
+  strand-less lattice slots), so the FULL composite oracle is green on `_sequence_for_oxdna(make_6hb)` (504==504) but
+  fails on a routed design; prove other build branches with `assert_fully_sequenced` + `canonical_topology` equality and
+  skip the geometry clause. (2) tagging a domain `overhang_id` makes `full_sequence` SKIP it (no WC partner → `'N'`) →
+  field 400s on undefined; when `sequence=True` use a `domain`/`cluster` anchor (no tag), or tag AFTER sequencing. (3)
+  you can't build a specimen from an UNSEQUENCED design (relax 400s on undefined) — exercise the oracle's clause-1
+  red-path by handing it a raw design as the `design` arg. (4) coverage is FLAT 37 — `build_field_specimen` is pure
+  composition; the value is the chain + composite oracle, not a route.
+
+**▶ HARNESS NOW AVAILABLE (AF-12 P2 `from_primitive`, use it — do NOT rebuild):**
+- `from backend.api import headless_spec_build as hs` → `hs.build_assembly(spec, *, primitives_dir=None)` with a part
+  defined as `{"from_primitive": "<catalog name>"}` instances a curated catalog primitive by name. `primitives_dir`
+  overrides the catalog folder (default = the live workspace `Primitives` dir); pass an absolute `tmp_path` containing
+  `<name>.nadoc` files for tests. Resolves NAME → `.nadoc` via `primitive_catalog.design_path`, then lowers through the
+  EXACT `from_file` path (placeable by `add_part` / `place_grid` / `place_ring`; the instance is file-backed). An
+  unknown name → `BuildSpecError` at BUILD time (parser is catalog-agnostic).
+- **Augment = NEW `from tests.automation_harness import assert_part_from_primitive`** — `(assembly, instance_id,
+  primitive_name, primitives_dir)`: independently re-resolves the catalog name through `primitive_catalog.design_path`,
+  loads that primitive's `.nadoc`, and delegates to `assert_part_from_file`. The new load-bearing piece over `from_file`
+  is the **name→catalog-path RESOLVER** (a name mapped to the wrong/renamed primitive is invisible to
+  `canonical_assembly`). Compose with `assert_instances_from_file` + `assert_instances_on_grid` for a from_primitive
+  layout. Can-go-red: wrong name → "DIFFERENT topology"; unknown name → "catalog has no primitive".
+- **GOTCHAS banked:** (1) the catalog NAME is the file STEM (`6hb_primitive.nadoc` → `"6hb_primitive"`); names must pass
+  `primitive_catalog.is_safe_id` (alnum + underscore, leading digit OK). (2) save a catalog `.nadoc` with
+  `design.to_json()` (symmetric to the loader's `Design.from_json`). (3) coverage stays FLAT at 37 — `from_primitive`
+  folds into `file_paths` and reuses `add_file_instance`/`place_file_*`, wrapping no new route. (4) only STATIC
+  (file-backed) catalog primitives — a `metadata.primitive_kind` (parametric, e.g. circle) part is NOT yet supported
+  (the resolver returns a static `.nadoc` path; a parametric kind needs a generative build path, deferred).
+
+**▶ HARNESS NOW AVAILABLE (`polymerize_periodic` straggler, use it — do NOT rebuild):**
+- `from backend.api import headless_assembly_build as hab` → `hab.polymerize_periodic(instance_id, count, *,
+  direction="forward")` grows a periodic polymer from a SINGLE seed instance (no hand-defined mate — the repeat is
+  auto-derived from the part's `is_periodic_seam` ligations via `derive_periodic_delta`). Route 422s without a
+  resolvable seam, 400s on `count<2`. Seed fixture is light: `make_bundle_design([(0,0),(0,1)], L, HONEYCOMB,
+  strand_filter="both")` + `forced_ligations=[_seam_for(h0,L), _seam_for(h1,L)]` (the `_seam_for` helper lives in
+  `tests/test_headless_assembly_build.py` and `test_periodic_polymer.py`).
+- **Augment = NEW `from tests.automation_harness import assert_periodic_chain_tiles`** — `(assembly, *, tol_nm=0.05,
+  step_tol_nm=0.05, angle_tol_deg=0.5, min_step_nm=0.5) → {n_junctions, max_gap_nm, step_nm, angle_deg}`. Over the
+  chain's rigid `seam0:*` junctions: (1) ≥1 junction (non-emptiness), (2) seamless tiling — copy-k `seam0:3p` world
+  ≈ copy-(k+1) `seam0:5p` world via `_get_connector_world` (the resolver's machinery), (3) single repeat unit —
+  every junction's `T_high@inv(T_low)` shares one translation length + rotation angle (magnitudes → direction-
+  agnostic, holds for `both`), (4) step>min non-vacuity guard. **Load-bearing because `canonical_assembly` is blind
+  to the placed geometry** — it sees the chain's structure survive `.nass` but not whether the derived delta tiles.
+  Distinct from `assert_polymer_chain` (mate-seeded). Can-go-red: shove a copy → "open"; lone seed (no chain) →
+  "nothing was polymerized".
+- **GOTCHAS banked:** (1) the synthesized junctions are `joint_type=="rigid"` with `seam0:3p`/`seam0:5p` labels;
+  filter on BOTH the type and the label prefix. (2) `seam0:*` connectors resolve LIVE from the design geometry (the
+  frozen-chain fix), so `_get_connector_world` recomputes the seam each call — pass the instance-overridden design.
+  (3) the 2-seam HC bundle's delta is a LEAST-SQUARES Kabsch fit, so use `tol_nm=0.05` (route test's atol), not 0.01.
+  (4) flipping `polymerize_periodic_assembly` → covered bumps the hardcoded coverage count in THREE tests
+  (`test_oxdna_coverage_report...`, `test_cluster_obb::...adds_no_coverage`, `test_headless_spec_build::...adds_no_coverage`)
+  36→37 — grep `covered"] == 36` before committing any future coverage flip.
+
+**▶ HARNESS NOW AVAILABLE (AF-12 follow-up — file-backed layout, use it — do NOT rebuild):**
+- `from backend.api import headless_assembly_build as hab` → `hab.place_file_grid(path, rows, cols, *, pitch,
+  row_pitch=None, plane="XY", center=False, name="Part")` / `hab.place_file_ring(path, n, *, radius, plane="XY",
+  start_angle_deg=0.0, center=(0,0,0), name="Part")` — the file-backed twins of `place_grid`/`place_ring`: identical
+  per-slot translations, but each slot drives `add_file_instance(path)` (one path reference per copy, not embedded
+  designs). Via the grammar: a `{"from_file": …}` part placed by a `place_grid`/`place_ring` op now parses + builds
+  (the rejection was removed); the interpreter dispatches on `part in file_paths`.
+- **Augment = NEW `from tests.automation_harness import assert_instances_from_file`** — `(assembly, expected_topology,
+  *, instance_ids=None)`: loads the design behind EVERY selected slot and asserts each is file-backed and resolves to
+  `expected_topology` (pass `canonical_topology(saved)`), with a non-vacuity guard. **Layout-agnostic source pin** —
+  compose it with `assert_instances_on_grid`/`_on_ring` (lattice) for the full file-backed-layout proof. It's the
+  plural of `assert_part_from_file`: a one-slot check misses a layout that file-backed slot 0 and embedded inline copies
+  for the rest. Can-go-red: inline slot anywhere → "not file-backed"; wrong topology → "DIFFERENT topology"; empty
+  selection (`instance_ids=[]`) → "selected no instances".
+- **GOTCHAS banked:** (1) use an ABSOLUTE `tmp_path` .nadoc — resolves for both the from_file load AND the `.nass`
+  round-trip flatten (`_PROJECT_ROOT / abs == abs`). (2) the can-go-red "inline slot" red-test builds a MIXED assembly
+  (`place_file_grid` + an `add_inline_instance`) in a scratch session, not via `build_assembly`. (3) coverage stays flat
+  — `place_file_*` wrap no new route (they loop the already-covered `add_file_instance`).
 
 **▶ HARNESS NOW AVAILABLE (AF-12 P1, use it — do NOT rebuild):**
 - `from backend.api import headless_spec_build as hs` → `hs.build_assembly(spec)` with a part defined as
   `{"from_file": "<path>"}` in `spec["parts"]` instances a saved validated `.nadoc` by reference. The path resolves the
   way the assembly routes resolve it (`_load_design_from_source`: absolute, or relative to workspace / assembly parent /
   project root); an absolute `tmp_path` file works for both the oracle AND the round-trip flatten (`_PROJECT_ROOT / abs
-  == abs`). File parts can ONLY be placed by `add_part` (place_grid/place_ring 400 at parse time — they instance an
-  inline design per slot).
+  == abs`). File parts may be placed by `add_part` (one reference) OR by `place_grid`/`place_ring` (per-slot references,
+  AF-12 follow-up above).
 - **Augment = NEW `from tests.automation_harness import assert_part_from_file`** — `(assembly, instance_id,
   expected_topology)`: loads the design the file instance actually references and asserts its `canonical_topology` ==
   `expected_topology` (pass `canonical_topology(saved_design)`), after asserting the instance is genuinely file-backed.
@@ -230,18 +340,20 @@ topology fingerprint, no directionality)._
   clean `met` for the augment. (4) Reuse `_MOCK_OXDNA_TRAJ` (multi-frame; `steps=6000`→60 frames clears the
   confidence gate); import the CONSTANT not the fixture (F811).
 
-**▶ NEXT — pick one (design `constraints` + `optimize`/knob loop wired; AF-12 P1 `from_file` shipped; remaining work +
-stragglers):**
-- **AF-12 Phase 2 — `from_primitive` (catalog-by-name) [the other text-to-design rung]:** a `parts` entry
-  `{"from_primitive": "<catalog name>"}` resolving against the design-level "Add Primitive" catalog. **NOT a trivial
-  grammar branch** — the catalog (`routes_primitives.py`) is GET-only with NO headless instancing path (only the circle
-  disc has one, `hb.circle_segment`), so this needs a name→part resolver (probably surfacing the catalog's saved
-  `.nadoc` path → reuse the AF-12 P1 `from_file` lowering + `assert_part_from_file`, OR build the parametric primitive
-  headlessly). Decide the resolution model first; a hinge primitive is likely an assembly-level *template* (leaves + a
-  revolute mate), not just geometry — consider parts carrying small mate recipes.
-- **AF-12 follow-up — file-backed `place_grid`/`place_ring`:** today file parts are `add_part`-only; a file-backed grid
-  would loop `add_file_instance` with per-slot transforms (pin: `assert_instances_on_grid` + `assert_part_from_file` on
-  one slot). Small, mechanical.
+**▶ NEXT — pick one (design `constraints` + `optimize`/knob loop wired; AF-12 `from_file` + file-backed layout +
+`from_primitive` STATIC catalog-by-name shipped; remaining work + stragglers):**
+- **AF-12 Phase 2b — `from_primitive` for the PARAMETRIC circle disc [the next text-to-design rung]:** a `parts` entry
+  `{"from_primitive": "small_circle", "radius_nm": 12}` resolving against a catalog primitive flagged
+  `metadata.primitive_kind="circle"`. **The static name→path resolver SHIPPED** (`_resolve_primitive_path`); this rung
+  needs a *generative* branch instead — detect `primitive_kind` (read it off the catalog `.nadoc`'s metadata), and for a
+  circle build the disc headlessly via `hb.circle_segment(radius)` rather than file-referencing the saved disc. The part
+  is then NOT file-backed → `assert_part_from_primitive` (file-source pin) won't apply; reuse `assert_circular_disc`
+  (the AF-4 geometric oracle) to prove the placed disc has the requested radius. Likely an ASK-FIRST call on how a
+  parametric primitive carries its param into an assembly part (a design-level circle is a single-design op, but an
+  assembly `add_part` instances a whole Design — decide whether the disc is built as its own part-Design first).
+- **AF-12 Phase 2c — hinge / assembly-template primitives:** a catalog primitive that is an assembly-level *template*
+  (leaves + a revolute mate recipe), not just geometry — parts carrying small mate recipes. Bigger architecture call;
+  defer until a concrete hinge primitive exists in the catalog.
 - **Multi-knob / richer knob shapes (optional grammar growth):** `optimize` today varies ONE numeric op param via
   bisection. A vector knob (two params) would need a non-bisection `adjust_fn` (e.g. coordinate descent) the grammar
   synthesises — only worth it when a real two-DOF constraint shows up. A `loop_skip count` or `length` knob also works
@@ -249,8 +361,8 @@ stragglers):**
 - **Assembly `constraints`** — `build_and_check_design`/`build_and_optimize_design` are design-only; an assembly spec's parts could carry
   constraints (parsed today, IGNORED by the assembly driver). Wire an assembly-level relaxed constraint if/when an
   assembly headless oxDNA path exists (none yet).
-- **Stragglers (unchanged):** `polymerize_periodic` (single-part `is_periodic_seam` + `derive_periodic_delta` Kabsch
-  oracle — needs a periodic-seam fixture); `bind_overhangs` ASSEMBLY spec op (DEFERRED pending overhang-binding firming).
+- **Stragglers:** `polymerize_periodic` SHIPPED 2026-06-22 (`hab.polymerize_periodic` + `assert_periodic_chain_tiles`).
+  Remaining: `bind_overhangs` ASSEMBLY spec op (DEFERRED pending overhang-binding firming).
 
 **▶ HARNESS NOW AVAILABLE (AF-13 P4, use it — do NOT rebuild):**
 - `from backend.api import headless_oxdna_build as hox` → `hox.iterate_to_constraint(...)`. `build_fn(knob)→Design`
@@ -284,8 +396,8 @@ P5 above — the live ▶ NEXT is the top-of-file handoff):**
   `_dispatch_measure` arm + `assert_relaxed_measurement` branch + analytic pins (reuse segment_angle as template).
   An axis/helix-grouping measure = same tail + a `_fit_helix_axis`-style grouping core (reuse inter_helix_spacing).
   No remaining measure needs new arity machinery.
-- **Stragglers (unchanged):** `polymerize_periodic` (single-part `is_periodic_seam` + `derive_periodic_delta` Kabsch
-  oracle — needs a periodic-seam fixture); `bind_overhangs` ASSEMBLY spec op (DEFERRED pending overhang-binding firming).
+- **Stragglers:** `polymerize_periodic` SHIPPED 2026-06-22 (`hab.polymerize_periodic` + `assert_periodic_chain_tiles`).
+  Remaining: `bind_overhangs` ASSEMBLY spec op (DEFERRED pending overhang-binding firming).
 
 **▶ HARNESS NOW AVAILABLE (AF-17, use it — do NOT rebuild):**
 - `from backend.api import headless_oxdna_build as hox`. **Auto-tune a relaxation:** `hox.run_relaxation_tuned(
@@ -1038,9 +1150,14 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
     overhangs/sub-domains, so a round-trip that regenerated a sub-domain id while the binding kept its stale ref
     would slip past `canonical_assembly` — only resolving against the actual designs catches it. Also extended
     `canonical_assembly` to fingerprint `overhang_bindings` (now a **5-tuple**). Coverage 29→32.
-  - [ ] **periodic polymerize remains** — `polymerize_periodic` (the SINGLE-part `is_periodic_seam` path with
-    the `derive_periodic_delta` Kabsch oracle) was NOT built: it needs a heavy fixture (a design carrying
-    `is_periodic_seam` forced ligations, e.g. via the route-for-polymerization op) — see handoff.
+  - [x] **periodic polymerize — SHIPPED 2026-06-22.** `hab.polymerize_periodic(instance_id, count, *,
+    direction)` wraps `POST /assembly/polymerize-periodic` (flips `polymerize_periodic_assembly` → covered,
+    36→37). Fixture turned out light: a 2-helix HC bundle + two `_seam_for` `is_periodic_seam` ligations
+    (mirrors `test_periodic_polymer.py`). Oracle NEW `assert_periodic_chain_tiles` — the derived repeat unit
+    tiles seamlessly at EVERY rigid seam junction (3p↔5p coincidence via `_get_connector_world`) AND is a
+    single repeating unit (constant step length + rotation, magnitude-only → direction-agnostic) + a
+    non-vacuity step>min guard. Distinct from `assert_polymer_chain` (mate-seeded, re-derives delta from two
+    instances): here the delta is auto-derived from ONE part's seam geometry.
 - [x] **AF-10 — instance layout helpers** (grid / ring placement) for parametric assembly gen.
   SHIPPED 2026-06-17. NEW pure core `backend/core/instance_layout.py` (`grid_translations` /
   `ring_translations` — spec→world translations, identity orientation; mirrors `circle_primitive`) +
@@ -1102,9 +1219,34 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
   `assert_spec_matches_calls` catches a dropped/wrong-path `from_file` but is BLIND to whether the path resolves to the
   INTENDED validated topology; only this oracle catches a stale/edited/wrong-path primitive silently substituting. 10
   tests (test_build_spec: 1 parse + 5 reject; test_headless_spec_build: 1 augment + 2 can-go-red + 1 roundtrip).
-  **Phase 2 (`from_primitive` — catalog-by-name) still OPEN:** the design-level "Add Primitive" catalog has no headless
-  instancing path (only the circle disc), so a name→part resolver + a headless primitive-instantiation wrapper is the
-  remaining rung. Also still open: file-backed `place_grid`/`place_ring`, and parts carrying small mate recipes (an
+  **Follow-up (file-backed `place_grid`/`place_ring`) SHIPPED 2026-06-22** — a file part may now be placed by
+  `place_grid`/`place_ring` (not only `add_part`): the parse-time rejection is removed, the interpreter dispatches a
+  file part to NEW `hab.place_file_grid(path, rows, cols, …)` / `hab.place_file_ring(path, n, …)` (loop
+  `add_file_instance` with the same per-slot `grid_translations`/`ring_translations` — so the validated `.nadoc`
+  travels as one path reference per copy, not rows·cols embedded designs). **Oracle = NEW `assert_instances_from_file(
+  assembly, expected_topology, *, instance_ids=None)`** — the layout-AGNOSTIC source pin: it LOADS the design behind
+  EVERY selected slot and asserts each is file-backed and resolves to the saved primitive's `canonical_topology`. It
+  composes with `assert_instances_on_grid`/`_on_ring` (which pin the lattice but never load the design) to fully pin a
+  file-backed layout; the plural of `assert_part_from_file` (a one-slot check misses a layout that file-backed only
+  slot 0 and embedded inline copies for the rest). Coverage flat (no new route). Net +9 tests (test_build_spec: 2 accept
+  replacing 2 deleted rejects; test_headless_assembly_build: 3 wrapper; test_headless_spec_build: 3 spec + 3 can-go-red).
+  **Phase 2
+  (`from_primitive` — catalog-by-name, STATIC catalog primitives) SHIPPED 2026-06-22:** an assembly spec's `parts`
+  library may reference a curated catalog primitive **by name** — `"parts": {"beam": {"from_primitive": "6hb_primitive"}}`
+  — the same name the "Add Primitive" UI shows. The pure parser (`build_spec._parse_part`/`PrimitivePart` +
+  `_PRIMITIVE_PART_KEYS`) discriminates a `from_primitive` part from a `from_file` part and an inline spec; the
+  interpreter (`headless_spec_build._resolve_primitive_path`) resolves the NAME → the catalog primitive's `.nadoc` path
+  (`primitive_catalog.design_path`, `primitives_dir` overridable, default = the live workspace `Primitives` dir) and then
+  lowers it through the EXACT `from_file` machinery (one path reference per copy; placeable by `add_part`/`place_grid`/
+  `place_ring`). An unknown name fails the BUILD with a clear `BuildSpecError` (the parser is catalog-agnostic). Wraps no
+  new route (reuses `add_file_instance` → coverage flat at 37). **Oracle = NEW `assert_part_from_primitive(assembly,
+  instance_id, primitive_name, primitives_dir)`** — independently re-resolves the catalog NAME through
+  `primitive_catalog.design_path`, loads that primitive's `.nadoc`, and delegates to `assert_part_from_file`; the new
+  load-bearing piece over `from_file` is the **name→catalog-path RESOLVER** (a name mapped to the wrong/renamed primitive
+  is invisible to `canonical_assembly`). Net +6 tests (test_headless_spec_build: 1 augment + 2 can-go-red on the oracle +
+  1 unknown-name-fails-build + 1 roundtrip + 1 place_grid layout; suite 3002→3008). Scoped to STATIC (file-backed) catalog
+  primitives per the user's choice. **Still OPEN:** the PARAMETRIC circle disc (`metadata.primitive_kind="circle"`, needs a
+  radius → generative `hb.circle_segment` path, not a file reference) + parts carrying small mate recipes (an
   assembly-level hinge *template*, not just geometry). Original assessment below.
   **The gap (assessed 2026-06-17):** there is no primitive-catalog → automation pipeline. The design-level "Add
   Primitive" catalog is **read-only + UI-only** — `routes_primitives.py` exposes only `GET /primitives` +
@@ -1249,6 +1391,142 @@ readers `read_configuration_unwrapped` / `read_configuration_full` / `oxdna_back
   (the screenshot). **Validation gained, not a passthrough:** first programmatic proof of which atomistic bonds
   are real vs over-stretched vs renderer-hidden, and that the rigid stamp is frame-invariant — a number no
   HTTP-200 or eyeball gives.  **Deferred → Tier F (AF-ATOM P2) + the backbone-closure feature below.**
+
+### Tier 6 — time-resolved E-field response + interactive engine (the real-time field-exploration goal)
+
+**What's different here.** Tier 5 measures a *static* property of one relaxed mean structure. Tier 6 measures a
+**time course**: subject an anchored structure to an E-field and watch its helical alignment + base-pairing evolve
+*frame by frame*, extracting an **equilibration time τ** and a **non-destructive window** (aligns without melting).
+The oracle class is still Tier-5's stochastic/confidence-gated one, but now over a *trajectory* (per-frame
+observables), not a single pooled mean. The capstone is an **automated cross-design field sweep**.
+
+**What already exists (audited 2026-06-22 — do NOT rebuild; see `memory/project_oxdna_efield.md` + `project_oxdna_relaxation.md`).**
+The *batch* field path is shipped and automatable end-to-end: `POST /oxdna/jobs/{id}/field` spawns a field **child
+job** (parent's relaxed `last_conf` → single `field` stage) with composable forces (`write_field_forces` =
+uniform `string` force on all beads + anchor `trap`s, `DEFAULT_ANCHOR_STIFF=1000` = immobile); anchors resolve
+server-side (`resolve_anchor_particles`: overhang / cluster / domain → particle indices); the oracle
+`measure_field_response(field_pos, ref_pos, field_dir, anchor_keys)` already asserts anchored-held + free-deflected-
+along-field; `headless_oxdna_build.run_field` / `run_field_validation` / `field_response_from_confs` drive it
+headlessly; and a **field-deflecting mock binary** (`_FIELD_MOCK_OXDNA`) shifts free beads ∝F0 along the field +
+holds trapped beads → the whole pipeline + oracle run on CPU with NO GPU (deflection already pinned monotonic in
+field magnitude). The field stage writes a `trajectory.dat` (the `/trajectory` route includes it; RMSF/flex-map
+pools `kind in {production,field}`). **So Tier 6 builds measurement + sweep ON the existing field child-job +
+mock**, not a new engine — except the AF-21/22 live sub-track.
+
+**Physics caveats (load-bearing — keep them in every oracle's framing; from `project_oxdna_efield.md` §1).**
+(1) **Quasi-static only** — no explicit ions/screening, no hydrodynamics, timestep can't reach AC fields; τ is the
+*mechanical relaxation to a new DC pose*, NOT electrophoretic mobility, and the swing *trajectory* is qualitative
+while the *equilibrium pose* is meaningful. (2) **Anchors are mandatory** (uniform field ⇒ net COM force ⇒ a free
+structure streams across the box) AND **anchor selection matters** (pinning only a floppy ssDNA overhang holds the
+overhang but lets the rigid duplex swing — pin a duplex/cluster to hold the body). (3) **τ vs throughput** —
+re-equilibration is ~10⁵–10⁶ steps; interactive rates are realistic only for *small* specimens (single duplex +
+overhang), batch for large origami. Frame these as documented scope, not as bugs.
+
+**Three-Layer Law (as in Tier 5).** The field is a **Physical-layer** load; field/relaxed coords are read back as
+display/measurement artifacts and **never written into `Design`**. The *anchor designation* and *overhang* are
+topological/spec inputs the user (or spec) provides; the resolver is mechanical (no geometric reasoning about which
+nucleotide aligns which way — that's the ASK-FIRST `feedback_crossover_no_reasoning` rule). Field direction +
+magnitude are user/spec inputs; oracles measure **magnitudes** (alignment projection, |displacement|, τ) →
+direction-agnostic, no sign/handedness reasoning enters the driver.
+
+**oxpy prerequisite (AF-21+ only; AF-18/19/20/23-batch need none) — ✅ BUILT + WIRED 2026-06-23.** The interactive
+engine needs oxDNA's Python binding **oxpy**, which lets a persistent Python process step the engine in bursts and
+mutate the field force vector *without restarting / re-initing CUDA*. **Now built and importable from the NADOC
+venv** (was `Python:BOOL=OFF`). As-built, for the AF-21 session — DO NOT re-derive:
+- Rebuilt the EXISTING `~/oxDNA/build` (CUDA objects reused) with
+  `cmake .. -DCUDA=ON -DPython=ON -DPython_EXECUTABLE=/home/joshua/NADOC/.venv/bin/python3 && make -j12`. Prereq was
+  `sudo apt-get install -y python3-dev` (the venv runs on the *system* Python `/usr`; its dev headers were missing —
+  user ran the one sudo step). pybind11 submodule was already populated at `~/oxDNA/src/oxpy/pybind11`.
+- Built module: `~/oxDNA/build/python/oxpy/core.so` (+ `__init__.py`/`utils.py`), plain `setuptools` pyproject.
+  **Editable-installed into the venv:** `uv pip install --python .venv/bin/python3 -e ~/oxDNA/build/python` → a future
+  `make` that refreshes `core.so` is picked up automatically (no re-install). `import oxpy` works with NO PYTHONPATH.
+- **API surface confirmed present** (the AF-21 substrate): `oxpy.OxpyManager` with `.run(steps)` (burst-step),
+  `.current_step`/`.steps_run`, `.config_info` (live particle/position access), `.print_configuration`; top-level
+  `oxpy.forces` (where the field `ConstantRateForce` is added + **mutated live** between bursts) and `oxpy.observables`
+  (live alignment/bp monitoring). The standalone CLI binary (`find_oxdna` → `~/oxDNA/build/bin/oxDNA`) is unchanged, so
+  the shipped *batch* field path (AF-18→20) is unaffected. Nothing in NADOC imports oxpy yet — AF-21 introduces the
+  first `import oxpy` (in a NEW `backend/physics/oxdna_live.py`, NOT a god-file).
+- **GOTCHA for AF-21 tests:** the parity oracle's binary half is GPU-free via `_FIELD_MOCK_OXDNA`, but the *oxpy* half
+  needs the real engine — gate oxpy tests with `pytest.importorskip("oxpy")` (mirror the `skipif find_oxdna() is None`
+  pattern) so CI on a machine without the build still passes.
+
+- [x] **AF-18 — full-pipeline anchored field-specimen builder.** One headless call composing the entire
+  build→field-ready chain into a single validated entry point: `hox.build_field_specimen(spec_or_design, ws, *,
+  overhang, anchor, **relax_params) → {design, job, anchor_keys}` (new code in `headless_oxdna_build.py` /
+  `headless_spec_build.py`, NOT a god-file) — bundle/route (`hb.auto_scaffold`+`hb.full_autostaple` or a build-spec)
+  → `hb.full_sequence` → `hb.overhang_extrude` → `hox.run_relaxation` → designate the overhang/cluster as the field
+  **anchor** (resolve via `resolve_anchor_particles`). **Augment = NEW `assert_field_ready_specimen(result, design,
+  ws)`** — composes three proofs into "this specimen can run a field experiment": fully sequenced (reuse
+  `assert_fully_sequenced`) + relaxed geometry recovered (reuse `assert_relaxed_geometry_recovered`) + **≥1 anchor
+  resolves to particle indices AND a probe field holds the anchored beads while the free part deflects** (reuse
+  `measure_field_response` on a short mock field run). **Load-bearing because nothing today proves an end-to-end-built
+  design is field-experiment-ready** — each piece (sequence, relax, anchor) is pinned alone, but not that they
+  compose into a runnable, anchorable specimen; the gap is exactly the user's "build → … → set as anchor" chain.
+  Can-go-red: an unsequenced/unrelaxed/un-anchorable specimen fails the corresponding clause. No oxpy. **ASK-FIRST:**
+  which nucleotides are the overhang/anchor is a spec input — do not infer it geometrically.
+
+- [ ] **AF-19 — field equilibration-timeline measurement (τ) + non-melt oracle.** The key NEW physical observable.
+  Pure `measure_field_equilibration(frames, field_dir, anchor_keys, *, observable="alignment") → {tau_steps,
+  plateau, aligned_final, bp_timecourse, melted}` in `backend/core/oxdna_health.py`: per-frame alignment of the free
+  body's principal axis to the field (reuse the `field_response` projection) + per-frame base-pair retention (reuse
+  the bp metric), fit the monotone approach to its plateau, extract τ (time to reach 1−1/e of the plateau).
+  **Augment = NEW `assert_equilibration_timeline(job, ws, field_dir, anchor_keys, *, melt_floor, min_confidence)`** —
+  the field trajectory shows a finite positive τ, a monotone-within-noise approach to a stable plateau, AND **bp
+  retention never drops below `melt_floor` across the WHOLE timeline** (the "without ripping it apart" invariant),
+  confidence-gated on frame count. **Load-bearing because `measure_field_response` is endpoint-only** (final
+  aligned/displaced) — blind to the *time course* and to *transient* melting mid-swing. Reuses the `field`-stage
+  trajectory + `_FIELD_MOCK_OXDNA` (its ∝F0-per-step shift gives a synthetic monotone alignment ramp for CI).
+  Can-go-red: a non-converging (never-plateau) run → no finite τ; a melt during the swing → floor breach. No oxpy.
+
+- [ ] **AF-20 — field sweep driver + (|E|,direction)→response map + correlation oracle.** `hox.sweep_field_response(
+  specimen, intensities_pN, directions, ws) → {(pN,dir): {tau, aligned, bp_retained, destructive}}` — each grid cell
+  a child field job off the same relaxed parent (reuse the field child-job spawn), measured by AF-19, assembled into
+  a map flagging the non-destructive regime (`aligned ∧ bp_retained ≥ floor`). **Augment = NEW `assert_field_sweep_map(
+  map, *, benign_range, destructive_range)`** — every cell carries a verdict (no gaps); the non-destructive regime is
+  **non-empty in `benign_range` and empty in `destructive_range`** (can-go-red); AND **τ decreases monotonically with
+  |E| in the responsive band** (the field-strength ↔ equilibration-timeline correlation the user wants). **Load-bearing
+  as the first automated MULTI-config physical experiment with a reusable field↔τ correlation oracle** — Tier 5
+  measured one structure at one condition; this measures a *response surface*. Reuses AF-19 + the mock's
+  already-pinned "deflection scales with magnitude". Can-go-red: a flat (field-independent) τ, or a non-empty
+  destructive window. No oxpy. **Log a `log()`/note if any cell is skipped** (no silent truncation of the sweep).
+
+- [ ] **AF-21 — oxpy persistent interactive engine + equilibrium-parity / live-mutation oracle. [PREREQ: oxpy build
+  `-DPython=ON` — ask the user first.]** NEW `backend/physics/oxdna_live.py` wrapping oxpy: `LiveOxdnaSession` loads
+  topology+conf, steps in bursts (`run(M)` loop), **mutates the field `ConstantRateForce` vector live**, and reads CM
+  positions in-process (no file round-trip, no CUDA re-init between bursts) — a cohesive module, NOT a god-file
+  block. Headless `hox.run_live_field(...)` drives it. **Augment = NEW `assert_oxpy_equilibrium_parity(live_result,
+  batch_result, *, tol, min_confidence)`** — an oxpy burst-stepped run reaches the **same equilibrium observables**
+  (alignment, R_g, bp retention) within `tol` as a one-shot binary run of the same total steps from the same seed,
+  **confidence-gated** (stochastic thermostats forbid trajectory parity → assert *equilibrium-property* parity, the
+  Tier-5 stochastic-oracle class), AND **mutating the field vector mid-run shifts the measured deflection toward the
+  new vector**. **Load-bearing because it proves the interactive engine is physically equivalent to the validated
+  batch engine** (else "real-time" output is untrustworthy) + that live field control actually steers. The parity
+  half is testable GPU-free against the binary `_FIELD_MOCK_OXDNA`; the live-mutation half needs the real oxpy build.
+  Can-go-red: an oxpy run diverging from the binary beyond tol, or a field-vector change that doesn't move the body.
+
+- [ ] **AF-22 — live field-steering session + field-following oracle. [builds on AF-21.]** `hox.steer_field_session(
+  session, waypoints) → timeline` — set field dir d₁, run a burst, read observables; switch to d₂, run, read; … a
+  steered timeline (the programmatic form of a user dragging the field gizmo). **Augment = NEW `assert_live_field_
+  following(timeline, *, melt_floor)`** — after each waypoint the free body's alignment observable moves **toward the
+  current field vector** (the structure follows the field), and bp retention stays above `melt_floor` across ALL
+  waypoints. **Load-bearing because it proves the interactive control loop produces real field-following without
+  melting** — the substance behind "playing in real time", distinct from a merely responsive UI. Reuses AF-19's
+  per-frame observables + AF-21's session. Can-go-red: a body that ignores a waypoint change, or a melt during
+  steering. (The frontend live-steering UI + frame-streaming WS is a separate Tier-F display item → push an `MV-`
+  row when that ships; this AF item is the headless, automatable control loop.)
+
+- [ ] **AF-23 — CAPSTONE: cross-design automated field-response campaign (the user's stated goal).**
+  `hox.run_field_campaign(specs, intensities_pN, directions, ws) → {design_name: sweep_map}` — build each design from
+  a build-spec / catalog primitive (reuse the AF-11/12 grammar + AF-18 specimen builder), run the AF-20 sweep on each,
+  report **per-design non-destructive operating window + alignment-vs-field response**. **Augment = NEW
+  `assert_field_campaign(campaign, *, expect_distinguishable)`** — every design yields a populated map with a reported
+  non-destructive window; designs are **distinguishable** (a floppier / longer-lever design aligns at a lower |E| or
+  shorter τ — proven on two specimens chosen to differ); reproducible across a re-run (deterministic mock). **Load-
+  bearing as the capstone that ties text→design (grammar) + field sweep (AF-20) + equilibration (AF-19) into one
+  automated study reusable for ANY origami** — "automatic exploration of E-field intensities and directions that
+  correlate with DNA alignment equilibration timelines, without ripping it apart, for various designs." Runs on the
+  batch path (AF-20, de-risked) now; transparently swaps to the AF-21/22 oxpy fast path once built. Can-go-red: a
+  campaign where designs are indistinguishable (`expect_distinguishable` violated) or a design yields an empty map.
 
 ### Tier F — frontend display subsystems (no REST route; JS-controller API + vitest-oracle augment)
 

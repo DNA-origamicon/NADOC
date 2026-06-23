@@ -32,8 +32,12 @@ from tests.automation_harness import (
     assert_converges_to_constraint,
     assert_deformation_angle,
     assert_gear_ratio,
+    assert_instances_from_file,
+    assert_instances_on_grid,
+    assert_instances_on_ring,
     assert_mate_coincident,
     assert_part_from_file,
+    assert_part_from_primitive,
     assert_polymer_chain,
     assert_roundtrip_stable,
     assert_spec_constraints_reported,
@@ -574,6 +578,195 @@ def test_assembly_spec_from_file_roundtrips_stable(tmp_path):
         assert_assembly_roundtrip_stable(lambda: hs.build_assembly(_file_part_spec(path)))
 
 
+# ── file-backed parametric layout (AF-12 follow-up — place_grid/place_ring by ref) ──
+# A {"from_file": …} part may now be placed by place_grid / place_ring (not only
+# add_part): the driver loops add_file_instance per slot, so the saved validated .nadoc
+# travels as a path reference per copy. assert_instances_on_grid/_on_ring pin the LATTICE
+# but never load the design; assert_instances_from_file is the load-bearing source pin —
+# every slot resolves to the saved primitive's topology (catches a slot that embedded an
+# inline copy or substituted a wrong path).
+
+def test_assembly_spec_file_grid_places_and_references(tmp_path):
+    """A file-backed place_grid lands rows×cols copies on the lattice, each a genuine
+    reference to the saved primitive."""
+    saved = make_6hb_design()
+    path = _save_primitive(tmp_path, saved)
+    spec = {"kind": "assembly", "name": "FG", "parts": {"saved": {"from_file": path}},
+            "ops": [{"op": "place_grid", "part": "saved", "rows": 2, "cols": 3, "pitch": 11.0}]}
+    a = hs.build_assembly(spec)
+    assert len(a.instances) == 6
+    assert all(i.source.type == "file" for i in a.instances)
+    assert_instances_on_grid(a, 2, 3, pitch=11.0)
+    assert assert_instances_from_file(a, canonical_topology(saved)) == 6
+
+
+def test_assembly_spec_file_ring_places_and_references(tmp_path):
+    """A file-backed place_ring lands n copies on the ring, each a file reference."""
+    saved = make_6hb_design()
+    path = _save_primitive(tmp_path, saved)
+    spec = {"kind": "assembly", "name": "FR", "parts": {"saved": {"from_file": path}},
+            "ops": [{"op": "place_ring", "part": "saved", "n": 5, "radius": 16.0}]}
+    a = hs.build_assembly(spec)
+    assert len(a.instances) == 5
+    assert_instances_on_ring(a, 5, radius=16.0)
+    assert assert_instances_from_file(a, canonical_topology(saved)) == 5
+
+
+def test_assembly_spec_file_grid_roundtrips_stable(tmp_path):
+    """The file-backed grid survives a .nass round-trip with all slots still referencing
+    the primitive."""
+    saved = make_6hb_design()
+    path = _save_primitive(tmp_path, saved)
+    spec = {"kind": "assembly", "name": "FGRT", "parts": {"saved": {"from_file": path}},
+            "ops": [{"op": "place_grid", "part": "saved", "rows": 2, "cols": 2, "pitch": 10.0}]}
+    with hab.assembly_scratch_session():
+        reloaded = assert_assembly_roundtrip_stable(lambda: hs.build_assembly(spec))
+    assert_instances_from_file(reloaded, canonical_topology(saved))
+
+
+# ── catalog-named part (AF-12 Phase 2 — from_primitive) ────────────────────────
+# The text-to-design rung: reference a curated, pre-validated catalog primitive by the
+# SAME name the "Add Primitive" UI shows ({"from_primitive": "6hb_primitive"}), without
+# knowing where its .nadoc lives. The driver resolves the name → the catalog primitive's
+# saved .nadoc path, then lowers it through the EXACT from_file machinery (one path
+# reference per copy). The new, load-bearing piece over from_file is the name→catalog-path
+# RESOLVER: assert_part_from_primitive independently re-resolves the name through the
+# catalog and proves the instance is that exact primitive's validated topology — a name
+# silently mapped to the wrong/renamed primitive is invisible to canonical_assembly.
+
+def _save_catalog_primitive(primitives_dir, name, design):
+    """Drop a posed .nadoc into a tmp catalog dir under the catalog NAME (stem)."""
+    p = primitives_dir / f"{name}.nadoc"
+    p.write_text(design.to_json(), encoding="utf-8")
+    return p
+
+
+def _primitive_part_spec(name):
+    """A catalog primitive (by name) mated to an inline beam — instance + articulate a
+    curated validated part exactly as the text-to-design use case describes."""
+    return {"kind": "assembly", "name": "P", "parts": {
+        "saved": {"from_primitive": name}, "beam": _BEAM_SPEC,
+    }, "ops": [
+        {"op": "add_part", "part": "saved", "ref": "S",
+         "connectors": [{"label": "s", "position": [5, 0, 0], "normal": [1, 0, 0]}]},
+        {"op": "add_part", "part": "beam", "ref": "B", "transform": [20, 0, 0],
+         "connectors": [{"label": "b", "position": [-5, 0, 0], "normal": [-1, 0, 0]}]},
+        {"op": "mate", "child": "B", "parent": "S", "child_label": "b", "parent_label": "s"},
+    ]}
+
+
+def _two_helix_design():
+    """A genuinely different topology from the 6hb (for the wrong-name red-test)."""
+    return hs.build_design({"lattice": "honeycomb", "ops": [
+        {"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42}]})
+
+
+def test_assembly_spec_from_primitive_uses_catalog_topology(tmp_path):
+    """THE AUGMENT: a {"from_primitive": "<name>"} part resolves its catalog NAME to the
+    saved primitive and instances it by reference, resolving to EXACTLY that primitive's
+    validated topology. Load-bearing because canonical_assembly keys a file source by path
+    only and never loads the design — only this proves the name→catalog-path RESOLVER picked
+    the right primitive (and wired a real, loadable, topology-bearing reference)."""
+    saved = make_6hb_design()
+    _save_catalog_primitive(tmp_path, "beam_six", saved)
+    a = hs.build_assembly(_primitive_part_spec("beam_six"), primitives_dir=tmp_path)
+    file_inst = next(i for i in a.instances if i.source.type == "file")
+    resolved = assert_part_from_primitive(a, file_inst.id, "beam_six", tmp_path)
+    assert canonical_topology(resolved) == canonical_topology(saved)
+
+
+def test_assembly_spec_from_primitive_oracle_fires_on_wrong_name(tmp_path):
+    """can-go-red: asserting the instance came from a DIFFERENT catalog primitive than it
+    actually did → the oracle re-resolves that other name, loads its topology, and catches
+    the mismatch canonical_assembly can't see."""
+    _save_catalog_primitive(tmp_path, "beam_six", make_6hb_design())
+    _save_catalog_primitive(tmp_path, "beam_two", _two_helix_design())
+    a = hs.build_assembly(_primitive_part_spec("beam_six"), primitives_dir=tmp_path)
+    file_inst = next(i for i in a.instances if i.source.type == "file")
+    with pytest.raises(AssertionError, match="DIFFERENT topology"):
+        assert_part_from_primitive(a, file_inst.id, "beam_two", tmp_path)
+
+
+def test_assembly_spec_from_primitive_oracle_rejects_unknown_name(tmp_path):
+    """can-go-red: asked to re-resolve a name absent from the catalog, the oracle refuses
+    rather than passing vacuously (the build itself would also have raised for this name)."""
+    _save_catalog_primitive(tmp_path, "beam_six", make_6hb_design())
+    a = hs.build_assembly(_primitive_part_spec("beam_six"), primitives_dir=tmp_path)
+    file_inst = next(i for i in a.instances if i.source.type == "file")
+    with pytest.raises(AssertionError, match="catalog has no primitive"):
+        assert_part_from_primitive(a, file_inst.id, "nope_missing", tmp_path)
+
+
+def test_assembly_spec_from_primitive_unknown_name_fails_build(tmp_path):
+    """An unknown catalog name fails the BUILD with a clear BuildSpecError (the parser is
+    catalog-agnostic, so name validity is checked at build time), not a silent empty part."""
+    _save_catalog_primitive(tmp_path, "beam_six", make_6hb_design())
+    with pytest.raises(BuildSpecError, match="no catalog primitive named 'ghost'"):
+        hs.build_assembly(_primitive_part_spec("ghost"), primitives_dir=tmp_path)
+
+
+def test_assembly_spec_from_primitive_roundtrips_stable(tmp_path):
+    """The catalog-resolved file source survives a .nass round-trip — the from_primitive
+    reference is durable, lowering to the same path reference from_file does."""
+    _save_catalog_primitive(tmp_path, "beam_six", make_6hb_design())
+    with hab.assembly_scratch_session():
+        assert_assembly_roundtrip_stable(
+            lambda: hs.build_assembly(_primitive_part_spec("beam_six"), primitives_dir=tmp_path))
+
+
+def test_assembly_spec_primitive_grid_places_and_references(tmp_path):
+    """A catalog primitive may be laid out by place_grid (it folds into the from_file path,
+    so per-slot references), each slot resolving to the named primitive's topology."""
+    saved = make_6hb_design()
+    _save_catalog_primitive(tmp_path, "beam_six", saved)
+    spec = {"kind": "assembly", "name": "PG",
+            "parts": {"saved": {"from_primitive": "beam_six"}},
+            "ops": [{"op": "place_grid", "part": "saved", "rows": 2, "cols": 3, "pitch": 11.0}]}
+    a = hs.build_assembly(spec, primitives_dir=tmp_path)
+    assert len(a.instances) == 6
+    assert all(i.source.type == "file" for i in a.instances)
+    assert_instances_on_grid(a, 2, 3, pitch=11.0)
+    assert assert_instances_from_file(a, canonical_topology(saved)) == 6
+
+
+def _file_grid_spec(path):
+    return {"kind": "assembly", "name": "FG", "parts": {"saved": {"from_file": path}},
+            "ops": [{"op": "place_grid", "part": "saved", "rows": 1, "cols": 2, "pitch": 10.0}]}
+
+
+def test_instances_from_file_oracle_fires_on_wrong_topology(tmp_path):
+    """can-go-red: a layout whose slots resolve to a DIFFERENT topology than expected is
+    caught — the source pin every lattice oracle is blind to."""
+    saved = make_6hb_design()
+    a = hs.build_assembly(_file_grid_spec(_save_primitive(tmp_path, saved)))
+    other = hs.build_design({"lattice": "honeycomb", "ops": [
+        {"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42}]})
+    with pytest.raises(AssertionError, match="DIFFERENT topology"):
+        assert_instances_from_file(a, canonical_topology(other))
+
+
+def test_instances_from_file_oracle_rejects_inline_slot(tmp_path):
+    """can-go-red: a layout where ONE slot is an embedded inline copy (defeating the
+    by-reference purpose) is caught — a one-slot pin on the first instance would miss it."""
+    saved = make_6hb_design()
+    path = _save_primitive(tmp_path, saved)
+    with hab.assembly_scratch_session():
+        hab.new_assembly("Mixed")
+        hab.place_file_grid(path, 1, 2, pitch=10.0)                 # two file slots
+        hab.add_inline_instance(make_6hb_design(), name="rogue")    # one embedded copy
+        a = assembly_state.get_or_404().model_copy(deep=True)
+    with pytest.raises(AssertionError, match="not file-backed"):
+        assert_instances_from_file(a, canonical_topology(saved))
+
+
+def test_instances_from_file_oracle_rejects_empty_selection(tmp_path):
+    """can-go-red: an empty selection is a vacuous pass — the non-vacuity guard fires."""
+    saved = make_6hb_design()
+    a = hs.build_assembly(_file_grid_spec(_save_primitive(tmp_path, saved)))
+    with pytest.raises(AssertionError, match="selected no instances"):
+        assert_instances_from_file(a, canonical_topology(saved), instance_ids=[])
+
+
 # ── gear op (AF-11 Phase 2 — assembly relations cluster) ──────────────────────
 # A gear is a coupling relation; canonical_assembly DOES fingerprint gear_relations
 # (the 5-tuple), so unlike loop_skip/bend/twist, assert_spec_matches_calls is
@@ -1003,5 +1196,6 @@ def test_spec_build_adds_no_coverage():
     count, not the route-coverage count."""
     from tests.automation_harness import headless_coverage_report
     # AF-14 Phase 1's place_cluster_joint added one route (add_joint): 34 → 35;
-    # the full_sequence feature added assign_staple_sequences: 35 → 36.
-    assert headless_coverage_report()["covered"] == 36
+    # the full_sequence feature added assign_staple_sequences: 35 → 36;
+    # the periodic straggler added polymerize_periodic_assembly: 36 → 37.
+    assert headless_coverage_report()["covered"] == 37

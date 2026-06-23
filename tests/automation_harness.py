@@ -670,6 +670,123 @@ def assert_polymer_chain(
     return delta
 
 
+def assert_periodic_chain_tiles(
+    assembly,
+    *,
+    tol_nm: float = 0.05,
+    step_tol_nm: float = 0.05,
+    angle_tol_deg: float = 0.5,
+    min_step_nm: float = 0.5,
+) -> dict:
+    """Geometric oracle for *periodic* polymerize: one DERIVED repeat unit tiles the
+    whole chain seamlessly.
+
+    ``/assembly/polymerize-periodic`` (``hab.polymerize_periodic``) grows a chain from
+    a SINGLE seed instance — there is no hand-defined seed mate.  The repeat transform
+    ``delta`` is *derived* from the part's own ``is_periodic_seam`` geometry
+    (``derive_periodic_delta``, a Kabsch fit over the seam cross-sections), and copy
+    ``k`` is placed at ``T_seed @ delta**k``.  Consecutive copies are tied by
+    synthesized **rigid** seam joints (``seam0:3p`` on the low copy → ``seam0:5p`` on
+    the high copy).  This is fundamentally different from :func:`assert_polymer_chain`
+    (mate-seeded, where the repeat is re-derived from two existing instances): here the
+    load-bearing claim is that the *auto-derived* delta actually tiles, at **every**
+    junction, not just the one (or two seams) it was fit over.
+
+    Pass the assembly *after* :func:`~backend.api.headless_assembly_build.polymerize_periodic`
+    (optionally after :func:`resolve`).  This asserts, over the chain's rigid seam
+    junctions:
+
+      1. **A chain was grown.** At least one rigid seam junction exists (else nothing
+         was polymerized — the non-emptiness guard).
+      2. **Seamless tiling at every junction.** For each junction the low copy's
+         ``seam0:3p`` world position coincides with the high copy's ``seam0:5p`` world
+         position within ``tol_nm``, resolved with the SAME ``_get_connector_world``
+         machinery ``resolve_assembly`` uses (on the instance-overridden design) — so a
+         derived delta that docks the seam it was fit on but drifts at later copies, or
+         a chain whose copies were placed off the repeat, fails here.
+      3. **A single repeat unit (the periodicity invariant).** Every junction's world
+         repeat ``T_high @ inv(T_low)`` has the SAME translation length (within
+         ``step_tol_nm``) and the same rotation angle (within ``angle_tol_deg``).  This
+         is what distinguishes a *periodic* chain from a bag of independent mates: one
+         transform repeats.  Magnitudes only → direction-agnostic (forward ``delta`` and
+         backward ``delta_inv`` share length + angle, so it holds for any ``direction``).
+      4. **Genuine tiling (the can-go-red guard).** That common step length exceeds
+         ``min_step_nm``; a degenerate ``delta ≈ I`` would stack every copy on the seed
+         and pass vacuously — the analog of :func:`assert_mate_coincident`'s
+         non-triviality guard.
+
+    Returns ``{n_junctions, max_gap_nm, step_nm, angle_deg}``.
+    """
+    import numpy as np
+
+    from backend.api.assembly import _assembly_source_path, _design_with_instance_overrides
+    from backend.core.assembly_connectors import _get_connector_world
+
+    inst_by_id = {i.id: i for i in assembly.instances}
+    junctions = [
+        j for j in assembly.joints
+        if j.joint_type == "rigid"
+        and (j.connector_a_label or "").startswith("seam0:")
+        and (j.connector_b_label or "").startswith("seam0:")
+        and j.instance_a_id in inst_by_id and j.instance_b_id in inst_by_id
+    ]
+    assert junctions, (
+        "no rigid periodic-seam junctions in the assembly — nothing was polymerized "
+        "(or the seam joints lost their seam0:* connector labels)."
+    )
+
+    asm_path = _assembly_source_path(assembly)
+
+    def _mat(inst):
+        return np.array(inst.transform.values, dtype=float).reshape(4, 4)
+
+    gaps: list[float] = []
+    steps: list[float] = []
+    angles: list[float] = []
+    for j in junctions:
+        a = inst_by_id[j.instance_a_id]   # low copy, presents seam0:3p
+        b = inst_by_id[j.instance_b_id]   # high copy, presents seam0:5p
+        design_a = _design_with_instance_overrides(a, asm_path)
+        design_b = _design_with_instance_overrides(b, asm_path)
+        ca = _get_connector_world(a, j.connector_a_label, design_a)
+        cb = _get_connector_world(b, j.connector_b_label, design_b)
+        assert ca is not None and cb is not None, (
+            "could not resolve a seam connector world position "
+            f"(a={j.connector_a_label!r}→{ca}, b={j.connector_b_label!r}→{cb})"
+        )
+        gaps.append(float(np.linalg.norm(np.asarray(ca) - np.asarray(cb))))
+
+        repeat = _mat(b) @ np.linalg.inv(_mat(a))
+        steps.append(float(np.linalg.norm(repeat[:3, 3])))
+        cos_t = max(-1.0, min(1.0, (float(np.trace(repeat[:3, :3])) - 1.0) / 2.0))
+        angles.append(float(np.degrees(np.arccos(cos_t))))
+
+    max_gap = max(gaps)
+    assert max_gap <= tol_nm, (
+        f"a periodic seam junction is {max_gap:.4f} nm open (> {tol_nm} nm) — the "
+        "derived repeat transform does not tile the chain seamlessly (copy k's 3' seam "
+        "does not meet copy k+1's 5' seam)."
+    )
+
+    step = float(np.mean(steps))
+    assert max(abs(s - step) for s in steps) <= step_tol_nm, (
+        f"the chain's per-junction step length varies ({min(steps):.3f}…{max(steps):.3f} "
+        f"nm, tol {step_tol_nm}) — the chain is not a single repeating unit."
+    )
+    angle = float(np.mean(angles))
+    assert max(abs(a - angle) for a in angles) <= angle_tol_deg, (
+        f"the chain's per-junction rotation varies ({min(angles):.3f}…{max(angles):.3f}°, "
+        f"tol {angle_tol_deg}) — the chain is not a single repeating unit."
+    )
+    assert step > min_step_nm, (
+        f"the periodic repeat is ~identity (step {step:.4f} nm < {min_step_nm} nm) — "
+        "every copy is stacked on the seed, so this oracle would pass vacuously (use a "
+        "part whose seam-to-seam length is non-zero)."
+    )
+    return {"n_junctions": len(junctions), "max_gap_nm": max_gap,
+            "step_nm": step, "angle_deg": angle}
+
+
 # ── Overhang-binding referential-integrity oracle ─────────────────────────────
 
 def assert_binding_resolves(
@@ -784,6 +901,74 @@ def assert_part_from_file(assembly, instance_id, expected_topology):
         "(canonical_assembly keys a file source by path only and cannot catch this.)"
     )
     return design
+
+
+def assert_instances_from_file(assembly, expected_topology, *, instance_ids=None):
+    """AF-12 follow-up: **every** instance of a (file-backed) parametric layout resolves
+    to exactly the saved primitive's validated topology — the layout-AGNOSTIC source pin
+    that composes with :func:`assert_instances_on_grid` / :func:`assert_instances_on_ring`
+    (which pin the *lattice* but are blind to the part source) to fully pin a file-backed
+    ``place_grid`` / ``place_ring``.
+
+    The plural of :func:`assert_part_from_file`: a single-slot check leaves the rest of a
+    layout UNPROVEN.  A builder that file-backed only the first slot and embedded inline
+    copies for the others (silently defeating the by-reference purpose — ``rows·cols``
+    embedded designs instead of one path), or that substituted a wrong path partway
+    through, would pass a one-slot pin while every lattice check (which never loads the
+    design) still goes green.  This LOADS the design behind every selected instance and
+    asserts each is file-backed and resolves to ``expected_topology`` (pass
+    ``expected_topology = canonical_topology(saved)``).
+
+    Filtered to ``instance_ids`` if given (else every instance).  Returns the number of
+    instances proven.  Can-go-red: an inline / wrong-topology slot anywhere in the layout
+    → :func:`assert_part_from_file` raises; an empty selection → the non-vacuity guard.
+    """
+    insts = [
+        i for i in assembly.instances
+        if instance_ids is None or i.id in set(instance_ids)
+    ]
+    assert insts, (
+        "assert_instances_from_file selected no instances — nothing to prove (build the "
+        "layout first, or pass the placed instance_ids); a vacuous pass is not validation."
+    )
+    for inst in insts:
+        assert_part_from_file(assembly, inst.id, expected_topology)
+    return len(insts)
+
+
+def assert_part_from_primitive(assembly, instance_id, primitive_name, primitives_dir):
+    """AF-12 Phase 2: a ``{"from_primitive": "<name>"}`` part instance resolves to **exactly**
+    the catalog primitive of that name — proving the grammar's *name→catalog-path resolver*
+    picked the right primitive and nothing silently substituted for it.
+
+    This is the load-bearing pin for the ``from_primitive`` grammar, and it adds a check
+    ``from_file``'s :func:`assert_part_from_file` cannot: that one trusts a path already on
+    the instance; here the **catalog NAME** is the input, so a resolver that mapped the name
+    to the wrong/renamed primitive, or to nothing, must be caught.  We *independently*
+    re-resolve ``primitive_name`` through the catalog (:func:`primitive_catalog.design_path`,
+    NOT the interpreter's own resolution), load that primitive's saved ``.nadoc``, compute
+    its :func:`canonical_topology`, and delegate to :func:`assert_part_from_file` — which
+    loads the design the *instance* actually references and compares.  So if the build wired
+    a different primitive than the name claims, the two topologies diverge and this raises.
+
+    ``primitives_dir`` is the catalog folder (pass the same one handed to ``build_assembly``).
+    Asserts the name resolves in the catalog, the instance is genuinely file-backed, and it
+    resolves to the named primitive's topology.  Returns the resolved
+    :class:`~backend.core.models.Design`.  Can-go-red: a name pointing at a different/renamed
+    primitive → topology mismatch; an unknown name → the catalog-resolution guard.
+    """
+    from pathlib import Path
+
+    from backend.core import primitive_catalog as _pc
+
+    path = _pc.design_path(Path(primitives_dir), primitive_name)
+    assert path is not None, (
+        f"catalog has no primitive named {primitive_name!r} in {primitives_dir} — "
+        "assert_part_from_primitive cannot re-resolve the name; the from_primitive build "
+        "should itself have raised BuildSpecError for an unknown name."
+    )
+    saved = Design.from_json(path.read_text(encoding="utf-8"))
+    return assert_part_from_file(assembly, instance_id, canonical_topology(saved))
 
 
 # ── Instance-layout oracles (parametric grid / ring placement) ────────────────
@@ -2107,6 +2292,83 @@ def assert_relaxed_geometry_recovered(job, design: Design, workspace, *,
         f"(missing {len(design_keys - recovered_keys)}, extra "
         f"{len(recovered_keys - design_keys)})")
     return display
+
+
+def assert_field_ready_specimen(result, design: Design, workspace, *,
+                                field_pN: float = 4.0, field_dir=(0, 0, 1),
+                                field_steps: int = 2000, anchor_tol_nm: float = 1.0,
+                                min_free_proj_nm: float = 0.5) -> dict:
+    """AF-18 (Tier 6) composite oracle: an end-to-end-built design is *ready to run
+    an electric-field experiment* — fully sequenced, relaxed, and anchorable so that
+    a field holds the anchored beads while the rest deflects.
+
+    ``result`` is the dict :func:`~backend.api.headless_oxdna_build.build_field_specimen`
+    returns (``{design, job, anchor_keys, anchor}``); ``design`` is the specimen design
+    (normally ``result["design"]``).  Composes three independently-proven properties
+    into one "field-ready" verdict:
+
+    1. **fully sequenced** — :func:`assert_fully_sequenced` (zero undefined bases AND
+       correct WC-complement staples), the gate ``create_oxdna_job`` / every export
+       enforces;
+    2. **relaxed geometry recovered** — :func:`assert_relaxed_geometry_recovered` on
+       ``result["job"]`` (the relaxation reached ``completed`` and the relaxed frame
+       reads back as a full per-nucleotide position map);
+    3. **anchorable under a field** — ``result["anchor_keys"]`` is non-empty (the
+       anchor resolved to real nucleotides) AND a short *probe* field run (a field
+       child branched off the relaxed parent, anchoring ``result["anchor"]``) makes
+       the anchored beads hold while the free part deflects ALONG the field, verified
+       by :func:`~backend.core.oxdna_health.measure_field_response` (``passed``).
+
+    The load-bearing gap this closes: each piece (sequence, relax, anchor) was pinned
+    *alone*, but nothing proved they **compose** into a single runnable, anchorable
+    specimen — exactly the user's "build → … → set as anchor → run a field" chain.
+
+    *Physical-layer only* — it reads relaxed/field geometry, never writes it into
+    ``Design`` (the Three-Layer Law).  ``field_dir``/``field_pN`` drive only the probe
+    (magnitudes/projection are measured → direction-agnostic, no sign reasoning).
+    Returns ``{n_wc_checked, n_anchored, field_response}``.
+
+    Can-go-red: an unsequenced specimen fails clause 1; a non-completed relaxation
+    fails clause 2; an anchor that resolves to nothing (or a field that fails to hold
+    the anchor / deflect the body) fails clause 3.
+    """
+    from pathlib import Path
+
+    from backend.api import headless_oxdna_build as hox
+    from backend.core.oxdna_health import field_response_from_confs
+
+    # Clause 1 — export/oxDNA-ready sequence.
+    n_wc = assert_fully_sequenced(design)
+
+    # Clause 2 — the relaxation completed and the relaxed geometry reads back.
+    job = result["job"]
+    assert_relaxed_geometry_recovered(job, design, workspace)
+
+    # Clause 3 — a resolved anchor + a probe field that holds it while the rest moves.
+    anchor_keys = result["anchor_keys"]
+    assert anchor_keys, (
+        "specimen resolved no anchor nucleotides — not field-anchorable (a uniform "
+        "field would just stream the whole structure across the box)")
+    anchor = result["anchor"]
+    child = hox.append_field(job.job_id, workspace, field_pN=field_pN,
+                             dir=list(field_dir), anchors=[anchor], steps=field_steps)
+    field_job = hox.wait_for_terminal(child["job_id"], workspace)
+    status = getattr(field_job.status, "value", str(field_job.status))
+    assert status == "completed", (
+        f"probe field run did not complete (status={status!r}); error={field_job.error!r}")
+
+    ws = Path(workspace)
+    field_conf = field_job.stage_dir(ws, field_job.stages[-1].name) / "last_conf.dat"
+    ref_conf = field_job.job_dir(ws) / "conf.dat"
+    response = field_response_from_confs(
+        design, field_conf, ref_conf, field_dir=list(field_dir),
+        anchor_keys=anchor_keys, anchor_tol_nm=anchor_tol_nm,
+        min_free_proj_nm=min_free_proj_nm)
+    assert response["passed"], (
+        f"specimen is not field-ready — the probe field did not confirm "
+        f"anchor-held/body-deflected: {response['reason']}")
+    return {"n_wc_checked": n_wc, "n_anchored": len(anchor_keys),
+            "field_response": response}
 
 
 def assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,

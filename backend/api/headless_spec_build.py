@@ -49,6 +49,8 @@ strand graph), so the load-bearing pin for a ``loop_skip`` spec is the geometric
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from backend.api import assembly_state
 from backend.api import headless_assembly_build as hab
 from backend.api import headless_build as hb
@@ -60,6 +62,7 @@ from backend.core.build_spec import (
     BuildSpecError,
     DesignSpec,
     FilePart,
+    PrimitivePart,
     parse_assembly_spec,
     parse_design_spec,
 )
@@ -391,17 +394,26 @@ def _run_assembly_op(
         if "ref" in p:
             refs[p["ref"]] = new_id
     elif op.op == "place_grid":
+        # A file-backed part loops add_file_instance per slot (the saved .nadoc travels as
+        # a path reference per copy, AF-12); an inline part embeds the design per slot.
+        key = p["part"]
         kwargs = {"pitch": p["pitch"], "plane": p["plane"], "center": p["center"],
-                  "name": p.get("name", p["part"])}
+                  "name": p.get("name", key)}
         if "row_pitch" in p:
             kwargs["row_pitch"] = p["row_pitch"]
-        hab.place_grid(part_designs[p["part"]], p["rows"], p["cols"], **kwargs)
+        if key in file_paths:
+            hab.place_file_grid(file_paths[key], p["rows"], p["cols"], **kwargs)
+        else:
+            hab.place_grid(part_designs[key], p["rows"], p["cols"], **kwargs)
     elif op.op == "place_ring":
-        hab.place_ring(
-            part_designs[p["part"]], p["n"], radius=p["radius"], plane=p["plane"],
-            start_angle_deg=p["start_angle_deg"], center=p["center"],
-            name=p.get("name", p["part"]),
-        )
+        key = p["part"]
+        kwargs = {"radius": p["radius"], "plane": p["plane"],
+                  "start_angle_deg": p["start_angle_deg"], "center": p["center"],
+                  "name": p.get("name", key)}
+        if key in file_paths:
+            hab.place_file_ring(file_paths[key], p["n"], **kwargs)
+        else:
+            hab.place_ring(part_designs[key], p["n"], **kwargs)
     elif op.op == "mate":
         kwargs = {
             "child_label": p["child_label"], "parent_label": p["parent_label"],
@@ -429,14 +441,47 @@ def _run_assembly_op(
         raise BuildSpecError(f"unsupported assembly op {op.op!r}")
 
 
-def _build_assembly_from_parsed(parsed: AssemblySpec) -> Assembly:
+def _default_primitives_dir() -> Path:
+    """The live catalog folder the "Add Primitive" UI reads (honors test monkeypatch)."""
+    from backend.api import routes_primitives
+
+    return routes_primitives._primitives_dir()
+
+
+def _resolve_primitive_path(part: PrimitivePart, primitives_dir: Path) -> str:
+    """Catalog NAME → the primitive's saved ``.nadoc`` path (the new, load-bearing
+    resolution AF-12 Phase 2 adds over ``from_file``).  Raises :class:`BuildSpecError` on an
+    unknown/unsafe name so a typo'd primitive fails the build with a clear message rather
+    than silently instancing nothing."""
+    from backend.core import primitive_catalog as _pc
+
+    path = _pc.design_path(primitives_dir, part.name)
+    if path is None:
+        available = [m["id"] for m in _pc.list_primitives(primitives_dir)]
+        raise BuildSpecError(
+            f"from_primitive: no catalog primitive named {part.name!r} in "
+            f"{primitives_dir} (available: {available})"
+        )
+    return str(path)
+
+
+def _build_assembly_from_parsed(
+    parsed: AssemblySpec, *, primitives_dir: Path | None = None
+) -> Assembly:
     # Build each INLINE part design first (own scratch session per part), then place.
-    # File-backed parts (AF-12) are never built here — their path is handed straight to
-    # add_file_instance, so the validated saved design travels as a reference.
+    # File-backed parts (AF-12 from_file) and catalog parts (AF-12 P2 from_primitive) are
+    # never built here — their path is handed straight to add_file_instance, so the
+    # validated saved design travels as a reference. A from_primitive part resolves its
+    # catalog name → .nadoc path first, then is treated identically to a from_file part.
+    pdir = primitives_dir if primitives_dir is not None else _default_primitives_dir()
     part_designs = {key: _build_design_from_parsed(ds)
-                    for key, ds in parsed.parts.items() if not isinstance(ds, FilePart)}
-    file_paths = {key: ds.path
-                  for key, ds in parsed.parts.items() if isinstance(ds, FilePart)}
+                    for key, ds in parsed.parts.items() if isinstance(ds, DesignSpec)}
+    file_paths: dict[str, str] = {}
+    for key, ds in parsed.parts.items():
+        if isinstance(ds, FilePart):
+            file_paths[key] = ds.path
+        elif isinstance(ds, PrimitivePart):
+            file_paths[key] = _resolve_primitive_path(ds, pdir)
     with hab.assembly_scratch_session():
         hab.new_assembly(parsed.name)
         refs: dict[str, str] = {}
@@ -446,14 +491,21 @@ def _build_assembly_from_parsed(parsed: AssemblySpec) -> Assembly:
         return assembly_state.get_or_404().model_copy(deep=True)
 
 
-def build_assembly(spec) -> Assembly:
+def build_assembly(spec, *, primitives_dir: Path | None = None) -> Assembly:
     """Build the assembly a spec describes (parse → drive wrappers) → standalone Assembly.
 
-    Each named part in ``spec['parts']`` is built once via :func:`build_design` (its own
+    Each inline part in ``spec['parts']`` is built once via :func:`build_design` (its own
     isolated scratch design), then placed/mated by the op list inside an isolated scratch
-    assembly.  Returns a deep copy.  Raises
-    :class:`backend.core.build_spec.BuildSpecError` on a malformed spec (at parse time).
-    Pin the result with :func:`tests.automation_harness.assert_assembly_roundtrip_stable`
-    and :func:`~tests.automation_harness.assert_spec_matches_calls` (``kind='assembly'``).
+    assembly.  A ``{"from_file": …}`` part is instanced by path; a
+    ``{"from_primitive": "<catalog name>"}`` part (AF-12 Phase 2) resolves its name against
+    the primitive catalog — ``primitives_dir`` overrides the catalog folder (defaults to the
+    live workspace ``Primitives`` dir the "Add Primitive" UI reads).  Returns a deep copy.
+    Raises :class:`backend.core.build_spec.BuildSpecError` on a malformed spec (at parse
+    time) or an unknown ``from_primitive`` name (at build time).  Pin the result with
+    :func:`tests.automation_harness.assert_assembly_roundtrip_stable`,
+    :func:`~tests.automation_harness.assert_spec_matches_calls` (``kind='assembly'``), and —
+    for a ``from_primitive`` part — :func:`~tests.automation_harness.assert_part_from_primitive`.
     """
-    return _build_assembly_from_parsed(parse_assembly_spec(spec))
+    return _build_assembly_from_parsed(
+        parse_assembly_spec(spec), primitives_dir=primitives_dir
+    )

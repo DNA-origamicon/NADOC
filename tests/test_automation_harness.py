@@ -153,7 +153,7 @@ def test_oxdna_coverage_report_separate_from_design_assembly():
     does NOT perturb the design/assembly coverage number."""
     from tests.automation_harness import oxdna_coverage_report
 
-    assert headless_coverage_report()["covered"] == 36  # /oxdna audit is separate
+    assert headless_coverage_report()["covered"] == 37  # /oxdna audit is separate
     ox = oxdna_coverage_report()
     assert ox["total"] == ox["covered"] + ox["uncovered"]
     covered = {r["endpoint"] for r in ox["covered_routes"]}
@@ -400,6 +400,71 @@ def test_polymer_chain_oracle_fires_vacuously_on_stacked_seed():
         after = assembly_state.get_or_404()
         with pytest.raises(AssertionError, match="~identity"):
             assert_polymer_chain(before, after, seed_jid, count=4)
+
+
+# ── The periodic-chain oracle PASSES on a real chain and FIRES otherwise ───────
+
+def test_coverage_report_marks_periodic_polymerize_route_covered():
+    """The periodic straggler flipped polymerize_periodic_assembly → covered."""
+    report = headless_coverage_report()
+    covered = {r["endpoint"] for r in report["covered_routes"]}
+    assert "polymerize_periodic_assembly" in covered
+
+
+def _periodic_chain_after():
+    """Active scratch assembly: one periodic 2-helix seed part, polymerized forward to
+    4 copies.  Returns the after-assembly snapshot."""
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+    from tests.test_headless_assembly_build import _periodic_seed_design
+
+    hab.new_assembly("Ring")
+    hab.add_inline_instance(_periodic_seed_design(42), name="Seg")
+    seed_id = assembly_state.get_or_404().instances[0].id
+    hab.polymerize_periodic(seed_id, count=4, direction="forward")
+    return assembly_state.get_or_404().model_copy(deep=True)
+
+
+def test_periodic_chain_oracle_passes_on_a_real_chain():
+    """assert_periodic_chain_tiles is green when the derived repeat tiles seamlessly."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_periodic_chain_tiles
+
+    with hab.assembly_scratch_session():
+        after = _periodic_chain_after()
+        assert_periodic_chain_tiles(after)
+
+
+def test_periodic_chain_oracle_fires_on_open_seam():
+    """Red-test: shoving one copy off the chain opens a seam junction → the oracle raises."""
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_periodic_chain_tiles
+
+    with hab.assembly_scratch_session():
+        after = _periodic_chain_after()
+        victim = after.instances[-1]
+        moved = victim.model_copy(update={"transform": hab.translation(999.0, 0.0, 0.0)})
+        broken = after.model_copy(update={
+            "instances": [moved if i.id == victim.id else i for i in after.instances]
+        })
+        with pytest.raises(AssertionError, match="open|repeating unit"):
+            assert_periodic_chain_tiles(broken)
+
+
+def test_periodic_chain_oracle_fires_on_no_chain():
+    """Red-test: a lone un-polymerized periodic seed has no junctions → the
+    non-emptiness guard raises (nothing was tiled to prove)."""
+    from backend.api import assembly_state
+    from backend.api import headless_assembly_build as hab
+    from tests.automation_harness import assert_periodic_chain_tiles
+    from tests.test_headless_assembly_build import _periodic_seed_design
+
+    with hab.assembly_scratch_session():
+        hab.new_assembly("Lone")
+        hab.add_inline_instance(_periodic_seed_design(42), name="Seg")
+        lone = assembly_state.get_or_404()
+        with pytest.raises(AssertionError, match="nothing was polymerized"):
+            assert_periodic_chain_tiles(lone)
 
 
 # ── The binding-resolves oracle PASSES on a real binding and FIRES otherwise ───

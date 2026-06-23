@@ -90,13 +90,37 @@ class FilePart:
 
 
 @dataclass
-class AssemblySpec:
-    """A parsed assembly spec: a name, a library of parsed parts (by key — each an inline
-    :class:`DesignSpec` or a file-backed :class:`FilePart`), and an ordered op list
-    referencing those parts."""
+class PrimitivePart:
+    """A part referenced by **catalog name** (AF-12 Phase 2 ``from_primitive``) rather than
+    an inline design spec or a raw file path — so an assembly spec can instance a curated,
+    pre-validated building block (``6hb_primitive`` / ``18hb_primitive`` / …) by the same
+    name the "Add Primitive" UI shows, without knowing where its ``.nadoc`` lives.
+
+    The driver resolves the name → the catalog primitive's saved ``.nadoc`` path
+    (:func:`backend.core.primitive_catalog.design_path`) and lowers it through the **exact**
+    ``from_file`` machinery (:class:`FilePart`): the part travels as a file *reference*, not
+    an embedded copy.  The new, load-bearing piece this adds over ``from_file`` is the
+    **name→catalog-path resolver**, pinned by
+    :func:`tests.automation_harness.assert_part_from_primitive` (which independently
+    re-resolves the name through the catalog and proves the placed instance is that exact
+    primitive's validated topology — a name silently pointing at the wrong/renamed primitive
+    is invisible to :func:`~tests.automation_harness.canonical_assembly`).
+
+    Only static (file-backed) catalog primitives are supported here; a *parametric*
+    primitive (``metadata.primitive_kind`` — e.g. the radius-driven circle disc) needs a
+    generative build path, not a file reference, and is deferred to a later phase."""
 
     name: str
-    parts: dict[str, DesignSpec | FilePart]
+
+
+@dataclass
+class AssemblySpec:
+    """A parsed assembly spec: a name, a library of parsed parts (by key — each an inline
+    :class:`DesignSpec`, a file-backed :class:`FilePart`, or a catalog-named
+    :class:`PrimitivePart`), and an ordered op list referencing those parts."""
+
+    name: str
+    parts: dict[str, DesignSpec | FilePart | PrimitivePart]
     ops: list[BuildOp] = field(default_factory=list)
 
 
@@ -737,22 +761,36 @@ def _parse_assembly_op(raw, *, where: str) -> BuildOp:
 
 
 _FILE_PART_KEYS = {"from_file"}
+_PRIMITIVE_PART_KEYS = {"from_primitive"}
 
 
-def _parse_part(raw, *, where: str) -> DesignSpec | FilePart:
-    """Parse one entry of an assembly's ``parts`` library → an inline :class:`DesignSpec`
-    or a file-backed :class:`FilePart`.
+def _parse_part(raw, *, where: str) -> DesignSpec | FilePart | PrimitivePart:
+    """Parse one entry of an assembly's ``parts`` library → an inline :class:`DesignSpec`,
+    a file-backed :class:`FilePart`, or a catalog-named :class:`PrimitivePart`.
 
     A ``{"from_file": "<path>"}`` object (AF-12) references a saved validated ``.nadoc``
-    by path; anything else is parsed as an inline design spec.  The two are discriminated
-    by the presence of the ``from_file`` key (a design spec is also an object, but carries
-    ``ops`` not ``from_file``)."""
+    by path; a ``{"from_primitive": "<catalog name>"}`` object (AF-12 Phase 2) references a
+    curated catalog primitive by name (resolved to its ``.nadoc`` at build time); anything
+    else is parsed as an inline design spec.  The three are discriminated by the presence of
+    the ``from_file`` / ``from_primitive`` key (a design spec is also an object, but carries
+    ``ops`` not either key).  Name validity against the live catalog is checked at *build*
+    time (the parser is catalog-agnostic), so an unknown name is a build-time error."""
     if isinstance(raw, dict) and "from_file" in raw:
         _require_keys(raw, _FILE_PART_KEYS, where=where)
         path = _as_str(_get(raw, "from_file", where=where), key="from_file", where=where)
         if not path.strip():
             raise BuildSpecError(f"{where}: 'from_file' must be a non-empty path string")
         return FilePart(path=path)
+    if isinstance(raw, dict) and "from_primitive" in raw:
+        _require_keys(raw, _PRIMITIVE_PART_KEYS, where=where)
+        name = _as_str(
+            _get(raw, "from_primitive", where=where), key="from_primitive", where=where
+        )
+        if not name.strip():
+            raise BuildSpecError(
+                f"{where}: 'from_primitive' must be a non-empty catalog name string"
+            )
+        return PrimitivePart(name=name)
     return parse_design_spec(raw, where=where)
 
 
@@ -764,7 +802,8 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
         {
           "kind": "assembly",            # optional
           "name": "My assembly",         # optional
-          "parts": { "<key>": <design-spec> | {"from_file": "<path>"}, … },  # part library
+          "parts": { "<key>": <design-spec> | {"from_file": "<path>"}
+                              | {"from_primitive": "<catalog name>"}, … },  # part library
           "ops": [
             {"op": "add_part",  "part": "<key>", "ref": "<inst-key>",
              "transform": [x,y,z]|[16 floats]|null, "connectors": [{label,position,normal}]},
@@ -828,15 +867,10 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
                     f"{loc}: references part {p['part']!r} which is not in 'parts' "
                     f"({sorted(parts)})"
                 )
-            # File-backed parts are placed by REFERENCE (add_file_instance), one
-            # instance at a time; place_grid/place_ring instance an inline design per
-            # slot, so they cannot take a file part (a later phase could add a
-            # file-backed grid that loops add_file_instance with per-slot transforms).
-            if opn.op in ("place_grid", "place_ring") and isinstance(parts[p["part"]], FilePart):
-                raise BuildSpecError(
-                    f"{loc}: file-backed part {p['part']!r} can only be placed with "
-                    "'add_part' (place_grid/place_ring instance an inline design per slot)"
-                )
+            # A file-backed part may be placed by add_part (one reference) OR by
+            # place_grid/place_ring (the driver loops add_file_instance with per-slot
+            # transforms — AF-12 follow-up — so the saved validated .nadoc travels as a
+            # path reference per slot, not rows·cols embedded copies).
         if opn.op == "add_part" and "ref" in p:
             if p["ref"] in defined:
                 raise BuildSpecError(f"{loc}: duplicate instance ref {p['ref']!r}")

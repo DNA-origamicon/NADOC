@@ -18,11 +18,14 @@ from tests.automation_harness import (
     assert_assembly_roundtrip_stable,
     assert_binding_resolves,
     assert_gear_ratio,
+    assert_instances_from_file,
     assert_instances_on_grid,
     assert_instances_on_ring,
     assert_mate_coincident,
+    assert_periodic_chain_tiles,
     assert_polymer_chain,
     canonical_assembly,
+    canonical_topology,
     headless_coverage_report,
 )
 from tests.conftest import make_6hb_design
@@ -681,18 +684,156 @@ def test_place_ring_offset_center_plane_and_roundtrips():
         )
 
 
+# ── AF-12 follow-up: file-backed parametric layout (grid / ring by reference) ──
+
+def _save_6hb(tmp_path):
+    """Save a validated 6hb primitive as an absolute-path .nadoc (absolute so it
+    resolves for both the from_file load AND the .nass round-trip flatten)."""
+    saved = make_6hb_design()
+    path = tmp_path / "primitive.nadoc"
+    path.write_text(saved.to_json(), encoding="utf-8")
+    return str(path), saved
+
+
+def test_place_file_grid_lands_on_lattice_and_references_file(tmp_path):
+    """place_file_grid drops rows×cols copies on the exact grid, and EVERY slot is a
+    genuine file reference to the saved primitive (not rows·cols embedded copies)."""
+    path, saved = _save_6hb(tmp_path)
+    with hab.assembly_scratch_session():
+        hab.new_assembly("FileGrid")
+        hab.place_file_grid(path, 2, 3, pitch=15.0)
+        a = assembly_state.get_or_404()
+        assert len(a.instances) == 6
+        assert all(i.source.type == "file" for i in a.instances)
+        assert_instances_on_grid(a, 2, 3, pitch=15.0)            # lattice
+        assert assert_instances_from_file(a, canonical_topology(saved)) == 6  # source
+
+
+def test_place_file_grid_roundtrips_stable(tmp_path):
+    """A file-backed rectangular grid lands on the lattice, every slot references the
+    primitive, AND the whole thing survives a .nass round-trip."""
+    path, saved = _save_6hb(tmp_path)
+    with hab.assembly_scratch_session():
+        def build():
+            hab.new_assembly("FileGridRT")
+            hab.place_file_grid(path, 2, 3, pitch=12.0, row_pitch=8.0)
+            return assembly_state.get_or_404().model_copy(deep=True)
+
+        reloaded = assert_assembly_roundtrip_stable(build)
+        assert len(reloaded.instances) == 6
+        assert_instances_on_grid(reloaded, 2, 3, pitch=12.0, row_pitch=8.0)
+        assert_instances_from_file(reloaded, canonical_topology(saved))
+
+
+def test_place_file_ring_lands_on_ring_and_references_file(tmp_path):
+    """place_file_ring drops n copies on the ring, every slot a file reference."""
+    path, saved = _save_6hb(tmp_path)
+    with hab.assembly_scratch_session():
+        hab.new_assembly("FileRing")
+        hab.place_file_ring(path, 6, radius=20.0)
+        a = assembly_state.get_or_404()
+        assert len(a.instances) == 6
+        assert_instances_on_ring(a, 6, radius=20.0)
+        assert assert_instances_from_file(a, canonical_topology(saved)) == 6
+
+
+# ── Periodic polymerize (single-part, derived repeat) ─────────────────────────
+
+def _seam_for(h, L: int):
+    """A periodic seam wrapping helix *h*'s far end onto its near end (low↔high bp).
+
+    A forward strand presents its 3' at high bp / 5' at low bp; a reverse strand is
+    antiparallel.  Mirrors ``tests/test_periodic_polymer.py``'s helper.
+    """
+    from backend.core.models import Direction, ForcedLigation
+
+    if h.direction == Direction.FORWARD:
+        return ForcedLigation(
+            three_prime_helix_id=h.id, three_prime_bp=L - 1, three_prime_direction=Direction.FORWARD,
+            five_prime_helix_id=h.id, five_prime_bp=0, five_prime_direction=Direction.FORWARD,
+            is_periodic_seam=True,
+        )
+    return ForcedLigation(
+        three_prime_helix_id=h.id, three_prime_bp=0, three_prime_direction=Direction.REVERSE,
+        five_prime_helix_id=h.id, five_prime_bp=L - 1, five_prime_direction=Direction.REVERSE,
+        is_periodic_seam=True,
+    )
+
+
+def _periodic_seed_design(L: int = 42, *, periodic: bool = True):
+    """A 2-helix honeycomb bundle marked with ``is_periodic_seam`` end-to-end seams,
+    so ``derive_periodic_delta`` can recover its repeat transform from one instance."""
+    from backend.core.lattice import make_bundle_design
+    from backend.core.models import LatticeType
+
+    d = make_bundle_design([(0, 0), (0, 1)], L,
+                           lattice_type=LatticeType.HONEYCOMB, strand_filter="both")
+    if periodic:
+        d.forced_ligations = [_seam_for(d.helices[0], L), _seam_for(d.helices[1], L)]
+    return d
+
+
+def _periodic_chain(L: int = 42, *, count: int = 4, direction: str = "forward"):
+    """Active scratch assembly: one periodic seed part, polymerized to ``count`` copies."""
+    hab.new_assembly("Ring")
+    hab.add_inline_instance(_periodic_seed_design(L), name="Seg")
+    seed_id = assembly_state.get_or_404().instances[0].id
+    hab.polymerize_periodic(seed_id, count=count, direction=direction)
+    return assembly_state.get_or_404().model_copy(deep=True)
+
+
+def test_periodic_polymerize_tiles_chain():
+    """The derived repeat unit tiles the chain seamlessly at every junction."""
+    with hab.assembly_scratch_session():
+        a = _periodic_chain(count=4)
+        assert len(a.instances) == 4
+        out = assert_periodic_chain_tiles(a)
+        assert out["n_junctions"] == 3
+        # straight bundle → pure axial translation repeat, ~no rotation
+        assert out["angle_deg"] < 1.0
+
+
+def test_periodic_chain_both_directions_tiles():
+    """direction='both' still tiles — the step magnitude is direction-agnostic."""
+    with hab.assembly_scratch_session():
+        a = _periodic_chain(count=5, direction="both")
+        assert len(a.instances) == 5
+        assert_periodic_chain_tiles(a)
+
+
+def test_periodic_chain_roundtrips_stable():
+    """A polymerized periodic chain validates and survives a .nass round-trip."""
+    with hab.assembly_scratch_session():
+        reloaded = assert_assembly_roundtrip_stable(lambda: _periodic_chain(count=4))
+        assert len(reloaded.instances) == 4
+
+
+def test_periodic_polymerize_requires_a_seam():
+    """A part with no periodic seam 422s (no repeat transform to derive)."""
+    import pytest as _pytest
+    from fastapi import HTTPException
+
+    with hab.assembly_scratch_session():
+        hab.new_assembly("NoSeam")
+        hab.add_inline_instance(_periodic_seed_design(42, periodic=False), name="Plain")
+        seed_id = assembly_state.get_or_404().instances[0].id
+        with _pytest.raises(HTTPException) as exc:
+            hab.polymerize_periodic(seed_id, count=4)
+        assert exc.value.status_code == 422
+
+
 # ── Coverage flip ─────────────────────────────────────────────────────────────
 
 def test_assembly_routes_now_covered():
     """AF-7 flipped create/add-instance/resolve/import; AF-8 adds connector + mate;
     AF-9 adds gear-relations + the joint-drive PATCH + belt-paths + polymerize +
-    the overhang-binding CRUD."""
+    the overhang-binding CRUD; the periodic straggler adds polymerize-periodic."""
     report = headless_coverage_report()
     covered = {r["endpoint"] for r in report["covered_routes"]}
     assert {
         "create_assembly", "add_instance", "resolve_assembly", "import_assembly",
         "add_connector", "create_mate", "create_gear_relation", "patch_joint",
-        "create_belt_path", "polymerize_assembly",
+        "create_belt_path", "polymerize_assembly", "polymerize_periodic_assembly",
         "create_assembly_overhang_binding", "patch_assembly_overhang_binding",
         "delete_assembly_overhang_binding",
     } <= covered
