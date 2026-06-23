@@ -24,6 +24,7 @@ from backend.core.oxdna_job import OxdnaStatus
 from tests.automation_harness import (
     assert_equilibration_timeline,
     assert_field_ready_specimen,
+    assert_field_sweep_map,
     assert_fully_sequenced,
     assert_relaxed_geometry_recovered,
     assert_relaxed_measurement,
@@ -698,6 +699,206 @@ def mock_oxdna_field_traj(tmp_path, monkeypatch):
 # (mean(orig−C)=0) → alignment still saturates ∝F0 and still plateaus; only the
 # per-pair distances (hence bp retention) change.  This gives the AF-20 sweep a
 # substrate where BOTH τ↔|E| (decreasing) and the destructive window vary with |E|.
+_FIELD_SWEEP_MOCK_OXDNA = '''#!/usr/bin/env python3
+import sys, re, math
+from pathlib import Path
+inp = Path(sys.argv[1]); text = inp.read_text()
+def val(k):
+    m = re.search(r"^" + k + r"\\s*=\\s*(.+)$", text, re.M)
+    return m.group(1).strip() if m else None
+conf = Path(val("conf_file"))
+lastconf = val("lastconf_file") or "last_conf.dat"
+energy = val("energy_file") or "energy.dat"
+traj = val("trajectory_file") or "trajectory.dat"
+steps = int(val("steps") or "100")
+cwd = Path.cwd()
+ff = val("external_forces_file")
+ftxt = Path(ff).read_text() if ff and Path(ff).exists() else ""
+trapped = set(int(m) for m in re.findall(r"type = trap\\nparticle = (\\d+)", ftxt))
+sm = re.search(r"type = string\\nparticle = -1\\nF0 = ([-\\d.eE]+)\\nrate = [-\\d.eE]+\\ndir = ([-\\d.eE,]+)", ftxt)
+lines = conf.read_text().splitlines()
+hdr = lines[:3]
+data = [l for l in lines[3:] if l.strip()]
+n_frames = max(2, steps // 100)
+if sm:
+    F0 = float(sm.group(1))
+    dx, dy, dz = (float(x) for x in sm.group(2).split(","))
+    sc = 100.0
+    pk = (sc * F0 * dx, sc * F0 * dy, sc * F0 * dz)
+    k = max(1.3, 4.5 - 12.0 * F0)            # stronger field -> smaller k -> smaller tau
+    s_max = 2.0 if F0 >= 0.4 else 0.0        # above threshold: dilate -> melt
+else:
+    F0 = 0.0; pk = (0.0, 0.0, 0.0); k = max(1.0, n_frames / 4.0); s_max = 0.0
+# centroid of the free (non-trapped) beads' original positions
+free_xyz = [[float(x) for x in l.split()[:3]]
+            for i, l in enumerate(data) if i not in trapped]
+if free_xyz:
+    cx = sum(p[0] for p in free_xyz) / len(free_xyz)
+    cy = sum(p[1] for p in free_xyz) / len(free_xyz)
+    cz = sum(p[2] for p in free_xyz) / len(free_xyz)
+else:
+    cx = cy = cz = 0.0
+frames_txt = []
+for fi in range(n_frames):
+    factor = 1.0 - math.exp(-fi / k)
+    sh = (pk[0] * factor, pk[1] * factor, pk[2] * factor)
+    s = s_max * factor
+    out = ["t = " + str(fi), hdr[1], hdr[2]]
+    idx = 0
+    for ln in data:
+        p = ln.split()
+        if idx not in trapped:
+            ox, oy, oz = float(p[0]), float(p[1]), float(p[2])
+            p[0] = repr(cx + (ox - cx) * (1.0 + s) + sh[0])
+            p[1] = repr(cy + (oy - cy) * (1.0 + s) + sh[1])
+            p[2] = repr(cz + (oz - cz) * (1.0 + s) + sh[2])
+        out.append(" ".join(p)); idx += 1
+    frames_txt.append("\\n".join(out))
+(cwd / traj).write_text("\\n".join(frames_txt) + "\\n")
+(cwd / lastconf).write_text("\\n".join(frames_txt[-1].splitlines()) + "\\n")
+with open(cwd / energy, "w") as f:
+    for i in range(n_frames):
+        f.write(f"{i} {-1.5 - 0.001 * i} 0.5 -1.0\\n")
+'''
+
+
+@pytest.fixture
+def mock_oxdna_field_sweep(tmp_path, monkeypatch):
+    """A fake oxDNA binary whose field stage gives a τ that DECREASES with |E| and a
+    melt (base-pair break) above a destructive threshold (AF-20 sweep substrate)."""
+    p = tmp_path / "mock_oxdna_field_sweep.py"
+    p.write_text(_FIELD_SWEEP_MOCK_OXDNA)
+    p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    monkeypatch.setenv("OXDNA_BIN", str(p))
+    return p
+
+
+def _sweep_specimen(tmp_path):
+    """Build a relaxed specimen anchored on a REAL extruded ssDNA overhang (12 nt),
+    given a structure-safe random sequence so no base is undefined.
+
+    This is the correct field experimental setup: the anchor is a genuine
+    single-stranded overhang tip (the whole overhang domain is pinned), NOT a regular
+    duplex domain buried in the bundle.  ``extrude_valid_overhang`` delegates to the
+    geometry oracle (``overhang_candidate_error``) so the overhang lands exactly where
+    the UI overhang tool would offer it (CLAUDE.md 'DNA Topology — Ask First': the
+    site is chosen by the validated oracle, not reasoned about here).
+
+    ``make_6hb_design`` is multi-scaffold, so it is sequenced with ``_sequence_for_oxdna``
+    (which WC-complements staples per (helix, bp) across all scaffolds); the extruded
+    overhang's ssDNA has no WC partner, so it is given a fixed random sequence so no
+    base is undefined (the simulation guard requires a definite base on every
+    nucleotide)."""
+    from tests.conftest import extrude_valid_overhang
+
+    base = _sequence_for_oxdna(make_6hb_design())
+    d, ovhg_id = extrude_valid_overhang(base, length_bp=12)
+    d = _define_overhang_bases(d, ovhg_id, seed=20240623)
+    anchor = {"kind": "overhang", "id": ovhg_id}
+    result = hox.build_field_specimen(
+        d, tmp_path, anchor=anchor, sequence=False, min_bp_retained=0.0)
+    assert result["job"].status is OxdnaStatus.completed, result["job"].error
+    return result
+
+
+def _define_overhang_bases(design, overhang_id, *, seed):
+    """Fill the overhang domain's slice of its parent strand's (domain-order) sequence
+    with fixed random A/C/G/T, leaving every other base unchanged → no undefined base.
+    Pure index arithmetic on the documented 5′→3′ domain-order layout (no geometry)."""
+    import random
+    rng = random.Random(seed)
+    new_strands = []
+    for s in design.strands:
+        oh_idx = next((i for i, dm in enumerate(s.domains)
+                       if dm.overhang_id == overhang_id), None)
+        if oh_idx is None or not s.sequence:
+            new_strands.append(s)
+            continue
+        offset = sum(abs(dm.end_bp - dm.start_bp) + 1 for dm in s.domains[:oh_idx])
+        dm = s.domains[oh_idx]
+        length = abs(dm.end_bp - dm.start_bp) + 1
+        chars = list(s.sequence)
+        for j in range(offset, offset + length):
+            chars[j] = rng.choice("ACGT")
+        new_strands.append(s.model_copy(update={"sequence": "".join(chars)}))
+    return design.model_copy(update={"strands": new_strands})
+
+
+def test_field_sweep_maps_response_surface(tmp_path, mock_oxdna_field_sweep):
+    """The full AF-20 path: sweep |E| × direction off one relaxed specimen → a
+    complete map with a non-destructive operating window, a destructive upper bound,
+    and a τ that decreases with |E| (the field↔equilibration correlation)."""
+    specimen = _sweep_specimen(tmp_path)
+    sweep = hox.sweep_field_response(
+        specimen, [2.0, 4.0, 8.0, 16.0, 32.0], [(0, 0, 1), (0, 1, 0)], tmp_path,
+        field_steps=2000, melt_floor=0.5, min_confidence=10)
+
+    assert not sweep["skipped"]
+    assert len(sweep["map"]) == 5 * 2
+    summary = assert_field_sweep_map(
+        sweep, benign_range=(0.0, 20.0), destructive_range=(24.0, 1e9),
+        melt_floor=0.5)
+    assert summary["n_directions_checked"] == 2
+    assert summary["n_benign_safe"] >= 1
+    # The 32 pN cells melted (destructive upper bound); the 2 pN cells held.
+    assert sweep["map"][(32.0, (0.0, 0.0, 1.0))]["destructive"] is True
+    assert sweep["map"][(2.0, (0.0, 0.0, 1.0))]["destructive"] is False
+    # τ fell monotonically across the responsive band (per direction).
+    band = sorted((pN, c["tau_steps"]) for (pN, d), c in sweep["map"].items()
+                  if d == (0.0, 0.0, 1.0) and not c["destructive"])
+    taus = [t for _pN, t in band]
+    assert taus == sorted(taus, reverse=True) and taus[0] > taus[-1]
+
+
+def _sweep_cell(*, tau, destructive=False, aligned=True, bp_min=1.0):
+    return {"tau_steps": tau, "tau_frames": (tau / 100.0 if tau else None),
+            "converged": aligned, "aligned": aligned, "bp_min": bp_min,
+            "bp_final": bp_min, "n_frames": 20, "melted": bp_min < 0.5,
+            "confident": True, "destructive": destructive}
+
+
+def test_field_sweep_oracle_fires_on_flat_tau():
+    """Can-go-red (clause 4): a field-INDEPENDENT τ (flat across |E|) → the field↔τ
+    correlation clause fires.  Hand-built so clauses 1-3 pass (a real safe window +
+    a melted upper bound) and ONLY the flat-τ clause can fire — the AF-19 mock can't
+    be reused here (it never melts → no destructive cell to satisfy clause 3)."""
+    d = (0.0, 0.0, 1.0)
+    sweep = {
+        "map": {(2.0, d): _sweep_cell(tau=300.0),
+                (4.0, d): _sweep_cell(tau=300.0),       # flat — same τ as 2 pN
+                (8.0, d): _sweep_cell(tau=300.0),
+                (32.0, d): _sweep_cell(tau=300.0, destructive=True, bp_min=0.0)},
+        "skipped": [], "intensities_pN": [2.0, 4.0, 8.0, 32.0],
+        "directions": [d], "melt_floor": 0.5}
+    with pytest.raises(AssertionError, match="flat across"):
+        assert_field_sweep_map(sweep, benign_range=(0.0, 20.0),
+                               destructive_range=(24.0, 1e9), melt_floor=0.5)
+
+
+def test_field_sweep_oracle_fires_on_unbounded_window(tmp_path, mock_oxdna_field_sweep):
+    """Can-go-red (clause 3): calling the oracle with a destructive range over cells
+    that did NOT melt (all ≤ the threshold) → the 'window not bounded above' fires."""
+    specimen = _sweep_specimen(tmp_path)
+    sweep = hox.sweep_field_response(
+        specimen, [2.0, 4.0, 8.0, 16.0], [(0, 0, 1)], tmp_path,
+        field_steps=2000, melt_floor=0.5, min_confidence=10)
+    with pytest.raises(AssertionError, match="did\\s+NOT melt|not bounded above"):
+        assert_field_sweep_map(sweep, benign_range=(0.0, 4.0),
+                               destructive_range=(8.0, 20.0), melt_floor=0.5)
+
+
+def test_field_sweep_oracle_fires_on_gap(tmp_path, mock_oxdna_field_sweep):
+    """Can-go-red (clause 1): a missing grid cell → the no-gaps clause fires."""
+    specimen = _sweep_specimen(tmp_path)
+    sweep = hox.sweep_field_response(
+        specimen, [2.0, 4.0, 32.0], [(0, 0, 1)], tmp_path,
+        field_steps=2000, melt_floor=0.5, min_confidence=10)
+    sweep["map"].pop((4.0, (0.0, 0.0, 1.0)))   # drop a verdict
+    with pytest.raises(AssertionError, match="no verdict for cell|gap in the map"):
+        assert_field_sweep_map(sweep, benign_range=(0.0, 20.0),
+                               destructive_range=(24.0, 1e9), melt_floor=0.5)
+
+
 def _landmarks(design):
     """Two well-separated landmark nucleotide keys present in the design geometry."""
     from backend.core.design_geometry import _geometry_for_design

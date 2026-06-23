@@ -342,6 +342,115 @@ def build_field_specimen(spec_or_design, workspace, *, anchor: dict,
     return {"design": design, "job": job, "anchor_keys": anchor_keys, "anchor": anchor}
 
 
+# ── Field SWEEP: a (|E|, direction) response surface over one specimen (AF-20) ──
+
+def _measure_field_cell(job, workspace, design, field_dir, anchor_keys, *,
+                        melt_floor: float, min_confidence: int) -> dict | None:
+    """Reduce ONE terminal field child job to a sweep-cell verdict via the AF-19
+    time-resolved measure.  Returns ``None`` (skip) only when the job did not
+    complete or wrote no field trajectory (so the caller can record a no-silent-
+    truncation note); otherwise a dict of the *measured* observables:
+    ``{tau_steps, tau_frames, converged, aligned, bp_min, bp_final, n_frames,
+    melted, confident, destructive}``.  ``destructive`` is the convenience verdict
+    (``not (aligned and bp_min >= melt_floor)``) — the oracle recomputes it from
+    the raw fields, so it is narrative here, not load-bearing.
+    """
+    from backend.core.oxdna_health import measure_field_equilibration
+    from backend.physics.oxdna_interface import read_trajectory_frames_full
+
+    if job.status != OxdnaStatus.completed:
+        return None
+    ws = Path(workspace)
+    stage = next((s for s in job.stages if s.kind == "field"), None)
+    if stage is None:
+        return None
+    traj = job.stage_dir(ws, stage.name) / "trajectory.dat"
+    if not traj.exists():
+        return None
+
+    frames = read_trajectory_frames_full(traj, design)
+    n_frames = len(frames)
+    confident = n_frames >= min_confidence
+    if n_frames < 2:
+        return {"tau_steps": None, "tau_frames": None, "converged": False,
+                "aligned": False, "bp_min": 0.0, "bp_final": 0.0,
+                "n_frames": n_frames, "melted": True, "confident": False,
+                "destructive": True}
+
+    total_steps = getattr(stage, "steps", None)
+    steps_per_frame = (total_steps / n_frames) if total_steps else 1.0
+    eq = measure_field_equilibration(frames, field_dir, anchor_keys, design=design,
+                                     steps_per_frame=steps_per_frame,
+                                     melt_floor=melt_floor)
+    aligned = bool(eq["converged"] and eq["tau_steps"] is not None
+                   and eq["tau_steps"] > 0 and confident)
+    bp_min = eq["bp_min"]
+    destructive = not (aligned and bp_min >= melt_floor)
+    return {"tau_steps": eq["tau_steps"], "tau_frames": eq["tau_frames"],
+            "converged": bool(eq["converged"]), "aligned": aligned,
+            "bp_min": bp_min, "bp_final": eq["bp_timecourse"][-1],
+            "n_frames": n_frames, "melted": bool(eq["melted"]),
+            "confident": confident, "destructive": destructive}
+
+
+def sweep_field_response(specimen: dict, intensities_pN, directions, workspace, *,
+                         field_steps: int = 2000, melt_floor: float = 0.5,
+                         min_confidence: int = 10, timeout: float = 30.0,
+                         anchor_stiff: float = DEFAULT_ANCHOR_STIFF) -> dict:
+    """Sweep an electric field over a grid of ``(|E|, direction)`` and assemble the
+    per-cell *response surface* of a single field-ready specimen (AF-20, Tier 6).
+
+    ``specimen`` is the dict :func:`build_field_specimen` returns (``design`` +
+    relaxed ``job`` + ``anchor`` + ``anchor_keys``).  For every intensity (pN) ×
+    direction cell, a **child field job** is branched off the SAME relaxed parent
+    (reusing the :func:`append_field` child-job spawn — the parent is relaxed once,
+    so each cell measures the same starting structure under a different field), run
+    to terminal, and reduced by the AF-19 time-resolved measure
+    (:func:`~backend.core.oxdna_health.measure_field_equilibration`) to a cell
+    verdict carrying the equilibration time τ, the aligned/converged flags, and the
+    base-pair-retention floor (the melt watch).
+
+    Returns ``{"map": {(pN, dir_tuple): cell}, "skipped": [(pN, dir_tuple), …],
+    "intensities_pN": [...], "directions": [...], "melt_floor": …}``.  A cell whose
+    field job failed or wrote no trajectory is recorded in ``skipped`` (NOT silently
+    dropped — the sweep grid stays auditable).  Pin the surface with
+    :func:`tests.automation_harness.assert_field_sweep_map`.
+
+    *Physical-layer only* — it reads each field trajectory, never writes it back
+    into ``Design`` (the Three-Layer Law).  ``directions``/``intensities_pN`` are
+    user/spec inputs; the cells measure magnitudes (τ, alignment projection, bp
+    retention) → direction-agnostic, no sign/handedness reasoning here.
+    """
+    parent = specimen["job"]
+    if parent.status != OxdnaStatus.completed:
+        raise ValueError(
+            "sweep_field_response: the specimen's relaxed parent job is not "
+            f"completed (status={parent.status}); build it with build_field_specimen")
+    design = specimen["design"]
+    anchor = specimen["anchor"]
+    anchor_keys = specimen["anchor_keys"]
+    dirs = [tuple(float(c) for c in d) for d in directions]
+    intensities = [float(p) for p in intensities_pN]
+
+    response: dict[tuple, dict] = {}
+    skipped: list[tuple] = []
+    for pN in intensities:
+        for d in dirs:
+            info = append_field(parent.job_id, workspace, field_pN=pN, dir=list(d),
+                                anchors=[anchor], steps=field_steps,
+                                anchor_stiff=anchor_stiff)
+            job = wait_for_terminal(info["job_id"], workspace, timeout=timeout)
+            cell = _measure_field_cell(job, workspace, design, list(d), anchor_keys,
+                                       melt_floor=melt_floor,
+                                       min_confidence=min_confidence)
+            if cell is None:
+                skipped.append((pN, d))
+                continue
+            response[(pN, d)] = cell
+    return {"map": response, "skipped": skipped, "intensities_pN": intensities,
+            "directions": dirs, "melt_floor": melt_floor}
+
+
 # ── Hardware benchmark: auto-tune the relaxation backend headlessly ────────────
 
 def run_oxdna_benchmark(design: Design, workspace, *, steps: int | None = None,

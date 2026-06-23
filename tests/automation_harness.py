@@ -2444,6 +2444,102 @@ def assert_equilibration_timeline(job, workspace, field_dir, anchor_keys, *,
     return result
 
 
+def assert_field_sweep_map(sweep, *, benign_range, destructive_range,
+                           melt_floor=0.5, tau_tol_steps=1e-6,
+                           min_tau_drop_steps=1.0):
+    """AF-20 (Tier 6) oracle: a swept ``(|E|, direction)`` field response surface is
+    a *complete, physically-sensible* map — the first automated MULTI-config physical
+    experiment.  Where Tier 5 measured one structure at one condition, this asserts a
+    **response surface**: a non-destructive operating window + the field-strength ↔
+    equilibration-timeline correlation the user wants.
+
+    ``sweep`` is the dict :func:`~backend.api.headless_oxdna_build.sweep_field_response`
+    returns (``map`` keyed by ``(pN, dir_tuple)`` + ``skipped`` + ``intensities_pN`` +
+    ``directions``).  Four clauses:
+
+    1. **no gaps** — no cell was skipped, and every ``(pN, direction)`` grid cell
+       carries a verdict (a sweep that silently dropped a condition is not a map).
+    2. **a non-destructive window exists** — at least one cell whose ``|E|`` lies in
+       ``benign_range`` is non-destructive (aligned to a new pose AND its base-pair
+       retention stayed above ``melt_floor`` for the whole swing).  *Recomputed here*
+       from the raw measured ``aligned``/``bp_min`` fields, not the wrapper's stored
+       ``destructive`` flag (so the oracle measures the surface, it doesn't echo it).
+    3. **the destructive regime is destructive** — ``destructive_range`` covers ≥1
+       swept cell AND every such cell IS destructive (it melted / failed to hold) —
+       the "without ripping it apart" window has a real upper bound.
+    4. **τ decreases with |E|** — within each direction's *responsive band* (the
+       non-destructive, aligned cells, ordered by ``|E|``) the equilibration time τ
+       is monotone non-increasing AND actually falls (the strongest responsive field
+       equilibrates faster than the weakest — the field↔τ correlation, not a flat
+       line).  ``≥ 2`` responsive cells are required so the trend is non-vacuous.
+
+    ``benign_range``/``destructive_range`` are inclusive ``(lo_pN, hi_pN)`` bands.
+    Direction-agnostic (τ + retention are magnitudes).  Returns a summary dict.
+
+    Can-go-red: a skipped/incomplete grid (clause 1); a benign band with no safe
+    cell (clause 2); a destructive band that did not melt, i.e. a "non-empty"
+    (still-intact) destructive window (clause 3); a flat, field-independent τ
+    (clause 4).
+    """
+    cells = sweep["map"]
+    assert not sweep["skipped"], (
+        f"field sweep skipped {len(sweep['skipped'])} cell(s) {sweep['skipped']} — "
+        "the response surface is incomplete (a field job failed or wrote no "
+        "trajectory); no silent truncation of the grid")
+
+    # Clause 1 — every grid cell present.
+    grid = [(pN, d) for pN in sweep["intensities_pN"] for d in sweep["directions"]]
+    assert grid, "field sweep covered no (|E|, direction) cells (empty grid)"
+    for key in grid:
+        assert key in cells, f"field sweep has no verdict for cell {key} (a gap in the map)"
+
+    def _nondestructive(cell):
+        # Recompute from the raw measured fields (NOT cell["destructive"]).
+        return bool(cell["aligned"]) and cell["bp_min"] >= melt_floor
+
+    # Clause 2 — a non-destructive operating window exists in the benign band.
+    blo, bhi = benign_range
+    benign_safe = [k for k, c in cells.items()
+                   if blo <= k[0] <= bhi and _nondestructive(c)]
+    assert benign_safe, (
+        f"no non-destructive cell in the benign |E| range {benign_range} pN — the "
+        "specimen has no safe operating window where it aligns without melting")
+
+    # Clause 3 — the destructive band covers real cells and they all melted.
+    dlo, dhi = destructive_range
+    destr_cells = [(k, c) for k, c in cells.items() if dlo <= k[0] <= dhi]
+    assert destr_cells, (
+        f"destructive |E| range {destructive_range} pN covers no swept cell — the "
+        "sweep cannot certify an upper bound (vacuous)")
+    still_intact = [k for k, c in destr_cells if _nondestructive(c)]
+    assert not still_intact, (
+        f"cells {still_intact} in the destructive range {destructive_range} pN did "
+        "NOT melt — the non-destructive window is not bounded above (the structure "
+        "survives a field that should rip it apart)")
+
+    # Clause 4 — τ decreases with |E| in each direction's responsive band.
+    n_checked = 0
+    for d in sweep["directions"]:
+        band = sorted((k[0], c) for k, c in cells.items()
+                      if k[1] == d and _nondestructive(c))
+        taus = [c["tau_steps"] for _pN, c in band]
+        assert len(taus) >= 2, (
+            f"direction {d}: responsive band has {len(taus)} cell(s) (<2) — cannot "
+            "test a τ-vs-|E| trend; widen the responsive intensity range")
+        for (lo_pN, a), (hi_pN, b) in zip(band, band[1:]):
+            assert b["tau_steps"] <= a["tau_steps"] + tau_tol_steps, (
+                f"direction {d}: equilibration time τ rose from {a['tau_steps']:.1f} "
+                f"({lo_pN} pN) to {b['tau_steps']:.1f} ({hi_pN} pN) — stronger field "
+                "should equilibrate at least as fast (τ non-increasing in |E|)")
+        assert taus[0] - taus[-1] >= min_tau_drop_steps, (
+            f"direction {d}: τ is flat across |E| ({taus}) — no field↔equilibration "
+            "correlation (the response is field-strength independent)")
+        n_checked += 1
+
+    return {"n_cells": len(cells), "n_benign_safe": len(benign_safe),
+            "n_destructive": len(destr_cells), "n_directions_checked": n_checked}
+
+
 def assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,
                                workspace, min_confidence=RMSF_PRELIM_FRAMES):
     """Tier-5 constraint primitive: a *measured* geometric property of the
