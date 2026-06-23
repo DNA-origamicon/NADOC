@@ -2371,6 +2371,79 @@ def assert_field_ready_specimen(result, design: Design, workspace, *,
             "field_response": response}
 
 
+def assert_equilibration_timeline(job, workspace, field_dir, anchor_keys, *,
+                                  design: Design, melt_floor: float = 0.5,
+                                  min_confidence: int = 10):
+    """AF-19 (Tier 6) oracle: a field run reaches a stable equilibrium in finite time
+    *without melting* — the structure swings to a new pose and holds together.
+
+    ``measure_field_response`` (AF-18) is **endpoint-only**: it compares the final
+    field pose to the field-off reference and is blind to (a) *how long* the swing took
+    and (b) any *transient* base-pair melt mid-swing.  This oracle reads the whole
+    field-stage ``trajectory.dat`` and asserts a **time-resolved** verdict:
+
+    1. **confidence gate** — at least ``min_confidence`` trajectory frames were written
+       (a too-short run cannot certify an equilibration timescale; mirrors the Tier-5
+       frame-count gate);
+    2. **finite positive τ + plateau** — :func:`~backend.core.oxdna_health.measure_field_equilibration`
+       finds a monotone-within-noise approach to a stable plateau and a finite positive
+       equilibration time τ (a run still climbing at the end has *not* equilibrated →
+       ``converged`` is False → this fails);
+    3. **non-melt invariant** — base-pair retention never drops below ``melt_floor`` at
+       ANY frame across the whole timeline (the "aligns without ripping it apart"
+       window the user wants — checked transiently, not just at the end).
+
+    ``job`` is the terminal field child job (from
+    :func:`~backend.api.headless_oxdna_build.run_field` or an ``append_field`` child);
+    ``anchor_keys`` are the pinned nucleotide keys (the field anchor); ``field_dir`` the
+    field direction (magnitudes/projection are measured → direction-agnostic).
+    Returns the :func:`measure_field_equilibration` result dict.
+
+    *Physical-layer only* — reads trajectory geometry, never writes it back into
+    ``Design``.  Can-go-red: a non-converging (never-plateau) run yields no finite τ
+    (clause 2); a melt during the swing breaches the floor (clause 3); too few frames
+    is inconclusive (clause 1).
+    """
+    from pathlib import Path
+
+    from backend.core.oxdna_health import measure_field_equilibration
+    from backend.physics.oxdna_interface import read_trajectory_frames_full
+
+    status = getattr(job.status, "value", str(job.status))
+    assert status == "completed", (
+        f"field job did not reach completed (status={status!r}); error={job.error!r}")
+
+    ws = Path(workspace)
+    field_idx = next((i for i, s in enumerate(job.stages) if s.kind == "field"), None)
+    assert field_idx is not None, "job has no field stage to read a timeline from"
+    stage = job.stages[field_idx]
+    traj = job.stage_dir(ws, stage.name) / "trajectory.dat"
+    assert traj.exists(), f"field stage wrote no trajectory.dat ({traj})"
+
+    frames = read_trajectory_frames_full(traj, design)
+    n_frames = len(frames)
+    assert n_frames >= min_confidence, (
+        f"field equilibration is INCONCLUSIVE — only {n_frames} trajectory "
+        f"frame(s) (need >= {min_confidence}); run a longer field stage to certify "
+        "a timescale (the confidence gate)")
+
+    total_steps = getattr(stage, "steps", None)
+    steps_per_frame = (total_steps / n_frames) if total_steps else 1.0
+
+    result = measure_field_equilibration(
+        frames, field_dir, anchor_keys, design=design,
+        steps_per_frame=steps_per_frame, melt_floor=melt_floor)
+
+    assert result["converged"], (
+        f"field response did not equilibrate to a stable plateau: {result['reason']}")
+    assert result["tau_steps"] is not None and result["tau_steps"] > 0, (
+        f"no finite positive equilibration time τ (tau_steps={result['tau_steps']!r})")
+    assert not result["melted"], (
+        f"structure melted during the field swing — base-pair retention dropped to "
+        f"{result['bp_min']:.0%} below the {melt_floor:.0%} floor (it was ripped apart)")
+    return result
+
+
 def assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,
                                workspace, min_confidence=RMSF_PRELIM_FRAMES):
     """Tier-5 constraint primitive: a *measured* geometric property of the

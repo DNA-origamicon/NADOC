@@ -721,6 +721,153 @@ def field_response_from_confs(
         field_dir, anchor_keys, **kw)
 
 
+def measure_field_equilibration(
+    frames,
+    field_dir,
+    anchor_keys,
+    *,
+    design: Design,
+    steps_per_frame: float = 1.0,
+    melt_floor: float = 0.0,
+    plateau_frac: float = 1.0 - 1.0 / math.e,
+    plateau_slope_frac: float = 0.3,
+    min_rise_nm: float = 0.5,
+    monotone_tol_frac: float = 0.15,
+) -> dict:
+    """Extract the *time course* of a structure's response to an electric-field stage
+    — the equilibration timeline τ + a transient-melt watch (AF-19, Tier 6).
+
+    Where :func:`measure_field_response` is **endpoint-only** (the final relaxed pose
+    vs the field-off reference), this reads the WHOLE field-stage trajectory and
+    measures, frame by frame, how the free body aligns to the field AND whether the
+    structure holds together *during* the swing.  ``frames`` is the list of
+    per-nucleotide maps :func:`read_trajectory_frames_full` returns (each
+    ``{(helix_id, bp_index, direction): {backbone_position, a1, …}}``), in time order;
+    frame 0 is the field-off start the displacement is measured against.  ``field_dir``
+    is the field direction (only its unit direction matters — projection magnitudes are
+    measured, so no sign/handedness reasoning enters here); ``anchor_keys`` are the
+    pinned ``(helix_id, bp_index, direction)`` keys (their nucleotides are excluded
+    from the free-body projection — they are held by traps).
+
+    Two per-frame observables:
+
+    * **alignment** — the mean displacement of the *free* (non-anchored) nucleotides
+      along the field direction, relative to frame 0 (the same projection
+      :func:`measure_field_response` reports as ``free_proj_along_field_nm``, now per
+      frame).  Under a DC field an anchored body swings to a new pose and the
+      projection rises and **saturates**.
+    * **bp retention** — :func:`base_pair_retention` per frame (fraction of designed WC
+      pairs still hydrogen-bonded), so a *transient* melt mid-swing is visible, not just
+      the endpoint.
+
+    The monotone approach is fit to its plateau (mean of the tail frames) and τ is the
+    time (in steps, via ``steps_per_frame``) to reach ``plateau_frac`` of the plateau
+    (``1 − 1/e`` ≈ 63%, linearly interpolated between bracketing frames).  ``converged``
+    is True only when the response is **non-vacuous** (total rise ≥ ``min_rise_nm``),
+    **monotone within noise** (no frame drops more than ``monotone_tol_frac`` of the
+    plateau below its predecessor), and has actually **plateaued** (the late-frame slope
+    has fallen to ≤ ``plateau_slope_frac`` of the early-frame slope — a run still
+    climbing at the end has *not* equilibrated, so τ is reported as ``None``).
+
+    ``melted`` is True when bp retention dips below ``melt_floor`` at ANY frame (the
+    "without ripping it apart" invariant — the floor is breached even transiently).
+
+    Returns ``{n_frames, alignment_timecourse, bp_timecourse, plateau, aligned_final,
+    tau_frames, tau_steps, converged, bp_min, melted, reason}``.  *Physical-layer only*
+    — it reads trajectory geometry, never writes it back into ``Design``.  Raises on
+    fewer than two frames or a zero field direction (no silent degenerate timeline).
+    """
+    if frames is None or len(frames) < 2:
+        raise ValueError(
+            "measure_field_equilibration: need at least two trajectory frames to "
+            "measure a time course")
+    fdir = np.asarray(field_dir, dtype=float)
+    fnorm = float(np.linalg.norm(fdir))
+    if fnorm <= 1e-9:
+        raise ValueError("measure_field_equilibration: field_dir is ~zero")
+    fdir = fdir / fnorm
+    anchor_set = {_landmark_key(tuple(k)[:3]) for k in anchor_keys}
+
+    ref = frames[0]
+    free_keys = [k for k in ref if k not in anchor_set]
+    if not free_keys:
+        raise ValueError(
+            "measure_field_equilibration: no free (non-anchored) nucleotides to "
+            "measure — every key is anchored")
+
+    alignment: list[float] = []
+    for fr in frames:
+        projs = []
+        for k in free_keys:
+            if k not in fr:
+                continue
+            disp = np.asarray(fr[k]["backbone_position"], dtype=float) - \
+                np.asarray(ref[k]["backbone_position"], dtype=float)
+            projs.append(float(np.dot(disp, fdir)))
+        alignment.append(float(np.mean(projs)) if projs else 0.0)
+
+    bp_timecourse = [base_pair_retention(design, fr)[0] for fr in frames]
+    bp_min = min(bp_timecourse)
+    melted = bp_min < melt_floor
+
+    n = len(alignment)
+    tail_n = max(2, n // 4)
+    plateau = float(np.mean(alignment[-tail_n:]))
+    aligned_final = alignment[-1]
+    total_rise = aligned_final - alignment[0]
+
+    reasons: list[str] = []
+    if total_rise < min_rise_nm:
+        reasons.append(
+            f"free-body response {total_rise:.2f} nm < {min_rise_nm} nm min "
+            "(no field response / field-independent)")
+
+    back_tol = monotone_tol_frac * abs(plateau)
+    backsteps = sum(1 for i in range(1, n)
+                    if alignment[i] < alignment[i - 1] - back_tol)
+    if backsteps:
+        reasons.append(
+            f"approach is non-monotone ({backsteps} frame(s) recede past noise)")
+
+    third = max(1, n // 3)
+    early_slope = (alignment[third] - alignment[0]) / third
+    late_slope = (alignment[-1] - alignment[-1 - third]) / third
+    plateaued = early_slope > 0 and late_slope <= plateau_slope_frac * early_slope
+    if not plateaued:
+        reasons.append(
+            "trajectory has not plateaued (late-frame slope "
+            f"{late_slope:.3f} vs early {early_slope:.3f} nm/frame) — not equilibrated")
+
+    converged = not reasons
+    tau_frames: float | None = None
+    tau_steps: float | None = None
+    if converged:
+        target = alignment[0] + plateau_frac * (plateau - alignment[0])
+        for i in range(1, n):
+            if alignment[i] >= target:
+                lo, hi = alignment[i - 1], alignment[i]
+                frac = 0.0 if hi == lo else (target - lo) / (hi - lo)
+                tau_frames = (i - 1) + frac
+                break
+        if tau_frames is None:
+            tau_frames = float(n - 1)
+        tau_steps = tau_frames * steps_per_frame
+
+    return {
+        "n_frames": n,
+        "alignment_timecourse": alignment,
+        "bp_timecourse": bp_timecourse,
+        "plateau": plateau,
+        "aligned_final": aligned_final,
+        "tau_frames": tau_frames,
+        "tau_steps": tau_steps,
+        "converged": converged,
+        "bp_min": bp_min,
+        "melted": melted,
+        "reason": "; ".join(reasons) or "monotone approach to a stable plateau",
+    }
+
+
 # ── Declarative relaxed-structure constraints (AF-13 P3) ───────────────────────
 # A constraint is a *declarative* statement about the relaxed structure, e.g.
 # "the two ends are 50 nm ± 5 nm apart, certified by >= 50 pooled frames".  It

@@ -22,6 +22,7 @@ import pytest
 from backend.api import headless_oxdna_build as hox
 from backend.core.oxdna_job import OxdnaStatus
 from tests.automation_harness import (
+    assert_equilibration_timeline,
     assert_field_ready_specimen,
     assert_fully_sequenced,
     assert_relaxed_geometry_recovered,
@@ -411,6 +412,139 @@ def test_field_ready_oracle_fires_on_empty_anchor(tmp_path, mock_oxdna_field):
         assert_field_ready_specimen(result, result["design"], tmp_path)
 
 
+# ── AF-19 (Tier 6): field equilibration-timeline τ + non-melt oracle ───────────
+
+def _resolve_anchor_keys(design, anchor):
+    from backend.physics.oxdna_interface import resolve_anchor_particles
+    _parts, keys = resolve_anchor_particles(design, [anchor])
+    return keys
+
+
+def test_equilibration_timeline_extracts_finite_tau(tmp_path, mock_oxdna_field_traj):
+    """End-to-end: relax → field (overhang anchored) → the time-resolved oracle
+    finds a finite positive τ, a monotone approach to a stable plateau, and no melt
+    across the whole field trajectory."""
+    d, _dom = _design_with_overhang_anchor()
+    anchor = {"kind": "overhang", "id": "ov_anchor"}
+    keys = _resolve_anchor_keys(d, anchor)
+    job = hox.run_field(d, tmp_path, field_pN=4.0, dir=[0, 0, 1], anchors=[anchor],
+                        field_steps=2000, min_bp_retained=0.0)
+    assert job.status is OxdnaStatus.completed, job.error
+
+    out = assert_equilibration_timeline(
+        job, tmp_path, [0, 0, 1], keys, design=d, melt_floor=0.5)
+    assert out["converged"] is True
+    assert out["tau_steps"] is not None and out["tau_steps"] > 0
+    assert out["melted"] is False
+    assert out["bp_min"] >= 0.5
+    # The free body actually rose and saturated (the timeline isn't a flat line).
+    assert out["aligned_final"] > out["alignment_timecourse"][0] + 0.5
+
+
+def test_equilibration_timeline_inconclusive_on_short_run(tmp_path, mock_oxdna_field_traj):
+    """The confidence gate fires: too few field frames → INCONCLUSIVE-raise."""
+    d, _dom = _design_with_overhang_anchor()
+    anchor = {"kind": "overhang", "id": "ov_anchor"}
+    keys = _resolve_anchor_keys(d, anchor)
+    # field_steps=1000 → 10 trajectory frames (the 1000-step FieldRequest minimum);
+    # a min_confidence of 15 is unreachable → the gate fires.
+    job = hox.run_field(d, tmp_path, field_pN=4.0, dir=[0, 0, 1], anchors=[anchor],
+                        field_steps=1000, min_bp_retained=0.0)
+    assert job.status is OxdnaStatus.completed, job.error
+    with pytest.raises(AssertionError, match="INCONCLUSIVE"):
+        assert_equilibration_timeline(
+            job, tmp_path, [0, 0, 1], keys, design=d, melt_floor=0.5,
+            min_confidence=15)
+
+
+# Pure-measure unit tests — hand-built frames pin the τ / plateau / monotone /
+# melt logic independent of the mock binary (the measure is the load-bearing core).
+
+def _frame_from(positions_by_key, a1=(1.0, 0.0, 0.0)):
+    """Build a read_trajectory_frames_full-shaped frame map from {key: xyz_nm}."""
+    import numpy as np
+    return {k: {"backbone_position": np.asarray(v, dtype=float),
+                "a1": np.asarray(a1, dtype=float),
+                "a3": np.asarray((0.0, 0.0, 1.0), dtype=float)}
+            for k, v in positions_by_key.items()}
+
+
+def _ramp_frames(n, plateau_nm, k, *, free_key, anchor_key, bp_floor_at=None):
+    """n saturating frames: the free bead ramps along +z, the anchor bead is held.
+    If ``bp_floor_at`` is set, the free bead's WC partner is yanked away at that
+    frame (a transient melt) by separating their base sites."""
+    import math as _m
+    frames = []
+    for i in range(n):
+        factor = 1.0 - _m.exp(-i / k)
+        z = plateau_nm * factor
+        pos = {anchor_key: (0.0, 0.0, 0.0),
+               free_key: (0.0, 0.0, z),
+               # free_key's WC partner sits at the same site (paired) unless melted.
+               (free_key[0], free_key[1], "REVERSE"): (0.0, 0.0, z)}
+        if bp_floor_at is not None and i >= bp_floor_at:
+            pos[(free_key[0], free_key[1], "REVERSE")] = (0.0, 5.0, z)  # ripped apart
+        frames.append(_frame_from(pos))
+    return frames
+
+
+def test_measure_field_equilibration_pure_converges():
+    """A saturating ramp → converged, finite τ near the time constant, full bp."""
+    from backend.core.oxdna_health import measure_field_equilibration
+    free = ("h0", 0, "FORWARD")
+    anch = ("h0", 99, "FORWARD")
+    frames = _ramp_frames(20, plateau_nm=4.0, k=5.0, free_key=free, anchor_key=anch)
+    # design only used for base_pair_retention; the frames carry the pairing.
+    d = make_6hb_design()
+    out = measure_field_equilibration(
+        frames, [0, 0, 1], [anch], design=d, steps_per_frame=100.0, melt_floor=0.5)
+    assert out["converged"] is True
+    assert out["tau_frames"] is not None
+    assert 3.0 <= out["tau_frames"] <= 7.0            # 1−1/e crossing ≈ k=5
+    assert out["tau_steps"] == out["tau_frames"] * 100.0
+    assert out["melted"] is False
+
+
+def test_measure_field_equilibration_pure_non_converging():
+    """A LINEAR (never-plateau) ramp → no finite τ (can-go-red clause)."""
+    from backend.core.oxdna_health import measure_field_equilibration
+    free = ("h0", 0, "FORWARD")
+    anch = ("h0", 99, "FORWARD")
+    frames = []
+    for i in range(20):
+        pos = {anch: (0.0, 0.0, 0.0), free: (0.0, 0.0, 0.5 * i),
+               ("h0", 0, "REVERSE"): (0.0, 0.0, 0.5 * i)}
+        frames.append(_frame_from(pos))
+    out = measure_field_equilibration(
+        frames, [0, 0, 1], [anch], design=make_6hb_design(), melt_floor=0.5)
+    assert out["converged"] is False
+    assert out["tau_steps"] is None
+    assert "plateau" in out["reason"]
+
+
+def test_measure_field_equilibration_pure_detects_melt():
+    """bp retention dips below the floor mid-swing → melted=True (the transient-melt
+    watch measure_field_response is blind to)."""
+    from backend.core.oxdna_health import measure_field_equilibration
+    free = ("h0", 0, "FORWARD")
+    anch = ("h0", 99, "FORWARD")
+    frames = _ramp_frames(20, plateau_nm=4.0, k=5.0, free_key=free, anchor_key=anch,
+                          bp_floor_at=8)
+    out = measure_field_equilibration(
+        frames, [0, 0, 1], [anch], design=make_6hb_design(), melt_floor=0.5)
+    # The single designed pair breaks at frame 8 → retention 1.0 → 0.0 < floor.
+    assert out["melted"] is True
+    assert out["bp_min"] < 0.5
+
+
+def test_measure_field_equilibration_requires_two_frames():
+    from backend.core.oxdna_health import measure_field_equilibration
+    one = _ramp_frames(1, 4.0, 5.0, free_key=("h0", 0, "FORWARD"),
+                       anchor_key=("h0", 99, "FORWARD"))
+    with pytest.raises(ValueError, match="two trajectory frames"):
+        measure_field_equilibration(one, [0, 0, 1], [], design=make_6hb_design())
+
+
 # ── Function-identity coverage: the wrappers drive the real route handlers ─────
 
 def test_oxdna_coverage_report_marks_af13_routes_covered():
@@ -483,6 +617,87 @@ def mock_oxdna_traj(tmp_path, monkeypatch):
     return p
 
 
+# ── AF-19 (Tier 6): a field mock that emits a TIME-RESOLVED trajectory ─────────
+# Unlike _FIELD_MOCK_OXDNA (single shifted last_conf) this writes a multi-frame
+# trajectory.dat where the free (non-trapped) beads ramp along the field with a
+# SATURATING profile (shift_i = plateau·(1−exp(−i/k))) — a synthetic monotone
+# approach to equilibrium with a finite τ.  The plateau ∝ F0, so a stronger field
+# saturates further (reused by the AF-20 sweep).  Base pairs translate together,
+# so retention stays high (no melt) — the can-go-red melt/non-converge cases are
+# exercised on hand-built frames against the pure measure.
+_FIELD_TRAJ_MOCK_OXDNA = '''#!/usr/bin/env python3
+import sys, re, math
+from pathlib import Path
+inp = Path(sys.argv[1]); text = inp.read_text()
+def val(k):
+    m = re.search(r"^" + k + r"\\s*=\\s*(.+)$", text, re.M)
+    return m.group(1).strip() if m else None
+conf = Path(val("conf_file"))
+lastconf = val("lastconf_file") or "last_conf.dat"
+energy = val("energy_file") or "energy.dat"
+traj = val("trajectory_file") or "trajectory.dat"
+steps = int(val("steps") or "100")
+cwd = Path.cwd()
+ff = val("external_forces_file")
+ftxt = Path(ff).read_text() if ff and Path(ff).exists() else ""
+trapped = set(int(m) for m in re.findall(r"type = trap\\nparticle = (\\d+)", ftxt))
+sm = re.search(r"type = string\\nparticle = -1\\nF0 = ([-\\d.eE]+)\\nrate = [-\\d.eE]+\\ndir = ([-\\d.eE,]+)", ftxt)
+lines = conf.read_text().splitlines()
+hdr = lines[:3]
+data = [l for l in lines[3:] if l.strip()]
+n_frames = max(2, steps // 100)
+if sm:
+    F0 = float(sm.group(1))
+    dx, dy, dz = (float(x) for x in sm.group(2).split(","))
+    sc = 100.0
+    pk = (sc * F0 * dx, sc * F0 * dy, sc * F0 * dz)
+else:
+    pk = (0.0, 0.0, 0.0)
+k = max(1.0, n_frames / 4.0)
+frames_txt = []
+for fi in range(n_frames):
+    factor = 1.0 - math.exp(-fi / k)
+    sh = (pk[0] * factor, pk[1] * factor, pk[2] * factor)
+    out = ["t = " + str(fi), hdr[1], hdr[2]]
+    idx = 0
+    for ln in data:
+        p = ln.split()
+        if idx not in trapped:
+            p[0] = repr(float(p[0]) + sh[0])
+            p[1] = repr(float(p[1]) + sh[1])
+            p[2] = repr(float(p[2]) + sh[2])
+        out.append(" ".join(p)); idx += 1
+    frames_txt.append("\\n".join(out))
+(cwd / traj).write_text("\\n".join(frames_txt) + "\\n")
+(cwd / lastconf).write_text("\\n".join(frames_txt[-1].splitlines()) + "\\n")
+with open(cwd / energy, "w") as f:
+    for i in range(n_frames):
+        f.write(f"{i} {-1.5 - 0.001 * i} 0.5 -1.0\\n")
+'''
+
+
+@pytest.fixture
+def mock_oxdna_field_traj(tmp_path, monkeypatch):
+    """A fake oxDNA binary whose field stage emits a multi-frame trajectory.dat
+    with a saturating monotone alignment ramp (AF-19 equilibration timeline)."""
+    p = tmp_path / "mock_oxdna_field_traj.py"
+    p.write_text(_FIELD_TRAJ_MOCK_OXDNA)
+    p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    monkeypatch.setenv("OXDNA_BIN", str(p))
+    return p
+
+
+# ── AF-20 (Tier 6): a field mock whose τ AND melt depend on |E| ────────────────
+# Richer than _FIELD_TRAJ_MOCK_OXDNA (whose time constant k is field-independent):
+# here the saturating ramp's time constant k DECREASES with F0 (a stronger field
+# equilibrates faster → smaller τ), and above a destructive F0 threshold the free
+# (non-trapped) cloud is dilated about its own centroid by a factor (1+s) that ramps
+# in with the swing — every free base-pair separation scales by (1+s), so above the
+# threshold the structure melts (base-pair retention → 0) mid-swing.  The dilation
+# is about the free centroid, so it cancels in the MEAN along-field projection
+# (mean(orig−C)=0) → alignment still saturates ∝F0 and still plateaus; only the
+# per-pair distances (hence bp retention) change.  This gives the AF-20 sweep a
+# substrate where BOTH τ↔|E| (decreasing) and the destructive window vary with |E|.
 def _landmarks(design):
     """Two well-separated landmark nucleotide keys present in the design geometry."""
     from backend.core.design_geometry import _geometry_for_design
