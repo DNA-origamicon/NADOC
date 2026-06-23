@@ -1264,6 +1264,43 @@ ASK-FIRST: grid_pos→id resolution is a lookup, the measures are magnitudes —
 
 ---
 
+**AF-13 P6 — design `optimize` block (knob → `iterate_to_constraint`)** · _shape:_ **grammar growth + composition
+driver** — the pure parser `backend/core/build_spec.py` gains an optional top-level `optimize` block on a design spec
+(`DesignSpec.optimize`; `_parse_optimize`/`_parse_knob`): a parametric `knob` (`{op:<ops index>, param:<numeric param
+name>, lo, hi, initial, response:"increasing"|"decreasing"}`) + a single AF-13 P3 `constraint`. Validated at parse time
+— knob index in range, `param` present on that op AND numeric, `lo<hi`, `initial∈[lo,hi]`, `response` in the enum,
+constraint via `parse_constraint_spec` — so a malformed optimize block raises `BuildSpecError` BEFORE any build/relax +
+1 driver fn `hs.build_and_optimize_design(spec, ws, *, max_iterations, production_steps, tuned, **relax_params)` + 2
+helpers (`_ops_with_knob` clones the op list overriding the knob param; `_synth_bisection` lowers the declared
+`response` to a bisection `adjust_fn` direction) in `backend/api/headless_spec_build.py` — it synthesises `build_fn`
+(rebuild with the knob) + `adjust_fn`, resolves the constraint's grid_pos landmarks → runtime ids on ONE probe build
+(ids deterministic → stable across rebuilds), and drives the already-covered `hox.iterate_to_constraint`, re-implements
+nothing; `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** · _oxDNA-coverage Δ:_ **UNCHANGED, 36** (wraps no new route —
+composition sugar over covered wrappers + a closed loop, like P4/P5; `test_spec_build_adds_no_coverage` still asserts
+36) · _oracle shipped:_ **REUSES `assert_converges_to_constraint`** (the AF-13 P4 capstone oracle — status `met` +
+winning verdict confidence-gated + every step's gate held + final within tol + **non-vacuity**), now driven entirely
+from a declarative spec. **Load-bearing because `assert_spec_matches_calls` is BLIND both to the bend overlay AND to a
+physical-layer convergence** — the canonical-topology fingerprint cannot see whether the knob moved the relaxed
+end-to-end onto target; only the convergence oracle proves the optimize block lowered to a real, converging loop ·
+_tests:_ 3 grammar-normalisation (knob+constraint normalise; `initial` defaults to bracket midpoint; defaults to no
+optimize) + 10 grammar rejections (op index out of range, param not on the op, param non-numeric, `lo≥hi`, `initial`
+outside bracket, bad `response`, typo'd knob field, missing knob, missing constraint, malformed inner constraint
+propagates) in `test_build_spec.py` + 4 driver tests in `test_headless_spec_build.py` (the augment: spec converges a
+bend-curvature knob to the target, bisecting `2.0→3.0→2.5` deterministically; **two load-bearing red-tests**:
+unreachable target → exhausted → oracle raises "did not converge", initial knob on-target → vacuous → oracle raises;
++ no-optimize-block → `BuildSpecError`); full suite **2975 passed / 55 skipped**, no drop · **"Validation gained, not just a
+passthrough:** before this the AF-13 P4 `iterate_to_constraint` loop existed but had to be hand-wired (a Python
+`build_fn`/`adjust_fn` per design); a *declarative* spec could attach+report a constraint (P5) but not DRIVE a knob to
+satisfy it. `build_and_optimize_design` closes that: a JSON spec now says 'vary this op's parameter until the relaxed
+structure meets this constraint', and `assert_converges_to_constraint` proves the grammar synthesises a faithful
+build/adjust pair that actually converges — confidence-gated and non-vacuous — the constraint-DRIVEN text-to-design
+rung the whole Tier-5 spine was built toward, and the property `assert_spec_matches_calls` is structurally blind to.
+The deterministic `2.0→3.0→2.5` bisection pins that the declared monotone `response` lowered to the correct direction;
+the two red-tests prove the green can go red. No ASK-FIRST: the knob magnitude is direction-agnostic and the monotone
+sense is a spec-author declaration the grammar lowers, never an inferred bend sign.**"
+
+---
+
 **AF-ATOM P1 — atomistic-display validation oracle + queryable route + `/validate-atomistic` skill** · _shape:_
 **new `backend/core` validation module + sub-router route + CLI + skill** — `backend/core/atomistic_validation.py`
 (`audit_bonds`, `audit_oxdna_job`, `latest_job_for_design`, `relaxed_frame_for_job`), route

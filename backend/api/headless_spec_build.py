@@ -248,6 +248,106 @@ def build_and_check_design(
     return {"design": design, "verdicts": verdicts}
 
 
+# ── declarative optimize block (AF-13 P5 — knob → iterate_to_constraint) ────────
+
+def _ops_with_knob(ops: list[BuildOp], op_idx: int, param: str, value) -> list[BuildOp]:
+    """Clone the parsed op list, overriding ``ops[op_idx].params[param]`` with the
+    current knob ``value`` — each :func:`build_fn` call rebuilds from this template, so
+    a knob change never leaks between iterations."""
+    out: list[BuildOp] = []
+    for i, op in enumerate(ops):
+        params = dict(op.params)
+        if i == op_idx:
+            params[param] = value
+        out.append(BuildOp(op=op.op, params=params))
+    return out
+
+
+def _synth_bisection(target_nm: float, response: str):
+    """Synthesise the :func:`hox.iterate_to_constraint` ``adjust_fn`` from the knob's
+    declared monotone ``response`` — bisection on a ``{value, lo, hi}`` knob.
+
+    ``response='decreasing'`` means the measured property falls as the knob rises (a
+    bend curvature whose end-to-end shrinks): a too-high measurement → raise the knob
+    (``lo = value``).  ``'increasing'`` is the mirror.  The sense is the spec author's
+    declaration lowered to a bisection direction, never inferred here — the convergence
+    itself is a magnitude, so no directionality reasoning enters the grammar.  Only ever
+    called on an ``unmet`` verdict (the loop handles ``met``/``inconclusive``)."""
+    rising_lowers_measure = response == "decreasing"
+
+    def adjust(knob: dict, verdict: dict) -> dict:
+        lo, hi, v = knob["lo"], knob["hi"], knob["value"]
+        too_high = verdict["measured_nm"] > target_nm
+        # decreasing: a too-high measure needs MORE knob (raise lo); increasing: LESS.
+        if too_high == rising_lowers_measure:
+            lo = v
+        else:
+            hi = v
+        return {"value": (lo + hi) / 2, "lo": lo, "hi": hi}
+
+    return adjust
+
+
+def build_and_optimize_design(
+    spec,
+    workspace,
+    *,
+    max_iterations: int = 8,
+    production_steps: int = 6000,
+    tuned: bool = False,
+    **relax_params,
+) -> dict:
+    """Build a design from a spec's ``optimize`` block, driving its parametric **knob**
+    through the closed :func:`hox.iterate_to_constraint` loop until the declared
+    relaxed-structure ``constraint`` is met → the loop's result dict.
+
+    The grammar's *constraint-driven* entry point — the knob counterpart to
+    :func:`build_and_check_design`'s attach+report.  Each iteration rebuilds the design
+    with the knob's current value overriding ``ops[knob.op].params[knob.param]``,
+    relaxes it headlessly, REPORTS the constraint on the production mean structure, and
+    bisects the knob (per the knob's declared monotone ``response``) until the verdict
+    is ``met`` or the iteration budget is exhausted.  ``constraint`` landmarks name
+    helices by ``grid_pos``; they are resolved to runtime ids on a single probe build
+    (the ids are deterministic, so the resolution is stable across every rebuild).
+
+    Returns the :func:`hox.iterate_to_constraint` result (``{status, knob, job,
+    iterations, verdict}``).  Pin convergence with
+    :func:`tests.automation_harness.assert_converges_to_constraint` — the load-bearing
+    pin, since :func:`~tests.automation_harness.assert_spec_matches_calls` (the
+    canonical-topology fingerprint) is blind to both the bend overlay and the
+    physical-layer convergence.  *Physical-layer only* — the relaxed coordinates steer
+    the next topology edit but are never written back to ``Design`` (the Three-Layer
+    Law).  Raises :class:`BuildSpecError` (at parse time) on a spec with no ``optimize``
+    block.
+    """
+    parsed = parse_design_spec(spec)
+    if parsed.optimize is None:
+        raise BuildSpecError(
+            "build_and_optimize_design requires an 'optimize' block on the spec "
+            "(a knob + a constraint); use build_and_check_design for attach+report"
+        )
+    knob = parsed.optimize["knob"]
+    constraint = parsed.optimize["constraint"]
+    op_idx, param = knob["op"], knob["param"]
+
+    def build_fn(k: dict) -> Design:
+        ops = _ops_with_knob(parsed.ops, op_idx, param, k["value"])
+        return _build_design_from_parsed(DesignSpec(lattice=parsed.lattice, ops=ops))
+
+    # Probe build at the initial knob to resolve the constraint's grid_pos landmarks →
+    # runtime helix ids (deterministic, so stable across every rebuild the loop does).
+    probe = build_fn({"value": knob["initial"]})
+    resolved = _resolve_constraint(constraint, probe)
+
+    adjust_fn = _synth_bisection(constraint["target_nm"], knob["response"])
+    return hox.iterate_to_constraint(
+        build_fn, adjust_fn, resolved, workspace,
+        initial_knob={"value": knob["initial"], "lo": knob["lo"], "hi": knob["hi"]},
+        max_iterations=max_iterations, production_steps=production_steps,
+        tuned=tuned, **relax_params,
+    )
+
+
 # ── assembly interpreter ──────────────────────────────────────────────────────
 
 def _materialize_transform(t):

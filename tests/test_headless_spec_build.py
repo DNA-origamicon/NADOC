@@ -29,6 +29,7 @@ from backend.core.oxdna_job import OxdnaStatus
 from tests.automation_harness import (
     assert_assembly_roundtrip_stable,
     assert_circular_disc,
+    assert_converges_to_constraint,
     assert_deformation_angle,
     assert_gear_ratio,
     assert_mate_coincident,
@@ -828,6 +829,92 @@ def test_build_and_check_unknown_grid_pos_raises(tmp_path):
     spec = {"lattice": "honeycomb", "ops": _SEQUENCED_OPS, "constraints": [constraint]}
     with pytest.raises(BuildSpecError, match="no helix is there"):
         hs.build_and_check_design(spec, tmp_path, min_bp_retained=0.0)
+
+
+# ── the optimize block: a knob lowered to the closed iterate_to_constraint loop ──
+# build_and_optimize_design varies a bend-curvature knob until the relaxed end-to-end
+# lands on target — a CLOSED convergence loop the canonical fingerprint can't see, so
+# assert_converges_to_constraint is the load-bearing pin (mirrors AF-13 P4's capstone,
+# now driven entirely from a declarative spec).  Identity mock → the relaxed mean
+# reproduces the design geometry, so the bend (a real topology edit) is what moves the
+# measured end-to-end, exactly as a GPU run's physics would.  Probed monotone profile on
+# h_XY_1_2 (bp0 fwd → bp41 rev): kappa 2.0 -> 12.68 nm, 2.5 -> 12.06, 3.0 -> 11.32.
+
+# A fully-sequenced 6hb with a bend op (index 1) whose curvature is the knob.  The bend
+# survives auto_scaffold + full_autostaple (it's a geometric overlay, independent of the
+# strand routing the sequencing does).
+_OPT_BEND_OPS = [
+    {"op": "bundle", "cells": _CELLS, "length_bp": 42, "name": "6hb"},
+    {"op": "bend", "plane_a_bp": 2, "plane_b_bp": 39, "curvature_deg_per_bp": 2.0},
+    {"op": "auto_scaffold"},
+    {"op": "full_autostaple", "scaffold_name": "M13mp18"},
+]
+_OPT_LANDMARKS = [{"helix": [1, 2], "bp_index": 0, "direction": "forward"},
+                  {"helix": [1, 2], "bp_index": 41, "direction": "reverse"}]
+
+
+def _optimize_spec(*, target=12.0, tol=0.5, initial=2.0, min_confidence=50):
+    return {
+        "lattice": "honeycomb",
+        "ops": _OPT_BEND_OPS,
+        "optimize": {
+            "knob": {"op": 1, "param": "curvature_deg_per_bp",
+                     "lo": 0.0, "hi": 4.0, "initial": initial, "response": "decreasing"},
+            "constraint": {"measure": "end_to_end", "landmarks": _OPT_LANDMARKS,
+                           "target_nm": target, "tol_nm": tol,
+                           "min_confidence": min_confidence},
+        },
+    }
+
+
+def test_build_and_optimize_converges(tmp_path, mock_oxdna_traj):
+    """THE AUGMENT: the optimize block lowers a bend-curvature knob to the closed
+    iterate_to_constraint loop and converges the relaxed end-to-end onto the target,
+    every verdict confidence-gated.  assert_converges_to_constraint is load-bearing
+    here: assert_spec_matches_calls (the canonical fingerprint) is blind both to the
+    bend overlay and to a physical-layer convergence — only this proves the grammar
+    lowered the knob + constraint to a real, converging loop."""
+    result = hs.build_and_optimize_design(
+        _optimize_spec(target=12.0, tol=0.5, initial=2.0), tmp_path,
+        production_steps=6000, min_bp_retained=0.0)
+    assert_converges_to_constraint(result, target_nm=12.0, tol_nm=0.5, min_confidence=50)
+    assert result["status"] == "met"
+    # the declared 'decreasing' sense → deterministic bisection: 2.0 (12.68, too high)
+    # → 3.0 (11.32, too low) → 2.5 (12.06, met).  Proves the grammar lowered the
+    # monotone response to the correct bisection direction, not just "a loop ran".
+    assert result["knob"]["value"] == pytest.approx(2.5)
+    assert len(result["iterations"]) == 3
+    assert all(it["production_rounds"] == 1 for it in result["iterations"])
+
+
+def test_build_and_optimize_oracle_fires_on_unreachable(tmp_path, mock_oxdna_traj):
+    """can-go-red: a target below any reachable end-to-end (the profile bottoms at
+    ~9.58 nm) → the loop exhausts its budget and the convergence oracle raises."""
+    result = hs.build_and_optimize_design(
+        _optimize_spec(target=2.0, tol=0.3, initial=2.0), tmp_path,
+        max_iterations=5, production_steps=6000, min_bp_retained=0.0)
+    assert result["status"] == "exhausted"
+    with pytest.raises(AssertionError, match="did not converge"):
+        assert_converges_to_constraint(result, target_nm=2.0, tol_nm=0.3, min_confidence=50)
+
+
+def test_build_and_optimize_oracle_fires_on_vacuous(tmp_path, mock_oxdna_traj):
+    """can-go-red: an initial knob that already meets the constraint → the loop
+    'converges' on attempt 0 with no adjustment, and the non-vacuity guard fires."""
+    result = hs.build_and_optimize_design(
+        _optimize_spec(target=12.06, tol=0.5, initial=2.5), tmp_path,
+        production_steps=6000, min_bp_retained=0.0)
+    assert result["status"] == "met"
+    with pytest.raises(AssertionError, match="vacuous|FIRST attempt"):
+        assert_converges_to_constraint(result, target_nm=12.06, tol_nm=0.5, min_confidence=50)
+
+
+def test_build_and_optimize_requires_optimize_block(tmp_path):
+    """A spec with no optimize block raises at parse time (before any build/relax) —
+    build_and_check_design is the attach+report path, this is the knob path."""
+    with pytest.raises(BuildSpecError, match="requires an 'optimize' block"):
+        hs.build_and_optimize_design(
+            {"lattice": "honeycomb", "ops": _OPT_BEND_OPS}, tmp_path, min_bp_retained=0.0)
 
 
 # ── coverage: this driver wraps no new route (composition-sugar item) ──────────

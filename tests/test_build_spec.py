@@ -155,6 +155,97 @@ def test_design_spec_defaults_to_no_constraints():
     assert parsed.constraints == []
 
 
+# ── optimize block grammar (AF-13 P5 — knob → iterate_to_constraint) ───────────
+
+def _optimize_ops():
+    return [{"op": "bundle", "cells": [[0, 0], [0, 1]], "length_bp": 42},
+            {"op": "bend", "plane_a_bp": 2, "plane_b_bp": 39,
+             "curvature_deg_per_bp": 2.0}]
+
+
+def test_design_spec_normalises_optimize():
+    """A design spec's optional ``optimize`` block parses → {knob, constraint}: the knob
+    references an op by index + a numeric param, the constraint is an AF-13 P3 spec
+    (landmarks the driver resolves)."""
+    parsed = parse_design_spec({
+        "lattice": "honeycomb",
+        "ops": _optimize_ops(),
+        "optimize": {
+            "knob": {"op": 1, "param": "curvature_deg_per_bp",
+                     "lo": 0.0, "hi": 4.0, "initial": 2.0, "response": "decreasing"},
+            "constraint": {"measure": "end_to_end",
+                           "landmarks": [{"helix": [0, 0], "bp_index": 0, "direction": "forward"},
+                                         {"helix": [0, 1], "bp_index": 41, "direction": "reverse"}],
+                           "target_nm": 12.0, "tol_nm": 0.5},
+        },
+    })
+    opt = parsed.optimize
+    assert opt is not None
+    assert opt["knob"] == {"op": 1, "param": "curvature_deg_per_bp",
+                           "lo": 0.0, "hi": 4.0, "initial": 2.0, "response": "decreasing"}
+    # the constraint is a fully-parsed AF-13 P3 dict (landmarks → grid_pos tuples)
+    assert opt["constraint"]["measure"] == "end_to_end"
+    assert opt["constraint"]["landmarks"][0] == ((0, 0), 0, "FORWARD")
+    assert opt["constraint"]["landmarks"][1] == ((0, 1), 41, "REVERSE")
+
+
+def test_design_spec_optimize_defaults_initial_to_midpoint():
+    """``initial`` is optional — it defaults to the bracket midpoint."""
+    parsed = parse_design_spec({
+        "ops": _optimize_ops(),
+        "optimize": {
+            "knob": {"op": 1, "param": "curvature_deg_per_bp", "lo": 1.0, "hi": 3.0,
+                     "response": "decreasing"},
+            "constraint": {"measure": "radius_of_gyration", "target_nm": 5.0, "tol_nm": 1.0},
+        },
+    })
+    assert parsed.optimize["knob"]["initial"] == 2.0   # (lo + hi) / 2
+
+
+def test_design_spec_defaults_to_no_optimize():
+    parsed = parse_design_spec({"ops": [{"op": "bundle", "cells": [[0, 1]], "length_bp": 42}]})
+    assert parsed.optimize is None
+
+
+@pytest.mark.parametrize("opt,match", [
+    # knob op index out of range
+    ({"knob": {"op": 5, "param": "curvature_deg_per_bp", "lo": 0, "hi": 4, "response": "decreasing"},
+      "constraint": {"measure": "radius_of_gyration", "target_nm": 5, "tol_nm": 1}}, "out of range"),
+    # knob param names something that isn't a parameter of that op
+    ({"knob": {"op": 1, "param": "wibble", "lo": 0, "hi": 4, "response": "decreasing"},
+      "constraint": {"measure": "radius_of_gyration", "target_nm": 5, "tol_nm": 1}}, "not a parameter"),
+    # knob param is non-numeric (a bundle's 'plane' is a string → can't be a knob)
+    ({"knob": {"op": 0, "param": "plane", "lo": 0, "hi": 4, "response": "decreasing"},
+      "constraint": {"measure": "radius_of_gyration", "target_nm": 5, "tol_nm": 1}}, "not numeric"),
+    # lo must be < hi
+    ({"knob": {"op": 1, "param": "curvature_deg_per_bp", "lo": 4, "hi": 1, "response": "decreasing"},
+      "constraint": {"measure": "radius_of_gyration", "target_nm": 5, "tol_nm": 1}}, "must be <"),
+    # initial outside the bracket
+    ({"knob": {"op": 1, "param": "curvature_deg_per_bp", "lo": 0, "hi": 4, "initial": 9,
+               "response": "decreasing"},
+      "constraint": {"measure": "radius_of_gyration", "target_nm": 5, "tol_nm": 1}}, "within"),
+    # unknown response
+    ({"knob": {"op": 1, "param": "curvature_deg_per_bp", "lo": 0, "hi": 4, "response": "sideways"},
+      "constraint": {"measure": "radius_of_gyration", "target_nm": 5, "tol_nm": 1}}, "response"),
+    # typo'd knob field
+    ({"knob": {"op": 1, "param": "curvature_deg_per_bp", "lo": 0, "hi": 4, "responce": "decreasing"},
+      "constraint": {"measure": "radius_of_gyration", "target_nm": 5, "tol_nm": 1}}, "unknown field"),
+    # optimize missing its knob
+    ({"constraint": {"measure": "radius_of_gyration", "target_nm": 5, "tol_nm": 1}},
+     "missing required field 'knob'"),
+    # optimize missing its constraint
+    ({"knob": {"op": 1, "param": "curvature_deg_per_bp", "lo": 0, "hi": 4, "response": "decreasing"}},
+     "missing required field 'constraint'"),
+    # a malformed constraint inside optimize propagates the AF-13 P3 rejection
+    ({"knob": {"op": 1, "param": "curvature_deg_per_bp", "lo": 0, "hi": 4, "response": "decreasing"},
+      "constraint": {"measure": "wibble", "target_nm": 5, "tol_nm": 1, "landmarks": []}},
+     "measure must be one of"),
+])
+def test_design_spec_optimize_rejects(opt, match):
+    with pytest.raises(BuildSpecError, match=match):
+        parse_design_spec({"lattice": "honeycomb", "ops": _optimize_ops(), "optimize": opt})
+
+
 # ── design grammar: rejections ────────────────────────────────────────────────
 
 @pytest.mark.parametrize("bad,match", [

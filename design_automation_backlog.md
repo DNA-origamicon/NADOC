@@ -158,18 +158,43 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 >    + the `bind_overhangs` spec op — both correctly DEFERRED (no assembly headless-oxDNA path; overhang-binding
 >    not yet firmed). Nothing below needs deleting; the loop is healthy and converging on the two goals.
 
-_Living pointer — each session overwrites this (step 8). **AF-13 P5 — the design `constraints` block is now WIRED
-INTO THE AF-11 GRAMMAR (attach + report, no knob) — SHIPPED 2026-06-21.** A design spec may carry an optional
-top-level `constraints` list; each is an AF-13 P3 `{measure, landmarks, target_nm, tol_nm, min_confidence}` whose
-landmarks name a helix by **grid_pos** (`{helix:[r,c], bp_index, direction}`). The pure parser
-`backend/core/build_spec.py` validates it at parse time (hands the cell-normalised constraint to
-`parse_constraint_spec`, so a malformed constraint raises `BuildSpecError` BEFORE any build/relax), and the driver
-`backend.api.headless_spec_build.build_and_check_design(spec, ws, *, steps=6000, tuned=False, **relax_params) →
-{design, verdicts}` lowers it: resolve each landmark's grid_pos→runtime id (fail-fast), relax ONCE + production, then
-`check_relaxed_constraint` per constraint. **All four `measure_*` kinds get the grammar path for free** (the reporter
-dispatches on the measure name). DECISION banked: started with **attach + report (no knob)** as recommended; the
-knob-driven `iterate_to_constraint` clause is the deferred next step. Coverage flat (36, composition sugar);
-god-files Δ=0. Suite **2920 passed / 55 skipped**._
+_Living pointer — each session overwrites this (step 8). **AF-13 P6 — the design `optimize` block (KNOB → closed
+`iterate_to_constraint` loop) is now WIRED INTO THE AF-11 GRAMMAR — SHIPPED 2026-06-22.** A design spec may carry an
+optional top-level `optimize` block: a parametric `knob` (`{op:<ops index>, param:<numeric param name>, lo, hi,
+initial, response:"increasing"|"decreasing"}`) + a single AF-13 P3 `constraint`. The pure parser
+`backend/core/build_spec.py` (`_parse_optimize`/`_parse_knob`) validates it at parse time — knob index in range, param
+present + NUMERIC, `lo<hi`, `initial∈[lo,hi]`, response in the enum, constraint via `parse_constraint_spec` — so a
+malformed optimize block raises `BuildSpecError` BEFORE any build/relax. The driver
+`backend.api.headless_spec_build.build_and_optimize_design(spec, ws, *, max_iterations=8, production_steps=6000,
+tuned=False, **relax_params)` lowers it to the closed `hox.iterate_to_constraint` loop: synthesises `build_fn` (rebuild
+with the knob overriding `ops[op].params[param]`) + `adjust_fn` (bisection whose direction comes from the DECLARED
+`response`, never an inferred bend sign), resolves the constraint's grid_pos landmarks → runtime ids on ONE probe build
+(deterministic ids → stable across rebuilds), drives the loop, re-implements nothing. DECISION banked: the recommended
+P5-handoff next item; NO ASK-FIRST needed (knob magnitude is direction-agnostic; the monotone sense is a spec-author
+declaration the grammar lowers). Coverage flat (36, composition sugar); god-files Δ=0. Suite **2975 passed / 55
+skipped** (+17 tests this session)._
+
+**▶ HARNESS NOW AVAILABLE (AF-13 P6, use it — do NOT rebuild):**
+- `from backend.api import headless_spec_build as hs` → `hs.build_and_optimize_design(spec, workspace, *,
+  max_iterations=8, production_steps=6000, tuned=False, **relax_params) →` the `hox.iterate_to_constraint` result
+  (`{status, knob, job, iterations, verdict}`). Spec needs an `optimize` block (a spec WITHOUT one → `BuildSpecError`
+  at parse time — that's the attach+report path `build_and_check_design`). The optimized op list must build a
+  FULLY-SEQUENCED design EACH iteration (e.g. `bundle → bend → auto_scaffold → full_autostaple`; the bend survives the
+  routing — it's a geometric overlay). `knob.response` is the spec author's declared monotonicity ("decreasing" = the
+  measure FALLS as the knob rises, e.g. bend curvature ↑ → end-to-end ↓), lowered to the bisection direction in
+  `_synth_bisection` — the grammar never reasons about bend sign.
+- **Augment = reuse `from tests.automation_harness import assert_converges_to_constraint`** (the AF-13 P4 oracle):
+  `(result, *, target_nm, tol_nm, min_confidence)`. Load-bearing because `assert_spec_matches_calls` is BLIND both to
+  the bend overlay AND to a physical-layer convergence — the fingerprint can't see whether the knob hit target.
+  Can-go-red: unreachable target → exhausted ("did not converge"); initial knob on-target → vacuous ("FIRST attempt").
+- **GOTCHAS banked:** (1) a 2-helix bundle does NOT fully sequence via `full_autostaple` (84/168 undefined) — use the
+  6hb (`SIX_HB_CELLS`) for an optimize fixture, NOT the 2-helix bend fixture. (2) the monotone profile must be checked
+  per-landmark-PAIR: a single-helix bp0→bp41 end-to-end on the 6hb is NON-monotone (off-axis swing); `h_XY_1_2`
+  bp0-fwd→bp41-rev IS monotone-decreasing (κ 2.0→12.68, 2.5→12.06, 3.0→11.32 nm), so target 12.0/tol 0.5/initial κ=2.0
+  converges `2.0→3.0→2.5` in 3 deterministic bisection steps. Probe a candidate profile with
+  `measure_end_to_end(_geometry_for_design(build(κ)), a, b)` (mock is identity → geometry == relaxed mean). (3) reuse
+  `_MOCK_OXDNA_TRAJ` + the `mock_oxdna_traj` fixture; `production_steps=6000`→60 frames clears `min_confidence=50` in one
+  round.
 
 **▶ HARNESS NOW AVAILABLE (AF-13 P5, use it — do NOT rebuild):**
 - `from backend.api import headless_spec_build as hs` → `hs.build_and_check_design(spec, workspace, *, steps=6000,
@@ -190,14 +215,13 @@ god-files Δ=0. Suite **2920 passed / 55 skipped**._
   clean `met` for the augment. (4) Reuse `_MOCK_OXDNA_TRAJ` (multi-frame; `steps=6000`→60 frames clears the
   confidence gate); import the CONSTANT not the fixture (F811).
 
-**▶ NEXT — pick one (the design `constraints` block is wired; remaining grammar work + stragglers):**
-- **The KNOB clause (recommended next):** extend the grammar to lower a constraint + a parametric *knob spec* to the
-  closed `hox.iterate_to_constraint` loop (not just `check_relaxed_constraint`). Needs a spec shape for the knob (a
-  bend curvature / loop_skip count / length to vary) + an `adjust_fn` the grammar synthesises from the knob→measure
-  relation. Augment: a spec converges to the target (reuse `assert_converges_to_constraint`) GPU-free on the identity
-  mock via a TOPOLOGY knob (the bend fixture `_build_bent_bundle`/`_bisect_kappa`). **ASK-FIRST** only if a knob's
-  sign/sense is ambiguous (the magnitude convergence itself is direction-agnostic).
-- **Assembly `constraints`** — `build_and_check_design` is design-only; an assembly spec's parts could carry
+**▶ NEXT — pick one (the design `constraints` block AND the `optimize`/knob loop are both wired; remaining work +
+stragglers):**
+- **Multi-knob / richer knob shapes (optional grammar growth):** `optimize` today varies ONE numeric op param via
+  bisection. A vector knob (two params) would need a non-bisection `adjust_fn` (e.g. coordinate descent) the grammar
+  synthesises — only worth it when a real two-DOF constraint shows up. A `loop_skip count` or `length` knob also works
+  today (any numeric op param), only the bend was fixture-proven; pick a monotone landmark pair per the P6 GOTCHA.
+- **Assembly `constraints`** — `build_and_check_design`/`build_and_optimize_design` are design-only; an assembly spec's parts could carry
   constraints (parsed today, IGNORED by the assembly driver). Wire an assembly-level relaxed constraint if/when an
   assembly headless oxDNA path exists (none yet).
 - **Stragglers (unchanged):** `polymerize_periodic` (single-part `is_periodic_seam` + `derive_periodic_delta` Kabsch
@@ -1147,6 +1171,22 @@ readers `read_configuration_unwrapped` / `read_configuration_full` / `oxdna_back
   SAME verdict a hand-driven `check_relaxed_constraint` does — load-bearing because `assert_spec_matches_calls` is
   blind to a physical-layer verdict. Composition-sugar (coverage flat, 36; god-files Δ=0). The knob-driven
   `iterate_to_constraint` grammar clause is the deferred next step.
+
+- [x] **AF-13 (Phase 6) — design `optimize` block (knob → `iterate_to_constraint`). SHIPPED 2026-06-22.** A design
+  spec carries an optional top-level `optimize` block: a parametric `knob` (`{op:<index>, param:<numeric param>, lo,
+  hi, initial, response:"increasing"|"decreasing"}`) + a single AF-13 P3 `constraint`. The pure grammar
+  `build_spec.py` (`_parse_optimize`/`_parse_knob`) validates it at parse time — knob index in range, param present +
+  **numeric**, `lo<hi`, `initial∈[lo,hi]`, response in the enum, constraint via `parse_constraint_spec` — so a
+  malformed optimize block raises `BuildSpecError` BEFORE any build/relax. Driver
+  `hs.build_and_optimize_design(spec, ws, *, max_iterations, production_steps, tuned, **relax_params)` lowers it to the
+  closed `hox.iterate_to_constraint` loop: synthesises `build_fn` (rebuild with the knob overriding
+  `ops[op].params[param]`) + `adjust_fn` (bisection whose direction comes from the **declared** `response`, never an
+  inferred bend sign) and resolves the constraint's grid_pos landmarks → runtime ids on one probe build (ids
+  deterministic → stable across rebuilds). Oracle = reuse `assert_converges_to_constraint` (the AF-13 P4 capstone
+  oracle): the spec converges a bend-curvature knob to the relaxed end-to-end target, confidence-gated + non-vacuous.
+  Load-bearing because `assert_spec_matches_calls` is blind both to the bend overlay AND to a physical-layer
+  convergence. Composition-sugar (coverage flat, 36; god-files Δ=0). NO ASK-FIRST: the knob magnitude is
+  direction-agnostic, the monotone sense is a spec-author declaration the grammar lowers, never reasons about.
 
 - [x] **AF-ATOM (Phase 1) — atomistic-display validation oracle + queryable route + `/validate-atomistic`
   skill. SHIPPED 2026-06-21.** Every element the oxDNA-display **atomistic** rep draws (each bond stick, each

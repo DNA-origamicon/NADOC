@@ -62,11 +62,15 @@ class DesignSpec:
     """A parsed design spec: a lattice + an ordered op list (first op is a bundle),
     plus an optional list of declarative relaxed-structure ``constraints`` (AF-13 P3
     specs — physical-layer pass/fail gates the driver REPORTS against an oxDNA run;
-    each landmark names a helix by ``grid_pos`` the driver resolves at build time)."""
+    each landmark names a helix by ``grid_pos`` the driver resolves at build time) and
+    an optional ``optimize`` block (AF-13 P5 — a parametric ``knob`` + a single
+    ``constraint`` the driver drives through the closed
+    :func:`~backend.api.headless_oxdna_build.iterate_to_constraint` loop until met)."""
 
     lattice: LatticeType
     ops: list[BuildOp]
     constraints: list[dict] = field(default_factory=list)
+    optimize: dict | None = None
 
 
 @dataclass
@@ -371,6 +375,87 @@ def _parse_design_constraint(raw, *, where: str) -> dict:
         raise BuildSpecError(f"{where}: {e}") from e
 
 
+# ── declarative optimize block (AF-13 P5 — knob → iterate_to_constraint) ────────
+
+_OPTIMIZE_KEYS = {"knob", "constraint"}
+_KNOB_KEYS = {"op", "param", "lo", "hi", "initial", "response"}
+_KNOB_RESPONSES = {"increasing", "decreasing"}
+
+
+def _parse_knob(raw, ops: list[BuildOp], *, where: str) -> dict:
+    """Validate the optimize ``knob`` → a normalised
+    ``{op, param, lo, hi, initial, response}`` dict.
+
+    ``op`` indexes into the design's ``ops`` and ``param`` must name a **numeric**
+    parameter of that op (the scalar the loop varies — e.g. a ``bend`` op's
+    ``curvature_deg_per_bp``).  ``lo``/``hi`` bracket the search; ``initial`` (default
+    the bracket midpoint) seeds it.  ``response`` declares how the *measured* property
+    moves as the knob **rises** — ``"decreasing"`` (a bend curvature whose end-to-end
+    shrinks) or ``"increasing"``.  That sense is the spec author's **declaration**, not
+    a geometric inference: the grammar never reasons about bend sign/handedness (the
+    convergence magnitude is direction-agnostic), it just lowers the declared
+    monotonicity to the bisection sense in the driver."""
+    if not isinstance(raw, dict):
+        raise BuildSpecError(f"{where}: 'knob' must be an object, got {raw!r}")
+    _require_keys(raw, _KNOB_KEYS, where=where)
+    op_idx = _as_int(_get(raw, "op", where=where), key="op", where=where)
+    if not 0 <= op_idx < len(ops):
+        raise BuildSpecError(
+            f"{where}: 'op' index {op_idx} is out of range (0..{len(ops) - 1})"
+        )
+    param = _as_str(_get(raw, "param", where=where), key="param", where=where)
+    target_op = ops[op_idx]
+    if param not in target_op.params:
+        raise BuildSpecError(
+            f"{where}: 'param' {param!r} is not a parameter of op[{op_idx}] "
+            f"({target_op.op!r}, has {sorted(target_op.params)})"
+        )
+    cur = target_op.params[param]
+    if isinstance(cur, bool) or not isinstance(cur, (int, float)):
+        raise BuildSpecError(
+            f"{where}: 'param' {param!r} of op[{op_idx}] is not numeric (is {cur!r}) "
+            "— only a numeric parameter can be a knob"
+        )
+    lo = _as_num(_get(raw, "lo", where=where), key="lo", where=where)
+    hi = _as_num(_get(raw, "hi", where=where), key="hi", where=where)
+    if lo >= hi:
+        raise BuildSpecError(f"{where}: 'lo' ({lo}) must be < 'hi' ({hi})")
+    initial = (_as_num(raw["initial"], key="initial", where=where)
+               if "initial" in raw else (lo + hi) / 2)
+    if not lo <= initial <= hi:
+        raise BuildSpecError(
+            f"{where}: 'initial' ({initial}) must be within [lo, hi] = [{lo}, {hi}]"
+        )
+    response = _as_str(_get(raw, "response", where=where), key="response", where=where)
+    if response not in _KNOB_RESPONSES:
+        raise BuildSpecError(
+            f"{where}: 'response' must be one of {sorted(_KNOB_RESPONSES)}, "
+            f"got {response!r}"
+        )
+    return {"op": op_idx, "param": param, "lo": lo, "hi": hi,
+            "initial": initial, "response": response}
+
+
+def _parse_optimize(raw, ops: list[BuildOp], *, where: str) -> dict:
+    """Validate the optional top-level ``optimize`` block → ``{knob, constraint}``.
+
+    The grammar's *constraint-driven* clause: the driver
+    (:func:`backend.api.headless_spec_build.build_and_optimize_design`) varies ``knob``
+    through the closed :func:`~backend.api.headless_oxdna_build.iterate_to_constraint`
+    loop until ``constraint`` (a single AF-13 P3 relaxed-structure spec) is met.  Both
+    halves are validated here so a malformed optimize block fails at PARSE time, before
+    any expensive build/relax.  The knob references an op by index (so it must come
+    after ``ops`` is parsed); the constraint's landmarks name helices by ``grid_pos``
+    (resolved to runtime ids by the driver)."""
+    if not isinstance(raw, dict):
+        raise BuildSpecError(f"{where}: 'optimize' must be an object, got {raw!r}")
+    _require_keys(raw, _OPTIMIZE_KEYS, where=where)
+    knob = _parse_knob(_get(raw, "knob", where=where), ops, where=f"{where}.knob")
+    constraint = _parse_design_constraint(
+        _get(raw, "constraint", where=where), where=f"{where}.constraint")
+    return {"knob": knob, "constraint": constraint}
+
+
 def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
     """Validate a design spec dict → :class:`DesignSpec` (lattice + ordered op list).
 
@@ -401,7 +486,12 @@ def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
              "landmarks": [{"helix": [r,c], "bp_index": int, "direction": "forward"},
                            {"helix": [r,c], "bp_index": int, "direction": "forward"}],
              "target_nm": num, "tol_nm": num, "min_confidence": int}
-          ]
+          ],
+          "optimize": {                    # optional, AF-13 P5 — knob → iterate loop
+            "knob": {"op": int, "param": str, "lo": num, "hi": num,
+                     "initial": num, "response": "increasing"|"decreasing"},
+            "constraint": { <one AF-13 P3 constraint, as above> }
+          }
         }
 
     The first op must be a *primordial* op — ``bundle`` or ``circle_segment`` (both
@@ -432,11 +522,20 @@ def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
     :func:`~backend.core.oxdna_health.parse_constraint_spec`) so a malformed
     constraint fails at parse time, and are *REPORTED* — not executed — by the driver
     :func:`backend.api.headless_spec_build.build_and_check_design` against an oxDNA
-    relaxation.  Raises :class:`BuildSpecError` on any grammar violation.
+    relaxation.
+
+    An optional top-level ``optimize`` block (AF-13 P5) carries a parametric ``knob``
+    (an op-index + a numeric ``param`` to vary, a ``lo``/``hi`` bracket, and a declared
+    monotone ``response``) plus a single ``constraint``.  The driver
+    :func:`~backend.api.headless_spec_build.build_and_optimize_design` lowers it to the
+    closed :func:`~backend.api.headless_oxdna_build.iterate_to_constraint` loop —
+    rebuild with the knob, relax, measure, bisect — until the constraint is met.  It is
+    validated here (knob index/param/bracket + the constraint) so a malformed optimize
+    block fails at parse time.  Raises :class:`BuildSpecError` on any grammar violation.
     """
     if not isinstance(spec, dict):
         raise BuildSpecError(f"{where}: spec must be an object, got {type(spec).__name__}")
-    _require_keys(spec, {"kind", "lattice", "ops", "constraints"}, where=where)
+    _require_keys(spec, {"kind", "lattice", "ops", "constraints", "optimize"}, where=where)
     kind = spec.get("kind", "design")
     if kind != "design":
         raise BuildSpecError(f"{where}: 'kind' must be 'design', got {kind!r}")
@@ -467,7 +566,10 @@ def parse_design_spec(spec, *, where: str = "design") -> DesignSpec:
         _parse_design_constraint(c, where=f"{where}.constraints[{i}]")
         for i, c in enumerate(raw_constraints)
     ]
-    return DesignSpec(lattice=lattice, ops=ops, constraints=constraints)
+    optimize = (None if spec.get("optimize") is None
+                else _parse_optimize(spec["optimize"], ops, where=f"{where}.optimize"))
+    return DesignSpec(lattice=lattice, ops=ops, constraints=constraints,
+                      optimize=optimize)
 
 
 # ── assembly grammar ──────────────────────────────────────────────────────────
