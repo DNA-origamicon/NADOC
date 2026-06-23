@@ -158,21 +158,36 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 >    + the `bind_overhangs` spec op — both correctly DEFERRED (no assembly headless-oxDNA path; overhang-binding
 >    not yet firmed). Nothing below needs deleting; the loop is healthy and converging on the two goals.
 
-_Living pointer — each session overwrites this (step 8). **AF-13 P6 — the design `optimize` block (KNOB → closed
-`iterate_to_constraint` loop) is now WIRED INTO THE AF-11 GRAMMAR — SHIPPED 2026-06-22.** A design spec may carry an
-optional top-level `optimize` block: a parametric `knob` (`{op:<ops index>, param:<numeric param name>, lo, hi,
-initial, response:"increasing"|"decreasing"}`) + a single AF-13 P3 `constraint`. The pure parser
-`backend/core/build_spec.py` (`_parse_optimize`/`_parse_knob`) validates it at parse time — knob index in range, param
-present + NUMERIC, `lo<hi`, `initial∈[lo,hi]`, response in the enum, constraint via `parse_constraint_spec` — so a
-malformed optimize block raises `BuildSpecError` BEFORE any build/relax. The driver
-`backend.api.headless_spec_build.build_and_optimize_design(spec, ws, *, max_iterations=8, production_steps=6000,
-tuned=False, **relax_params)` lowers it to the closed `hox.iterate_to_constraint` loop: synthesises `build_fn` (rebuild
-with the knob overriding `ops[op].params[param]`) + `adjust_fn` (bisection whose direction comes from the DECLARED
-`response`, never an inferred bend sign), resolves the constraint's grid_pos landmarks → runtime ids on ONE probe build
-(deterministic ids → stable across rebuilds), drives the loop, re-implements nothing. DECISION banked: the recommended
-P5-handoff next item; NO ASK-FIRST needed (knob magnitude is direction-agnostic; the monotone sense is a spec-author
-declaration the grammar lowers). Coverage flat (36, composition sugar); god-files Δ=0. Suite **2975 passed / 55
-skipped** (+17 tests this session)._
+_Living pointer — each session overwrites this (step 8). **AF-12 Phase 1 — build from a saved validated primitive
+(`from_file`) — SHIPPED 2026-06-22.** An assembly spec's `parts` library entry may now be `{"from_file": "<path>"}`
+(reference a saved validated `.nadoc` by path) instead of an inline design spec. Pure parser
+`backend/core/build_spec.py` (`FilePart`/`_parse_part`) discriminates it by the `from_file` key, validates it (non-empty
+string path, no extra keys), restricts file parts to `add_part` (place_grid/place_ring → parse-time reject); interpreter
+`headless_spec_build.py` lowers it to the already-covered `hab.add_file_instance(path)` (validated design travels as a
+REFERENCE, not an embedded copy), re-implements nothing. Coverage flat (36 — wraps no new route); god-files Δ=0. Oracle
+NEW `assert_part_from_file` (below). Suite **2985 passed / 55 skipped** (+10 tests). NO ASK-FIRST (path resolution +
+topology fingerprint, no directionality)._
+
+**▶ HARNESS NOW AVAILABLE (AF-12 P1, use it — do NOT rebuild):**
+- `from backend.api import headless_spec_build as hs` → `hs.build_assembly(spec)` with a part defined as
+  `{"from_file": "<path>"}` in `spec["parts"]` instances a saved validated `.nadoc` by reference. The path resolves the
+  way the assembly routes resolve it (`_load_design_from_source`: absolute, or relative to workspace / assembly parent /
+  project root); an absolute `tmp_path` file works for both the oracle AND the round-trip flatten (`_PROJECT_ROOT / abs
+  == abs`). File parts can ONLY be placed by `add_part` (place_grid/place_ring 400 at parse time — they instance an
+  inline design per slot).
+- **Augment = NEW `from tests.automation_harness import assert_part_from_file`** — `(assembly, instance_id,
+  expected_topology)`: loads the design the file instance actually references and asserts its `canonical_topology` ==
+  `expected_topology` (pass `canonical_topology(saved_design)`), after asserting the instance is genuinely file-backed.
+  **Load-bearing because `canonical_assembly` keys a file source by `("file", path, sha256)` ONLY — it never loads the
+  design** — so `assert_spec_matches_calls` is blind to whether the path resolves to the intended topology. Can-go-red:
+  wrong-topology substitute → "DIFFERENT topology"; pointed at an inline instance → "not file-backed".
+- **GOTCHAS banked:** (1) discriminate file-vs-inline part by the `from_file` KEY (an inline part is also a dict but
+  carries `ops`); a half-inline/half-file dict (`from_file` + `lattice`) is rejected by the `_FILE_PART_KEYS` whitelist.
+  (2) `build_assembly` opens its OWN `assembly_scratch_session`, so the augment test calls it directly (no outer
+  session); the roundtrip test needs the outer session like the other `assert_assembly_roundtrip_stable` callers.
+  (3) save a part with `design.to_json()` (symmetric to the loader's `Design.from_json`). (4) Phase 2 (`from_primitive`
+  catalog-by-name) is the remaining text-to-design rung — the design-level catalog has NO headless instancing path yet
+  (only the circle disc), so it needs a name→part resolver, not just a grammar branch.
 
 **▶ HARNESS NOW AVAILABLE (AF-13 P6, use it — do NOT rebuild):**
 - `from backend.api import headless_spec_build as hs` → `hs.build_and_optimize_design(spec, workspace, *,
@@ -215,8 +230,18 @@ skipped** (+17 tests this session)._
   clean `met` for the augment. (4) Reuse `_MOCK_OXDNA_TRAJ` (multi-frame; `steps=6000`→60 frames clears the
   confidence gate); import the CONSTANT not the fixture (F811).
 
-**▶ NEXT — pick one (the design `constraints` block AND the `optimize`/knob loop are both wired; remaining work +
+**▶ NEXT — pick one (design `constraints` + `optimize`/knob loop wired; AF-12 P1 `from_file` shipped; remaining work +
 stragglers):**
+- **AF-12 Phase 2 — `from_primitive` (catalog-by-name) [the other text-to-design rung]:** a `parts` entry
+  `{"from_primitive": "<catalog name>"}` resolving against the design-level "Add Primitive" catalog. **NOT a trivial
+  grammar branch** — the catalog (`routes_primitives.py`) is GET-only with NO headless instancing path (only the circle
+  disc has one, `hb.circle_segment`), so this needs a name→part resolver (probably surfacing the catalog's saved
+  `.nadoc` path → reuse the AF-12 P1 `from_file` lowering + `assert_part_from_file`, OR build the parametric primitive
+  headlessly). Decide the resolution model first; a hinge primitive is likely an assembly-level *template* (leaves + a
+  revolute mate), not just geometry — consider parts carrying small mate recipes.
+- **AF-12 follow-up — file-backed `place_grid`/`place_ring`:** today file parts are `add_part`-only; a file-backed grid
+  would loop `add_file_instance` with per-slot transforms (pin: `assert_instances_on_grid` + `assert_part_from_file` on
+  one slot). Small, mechanical.
 - **Multi-knob / richer knob shapes (optional grammar growth):** `optimize` today varies ONE numeric op param via
   bisection. A vector knob (two params) would need a non-bisection `adjust_fn` (e.g. coordinate descent) the grammar
   synthesises — only worth it when a real two-DOF constraint shows up. A `loop_skip count` or `length` knob also works
@@ -1063,7 +1088,24 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
   polymerize/overhang-bindings (assembly, each like gear) + auto-scaffold/full-autostaple (design) — each a
   tiny dispatch entry over an existing wrapper, oracle picked by what the op changes.*
 
-- [ ] **AF-12 — build from primitives (catalog/file-backed parts in the build-spec).** PLACEHOLDER, expand later.
+- [~] **AF-12 — build from primitives (catalog/file-backed parts in the build-spec).** **Phase 1 (`from_file`)
+  SHIPPED 2026-06-22** — an assembly spec's `parts` library may now reference a saved validated `.nadoc` **by path**:
+  `"parts": {"hinge": {"from_file": "<path>"}}`. The pure parser (`build_spec._parse_part`/`FilePart`) discriminates a
+  file part from an inline design spec by the `from_file` key, validates it (non-empty string path, no extra keys), and
+  restricts file parts to `add_part` placement (place_grid/place_ring instance an inline design per slot → rejected at
+  parse time). The interpreter (`headless_spec_build._build_assembly_from_parsed`/`_run_assembly_op`) lowers a file part
+  to `hab.add_file_instance(path)` (the validated design travels as a REFERENCE, not an embedded copy) — wraps no new
+  route (`add_file_instance` already existed → coverage flat at 36). **Oracle = NEW `assert_part_from_file(assembly,
+  instance_id, expected_topology)`** — loads the design the instance actually references (via the route's
+  `_load_design_from_source`) and asserts its `canonical_topology` equals the saved primitive's. **Load-bearing because
+  `canonical_assembly` keys a file source by `("file", path, sha256)` ONLY and never loads the design** — so
+  `assert_spec_matches_calls` catches a dropped/wrong-path `from_file` but is BLIND to whether the path resolves to the
+  INTENDED validated topology; only this oracle catches a stale/edited/wrong-path primitive silently substituting. 10
+  tests (test_build_spec: 1 parse + 5 reject; test_headless_spec_build: 1 augment + 2 can-go-red + 1 roundtrip).
+  **Phase 2 (`from_primitive` — catalog-by-name) still OPEN:** the design-level "Add Primitive" catalog has no headless
+  instancing path (only the circle disc), so a name→part resolver + a headless primitive-instantiation wrapper is the
+  remaining rung. Also still open: file-backed `place_grid`/`place_ring`, and parts carrying small mate recipes (an
+  assembly-level hinge *template*, not just geometry). Original assessment below.
   **The gap (assessed 2026-06-17):** there is no primitive-catalog → automation pipeline. The design-level "Add
   Primitive" catalog is **read-only + UI-only** — `routes_primitives.py` exposes only `GET /primitives` +
   `preview.gif`/`poster.png`; there is **no placement route** (the browser reads `derive_placement_spec` and composes

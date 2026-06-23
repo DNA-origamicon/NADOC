@@ -59,6 +59,7 @@ from backend.core.build_spec import (
     BuildOp,
     BuildSpecError,
     DesignSpec,
+    FilePart,
     parse_assembly_spec,
     parse_design_spec,
 )
@@ -362,16 +363,28 @@ def _materialize_transform(t):
 def _run_assembly_op(
     op: BuildOp,
     part_designs: dict[str, Design],
+    file_paths: dict[str, str],
     refs: dict[str, str],
     joint_refs: dict[str, str],
 ) -> None:
     """Drive one assembly op through its real wrapper, tracking instance + joint refs."""
     p = op.params
     if op.op == "add_part":
-        hab.add_inline_instance(
-            part_designs[p["part"]], name=p.get("name", p["part"]),
-            transform=_materialize_transform(p["transform"]),
-        )
+        # A file-backed part is placed by REFERENCE (add_file_instance) so the validated
+        # saved .nadoc travels as a path, not an embedded copy (AF-12); an inline part is
+        # embedded. parse_assembly_spec guarantees place_grid/place_ring never see a file
+        # part, so only add_part needs the branch.
+        key = p["part"]
+        if key in file_paths:
+            hab.add_file_instance(
+                file_paths[key], name=p.get("name", key),
+                transform=_materialize_transform(p["transform"]),
+            )
+        else:
+            hab.add_inline_instance(
+                part_designs[key], name=p.get("name", key),
+                transform=_materialize_transform(p["transform"]),
+            )
         new_id = assembly_state.get_or_404().instances[-1].id
         for conn in p["connectors"]:
             hab.add_connector(new_id, conn["label"], conn["position"], conn["normal"])
@@ -417,14 +430,19 @@ def _run_assembly_op(
 
 
 def _build_assembly_from_parsed(parsed: AssemblySpec) -> Assembly:
-    # Build each named part design first (own scratch session per part), then place.
-    part_designs = {key: _build_design_from_parsed(ds) for key, ds in parsed.parts.items()}
+    # Build each INLINE part design first (own scratch session per part), then place.
+    # File-backed parts (AF-12) are never built here — their path is handed straight to
+    # add_file_instance, so the validated saved design travels as a reference.
+    part_designs = {key: _build_design_from_parsed(ds)
+                    for key, ds in parsed.parts.items() if not isinstance(ds, FilePart)}
+    file_paths = {key: ds.path
+                  for key, ds in parsed.parts.items() if isinstance(ds, FilePart)}
     with hab.assembly_scratch_session():
         hab.new_assembly(parsed.name)
         refs: dict[str, str] = {}
         joint_refs: dict[str, str] = {}
         for op in parsed.ops:
-            _run_assembly_op(op, part_designs, refs, joint_refs)
+            _run_assembly_op(op, part_designs, file_paths, refs, joint_refs)
         return assembly_state.get_or_404().model_copy(deep=True)
 
 

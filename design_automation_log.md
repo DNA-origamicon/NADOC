@@ -1301,6 +1301,37 @@ sense is a spec-author declaration the grammar lowers, never an inferred bend si
 
 ---
 
+**AF-12 P1 — build from a saved validated primitive (`from_file` in the assembly build-spec)** · _shape:_ **grammar
+growth + composition driver** — the pure parser `backend/core/build_spec.py` gains a `FilePart` marker + `_parse_part`:
+an assembly spec's `parts` library entry may now be `{"from_file": "<path>"}` (referencing a saved validated `.nadoc` by
+path) instead of an inline design spec. Discriminated by the `from_file` key; validated (non-empty string path, no extra
+keys) so a malformed file part raises `BuildSpecError` at parse time, and restricted to `add_part` placement
+(place_grid/place_ring instance an inline design per slot → rejected). The interpreter
+`backend/api/headless_spec_build.py` (`_build_assembly_from_parsed`/`_run_assembly_op`) lowers a file part to the
+already-covered `hab.add_file_instance(path)` — the validated design travels as a REFERENCE, never an embedded copy;
+re-implements nothing; `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** · _coverage Δ:_ **UNCHANGED, 36** (wraps no new
+route — `add_file_instance` already existed; `test_spec_build_adds_no_coverage` still asserts 36) · _oracle shipped:_
+**NEW `assert_part_from_file(assembly, instance_id, expected_topology)`** in `tests/automation_harness.py` — loads the
+design the file instance actually references (via the assembly route's `_load_design_from_source`) and asserts its
+`canonical_topology` equals the saved primitive's, after asserting the instance is genuinely file-backed (an inline copy
+defeats the point). **Load-bearing because `canonical_assembly` keys a *file* source by `("file", path, sha256)` ONLY —
+it NEVER loads the design behind the path** — so `assert_spec_matches_calls` catches a dropped/wrong-path `from_file` but
+is structurally blind to whether the path resolves to the INTENDED validated topology · _tests:_ +10 — `test_build_spec`
+(1 parse: file part → FilePart, inline still DesignSpec; 5 reject: empty path, non-string path, extra keys, place_grid on
+file part, place_ring on file part) + `test_headless_spec_build` (1 augment: a `from_file` part mated to an inline beam
+resolves to exactly the saved 6hb's topology; 2 can-go-red: wrong-topology substitute → "DIFFERENT topology", oracle
+pointed at the inline beam → "not file-backed"; 1 roundtrip: the file source survives a `.nass` round-trip); full suite
+**2985 passed / 55 skipped**, no drop · **"Validation gained, not just a passthrough:** before this, an assembly spec
+could ONLY embed parts inline — a JSON spec re-declared a primitive's full topology every time, so there was no way to
+say 'instance the hinge I hand-authored and experimentally validated'. `from_file` adds that reference-by-path rung, and
+`assert_part_from_file` proves the grammar wired the right path through to a real, loadable, topology-bearing instance —
+i.e. 'build from primitive X provably uses *exactly* validated X', so a stale/renamed/edited primitive can't silently
+substitute. That referential-integrity-against-the-loaded-design property is precisely what `canonical_assembly` (which
+only fingerprints the path string) is blind to, exactly as `assert_binding_resolves` covers the overhang-binding blind
+spot. The two can-go-red tests prove the green can go red.**"
+
+---
+
 **AF-ATOM P1 — atomistic-display validation oracle + queryable route + `/validate-atomistic` skill** · _shape:_
 **new `backend/core` validation module + sub-router route + CLI + skill** — `backend/core/atomistic_validation.py`
 (`audit_bonds`, `audit_oxdna_job`, `latest_job_for_design`, `relaxed_frame_for_job`), route

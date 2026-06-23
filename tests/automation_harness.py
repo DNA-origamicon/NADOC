@@ -746,6 +746,46 @@ def assert_binding_resolves(
         )
 
 
+# ── File-backed part oracle (AF-12 — build from a saved validated primitive) ──
+
+def assert_part_from_file(assembly, instance_id, expected_topology):
+    """AF-12: a file-backed part instance resolves to **exactly** the saved ``.nadoc``'s
+    validated topology — proving ``{"from_file": …}`` instances the intended primitive
+    and nothing silently substituted for it.
+
+    This is the LOAD-BEARING pin for the ``from_file`` grammar, and it is validation
+    :func:`canonical_assembly` cannot provide: a *file* instance is fingerprinted by
+    ``("file", path, sha256)`` only — the fingerprint NEVER loads the design behind the
+    path — so a spec that wired the wrong path, or whose file was edited/renamed after
+    authoring, still matches :func:`assert_spec_matches_calls`.  Here we LOAD the design
+    the instance actually references (via the same ``_load_design_from_source`` machinery
+    the assembly routes use) and compare its :func:`canonical_topology` to the topology
+    of the design that was saved (pass ``expected_topology = canonical_topology(saved)``).
+
+    Asserts the instance exists, is genuinely file-backed (an inline instance defeats the
+    point — that would be an embedded copy, not a reference), and resolves to
+    ``expected_topology``.  Returns the resolved :class:`~backend.core.models.Design`.
+    Can-go-red: a wrong/edited primitive resolves to a different topology → mismatch.
+    """
+    from backend.api.assembly import _assembly_source_path, _load_design_from_source
+
+    inst = next((i for i in assembly.instances if i.id == instance_id), None)
+    assert inst is not None, f"no instance {instance_id!r} in the assembly"
+    assert getattr(inst.source, "type", None) == "file", (
+        f"instance {inst.name!r} is not file-backed (source type "
+        f"{getattr(inst.source, 'type', None)!r}) — assert_part_from_file pins the "
+        "from_file grammar; an inline instance is an embedded copy, not a reference."
+    )
+    design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    actual = canonical_topology(design)
+    assert actual == expected_topology, (
+        f"file-backed part {inst.name!r} resolved to a DIFFERENT topology than the "
+        "saved primitive — a stale/edited/wrong-path file silently substituted. "
+        "(canonical_assembly keys a file source by path only and cannot catch this.)"
+    )
+    return design
+
+
 # ── Instance-layout oracles (parametric grid / ring placement) ────────────────
 
 def _instance_origin(inst):

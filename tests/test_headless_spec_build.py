@@ -33,6 +33,7 @@ from tests.automation_harness import (
     assert_deformation_angle,
     assert_gear_ratio,
     assert_mate_coincident,
+    assert_part_from_file,
     assert_polymer_chain,
     assert_roundtrip_stable,
     assert_spec_constraints_reported,
@@ -493,6 +494,84 @@ def test_assembly_spec_mate_is_coincident():
 def test_assembly_spec_mate_roundtrips_stable():
     with hab.assembly_scratch_session():
         assert_assembly_roundtrip_stable(lambda: hs.build_assembly(_mate_spec()))
+
+
+# ── file-backed parts (AF-12 — build from a saved validated primitive) ─────────
+# The motivating use case: hand-author + experimentally validate a part (real topology
+# = ground truth), save it as a .nadoc, then let automation place/articulate copies by
+# REFERENCE. A {"from_file": …} part is fingerprinted by canonical_assembly as
+# ("file", path, sha256) ONLY — the fingerprint never loads the design behind the path —
+# so assert_spec_matches_calls catches a dropped/wrong-path from_file but is BLIND to
+# whether the path resolves to the INTENDED validated topology. assert_part_from_file is
+# the load-bearing pin: it loads the design the instance actually references and compares
+# its canonical_topology to the saved primitive's.
+
+def _file_part_spec(path):
+    """A saved primitive (by file path) mated to an inline beam — instance + articulate a
+    validated part exactly as the motivating use case describes."""
+    return {"kind": "assembly", "name": "F", "parts": {
+        "saved": {"from_file": path}, "beam": _BEAM_SPEC,
+    }, "ops": [
+        {"op": "add_part", "part": "saved", "ref": "S",
+         "connectors": [{"label": "s", "position": [5, 0, 0], "normal": [1, 0, 0]}]},
+        {"op": "add_part", "part": "beam", "ref": "B", "transform": [20, 0, 0],
+         "connectors": [{"label": "b", "position": [-5, 0, 0], "normal": [-1, 0, 0]}]},
+        {"op": "mate", "child": "B", "parent": "S", "child_label": "b", "parent_label": "s"},
+    ]}
+
+
+def _save_primitive(tmp_path, design):
+    path = tmp_path / "primitive.nadoc"
+    path.write_text(design.to_json(), encoding="utf-8")
+    return str(path)
+
+
+def test_assembly_spec_from_file_uses_validated_topology(tmp_path):
+    """THE AUGMENT: a {"from_file": …} part instances the saved design by reference, and
+    the instance resolves to EXACTLY that file's validated topology. Load-bearing because
+    canonical_assembly keys a file source by path only and never loads the design — only
+    this proves the from_file grammar wired the right path through to a real, loadable,
+    topology-bearing instance."""
+    saved = make_6hb_design()
+    path = _save_primitive(tmp_path, saved)
+    a = hs.build_assembly(_file_part_spec(path))
+    file_inst = next(i for i in a.instances if i.source.type == "file")
+    assert file_inst.source.path == path                       # the wired reference
+    resolved = assert_part_from_file(a, file_inst.id, canonical_topology(saved))
+    assert canonical_topology(resolved) == canonical_topology(saved)
+
+
+def test_assembly_spec_from_file_oracle_fires_on_wrong_topology(tmp_path):
+    """can-go-red: a stale/edited/wrong primitive resolves to a DIFFERENT topology than
+    expected → the oracle catches the silent substitution canonical_assembly can't."""
+    saved = make_6hb_design()
+    path = _save_primitive(tmp_path, saved)
+    a = hs.build_assembly(_file_part_spec(path))
+    file_inst = next(i for i in a.instances if i.source.type == "file")
+    other = hs.build_design(  # a 2-helix bundle — a genuinely different topology
+        {"lattice": "honeycomb", "ops": [
+            {"op": "bundle", "cells": [[0, 1], [1, 1]], "length_bp": 42}]})
+    with pytest.raises(AssertionError, match="DIFFERENT topology"):
+        assert_part_from_file(a, file_inst.id, canonical_topology(other))
+
+
+def test_assembly_spec_from_file_oracle_rejects_inline_instance(tmp_path):
+    """can-go-red: pointed at the INLINE beam (an embedded copy, not a file reference)
+    the oracle refuses — it pins the from_file grammar, not just any matching topology."""
+    saved = make_6hb_design()
+    path = _save_primitive(tmp_path, saved)
+    a = hs.build_assembly(_file_part_spec(path))
+    inline_inst = next(i for i in a.instances if i.source.type == "inline")
+    with pytest.raises(AssertionError, match="not file-backed"):
+        assert_part_from_file(a, inline_inst.id, canonical_topology(make_6hb_design()))
+
+
+def test_assembly_spec_from_file_roundtrips_stable(tmp_path):
+    """The file source survives a .nass round-trip (path + sha resolve, flatten ok) —
+    the from_file reference is durable, not a build-time-only convenience."""
+    path = _save_primitive(tmp_path, make_6hb_design())
+    with hab.assembly_scratch_session():
+        assert_assembly_roundtrip_stable(lambda: hs.build_assembly(_file_part_spec(path)))
 
 
 # ── gear op (AF-11 Phase 2 — assembly relations cluster) ──────────────────────

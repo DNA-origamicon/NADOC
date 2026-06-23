@@ -12,6 +12,7 @@ import pytest
 
 from backend.core.build_spec import (
     BuildSpecError,
+    FilePart,
     parse_assembly_spec,
     parse_design_spec,
 )
@@ -389,6 +390,41 @@ def test_assembly_spec_accepts_16float_matrix_transform():
     })
     assert parsed.ops[0].params["transform"]["kind"] == "matrix"
     assert len(parsed.ops[0].params["transform"]["values"]) == 16
+
+
+# ── file-backed parts (AF-12 — from_file) ─────────────────────────────────────
+
+def test_assembly_spec_parses_file_part():
+    """A ``{"from_file": "<path>"}`` part parses to a FilePart marker (the driver lowers
+    it to add_file_instance); an inline part still parses to a DesignSpec."""
+    parsed = parse_assembly_spec({
+        "parts": {"hinge": {"from_file": "parts-library/hinge_6hb.nadoc"}, "beam": _BEAM},
+        "ops": [{"op": "add_part", "part": "hinge"}],
+    })
+    assert parsed.parts["hinge"] == FilePart(path="parts-library/hinge_6hb.nadoc")
+    assert parsed.parts["beam"].lattice is LatticeType.HONEYCOMB   # inline still a DesignSpec
+
+
+@pytest.mark.parametrize("bad,match", [
+    # from_file must be a non-empty string
+    ({"parts": {"h": {"from_file": ""}}, "ops": [{"op": "add_part", "part": "h"}]},
+     "non-empty path"),
+    ({"parts": {"h": {"from_file": 7}}, "ops": [{"op": "add_part", "part": "h"}]},
+     "from_file"),
+    # extra keys on a file part are rejected (catches a half-inline/half-file typo)
+    ({"parts": {"h": {"from_file": "x.nadoc", "lattice": "honeycomb"}},
+      "ops": [{"op": "add_part", "part": "h"}]}, "unknown field"),
+    # a file part cannot be placed by place_grid / place_ring (one instance, by ref)
+    ({"parts": {"h": {"from_file": "x.nadoc"}},
+      "ops": [{"op": "place_grid", "part": "h", "rows": 2, "cols": 2, "pitch": 10}]},
+     "can only be placed with 'add_part'"),
+    ({"parts": {"h": {"from_file": "x.nadoc"}},
+      "ops": [{"op": "place_ring", "part": "h", "n": 4, "radius": 12}]},
+     "can only be placed with 'add_part'"),
+])
+def test_assembly_spec_file_part_rejects(bad, match):
+    with pytest.raises(BuildSpecError, match=match):
+        parse_assembly_spec(bad)
 
 
 @pytest.mark.parametrize("bad,match", [

@@ -74,12 +74,29 @@ class DesignSpec:
 
 
 @dataclass
+class FilePart:
+    """A part referenced by a saved ``.nadoc`` file path (AF-12 ``from_file``) instead
+    of an inline design spec — so an assembly spec can instance a hand-authored,
+    experimentally-validated saved primitive **by path** rather than re-declaring its
+    topology inline.  The driver lowers it to
+    :func:`backend.api.headless_assembly_build.add_file_instance` (the part travels as a
+    file *reference*, not an embedded copy), and the load-bearing
+    :func:`tests.automation_harness.assert_part_from_file` oracle proves the instance
+    resolves to *exactly* that file's validated topology — a property
+    :func:`~tests.automation_harness.canonical_assembly` is blind to (it keys a file
+    source by ``(path, sha256)`` only, never loading the design)."""
+
+    path: str
+
+
+@dataclass
 class AssemblySpec:
-    """A parsed assembly spec: a name, a library of parsed part design specs (by key),
-    and an ordered op list referencing those parts."""
+    """A parsed assembly spec: a name, a library of parsed parts (by key — each an inline
+    :class:`DesignSpec` or a file-backed :class:`FilePart`), and an ordered op list
+    referencing those parts."""
 
     name: str
-    parts: dict[str, DesignSpec]
+    parts: dict[str, DesignSpec | FilePart]
     ops: list[BuildOp] = field(default_factory=list)
 
 
@@ -719,6 +736,26 @@ def _parse_assembly_op(raw, *, where: str) -> BuildOp:
     return BuildOp(op=op, params=p)
 
 
+_FILE_PART_KEYS = {"from_file"}
+
+
+def _parse_part(raw, *, where: str) -> DesignSpec | FilePart:
+    """Parse one entry of an assembly's ``parts`` library → an inline :class:`DesignSpec`
+    or a file-backed :class:`FilePart`.
+
+    A ``{"from_file": "<path>"}`` object (AF-12) references a saved validated ``.nadoc``
+    by path; anything else is parsed as an inline design spec.  The two are discriminated
+    by the presence of the ``from_file`` key (a design spec is also an object, but carries
+    ``ops`` not ``from_file``)."""
+    if isinstance(raw, dict) and "from_file" in raw:
+        _require_keys(raw, _FILE_PART_KEYS, where=where)
+        path = _as_str(_get(raw, "from_file", where=where), key="from_file", where=where)
+        if not path.strip():
+            raise BuildSpecError(f"{where}: 'from_file' must be a non-empty path string")
+        return FilePart(path=path)
+    return parse_design_spec(raw, where=where)
+
+
 def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
     """Validate an assembly spec dict → :class:`AssemblySpec`.
 
@@ -727,7 +764,7 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
         {
           "kind": "assembly",            # optional
           "name": "My assembly",         # optional
-          "parts": { "<key>": <design-spec>, … },   # named part library
+          "parts": { "<key>": <design-spec> | {"from_file": "<path>"}, … },  # part library
           "ops": [
             {"op": "add_part",  "part": "<key>", "ref": "<inst-key>",
              "transform": [x,y,z]|[16 floats]|null, "connectors": [{label,position,normal}]},
@@ -769,7 +806,7 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
     if not isinstance(raw_parts, dict) or not raw_parts:
         raise BuildSpecError(f"{where}: 'parts' must be a non-empty object of part specs")
     parts = {
-        key: parse_design_spec(ds, where=f"{where}.parts[{key!r}]")
+        key: _parse_part(ds, where=f"{where}.parts[{key!r}]")
         for key, ds in raw_parts.items()
     }
 
@@ -790,6 +827,15 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
                 raise BuildSpecError(
                     f"{loc}: references part {p['part']!r} which is not in 'parts' "
                     f"({sorted(parts)})"
+                )
+            # File-backed parts are placed by REFERENCE (add_file_instance), one
+            # instance at a time; place_grid/place_ring instance an inline design per
+            # slot, so they cannot take a file part (a later phase could add a
+            # file-backed grid that loops add_file_instance with per-slot transforms).
+            if opn.op in ("place_grid", "place_ring") and isinstance(parts[p["part"]], FilePart):
+                raise BuildSpecError(
+                    f"{loc}: file-backed part {p['part']!r} can only be placed with "
+                    "'add_part' (place_grid/place_ring instance an inline design per slot)"
                 )
         if opn.op == "add_part" and "ref" in p:
             if p["ref"] in defined:
