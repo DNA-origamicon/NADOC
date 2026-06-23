@@ -180,19 +180,103 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 > **AF-23 CAPSTONE** (cross-design
 > automated campaign). **De-risk note:** AF-18→20 + AF-23's batch path ride the ALREADY-SHIPPED field child-job +
 > `_FIELD_MOCK_OXDNA` (no GPU, no oxpy) — only AF-21/22 need the oxpy build. Each loop ships one reusable oracle per
-> the anti-shovel contract. **AF-18 SHIPPED 2026-06-23. ▶ START: AF-19** (equilibration-timeline τ + non-melt oracle).
+> the anti-shovel contract. **AF-18 + AF-19 + AF-20 + AF-23 (CAPSTONE) SHIPPED 2026-06-23. ▶ START: AF-21** (oxpy
+> persistent interactive engine — oxpy IS built + venv-wired, `import oxpy` ready; PARITY half is GPU-free against
+> `_FIELD_MOCK_OXDNA`, the live-mutation half needs the real engine → gate with `pytest.importorskip("oxpy")`).
+> **AF-22** (live field-steering, builds on AF-21) follows. The Tier-6 BATCH spine (AF-18→20→23) is now COMPLETE — the
+> remaining Tier-6 work is the oxpy *interactive* sub-track (AF-21/22) only; everything else open is the AF-12/13
+> text-to-design stragglers below (lower priority than finishing the interactive engine).
 
-_Living pointer — each session overwrites this (step 8). **AF-18 full-pipeline anchored field-specimen builder — SHIPPED
-2026-06-23.** ONE headless call composes the whole build→field-ready chain: `hox.build_field_specimen(spec_or_design, ws,
-*, anchor, overhang=None, sequence=True, **relax_params) → {design, job, anchor_keys, anchor}`. Input is a ready `Design`
-(deep-copied) OR a build-spec dict (lowered via `hs.build_design`). In a `hb.scratch_session`: optional
-`hb.overhang_extrude(**overhang)` → optional `hb.full_sequence` → capture design; then `resolve_anchor_particles` the
-`anchor` descriptor on the FINAL design (raises if it resolves to nothing) → `run_relaxation`. NEW composite oracle
-`assert_field_ready_specimen(result, design, ws)` = fully-sequenced + relaxed-geometry-recovered + anchorable (a short
-PROBE field child holds the anchor while the free part deflects along the field). Coverage FLAT 37 (pure COMPOSITION of
-covered wrappers — no new route). Net +6 tests (suite 3008→3014, 55 skipped). **ASK-FIRST honoured:** overhang/anchor
-nucleotides are caller-supplied descriptors, never inferred geometrically; probe measures magnitudes only. The Tier-6
-specimen spine AF-19/20/23 build on._
+_Living pointer — each session overwrites this (step 8). **AF-23 CAPSTONE: cross-design automated field-response campaign —
+SHIPPED 2026-06-23.** The user's stated goal: automatic exploration of which E-field intensities × directions align which
+DNA structures, on what equilibration timescale, without ripping them apart, for VARIOUS designs. The first MULTI-design
+physical experiment (AF-20 measured one response surface; this measures + compares a surface PER design).
+`hox.run_field_campaign(specimens, intensities_pN, directions, ws, *, field_steps=2000, melt_floor=0.5, min_confidence=10,
+timeout=30, anchor_stiff=…, **relax_params) → {"sweeps": {name: sweep}, "skipped": [(name, reason)], "names": […],
+"intensities_pN": […], "directions": […], "melt_floor": …}` in `backend/api/headless_oxdna_build.py`. `specimens` = a list of
+`{"name", "design": Design|build-spec, "anchor": {kind,id,…}, "overhang"?, "sequence"?}`; per design it runs
+`build_field_specimen` (build→overhang→sequence→relax→anchor) then `sweep_field_response` in its OWN `ws/campaign/<i>_<name>`
+subdir (so per-design job trees never collide). A design whose build/sweep raises is recorded in `skipped` (NOT dropped).
+NEW oracle `assert_field_campaign(campaign, *, benign_range, destructive_range, expect_distinguishable=True, melt_floor=0.5,
+min_tau_separation_steps=1.0, repro=None, tau_tol_steps=1e-6, min_tau_drop_steps=1.0)`: (1) no design dropped (skipped empty +
+sweeps non-empty), (2) every design passes `assert_field_sweep_map` (a reported non-destructive window per design), (3)
+**DISTINGUISHABILITY** — ≥2 designs differ at a shared responsive `(|E|,dir)` cell by ≥`min_tau_separation_steps` τ (the
+load-bearing NEW assertion over AF-20: AF-20 pins ONE surface, this proves the campaign produces design-DISCRIMINATING
+surfaces), (4) **reproducible** — if `repro` (a 2nd run) given, every shared design+cell τ matches within `tau_tol_steps`. Net
++4 tests (suite 3024→3028). Coverage FLAT 37 (no new route — composes `build_field_specimen` + `sweep_field_response`).
+**ASK-FIRST honoured:** field dir + |E| + anchor are spec inputs, cells measure magnitudes (τ, projection, retention)._
+
+**▶ HARNESS NOW AVAILABLE (AF-23 campaign, use it — do NOT rebuild):**
+- `from backend.api import headless_oxdna_build as hox` → `hox.run_field_campaign(specimens, intensities_pN, directions, ws,
+  *, field_steps=2000, melt_floor=0.5, min_confidence=10, **relax_params) → {"sweeps", "skipped", "names", …}`. Each
+  `specimens` entry is the AF-18 `build_field_specimen` kwargs as a dict (`design` + `anchor` + optional `overhang`/`sequence`)
+  + a `name`. Reuses the de-risked AF-20 batch path entirely; transparently swaps to the AF-21/22 oxpy fast path once built.
+- **Augment = NEW `from tests.automation_harness import assert_field_campaign`** — `(campaign, *, benign_range,
+  destructive_range, expect_distinguishable=True, melt_floor=0.5, min_tau_separation_steps=1.0, repro=None)`. Returns
+  `{n_designs, n_distinguishing_cells, n_repro_cells, per_design}`. The distinguishability predicate recomputes each design's
+  τ signature from raw `aligned ∧ bp_min ≥ melt_floor` (anti-echo, NOT `cell["destructive"]`).
+- **GOTCHAS banked (read before AF-21):** (1) the AF-20 `_FIELD_SWEEP_MOCK` has a **design-INDEPENDENT** τ → two designs swept
+  through it are IDENTICAL → it CANNOT exercise the distinguishability clause. AF-23 added a NEW
+  `_FIELD_CAMPAIGN_MOCK_OXDNA`/`mock_oxdna_field_campaign` where `k = clamp((4.5−12·F0)·(540/N))` — N=particle count, so a
+  bigger design → smaller k → shorter τ → DISTINGUISHABLE, while the melt threshold stays design-independent (`s_max=2.0 if
+  F0≥0.4`) so the SAME benign/destructive bands hold for every design. (2) distinguishability shows at LOW |E| (2–4 pN): at
+  high benign |E| both designs' k floor at 1.0 (shared) → equal τ there; the oracle only needs ONE differing shared cell, so
+  this is fine, but a hand-built distinguishability check should read a low-|E| cell. (3) **the distinguishable fixture is 6hb
+  vs 18hb** (`make_6hb_design`/`make_18hb_design`, both at `length_bp=42` → N≈528 vs 1536, a clean ~3× lever) each anchored on
+  a REAL extruded ssDNA overhang via `_campaign_entry` (mirrors AF-20's `_sweep_specimen`: `extrude_valid_overhang` +
+  `_define_overhang_bases`, `sequence=False`). (4) the indistinguishable RED test uses TWO IDENTICAL 6hb (different `name`s,
+  same topology→same N→same τ). (5) the skipped RED test uses an anchor id that doesn't resolve → `build_field_specimen`
+  raises → recorded in `skipped` (not dropped) → clause 1 fires. (6) coverage stays FLAT 37 — campaign wraps NO route.
+
+**▶ HARNESS NOW AVAILABLE (AF-20 field sweep, use it — do NOT rebuild):**
+- `from backend.api import headless_oxdna_build as hox` → `hox.sweep_field_response(specimen, intensities_pN, directions,
+  ws, *, field_steps=2000, melt_floor=0.5, min_confidence=10) → {"map", "skipped", "intensities_pN", "directions",
+  "melt_floor"}`. `specimen` = an AF-18 `build_field_specimen` result (`design`+relaxed `job`+`anchor`+`anchor_keys`). Each
+  cell keyed `(pN_float, dir_tuple)`. Raises if the specimen's parent job is not `completed`.
+- **Augment = NEW `from tests.automation_harness import assert_field_sweep_map`** — `(sweep, *, benign_range,
+  destructive_range, melt_floor=0.5, tau_tol_steps=1e-6, min_tau_drop_steps=1.0)`. `*_range` are inclusive `(lo_pN, hi_pN)`.
+  Returns `{n_cells, n_benign_safe, n_destructive, n_directions_checked}`. The non-destructive predicate is RECOMPUTED from
+  `aligned ∧ bp_min ≥ melt_floor` (do not trust `cell["destructive"]`).
+- **GOTCHAS banked (read before AF-21/23):** (1) the AF-19 `_FIELD_TRAJ_MOCK` has a **field-independent k** (flat τ) and
+  **never melts** → it CANNOT exercise the AF-20 green path. AF-20 added a NEW `_FIELD_SWEEP_MOCK_OXDNA`/`mock_oxdna_field_sweep`
+  where `k = max(1.3, 4.5 − 12·F0)` (stronger field → smaller k → smaller τ) AND, above `F0 ≥ 0.4`, dilates the free cloud
+  about its own centroid by `(1+s)` with `s = 2·factor` → every free base-pair separation scales by (1+s) → melt. The dilation
+  is centroid-symmetric so it **cancels in the MEAN along-field projection** (alignment still saturates ∝F0 and plateaus) —
+  only `bp_min` drops. (2) `F0 = field_pN / 48.63` (`pn_to_oxdna_force`); the `F0≥0.4` melt threshold ≈ **19.5 pN**, so the
+  green test uses intensities `[2,4,8,16,32]` → 16 pN benign, 32 pN destructive; `benign_range=(0,20)`,
+  `destructive_range=(24,1e9)`. (3) the **flat-τ can-go-red can't use a mock** (a no-melt mock can't satisfy clause 3's
+  non-vacuity) → it's pinned on a HAND-BUILT sweep dict with equal τ + one melted cell (mirrors AF-19's hand-built melt test).
+  (4) coverage stays FLAT 37 — `sweep_field_response` reuses `append_field`; no route is wrapped. (5) **the sweep fixture
+  anchors a REAL extruded ssDNA overhang, not a tagged internal domain** (an internal bundle domain is NOT a valid field
+  anchor): `conftest.extrude_valid_overhang(design, length_bp=12)` (delegates to the `overhang_candidate_error` geometry
+  oracle — no site reasoning) → `{"kind":"overhang","id":ovhg_id}` resolves to the WHOLE 12-nt overhang domain.
+  **`make_6hb_design` is MULTI-scaffold** → `hb.full_sequence` (single active scaffold) leaves ~210 staple bases undefined;
+  sequence with `_sequence_for_oxdna` (per-(helix,bp) WC across all scaffolds) instead. The ssDNA overhang has no WC partner
+  → fill its bases via a domain-order slice splice (`_define_overhang_bases`, fixed-seed random ACGT); do **NOT** use the
+  `POST /design/generate-overhang-sequences` route here — on a `_sequence_for_oxdna`-assigned 5′-overhang strand its resplice
+  CORRUPTED the 42-bp body (defined the 12 overhang, undefined the body). `build_field_specimen`'s `overhang=` param can't
+  mint the anchor id, so extrude FIRST then pass `overhang=None` + the overhang-id anchor + `sequence=False`.
+
+**▶ HARNESS NOW AVAILABLE (AF-19 equilibration timeline, use it — do NOT rebuild):**
+- `from backend.core.oxdna_health import measure_field_equilibration` — PURE `(frames, field_dir, anchor_keys, *,
+  design, steps_per_frame=1.0, melt_floor=0.0, plateau_frac=1−1/e, plateau_slope_frac=0.3, min_rise_nm=0.5,
+  monotone_tol_frac=0.15) → dict`. `frames` = the list `read_trajectory_frames_full(traj, design)` returns (maps keyed
+  by `(helix,bp,dir)` with `backbone_position`+`a1`); frame 0 is the field-off reference. Anchored keys are EXCLUDED from
+  the free-body projection. Needs `design` (for `base_pair_retention` per frame). Raises on <2 frames / zero field dir.
+- **Augment = `from tests.automation_harness import assert_equilibration_timeline`** — `(job, ws, field_dir,
+  anchor_keys, *, design, melt_floor=0.5, min_confidence=10)`. Locates the `kind=="field"` stage's `trajectory.dat`,
+  reads frames, confidence-gates, runs the measure, asserts `converged` + finite positive `tau_steps` + `not melted`.
+- **GOTCHAS banked (read before AF-20):** (1) `FieldRequest.steps` has a **1000 minimum** (pydantic 422 below it) — the
+  field mock writes `max(2, steps//100)` frames, so `field_steps=2000`→20 frames clears `min_confidence=10`; to force an
+  INCONCLUSIVE red-path call the oracle with `min_confidence=15` on a 1000-step (10-frame) run, don't pass steps<1000.
+  (2) The existing `_FIELD_MOCK_OXDNA` writes ONLY `last_conf.dat` (no trajectory) — AF-19 added a NEW
+  `_FIELD_TRAJ_MOCK_OXDNA`/`mock_oxdna_field_traj` fixture in `test_headless_oxdna_build.py` that emits a multi-frame
+  field `trajectory.dat` with a SATURATING ramp `shift_i = sc·F0·(1−exp(−i/k))` (sc=100, k=n/4) — plateau ∝ F0 (reuse
+  it for AF-20's |E|-sweep). (3) the mock's free beads translate TOGETHER so designed pairs stay formed (no melt) — the
+  melt/non-converge can-go-red cases are pinned on HAND-BUILT frames against the pure measure, not the mock. (4) τ in
+  STEPS needs `steps_per_frame` = stage.steps / n_frames; the oracle computes it from the field stage; the pure measure
+  defaults to 1.0 (τ in frame units). (5) coverage stays FLAT 37 — the oracle reads the field trajectory the shipped
+  child-job already writes; no route is wrapped.
 
 **▶ HARNESS NOW AVAILABLE (AF-18 field-specimen builder, use it — do NOT rebuild):**
 - `from backend.api import headless_oxdna_build as hox` → `hox.build_field_specimen(spec_or_design, ws, *, anchor,
@@ -1465,7 +1549,7 @@ venv** (was `Python:BOOL=OFF`). As-built, for the AF-21 session — DO NOT re-de
   Can-go-red: an unsequenced/unrelaxed/un-anchorable specimen fails the corresponding clause. No oxpy. **ASK-FIRST:**
   which nucleotides are the overhang/anchor is a spec input — do not infer it geometrically.
 
-- [ ] **AF-19 — field equilibration-timeline measurement (τ) + non-melt oracle.** The key NEW physical observable.
+- [x] **AF-19 — field equilibration-timeline measurement (τ) + non-melt oracle.** The key NEW physical observable.
   Pure `measure_field_equilibration(frames, field_dir, anchor_keys, *, observable="alignment") → {tau_steps,
   plateau, aligned_final, bp_timecourse, melted}` in `backend/core/oxdna_health.py`: per-frame alignment of the free
   body's principal axis to the field (reuse the `field_response` projection) + per-frame base-pair retention (reuse
@@ -1478,7 +1562,8 @@ venv** (was `Python:BOOL=OFF`). As-built, for the AF-21 session — DO NOT re-de
   trajectory + `_FIELD_MOCK_OXDNA` (its ∝F0-per-step shift gives a synthetic monotone alignment ramp for CI).
   Can-go-red: a non-converging (never-plateau) run → no finite τ; a melt during the swing → floor breach. No oxpy.
 
-- [ ] **AF-20 — field sweep driver + (|E|,direction)→response map + correlation oracle.** `hox.sweep_field_response(
+- [x] **AF-20 — field sweep driver + (|E|,direction)→response map + correlation oracle.** SHIPPED 2026-06-23
+  (`hox.sweep_field_response` + `assert_field_sweep_map`; HARNESS block at the top of the handoff). `hox.sweep_field_response(
   specimen, intensities_pN, directions, ws) → {(pN,dir): {tau, aligned, bp_retained, destructive}}` — each grid cell
   a child field job off the same relaxed parent (reuse the field child-job spawn), measured by AF-19, assembled into
   a map flagging the non-destructive regime (`aligned ∧ bp_retained ≥ floor`). **Augment = NEW `assert_field_sweep_map(
@@ -1515,7 +1600,8 @@ venv** (was `Python:BOOL=OFF`). As-built, for the AF-21 session — DO NOT re-de
   steering. (The frontend live-steering UI + frame-streaming WS is a separate Tier-F display item → push an `MV-`
   row when that ships; this AF item is the headless, automatable control loop.)
 
-- [ ] **AF-23 — CAPSTONE: cross-design automated field-response campaign (the user's stated goal).**
+- [x] **AF-23 — CAPSTONE: cross-design automated field-response campaign (the user's stated goal). SHIPPED 2026-06-23**
+  (`hox.run_field_campaign` + `assert_field_campaign`; HARNESS block at the top of the handoff).
   `hox.run_field_campaign(specs, intensities_pN, directions, ws) → {design_name: sweep_map}` — build each design from
   a build-spec / catalog primitive (reuse the AF-11/12 grammar + AF-18 specimen builder), run the AF-20 sweep on each,
   report **per-design non-destructive operating window + alignment-vs-field response**. **Augment = NEW

@@ -451,6 +451,77 @@ def sweep_field_response(specimen: dict, intensities_pN, directions, workspace, 
             "directions": dirs, "melt_floor": melt_floor}
 
 
+# ── CAPSTONE: cross-design automated field-response campaign (AF-23) ────────────
+
+def run_field_campaign(specimens, intensities_pN, directions, workspace, *,
+                       field_steps: int = 2000, melt_floor: float = 0.5,
+                       min_confidence: int = 10, timeout: float = 30.0,
+                       anchor_stiff: float = DEFAULT_ANCHOR_STIFF,
+                       **relax_params) -> dict:
+    """Run the SAME ``(|E|, direction)`` field sweep across MANY designs and assemble
+    a per-design response-surface campaign (AF-23, Tier 6 capstone — the user's stated
+    goal: *automatic exploration of which E-field intensities × directions align which
+    DNA structures, on what equilibration timescale, without ripping them apart, for
+    various designs*).
+
+    ``specimens`` is a list of dicts, one per design::
+
+        {"name": "6hb", "design": <Design | build-spec dict>,
+         "anchor": {"kind": "overhang", "id": …},
+         "overhang": {…} | None, "sequence": True | False}
+
+    For each entry this composes the de-risked batch path: :func:`build_field_specimen`
+    (build → optional overhang → sequence → relax → resolve the field anchor) followed
+    by :func:`sweep_field_response` (a child field job per ``(|E|, direction)`` cell off
+    that specimen's relaxed parent).  Each design runs in its own ``workspace/campaign/
+    <name>`` subdir so the per-design job trees never collide.
+
+    Returns ``{"sweeps": {name: sweep_dict}, "skipped": [(name, reason), …],
+    "names": [name, …], "intensities_pN": [...], "directions": [...],
+    "melt_floor": …}``.  A design whose build or sweep raises is recorded in
+    ``skipped`` (NOT silently dropped — the campaign stays auditable, mirroring
+    :func:`sweep_field_response`'s per-cell skip list).  Pin the campaign with
+    :func:`tests.automation_harness.assert_field_campaign`.
+
+    The ``directions``/``intensities_pN`` grid is shared across designs so their
+    response surfaces are directly comparable (the cross-design distinguishability the
+    capstone proves).  *Physical-layer only* — it reads each field trajectory, never
+    writes it back into ``Design`` (the Three-Layer Law).  Field direction + magnitude
+    are spec inputs; the cells measure magnitudes (τ, alignment, bp retention) →
+    direction-agnostic, no sign/handedness reasoning here.  Transparently swaps to the
+    AF-21/22 oxpy fast path once that ships (same specimen + sweep contract).
+    """
+    ws_root = Path(workspace)
+    dirs = [tuple(float(c) for c in d) for d in directions]
+    intensities = [float(p) for p in intensities_pN]
+
+    sweeps: dict[str, dict] = {}
+    skipped: list[tuple] = []
+    names: list[str] = []
+    for i, entry in enumerate(specimens):
+        name = str(entry.get("name") or f"design_{i}")
+        names.append(name)
+        safe = "".join(ch if (ch.isalnum() or ch in "-_") else "_" for ch in name)
+        sub = ws_root / "campaign" / f"{i:03d}_{safe}"
+        sub.mkdir(parents=True, exist_ok=True)
+        try:
+            specimen = build_field_specimen(
+                entry["design"], sub, anchor=entry["anchor"],
+                overhang=entry.get("overhang"), sequence=entry.get("sequence", True),
+                timeout=timeout, **relax_params)
+            sweep = sweep_field_response(
+                specimen, intensities, dirs, sub, field_steps=field_steps,
+                melt_floor=melt_floor, min_confidence=min_confidence,
+                timeout=timeout, anchor_stiff=anchor_stiff)
+        except Exception as exc:  # noqa: BLE001 — recorded, not swallowed (oracle gates)
+            skipped.append((name, f"{type(exc).__name__}: {exc}"))
+            continue
+        sweeps[name] = sweep
+    return {"sweeps": sweeps, "skipped": skipped, "names": names,
+            "intensities_pN": intensities, "directions": dirs,
+            "melt_floor": melt_floor}
+
+
 # ── Hardware benchmark: auto-tune the relaxation backend headlessly ────────────
 
 def run_oxdna_benchmark(design: Design, workspace, *, steps: int | None = None,

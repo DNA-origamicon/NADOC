@@ -79,6 +79,9 @@ Pulled from the 2026-06-16 audit; each is a *proven* pattern already green in th
 | `assert_periodic_chain_tiles` (`polymerize_periodic` straggler) | a SINGLE-part periodic polymer's AUTO-DERIVED repeat unit tiles the chain seamlessly: over every synthesized rigid `seam0:*` junction, (1) ≥1 junction (a chain was grown), (2) copy-k `seam0:3p` world ≈ copy-(k+1) `seam0:5p` world (resolved with the resolver's own `_get_connector_world` on the instance-overridden design), (3) a SINGLE repeat unit — every junction's `T_high@inv(T_low)` shares one translation length (≤`step_tol_nm`) + rotation angle (≤`angle_tol_deg`), magnitudes-only so direction-agnostic (forward `delta` and backward `delta_inv` share both → holds for `both`), (4) step>`min_step_nm` non-vacuity guard. The periodic analog of `assert_mate_coincident` but over a whole DERIVED chain + the single-repeat-unit invariant `assert_polymer_chain` (mate-seeded, delta re-derived from two existing instances) does not check; load-bearing because `canonical_assembly` sees the chain's structure survive `.nass` but is blind to whether the derived delta actually tiles. Can-go-red on a copy shoved off the chain (open seam) or a lone un-polymerized seed (no junctions) | `tests/automation_harness.py` (`assert_periodic_chain_tiles`); `backend/api/headless_assembly_build.py` (`polymerize_periodic`); drives `backend/core/periodic_polymer.derive_periodic_delta` | any auto-derived (no hand-mate) repeating chain whose junction geometry must close (periodic/belt seam tiling, future ring-closure checks) |
 | `assert_part_from_primitive` (AF-12 Phase 2 — `from_primitive` catalog-by-name) | a `{"from_primitive": "<name>"}` part instance resolves to **exactly** the catalog primitive of that name — proving the grammar's *name→catalog-path resolver* picked the right primitive. The check `assert_part_from_file` cannot give: that oracle trusts a path already on the instance; here the catalog **NAME** is the input, so a resolver that mapped the name to the wrong/renamed primitive (or to nothing) must be caught. INDEPENDENTLY re-resolves `primitive_name` via `primitive_catalog.design_path` (NOT the interpreter's resolution), loads that primitive's `.nadoc`, computes `canonical_topology`, and delegates to `assert_part_from_file` (which loads what the *instance* actually references and compares) — so a name pointing at a different primitive than the build wired makes the two topologies diverge. Asserts name resolves in the catalog + instance is file-backed + topology matches. Can-go-red: wrong/renamed name → topology mismatch; unknown name → catalog-resolution guard | `tests/automation_harness.py` (`assert_part_from_primitive`); `backend/core/build_spec.py` (`PrimitivePart`/`_parse_part`); `backend/api/headless_spec_build.py` (`_resolve_primitive_path`); drives `backend/core/primitive_catalog.design_path` | any by-name resource resolver whose name→artifact mapping the structure fingerprint can't see (future `from_primitive` parametric/template kinds, named-fixture references) |
 | `assert_field_ready_specimen` (AF-18 — Tier 6 specimen spine) | the FIRST composite physical-layer oracle: an end-to-end-built design is *ready to run an electric-field experiment*. Composes three independently-proven properties into one verdict — (1) fully sequenced (`assert_fully_sequenced`), (2) relaxed geometry recovered (`assert_relaxed_geometry_recovered`), (3) **anchorable under a field**: the anchor descriptor resolved to real nucleotides AND a SHORT PROBE field child branched off the relaxed parent holds the anchored beads while the free part deflects ALONG the field (`measure_field_response.passed`). Load-bearing because each piece was pinned ALONE — nothing proved they **compose** into one runnable, anchorable specimen (the user's "build → … → set as anchor → run a field" chain). Direction-agnostic (probe measures magnitudes/projection); Three-Layer-clean (reads relaxed/field geometry, never writes it back). Can-go-red: unsequenced design (clause 1) / non-completed relaxation (clause 2) / empty-anchor or non-deflecting field (clause 3) | `tests/automation_harness.py` (`assert_field_ready_specimen`); `backend/api/headless_oxdna_build.py` (`build_field_specimen`); drives `resolve_anchor_particles` + `measure_field_response` | the Tier-6 field-experiment items (AF-19 equilibration τ, AF-20 field sweep, AF-23 cross-design campaign) — each runs its field on a specimen this oracle certified ready |
+| `measure_field_equilibration` + `assert_equilibration_timeline` (AF-19 — Tier 6 time-resolved) | the FIRST TIME-RESOLVED physical oracle: where `measure_field_response` (AF-18) is **endpoint-only** (final pose vs reference), this reads the WHOLE field-stage trajectory and measures, frame by frame, (1) the free body's **alignment** (mean displacement of non-anchored nucleotides ALONG the field vs frame 0 — the `measure_field_response` projection, per frame) and (2) per-frame **base-pair retention** (`base_pair_retention`). Fits the monotone approach to its plateau (tail mean) and extracts the **equilibration time τ** (interpolated time to `1−1/e` of plateau). `converged` requires non-vacuous rise (≥`min_rise_nm`) + monotone-within-noise + an actual plateau (late-frame slope ≤ `plateau_slope_frac`·early slope — a run still climbing has NOT equilibrated → `tau=None`); `melted`=True if bp dips below `melt_floor` at ANY frame (transient-melt watch, blind to `measure_field_response`). Pure (`backend/core`, takes `read_trajectory_frames_full` maps + `design`); direction-agnostic (projection magnitude); Three-Layer-clean. The asserter confidence-gates trajectory frame count, then asserts converged + finite positive τ + no melt. Can-go-red: linear (never-plateau) ramp → no finite τ; bp floor breach mid-swing → melted; too-few frames → INCONCLUSIVE | `backend/core/oxdna_health.py` (`measure_field_equilibration`); `tests/automation_harness.py` (`assert_equilibration_timeline`); drives `read_trajectory_frames_full` + `base_pair_retention` | the AF-20 field sweep (measure τ per `(|E|,dir)` cell → field↔τ correlation map) + the AF-23 cross-design campaign; the per-frame-observable pattern reusable for any trajectory-resolved measure (R_g vs t, angle vs t) |
+| `assert_field_sweep_map` (AF-20 — Tier 6 response surface) | the FIRST MULTI-config physical oracle: where every prior physical oracle (AF-13/18/19) measured one structure at one condition, this asserts a *response surface* over a swept `(|E|, direction)` grid. Four clauses on the `hox.sweep_field_response` map: (1) **no gaps** — nothing skipped + every grid cell carries a verdict (a sweep that silently dropped a condition is not a map); (2) **a non-destructive window exists** in `benign_range` — RECOMPUTED from the raw measured `aligned ∧ bp_min ≥ melt_floor`, NOT the wrapper's stored `destructive` flag (anti-echo: the oracle measures the surface, doesn't echo it); (3) **the destructive regime is destructive** — `destructive_range` covers ≥1 swept cell AND every such cell melted (the "without ripping it apart" window has a real upper bound; non-vacuity-guarded); (4) **τ ↔ |E| correlation** — within each direction's responsive (non-destructive) band, ordered by |E|, the equilibration time τ is monotone non-increasing AND actually falls (the strongest responsive field equilibrates faster than the weakest — not a flat line; ≥2 cells required). Direction-agnostic (τ + retention are magnitudes); Three-Layer-clean (reads each field trajectory, never writes back). Can-go-red: a skipped/incomplete grid; a benign band with no safe cell; a destructive band that did not melt; a flat field-independent τ | `tests/automation_harness.py` (`assert_field_sweep_map`); `backend/api/headless_oxdna_build.py` (`sweep_field_response`/`_measure_field_cell`); drives `measure_field_equilibration` per cell | the AF-23 cross-design campaign (run this sweep per specimen → per-design operating window + alignment-vs-field response); any multi-condition response-surface oracle over a physical-layer measure (force-extension curves, salt sweeps) |
+| `assert_field_campaign` (AF-23 — Tier 6 CAPSTONE, cross-design study) | the FIRST MULTI-DESIGN physical oracle: where every prior physical oracle (AF-13/18/19/20) measured ONE structure (AF-20 at many conditions), this asserts a *campaign* — the same `(|E|, direction)` sweep run + compared across MANY designs. Four clauses on the `hox.run_field_campaign` result: (1) **no dropped design** — `skipped` empty + `sweeps` non-empty (a campaign that silently lost a design is not a study; AF-20's no-truncation rule, one level up); (2) **every design is a valid response surface** — each design's sweep passes `assert_field_sweep_map` (populated grid + benign window + destructive bound + τ↔\|E\|), so each carries a *reported* non-destructive operating window; (3) **DISTINGUISHABILITY** — ≥2 designs differ at a shared responsive `(\|E\|, dir)` cell by ≥`min_tau_separation_steps` τ (a floppier/longer-lever design equilibrates on a different timescale), recomputed from raw `aligned ∧ bp_min ≥ melt_floor` (anti-echo, NOT `cell["destructive"]`) — the load-bearing NEW assertion over AF-20: AF-20 pins ONE surface, nothing before proved the campaign produces design-DISCRIMINATING surfaces (the whole point of "various designs"); (4) **reproducible** — if `repro` (a 2nd run) given, every shared design+cell τ matches within `tau_tol_steps` (the deterministic-mock re-run is identical — a prerequisite for trusting any automated cross-design conclusion). Direction-agnostic (τ + retention magnitudes); Three-Layer-clean (reads each field trajectory, never writes back). Can-go-red: a skipped design (clause 1); a design with no safe/destructive window (clause 2); indistinguishable designs (clause 3); a non-deterministic re-run (clause 4) | `tests/automation_harness.py` (`assert_field_campaign`/`_campaign_tau_signature`); `backend/api/headless_oxdna_build.py` (`run_field_campaign`); composes `assert_field_sweep_map` per design | ANY cross-design / cross-condition campaign over a physical-layer measure (multi-design force-extension, salt/temperature campaigns, batch screening); the distinguishability pattern (per-design signature → assert ≥2 differ at a shared cell) reusable for any "prove the study discriminates its subjects" oracle |
 
 ---
 
@@ -1506,6 +1509,92 @@ running the WHOLE chain end-to-end and proving a probe field actually holds the 
 deflects — so a builder that produced an unsequenced, unrelaxed, or un-anchorable specimen fails the matching clause.
 It is the Tier-6 specimen spine AF-19 (equilibration τ) / AF-20 (field sweep) / AF-23 (campaign) build their field
 experiments on.**"
+
+---
+
+**AF-19 — field equilibration-timeline τ + non-melt oracle (Tier 6, time-resolved)** · _shape:_ 1 PURE measure
+`measure_field_equilibration` in `backend/core/oxdna_health.py` + 1 oracle `assert_equilibration_timeline` in
+`tests/automation_harness.py` + 1 new test mock (`_FIELD_TRAJ_MOCK_OXDNA`/`mock_oxdna_field_traj`, a field binary that
+emits a multi-frame `trajectory.dat` with a saturating alignment ramp). `crud.py`/`assembly.py`/`main.js` LOC Δ = **0**;
+`backend/core` imports nothing from `backend/api` (the measure takes the already-read trajectory frames + the design) ·
+_headless-coverage Δ:_ **37 → 37** (FLAT — reads the field `trajectory.dat` the ALREADY-SHIPPED field child-job writes;
+wraps no new route) · _oracle shipped:_ `measure_field_equilibration(frames, field_dir, anchor_keys, *, design,
+steps_per_frame, melt_floor, …)` — per-frame free-body alignment projection (the `measure_field_response` projection vs
+frame 0) + per-frame `base_pair_retention`; fits the monotone approach to a plateau (tail mean) and extracts τ = time to
+`1−1/e` of plateau; `converged` = non-vacuous rise + monotone-within-noise + actual plateau (late slope ≤ 0.3·early
+slope); `melted` = bp below floor at ANY frame. `assert_equilibration_timeline(job, ws, field_dir, anchor_keys, *,
+design, melt_floor=0.5, min_confidence=10)` locates the field stage's trajectory, confidence-gates frame count, asserts
+converged + finite positive τ + not melted · _tests:_ 6 new in `test_headless_oxdna_build.py` (end-to-end relax→field→
+oracle finds finite τ + no melt on the deflecting trajectory mock; confidence-gate fires on a 10-frame run at
+`min_confidence=15`; **3 pure-measure pins on hand-built frames** — saturating ramp converges with τ≈k, LINEAR ramp →
+`converged=False`/`tau=None` (never-plateau can-go-red), bp yanked apart mid-swing → `melted=True` (transient-melt
+can-go-red); <2-frames raises) · full suite **3020 passed / 55 skipped**, no drop · _cohesion:_ ONE reason to change —
+how a field trajectory's equilibration timeline is measured. **ASK-FIRST honoured:** field direction is a caller input;
+the measure reports projection MAGNITUDES along it (direction-agnostic, no sign/handedness reasoning) · **"Validation
+gained, not just a passthrough:** before AF-19 `measure_field_response` proved only the ENDPOINT (the final field pose vs
+the field-off reference) — it was blind to *how long* equilibration took and to any *transient* base-pair melt during the
+swing. `measure_field_equilibration` closes both gaps by reading the whole field trajectory: it extracts a finite τ (and
+refuses one for a run that never plateaus) and watches bp retention at EVERY frame (catching a structure that aligns by
+ripping apart and re-forming) — neither of which the endpoint oracle can see. The two can-go-red pure tests prove the
+green can go red on a non-converging run and on a transient melt. It is the per-`(|E|,direction)`-cell measure the AF-20
+sweep + AF-23 campaign assemble into a field↔τ response surface.**"
+
+**AF-20 — field sweep driver + (|E|,direction)→response surface + field↔τ correlation oracle (Tier 6, multi-config)** ·
+_shape:_ 1 orchestration wrapper `hox.sweep_field_response` (+ a private `_measure_field_cell` reducer) in
+`backend/api/headless_oxdna_build.py` + 1 oracle `assert_field_sweep_map` in `tests/automation_harness.py` + 1 new test
+mock (`_FIELD_SWEEP_MOCK_OXDNA`/`mock_oxdna_field_sweep`, a field binary whose time constant DECREASES with |E| and which
+melts above a threshold). `crud.py`/`assembly.py`/`main.js` LOC Δ = **0**; the wrapper reuses the shipped `append_field`
+child-job spawn + the AF-19 `measure_field_equilibration` (no logic re-implemented) · _headless-coverage Δ:_ **37 → 37**
+(FLAT — branches child field jobs via the already-covered `append_field`; wraps no new route) · _oracle shipped:_
+`assert_field_sweep_map(sweep, *, benign_range, destructive_range, melt_floor=0.5, tau_tol_steps=1e-6,
+min_tau_drop_steps=1.0)` — four clauses over a `(pN,dir)→cell` map: (1) no skipped cells + every grid cell present (no
+silent truncation); (2) a non-destructive operating window in `benign_range`, **recomputed from the raw measured
+`aligned`/`bp_min`** not the wrapper's stored flag (anti-echo); (3) `destructive_range` covers ≥1 cell and ALL of them
+melted (a real upper bound, non-vacuity-guarded); (4) **τ non-increasing AND actually falls with |E|** in each direction's
+responsive band (≥2 cells — the field↔equilibration correlation) · _tests:_ 4 new in `test_headless_oxdna_build.py`
+(end-to-end build→sweep 5 |E|×2 dir → complete map, safe window, 32 pN melts / 2 pN holds, τ strictly decreasing; **3
+can-go-red**: flat τ on a HAND-BUILT equal-τ map with one melted cell, a destructive range over un-melted cells →
+"window not bounded above", a dropped grid cell → "no verdict for cell"). The specimen is the CORRECT experimental setup —
+anchored on a REAL extruded ssDNA overhang (the whole 12-nt overhang domain pinned via `conftest.extrude_valid_overhang`
+→ the `overhang_candidate_error` geometry oracle), NOT a regular bundle domain tagged as an overhang; overhang bases are a
+fixed-seed random splice (the multi-scaffold 6hb is sequenced by `_sequence_for_oxdna`, not `full_sequence`) · targeted files **290 passed**
+(`test_headless_oxdna_build` + `test_automation_harness` + `test_oxdna_relaxation`); full suite not run this session (user
+declined the long run); net **+4 tests (suite 3020→3024)** · _cohesion:_ ONE reason to change — how a single specimen's
+field response surface is swept + reduced to per-cell verdicts. **ASK-FIRST honoured:** intensities + directions are caller
+inputs; cells measure magnitudes (τ, alignment projection, bp retention) · **"Validation gained, not just a passthrough:**
+before AF-20 every physical oracle (AF-13/18/19) measured ONE structure at ONE condition. `assert_field_sweep_map` is the
+first MULTI-config physical oracle: it proves a *response surface* — that the specimen has a bounded non-destructive
+operating window (aligns without melting below a field, melts above it) AND that its equilibration time τ correlates with
+field strength (stronger field → faster equilibration), the exact `(|E|,direction)↔τ` map the user wants. Nothing before
+asserted a property ACROSS conditions; the τ-monotonicity + bounded-window clauses can only be tested on a swept grid. The
+three can-go-red tests prove the green goes red on a flat (field-independent) τ, an unbounded destructive window, and a
+gap in the grid. It is the per-design sweep the AF-23 cross-design campaign runs on each specimen.**"
+
+**AF-23 — CAPSTONE: cross-design automated field-response campaign (Tier 6, multi-design study)** · _shape:_ 1 wrapper
+`run_field_campaign` in `backend/api/headless_oxdna_build.py` (composes the de-risked AF-18 `build_field_specimen` +
+AF-20 `sweep_field_response` per design, each in its own `ws/campaign/<i>_<name>` subdir; wraps NO new route) + 1 reusable
+oracle `assert_field_campaign` (+ helper `_campaign_tau_signature`) in `tests/automation_harness.py`;
+`crud.py`/`assembly.py`/`main.js` LOC Δ = **0** · _headless-coverage Δ:_ **FLAT 37** (campaign is pure composition of two
+already-covered wrappers — no route flips) · _oracle shipped:_ `assert_field_campaign(campaign, *, benign_range,
+destructive_range, expect_distinguishable=True, melt_floor=0.5, min_tau_separation_steps=1.0, repro=None, tau_tol_steps=1e-6,
+min_tau_drop_steps=1.0)` — the FIRST multi-DESIGN physical oracle: (1) no dropped design (skipped empty + sweeps non-empty),
+(2) every design passes `assert_field_sweep_map` (a reported non-destructive window per design), (3) **DISTINGUISHABILITY** —
+≥2 designs differ at a shared responsive `(|E|,dir)` cell by ≥`min_tau_separation_steps` τ, recomputed from raw
+`aligned ∧ bp_min ≥ melt_floor` (anti-echo), (4) **reproducible** — `repro` 2nd run reproduces every shared design+cell τ
+within `tau_tol_steps`. Direction-agnostic; Three-Layer-clean · _tests:_ 4 new in `test_headless_oxdna_build.py`
+(6hb-vs-18hb distinguishes + 18hb faster at 2 pN; reproducible re-run; **two load-bearing red-tests**: two identical 6hb →
+"INDISTINGUISHABLE", an unresolvable anchor → recorded in `skipped` → "skipped" fires) + a NEW design-dependent campaign mock
+(`_FIELD_CAMPAIGN_MOCK_OXDNA`/`mock_oxdna_field_campaign`: `k = clamp((4.5−12·F0)·(540/N))` → τ scales with particle count N,
+melt threshold design-independent); full suite **3028 passed / 55 skipped** (3024→3028), no drop · **"Validation gained, not
+just a passthrough:** before AF-23 every physical oracle (AF-13/18/19/20) measured ONE structure — AF-20 at many conditions,
+but still one design. `assert_field_campaign` is the first oracle that proves the campaign produces design-DISCRIMINATING
+response surfaces: it runs the SAME `(|E|,direction)` sweep across multiple designs and asserts ≥2 are distinguishable by
+their measured equilibration timescale (a bigger/longer-lever 18hb equilibrates faster than a 6hb at the same field) AND that
+the study reproduces exactly. Nothing before asserted a property ACROSS designs — the distinguishability + reproducibility
+clauses can only be tested on a multi-design campaign, and the AF-20 sweep mock's design-independent τ literally cannot
+exercise them (it took a new N-dependent mock). The two red-tests prove the green goes red on indistinguishable designs and a
+dropped design. This is the capstone the user asked for: 'automatic exploration of E-field intensities and directions that
+correlate with DNA alignment equilibration timelines, without ripping it apart, for various designs.'**"
 
 ---
 

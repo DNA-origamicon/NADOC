@@ -2540,6 +2540,134 @@ def assert_field_sweep_map(sweep, *, benign_range, destructive_range,
             "n_destructive": len(destr_cells), "n_directions_checked": n_checked}
 
 
+def _campaign_tau_signature(sweep, *, melt_floor):
+    """The τ of every *non-destructive* (aligned ∧ retained) cell of one sweep, keyed
+    by ``(pN, dir)`` — a design's field-response signature.  Recomputed from the raw
+    measured ``aligned``/``bp_min`` (NOT the wrapper's stored ``destructive`` flag), so
+    a campaign oracle that compares signatures measures the surface, not an echo of it.
+    """
+    sig = {}
+    for key, cell in sweep["map"].items():
+        if bool(cell["aligned"]) and cell["bp_min"] >= melt_floor:
+            sig[key] = cell["tau_steps"]
+    return sig
+
+
+def assert_field_campaign(campaign, *, benign_range, destructive_range,
+                          expect_distinguishable=True, melt_floor=0.5,
+                          min_tau_separation_steps=1.0, repro=None,
+                          tau_tol_steps=1e-6, min_tau_drop_steps=1.0):
+    """AF-23 (Tier 6 CAPSTONE) oracle: a cross-design field-response *campaign* is a
+    complete, design-discriminating, reproducible study — the user's stated goal,
+    tying text→design (the AF-11/12 grammar) + field sweep (AF-20) + equilibration
+    (AF-19) into ONE automated experiment reusable for any origami.
+
+    ``campaign`` is the dict :func:`~backend.api.headless_oxdna_build.run_field_campaign`
+    returns (``sweeps`` keyed by design name + ``skipped`` + ``names`` + the shared
+    ``intensities_pN``/``directions`` grid).  Four clauses:
+
+    1. **no dropped design** — ``skipped`` is empty and ``sweeps`` is non-empty (a
+       campaign that silently lost a design is not a study; mirrors the AF-20
+       no-silent-truncation rule, one level up).
+    2. **every design is a valid response surface** — each design's sweep passes
+       :func:`assert_field_sweep_map` (a populated grid, a non-destructive operating
+       window in ``benign_range``, a destructive upper bound in ``destructive_range``,
+       and τ falling with ``|E|``).  So every design carries a *reported* non-destructive
+       window, the per-design half of the capstone deliverable.
+    3. **designs are distinguishable** — when ``expect_distinguishable`` (the default),
+       at least two designs differ in their response: there is a shared responsive
+       ``(|E|, direction)`` cell where their equilibration times τ differ by ≥
+       ``min_tau_separation_steps`` (a floppier / longer-lever design equilibrates on a
+       different timescale).  Recomputed from the measured τ, not echoed.  This is the
+       load-bearing NEW assertion over AF-20: AF-20 pins ONE surface; nothing before
+       proved the campaign produces design-*discriminating* surfaces (the whole point of
+       sweeping "various designs").  With ``expect_distinguishable=False`` the clause is
+       skipped (e.g. a control of identical designs).
+    4. **reproducible** — when ``repro`` (a second :func:`run_field_campaign` result over
+       the same specimens) is supplied, every shared design + cell's τ matches within
+       ``tau_tol_steps`` (the deterministic-mock campaign re-runs identically — a
+       prerequisite for trusting any automated cross-design conclusion).
+
+    ``benign_range``/``destructive_range`` are inclusive ``(lo_pN, hi_pN)`` bands shared
+    across designs.  Direction-agnostic (τ + retention are magnitudes).  Returns a
+    summary dict.
+
+    Can-go-red: a skipped design (clause 1); a design whose surface is incomplete or has
+    no safe/destructive window (clause 2, via ``assert_field_sweep_map``); a campaign of
+    indistinguishable designs (clause 3); a non-deterministic re-run (clause 4).
+    """
+    sweeps = campaign["sweeps"]
+
+    # Clause 1 — no design dropped.
+    assert not campaign["skipped"], (
+        f"field campaign skipped {len(campaign['skipped'])} design(s) "
+        f"{campaign['skipped']} — a build/sweep failed; the cross-design study is "
+        "incomplete (no silent truncation of the campaign)")
+    assert sweeps, "field campaign produced no design response surfaces (empty)"
+
+    # Clause 2 — every design is itself a valid, windowed response surface.
+    per_design = {}
+    for name, sweep in sweeps.items():
+        per_design[name] = assert_field_sweep_map(
+            sweep, benign_range=benign_range, destructive_range=destructive_range,
+            melt_floor=melt_floor, tau_tol_steps=tau_tol_steps,
+            min_tau_drop_steps=min_tau_drop_steps)
+
+    # Build each design's τ signature over its non-destructive cells.
+    signatures = {name: _campaign_tau_signature(sweep, melt_floor=melt_floor)
+                  for name, sweep in sweeps.items()}
+
+    # Clause 3 — the designs are distinguishable (the capstone's reason to exist).
+    n_distinguishing = 0
+    if expect_distinguishable:
+        assert len(sweeps) >= 2, (
+            "expect_distinguishable requires >= 2 designs to compare (the campaign "
+            f"has {len(sweeps)})")
+        names = list(signatures)
+        max_sep = 0.0
+        sep_cell = None
+        for ai in range(len(names)):
+            for bi in range(ai + 1, len(names)):
+                sa, sb = signatures[names[ai]], signatures[names[bi]]
+                shared = set(sa) & set(sb)
+                for cell in shared:
+                    sep = abs(sa[cell] - sb[cell])
+                    if sep >= min_tau_separation_steps:
+                        n_distinguishing += 1
+                    if sep > max_sep:
+                        max_sep, sep_cell = sep, cell
+        assert n_distinguishing >= 1, (
+            "field campaign designs are INDISTINGUISHABLE — no shared responsive "
+            f"(|E|, direction) cell separates any two designs' τ by >= "
+            f"{min_tau_separation_steps} steps (largest τ separation seen: "
+            f"{max_sep:.1f} steps at {sep_cell}); the campaign cannot tell the "
+            "structures apart")
+
+    # Clause 4 — deterministic re-run reproduces every τ.
+    n_repro = 0
+    if repro is not None:
+        repro_sigs = {name: _campaign_tau_signature(sweep, melt_floor=melt_floor)
+                      for name, sweep in repro["sweeps"].items()}
+        shared_designs = set(signatures) & set(repro_sigs)
+        assert shared_designs, (
+            "reproducibility check: the re-run campaign shares no design names with "
+            "the original (nothing to compare)")
+        for name in shared_designs:
+            a, b = signatures[name], repro_sigs[name]
+            assert set(a) == set(b), (
+                f"design {name!r}: re-run's responsive cell set differs from the "
+                f"original ({set(a) ^ set(b)}) — the campaign is not deterministic")
+            for cell, tau in a.items():
+                assert abs(tau - b[cell]) <= tau_tol_steps, (
+                    f"design {name!r} cell {cell}: τ {tau:.3f} (run 1) vs "
+                    f"{b[cell]:.3f} (run 2) differ > {tau_tol_steps} — the campaign "
+                    "is not reproducible")
+                n_repro += 1
+
+    return {"n_designs": len(sweeps), "n_distinguishing_cells": n_distinguishing,
+            "n_repro_cells": n_repro, "per_design": per_design}
+
+
 def assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,
                                workspace, min_confidence=RMSF_PRELIM_FRAMES):
     """Tier-5 constraint primitive: a *measured* geometric property of the

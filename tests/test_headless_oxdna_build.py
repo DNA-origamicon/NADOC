@@ -23,6 +23,7 @@ from backend.api import headless_oxdna_build as hox
 from backend.core.oxdna_job import OxdnaStatus
 from tests.automation_harness import (
     assert_equilibration_timeline,
+    assert_field_campaign,
     assert_field_ready_specimen,
     assert_field_sweep_map,
     assert_fully_sequenced,
@@ -30,7 +31,7 @@ from tests.automation_harness import (
     assert_relaxed_measurement,
     oxdna_coverage_report,
 )
-from tests.conftest import make_6hb_design
+from tests.conftest import make_6hb_design, make_18hb_design
 
 # Reuse the mock-binary source + the M13+WC sequencing helper from the oxDNA runner
 # tests (a local fixture wraps the mock so pytest discovers it without a
@@ -773,6 +774,89 @@ def mock_oxdna_field_sweep(tmp_path, monkeypatch):
     return p
 
 
+# The AF-20 sweep mock's τ depends ONLY on |E| (field-independent of the design), so
+# two designs swept through it would yield identical surfaces — it cannot exercise the
+# AF-23 campaign's cross-design DISTINGUISHABILITY clause.  The campaign mock makes the
+# equilibration constant k (hence τ) scale with the particle count N (a bigger / longer-
+# lever structure has a smaller k → shorter τ → equilibrates faster), while keeping the
+# melt behaviour design-INDEPENDENT (s_max threshold on F0 only) so the SAME benign /
+# destructive |E| bands hold for every design.  k = clamp((4.5 − 12·F0)·(REF_N / N)).
+_FIELD_CAMPAIGN_MOCK_OXDNA = '''#!/usr/bin/env python3
+import sys, re, math
+from pathlib import Path
+inp = Path(sys.argv[1]); text = inp.read_text()
+def val(k):
+    m = re.search(r"^" + k + r"\\s*=\\s*(.+)$", text, re.M)
+    return m.group(1).strip() if m else None
+conf = Path(val("conf_file"))
+lastconf = val("lastconf_file") or "last_conf.dat"
+energy = val("energy_file") or "energy.dat"
+traj = val("trajectory_file") or "trajectory.dat"
+steps = int(val("steps") or "100")
+cwd = Path.cwd()
+ff = val("external_forces_file")
+ftxt = Path(ff).read_text() if ff and Path(ff).exists() else ""
+trapped = set(int(m) for m in re.findall(r"type = trap\\nparticle = (\\d+)", ftxt))
+sm = re.search(r"type = string\\nparticle = -1\\nF0 = ([-\\d.eE]+)\\nrate = [-\\d.eE]+\\ndir = ([-\\d.eE,]+)", ftxt)
+lines = conf.read_text().splitlines()
+hdr = lines[:3]
+data = [l for l in lines[3:] if l.strip()]
+N = max(1, len(data))                        # particle count == total nucleotides
+lever = 540.0 / N                            # bigger design -> smaller lever -> smaller k
+n_frames = max(2, steps // 100)
+if sm:
+    F0 = float(sm.group(1))
+    dx, dy, dz = (float(x) for x in sm.group(2).split(","))
+    sc = 100.0
+    pk = (sc * F0 * dx, sc * F0 * dy, sc * F0 * dz)
+    k = max(1.0, min(8.0, (4.5 - 12.0 * F0) * lever))   # design-dependent tau
+    s_max = 2.0 if F0 >= 0.4 else 0.0        # design-INDEPENDENT melt threshold
+else:
+    F0 = 0.0; pk = (0.0, 0.0, 0.0); k = max(1.0, n_frames / 4.0); s_max = 0.0
+free_xyz = [[float(x) for x in l.split()[:3]]
+            for i, l in enumerate(data) if i not in trapped]
+if free_xyz:
+    cx = sum(p[0] for p in free_xyz) / len(free_xyz)
+    cy = sum(p[1] for p in free_xyz) / len(free_xyz)
+    cz = sum(p[2] for p in free_xyz) / len(free_xyz)
+else:
+    cx = cy = cz = 0.0
+frames_txt = []
+for fi in range(n_frames):
+    factor = 1.0 - math.exp(-fi / k)
+    sh = (pk[0] * factor, pk[1] * factor, pk[2] * factor)
+    s = s_max * factor
+    out = ["t = " + str(fi), hdr[1], hdr[2]]
+    idx = 0
+    for ln in data:
+        p = ln.split()
+        if idx not in trapped:
+            ox, oy, oz = float(p[0]), float(p[1]), float(p[2])
+            p[0] = repr(cx + (ox - cx) * (1.0 + s) + sh[0])
+            p[1] = repr(cy + (oy - cy) * (1.0 + s) + sh[1])
+            p[2] = repr(cz + (oz - cz) * (1.0 + s) + sh[2])
+        out.append(" ".join(p)); idx += 1
+    frames_txt.append("\\n".join(out))
+(cwd / traj).write_text("\\n".join(frames_txt) + "\\n")
+(cwd / lastconf).write_text("\\n".join(frames_txt[-1].splitlines()) + "\\n")
+with open(cwd / energy, "w") as f:
+    for i in range(n_frames):
+        f.write(f"{i} {-1.5 - 0.001 * i} 0.5 -1.0\\n")
+'''
+
+
+@pytest.fixture
+def mock_oxdna_field_campaign(tmp_path, monkeypatch):
+    """A fake oxDNA binary whose field-stage τ scales with the design's particle count
+    (a bigger structure equilibrates faster) while its melt threshold is design-
+    independent — the AF-23 campaign substrate (lets two designs be DISTINGUISHABLE)."""
+    p = tmp_path / "mock_oxdna_field_campaign.py"
+    p.write_text(_FIELD_CAMPAIGN_MOCK_OXDNA)
+    p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    monkeypatch.setenv("OXDNA_BIN", str(p))
+    return p
+
+
 def _sweep_specimen(tmp_path):
     """Build a relaxed specimen anchored on a REAL extruded ssDNA overhang (12 nt),
     given a structure-safe random sequence so no base is undefined.
@@ -897,6 +981,96 @@ def test_field_sweep_oracle_fires_on_gap(tmp_path, mock_oxdna_field_sweep):
     with pytest.raises(AssertionError, match="no verdict for cell|gap in the map"):
         assert_field_sweep_map(sweep, benign_range=(0.0, 20.0),
                                destructive_range=(24.0, 1e9), melt_floor=0.5)
+
+
+# ── AF-23 CAPSTONE: cross-design field-response campaign ───────────────────────
+
+def _campaign_entry(name, make_design, *, length_bp=42, overhang_len=12,
+                    seed=20240623):
+    """Prepare ONE field-ready specimen entry for ``run_field_campaign``: a sequenced
+    design with a REAL extruded ssDNA overhang as the field anchor (same setup as the
+    AF-20 ``_sweep_specimen``, but returns the campaign-entry dict — the campaign wrapper
+    builds + relaxes + sweeps each).  The overhang site is chosen by the validated
+    geometry oracle, not reasoned about here (CLAUDE.md 'DNA Topology — Ask First')."""
+    from tests.conftest import extrude_valid_overhang
+
+    base = _sequence_for_oxdna(make_design(length_bp))
+    d, ovhg_id = extrude_valid_overhang(base, length_bp=overhang_len)
+    d = _define_overhang_bases(d, ovhg_id, seed=seed)
+    return {"name": name, "design": d, "anchor": {"kind": "overhang", "id": ovhg_id},
+            "sequence": False}
+
+
+def test_field_campaign_distinguishes_designs(tmp_path, mock_oxdna_field_campaign):
+    """The full AF-23 capstone path: sweep the SAME |E|×direction grid across two
+    differently-sized designs (6hb vs 18hb) → a per-design response surface for each,
+    every one a valid windowed sweep, AND the two are DISTINGUISHABLE (the larger /
+    longer-lever 18hb equilibrates faster → shorter τ at a shared responsive cell)."""
+    specimens = [_campaign_entry("6hb", make_6hb_design),
+                 _campaign_entry("18hb", make_18hb_design)]
+    campaign = hox.run_field_campaign(
+        specimens, [2.0, 4.0, 8.0, 16.0, 32.0], [(0, 0, 1)], tmp_path,
+        field_steps=2000, melt_floor=0.5, min_confidence=10, min_bp_retained=0.0)
+
+    assert not campaign["skipped"], campaign["skipped"]
+    assert set(campaign["sweeps"]) == {"6hb", "18hb"}
+    summary = assert_field_campaign(
+        campaign, benign_range=(0.0, 20.0), destructive_range=(24.0, 1e9),
+        melt_floor=0.5)
+    assert summary["n_designs"] == 2
+    assert summary["n_distinguishing_cells"] >= 1
+    # The larger 18hb equilibrates faster than the 6hb at the weakest responsive field.
+    cell = (2.0, (0.0, 0.0, 1.0))
+    assert campaign["sweeps"]["18hb"]["map"][cell]["tau_steps"] < \
+        campaign["sweeps"]["6hb"]["map"][cell]["tau_steps"]
+
+
+def test_field_campaign_is_reproducible(tmp_path, mock_oxdna_field_campaign):
+    """Clause 4: re-running the campaign over the same specimen reproduces every cell's
+    τ exactly (the deterministic mock) — the prerequisite for trusting any automated
+    cross-design conclusion."""
+    grid = ([2.0, 4.0, 8.0, 16.0, 32.0], [(0, 0, 1)])
+    run1 = hox.run_field_campaign(
+        [_campaign_entry("6hb", make_6hb_design)], *grid, tmp_path / "r1",
+        melt_floor=0.5, min_confidence=10, min_bp_retained=0.0)
+    run2 = hox.run_field_campaign(
+        [_campaign_entry("6hb", make_6hb_design)], *grid, tmp_path / "r2",
+        melt_floor=0.5, min_confidence=10, min_bp_retained=0.0)
+    summary = assert_field_campaign(
+        run1, benign_range=(0.0, 20.0), destructive_range=(24.0, 1e9),
+        melt_floor=0.5, expect_distinguishable=False, repro=run2)
+    assert summary["n_repro_cells"] >= 1
+
+
+def test_field_campaign_oracle_fires_on_indistinguishable(tmp_path,
+                                                          mock_oxdna_field_campaign):
+    """Can-go-red (clause 3): a campaign of two IDENTICAL designs has identical response
+    surfaces → the distinguishability clause fires (the campaign cannot tell them
+    apart)."""
+    campaign = hox.run_field_campaign(
+        [_campaign_entry("6hb_a", make_6hb_design),
+         _campaign_entry("6hb_b", make_6hb_design)],
+        [2.0, 4.0, 8.0, 16.0, 32.0], [(0, 0, 1)], tmp_path,
+        melt_floor=0.5, min_confidence=10, min_bp_retained=0.0)
+    assert not campaign["skipped"]
+    with pytest.raises(AssertionError, match="INDISTINGUISHABLE|cannot tell"):
+        assert_field_campaign(campaign, benign_range=(0.0, 20.0),
+                              destructive_range=(24.0, 1e9), melt_floor=0.5)
+
+
+def test_field_campaign_records_a_failed_design(tmp_path, mock_oxdna_field_campaign):
+    """Can-go-red (clause 1): a design with an unresolvable anchor is recorded in
+    ``skipped`` (NOT silently dropped), and the campaign oracle fires on it."""
+    good = _campaign_entry("6hb", make_6hb_design)
+    bad = {"name": "bad", "design": make_6hb_design(42),
+           "anchor": {"kind": "overhang", "id": "does-not-exist"}, "sequence": True}
+    campaign = hox.run_field_campaign(
+        [good, bad], [2.0, 4.0, 8.0, 16.0, 32.0], [(0, 0, 1)], tmp_path,
+        melt_floor=0.5, min_confidence=10, min_bp_retained=0.0)
+    assert [n for n, _ in campaign["skipped"]] == ["bad"]
+    with pytest.raises(AssertionError, match="skipped"):
+        assert_field_campaign(campaign, benign_range=(0.0, 20.0),
+                              destructive_range=(24.0, 1e9), melt_floor=0.5)
 
 
 def _landmarks(design):
