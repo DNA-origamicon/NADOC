@@ -95,9 +95,39 @@ gate drives hidePanel). Live domain-end click gesture not hand-driven → MV row
    `doc-presence`/`doc-goodbye`) + the `store.subscribe` that re-announces on design change move WITH the module.
    Factory `initCoediting({store, getDocId, getWorkspacePath, syncBadge})→{handleMessage, announce, …}`. Re-derive scope (⚠).
 
-After it, re-run the scan; if nothing cohesive remains, THEN flip the phase to "composition-root maintenance"
-(CLAUDE.md / main-init.md) and stop. Do NOT split the lifecycle spine (`_resetForNewDesign`/`_enterAssemblyMode`/
-`_exitAssemblyMode`/`_setMenuToggle`) or build a `ui/menu_misc.js` junk drawer (six logged mis-scopes prove it).
+After it, re-run the scan; if nothing cohesive remains, you may flip to "composition-root maintenance" — but
+ONLY after clearing the **terminal-state gate** below. Do NOT split the lifecycle spine
+(`_resetForNewDesign`/`_enterAssemblyMode`/`_exitAssemblyMode`/`_setMenuToggle`) or build a `ui/menu_misc.js`
+junk drawer (six logged mis-scopes prove it).
+
+**▶ TERMINAL-STATE GATE (MANDATORY — the loop may NOT declare "done / composition-root maintenance" until every
+box is checked and the proof is written into the log).** This gate exists because the three hardest clusters
+(frontier #1 Translate/Rotate, #2 Representation switcher, #3 Atomistic/surface) were each *deferred for weeks*
+before #81/#84/#86 finally carved them — "leave it, it's glue" is the failure mode this gate blocks. "Irreducible
+glue" is a CONCLUSION you earn with a coupling analysis, never a default you assert to stop early.
+
+- [ ] **Residual-coupling pass per formerly-deferred cluster.** For EACH of the three carved frontiers, read its
+  leftover wiring in main.js (the alias-consts, the shared-flag web, the `store.subscribe` blocks that stayed
+  inline) and write a one-paragraph verdict in the log: either (a) extract the remaining cohesive sub-block, or
+  (b) record WHY it is genuinely shared glue — name the ≥2 foreign consumers it co-serves and the shared closure
+  state that would fragment if split. A verdict with no named consumers does NOT clear the box.
+  - **#1 Translate/Rotate residual = the CONCRETE NEXT CANDIDATE.** Four `store.subscribe` blocks at
+    ~6210–6267 (transform-field populate on activeCluster change; selectableTypes save/restore on tool
+    toggle; strand-click → cluster-switch via `_refreshClusterPivotForAttach`+`clusterGizmo.attach`;
+    deform-tool mutual-exclusion) + the `_translateRotateActive` 22-site flag. These were left inline when
+    `scene/translate_rotate_tool.js` lifted (#81). PROBE: do they form a cohesive "tool activation wiring"
+    block that belongs in the tool factory (or a thin `scene/translate_rotate_wiring.js`), or do they
+    genuinely straddle clusterGizmo + selectableTypes + deform state? Run the pass; extract or justify.
+  - **#2 Representation switcher residual** — `_currentRepr`/`_lastDetailLevel`/`_lodMode` lets + their get/set
+    shims (#84 left them in main as "shared"). Name every reader before ruling them irreducible.
+  - **#3 Atomistic/surface residual** — `atomisticRenderer`/`surfaceRenderer` injected-not-moved (#86). Confirm
+    the ≥2 foreign consumers (animation/MD/switcher) are real, or fold them in.
+- [ ] **Co-editing scrap** (the ▶ NEXT item above) extracted OR logged irreducible with named consumers.
+- [ ] **Fresh terminal scan** (`grep -n "// ──"` + a function-cohesion sweep) returns zero un-passed cohesive
+  clusters. List what you scanned in the log so the next session doesn't re-derive it.
+
+Only when all four boxes are checked may the handoff be rewritten to "composition-root maintenance." Until then,
+the loop is NOT done — pick the topmost unchecked gate item as the session's target.
 
 **STILL-OPEN latent-bug note (carried from #79/#80, inside `translate_rotate_tool.js`):** the tool's two commit paths
 pass `_refreshClusterOverlays({ withFlexibleArcs: false })` — a cluster move with anchored ssDNA arcs arguably *should*
@@ -114,22 +144,18 @@ leapfrog a *foreign* subscriber that co-fires on the same store key (verify with
 for Phase 3d-A). (4) **Done = coupling+cohesion, not LOC** — one reason to change + a small dep surface; a big shared-state block
 (shared cache / shared helper) is ONE module even if >250 ln (splitting fragments the shared state, #86).
 
-<details><summary>Prior detail on frontier #1 (kept for reference)</summary>
+**✅ ALL THREE FRONTIER CLUSTERS ARE CARVED (do NOT re-list them as open — this corrects a stale `<details>`
+that misread the record).** The three "hardest-first" frontiers each have a `[x] DONE` row in the HARD tier
+section below — re-read those rows, not the obsolete summary:
 
-1. **Translate/Rotate tool + the `_mr*` panel shell** — banner `// ── Joint arrow pick handler` (~5252) through the
-   cluster/instance gizmo attach (~6770), the BIGGEST single block (~700 ln + the `_mr*` shell). `_activateTranslateRotateTool`
-   …`_cancelTranslateRotateTool` + `_onToolPickPointerDown` + the cluster raycaster (→ `scene/joint_pick.js`) + the `_mr*`
-   shell it owns (`_mrSetTransformValues`/`_mrSetClusterOptions`/`_mrCommitInputs`/… + `_translateRotateActive`,
-   read/written from 20+ sites). **Co-extract the shell here** — it's the natural pairing (Move/Rotate's flex sub-block
-   already left in #71). Gesture-bound, assembly+design dual-mode. Much easier AFTER the keystone.
-2. **Representation switcher** (~320 ln) — banners `// ── Unified representation radio` (~7851) + `_setRepresentation` +
-   `// ── Function-key bindings: F1…F7` + the option sliders. Central mode-switch touching every renderer + the Coloring
-   submenu (`_setColoringMode`'s 7 callers live here). Map the renderer fan-out; multi-commit.
-3. **Atomistic/surface controllers (remainder)** — `_applyAtomisticMode`/`_applySurfaceMode`/`_refetchAtomistic`/
-   `_ensureAtomData` + region overlays (~1893–2418). Pure colour cores already drained (#72). Interleaved with renderer
-   construction — first separate the controller fns from the init wiring, then lift the controllers as a factory.
-
-</details>
+1. **Translate/Rotate tool + `_mr*` shell** → `scene/translate_rotate_tool.js` (#81) + `scene/move_rotate_panel.js`
+   (#78) + `scene/joint_pick.js` (#77) + `scene/response_delta.js` (#76). **DONE.** Residual = the tool-activation
+   `store.subscribe` wiring at ~6210–6267 + the `_translateRotateActive` flag → the terminal-state gate's
+   CONCRETE NEXT CANDIDATE (above). Run the residual-coupling pass; don't assume it's glue.
+2. **Representation switcher** → `ui/representation_switcher.js` + `ui/repr_option_sliders.js` + `scene/coloring_modes.js`
+   (#82–84). **DONE.** Residual = shared `_currentRepr`/`_lastDetailLevel`/`_lodMode` lets (gate item #2).
+3. **Atomistic/surface controllers** → `scene/atom_surface_display.js` (#86). **DONE.** Residual = injected
+   `atomisticRenderer`/`surfaceRenderer` (gate item #3).
 
 **Gesture gate is UNBLOCKED (commit 8e050e4) — build on it, don't re-derive.** Drive transform commits via the
 Move/Rotate panel numeric inputs (`change` → `_mrCommitInputs` → `_queueAssemblyPrimaryCommit` → the SAME
@@ -148,8 +174,10 @@ inline — six logged mis-scopes prove the map's adjacency ≠ cohesion; a `ui/m
 
 **The goal is NOT a LOC number.** main.js is the composition root: 146 imports + ~100 module constructions + the
 lifecycle spine + thin per-action wiring are *irreducible* (~2,500–3,500 ln floor). **Target: "the closure holds zero
-cohesive logic clusters."** The four campaigns above ARE the remaining clusters — clear them and that target is met;
-LOC lands ~3,000 as a *result*. Genuinely-permanent inline: `_setMenuToggle` (43-use shared util — a mechanical
+cohesive logic clusters."** The four named campaigns are carved (#81/#84/#86 + the panel/atomistic shells); the
+remaining cohesive surface is the per-cluster RESIDUAL wiring the terminal-state gate forces you to pass
+(not assume away). The file is still ~7.3k, well above the ~3k floor — that gap is the residual-wiring + co-editing
+work the gate enumerates, NOT pre-cleared glue. Clear the gate and LOC lands toward the floor as a *result*. Genuinely-permanent inline: `_setMenuToggle` (43-use shared util — a mechanical
 import-swap, not a feature factory) and the lifecycle spine (`_resetForNewDesign`/`_enterAssemblyMode`/`_exitAssemblyMode`).
 
 **Terminal state = a composition root, and KEEPING it one is the next job.** Once the closure holds zero cohesive
@@ -810,6 +838,19 @@ run the want-it gate, and fix the entry on your way out. Ordered cleanest→hard
   factory); alias-consts keep every call site verbatim; the 2 boot-time value-captures (keyboard-shortcuts ~4509,
   assemblyContextMenu ~4995) wrapped as lazy arrows. 19 factory tests, smoke 23/23, assembly_move_tool/select 3/3.
   Live design-mode 3D-drag commit NOT hand-driven (LESSONS H7) — factory branch tests cover it.
+- [ ] **Translate/Rotate tool — ACTIVATION WIRING RESIDUAL (terminal-state gate item #1; topmost open target).**
+  When the tool gesture core lifted (#81), four `store.subscribe` blocks stayed inline at ~6210–6267:
+  (a) populate the `_mr*` transform fields + pivot options when `activeClusterId` changes while the tool is on;
+  (b) save/restore `selectableTypes` on tool toggle; (c) on strand-click while active, switch to that strand's
+  cluster via `_refreshClusterPivotForAttach` + `clusterGizmo.attach`; (d) cancel the tool when the deform tool
+  starts (mutual exclusion). Plus the `_translateRotateActive` 22-site flag (already a get/set shim on the tool
+  factory). **PROBE before deciding:** these four read `clusterGizmo`, `selectableTypes`, `_refreshClusterPivotForAttach`
+  (shared with Move/Rotate panel), and the deform-tool flag — re-derive whether they are cohesive "tool-activation
+  wiring" that belongs IN `translate_rotate_tool.js` (register its own subscribers at the factory init point,
+  preserving order) or a thin new `scene/translate_rotate_wiring.js`, OR whether they genuinely straddle ≥2
+  foreign subsystems and are shared glue. **EXTRACT or write the named-consumer justification** — do not skip.
+  Subscriber registration-order is load-bearing (see the CRITICAL ordering section in `main-init.md`): if you
+  move them, re-register at the same point in `main()`. Risk: MED-HARD (shared state, but bounded ~4 blocks).
 - [x] **▶ KEYSTONE — Assembly transform/commit/FK + motion constraints. DONE** (#73/#74/#75, commits f752255/46d66fe/e161a9f, −255 ln → `scene/assembly_transform.js`, 23 vitest). Banners
   `// ── Rigid-body group gizmo attachment` (~6773, attach itself partly in group_gizmo.js already) + `// ── Forward
   kinematics` (~6840) + `// ── Motion-constraint analyzer` (~6996) + status chip (~7083), ~400 ln.
