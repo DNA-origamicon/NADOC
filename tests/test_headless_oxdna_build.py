@@ -1929,3 +1929,78 @@ def test_steer_field_session_rejects_empty_waypoints(tmp_path, mock_oxdna_field)
                             field_dir=[0, 0, 1], field_oxdna=pn_to_oxdna_force(4.0))
     with pytest.raises(ValueError, match="no waypoints"):
         hox.steer_field_session(sess, [])
+
+
+# ── AF-24 (Tier 6): REAL-engine equilibration-τ validation ─────────────────────
+# The whole Tier-6 spine (AF-18..AF-23) was pinned only against identity/hand-built
+# MOCK binaries — they could not prove the real engine produces an alignment τ
+# without melting.  This retires that caveat on the REAL engine.  It is the proof
+# that the mock-tuned create_job step defaults (mc=100/md=100/equil=100) were the
+# bug: oxDNA drops base-pairing early in md_relax and only RE-ANNEALS over the long
+# (~1e6-step) md_relax STANDARD_RELAX_PARAMS now applies (verified on
+# workspace/test343.nadoc: HBList mc 35 → md 39 → equil 42/42).
+#
+# Opt-in (a real relaxation is ~minutes on a GPU): set NADOC_RUN_OXDNA_SLOW=1.
+# Needs a real oxDNA binary (find_oxdna) + a CUDA GPU.  Skipped in the default suite.
+
+@pytest.mark.slow
+def test_field_specimen_reanneals_and_equilibrates_real_engine(tmp_path):
+    """AF-24 P1: the full Tier-6 workflow on the REAL oxDNA engine — build a field
+    specimen with STANDARD-grade relaxation, confirm the duplex RE-ANNEALS to a
+    fully-paired self-sustaining structure, subject it to an anchored E-field, and
+    assert the time-resolved oracle: the free body aligns to a stable plateau in
+    finite τ WITHOUT melting (τ_align < τ_melt).  This is the first real-engine
+    confirmation of the Tier-6 physical claims (everything below was mock-only)."""
+    import os
+    from pathlib import Path
+
+    from backend.core.models import Design
+    from backend.core.oxdna_health import base_pair_retention
+    from backend.core.oxdna_runner import find_oxdna
+    from backend.physics.oxdna_interface import (
+        read_configuration_unwrapped, resolve_anchor_particles,
+    )
+
+    if not os.environ.get("NADOC_RUN_OXDNA_SLOW"):
+        pytest.skip("opt-in: set NADOC_RUN_OXDNA_SLOW=1 (a real relaxation is ~minutes)")
+    if find_oxdna() is None:
+        pytest.skip("no real oxDNA binary on PATH/$OXDNA_BIN")
+
+    design = Design.from_json(
+        (Path(__file__).parent / "fixtures" / "test343.nadoc").read_text())
+    anchor = {"kind": "overhang", "id": "ovhg_inline_stpl_XY_0_1_5p"}
+    _parts, keys = resolve_anchor_particles(design, [anchor])
+    assert keys, "test343's ssDNA overhang anchor must resolve to nucleotides"
+
+    # The FIX: a REAL specimen build passes STANDARD_RELAX_PARAMS (md_relax≈1e6),
+    # which re-anneals on the real engine.  The bare mock defaults (mc=100/md=100/
+    # equil=100) leave the duplex melted — that was the Tier-6 automation bug.
+    specimen = hox.build_field_specimen(
+        design, tmp_path, anchor=anchor, sequence=False, backend="CUDA",
+        timeout=900.0, **hox.STANDARD_RELAX_PARAMS)
+    job = specimen["job"]
+    assert job.status is OxdnaStatus.completed, f"relaxation failed: {job.error}"
+
+    # Re-anneal proof: the relaxed structure is (nearly) fully base-paired — the
+    # export drops pairing early in md_relax, the long md_relax pulls it back, and
+    # equil (mutual traps OFF) HOLDS it → the annealed duplex self-sustains.
+    top = job.job_dir(tmp_path) / "topology.top"
+    last = job.stage_dir(tmp_path, job.stages[-1].name) / "last_conf.dat"
+    retention = base_pair_retention(
+        design, read_configuration_unwrapped(last, design, top))[0]
+    assert retention >= 0.9, (
+        f"specimen did not re-anneal (final retention {retention:.2f}); a too-short "
+        "md_relax leaves the duplex melted — STANDARD_RELAX_PARAMS must reach it")
+
+    # Anchored E-field: the free body aligns without ripping apart (τ_align < τ_melt).
+    # pN=2.0 over 20k steps reaches a stable plateau with base-pairing well above the
+    # melt floor (empirically τ≈3.6k steps, bp_min≈0.8 — comfortable margin).
+    child = hox.append_field(job.job_id, tmp_path, field_pN=2.0, dir=[0, 0, 1],
+                             anchors=[anchor], steps=20000)
+    field_job = hox.wait_for_terminal(child["job_id"], tmp_path, timeout=900.0)
+    assert field_job.status is OxdnaStatus.completed, field_job.error
+
+    out = assert_equilibration_timeline(
+        field_job, tmp_path, [0, 0, 1], specimen["anchor_keys"], design=design,
+        melt_floor=0.5, min_confidence=10)
+    assert out["converged"] and out["tau_steps"] > 0 and not out["melted"]

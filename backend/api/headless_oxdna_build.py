@@ -52,11 +52,35 @@ from backend.api.routes_oxdna import (
 )
 from backend.core.models import Design
 from backend.core.oxdna_job import OxdnaJob, OxdnaStatus
+from backend.core.oxdna_protocol import (
+    DEFAULT_EQUIL_STEPS,
+    DEFAULT_MC_STEPS,
+    DEFAULT_MD_RELAX_STEPS,
+    MAX_RELAX_RETRIES,
+)
 from backend.physics.oxdna_interface import DEFAULT_ANCHOR_STIFF
 
 _scratch_counter = itertools.count()
 
 _TERMINAL = (OxdnaStatus.completed, OxdnaStatus.failed, OxdnaStatus.stopped)
+
+# Standard-grade relaxation parameters for a REAL-engine specimen build.  The
+# ``create_job`` / ``build_field_specimen`` defaults (mc=100 / md_relax=100 /
+# equil=100, gate 0.0, 0 retries) are tuned for the identity MOCK binary and do NOT
+# re-anneal on the real engine: oxDNA drops base-pairing early in md_relax and needs
+# the full ~1e6-step md_relax for the mutual traps to pull the duplex back together
+# (verified — a 42 bp duplex re-anneals to 42/42 only with md_relax≈1e6; 1e5 leaves it
+# melted; see ``project_oxdna_relaxation`` 2026-06-23).  A REAL Tier-6 run passes
+# ``**STANDARD_RELAX_PARAMS`` to ``build_field_specimen`` explicitly (the mock defaults
+# stay the default so GPU-free orchestration tests — whose mock cost scales with step
+# count — stay fast).
+STANDARD_RELAX_PARAMS: dict = {
+    "mc_steps": DEFAULT_MC_STEPS,              # 1_000
+    "md_relax_steps": DEFAULT_MD_RELAX_STEPS,  # 1_000_000 — the re-anneal needs this
+    "equil_steps": DEFAULT_EQUIL_STEPS,        # 100_000
+    "min_bp_retained": 0.5,                    # real quality gate (catches under-relax)
+    "max_relax_retries": MAX_RELAX_RETRIES,    # escalate-and-retry a stuck md_relax
+}
 
 
 # ── Isolation context managers ────────────────────────────────────────────────
@@ -312,8 +336,20 @@ def build_field_specimen(spec_or_design, workspace, *, anchor: dict,
        back as a position map, never written into ``Design`` — the Three-Layer Law).
 
     ``relax_params`` forward to :func:`create_job` (``min_bp_retained`` / step counts
-    / ``backend`` / …).  Pin the result with
-    :func:`tests.automation_harness.assert_field_ready_specimen`.
+    / ``backend`` / …).  **For a REAL-engine run, pass ``**STANDARD_RELAX_PARAMS``**
+    (md_relax≈1e6) and a generous ``timeout`` (a real relaxation is minutes):
+
+        hox.build_field_specimen(design, ws, anchor=a, sequence=False,
+                                 backend="CUDA", timeout=900.0,
+                                 **hox.STANDARD_RELAX_PARAMS)
+
+    The bare ``create_job`` defaults (mc=100/md=100/equil=100) are MOCK-tuned and do
+    **not** re-anneal on the real engine — the duplex melts early in md_relax and only
+    recovers over the long md_relax (verified — see :data:`STANDARD_RELAX_PARAMS`).
+    They are kept as the default so GPU-free orchestration tests (which drive the mock
+    binary, whose cost scales with step count) stay fast; the *real* Tier-6 path opts
+    into the standard grade explicitly.
+    Pin the result with :func:`tests.automation_harness.assert_field_ready_specimen`.
     """
     from backend.api import headless_build as hb
     from backend.physics.oxdna_interface import resolve_anchor_particles

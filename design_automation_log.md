@@ -78,6 +78,7 @@ Pulled from the 2026-06-16 audit; each is a *proven* pattern already green in th
 | `assert_spec_constraints_reported` (AF-13 P5 — grammar `constraints` block) | a design spec's declarative `constraints` block is lowered to the SAME per-constraint `check_relaxed_constraint` verdict (status + `met` + `measured_nm`) a hand-driven call yields — the load-bearing pin where `assert_spec_matches_calls` is BLIND (the canonical-topology fingerprint cannot see whether a physical-layer constraint was attached, its grid_pos landmark resolved to the right helix, or reported at all). Non-vacuity + count-mismatch guards; the driver resolves each landmark's `grid_pos`→runtime id, relaxes ONCE, then reports every constraint. Can-go-red on a wrong-helix resolution (measured diverges), a dropped constraint (count), a flipped status, or an empty block (vacuity) | `tests/automation_harness.py` (`assert_spec_constraints_reported`); `backend/core/build_spec.py` (`constraints` grammar); `backend/api/headless_spec_build.py` (`build_and_check_design`/`check_design_constraints`) | any declarative→physical-layer lowering whose effect the structure fingerprint can't see (the iterate-loop knob clause next; future `measure_*` constraint kinds get the grammar path for free) |
 | `assert_periodic_chain_tiles` (`polymerize_periodic` straggler) | a SINGLE-part periodic polymer's AUTO-DERIVED repeat unit tiles the chain seamlessly: over every synthesized rigid `seam0:*` junction, (1) ≥1 junction (a chain was grown), (2) copy-k `seam0:3p` world ≈ copy-(k+1) `seam0:5p` world (resolved with the resolver's own `_get_connector_world` on the instance-overridden design), (3) a SINGLE repeat unit — every junction's `T_high@inv(T_low)` shares one translation length (≤`step_tol_nm`) + rotation angle (≤`angle_tol_deg`), magnitudes-only so direction-agnostic (forward `delta` and backward `delta_inv` share both → holds for `both`), (4) step>`min_step_nm` non-vacuity guard. The periodic analog of `assert_mate_coincident` but over a whole DERIVED chain + the single-repeat-unit invariant `assert_polymer_chain` (mate-seeded, delta re-derived from two existing instances) does not check; load-bearing because `canonical_assembly` sees the chain's structure survive `.nass` but is blind to whether the derived delta actually tiles. Can-go-red on a copy shoved off the chain (open seam) or a lone un-polymerized seed (no junctions) | `tests/automation_harness.py` (`assert_periodic_chain_tiles`); `backend/api/headless_assembly_build.py` (`polymerize_periodic`); drives `backend/core/periodic_polymer.derive_periodic_delta` | any auto-derived (no hand-mate) repeating chain whose junction geometry must close (periodic/belt seam tiling, future ring-closure checks) |
 | `assert_part_from_primitive` (AF-12 Phase 2 — `from_primitive` catalog-by-name) | a `{"from_primitive": "<name>"}` part instance resolves to **exactly** the catalog primitive of that name — proving the grammar's *name→catalog-path resolver* picked the right primitive. The check `assert_part_from_file` cannot give: that oracle trusts a path already on the instance; here the catalog **NAME** is the input, so a resolver that mapped the name to the wrong/renamed primitive (or to nothing) must be caught. INDEPENDENTLY re-resolves `primitive_name` via `primitive_catalog.design_path` (NOT the interpreter's resolution), loads that primitive's `.nadoc`, computes `canonical_topology`, and delegates to `assert_part_from_file` (which loads what the *instance* actually references and compares) — so a name pointing at a different primitive than the build wired makes the two topologies diverge. Asserts name resolves in the catalog + instance is file-backed + topology matches. Can-go-red: wrong/renamed name → topology mismatch; unknown name → catalog-resolution guard | `tests/automation_harness.py` (`assert_part_from_primitive`); `backend/core/build_spec.py` (`PrimitivePart`/`_parse_part`); `backend/api/headless_spec_build.py` (`_resolve_primitive_path`); drives `backend/core/primitive_catalog.design_path` | any by-name resource resolver whose name→artifact mapping the structure fingerprint can't see (future `from_primitive` parametric/template kinds, named-fixture references) |
+| `assert_part_is_circular_disc` (AF-12 Phase 2b — `from_primitive` PARAMETRIC circle) | a `{"from_primitive": "<circle>", "params": {"radius_nm": R}}` part instance is a GENERATIVELY-built circular disc of radius ≈ R — the parametric counterpart to `assert_part_from_primitive`, which is file-backed-only and would actively FAIL on this inline part. A parametric primitive is NOT file-referenced: the driver re-derives the disc at the requested radius (lowering to the SAME single `circle_segment` op a hand-authored spec uses) and embeds it INLINE, so the load-bearing check is GEOMETRIC, not a source pin. Asserts the instance is inline-backed (a file source means the static saved-default-radius disc was instanced instead of the requested parametric one — the wrong build branch), loads the design the instance embeds (via `_load_design_from_source`), and delegates to the AF-4 `assert_circular_disc` (reads placed axis geometry → circular + radius ≈ R). Pins `params.radius_nm → footprint → circle_segment → placed geometry` *through the assembly layer*, which `canonical_assembly` (keys an inline source by its embedded topology fingerprint, blind to whether that geometry is circular *of radius R*) cannot. Can-go-red: wrong requested radius → circularity/radius fail; a file-backed (static) instance → inline guard | `tests/automation_harness.py` (`assert_part_is_circular_disc`); `backend/core/build_spec.py` (`PrimitivePart.params`/`_parse_part`); `backend/api/headless_spec_build.py` (`_resolve_primitive_part`/`_build_circle_primitive`); reuses `assert_circular_disc` (AF-4) | any generatively-built (vs file-referenced) parametric part whose placed geometry must match a requested parameter (future `primitive_kind` template/hinge kinds; the inline-vs-file branch check reusable for any "right build path was taken" pin) |
 | `assert_field_ready_specimen` (AF-18 — Tier 6 specimen spine) | the FIRST composite physical-layer oracle: an end-to-end-built design is *ready to run an electric-field experiment*. Composes three independently-proven properties into one verdict — (1) fully sequenced (`assert_fully_sequenced`), (2) relaxed geometry recovered (`assert_relaxed_geometry_recovered`), (3) **anchorable under a field**: the anchor descriptor resolved to real nucleotides AND a SHORT PROBE field child branched off the relaxed parent holds the anchored beads while the free part deflects ALONG the field (`measure_field_response.passed`). Load-bearing because each piece was pinned ALONE — nothing proved they **compose** into one runnable, anchorable specimen (the user's "build → … → set as anchor → run a field" chain). Direction-agnostic (probe measures magnitudes/projection); Three-Layer-clean (reads relaxed/field geometry, never writes it back). Can-go-red: unsequenced design (clause 1) / non-completed relaxation (clause 2) / empty-anchor or non-deflecting field (clause 3) | `tests/automation_harness.py` (`assert_field_ready_specimen`); `backend/api/headless_oxdna_build.py` (`build_field_specimen`); drives `resolve_anchor_particles` + `measure_field_response` | the Tier-6 field-experiment items (AF-19 equilibration τ, AF-20 field sweep, AF-23 cross-design campaign) — each runs its field on a specimen this oracle certified ready |
 | `measure_field_equilibration` + `assert_equilibration_timeline` (AF-19 — Tier 6 time-resolved) | the FIRST TIME-RESOLVED physical oracle: where `measure_field_response` (AF-18) is **endpoint-only** (final pose vs reference), this reads the WHOLE field-stage trajectory and measures, frame by frame, (1) the free body's **alignment** (mean displacement of non-anchored nucleotides ALONG the field vs frame 0 — the `measure_field_response` projection, per frame) and (2) per-frame **base-pair retention** (`base_pair_retention`). Fits the monotone approach to its plateau (tail mean) and extracts the **equilibration time τ** (interpolated time to `1−1/e` of plateau). `converged` requires non-vacuous rise (≥`min_rise_nm`) + monotone-within-noise + an actual plateau (late-frame slope ≤ `plateau_slope_frac`·early slope — a run still climbing has NOT equilibrated → `tau=None`); `melted`=True if bp dips below `melt_floor` at ANY frame (transient-melt watch, blind to `measure_field_response`). Pure (`backend/core`, takes `read_trajectory_frames_full` maps + `design`); direction-agnostic (projection magnitude); Three-Layer-clean. The asserter confidence-gates trajectory frame count, then asserts converged + finite positive τ + no melt. Can-go-red: linear (never-plateau) ramp → no finite τ; bp floor breach mid-swing → melted; too-few frames → INCONCLUSIVE | `backend/core/oxdna_health.py` (`measure_field_equilibration`); `tests/automation_harness.py` (`assert_equilibration_timeline`); drives `read_trajectory_frames_full` + `base_pair_retention` | the AF-20 field sweep (measure τ per `(|E|,dir)` cell → field↔τ correlation map) + the AF-23 cross-design campaign; the per-frame-observable pattern reusable for any trajectory-resolved measure (R_g vs t, angle vs t) |
 | `assert_field_sweep_map` (AF-20 — Tier 6 response surface) | the FIRST MULTI-config physical oracle: where every prior physical oracle (AF-13/18/19) measured one structure at one condition, this asserts a *response surface* over a swept `(|E|, direction)` grid. Four clauses on the `hox.sweep_field_response` map: (1) **no gaps** — nothing skipped + every grid cell carries a verdict (a sweep that silently dropped a condition is not a map); (2) **a non-destructive window exists** in `benign_range` — RECOMPUTED from the raw measured `aligned ∧ bp_min ≥ melt_floor`, NOT the wrapper's stored `destructive` flag (anti-echo: the oracle measures the surface, doesn't echo it); (3) **the destructive regime is destructive** — `destructive_range` covers ≥1 swept cell AND every such cell melted (the "without ripping it apart" window has a real upper bound; non-vacuity-guarded); (4) **τ ↔ |E| correlation** — within each direction's responsive (non-destructive) band, ordered by |E|, the equilibration time τ is monotone non-increasing AND actually falls (the strongest responsive field equilibrates faster than the weakest — not a flat line; ≥2 cells required). Direction-agnostic (τ + retention are magnitudes); Three-Layer-clean (reads each field trajectory, never writes back). Can-go-red: a skipped/incomplete grid; a benign band with no safe cell; a destructive band that did not melt; a flat field-independent τ | `tests/automation_harness.py` (`assert_field_sweep_map`); `backend/api/headless_oxdna_build.py` (`sweep_field_response`/`_measure_field_cell`); drives `measure_field_equilibration` per cell | the AF-23 cross-design campaign (run this sweep per specimen → per-design operating window + alignment-vs-field response); any multi-condition response-surface oracle over a physical-layer measure (force-extension curves, salt sweeps) |
@@ -1487,6 +1488,39 @@ file source by path only and never loads the design, and certainly never re-chec
 rung: a natural-language 'place a 6hb beam' lowers to `{"from_primitive": "6hb_primitive"}` and is pinned to resolve
 correctly.**"
 
+**AF-12 Phase 2b — `from_primitive` for the PARAMETRIC circle disc (generative, by-name + params)** · _shape:_ grammar
++ interpreter, no new module — `PrimitivePart.params` field + `_PRIMITIVE_PART_KEYS += {"params"}` + a `_parse_part`
+params branch in `backend/core/build_spec.py`; `_resolve_primitive_part` + `_build_circle_primitive` in
+`backend/api/headless_spec_build.py` (the static branch reuses the AF-12 P2 `_resolve_primitive_path`); new oracle in
+`tests/automation_harness.py`. `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** · _headless-coverage Δ:_ **37 → 37**
+(FLAT — the parametric disc is built by lowering to a single `circle_segment` op through `build_design`, both already
+covered; wraps no new route) · _oracle shipped:_ `assert_part_is_circular_disc(assembly, instance_id,
+requested_radius_nm)` — the parametric counterpart to `assert_part_from_primitive`: asserts the instance is INLINE-backed
+(a parametric primitive that resolved to a *file* would be the wrong path — the saved default-radius disc, not the
+requested one), loads the embedded design, and delegates to the AF-4 `assert_circular_disc` geometric oracle (placed
+helices trace a circle of the requested radius). **ASK-FIRST honoured** (the user made both calls up front: generic
+`params` dict grammar `{"from_primitive":"<circle>","params":{"radius_nm":R}}`; `radius_nm` REQUIRED for a circle kind —
+no silent catalog-default fallback). Radius is a magnitude — no topology/directionality reasoning entered · _tests:_ 11
+new (6 parser cases in `test_build_spec.py`: static `from_primitive` parses to empty-params `PrimitivePart`; parametric
+parses its params; a 4-case reject parametrize — empty name / non-object params / non-number param value / extra key; 7
+build in `test_headless_spec_build.py`: augment green — radius 14 disc built+circular; radius is the knob NOT the default — 10 nm
+catalog default instanced at 20 nm yields a 20 nm disc; 2 can-go-red — wrong radius 30 → circularity/radius fail,
+file-backed instance → inline guard; `radius_nm` omitted → build raises "requires a 'radius_nm' param"; params on a
+static primitive → "takes no params"; inline disc `.nass` round-trip stable); full suite **3041 → 3054 passed / 55
+skipped** (+13: 6 parser cases incl. the 4-case reject parametrize + 7 build), no drop · _cohesion:_
+`_resolve_primitive_part` has ONE reason to change — how a catalog `primitive_kind`
+maps to (static-file-reference | generative-inline-build) ·
+**"Validation gained, not just a passthrough:** before this, a `from_primitive` part could ONLY be a static file
+reference at the primitive's saved geometry — there was no way to instance a *parametric* catalog primitive at a
+spec-chosen size, and nothing proved a generatively-built part lands the requested geometry. `assert_part_is_circular_disc`
+closes that by loading the design the assembly instance embeds and proving (via the AF-4 circularity oracle) the placed
+helices trace a circle of the **requested** radius — pinning the `params.radius_nm → footprint → circle_segment → placed
+geometry` path *through the assembly layer*, which `canonical_assembly` (keys an inline source by its embedded topology
+fingerprint, blind to whether that geometry is circular *of radius R*) cannot see. The inline guard additionally proves
+the driver took the generative branch, not the wrong file-reference path. It's the parametric text-to-design rung: 'place
+a 12 nm disc' lowers to `{"from_primitive":"small_circle","params":{"radius_nm":12}}` and is pinned to build the right
+disc.**"
+
 **AF-18 — full-pipeline anchored field-specimen builder (Tier 6, first loop)** · _shape:_ 1 composite wrapper
 `build_field_specimen` in `backend/api/headless_oxdna_build.py` (composes the ALREADY-COVERED wrappers
 `hs.build_design` / `hb.overhang_extrude` / `hb.full_sequence` / `run_relaxation` + `resolve_anchor_particles` — runs
@@ -1649,6 +1683,24 @@ projection rose) AND held together at EVERY waypoint (bp ≥ melt_floor), with a
 can't pass and four red-tests proving each clause goes red. It's the headless, automatable form of the user's 'play with
 the field in real time' goal — and the per-step-response pattern is reusable for any interactive control sequence (steered
 salt/temperature ramps, gizmo-driven deformation paths). This COMPLETES Tier 6.**"
+
+**AF-24 — real-engine Tier-6 equilibration-τ validation (the relaxation-step-count FIX)** · _shape:_ NO new wrapper
+— a `STANDARD_RELAX_PARAMS` preset + corrected docstrings in `backend/api/headless_oxdna_build.py`, a corrected
+`write_mutual_traps` docstring in `backend/physics/oxdna_interface.py`, a `tests/fixtures/test343.nadoc` fixture, and
+a gated real-engine test; `crud.py`/`assembly.py`/`main.js` LOC Δ = **0** · _headless-coverage Δ:_ **FLAT 37** (no
+route wrapped) · _oracle shipped:_ reuse `assert_equilibration_timeline` UNCHANGED, now driven on the REAL engine —
+the augment is the gated test `test_field_specimen_reanneals_and_equilibrates_real_engine` (opt-in
+`NADOC_RUN_OXDNA_SLOW=1`, `@pytest.mark.slow`): build `test343` with `**STANDARD_RELAX_PARAMS` → assert re-anneal
+(retention ≥ 0.9) → anchored field (pN=2, 20k steps) → converged + finite τ + not melted. **PASSED on real CUDA,
+~250 s** (run twice green) · _tests:_ +1 gated real test (skips in the default suite → +1 skip); clean full suite
+**3054 passed / 56 skipped / 0 failed** (a first run had a cross-file flake `test_iterate_oracle_fires_on_vacuous_
+convergence` while a GPU re-verify ran concurrently — green in isolation, in-file, and on a clean re-run; my changes
+are inert w.r.t. it — an import + a constant + docstrings) · **"Validation gained, not just a passthrough:** the Tier-6 physical claims (the duplex
+RE-ANNEALS, then an anchored field aligns it to a stable τ WITHOUT melting — τ_align < τ_melt) are now ENGINE-confirmed
+on real oxDNA, retiring the mock-only caveat for the τ path; and the ROOT CAUSE is fixed — the AF Tier-6 builders had
+silently inherited mock-tuned relaxation defaults (mc=100/md=100/equil=100, 10⁴× too few md_relax steps) so the duplex
+never re-annealed; `STANDARD_RELAX_PARAMS` (md≈1e6) re-anneals a real specimen to 42/42 by oxDNA's own HBList ground
+truth. The `base_pair_retention` metric and the geometry export were both EXONERATED (export is 42/42 at t=0).**"
 
 ---
 
@@ -2083,9 +2135,91 @@ _(none yet — first session. Candidates the audit already suggests:)_
   the composite "field-ready" oracle + the proven probe-field, exactly like the 4-bar capstone. Don't expect a
   coverage bump; the justification is the composition.
 
+### Banked from AF-12 Phase 2b (parametric `from_primitive` circle)
+- **A parametric primitive flips the part SOURCE from file to inline — so its pin must be geometric, not a source
+  pin.** AF-12 P2 (static) resolves a catalog name → a `.nadoc` PATH and instances by reference (`add_file_instance`);
+  `assert_part_from_primitive` re-resolves the path and compares topology. A *parametric* circle has no fixed saved
+  geometry to reference — its size is the spec's knob — so it is built GENERATIVELY and embedded INLINE
+  (`add_inline_instance`). `assert_part_from_primitive` would actively FAIL on it (it asserts `source.type == "file"`).
+  The right pin is `assert_part_is_circular_disc`: load the embedded design and reuse the AF-4 `assert_circular_disc`
+  geometric oracle. The inline-vs-file assertion in that oracle doubles as a "right build branch was taken" check —
+  a parametric primitive that came out file-backed means the driver re-used the saved default-radius disc.
+- **Build the parametric disc by LOWERING to its primordial op, not by hand-constructing a Design.** `_build_circle_primitive`
+  emits a one-op design spec `{"lattice":"SQUARE","ops":[{"op":"circle_segment","radius_nm":R,…}]}` and runs it through
+  `build_design` — so a `from_primitive` circle is canonical-topology-identical to a hand-authored `circle_segment` op,
+  inherits all the op parser's validation (SQUARE-required, `radius_nm > 0`), and keeps coverage flat (no new route).
+  Reuse the catalog's saved `plane`/`min_chord_bp` (via `primitive_catalog.derive_placement_spec`) so only the radius is
+  the author's knob.
+- **Keep the parser catalog-agnostic; decide param rules at BUILD time.** `_parse_part` validates `params` as a generic
+  name→number map only — it does NOT know whether a name is a circle. "circle requires `radius_nm`" and "a static
+  primitive forbids params" are enforced in `_resolve_primitive_part`/`_build_circle_primitive`, *after* the catalog's
+  `primitive_kind` is read. This mirrors AF-12 P2's "name validity is a build-time check" rule and keeps the pure parser
+  free of catalog knowledge.
+
 ## Difficulties ledger (genuinely-stuck items + why)
 
-_(none yet.)_
+**2026-06-23 — Tier 6 physics is mock-validated, not engine-validated (the AF-24 gap).** Tier 6 (AF-18..AF-23)
+ships complete CODE + ORACLES + live-engine PLUMBING, but the only real-engine confirmation is AF-21's
+`test_run_live_field_real_oxpy_steers` (live `F0`/`dir` re-aim steers a real specimen — confirmed PASSING in 13s
+this session). AF-19 (τ), AF-20 (|E|↔τ sweep), AF-23 (cross-design campaign) are pinned ONLY against hand-built
+mock binaries (`mock_oxdna_field_traj`/`_sweep`/`_campaign`) whose τ/melt signatures are coded to satisfy the
+oracle (campaign mock: `k=clamp((4.5−12·F0)·(540/N))`, melt at `F0≥0.4`). So the oracles prove their MEASUREMENT
+code is correct given a right-shaped trajectory — NOT that the real engine produces alignment-τ, the τ↓-as-|E|↑
+law, a non-destructive window, or distinguishable per-design τ (the user's actual goal). **Why it stayed open:**
+a meaningful real run needs a PROPERLY-relaxed duplex (short relaxations give bp_retained≈0, under-formed — see
+`project_oxdna_efield`), i.e. real GPU runtime, deliberately deferred during the build loops. **De-risked this
+session (so it's no longer stuck, just queued):** oxpy imports, the F0/dir binding patch is live, the binary
+resolves at `/home/joshua/oxDNA/build/bin/oxDNA`, an RTX 2080 SUPER is present, and the real gated path RUNS not
+skips. → **Diverted to AF-24** (real-engine gated validation, staged P1 τ → P2 sweep → P3 campaign/melt), now the
+backlog's `▶ NEXT` ahead of the AF-12/13 stragglers. Each AF-24 phase reuses an EXISTING asserter unchanged and
+ships no wrapper (coverage FLAT 37) — the augment is the real-engine gated test that retires the mock-only caveat.
+
+**2026-06-23 (later) — AF-24 ROOT-CAUSED + the fix is known: the automation ran a MOCK-TUNED relaxation (10⁴× too
+few steps) on the real engine, so the duplex never RE-ANNEALED.** NOT the field oracle, NOT the retention metric,
+NOT the export, and NOT a "relaxation melts" artifact (an earlier draft of this entry concluded that — it was WRONG,
+corrected below). User domain insight cracked it: *oxDNA drops base-pairing initially, then re-anneals over the long
+md_relax stage.* Investigated on CUDA (RTX 2080 SUPER) with oxDNA's OWN `HBList` (`oxdna_interface.count_hbonds` →
+`DNAnalysis`) as ground truth. Findings:
+- **The oxDNA EXPORT is flawless** (still true): at t=0, HBList = **42/42**; every pair COM–COM 1.05 nm, base-site
+  0.37 nm, `a1·a1 = a3·a3 = −1.00`; backbone bonds 0.785 units (FENE eq. 0.7564). Export geometry is correct.
+- **`base_pair_retention` is SOUND** (still true): tracks oxDNA's energy-based HBList (the "diagnose metric first"
+  call — answered, not a metric bug).
+- **THE BUG — mock-tuned step counts reached the real engine.** `headless_oxdna_build.create_job` defaults to
+  **mc=100 / md_relax=100 / equil=100**, `min_bp_retained=0.0`, `max_relax_retries=0` — EXPLICITLY tuned for the
+  identity mock (its docstring says a real run "should raise [the gate] back to ~0.5" and "pass a positive [retry]
+  budget"). The STANDARD relax (`oxdna_protocol` / `routes_oxdna` defaults) is **mc=1000 / md_relax=1_000_000 /
+  equil=100_000**. The AF Tier-6 builders (`build_field_specimen`/`run_field`) + every probe inherited the mock
+  defaults → gave the real engine 10⁴× too few md_relax steps → it dropped pairing and never had time to re-anneal.
+  My "melts monotonically with steps (100→40 … 50000→0)" sweep was an artifact of scaling ALL stages to small EQUAL
+  counts — it truncates before the re-anneal AND over-runs a trap-free equil; it never ran the real protocol.
+- **PROOF the protocol is correct (user's working case `workspace/test343.nadoc`, a 42 bp duplex + 7 nt overhang
+  anchor, headless STANDARD relax mc=1000/md=1e6/equil=1e5, 217 s on GPU):** HBList **mc 35 → md 39 → equil 42/42**.
+  It DROPS then RE-ANNEALS to a perfect 42/42, and `3_equil` (mutual traps OFF) HOLDS 42/42 → the annealed structure
+  SELF-SUSTAINS. Exactly the user's description; the protocol works.
+- **Secondary (separate) issue:** the bare `make_minimal_design(1 helix, 42 bp)` duplex CRASHES at md=1e6 with an
+  oxDNA cell-list overflow (`a cell contains more than _max_n_per_cell (42)` — "box too large for the simulation":
+  `box_nm_for_positions` gives a sparse 50 nm box, and `render_stage_input` doesn't set `cells_auto_optimisation =
+  false` / `max_density_multiplier`). test343 (a real app design) relaxes fine, so use a real-design fixture; OR add
+  those cell keys for sparse small systems. Not the main blocker.
+- **`write_mutual_traps` docstring is WRONG** (claims backbones start ~1.9 nm apart / unformed; reality 1.05 nm,
+  fully bonded) — fix when touched.
+- **THE FIX (now well-understood, NOT ASK-FIRST — just use documented standard params; no topology reasoning):**
+  the AF Tier-6 real-engine path must run a STANDARD-grade relaxation (mc≈1000, md_relax≈1e6, equil≈1e5,
+  `min_bp_retained≈0.5`, `max_relax_retries>0`) on a real-design fixture (test343-style), NOT the mock defaults.
+  Then build AF-24 P1 (gated real test) on that: the annealed 42/42 specimen → field stage → `assert_equilibration_
+  timeline`. The field stage is unbiased MD, but the equil result shows the annealed duplex self-sustains, so it
+  should hold pairing under a field (the remaining empirical check is τ_align < τ_melt — now likely fine). Repro:
+  scratchpad `af24_standard.py` (test343 standard relax), `af24_duplex.py`, the t=0 HBList/orientation probes.
+- **Status — AF-24 P1 SHIPPED 2026-06-23.** The fix landed: `headless_oxdna_build.STANDARD_RELAX_PARAMS`
+  (mc=1000 / md_relax=1e6 / equil=1e5 / `min_bp_retained=0.5` / `max_relax_retries=3`) — a REAL Tier-6 specimen
+  build passes `**STANDARD_RELAX_PARAMS` explicitly (the mock-tuned `build_field_specimen` defaults stay the default
+  so the GPU-free mock suite — whose mock cost scales with step count — stays fast). The gated test
+  `test_field_specimen_reanneals_and_equilibrates_real_engine` (opt-in `NADOC_RUN_OXDNA_SLOW=1`; `@pytest.mark.slow`)
+  builds `tests/fixtures/test343.nadoc`, asserts re-anneal (retention ≥ 0.9), runs an anchored field (pN=2, 20k
+  steps), and reuses `assert_equilibration_timeline` UNCHANGED → **PASSED on real CUDA, 252 s** (converged + finite
+  τ + not melted; τ_align < τ_melt confirmed). The `write_mutual_traps` docstring was corrected. Remaining: AF-24
+  P2 (real |E|↔τ sweep) + P3 (real cross-design campaign) — same pattern, slower (multi-cell). See
+  `project_oxdna_relaxation`.
 
 ---
 

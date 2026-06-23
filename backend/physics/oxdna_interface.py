@@ -1000,13 +1000,15 @@ def write_mutual_traps(
     """Write an oxDNA external-forces file with mutual traps for every designed
     Watson-Crick pair, and return the number of pairs trapped.
 
-    A NADOC-built structure starts at the coarse NADOC duplex geometry (backbones
-    ~1.9 nm apart), far outside oxDNA's base-pair H-bond range (~0.34 nm), so
-    oxDNA never forms the designed pairs and a free MD melts them.  Mutual traps
-    pull each WC partner pair together (toward CM-CM separation ``r0`` oxDNA units
-    with stiffness ``stiff``) during the relaxation MC/MD stages, so oxDNA forms
-    the bonds while the backbone relaxes into native geometry.  This is the
-    standard oxDNA relaxation aid (relaxation.html / oxView).
+    The NADOC oxDNA *export* already lands designed WC pairs at their bonded geometry
+    (verified 2026-06-23: a fresh export reads 42/42 H-bonds by oxDNA's own ``HBList``,
+    base sites ~0.37 nm apart, ``a1·a1 = a3·a3 = −1.00``).  The problem is that a
+    *free* MD lets pairs drift apart early in the relaxation and they only re-anneal
+    over a long (~1e6-step) ``md_relax``.  Mutual traps hold each WC partner pair near
+    CM-CM separation ``r0`` oxDNA units (stiffness ``stiff``) during the MC/MD
+    relaxation stages so the pairs re-form while the backbone settles — the standard
+    oxDNA relaxation aid (relaxation.html / oxView).  (A too-short md_relax never
+    finishes re-annealing — see ``project_oxdna_relaxation`` 2026-06-23.)
 
     Designed pairs = (helix, bp) carrying both FORWARD and REVERSE nucleotides.
     Particle indices are the 0-based topology order (``_strand_nucleotide_order``),

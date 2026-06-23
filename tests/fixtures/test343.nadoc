@@ -1,0 +1,244 @@
+{
+  "id": "2eb9addc-fdda-4c35-9dbd-d1d8bf206148",
+  "helices": [
+    {
+      "id": "h_XY_0_1",
+      "axis_start": {
+        "x": 1.9485571585149868,
+        "y": 1.125,
+        "z": -2.338
+      },
+      "axis_end": {
+        "x": 1.9485571585149868,
+        "y": 1.125,
+        "z": 13.694
+      },
+      "phase_offset": -2.84401401612476,
+      "twist_per_bp_rad": 0.598647933434055,
+      "length_bp": 49,
+      "bp_start": -7,
+      "loop_skips": [],
+      "label": null,
+      "grid_pos": [
+        0,
+        1
+      ],
+      "direction": "REVERSE"
+    }
+  ],
+  "strands": [
+    {
+      "id": "scaf_XY_0_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 41,
+          "end_bp": 0,
+          "direction": "REVERSE",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "scaffold",
+      "sequence": "TGATAGACGGTTTTTCGCCCTTTGACGTTGGAGTCCACGTTC",
+      "color": null,
+      "notes": null,
+      "is_reference": false
+    },
+    {
+      "id": "stpl_XY_0_1",
+      "domains": [
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": -7,
+          "end_bp": -1,
+          "direction": "FORWARD",
+          "overhang_id": "ovhg_inline_stpl_XY_0_1_5p",
+          "binds_overhang_id": null
+        },
+        {
+          "helix_id": "h_XY_0_1",
+          "start_bp": 0,
+          "end_bp": 41,
+          "direction": "FORWARD",
+          "overhang_id": null,
+          "binds_overhang_id": null
+        }
+      ],
+      "strand_type": "staple",
+      "sequence": "AGTTCGGGAACGTGGACTCCAACGTCAAAGGGCGAAAAACCGTCTATCA",
+      "color": null,
+      "notes": null,
+      "is_reference": false
+    }
+  ],
+  "lattice_type": "HONEYCOMB",
+  "metadata": {
+    "name": "test343",
+    "description": "",
+    "author": "",
+    "created_at": "",
+    "modified_at": "",
+    "tags": [],
+    "primitive_kind": null,
+    "hardware_defaults": {}
+  },
+  "deformations": [],
+  "cluster_transforms": [
+    {
+      "id": "f30a1bf6-0e11-4095-98b8-fd13dba85c0d",
+      "name": "Cluster 1",
+      "is_default": true,
+      "helix_ids": [
+        "h_XY_0_1"
+      ],
+      "domain_ids": [],
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "pivot": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "cluster_joints": [],
+  "overhangs": [
+    {
+      "id": "ovhg_inline_stpl_XY_0_1_5p",
+      "helix_id": "h_XY_0_1",
+      "strand_id": "stpl_XY_0_1",
+      "sequence": "AGTTCGG",
+      "label": "OH1",
+      "rotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "pivot": [
+        1.9485571585149868,
+        1.125,
+        0.0
+      ],
+      "sub_domains": [
+        {
+          "id": "a5a5dedc-3a39-5ef5-99f1-3c08cfcc87ba",
+          "name": "a",
+          "color": null,
+          "start_bp_offset": 0,
+          "length_bp": 7,
+          "sequence_override": null,
+          "rotation_theta_deg": 0.0,
+          "rotation_phi_deg": 0.0,
+          "notes": "",
+          "tm_celsius": null,
+          "gc_percent": null,
+          "hairpin_warning": false,
+          "dimer_warning": false
+        }
+      ],
+      "parent_overhang_id": null,
+      "strand_anim_setup": null
+    }
+  ],
+  "overhang_connections": [],
+  "overhang_bindings": [],
+  "flexible_segment_marks": [],
+  "flexible_connections": [],
+  "protein_assets": [],
+  "protein_attachments": [],
+  "tm_settings": {
+    "na_mM": 50.0,
+    "conc_nM": 250.0
+  },
+  "extensions": [],
+  "plate_layout": null,
+  "representation_overrides": [],
+  "photoproduct_junctions": [],
+  "crossovers": [],
+  "forced_ligations": [],
+  "camera_poses": [],
+  "animations": [],
+  "loadouts": [],
+  "atomistic_reference": null,
+  "active_loadout_id": null,
+  "feature_log": [
+    {
+      "feature_type": "snapshot",
+      "id": "0ac832e5-aa8a-4722-98f2-c898b1190aa5",
+      "op_kind": "bundle-create",
+      "label": "Create bundle: test343",
+      "timestamp": "2026-06-23T20:17:13.783790+00:00",
+      "params": {
+        "cells": [
+          [
+            0,
+            1
+          ]
+        ],
+        "length_bp": 42,
+        "name": "test343",
+        "plane": "XY",
+        "strand_filter": "both",
+        "lattice_type": "HONEYCOMB",
+        "ligate_adjacent": true
+      },
+      "design_snapshot_gz_b64": "H4sIAMnpOmoA/2VSTW/bMAz9LzrXhVsnbZrjhgG7tD0PwyDQEm2r1YdB0V2LIP99VGpnSXoT36PIR/LtlLNqq5r7u037sHqomttVU63sxlTt3bqu6s26xa65r+ubTl2pAb0zmNX2958rlZkg2jnwwCyU5o8Rpd7P56cfv74/P36TTwEZLDCo7U5FCIVmzNysGiEtZkNuZJei4ALAxEOiz7chBEargT/jkKzr3AnA0M/9R3LBsXtD/eqiTBQn70UvkP0LhNpiB5NnSd7t96VrlyhA6Tr/N37KjKTLTLmQF/hLcpFnLL0hDRD7i1CbFCOak6JHphVN7vih8/juWo86Yx8wsg5Ar5fcl2IjJUYXNeSMfIkxgxlKrZngIMXlIoeeZe06PKrtur6uZaQUjY4S3pZYtoHvjDGfdJJjovbwkSZeNkk4EmZpcFiaLpORs4sVxiFxEjF2Mqxfpniq21DKueQvEyYyckLv+rP9izEI9JjyUhOiO7uQT2BF0MJyCi6L5TRhh4TR4CIVzMEHc752Rzd04qaJCtPPUv4D2kyUi++qm3M8T+2RK2X2/wBiCH02MgMAAA==",
+      "snapshot_size_bytes": 818,
+      "post_state_gz_b64": "H4sIAMnpOmoA/6VUS2/bMAz+Lzo7hZ3YaZLbHhl26QpkwB4YBkGR6FitLHkS3aYr8t9H+dGk6Q7DehP58fmR1CPTiq3YFLZLoZSclEqJSS5nxWSptmqiMrXYltN0nuULlrAKjJYQ2OrHY+9X8W/fecozwsReBx5QeGSrR7Znq+ximS+K4jIrFkWWLxfzRcIeojqbFgn7zVbpRXoY/MCqf/XK8ot0uiDHphIBuCvLABgNZvm8mGZFdrnMZvNpMU0Y3uuAvAHPtw33QsWUBYXML5ezWT7L04JCGrA7rMiCrXLyIcuhiZQw50i81U1s+SfJYguGrWxrTMJ2XiveuAilSUao0h4kameJmM36y3rzec0OpA/ohVUnrAUpyiNxytVC2x6OBO/5ObVdQX2FWcKIq+6d/j1jwtwd+ErYXRenr3WrqQD+AjhWx/GhgaG00hkVs8KvFqyEMYZ0xvlRsA7jHvQCDdBDCb63LoUJcEjGXrEx/9dremw1tn3a64frzdc3m/ev7RVFY+DVnXZ7gUiHMQb+eP1p/f3d9dVbil0DCiVQxPW2oo4wxUNav0gHBOl1M3QVj6jFKqaOb+lBICgusJdrp3SpTxQodsNeNl7XGvUd8Fttn4iohFf3wgNXUIrWIBk/Hg4xa+l8LWLWwV+aNiCdSaQnRPBMf+O0xUE3Ensmcums7Qd0jsSB6CeH0sBebw3wALsaLPJa+Ntz7EWwxtMYtOUi0LWf6xCFrGKsAcCagtNEupyRdl5fsVVB/02crZXckjgt+v8H9gg2nGSiYQI34sG1ODLpofEQKEFHWrdbdPwwelQOHRWjWon8prWndUvvQoj2Y4fOSxqh0btn/NNieBE/kzGmsPrZhIwTigoaUXQ1fW1anm5jX6qQ3R4M9idnUdI2tT4iu6GUo4LL1oe4d5PsuT602yesO6I/WrsRCzAGAAA=",
+      "post_state_size_bytes": 1584,
+      "evicted": false,
+      "diff_added_b64": "",
+      "diff_removed_ids": [],
+      "diff_modified_b64": "",
+      "pre_state_from_previous": false
+    },
+    {
+      "feature_type": "routing-cluster",
+      "id": "1f4002fc-0ce9-48c4-a2f1-e4fa7ad84ec3",
+      "label": "Fine Routing",
+      "timestamp": "2026-06-23T20:17:22.600056+00:00",
+      "children": [
+        {
+          "feature_type": "minor",
+          "id": "54b26d1e-5a60-46d5-8569-ea2fb3625c42",
+          "op_subtype": "strand-end-resize",
+          "label": "Resize 1 strand end",
+          "timestamp": "2026-06-23T20:17:22.600056+00:00",
+          "params": {
+            "entries": [
+              {
+                "strand_id": "stpl_XY_0_1",
+                "helix_id": "h_XY_0_1",
+                "end": "5p",
+                "delta_bp": -7
+              }
+            ]
+          },
+          "diff_added_b64": "",
+          "diff_removed_b64": "",
+          "diff_modified_b64": "H4sIANLpOmoA/91Ty27bMBD8FYPnWBAlUo/cCtS9FnCBPlAEBG2tLSIsyZJM69Twv3dJK4mTFEUfyCEBBGmXO7McLkd74jyQ89mejKDVGgLGn/dEDfglo/j4SZSCkrMZkTsVRIjSx4ze4ZsWPes4bynvOGV913SIu84FWnGMf2BcFuXhhg5m+DsyZUVZdYnvRhlA2M0mQMygmjW8opy2Pa2bileIid9ViMKBFysnvBzy7hxbs7ava1azkqfGGsw2jojBOks8RN8crEx1a3HhUrk8i4u0IlegMTFXWmO69WoQzuYyEmiCDMrDOipr0tyWi/eL5bsFOaRKiF6a4d5cQ3T6ZLSD/SKVmRDpGnbi8fyzwqPoJBJHOZ2APtz9zdvlh1fL14lkv4Efpdke+03yVwrliMelE7UiXjs4KpVOQ94fvl6BWcNdn7XV1t+lxsbsninF6/awAT9xNlIHOFzkq7QhPqXj5lVR191/mK4ump79wnTYuGOspPg0tGJt84+e6+97bt4+B9Nllbeum/+56zAdMTRaGRAnIgR35HduPJu9+J/h8BOAXJ5cfgUAAA==",
+          "diff_size_bytes": 1406
+        }
+      ],
+      "pre_state_gz_b64": "H4sIANLpOmoA/6VUTW/cNhD9KwXPWkPcldZa3drURS+pARdoGwQBQZGjFWOJVMmRs66x/71DfXjlTQ5FcxCg4eN8vOGbeWFGs5JtoTpIrdWm1lpuMrXLNwdd6Y3muqjqbbrnWcES1kBrFARWfnyZ/Brx1weRCk6YPJkgAkqPrHxhJ1bym0NW5Pktz4ucZ4diXyTsOR7zbZ6wf1iZ3qTn2Q+s/q9ePLtJtwU59o0MIFxdB8B4YZft8y3P+e2B7/bbfJsw/GICih68qHrhpY4pcwqZ3R52u2yXpTmFbMEesaEbrMzIh27OJFLCnCPz0fSR8ieyZQUtK+3Qtgk7eqNF7yKUJpxQbTwoNM5SYx7u/rh7+P2Onek8oJdWr7oWlKwvjdOuk8ZOcGzwSVy3dixoqpAnjHo1/qffzpgw9wS+kfY4xplqrQwVIL4CLtUJfO5hLq12rY5Z4e8BrIIlhnKt84thHUYdTAY9oIca/HS7lm2Ac7Jwxb79f1zTC9VIe831l/uHP398+Pl7uaLsW/hupqMuEGkwlsC/3v929+Hd/fufKHYHKLVEGeVtZRdhiockv9gOCMqbfmYVh2jAJqaO/8qDRNBC4mR3TpvarA5QHmdd9t50Bs0TiEdjXxvRSK+/SA9CQy2HFunyy/kcs9bOdzJmnf1VOwSkMYntCRFcibXepZJX9X6TAuebLD3QaiiqgjYF3+lKFrlKo1pmbu+mSD/Ep6RmzZlZiX6A5PXJY/jLo39adDEjZI+FtHJqzEdaFMn8EeYdfgNI+Aj25snhlct5xfCzMxbnJItErkyhnLWT1K6RKC3z6lC3cDJVCyLAsQOLopP+8Rr7KlhP9QNxlYH21vUZolRNjLX0oaPgpK0xZxSQ6N6zMo/MSKVWCUvmNp82KZwQbFhlogaCaOWzG3DRhIfeQ6AEYwvHKaE1BotH49BRMXpQKD4Pdl238i6EeH9h6LwiMbbm+EZJJAMv41pcYkpr3mitdVJTQQuKrqMlbdR6rqZSpRoVPd9fDXhNczH4iBznUi4HQg0+xAna8LfnYahesXEd/AsT8kdD+gYAAA==",
+      "pre_state_size_bytes": 1786,
+      "post_state_gz_b64": "H4sIANLpOmoA/6VWXW/bNhT9KwOfJUOyJFvy29Zl6EsXIAO2FUVBUOSVxIYiNYpKkwX+77vUhy076ZZtQAKIvOT9POfQz0QKciBbKAsmBA8rIViY8iQLC1GKUMQiL6tttIvTnASkASU59OTw6Xm619DfP9KIxmhjj7KnvWPWkcMzeSSHeFOkeZbt4yzP4rTId3lAnvx2vM0C8ic5hNtNkuTH+Spo8daLcbLZFSle7BrWAzVV1YMb/eVpGsX4t4u36X4XEPdV9o52YGnZUcswQrTJ0GO6L5IkTdIoQ48KdO0aPEEOaREQPDmXEe7RaAyu72Xnq/6Ma1aCIgc9KBWQ2kpBO+NNURCjVUgL3EmjsTd3N7/e3P1yQ4643zvLtFg1ruesOvdOmJZJPZl9jx/pdXfHjKYU44Bgr8bv6PWIATEPYBum69HPlGspMQH6wnDOjrqnDubUKqOEjwp/DKA5LD64UcYuC22ch8K0wAFaqMBOpyumejgGS62uU/+tVj+ApdYwviz2p9u7376/+/G6WFw1+KWV1EBXkWnWkW83IfjnXKJzKunbUvm3fXesU/C/uz5i1Dnk6eL4/e3PNx/f3X74AX234JhgjnmqadZ6M/pzyAU/Gui5ld1clef04Bof2n9zC8yBoMxN69YIWcnVhmP1zJHOylY6+QD0XupTIxpmxVdmgQqo2KAcHn4+Hn3UytiW+ajzfa6G3iFnfXt6b1wRp0oiFpfVLowgjsM0KlCp8jJH4YoTUbI845FH7lzbu8nTd36U2Kw5Mjk4O0BwGrl3fx765wWjswXXYyKKTY35FG2iYP5HmzXuFUMQj8ZOPhh3deW4qvCLkdrNQRaIrIr9Wyx/C7Ajpl4h3jWsZiUjt++99U1lvKLMkypPreiHkq7pPSbBMpYJwKclYUkRZlDhwIoqDhMe5bziPN+X7Dww/3mB94WAJ5WPLgR7f65r5BgK8qnApSTqGkQ9Dr/28h+tDF0jV9sztUYst5SD6uVwolrN/TPCQbsznqXtECWIaS11PfPPK0OLk73c9TPvEPvavVSC08yYli3FGofuLBGn09xoPQnOFVyoFxipF+5VCh5lqRAvULc+Xsvs/bXthbMOWwJYC+sx/vWec4w33tfChjFLN8X0MkLbD+SQjT1Ez5xqXG79GtkNjw50v4qENAKq2JMZTp200FnoMcA0lWWOy43GOIPJiIE7+mXQ67y5NX3vzy8VGhyRoErWF3qC2LLMP9SLT9/q9QllmMCEFqszLf5ukHytrlOqjI+6Np9fzbBCdRyst9RzKucNygfbe0j7N2y97wmz2MaJ/wWTxE8njwkAAA==",
+      "post_state_size_bytes": 2447,
+      "evicted": false,
+      "diffs_evicted": false
+    }
+  ],
+  "feature_log_cursor": -1,
+  "feature_log_sub_cursor": null
+}

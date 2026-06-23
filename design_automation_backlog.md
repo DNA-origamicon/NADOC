@@ -180,27 +180,76 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 > **AF-23 CAPSTONE** (cross-design
 > automated campaign). **De-risk note:** AF-18→20 + AF-23's batch path ride the ALREADY-SHIPPED field child-job +
 > `_FIELD_MOCK_OXDNA` (no GPU, no oxpy) — only AF-21/22 need the oxpy build. Each loop ships one reusable oracle per
-> the anti-shovel contract. **THE ENTIRE TIER 6 IS NOW COMPLETE: AF-18 + AF-19 + AF-20 + AF-21 + AF-22 + AF-23 (CAPSTONE)
-> ALL SHIPPED 2026-06-23.** Batch spine (AF-18→20→23) + oxpy interactive engine (AF-21) + multi-waypoint live steering (AF-22).
-> ▶ START NEXT: the AF-12/13 text-to-design stragglers below — `▶ NEXT` (AF-12 Phase 2b parametric circle `from_primitive`,
-> then 2c hinge/template primitives, multi-knob `optimize`, assembly-level `constraints`). No Tier-6 work remains.
+> the anti-shovel contract. **TIER 6 CODE + PLUMBING SHIPPED 2026-06-23 (AF-18..AF-23) — but the PHYSICS is NOT yet
+> validated on the real engine (see the ★ ASSESSMENT 2026-06-23 below).** Batch spine (AF-18→20→23) + oxpy interactive
+> engine (AF-21) + multi-waypoint live steering (AF-22) all exist and pass their suites; AF-21's live-steering plumbing is
+> CONFIRMED on real oxpy. The gap: AF-19/20/23's physical observables (τ, |E|↔τ law, melt window, cross-design
+> distinguishability) are pinned ONLY against hand-built mocks engineered to emit those signatures — never run on the
+> real engine. ▶ START NEXT: **AF-24 — real-engine Tier-6 validation** (the diverted top priority), then the AF-12/13
+> text-to-design stragglers. **AF-12 Phase 2b (parametric circle `from_primitive` + params) SHIPPED 2026-06-23.**
 
-_Living pointer — each session overwrites this (step 8). **AF-22: multi-waypoint live field steering + field-following oracle
-— SHIPPED 2026-06-23.** The headless analog of dragging the field gizmo through a PATH (the interactive control LOOP, vs
-AF-21's single re-aim): `hox.steer_field_session(session, waypoints, *, steps_per_waypoint=1000) → {timeline:[…], n_waypoints}`.
-For each waypoint `{dir, field_pN?, steps?}` it re-aims the live field, runs a burst, and records the free body's deflection
-ALONG that leg's vector BEFORE the burst (the pose the previous leg left) vs AFTER — the rising before→after projection is the
-field-following signal. Drives the SAME AF-21 `LiveOxdnaSession` (`set_field`/`run`/`equilibrium_observables` in a loop); wraps
-NO route → coverage FLAT 37. NEW oracle `assert_live_field_following(timeline, *, melt_floor=0.5, min_following_nm=0.5)`:
-(1) non-vacuity (≥2 waypoints + ≥1 substantial move), (2) field-following (EVERY waypoint's along-vector projection rose →
-`proj_after>proj_before`), (3) no melt (bp_retention ≥ melt_floor at EVERY waypoint). Net +7 tests (suite 3034→3041, no drop;
-2 GPU-free pipeline tests over the `_MockFieldStepper` — orthogonal-waypoint following + per-leg magnitude — + 4 hand-built
-red-path tests for ignored-waypoint / melt / vacuous / <2-waypoints + 1 empty-waypoints ValueError). Load-bearing: nothing
-before proved the interactive control LOOP (many field changes in sequence) sustains field-following WITHOUT a melt — AF-21
-pins one re-aim's equilibrium, blind to a multi-step steered path. **ASK-FIRST honoured:** field dirs/|E| are inputs; the
-oracle measures signed projections along each leg's own vector (direction-agnostic, no handedness reasoning). Real-oxpy
-multi-waypoint steering is exercised transitively by AF-21's gated `test_run_live_field_real_oxpy_steers` (same session machinery);
-a dedicated gated AF-22 real-engine test was NOT added (the mock proves the loop logic; the single-step real path is already pinned)._
+> **★ ASSESSMENT + DIVERSION 2026-06-23 (user request: "has the AF ledger completed the live E-field testing?").**
+> Verdict: **plumbing yes, physics no.** Evidence gathered this session — (a) `oxpy` imports (`~/oxDNA/build/python`),
+> (b) the F0/dir binding patch IS live (`oxpy.forces.BaseForce` exposes `F0` + `dir`), (c) `find_oxdna()` →
+> `/home/joshua/oxDNA/build/bin/oxDNA`, (d) an RTX 2080 SUPER is present, (e) **the one gated real-oxpy test
+> `test_run_live_field_real_oxpy_steers` RUNS (not skips) and PASSES in 13s** — real relaxation → real `string` field →
+> live `F0`/`dir` re-aim → confirmed steering. So the live ENGINE works. **But:** every AF-19/20/23 test uses
+> `mock_oxdna_field_traj`/`_sweep`/`_campaign` — hand-built binaries whose τ/melt signatures are coded to match the
+> oracle (e.g. campaign `k=clamp((4.5−12·F0)·(540/N))`). The oracles prove the MEASUREMENT CODE is correct given a
+> right-shaped trajectory; nothing has confirmed the real engine PRODUCES alignment-τ, τ↓-as-|E|↑, a non-destructive
+> window, or distinguishable per-design τ — the user's actual goal. **DIVERSION:** AF-24 (below) ports the AF-19/20/23
+> oracles to REAL-engine gated tests (importorskip oxpy + find_oxdna, CUDA where available), staged P1→P3, ahead of the
+> AF-12/13 stragglers. De-risked: engine + patch + binary + GPU all confirmed working this session.
+
+_Living pointer — each session overwrites this (step 8). **▶ AF-24 P1 SHIPPED 2026-06-23 — real-engine Tier-6
+equilibration-τ CONFIRMED; the relaxation-step-count bug is FIXED.** Root cause (full chain in the difficulties
+ledger): the AF Tier-6 builders inherited `create_job`'s MOCK-tuned defaults (mc=100/md_relax=100/equil=100 — 10⁴×
+too few md_relax steps), so the real engine dropped base-pairing and NEVER re-annealed. The metric, the export
+(42/42 at t=0 by oxDNA's own HBList), and the protocol were all fine. THE FIX: `headless_oxdna_build.STANDARD_RELAX_PARAMS`
+(mc=1000/md_relax=1e6/equil=1e5/`min_bp_retained=0.5`/`max_relax_retries=3`); a REAL Tier-6 build passes
+`**hox.STANDARD_RELAX_PARAMS` explicitly (mock defaults stay default so the GPU-free suite — whose mock cost scales
+with step count — stays fast). PROOF + augment: `tests/test_headless_oxdna_build.py::test_field_specimen_reanneals_
+and_equilibrates_real_engine` (opt-in `NADOC_RUN_OXDNA_SLOW=1`, `@pytest.mark.slow`, fixture
+`tests/fixtures/test343.nadoc`): re-anneal retention ≥ 0.9 → anchored field (pN=2, 20k) → `assert_equilibration_timeline`
+UNCHANGED → **PASSED on real CUDA, 252 s** (converged + finite τ + not melted; τ_align < τ_melt). Full suite 3053
+passed / 56 skipped (the gated test skips by default). Also fixed the wrong `write_mutual_traps` docstring.
+**▶ NEXT — AF-24 P2** (real |E|↔τ sweep: `sweep_field_response` over ≥2 real intensities → `assert_field_sweep_map`
+on REAL cells; same `**STANDARD_RELAX_PARAMS` recipe + the pN=2-ish benign / higher-pN destructive bands from this
+session's sweep: pN≤2 benign, pN≥4 melts at 20k steps), then **P3** (real cross-design campaign), then the AF-12/13
+text-to-design stragglers. GOTCHA for P2/P3: each cell is a field run off ONE relaxed parent (the 219 s relax is
+shared — reuse `append_field` on the parent job, as the gated test does); keep them GPU-gated + opt-in. The sparse
+`make_minimal_design` duplex hits an oxDNA cell-list overflow at md=1e6 (50 nm box) — use a real-design fixture
+(test343) or set `cells_auto_optimisation=false`/`max_density_multiplier` in `render_stage_input` (unfixed, minor).
+Repro probes: scratchpad `af24_standard.py`, `af24_field.py`/`af24_field2.py` (the field sweep)._
+
+**▶ AF-24 — real-engine Tier-6 validation (NEW, the diversion target; staged):**
+- **P1 — real equilibration τ:** properly-relaxed specimen → real field stage → `measure_field_equilibration` on the
+  real `trajectory.dat` → `assert_equilibration_timeline` green. Gated real-oxpy/GPU test. First real-physics proof.
+- **P2 — real |E|↔τ sweep:** `sweep_field_response` over ≥2 real intensities on one specimen → `assert_field_sweep_map`
+  (τ monotone-falls + a non-destructive window + a destructive bound) on REAL cells. Confirms the field LAW, not a mock.
+- **P3 — real cross-design distinguishability + melt window:** `run_field_campaign` over ≥2 designs (6hb vs 18hb lever)
+  → `assert_field_campaign` (per-design surface + distinguishable τ + reproducible) on the real engine. The user's
+  stated capstone goal: which fields align which structures, on what timescale, WITHOUT ripping them apart — confirmed
+  on real physics, not the design-dependent-k mock. May need real GPU runtime budget; can run as a background campaign.
+- **Anti-shovel note:** AF-24 ships NO new wrapper (coverage stays FLAT 37) — its deliverable is the real-engine GATED
+  TESTS that retire the "mock-only" caveat on the AF-19/20/23 oracles. The validation gained: the oracles' physical
+  claims become engine-confirmed, not mock-asserted. That IS the augment (a green that can go red on real physics).
+
+**▶ HARNESS NOW AVAILABLE (AF-12 Phase 2b parametric circle, use it — do NOT rebuild):**
+- `from backend.api import headless_spec_build as hs` → `hs.build_assembly(spec, *, primitives_dir=None)` with a part
+  `{"from_primitive": "<circle-name>", "params": {"radius_nm": R}}` builds that catalog circle GENERATIVELY at radius R and
+  embeds it INLINE (NOT file-backed). The catalog entry must carry `metadata.primitive_kind == "circle"` (SQUARE). `radius_nm`
+  is REQUIRED (omitting → `BuildSpecError`); handing `params` to a STATIC primitive → `BuildSpecError "takes no params"`.
+- **Augment = `from tests.automation_harness import assert_part_is_circular_disc`** — `(assembly, instance_id,
+  requested_radius_nm, *, max_spread_nm=0.5, radius_tol_nm=0.5)`. Asserts inline-backed + loads embedded design + AF-4
+  circularity/radius. Can-go-red: wrong radius → circularity/radius fail; file-backed instance → inline guard.
+- **GOTCHAS banked:** (1) the disc instance shares `source.type=="inline"` with any inline DesignSpec part — find it by NAME
+  (`add_part` names it the part key, e.g. `"disc"`), not by source type. (2) build the parametric Design by LOWERING to a
+  `circle_segment` op through `build_design` (not hand-constructing) → canonical-identical to a clicked disc + free op-parser
+  validation + flat coverage. (3) the saved catalog `.nadoc`'s GEOMETRY is irrelevant (only its `primitive_kind` +
+  `derive_placement_spec` plane/min_chord_bp are read) — a test fixture can save a default-radius disc + inject
+  `metadata.primitive_kind="circle"`. (4) AF-12 P2c (hinge/template primitives) needs a concrete hinge primitive in the
+  catalog first; multi-knob `optimize` + assembly `constraints` remain deferred (no assembly headless-oxDNA path).
 
 **▶ HARNESS NOW AVAILABLE (AF-22 live steering, use it — do NOT rebuild):**
 - `from backend.api import headless_oxdna_build as hox` → `hox.steer_field_session(session, waypoints, *,
@@ -463,15 +512,12 @@ a dedicated gated AF-22 real-engine test was NOT added (the mock proves the loop
 
 **▶ NEXT — pick one (design `constraints` + `optimize`/knob loop wired; AF-12 `from_file` + file-backed layout +
 `from_primitive` STATIC catalog-by-name shipped; remaining work + stragglers):**
-- **AF-12 Phase 2b — `from_primitive` for the PARAMETRIC circle disc [the next text-to-design rung]:** a `parts` entry
-  `{"from_primitive": "small_circle", "radius_nm": 12}` resolving against a catalog primitive flagged
-  `metadata.primitive_kind="circle"`. **The static name→path resolver SHIPPED** (`_resolve_primitive_path`); this rung
-  needs a *generative* branch instead — detect `primitive_kind` (read it off the catalog `.nadoc`'s metadata), and for a
-  circle build the disc headlessly via `hb.circle_segment(radius)` rather than file-referencing the saved disc. The part
-  is then NOT file-backed → `assert_part_from_primitive` (file-source pin) won't apply; reuse `assert_circular_disc`
-  (the AF-4 geometric oracle) to prove the placed disc has the requested radius. Likely an ASK-FIRST call on how a
-  parametric primitive carries its param into an assembly part (a design-level circle is a single-design op, but an
-  assembly `add_part` instances a whole Design — decide whether the disc is built as its own part-Design first).
+- **AF-12 Phase 2b — `from_primitive` for the PARAMETRIC circle disc — ✅ SHIPPED 2026-06-23.** Grammar
+  `{"from_primitive": "<circle>", "params": {"radius_nm": R}}` (user's ASK-FIRST calls: generic `params` dict; `radius_nm`
+  REQUIRED for a circle kind). The driver detects `primitive_kind=="circle"`, builds the disc GENERATIVELY by lowering to a
+  single `circle_segment` op through `build_design`, and embeds it INLINE (not file-backed). New oracle
+  `assert_part_is_circular_disc` (inline guard + AF-4 `assert_circular_disc` on the embedded design). See the
+  `▶ HARNESS NOW AVAILABLE (AF-12 Phase 2b …)` block above + the log's metrics row.
 - **AF-12 Phase 2c — hinge / assembly-template primitives:** a catalog primitive that is an assembly-level *template*
   (leaves + a revolute mate recipe), not just geometry — parts carrying small mate recipes. Bigger architecture call;
   defer until a concrete hinge primitive exists in the catalog.
@@ -1366,9 +1412,12 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
   load-bearing piece over `from_file` is the **name→catalog-path RESOLVER** (a name mapped to the wrong/renamed primitive
   is invisible to `canonical_assembly`). Net +6 tests (test_headless_spec_build: 1 augment + 2 can-go-red on the oracle +
   1 unknown-name-fails-build + 1 roundtrip + 1 place_grid layout; suite 3002→3008). Scoped to STATIC (file-backed) catalog
-  primitives per the user's choice. **Still OPEN:** the PARAMETRIC circle disc (`metadata.primitive_kind="circle"`, needs a
-  radius → generative `hb.circle_segment` path, not a file reference) + parts carrying small mate recipes (an
-  assembly-level hinge *template*, not just geometry). Original assessment below.
+  primitives per the user's choice. **Phase 2b (PARAMETRIC circle disc) SHIPPED 2026-06-23:**
+  `{"from_primitive": "<circle>", "params": {"radius_nm": R}}` builds the disc generatively (lower to `circle_segment` via
+  `build_design`, embed INLINE) when the catalog entry is `metadata.primitive_kind="circle"`; oracle
+  `assert_part_is_circular_disc` (inline guard + AF-4 circularity). **Still OPEN:** Phase 2c — parts carrying small mate
+  recipes (an assembly-level hinge *template*, not just geometry; needs a concrete hinge primitive in the catalog first).
+  Original assessment below.
   **The gap (assessed 2026-06-17):** there is no primitive-catalog → automation pipeline. The design-level "Add
   Primitive" catalog is **read-only + UI-only** — `routes_primitives.py` exposes only `GET /primitives` +
   `preview.gif`/`poster.png`; there is **no placement route** (the browser reads `derive_placement_spec` and composes
