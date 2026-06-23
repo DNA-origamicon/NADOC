@@ -342,6 +342,169 @@ def build_field_specimen(spec_or_design, workspace, *, anchor: dict,
     return {"design": design, "job": job, "anchor_keys": anchor_keys, "anchor": anchor}
 
 
+# ── LIVE field: persistent in-process oxpy session, re-aimable mid-run (AF-21) ──
+
+def _prepare_field_rundir(design, seed_conf, rundir, *, field_pN, dir, anchors,
+                          anchor_stiff, steps):
+    """Stage a field run dir (``topology.top`` / ``conf.dat`` / ``field_forces.txt``
+    / ``input``) reusing the SAME proven writers the batch field stage uses, so a
+    live oxpy session runs the identical physics setup.  ``seed_conf`` is the
+    field-off (relaxed) configuration the field starts from.  Returns the field
+    magnitude in oxDNA units."""
+    import shutil
+
+    from backend.core.oxdna_protocol import build_field_stage, render_stage_input
+    from backend.physics.oxdna_interface import (
+        pn_to_oxdna_force, write_field_forces, write_topology,
+    )
+
+    rundir = Path(rundir)
+    rundir.mkdir(parents=True, exist_ok=True)
+    write_topology(design, rundir / "topology.top")
+    shutil.copy(seed_conf, rundir / "conf.dat")
+    field_oxdna = pn_to_oxdna_force(field_pN)
+    # Anchors are mandatory (a uniform field on a free body just streams the COM
+    # across the box) — write_field_forces raises if the selection is empty.
+    write_field_forces(rundir / "field_forces.txt", design, rundir / "conf.dat",
+                       field_oxdna=field_oxdna, field_dir=list(dir), anchors=anchors,
+                       anchor_stiff=anchor_stiff)
+    spec = build_field_stage(name="live_field", field_oxdna=field_oxdna,
+                             field_dir=list(dir), forces_file="field_forces.txt",
+                             steps=steps, backend="CPU", device="0")
+    (rundir / "input").write_text(
+        render_stage_input(spec, "topology.top", "conf.dat", "field_forces.txt"))
+    return field_oxdna
+
+
+def run_live_field(specimen, workspace, *, field_pN: float, dir, total_steps: int = 4000,
+                   n_bursts: int = 4, mutate_dir=None, anchor_stiff=DEFAULT_ANCHOR_STIFF,
+                   session=None, rundir=None) -> dict:
+    """Drive a PERSISTENT in-process oxpy field run over a built specimen — the
+    interactive analog of :func:`run_field` (AF-21, Tier 6).  The engine loads once
+    and steps in ``n_bursts`` bursts (``total_steps`` total); if ``mutate_dir`` is
+    given the field is **re-aimed** to it at the half-way point (the live mutation),
+    proving the structure follows the steered field.  Returns equilibrium
+    observables in the schema the parity oracle compares:
+
+    ``{"observables": {alignment_nm, radius_of_gyration_nm, bp_retention, …},
+       "confidence": <bursts>, "field_dir": [...], "mutation": {...} | None}``
+
+    ``specimen`` is a :func:`build_field_specimen` result (``design`` + relaxed
+    parent ``job`` + ``anchor`` + ``anchor_keys``).  ``session`` is an injectable
+    :class:`~backend.physics.oxdna_live.LiveOxdnaSession`-like object — GPU-free
+    tests pass a mock stepper; left ``None`` it builds a real oxpy session over a
+    freshly-staged run dir (needs the oxpy build).
+
+    The ``mutation`` block measures the free body's deflection ALONG the *new*
+    field vector before vs after the re-aim (``followed`` = it increased) — the
+    can-go-red signal for "the field actually steers the body".  Physical-layer
+    only (reads geometry, never writes ``Design``); magnitudes → direction-agnostic.
+    """
+    design = specimen["design"]
+    anchor_keys = specimen["anchor_keys"]
+    ws = Path(workspace)
+
+    if session is None:
+        from backend.physics.oxdna_live import LiveOxdnaSession, _OxpyStepper
+
+        job = specimen["job"]
+        seed_conf = job.stage_dir(ws, job.stages[-1].name) / "last_conf.dat"
+        rd = Path(rundir) if rundir else ws / f"live_field_{next(_scratch_counter)}"
+        field_oxdna = _prepare_field_rundir(
+            design, seed_conf, rd, field_pN=field_pN, dir=dir,
+            anchors=[specimen["anchor"]], anchor_stiff=anchor_stiff, steps=total_steps)
+        session = LiveOxdnaSession(design, anchor_keys, stepper=_OxpyStepper(rd),
+                                   field_dir=list(dir), field_oxdna=field_oxdna)
+
+    burst = max(1, total_steps // max(1, n_bursts))
+    phase1 = (n_bursts // 2) if mutate_dir is not None else n_bursts
+
+    with session:
+        session.set_field(field_dir=list(dir))   # field on, our magnitude + dir
+        for _ in range(phase1):
+            session.run(burst)
+
+        mutation = None
+        if mutate_dir is not None:
+            before = session.equilibrium_observables(field_dir=list(mutate_dir))
+            session.set_field(field_dir=list(mutate_dir))   # the LIVE re-aim
+            for _ in range(n_bursts - phase1):
+                session.run(burst)
+            after = session.equilibrium_observables(field_dir=list(mutate_dir))
+            mutation = {
+                "from_dir": list(dir),
+                "to_dir": list(mutate_dir),
+                "proj_on_to_before_nm": before["alignment_nm"],
+                "proj_on_to_after_nm": after["alignment_nm"],
+                "followed": after["alignment_nm"] > before["alignment_nm"] + 1e-9,
+            }
+
+        observables = session.equilibrium_observables()
+
+    return {"observables": observables, "confidence": int(n_bursts),
+            "field_dir": list(mutate_dir) if mutate_dir is not None else list(dir),
+            "mutation": mutation}
+
+
+def steer_field_session(session, waypoints, *, steps_per_waypoint: int = 1000) -> dict:
+    """Drive a SEQUENCE of field waypoints over a persistent live session — the
+    headless analog of a user dragging the field gizmo through a path (AF-22, Tier 6).
+
+    Where :func:`run_live_field` re-aims the field ONCE (the AF-21 mutation), this
+    walks an arbitrary list of waypoints: for each one it re-aims the field to the
+    waypoint's direction (and optional magnitude), runs a burst, and records the free
+    body's deflection ALONG that waypoint's field vector measured *before* the burst
+    (the pose the previous waypoint left) and *after* it.  The rising before→after
+    projection is the field-following signal — the structure chasing the steered
+    field — checked by :func:`assert_live_field_following`.
+
+    ``session`` is an un-entered
+    :class:`~backend.physics.oxdna_live.LiveOxdnaSession`-like object (GPU-free tests
+    inject a mock stepper; a real one needs the oxpy build).  Each ``waypoints`` entry
+    is a dict ``{"dir": [x,y,z], "field_pN": <opt>, "steps": <opt>}`` — ``dir`` is the
+    new field direction; ``field_pN`` re-scales the magnitude for that leg (else the
+    session's current magnitude carries over); ``steps`` overrides ``steps_per_waypoint``
+    for that leg.
+
+    Returns ``{"timeline": [per-waypoint dict, …], "n_waypoints": N}`` where each entry
+    carries ``{field_dir, steps, proj_before_nm, proj_after_nm, alignment_nm,
+    bp_retention, radius_of_gyration_nm, followed}``.  ``alignment_nm`` is the deflection
+    along the *current* waypoint's vector (= ``proj_after_nm``).  Physical-layer only
+    (reads geometry, never writes ``Design``); magnitudes/signed-projections only →
+    direction-agnostic (no handedness reasoning).
+    """
+    from backend.physics.oxdna_interface import pn_to_oxdna_force
+
+    if not waypoints:
+        raise ValueError("steer_field_session: no waypoints to steer through")
+
+    timeline: list[dict] = []
+    with session:
+        for wp in waypoints:
+            new_dir = list(wp["dir"])
+            # Deflection along the NEW vector at the pose the previous leg left.
+            before = session.equilibrium_observables(field_dir=new_dir)
+            set_kw = {"field_dir": new_dir}
+            if wp.get("field_pN") is not None:
+                set_kw["field_oxdna"] = pn_to_oxdna_force(float(wp["field_pN"]))
+            session.set_field(**set_kw)
+            steps = int(wp.get("steps", steps_per_waypoint))
+            session.run(steps)
+            after = session.equilibrium_observables(field_dir=new_dir)
+            timeline.append({
+                "field_dir": new_dir,
+                "steps": steps,
+                "proj_before_nm": before["alignment_nm"],
+                "proj_after_nm": after["alignment_nm"],
+                "alignment_nm": after["alignment_nm"],
+                "bp_retention": after["bp_retention"],
+                "radius_of_gyration_nm": after["radius_of_gyration_nm"],
+                "followed": after["alignment_nm"] > before["alignment_nm"] + 1e-9,
+            })
+
+    return {"timeline": timeline, "n_waypoints": len(timeline)}
+
+
 # ── Field SWEEP: a (|E|, direction) response surface over one specimen (AF-20) ──
 
 def _measure_field_cell(job, workspace, design, field_dir, anchor_keys, *,

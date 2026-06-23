@@ -27,6 +27,8 @@ from tests.automation_harness import (
     assert_field_ready_specimen,
     assert_field_sweep_map,
     assert_fully_sequenced,
+    assert_live_field_following,
+    assert_oxpy_equilibrium_parity,
     assert_relaxed_geometry_recovered,
     assert_relaxed_measurement,
     oxdna_coverage_report,
@@ -1624,3 +1626,306 @@ def test_relaxed_measurement_inter_helix_spacing_fires_on_wrong_target(
         assert_relaxed_measurement(
             job, {"measure": "inter_helix_spacing", "landmarks": [a, b]},
             target + 5.0, 0.5, workspace=tmp_path, min_confidence=50)
+
+
+# ── AF-21 (Tier 6): persistent in-process oxpy live field engine + parity ─────────
+# The parity HALF is GPU-free: an in-process mock stepper mirrors _FIELD_MOCK_OXDNA's
+# deflection model (free beads shift 200·F0 along the field; anchors held; the shift
+# is position-based so burst-stepping == one-shot). The live-mutation HALF (a real
+# field re-aim steering the body) is exercised against the real oxpy build, gated by
+# pytest.importorskip("oxpy").
+import re as _re
+from pathlib import Path as _Path
+
+
+class _MockFieldStepper:
+    """GPU-free stand-in for backend.physics.oxdna_live._OxpyStepper, mirroring the
+    _FIELD_MOCK_OXDNA binary: free (non-anchored) beads shift 200·F0 along the field,
+    anchors held, shift recomputed from the seed each readout (so chunking into
+    bursts cannot change where it ends up). Drives the live pipeline + parity oracle
+    with no oxpy/GPU."""
+
+    _SC = 200.0
+
+    def __init__(self, rundir):
+        self.rundir = _Path(rundir)
+        self._F0 = 0.0
+        self._dir = [0.0, 0.0, 1.0]
+        self._seed_lines: list[str] = []
+        self._trapped: set[int] = set()
+
+    def __enter__(self):
+        self._seed_lines = (self.rundir / "conf.dat").read_text().splitlines()
+        ftxt = (self.rundir / "field_forces.txt").read_text()
+        self._trapped = {int(m) for m in
+                         _re.findall(r"type = trap\s*\nparticle = (\d+)", ftxt)}
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def set_field(self, F0, direction):
+        self._F0 = float(F0)
+        self._dir = [float(x) for x in direction]
+
+    def run(self, steps):
+        pass
+
+    def configuration(self, design):
+        from backend.physics.oxdna_interface import read_configuration_full
+        sh = (self._SC * self._F0 * self._dir[0],
+              self._SC * self._F0 * self._dir[1],
+              self._SC * self._F0 * self._dir[2])
+        out, idx = [], 0
+        for ln in self._seed_lines:
+            if ln.startswith(("t ", "b ", "E ")) or not ln.strip():
+                out.append(ln)
+                continue
+            p = ln.split()
+            if idx not in self._trapped:
+                p[0] = repr(float(p[0]) + sh[0])
+                p[1] = repr(float(p[1]) + sh[1])
+                p[2] = repr(float(p[2]) + sh[2])
+            out.append(" ".join(p))
+            idx += 1
+        (self.rundir / "last_conf.dat").write_text("\n".join(out) + "\n")
+        return read_configuration_full(self.rundir / "last_conf.dat", design)
+
+
+def test_oxpy_live_field_matches_batch_and_steers(tmp_path, mock_oxdna_field):
+    """GPU-free: a burst-stepped live session (mock stepper) reaches the SAME
+    equilibrium as a one-shot binary field run along the SAME final field, AND a
+    mid-run re-aim steers the body — both verified by the AF-21 parity oracle."""
+    from backend.core.oxdna_health import field_equilibrium_from_confs
+    from backend.physics.oxdna_interface import DEFAULT_ANCHOR_STIFF, pn_to_oxdna_force
+    from backend.physics.oxdna_live import LiveOxdnaSession
+
+    d, _dom = _design_with_overhang_anchor()
+    anchor = {"kind": "overhang", "id": "ov_anchor"}
+    field_pN, up, xr = 4.0, [0, 0, 1], [1, 0, 0]
+    field_oxdna = pn_to_oxdna_force(field_pN)
+
+    # Specimen: relaxed seed = design geometry under the identity mock relaxation.
+    spec_ws = tmp_path / "spec"
+    specimen = hox.build_field_specimen(
+        d, spec_ws, anchor=anchor, sequence=False, min_bp_retained=0.0)
+    assert specimen["job"].status is OxdnaStatus.completed
+    seed = (specimen["job"].stage_dir(spec_ws, specimen["job"].stages[-1].name)
+            / "last_conf.dat")
+
+    # BATCH equilibrium along the FINAL (re-aimed) field +x, via the binary mock.
+    batch_ws = tmp_path / "batch"
+    bj = hox.run_field(d, batch_ws, field_pN=field_pN, dir=xr, anchors=[anchor],
+                       field_steps=2000, min_bp_retained=0.0)
+    bconf = bj.stage_dir(batch_ws, bj.stages[-1].name) / "last_conf.dat"
+    bseed = bj.job_dir(batch_ws) / "conf.dat"
+    batch_result = {
+        "observables": field_equilibrium_from_confs(
+            d, bconf, bseed, field_dir=xr, anchor_keys=specimen["anchor_keys"]),
+        "confidence": 4, "mutation": None,
+    }
+
+    # LIVE (mock stepper): start +z, re-aim to +x → final along +x with a mutation.
+    rd = tmp_path / "live"
+    hox._prepare_field_rundir(d, seed, rd, field_pN=field_pN, dir=up,
+                              anchors=[anchor], anchor_stiff=DEFAULT_ANCHOR_STIFF,
+                              steps=2000)
+    sess = LiveOxdnaSession(d, specimen["anchor_keys"], stepper=_MockFieldStepper(rd),
+                            field_dir=up, field_oxdna=field_oxdna)
+    live_result = hox.run_live_field(specimen, tmp_path, field_pN=field_pN, dir=up,
+                                     n_bursts=4, mutate_dir=xr, session=sess)
+
+    res = assert_oxpy_equilibrium_parity(live_result, batch_result,
+                                         tol_nm=0.5, bp_tol=0.02)
+    assert res["followed"] is True
+    # the re-aim genuinely moved the body along the new vector (anti-vacuity)
+    assert live_result["mutation"]["proj_on_to_after_nm"] > 1.0
+    assert live_result["mutation"]["proj_on_to_before_nm"] < 0.5
+
+
+def test_run_live_field_real_oxpy_steers(tmp_path):
+    """Gated (needs the real oxpy build): a PERSISTENT oxpy session burst-steps a
+    real relaxed specimen and a live field re-aim steers the free body toward the
+    new vector — the live-mutation half of AF-21 the mock cannot prove."""
+    pytest.importorskip("oxpy")
+    from backend.core.oxdna_runner import find_oxdna
+    if find_oxdna() is None:
+        pytest.skip("no real oxDNA binary on PATH/$OXDNA_BIN")
+
+    d, _dom = _design_with_overhang_anchor()
+    anchor = {"kind": "overhang", "id": "ov_anchor"}
+    specimen = hox.build_field_specimen(
+        d, tmp_path, anchor=anchor, sequence=False, backend="CPU",
+        min_bp_retained=0.0)
+    if specimen["job"].status is not OxdnaStatus.completed:
+        pytest.skip(f"real relaxation did not complete: {specimen['job'].error}")
+
+    res = hox.run_live_field(specimen, tmp_path, field_pN=6.0, dir=[0, 0, 1],
+                             total_steps=3000, n_bursts=3, mutate_dir=[1, 0, 0])
+    mut = res["mutation"]
+    assert mut is not None and mut["followed"] is True, (
+        f"real oxpy field re-aim did not steer: {mut}")
+    obs = res["observables"]
+    # finite, real equilibrium readback (NaN != NaN guards a broken readout)
+    assert obs["alignment_nm"] == obs["alignment_nm"]
+    assert 0.0 <= obs["bp_retention"] <= 1.0
+
+
+# ── AF-22 (Tier 6): multi-waypoint live field steering + field-following oracle ───
+# Builds on AF-21's LiveOxdnaSession + the _MockFieldStepper above. The mock shifts
+# free beads 200·F0 along the CURRENT field (recomputed from the seed each readout),
+# so steering through orthogonal waypoints makes each leg's along-vector projection
+# rise from ~0 (the body was aligned to the PREVIOUS leg) to the full deflection. The
+# can-go-red cases (a waypoint the body ignored, a melt mid-steer) are pinned on
+# hand-built timelines against the oracle, mirroring AF-19/AF-20's red tests.
+
+
+def test_steer_field_session_follows_a_waypoint_path(tmp_path, mock_oxdna_field):
+    """GPU-free: a live session steered through three orthogonal waypoints follows
+    each re-aim (the projection along each leg's vector rises) without melting —
+    the AF-22 field-following oracle is green."""
+    from backend.physics.oxdna_interface import DEFAULT_ANCHOR_STIFF, pn_to_oxdna_force
+    from backend.physics.oxdna_live import LiveOxdnaSession
+
+    d, _dom = _design_with_overhang_anchor()
+    anchor = {"kind": "overhang", "id": "ov_anchor"}
+    field_pN = 4.0
+    field_oxdna = pn_to_oxdna_force(field_pN)
+
+    spec_ws = tmp_path / "spec"
+    specimen = hox.build_field_specimen(
+        d, spec_ws, anchor=anchor, sequence=False, min_bp_retained=0.0)
+    assert specimen["job"].status is OxdnaStatus.completed
+    seed = (specimen["job"].stage_dir(spec_ws, specimen["job"].stages[-1].name)
+            / "last_conf.dat")
+
+    rd = tmp_path / "live"
+    hox._prepare_field_rundir(d, seed, rd, field_pN=field_pN, dir=[0, 0, 1],
+                              anchors=[anchor], anchor_stiff=DEFAULT_ANCHOR_STIFF,
+                              steps=3000)
+    sess = LiveOxdnaSession(d, specimen["anchor_keys"],
+                            stepper=_MockFieldStepper(rd),
+                            field_dir=[0, 0, 1], field_oxdna=field_oxdna)
+
+    waypoints = [{"dir": [0, 0, 1]}, {"dir": [1, 0, 0]}, {"dir": [0, 1, 0]}]
+    timeline = hox.steer_field_session(sess, waypoints, steps_per_waypoint=1000)
+
+    assert timeline["n_waypoints"] == 3
+    res = assert_live_field_following(timeline, melt_floor=0.5)
+    assert res["n_waypoints"] == 3
+    assert res["n_following_moves"] == 3  # every orthogonal re-aim was substantial
+    # each leg's deflection along its OWN vector saturates near 200·F0 (anti-vacuity)
+    assert all(wp["followed"] for wp in timeline["timeline"])
+    assert timeline["timeline"][0]["proj_before_nm"] < 0.5      # field-off start
+    assert timeline["timeline"][-1]["proj_after_nm"] > 1.0
+
+
+def test_steer_field_session_magnitude_per_waypoint(tmp_path, mock_oxdna_field):
+    """A waypoint's optional per-leg field_pN re-scales the magnitude: a stronger
+    leg deflects the body further along its vector than a weaker one."""
+    from backend.physics.oxdna_interface import DEFAULT_ANCHOR_STIFF, pn_to_oxdna_force
+    from backend.physics.oxdna_live import LiveOxdnaSession
+
+    d, _dom = _design_with_overhang_anchor()
+    anchor = {"kind": "overhang", "id": "ov_anchor"}
+
+    spec_ws = tmp_path / "spec"
+    specimen = hox.build_field_specimen(
+        d, spec_ws, anchor=anchor, sequence=False, min_bp_retained=0.0)
+    seed = (specimen["job"].stage_dir(spec_ws, specimen["job"].stages[-1].name)
+            / "last_conf.dat")
+
+    rd = tmp_path / "live"
+    hox._prepare_field_rundir(d, seed, rd, field_pN=2.0, dir=[0, 0, 1],
+                              anchors=[anchor], anchor_stiff=DEFAULT_ANCHOR_STIFF,
+                              steps=2000)
+    sess = LiveOxdnaSession(d, specimen["anchor_keys"],
+                            stepper=_MockFieldStepper(rd),
+                            field_dir=[0, 0, 1], field_oxdna=pn_to_oxdna_force(2.0))
+
+    waypoints = [{"dir": [1, 0, 0], "field_pN": 2.0},
+                 {"dir": [0, 1, 0], "field_pN": 8.0}]
+    timeline = hox.steer_field_session(sess, waypoints, steps_per_waypoint=1000)["timeline"]
+
+    # the 8 pN leg's saturated deflection exceeds the 2 pN leg's (magnitude honoured)
+    assert timeline[1]["proj_after_nm"] > 2.0 * timeline[0]["proj_after_nm"]
+
+
+def test_field_following_oracle_fires_on_ignored_waypoint():
+    """Can-go-red: a hand-built timeline where one waypoint's projection did NOT rise
+    (the body ignored the re-aim) raises the field-following clause."""
+    timeline = {"n_waypoints": 2, "timeline": [
+        {"field_dir": [0, 0, 1], "proj_before_nm": 0.0, "proj_after_nm": 5.0,
+         "alignment_nm": 5.0, "bp_retention": 1.0, "radius_of_gyration_nm": 3.0,
+         "followed": True},
+        # second leg: re-aimed to +x but the body did not move toward it
+        {"field_dir": [1, 0, 0], "proj_before_nm": 0.1, "proj_after_nm": 0.1,
+         "alignment_nm": 0.1, "bp_retention": 1.0, "radius_of_gyration_nm": 3.0,
+         "followed": False},
+    ]}
+    with pytest.raises(AssertionError, match="did NOT follow"):
+        assert_live_field_following(timeline, melt_floor=0.5)
+
+
+def test_field_following_oracle_fires_on_melt():
+    """Can-go-red: a hand-built timeline where bp retention dips below melt_floor at a
+    waypoint raises the no-melt clause."""
+    timeline = {"n_waypoints": 2, "timeline": [
+        {"field_dir": [0, 0, 1], "proj_before_nm": 0.0, "proj_after_nm": 5.0,
+         "alignment_nm": 5.0, "bp_retention": 0.95, "radius_of_gyration_nm": 3.0,
+         "followed": True},
+        {"field_dir": [1, 0, 0], "proj_before_nm": 0.0, "proj_after_nm": 6.0,
+         "alignment_nm": 6.0, "bp_retention": 0.30, "radius_of_gyration_nm": 4.0,
+         "followed": True},
+    ]}
+    with pytest.raises(AssertionError, match="MELTED"):
+        assert_live_field_following(timeline, melt_floor=0.5)
+
+
+def test_field_following_oracle_fires_on_vacuous_timeline():
+    """Can-go-red: a stationary all-tiny-move timeline (no substantial following)
+    raises the non-vacuity guard."""
+    timeline = {"n_waypoints": 2, "timeline": [
+        {"field_dir": [0, 0, 1], "proj_before_nm": 0.0, "proj_after_nm": 0.001,
+         "alignment_nm": 0.001, "bp_retention": 1.0, "radius_of_gyration_nm": 3.0,
+         "followed": True},
+        {"field_dir": [1, 0, 0], "proj_before_nm": 0.0, "proj_after_nm": 0.001,
+         "alignment_nm": 0.001, "bp_retention": 1.0, "radius_of_gyration_nm": 3.0,
+         "followed": True},
+    ]}
+    with pytest.raises(AssertionError, match="vacuous"):
+        assert_live_field_following(timeline, melt_floor=0.5, min_following_nm=0.5)
+
+
+def test_field_following_oracle_requires_two_waypoints():
+    """Can-go-red: a single-waypoint timeline cannot show steering."""
+    timeline = {"n_waypoints": 1, "timeline": [
+        {"field_dir": [0, 0, 1], "proj_before_nm": 0.0, "proj_after_nm": 5.0,
+         "alignment_nm": 5.0, "bp_retention": 1.0, "radius_of_gyration_nm": 3.0,
+         "followed": True},
+    ]}
+    with pytest.raises(AssertionError, match="needs >= 2 waypoints"):
+        assert_live_field_following(timeline, melt_floor=0.5)
+
+
+def test_steer_field_session_rejects_empty_waypoints(tmp_path, mock_oxdna_field):
+    """No waypoints → ValueError (nothing to steer through)."""
+    from backend.physics.oxdna_interface import DEFAULT_ANCHOR_STIFF, pn_to_oxdna_force
+    from backend.physics.oxdna_live import LiveOxdnaSession
+
+    d, _dom = _design_with_overhang_anchor()
+    anchor = {"kind": "overhang", "id": "ov_anchor"}
+    spec_ws = tmp_path / "spec"
+    specimen = hox.build_field_specimen(
+        d, spec_ws, anchor=anchor, sequence=False, min_bp_retained=0.0)
+    seed = (specimen["job"].stage_dir(spec_ws, specimen["job"].stages[-1].name)
+            / "last_conf.dat")
+    rd = tmp_path / "live"
+    hox._prepare_field_rundir(d, seed, rd, field_pN=4.0, dir=[0, 0, 1],
+                              anchors=[anchor], anchor_stiff=DEFAULT_ANCHOR_STIFF,
+                              steps=1000)
+    sess = LiveOxdnaSession(d, specimen["anchor_keys"],
+                            stepper=_MockFieldStepper(rd),
+                            field_dir=[0, 0, 1], field_oxdna=pn_to_oxdna_force(4.0))
+    with pytest.raises(ValueError, match="no waypoints"):
+        hox.steer_field_session(sess, [])

@@ -721,6 +721,79 @@ def field_response_from_confs(
         field_dir, anchor_keys, **kw)
 
 
+def _full_map_to_positions(full_map) -> list[dict]:
+    """A ``read_configuration_full`` map (``{(helix,bp,dir): {backbone_position,
+    a1, a3}}``, ``copies=False``) → the per-nucleotide position list the
+    list-based measures (:func:`measure_field_response`,
+    :func:`measure_radius_of_gyration`) expect."""
+    return [{"helix_id": k[0], "bp_index": k[1], "direction": k[2],
+             "backbone_position": v["backbone_position"]}
+            for k, v in full_map.items()]
+
+
+def field_equilibrium_observables(
+    field_full_map,
+    reference_full_map,
+    field_dir,
+    anchor_keys,
+    *,
+    design,
+) -> dict:
+    """The EQUILIBRIUM observables of a field-relaxed structure vs its field-off
+    reference — the reusable comparison currency for the burst-stepped (oxpy) vs
+    one-shot (batch) parity oracle (AF-21).
+
+    ``field_full_map`` / ``reference_full_map`` are ``read_configuration_full``
+    maps (``copies=False``) of the post-field and field-off configurations.
+    Composes three independently-proven measures into one equilibrium fingerprint:
+
+    - ``alignment_nm`` — mean displacement of the FREE (non-anchored) nucleotides
+      ALONG the field, vs the reference (:func:`measure_field_response`'s
+      ``free_proj_along_field_nm`` — the equilibrium pose the field drives to);
+    - ``radius_of_gyration_nm`` — global compactness of the field structure
+      (:func:`measure_radius_of_gyration`); swelling/collapse a single projection
+      cannot see;
+    - ``bp_retention`` — fraction of designed WC pairs still hydrogen-bonded
+      (:func:`base_pair_retention`); the "did it survive the field" readout.
+
+    Pure (takes already-read maps, no I/O), magnitudes only (direction-agnostic),
+    Three-Layer-clean (reads geometry, never writes ``Design``).  Returns
+    ``{alignment_nm, radius_of_gyration_nm, bp_retention, n_free, n_anchored}``.
+    """
+    field_positions = _full_map_to_positions(field_full_map)
+    reference_positions = _full_map_to_positions(reference_full_map)
+    resp = measure_field_response(
+        field_positions, reference_positions, field_dir, anchor_keys)
+    rg = measure_radius_of_gyration(field_positions)
+    bp, _n_pairs = base_pair_retention(design, field_full_map)
+    return {
+        "alignment_nm": resp["free_proj_along_field_nm"],
+        "radius_of_gyration_nm": rg,
+        "bp_retention": bp,
+        "n_free": resp["n_free"],
+        "n_anchored": resp["n_anchored"],
+    }
+
+
+def field_equilibrium_from_confs(
+    design,
+    field_conf_path,
+    reference_conf_path,
+    *,
+    field_dir,
+    anchor_keys,
+) -> dict:
+    """:func:`field_equilibrium_observables` driven from two oxDNA configuration
+    files — the batch-side counterpart for the AF-21 parity oracle (the one-shot
+    binary run's equilibrium fingerprint).  ``field_conf_path`` is the post-field
+    configuration; ``reference_conf_path`` the field-off (relaxed) seed."""
+    from backend.physics.oxdna_interface import read_configuration_full
+    return field_equilibrium_observables(
+        read_configuration_full(field_conf_path, design),
+        read_configuration_full(reference_conf_path, design),
+        field_dir, anchor_keys, design=design)
+
+
 def measure_field_equilibration(
     frames,
     field_dir,

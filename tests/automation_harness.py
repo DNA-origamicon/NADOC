@@ -2668,6 +2668,151 @@ def assert_field_campaign(campaign, *, benign_range, destructive_range,
             "n_repro_cells": n_repro, "per_design": per_design}
 
 
+def assert_oxpy_equilibrium_parity(live_result, batch_result, *, tol_nm: float = 0.5,
+                                   bp_tol: float = 0.05, min_confidence: int = 2,
+                                   require_mutation: bool = True):
+    """AF-21 (Tier 6) oracle: the PERSISTENT in-process oxpy engine is physically
+    equivalent to the validated one-shot batch engine, AND its live field control
+    actually steers the body.
+
+    Every prior physical oracle (AF-13/18/19/20/23) drove the *batch* CLI binary.
+    AF-21 introduces a second engine — a burst-stepped, live-field-mutating oxpy
+    session.  If "real-time" output is to be trusted it must reach the SAME
+    equilibrium the batch path reaches, and a field re-aim must actually move the
+    structure.  This oracle asserts both, on two ``run_live_field``/batch result
+    dicts (schema ``{"observables": {alignment_nm, radius_of_gyration_nm,
+    bp_retention}, "confidence": int, "mutation": {...} | None}``):
+
+    1. **confidence gate** — both runs carry ``confidence >= min_confidence``
+       (a too-short burst budget cannot certify an equilibrium; the Tier-5 gate,
+       here over bursts/frames).  A stochastic thermostat forbids *trajectory*
+       parity, so this asserts **equilibrium-property** parity, not step-by-step.
+    2. **equilibrium parity** — the live and batch ``alignment_nm`` and
+       ``radius_of_gyration_nm`` agree within ``tol_nm`` and ``bp_retention``
+       within ``bp_tol`` (the new pose + compactness + survival the field drives to
+       is engine-independent — burst-stepping does not change where it ends up).
+    3. **live field-following** — (when ``require_mutation``) the live run carries a
+       ``mutation`` record whose ``followed`` is True: re-aiming the field mid-run
+       increased the free body's deflection ALONG the new vector (the substance
+       behind "drag the field and it follows", distinct from a responsive UI).
+
+    Direction-agnostic (alignment/τ are magnitudes); the parity clause is testable
+    GPU-free against the binary ``_FIELD_MOCK_OXDNA`` (an in-process mock stepper
+    mirrors its deflection model); the live-mutation clause is exercised by the
+    real oxpy build.  Returns ``{alignment_delta_nm, rg_delta_nm, bp_delta,
+    followed}``.
+
+    Can-go-red: a live run diverging from batch beyond tol (clause 2); a field
+    re-aim that does not move the body (``followed`` False, clause 3); a run below
+    the confidence gate (clause 1).
+    """
+    lc = int(live_result.get("confidence", 0))
+    bc = int(batch_result.get("confidence", 0))
+    assert lc >= min_confidence and bc >= min_confidence, (
+        f"oxpy parity is INCONCLUSIVE — confidence live={lc} batch={bc} "
+        f"(need >= {min_confidence}); run more bursts/frames (the confidence gate)")
+
+    lo = live_result["observables"]
+    bo = batch_result["observables"]
+    da = abs(lo["alignment_nm"] - bo["alignment_nm"])
+    dr = abs(lo["radius_of_gyration_nm"] - bo["radius_of_gyration_nm"])
+    db = abs(lo["bp_retention"] - bo["bp_retention"])
+    assert da <= tol_nm, (
+        f"oxpy/batch equilibrium DIVERGED in alignment: live "
+        f"{lo['alignment_nm']:.3f} nm vs batch {bo['alignment_nm']:.3f} nm "
+        f"(Δ {da:.3f} > {tol_nm} nm) — the interactive engine is not reaching the "
+        "batch engine's equilibrium pose")
+    assert dr <= tol_nm, (
+        f"oxpy/batch equilibrium DIVERGED in radius of gyration: live "
+        f"{lo['radius_of_gyration_nm']:.3f} nm vs batch "
+        f"{bo['radius_of_gyration_nm']:.3f} nm (Δ {dr:.3f} > {tol_nm} nm)")
+    assert db <= bp_tol, (
+        f"oxpy/batch equilibrium DIVERGED in base-pair retention: live "
+        f"{lo['bp_retention']:.3f} vs batch {bo['bp_retention']:.3f} "
+        f"(Δ {db:.3f} > {bp_tol})")
+
+    followed = None
+    if require_mutation:
+        mut = live_result.get("mutation")
+        assert mut is not None, (
+            "live run carries no field-mutation record — cannot prove the field "
+            "steers the body (pass mutate_dir to run_live_field, or "
+            "require_mutation=False for a parity-only check)")
+        followed = bool(mut["followed"])
+        assert followed, (
+            f"the live field re-aim did NOT steer the body: deflection along the "
+            f"new vector went {mut['proj_on_to_before_nm']:.3f} → "
+            f"{mut['proj_on_to_after_nm']:.3f} nm (expected an increase) — a dead "
+            "field vector mutation")
+
+    return {"alignment_delta_nm": da, "rg_delta_nm": dr, "bp_delta": db,
+            "followed": followed}
+
+
+def assert_live_field_following(timeline, *, melt_floor: float = 0.5,
+                                min_following_nm: float = 0.5):
+    """AF-22 (Tier 6) oracle: a STEERED live-field timeline produces real
+    field-following without melting — the substance behind "play with the field in
+    real time", distinct from a merely responsive UI.
+
+    Where :func:`assert_oxpy_equilibrium_parity` (AF-21) proves ONE field re-aim
+    steers the body, this proves an arbitrary *path* of waypoints does: for the
+    timeline :func:`backend.api.headless_oxdna_build.steer_field_session` returns
+    (``{"timeline": [{field_dir, proj_before_nm, proj_after_nm, bp_retention, …}, …],
+    "n_waypoints": N}``), it asserts:
+
+    1. **non-vacuity** — ≥2 waypoints (a steered path needs at least a change), and at
+       least one waypoint whose field-following move (``proj_after − proj_before``) is
+       ≥ ``min_following_nm`` (so the body genuinely chased a re-aim, not floating
+       noise); a timeline of stationary zeros cannot pass.
+    2. **field-following** — at EVERY waypoint the free body's deflection along that
+       waypoint's field vector ROSE across the burst (``proj_after > proj_before``):
+       running under the re-aimed field moved the structure toward the new direction.
+       A body that ignored a waypoint change (the projection did not rise) fails here.
+    3. **no melt during steering** — ``bp_retention`` stays ≥ ``melt_floor`` at every
+       waypoint (the structure followed the field WITHOUT ripping apart, across the
+       whole path — the "without melting" half of the user's goal, now over a
+       trajectory of field changes, not one).
+
+    Load-bearing because nothing before proved the interactive control LOOP (many
+    field changes in sequence) produces sustained field-following without a melt —
+    AF-21 pins a single re-aim's equilibrium, blind to a multi-step steered path.
+    Direction-agnostic (signed projections along each leg's own vector → no
+    handedness reasoning).  Returns ``{n_waypoints, n_following_moves, min_bp,
+    max_following_nm}``.
+
+    Can-go-red: a waypoint the body ignored (clause 2); a melt at any waypoint
+    (clause 3); a stationary all-zero timeline (clause 1 non-vacuity).
+    """
+    wps = timeline["timeline"] if isinstance(timeline, dict) else list(timeline)
+    assert len(wps) >= 2, (
+        f"a steered field timeline needs >= 2 waypoints to prove following "
+        f"(got {len(wps)}) — a single field cannot show the body chasing a re-aim")
+
+    moves = [float(wp["proj_after_nm"]) - float(wp["proj_before_nm"]) for wp in wps]
+    bps = [float(wp["bp_retention"]) for wp in wps]
+
+    for i, (wp, move, bp) in enumerate(zip(wps, moves, bps)):
+        assert bp >= melt_floor, (
+            f"waypoint {i} (field {wp['field_dir']}) MELTED during steering: "
+            f"bp retention {bp:.3f} < {melt_floor} — the structure ripped apart "
+            "following the field")
+        assert move > 1e-9, (
+            f"waypoint {i} (field {wp['field_dir']}) did NOT follow the field "
+            f"re-aim: deflection along its vector went {wp['proj_before_nm']:.3f} "
+            f"→ {wp['proj_after_nm']:.3f} nm (expected a rise) — a dead waypoint "
+            "the body ignored")
+
+    n_following = sum(1 for m in moves if m >= min_following_nm)
+    assert n_following >= 1, (
+        f"no waypoint moved the body by >= {min_following_nm} nm along its field "
+        f"(max move {max(moves):.3f} nm) — the steering is vacuous (the body never "
+        "substantially chased a re-aim)")
+
+    return {"n_waypoints": len(wps), "n_following_moves": n_following,
+            "min_bp": min(bps), "max_following_nm": max(moves)}
+
+
 def assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,
                                workspace, min_confidence=RMSF_PRELIM_FRAMES):
     """Tier-5 constraint primitive: a *measured* geometric property of the

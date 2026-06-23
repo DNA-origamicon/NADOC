@@ -1660,3 +1660,59 @@ def test_spec_constraints_reported_vacuity_guard():
     from tests.automation_harness import assert_spec_constraints_reported
     with pytest.raises(AssertionError, match="no constraint verdicts"):
         assert_spec_constraints_reported({"verdicts": []}, [])
+
+
+# ── AF-21: assert_oxpy_equilibrium_parity (GPU-free, hand-built result dicts) ─────
+
+def _parity_result(*, align=14.0, rg=5.0, bp=0.5, conf=4, mut_followed=True):
+    """A run_live_field-shaped result dict for oracle unit tests."""
+    return {
+        "observables": {"alignment_nm": align, "radius_of_gyration_nm": rg,
+                        "bp_retention": bp},
+        "confidence": conf,
+        "mutation": {
+            "from_dir": [0, 0, 1], "to_dir": [1, 0, 0],
+            "proj_on_to_before_nm": 0.0,
+            "proj_on_to_after_nm": align if mut_followed else 0.0,
+            "followed": mut_followed,
+        },
+    }
+
+
+def test_oxpy_parity_oracle_passes():
+    """Matching equilibria + a steering re-aim → the oracle passes and reports the
+    deltas + followed flag."""
+    from tests.automation_harness import assert_oxpy_equilibrium_parity
+    live = _parity_result()
+    batch = _parity_result(); batch["mutation"] = None
+    r = assert_oxpy_equilibrium_parity(live, batch, tol_nm=0.5, bp_tol=0.02)
+    assert r["followed"] is True
+    assert r["alignment_delta_nm"] == 0.0
+
+
+def test_oxpy_parity_oracle_fires_on_divergence():
+    """Red-test: a live equilibrium far from batch raises the divergence clause."""
+    from tests.automation_harness import assert_oxpy_equilibrium_parity
+    live = _parity_result(align=14.0)
+    batch = _parity_result(align=20.0); batch["mutation"] = None
+    with pytest.raises(AssertionError, match="DIVERGED"):
+        assert_oxpy_equilibrium_parity(live, batch, tol_nm=0.5)
+
+
+def test_oxpy_parity_oracle_fires_on_dead_field():
+    """Red-test: a field re-aim that does not move the body raises the steering
+    clause (the 'dead field vector mutation' guard)."""
+    from tests.automation_harness import assert_oxpy_equilibrium_parity
+    live = _parity_result(mut_followed=False)
+    batch = _parity_result(); batch["mutation"] = None
+    with pytest.raises(AssertionError, match="did NOT steer"):
+        assert_oxpy_equilibrium_parity(live, batch)
+
+
+def test_oxpy_parity_oracle_fires_on_low_confidence():
+    """Red-test: too few bursts/frames is inconclusive (the confidence gate)."""
+    from tests.automation_harness import assert_oxpy_equilibrium_parity
+    live = _parity_result(conf=1)
+    batch = _parity_result(conf=1); batch["mutation"] = None
+    with pytest.raises(AssertionError, match="INCONCLUSIVE"):
+        assert_oxpy_equilibrium_parity(live, batch, min_confidence=2)

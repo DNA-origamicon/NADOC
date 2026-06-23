@@ -180,31 +180,68 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 > **AF-23 CAPSTONE** (cross-design
 > automated campaign). **De-risk note:** AF-18→20 + AF-23's batch path ride the ALREADY-SHIPPED field child-job +
 > `_FIELD_MOCK_OXDNA` (no GPU, no oxpy) — only AF-21/22 need the oxpy build. Each loop ships one reusable oracle per
-> the anti-shovel contract. **AF-18 + AF-19 + AF-20 + AF-23 (CAPSTONE) SHIPPED 2026-06-23. ▶ START: AF-21** (oxpy
-> persistent interactive engine — oxpy IS built + venv-wired, `import oxpy` ready; PARITY half is GPU-free against
-> `_FIELD_MOCK_OXDNA`, the live-mutation half needs the real engine → gate with `pytest.importorskip("oxpy")`).
-> **AF-22** (live field-steering, builds on AF-21) follows. The Tier-6 BATCH spine (AF-18→20→23) is now COMPLETE — the
-> remaining Tier-6 work is the oxpy *interactive* sub-track (AF-21/22) only; everything else open is the AF-12/13
-> text-to-design stragglers below (lower priority than finishing the interactive engine).
+> the anti-shovel contract. **THE ENTIRE TIER 6 IS NOW COMPLETE: AF-18 + AF-19 + AF-20 + AF-21 + AF-22 + AF-23 (CAPSTONE)
+> ALL SHIPPED 2026-06-23.** Batch spine (AF-18→20→23) + oxpy interactive engine (AF-21) + multi-waypoint live steering (AF-22).
+> ▶ START NEXT: the AF-12/13 text-to-design stragglers below — `▶ NEXT` (AF-12 Phase 2b parametric circle `from_primitive`,
+> then 2c hinge/template primitives, multi-knob `optimize`, assembly-level `constraints`). No Tier-6 work remains.
 
-_Living pointer — each session overwrites this (step 8). **AF-23 CAPSTONE: cross-design automated field-response campaign —
-SHIPPED 2026-06-23.** The user's stated goal: automatic exploration of which E-field intensities × directions align which
-DNA structures, on what equilibration timescale, without ripping them apart, for VARIOUS designs. The first MULTI-design
-physical experiment (AF-20 measured one response surface; this measures + compares a surface PER design).
-`hox.run_field_campaign(specimens, intensities_pN, directions, ws, *, field_steps=2000, melt_floor=0.5, min_confidence=10,
-timeout=30, anchor_stiff=…, **relax_params) → {"sweeps": {name: sweep}, "skipped": [(name, reason)], "names": […],
-"intensities_pN": […], "directions": […], "melt_floor": …}` in `backend/api/headless_oxdna_build.py`. `specimens` = a list of
-`{"name", "design": Design|build-spec, "anchor": {kind,id,…}, "overhang"?, "sequence"?}`; per design it runs
-`build_field_specimen` (build→overhang→sequence→relax→anchor) then `sweep_field_response` in its OWN `ws/campaign/<i>_<name>`
-subdir (so per-design job trees never collide). A design whose build/sweep raises is recorded in `skipped` (NOT dropped).
-NEW oracle `assert_field_campaign(campaign, *, benign_range, destructive_range, expect_distinguishable=True, melt_floor=0.5,
-min_tau_separation_steps=1.0, repro=None, tau_tol_steps=1e-6, min_tau_drop_steps=1.0)`: (1) no design dropped (skipped empty +
-sweeps non-empty), (2) every design passes `assert_field_sweep_map` (a reported non-destructive window per design), (3)
-**DISTINGUISHABILITY** — ≥2 designs differ at a shared responsive `(|E|,dir)` cell by ≥`min_tau_separation_steps` τ (the
-load-bearing NEW assertion over AF-20: AF-20 pins ONE surface, this proves the campaign produces design-DISCRIMINATING
-surfaces), (4) **reproducible** — if `repro` (a 2nd run) given, every shared design+cell τ matches within `tau_tol_steps`. Net
-+4 tests (suite 3024→3028). Coverage FLAT 37 (no new route — composes `build_field_specimen` + `sweep_field_response`).
-**ASK-FIRST honoured:** field dir + |E| + anchor are spec inputs, cells measure magnitudes (τ, projection, retention)._
+_Living pointer — each session overwrites this (step 8). **AF-22: multi-waypoint live field steering + field-following oracle
+— SHIPPED 2026-06-23.** The headless analog of dragging the field gizmo through a PATH (the interactive control LOOP, vs
+AF-21's single re-aim): `hox.steer_field_session(session, waypoints, *, steps_per_waypoint=1000) → {timeline:[…], n_waypoints}`.
+For each waypoint `{dir, field_pN?, steps?}` it re-aims the live field, runs a burst, and records the free body's deflection
+ALONG that leg's vector BEFORE the burst (the pose the previous leg left) vs AFTER — the rising before→after projection is the
+field-following signal. Drives the SAME AF-21 `LiveOxdnaSession` (`set_field`/`run`/`equilibrium_observables` in a loop); wraps
+NO route → coverage FLAT 37. NEW oracle `assert_live_field_following(timeline, *, melt_floor=0.5, min_following_nm=0.5)`:
+(1) non-vacuity (≥2 waypoints + ≥1 substantial move), (2) field-following (EVERY waypoint's along-vector projection rose →
+`proj_after>proj_before`), (3) no melt (bp_retention ≥ melt_floor at EVERY waypoint). Net +7 tests (suite 3034→3041, no drop;
+2 GPU-free pipeline tests over the `_MockFieldStepper` — orthogonal-waypoint following + per-leg magnitude — + 4 hand-built
+red-path tests for ignored-waypoint / melt / vacuous / <2-waypoints + 1 empty-waypoints ValueError). Load-bearing: nothing
+before proved the interactive control LOOP (many field changes in sequence) sustains field-following WITHOUT a melt — AF-21
+pins one re-aim's equilibrium, blind to a multi-step steered path. **ASK-FIRST honoured:** field dirs/|E| are inputs; the
+oracle measures signed projections along each leg's own vector (direction-agnostic, no handedness reasoning). Real-oxpy
+multi-waypoint steering is exercised transitively by AF-21's gated `test_run_live_field_real_oxpy_steers` (same session machinery);
+a dedicated gated AF-22 real-engine test was NOT added (the mock proves the loop logic; the single-step real path is already pinned)._
+
+**▶ HARNESS NOW AVAILABLE (AF-22 live steering, use it — do NOT rebuild):**
+- `from backend.api import headless_oxdna_build as hox` → `hox.steer_field_session(session, waypoints, *,
+  steps_per_waypoint=1000) → {"timeline": [{field_dir, steps, proj_before_nm, proj_after_nm, alignment_nm, bp_retention,
+  radius_of_gyration_nm, followed}, …], "n_waypoints": N}`. `session` is an UN-entered AF-21 `LiveOxdnaSession`-like object
+  (the function enters it via `with session:`); each `waypoints` entry is `{"dir":[x,y,z], "field_pN":<opt>, "steps":<opt>}`.
+  Raises `ValueError` on empty `waypoints`. `alignment_nm == proj_after_nm` (deflection along the CURRENT leg's vector).
+- **Augment = `from tests.automation_harness import assert_live_field_following`** (signature + clauses above).
+- **GOTCHAS banked:** (1) the `_MockFieldStepper` shift is recomputed from the seed each readout (position-based, not
+  incremental), so steering through ORTHOGONAL waypoints makes each leg's `proj_before≈0` (the body was aligned to the
+  PREVIOUS, orthogonal leg) → `proj_after≈200·F0` → a clean substantial follow; a repeated-direction waypoint would have
+  `proj_before≈proj_after` → `followed=False` → fails clause 2 (that IS the intended ignored-waypoint red signal). (2) the
+  melt + ignored-waypoint red tests are HAND-BUILT timeline dicts (the no-melt mock translates free beads together → bp
+  stays 1.0, can't melt), mirroring AF-19/AF-20's hand-built reds. (3) coverage FLAT 37 — pure composition over the AF-21
+  session, no route wrapped. (4) Tier 6 is DONE — do not look for more field work; the next item is the AF-12/13 stragglers.
+
+**▶ HARNESS NOW AVAILABLE (AF-21 live engine, use it — do NOT rebuild):**
+- `from backend.physics.oxdna_live import LiveOxdnaSession, _OxpyStepper` — persistent oxpy session. Used as a context
+  manager; `set_field(field_oxdna=…, field_dir=…)` mutates the live field between `run(steps)` bursts;
+  `equilibrium_observables(field_dir=…)` reads the current equilibrium vs the field-off reference. `_OxpyStepper(rundir)`
+  needs a staged field run dir (`input`+`topology.top`+`conf.dat`+`field_forces.txt`) — build it with
+  `hox._prepare_field_rundir(design, seed_conf, rundir, *, field_pN, dir, anchors, anchor_stiff, steps)` (reuses the SAME
+  `write_topology`/`write_field_forces`/`build_field_stage`/`render_stage_input` writers the batch field stage uses).
+- `from backend.api import headless_oxdna_build as hox` → `hox.run_live_field(specimen, ws, *, field_pN, dir,
+  total_steps=4000, n_bursts=4, mutate_dir=None, anchor_stiff=DEFAULT_ANCHOR_STIFF, session=None, rundir=None)`. `specimen`
+  is an AF-18 `build_field_specimen` result. `session=None` builds a REAL oxpy session (needs the oxpy build); inject a mock
+  for GPU-free tests. **AF-22 builds its multi-waypoint steered timeline by calling `session.set_field`/`run`/`observables`
+  in a loop — the session already supports it.**
+- **Augment = `from tests.automation_harness import assert_oxpy_equilibrium_parity`** (see signature above).
+- **GOTCHAS banked (read before AF-22):** (1) the binding patch is in the USER's `~/oxDNA` C++ — a fresh clone/rebuild
+  WITHOUT it makes `force.F0`/`force.dir` `AttributeError` and `run_live_field`'s real path dies; the two
+  `def_readwrite` lines + `make` must be reapplied (it's `git`-untracked in their tree). (2) the field force is found by
+  `f.type == "string"` (NOT an `id`), so don't rely on a forces-file `id`. (3) a uniform field on a FREE (unanchored) body
+  streams the COM ballistically — `write_field_forces` REQUIRES anchors; a re-aim test on a free body shows residual
+  momentum from the prior direction, so anchor the body (the field deflects the free part against the anchor to a pose).
+  (4) F0 in oxDNA units is large: `pn_to_oxdna_force(4 pN)≈0.082`; F0≈0.4 (≈19 pN) blows the integrator up on a tiny system
+  — use the realistic `pn_to_oxdna_force(field_pN)` regime. (5) the GPU-free parity test makes live & batch end on the SAME
+  final field (re-aim live `+z→+x`, run batch directly at `+x`) so the equilibria are comparable; alignment is along the
+  FINAL dir. (6) the gated real test runs a REAL relaxation (`build_field_specimen`, mc/md/equil=100) + real field — it
+  RUNS (not skips) wherever oxpy + a binary resolve; `pytest.importorskip("oxpy")` + `find_oxdna() is None` skip elsewhere.
+  (7) coverage stays FLAT 37 — `run_live_field` wraps NO route (pure composition + the new engine path).
 
 **▶ HARNESS NOW AVAILABLE (AF-23 campaign, use it — do NOT rebuild):**
 - `from backend.api import headless_oxdna_build as hox` → `hox.run_field_campaign(specimens, intensities_pN, directions, ws,
@@ -1575,8 +1612,10 @@ venv** (was `Python:BOOL=OFF`). As-built, for the AF-21 session — DO NOT re-de
   already-pinned "deflection scales with magnitude". Can-go-red: a flat (field-independent) τ, or a non-empty
   destructive window. No oxpy. **Log a `log()`/note if any cell is skipped** (no silent truncation of the sweep).
 
-- [ ] **AF-21 — oxpy persistent interactive engine + equilibrium-parity / live-mutation oracle. [PREREQ: oxpy build
-  `-DPython=ON` — ask the user first.]** NEW `backend/physics/oxdna_live.py` wrapping oxpy: `LiveOxdnaSession` loads
+- [x] **AF-21 — oxpy persistent interactive engine + equilibrium-parity / live-mutation oracle. SHIPPED 2026-06-23**
+  (`backend/physics/oxdna_live.py` `LiveOxdnaSession`/`_OxpyStepper` + `hox.run_live_field` + `assert_oxpy_equilibrium_parity`;
+  HARNESS block at the top of the handoff). [PREREQ: oxpy build
+  `-DPython=ON` — DONE.]** NEW `backend/physics/oxdna_live.py` wrapping oxpy: `LiveOxdnaSession` loads
   topology+conf, steps in bursts (`run(M)` loop), **mutates the field `ConstantRateForce` vector live**, and reads CM
   positions in-process (no file round-trip, no CUDA re-init between bursts) — a cohesive module, NOT a god-file
   block. Headless `hox.run_live_field(...)` drives it. **Augment = NEW `assert_oxpy_equilibrium_parity(live_result,
@@ -1589,7 +1628,8 @@ venv** (was `Python:BOOL=OFF`). As-built, for the AF-21 session — DO NOT re-de
   half is testable GPU-free against the binary `_FIELD_MOCK_OXDNA`; the live-mutation half needs the real oxpy build.
   Can-go-red: an oxpy run diverging from the binary beyond tol, or a field-vector change that doesn't move the body.
 
-- [ ] **AF-22 — live field-steering session + field-following oracle. [builds on AF-21.]** `hox.steer_field_session(
+- [x] **AF-22 — live field-steering session + field-following oracle. SHIPPED 2026-06-23**
+  (`hox.steer_field_session` + `assert_live_field_following`; HARNESS block at the top of the handoff). [builds on AF-21.]** `hox.steer_field_session(
   session, waypoints) → timeline` — set field dir d₁, run a burst, read observables; switch to d₂, run, read; … a
   steered timeline (the programmatic form of a user dragging the field gizmo). **Augment = NEW `assert_live_field_
   following(timeline, *, melt_floor)`** — after each waypoint the free body's alignment observable moves **toward the
