@@ -600,6 +600,31 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect($('oxdna-jobs-flex-status').textContent.toLowerCase()).toContain('waiting for a production or field run')
   })
 
+  it('locks the OxDNA display / flex / trajectory toggles while a live session runs', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 3, stages: relaxStages({ kind: 'production', status: 'done' }) }])
+    let liveOn = false
+    const oxdnaLive = { isOn: () => liveOn, stop: vi.fn() }
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: fakeDisplay(), oxdnaLive })
+    await selectFirstJob(panel)
+    // A completed+produced job → all three overlays usable.
+    expect($('oxdna-jobs-display-toggle').disabled).toBe(false)
+    expect($('oxdna-jobs-flex-toggle').disabled).toBe(false)
+    expect($('oxdna-jobs-traj-toggle').disabled).toBe(false)
+    // Live starts → all three locked so a click can't fight the live overlay.
+    liveOn = true
+    window.dispatchEvent(new CustomEvent('nadoc:oxdna-live-start'))
+    expect($('oxdna-jobs-display-toggle').disabled).toBe(true)
+    expect($('oxdna-jobs-flex-toggle').disabled).toBe(true)
+    expect($('oxdna-jobs-traj-toggle').disabled).toBe(true)
+    // Live stops → normal gating restored.
+    liveOn = false
+    window.dispatchEvent(new CustomEvent('nadoc:oxdna-live-stop'))
+    expect($('oxdna-jobs-display-toggle').disabled).toBe(false)
+    expect($('oxdna-jobs-flex-toggle').disabled).toBe(false)
+    expect($('oxdna-jobs-traj-toggle').disabled).toBe(false)
+  })
+
   it('selecting a job dispatches nadoc:oxdna-job-selected (so the E-field Run button reacts)', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jSel', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 3, stages: relaxStages() }])

@@ -89,13 +89,11 @@ class _OxpyStepper:
                 inp[key] = str(self.rundir / fname)
         self._mgr = oxpy.OxpyManager(inp)
         ci = self._mgr.config_info()
-        # The uniform field is the single "string" force; anchors are "trap"s.
+        # The uniform field is the single "string" force; anchors are "trap"s.  A
+        # run may carry NO field (anchors / hard surface / pure free dynamics only),
+        # in which case there is nothing to steer — set_field then no-ops.
         strings = [f for f in ci.forces if f.type == "string"]
-        if not strings:
-            raise RuntimeError(
-                "oxdna_live: the run dir's external forces define no uniform-field "
-                "'string' force to steer")
-        self._field = strings[0]
+        self._field = strings[0] if strings else None
         return self
 
     def __exit__(self, *exc) -> bool:
@@ -107,6 +105,8 @@ class _OxpyStepper:
         return False
 
     def set_field(self, F0: float, direction) -> None:
+        if self._field is None:
+            return   # no uniform field in this run → nothing to steer
         v = _unit(direction)
         self._field.F0 = float(F0)
         self._field.dir = [float(v[0]), float(v[1]), float(v[2])]

@@ -1998,6 +1998,15 @@ export const getOxdnaRmsfAtomistic = (id) =>
 export const getOxdnaRmsfSurface = (id, params = {}) =>
   _oxdnaJSON('POST', `/oxdna/jobs/${id}/rmsf-surface`, params)
 
+// ── Ephemeral LIVE oxDNA field session (routes_oxdna_live.py) ────────────────
+// An in-process oxpy run that stores NO job — seeded from a completed relaxed
+// job, re-aimable in (near) real time.  Display-only; never mutates topology.
+export const oxdnaLiveAvailable  = ()            => _oxdnaJSON('GET',  '/oxdna/live/available')
+export const startOxdnaLive      = (body)        => _oxdnaJSON('POST', '/oxdna/live/start', body)
+export const updateOxdnaLiveField = (id, body)   => _oxdnaJSON('POST', `/oxdna/live/${id}/field`, body)
+export const getOxdnaLiveFrame   = (id)          => _oxdnaJSON('GET',  `/oxdna/live/${id}/frame`)
+export const stopOxdnaLive       = (id)          => _oxdnaJSON('POST', `/oxdna/live/${id}/stop`)
+
 /** Create a NAMD MD job (routes_md.py).  Pass {oxdna_job_id} to seed the run
  *  from a completed oxDNA job's relaxed coordinates instead of ideal B-DNA. */
 export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)

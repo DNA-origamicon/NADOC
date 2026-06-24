@@ -60,6 +60,7 @@ from backend.api.routes_flexible_segments import router as flexible_segments_rou
 from backend.api.routes_loop_skip import router as loop_skip_router
 from backend.api.routes_md import router as md_router
 from backend.api.routes_oxdna import router as oxdna_router
+from backend.api.routes_oxdna_live import router as oxdna_live_router
 from backend.api.routes_primitives import router as primitives_router
 from backend.api.routes_protein import router as protein_router
 from backend.api.routes_assign_sequences import router as assign_sequences_router
@@ -175,6 +176,7 @@ app.include_router(assembly_validation_router, prefix="/api")
 app.include_router(assembly_workspace_router, prefix="/api")
 app.include_router(md_router,          prefix="/api")
 app.include_router(oxdna_router,       prefix="/api")
+app.include_router(oxdna_live_router,  prefix="/api")
 app.include_router(benchmark_router,   prefix="/api")
 app.include_router(engines_router,     prefix="/api")
 app.include_router(primitives_router,  prefix="/api")

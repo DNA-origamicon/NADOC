@@ -149,6 +149,28 @@ describe('initOxdnaDisplay controller', () => {
     expect(deps.designRenderer.applyFemPositions).not.toHaveBeenCalled()
   })
 
+  it('displayLiveFrame applies a positions payload directly (live mode, no fetch)', () => {
+    const deps = makeDeps({ ready: false, positions: [] })
+    const ctrl = initOxdnaDisplay(deps)
+    const positions = [{ helix_id: 'h0', bp_index: 2, direction: 'REVERSE',
+      backbone_position: [4, 5, 6], nx: 0, ny: 1, nz: 0 }]
+    const applied = ctrl.displayLiveFrame(positions)
+    expect(applied).toBe(true)
+    expect(deps.api.getOxdnaDisplay).not.toHaveBeenCalled()   // no network for a live frame
+    expect(deps.designRenderer.applyFemPositions).toHaveBeenCalledWith(positions)
+    expect(ctrl.isActive()).toBe(true)
+    expect(ctrl.mode()).toBe('live')
+    expect(ctrl.activeJobId()).toBe(null)
+  })
+
+  it('displayLiveFrame ignores empty/bad payloads', () => {
+    const deps = makeDeps({ ready: false, positions: [] })
+    const ctrl = initOxdnaDisplay(deps)
+    expect(ctrl.displayLiveFrame([])).toBe(false)
+    expect(ctrl.displayLiveFrame(null)).toBe(false)
+    expect(ctrl.isActive()).toBe(false)
+  })
+
   it('stopAndRestore clears the overlay', async () => {
     const resp = { ready: true, positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD',
       backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0 }] }

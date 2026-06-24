@@ -400,7 +400,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, oxdnaLive = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -644,6 +644,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // ── Launch ─────────────────────────────────────────────────────────────────
   runBtn?.addEventListener('click', async () => {
     if (_launching || !_available) return
+    oxdnaLive?.stop()   // a relaxation supersedes any live session (shared overlay)
     _launching = true
     runBtn.disabled = true
     _setStatus('Preparing relaxation job…', _C.accent)
@@ -956,6 +957,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     // last frame (each is its own stage).
     const prodReady = job?.status === 'completed'
     const hasRun = productionRunCount(job) > 0
+    // A live session owns the one bead overlay — lock the relaxed-display / flex /
+    // trajectory toggles while it runs so a click can't fight it (the user must
+    // Stop Live first).  Cleared the moment Live stops (the live-change events
+    // re-run _updateButtons).
+    const liveOn = !!oxdnaLive?.isOn?.()
 
     // Relax — disabled while unavailable, launching, or a production run is active.
     if (runBtn) runBtn.disabled = !_available || _launching || prodRunning
@@ -965,7 +971,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     const relaxActive = _launching || _visibleJobs().some(isRelaxRunning)
     const prodActive  = _visibleJobs().some(isProductionRunning)
     if (runBtn)  _setBtnSpinner(runBtn,  relaxActive, '▶ Relax', 'Relaxing…')
-    if (prodBtn) _setBtnSpinner(prodBtn, prodActive,  'Start Production', 'Production…')
+    if (prodBtn) _setBtnSpinner(prodBtn, prodActive,  'Full Sim', 'Running…')
 
     if (prodBtn) {
       prodBtn.disabled = !prodReady
@@ -986,11 +992,16 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     // warns the user not to trust a short run.
     if (flexToggle && !_flexBusy) {
       // Flex map pools production OR field trajectories → gate on samplingState.
-      const ok = samplingState(job) === 'done' || samplingState(job) === 'running'
+      // Locked while a live session is running (shared overlay).
+      const ok = !liveOn && (samplingState(job) === 'done' || samplingState(job) === 'running')
       flexToggle.disabled = !ok
       const lab = flexToggle.closest('label')
-      if (lab) { lab.style.opacity = ok ? '1' : '0.5'; lab.style.cursor = ok ? 'pointer' : 'not-allowed' }
-      if (!ok && flexStatus && oxdnaDisplay?.mode() !== 'rmsf') {
+      if (lab) {
+        lab.style.opacity = ok ? '1' : '0.5'
+        lab.style.cursor = ok ? 'pointer' : 'not-allowed'
+        lab.title = liveOn ? 'Stop Live to use the flexibility map' : ''
+      }
+      if (!ok && !liveOn && flexStatus && oxdnaDisplay?.mode() !== 'rmsf') {
         _setFlexStatus('Waiting for a production or field run', _C.dim)
       }
     }
@@ -1005,12 +1016,29 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     }
 
     // View trajectory — unlocks once the job has any trajectory data (≥1 stage
-    // started); shows the composite relaxation + all production runs.
+    // started); shows the composite relaxation + all production runs.  Locked while
+    // a live session is running (shared overlay).
     if (trajToggle && !_trajBusy) {
-      const ok = hasTrajectory(job)
+      const ok = !liveOn && hasTrajectory(job)
       trajToggle.disabled = !ok
       const lab = trajToggle.closest('label')
-      if (lab) { lab.style.opacity = ok ? '1' : '0.5'; lab.style.cursor = ok ? 'pointer' : 'not-allowed' }
+      if (lab) {
+        lab.style.opacity = ok ? '1' : '0.5'
+        lab.style.cursor = ok ? 'pointer' : 'not-allowed'
+        lab.title = liveOn ? 'Stop Live to view a trajectory' : ''
+      }
+    }
+
+    // OxDNA display (relaxed positions) — always available with a job, EXCEPT while
+    // a live session owns the overlay, when it is locked too.
+    if (displayToggle) {
+      displayToggle.disabled = liveOn
+      const lab = displayToggle.closest('label')
+      if (lab) {
+        lab.style.opacity = liveOn ? '0.5' : '1'
+        lab.style.cursor = liveOn ? 'not-allowed' : 'pointer'
+        lab.title = liveOn ? 'Stop Live to use the OxDNA display' : ''
+      }
     }
   }
   function _setProdStatus(text, color = _C.dim) {
@@ -1020,6 +1048,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
 
   prodBtn?.addEventListener('click', async () => {
     if (!_selectedId || prodBtn.disabled) return
+    oxdnaLive?.stop()   // a production run supersedes any live session (shared overlay)
     const steps = parseInt(prodStepsInput?.value || '5000000', 10)
 
     // Compose the run from the independently-enabled elements (field / surface /
@@ -1153,6 +1182,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       if (ss !== 'done' && ss !== 'running') {
         flexToggle.checked = false; _setFlexStatus('Waiting for a production or field run', _C.warn); return
       }
+      oxdnaLive?.stop()   // mutually exclusive with the live overlay
       if (displayToggle?.checked) _setDisplayOff()   // mutually exclusive with OxDNA display
       if (trajToggle?.checked) _setTrajOff()
       await _refreshFlex()
@@ -1224,6 +1254,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       if (!hasTrajectory(_selectedJob())) {
         trajToggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); return
       }
+      oxdnaLive?.stop()   // mutually exclusive with the live overlay
       if (displayToggle?.checked) _setDisplayOff()   // mutually exclusive overlays
       if (flexToggle?.checked) _setFlexOff()
       await _refreshTraj()
@@ -1370,12 +1401,27 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   displayToggle?.addEventListener('change', async () => {
     if (displayToggle.checked) {
       if (!_selectedId) { displayToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); return }
+      oxdnaLive?.stop()   // mutually exclusive with the live overlay
       if (flexToggle?.checked) _setFlexOff()   // mutually exclusive with the flexibility map
       if (trajToggle?.checked) _setTrajOff()
       await _refreshDisplay()
     } else {
       _setDisplayOff()
     }
+  })
+
+  // ── Live mode took over the bead overlay → drop our relaxed/flex/traj overlay ─
+  // The live controller dispatches this before applying its first frame, so the
+  // shared bead overlay isn't fought over (Live and the job-display overlays are
+  // mutually exclusive).  We also clear + LOCK the three display toggles for the
+  // duration of the live session so a click can't create a conflict.
+  window.addEventListener('nadoc:oxdna-live-start', () => {
+    if (oxdnaDisplay?.isActive()) _allDisplaysOff()
+    _updateButtons(_selectedJob())   // disable display / flex / traj toggles
+  })
+  // Live stopped → re-enable the toggles (subject to their normal job-state gating).
+  window.addEventListener('nadoc:oxdna-live-stop', () => {
+    _updateButtons(_selectedJob())
   })
 
   // ── Pause display when leaving the Dynamics tab ───────────────────────────

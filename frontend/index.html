@@ -3436,11 +3436,19 @@
                         style="flex:1;font-size:var(--text-xs);padding:5px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer;font-weight:600">
                   ▶ Relax
                 </button>
+                <button id="oxdna-jobs-live-btn" disabled
+                        title="Start a live, field-steerable oxDNA session (nothing is saved)"
+                        style="flex:1;font-size:var(--text-xs);padding:5px;background:#1a1622;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
+                  ◉ Live
+                </button>
                 <button id="oxdna-jobs-prod-btn" disabled
+                        title="Run a full unbiased MD simulation from the relaxed structure (composes any enabled field / hard surface / anchors)"
                         style="flex:1;font-size:var(--text-xs);padding:5px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
-                  Start Production
+                  Full Sim
                 </button>
               </div>
+              <!-- live (ephemeral, in-process oxpy) session status -->
+              <div id="oxdna-jobs-live-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
               <!-- production parameters (enabled once a relaxation completes) -->
               <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center;margin-bottom:6px">
                 <label for="oxdna-jobs-prod-steps" style="font-size:var(--text-xs);color:#8b949e">Production steps</label>

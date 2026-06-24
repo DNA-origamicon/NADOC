@@ -439,6 +439,32 @@ export function initOxdnaDisplay({
   }
 
   /**
+   * Apply an ALREADY-FETCHED live-session frame (a positions payload, same shape
+   * as a /display response's `positions`) directly to the model — the ephemeral
+   * "Live" oxDNA mode (oxdna_live_controller.js).  No network fetch here: the
+   * controller polls /oxdna/live/{id}/frame and hands the positions in, so the
+   * bead overlay updates in near real time as the field is steered.  Shares the
+   * one bead overlay + epoch with the other modes (mutually exclusive — turning
+   * Live on supersedes a relaxed/flex/traj overlay and vice-versa).  Heavy reps
+   * (atomistic/surface) are NOT reconstructed for live frames — they need a job's
+   * topology model, which an ephemeral session has none of; live is a CG preview.
+   * Returns true if a frame was applied.
+   */
+  function displayLiveFrame(positions) {
+    if (!designRenderer || !Array.isArray(positions) || !positions.length) return false
+    const updates = toFemUpdates({ ready: true, positions })
+    if (!updates.length) return false
+    _epoch++   // supersede any in-flight relaxed/flex/traj fetch
+    designRenderer.clearScalarColors?.()
+    designRenderer.applyFemPositions(updates)
+    proteinRenderer?.clearOxdnaTransforms?.()
+    _active = true
+    _mode = 'live'
+    _jobId = null
+    return true
+  }
+
+  /**
    * Fetch the production flexibility map for jobId, deform the model to the
    * average structure, and recolour beads by RMSF (rigid→flexible).
    */
@@ -582,6 +608,7 @@ export function initOxdnaDisplay({
 
   return {
     displayJob,
+    displayLiveFrame,
     displayRmsf,
     recolorRmsf,
     loadTrajectory,

@@ -193,6 +193,7 @@ import { initBenchmarkPanel } from './ui/benchmark_panel.js'
 import { initAnchorGlow } from './scene/anchor_glow.js'
 import { initOxdnaDisplay } from './ui/oxdna_display.js'
 import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
+import { initOxdnaLive } from './ui/oxdna_live_controller.js'
 import { initMdEngines }   from './ui/md_engines.js'
 import { initEfieldGizmo } from './scene/efield_gizmo.js'
 import { initEfieldSetup } from './ui/efield_setup.js'
@@ -1870,14 +1871,25 @@ async function main() {
   // When the scene representation changes while an oxDNA overlay is active, re-apply
   // the current frame to the freshly-built atomistic/surface mesh.
   window.addEventListener('nadoc:representation-change', () => oxdnaDisplay.reapplyForRepr())
-  const oxdnaPanel = initOxdnaJobsPanel({
-    oxdnaDisplay, getWorkspacePath: () => _workspacePath,
-    // The single production Run composes the independently-enabled elements.
-    getRunElements: () => ({
-      field: efieldSetup?.getFieldSpec?.(),
-      surface: oxdnaFloorSetup?.getSurfaceSpec?.(),
-      anchors: oxdnaAnchorsSetup?.getAnchors?.() || [],
-    }),
+  // Ephemeral "Live" oxDNA mode (in-process oxpy, nothing stored): owns the Live
+  // toggle, seeds from the panel's selected relaxed job, and pushes field re-aims.
+  // Lazy getters resolve the panel + field/anchor cards (all declared below).
+  let oxdnaPanel = null
+  // Both the "Full Sim" run AND the Live session compose the same independently-
+  // enabled elements (field / hard surface / anchors).
+  const _oxdnaRunElements = () => ({
+    field: efieldSetup?.getFieldSpec?.(),
+    surface: oxdnaFloorSetup?.getSurfaceSpec?.(),
+    anchors: oxdnaAnchorsSetup?.getAnchors?.() || [],
+  })
+  const oxdnaLive = initOxdnaLive({
+    oxdnaDisplay,
+    getSelectedJob: () => oxdnaPanel?.getSelectedJob?.() || null,
+    getRunElements: _oxdnaRunElements,
+  })
+  oxdnaPanel = initOxdnaJobsPanel({
+    oxdnaDisplay, oxdnaLive, getWorkspacePath: () => _workspacePath,
+    getRunElements: _oxdnaRunElements,
     // Clicking a job echoes its run conditions into every card (field arrow,
     // surface, anchor chips + 3D glow) — what was used during that run.
     applyRunConfig: (cfg) => {
@@ -1904,7 +1916,12 @@ async function main() {
     anchorGlow.setAnchors(fieldOn && anchors.length ? anchors : [])
   }
 
-  const efieldSetup = initEfieldSetup({ gizmo: efieldGizmo, onChange: _refreshAnchorGlow })
+  const efieldSetup = initEfieldSetup({
+    gizmo: efieldGizmo,
+    // Field changed (gizmo drag / input edit): refresh the anchor halo AND, if a
+    // live session is running, re-aim its field so the structure follows live.
+    onChange: () => { _refreshAnchorGlow(); oxdnaLive?.onFieldChanged?.() },
+  })
   if (import.meta.env.DEV) window.__nadocEfield = { setup: efieldSetup, gizmo: efieldGizmo }
 
   const oxdnaFloorSetup = initOxdnaFloorSetup({
