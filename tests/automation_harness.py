@@ -1702,6 +1702,236 @@ def assert_cluster_in_feature_log(design, cluster_id: str, *, expect_helix_ids=N
     return entry
 
 
+def assert_feature_seek(seek_fn, checkpoints, *, latest_position: int = -1):
+    """Oracle: feature-log seek scrubs the build timeline **faithfully,
+    non-destructively, and reversibly** — the missing primitive under "roll a job
+    back to its run state" and a navigable build history for text-to-design.
+
+    Unlike *revert* (which truncates the log), a seek only moves the active cursor
+    and re-realises the derived topology/geometry, so the full history survives and
+    the latest state is one ``seek(-1)`` away.  This pins that contract.
+
+    Parameters
+    ----------
+    seek_fn : callable(position, sub_position=None) -> Design
+        The seek primitive (e.g. :func:`backend.api.headless_build.seek_features`).
+        Returns the *active* design after scrubbing to ``position``; it MUST mutate
+        and return the same design the *checkpoints* were recorded against.
+    checkpoints : ordered list of ``(position, fingerprint)`` — or
+        ``(position, fingerprint, probe)`` — pairs **recorded forward**.
+        ``fingerprint`` is :func:`backend.core.oxdna_staleness.design_build_fingerprint`
+        captured *during the forward build*, at the moment ``position`` was the last
+        active log entry (``position = len(feature_log) - 1`` right after that op).
+        The LAST checkpoint is the latest/end state.  An optional ``probe(design)``
+        (truthy) pins a concrete structural effect at that position — e.g. "the
+        overhang's strands are gone", "sequences are cleared".
+
+    Asserts, for every checkpoint:
+
+      1. **Non-destructive** — ``len(feature_log)`` is unchanged after the back-seek
+         (a revert-style truncation fails here).
+      2. **Cursor lands** — ``feature_log_cursor`` equals the requested position
+         (normalised: the final index and ``-1`` both mean "latest" → cursor ``-1``).
+      3. **Faithful reconstruction** — ``design_build_fingerprint`` at the position
+         equals the recorded forward fingerprint (the build state is reproduced).
+      4. **Reversible** — an immediate ``seek(latest)`` restores the latest
+         fingerprint exactly.
+      5. **Effect removal** — the optional ``probe`` is truthy (e.g. seeking before a
+         logged op drops its effect).
+
+    Can-go-red: a seek that truncates the log (1), lands the cursor wrong (2), whose
+    fingerprint ≠ the recorded forward state (3), that doesn't round-trip back to
+    latest (4), or that leaves a later op's effect in place (5).  To keep (3)
+    non-vacuous, every interior checkpoint's recorded fingerprint must differ from
+    the latest — otherwise seeking there would be indistinguishable from "latest"
+    and prove nothing.
+
+    Returns the number of log entries (the non-destructive length).
+    """
+    from backend.core.oxdna_staleness import design_build_fingerprint
+
+    assert len(checkpoints) >= 2, (
+        f"assert_feature_seek needs a multi-entry timeline (>=2 checkpoints), "
+        f"got {len(checkpoints)} — a single-op build proves nothing about scrubbing."
+    )
+
+    # Establish the latest state + the non-destructive log length from a fresh
+    # seek-to-latest (so the oracle is self-contained regardless of where the
+    # design's cursor currently sits).
+    latest = seek_fn(latest_position)
+    n0 = len(latest.feature_log)
+    assert n0 >= 2, f"timeline has {n0} log entries; need >=2 to scrub."
+    latest_fp = design_build_fingerprint(latest)
+
+    def _expected_cursor(position: int) -> int:
+        if position in (-1, -2):
+            return position
+        return -1 if position >= n0 - 1 else position
+
+    for i, checkpoint in enumerate(checkpoints):
+        if len(checkpoint) == 3:
+            position, fp, probe = checkpoint
+        else:
+            position, fp = checkpoint
+            probe = None
+        is_final = i == len(checkpoints) - 1
+
+        if not is_final and position not in (-2,):
+            assert fp != latest_fp, (
+                f"checkpoint {i} (position {position}) recorded a fingerprint equal to "
+                "the latest state — an interior seek that can't be distinguished from "
+                "'latest' makes the faithful-reconstruction assertion vacuous; record "
+                "the forward fingerprint at the moment that op was the last active one."
+            )
+
+        d = seek_fn(position)
+
+        # (1) non-destructive
+        assert len(d.feature_log) == n0, (
+            f"seek({position}) changed the feature-log length {n0} -> "
+            f"{len(d.feature_log)} — a seek must NOT truncate the log (that's revert)."
+        )
+        # (2) cursor lands
+        exp_cursor = _expected_cursor(position)
+        assert d.feature_log_cursor == exp_cursor, (
+            f"seek({position}) left cursor at {d.feature_log_cursor}, expected "
+            f"{exp_cursor}."
+        )
+        # (3) faithful reconstruction
+        got = design_build_fingerprint(d)
+        assert got == fp, (
+            f"seek({position}) fingerprint {got[:12]} != recorded forward "
+            f"{fp[:12]} — the scrubbed build state does not match how it was built."
+        )
+        # (5) effect removal / structural probe
+        if probe is not None:
+            assert probe(d), (
+                f"seek({position}) structural probe failed — a later op's effect "
+                "was not removed (or an expected state was not reconstructed)."
+            )
+        # (4) reversible
+        back = seek_fn(latest_position)
+        back_fp = design_build_fingerprint(back)
+        assert back_fp == latest_fp, (
+            f"seek({position}) then seek({latest_position}) did not return to the "
+            f"latest fingerprint ({back_fp[:12]} != {latest_fp[:12]}) — seek is not "
+            "reversible."
+        )
+
+    return n0
+
+
+def assert_roll_return_lifecycle(
+    *,
+    roll,
+    return_to_latest,
+    out_of_date,
+    stale_live_call,
+    run_fingerprint: str,
+    run_log_position: int,
+    edit_probe,
+    run_state_probe,
+):
+    """Oracle: the full out-of-date job lifecycle — **simulate → edit → roll →
+    return** — incl. the 409 crash-guard.  The single end-to-end regression guard
+    the feature lacked: every leg was only ever validated in pieces.
+
+    Drives the headless wrappers (so they're validated, not passthroughs) and the
+    real stale-guard, asserting at each leg.  Call with the active design already
+    EDITED past a completed job's run state (the job is therefore stale).
+
+    Parameters (all callables operate on the live active design / the stale job)
+    ----------
+    roll : callable() -> dict
+        The roll wrapper bound to the stale job (e.g.
+        ``lambda: hox.roll_job_to_run_state(job_id, workspace)``).  Must return the
+        roll response carrying ``return_loadout_id``.
+    return_to_latest : callable(loadout_id) -> Design
+        The return wrapper (e.g. ``hb.return_to_latest``).
+    out_of_date : callable() -> bool
+        Current stale status of the job (e.g. reads the jobs-list route).
+    stale_live_call : callable() -> object
+        Attempts a live/production op on the STALE job; MUST raise
+        ``HTTPException(409)`` — the guard that replaced the original crash.
+    run_fingerprint : the job's run-state ``design_build_fingerprint``.
+    run_log_position : the job's ``feature_log_position`` (where the cursor must land).
+    edit_probe(design) -> bool : truthy when the post-run EDIT is present
+        (e.g. the overhang exists).
+    run_state_probe(design) -> bool : truthy when the design is at the job's RUN state
+        (e.g. the overhang is gone AND sequences survive).
+
+    Asserts, in order:
+
+      0. **Precondition** — the edit is present and the job is ``out_of_date``.
+      1. **Crash-guard** — a live/production op on the stale job is refused with
+         **409** (not a 500 crash, not silently allowed).
+      2. **Roll is non-destructive** — the full feature log is kept (length
+         unchanged), the cursor seeks to ``run_log_position``, and the roll banks a
+         ``return_loadout_id``.
+      3. **Roll reaches the run state** — the rolled design's fingerprint equals
+         ``run_fingerprint`` and ``run_state_probe`` holds (edit's topology gone,
+         sequences preserved).
+      4. **The flag clears** — the job is no longer ``out_of_date`` after the roll.
+      5. **Return restores the edits** — return-to-latest brings back the edited
+         state (``edit_probe`` holds again).
+
+    Can-go-red: a stale job that runs without refusal (1), a roll that truncates the
+    log / lands the cursor wrong / drops the return branch (2), a rolled state that
+    doesn't match the run fingerprint or loses sequences (3), a ⚠ that never clears
+    (4), or a return that loses the edits (5).
+    """
+    from fastapi import HTTPException
+    from backend.core.oxdna_staleness import design_build_fingerprint
+
+    # 0. precondition
+    pre = design_state.get_or_404()
+    full_len = len(pre.feature_log)
+    assert edit_probe(pre), "precondition failed: the edit must be present before rolling."
+    assert out_of_date() is True, "precondition failed: the job should be out_of_date after the edit."
+
+    # 1. crash-guard: a live op on the stale job is refused with 409
+    raised: BaseException | None = None
+    try:
+        stale_live_call()
+    except BaseException as exc:  # noqa: BLE001 — we classify it below
+        raised = exc
+    assert isinstance(raised, HTTPException) and raised.status_code == 409, (
+        f"a live/production op on the STALE job must be refused with HTTP 409 (the "
+        f"crash-guard), got {raised!r}."
+    )
+
+    # 2-4. roll
+    resp = roll()
+    rid = (resp or {}).get("return_loadout_id")
+    assert rid, "roll must bank the later edits as a 'return_loadout_id' branch."
+    rolled = design_state.get_or_404()
+    assert len(rolled.feature_log) == full_len, (
+        f"roll changed the feature-log length {full_len} -> {len(rolled.feature_log)} — "
+        "the roll must keep the full log (seek, not truncate)."
+    )
+    assert rolled.feature_log_cursor == run_log_position, (
+        f"roll left the cursor at {rolled.feature_log_cursor}, expected the job's "
+        f"run position {run_log_position}."
+    )
+    assert design_build_fingerprint(rolled) == run_fingerprint, (
+        "rolled design fingerprint != the job's run-state fingerprint — the roll did "
+        "not reproduce the state the job was relaxed at."
+    )
+    assert run_state_probe(rolled), (
+        "rolled design is not at the job's run state (the edit's topology was not "
+        "removed, or sequences were lost)."
+    )
+    assert out_of_date() is False, (
+        "the out-of-date flag did NOT clear after the roll (the ⚠ would persist in "
+        "the app)."
+    )
+
+    # 5. return to latest
+    back = return_to_latest(rid)
+    assert edit_probe(back), "return-to-latest lost the edits (the overhang did not come back)."
+    return rid
+
+
 def assert_edges_collinear(
     design,
     cluster_id: str,

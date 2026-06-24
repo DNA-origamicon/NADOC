@@ -48,6 +48,7 @@ from backend.api.routes_oxdna import (
     create_oxdna_job as _route_create_oxdna_job,
     get_oxdna_display as _route_get_display,
     get_oxdna_rmsf as _route_get_rmsf,
+    roll_oxdna_job_design as _route_roll_design,
     start_oxdna_job as _route_start_job,
 )
 from backend.core.models import Design
@@ -218,6 +219,25 @@ def append_field(job_id: str, workspace, *, field_pN: float, dir, anchors: list[
         return asyncio.run(_route_append_field(job_id, FieldRequest(
             field_pN=field_pN, dir=list(dir), anchors=anchors,
             steps=steps, anchor_stiff=anchor_stiff)))
+
+
+def roll_job_to_run_state(job_id: str, workspace) -> dict:
+    """Roll the ACTIVE design back to the state oxDNA job ``job_id`` was relaxed at
+    (mirrors ``POST /oxdna/jobs/{id}/roll-design``) — the headless analog of the
+    out-of-date "Roll & run" button.
+
+    Operates on the **live** active design (NOT a job-scoped scratch design): it
+    saves the current edits as a "Return to latest" loadout branch, then seeks the
+    feature-log cursor to the job's run position so the full log is kept, the model
+    reverts to the job's state, and the out-of-date flag clears.  Returns the roll
+    response (carries ``return_loadout_id`` — pass it to
+    :func:`backend.api.headless_build.return_to_latest`).
+
+    Pin the whole simulate→edit→roll→return contract with
+    :func:`tests.automation_harness.assert_roll_return_lifecycle`.
+    """
+    with _use_workspace(workspace):
+        return asyncio.run(_route_roll_design(job_id))
 
 
 def read_relaxed_positions(job_id: str, workspace) -> dict:

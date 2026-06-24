@@ -1311,5 +1311,7 @@ def test_spec_build_adds_no_coverage():
     from tests.automation_harness import headless_coverage_report
     # AF-14 Phase 1's place_cluster_joint added one route (add_joint): 34 → 35;
     # the full_sequence feature added assign_staple_sequences: 35 → 36;
-    # the periodic straggler added polymerize_periodic_assembly: 36 → 37.
-    assert headless_coverage_report()["covered"] == 37
+    # the periodic straggler added polymerize_periodic_assembly: 36 → 37;
+    # AF-25's seek_features added /design/features/seek: 37 → 38;
+    # AF-26's return_to_latest added /design/loadouts/{id}/select: 38 → 39.
+    assert headless_coverage_report()["covered"] == 39

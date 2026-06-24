@@ -802,11 +802,13 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     // live/production would be inconsistent (only Relax stays available).
     if (jobOutOfDate(job)) {
       const warn = Object.assign(document.createElement('span'), { textContent: '⚠' })
+      warn.className = 'oxdna-job-stale-warn'   // stable hook for the AF-26 staleness e2e
       warn.style.cssText = `flex-shrink:0;color:${_C.warn};font-size:11px`
       warn.title = 'Design changed since this job was relaxed — run a new Relax, or roll the feature log back, before live/production.'
       row.append(warn)
     }
     row.append(sym)
+    row.dataset.jobId = job.job_id   // stable per-row selector (rows are otherwise id-less)
     row.addEventListener('click', () => { _selectJob(job.job_id) })
     return row
   }

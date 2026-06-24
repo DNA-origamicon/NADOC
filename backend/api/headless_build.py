@@ -49,6 +49,7 @@ from backend.api.crud import (
     get_deformed_frame as _route_deformed_frame,
     ligate_strand as _route_ligate,
     overhang_extrude as _route_overhang_extrude,
+    select_loadout as _route_select_loadout,
 )
 from backend.api.routes_clusters import (
     AddClusterBody,
@@ -63,6 +64,10 @@ from backend.api.routes_cluster_joints import (
 from backend.api.routes_deformation import (
     AddDeformationBody,
     add_deformation as _route_add_deformation,
+)
+from backend.api.routes_feature_log import (
+    SeekFeaturesBody,
+    seek_features as _route_seek_features,
 )
 from backend.api.routes_loop_skip import (
     LoopSkipInsertRequest,
@@ -582,6 +587,41 @@ def overhang_extrude(
         is_five_prime=is_five_prime, neighbor_row=neighbor_row,
         neighbor_col=neighbor_col, length_bp=length_bp,
     ))
+    return design_state.get_or_404()
+
+
+# ── feature-log timeline navigation (scrub / seek — undo the build to a point) ──
+
+def seek_features(position: int, sub_position: int | None = None) -> Design:
+    """Scrub the feature-log timeline to *position* (POST /design/features/seek).
+
+    The single primitive behind "roll a design back to an earlier build state" —
+    the headless analog of dragging the Feature Log rail thumb.  It replays the
+    log up to *position* and rebuilds the derived geometry/topology, **without
+    truncating the log** (unlike revert): only the active cursor + the realised
+    state move, so a later ``seek_features(-1)`` restores the latest state exactly.
+
+    ``position`` — ``-2`` empties the design (no features active), ``-1`` seeks to
+    the latest (all entries active), ``>=0`` makes that index the last active
+    entry (dropping the effect of every op after it).  ``sub_position`` is honored
+    only when *position* indexes a routing-cluster entry (mid-cluster scrub).
+
+    Pin the scrub invariants with
+    :func:`tests.automation_harness.assert_feature_seek`.
+    """
+    _route_seek_features(SeekFeaturesBody(position=position, sub_position=sub_position))
+    return design_state.get_or_404()
+
+
+def return_to_latest(loadout_id: str) -> Design:
+    """Return to the "Latest" loadout branch a job-roll saved, restoring the edits
+    that were in place before the roll (POST /design/loadouts/{id}/select?save_current=false).
+
+    ``save_current=False`` so the rolled run-state (reproducible from the job) is NOT
+    folded back over the branch holding the user's latest edits.  The counterpart to
+    :func:`backend.api.headless_oxdna_build.roll_job_to_run_state`.
+    """
+    _route_select_loadout(loadout_id, save_current=False)
     return design_state.get_or_404()
 
 

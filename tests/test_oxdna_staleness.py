@@ -182,6 +182,77 @@ def test_roll_design_restores_snapshot_and_clears_out_of_date(monkeypatch, tmp_p
     assert all(not s.sequence for s in back.strands)
 
 
+def test_af26_roll_return_lifecycle_overhang_edit(monkeypatch, tmp_path):
+    """AF-26 — the full simulate→edit→roll→return lifecycle as ONE driven oracle,
+    using the OVERHANG edit (the membership case AF-25 fixed) the existing per-slice
+    tests never exercised: build → relax (mock job) → add an overhang → the job goes
+    stale → a production attempt is refused 409 → roll seeks back (overhang gone,
+    sequences survive, ⚠ clears) → return-to-latest brings the overhang back.
+
+    Drives the headless wrappers ``roll_job_to_run_state`` + ``return_to_latest`` so
+    they're validated, not passthroughs."""
+    import asyncio
+
+    from backend.api import headless_build as hb
+    from backend.api import headless_oxdna_build as hox
+    from backend.api.routes_oxdna import ProductionRequest, append_oxdna_production
+    from backend.core.models import LatticeType
+    from backend.physics.oxdna_interface import count_undefined_bases
+    from tests.automation_harness import assert_roll_return_lifecycle
+    from tests.conftest import SIX_HB_CELLS
+    from tests.test_headless_build import _place_one_overhang
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(routes_oxdna, "find_oxdna", lambda: "/fake/oxDNA")
+    monkeypatch.setattr(routes_oxdna, "start_job", lambda *a, **k: None)
+
+    # Build a routed, broken, sequenced 6hb on the DEFAULT doc (the routes read it).
+    hb.new_design(LatticeType.HONEYCOMB)
+    hb.create_bundle(SIX_HB_CELLS, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
+    hb.auto_scaffold(seamless=False)
+    hb.auto_crossover()
+    hb.auto_break()
+    hb.assign_scaffold_sequence()
+    hb.assign_staple_sequences()
+    d = design_state.get_or_404()
+    run_fp = oxdna_design_fingerprint(d)
+    pos = effective_feature_log_position(d)
+
+    # A completed mock job relaxed at the run state (no GPU — guard fires pre-binary).
+    job = new_oxdna_job("6hb", [], design_fingerprint=run_fp, feature_log_position=pos)
+    job.status = OxdnaStatus.completed
+    job.save(tmp_path)
+    (job.job_dir(tmp_path) / "design.json").write_text(d.model_dump_json())
+
+    # EDIT after the run: add an overhang → job diverges + goes stale.
+    edited = _place_one_overhang(design_state.get_or_404())
+    assert edited is not None and len(edited.overhangs) == 1
+
+    c = TestClient(app)
+
+    def _out_of_date() -> bool:
+        return c.get(f"/api/oxdna/jobs/{job.job_id}").json()["out_of_date"]
+
+    def _stale_live_call():
+        # Direct route call RAISES HTTPException(409) (the guard) before any binary use.
+        return asyncio.run(append_oxdna_production(job.job_id, ProductionRequest(steps=1000)))
+
+    def _run_state_probe(des) -> bool:
+        undef, total = count_undefined_bases(des, exclude_reference=True)
+        return len(des.overhangs) == 0 and total > 0 and undef < total
+
+    assert_roll_return_lifecycle(
+        roll=lambda: hox.roll_job_to_run_state(job.job_id, tmp_path),
+        return_to_latest=hb.return_to_latest,
+        out_of_date=_out_of_date,
+        stale_live_call=_stale_live_call,
+        run_fingerprint=run_fp,
+        run_log_position=pos,
+        edit_probe=lambda des: len(des.overhangs) == 1,
+        run_state_probe=_run_state_probe,
+    )
+
+
 def test_assign_sequences_are_feature_log_steps(tmp_path):
     """Sequence assignment is now a feature-log entry, so a seek (incl. a job roll)
     reproduces the sequenced state instead of dropping it."""

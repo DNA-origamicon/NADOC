@@ -22,6 +22,7 @@ from backend.core.validator import validate_design
 from tests.automation_harness import (
     assert_circular_disc,
     assert_cluster_in_feature_log,
+    assert_feature_seek,
     assert_cluster_translated,
     assert_deformation_angle,
     assert_fully_sequenced,
@@ -52,6 +53,92 @@ def _staple_termini(d):
 def _hc_neighbors(r, c):
     offs = [(-1, 0), (0, -1), (0, 1)] if (r + c) % 2 == 0 else [(0, -1), (0, 1), (1, 0)]
     return [(r + dr, c + dc) for dr, dc in offs]
+
+
+def _place_one_overhang(d):
+    """Extrude one valid staple overhang on a routed/broken bundle; return the
+    design.  Mirrors test_overhang_extrude_places_a_valid_candidate's search."""
+    hobj = {h.id: h for h in d.helices}
+    occ = {h.grid_pos for h in d.helices}
+    for hid, bp, dirn, is5 in _staple_termini(d):
+        r, c = hobj[hid].grid_pos
+        for nr, nc in _hc_neighbors(r, c):
+            if (nr, nc) in occ:
+                continue
+            try:
+                return hb.overhang_extrude(
+                    hid, bp, direction=dirn, is_five_prime=is5,
+                    neighbor_row=nr, neighbor_col=nc, length_bp=8,
+                )
+            except HTTPException:
+                continue
+    return None
+
+
+def test_af25_feature_seek_scrubs_timeline_faithfully():
+    """AF-25 — headless feature-log SEEK + non-destructive-scrub oracle.
+
+    Build a multi-entry timeline (bundle → auto-scaffold → assign-scaffold-sequence
+    → overhang), recording the build fingerprint forward after each op, then prove
+    ``hb.seek_features`` scrubs to each point faithfully, non-destructively, and
+    reversibly — and that seeking BEFORE an op drops its effect (overhang gone,
+    sequences cleared)."""
+    from backend.core.oxdna_staleness import design_build_fingerprint as _fp
+    from backend.physics.oxdna_interface import count_undefined_bases
+
+    def _all_undefined(d):
+        undef, total = count_undefined_bases(d, exclude_reference=True)
+        return total > 0 and undef == total
+
+    def _scaffold_sequenced(d):
+        undef, total = count_undefined_bases(d, exclude_reference=True)
+        return total > 0 and undef < total
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        d0 = hb.create_bundle(SIX_HB_CELLS, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
+        pos_bundle = len(d0.feature_log) - 1
+        fp_bundle = _fp(d0)
+
+        d1 = hb.auto_scaffold(seamless=False)
+        pos_scaffold = len(d1.feature_log) - 1
+        fp_scaffold = _fp(d1)
+
+        # break staples so there are nick termini to extrude an overhang from
+        hb.auto_crossover()
+        hb.auto_break()
+
+        d2 = hb.assign_scaffold_sequence()
+        pos_seq = len(d2.feature_log) - 1
+        fp_seq = _fp(d2)
+
+        d3 = _place_one_overhang(d2)
+        assert d3 is not None, "expected at least one valid overhang site on a routed 6hb"
+        assert len(d3.overhangs) == 1
+        pos_overhang = len(d3.feature_log) - 1
+        fp_overhang = _fp(d3)
+
+        # all four ops are distinct build states → a real, scrubable timeline
+        assert len({fp_bundle, fp_scaffold, fp_seq, fp_overhang}) == 4
+
+        # auto_crossover/auto_break logged entries sit between assign-seq's
+        # recorded position and the overhang; record positions forward so the
+        # oracle's checkpoints stay valid regardless of how many entries those add.
+        n0 = assert_feature_seek(
+            hb.seek_features,
+            [
+                # before scaffold routing: bundle only, no overhang
+                (pos_bundle, fp_bundle, lambda d: len(d.overhangs) == 0),
+                # routed but unsequenced: every base still undefined
+                (pos_scaffold, fp_scaffold, _all_undefined),
+                # scaffold sequenced, overhang not yet placed
+                (pos_seq, fp_seq, lambda d: len(d.overhangs) == 0 and _scaffold_sequenced(d)),
+                # latest: the overhang is present
+                (pos_overhang, fp_overhang, lambda d: len(d.overhangs) == 1),
+            ],
+        )
+        assert n0 == len(d3.feature_log)
+        # explicitly: the seek did NOT truncate the log (non-destructive vs revert)
+        assert len(hb.seek_features(-1).feature_log) == n0
 
 
 def test_build_bundle_records_feature_log():

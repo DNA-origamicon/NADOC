@@ -1740,6 +1740,92 @@ so τ(N_free) is a regime observation, not a fitted power law. AF-24 P2/P3 shoul
 tethered cross-sections (and repeats per cell — each oxDNA run has a fresh RNG seed, hence the ±599 scatter) to pin
 τ(N_free) and the field-strength↔τ law across the response surface.
 
+### AF-25 — headless feature-log SEEK wrapper + non-destructive-scrub oracle (2026-06-24)
+
+**Shape:** headless wrapper (`backend/api/headless_build.py::seek_features(position, sub_position=None)`) over the
+existing `POST /design/features/seek` route — the single primitive behind "scrub the build timeline" / "roll a job
+back to its run state". Runs the same route service mouse-free; no logic in `crud.py`.
+
+**Primary metric — validation augment:** `tests/automation_harness.py::assert_feature_seek(seek_fn, checkpoints)`
+pins the five scrub invariants: (1) non-destructive (log length unchanged — unlike revert, which truncates),
+(2) cursor lands at the requested position, (3) faithful reconstruction (`design_build_fingerprint` at P equals the
+forward-recorded fingerprint), (4) reversible (`seek(P)` then `seek(-1)` returns to latest exactly), (5) effect
+removal via optional structural probes. Pin: `test_headless_build.py::test_af25_feature_seek_scrubs_timeline_
+faithfully` (bundle → auto-scaffold → assign-scaffold-sequence → overhang, fingerprints recorded forward).
+
+**Secondary metrics:** headless coverage **37 → 38** (`/design/features/seek` now wrapped — the three
+`*_adds_no_coverage` pins bumped 37→38). God-files flat (logic stayed in the route service; only a thin wrapper added).
+Cohesion: one reason to change — the seek-then-serialise contract.
+
+**REAL BUG FOUND + FIXED (the point of the loop).** The oracle went RED first run, not green: `crud._topology_
+substitute` restored every topology-bearing field from the seek snapshot **except `overhangs`**. The downstream seek
+loop only re-applies overhang *rotations* (a display delta) — it never adds/removes overhangs — so seeking before an
+overhang-extrude (or to empty) dropped the overhang's helix + strands but left a **dangling `overhangs` entry**.
+Because `overhangs` is in `design_build_fingerprint`, the seeked state's fingerprint was wrong → in
+`roll_active_to_job_state` the `design_build_fingerprint(seeked) == design_build_fingerprint(snapshot)` clean-path
+check failed and fell through to the snapshot-overlay fallback; the manual feature-log seek left a stale fingerprint,
+which is consistent with the reported "⚠ out-of-date doesn't clear after a back-seek". **Fix:** add
+`overhangs=snap_design.overhangs` to `_topology_substitute` (snapshot is ground-truth membership; rotation deltas
+still overwrite per-overhang afterward, so display layer is preserved). Full suite **3119 → confirm green**.
+
+**Validation gained, not just a passthrough:** first programmatic proof the timeline scrub reconstructs + reverses
+faithfully and non-destructively — AND it immediately caught a real reconstruction bug (stale overhang membership)
+that the existing per-slice backend tests missed. This is the missing primitive AF-26 composes for the job roll.
+
+### AF-26 — job-staleness ROLL/RETURN lifecycle wrapper + oracle (BACKEND leg, 2026-06-24)
+
+**Shape:** two headless wrappers — `headless_oxdna_build.roll_job_to_run_state(job_id, workspace)` (wraps
+`POST /oxdna/jobs/{id}/roll-design`, operating on the LIVE active design) + `headless_build.return_to_latest(loadout_id)`
+(wraps `POST /design/loadouts/{id}/select?save_current=false`). They compose the existing relax/edit/seek primitives.
+
+**Primary metric — validation augment:** `automation_harness.assert_roll_return_lifecycle(...)` drives the whole
+**simulate → edit → roll → return** loop through the wrappers and asserts each leg: precondition stale; a production
+attempt on the stale job refused **409** (the crash-guard); roll keeps the full log + seeks the cursor to the job
+position + banks a `return_loadout_id`; rolled fingerprint == run state + sequences survive + edit's topology gone;
+**the out-of-date flag clears**; return-to-latest restores the edits. Pin:
+`test_oxdna_staleness.py::test_af26_roll_return_lifecycle_overhang_edit` — uses the OVERHANG edit (the membership case
+AF-25 fixed) the per-slice tests never drove.
+
+**Secondary metrics:** headless coverage **38 → 39** (`/design/loadouts/{id}/select` now wrapped); oxDNA coverage
+**4 → 5** (`roll-design`). God-files flat (logic stayed in the routes). Cohesion: roll/return wrappers each have one
+reason to change (their route's contract).
+
+**KEY FINDING (matches the spec's prediction).** The AF-26 BACKEND oracle **passes even with the AF-25 fix reverted** —
+because `roll_active_to_job_state`'s snapshot-overlay *fallback* already restores the run-state topology and clears the
+flag at the backend level (verified: revert the `_topology_substitute` one-liner → AF-25 goes RED, AF-26 stays GREEN).
+So the backend lifecycle is sound; the live "⚠ doesn't clear / cursor doesn't roll" bug the user reports lives in the
+**frontend** (panel refetch on `nadoc:design-changed`, Feature Log rail-thumb, scene rebuild). **AF-26 is therefore
+NOT complete with the backend leg alone** — per the backlog it needs a REAL end-to-end Playwright leg over the actual
+oxDNA/MD panel + Feature Log rail, made to go RED on the running app first. That leg is the remaining deliverable.
+
+**Validation gained, not a passthrough:** first single driven proof of the staleness→roll→return contract incl. the
+409 guard, exercising the headless wrappers end-to-end; AND it localized the live bug to the frontend by proving the
+backend lifecycle correct under fix-revert.
+
+### AF-26 — the real end-to-end Playwright leg (2026-06-24) — TIER 7 COMPLETE
+
+**Deliverable:** `frontend/e2e/job_log_sync.spec.js` drives the GENUINE path — the real oxDNA jobs panel, a real
+overhang edit (`extrudeOverhang`), a real feature-log seek (`seekFeatures`) — and asserts the RENDERED DOM: the
+seeded job's row has no `.oxdna-job-stale-warn` initially, gains it after the edit, and **loses it after the manual
+seek back** while the store's design rolls (overhangs → 0, `feature_log_cursor` → run position). GPU-free seed
+`tests/e2e_seed_af26.py` (a completed job + matching .nadoc, self-cleaning by a marker name + seed signature). Two
+minimal panel testability hooks: `row.dataset.jobId` + the `.oxdna-job-stale-warn` class.
+
+**Can-go-red PROVEN in the browser** (the backlog's hard requirement): reverting the one-line `_topology_substitute`
+fix makes the spec fail at the post-seek assertion (the ⚠ stays) — the exact user-reported symptom; restoring →
+green. So the e2e exercises the real failure mode the green unit tests missed, and pins the AF-25 backend fix
+end-to-end through a browser.
+
+**Why the unit tests missed it (the lesson):** `roll_design_sync.test.js` / `job_staleness.test.js` pinned the client
+functions in isolation (roll applies the design; seek fires `nadoc:design-changed`) and all passed — but the bug was
+the BACKEND seek reconstruction returning a wrong fingerprint, invisible to any frontend-only or backend-slice test.
+Only a test that drives real backend seek → real refetch → real DOM catches it.
+
+**Infra finding:** the running dev backend was on STALE code (its `OxdnaJob` predated `design_fingerprint`), so it
+silently dropped every fingerprinted job from the list (the per-job loader swallows exceptions) — the staleness
+feature was effectively dead in that server. Restarted it. Worth checking the dev server is current when a
+staleness/job feature "doesn't work in the app but passes tests".
+
 ---
 
 ## Lessons (anti-patterns banked — read before building)
@@ -2172,6 +2258,22 @@ _(none yet — first session. Candidates the audit already suggests:)_
   `overhang_extrude` / `full_sequence` / `run_relaxation` + `resolve_anchor_particles`. The new validation power is
   the composite "field-ready" oracle + the proven probe-field, exactly like the 4-bar capstone. Don't expect a
   coverage bump; the justification is the composition.
+
+### Banked from AF-25 (feature-log seek)
+- **Seek reconstruction split topology membership from display deltas — and dropped one.** `crud._seek_feature_log`
+  rebuilds a past state in two passes: `_seek_snapshot_base` → `_topology_substitute` restores the topology-bearing
+  *fields* from the nearest snapshot, THEN a delta-replay loop re-applies overlays (deformations, cluster transforms,
+  overhang **rotations**). The trap: `_topology_substitute` listed helices/strands/crossovers/extensions/… but **not
+  `overhangs`**, and the delta loop only ever rotates overhangs — it never adds/removes them. So overhang *membership*
+  had no owner: seeking before an overhang-extrude (or to empty) removed the overhang's helix + strands but left a
+  dangling `overhangs` entry. Lesson: when a field is split across "snapshot restores membership" + "delta replays the
+  display attribute", **every such field must appear in the snapshot-substitution list** — a field that's only ever
+  *adjusted* by deltas, never *created/destroyed* by them, will silently keep stale live membership.
+- **A stale fingerprint field is invisible until something hashes it.** `overhangs` is in `design_build_fingerprint`,
+  so the dangling entry quietly poisoned the hash → the job-roll's `fp(seeked)==fp(snapshot)` clean-path check failed
+  and silently took the fallback branch; nothing crashed, no test caught it (per-slice tests never seeked *past* an
+  overhang). The oracle that records the forward fingerprint and demands the back-seek reproduce it is what surfaced
+  it. Write fingerprint-equality oracles for any "reconstruct an earlier state" path.
 
 ### Banked from AF-12 Phase 2b (parametric `from_primitive` circle)
 - **A parametric primitive flips the part SOURCE from file to inline — so its pin must be geometric, not a source

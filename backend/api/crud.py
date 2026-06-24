@@ -9222,12 +9222,26 @@ def _replay_minor_op(design: Design, op_subtype: str, params: dict) -> Design:
 
 def _topology_substitute(design: Design, snap_design: Design) -> Design:
     """Substitute topology-bearing fields from ``snap_design`` into ``design``,
-    leaving deformations/cluster_transforms/overhangs to the delta-replay logic.
+    leaving deformations/cluster_transforms to the delta-replay logic.
+
+    ``overhangs`` is topology (each overhang owns a helix + strands), so its
+    *membership* must come from the snapshot — seeking before an overhang-extrude
+    has to drop that overhang, not just hide its helix/strands. The downstream
+    seek logic only re-applies overhang *rotations* (a display-layer delta) onto
+    whatever overhangs the snapshot restored; it never adds/removes them, so
+    without restoring the list here a back-seek (or seek-to-empty) leaves a
+    dangling ``overhangs`` entry whose helix/strands are already gone. That stale
+    entry also poisons ``design_build_fingerprint`` (overhangs are in it), which is
+    why a job-roll's seeked state failed to match the run-state fingerprint and the
+    out-of-date flag never cleared. The snapshot bakes each overhang's rotation at
+    op time (identity for a fresh extrude); the rotation delta-replay then overwrites
+    it for any overhang with a rotation op in the active window, so this is safe.
     """
     return design.copy_with(
         helices=snap_design.helices,
         strands=snap_design.strands,
         crossovers=snap_design.crossovers,
+        overhangs=snap_design.overhangs,
         overhang_connections=snap_design.overhang_connections,
         extensions=snap_design.extensions,
         photoproduct_junctions=snap_design.photoproduct_junctions,

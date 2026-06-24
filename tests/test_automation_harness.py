@@ -153,11 +153,14 @@ def test_oxdna_coverage_report_separate_from_design_assembly():
     does NOT perturb the design/assembly coverage number."""
     from tests.automation_harness import oxdna_coverage_report
 
-    assert headless_coverage_report()["covered"] == 37  # /oxdna audit is separate
+    # AF-25 added seek_features (37→38); AF-26 added return_to_latest/select_loadout (38→39).
+    assert headless_coverage_report()["covered"] == 39  # /oxdna audit is separate
     ox = oxdna_coverage_report()
     assert ox["total"] == ox["covered"] + ox["uncovered"]
     covered = {r["endpoint"] for r in ox["covered_routes"]}
-    assert {"create_oxdna_job", "start_oxdna_job", "append_oxdna_production"} <= covered
+    # AF-26 added roll_oxdna_job_design (roll_job_to_run_state wraps it).
+    assert {"create_oxdna_job", "start_oxdna_job", "append_oxdna_production",
+            "roll_oxdna_job_design"} <= covered
 
 
 # ── The gear-ratio oracle PASSES on a real gear and FIRES otherwise ────────────

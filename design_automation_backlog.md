@@ -201,7 +201,27 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 > oracles to REAL-engine gated tests (importorskip oxpy + find_oxdna, CUDA where available), staged P1→P3, ahead of the
 > AF-12/13 stragglers. De-risked: engine + patch + binary + GPU all confirmed working this session.
 
-_Living pointer — each session overwrites this (step 8). **▶ AF-24 P1 SHIPPED 2026-06-23 — real-engine Tier-6
+_Living pointer — each session overwrites this (step 8). **▶ TIER 7 COMPLETE 2026-06-24 — "job/feature-log sync"
+DONE. AF-25 + AF-26 (backend + real e2e leg) all SHIPPED + verified. Full backend suite green (3123 passed / 64
+skipped); AF-26 e2e red→green proven in the real browser; smoke + panel vitest green.** Nothing committed (user
+hasn't asked). ▶ NEXT (new top of backlog): the AF-24 real-engine Tier-6 stragglers (P2/P3), then the AF-12/13
+text-to-design stragglers. Historical detail below.
+- AF-25: `seek_features` + `assert_feature_seek` (coverage 37→38). Oracle went RED first run → caught + FIXED a real
+  bug: `_topology_substitute` never rolled back the `overhangs` list on a seek (dangling overhang → wrong build
+  fingerprint).
+- AF-26 backend: `roll_job_to_run_state` + `return_to_latest` wrappers + `assert_roll_return_lifecycle` (full
+  simulate→edit→roll→return + 409 guard), pin `test_af26_roll_return_lifecycle_overhang_edit`. Coverage 38→39 + oxDNA 4→5.
+- **DIAGNOSIS:** the AF-26 backend oracle stays GREEN with the AF-25 fix reverted (the roll route's snapshot-overlay
+  fallback already clears the flag) → the live bug is the manual-seek path, whose fingerprint the AF-25 fix repaired.
+  Frontend wiring already refetches on seek (`seekFeatures`→`_syncFromDesignResponse`→`nadoc:design-changed`→panels
+  `_fetchJobs`), so the AF-25 one-liner is *likely* the root-cause fix — but UNPROVEN in-app.
+- **▶ NEXT (e2e leg, dev servers were up :8000/:5173):** a Playwright spec driving the real oxDNA/MD panel + Feature
+  Log rail (load → seed/relax a job → add an overhang → ⚠ appears → manual rail-seek back AND/OR "Roll & run" →
+  assert ⚠ clears + cursor/rail-thumb moves + scene rebuilds with the overhang gone). Made to go RED first by
+  reverting the `overhangs=snap_design.overhangs` line in `_topology_substitute`. Mirror `frontend/e2e/
+  feature_log_revert.spec.js`. GOTCHA: real-app job creation needs a (mock) oxDNA binary or a pre-seeded completed
+  job in the workspace — figure out the seeding path. Nothing committed (user hasn't asked).** Prior AF-24 pointer below.
+▶ AF-24 P1 SHIPPED 2026-06-23 — real-engine Tier-6
 equilibration-τ CONFIRMED; the relaxation-step-count bug is FIXED.** Root cause (full chain in the difficulties
 ledger): the AF Tier-6 builders inherited `create_job`'s MOCK-tuned defaults (mc=100/md_relax=100/equil=100 — 10⁴×
 too few md_relax steps), so the real engine dropped base-pairing and NEVER re-annealed. The metric, the export
@@ -1741,7 +1761,14 @@ mock-binary path (no GPU) for the backend legs. The browser GESTURES (the ⚠ ma
 the rail-drag visual, live-follows-the-rolled-design) are the very things failing hand-check → `MV-OXSTALE` /
 `MV-OXLIVEFIELD` (both PENDING/FAILING, not validated).
 
-- [ ] **AF-25 — headless feature-log SEEK wrapper + non-destructive-scrub oracle.** Route
+- [x] **AF-25 — headless feature-log SEEK wrapper + non-destructive-scrub oracle. SHIPPED 2026-06-24.**
+  `headless_build.seek_features(position, sub_position=None)` + `automation_harness.assert_feature_seek(seek_fn,
+  checkpoints)` (5 scrub invariants). Coverage 37→38. **The backend oracle did NOT pass first-run** — it went RED and
+  exposed a real bug: `crud._topology_substitute` never restored the `overhangs` list from the seek snapshot, so
+  seeking before an overhang-extrude left a dangling overhang → wrong `design_build_fingerprint` → the roll's
+  clean-path fingerprint check failed (consistent with "⚠ doesn't clear after a back-seek"). FIXED (one line:
+  `overhangs=snap_design.overhangs`). Full suite green. See `design_automation_log.md` AF-25 row. Original intake below.
+- [ ] **AF-25 (original intake) — headless feature-log SEEK wrapper + non-destructive-scrub oracle.** Route
   `POST /design/features/seek {position, sub_position}` EXISTS (`routes_feature_log.py`) + is UI-wired
   (`client.seekFeatures` → `feature_log_panel` rail), but has **no headless entry point** — so the design
   timeline can't be navigated programmatically, and the oxDNA/MD job-roll (which IS a feature-log seek) can't
@@ -1764,7 +1791,28 @@ the rail-drag visual, live-follows-the-rolled-design) are the very things failin
   route (frontend refetch/render), so do NOT stop at a green backend oracle: it's the prerequisite primitive,
   and AF-26 is where the real-flow red must be produced.
 
-- [ ] **AF-26 — headless job-staleness ROLL/RETURN lifecycle wrapper + the simulate→edit→roll→return oracle.**
+- [x] **AF-26 — SHIPPED 2026-06-24 (backend + real e2e leg). "job/feature-log sync" COMPLETE.** The Playwright
+  leg `frontend/e2e/job_log_sync.spec.js` drives the REAL oxDNA panel + a real overhang edit + a real feature-log
+  seek and asserts on the rendered DOM: the seeded job shows no ⚠ initially → ⚠ appears after the overhang edit →
+  **⚠ clears after the manual seek back + the model rolls (overhang gone, cursor at run position)**. Seeded GPU-free
+  via `tests/e2e_seed_af26.py` (completed job + matching .nadoc into the workspace; self-cleaning). Two minimal
+  panel testability hooks added (`data-job-id` on the row, `.oxdna-job-stale-warn` class). **CAN-GO-RED PROVEN in the
+  browser:** reverting the `overhangs=snap_design.overhangs` line in `_topology_substitute` makes the spec fail at the
+  post-seek assertion (⚠ stays) — the exact reported bug. Restored → green. smoke + panel vitest green. Also fixed:
+  the running dev backend was on stale code (pre-`design_fingerprint` OxdnaJob) and silently dropped fingerprinted
+  jobs — restarted it. Original intake below.
+- [~] **AF-26 — BACKEND LEG SHIPPED 2026-06-24; real end-to-end Playwright leg REMAINING.** Wrappers
+  `headless_oxdna_build.roll_job_to_run_state(job_id, workspace)` + `headless_build.return_to_latest(loadout_id)` +
+  `automation_harness.assert_roll_return_lifecycle(...)` driving the full simulate→edit→roll→return loop incl. the 409
+  guard, pinned by `test_oxdna_staleness.py::test_af26_roll_return_lifecycle_overhang_edit` (overhang edit). Coverage
+  38→39 (select_loadout) + oxDNA 4→5 (roll-design). **CONFIRMED the spec's prediction:** the backend oracle stays GREEN
+  even with the AF-25 fix reverted — `roll_active_to_job_state`'s snapshot-overlay fallback already clears the flag
+  backend-side, so the live bug is in the FRONTEND. **NEXT: the real Playwright e2e leg** over the actual oxDNA/MD
+  panel + Feature Log rail (load → relax → edit → ⚠ → Roll → assert ⚠ clears + cursor moves + model reverts; and the
+  manual rail-seek path), made to go RED on the running app first. NOTE: AF-25's `_topology_substitute` fix repaired the
+  backend half of the manual-seek path (seeked fingerprint now correct) — the e2e leg must determine whether the app's
+  refetch/rail-thumb/scene-rebuild still mis-renders. See `design_automation_log.md` AF-26 row. Original intake below.
+- [ ] **AF-26 (original intake) — headless job-staleness ROLL/RETURN lifecycle wrapper + the simulate→edit→roll→return oracle.**
   The whole "run a sim → edit the design → job goes out-of-date → roll the design back to the run state → run →
   return to latest" loop is the regression guard for the out-of-date feature (which originally crashed with an
   internal-server-error), but it's only validated in PIECES, never as one driven lifecycle. Routes EXIST:
