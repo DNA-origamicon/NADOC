@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
-import { initOxdnaLive, liveJobEligible, liveButtonState } from './oxdna_live_controller.js'
+import { initOxdnaLive, liveJobEligible, liveButtonState,
+         backendLabel, liveStatusLine, liveFallbackNotice } from './oxdna_live_controller.js'
 
 vi.mock('./toast.js', () => ({ showToast: vi.fn() }))
 vi.mock('../api/client.js', () => ({
@@ -49,6 +50,45 @@ describe('liveButtonState', () => {
   it('enabled when available + eligible job', () => {
     const s = liveButtonState({ available: true, job: { status: 'completed' } })
     expect(s.enabled).toBe(true)
+  })
+})
+
+describe('backendLabel', () => {
+  it('maps CUDA→GPU, CPU→CPU, unknown→empty', () => {
+    expect(backendLabel('CUDA')).toBe('GPU (CUDA)')
+    expect(backendLabel('CPU')).toBe('CPU')
+    expect(backendLabel(null)).toBe('')
+    expect(backendLabel(undefined)).toBe('')
+  })
+})
+
+describe('liveStatusLine', () => {
+  it('warming up before the first frame is ready', () => {
+    expect(liveStatusLine({ ready: false })).toMatch(/warming up/)
+  })
+  it('includes nt, burst count, and the active backend', () => {
+    expect(liveStatusLine({ ready: true, nPositions: 504, nBursts: 3, backend: 'CUDA' }))
+      .toBe('Live · 504 nt · 3 bursts stepped · GPU (CUDA)')
+  })
+  it('singularizes a single burst and omits an unknown backend', () => {
+    expect(liveStatusLine({ ready: true, nPositions: 100, nBursts: 1 }))
+      .toBe('Live · 100 nt · 1 burst stepped')
+  })
+})
+
+describe('liveFallbackNotice', () => {
+  it('fires once when the frame reports a GPU→CPU fallback', () => {
+    const msg = liveFallbackNotice({ backend_fell_back: true }, false)
+    expect(msg).toMatch(/GPU out of memory/)
+    expect(msg).toMatch(/fell back to CPU/)
+  })
+  it('suppressed once already shown', () => {
+    expect(liveFallbackNotice({ backend_fell_back: true }, true)).toBeNull()
+  })
+  it('null when no fallback occurred', () => {
+    expect(liveFallbackNotice({ backend_fell_back: false }, false)).toBeNull()
+    expect(liveFallbackNotice({}, false)).toBeNull()
+    expect(liveFallbackNotice(null, false)).toBeNull()
   })
 })
 

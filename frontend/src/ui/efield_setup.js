@@ -19,7 +19,7 @@
 
 import {
   DEFAULT_Q_EFF, fieldVpmToPn, pnToFieldVpm,
-  arrowLenForPn, pnForArrowLen, scaleVec, normalize, vecLen,
+  arrowLenForPn, pnForArrowLen, nmPerPnForN, scaleVec, normalize, vecLen,
   fieldColorHex, fieldZone,
 } from '../scene/efield_math.js'
 
@@ -31,7 +31,7 @@ function _fmtPn(p) {
   return n.toPrecision(4).replace(/\.?0+$/, '')
 }
 
-export function initEfieldSetup({ gizmo, onChange = null } = {}) {
+export function initEfieldSetup({ gizmo, onChange = null, getBaseCount = null } = {}) {
   const toggle = document.getElementById('efield-toggle')
   const arrow  = document.getElementById('efield-arrow')
   const bodyEl = document.getElementById('efield-body')
@@ -77,9 +77,14 @@ export function initEfieldSetup({ gizmo, onChange = null } = {}) {
     }
     return _dirFromInputs()
   }
+  // Arrow length ⇄ pN scale for THIS design: nm-per-pN grows ∝ base count, so the
+  // arrow encodes total force and a given drag is a smaller per-nt force on a big
+  // origami (finer control). Falls back to the flat constant with no geometry.
+  function _nmPerPn() { return nmPerPnForN(getBaseCount?.() ?? 0) }
+
   function _pushToGizmo() {
     if (!gizmo) return
-    gizmo.setVector(scaleVec(_dirFromInputs(), arrowLenForPn(_pN)))
+    gizmo.setVector(scaleVec(_dirFromInputs(), arrowLenForPn(_pN, _nmPerPn())))
     gizmo.setColor?.(fieldColorHex(_pN))           // absolute field-strength grade
   }
   function _syncInputsFromGizmo() {
@@ -136,7 +141,7 @@ export function initEfieldSetup({ gizmo, onChange = null } = {}) {
 
   // Gizmo drag → update magnitude (length) + direction inputs live.
   gizmo?.setOnChange?.((vec) => {
-    _pN = pnForArrowLen(vecLen(vec))
+    _pN = pnForArrowLen(vecLen(vec), _nmPerPn())
     gizmo.setColor?.(fieldColorHex(_pN))
     _syncInputsFromGizmo(); _syncVpm(); _renderReady()
   })

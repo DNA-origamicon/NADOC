@@ -1954,6 +1954,9 @@ async function main() {
     // Field changed (gizmo drag / input edit): refresh the anchor halo AND, if a
     // live session is running, re-aim its field so the structure follows live.
     onChange: () => { _refreshAnchorGlow(); oxdnaLive?.onFieldChanged?.() },
+    // Total base count → scales the arrow's force range so big origami get finer
+    // per-nt control (the arrow encodes total push; per-nt ∝ 1/N).
+    getBaseCount: () => store.getState().currentGeometry?.length || 0,
   })
   if (import.meta.env.DEV) window.__nadocEfield = { setup: efieldSetup, gizmo: efieldGizmo }
 

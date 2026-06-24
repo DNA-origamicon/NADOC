@@ -50,6 +50,29 @@ export function liveButtonState({ available, availReason, job }) {
   return { enabled: true, reason: 'Start a live, field-steerable oxDNA session (nothing is saved)' }
 }
 
+/** Pure: human label for the active compute backend ('CUDA'→GPU, 'CPU'→CPU). */
+export function backendLabel(backend) {
+  if (backend === 'CUDA') return 'GPU (CUDA)'
+  if (backend === 'CPU')  return 'CPU'
+  return ''
+}
+
+/** Pure: the running-status line, including the active backend when known. */
+export function liveStatusLine({ ready, nPositions = 0, nBursts = 0, backend = null } = {}) {
+  if (!ready) return 'Live session warming up…'
+  const eng = backendLabel(backend)
+  const on  = eng ? ` · ${eng}` : ''
+  return `Live · ${nPositions} nt · ${nBursts} burst${nBursts === 1 ? '' : 's'} stepped${on}`
+}
+
+/** Pure: one-shot GPU→CPU fallback popup text, or null. `shown` guards the
+ *  one-time alert so the per-frame poll doesn't spam it. */
+export function liveFallbackNotice(frame, shown) {
+  if (shown || !frame?.backend_fell_back) return null
+  return 'GPU out of memory — this design is too large for the GPU (or other GPU '
+       + 'jobs are using it), so the live session fell back to CPU (slower).'
+}
+
 export function initOxdnaLive({
   oxdnaDisplay = null, getSelectedJob = null, getRunElements = null,
 } = {}) {
@@ -66,6 +89,8 @@ export function initOxdnaLive({
   let _busy       = false      // start/stop in flight → ignore re-entrant clicks
   let _lastPush   = 0
   let _pushTimer  = null
+  let _backend    = null       // active compute backend ('CUDA' | 'CPU')
+  let _fellBack   = false      // GPU→CPU fallback popup already shown this session?
 
   function _setStatus(text, color = _C.dim) {
     if (statusEl) { statusEl.textContent = text; statusEl.style.color = color }
@@ -140,14 +165,18 @@ export function initOxdnaLive({
     }
     _sid = r.session_id
     _on = true
+    _backend = r.backend || null
+    _fellBack = false
     _setButton()
     // Live now owns the one bead overlay — tell the panel to clear its relaxed /
     // flex / trajectory overlays AND lock those toggles (isOn() is true now, so the
     // panel disables them).  Fires before the first polled frame is applied, so the
     // shared overlay is never fought over.
     window.dispatchEvent(new CustomEvent('nadoc:oxdna-live-start'))
-    _setStatus(hasField ? 'Live session running — drag the field to steer.'
-                        : 'Live session running.', _C.ok)
+    const eng = backendLabel(_backend)
+    const onEng = eng ? ` on ${eng}` : ''
+    _setStatus(hasField ? `Live session running${onEng} — drag the field to steer.`
+                        : `Live session running${onEng}.`, _C.ok)
     _schedulePoll(0)
   }
 
@@ -170,9 +199,17 @@ export function initOxdnaLive({
       stop()
       return
     }
+    // GPU→CPU fallback (out of memory): alert the user ONCE, then carry on on CPU.
+    const note = liveFallbackNotice(f, _fellBack)
+    if (note) {
+      _fellBack = true
+      showToast(note, { severity: 'warn', duration: 8000 })
+    }
+    if (f.backend) _backend = f.backend
     if (f.ready && Array.isArray(f.positions) && f.positions.length) {
       oxdnaDisplay?.displayLiveFrame?.(f.positions)
-      _setStatus(`Live · ${f.n_positions} nt · ${f.n_bursts} burst${f.n_bursts === 1 ? '' : 's'} stepped`, _C.ok)
+      _setStatus(liveStatusLine({ ready: true, nPositions: f.n_positions,
+                                  nBursts: f.n_bursts, backend: _backend }), _C.ok)
     } else {
       _setStatus('Live session warming up…', _C.accent)
     }

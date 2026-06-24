@@ -62,38 +62,75 @@ class _OxpyStepper:
             fmap = st.configuration(design)
     """
 
-    def __init__(self, rundir, *, input_name: str = "input"):
+    def __init__(self, rundir, *, input_name: str = "input", backend: str = "CPU",
+                 fallback_input: str = "input_cpu", _open_fn=None):
         self.rundir = Path(rundir)
         self.input_name = input_name
+        # ``backend`` is the backend the primary ``input`` was staged with. When it
+        # is "CUDA" and the open fails (no GPU init / out of memory), we retry on the
+        # pre-staged CPU input (``fallback_input``) and flag it for the UI.
+        self.backend = backend
+        self.fallback_input = fallback_input
+        self.active_backend = backend
+        self.fell_back = False
+        self.fallback_reason: str | None = None
+        self._open_fn = _open_fn or self._oxpy_open
         self._stack: contextlib.ExitStack | None = None
         self._mgr = None
         self._field = None
 
-    def __enter__(self) -> "_OxpyStepper":
+    def _oxpy_open(self, input_name: str):
+        """Open a real oxpy engine over ``rundir/input_name`` → ``(stack, mgr, field)``.
+
+        On any failure the half-opened oxpy ``Context`` is torn down before
+        re-raising, so a CUDA out-of-memory leaves no dangling GPU context for the
+        CPU retry."""
         import oxpy  # lazy — only a real session needs the engine
 
-        self._stack = contextlib.ExitStack()
-        self._stack.enter_context(oxpy.Context())
-        inp = oxpy.InputFile()
-        inp.init_from_filename(str(self.rundir / self.input_name))
-        # Absolute file paths so the run does not depend on the process cwd.
-        for key, fname in (
-            ("topology", "topology.top"),
-            ("conf_file", "conf.dat"),
-            ("external_forces_file", "field_forces.txt"),
-            ("lastconf_file", "last_conf.dat"),
-            ("trajectory_file", "trajectory.dat"),
-            ("energy_file", "energy.dat"),
-        ):
-            if key in inp:
-                inp[key] = str(self.rundir / fname)
-        self._mgr = oxpy.OxpyManager(inp)
-        ci = self._mgr.config_info()
-        # The uniform field is the single "string" force; anchors are "trap"s.  A
-        # run may carry NO field (anchors / hard surface / pure free dynamics only),
-        # in which case there is nothing to steer — set_field then no-ops.
-        strings = [f for f in ci.forces if f.type == "string"]
-        self._field = strings[0] if strings else None
+        stack = contextlib.ExitStack()
+        try:
+            stack.enter_context(oxpy.Context())
+            inp = oxpy.InputFile()
+            inp.init_from_filename(str(self.rundir / input_name))
+            # Absolute file paths so the run does not depend on the process cwd.
+            for key, fname in (
+                ("topology", "topology.top"),
+                ("conf_file", "conf.dat"),
+                ("external_forces_file", "field_forces.txt"),
+                ("lastconf_file", "last_conf.dat"),
+                ("trajectory_file", "trajectory.dat"),
+                ("energy_file", "energy.dat"),
+            ):
+                if key in inp:
+                    inp[key] = str(self.rundir / fname)
+            mgr = oxpy.OxpyManager(inp)
+            ci = mgr.config_info()
+            # The uniform field is the single "string" force; anchors are "trap"s. A
+            # run may carry NO field (anchors / hard surface / pure free dynamics
+            # only), in which case there is nothing to steer — set_field then no-ops.
+            strings = [f for f in ci.forces if f.type == "string"]
+            field = strings[0] if strings else None
+            return stack, mgr, field
+        except Exception:
+            stack.close()
+            raise
+
+    def __enter__(self) -> "_OxpyStepper":
+        self.fell_back = False
+        self.fallback_reason = None
+        self.active_backend = self.backend
+        try:
+            self._stack, self._mgr, self._field = self._open_fn(self.input_name)
+        except Exception as exc:  # noqa: BLE001 — retry CUDA→CPU, else re-raise
+            cpu_input = self.rundir / self.fallback_input
+            if self.backend != "CUDA" or not cpu_input.exists():
+                raise
+            # GPU init / out-of-memory: fall back to the pre-staged CPU input and
+            # flag it so the live runner can alert the user (popup).
+            self.fell_back = True
+            self.fallback_reason = f"{type(exc).__name__}: {exc}"
+            self.active_backend = "CPU"
+            self._stack, self._mgr, self._field = self._open_fn(self.fallback_input)
         return self
 
     def __exit__(self, *exc) -> bool:

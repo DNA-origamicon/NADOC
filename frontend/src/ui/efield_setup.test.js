@@ -159,3 +159,34 @@ describe('initEfieldSetup', () => {
     expect(api.getFieldSpec().enabled).toBe(false)
   })
 })
+
+// Sibling describe (its own setup — no flat `api` bound to the same DOM) so the
+// base-count scaling is the only handler on the gizmo/inputs.
+describe('initEfieldSetup — base-count-aware gizmo scaling', () => {
+  let els, gizmo
+  beforeEach(() => { els = mountIds(IDS); gizmo = makeGizmo() })
+  afterEach(() => clearDom())
+
+  it('arrow encodes total force: on a 10× design, 1 pN/nt is a 10× longer arrow', () => {
+    initEfieldSetup({ gizmo, getBaseCount: () => 10000 })   // 10× the 1000-nt reference
+    setInput(els['efield-mag'], '1')                        // 1 pN/nt
+    const v = gizmo.setVector.mock.calls.at(-1)[0]
+    // nm/pN = 4 × 10000/1000 = 40 → arrow = MIN(2) + 40·1 = 42 nm
+    expect(Math.hypot(...v)).toBeCloseTo(42, 6)
+  })
+
+  it('a fixed drag length yields a small per-nt force on a big design', () => {
+    const api = initEfieldSetup({ gizmo, getBaseCount: () => 10000 })
+    els['efield-toggle'].click()                            // open → gizmo active
+    gizmo._fireDrag([0, 40, 0])                             // 40 nm arrow drag
+    // pN = (40 − 2) / 40 ≈ 0.95 (vs 9.5 under the flat structure-blind mapping)
+    expect(api.getFieldSpec().field_pN).toBeCloseTo(0.95, 6)
+  })
+
+  it('no base count → flat behaviour unchanged (1 pN/nt = 6 nm arrow)', () => {
+    initEfieldSetup({ gizmo })                              // getBaseCount omitted
+    setInput(els['efield-mag'], '1')
+    const v = gizmo.setVector.mock.calls.at(-1)[0]
+    expect(Math.hypot(...v)).toBeCloseTo(6, 6)              // 2 + 4·1
+  })
+})

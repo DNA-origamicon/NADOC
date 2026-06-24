@@ -118,6 +118,12 @@ export function disruptPnFor(ctx) { return _pnForTension(EFIELD_ANCHOR_DISRUPT_P
 export const EFIELD_NM_PER_PN  = 4    // world nm of arrow per pN (structure-blind fallback)
 export const EFIELD_MIN_LEN_NM = 2    // floor so direction stays visible at 0 pN
 export const EFIELD_MAX_LEN_NM = 60   // cap so a huge field doesn't fill the scene
+// Base count at which the arrow keeps its structure-blind feel (full drag ≈ the
+// flat ~14.5 pN/nt). A PROPORTIONALITY ANCHOR, not a floor: nm-per-pN scales ∝ N
+// about this point, so a design 10× bigger gives 10× finer per-nt control — the
+// arrow encodes the TOTAL push on the structure (per-nt force ∝ 1/N). The precise
+// per-nt value is always set in the numeric box; this only shapes the drag feel.
+export const EFIELD_REF_NT = 1000
 
 const _clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x))
 
@@ -133,6 +139,22 @@ export function nmPerPnFor(ctx) {
   const dPn = disruptPnFor(ctx)
   if (!(dPn > 0)) return EFIELD_NM_PER_PN
   return _clamp((EFIELD_MAX_LEN_NM - EFIELD_MIN_LEN_NM) / dPn, 0.02, 1e6)
+}
+
+/**
+ * nm-of-arrow per pN scaled by the design's TOTAL base count `nTotal` — so the
+ * arrow encodes total force and the per-nt force for a given arrow length shrinks
+ * ∝ 1/N.  This is what gives fine per-nt control on large origami: at the
+ * reference size `EFIELD_REF_NT` it equals the flat constant; 10× the bases → 10×
+ * the nm/pN → 1/10 the per-nt force for the same drag.  No floor (scales at all
+ * sizes, per the design choice); falls back to the flat constant when `nTotal` is
+ * unknown (no geometry loaded).  Only base count is needed — the anchored-nt count
+ * (which `nmPerPnFor` uses) isn't known in the browser until a run is created.
+ */
+export function nmPerPnForN(nTotal) {
+  const N = _num(nTotal)
+  if (!(N > 0)) return EFIELD_NM_PER_PN
+  return _clamp(EFIELD_NM_PER_PN * (N / EFIELD_REF_NT), 0.02, 1e6)
 }
 
 /** Arrow world length (nm) for a force-per-nucleotide (pN). `nmPerPn` defaults to

@@ -251,8 +251,8 @@ def test_prepare_live_rundir_composes_elements(tmp_path):
 
     # (a) nothing enabled → free dynamics: empty forces, external_forces NOT set.
     rd0 = tmp_path / "free"
-    info0 = _prepare_live_rundir(d, seed, rd0, field=None, wall=None, anchors=[],
-                                 anchor_stiff=1000.0, steps=300)
+    info0, be0 = _prepare_live_rundir(d, seed, rd0, field=None, wall=None, anchors=[],
+                                      anchor_stiff=1000.0, steps=300, backend="CPU")
     assert info0["has_forces"] is False
     assert info0["n_anchored"] == 0
     assert "external_forces = true" not in (rd0 / "input").read_text()
@@ -260,11 +260,35 @@ def test_prepare_live_rundir_composes_elements(tmp_path):
 
     # (b) anchors only (no field) → traps written, external_forces on, no string force.
     rd1 = tmp_path / "anch"
-    info1 = _prepare_live_rundir(d, seed, rd1, field=None, wall=None, anchors=[anchor],
-                                 anchor_stiff=1000.0, steps=300)
+    info1, be1 = _prepare_live_rundir(d, seed, rd1, field=None, wall=None,
+                                      anchors=[anchor], anchor_stiff=1000.0, steps=300,
+                                      backend="CPU")
     assert info1["has_forces"] is True
     assert info1["n_anchored"] > 0
     forces = (rd1 / "field_forces.txt").read_text()
     assert "type = trap" in forces
     assert "type = string" not in forces            # no field
     assert "external_forces = true" in (rd1 / "input").read_text()
+
+
+def test_prepare_live_rundir_stages_cuda_with_cpu_fallback(tmp_path):
+    """A CUDA-backed live rundir stages a CUDA primary ``input`` AND a CPU
+    ``input_cpu`` for the GPU-OOM fallback path."""
+    from backend.api.crud import _geometry_for_design
+    from backend.api.routes_oxdna_live import _prepare_live_rundir
+    from backend.physics.oxdna_interface import write_configuration
+    from tests.test_headless_oxdna_build import _design_with_overhang_anchor
+
+    d, _dom = _design_with_overhang_anchor()
+    seed = tmp_path / "seed.dat"
+    write_configuration(d, _geometry_for_design(d, compact_skips=True), seed)
+
+    rd = tmp_path / "cuda"
+    _info, backend = _prepare_live_rundir(d, seed, rd, field=None, wall=None,
+                                          anchors=[], anchor_stiff=1000.0, steps=300,
+                                          backend="CUDA")
+    assert backend == "CUDA"
+    assert "backend = CUDA" in (rd / "input").read_text()
+    assert (rd / "input_cpu").exists()
+    assert "backend = CPU" in (rd / "input_cpu").read_text()
+    assert "CUDA" not in (rd / "input_cpu").read_text()

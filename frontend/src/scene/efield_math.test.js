@@ -8,8 +8,8 @@ import {
   buildFieldSpec, fieldSpecReady,
   fieldColorHex, fieldZone, EFIELD_PN_LOW, EFIELD_PN_GOOD, EFIELD_PN_DISRUPT,
   anchorAmplification, anchorTensionPn, safePnFor, disruptPnFor,
-  nmPerPnFor, fieldZoneFor, fieldColorForHex,
-  EFIELD_ANCHOR_SAFE_PN, EFIELD_ANCHOR_DISRUPT_PN,
+  nmPerPnFor, nmPerPnForN, fieldZoneFor, fieldColorForHex,
+  EFIELD_ANCHOR_SAFE_PN, EFIELD_ANCHOR_DISRUPT_PN, EFIELD_REF_NT,
 } from './efield_math.js'
 
 describe('force-unit conversions', () => {
@@ -263,5 +263,33 @@ describe('structure-aware drag scaling', () => {
     // more anchors → larger disrupt force → gentler (smaller) nm/pN scale
     expect(nmPerPnFor({ nTotal: 14774, nAnchored: 160 }))
       .toBeLessThan(nmPerPnFor({ nTotal: 14774, nAnchored: 16 }))
+  })
+})
+
+describe('base-count drag scaling (nmPerPnForN)', () => {
+  it('unknown / zero base count keeps the flat constant', () => {
+    expect(nmPerPnForN(0)).toBe(EFIELD_NM_PER_PN)
+    expect(nmPerPnForN(null)).toBe(EFIELD_NM_PER_PN)
+    expect(nmPerPnForN(undefined)).toBe(EFIELD_NM_PER_PN)
+  })
+
+  it('equals the flat constant at the reference base count', () => {
+    expect(nmPerPnForN(EFIELD_REF_NT)).toBeCloseTo(EFIELD_NM_PER_PN, 9)
+  })
+
+  it('scales nm/pN proportionally to base count (no floor)', () => {
+    // 10× the bases → 10× the nm/pN → 1/10 the per-nt force for the same arrow.
+    expect(nmPerPnForN(10 * EFIELD_REF_NT)).toBeCloseTo(10 * EFIELD_NM_PER_PN, 6)
+    // below the reference it keeps scaling down (no floor) — small designs coarser.
+    expect(nmPerPnForN(EFIELD_REF_NT / 4)).toBeCloseTo(EFIELD_NM_PER_PN / 4, 6)
+  })
+
+  it('a given arrow length gives a smaller per-nt force on a bigger design', () => {
+    const small = nmPerPnForN(1000)
+    const big   = nmPerPnForN(14774)        // VoltronCore
+    const lenNm = 30                         // same arrow drag on both
+    expect(pnForArrowLen(lenNm, big)).toBeLessThan(pnForArrowLen(lenNm, small))
+    // and round-trips with its own scale
+    expect(pnForArrowLen(arrowLenForPn(0.3, big), big)).toBeCloseTo(0.3, 6)
   })
 })

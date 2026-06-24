@@ -145,18 +145,26 @@ def _make_frame_builder(rundir: Path, design, design_ref: Path, anchor_keys):
 
 
 def _prepare_live_rundir(design, seed_conf, rundir, *, field, wall, anchors,
-                         anchor_stiff, steps):
+                         anchor_stiff, steps, backend=None):
     """Stage a temp live run dir composing any combination of an electric field, a
     hard surface, and anchor traps — the SAME proven writers the consolidated
     "Full Sim" run uses (:func:`write_run_forces` + :func:`build_run_stage`), so a
     live oxpy session runs the identical physics setup.  ``field`` /``wall`` are the
-    resolved element dicts (or None); ``anchors`` are anchor descriptors.  Returns
-    the :func:`write_run_forces` info dict (``anchor_keys`` / ``n_anchored`` /
-    ``field`` / ``wall`` / ``has_forces``)."""
+    resolved element dicts (or None); ``anchors`` are anchor descriptors.
+
+    The primary ``input`` is staged with ``backend`` (defaults to
+    :func:`preferred_backend` — CUDA when a GPU is present), and a CPU ``input_cpu``
+    is ALWAYS staged alongside so the stepper can fall back if the GPU run fails to
+    initialise (out of memory).  Returns ``(info, backend)`` — the
+    :func:`write_run_forces` info dict and the chosen primary backend."""
     import shutil
 
+    from backend.core.oxdna_live_backend import preferred_backend
     from backend.core.oxdna_protocol import build_run_stage, render_stage_input
     from backend.physics.oxdna_interface import write_run_forces, write_topology
+
+    if backend is None:
+        backend = preferred_backend()
 
     rundir.mkdir(parents=True, exist_ok=True)
     write_topology(design, rundir / "topology.top")
@@ -170,20 +178,25 @@ def _prepare_live_rundir(design, seed_conf, rundir, *, field, wall, anchors,
     efield_rec = None
     if info.get("field"):
         efield_rec = {"dir": info["field"]["dir"], "force_oxdna": info["field"]["force_oxdna"]}
-    spec = build_run_stage(
-        name="live_run", steps=steps,
-        external_forces=has_forces,
-        forces_file="field_forces.txt" if has_forces else None,
-        efield=efield_rec,
-        forces_meta={"has_field": bool(info.get("field")), "has_surface": bool(info.get("wall"))},
-        # repulsion plane / anchor traps are absolute-coordinate forces → disable
-        # oxDNA's COM diffusion-fix; a pure field (always anchored) is absolute too.
-        absolute_forces=bool(wall or anchors or info.get("field")),
-        backend="CPU", device="0")
-    (rundir / "input").write_text(render_stage_input(
-        spec, "topology.top", "conf.dat",
-        "field_forces.txt" if has_forces else None))
-    return info
+    forces_file = "field_forces.txt" if has_forces else None
+
+    def _render(be: str) -> str:
+        spec = build_run_stage(
+            name="live_run", steps=steps,
+            external_forces=has_forces, forces_file=forces_file, efield=efield_rec,
+            forces_meta={"has_field": bool(info.get("field")),
+                         "has_surface": bool(info.get("wall"))},
+            # repulsion plane / anchor traps are absolute-coordinate forces → disable
+            # oxDNA's COM diffusion-fix; a pure field (always anchored) is absolute too.
+            absolute_forces=bool(wall or anchors or info.get("field")),
+            backend=be, device="0")
+        return render_stage_input(spec, "topology.top", "conf.dat", forces_file)
+
+    (rundir / "input").write_text(_render(backend))
+    # Always stage a CPU fallback input (cheap) for the GPU-OOM retry path.
+    (rundir / "input_cpu").write_text(
+        _render("CPU") if backend != "CPU" else (rundir / "input").read_text())
+    return info, backend
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -245,7 +258,7 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
 
     sid = new_session_id()
     rundir = ws / "live_sessions" / sid
-    info = _prepare_live_rundir(
+    info, backend = _prepare_live_rundir(
         design, seed_conf, rundir, field=field_in, wall=wall_in, anchors=anchors,
         anchor_stiff=body.anchor_stiff, steps=body.burst_steps)
     # A field with a stale/unresolvable anchor selection (resolves to 0) would still
@@ -263,7 +276,8 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
     design_ref = rundir / "design_ref.dat"
     write_configuration(design, _geometry_for_design(design, compact_skips=True), design_ref)
 
-    engine = LiveOxdnaSession(design, anchor_keys, stepper=_OxpyStepper(rundir),
+    engine = LiveOxdnaSession(design, anchor_keys,
+                              stepper=_OxpyStepper(rundir, backend=backend),
                               field_dir=field_dir, field_oxdna=field_oxdna)
     live = LiveSession(
         sid, engine,
@@ -277,7 +291,8 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
     live.start()
     logger.info("start_oxdna_live: session=%s parent_job=%s field=%s surface=%s anchored=%d",
                 sid, body.job_id, bool(field_in), bool(wall_in), info["n_anchored"])
-    return {"session_id": sid, "status": live.status, "n_anchored": info["n_anchored"]}
+    return {"session_id": sid, "status": live.status,
+            "n_anchored": info["n_anchored"], "backend": backend}
 
 
 @router.post("/oxdna/live/{session_id}/field")

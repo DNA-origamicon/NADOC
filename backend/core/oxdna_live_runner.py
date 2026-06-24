@@ -167,6 +167,19 @@ class LiveSession:
                 None if field_dir is None else list(field_dir),
             )
 
+    def _backend_info(self) -> dict:
+        """Active backend + GPU→CPU fallback flags, read from the session's stepper
+        (a real :class:`~backend.physics.oxdna_live._OxpyStepper`).  Absent for the
+        GPU-free fake sessions used in unit tests → empty dict."""
+        stepper = getattr(self._session, "stepper", None)
+        if stepper is None:
+            return {}
+        return {
+            "backend": getattr(stepper, "active_backend", None),
+            "backend_fell_back": bool(getattr(stepper, "fell_back", False)),
+            "backend_reason": getattr(stepper, "fallback_reason", None),
+        }
+
     def frame(self) -> dict:
         """The latest captured configuration as a display payload (or not-ready)."""
         with self._lock:
@@ -178,6 +191,7 @@ class LiveSession:
                 "n_bursts": self._n_bursts,
                 "status": self.status,
                 "error": self.error,
+                **self._backend_info(),
             }
 
     def stop(self) -> None:
