@@ -668,6 +668,47 @@ def read_configuration_full(
     return result
 
 
+def configuration_full_from_particles(
+    particles,
+    design: Design,
+    *,
+    copies: bool = False,
+) -> dict[tuple, dict]:
+    """In-memory twin of :func:`read_configuration_full`: build the SAME
+    ``(helix_id, bp_index, direction) -> {backbone_position(nm), a1, a3}`` map
+    directly from live oxpy particles, skipping the ``print_configuration`` file
+    write + re-parse the file path pays every frame.
+
+    ``particles`` is ``config_info().particles()`` from a running ``OxpyManager``.
+    Particle order equals the topology order == ``_strand_nucleotide_order(design)``
+    (``write_topology`` emits nucleotides in exactly that order), so particle ``i``
+    is ``order[i]``.  Each particle exposes ``pos`` (centre of mass, oxDNA units) and
+    ``orientation`` — a 3×3 rotation matrix whose **column 0 is a1** (base-normal)
+    and **column 2 is a3** (5′→3′); both verified equal to the ``.dat`` a1/a3 to
+    ~1e-14.  Leading protein beads (hybrid DNANM) occupy the first particle indices,
+    mirrored by the same lead offset the file reader applies.  Output is byte-for-byte
+    equivalent to feeding ``read_configuration_full``'s result downstream (verified
+    end-to-end through the display unwrap to <1e-12 nm)."""
+    order = _strand_nucleotide_order(design)
+    offset = max(0, len(particles) - len(order))   # leading protein beads (hybrid)
+    result: dict[tuple, dict] = {}
+    for i, key in enumerate(order):
+        j = offset + i
+        if j >= len(particles):
+            break
+        p = particles[j]
+        pos_nm = np.asarray(p.pos, dtype=float) * OXDNA_LENGTH_UNIT
+        ori = np.asarray(p.orientation, dtype=float)
+        a1 = ori[:, 0]
+        a3 = ori[:, 2]
+        result[key if copies else key[:3]] = {
+            "backbone_position": pos_nm,
+            "a1": a1 / (np.linalg.norm(a1) + 1e-14),
+            "a3": a3 / (np.linalg.norm(a3) + 1e-14),
+        }
+    return result
+
+
 # oxDNA2 backbone-site offset from the centre of mass (model.h POS_MM_BACK1/2),
 # in oxDNA length units.  The .dat position is the CM; the backbone sits at
 # CM + POS_MM_BACK1·a1 + POS_MM_BACK2·a2 (a2 = a3 × a1).
@@ -742,6 +783,36 @@ def read_configuration_unwrapped(
                                      align_keys=align_keys, rotate=rotate, align=align)
 
 
+def _build_unwrap_adjacency(relax: dict[tuple, dict], design: Design) -> dict[tuple, list[tuple]]:
+    """Bond-adjacency for the unwrap BFS: backbone bonds + loop-copy ties + designed
+    WC pairs, over the keys present in *relax*.  Depends only on topology + the key
+    SET (constant for a given design/frame-shape), so a live session can build it
+    ONCE and pass it back via ``unwrap_align_to_reference(..., adj=…)`` instead of
+    rebuilding it every frame."""
+    adj: dict[tuple, list[tuple]] = {k: [] for k in relax}
+    for a, b in backbone_bond_pairs(design):
+        if a in relax and b in relax:
+            adj[a].append(b)
+            adj[b].append(a)
+    # Loop-insertion copies (4-tuple keys): tie each copy to its base 3-tuple (or the
+    # previous copy) so it joins the same connected component as its sibling.
+    for k in relax:
+        if len(k) == 4:
+            base = k[:3] if k[3] == 0 else (k[0], k[1], k[2], k[3] - 1)
+            if base in relax:
+                adj[k].append(base)
+                adj[base].append(k)
+    # WC pairs only between canonical 3-tuple nucleotides (copies are unpaired loop
+    # bases — keying them here would collide multiple copies onto one (h,bp)).
+    fwd = {(k[0], k[1]): k for k in relax if len(k) == 3 and k[2] == "FORWARD"}
+    rev = {(k[0], k[1]): k for k in relax if len(k) == 3 and k[2] == "REVERSE"}
+    for hb in set(fwd) & set(rev):
+        a, b = fwd[hb], rev[hb]
+        adj[a].append(b)
+        adj[b].append(a)
+    return adj
+
+
 def unwrap_align_to_reference(
     relax: dict[tuple, dict],
     ref:   dict[tuple, dict],
@@ -752,6 +823,7 @@ def unwrap_align_to_reference(
     rotate:     bool = True,
     align:      bool = True,
     extra_points: Optional[list] = None,
+    adj:        Optional[dict] = None,
 ):
     """In-memory core of read_configuration_unwrapped: BFS-unwrap each bonded
     component to whole, box-shift it toward its reference image, then superpose
@@ -767,30 +839,13 @@ def unwrap_align_to_reference(
     whole assembly.  ``rotate=False`` does a TRANSLATION-ONLY fit (match the subset
     centroid to its reference, no rotation), so a field-induced reorientation of
     the rest stays visible — the anchored region is a positional, not rotational,
-    reference."""
-    # Adjacency: backbone bonds + designed WC pairs (3-tuple keys present in relax).
-    adj: dict[tuple, list[tuple]] = {k: [] for k in relax}
-    for a, b in backbone_bond_pairs(design):
-        if a in relax and b in relax:
-            adj[a].append(b)
-            adj[b].append(a)
-    # Loop-insertion copies (4-tuple keys, copies=True): tie each copy to its base
-    # 3-tuple (or the previous copy) so it joins the same connected component as its
-    # sibling and rides the same unwrap/box-shift/superpose transform.
-    for k in relax:
-        if len(k) == 4:
-            base = k[:3] if k[3] == 0 else (k[0], k[1], k[2], k[3] - 1)
-            if base in relax:
-                adj[k].append(base)
-                adj[base].append(k)
-    # WC pairs only between the canonical 3-tuple nucleotides (copies are unpaired
-    # loop bases — keying them here would collide multiple copies onto one (h,bp)).
-    fwd = {(k[0], k[1]): k for k in relax if len(k) == 3 and k[2] == "FORWARD"}
-    rev = {(k[0], k[1]): k for k in relax if len(k) == 3 and k[2] == "REVERSE"}
-    for hb in set(fwd) & set(rev):
-        a, b = fwd[hb], rev[hb]
-        adj[a].append(b)
-        adj[b].append(a)
+    reference.
+
+    ``adj`` may be a precomputed bond-adjacency (:func:`_build_unwrap_adjacency`);
+    when omitted it is built here.  A live session passes a cached one so the
+    constant topology graph is not rebuilt every frame."""
+    if adj is None:
+        adj = _build_unwrap_adjacency(relax, design)
 
     placed: dict[tuple, np.ndarray] = {}
     for seed in relax:

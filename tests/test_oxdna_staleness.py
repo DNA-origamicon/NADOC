@@ -1,0 +1,235 @@
+"""Out-of-date oxDNA job detection: design fingerprint, the stale guard, and the
+non-destructive feature-log roll (seek).  GPU-free — no oxDNA binary needed (the
+guard fires before any binary use)."""
+
+from __future__ import annotations
+
+import pytest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+
+import backend.api.routes_oxdna as routes_oxdna
+from backend.api import state as design_state
+# Module-level (collection time) so the app is built with the REAL routers before any
+# test that swaps a fake fastapi into sys.modules (test_md_milestone1) runs.
+from backend.api.main import app
+from backend.core.models import ClusterRigidTransform, DeformationLogEntry
+from backend.core.oxdna_job import OxdnaStatus, new_oxdna_job
+from backend.core.oxdna_staleness import (
+    effective_feature_log_position,
+    job_out_of_date,
+    oxdna_design_fingerprint,
+)
+from tests.conftest import make_6hb_design
+
+
+@pytest.fixture(autouse=True)
+def _clean_default_doc():
+    """These tests set the DEFAULT document's active design (the TestClient routes
+    read it).  Reset any leaked doc-context contextvar to the default doc first (so
+    set_design and the routes agree), and drop the design afterwards so they never
+    leak an active design into the shared state (headless oxDNA tests assume a clean
+    default doc)."""
+    from backend.api import doc_context
+    doc_context.set_current_doc(None)
+    yield
+    design_state.drop_doc(doc_context.DEFAULT_DOC_ID)
+
+
+# ── Fingerprint ───────────────────────────────────────────────────────────────
+
+def test_fingerprint_deterministic():
+    d = make_6hb_design()
+    assert oxdna_design_fingerprint(d) == oxdna_design_fingerprint(d)
+
+
+def test_fingerprint_changes_on_topology_edit():
+    d = make_6hb_design()
+    fp = oxdna_design_fingerprint(d)
+    edited = d.copy_with(strands=d.strands[:-1])   # remove a strand → different build
+    assert oxdna_design_fingerprint(edited) != fp
+
+
+def test_fingerprint_ignores_display_only_fields():
+    """A cluster repositioning (display layer) or feature-log cursor move must NOT
+    mark a job stale — only structure/sequence/geometry does."""
+    d = make_6hb_design()
+    fp = oxdna_design_fingerprint(d)
+    moved_cluster = d.copy_with(
+        cluster_transforms=[ClusterRigidTransform(translation=[10.0, 0.0, 0.0])])
+    assert oxdna_design_fingerprint(moved_cluster) == fp
+    cursor_moved = d.copy_with(feature_log_cursor=3)
+    assert oxdna_design_fingerprint(cursor_moved) == fp
+
+
+# ── Feature-log roll position ─────────────────────────────────────────────────
+
+def test_effective_feature_log_position():
+    d = make_6hb_design()
+    assert effective_feature_log_position(d.copy_with(feature_log=[])) is None
+    log = [DeformationLogEntry(deformation_id=f"x{i}") for i in range(3)]
+    assert effective_feature_log_position(d.copy_with(feature_log=log, feature_log_cursor=-1)) == 2
+    assert effective_feature_log_position(d.copy_with(feature_log=log, feature_log_cursor=1)) == 1
+
+
+# ── out-of-date comparison ────────────────────────────────────────────────────
+
+def test_job_out_of_date_comparison():
+    assert job_out_of_date("a", "b") is True
+    assert job_out_of_date("a", "a") is False
+    assert job_out_of_date(None, "a") is False   # unknown → never blocked
+    assert job_out_of_date("a", None) is False
+
+
+# ── Guard helper + routes ─────────────────────────────────────────────────────
+
+def test_assert_job_current_raises_409_when_stale(monkeypatch, tmp_path):
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    d = make_6hb_design()
+    design_state.set_design(d)
+
+    stale = new_oxdna_job("d", [], design_fingerprint="not-the-current-fp")
+    with pytest.raises(HTTPException) as ei:
+        routes_oxdna._assert_job_current(stale)
+    assert ei.value.status_code == 409
+    assert "design has changed" in ei.value.detail.lower()
+
+    fresh = new_oxdna_job("d", [], design_fingerprint=oxdna_design_fingerprint(d))
+    routes_oxdna._assert_job_current(fresh)   # matching fingerprint → no raise
+
+
+def test_production_refused_when_design_changed(monkeypatch, tmp_path):
+
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(routes_oxdna, "find_oxdna", lambda: "/fake/oxDNA")
+    monkeypatch.setattr(routes_oxdna, "start_job", lambda *a, **k: None)
+
+    design_state.set_design(make_6hb_design())
+    job = new_oxdna_job("d", [], design_fingerprint="stale-fp")
+    job.status = OxdnaStatus.completed
+    job.save(tmp_path)
+
+    r = TestClient(app).post(f"/api/oxdna/jobs/{job.job_id}/production", json={"steps": 1000})
+    assert r.status_code == 409
+    assert "design has changed" in r.json()["detail"].lower()
+
+
+def test_list_route_flags_out_of_date(monkeypatch, tmp_path):
+
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    d = make_6hb_design()
+    design_state.set_design(d)
+    fp = oxdna_design_fingerprint(d)
+
+    fresh = new_oxdna_job("d", [], design_fingerprint=fp)
+    fresh.status = OxdnaStatus.completed
+    fresh.save(tmp_path)
+    stale = new_oxdna_job("d", [], design_fingerprint="deadbeef")
+    stale.status = OxdnaStatus.completed
+    stale.save(tmp_path)
+
+    by_id = {j["job_id"]: j for j in TestClient(app).get("/api/oxdna/jobs").json()}
+    assert by_id[fresh.job_id]["out_of_date"] is False
+    assert by_id[stale.job_id]["out_of_date"] is True
+
+
+# ── Roll to a job's exact state (restore snapshot, not seek) ──────────────────
+
+def test_roll_design_restores_snapshot_and_clears_out_of_date(monkeypatch, tmp_path):
+    """The reported bug: out-of-date must CLEAR after rolling to the job's state — even
+    when the state includes sequences.  This is the OLD-job fallback: a job with no
+    recorded feature-log position can't be seeked, so `roll-design` overlays the job's
+    exact snapshot (fingerprint re-matches, edits preserved on the return loadout)."""
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+
+    # The design the job ran at — with sequences assigned (NOT a feature-log snapshot).
+    relaxed = make_6hb_design()
+    for s in relaxed.strands:
+        s.sequence = "ACGT"
+    job_fp = oxdna_design_fingerprint(relaxed)
+
+    job = new_oxdna_job("6hb", [], design_fingerprint=job_fp)
+    job.status = OxdnaStatus.completed
+    job.save(tmp_path)
+    (job.job_dir(tmp_path) / "design.json").write_text(relaxed.model_dump_json())
+
+    # The user then edits the design (clears sequences) → job is out of date.
+    edited = relaxed.model_copy(deep=True)
+    for s in edited.strands:
+        s.sequence = ""
+    design_state.set_design(edited)
+    c = TestClient(app)
+    assert c.get(f"/api/oxdna/jobs/{job.job_id}").json()["out_of_date"] is True
+
+    # Roll to the job's state → restores the sequenced snapshot, clears the flag.
+    r = c.post(f"/api/oxdna/jobs/{job.job_id}/roll-design")
+    assert r.status_code == 200, r.text
+    assert r.json().get("return_loadout_id")                       # later work saved as a branch
+    restored = design_state.get_or_404()
+    assert all(s.sequence == "ACGT" for s in restored.strands)     # sequences came back
+    assert oxdna_design_fingerprint(restored) == job_fp
+    assert c.get(f"/api/oxdna/jobs/{job.job_id}").json()["out_of_date"] is False   # ⚠ cleared
+
+    # Return to latest (select the branch WITHOUT saving the rolled state over it)
+    # restores the edited (cleared) state.
+    rid = r.json()["return_loadout_id"]
+    assert c.post(f"/api/design/loadouts/{rid}/select?save_current=false").status_code == 200
+    back = design_state.get_or_404()
+    assert all(not s.sequence for s in back.strands)
+
+
+def test_assign_sequences_are_feature_log_steps(tmp_path):
+    """Sequence assignment is now a feature-log entry, so a seek (incl. a job roll)
+    reproduces the sequenced state instead of dropping it."""
+    design_state.set_design(make_6hb_design())
+    c = TestClient(app)
+    assert c.post("/api/design/assign-scaffold-sequence", json={"scaffold_name": "M13mp18"}).status_code == 200
+    assert c.post("/api/design/assign-staple-sequences").status_code == 200
+    kinds = [getattr(e, "op_kind", None) for e in design_state.get_or_404().feature_log]
+    assert "assign-scaffold-sequence" in kinds
+    assert "assign-staple-sequences" in kinds
+
+
+def test_roll_seeks_feature_log_cursor_and_keeps_full_log(monkeypatch, tmp_path):
+    """The reported fix: Roll & run SEEKS the feature-log cursor to the job's position
+    (visible in the Feature Log tab) instead of replacing the log — the full log is
+    kept, later entries become inactive, the model reverts to the job's state, and the
+    user can seek forward again."""
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+
+    design_state.set_design(make_6hb_design())
+    c = TestClient(app)
+    c.post("/api/design/assign-scaffold-sequence", json={"scaffold_name": "M13mp18"})
+    c.post("/api/design/assign-staple-sequences")
+    d = design_state.get_or_404()
+    pos = effective_feature_log_position(d)             # the job runs at this log position
+    seqs_at_job = [s.sequence for s in d.strands]
+
+    job = new_oxdna_job("t", [], design_fingerprint=oxdna_design_fingerprint(d),
+                        feature_log_position=pos)
+    job.status = OxdnaStatus.completed
+    job.save(tmp_path)
+    (job.job_dir(tmp_path) / "design.json").write_text(d.model_dump_json())
+
+    # A NEW logged op after the job (re-assign a different scaffold) → diverged + stale.
+    c.post("/api/design/assign-scaffold-sequence", json={"custom_sequence": "ACGT" * 2000})
+    full_len = len(design_state.get_or_404().feature_log)
+    assert full_len > pos + 1
+    assert c.get(f"/api/oxdna/jobs/{job.job_id}").json()["out_of_date"] is True
+
+    # Roll: SEEK the cursor to the job position — full log kept, model reverts.
+    r = c.post(f"/api/oxdna/jobs/{job.job_id}/roll-design")
+    assert r.status_code == 200, r.text
+    rolled = design_state.get_or_404()
+    assert len(rolled.feature_log) == full_len          # FULL log preserved (not truncated)
+    assert rolled.feature_log_cursor == pos             # cursor seeked to the job position
+    assert [s.sequence for s in rolled.strands] == seqs_at_job   # model == the job's state
+    assert c.get(f"/api/oxdna/jobs/{job.job_id}").json()["out_of_date"] is False
+
+    # The user can seek forward in the Feature Log tab to return to the latest edit.
+    assert c.post("/api/design/features/seek", json={"position": -1}).status_code == 200
+    assert [s.sequence for s in design_state.get_or_404().strands] != seqs_at_job

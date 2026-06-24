@@ -119,6 +119,32 @@ def _scratch_design(design: Design):
         design_state.drop_doc(doc_id)
 
 
+@contextlib.contextmanager
+def _scratch_job_design(job_id: str, workspace):
+    """Scope a job's frozen snapshot design as the active design while a route runs.
+
+    The oxDNA staleness guard (``routes_oxdna._assert_job_current``) refuses a
+    live/production run when the CURRENT active design diverges from the job — a UI
+    safeguard.  In headless automation there is no UI design; a field/production run
+    logically operates on the job's OWN design, so bind that as the active design for
+    the call (matching fingerprint → guard passes), instead of leaving whatever
+    happens to be in the default document to trip it.  No snapshot (legacy job) → no
+    scope (the guard no-ops on an unknown fingerprint)."""
+    snap = None
+    try:
+        from backend.core.oxdna_job import OxdnaJob
+        from backend.core.oxdna_runner import _load_snapshot_design
+        job = OxdnaJob.load(job_id, Path(workspace))
+        snap = _load_snapshot_design(job.job_dir(Path(workspace)))
+    except Exception:
+        snap = None
+    if snap is None:
+        yield
+    else:
+        with _scratch_design(snap):
+            yield
+
+
 # ── Route-driving wrappers ────────────────────────────────────────────────────
 
 def create_job(
@@ -176,7 +202,7 @@ def start_relaxation(job_id: str, workspace) -> dict:
 def append_production(job_id: str, workspace, *, steps: int = 1000) -> dict:
     """Append an unbiased MD production stage to a completed job (mirrors
     ``POST /oxdna/jobs/{id}/production``).  Continues from the relaxed structure."""
-    with _use_workspace(workspace):
+    with _use_workspace(workspace), _scratch_job_design(job_id, workspace):
         return asyncio.run(
             _route_append_production(job_id, ProductionRequest(steps=steps))
         )
@@ -188,7 +214,7 @@ def append_field(job_id: str, workspace, *, field_pN: float, dir, anchors: list[
     ``POST /oxdna/jobs/{id}/field``).  ``anchors`` are descriptors resolved to
     pinned nucleotides (e.g. ``{'kind':'domain','strand_id':…,'domain_index':0}``
     or ``{'kind':'overhang','id':…}``)."""
-    with _use_workspace(workspace):
+    with _use_workspace(workspace), _scratch_job_design(job_id, workspace):
         return asyncio.run(_route_append_field(job_id, FieldRequest(
             field_pN=field_pN, dir=list(dir), anchors=anchors,
             steps=steps, anchor_stiff=anchor_stiff)))

@@ -97,6 +97,15 @@ class OxdnaJob:
     # ``surface`` = {dir, offset_nm, stiff}|None; ``anchors`` = frontend descriptors
     # (camelCase) so the Anchors card can re-render its chips verbatim.
     run_config:          Optional[dict]          = None
+    # Out-of-date detection.  ``design_fingerprint`` is a content hash of the
+    # design's oxDNA-build-relevant fields at creation (see
+    # ``backend.core.oxdna_staleness``); if the current design's fingerprint differs,
+    # the job is stale and live/production would resolve current selections against
+    # this job's frozen topology and crash.  ``feature_log_position`` is the design's
+    # last-active feature-log index at creation — the point to non-destructively roll
+    # the feature log back to so the job becomes runnable again (None = no log).
+    design_fingerprint:  Optional[str]           = None
+    feature_log_position: Optional[int]          = None
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -139,6 +148,8 @@ class OxdnaJob:
         data.setdefault("run_config", None)
         data.setdefault("max_relax_retries", 3)
         data.setdefault("relax_retries", 0)
+        data.setdefault("design_fingerprint", None)
+        data.setdefault("feature_log_position", None)
         return cls(**data)
 
     @classmethod
@@ -174,6 +185,8 @@ def new_oxdna_job(
     efield: Optional[dict] = None,
     run_config: Optional[dict] = None,
     max_relax_retries: int = 3,
+    design_fingerprint: Optional[str] = None,
+    feature_log_position: Optional[int] = None,
 ) -> OxdnaJob:
     return OxdnaJob(
         job_id             = uuid.uuid4().hex[:12],
@@ -190,4 +203,6 @@ def new_oxdna_job(
         efield             = efield,
         run_config         = run_config,
         max_relax_retries  = max_relax_retries,
+        design_fingerprint = design_fingerprint,
+        feature_log_position = feature_log_position,
     )

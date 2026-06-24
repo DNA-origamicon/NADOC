@@ -144,6 +144,57 @@ def _load_job(job_id: str) -> MdJob:
         raise HTTPException(500, f"Failed to load job {job_id}: {exc}")
 
 
+# ── Out-of-date detection (design edited after an MD job was prepared) ─────────
+_MD_DERIVED_FP_CACHE: dict[str, str] = {}
+
+
+def _md_snapshot_design(job: MdJob):
+    """The exact design this MD job was prepared from (its frozen design.json), or
+    None for a job that predates snapshot-saving."""
+    p = job.job_dir(_workspace()) / "design.json"
+    if not p.exists():
+        return None
+    from backend.core.models import Design
+    try:
+        return Design.model_validate_json(p.read_text())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _md_job_fingerprint(job: MdJob) -> "str | None":
+    if job.design_fingerprint:
+        return job.design_fingerprint
+    cached = _MD_DERIVED_FP_CACHE.get(job.job_id)
+    if cached is not None:
+        return cached
+    snap = _md_snapshot_design(job)
+    if snap is None:
+        return None
+    from backend.core.oxdna_staleness import design_build_fingerprint
+    fp = design_build_fingerprint(snap)
+    _MD_DERIVED_FP_CACHE[job.job_id] = fp
+    return fp
+
+
+def _md_job_out_of_date(job: MdJob, current_fp: "str | None") -> bool:
+    from backend.core.oxdna_staleness import job_out_of_date
+    return job_out_of_date(_md_job_fingerprint(job), current_fp)
+
+
+def _assert_md_job_current(job: MdJob) -> None:
+    """Refuse (409) running production/start on a job whose design has changed since
+    it was prepared (mirrors the oxDNA guard); the frontend turns it into the roll
+    popup."""
+    from backend.core.oxdna_staleness import (
+        current_active_design_fingerprint, job_out_of_date)
+    if job_out_of_date(_md_job_fingerprint(job), current_active_design_fingerprint()):
+        raise HTTPException(
+            409,
+            "The design has changed since this MD job was prepared. Roll the design "
+            "back to the job's run state, or prepare a new MD run, first.",
+        )
+
+
 def _jsonl_records(path: Path) -> list[dict]:
     if not path.exists():
         return []
@@ -935,6 +986,17 @@ async def _prepare_job_bg(
                 job.prep_params = pp
                 job.save(ws)
 
+        # Persist the EXACT design this run is prepared from + its out-of-date
+        # fingerprint, so a later design edit flags the job and "Roll & run" can
+        # restore this exact state (mirrors oxDNA).
+        from backend.core.oxdna_staleness import (
+            design_build_fingerprint, effective_feature_log_position)
+        (job_dir / "design.json").write_text(local_design.model_dump_json())
+        job = MdJob.load(job_id, ws)
+        job.design_fingerprint = design_build_fingerprint(local_design)
+        job.feature_log_position = effective_feature_log_position(local_design)
+        job.save(ws)
+
         prepare = (
             prepare_equilibrium_aware_namd
             if body.protocol == EQUILIBRIUM_AWARE_PROTOCOL
@@ -1018,17 +1080,26 @@ def _backfill_failure_kind(job: MdJob) -> None:
 
 @router.get("/md/jobs")
 async def list_md_jobs() -> list[dict]:
+    from backend.core.oxdna_staleness import current_active_design_fingerprint
     jobs = MdJob.list_jobs(_workspace())
     jobs = [reconcile_job_status(j, _workspace()) for j in jobs]
+    current_fp = current_active_design_fingerprint()
+    out: list[dict] = []
     for j in jobs:
         _backfill_failure_kind(j)
-    return [j.to_dict() for j in jobs]
+        d = j.to_dict()
+        d["out_of_date"] = _md_job_out_of_date(j, current_fp)
+        out.append(d)
+    return out
 
 
 @router.get("/md/jobs/{job_id}")
 async def get_md_job(job_id: str) -> dict:
+    from backend.core.oxdna_staleness import current_active_design_fingerprint
     job = _load_job(job_id)
-    return job.to_dict()
+    d = job.to_dict()
+    d["out_of_date"] = _md_job_out_of_date(job, current_active_design_fingerprint())
+    return d
 
 
 @router.get("/md/jobs/{job_id}/display")
@@ -1094,6 +1165,7 @@ async def append_md_production(job_id: str, body: ProductionRequest) -> dict:
     job = _load_job(job_id)
     if is_running(job_id) or job.status in (MdStatus.running, MdStatus.preparing):
         raise HTTPException(400, "Cannot append production while the job is running")
+    _assert_md_job_current(job)
     total_steps, length_ns = _production_steps_and_ns(body)
     segments = _append_production_segments(
         job,
@@ -1113,6 +1185,21 @@ async def append_md_production(job_id: str, body: ProductionRequest) -> dict:
         "length_ns": length_ns,
         "autostart": body.autostart,
     }
+
+
+@router.post("/md/jobs/{job_id}/roll-design")
+async def roll_md_job_design(job_id: str) -> dict:
+    """Restore the design to the EXACT state this MD job was prepared from (its frozen
+    snapshot), saving the current edits as a "Return to latest" loadout branch — so a
+    stale job's ⚠ clears and the trajectory display matches the structure again."""
+    from backend.api.crud import roll_active_to_job_state
+
+    job = _load_job(job_id)
+    design = _md_snapshot_design(job)
+    if design is None:
+        raise HTTPException(400, "This MD job has no saved design snapshot to roll back to.")
+    name = job.design_name or "this job"
+    return roll_active_to_job_state(design, job.feature_log_position, f"Latest — before viewing {name}")
 
 
 @router.post("/md/jobs/{job_id}/start")

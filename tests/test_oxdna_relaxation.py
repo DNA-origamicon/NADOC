@@ -2755,6 +2755,67 @@ def test_unwrap_anchor_positional_no_rotation():
     assert np.allclose(out[kF]["a1"], [1, 0, 0])
 
 
+class _FakeParticle:
+    """Minimal oxpy-particle stand-in: exposes .pos (CM, oxDNA units) and
+    .orientation (3×3 whose columns 0/2 are a1/a3) — the surface
+    configuration_full_from_particles reads."""
+
+    def __init__(self, pos, orientation):
+        self.pos = pos
+        self.orientation = orientation
+
+
+def test_configuration_full_from_particles_matches_file_readout(design, geometry, tmp_path):
+    """The in-memory live readout (#2) must reproduce read_configuration_full's map
+    byte-for-byte: same (helix,bp,dir) keys, a1 = orientation col 0, a3 = col 2, and
+    pos in nm (oxDNA units × length unit).  Built GPU-free from a written conf."""
+    from backend.physics.oxdna_interface import (
+        OXDNA_LENGTH_UNIT, _strand_nucleotide_order, configuration_full_from_particles,
+        read_configuration_full, write_configuration)
+
+    conf = tmp_path / "c.dat"
+    write_configuration(design, geometry, conf, box_nm=80.0)
+    file_map = read_configuration_full(conf, design)
+
+    # Synthesize particles in topology order; orientation columns = [a1, a2, a3].
+    order = _strand_nucleotide_order(design)
+    parts = []
+    for key in order:
+        v = file_map[key[:3]]
+        a1, a3 = np.asarray(v["a1"]), np.asarray(v["a3"])
+        a2 = np.cross(a3, a1)
+        ori = np.column_stack([a1, a2, a3])
+        parts.append(_FakeParticle(np.asarray(v["backbone_position"]) / OXDNA_LENGTH_UNIT, ori))
+
+    mem_map = configuration_full_from_particles(parts, design)
+    assert set(mem_map) == set(file_map)
+    for k in file_map:
+        assert np.allclose(mem_map[k]["backbone_position"], file_map[k]["backbone_position"], atol=1e-9)
+        assert np.allclose(mem_map[k]["a1"], file_map[k]["a1"], atol=1e-9)
+        assert np.allclose(mem_map[k]["a3"], file_map[k]["a3"], atol=1e-9)
+
+
+def test_unwrap_precomputed_adj_matches_builtin(design, geometry, tmp_path):
+    """The cached-adjacency path (#3) must produce the identical unwrap as building
+    the graph inline — so a live session can reuse one graph across frames."""
+    from backend.physics.oxdna_interface import (
+        _build_unwrap_adjacency, read_configuration_full, unwrap_align_to_reference,
+        write_configuration)
+
+    conf = tmp_path / "c.dat"
+    write_configuration(design, geometry, conf, box_nm=80.0)
+    relax = read_configuration_full(conf, design)
+    ref = read_configuration_full(conf, design)
+    box = np.array([80.0, 80.0, 80.0])
+
+    adj = _build_unwrap_adjacency(relax, design)
+    builtin = unwrap_align_to_reference(relax, ref, design, box)
+    cached = unwrap_align_to_reference(relax, ref, design, box, adj=adj)
+    assert set(builtin) == set(cached)
+    for k in builtin:
+        assert np.allclose(builtin[k]["backbone_position"], cached[k]["backbone_position"], atol=1e-12)
+
+
 def test_field_display_aligns_to_design_not_drifted_seed(design, geometry, monkeypatch, tmp_path):
     """A field run's display must anchor onto the DESIGN geometry (origin frame),
     NOT the job's conf.dat — which is the relaxation-drifted seed.  A seed shifted

@@ -43,6 +43,7 @@ class _FakeEngine:
         self.exited = False
         self.field_calls: list[tuple] = []
         self.runs: list[int] = []
+        self.snapshots = 0
         self._lock = threading.Lock()
 
     def __enter__(self):
@@ -52,6 +53,10 @@ class _FakeEngine:
     def __exit__(self, *exc):
         self.exited = True
         return False
+
+    def snapshot_seed(self):
+        with self._lock:
+            self.snapshots += 1
 
     def set_field(self, *, field_oxdna=None, field_dir=None):
         with self._lock:
@@ -99,6 +104,33 @@ def test_live_session_set_field_applied_live():
     finally:
         live.stop()
     assert (0.2, [0, 0, 1]) in eng.field_calls
+
+
+def test_live_session_reconfigure_swaps_engine_seamlessly():
+    """A queued reconfigure snapshots the current pose on the OLD engine, tears it
+    down, builds + enters the NEW engine, sets its field, and keeps stepping — the
+    worker swaps engine + frame builder mid-loop."""
+    eng1 = _FakeEngine()
+    eng2 = _FakeEngine()
+    live = LiveSession("rc", eng1, frame_builder=lambda e: [{"id": id(e)}],
+                       field_oxdna=0.05, field_dir=[1, 0, 0], burst_steps=5)
+    live.start()
+    try:
+        _wait(lambda: live.frame()["n_bursts"] >= 1)
+        assert live.frame()["positions"] == [{"id": id(eng1)}]   # eng1's builder
+
+        live.reconfigure(lambda: (eng2, lambda e: [{"id": id(e)}]),
+                         field_oxdna=0.2, field_dir=[0, 0, 1])
+        # The swap: old snapshotted + closed, new entered + field set, frames from eng2.
+        _wait(lambda: eng2.entered and live.frame()["positions"] == [{"id": id(eng2)}])
+        assert eng1.snapshots == 1                                # current pose dumped
+        assert eng1.exited is True                               # old engine torn down
+        assert (0.2, [0, 0, 1]) in eng2.field_calls             # field applied to new
+        n0 = live.frame()["n_bursts"]
+        _wait(lambda: live.frame()["n_bursts"] > n0)            # keeps stepping on eng2
+    finally:
+        live.stop()
+    assert eng2.exited is True
 
 
 def test_frame_builder_error_does_not_kill_loop():
@@ -176,6 +208,46 @@ def test_stop_all_enforces_single_session():
     assert get_session("x") is None
 
 
+# ── Real-oxpy: in-memory readout convention (#2) ──────────────────────────────
+
+def test_configuration_map_matches_file_readout_real_oxpy(tmp_path):
+    """The in-memory live readout must agree with the file path on a REAL engine —
+    locks the oxpy orientation convention (a1 = orientation col 0, a3 = col 2) and
+    the pos→nm conversion against print_configuration + read_configuration_full."""
+    import numpy as np
+
+    pytest.importorskip("oxpy")
+    from backend.api.crud import _geometry_for_design
+    from backend.core.oxdna_protocol import build_run_stage, render_stage_input
+    from backend.physics.oxdna_interface import (
+        write_configuration, write_topology)
+    from backend.physics.oxdna_live import _OxpyStepper
+    from tests.test_headless_oxdna_build import _design_with_overhang_anchor
+
+    d, _dom = _design_with_overhang_anchor()
+    rd = tmp_path / "live"
+    rd.mkdir()
+    write_topology(d, rd / "topology.top")
+    write_configuration(d, _geometry_for_design(d, compact_skips=True), rd / "conf.dat")
+    spec = build_run_stage(name="t", steps=1000, backend="CPU")   # CPU → only needs oxpy
+    # Cap the backbone force so raw (unrelaxed) design geometry — whose bonded beads
+    # start over-stretched — loads without an init FENE error (the relax stages do this).
+    inp_text = (render_stage_input(spec, "topology.top", "conf.dat")
+                + "\nmax_backbone_force = 5\nmax_backbone_force_far = 10\n")
+    (rd / "input").write_text(inp_text)
+
+    with _OxpyStepper(rd) as st:
+        st.run(200)
+        file_map = st.configuration(d)            # print_configuration + parse
+        mem_map = st.configuration_map(d)         # in-memory particles
+    assert set(mem_map) == set(file_map)
+    for k in file_map:
+        assert np.allclose(mem_map[k]["backbone_position"],
+                           file_map[k]["backbone_position"], atol=1e-9)
+        assert np.allclose(mem_map[k]["a1"], file_map[k]["a1"], atol=1e-9)
+        assert np.allclose(mem_map[k]["a3"], file_map[k]["a3"], atol=1e-9)
+
+
 # ── Route-level (no oxpy needed for these branches) ───────────────────────────
 
 def test_live_frame_unknown_session_404():
@@ -197,6 +269,33 @@ def test_live_stop_unknown_session_ok():
     from backend.api import routes_oxdna_live as rl
     r = asyncio.run(rl.stop_oxdna_live("nope"))
     assert r["ok"] is True and r["stopped"] is False
+
+
+def test_live_reconfigure_unknown_session_404():
+    from backend.api import routes_oxdna_live as rl
+    body = rl.LiveReconfigureRequest(anchors=[{"kind": "overhang", "id": "o"}])
+    with pytest.raises(HTTPException) as ei:
+        asyncio.run(rl.reconfigure_oxdna_live("nope", body))
+    assert ei.value.status_code == 404
+
+
+def test_live_reconfigure_field_requires_anchor():
+    """Recomposing to a field with no anchor is rejected (COM-drift gotcha) — the
+    same gate as start, checked before the worker is touched."""
+    from backend.api import routes_oxdna_live as rl
+    stop_all()
+    sess = LiveSession("rcf", _FakeEngine(), frame_builder=lambda e: [],
+                       field_oxdna=0.0, field_dir=[0, 1, 0])
+    register(sess)
+    sess.start()
+    try:
+        body = rl.LiveReconfigureRequest(field={"field_pN": 4.0, "dir": [0, 1, 0]}, anchors=[])
+        with pytest.raises(HTTPException) as ei:
+            asyncio.run(rl.reconfigure_oxdna_live("rcf", body))
+        assert ei.value.status_code == 400
+        assert "anchor" in ei.value.detail.lower()
+    finally:
+        stop_session("rcf")
 
 
 def test_live_available_probe_shape():

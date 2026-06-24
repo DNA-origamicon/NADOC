@@ -75,29 +75,31 @@ def assign_scaffold_sequence_endpoint(body: _ScaffoldSeqBody = _ScaffoldSeqBody(
     )
     from fastapi import HTTPException
 
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    use_custom = bool(body.custom_sequence and body.custom_sequence.strip())
-    try:
+    # Logged as a feature-log snapshot (op_kind='assign-scaffold-sequence') so the
+    # sequenced state is captured in the log — a feature-log seek (incl. an oxDNA/MD
+    # job roll) reproduces the sequences instead of dropping them.
+    def _run(design):
+        use_custom = bool(body.custom_sequence and body.custom_sequence.strip())
         if use_custom:
             updated, total_nt, padded_nt = assign_custom_scaffold_sequence(
-                design, body.custom_sequence, strand_id=body.strand_id
-            )
+                design, body.custom_sequence, strand_id=body.strand_id)
             scaffold_len = len(body.custom_sequence.strip().upper().replace(" ", "").replace("\n", "").replace("\r", ""))
         else:
             updated, total_nt, padded_nt = assign_scaffold_sequence(
-                design, body.scaffold_name, strand_id=body.strand_id
-            )
+                design, body.scaffold_name, strand_id=body.strand_id)
             scaffold_len = next(
-                (ln for name, ln, _ in SCAFFOLD_LIBRARY if name == body.scaffold_name), 0
-            )
+                (ln for name, ln, _ in SCAFFOLD_LIBRARY if name == body.scaffold_name), 0)
+        _run.info = {"total_nt": total_nt, "scaffold_len": scaffold_len, "padded_nt": padded_nt}
+        return updated
+
+    try:
+        updated, report, _entry = design_state.mutate_with_feature_log(
+            op_kind='assign-scaffold-sequence', label='Assign scaffold sequence',
+            params=body.model_dump(), fn=_run)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    updated, report = design_state.set_design_silent_reconciled(updated, design)
     resp = _design_response(updated, report)
-    resp["total_nt"]     = total_nt
-    resp["scaffold_len"] = scaffold_len
-    resp["padded_nt"]    = padded_nt
+    resp.update(_run.info)
     return resp
 
 
@@ -201,16 +203,20 @@ def assign_staple_sequences_endpoint() -> dict:
     from backend.core.sequences import assign_staple_sequences
     from fastapi import HTTPException
 
-    design = design_state.get_or_404()
-    design_state.snapshot()
-    if design.overhangs:
-        cleared_overhangs = [o.model_copy(update={"sequence": None}) for o in design.overhangs]
-        design = design.model_copy(update={"overhangs": cleared_overhangs})
+    # Logged (op_kind='assign-staple-sequences') so the sequenced state is captured
+    # in the feature log and survives a seek / job roll.
+    def _run(design):
+        if design.overhangs:
+            cleared_overhangs = [o.model_copy(update={"sequence": None}) for o in design.overhangs]
+            design = design.model_copy(update={"overhangs": cleared_overhangs})
+        return assign_staple_sequences(design)
+
     try:
-        updated = assign_staple_sequences(design)
+        updated, report, _entry = design_state.mutate_with_feature_log(
+            op_kind='assign-staple-sequences', label='Assign staple sequences',
+            params={}, fn=_run)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    updated, report = design_state.set_design_silent_reconciled(updated, design)
     return _design_response(updated, report)
 
 

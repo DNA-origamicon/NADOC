@@ -87,6 +87,15 @@ class MdJob:
     # True when the user explicitly stopped the job — keeps the startup/supervisor
     # auto-resume from relaunching a deliberately-paused run.  Reset on manual start.
     user_stopped: bool = False
+    # Out-of-date detection (mirrors OxdnaJob).  ``design_fingerprint`` is a content
+    # hash of the design this run was PREPARED from (set during background prep, after
+    # the seed/active design is resolved — see backend.core.oxdna_staleness); a current
+    # design whose fingerprint differs is out of date.  ``feature_log_position`` records
+    # the design's last-active feature-log index at prep, for display.  The exact
+    # design is also saved as ``design.json`` in the job dir so a stale job can be
+    # rolled back to its run state.
+    design_fingerprint: Optional[str] = None
+    feature_log_position: Optional[int] = None
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -123,6 +132,8 @@ class MdJob:
         data.setdefault("seed_oxdna_job_id", None)
         data.setdefault("failure_kind", None)
         data.setdefault("prep_params", None)
+        data.setdefault("design_fingerprint", None)
+        data.setdefault("feature_log_position", None)
         return cls(**data)
 
     @classmethod

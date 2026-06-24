@@ -8636,13 +8636,19 @@ def create_loadout(body: LoadoutCreateBody) -> dict:
 
 
 @router.post("/design/loadouts/{loadout_id}/select", status_code=200)
-def select_loadout(loadout_id: str) -> dict:
-    """Save the current branch and restore the selected branch snapshot."""
+def select_loadout(loadout_id: str, save_current: bool = True) -> dict:
+    """Save the current branch and restore the selected branch snapshot.
+
+    ``save_current=false`` restores WITHOUT first folding the current design into the
+    active loadout — used by the oxDNA/MD "Return to latest" action: after a roll the
+    active design is the job's run-state (reproducible from the job), so it must NOT
+    overwrite the loadout holding the user's latest edits."""
     from backend.core.validator import validate_design
 
     current = design_state.get_or_404()
     loadouts, active_id = _ensure_loadouts(current)
-    loadouts = _save_active_loadout_snapshot(current, loadouts, active_id)
+    if save_current:
+        loadouts = _save_active_loadout_snapshot(current, loadouts, active_id)
 
     selected = next((l for l in loadouts if l.id == loadout_id), None)
     if selected is None:
@@ -8917,6 +8923,59 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
     # / positions_only fire in the rare case where an extrusion edit happened
     # to leave the renderer-relevant fields unchanged.
     return _design_replace_response(design, final, report)
+
+
+def roll_active_to_job_state(snapshot: Design, feature_log_position, return_name: str) -> dict:
+    """Roll the active design back to the state an oxDNA/MD job was run at, by SEEKING
+    the feature-log cursor to the job's position — exactly like sliding the Feature Log
+    tab's rail.  The full feature log is preserved (later entries — e.g. an overhang
+    added after the run — become inactive/forward, so the model loses them and the
+    user can seek forward again), and the cursor is visible in the Feature Log tab.
+
+    Sequence assignment is now a logged op, so the seek reproduces the job's exact
+    state (the out-of-date fingerprint clears).  For OLD jobs created before that,
+    the seek may drop sequences → we overlay the job's saved snapshot topology while
+    keeping the seeked feature_log + cursor, so the run is still consistent.
+
+    The pre-roll design is saved as a loadout branch (``return_loadout_id``, the
+    "Return to latest" target) and pushed to undo (Ctrl-Z restores)."""
+    from backend.core.oxdna_staleness import design_build_fingerprint
+    from backend.core.validator import validate_design
+
+    current = design_state.get_or_404()
+    loadouts = list(current.loadouts or [])
+    active_id = current.active_loadout_id
+    if loadouts and active_id and any(l.id == active_id for l in loadouts):
+        loadouts = _save_active_loadout_snapshot(current, loadouts, active_id)
+    return_id = str(_uuid.uuid4())
+    payload, size = _encode_loadout_design_snapshot(current)
+    loadouts.append(DesignLoadout(
+        id=return_id, name=return_name,
+        design_snapshot_gz_b64=payload, snapshot_size_bytes=size))
+
+    # Seek the cursor to the job's run position (full log kept, cursor moves).
+    n = len(current.feature_log)
+    if feature_log_position is not None and -1 <= feature_log_position < n:
+        seeked = _seek_feature_log(current, feature_log_position)
+    else:
+        seeked = current   # no recorded position / out of range → leave the cursor
+
+    # New jobs: the seek already reproduces the job's state.  Old jobs: overlay the
+    # job's exact snapshot topology onto the seeked log/cursor so it still runs.
+    if design_build_fingerprint(seeked) == design_build_fingerprint(snapshot):
+        rolled = seeked.copy_with(loadouts=loadouts, active_loadout_id=None)
+    else:
+        rolled = snapshot.copy_with(
+            feature_log=seeked.feature_log,
+            feature_log_cursor=seeked.feature_log_cursor,
+            feature_log_sub_cursor=seeked.feature_log_sub_cursor,
+            loadouts=loadouts, active_loadout_id=None)
+
+    design_state.set_design(rolled)
+    report = validate_design(rolled)
+    resp = _design_response_with_geometry(rolled, report)
+    resp["return_loadout_id"] = return_id
+    return resp
 
 
 @router.post("/design/features/{index}/revert", status_code=200)

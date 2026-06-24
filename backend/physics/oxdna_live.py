@@ -160,6 +160,35 @@ class _OxpyStepper:
         self._mgr.print_configuration()
         return read_configuration_full(self.rundir / "last_conf.dat", design)
 
+    def configuration_map(self, design: Design) -> dict:
+        """Live-display readout WITHOUT the file round-trip: build the same
+        ``(helix,bp,dir) -> {backbone_position(nm), a1, a3}`` map :meth:`configuration`
+        returns, but straight from the in-engine oxpy particles
+        (:func:`configuration_full_from_particles`) — no ``print_configuration`` write
+        + re-parse every frame.  Verified byte-identical through the display unwrap."""
+        from backend.physics.oxdna_interface import configuration_full_from_particles
+
+        particles = self._mgr.config_info().particles()
+        return configuration_full_from_particles(particles, design)
+
+    def box_nm(self) -> np.ndarray:
+        """Current simulation-box edge lengths in nm (oxDNA ``box_sides`` × length
+        unit) — the per-frame minimum-image basis the display unwrap needs."""
+        from backend.physics.oxdna_interface import OXDNA_LENGTH_UNIT
+
+        return np.asarray(self._mgr.config_info().box_sides, dtype=float) * OXDNA_LENGTH_UNIT
+
+    def snapshot_seed(self) -> Path:
+        """Dump the current engine configuration to ``reconfig_seed.dat`` so a live
+        recomposition can continue from the PRESENT pose (not the relaxed seed).
+        Returns the seed path."""
+        import shutil
+
+        self._mgr.print_configuration()   # writes rundir/last_conf.dat
+        seed = self.rundir / "reconfig_seed.dat"
+        shutil.copy(self.rundir / "last_conf.dat", seed)
+        return seed
+
 
 class LiveOxdnaSession:
     """A persistent live field session: a field-off reference, burst-stepping, live
@@ -198,6 +227,11 @@ class LiveOxdnaSession:
 
     def run(self, steps: int) -> None:
         self.stepper.run(steps)
+
+    def snapshot_seed(self):
+        """Dump the current pose for a live reconfigure (see
+        :meth:`_OxpyStepper.snapshot_seed`)."""
+        return self.stepper.snapshot_seed()
 
     def equilibrium_observables(self, *, field_dir=None) -> dict:
         """Current equilibrium observables vs the field-off reference

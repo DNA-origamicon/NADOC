@@ -204,6 +204,55 @@ def _load_job(job_id: str) -> OxdnaJob:
     return reconcile_oxdna_status(job, _workspace())
 
 
+# ── Out-of-date detection (design edited after a job was relaxed) ──────────────
+# Derived fingerprints for OLD jobs (saved before design_fingerprint existed) are
+# cached in-memory by job_id — a job's snapshot is frozen, so its fingerprint never
+# changes; this lets the list flag legacy jobs stale without re-hashing every poll.
+_DERIVED_FP_CACHE: dict[str, str] = {}
+
+
+def _current_design_fingerprint() -> "str | None":
+    """Fingerprint of the CURRENTLY active design (None if there is none)."""
+    from backend.core.oxdna_staleness import current_active_design_fingerprint
+    return current_active_design_fingerprint()
+
+
+def _job_fingerprint(job: OxdnaJob) -> "str | None":
+    """The job's creation fingerprint — the stored value, or (for a job saved before
+    this field existed) one derived once from its frozen design.json snapshot."""
+    if job.design_fingerprint:
+        return job.design_fingerprint
+    cached = _DERIVED_FP_CACHE.get(job.job_id)
+    if cached is not None:
+        return cached
+    from backend.core.oxdna_staleness import oxdna_design_fingerprint
+    snap = _load_snapshot_design(job.job_dir(_workspace()))
+    if snap is None:
+        return None
+    fp = oxdna_design_fingerprint(snap)
+    _DERIVED_FP_CACHE[job.job_id] = fp
+    return fp
+
+
+def _job_is_out_of_date(job: OxdnaJob, current_fp: "str | None") -> bool:
+    from backend.core.oxdna_staleness import job_out_of_date
+    return job_out_of_date(_job_fingerprint(job), current_fp)
+
+
+def _assert_job_current(job: OxdnaJob) -> None:
+    """Refuse (409) a live/production op when the design changed since this job was
+    relaxed — otherwise it resolves the current design's selections against the job's
+    frozen topology and crashes with an internal error.  The frontend turns this 409
+    into the 'design has changed' roll-or-cancel popup."""
+    if _job_is_out_of_date(job, _current_design_fingerprint()):
+        raise HTTPException(
+            409,
+            "The design has changed since this job was relaxed. Roll the feature log "
+            "back to the relaxation stage, or run a new relaxation, before running a "
+            "live session or production.",
+        )
+
+
 def _lineage_jobs(job: OxdnaJob) -> list[OxdnaJob]:
     """The selected job's ancestor chain, ROOT first → … → selected, following
     ``parent_job_id``.  A field/production child is seeded from its parent's end
@@ -423,6 +472,12 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         # imported cadnano helices that span the whole grid — which over-counts the
         # real system size (e.g. 33,716 grid slots vs 14,774 actual nucleotides).
         job.n_nucleotides = len(_strand_nucleotide_order(design))
+        # Out-of-date fingerprint + the feature-log point to roll back to if the
+        # design is later edited (so live/production can be made consistent again).
+        from backend.core.oxdna_staleness import (
+            effective_feature_log_position, oxdna_design_fingerprint)
+        job.design_fingerprint = oxdna_design_fingerprint(design)
+        job.feature_log_position = effective_feature_log_position(design)
         await run_in_threadpool(
             prepare_oxdna_job, design, geometry, job, _workspace(), specs,
             surface=surface_in, anchors=anchors_in, anchor_stiff=body.anchor_stiff)
@@ -444,15 +499,22 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
 
 @router.get("/oxdna/jobs")
 async def list_oxdna_jobs() -> list[dict]:
-    return [
-        reconcile_oxdna_status(j, _workspace()).to_dict()
-        for j in OxdnaJob.list_jobs(_workspace())
-    ]
+    jobs = [reconcile_oxdna_status(j, _workspace()) for j in OxdnaJob.list_jobs(_workspace())]
+    current_fp = _current_design_fingerprint()   # computed once for the whole list
+    out: list[dict] = []
+    for j in jobs:
+        d = j.to_dict()
+        d["out_of_date"] = _job_is_out_of_date(j, current_fp)
+        out.append(d)
+    return out
 
 
 @router.get("/oxdna/jobs/{job_id}")
 async def get_oxdna_job(job_id: str) -> dict:
-    return _load_job(job_id).to_dict()
+    job = _load_job(job_id)
+    d = job.to_dict()
+    d["out_of_date"] = _job_is_out_of_date(job, _current_design_fingerprint())
+    return d
 
 
 @router.get("/oxdna/jobs/{job_id}/error-log")
@@ -553,6 +615,7 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
     job = _load_job(job_id)
     if is_running(job_id) or job.status != OxdnaStatus.completed:
         raise HTTPException(400, "Production requires a completed relaxation job.")
+    _assert_job_current(job)
     if find_oxdna() is None:
         raise HTTPException(400, "oxDNA binary not found.")
 
@@ -583,6 +646,26 @@ async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
     return {"ok": True, "job_id": job_id, "status": "running", "production_steps": body.steps}
 
 
+@router.post("/oxdna/jobs/{job_id}/roll-design")
+async def roll_oxdna_job_design(job_id: str) -> dict:
+    """Restore the design to the EXACT state this job was run at (its frozen
+    snapshot), saving the current edits as a "Return to latest" loadout branch.
+
+    This is the robust "roll" used by the out-of-date guard: a feature-log seek can't
+    reproduce sequences / manual edits the log doesn't capture (so the stale flag
+    never cleared), but restoring the job's saved snapshot byte-for-byte makes the
+    current design match the job again → the ⚠ clears and live/production is
+    consistent.  The later edits live on in the returned ``return_loadout_id`` branch."""
+    from backend.api.crud import roll_active_to_job_state
+
+    job = _load_job(job_id)
+    design = _load_snapshot_design(job.job_dir(_workspace()))
+    if design is None:
+        raise HTTPException(400, "This job has no saved design snapshot to roll back to.")
+    name = job.design_name or "this job"
+    return roll_active_to_job_state(design, job.feature_log_position, f"Latest — before viewing {name}")
+
+
 @router.post("/oxdna/jobs/{job_id}/field")
 async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     """Spawn an electric-field run as a CHILD job branched from a relaxed parent.
@@ -601,6 +684,7 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     parent = _load_job(job_id)
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
         raise HTTPException(400, "An electric-field run requires a completed job to seed from.")
+    _assert_job_current(parent)
     if find_oxdna() is None:
         raise HTTPException(400, "oxDNA binary not found.")
     if not body.anchors:
@@ -631,6 +715,8 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
         n_nucleotides=parent.n_nucleotides, device=parent.device,
         backend=parent.backend, salt_concentration=parent.salt_concentration,
         design_source_path=parent.design_source_path, parent_job_id=parent.job_id,
+        design_fingerprint=parent.design_fingerprint,
+        feature_log_position=parent.feature_log_position,
         efield={"force_pN": body.field_pN, "force_oxdna": field_oxdna, "dir": list(body.dir)},
         run_config={
             "kind":    "field",
@@ -684,6 +770,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     parent = _load_job(job_id)
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
         raise HTTPException(400, "A production run requires a completed relaxation job.")
+    _assert_job_current(parent)
     if find_oxdna() is None:
         raise HTTPException(400, "oxDNA binary not found.")
     if body.field and not body.anchors:
@@ -738,6 +825,8 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         n_nucleotides=parent.n_nucleotides, device=parent.device,
         backend=parent.backend, salt_concentration=parent.salt_concentration,
         design_source_path=parent.design_source_path, parent_job_id=parent.job_id,
+        design_fingerprint=parent.design_fingerprint,
+        feature_log_position=parent.feature_log_position,
         efield=efield_rec or {},
         run_config={
             "kind":    "run",

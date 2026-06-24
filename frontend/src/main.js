@@ -1890,6 +1890,9 @@ async function main() {
     oxdnaDisplay,
     getSelectedJob: () => oxdnaPanel?.getSelectedJob?.() || null,
     getRunElements: _oxdnaRunElements,
+    // Stale-job guard (design changed after a relax) lives in the panel — the live
+    // controller delegates the roll-or-cancel popup to it before starting.
+    ensureJobCurrent: (label) => oxdnaPanel?.ensureJobCurrent?.(label),
   })
 
   // ── MD-job visualization (trajectory scrub + flexibility map) ─────────────────
@@ -1933,6 +1936,9 @@ async function main() {
       oxdnaAnchorsSetup?.applyConfig?.(cfg.anchors)
     },
   })
+  // (Editing OR seeking the design refetches the oxDNA/MD job lists so the out-of-date
+  // ⚠ markers update immediately — driven by the client's `nadoc:design-changed` event
+  // on every design sync; both panels self-listen, so no store subscription here.)
   // E-field setup: direction/magnitude arrow gizmo + anchor picker + Run field
   // (appends a field stage to the panel's selected completed oxDNA job).
   let _viewToolButtons = null   // assigned at initViewToolButtons (further down)
@@ -1952,8 +1958,9 @@ async function main() {
   const efieldSetup = initEfieldSetup({
     gizmo: efieldGizmo,
     // Field changed (gizmo drag / input edit): refresh the anchor halo AND, if a
-    // live session is running, re-aim its field so the structure follows live.
-    onChange: () => { _refreshAnchorGlow(); oxdnaLive?.onFieldChanged?.() },
+    // live session is running, update it — re-aim the field live (magnitude/dir) or
+    // recompose the engine if the field was just toggled on/off.
+    onChange: () => { _refreshAnchorGlow(); oxdnaLive?.onElementsChanged?.() },
     // Total base count → scales the arrow's force range so big origami get finer
     // per-nt control (the arrow encodes total push; per-nt ∝ 1/N).
     getBaseCount: () => store.getState().currentGeometry?.length || 0,
@@ -1965,9 +1972,13 @@ async function main() {
     // the grid button on).  _viewToolButtons is created later in main(); this only
     // fires on user interaction, so the lazy reference is safe.
     setSurfaceGrid: (cfg) => _viewToolButtons?.setSurfaceGrid?.(cfg),
+    // Toggling the hard floor while Live is running recomposes the live engine.
+    onChange: () => oxdnaLive?.onElementsChanged?.(),
   })
   const oxdnaAnchorsSetup = initOxdnaAnchorsSetup({
-    getSelection: () => store.getState(), onChange: _refreshAnchorGlow,
+    getSelection: () => store.getState(),
+    // Changing anchors refreshes the halo AND recomposes a running live session.
+    onChange: () => { _refreshAnchorGlow(); oxdnaLive?.onElementsChanged?.() },
   })
   // Leaving the Dynamics tab drops the field gizmo (efield_setup) — clear the anchor
   // halo too so it never lingers in other tabs.

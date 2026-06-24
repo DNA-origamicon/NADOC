@@ -18,6 +18,7 @@
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { showToast } from './toast.js'
+import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
 import { initFlexScale } from './flex_scale.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
@@ -196,6 +197,9 @@ export function isRelaxRunning(job) {
 export function isProductionRunning(job) {
   return job?.status === 'running' && productionState(job) === 'running'
 }
+
+// Out-of-date detection + the roll-or-cancel guard are shared with the MD panel.
+export { jobOutOfDate }
 
 /** A spinning circular activity indicator (CSS class .nadoc-spinner). */
 export function makeSpinner(color = 'currentColor', size = 11) {
@@ -733,7 +737,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // selection) — a running job's health/progress changing must NOT re-render the
   // list, or the row spinners restart their animation every poll.
   function _listSignature(jobs) {
-    return jobs.map(j => `${j.job_id}:${j.status}:${productionState(j)}`).join(',') +
+    return jobs.map(j => `${j.job_id}:${j.status}:${productionState(j)}:${j.out_of_date ? 1 : 0}`).join(',') +
            `|sel=${_selectedId}`
   }
 
@@ -793,7 +797,16 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     sym.title = badge.label
     if (!jobIsActive(job)) sym.style.color = badge.color
 
-    row.append(idx, label, ts, sym)
+    row.append(idx, label, ts)
+    // Out-of-date marker: the design changed since this job was relaxed, so
+    // live/production would be inconsistent (only Relax stays available).
+    if (jobOutOfDate(job)) {
+      const warn = Object.assign(document.createElement('span'), { textContent: '⚠' })
+      warn.style.cssText = `flex-shrink:0;color:${_C.warn};font-size:11px`
+      warn.title = 'Design changed since this job was relaxed — run a new Relax, or roll the feature log back, before live/production.'
+      row.append(warn)
+    }
+    row.append(sym)
     row.addEventListener('click', () => { _selectJob(job.job_id) })
     return row
   }
@@ -1121,8 +1134,24 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   }
   function _selectedJob() { return _jobs.find(j => j.job_id === _selectedId) || null }
 
+  // Stale-design guard: if the selected job's design changed since it was relaxed,
+  // running live/production would resolve current selections against the job's frozen
+  // topology and crash.  Offer to non-destructively ROLL the feature log back to the
+  // relaxation stage (later edits kept — a persistent toast lets the user return), or
+  // cancel.  Returns true to proceed, false to abort.  Shared by production + Live.
+  function _ensureJobCurrent(actionLabel) {
+    return ensureJobCurrent({
+      job: _selectedJob(),
+      rollFn: api.rollOxdnaJobDesign,
+      refetch: _fetchJobs,
+      isStale: () => jobOutOfDate(_selectedJob()),
+      actionLabel,
+    })
+  }
+
   prodBtn?.addEventListener('click', async () => {
     if (!_selectedId || prodBtn.disabled) return
+    if (!(await _ensureJobCurrent('a production run'))) return
     oxdnaLive?.stop()   // a production run supersedes any live session (shared overlay)
     const steps = parseInt(prodStepsInput?.value || '5000000', 10)
 
@@ -1510,6 +1539,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     }
   })
 
+  // ── Design changed (edit OR feature-log seek) → re-evaluate out-of-date ────
+  // The client emits this on every design sync; refetch so the ⚠ markers update
+  // even off the Dynamics tab (where the 1.5 s poll is paused) — e.g. when the user
+  // seeks the Feature Log back to a job's run position, clearing its stale flag.
+  window.addEventListener('nadoc:design-changed', () => { _fetchJobs() })
+
   // ── Design switched/opened → re-filter the list to the new design ─────────
   // Without this the list keeps showing the previous design's jobs (and the
   // selection/display belong to the old design).  Mirrors md_jobs_panel.
@@ -1528,5 +1563,5 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   _checkAvailable()
   if (!_collapsed) _onOpen()
 
-  return { refresh: _fetchJobs, getSelectedJob: _selectedJob }
+  return { refresh: _fetchJobs, getSelectedJob: _selectedJob, ensureJobCurrent: _ensureJobCurrent }
 }

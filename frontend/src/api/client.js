@@ -11,6 +11,15 @@
 
 import { store } from '../state/store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
+
+// Signal that the active design's content changed: cross-TAB (BroadcastChannel) so
+// other browser tabs re-fetch, AND in-PAGE (window event) so the oxDNA/MD job panels
+// re-evaluate their out-of-date markers immediately — incl. a feature-log seek, which
+// is how a stale job is brought back in sync (the panels' poll is paused off-tab).
+function _signalDesignChanged() {
+  nadocBroadcast.emit('design-changed')
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('nadoc:design-changed'))
+}
 import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
 import { notifyRequestFailure, notifyRequestSuccess } from '../shared/connection_monitor.js'
@@ -214,6 +223,7 @@ function _formatServerTiming(headerValue) {
  *  rather than the raw URL. */
 function _busyHeaderForPath(method, path) {
   if (path.startsWith('/design/features/seek'))                    return 'Seeking Feature Log'
+  if (path.endsWith('/roll-design'))                               return 'Rolling design to job state'
   if (path.startsWith('/design/features/') && path.endsWith('/edit'))   return 'Editing Feature'
   if (path.startsWith('/design/features/') && path.endsWith('/revert')) return 'Reverting Feature'
   if (path.startsWith('/design/features/') && method === 'DELETE')      return 'Deleting Feature'
@@ -381,7 +391,7 @@ export async function _syncFromDesignResponse(json, { skipGeometry = false, tran
     if (json.design)     minimalUpdates.currentDesign     = json.design
     if (json.validation) minimalUpdates.validationReport  = json.validation
     store.setState(minimalUpdates)
-    if (json.design) nadocBroadcast.emit('design-changed')
+    if (json.design) _signalDesignChanged()
     if (json.design) persistDesign()
     _designSyncTransient = false
     return json
@@ -518,7 +528,7 @@ export async function _syncFromDesignResponse(json, { skipGeometry = false, tran
     }
   }
   // Notify other tabs (cadnano editor, second 3D windows) that the design changed.
-  if (json.design) nadocBroadcast.emit('design-changed')
+  if (json.design) _signalDesignChanged()
   // Persist design to localStorage for session recovery on refresh/restart.
   if (json.design) persistDesign()
   if (json.design) _clearStaleSelections()
@@ -767,7 +777,7 @@ async function _syncClusterOnlyDiff(json) {
     showToast(json.placement_warnings.join('  •  '), 6000)
   }
   if (json.design) {
-    nadocBroadcast.emit('design-changed')
+    _signalDesignChanged()
     persistDesign()
   }
   if (_responseDeltaHandler && !_skipNextDelta) await _responseDeltaHandler(json)
@@ -863,7 +873,7 @@ async function _syncPositionsOnlyDiff(json) {
     showToast(json.placement_warnings.join('  •  '), 6000)
   }
   if (json.design) {
-    nadocBroadcast.emit('design-changed')
+    _signalDesignChanged()
     persistDesign()
   }
   if (_responseDeltaHandler && !_skipNextDelta) await _responseDeltaHandler(json)
@@ -2005,6 +2015,7 @@ export const getOxdnaRmsfSurface = (id, params = {}) =>
 export const oxdnaLiveAvailable  = ()            => _oxdnaJSON('GET',  '/oxdna/live/available')
 export const startOxdnaLive      = (body)        => _oxdnaJSON('POST', '/oxdna/live/start', body)
 export const updateOxdnaLiveField = (id, body)   => _oxdnaJSON('POST', `/oxdna/live/${id}/field`, body)
+export const reconfigureOxdnaLive = (id, body)   => _oxdnaJSON('POST', `/oxdna/live/${id}/reconfigure`, body)
 export const getOxdnaLiveFrame   = (id)          => _oxdnaJSON('GET',  `/oxdna/live/${id}/frame`)
 export const stopOxdnaLive       = (id)          => _oxdnaJSON('POST', `/oxdna/live/${id}/stop`)
 
@@ -2104,6 +2115,21 @@ export async function rollbackLastFeature() {
   return _syncFromDesignResponse(json)
 }
 
+// "Roll to a job's state": restore the design to the EXACT snapshot an oxDNA/MD job
+// was run at (sequences + manual edits intact, unlike a feature-log seek), saving the
+// current edits as a "Return to latest" loadout branch. Returns the design response +
+// `return_loadout_id`. _request syncs the design response → the scene rebuilds.
+export async function rollOxdnaJobDesign(jobId) {
+  const json = await _request('POST', `/oxdna/jobs/${jobId}/roll-design`)
+  if (json) await _syncFromDesignResponse(json)   // apply the seeked design (scene + feature-log cursor)
+  return json
+}
+export async function rollMdJobDesign(jobId) {
+  const json = await _request('POST', `/md/jobs/${jobId}/roll-design`)
+  if (json) await _syncFromDesignResponse(json)
+  return json
+}
+
 export async function deleteFeature(index, subIndex = null, { cascade = false } = {}) {
   // subIndex targets a single sub-step inside a Fine Routing cluster; omit it
   // (or pass null) to delete the whole top-level entry.
@@ -2134,8 +2160,9 @@ export async function createLoadout(name) {
   return _syncFromDesignResponse(json)
 }
 
-export async function selectLoadout(loadoutId) {
-  const json = await _request('POST', `/design/loadouts/${loadoutId}/select`)
+export async function selectLoadout(loadoutId, { saveCurrent = true } = {}) {
+  const q = saveCurrent ? '' : '?save_current=false'
+  const json = await _request('POST', `/design/loadouts/${loadoutId}/select${q}`)
   return _syncFromDesignResponse(json)
 }
 

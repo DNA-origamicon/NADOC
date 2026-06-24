@@ -33,6 +33,21 @@ const _C = { ok: '#5cb85c', warn: '#e0a800', err: '#d9534f', accent: '#4a9eff', 
 
 const POLL_MS = 500
 const FIELD_PUSH_MS = 150   // throttle live field re-aim POSTs (gizmo drag fires fast)
+const RECONFIG_MS = 350     // debounce live recomposition POSTs (engine rebuild is heavy)
+
+/** Pure: a stable "composition signature" of the run elements — what REQUIRES the
+ *  live engine to be rebuilt (the floor / field on-off / surface params / anchors).
+ *  Deliberately EXCLUDES the field magnitude + direction: those are re-aimed in
+ *  place (force.F0/.dir mutation) without a rebuild, so they must not trip a
+ *  reconfigure.  Two element sets with the same signature → only a field re-aim is
+ *  ever needed; a changed signature → recompose the engine. */
+export function reconfigSig(el = {}) {
+  const f = el.field, s = el.surface, a = el.anchors || []
+  const fieldOn = !!(f?.enabled && f.field_pN > 0)
+  const surf = s?.enabled ? { dir: s.dir, off: s.offsetNm, stiff: s.stiff } : null
+  const anchors = a.map((x) => JSON.stringify(x)).sort()
+  return JSON.stringify({ fieldOn, surf, anchors })
+}
 
 /** Pure: can a job seed a live session?  A completed ROOT relaxation (not a
  *  field/production child — Live runs on a relaxed structure). */
@@ -75,6 +90,7 @@ export function liveFallbackNotice(frame, shown) {
 
 export function initOxdnaLive({
   oxdnaDisplay = null, getSelectedJob = null, getRunElements = null,
+  ensureJobCurrent = null,
 } = {}) {
   const liveBtn   = document.getElementById('oxdna-jobs-live-btn')
   const statusEl  = document.getElementById('oxdna-jobs-live-status')
@@ -84,13 +100,15 @@ export function initOxdnaLive({
   let _availReason = 'checking…'
   let _on         = false
   let _sid        = null
-  let _hasField   = false      // did this session start WITH a field (→ steerable)?
+  let _hasField   = false      // is the RUNNING session's field on (→ steerable)?
   let _pollTimer  = null
   let _busy       = false      // start/stop in flight → ignore re-entrant clicks
   let _lastPush   = 0
   let _pushTimer  = null
   let _backend    = null       // active compute backend ('CUDA' | 'CPU')
   let _fellBack   = false      // GPU→CPU fallback popup already shown this session?
+  let _sig        = null       // composition signature of the running element set
+  let _reconfigTimer = null    // debounce timer for live recomposition POSTs
 
   function _setStatus(text, color = _C.dim) {
     if (statusEl) { statusEl.textContent = text; statusEl.style.color = color }
@@ -134,6 +152,12 @@ export function initOxdnaLive({
     const job = getSelectedJob?.() || null
     if (!liveJobEligible(job)) { showToast('Select a completed relaxed job first', 'warn'); return }
 
+    // Stale-design guard: if the design changed since this job was relaxed, offer to
+    // roll the feature log back to the relaxation stage (or cancel) before starting —
+    // otherwise the live session resolves current selections against the job's frozen
+    // topology and errors.  Delegated to the panel (it owns the job list + roll).
+    if (ensureJobCurrent && !(await ensureJobCurrent('a live session'))) return
+
     // Compose whatever the run cards have enabled (like the "Full Sim" run); any
     // combination is allowed — only a field requires ≥1 anchor.
     const el = getRunElements?.() || {}
@@ -167,6 +191,7 @@ export function initOxdnaLive({
     _on = true
     _backend = r.backend || null
     _fellBack = false
+    _sig = reconfigSig(el)   // baseline composition — later changes recompose the run
     _setButton()
     // Live now owns the one bead overlay — tell the panel to clear its relaxed /
     // flex / trajectory overlays AND lock those toggles (isOn() is true now, so the
@@ -216,11 +241,24 @@ export function initOxdnaLive({
     _schedulePoll()
   }
 
+  // A run-card changed while Live is running (field/floor/anchors). If the
+  // COMPOSITION changed (floor or field toggled on/off, surface params, anchors) the
+  // engine must be rebuilt with the new forces — recompose it over the current pose.
+  // If only the field magnitude/direction changed, re-aim it in place (cheap).
+  function onElementsChanged() {
+    if (!_on || !_sid) return
+    const el = getRunElements?.() || {}
+    const sig = reconfigSig(el)
+    if (sig !== _sig) { _onCompositionChanged(el, sig); return }
+    _maybeReaimField(el.field)
+  }
+  // Back-compat alias (the E-field card wires this name).
+  const onFieldChanged = onElementsChanged
+
   // Re-aim the running field when the gizmo/inputs change (throttled — drag fires
   // many times per second; the backend coalesces to the latest anyway).
-  function onFieldChanged() {
-    if (!_on || !_sid || !_hasField) return   // only a session started WITH a field is steerable
-    const field = (getRunElements?.() || {}).field
+  function _maybeReaimField(field) {
+    if (!_hasField) return                     // only a session whose field is on is steerable
     if (!field?.enabled || !(field.field_pN > 0)) return
     const now = Date.now()
     const send = () => {
@@ -234,15 +272,53 @@ export function initOxdnaLive({
     }
   }
 
+  // The element set changed → recompose the running engine (seamless: it continues
+  // from the current live pose).  Debounced — a slider drag fires many changes and an
+  // engine rebuild is heavy.  A field still needs ≥1 anchor; warn + skip otherwise
+  // (leave _sig stale so adding an anchor later still triggers the recompose).
+  function _onCompositionChanged(el, sig) {
+    const field = el.field
+    const hasField = !!(field?.enabled && field.field_pN > 0)
+    const anchors = el.anchors || []
+    if (hasField && !anchors.length) {
+      _setStatus('A field needs ≥1 anchor — add one, or disable the field.', _C.warn)
+      showToast('Field needs ≥1 anchor', 'warn')
+      return
+    }
+    _sig = sig
+    _hasField = hasField
+    if (_reconfigTimer) clearTimeout(_reconfigTimer)
+    _reconfigTimer = setTimeout(() => { if (_on && _sid) _sendReconfigure(el) }, RECONFIG_MS)
+  }
+
+  async function _sendReconfigure(el) {
+    const field = el.field, surface = el.surface, anchors = el.anchors || []
+    const body = {}
+    if (field?.enabled && field.field_pN > 0) body.field = { field_pN: field.field_pN, dir: field.dir }
+    if (surface?.enabled) body.surface = { dir: surface.dir, offset_nm: surface.offsetNm, stiff: surface.stiff }
+    if (anchors.length) body.anchors = anchors
+    _setStatus('Updating live run…', _C.accent)
+    const r = await api.reconfigureOxdnaLive(_sid, body).catch(() => null)
+    if (!_on || !_sid) return
+    if (!r?.ok) {
+      _setStatus(api.lastErrorMessage?.() || 'Live update failed (see console)', _C.err)
+      return
+    }
+    _setStatus(body.field ? 'Live · field steering — drag to re-aim.'
+                          : (body.surface ? 'Live · surface applied.' : 'Live running.'), _C.ok)
+  }
+
   // Clear local state + restore the model overlay (no stop POST — used when the
   // backend already reports the session gone).
   function _teardownLocal() {
     if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
     if (_pushTimer) { clearTimeout(_pushTimer); _pushTimer = null }
+    if (_reconfigTimer) { clearTimeout(_reconfigTimer); _reconfigTimer = null }
     const wasOn = _on
     _on = false
     _sid = null
     _hasField = false
+    _sig = null
     if (oxdnaDisplay?.mode?.() === 'live') oxdnaDisplay.stopAndRestore()
     _setButton()
     // Tell the panel to re-enable the display / flex / trajectory toggles it locked
@@ -276,5 +352,5 @@ export function initOxdnaLive({
   _checkAvailable()
   _setButton()
 
-  return { isOn: () => _on, toggle, stop, onFieldChanged, refreshButton }
+  return { isOn: () => _on, toggle, stop, onElementsChanged, onFieldChanged, refreshButton }
 }

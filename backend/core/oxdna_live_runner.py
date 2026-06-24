@@ -84,15 +84,21 @@ class LiveSession:
 
     def __init__(self, session_id: str, session, *, frame_builder,
                  field_oxdna: float, field_dir, burst_steps: int = 500,
-                 rundir: Path | None = None):
+                 rundir: Path | None = None, design=None, design_ref=None):
         self.session_id = session_id
         self._session = session
         self._frame_builder = frame_builder
         self._burst = max(1, int(burst_steps))
         self._rundir = Path(rundir) if rundir is not None else None
+        # Domain handles a live RECONFIGURE needs (re-stage the rundir for a new
+        # element composition); the route sets them at start.  Left None for the
+        # GPU-free fake-engine tests, which inject their own rebuild callable.
+        self.design = design
+        self.design_ref = Path(design_ref) if design_ref is not None else None
 
         self._lock = threading.Lock()
         self._pending: tuple | None = None       # (field_oxdna|None, dir|None)
+        self._pending_reconfig: tuple | None = None   # (rebuild_fn, field_oxdna, dir)
         self._latest: list | None = None          # last captured positions payload
         self._field_oxdna = float(field_oxdna)
         self._field_dir = list(field_dir)
@@ -109,8 +115,12 @@ class LiveSession:
         self._thread.start()
 
     def _run(self) -> None:
+        # Manual enter/exit (not `with self._session:`) so a live RECONFIGURE can swap
+        # self._session mid-loop and the finally still tears down whatever engine is
+        # current — `with` would bind the ORIGINAL session and double-exit it.
         try:
-            with self._session:
+            self._session.__enter__()
+            try:
                 # Field on at the requested magnitude + direction, then a first
                 # capture so the display has a frame before the first burst lands.
                 self._session.set_field(field_oxdna=self._field_oxdna,
@@ -118,16 +128,46 @@ class LiveSession:
                 self.status = "running"
                 self._capture_frame()
                 while not self._stop.is_set():
+                    self._apply_pending_reconfig()
                     self._apply_pending_field()
                     self._session.run(self._burst)
                     self._n_bursts += 1
                     self._capture_frame()
+            finally:
+                self._session.__exit__(None, None, None)
         except Exception as exc:  # noqa: BLE001 — surfaced via /frame, not swallowed
             self.error = f"{type(exc).__name__}: {exc}"
             self.status = "error"
         finally:
             if self.status != "error":
                 self.status = "stopped"
+
+    def _apply_pending_reconfig(self) -> None:
+        """Apply a queued live recomposition (floor / E-field / anchors toggled
+        mid-run).  Dumps the CURRENT engine state as the new seed, tears down the old
+        engine, and rebuilds it over that seed with the new forces — so the structure
+        continues SEAMLESSLY from where it is rather than resetting to the relaxed
+        pose.  ``rebuild_fn() -> (new_session, new_frame_builder)`` is supplied by the
+        route (it re-stages the rundir + constructs the fresh engine)."""
+        with self._lock:
+            rc = self._pending_reconfig
+            self._pending_reconfig = None
+        if rc is None:
+            return
+        rebuild_fn, f_oxdna, f_dir = rc
+        # Snapshot the present pose while the old engine is still open, then close it,
+        # build the new engine over that seed, and continue.
+        self._session.snapshot_seed()
+        self._session.__exit__(None, None, None)
+        new_session, new_builder = rebuild_fn()
+        self._session = new_session
+        self._frame_builder = new_builder
+        self._session.__enter__()
+        self._session.set_field(field_oxdna=f_oxdna, field_dir=f_dir)
+        with self._lock:
+            self._field_oxdna = float(f_oxdna)
+            self._field_dir = list(f_dir)
+        self._capture_frame()
 
     def _apply_pending_field(self) -> None:
         with self._lock:
@@ -179,6 +219,27 @@ class LiveSession:
             "backend_fell_back": bool(getattr(stepper, "fell_back", False)),
             "backend_reason": getattr(stepper, "fallback_reason", None),
         }
+
+    def reconfigure(self, rebuild_fn, *, field_oxdna: float = 0.0,
+                    field_dir=None) -> None:
+        """Queue a live recomposition (the element set changed — floor/field/anchors
+        toggled).  ``rebuild_fn()`` (built by the route) returns the
+        ``(new_session, new_frame_builder)`` for the new composition, seeded from the
+        pose the worker snapshots; applied before the next burst."""
+        with self._lock:
+            self._pending_reconfig = (
+                rebuild_fn,
+                float(field_oxdna),
+                list(field_dir) if field_dir is not None else list(self._field_dir),
+            )
+
+    @property
+    def rundir(self) -> "Path | None":
+        return self._rundir
+
+    @property
+    def burst_steps(self) -> int:
+        return self._burst
 
     def frame(self) -> dict:
         """The latest captured configuration as a display payload (or not-ready)."""

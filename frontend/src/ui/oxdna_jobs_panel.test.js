@@ -22,7 +22,7 @@ import {
   productionRunCount, hasTrajectory, isResumable, startButtonLabel, flexConfidenceText,
   resumeNote, flattenJobTree, descendantIds, fieldChildTitle, deleteConfirmMessage, samplingState,
   runConfigForJob, healthForDisplay, runElements, runIndicatorTags, runRowLabel, runChildTitle,
-  jobHasFailure, errorLogText,
+  jobHasFailure, errorLogText, jobOutOfDate,
 } from './oxdna_jobs_panel.js'
 
 describe('jobHasFailure', () => {
@@ -62,6 +62,15 @@ describe('errorLogText', () => {
   })
   it('handles a missing payload gracefully', () => {
     expect(errorLogText(null)).toMatch(/No error details/)
+  })
+})
+
+describe('jobOutOfDate (design edited after relax)', () => {
+  it('reflects the backend out_of_date flag', () => {
+    expect(jobOutOfDate({ out_of_date: true })).toBe(true)
+    expect(jobOutOfDate({ out_of_date: false })).toBe(false)
+    expect(jobOutOfDate({})).toBe(false)
+    expect(jobOutOfDate(null)).toBe(false)
   })
 })
 

@@ -35,6 +35,7 @@ from backend.api.routes_oxdna import (
     AnchorRef,
     FieldElement,
     SurfaceElement,
+    _assert_job_current,
     _load_job,
     _workspace,
 )
@@ -56,7 +57,6 @@ from backend.physics.oxdna_interface import (
     DEFAULT_ANCHOR_STIFF,
     oxdna_backbone_site,
     pn_to_oxdna_force,
-    read_configuration_unwrapped,
     write_configuration,
 )
 
@@ -89,6 +89,17 @@ class LiveFieldRequest(BaseModel):
     dir:      list[float] = Field(..., min_length=3, max_length=3)
 
 
+class LiveReconfigureRequest(BaseModel):
+    """Re-compose a RUNNING live session's element set (the user toggled the floor /
+    E-field / anchors mid-run).  Same independently-optional elements as start —
+    the engine is rebuilt over the session's CURRENT pose, so the structure responds
+    from where it is (no reset)."""
+    field:        FieldElement | None = None
+    surface:      SurfaceElement | None = None
+    anchors:      list[AnchorRef] = Field(default_factory=list)
+    anchor_stiff: float = Field(DEFAULT_ANCHOR_STIFF, gt=0.0)
+
+
 # ── oxpy availability (the field-steering patch is mandatory) ─────────────────
 
 def oxpy_live_available() -> dict:
@@ -110,23 +121,37 @@ def oxpy_live_available() -> dict:
 
 # ── Frame builder (display payload, mirrors the batch field display) ──────────
 
-def _make_frame_builder(rundir: Path, design, design_ref: Path, anchor_keys):
-    """Return a ``frame_builder(live_session) -> positions`` that flushes the
-    engine's current configuration to ``last_conf.dat`` and reads it back into the
-    same applyFemPositions payload the ``/oxdna/jobs/{id}/display`` route emits:
-    PBC-unwrapped, aligned to the origin-frame design geometry, with the anchored
-    beads as a positional-only reference (translate-onto-design, NO rotation) so
-    the field-induced reorientation we're studying stays visible.  The true
-    backbone site is rendered (not the inward oxDNA centre of mass)."""
+def _make_frame_builder(design, design_ref: Path, anchor_keys):
+    """Return a ``frame_builder(live_session) -> positions`` that reads the engine's
+    CURRENT configuration straight from oxpy memory (no per-frame file round-trip)
+    and folds it into the same applyFemPositions payload the
+    ``/oxdna/jobs/{id}/display`` route emits: PBC-unwrapped, aligned to the
+    origin-frame design geometry, with the anchored beads as a positional-only
+    reference (translate-onto-design, NO rotation) so the field-induced reorientation
+    we're studying stays visible.  The true backbone site is rendered (not the inward
+    oxDNA centre of mass).
+
+    The origin-frame reference pose and the bond-adjacency graph are CONSTANT for the
+    session, so both are parsed/built ONCE here and reused every frame (the per-frame
+    cost drops to: in-memory particle read + BFS unwrap + Kabsch)."""
+    from backend.physics.oxdna_interface import (
+        _build_unwrap_adjacency,
+        read_configuration_full,
+        unwrap_align_to_reference,
+    )
+
     keys = [tuple(k) for k in anchor_keys] if anchor_keys else None
+    ref = read_configuration_full(design_ref, design)   # origin-frame design pose — parsed once
+    cache: dict = {}                                     # adjacency, built on the first frame
 
     def build(live_session) -> list:
-        # configuration() flushes the engine state to rundir/last_conf.dat as a
-        # side effect (and returns the raw map, ignored — we want the unwrapped one).
-        live_session.stepper.configuration(design)
-        full = read_configuration_unwrapped(
-            rundir / "last_conf.dat", design, design_ref,
-            align_keys=keys, rotate=keys is None, align=True)
+        stepper = live_session.stepper
+        relax = stepper.configuration_map(design)        # in-memory — no file write/parse
+        if "adj" not in cache:
+            cache["adj"] = _build_unwrap_adjacency(relax, design)
+        full = unwrap_align_to_reference(
+            relax, ref, design, stepper.box_nm(),
+            align_keys=keys, rotate=keys is None, align=True, adj=cache["adj"])
         return [
             {
                 "helix_id": hid,
@@ -199,6 +224,48 @@ def _prepare_live_rundir(design, seed_conf, rundir, *, field, wall, anchors,
     return info, backend
 
 
+def _resolve_live_elements(body):
+    """Resolve a start/reconfigure request's enabled elements into the writers' input
+    dicts (mirror /run): returns ``(field_in, field_oxdna, field_dir, wall_in,
+    anchors)``.  ``field_in`` / ``wall_in`` are None when that element is off."""
+    field_in = None
+    field_oxdna = 0.0
+    field_dir = [0.0, 1.0, 0.0]
+    if body.field:
+        field_oxdna = pn_to_oxdna_force(body.field.field_pN)
+        field_in = {"force_oxdna": field_oxdna, "dir": list(body.field.dir)}
+        field_dir = list(body.field.dir)
+    wall_in = None
+    if body.surface:
+        wall_in = {"dir": body.surface.dir, "offset_nm": body.surface.offset_nm,
+                   "stiff": body.surface.stiff}
+    anchors = [a.model_dump(by_alias=False) for a in body.anchors]
+    return field_in, field_oxdna, field_dir, wall_in, anchors
+
+
+def _build_live_engine(design, seed_conf, rundir, design_ref, *, field_in, wall_in,
+                       anchors, anchor_stiff, steps):
+    """Stage *rundir* for the given element composition (seeded from *seed_conf*) and
+    build the live engine + frame builder.  Shared by /start (seed = the job's relaxed
+    conf) and /reconfigure (seed = the snapshotted current pose), so both run the
+    identical physics setup.  ``_prepare_live_rundir`` autodetects the backend (CUDA
+    when a GPU is present) and stages a CPU fallback input; that backend is threaded
+    into the stepper and returned.  Returns ``(engine, frame_builder, info, backend)``."""
+    from backend.physics.oxdna_live import LiveOxdnaSession, _OxpyStepper
+
+    info, backend = _prepare_live_rundir(
+        design, seed_conf, rundir, field=field_in, wall=wall_in, anchors=anchors,
+        anchor_stiff=anchor_stiff, steps=steps)
+    anchor_keys = [tuple(k) for k in info["anchor_keys"]]
+    field_oxdna = field_in["force_oxdna"] if field_in else 0.0
+    field_dir = list(field_in["dir"]) if field_in else [0.0, 1.0, 0.0]
+    engine = LiveOxdnaSession(design, anchor_keys,
+                              stepper=_OxpyStepper(rundir, backend=backend),
+                              field_dir=field_dir, field_oxdna=field_oxdna)
+    builder = _make_frame_builder(design, design_ref, anchor_keys)
+    return engine, builder, info, backend
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.get("/oxdna/live/available")
@@ -229,6 +296,7 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
     parent = _load_job(body.job_id)
     if is_running(body.job_id) or parent.status != OxdnaStatus.completed:
         raise HTTPException(400, "Live needs a completed relaxed job to seed from.")
+    _assert_job_current(parent)   # refuse (409) if the design changed since the relax
 
     ws = _workspace()
     pjd = parent.job_dir(ws)
@@ -240,27 +308,24 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
         raise HTTPException(400, "No relaxed configuration to seed the live session from.")
 
     # Resolve the enabled elements into the writer's input dicts (mirror /run).
-    field_in = None
-    field_oxdna = 0.0
-    field_dir = [0.0, 1.0, 0.0]
-    if body.field:
-        field_oxdna = pn_to_oxdna_force(body.field.field_pN)
-        field_in = {"force_oxdna": field_oxdna, "dir": list(body.field.dir)}
-        field_dir = list(body.field.dir)
-    wall_in = None
-    if body.surface:
-        wall_in = {"dir": body.surface.dir, "offset_nm": body.surface.offset_nm,
-                   "stiff": body.surface.stiff}
-    anchors = [a.model_dump(by_alias=False) for a in body.anchors]
+    field_in, field_oxdna, field_dir, wall_in, anchors = _resolve_live_elements(body)
 
     from backend.api.crud import _geometry_for_design
-    from backend.physics.oxdna_live import LiveOxdnaSession, _OxpyStepper
 
     sid = new_session_id()
     rundir = ws / "live_sessions" / sid
-    info, backend = _prepare_live_rundir(
-        design, seed_conf, rundir, field=field_in, wall=wall_in, anchors=anchors,
-        anchor_stiff=body.anchor_stiff, steps=body.burst_steps)
+    rundir.mkdir(parents=True, exist_ok=True)
+    # Origin-frame design reference for display alignment (the field-off pose),
+    # mirroring routes_oxdna._design_ref_conf — NOT the drifted seed conf.  Written
+    # before the engine build so the frame builder can parse it.
+    design_ref = rundir / "design_ref.dat"
+    write_configuration(design, _geometry_for_design(design, compact_skips=True), design_ref)
+
+    # _build_live_engine autodetects the backend (CUDA when a GPU is present, with a
+    # CPU fallback input staged) and returns it for the response.
+    engine, builder, info, backend = _build_live_engine(
+        design, seed_conf, rundir, design_ref, field_in=field_in, wall_in=wall_in,
+        anchors=anchors, anchor_stiff=body.anchor_stiff, steps=body.burst_steps)
     # A field with a stale/unresolvable anchor selection (resolves to 0) would still
     # drift the COM — guard like /run does (and clean up the temp rundir).
     if field_in and info["n_anchored"] == 0:
@@ -269,21 +334,12 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
         raise HTTPException(
             400, "The anchor selection resolved to no nucleotides — a live field "
             "needs ≥1 anchor to hold the structure against the field.")
-    anchor_keys = [tuple(k) for k in info["anchor_keys"]]
 
-    # Origin-frame design reference for display alignment (the field-off pose),
-    # mirroring routes_oxdna._design_ref_conf — NOT the drifted seed conf.
-    design_ref = rundir / "design_ref.dat"
-    write_configuration(design, _geometry_for_design(design, compact_skips=True), design_ref)
-
-    engine = LiveOxdnaSession(design, anchor_keys,
-                              stepper=_OxpyStepper(rundir, backend=backend),
-                              field_dir=field_dir, field_oxdna=field_oxdna)
     live = LiveSession(
-        sid, engine,
-        frame_builder=_make_frame_builder(rundir, design, design_ref, anchor_keys),
+        sid, engine, frame_builder=builder,
         field_oxdna=field_oxdna, field_dir=field_dir,
-        burst_steps=body.burst_steps, rundir=rundir)
+        burst_steps=body.burst_steps, rundir=rundir,
+        design=design, design_ref=design_ref)
 
     # One in-process oxpy engine at a time — tear down any prior session first.
     stop_all()
@@ -302,6 +358,58 @@ async def update_oxdna_live_field(session_id: str, body: LiveFieldRequest) -> di
     if live is None:
         raise HTTPException(404, f"live session {session_id!r} not found")
     live.set_field(field_oxdna=pn_to_oxdna_force(body.field_pN), field_dir=body.dir)
+    return {"ok": True}
+
+
+@router.post("/oxdna/live/{session_id}/reconfigure")
+async def reconfigure_oxdna_live(session_id: str, body: LiveReconfigureRequest) -> dict:
+    """Re-compose a running live session (floor / E-field / anchors toggled mid-run).
+
+    The engine is rebuilt over the session's CURRENT pose with the new forces — the
+    structure responds from where it is (no reset to the relaxed seed).  A live field
+    still needs ≥1 anchor.  Applied before the next burst on the worker thread."""
+    live = get_session(session_id)
+    if live is None:
+        raise HTTPException(404, f"live session {session_id!r} not found")
+    if body.field and not body.anchors:
+        raise HTTPException(
+            400, "A live field needs ≥1 anchor (without one the field just drifts the "
+            "whole structure across the box). Add a fixed strand in the Anchors card, "
+            "or disable the field.")
+
+    design = live.design
+    rundir = live.rundir
+    if design is None or rundir is None:
+        raise HTTPException(400, "This live session does not support reconfigure.")
+    design_ref = live.design_ref or (rundir / "design_ref.dat")
+    steps = live.burst_steps
+
+    field_in, field_oxdna, field_dir, wall_in, anchors = _resolve_live_elements(body)
+
+    # Pre-validate the anchor selection on the request thread (resolve_anchor_particles
+    # needs only the design, not the conf) so a stale/empty field anchor returns 400
+    # instead of erroring the worker mid-rebuild.
+    if field_in:
+        from backend.physics.oxdna_interface import resolve_anchor_particles
+        parts, _keys = resolve_anchor_particles(design, anchors)
+        if not parts:
+            raise HTTPException(
+                400, "The anchor selection resolved to no nucleotides — a live field "
+                "needs ≥1 anchor to hold the structure against the field.")
+
+    def rebuild():
+        # Runs on the worker thread AFTER it snapshots the current pose to
+        # reconfig_seed.dat — re-stage the rundir for the new composition + build the
+        # fresh engine seeded from that pose.
+        engine, builder, _info, _backend = _build_live_engine(
+            design, rundir / "reconfig_seed.dat", rundir, design_ref,
+            field_in=field_in, wall_in=wall_in, anchors=anchors,
+            anchor_stiff=body.anchor_stiff, steps=steps)
+        return engine, builder
+
+    live.reconfigure(rebuild, field_oxdna=field_oxdna, field_dir=field_dir)
+    logger.info("reconfigure_oxdna_live: session=%s field=%s surface=%s anchors=%d",
+                session_id, bool(field_in), bool(wall_in), len(anchors))
     return {"ok": True}
 
 

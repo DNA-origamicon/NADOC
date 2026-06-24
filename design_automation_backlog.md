@@ -222,6 +222,17 @@ shared — reuse `append_field` on the parent job, as the gated test does); keep
 (test343) or set `cells_auto_optimisation=false`/`max_density_multiplier` in `render_stage_input` (unfixed, minor).
 Repro probes: scratchpad `af24_standard.py`, `af24_field.py`/`af24_field2.py` (the field sweep)._
 
+**▶ NEW (queued 2026-06-24) — Tier 7: AF-25 (headless feature-log SEEK + non-destructive-scrub oracle) and
+AF-26 (job-staleness ROLL/RETURN lifecycle oracle: simulate→edit→roll→return incl. the 409 crash-guard).
+THESE GUARD A LIVE BUG — the out-of-date-job flow is currently FAILING hand-check (the manual feature-log seek
+doesn't clear the ⚠ / the cursor & model don't visibly roll), and the bug has survived several fix rounds that
+all shipped green unit tests.** That green-tests-but-broken-app gap is the point: AF-26's oracle must drive the
+REAL end-to-end path (incl. a Playwright/integration leg over the actual panel + Feature Log rail, since the
+backend slices already pass) and **be made to go RED on the current build first**. The user explicitly asked
+for this automation INSTEAD of more manual back-and-forth. AF-25 (the missing headless seek primitive) is the
+prerequisite; AF-26 is where the real-flow red lives. Strong "validation-first" pick — arguably ahead of the
+AF-24 real-engine stragglers, since it's an active regression, not a caveat-retirement.
+
 **▶ AF-24 — real-engine Tier-6 validation (NEW, the diversion target; staged):**
 - **P1 — real equilibration τ:** properly-relaxed specimen → real field stage → `measure_field_equilibration` on the
   real `trajectory.dat` → `assert_equilibration_timeline` green. Gated real-oxpy/GPU test. First real-physics proof.
@@ -1702,6 +1713,85 @@ venv** (was `Python:BOOL=OFF`). As-built, for the AF-21 session — DO NOT re-de
   correlate with DNA alignment equilibration timelines, without ripping it apart, for various designs." Runs on the
   batch path (AF-20, de-risked) now; transparently swaps to the AF-21/22 oxpy fast path once built. Can-go-red: a
   campaign where designs are indistinguishable (`expect_distinguishable` violated) or a design yields an empty map.
+
+### Tier 7 — design-timeline navigation + job-staleness lifecycle (the simulate→edit→roll→return loop)
+
+> **■ MANUAL VALIDATION: currently FAILING (as of 2026-06-24).** The out-of-date-job feature still does NOT
+> work end-to-end in the running app — across several fix rounds (snapshot-restore → feature-log seek →
+> `_syncFromDesignResponse` on the roll → `nadoc:design-changed` refetch), each shipped with GREEN unit tests
+> (`test_oxdna_staleness.py` / `test_md_staleness.py` / `roll_design_sync.test.js`) **yet the user reports the
+> bug persists** (the manual feature-log seek doesn't clear the ⚠; the design/cursor don't visibly roll). That
+> gap — **green piecewise tests + a broken real flow** — is the whole reason these AF items exist: the existing
+> tests pin backend slices and isolated client functions, but NOTHING drives the genuine end-to-end path the
+> user actually exercises, so the real failure mode is invisible to CI. The user's call (correct): **build the
+> automation to detect/test/validate this rather than another manual back-and-forth.** So these oracles are NOT
+> "wrap a working feature" — they are **the regression harness for a LIVE bug**, and must be written to **go red
+> on the current build** (write the oracle first, confirm it FAILS, then fix until green). Because the failure
+> is in the frontend wiring + DOM (refetch, rail-thumb, scene rebuild) where the backend already passes, the
+> AF-26 oracle CANNOT be backend-only — it needs a real end-to-end leg (a Playwright/integration harness that
+> drives the actual panel + Feature Log rail, Tier-F style), not just `headless_build` calls.
+
+**Why now.** The 2026-06-23/24 out-of-date-job feature (a design edit after a sim run marks the job stale;
+"Roll & run" SEEKS the feature-log cursor back to the run state; "Return to latest" restores it) is validated
+only in **pieces** and its core primitive — the **feature-log seek** — has no headless entry point at all.
+These two items close that: a navigable build timeline (text-to-design value) + the single end-to-end
+regression guard for the staleness lifecycle (which originally manifested as an internal-server-error, and is
+STILL not passing hand-check — see the callout above). Both ride the ALREADY-SHIPPED routes + the AF-13
+mock-binary path (no GPU) for the backend legs. The browser GESTURES (the ⚠ marker, the roll-or-cancel popup,
+the rail-drag visual, live-follows-the-rolled-design) are the very things failing hand-check → `MV-OXSTALE` /
+`MV-OXLIVEFIELD` (both PENDING/FAILING, not validated).
+
+- [ ] **AF-25 — headless feature-log SEEK wrapper + non-destructive-scrub oracle.** Route
+  `POST /design/features/seek {position, sub_position}` EXISTS (`routes_feature_log.py`) + is UI-wired
+  (`client.seekFeatures` → `feature_log_panel` rail), but has **no headless entry point** — so the design
+  timeline can't be navigated programmatically, and the oxDNA/MD job-roll (which IS a feature-log seek) can't
+  be driven end-to-end. **Shape:** a thin `headless_build.seek_features(position, sub_position=None)` wrapper
+  running the *same* route service mouse-free (mirror the existing wrappers — no logic in `crud.py`).
+  **Augment = NEW `assert_feature_seek(...)`** on a multi-entry built design (bundle → auto-scaffold →
+  assign-sequences → overhang, all now logged) asserting the scrub invariants: (1) **non-destructive** —
+  `len(feature_log)` unchanged after a back-seek (unlike revert, which truncates); (2) **cursor lands** at the
+  requested position; (3) **faithful reconstruction** — `design_build_fingerprint` at position P equals the
+  design as captured when P was the last active op (recorded forward); (4) **reversible** — `seek(P)` then
+  `seek(-1)` returns to the latest fingerprint exactly; (5) **effect removal** — seeking BEFORE a logged op
+  drops its effect (the overhang's strands/helix gone; sequences cleared before `assign-scaffold-sequence`).
+  **Validation gained, not a passthrough:** first programmatic proof the timeline scrub reconstructs + reverses
+  faithfully and non-destructively — the missing primitive under "roll to a job's run state", and a navigable
+  build history for text-to-design. Can-go-red: a seek that truncates the log, lands the cursor wrong, or whose
+  fingerprint ≠ the recorded forward state.
+  **MV status: the in-app seek-driven roll is currently FAILING hand-check** (the user reports the ⚠ doesn't
+  clear / the cursor doesn't move). The backend seek route itself was verified to reconstruct correctly on
+  `6hb_sim_tests`, so AF-25's backend oracle may well pass first-run — that's a SIGNAL the bug lives past the
+  route (frontend refetch/render), so do NOT stop at a green backend oracle: it's the prerequisite primitive,
+  and AF-26 is where the real-flow red must be produced.
+
+- [ ] **AF-26 — headless job-staleness ROLL/RETURN lifecycle wrapper + the simulate→edit→roll→return oracle.**
+  The whole "run a sim → edit the design → job goes out-of-date → roll the design back to the run state → run →
+  return to latest" loop is the regression guard for the out-of-date feature (which originally crashed with an
+  internal-server-error), but it's only validated in PIECES, never as one driven lifecycle. Routes EXIST:
+  `POST /oxdna/jobs/{id}/roll-design` + `/md/jobs/{id}/roll-design` (seek-to-run-state + a "Latest" return
+  loadout) + `/design/loadouts/{id}/select?save_current=false` (return). **Shape:** headless wrappers
+  `roll_job_to_run_state(job_id)` + `return_to_latest(loadout_id)` (`headless_oxdna_build.py` /
+  `headless_build.py`) composing the AF-13 relax wrapper + AF-2 edit wrappers + AF-25 seek. **Augment = NEW
+  `assert_roll_return_lifecycle(...)`** running the full path and asserting at each leg: after an edit the job
+  is `out_of_date=True`; **a live/production attempt on the stale job is REFUSED (409)** — the guard that
+  replaced the crash; after roll `out_of_date=False`, the cursor sits at `job.feature_log_position`, the full
+  log is kept, the topology reverts (overhang gone) while **sequences survive** (the now-logged assign-sequence
+  ops); after return-to-latest the design is back to the edited state (overhang present). **Validation gained:**
+  first end-to-end automated proof of the staleness→roll→return contract incl. the 409 crash-guard — the single
+  regression the feature lacked. Reuses AF-13's mock-binary path (no GPU) for the backend legs. Can-go-red: a
+  stale job that runs without refusal, a roll that doesn't move the cursor / clear the flag / preserve the log,
+  or a return that loses the edits.
+  **MV status: this lifecycle is currently FAILING hand-check (2026-06-24) and the bug persists across multiple
+  fix rounds whose unit tests all went green** — so this item's PURPOSE is to reproduce that failure
+  automatically, not to bless a working feature. **Write the oracle to go RED on the current build first**, then
+  fix until green (the anti-shovel contract, sharpened: a green-first-run oracle here is a FALSE PASS — it means
+  the harness isn't exercising the path the user is). Because every backend slice already passes while the app
+  fails, the failing leg is the **frontend** (the panels' refetch on a `nadoc:design-changed` from a manual
+  rail-seek; the Feature Log rail-thumb position; the scene rebuild) — so AF-26 needs a **real end-to-end leg**
+  (a Playwright/integration harness driving the actual oxDNA/MD panel + Feature Log rail and asserting the ⚠
+  clears + the cursor moves + the model reverts), NOT a backend-only `headless_build` oracle. This is the
+  deliverable the user explicitly asked for: automation that DETECTS this class of bug so future fixes are
+  proven, ending the manual back-and-forth.
 
 ### Tier F — frontend display subsystems (no REST route; JS-controller API + vitest-oracle augment)
 

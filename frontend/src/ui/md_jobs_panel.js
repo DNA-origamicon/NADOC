@@ -14,6 +14,8 @@
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progress.js'
 import { showToast } from './toast.js'
+import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
+import { rollMdJobDesign } from '../api/client.js'
 import { docKey, docHeaders } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
@@ -94,7 +96,7 @@ export function mdHasMetrics(job, persisted = null) {
  *  every poll (visible stutter).  Mirrors the oxDNA panel. */
 export function mdListSignature(jobs, selectedId) {
   return (jobs ?? [])
-    .map(j => `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}`)
+    .map(j => `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}:${j.out_of_date ? 1 : 0}`)
     .join('|') + `#${selectedId ?? ''}`
 }
 
@@ -886,9 +888,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   prodBtn?.addEventListener('click', async () => {
     if (!_selectedId) return
+    if (prodBtn.disabled) return
+    // Stale-design guard: if the design changed since this job was prepared, offer to
+    // roll back to the job's run-state (or cancel) before extending it.
+    const proceed = await ensureJobCurrent({
+      job: _jobs.find(j => j.job_id === _selectedId),
+      rollFn: rollMdJobDesign,
+      refetch: _fetchJobs,
+      isStale: () => jobOutOfDate(_jobs.find(j => j.job_id === _selectedId)),
+      actionLabel: 'a production run',
+    })
+    if (!proceed) return
     const steps = _productionSteps()
     const ns = _productionNs(steps)
-    if (prodBtn.disabled) return
     if (prodStatus) {
       prodStatus.textContent = `Appending ${steps.toLocaleString()} production steps (${ns.toFixed(3)} ns)...`
       prodStatus.style.color = _C.muted
@@ -943,6 +955,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       _startMdPrewarm()
     }
   })
+
+  // Editing the design after a prep invalidates every MD job — refetch so the
+  // out-of-date ⚠ markers appear immediately (main.js dispatches this on each design
+  // change), not only on the next poll.
+  window.addEventListener('nadoc:design-changed', () => { _fetchJobs() })
 
   window.addEventListener('nadoc:md-display-state', evt => {
     if (!displayToggle?.checked) return
@@ -1146,6 +1163,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       ts.style.cssText = `font-size:10px;color:${_C.dim};flex-shrink:0;font-family:var(--font-mono)`
       ts.textContent = _fmtJobTime(job.created_at)
       row.appendChild(ts)
+
+      // Out-of-date marker: the design changed since this MD job was prepared.
+      if (jobOutOfDate(job)) {
+        const warn = Object.assign(document.createElement('span'), { textContent: '⚠' })
+        warn.style.cssText = `flex-shrink:0;color:${_C.warn};font-size:11px`
+        warn.title = 'Design changed since this MD job was prepared — roll the design back, or prepare a new run.'
+        row.appendChild(warn)
+      }
 
       // "Fix" button for a GPU-out-of-memory failure → opens the downsize popup.
       if (shouldShowFixButton(job)) {
