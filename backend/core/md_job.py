@@ -65,6 +65,13 @@ class MdJob:
     segments: list[MdSegmentStatus] = field(default_factory=list)
     current_segment_idx: int = 0
     error: Optional[str] = None
+    # Structured failure category, set alongside ``error`` so the UI can offer a
+    # targeted fix (e.g. "vram_oom" → the downsize/refit popup).  None = generic.
+    failure_kind: Optional[str] = None
+    # CreateJobRequest params captured at creation so a "refit" can rebuild the
+    # job with one setting changed (e.g. add a water-shell carve). None for jobs
+    # created before this was recorded.
+    prep_params: Optional[dict] = None
     namd_pid: Optional[int] = None
     threads: int = 16
     devices: str = "0"
@@ -110,6 +117,8 @@ class MdJob:
         ]
         data.setdefault("design_source_path", None)
         data.setdefault("seed_oxdna_job_id", None)
+        data.setdefault("failure_kind", None)
+        data.setdefault("prep_params", None)
         return cls(**data)
 
     @classmethod

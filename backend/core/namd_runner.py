@@ -32,6 +32,16 @@ from backend.core.md_job import MdJob, MdStatus, MdHealthSample
 from backend.core.md_health import run_health_check, append_health_jsonl
 from backend.core.namd_metrics import parse_namd_log
 from backend.core.md_protocols import segments_from_manifest
+from backend.core.md_vram import classify_failure_log_file
+
+
+def _classify_namd_failure(log_path: Path) -> str:
+    """Classify a failed NAMD run from its log into a FAILURE_* kind.
+
+    Drives the targeted "Fix" remedy: vram_oom → downsize, instability → gentler
+    relaxation, gpu_error → retry, other → generic guidance.
+    """
+    return classify_failure_log_file(log_path)
 
 logger = logging.getLogger(__name__)
 
@@ -660,6 +670,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         if rc != 0:
             logger.error("[%s] Minimization failed rc=%d; log=%s", job.job_id, rc, min_log)
             job.status = MdStatus.failed
+            job.failure_kind = _classify_namd_failure(min_log)
             job.error  = f"Minimization failed (rc={rc}). See {min_name}.log"
             job.save(workspace_dir)
             return
@@ -784,6 +795,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 if idx < len(job.segments):
                     job.segments[idx].status = "failed"
                 job.status = MdStatus.failed
+                job.failure_kind = _classify_namd_failure(seg_log)
                 job.error = f"NAMD failed for {spec.name} (rc={rc}). See {seg_log.name}"
                 job.save(workspace_dir)
                 return

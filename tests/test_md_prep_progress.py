@@ -141,14 +141,17 @@ def test_eta_zero_when_done():
 
 # ── Stall warning ────────────────────────────────────────────────────────────
 
-def test_warning_fires_after_soft_threshold():
+def test_no_elapsed_vs_expected_warning():
+    """Removed: the elapsed-vs-expected "may be stalled" warning was a poor signal
+    (per-phase nominal times vary too much by design size). A real stall is
+    surfaced by the heartbeat going stale, not by a timer."""
     phases = [PrepPhase("a", "Phase A", nominal_s=10.0, soft_factor=2.0)]
     clock = FakeClock()
     tr = PrepTracker(phases, clock=clock)
     clock.advance(15.0)
     assert tr.snapshot()["warning"] == ""
-    clock.advance(10.0)  # 25 s > 2 × 10 s
-    assert "stalled" in tr.snapshot()["warning"]
+    clock.advance(100.0)  # well past any old threshold — still no warning
+    assert tr.snapshot()["warning"] == ""
 
 
 def test_no_warning_once_done():

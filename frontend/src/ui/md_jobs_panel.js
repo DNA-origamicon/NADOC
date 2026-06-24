@@ -17,6 +17,7 @@ import { showToast } from './toast.js'
 import { docKey, docHeaders } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
+import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
 const _C = {
@@ -91,7 +92,7 @@ export function mdHasMetrics(job, persisted = null) {
  *  every poll (visible stutter).  Mirrors the oxDNA panel. */
 export function mdListSignature(jobs, selectedId) {
   return (jobs ?? [])
-    .map(j => `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}`)
+    .map(j => `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}`)
     .join('|') + `#${selectedId ?? ''}`
 }
 
@@ -126,6 +127,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const mgInput       = document.getElementById('md-jobs-mg')
   const naclInput     = document.getElementById('md-jobs-nacl')
   const paddingInput  = document.getElementById('md-jobs-padding')
+  const watershellInput = document.getElementById('md-jobs-watershell')
   const minstepsInput = document.getElementById('md-jobs-minsteps')
   const autostartChk  = document.getElementById('md-jobs-autostart')
   const displayToggle = document.getElementById('md-jobs-display-toggle')
@@ -173,6 +175,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   let _prewarmKey   = null
   let _listSig      = null   // last-rendered list signature (avoids spinner-restart churn)
   let _legendEl     = null   // status-symbol legend, inserted once after the list
+  let _fetchFails   = 0      // consecutive failed job-list polls (backend-down detector)
   let _inheritedSeedShown = null  // oxDNA job id whose seed positions are currently displayed
   let _mdFrameShown = false       // has a real MD frame been displayed for the current display job?
   const _metricsByJob = new Map()
@@ -273,15 +276,25 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   async function _fetchJobs() {
     try {
       const r = await fetch('/api/md/jobs')
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
       _jobs = await r.json()
       _jobs.sort((a, b) => b.created_at - a.created_at)
       console.log(`[${_ts()}] md-jobs: fetched ${_jobs.length} jobs`)
+      if (_fetchFails > 0) { _fetchFails = 0; _checkEngines() }  // reconnected → restore status line
       _renderList()
       _selectBestJob()
       if (displayToggle?.checked) _refreshMdDisplay()
       else _refreshMdPrewarm()
     } catch (err) {
-      console.warn(`[${_ts()}] md-jobs: _fetchJobs failed`, err)
+      _fetchFails++
+      console.warn(`[${_ts()}] md-jobs: _fetchJobs failed (${_fetchFails})`, err)
+      // Surface a non-responding backend so an active job doesn't silently keep
+      // looking "ongoing" — the poll can't confirm it's still alive.  Two strikes
+      // avoids flapping on a single dropped request.
+      if (_fetchFails >= 2 && namdStatusEl) {
+        namdStatusEl.textContent = '⚠ Backend not responding — job status may be stale (is the server running?)'
+        namdStatusEl.style.color = _C.err
+      }
     }
   }
 
@@ -356,7 +369,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   function _resetControlsToDefaults() {
     resetControlsToDefaults([
       presetSel, threadsInput, devicesInput, saltModeSel, mgInput, naclInput,
-      paddingInput, minstepsInput, autostartChk, prodStepsInput, prodContinueChk,
+      paddingInput, watershellInput, minstepsInput, autostartChk, prodStepsInput, prodContinueChk,
     ])
     _threadsInit = false
     _applySaltMode()
@@ -802,6 +815,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       mg_conc_mM:     parseFloat(mgInput?.value     ?? '12.5'),
       ion_conc_mM:    parseFloat(naclInput?.value   ?? '0'),
       padding_nm:     parseFloat(paddingInput?.value ?? '1.2'),
+      // UI is in Å; API wants nm. 0 = full box (no carve).
+      water_shell_nm: (parseFloat(watershellInput?.value ?? '0') || 0) / 10,
       minimize_steps: parseInt(minstepsInput?.value  ?? '10000', 10),
       autostart:      autostartChk?.checked ?? true,
       design_source_path: _currentPartPath() || null,
@@ -921,6 +936,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     jobs.slice(0, 8).forEach((job, i) => {
       const row = document.createElement('div')
       const isSelected = job.job_id === _selectedId
+      row.setAttribute('data-job-id', job.job_id)
       row.style.cssText = [
         'display:flex;align-items:center;gap:6px;padding:4px 5px;border-radius:3px;cursor:pointer;margin-bottom:2px',
         `background:${isSelected ? '#161b22' : 'transparent'}`,
@@ -956,6 +972,21 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       ts.textContent = _fmtJobTime(job.created_at)
       row.appendChild(ts)
 
+      // "Fix" button for a GPU-out-of-memory failure → opens the downsize popup.
+      if (shouldShowFixButton(job)) {
+        const fix = document.createElement('button')
+        fix.textContent = 'Fix'
+        fix.title = 'Ran out of GPU memory — adjust settings to fit this card'
+        fix.style.cssText =
+          `flex-shrink:0;font-size:10px;color:#fff;background:${_C.warn};`
+          + 'border:none;border-radius:3px;padding:1px 7px;cursor:pointer;font-weight:600'
+        fix.addEventListener('click', (e) => {
+          e.stopPropagation()   // don't trigger row selection
+          _openVramFix(job.job_id)
+        })
+        row.appendChild(fix)
+      }
+
       // Status symbol: spinner while active, else the badge shape (tooltip = label).
       const sym = mdJobIsActive(job)
         ? makeSpinner(sb.color, 10)
@@ -968,6 +999,43 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       listEl.appendChild(row)
     })
     if (!_legendEl) { _legendEl = makeStatusLegend(); listEl.after(_legendEl) }
+  }
+
+  // ── "Fix" flow (downsize / gentle-retry / resume) ─────────────────────────
+  async function _openVramFix(jobId) {
+    let advice
+    try {
+      const r = await fetch(`/api/md/jobs/${jobId}/fix-advice`)
+      advice = await r.json()
+      if (!r.ok) throw new Error(advice?.detail ?? `Server error ${r.status}`)
+    } catch (err) {
+      console.warn(`[${_ts()}] md-jobs: fix-advice failed`, err)
+      advice = { failure_kind: 'other', remedy: 'none' }
+    }
+    openVramFixModal({
+      advice,
+      onApply: async (action) => {
+        if (action.type === 'retry') {
+          const r = await fetch(`/api/md/jobs/${jobId}/start`, {
+            method: 'POST', headers: { ...docHeaders() },
+          })
+          if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail ?? `Server error ${r.status}`)
+          await _fetchJobs()
+          _selectJob(jobId)
+          return
+        }
+        // refit → a fresh job with adjusted settings
+        const r = await fetch(`/api/md/jobs/${jobId}/refit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...docHeaders() },
+          body: JSON.stringify(action.body),
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(d?.detail ?? `Server error ${r.status}`)
+        await _fetchJobs()
+        if (d?.job_id) _selectJob(d.job_id)
+      },
+    })
   }
 
   // ── Job selection + WS subscription ───────────────────────────────────────

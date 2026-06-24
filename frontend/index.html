@@ -3780,6 +3780,10 @@
                     <label style="color:#8b949e;align-self:center">Min. steps</label>
                     <input id="md-jobs-minsteps" type="number" value="10000" min="100" step="1000"
                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center" title="0 = full box. >0 keeps only water within this distance of the DNA and runs NVT — shrinks large designs to fit a small GPU. Use ≥6 Å; 15 Å recommended.">Water shell (Å)</label>
+                    <input id="md-jobs-watershell" type="number" value="0" min="0" step="1"
+                           title="0 = full box. >0 keeps only water within this distance of the DNA and runs NVT — shrinks large designs to fit a small GPU. Use ≥6 Å; 15 Å recommended."
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
                   </div>
                   <label style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
                     <input id="md-jobs-autostart" type="checkbox" checked style="accent-color:#3fb950">

@@ -51,6 +51,11 @@ from backend.core.md_prep_progress import (
     write_prep_progress,
 )
 from backend.core.namd_runner import default_threads, find_gmx, find_namd, is_running, reconcile_job_status, start_job, stop_job
+from backend.core.md_vram import (
+    detect_vram_mb,
+    package_solvation_profile,
+    recommend_downsize,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,10 +80,23 @@ class CreateJobRequest(BaseModel):
     ion_conc_mM: float = Field(0.0,  ge=0.0)
     mg_conc_mM:  float = Field(12.5, ge=0.0)
     padding_nm:  float = Field(1.2,  gt=0.0)
+    water_shell_nm: float = Field(
+        0.0, ge=0.0,
+        description="If >0, keep only water within this distance (nm) of the DNA "
+                    "and drop the rest, then run NVT. Halves the atom count for "
+                    "large designs so GPU-resident NAMD fits a small card. "
+                    "Use ≥0.6 nm (2·shell ≥ 12 Å cutoff); 1.5 nm recommended.",
+    )
     minimize_steps: int = Field(4_800, ge=100)
     declash: bool = Field(
         False,
         description="Force the declash protocol (auto-enabled anyway for designs with crossover extra bases, e.g. 2xT thymines)",
+    )
+    force_soft: bool = Field(
+        False,
+        description="Run the WHOLE ladder with the soft integrator (rigidBonds none "
+                    "+ 1 fs), not just the first segment. The instability 'Fix' remedy "
+                    "sets this for a model that keeps blowing up rigid-bond RATTLE.",
     )
     design_source_path: Optional[str] = Field(
         None,
@@ -733,15 +751,6 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     if body.salt_mode not in {"screening", "custom"}:
         raise HTTPException(400, f"Unknown salt_mode: {body.salt_mode!r}")
 
-    ion_conc_mM = body.ion_conc_mM
-    mg_conc_mM = body.mg_conc_mM
-    if body.salt_mode == "screening":
-        # Validated one-button default for DNA origami: neutralizing Na+ plus
-        # 12.5 mM MgCl2/MGH screening, no extra bulk NaCl.  The neutralizing
-        # counterions are computed from the audited topology charge downstream.
-        ion_conc_mM = 0.0
-        mg_conc_mM = 12.5
-
     # Engine availability is cheap — fail fast (synchronously) so the user gets a
     # 400 instead of a job that immediately fails in the background.
     try:
@@ -773,6 +782,26 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         name = (design.metadata.name or "design").replace(" ", "_")
         size_factor = design_size_factor(design)
 
+    job = _spawn_prep_job(body, design=design, seeded=seeded, name=name, size_factor=size_factor)
+    return job.to_dict()
+
+
+def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
+                    size_factor: float) -> MdJob:
+    """Create the MdJob, persist its prep params, and launch background prep.
+
+    Shared by :func:`create_md_job` and :func:`refit_md_job` so a refit reuses the
+    exact same solvation → ENM → config pipeline with one setting changed.
+    """
+    ion_conc_mM = body.ion_conc_mM
+    mg_conc_mM = body.mg_conc_mM
+    if body.salt_mode == "screening":
+        # Validated one-button default for DNA origami: neutralizing Na+ plus
+        # 12.5 mM MgCl2/MGH screening, no extra bulk NaCl.  The neutralizing
+        # counterions are computed from the audited topology charge downstream.
+        ion_conc_mM = 0.0
+        mg_conc_mM = 12.5
+
     job = new_job(
         design_name    = name,
         protocol       = body.protocol,
@@ -783,6 +812,8 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         design_source_path = body.design_source_path,
         seed_oxdna_job_id  = body.oxdna_job_id if seeded else None,
     )
+    # Capture the request so a later refit can rebuild the job with one knob moved.
+    job.prep_params = body.model_dump()
     job.status = MdStatus.preparing
     job.save(_workspace())
     logger.info("create_md_job: job_id=%s design=%s protocol=%s seeded=%s",
@@ -806,7 +837,7 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     _PREP_TASKS.add(task)
     task.add_done_callback(_PREP_TASKS.discard)
 
-    return job.to_dict()
+    return job
 
 
 async def _prepare_job_bg(
@@ -858,6 +889,30 @@ async def _prepare_job_bg(
         if _sequenced_base_count(local_design) == 0:
             raise RuntimeError(_NO_SEQUENCE_MSG)
 
+        # Pre-flight size check: if the user left the water shell on auto (0) and
+        # the system won't fit the detected GPU, enable a carve that does — so a
+        # large origami runs first time instead of OOM-ing.  Records the choice on
+        # the job so the user can see what was auto-adjusted.
+        water_shell_nm = body.water_shell_nm
+        if not water_shell_nm:
+            from backend.core.md_vram import auto_water_shell  # noqa: PLC0415
+            tracker.report("topology", None, "Checking GPU memory headroom…")
+            auto = await run_in_threadpool(
+                auto_water_shell, local_design,
+                padding_nm=body.padding_nm, devices=body.devices,
+                atomistic_model=seed_model,
+            )
+            if auto["shell_nm"]:
+                water_shell_nm = auto["shell_nm"]
+                logger.info("prep %s: auto water shell %.2f nm — %s",
+                            job_id, water_shell_nm, auto["note"])
+                job = MdJob.load(job_id, ws)
+                pp = dict(job.prep_params or {})
+                pp["auto_water_shell_nm"] = water_shell_nm
+                pp["auto_water_shell_note"] = auto["note"]
+                job.prep_params = pp
+                job.save(ws)
+
         prepare = (
             prepare_equilibrium_aware_namd
             if body.protocol == EQUILIBRIUM_AWARE_PROTOCOL
@@ -871,9 +926,11 @@ async def _prepare_job_bg(
             mg_conc_mM      = mg_conc_mM,
             salt_mode       = body.salt_mode,
             padding_nm      = body.padding_nm,
+            water_shell_nm  = water_shell_nm,
             minimize_steps  = body.minimize_steps,
             atomistic_model = seed_model,
             declash         = body.declash,
+            force_soft      = body.force_soft,
             progress        = tracker.report,
         )
         logger.info("prep %s: done; package=%s name_stem=%s segments=%d",
@@ -914,10 +971,35 @@ async def _prepare_job_bg(
         start_job(job, ws)
 
 
+def _backfill_failure_kind(job: MdJob) -> None:
+    """Lazily classify a failed job's failure_kind (one-time, then persisted).
+
+    Jobs that failed before failure_kind existed get classified here so the "Fix"
+    button can appear.  Scans only the few most-recent package logs and persists
+    the result, so each job is examined at most once.
+    """
+    if job.status != MdStatus.failed or job.failure_kind is not None:
+        return
+    pkg = job.package_dir(_workspace())
+    kind = "other"
+    if pkg.exists():
+        from backend.core.md_vram import classify_failure_log_file  # noqa: PLC0415
+        logs = sorted(pkg.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for lg in logs[:4]:
+            k = classify_failure_log_file(lg)
+            if k != "other":
+                kind = k
+                break
+    job.failure_kind = kind
+    job.save(_workspace())
+
+
 @router.get("/md/jobs")
 async def list_md_jobs() -> list[dict]:
     jobs = MdJob.list_jobs(_workspace())
     jobs = [reconcile_job_status(j, _workspace()) for j in jobs]
+    for j in jobs:
+        _backfill_failure_kind(j)
     return [j.to_dict() for j in jobs]
 
 
@@ -1030,11 +1112,203 @@ async def start_md_job(job_id: str) -> dict:
 
     job.status = MdStatus.running
     job.error = None
+    job.failure_kind = None
     job.user_stopped = False  # explicit (re)start clears the no-auto-resume flag
     job.save(_workspace())
 
     start_job(job, _workspace())
     return {"ok": True, "job_id": job_id, "status": "running"}
+
+
+class RefitRequest(BaseModel):
+    """Settings to override when re-running a failed job (all optional).
+
+    The "Fix" popup sends whichever apply to the diagnosed failure: a water-shell
+    carve for a VRAM downsize, force_soft for an instability, or none to retry.
+    """
+    water_shell_nm: Optional[float] = Field(None, ge=0.0)
+    force_soft: Optional[bool] = Field(None)
+    minimize_steps: Optional[int] = Field(None, ge=100)
+
+
+# Failure kind → the remedy the "Fix" popup offers.
+_REMEDY_BY_KIND = {
+    "vram_oom": "downsize",     # refit with a water-shell carve sized to the GPU
+    "instability": "gentle",    # refit with the soft integrator across the ladder
+    "gpu_error": "retry",       # resume — often a transient GPU/driver state
+    "other": "none",            # show the log; no automatic remedy
+}
+
+
+def _failed_log_excerpt(job: MdJob, max_lines: int = 24) -> Optional[str]:
+    """Tail of the most recent package log, for the popup to display."""
+    pkg = job.package_dir(_workspace())
+    if not pkg.exists():
+        return None
+    logs = sorted(pkg.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not logs:
+        return None
+    try:
+        lines = logs[0].read_text(errors="replace").splitlines()
+    except OSError:
+        return None
+    return "\n".join(lines[-max_lines:])
+
+
+def _fix_advice(job: MdJob) -> dict:
+    """Diagnose any failed job and describe the remedy the UI should offer.
+
+    For a VRAM OOM this includes the downsize recommendation (heavy geometry
+    compute); other kinds just carry the classification + log excerpt.  Call via
+    run_in_threadpool.
+    """
+    kind = job.failure_kind or "other"
+    if kind == "vram_oom":
+        out = _vram_advice(job)
+    else:
+        out = {
+            "job_id": job.job_id,
+            "is_vram_failure": False,
+            "failure_kind": kind,
+            "error": job.error,
+            "vram_mb": detect_vram_mb(job.devices),
+        }
+        prof = (package_solvation_profile(job.package_dir(_workspace()), job.name_stem)
+                if job.name_stem else None)
+        out["current_water_shell_nm"] = (prof or {}).get("current_water_shell_nm")
+
+    out["failure_kind"] = kind
+    out["remedy"] = _REMEDY_BY_KIND.get(kind, "none")
+    if kind == "vram_oom" and not out.get("feasible"):
+        out["remedy"] = "none"   # can't downsize enough for this GPU
+    out["log_excerpt"] = _failed_log_excerpt(job)
+    return out
+
+
+def _vram_advice(job: MdJob) -> dict:
+    """Build the VRAM diagnosis + downsize recommendation for a job (blocking).
+
+    Runs the geometry estimate, so call via run_in_threadpool.
+    """
+    vram_mb = detect_vram_mb(job.devices)
+    profile = (
+        package_solvation_profile(job.package_dir(_workspace()), job.name_stem)
+        if job.name_stem else None
+    )
+    out: dict = {
+        "job_id": job.job_id,
+        "is_vram_failure": job.failure_kind == "vram_oom",
+        "failure_kind": job.failure_kind,
+        "error": job.error,
+        "vram_mb": vram_mb,
+        "vram_detected": vram_mb is not None,
+        "profile_available": profile is not None,
+        "current_water_shell_nm": (profile or {}).get("current_water_shell_nm"),
+    }
+    if profile is None or vram_mb is None:
+        return out
+    out.update(recommend_downsize(
+        dna_xyz_nm = profile["dna_xyz_nm"],
+        box_nm     = profile["box_nm"],
+        full_water = profile["full_water"],
+        dna_atoms  = profile["dna_atoms"],
+        ion_atoms  = profile["ion_atoms"],
+        vram_mb    = vram_mb,
+    ))
+    return out
+
+
+@router.get("/md/jobs/{job_id}/fix-advice")
+async def fix_advice(job_id: str) -> dict:
+    """Diagnose a failed job and describe the remedy the "Fix" popup should offer.
+
+    Covers VRAM out-of-memory (→ downsize), first-step instability (→ gentler
+    relaxation), GPU/driver errors (→ retry), and anything else (→ show the log).
+    """
+    job = _load_job(job_id)
+    return await run_in_threadpool(_fix_advice, job)
+
+
+@router.post("/md/jobs/{job_id}/refit")
+async def refit_md_job(job_id: str, body: RefitRequest) -> dict:
+    """Create a new job from a failed one's provenance, with adjusted settings.
+
+    Reuses the original design source / oxDNA seed and prep settings, overriding
+    whichever of ``water_shell_nm`` / ``force_soft`` / ``minimize_steps`` were sent
+    (a water-shell carve also forces the ladder to NVT downstream).
+    """
+    old = _load_job(job_id)
+    if not (old.prep_params or old.design_source_path or old.seed_oxdna_job_id):
+        raise HTTPException(400, "Cannot refit: original job has no design provenance.")
+
+    try:
+        find_namd(); find_gmx()
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc))
+
+    # Reconstruct the original request, apply the sent overrides, backfill provenance.
+    params = dict(old.prep_params or {})
+    if body.water_shell_nm is not None:
+        params["water_shell_nm"] = body.water_shell_nm
+    if body.force_soft is not None:
+        params["force_soft"] = body.force_soft
+    if body.minimize_steps is not None:
+        params["minimize_steps"] = body.minimize_steps
+    params.setdefault("protocol", old.protocol)
+    params.setdefault("threads", old.threads)
+    params.setdefault("devices", old.devices)
+    params.setdefault("design_source_path", old.design_source_path)
+    params.setdefault("oxdna_job_id", old.seed_oxdna_job_id)
+    valid = {k: v for k, v in params.items() if k in CreateJobRequest.model_fields}
+    new_body = CreateJobRequest(**valid)
+
+    seeded = bool(new_body.oxdna_job_id)
+    if seeded:
+        from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
+        try:
+            await run_in_threadpool(assert_namd_seed_available, new_body.oxdna_job_id, _workspace())
+        except FileNotFoundError as exc:
+            raise HTTPException(400, str(exc))
+        design = None
+        name = old.design_name or "design"
+        size_factor = 1.0
+    else:
+        design = _load_design_for_refit(new_body.design_source_path)
+        if design is None:
+            raise HTTPException(
+                400,
+                "Cannot refit: original design could not be reloaded "
+                f"({new_body.design_source_path!r}).",
+            )
+        if _sequenced_base_count(design) == 0:
+            raise HTTPException(400, _NO_SEQUENCE_MSG)
+        name = (design.metadata.name or "design").replace(" ", "_")
+        size_factor = design_size_factor(design)
+
+    job = _spawn_prep_job(new_body, design=design, seeded=seeded, name=name,
+                          size_factor=size_factor)
+    logger.info("refit %s → new job %s (water_shell_nm=%.2f force_soft=%s)",
+                job_id, job.job_id, new_body.water_shell_nm, new_body.force_soft)
+    return {"ok": True, "job_id": job.job_id, "refit_from": job_id,
+            "water_shell_nm": new_body.water_shell_nm, "force_soft": new_body.force_soft}
+
+
+def _load_design_for_refit(source_path: Optional[str]):
+    """Reload a Design for a non-seeded refit from its workspace source path."""
+    from backend.core.models import Design  # noqa: PLC0415
+
+    if source_path:
+        p = (_workspace() / source_path)
+        if p.exists():
+            try:
+                return Design.from_json(p.read_text())
+            except (OSError, ValueError):
+                pass
+    # Fall back to the active design session, if any.
+    try:
+        return design_state.get_or_404()
+    except HTTPException:
+        return None
 
 
 @router.post("/md/jobs/{job_id}/stop")

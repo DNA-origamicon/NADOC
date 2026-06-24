@@ -618,6 +618,7 @@ def mgh_slow_release_segments(
     name_stem: str,
     *,
     soft: bool = False,
+    nvt_only: bool = False,
 ) -> tuple[str, list[SegmentSpec]]:
     """Return (min_name, segments) for the mgh_slow_release protocol.
 
@@ -632,6 +633,12 @@ def mgh_slow_release_segments(
     ``soft=True`` (declash protocol) runs every stage with the soft integrator
     (rigidBonds none + 1 fs) so residual single-stranded contacts do not crash
     rigid-bond RATTLE.
+
+    ``nvt_only=True`` forces every stage to run with the barostat off.  This is
+    required when the package was built with a water-shell carve: the carved cell
+    has vacuum corners, and an NPT piston would compress the box until the DNA
+    overlaps its own periodic image.  Stage names keep their ``NPT`` label (to
+    preserve manifest/resume continuity) but the cell is held fixed.
     """
     min_name = f"{name_stem}_00_min_enm_k0p5"
 
@@ -668,7 +675,7 @@ def mgh_slow_release_segments(
                     temp=300.0,
                     damping=5.0,
                     scale=scale,
-                    npt=True,
+                    npt=not nvt_only,
                     previous=previous,
                     reinit=False,
                     dcd_freq=_display_dcd_freq(seg_steps),
@@ -681,6 +688,16 @@ def mgh_slow_release_segments(
             )
             previous = seg_name
         stage_idx += 1
+
+    # Soft start: a freshly built ideal-B-DNA model often has one residual local
+    # strain the ENM minimisation can't fully relieve (the ENM pins the global
+    # shape).  Hitting it with 2 fs + rigidBonds all on the very first dynamics
+    # steps trips a RATTLE "Constraint failure".  Run just the FIRST segment with
+    # the soft integrator (rigidBonds none + 1 fs) so the strained atom relaxes
+    # safely; every later segment reverts to fast 2 fs rigid dynamics.  (When the
+    # whole ladder is already soft — declash designs — this is a no-op.)
+    if segments and not soft:
+        segments[0].soft = True
 
     return min_name, segments
 
@@ -696,6 +713,7 @@ def prepare_mgh_slow_release(
     mg_conc_mM: float = 12.5,
     salt_mode: str = "custom",
     padding_nm: float = 1.2,
+    water_shell_nm: float = 0.0,
     minimize_steps: int = 4_800,
     min_scale: float = 0.5,
     require_full_topology: bool = False,
@@ -703,6 +721,7 @@ def prepare_mgh_slow_release(
     atomistic_model=None,
     progress=None,
     declash: bool = False,
+    force_soft: bool = False,
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Build the solvated package and all stage configs in job_dir.
 
@@ -730,6 +749,9 @@ def prepare_mgh_slow_release(
 
     minimize_steps = _round_up_to_cycle(minimize_steps)
 
+    water_shell_nm = water_shell_nm or 0.0
+    carve_shell = water_shell_nm > 0
+
     zip_bytes = build_namd_solvated_package(
         design,
         padding_nm      = padding_nm,
@@ -739,6 +761,7 @@ def prepare_mgh_slow_release(
         require_full_topology = require_full_topology,
         seed            = seed,
         atomistic_model = atomistic_model,
+        water_shell_nm  = water_shell_nm if carve_shell else None,
         progress        = progress,
     )
 
@@ -798,8 +821,12 @@ def prepare_mgh_slow_release(
         progress("finalize", None, "Writing simulation configs…")
     (package_dir / "output").mkdir(exist_ok=True)
 
-    # Build segment list
-    min_name, segments = mgh_slow_release_segments(name_stem, soft=declash)
+    # Build segment list.  A water-shell carve leaves vacuum corners, so the
+    # whole ladder must run NVT (barostat off) — an NPT piston would collapse the
+    # cell onto the DNA's periodic image.
+    min_name, segments = mgh_slow_release_segments(
+        name_stem, soft=declash or force_soft, nvt_only=carve_shell,
+    )
 
     # Write minimization conf
     (package_dir / f"{min_name}.conf").write_text(

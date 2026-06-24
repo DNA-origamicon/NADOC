@@ -17,7 +17,7 @@ from backend.core.namd_solvate import _Water, _run_watched
 from tests.conftest import make_6hb_design
 
 
-def _fake_solvate(_pdb_text, _padding_nm, _tmpdir, progress=None):
+def _fake_solvate(_pdb_text, _padding_nm, _tmpdir, progress=None, *, water_shell_nm=None):
     """Stand-in for gmx solvation: emit the solvate phase, return dummy waters."""
     ns._emit(progress, "solvate", None, "fake solvate")
     waters = [_Water(i * 0.31, 0, 0, i * 0.31, 0.1, 0, i * 0.31, -0.1, 0) for i in range(8000)]

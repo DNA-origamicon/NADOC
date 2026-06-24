@@ -72,7 +72,10 @@ def test_segments_soft_flag_propagates():
     _, soft_segs = M.mgh_slow_release_segments("t", soft=True)
     _, hard_segs = M.mgh_slow_release_segments("t", soft=False)
     assert soft_segs and all(s.soft for s in soft_segs)
-    assert hard_segs and not any(s.soft for s in hard_segs)
+    # Soft start: the FIRST segment is always soft (relaxes the strained start
+    # past the RATTLE failure); every later segment reverts to rigid 2 fs.
+    assert hard_segs and hard_segs[0].soft
+    assert not any(s.soft for s in hard_segs[1:])
 
 
 def test_min_conf_enm_override():

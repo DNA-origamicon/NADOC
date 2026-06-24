@@ -252,15 +252,12 @@ class PrepTracker:
                 )
                 eta = speed * remaining_nominal
 
+            # No elapsed-vs-expected "longer than expected / may be stalled"
+            # warning: the per-phase nominal times vary too much by design size to
+            # be a useful stall indicator (they cry wolf on legitimately slow
+            # steps).  A genuine stall is surfaced instead by the heartbeat going
+            # stale (the snapshot stops advancing), which the UI detects directly.
             warning = ""
-            if not self._done:
-                t_in = now - self._phase_start
-                if t_in > phase.soft_factor * phase.nominal_s:
-                    over = int(t_in)
-                    warning = (
-                        f"'{phase.label}' has run {over}s — longer than expected; "
-                        "it may be stalled."
-                    )
 
             return {
                 "phase":           phase.key,

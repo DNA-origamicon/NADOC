@@ -9,9 +9,13 @@ setup:
 start:
     ./start.sh
 
-# Start FastAPI backend with hot reload
+# Start FastAPI backend with hot reload.
+# --timeout-graceful-shutdown: the status websockets (/ws/md-jobs) are long-lived
+# and never close on their own, so a --reload or stop used to wedge uvicorn forever
+# in "Waiting for connections to close" — freezing every job (prep heartbeat dies,
+# HTTP hangs). Cap the wait so a reload always force-closes within a few seconds.
 dev:
-    uv run uvicorn backend.api.main:app --reload --reload-dir backend --reload-dir scripts --reload-exclude 'workspace/**' --reload-exclude 'experiments/**' --reload-exclude 'runs/**' --reload-exclude 'bp_health_runs/**' --reload-exclude 'gromacs_run/**' --reload-exclude 'memory/**' --host 0.0.0.0 --port 8000
+    uv run uvicorn backend.api.main:app --reload --timeout-graceful-shutdown 5 --reload-dir backend --reload-dir scripts --reload-exclude 'workspace/**' --reload-exclude 'experiments/**' --reload-exclude 'runs/**' --reload-exclude 'bp_health_runs/**' --reload-exclude 'gromacs_run/**' --reload-exclude 'memory/**' --host 0.0.0.0 --port 8000
 
 # Run all tests
 test:
