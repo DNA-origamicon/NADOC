@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from backend.core import namd_runner
@@ -53,3 +55,41 @@ def test_no_prefix_when_taskset_missing_even_with_env(monkeypatch):
     monkeypatch.setenv("NADOC_NAMD_CORES", "0-5")
     monkeypatch.setattr(namd_runner.shutil, "which", lambda c: None)
     assert namd_runner._core_binding_prefix(6) == []
+
+
+# ── _run_namd_async launch command ────────────────────────────────────────────
+
+
+def test_run_namd_omits_devices_flag_for_cpu_only(tmp_path, monkeypatch):
+    """CPU-only NAMD runs must omit +devices entirely; +devices "" confuses NAMD."""
+    seen = {}
+
+    class FakeProc:
+        pid = 123
+
+        async def wait(self):
+            return 0
+
+    async def fake_create_subprocess_exec(*cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen["kwargs"] = kwargs
+        return FakeProc()
+
+    monkeypatch.setattr(
+        namd_runner.asyncio, "create_subprocess_exec", fake_create_subprocess_exec
+    )
+
+    rc, pid = asyncio.run(
+        namd_runner._run_namd_async(
+            "/fake/namd3",
+            "min",
+            tmp_path,
+            tmp_path / "min.log",
+            4,
+            "",
+        )
+    )
+
+    assert (rc, pid) == (0, 123)
+    assert "+devices" not in seen["cmd"]
+    assert seen["cmd"][-1] == "min.conf"

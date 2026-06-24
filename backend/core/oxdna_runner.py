@@ -115,27 +115,101 @@ def _external_oxdna_pid(job: OxdnaJob, workspace_dir: Path) -> Optional[int]:
 
 # ── oxDNA binary discovery ────────────────────────────────────────────────────
 
+# Conventional build locations, in *preference order within the same backend
+# class*.  ``build_cuda/`` (the doc's separate GPU dir) comes before ``build/``
+# (which the auto-build configures with ``-DCUDA=ON``); both before the
+# system ``Applications`` path.  ``oxDNA`` on PATH is listed but, because it is
+# very often a CPU-only conda/package build, it does NOT automatically win — see
+# ``find_oxdna``'s CUDA preference below.
 _OXDNA_CANDIDATES = [
     "oxDNA",
+    os.path.expanduser("~/oxDNA/build_cuda/bin/oxDNA"),
     os.path.expanduser("~/oxDNA/build/bin/oxDNA"),
     os.path.expanduser("~/Applications/oxDNA/build/bin/oxDNA"),
 ]
 
+# Cache CUDA-capability by (path, mtime) so the per-request find_oxdna() calls
+# don't re-run ldd every time.  mtime keying means a rebuild is picked up.
+_CUDA_CAP_CACHE: dict[tuple[str, float], bool] = {}
 
-def find_oxdna() -> Optional[str]:
-    """Return the first usable oxDNA binary path, or None if not found.
 
-    Resolution: ``$OXDNA_BIN`` override → ``oxDNA`` on PATH → conventional
-    ``~/oxDNA/build/bin/oxDNA`` (the local CUDA build location).
+def oxdna_supports_cuda(path: str) -> bool:
+    """True iff the oxDNA binary at ``path`` is linked against the CUDA runtime.
+
+    A CUDA-enabled oxDNA links ``libcudart`` (directly or via
+    ``liboxdna_common.so``); a CPU-only build does not.  We read this statically
+    with ``ldd`` — fast, no GPU needed, and definitive (the CPU-only conda build
+    that silently breaks GPU jobs has no ``libcudart`` line).  A binary whose
+    ``libcudart`` resolves to "not found" is treated as NOT CUDA-capable (it
+    couldn't load anyway).  Returns False on any probe failure.
+    """
+    if not path:
+        return False
+    try:
+        key = (path, os.path.getmtime(path))
+    except OSError:
+        return False
+    if key in _CUDA_CAP_CACHE:
+        return _CUDA_CAP_CACHE[key]
+    result = False
+    ldd = shutil.which("ldd")
+    if ldd:
+        import subprocess
+        try:
+            out = subprocess.run(
+                [ldd, path], capture_output=True, text=True, timeout=15, check=False,
+            )
+            for line in out.stdout.splitlines():
+                if "libcudart" in line and "not found" not in line:
+                    result = True
+                    break
+        except (OSError, subprocess.SubprocessError):
+            result = False
+    _CUDA_CAP_CACHE[key] = result
+    return result
+
+
+def _usable_path(candidate: str) -> Optional[str]:
+    """Resolve a candidate (PATH name or absolute path) to a runnable file."""
+    return shutil.which(candidate) or (
+        candidate if os.path.isfile(candidate) and os.access(candidate, os.X_OK) else None
+    )
+
+
+def find_oxdna(*, prefer_cuda: bool = True) -> Optional[str]:
+    """Return the best usable oxDNA binary path, or None if not found.
+
+    Resolution:
+
+    1. ``$OXDNA_BIN`` — explicit override always wins (user intent is absolute).
+    2. Otherwise, among the conventional candidates (``oxDNA`` on PATH and the
+       ``~/oxDNA`` build dirs), prefer a **CUDA-capable** binary when one exists.
+
+    The CUDA preference is the fix for the most common broken state: a CPU-only
+    ``oxDNA`` on PATH (conda/apt) shadowing a perfectly good local GPU build, so
+    every ``backend = CUDA`` MD stage aborts with "Backend 'CUDA' not supported".
+    Preferring the CUDA binary is never wrong — it runs the CPU backend fine too
+    — so this also helps no-GPU machines that happen to have a CUDA build.  Pass
+    ``prefer_cuda=False`` to get the plain first-usable behaviour.
     """
     override = os.environ.get("OXDNA_BIN", "").strip()
-    for candidate in ([override] if override else []) + _OXDNA_CANDIDATES:
-        found = shutil.which(candidate) or (
-            candidate if os.path.isfile(candidate) and os.access(candidate, os.X_OK) else None
-        )
+    if override:
+        found = _usable_path(override)
         if found:
             return found
-    return None
+
+    resolved: list[str] = []
+    for candidate in _OXDNA_CANDIDATES:
+        found = _usable_path(candidate)
+        if found and found not in resolved:
+            resolved.append(found)
+    if not resolved:
+        return None
+    if prefer_cuda:
+        for found in resolved:
+            if oxdna_supports_cuda(found):
+                return found
+    return resolved[0]
 
 
 _OXDNA_ANM_CANDIDATES = [
@@ -187,6 +261,7 @@ def oxdna_available() -> dict:
     return {
         "available": bin_path is not None,
         "oxdna_bin": bin_path,
+        "cuda_capable": oxdna_supports_cuda(bin_path) if bin_path else False,
         "recommended_device": os.environ.get("OXDNA_DEVICE", "0"),
     }
 

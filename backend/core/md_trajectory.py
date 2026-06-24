@@ -387,6 +387,88 @@ def md_frames_surface(topology_path, segments, coordinate_path, design, frame_in
     return out
 
 
+def md_rmsf(topology_path, segments, coordinate_path, design,
+            max_frames: int = 150) -> dict:
+    """Per-nucleotide average backbone position + RMSF over the NAMD run.
+
+    The MD analogue of ``oxdna_health.production_rmsf``: pools frames from EVERY
+    written segment (the user's flex-map gating is "all segments"), Kabsch-aligns
+    each frame to the design equilibrium (rigid-body motion removed, identical math
+    to the live Display-MD path via ``_extract_md_nadoc_frame``), and computes per
+    nucleotide the mean backbone-bead position, the mean base normal (a1), and the
+    RMSF = sqrt(mean_f |p_f - mean|^2).
+
+    Returns the SAME payload shape as ``GET /oxdna/jobs/{id}/rmsf`` so the frontend
+    flexibility-map code (rmsfColorMap / displayRmsf) consumes it unchanged:
+    ``{ready, n_frames, positions:[{helix_id, bp_index, direction, backbone_position,
+    nx, ny, nz, rmsf}], min_rmsf, max_rmsf, mean_rmsf}``.
+
+    Frames are sampled evenly to at most ``max_frames`` to bound the per-frame Kabsch
+    cost; each sampled frame is aligned independently (the sequential rotation-flip
+    guard only fires for adjacent frames, which strided sampling never hits)."""
+    seg_paths = [s[2] for s in segments]
+    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design)
+    p_order = ctx["p_order"]
+    n = ctx["n_frames"]
+    n_keys = len(p_order)
+    if n <= 0 or n_keys == 0:
+        return {"ready": False, "n_frames": 0, "positions": []}
+
+    idxs = list(range(n)) if n <= max_frames else _stride_pick(list(range(n)), max_frames)
+
+    # One-pass accumulation: RMSF^2 = mean_f|p_f|^2 - |mean_f p_f|^2 (per nucleotide).
+    sum_pos = np.zeros((n_keys, 3))
+    sum_sq = np.zeros(n_keys)        # Σ_f |p_f|^2
+    sum_norm = np.zeros((n_keys, 3))
+    have_norm = False
+    used = 0
+    for gidx in idxs:
+        p_nm, normals = _extract_md_nadoc_frame(ctx, gidx)
+        if p_nm is None or len(p_nm) != n_keys:
+            continue
+        sum_pos += p_nm
+        sum_sq += np.einsum("ij,ij->i", p_nm, p_nm)
+        if normals is not None and len(normals) == n_keys:
+            sum_norm += normals
+            have_norm = True
+        used += 1
+    if used == 0:
+        return {"ready": False, "n_frames": 0, "positions": []}
+
+    mean_pos = sum_pos / used
+    msd = sum_sq / used - np.einsum("ij,ij->i", mean_pos, mean_pos)
+    rmsf = np.sqrt(np.maximum(msd, 0.0))
+
+    if have_norm:
+        nrm = np.linalg.norm(sum_norm, axis=1, keepdims=True)
+        mean_norm = sum_norm / np.where(nrm > 1e-6, nrm, 1.0)
+    else:
+        mean_norm = np.tile([0.0, 0.0, 1.0], (n_keys, 1))
+
+    positions = []
+    for i, (hid, bp, direction) in enumerate(p_order):
+        positions.append({
+            "helix_id": hid,
+            "bp_index": bp,
+            "direction": direction,
+            "backbone_position": [float(mean_pos[i, 0]), float(mean_pos[i, 1]),
+                                  float(mean_pos[i, 2])],
+            "nx": float(mean_norm[i, 0]),
+            "ny": float(mean_norm[i, 1]),
+            "nz": float(mean_norm[i, 2]),
+            "rmsf": float(rmsf[i]),
+        })
+
+    return {
+        "ready": True,
+        "n_frames": used,
+        "positions": positions,
+        "min_rmsf": float(rmsf.min()),
+        "max_rmsf": float(rmsf.max()),
+        "mean_rmsf": float(rmsf.mean()),
+    }
+
+
 def md_composite_meta(segments, max_frames: int = 200) -> dict:
     """Lightweight metadata for the NAMD composite — ``{n_frames, markers, stages}``
     — from DCD frame counts only (DCD header, no PSF parse, no coordinate read), so

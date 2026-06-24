@@ -3607,6 +3607,7 @@
                 <div id="oxdna-jobs-detail-status" style="font-size:var(--text-xs);margin-bottom:4px;min-height:14px"></div>
                 <div id="oxdna-jobs-timeline" style="margin-bottom:4px"></div>
                 <div id="oxdna-jobs-detail-error" style="display:none;font-size:var(--text-xs);color:#d9534f;margin-top:5px"></div>
+                <button id="oxdna-jobs-errorlog-btn" style="display:none;font-size:var(--text-xs);padding:3px 8px;margin-top:5px;background:#3a1a1a;border:1px solid #d9534f;color:#d9534f;border-radius:3px;cursor:pointer">View error log</button>
                 <div style="display:flex;gap:5px;margin-top:6px">
                   <button id="oxdna-jobs-start-btn" style="display:none;flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Start</button>
                   <button id="oxdna-jobs-stop-btn"  style="display:none;flex:1;font-size:var(--text-xs);padding:4px;background:#3a1a1a;border:1px solid #d9534f;color:#d9534f;border-radius:3px;cursor:pointer">Stop</button>
@@ -3725,11 +3726,38 @@
                   </label>
                   <div id="md-jobs-prod-status" style="font-size:10px;color:#484f58;margin-top:3px;min-height:12px"></div>
                 </div>
-                <label style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
+                <label style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
+                       title="Live latest frame of the running/selected MD job, deforming the design model">
                   <input id="md-jobs-display-toggle" type="checkbox" style="accent-color:#58a6ff">
-                  Display MD
+                  Display MD (live)
                 </label>
                 <div id="md-jobs-display-status" style="font-size:10px;color:#484f58;margin-top:2px;min-height:12px"></div>
+                <!-- Flexibility map (avg structure over the whole run recoloured by per-base RMSF) -->
+                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                       title="Average structure over the whole NAMD run, recoloured rigid→flexible by per-base RMSF (all segments pooled)">
+                  <input id="md-jobs-flex-toggle" type="checkbox" disabled> Flexibility map (RMSF)
+                </label>
+                <div id="md-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                <div id="md-jobs-flex-bar" style="margin-top:3px;display:none"></div>
+                <div id="md-jobs-flex-legend" style="display:none"></div>
+                <!-- View trajectory: scrub every written segment (relaxation + production) -->
+                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                       title="Play/scrub the composite NAMD trajectory: every written segment, with a marker at each transition. Replaces VMD for reviewing MD runs.">
+                  <input id="md-jobs-traj-toggle" type="checkbox" disabled> View trajectory
+                </label>
+                <div id="md-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                <div id="md-jobs-traj-controls" style="display:none;margin-top:4px">
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <button id="md-jobs-traj-play" title="Play / pause"
+                            style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
+                    <div style="position:relative;flex:1;min-width:0">
+                      <input id="md-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
+                             style="width:100%;display:block;margin:0">
+                      <div id="md-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
+                    </div>
+                  </div>
+                  <div id="md-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
+                </div>
               </div>
 
               <!-- ── Benchmark (self-rendered collapsible card — auto-tune threads/devices) ── -->

@@ -48,10 +48,12 @@ from backend.core.oxdna_runner import (
     _latest_relaxed_conf,
     _load_snapshot_design,
     find_oxdna,
+    find_oxdna_anm,
     is_running,
     job_progress,
     load_stage_specs,
     oxdna_available,
+    oxdna_supports_cuda,
     prepare_oxdna_job,
     reconcile_oxdna_status,
     start_job,
@@ -350,6 +352,24 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
     from backend.physics.oxdna_protein import has_proteins
     protein = has_proteins(design)
 
+    # Fail fast on the classic broken state: a CUDA run requested but the binary
+    # NADOC resolved is CPU-only (e.g. a conda/apt oxDNA on PATH).  oxDNA would
+    # otherwise run the cheap MC stage and only abort the long MD stage with the
+    # cryptic "Backend 'CUDA' not supported".  Point the user at the fix instead.
+    if body.backend == "CUDA":
+        run_bin = find_oxdna_anm() if protein else find_oxdna()
+        if run_bin and not oxdna_supports_cuda(run_bin):
+            engine = "ANM-oxDNA" if protein else "oxDNA"
+            raise HTTPException(
+                400,
+                f"GPU (CUDA) run requested but the {engine} binary NADOC resolved "
+                f"({run_bin}) is CPU-only — it has no CUDA backend, so the MD stage "
+                f"would fail. Build a CUDA-enabled oxDNA (MD Engines panel → install, "
+                f"or `cmake .. -DCUDA=ON -DCMAKE_CUDA_ARCHITECTURES=<arch>` in "
+                f"~/oxDNA/build), or set $OXDNA_BIN to an existing CUDA build. To run "
+                f"on CPU anyway (much slower), choose the CPU backend.",
+            )
+
     specs = build_relaxation_stages(
         mc_steps           = body.mc_steps,
         md_relax_steps     = body.md_relax_steps,
@@ -433,6 +453,65 @@ async def list_oxdna_jobs() -> list[dict]:
 @router.get("/oxdna/jobs/{job_id}")
 async def get_oxdna_job(job_id: str) -> dict:
     return _load_job(job_id).to_dict()
+
+
+@router.get("/oxdna/jobs/{job_id}/error-log")
+async def get_oxdna_error_log(job_id: str) -> dict:
+    """Detailed failure log for the UI's "Error log" popup.
+
+    Returns the job-level error string plus the raw oxDNA stdout/stderr log of the
+    stage that failed (or, lacking a failed stage, the most recently started one),
+    tail-capped so the payload stays small.  Also surfaces a small diagnostics
+    block — the resolved binary and whether it is CUDA-capable vs the backend the
+    run requested — because the most common oxDNA failure is exactly that mismatch
+    (a CUDA run against a CPU-only binary).
+    """
+    job = _load_job(job_id)
+    ws = _workspace()
+    stages = job.stages or []
+
+    # Prefer the failed stage; else the current stage; else the last that started.
+    target = next((s for s in stages if s.status == "failed"), None)
+    if target is None and 0 <= job.current_stage_idx < len(stages):
+        target = stages[job.current_stage_idx]
+    if target is None:
+        target = next((s for s in reversed(stages) if s.status != "pending"), None)
+
+    log_text, log_path, stage_name = "", None, None
+    if target is not None:
+        stage_name = target.name
+        p = job.stage_dir(ws, target.name) / "oxdna.log"
+        log_path = str(p)
+        if p.is_file():
+            raw = p.read_text(errors="replace")
+            lines = raw.splitlines()
+            if len(lines) > 400:                       # tail-cap huge logs
+                lines = ["… (earlier output trimmed) …", *lines[-400:]]
+            log_text = "\n".join(lines)
+        else:
+            log_text = "(no oxDNA log was written for this stage)"
+
+    # Hybrid (protein) jobs run on the ANM fork binary; detect from the snapshot.
+    protein = False
+    try:
+        from backend.physics.oxdna_protein import has_proteins
+        protein = has_proteins(_load_snapshot_design(job.job_dir(ws)))
+    except Exception:
+        protein = False
+    run_bin = find_oxdna_anm() if protein else find_oxdna()
+    return {
+        "job_id": job_id,
+        "status": job.status.value if hasattr(job.status, "value") else str(job.status),
+        "error": job.error or "",
+        "stage": stage_name,
+        "log": log_text,
+        "log_path": log_path,
+        "diagnostics": {
+            "requested_backend": job.backend,
+            "oxdna_bin": run_bin,
+            "cuda_capable": oxdna_supports_cuda(run_bin) if run_bin else False,
+        },
+    }
 
 
 @router.get("/oxdna/jobs/{job_id}/progress")

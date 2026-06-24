@@ -1957,6 +1957,7 @@ export const scanNamdDownload    = ()            => _oxdnaJSON('GET',  '/engines
 export const createOxdnaJob      = (body)        => _oxdnaJSON('POST', '/oxdna/jobs', body)
 export const listOxdnaJobs       = ()            => _oxdnaJSON('GET',  '/oxdna/jobs')
 export const getOxdnaJob         = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}`)
+export const getOxdnaErrorLog    = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/error-log`)
 export const getOxdnaProgress    = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/progress`)
 export const startOxdnaJob       = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/start`)
 export const appendOxdnaProduction = (id, body)  => _oxdnaJSON('POST', `/oxdna/jobs/${id}/production`, body)
@@ -2017,6 +2018,9 @@ export const listMdJobs          = ()            => _oxdnaJSON('GET',  '/md/jobs
 export const getMdTrajectory     = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory`)
 /** Frame count + segment markers only (no coordinates) — sizes the trajectory slider fast. */
 export const getMdTrajectoryMeta = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory-meta`)
+/** Per-nucleotide flexibility map (RMSF) over the NAMD run — same shape as
+ *  getOxdnaRmsf, so the flexibility-map display code is shared. */
+export const getMdRmsf           = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/rmsf`)
 /** Per-frame NAMD heavy atoms ({idx:{atoms,bonds}}) for trajectory frame indices. */
 export const getMdFramesAtomistic = (id, frameIndices) =>
   _oxdnaJSON('POST', `/md/jobs/${id}/frames-atomistic`, { frame_indices: frameIndices })

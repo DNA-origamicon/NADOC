@@ -270,6 +270,28 @@ async def get_md_job_trajectory_meta(job_id: str) -> dict:
     return {"ready": result["n_frames"] > 0, **result}
 
 
+@router.get("/md/jobs/{job_id}/rmsf")
+async def get_md_job_rmsf(job_id: str) -> dict:
+    """Per-nucleotide flexibility map (RMSF) over the NAMD run — the MD analogue of
+    GET /oxdna/jobs/{id}/rmsf. Pools EVERY written segment (flex-map gating is "all
+    segments"), Kabsch-aligns each frame to the design, and returns the per-base mean
+    backbone position + base normal + RMSF. SAME payload shape as the oxDNA endpoint,
+    so the frontend flexibility-map code consumes it unchanged. A confidence block
+    flags short runs (autocorrelated frames → true error ≥ 1/sqrt(2N))."""
+    from backend.core.md_trajectory import md_rmsf
+    from backend.core.oxdna_health import rmsf_confidence
+
+    inputs = _md_traj_inputs(job_id)
+    if inputs is None:
+        return {"ready": False, "reason": "topology/reference or trajectory not found",
+                "positions": []}
+    psf, ref, segments, design = inputs
+    result = await run_in_threadpool(md_rmsf, psf, segments, ref, design)
+    if result.get("ready"):
+        result["confidence"] = rmsf_confidence(result.get("n_frames", 0))
+    return result
+
+
 class MdFramesAtomisticBody(BaseModel):
     frame_indices: list[int]
 

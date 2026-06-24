@@ -28,9 +28,14 @@ export function gpuSummary(gpu) {
  *   'auto'      — one-click build we can run here (try-auto)
  *   'download'  — license-gated download (NAMD) → instructions popup
  *   'guided'    — paste commands (GROMACS, or auto blocked by missing prereqs)
+ *
+ * A *degraded* engine (installed but CPU-only while a GPU is present) is treated
+ * like a not-installed one for the affordance — it carries an `install` plan that
+ * rebuilds it for CUDA — so the panel offers the rebuild instead of "Installed".
  */
 export function actionKind(engine) {
-  if (!engine || engine.installed) return 'installed'
+  if (!engine) return 'installed'
+  if (engine.installed && !engine.degraded) return 'installed'
   const inst = engine.install || {}
   if (inst.method === 'auto' && inst.can_auto) return 'auto'
   if (inst.method === 'download') return 'download'
@@ -39,11 +44,13 @@ export function actionKind(engine) {
 
 /** Button label for an engine's action. */
 export function actionLabel(engine) {
+  const degraded = !!engine?.degraded
   switch (actionKind(engine)) {
     case 'installed': return 'Installed'
-    case 'auto':      return `Install (${engine.install.target})`
+    case 'auto':      return degraded ? `Rebuild for GPU (${engine.install.target})`
+                                      : `Install (${engine.install.target})`
     case 'download':  return 'Download…'
-    default:          return 'How to install…'
+    default:          return degraded ? 'Enable GPU…' : 'How to install…'
   }
 }
 
@@ -54,10 +61,17 @@ export function commandText(engine) {
 
 /** Status dot color key for an engine: 'ok' | 'warn' | 'err'. */
 export function statusTone(engine) {
+  // Installed but CPU-only while a GPU is present: it works, just not full-speed.
+  if (engine?.degraded) return 'warn'
   if (engine?.installed) return 'ok'
   // A bundled engine (ships inside another) missing is a 'warn', not a hard error.
   if (engine?.required_note && /bundled|ships inside/i.test(engine.required_note)) return 'warn'
   return 'err'
+}
+
+/** Note to show under a degraded engine (empty string when not degraded). */
+export function degradedNote(engine) {
+  return (engine?.degraded && engine?.degraded_note) ? engine.degraded_note : ''
 }
 
 /**

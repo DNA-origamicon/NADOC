@@ -73,6 +73,32 @@ export function decideReload({
 }
 
 /**
+ * Toggle-on reload decision for the MD jobs panel.
+ *
+ * While the Display-MD toggle is OFF, a background prewarm keeps a warm display
+ * socket + cached latest frame for the selected job/segment (its `prewarmKey`).
+ * When the user toggles ON we want to REUSE that warm socket and paint the cached
+ * frame instantly — a fresh load re-parses the PSF (seconds for big systems),
+ * which is exactly the wait the prewarm exists to hide.
+ *
+ * `key` encodes `config_path|trajectory_path|segment_name`; config_path is the
+ * job's resolved manifest path, so a key match implies the same job and segment.
+ * Force a reload only when this exact key is neither already displayed nor already
+ * prewarmed.
+ *
+ * @param {object} p
+ * @param {string}      p.key         current display key (config|traj|segment)
+ * @param {string|null} p.displayKey  key the display path last loaded
+ * @param {string|null} p.displayJobId job id the display path last loaded
+ * @param {string}      p.jobId       job id now being displayed
+ * @param {string|null} p.prewarmKey  key the background prewarm last warmed
+ */
+export function shouldForceDisplayReload({ key, displayKey, displayJobId, jobId, prewarmKey }) {
+  if (prewarmKey === key) return false   // prewarm already warmed this exact target
+  return key !== displayKey || jobId !== displayJobId
+}
+
+/**
  * Frame-apply gating: a cached frame may only be re-applied to the scene when the
  * stream mode still matches the current scene representation. A 'nadoc' frame is
  * meaningless once the scene switched to an atomistic representation, and vice

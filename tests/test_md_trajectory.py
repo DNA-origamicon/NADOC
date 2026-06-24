@@ -108,6 +108,30 @@ def test_md_frames_atomistic_and_surface():
 
 
 @skip_no_fixture
+def test_md_rmsf_shape_and_values():
+    """Per-nucleotide flexibility map (RMSF) over the NAMD run mirrors the oxDNA
+    /rmsf payload shape, with finite non-negative fluctuations and unit base normals."""
+    from backend.core.md_trajectory import md_rmsf
+    design = _load_2hb()
+    dcds = sorted((_JOB / "output").glob("*.dcd"))
+    segments = [(d.stem, "md", d) for d in dcds]
+
+    r = md_rmsf(_PSF, segments, _REF, design, max_frames=40)
+    assert r["ready"] is True and r["n_frames"] > 0
+    pos = r["positions"]
+    assert len(pos) > 0
+    p0 = pos[0]
+    assert set(p0) >= {"helix_id", "bp_index", "direction",
+                       "backbone_position", "nx", "ny", "nz", "rmsf"}
+    rms = np.array([p["rmsf"] for p in pos])
+    assert np.all(np.isfinite(rms)) and np.all(rms >= 0.0)
+    assert r["min_rmsf"] <= r["mean_rmsf"] <= r["max_rmsf"]
+    # Base normals are unit length (within tolerance).
+    nmag = np.linalg.norm([[p["nx"], p["ny"], p["nz"]] for p in pos], axis=1)
+    assert np.allclose(nmag, 1.0, atol=1e-3)
+
+
+@skip_no_fixture
 def test_md_trajectory_route_uses_active_design():
     """GET /md/jobs/{id}/trajectory returns the composite for the active design."""
     from fastapi.testclient import TestClient
@@ -121,3 +145,20 @@ def test_md_trajectory_route_uses_active_design():
     j = r.json()
     assert j["ready"] is True and j["n_frames"] > 0
     assert len(j["frames"][0]) == j["n_nucleotides"] * 6
+
+
+@skip_no_fixture
+def test_md_rmsf_route_uses_active_design():
+    """GET /md/jobs/{id}/rmsf returns the flexibility map for the active design,
+    with a confidence block."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    from backend.api import state as design_state
+
+    design_state.set_design(_load_2hb())
+    client = TestClient(app)
+    r = client.get("/api/md/jobs/5c6a87247a60/rmsf")
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["ready"] is True and len(j["positions"]) > 0
+    assert "confidence" in j and "n_frames" in j["confidence"]

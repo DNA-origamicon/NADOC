@@ -17,6 +17,8 @@ import { showToast } from './toast.js'
 import { docKey, docHeaders } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
+import { shouldForceDisplayReload } from './md_display_state.js'
+import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
@@ -107,7 +109,7 @@ export function mdShouldShowInheritedSeed(job, displayMeta) {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null } = {}) {
+export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -156,6 +158,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const prodContinueChk = document.getElementById('md-jobs-prod-continue')
   const prodBtn       = document.getElementById('md-jobs-prod-btn')
   const prodStatus    = document.getElementById('md-jobs-prod-status')
+
+  // Visualization tools (flexibility map + trajectory scrub) — mirror the oxDNA panel.
+  const flexToggle   = document.getElementById('md-jobs-flex-toggle')
+  const flexStatus   = document.getElementById('md-jobs-flex-status')
+  const flexBar      = document.getElementById('md-jobs-flex-bar')
+  const flexLegend   = document.getElementById('md-jobs-flex-legend')
+  const trajToggle   = document.getElementById('md-jobs-traj-toggle')
+  const trajStatus   = document.getElementById('md-jobs-traj-status')
+  const trajControls = document.getElementById('md-jobs-traj-controls')
+  const trajPlay     = document.getElementById('md-jobs-traj-play')
+  const trajSlider   = document.getElementById('md-jobs-traj-slider')
+  const trajMarkers  = document.getElementById('md-jobs-traj-markers')
+  const trajLabel    = document.getElementById('md-jobs-traj-label')
 
   // ── State ──────────────────────────────────────────────────────────────────
   let _jobs         = []     // cached list from API
@@ -588,7 +603,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       // placeholder and clears the overlay flag (md-display-state 'frame').  Until then
       // the inherited positions stay visible (an empty DCD yields no 'frame' event).
       const key = `${d.config_path}|${d.trajectory_path ?? ''}|${d.segment_name ?? ''}`
-      const forceReload = key !== _displayKey || job.job_id !== _displayJobId
+      // The background prewarm (running while the toggle was off) already loaded
+      // this exact job/segment into the shared MD-display socket and cached its
+      // latest frame.  Reuse that warm socket so toggle-on paints instantly instead
+      // of waiting through a fresh PSF parse — same instant-display feel as oxDNA.
+      const forceReload = shouldForceDisplayReload({
+        key, displayKey: _displayKey, displayJobId: _displayJobId,
+        jobId: job.job_id, prewarmKey: _prewarmKey,
+      })
       const live = _jobNeedsLiveDisplay(job)
       _displayJobId = job.job_id
       _displayKey = key
@@ -641,6 +663,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   function _startMdDisplay() {
     if (!displayToggle) return
+    _setFlexOff()                     // live display + flex/traj are mutually exclusive
+    _setTrajOff()
     displayToggle.checked = true
     clearInterval(_prewarmTimer)
     _prewarmTimer = null
@@ -689,6 +713,157 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (!_selectedId) return
     _startMdDisplay()
   })
+
+  // ── Visualization tools: flexibility map (RMSF) + trajectory scrub ────────────
+  // A second display controller (getMdViz) drives these — same machinery as the
+  // oxDNA panel, pointed at the MD job endpoints.  Live display / flex / trajectory
+  // are mutually exclusive (each deforms the same design model).
+  function _selectedJob() { return _jobs.find(j => j.job_id === _selectedId) || null }
+
+  // A job has a scrub-able trajectory / flex map once any segment has written frames.
+  function _mdHasTrajectory(job) {
+    if (!job) return false
+    if (['running', 'completed', 'stopped', 'failed'].includes(job.status)) return true
+    return (job.segments || []).some(s => s.status === 'done' || s.status === 'running')
+  }
+
+  // Trajectory player (play/pause + scrub slider); seeks drive the display frame.
+  const trajPlayer = initOxdnaTrajectoryPlayer({
+    playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
+    onSeek: (i) => getMdViz?.()?.showFrame(i),
+    onBeforePlay: async () => {
+      const v = getMdViz?.()
+      if (!v) return true
+      v.setPlaying(true)
+      // CG plays instantly (prebuildHeavy is a no-op for the bead model).
+      const r = await v.prebuildHeavy(() => {})
+      return r?.ok !== false
+    },
+    onPlayStateChange: (playing) => { if (!playing) getMdViz?.()?.setPlaying(false) },
+  })
+
+  function _setFlexStatus(text, color = _C.dim) {
+    if (flexStatus) { flexStatus.textContent = text; flexStatus.style.color = color }
+  }
+  function _setFlexBar(state) {
+    if (!flexBar) return
+    if (state === 'computing') {
+      flexBar.style.display = ''
+      flexBar.innerHTML =
+        `<div style="position:relative;height:6px;border-radius:4px;overflow:hidden;background:#222">` +
+        `<div style="position:absolute;top:0;height:100%;width:35%;background:${_C.accent};` +
+        `animation:gromacs-indeterminate 1.1s linear infinite"></div></div>`
+    } else if (state === 'done') {
+      flexBar.style.display = ''
+      flexBar.innerHTML = `<span style="color:${_C.ok};font-size:11px">✓ Flexibility map ready</span>`
+    } else {
+      flexBar.style.display = 'none'
+      flexBar.innerHTML = ''
+    }
+  }
+  function _setFlexLegend(min, max) {
+    if (!flexLegend) return
+    if (min == null || max == null) { flexLegend.style.display = 'none'; flexLegend.innerHTML = ''; return }
+    flexLegend.style.display = ''
+    flexLegend.innerHTML =
+      `<div style="display:flex;align-items:center;gap:5px;font-size:9px;color:${_C.dim};margin-top:3px">` +
+      `<span>${min.toFixed(2)} nm</span>` +
+      `<span style="flex:1;height:7px;border-radius:3px;background:linear-gradient(90deg,#440154,#3b528b,#21918c,#5dc863,#fde725)"></span>` +
+      `<span>${max.toFixed(2)} nm</span></div>` +
+      `<div style="font-size:9px;color:${_C.dim}">rigid → flexible (RMSF)</div>`
+  }
+  function _setFlexOff() {
+    if (getMdViz?.()?.mode?.() === 'rmsf') getMdViz().stopAndRestore()
+    if (flexToggle) flexToggle.checked = false
+    _setFlexBar('off')
+    _setFlexLegend(null, null)
+    _setFlexStatus('', _C.dim)
+  }
+  async function _refreshFlex() {
+    const v = getMdViz?.()
+    if (!_selectedId || !v) return
+    _setFlexStatus('Computing average structure + RMSF…', _C.accent)
+    _setFlexBar('computing')
+    const r = await v.displayRmsf(_selectedId)
+    if (r.ok) {
+      _setFlexBar('done')
+      _setFlexLegend(r.min, r.max)
+      const conf = r.confidence || {}
+      const note = conf.preliminary ? ' · preliminary (short run)' : ''
+      _setFlexStatus(`Avg structure · ${r.n} bases · ${r.nFrames ?? '?'} frames${note}`,
+                     conf.preliminary ? _C.warn : _C.ok)
+    } else {
+      _setFlexBar('off')
+      _setFlexLegend(null, null)
+      _setFlexStatus(r.reason || 'no data', _C.warn)
+      if (flexToggle) flexToggle.checked = false
+    }
+  }
+  flexToggle?.addEventListener('change', async () => {
+    if (flexToggle.checked) {
+      if (!_selectedId) { flexToggle.checked = false; showToast('Select an MD job first', 'warn'); return }
+      if (!_mdHasTrajectory(_selectedJob())) {
+        flexToggle.checked = false; _setFlexStatus('No trajectory frames yet', _C.warn); return
+      }
+      if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
+      _setTrajOff()
+      await _refreshFlex()
+    } else {
+      _setFlexOff()
+    }
+  })
+
+  function _setTrajStatus(text, color = _C.ok) {
+    if (trajStatus) { trajStatus.textContent = text; trajStatus.style.color = color }
+  }
+  function _setTrajOff() {
+    trajPlayer.stop()
+    if (getMdViz?.()?.mode?.() === 'trajectory') getMdViz().stopAndRestore()
+    if (trajToggle) trajToggle.checked = false
+    if (trajControls) trajControls.style.display = 'none'
+    _setTrajStatus('', _C.dim)
+  }
+  async function _refreshTraj() {
+    const v = getMdViz?.()
+    if (!_selectedId || !v) return
+    _setTrajStatus('Loading trajectory…', _C.accent)
+    const r = await v.loadTrajectory(_selectedId)
+    if (r.ok) {
+      if (trajControls) trajControls.style.display = ''
+      trajPlayer.setTrajectory(r.n_frames, r.markers)
+      const nStages = (r.stages || []).length
+      _setTrajStatus(`${r.n_frames} frames · ${nStages} segment${nStages === 1 ? '' : 's'}`, _C.ok)
+    } else {
+      if (trajToggle) trajToggle.checked = false
+      if (trajControls) trajControls.style.display = 'none'
+      _setTrajStatus(r.reason || 'no trajectory', _C.warn)
+    }
+  }
+  trajToggle?.addEventListener('change', async () => {
+    if (trajToggle.checked) {
+      if (!_selectedId) { trajToggle.checked = false; showToast('Select an MD job first', 'warn'); return }
+      if (!_mdHasTrajectory(_selectedJob())) {
+        trajToggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); return
+      }
+      if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
+      _setFlexOff()
+      await _refreshTraj()
+    } else {
+      _setTrajOff()
+    }
+  })
+
+  // Enable/disable the viz toggles for the selected job; turn an active tool off if
+  // the job switched away or lost its trajectory.
+  function _updateVizToggles(job) {
+    const ok = _mdHasTrajectory(job)
+    for (const t of [flexToggle, trajToggle]) {
+      if (!t) continue
+      t.disabled = !ok
+      const lab = t.closest('label')
+      if (lab) { lab.style.opacity = ok ? '1' : '0.5'; lab.style.cursor = ok ? 'pointer' : 'not-allowed' }
+    }
+  }
 
   deleteBtn?.addEventListener('click', async () => {
     if (!_selectedId) return
@@ -1042,6 +1217,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   function _selectJob(jobId) {
     if (_selectedId === jobId) return
     console.log(`[${_ts()}] md-jobs: selecting job ${jobId}`)
+    _setFlexOff()   // the loaded trajectory / flex map belonged to the previous job
+    _setTrajOff()
     _selectedId = jobId
     _displayMeta = null
     _closeWs()
@@ -1151,6 +1328,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _renderTimeline(job)
     _renderMetrics(job, liveMetrics)
     _renderProductionControls(job)
+    _updateVizToggles(job)
     if (_TERMINAL_STATUSES.has(job.status) && _displayMeta?.job_id !== job.job_id) {
       _fetchDisplayMeta(job.job_id)
     }
@@ -1427,8 +1605,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     })
   }
 
+  // A checkpoint that did not fully pass but the run was allowed to continue: a
+  // non-blocking advisory breach (WC ref-relative below threshold; backend
+  // `blocking === false`).  Surfaced as ⚠, distinct from a ✗ hard failure.
+  function _isAdvisoryWarning(health) {
+    return !!health && health.passed === false && health.blocking === false
+  }
+
   function _segSymbol(status, health = null) {
-    if (status === 'done' && _productionAdvisory(health)) return { symbol: '⚠', color: _C.warn }
+    if (status === 'done' && (_productionAdvisory(health) || _isAdvisoryWarning(health)))
+      return { symbol: '⚠', color: _C.warn }
     switch (status) {
       case 'done':    return { symbol: '●', color: _C.ok }
       case 'failed':  return { symbol: '✗', color: _C.err }
@@ -1486,7 +1672,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         : ''
 
     const wcThreshold = health ? _wcThresholdForStage(health.stage) : 0.85
-    const wcAdvisory = _productionAdvisory(health)
+    const wcAdvisory = _productionAdvisory(health) || _isAdvisoryWarning(health)
     const wcValue = wcAdvisory ? `⚠ ${_fmtPct(health?.wc_ref_relative_fraction ?? null)}` : _fmtPct(health?.wc_ref_relative_fraction ?? null)
     const cards = [
       { label: 'Temp',       value: _fmt(scalar?.temperature_k ?? null, 1, 'K'),          color: _C.text },

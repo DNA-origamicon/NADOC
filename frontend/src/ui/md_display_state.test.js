@@ -6,6 +6,7 @@ import {
   sceneUsesNativeCg,
   decideReload,
   canReapplyFrame,
+  shouldForceDisplayReload,
 } from './md_display_state.js'
 
 describe('targetStreamMode', () => {
@@ -102,6 +103,42 @@ describe('decideReload', () => {
   it('opens (not reuse) when the socket is CLOSING/CLOSED', () => {
     expect(decideReload({ ...base, wsState: WS.CLOSING, currentConfig: '/run/a.json' })).toBe('open')
     expect(decideReload({ ...base, wsState: WS.CLOSED, currentConfig: '/run/a.json' })).toBe('open')
+  })
+})
+
+describe('shouldForceDisplayReload', () => {
+  const KEY = '/run/a.json|/run/a.dcd|relax_k0.5'
+
+  it('forces a reload on first toggle-on when nothing was prewarmed', () => {
+    // _displayKey/_displayJobId start null; no prewarm → must load fresh.
+    expect(shouldForceDisplayReload({
+      key: KEY, displayKey: null, displayJobId: null, jobId: 'job1', prewarmKey: null,
+    })).toBe(true)
+  })
+
+  it('does NOT reload when the prewarm already warmed this exact key (the instant-toggle path)', () => {
+    expect(shouldForceDisplayReload({
+      key: KEY, displayKey: null, displayJobId: null, jobId: 'job1', prewarmKey: KEY,
+    })).toBe(false)
+  })
+
+  it('still reloads when the prewarm warmed a different (stale) segment', () => {
+    expect(shouldForceDisplayReload({
+      key: KEY, displayKey: null, displayJobId: null, jobId: 'job1',
+      prewarmKey: '/run/a.json|/run/a.dcd|relax_k0.1',
+    })).toBe(true)
+  })
+
+  it('does NOT reload on a subsequent tick once the same key is already displayed', () => {
+    expect(shouldForceDisplayReload({
+      key: KEY, displayKey: KEY, displayJobId: 'job1', jobId: 'job1', prewarmKey: null,
+    })).toBe(false)
+  })
+
+  it('reloads when the displayed job id differs even if the key string matches', () => {
+    expect(shouldForceDisplayReload({
+      key: KEY, displayKey: KEY, displayJobId: 'jobOLD', jobId: 'job1', prewarmKey: null,
+    })).toBe(true)
   })
 })
 

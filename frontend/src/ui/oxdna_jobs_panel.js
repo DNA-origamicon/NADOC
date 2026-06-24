@@ -23,6 +23,9 @@ import { initFlexScale } from './flex_scale.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import { showConfirm } from './primitives/confirm.js'
+import { createModal } from './primitives/modal.js'
+import { createButton } from './primitives/button.js'
+import { el } from './primitives/dom.js'
 import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
 import * as api from '../api/client.js'
@@ -99,6 +102,41 @@ export function detailStatusText(job, progress) {
 }
 
 const _STAGE_GLYPH = { done: '●', failed: '✗', running: '○', pending: '·' }
+
+/** Pure: did the job fail at the job level OR in any stage? Drives the
+ *  "View error log" button's visibility. */
+export function jobHasFailure(job) {
+  if (!job) return false
+  return job.status === 'failed' || (job.stages || []).some(s => s.status === 'failed')
+}
+
+/** Pure: build the text shown in the error-log popup from the /error-log payload.
+ *  Leads with a plain-language diagnosis for the most common failure — a CUDA run
+ *  against a CPU-only binary — then the job error, then the raw oxDNA log. */
+export function errorLogText(payload) {
+  if (!payload) return 'No error details available.'
+  const d = payload.diagnostics || {}
+  const out = []
+  // Targeted hint for the CUDA/CPU-binary mismatch.
+  if (d.requested_backend === 'CUDA' && d.oxdna_bin && d.cuda_capable === false) {
+    out.push(
+      'DIAGNOSIS: this run requested the GPU (CUDA) backend, but the oxDNA binary ' +
+      `in use is CPU-only:\n  ${d.oxdna_bin}\n` +
+      'Build a CUDA-enabled oxDNA (terminal: `just oxdna-doctor --fix`, or the MD ' +
+      'Engines panel), then start the run again. To run on CPU instead, pick the ' +
+      'CPU backend.\n')
+  }
+  if (payload.error) out.push(`Error: ${payload.error}`)
+  if (payload.stage) out.push(`Failed stage: ${payload.stage}`)
+  if (d.oxdna_bin !== undefined) {
+    out.push(`Binary: ${d.oxdna_bin || '(none resolved)'} · backend requested: ` +
+      `${d.requested_backend || '?'} · CUDA-capable: ${d.cuda_capable ? 'yes' : 'no'}`)
+  }
+  if (payload.log_path) out.push(`Log: ${payload.log_path}`)
+  out.push('\n— oxDNA output ' + '—'.repeat(28))
+  out.push(payload.log || '(no log output)')
+  return out.join('\n')
+}
 
 /** Pure: per-stage timeline chips (glyph + kind + status) for a job. */
 export function stageChips(job) {
@@ -432,6 +470,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   const stopBtn    = document.getElementById('oxdna-jobs-stop-btn')
   const deleteBtn  = document.getElementById('oxdna-jobs-delete-btn')
   const errorEl    = document.getElementById('oxdna-jobs-detail-error')
+  const errorLogBtn = document.getElementById('oxdna-jobs-errorlog-btn')
   const progressEl = document.getElementById('oxdna-jobs-progress')
   const timelineEl = document.getElementById('oxdna-jobs-timeline')
   const healthEl   = document.getElementById('oxdna-jobs-health')
@@ -856,6 +895,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       errorEl.style.display = job.error ? '' : 'none'
       errorEl.textContent = job.error || ''
     }
+    // "View error log" appears whenever the job (or any stage) failed — even if
+    // job.error is blank — so the user can always reach the raw oxDNA output.
+    if (errorLogBtn) errorLogBtn.style.display = jobHasFailure(job) ? '' : 'none'
 
     _renderProgress(job)
     _renderTimeline(job)
@@ -868,6 +910,39 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // job is selected — without the user having to hover the button.
   function _emitJobSelected() {
     window.dispatchEvent(new CustomEvent('nadoc:oxdna-job-selected'))
+  }
+
+  // Fetch the detailed failure log and show it in a scrollable popup with a copy
+  // button. Used by the "View error log" button on a failed job.
+  async function _showErrorLog(jobId) {
+    if (!jobId) return
+    let text
+    try {
+      text = errorLogText(await api.getOxdnaErrorLog(jobId))
+    } catch (e) {
+      text = `Could not load the error log.\n${e?.message || e}`
+    }
+    const pre = el('pre', {
+      text,
+      attrs: { style:
+        'white-space:pre-wrap;word-break:break-word;font-family:monospace;' +
+        'font-size:12px;line-height:1.45;margin:0;max-height:55vh;overflow:auto;' +
+        'background:#0d1117;color:#c9d1d9;padding:10px;border-radius:4px' },
+    })
+    const modal = createModal({
+      title: 'oxDNA error log',
+      size: 'lg',
+      body: pre,
+      actions: [
+        createButton({
+          label: 'Copy', size: 'sm', onClick: async () => {
+            try { await navigator.clipboard.writeText(text); showToast('Error log copied') }
+            catch { showToast('Copy failed', { severity: 'error' }) }
+          },
+        }),
+        createButton({ label: 'Close', size: 'sm', variant: 'primary', onClick: () => modal.close() }),
+      ],
+    })
   }
 
   function _renderProgress(job) {
@@ -1319,6 +1394,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     await api.stopOxdnaJob(_selectedId)
     _fetchJobs()
   })
+  errorLogBtn?.addEventListener('click', () => { _showErrorLog(_selectedId) })
   deleteBtn?.addEventListener('click', async () => {
     if (!_selectedId) return
     const job = _selectedJob()

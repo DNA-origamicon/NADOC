@@ -192,6 +192,45 @@ def test_simulation_reports_installed_engine_as_missing(monkeypatch):
     assert st["sections"]["oxdna"]["ready"] is False
 
 
+# ── CUDA-degraded detection (installed but CPU-only while a GPU is present) ────
+
+def test_oxdna_cuda_capable_not_degraded(monkeypatch):
+    _patch_all(monkeypatch, oxdna="/o/oxDNA", anm="/a/oxDNA", namd="/n/namd3",
+               gmx="/g/gmx", psfgen="/n/psfgen", dnanalysis="/o/DNAnalysis",
+               gpu_present=True)
+    monkeypatch.setattr(engines, "oxdna_supports_cuda", lambda p: True)
+    ox = engines.engines_status()["engines"]["oxdna"]
+    assert ox["installed"] is True
+    assert ox["cuda_capable"] is True
+    assert ox["degraded"] is False
+    assert ox["install"] is None
+
+
+def test_oxdna_cpu_only_with_gpu_is_degraded_with_rebuild_plan(monkeypatch):
+    _patch_all(monkeypatch, oxdna="/o/oxDNA", anm="/a/oxDNA", namd="/n/namd3",
+               gmx="/g/gmx", psfgen="/n/psfgen", dnanalysis="/o/DNAnalysis",
+               gpu_present=True)
+    monkeypatch.setattr(engines, "oxdna_supports_cuda", lambda p: False)
+    ox = engines.engines_status()["engines"]["oxdna"]
+    assert ox["installed"] is True          # CPU binary still runs — not "missing"
+    assert ox["cuda_capable"] is False
+    assert ox["degraded"] is True
+    assert ox["install"]["target"] == "CUDA"      # the fix is re-attached
+    assert "CUDA" in ox["degraded_note"] and "faster" in ox["degraded_note"]
+    # section still reads ready (CPU works); degradation is a separate signal
+    assert engines.engines_status()["sections"]["oxdna"]["ready"] is True
+
+
+def test_oxdna_cpu_only_without_gpu_not_degraded(monkeypatch):
+    _patch_all(monkeypatch, oxdna="/o/oxDNA", anm="/a/oxDNA", namd="/n/namd3",
+               gmx="/g/gmx", psfgen="/n/psfgen", dnanalysis="/o/DNAnalysis",
+               gpu_present=False)
+    monkeypatch.setattr(engines, "oxdna_supports_cuda", lambda p: False)
+    ox = engines.engines_status()["engines"]["oxdna"]
+    assert ox["degraded"] is False          # no GPU → CPU-only is not a regression
+    assert ox["install"] is None
+
+
 def test_installable_keys_only_source_engines():
     keys = engines.installable_engine_keys()
     assert "namd" not in keys          # download-only

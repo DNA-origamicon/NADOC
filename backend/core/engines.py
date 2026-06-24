@@ -32,7 +32,12 @@ import os
 import shutil
 
 from backend.core import hardware
-from backend.core.oxdna_runner import find_dnanalysis, find_oxdna, find_oxdna_anm
+from backend.core.oxdna_runner import (
+    find_dnanalysis,
+    find_oxdna,
+    find_oxdna_anm,
+    oxdna_supports_cuda,
+)
 from backend.core.namd_runner import find_gmx, find_namd
 from backend.core.namd_topology import find_psfgen
 
@@ -376,6 +381,32 @@ def engines_status() -> dict:
             forced=_f("dnanalysis"),
         ),
     }
+
+    # ── CUDA-degraded detection ─────────────────────────────────────────────
+    # A source-built engine can be *installed* yet CPU-only (the classic broken
+    # state: a conda/apt `oxDNA` on PATH with no GPU support).  When a GPU is
+    # present that is "installed but not full-speed": flag it and re-attach the
+    # CUDA build plan as the fix, without marking the engine missing (the CPU
+    # binary still runs — just slowly).
+    for key in ("oxdna", "oxdna_anm"):
+        eng = engines[key]
+        path = eng["path"]
+        cuda_capable = oxdna_supports_cuda(path) if path else None
+        eng["cuda_capable"] = cuda_capable
+        degraded = bool(eng["installed"] and gpu["present"] and cuda_capable is False)
+        eng["degraded"] = degraded
+        if degraded:
+            eng["install"] = _source_build_plan(
+                gpu, tools, name=eng["name"],
+                commands_fn=_oxdna_commands if key == "oxdna" else _oxdna_anm_commands,
+            )
+            names = ", ".join(gpu["names"]) or "a CUDA GPU"
+            eng["degraded_note"] = (
+                f"oxDNA is installed but the binary NADOC resolved is CPU-only, while "
+                f"{names} is available. GPU (CUDA) runs are ~1–2 orders of magnitude "
+                f"faster. Rebuild with CUDA (commands below), or set OXDNA_BIN to an "
+                f"existing CUDA build."
+            )
 
     def _section(required: list[str]) -> dict:
         missing = [k for k in required if not engines[k]["installed"]]

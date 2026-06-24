@@ -192,6 +192,7 @@ import { initMdJobsPanel } from './ui/md_jobs_panel.js'
 import { initBenchmarkPanel } from './ui/benchmark_panel.js'
 import { initAnchorGlow } from './scene/anchor_glow.js'
 import { initOxdnaDisplay } from './ui/oxdna_display.js'
+import { mdVizApiAdapter } from './ui/md_viz_adapter.js'
 import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
 import { initOxdnaLive } from './ui/oxdna_live_controller.js'
 import { initMdEngines }   from './ui/md_engines.js'
@@ -1837,6 +1838,9 @@ async function main() {
     mdDisplayController,
     getWorkspacePath: () => _workspacePath,
     getOxdnaDisplay: () => oxdnaDisplay,
+    // mdViz is declared below (~after oxdnaDisplay): the MD trajectory-scrub +
+    // flexibility-map tools reuse the oxDNA display controller via an MD api adapter.
+    getMdViz: () => mdViz,
   })
 
   // ── Benchmark controls (auto-tune oxDNA/NAMD hardware config per machine) ─────
@@ -1887,6 +1891,35 @@ async function main() {
     getSelectedJob: () => oxdnaPanel?.getSelectedJob?.() || null,
     getRunElements: _oxdnaRunElements,
   })
+
+  // ── MD-job visualization (trajectory scrub + flexibility map) ─────────────────
+  // A SECOND display controller, identical wiring to oxdnaDisplay but pointed at the
+  // MD job endpoints via mdVizApiAdapter.  The CG (nadoc-bead) trajectory + RMSF
+  // payloads are byte-identical to oxDNA's, so the whole scrub/colour machinery is
+  // reused for NAMD jobs without touching the validated oxDNA controller.
+  const mdViz = initOxdnaDisplay({
+    designRenderer, api: mdVizApiAdapter(api), proteinRenderer,
+    getAtomisticRenderer: () => atomisticRenderer,
+    getSurfaceRenderer:   () => surfaceRenderer,
+    getCurrentRepr:       () => _currentRepr,
+    onRestoreDesignHeavy: () => {
+      if (atomisticRenderer.getMode?.() !== 'off') {
+        _atomSurface.invalidateAtomCache()
+        _atomSurface.applyAtomisticMode(atomisticRenderer.getMode())
+      }
+      if (_atomSurface.getSurfaceMode?.() !== 'off') {
+        _atomSurface.invalidateSurfaceCache()
+        _atomSurface.applySurfaceMode(_atomSurface.getSurfaceMode())
+      }
+    },
+    onHeavyStatus: (d) => window.dispatchEvent(
+      new CustomEvent('nadoc:md-heavy-status', { detail: d })),
+  })
+  window.addEventListener('nadoc:representation-change', () => {
+    if (mdViz.isActive?.()) mdViz.reapplyForRepr()
+  })
+  // oxDNA jobs panel — uses the remote's Live wiring (oxdnaLive); the MD viz panel
+  // (initMdJobsPanel) is wired to mdViz separately above via getMdViz.
   oxdnaPanel = initOxdnaJobsPanel({
     oxdnaDisplay, oxdnaLive, getWorkspacePath: () => _workspacePath,
     getRunElements: _oxdnaRunElements,

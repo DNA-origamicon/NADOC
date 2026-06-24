@@ -39,6 +39,10 @@ class MdHealthSample:
     wc_ref_relative_fraction: Optional[float] = None
     wc_mean_hbond_ang:       Optional[float] = None
     passed:                  bool = True
+    # False only for a non-blocking advisory failure (WC-only breach): the checkpoint
+    # did not fully pass but the run was allowed to continue.  Blocking failures
+    # (C1' breach / hard error) keep the default True and stop the job.
+    blocking:                bool = True
     reason:                  str  = ""
 
 

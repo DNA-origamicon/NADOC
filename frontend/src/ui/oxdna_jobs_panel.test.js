@@ -22,7 +22,48 @@ import {
   productionRunCount, hasTrajectory, isResumable, startButtonLabel, flexConfidenceText,
   resumeNote, flattenJobTree, descendantIds, fieldChildTitle, deleteConfirmMessage, samplingState,
   runConfigForJob, healthForDisplay, runElements, runIndicatorTags, runRowLabel, runChildTitle,
+  jobHasFailure, errorLogText,
 } from './oxdna_jobs_panel.js'
+
+describe('jobHasFailure', () => {
+  it('true when the job status is failed', () => {
+    expect(jobHasFailure({ status: 'failed', stages: [] })).toBe(true)
+  })
+  it('true when any stage failed even if job status is not failed', () => {
+    expect(jobHasFailure({ status: 'stopped', stages: [{ status: 'done' }, { status: 'failed' }] })).toBe(true)
+  })
+  it('false for a healthy/running job and for null', () => {
+    expect(jobHasFailure({ status: 'running', stages: [{ status: 'running' }] })).toBe(false)
+    expect(jobHasFailure(null)).toBe(false)
+  })
+})
+
+describe('errorLogText', () => {
+  it('leads with a CUDA-vs-CPU-binary diagnosis when that is the mismatch', () => {
+    const t = errorLogText({
+      error: "oxDNA failed for 2_md_relax (rc=1).", stage: '2_md_relax',
+      log: "ERROR: Backend 'CUDA' not supported",
+      log_path: '/w/2_md_relax/oxdna.log',
+      diagnostics: { requested_backend: 'CUDA', oxdna_bin: '/conda/oxDNA', cuda_capable: false },
+    })
+    expect(t).toMatch(/DIAGNOSIS/)
+    expect(t).toMatch(/CPU-only/)
+    expect(t).toMatch(/oxdna-doctor --fix/)
+    expect(t).toMatch(/Backend 'CUDA' not supported/)   // raw log still included
+    expect(t).toMatch(/2_md_relax/)
+  })
+  it('omits the CUDA diagnosis when the binary is CUDA-capable', () => {
+    const t = errorLogText({
+      error: 'something else', log: 'boom',
+      diagnostics: { requested_backend: 'CUDA', oxdna_bin: '/o/oxDNA', cuda_capable: true },
+    })
+    expect(t).not.toMatch(/DIAGNOSIS/)
+    expect(t).toMatch(/boom/)
+  })
+  it('handles a missing payload gracefully', () => {
+    expect(errorLogText(null)).toMatch(/No error details/)
+  })
+})
 
 describe('healthForDisplay (live mid-stage vs end-of-stage sample)', () => {
   const sample = { bp_retained_fraction: 0.9, potential_energy: -1.4, steps_per_s: 2000 }

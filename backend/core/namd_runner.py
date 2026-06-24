@@ -7,7 +7,9 @@ Manages a single NAMD job end-to-end:
   3. After each segment, calls md_health.run_health_check()
   4. Updates job.json on every state change
   5. Appends to output/health.jsonl and output/metrics.jsonl
-  6. Stops on health-gate failure or explicit cancellation
+  6. Stops on a BLOCKING health-gate failure (C1' backbone breach / hard error)
+     or explicit cancellation.  A WC-only breach is advisory: it warns and the
+     ladder continues (WC ref-relative is a calibration-noisy metric).
 
 The runner uses asyncio.create_subprocess_exec so it doesn't block the
 FastAPI event loop.  A running job's asyncio.Task is stored in _RUNNING so the
@@ -391,14 +393,22 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
             wc_ref_relative_fraction = hresult.wc_ref_relative_fraction,
             wc_mean_hbond_ang       = hresult.wc_mean_hbond_ang,
             passed                  = hresult.passed,
+            blocking                = hresult.blocking,
             reason                  = hresult.reason or (hresult.error or ""),
         ))
-        if not hresult.passed:
+        # A blocking failure (C1' breach / hard error) stops the run; a WC-only
+        # breach is advisory — warn and let the ladder continue.
+        if not hresult.passed and hresult.blocking:
             active.status = "failed"
             job.status = MdStatus.failed
             job.error = f"Health gate failed after {active.name}: {hresult.reason or hresult.error}"
             job.save(workspace_dir)
             return job
+        if not hresult.passed:
+            logger.warning(
+                "[%s] Health warning after %s (advisory, continuing): %s",
+                job.job_id, active.name, hresult.reason or hresult.error,
+            )
 
     active.status = "done"
     job.current_segment_idx += 1
@@ -537,10 +547,10 @@ async def _run_namd_async(
         namd_bin,
         f"+p{threads}",
         "+setcpuaffinity",
-        "+devices",
-        devices,
-        f"{conf_name}.conf",
     ]
+    if devices:
+        cmd += ["+devices", devices]
+    cmd += [f"{conf_name}.conf"]
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("w") as log_fh:
         proc = await asyncio.create_subprocess_exec(
@@ -818,7 +828,8 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 hresult.c1_paired_fraction or 0.0,
                 hresult.wc_ref_relative_fraction or 0.0,
                 hresult.passed,
-                f" FAIL: {hresult.reason or hresult.error}" if not hresult.passed else "",
+                ("" if hresult.passed
+                 else f" {'FAIL' if hresult.blocking else 'WARN'}: {hresult.reason or hresult.error}"),
             )
             append_health_jsonl(output_dir, spec.name, spec.stage, hresult)
 
@@ -833,11 +844,13 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 wc_ref_relative_fraction = hresult.wc_ref_relative_fraction,
                 wc_mean_hbond_ang       = hresult.wc_mean_hbond_ang,
                 passed                  = hresult.passed,
+                blocking                = hresult.blocking,
                 reason                  = hresult.reason or (hresult.error or ""),
             )
             job.health_samples.append(sample)
 
-            if not hresult.passed:
+            # A blocking failure (C1' backbone breach / hard error) stops the run.
+            if not hresult.passed and hresult.blocking:
                 if idx < len(job.segments):
                     job.segments[idx].status = "failed"
                 job.status = MdStatus.failed
@@ -846,6 +859,13 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 )
                 job.save(workspace_dir)
                 return
+
+            # A non-blocking (WC-only) breach: warn and continue the ladder.
+            if not hresult.passed:
+                logger.warning(
+                    "[%s] Health warning after %s (advisory, continuing): %s",
+                    job.job_id, spec.name, hresult.reason or hresult.error,
+                )
 
             if idx < len(job.segments):
                 job.segments[idx].status = "done"

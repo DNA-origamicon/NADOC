@@ -168,6 +168,57 @@ def test_stage_specs_shape():
     assert specs[1].steps == 1_000_000
 
 
+# ── binary resolution: CUDA preference (the GPU-shadowing fix) ─────────────────
+
+def _fake_oxdna(tmp_path, name, *, cuda: bool):
+    """Write an executable stub and a matching ``ldd`` cache entry for it."""
+    from backend.core import oxdna_runner
+    p = tmp_path / name
+    p.write_text("#!/bin/sh\n")
+    p.chmod(0o755)
+    # Seed the capability cache directly so the test doesn't depend on a real ldd.
+    oxdna_runner._CUDA_CAP_CACHE[(str(p), p.stat().st_mtime)] = cuda
+    return str(p)
+
+
+def test_oxdna_supports_cuda_cache(tmp_path, monkeypatch):
+    from backend.core import oxdna_runner
+    cpu = _fake_oxdna(tmp_path, "oxDNA_cpu", cuda=False)
+    gpu = _fake_oxdna(tmp_path, "oxDNA_gpu", cuda=True)
+    assert oxdna_runner.oxdna_supports_cuda(gpu) is True
+    assert oxdna_runner.oxdna_supports_cuda(cpu) is False
+    assert oxdna_runner.oxdna_supports_cuda("") is False
+    assert oxdna_runner.oxdna_supports_cuda("/no/such/file") is False
+
+
+def test_find_oxdna_prefers_cuda_over_cpu_on_path(tmp_path, monkeypatch):
+    """A CPU-only binary first in the candidate list must NOT shadow a CUDA one."""
+    from backend.core import oxdna_runner
+    cpu = _fake_oxdna(tmp_path, "oxDNA_cpu", cuda=False)
+    gpu = _fake_oxdna(tmp_path, "oxDNA_gpu", cuda=True)
+    monkeypatch.delenv("OXDNA_BIN", raising=False)
+    monkeypatch.setattr(oxdna_runner, "_OXDNA_CANDIDATES", [cpu, gpu])
+    assert oxdna_runner.find_oxdna() == gpu                       # CUDA preferred
+    assert oxdna_runner.find_oxdna(prefer_cuda=False) == cpu      # first-usable
+
+
+def test_find_oxdna_cpu_only_falls_back(tmp_path, monkeypatch):
+    from backend.core import oxdna_runner
+    cpu = _fake_oxdna(tmp_path, "oxDNA_cpu", cuda=False)
+    monkeypatch.delenv("OXDNA_BIN", raising=False)
+    monkeypatch.setattr(oxdna_runner, "_OXDNA_CANDIDATES", [cpu])
+    assert oxdna_runner.find_oxdna() == cpu                       # only option wins
+
+
+def test_find_oxdna_env_override_wins(tmp_path, monkeypatch):
+    from backend.core import oxdna_runner
+    cpu = _fake_oxdna(tmp_path, "oxDNA_cpu", cuda=False)
+    gpu = _fake_oxdna(tmp_path, "oxDNA_gpu", cuda=True)
+    monkeypatch.setenv("OXDNA_BIN", cpu)                          # explicit user intent
+    monkeypatch.setattr(oxdna_runner, "_OXDNA_CANDIDATES", [gpu])
+    assert oxdna_runner.find_oxdna() == cpu
+
+
 def test_render_cuda_md_input():
     specs = build_relaxation_stages(md_relax_steps=10_000, device="2")
     txt = render_stage_input(specs[1], "/abs/topology.top", "/abs/conf.dat")

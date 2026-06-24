@@ -25,7 +25,7 @@ import { el } from './primitives/dom.js'
 import { showToast } from './toast.js'
 import {
   ENGINE_ORDER, gpuSummary, actionKind, actionLabel, commandText,
-  statusTone, sectionSummary, gateMessage, namdScanSummary,
+  statusTone, sectionSummary, gateMessage, namdScanSummary, degradedNote,
 } from './md_engines_logic.js'
 
 const _TONE = { ok: '#3fb950', warn: '#d29922', err: '#f85149' }
@@ -89,14 +89,19 @@ export function initMdEngines({ api }) {
     const name = el('span', { text: eng.name, attrs: { style: 'font-weight:600' } })
     const head = el('div', { attrs: { style: 'display:flex;align-items:center' }, children: [dot, name] })
 
+    // Degraded = installed but CPU-only while a GPU is present: show the path AND
+    // a warning note, and offer the rebuild action instead of a passive "✓ installed".
+    const degraded = !!eng.degraded
     const lines = [el('div', { text: eng.purpose, attrs: { style: _DIM } })]
     if (eng.installed) {
       lines.push(el('div', { text: eng.path, attrs: { style: 'color:#6e7681;font-size:11px;font-family:monospace;word-break:break-all' } }))
+      const dnote = degradedNote(eng)
+      if (dnote) lines.push(el('div', { text: dnote, attrs: { style: `color:${_TONE.warn};font-size:12px` } }))
     } else if (eng.required_note) {
       lines.push(el('div', { text: eng.required_note, attrs: { style: _DIM + ';font-style:italic' } }))
     }
 
-    const right = eng.installed
+    const right = (eng.installed && !degraded)
       ? el('span', { text: '✓ installed', attrs: { style: `color:${_TONE.ok};font-size:12px;white-space:nowrap` } })
       : createButton({ label: actionLabel(eng), size: 'sm', variant: 'primary', onClick: () => _handleAction(eng.key) })
 

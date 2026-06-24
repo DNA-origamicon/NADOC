@@ -41,6 +41,17 @@ from tests.conftest import make_6hb_design, make_18hb_design
 from tests.test_oxdna_relaxation import _MOCK_OXDNA, _sequence_for_oxdna
 
 
+def _mark_mock_cuda_capable(p):
+    """Seed the CUDA-capability cache so a mock binary reads as CUDA-enabled.
+
+    The mock scripts ignore the declared backend (they run no real simulation),
+    i.e. they stand in for a *universal* CUDA-built oxDNA. Without this, the
+    CPU-only-binary guard in create_oxdna_job would (correctly) reject a CUDA run
+    against the mock. Keyed by (path, mtime) to match oxdna_supports_cuda."""
+    from backend.core import oxdna_runner
+    oxdna_runner._CUDA_CAP_CACHE[(str(p), p.stat().st_mtime)] = True
+
+
 @pytest.fixture
 def mock_oxdna(tmp_path, monkeypatch):
     """A fake oxDNA binary (copies the input conf → last_conf, writes energy) bound
@@ -49,6 +60,7 @@ def mock_oxdna(tmp_path, monkeypatch):
     p.write_text(_MOCK_OXDNA)
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     monkeypatch.setenv("OXDNA_BIN", str(p))
+    _mark_mock_cuda_capable(p)
     return p
 
 
@@ -227,6 +239,7 @@ def mock_oxdna_field(tmp_path, monkeypatch):
     p.write_text(_FIELD_MOCK_OXDNA)
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     monkeypatch.setenv("OXDNA_BIN", str(p))
+    _mark_mock_cuda_capable(p)
     return p
 
 
@@ -618,6 +631,7 @@ def mock_oxdna_traj(tmp_path, monkeypatch):
     p.write_text(_MOCK_OXDNA_TRAJ)
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     monkeypatch.setenv("OXDNA_BIN", str(p))
+    _mark_mock_cuda_capable(p)
     return p
 
 

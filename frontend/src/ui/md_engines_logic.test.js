@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   gpuSummary, actionKind, actionLabel, commandText, statusTone,
-  sectionSummary, gateMessage, namdScanSummary,
+  sectionSummary, gateMessage, namdScanSummary, degradedNote,
 } from './md_engines_logic.js'
 
 const engine = (over = {}) => ({
@@ -43,6 +43,25 @@ describe('actionKind / actionLabel', () => {
     expect(actionKind(e)).toBe('download')
     expect(actionLabel(e)).toBe('Download…')
   })
+  it('degraded (installed but CPU-only on a GPU box) offers a rebuild, not "Installed"', () => {
+    const e = engine({ installed: true, degraded: true })   // carries an auto CUDA plan
+    expect(actionKind(e)).toBe('auto')
+    expect(actionLabel(e)).toBe('Rebuild for GPU (CUDA)')
+  })
+  it('degraded with auto blocked → guided "Enable GPU…"', () => {
+    const e = engine({ installed: true, degraded: true,
+      install: { method: 'auto', can_auto: false, target: 'CUDA', commands: ['x'] } })
+    expect(actionKind(e)).toBe('guided')
+    expect(actionLabel(e)).toBe('Enable GPU…')
+  })
+})
+
+describe('degradedNote', () => {
+  it('returns the note only when degraded', () => {
+    expect(degradedNote(engine({ installed: true, degraded: true, degraded_note: 'rebuild me' }))).toBe('rebuild me')
+    expect(degradedNote(engine({ installed: true, degraded_note: 'x' }))).toBe('')   // not degraded
+    expect(degradedNote(engine({ installed: true }))).toBe('')
+  })
 })
 
 describe('commandText', () => {
@@ -59,6 +78,9 @@ describe('statusTone', () => {
   it('missing required → err', () => expect(statusTone(engine())).toBe('err'))
   it('missing bundled → warn', () => {
     expect(statusTone(engine({ required_note: 'Bundled with oxDNA; building oxDNA provides it.' }))).toBe('warn')
+  })
+  it('degraded → warn (installed but not full-speed)', () => {
+    expect(statusTone(engine({ installed: true, degraded: true }))).toBe('warn')
   })
 })
 

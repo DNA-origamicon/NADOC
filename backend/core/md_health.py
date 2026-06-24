@@ -67,6 +67,12 @@ class WcPair:
 @dataclass
 class HealthCheckResult:
     passed:                      bool
+    # Whether a failure should STOP the run.  A C1' (backbone-pairing) breach or a
+    # hard error blocks; a WC-only breach does not — WC ref-relative pairing is a
+    # calibration-noisy advisory metric (template-built references inflate many ref
+    # distances), so a low WC score warns but lets the run continue.  Defaults True
+    # so the early-return error cases below (missing PSF/DCD, no frames) block.
+    blocking:                    bool = True
     reason:                      str  = ""
     c1_paired_fraction:          Optional[float] = None
     c1_mean_ang:                 Optional[float] = None
@@ -406,19 +412,23 @@ def run_health_check(
 
     c1_frac = c1_m["paired_fraction"]
     wc_frac = wc_m["ref_relative_paired_fraction"]
+    c1_below = c1_frac < min_c1_paired
+    wc_below = wc_frac < min_wc_ref_relative
     failed_reasons: list[str] = []
 
-    if c1_frac < min_c1_paired:
+    if c1_below:
         failed_reasons.append(
             f"C1' paired {c1_frac*100:.1f}% < {min_c1_paired*100:.1f}%"
         )
-    if wc_frac < min_wc_ref_relative:
+    if wc_below:
         failed_reasons.append(
             f"WC ref-relative {wc_frac*100:.1f}% < {min_wc_ref_relative*100:.1f}%"
         )
 
     return HealthCheckResult(
         passed                   = len(failed_reasons) == 0,
+        # Only a C1' breach blocks; a WC-only breach is an advisory warning.
+        blocking                 = c1_below,
         reason                   = "; ".join(failed_reasons),
         c1_paired_fraction       = c1_frac,
         c1_mean_ang              = c1_m["mean_c1_ang"],
@@ -443,6 +453,7 @@ def append_health_jsonl(output_dir: Path, segment_name: str, stage: str,
         "segment":      segment_name,
         "stage":        stage,
         "passed":       result.passed,
+        "blocking":     result.blocking,
         "reason":       result.reason,
         "c1_paired_fraction":        result.c1_paired_fraction,
         "c1_mean_ang":               result.c1_mean_ang,
