@@ -49,6 +49,7 @@ strand graph), so the load-bearing pin for a ``loop_skip`` spec is the geometric
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from backend.api import assembly_state
@@ -465,14 +466,78 @@ def _resolve_primitive_path(part: PrimitivePart, primitives_dir: Path) -> str:
     return str(path)
 
 
+def _build_circle_primitive(catalog: dict, part: PrimitivePart) -> Design:
+    """Build a parametric circle (flat disc) primitive GENERATIVELY from its ``params``.
+
+    A ``primitive_kind == "circle"`` catalog entry is not file-referenced like a static
+    primitive — its saved geometry is just the default radius's disc.  Instead we re-derive
+    the disc at the spec's requested radius by lowering it to the SAME single
+    ``circle_segment`` primordial op a hand-authored design spec would use (so a
+    ``from_primitive`` circle is canonical-topology-identical to a clicked one), reusing the
+    catalog's saved ``plane`` / ``min_chord_bp`` (via :func:`primitive_catalog.derive_placement_spec`)
+    so only the radius is the spec author's knob.  ``radius_nm`` is REQUIRED — omitting it
+    fails the build rather than silently using the catalog default (the spec must declare its
+    parametric intent).
+    """
+    from backend.core import primitive_catalog as _pc
+
+    if "radius_nm" not in part.params:
+        raise BuildSpecError(
+            f"from_primitive {part.name!r} is a parametric circle and requires a "
+            f"'radius_nm' param (got params {sorted(part.params)})"
+        )
+    placement = _pc.derive_placement_spec(catalog) or {}
+    op: dict = {"op": "circle_segment", "radius_nm": part.params["radius_nm"],
+                "plane": placement.get("plane", "XY")}
+    if placement.get("min_chord_bp") is not None:
+        op["min_chord_bp"] = int(placement["min_chord_bp"])
+    # build_design parses + drives circle_segment (enforces SQUARE lattice + radius_nm > 0)
+    # in its own scratch session → a standalone disc Design embedded inline as the part.
+    return build_design({"lattice": "SQUARE", "ops": [op]})
+
+
+def _resolve_primitive_part(
+    part: PrimitivePart, primitives_dir: Path
+) -> tuple[str, str | Design]:
+    """Resolve a ``from_primitive`` part by its catalog ``primitive_kind``:
+
+    - a **static** primitive (no ``primitive_kind``) → ``("file", path)`` (instanced by
+      reference, the AF-12 Phase 2 behaviour); it takes no ``params``.
+    - a **parametric** primitive (``primitive_kind == "circle"``) → ``("inline", Design)``
+      built generatively from ``params`` and embedded inline.
+
+    Raises :class:`BuildSpecError` on an unknown name (via :func:`_resolve_primitive_path`),
+    on ``params`` handed to a static primitive (meaningless), or on an unsupported
+    ``primitive_kind``.
+    """
+    path = _resolve_primitive_path(part, primitives_dir)
+    catalog = json.loads(Path(path).read_text(encoding="utf-8"))
+    kind = (catalog.get("metadata") or {}).get("primitive_kind")
+    if kind is None:
+        if part.params:
+            raise BuildSpecError(
+                f"from_primitive {part.name!r} is a static catalog primitive and takes no "
+                f"params, got {sorted(part.params)}"
+            )
+        return ("file", path)
+    if kind == "circle":
+        return ("inline", _build_circle_primitive(catalog, part))
+    raise BuildSpecError(
+        f"from_primitive {part.name!r} has unsupported primitive_kind {kind!r} "
+        "(only static file-backed primitives and the parametric 'circle' are supported)"
+    )
+
+
 def _build_assembly_from_parsed(
     parsed: AssemblySpec, *, primitives_dir: Path | None = None
 ) -> Assembly:
     # Build each INLINE part design first (own scratch session per part), then place.
-    # File-backed parts (AF-12 from_file) and catalog parts (AF-12 P2 from_primitive) are
-    # never built here — their path is handed straight to add_file_instance, so the
-    # validated saved design travels as a reference. A from_primitive part resolves its
-    # catalog name → .nadoc path first, then is treated identically to a from_file part.
+    # File-backed parts (AF-12 from_file) and STATIC catalog parts (AF-12 P2 from_primitive)
+    # are never built here — their path is handed straight to add_file_instance, so the
+    # validated saved design travels as a reference. A static from_primitive part resolves its
+    # catalog name → .nadoc path, then is treated identically to a from_file part. A PARAMETRIC
+    # primitive (AF-12 P2b, primitive_kind=circle) is instead built generatively from its
+    # params and embedded inline (joins part_designs), so it is NOT file-referenced.
     pdir = primitives_dir if primitives_dir is not None else _default_primitives_dir()
     part_designs = {key: _build_design_from_parsed(ds)
                     for key, ds in parsed.parts.items() if isinstance(ds, DesignSpec)}
@@ -481,7 +546,14 @@ def _build_assembly_from_parsed(
         if isinstance(ds, FilePart):
             file_paths[key] = ds.path
         elif isinstance(ds, PrimitivePart):
-            file_paths[key] = _resolve_primitive_path(ds, pdir)
+            # A static catalog primitive instances by reference (→ file_paths); a parametric
+            # one (circle) is built generatively + embedded inline (→ part_designs), so it
+            # routes through add_inline_instance exactly like an inline DesignSpec part.
+            kind, value = _resolve_primitive_part(ds, pdir)
+            if kind == "file":
+                file_paths[key] = value  # type: ignore[assignment]
+            else:
+                part_designs[key] = value  # type: ignore[assignment]
     with hab.assembly_scratch_session():
         hab.new_assembly(parsed.name)
         refs: dict[str, str] = {}
@@ -499,12 +571,17 @@ def build_assembly(spec, *, primitives_dir: Path | None = None) -> Assembly:
     assembly.  A ``{"from_file": …}`` part is instanced by path; a
     ``{"from_primitive": "<catalog name>"}`` part (AF-12 Phase 2) resolves its name against
     the primitive catalog — ``primitives_dir`` overrides the catalog folder (defaults to the
-    live workspace ``Primitives`` dir the "Add Primitive" UI reads).  Returns a deep copy.
+    live workspace ``Primitives`` dir the "Add Primitive" UI reads).  A **static** catalog
+    primitive is instanced by reference (file-backed); a **parametric** one (AF-12 Phase 2b,
+    ``primitive_kind=circle``) carries a ``params`` dict (``{"radius_nm": R}``) and is built
+    GENERATIVELY at the requested radius, then embedded inline.  Returns a deep copy.
     Raises :class:`backend.core.build_spec.BuildSpecError` on a malformed spec (at parse
-    time) or an unknown ``from_primitive`` name (at build time).  Pin the result with
+    time), an unknown ``from_primitive`` name, a static primitive handed ``params``, or a
+    parametric circle missing ``radius_nm`` (all at build time).  Pin the result with
     :func:`tests.automation_harness.assert_assembly_roundtrip_stable`,
     :func:`~tests.automation_harness.assert_spec_matches_calls` (``kind='assembly'``), and —
-    for a ``from_primitive`` part — :func:`~tests.automation_harness.assert_part_from_primitive`.
+    for a static ``from_primitive`` part — :func:`~tests.automation_harness.assert_part_from_primitive`,
+    or — for a parametric circle — :func:`~tests.automation_harness.assert_part_is_circular_disc`.
     """
     return _build_assembly_from_parsed(
         parse_assembly_spec(spec), primitives_dir=primitives_dir

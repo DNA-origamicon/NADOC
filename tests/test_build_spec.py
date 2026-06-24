@@ -13,6 +13,7 @@ import pytest
 from backend.core.build_spec import (
     BuildSpecError,
     FilePart,
+    PrimitivePart,
     parse_assembly_spec,
     parse_design_spec,
 )
@@ -416,6 +417,48 @@ def test_assembly_spec_parses_file_part():
       "ops": [{"op": "add_part", "part": "h"}]}, "unknown field"),
 ])
 def test_assembly_spec_file_part_rejects(bad, match):
+    with pytest.raises(BuildSpecError, match=match):
+        parse_assembly_spec(bad)
+
+
+# ── catalog-named parts (AF-12 Phase 2 / 2b — from_primitive [+ params]) ───────
+
+def test_assembly_spec_parses_primitive_part():
+    """A ``{"from_primitive": "<name>"}`` part parses to a PrimitivePart marker with empty
+    params (a static catalog primitive); name validity is checked at build time."""
+    parsed = parse_assembly_spec({
+        "parts": {"saved": {"from_primitive": "6hb_primitive"}},
+        "ops": [{"op": "add_part", "part": "saved"}],
+    })
+    assert parsed.parts["saved"] == PrimitivePart(name="6hb_primitive", params={})
+
+
+def test_assembly_spec_parses_parametric_primitive_params():
+    """AF-12 Phase 2b: a ``{"from_primitive": "<name>", "params": {…}}`` part parses to a
+    PrimitivePart carrying its params (a generic name→number map; which params a primitive
+    requires/forbids is decided at build time from its catalog kind)."""
+    parsed = parse_assembly_spec({
+        "parts": {"disc": {"from_primitive": "circle", "params": {"radius_nm": 12}}},
+        "ops": [{"op": "add_part", "part": "disc"}],
+    })
+    assert parsed.parts["disc"] == PrimitivePart(name="circle", params={"radius_nm": 12.0})
+
+
+@pytest.mark.parametrize("bad,match", [
+    # from_primitive must be a non-empty string
+    ({"parts": {"d": {"from_primitive": ""}}, "ops": [{"op": "add_part", "part": "d"}]},
+     "non-empty catalog name"),
+    # params must be an object
+    ({"parts": {"d": {"from_primitive": "circle", "params": [1, 2]}},
+      "ops": [{"op": "add_part", "part": "d"}]}, "must be an object"),
+    # a param value must be a number, not a string
+    ({"parts": {"d": {"from_primitive": "circle", "params": {"radius_nm": "big"}}},
+      "ops": [{"op": "add_part", "part": "d"}]}, "must be a number"),
+    # extra keys on a primitive part are rejected (only from_primitive + params allowed)
+    ({"parts": {"d": {"from_primitive": "circle", "lattice": "square"}},
+      "ops": [{"op": "add_part", "part": "d"}]}, "unknown field"),
+])
+def test_assembly_spec_primitive_part_rejects(bad, match):
     with pytest.raises(BuildSpecError, match=match):
         parse_assembly_spec(bad)
 

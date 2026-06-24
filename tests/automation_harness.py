@@ -971,6 +971,53 @@ def assert_part_from_primitive(assembly, instance_id, primitive_name, primitives
     return assert_part_from_file(assembly, instance_id, canonical_topology(saved))
 
 
+def assert_part_is_circular_disc(
+    assembly,
+    instance_id,
+    requested_radius_nm,
+    *,
+    max_spread_nm=0.5,
+    radius_tol_nm=0.5,
+):
+    """AF-12 Phase 2b: a ``{"from_primitive": "<circle>", "params": {"radius_nm": R}}`` part
+    instance is a GENERATIVELY-built circular disc of radius ≈ R — the parametric counterpart
+    to :func:`assert_part_from_primitive` (which is file-backed-only and would *fail* on this
+    inline part).
+
+    A parametric primitive is not file-referenced: the driver re-derives the disc at the
+    requested radius and embeds it INLINE, so the load-bearing check is geometric, not a
+    source pin.  We assert the instance is genuinely inline-backed (a parametric primitive
+    that resolved to a *file* would be the wrong build path — the saved default-radius disc
+    instead of the requested one), load the design the instance embeds (via the same
+    ``_load_design_from_source`` the assembly routes use), and delegate to the AF-4
+    :func:`assert_circular_disc` geometric oracle — which reads the placed helices' axis
+    geometry and proves they trace a circle of the requested radius.
+
+    This pins the full ``params.radius_nm → footprint → circle_segment → placed geometry``
+    path *through the assembly layer* — something :func:`canonical_assembly` (which keys an
+    inline source by its embedded topology fingerprint, blind to whether that geometry is
+    actually circular *of the requested radius*) cannot.  Returns the resolved
+    :class:`~backend.core.models.Design`.  Can-go-red: a wrong requested radius → the
+    circularity/radius assertion fails; a file-backed (static) instance → the inline guard.
+    """
+    from backend.api.assembly import _assembly_source_path, _load_design_from_source
+
+    inst = next((i for i in assembly.instances if i.id == instance_id), None)
+    assert inst is not None, f"no instance {instance_id!r} in the assembly"
+    assert getattr(inst.source, "type", None) == "inline", (
+        f"instance {inst.name!r} is not inline-backed (source type "
+        f"{getattr(inst.source, 'type', None)!r}) — a parametric from_primitive disc is "
+        "built generatively and embedded inline, not referenced by path; a file source means "
+        "the static (saved default-radius) primitive was instanced instead of the parametric one."
+    )
+    design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
+    assert_circular_disc(
+        design, requested_radius_nm,
+        max_spread_nm=max_spread_nm, radius_tol_nm=radius_tol_nm,
+    )
+    return design
+
+
 # ── Instance-layout oracles (parametric grid / ring placement) ────────────────
 
 def _instance_origin(inst):

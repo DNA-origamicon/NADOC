@@ -10,6 +10,7 @@ re-implementation).  The faithfulness pin is the new reusable oracle
 """
 from __future__ import annotations
 
+import json
 import math
 import stat
 
@@ -38,6 +39,7 @@ from tests.automation_harness import (
     assert_mate_coincident,
     assert_part_from_file,
     assert_part_from_primitive,
+    assert_part_is_circular_disc,
     assert_polymer_chain,
     assert_roundtrip_stable,
     assert_spec_constraints_reported,
@@ -727,6 +729,118 @@ def test_assembly_spec_primitive_grid_places_and_references(tmp_path):
     assert all(i.source.type == "file" for i in a.instances)
     assert_instances_on_grid(a, 2, 3, pitch=11.0)
     assert assert_instances_from_file(a, canonical_topology(saved)) == 6
+
+
+# ── parametric catalog primitive (AF-12 Phase 2b — from_primitive + params) ────
+# The next text-to-design rung: a {"from_primitive": "<circle>", "params": {"radius_nm": R}}
+# part is NOT file-referenced like a static primitive — the driver re-derives the disc at the
+# requested radius (lowering to the SAME single circle_segment op a hand-authored spec uses)
+# and embeds it INLINE. So the load-bearing pin is geometric: assert_part_is_circular_disc
+# loads the embedded design and proves the placed helices trace a circle of the requested
+# radius — the params.radius_nm → footprint → build → placed-geometry path through the
+# assembly layer, which canonical_assembly (blind to circularity) cannot see.
+
+def _save_circle_primitive(primitives_dir, name="disc_primitive", default_radius_nm=10.0):
+    """Drop a parametric circle catalog primitive (metadata.primitive_kind='circle', SQUARE)
+    into a tmp catalog dir. Its saved geometry is just the default-radius disc; the spec's
+    requested radius re-derives a fresh disc generatively, so only the metadata + placement
+    (plane / min_chord_bp) of this saved file are load-bearing."""
+    design = hs.build_design({"lattice": "square", "ops": [
+        {"op": "circle_segment", "radius_nm": default_radius_nm}]})
+    raw = json.loads(design.to_json())
+    raw.setdefault("metadata", {})["primitive_kind"] = "circle"
+    p = primitives_dir / f"{name}.nadoc"
+    p.write_text(json.dumps(raw), encoding="utf-8")
+    return p
+
+
+def _circle_part_spec(name, radius_nm):
+    """A parametric circle primitive (by name + radius) mated to an inline beam — instance a
+    generatively-built disc exactly as the text-to-design use case describes."""
+    return {"kind": "assembly", "name": "C", "parts": {
+        "disc": {"from_primitive": name, "params": {"radius_nm": radius_nm}},
+        "beam": _BEAM_SPEC,
+    }, "ops": [
+        {"op": "add_part", "part": "disc", "ref": "D",
+         "connectors": [{"label": "d", "position": [5, 0, 0], "normal": [1, 0, 0]}]},
+        {"op": "add_part", "part": "beam", "ref": "B", "transform": [40, 0, 0],
+         "connectors": [{"label": "b", "position": [-5, 0, 0], "normal": [-1, 0, 0]}]},
+        {"op": "mate", "child": "B", "parent": "D", "child_label": "b", "parent_label": "d"},
+    ]}
+
+
+def test_assembly_spec_parametric_circle_builds_disc(tmp_path):
+    """THE AUGMENT: a {"from_primitive": "<circle>", "params": {"radius_nm": R}} part is built
+    GENERATIVELY at the requested radius and embedded inline; the placed disc is a circle of
+    radius ≈ R. Load-bearing because canonical_assembly keys the inline source by its embedded
+    topology fingerprint, blind to whether that geometry is actually circular of radius R."""
+    _save_circle_primitive(tmp_path, "disc_primitive", default_radius_nm=10.0)
+    a = hs.build_assembly(_circle_part_spec("disc_primitive", 14.0), primitives_dir=tmp_path)
+    disc = next(i for i in a.instances if i.name == "disc")
+    assert disc.source.type == "inline", "a parametric circle must be embedded inline, not file-backed"
+    assert_part_is_circular_disc(a, disc.id, 14.0)
+
+
+def test_assembly_spec_parametric_circle_honors_requested_radius(tmp_path):
+    """The radius is the spec author's knob, NOT the catalog default: a default-10 nm catalog
+    disc instanced with radius_nm=20 yields a ~20 nm disc (catches a driver that ignored
+    params and re-used the saved default radius)."""
+    _save_circle_primitive(tmp_path, "disc_primitive", default_radius_nm=10.0)
+    a = hs.build_assembly(_circle_part_spec("disc_primitive", 20.0), primitives_dir=tmp_path)
+    disc = next(i for i in a.instances if i.name == "disc")
+    assert_part_is_circular_disc(a, disc.id, 20.0)
+
+
+def test_parametric_circle_oracle_fires_on_wrong_radius(tmp_path):
+    """can-go-red: asserting the wrong radius → the geometric circularity/radius oracle fails
+    (the property check canonical_assembly is blind to)."""
+    _save_circle_primitive(tmp_path, "disc_primitive", default_radius_nm=10.0)
+    a = hs.build_assembly(_circle_part_spec("disc_primitive", 14.0), primitives_dir=tmp_path)
+    disc = next(i for i in a.instances if i.name == "disc")
+    with pytest.raises(AssertionError, match="radius"):
+        assert_part_is_circular_disc(a, disc.id, 30.0)
+
+
+def test_parametric_circle_oracle_fires_on_file_backed(tmp_path):
+    """can-go-red: pointed at a STATIC (file-backed) instance, the inline guard fires — a
+    parametric primitive that resolved to a file path would be the wrong build path (the saved
+    default-radius disc instead of the requested one)."""
+    _save_catalog_primitive(tmp_path, "beam_six", make_6hb_design())
+    a = hs.build_assembly(_primitive_part_spec("beam_six"), primitives_dir=tmp_path)
+    file_inst = next(i for i in a.instances if i.source.type == "file")
+    with pytest.raises(AssertionError, match="not inline-backed"):
+        assert_part_is_circular_disc(a, file_inst.id, 14.0)
+
+
+def test_parametric_circle_requires_radius(tmp_path):
+    """A circle-kind primitive with no radius_nm param fails the BUILD (the spec must declare
+    its parametric intent — no silent fallback to the catalog default)."""
+    _save_circle_primitive(tmp_path, "disc_primitive", default_radius_nm=10.0)
+    spec = {"kind": "assembly", "name": "C", "parts": {"disc": {"from_primitive": "disc_primitive"}},
+            "ops": [{"op": "add_part", "part": "disc"}]}
+    with pytest.raises(BuildSpecError, match="requires a 'radius_nm' param"):
+        hs.build_assembly(spec, primitives_dir=tmp_path)
+
+
+def test_static_primitive_rejects_params(tmp_path):
+    """Handing params to a STATIC (non-parametric) catalog primitive is meaningless and fails
+    the build — params are only for parametric kinds."""
+    _save_catalog_primitive(tmp_path, "beam_six", make_6hb_design())
+    spec = {"kind": "assembly", "name": "C",
+            "parts": {"saved": {"from_primitive": "beam_six", "params": {"radius_nm": 12}}},
+            "ops": [{"op": "add_part", "part": "saved"}]}
+    with pytest.raises(BuildSpecError, match="takes no params"):
+        hs.build_assembly(spec, primitives_dir=tmp_path)
+
+
+def test_assembly_spec_parametric_circle_roundtrips_stable(tmp_path):
+    """The generatively-built inline disc survives a .nass round-trip (it's a valid, stable
+    embedded part, lowering exactly as an inline DesignSpec part does)."""
+    _save_circle_primitive(tmp_path, "disc_primitive", default_radius_nm=10.0)
+    with hab.assembly_scratch_session():
+        assert_assembly_roundtrip_stable(
+            lambda: hs.build_assembly(_circle_part_spec("disc_primitive", 14.0),
+                                      primitives_dir=tmp_path))
 
 
 def _file_grid_spec(path):

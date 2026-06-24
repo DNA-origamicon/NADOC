@@ -106,11 +106,18 @@ class PrimitivePart:
     primitive's validated topology — a name silently pointing at the wrong/renamed primitive
     is invisible to :func:`~tests.automation_harness.canonical_assembly`).
 
-    Only static (file-backed) catalog primitives are supported here; a *parametric*
-    primitive (``metadata.primitive_kind`` — e.g. the radius-driven circle disc) needs a
-    generative build path, not a file reference, and is deferred to a later phase."""
+    A *parametric* primitive (``metadata.primitive_kind`` — e.g. the radius-driven circle
+    disc, AF-12 Phase 2b) instead carries a ``params`` dict (``{"radius_nm": 12}``) and is
+    built **generatively** at build time (lowered to its primordial op, e.g. ``circle_segment``)
+    and embedded INLINE — it is NOT a file reference, so :func:`assert_part_from_primitive`
+    (file-backed) does not apply; the placed disc is pinned by the AF-4 geometric oracle via
+    :func:`tests.automation_harness.assert_part_is_circular_disc`.  The parser stays
+    catalog-agnostic: ``params`` is validated as a generic name→number map here, and whether a
+    given primitive *requires* / *forbids* params is decided at build time once its
+    ``primitive_kind`` is read from the catalog."""
 
     name: str
+    params: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -761,7 +768,7 @@ def _parse_assembly_op(raw, *, where: str) -> BuildOp:
 
 
 _FILE_PART_KEYS = {"from_file"}
-_PRIMITIVE_PART_KEYS = {"from_primitive"}
+_PRIMITIVE_PART_KEYS = {"from_primitive", "params"}
 
 
 def _parse_part(raw, *, where: str) -> DesignSpec | FilePart | PrimitivePart:
@@ -790,7 +797,19 @@ def _parse_part(raw, *, where: str) -> DesignSpec | FilePart | PrimitivePart:
             raise BuildSpecError(
                 f"{where}: 'from_primitive' must be a non-empty catalog name string"
             )
-        return PrimitivePart(name=name)
+        params: dict = {}
+        if "params" in raw:
+            raw_params = raw["params"]
+            if not isinstance(raw_params, dict):
+                raise BuildSpecError(
+                    f"{where}: 'params' must be an object of primitive parameters, "
+                    f"got {raw_params!r}"
+                )
+            params = {
+                str(k): _as_num(v, key=f"params.{k}", where=where)
+                for k, v in raw_params.items()
+            }
+        return PrimitivePart(name=name, params=params)
     return parse_design_spec(raw, where=where)
 
 
@@ -803,7 +822,7 @@ def parse_assembly_spec(spec, *, where: str = "assembly") -> AssemblySpec:
           "kind": "assembly",            # optional
           "name": "My assembly",         # optional
           "parts": { "<key>": <design-spec> | {"from_file": "<path>"}
-                              | {"from_primitive": "<catalog name>"}, … },  # part library
+                              | {"from_primitive": "<catalog name>"[, "params": {…}]}, … },  # part library
           "ops": [
             {"op": "add_part",  "part": "<key>", "ref": "<inst-key>",
              "transform": [x,y,z]|[16 floats]|null, "connectors": [{label,position,normal}]},
