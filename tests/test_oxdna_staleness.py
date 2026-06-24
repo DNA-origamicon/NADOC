@@ -304,3 +304,87 @@ def test_roll_seeks_feature_log_cursor_and_keeps_full_log(monkeypatch, tmp_path)
     # The user can seek forward in the Feature Log tab to return to the latest edit.
     assert c.post("/api/design/features/seek", json={"position": -1}).status_code == 200
     assert [s.sequence for s in design_state.get_or_404().strands] != seqs_at_job
+
+
+# ── Overhang-sequence writes are feature-log steps (the 6hb_sim_tests bug) ─────
+
+def _routed_sequenced_6hb_with_overhang():
+    """Build a routed/broken/sequenced 6hb on the default doc, then extrude one
+    sequence-less overhang.  Returns (design, overhang_id)."""
+    from backend.api import headless_build as hb
+    from backend.core.models import LatticeType
+    from tests.conftest import SIX_HB_CELLS
+    from tests.test_headless_build import _place_one_overhang
+
+    hb.new_design(LatticeType.HONEYCOMB)
+    hb.create_bundle(SIX_HB_CELLS, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
+    hb.auto_scaffold(seamless=False)
+    hb.auto_crossover()
+    hb.auto_break()
+    hb.assign_scaffold_sequence()
+    hb.assign_staple_sequences()
+    edited = _place_one_overhang(design_state.get_or_404())
+    assert edited is not None and len(edited.overhangs) == 1
+    return edited, edited.overhangs[0].id
+
+
+def test_overhang_sequence_patch_is_feature_log_step_and_clears_stale(monkeypatch, tmp_path):
+    """The reported 6hb_sim_tests bug: a manually-assigned overhang sequence was NOT a
+    feature-log step, so seeking back to a relax job's run state dropped the sequence —
+    the fingerprint never re-matched and the out-of-date ⚠ never cleared.  A PATCH
+    sequence write is now a snapshot entry; seeking back reproduces it and ⚠ clears."""
+    from tests.test_headless_build import _place_one_overhang
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(routes_oxdna, "find_oxdna", lambda: "/fake/oxDNA")
+    monkeypatch.setattr(routes_oxdna, "start_job", lambda *a, **k: None)
+
+    _design, ovid = _routed_sequenced_6hb_with_overhang()
+    c = TestClient(app)
+
+    # Manually assign the overhang sequence — the previously-unlogged write that
+    # caused the divergence.  It must now append exactly one 'overhang-sequence' entry.
+    n_before = len(design_state.get_or_404().feature_log)
+    r = c.patch(f"/api/design/overhang/{ovid}", json={"sequence": "ACGTACGT"})
+    assert r.status_code == 200, r.text
+    d = design_state.get_or_404()
+    assert len(d.feature_log) == n_before + 1
+    assert d.feature_log[-1].op_kind == "overhang-sequence"
+    assert next(o for o in d.overhangs if o.id == ovid).sequence == "ACGTACGT"
+
+    run_fp = oxdna_design_fingerprint(d)
+    pos = effective_feature_log_position(d)
+
+    job = new_oxdna_job("6hb", [], design_fingerprint=run_fp, feature_log_position=pos)
+    job.status = OxdnaStatus.completed
+    job.save(tmp_path)
+    (job.job_dir(tmp_path) / "design.json").write_text(d.model_dump_json())
+
+    # Edit after the run: a SECOND overhang → diverged + stale.
+    edited2 = _place_one_overhang(design_state.get_or_404())
+    assert edited2 is not None and len(edited2.overhangs) == 2
+    assert c.get(f"/api/oxdna/jobs/{job.job_id}").json()["out_of_date"] is True
+
+    # Roll: seek the cursor back to the job position.  The first overhang's assigned
+    # sequence is reproduced (previously dropped → the bug) and ⚠ clears.
+    rr = c.post(f"/api/oxdna/jobs/{job.job_id}/roll-design")
+    assert rr.status_code == 200, rr.text
+    rolled = design_state.get_or_404()
+    assert next(o for o in rolled.overhangs if o.id == ovid).sequence == "ACGTACGT"
+    assert oxdna_design_fingerprint(rolled) == run_fp
+    assert c.get(f"/api/oxdna/jobs/{job.job_id}").json()["out_of_date"] is False
+
+
+def test_generate_random_overhang_sequence_is_feature_log_step():
+    """generate-random writes a fingerprint field too, so it must also be a logged
+    snapshot (otherwise the generated sequence vanishes on a seek, same bug class)."""
+    _design, ovid = _routed_sequenced_6hb_with_overhang()
+    c = TestClient(app)
+    n_before = len(design_state.get_or_404().feature_log)
+    r = c.post(f"/api/design/overhang/{ovid}/generate-random")
+    assert r.status_code == 200, r.text
+    d = design_state.get_or_404()
+    assert len(d.feature_log) == n_before + 1
+    assert d.feature_log[-1].op_kind == "overhang-sequence"
+    gen = next(o for o in d.overhangs if o.id == ovid).sequence
+    assert gen and set(gen) <= set("ACGT")

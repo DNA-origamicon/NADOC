@@ -4701,6 +4701,37 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     design = design_state.get_or_404()
     updated, spec_updates, new_spec = _build_overhang_patch(design, overhang_id, body)
 
+    sequence_was_set = "sequence" in body.model_fields_set
+    label_was_set = body.label is not None
+
+    # A sequence (or label) write changes a build-fingerprint field, so it must
+    # be a real feature-log step — otherwise seeking the slider back to this
+    # state cannot reproduce it, the live design and the timeline silently
+    # diverge, and an oxDNA job's out-of-date ⚠ can never clear (the assigned
+    # sequence is invisible to the seek/staleness machinery). Record a snapshot
+    # the same way overhang-extrude / overhang-bulk do; the snapshot's post-state
+    # also captures a concurrent rotation, so the separate rotation delta below
+    # is skipped in that case.
+    if sequence_was_set or label_was_set:
+        params: dict = {"overhang_id": overhang_id}
+        if sequence_was_set:
+            params["sequence"] = spec_updates.get("sequence")
+        if label_was_set:
+            params["label"] = body.label
+        if body.rotation is not None:
+            params["rotation"] = spec_updates["rotation"]
+        log_label = (
+            f"Overhang sequence: {spec_updates.get('sequence') or 'cleared'}"
+            if sequence_was_set else f"Overhang label: {body.label}"
+        )
+        updated, report, _entry = design_state.mutate_with_feature_log(
+            op_kind='overhang-sequence',
+            label=log_label,
+            params=params,
+            fn=lambda _d: updated,
+        )
+        return _design_response(updated, report)
+
     # Append rotation to feature log when rotation was changed.
     if body.rotation is not None:
         from backend.core.models import OverhangRotationLogEntry
@@ -4723,11 +4754,7 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     # For rotation-only patches, embed geometry in the response so the frontend
     # can update design + geometry atomically in one store.setState (no intermediate
     # render from stale geometry).  Full geometry for topology-changing patches.
-    rotation_only = (
-        body.rotation is not None
-        and "sequence" not in body.model_fields_set
-        and body.label is None
-    )
+    rotation_only = body.rotation is not None
     if rotation_only:
         # Full geometry (no partial flag) forces a complete scene rebuild on the
         # frontend so backbone positions and slab normals are read fresh from the
@@ -5641,7 +5668,6 @@ def generate_overhang_random_sequence(overhang_id: str) -> dict:
         generate_overhang_sequences,
         generate_overhang_sequence_with_overrides,
     )
-    from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
     spec = next((o for o in design.overhangs if o.id == overhang_id), None)
@@ -5685,8 +5711,15 @@ def generate_overhang_random_sequence(overhang_id: str) -> dict:
     # window can still form one).
     updated = _apply_boundary_hairpin_warnings(updated, overhang_id)
 
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    # Record a feature-log snapshot (not a silent set_design) so the assigned
+    # sequence is a real timeline step — seeking back to it reproduces the
+    # sequence and keeps oxDNA job staleness in sync (see patch_overhang).
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind='overhang-sequence',
+        label=f'Generate overhang sequence: {seq}',
+        params={'overhang_id': overhang_id, 'action': 'generate-random'},
+        fn=lambda _d: updated,
+    )
     return _design_response(updated, report)
 
 

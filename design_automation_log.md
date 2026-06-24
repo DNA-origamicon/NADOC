@@ -1772,6 +1772,24 @@ still overwrite per-overhang afterward, so display layer is preserved). Full sui
 faithfully and non-destructively — AND it immediately caught a real reconstruction bug (stale overhang membership)
 that the existing per-slice backend tests missed. This is the missing primitive AF-26 composes for the job roll.
 
+**FOLLOW-UP (2026-06-24, real-app repro on `workspace/6hb_sim_tests.nadoc`): the overhang-membership fix above was
+necessary but NOT sufficient — the "⚠ doesn't clear after a back-seek" symptom had a SECOND, independent cause.**
+A *manually-assigned overhang sequence* (`PATCH /design/overhang/{id}` with a `sequence`, or
+`POST /design/overhang/{id}/generate-random`) wrote a build-fingerprint field but recorded **no feature-log entry** —
+those two paths called `replace_with_reconcile` / `set_design` directly while every sibling op
+(`overhang-extrude`, `overhang-bulk`, `assign-*-sequences`) used `mutate_with_feature_log`. So the live design and the
+timeline silently diverged: a relax froze the live (sequenced) overhang, but the entry's stored snapshot had the
+overhang sequence as `None`/`NNNN…`, and seeking back faithfully restored the snapshot → fingerprint never re-matched →
+⚠ never cleared. In `6hb_sim_tests` the overhang `ovhg_h_XY_1_1_83_5p` was live `ATACTCGCTC` (frozen by the job) but the
+position-7 snapshot held `None`. **Fix:** route both sequence-write paths through `mutate_with_feature_log(op_kind=
+'overhang-sequence', …)` (new `SnapshotOpKind` literal); a concurrent rotation is captured by that snapshot so the
+rotation-only delta path is unchanged. Pins: `test_oxdna_staleness.py::test_overhang_sequence_patch_is_feature_log_
+step_and_clears_stale` (full stale→roll→clear repro, can-go-red proven: revert the crud change → no log entry → RED) +
+`::test_generate_random_overhang_sequence_is_feature_log_step`. Full suite **3131 → 3133 green**. **MIGRATION: none** —
+files already in the broken state (incl. `6hb_sim_tests`) are repaired by re-applying the overhang sequence once after
+the fix (which writes the proper log entry); that job's ⚠ then clears on seek. Audit confirmed the bulk-generate,
+sub-domain split/merge/patch, and generate-binder paths already log, so only these two leaked.
+
 ### AF-26 — job-staleness ROLL/RETURN lifecycle wrapper + oracle (BACKEND leg, 2026-06-24)
 
 **Shape:** two headless wrappers — `headless_oxdna_build.roll_job_to_run_state(job_id, workspace)` (wraps

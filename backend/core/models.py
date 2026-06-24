@@ -1188,6 +1188,7 @@ SnapshotOpKind = Literal[
     'extrude-continuation',
     'extrude-deformed-continuation',
     'overhang-extrude',
+    'overhang-sequence',
     'assign-scaffold-sequence',
     'assign-staple-sequences',
     'auto-scaffold',
