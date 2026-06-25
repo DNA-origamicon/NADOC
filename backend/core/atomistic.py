@@ -378,6 +378,12 @@ class Atom:
     # Extra-crossover-base interpolation (empty / 0.0 for regular nucleotides)
     aux_helix_id: str   = ""   # destination helix for extra-base lerp during Q expansion
     aux_t:        float = 0.0  # lerp weight 0→1 (src helix → aux_helix_id)
+    # Extra-crossover-base identity (None for regular nucleotides).  The stored
+    # helix_id/bp_index/direction stay the SOURCE nucleotide's key (so the topology
+    # writers are unchanged); these let the relaxed-display reconstruction and the MD
+    # P-atom mapping address each insert as ``("__xb__", crossover_id, extra_base_k)``.
+    crossover_id: Optional[str] = None
+    extra_base_k: Optional[int] = None
 
 
 @dataclass
@@ -405,6 +411,8 @@ def merge_models(*models: AtomisticModel) -> AtomisticModel:
                 is_modified=a.is_modified,
                 aux_helix_id=a.aux_helix_id,
                 aux_t=a.aux_t,
+                crossover_id=a.crossover_id,
+                extra_base_k=a.extra_base_k,
             ))
         for i, j in model.bonds:
             bonds.append((i + offset, j + offset))
@@ -472,6 +480,8 @@ def atomistic_model_from_reference(
             is_modified=ref_atom.is_modified,
             aux_helix_id=ref_atom.aux_helix_id,
             aux_t=ref_atom.aux_t,
+            crossover_id=getattr(ref_atom, "crossover_id", None),
+            extra_base_k=getattr(ref_atom, "extra_base_k", None),
         ))
 
     bonds: list[tuple[int, int]] = []
@@ -1058,6 +1068,7 @@ def build_atomistic_model(
     include_proteins: bool = False,
     axis_override: "dict[tuple[str, int], tuple[_np.ndarray, _np.ndarray]] | None" = None,
     frame_override: "dict[tuple, tuple[_np.ndarray, _np.ndarray, _np.ndarray]] | None" = None,
+    xb_pos_override: "dict[tuple[str, int], _np.ndarray] | None" = None,
     close_backbone: bool = False,
     relaxed_oxdna_phase: bool = False,
 ) -> AtomisticModel:
@@ -1506,6 +1517,7 @@ def build_atomistic_model(
         helix_map          = helix_map,
         bp_to_sugar_serials = bp_to_sugar_serials,
         exclude_helix_ids  = exclude_helix_ids,
+        xb_pos_override    = xb_pos_override,
     )
 
     # ── DISPLAY-ONLY: close the sequential backbone (relaxed-frame reconstruction) ─
@@ -1645,6 +1657,7 @@ def _build_extra_base_atoms(
     helix_map:          dict[str, object],
     bp_to_sugar_serials: dict[tuple[str, int, str], dict[str, int]],
     exclude_helix_ids:  "set[str] | None",
+    xb_pos_override:    "dict[tuple[str, int], _np.ndarray] | None" = None,
 ) -> int:
     """
     Place atomistic atoms for all extra crossover bases in the design.
@@ -1803,6 +1816,13 @@ def _build_extra_base_atoms(
             else:
                 origin_pos = _lerp(line_p0, line_p1, t_i)
                 arc_dir = bow_dir
+            # Relaxed/trajectory display: place this insert at its REAL simulated
+            # backbone position (keeping the arc-derived orientation), so the heavy
+            # rep shows the true ssDNA conformation instead of the geometric arc.
+            _xb_sim = (xb_pos_override.get((xo.id, i - 1))
+                       if xb_pos_override is not None else None)
+            if _xb_sim is not None:
+                origin_pos = _np.asarray(_xb_sim, dtype=float)
             origin, R = _extra_base_frame(origin_pos, arc_dir, bow_dir)
 
             residue = _BASE_CHAR_TO_RESIDUE.get(base_char.upper(), "DT")
@@ -1831,6 +1851,8 @@ def _build_extra_base_atoms(
                     direction    = ha.strand.value,
                     aux_helix_id = dst_key[0],
                     aux_t        = _aux_t,
+                    crossover_id = xo.id,
+                    extra_base_k = i - 1,
                 ))
                 sugar_name_to_serial[atom_name] = serial
                 serial += 1
@@ -1857,6 +1879,8 @@ def _build_extra_base_atoms(
                     direction    = ha.strand.value,
                     aux_helix_id = dst_key[0],
                     aux_t        = _aux_t,
+                    crossover_id = xo.id,
+                    extra_base_k = i - 1,
                 ))
                 base_name_to_serial[atom_name] = serial
                 serial += 1
@@ -1945,7 +1969,15 @@ def _build_extra_base_atoms(
             _rnd4(line_p0), _rnd4(line_p1), _rnd4(target_c1n),
         ) if (src_s is not None and dst_s is not None) else None
 
-        if n == 1 and src_s is not None and dst_s is not None:
+        # When the inserts carry REAL simulated positions (relaxed-display /
+        # trajectory ``xb_pos_override``), those positions are authoritative — skip
+        # the scipy bridge minimisation, which would otherwise re-seat the whole
+        # insert onto the geometric junction arc and discard the simulated pose.
+        _xb_overridden = (xb_pos_override is not None
+                          and (xo.id, 0) in xb_pos_override)
+        if _xb_overridden:
+            pass
+        elif n == 1 and src_s is not None and dst_s is not None:
             _mini_jobs.append(_functools.partial(
                 _minimize_1_extra_base,
                 atoms, src_s, dst_s, eb_sugar_serials[0],
@@ -2015,6 +2047,8 @@ def atomistic_to_json(model: AtomisticModel) -> dict:
                 "is_modified":  a.is_modified,
                 "aux_helix_id": a.aux_helix_id,
                 "aux_t":        a.aux_t,
+                "crossover_id": a.crossover_id,
+                "extra_base_k": a.extra_base_k,
             }
             for a in model.atoms
         ],

@@ -113,7 +113,7 @@ def test_backbone_closure_connects_and_preserves_rigid(design, tmp_path):
                and (k[0], k[1] + 1, k[2]) in frame)
     frame[key]["backbone_position"] = frame[key]["backbone_position"] + np.array([0.5, 0, 0])
 
-    npo, axo = _frame_atomistic_overrides(design, frame)
+    npo, axo, _xbo = _frame_atomistic_overrides(design, frame)
     open_m = build_atomistic_model(design, nuc_pos_override=npo, axis_override=axo, close_backbone=False)
     closed = build_atomistic_model(design, nuc_pos_override=npo, axis_override=axo, close_backbone=True)
 

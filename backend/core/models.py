@@ -1877,6 +1877,8 @@ class AtomisticReferenceAtom(BaseModel):
     is_modified: bool = False
     aux_helix_id: str = ""
     aux_t: float = 0.0
+    crossover_id: Optional[str] = None
+    extra_base_k: Optional[int] = None
 
 
 class AtomisticReference(BaseModel):

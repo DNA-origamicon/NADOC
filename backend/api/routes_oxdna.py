@@ -499,12 +499,15 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
 
 @router.get("/oxdna/jobs")
 async def list_oxdna_jobs() -> list[dict]:
-    jobs = [reconcile_oxdna_status(j, _workspace()) for j in OxdnaJob.list_jobs(_workspace())]
+    from backend.core.design_disk_usage import dir_size_bytes_cached
+    ws = _workspace()
+    jobs = [reconcile_oxdna_status(j, ws) for j in OxdnaJob.list_jobs(ws)]
     current_fp = _current_design_fingerprint()   # computed once for the whole list
     out: list[dict] = []
     for j in jobs:
         d = j.to_dict()
         d["out_of_date"] = _job_is_out_of_date(j, current_fp)
+        d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
         out.append(d)
     return out
 
@@ -937,13 +940,55 @@ async def delete_oxdna_job(job_id: str) -> dict:
             raise HTTPException(
                 400, f"Stop the running child run ({d.job_id}) before deleting its ancestor.")
 
+    from backend.core.job_archive import purge_index_entry
     deleted: list[str] = []
     for j in (*descendants, job):
         jd = j.job_dir(ws)
         if jd.exists():
             shutil.rmtree(jd)
+        purge_index_entry(ws, "oxdna_jobs", j.job_id)   # drop archived-job index entry if any
         deleted.append(j.job_id)
     return {"ok": True, "job_id": job_id, "deleted": deleted, "n_children": len(descendants)}
+
+
+# ── Archive / unarchive ────────────────────────────────────────────────────────
+
+class _ArchiveBody(BaseModel):
+    dest_root: str   # parent directory; the job moves to <dest_root>/<job_id>
+
+
+@router.post("/oxdna/jobs/{job_id}/archive", status_code=202)
+async def archive_oxdna_job(job_id: str, body: _ArchiveBody) -> dict:
+    """Start moving a job's folder to ``dest_root`` in the background (poll status)."""
+    from backend.core import job_archive
+    ws = _workspace()
+    job = _load_job(job_id)
+    if is_running(job_id) or job.status == OxdnaStatus.running:
+        raise HTTPException(400, "Stop the oxDNA job before archiving it")
+    try:
+        job_archive.start_archive(job, ws, "oxdna_jobs", Path(body.dest_root))
+    except (ValueError, FileExistsError, FileNotFoundError) as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "job_id": job_id, "action": "archive"}
+
+
+@router.post("/oxdna/jobs/{job_id}/unarchive", status_code=202)
+async def unarchive_oxdna_job(job_id: str) -> dict:
+    """Start moving an archived job's folder back into the workspace (poll status)."""
+    from backend.core import job_archive
+    ws = _workspace()
+    job = _load_job(job_id)
+    try:
+        job_archive.start_unarchive(job, ws, "oxdna_jobs")
+    except (ValueError, FileExistsError, FileNotFoundError) as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "job_id": job_id, "action": "unarchive"}
+
+
+@router.get("/oxdna/jobs/{job_id}/archive-status")
+async def oxdna_archive_status(job_id: str) -> dict:
+    from backend.core import job_archive
+    return job_archive.task_status("oxdna_jobs", job_id) or {"state": "idle"}
 
 
 @router.get("/oxdna/jobs/{job_id}/health")
@@ -1129,7 +1174,8 @@ async def oxdna_frames_surface(job_id: str, body: OxdnaFramesSurfaceBody) -> dic
         body.radius_inflate, body.smooth)
 
 
-def _relaxed_full_map(job, align: bool, *, copies: bool = False):
+def _relaxed_full_map(job, align: bool, *, copies: bool = False,
+                      include_extra_bases: bool = False):
     """Shared relaxed-frame reader for the display + display-atomistic/surface
     routes. Returns ``(design, full_map, stage_name, conf_path, ref_conf)`` where
     ``full_map`` is ``{(hid,bp,dir): {backbone_position(CM), a1, a3}}`` — the same
@@ -1139,7 +1185,11 @@ def _relaxed_full_map(job, align: bool, *, copies: bool = False):
     ``copies=True`` (atomistic/surface reconstruction only) additionally keys
     loop-insertion copies under their own 4-tuple key so the rigid-frame placer
     gives each copy its own relaxed frame.  The CG ``/display`` route keeps the
-    default 3-tuple map (it unpacks ``(hid,bp,dir)``)."""
+    default 3-tuple map (it unpacks ``(hid,bp,dir)``).
+
+    ``include_extra_bases=True`` keeps crossover extra-base inserts (keyed
+    ``(_XB_SENTINEL, crossover_id, k)``) so the display renders them at their real
+    simulated positions instead of the geometric arc."""
     jd = job.job_dir(_workspace())
 
     # Pick the latest stage with a last_conf.dat (prefer the most-advanced done stage).
@@ -1177,10 +1227,11 @@ def _relaxed_full_map(job, align: bool, *, copies: bool = False):
         full_map = read_configuration_unwrapped(
             conf_path, design, ref_conf,
             align_keys=[tuple(k) for k in anchor_keys], rotate=False, align=align,
-            copies=copies)
+            copies=copies, include_extra_bases=include_extra_bases)
     else:
         full_map = read_configuration_unwrapped(conf_path, design, ref_conf,
-                                                align=align, copies=copies)
+                                                align=align, copies=copies,
+                                                include_extra_bases=include_extra_bases)
     return (design, full_map, stage_name, conf_path, ref_conf)
 
 
@@ -1198,7 +1249,8 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
     lined up with the surface grid instead of re-posed onto the free design.
     """
     job = _load_job(job_id)
-    design, full_map, stage_name, conf_path, ref_conf = _relaxed_full_map(job, align)
+    design, full_map, stage_name, conf_path, ref_conf = _relaxed_full_map(
+        job, align, include_extra_bases=True)
     if full_map is None:
         return {"job_id": job.job_id, "ready": False, "positions": [], "stage_name": None}
 
@@ -1263,7 +1315,7 @@ async def get_oxdna_display_atomistic(job_id: str, align: bool = True) -> dict:
     from backend.core.atomistic import atomistic_reference_topology_hash
 
     job = _load_job(job_id)
-    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True)
+    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True, include_extra_bases=True)
     if full_map is None:
         return {"job_id": job.job_id, "ready": False}
     data = await run_in_threadpool(frame_atomistic_flat, design, full_map)
@@ -1302,7 +1354,7 @@ async def get_oxdna_display_surface(job_id: str, body: OxdnaSurfaceBody,
     from backend.core.oxdna_health import frame_surface_json
 
     job = _load_job(job_id)
-    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True)
+    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True, include_extra_bases=True)
     if full_map is None:
         return {"job_id": job.job_id, "ready": False}
     data = await run_in_threadpool(
@@ -1325,7 +1377,7 @@ async def get_oxdna_display_atomistic_audit(job_id: str, align: bool = True) -> 
     from backend.core.atomistic_validation import audit_bonds
 
     job = _load_job(job_id)
-    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True)
+    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True, include_extra_bases=True)
     if full_map is None:
         return {"job_id": job.job_id, "ready": False}
     report = await run_in_threadpool(audit_bonds, design, full_map)

@@ -1976,6 +1976,10 @@ export const appendOxdnaRun      = (id, body)    => _oxdnaJSON('POST', `/oxdna/j
 export const previewOxdnaFieldAnchors = (id, body) => _oxdnaJSON('POST', `/oxdna/jobs/${id}/field/anchor-preview`, body)
 export const stopOxdnaJob        = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/stop`)
 export const deleteOxdnaJob      = (id)          => _oxdnaJSON('DELETE', `/oxdna/jobs/${id}`)
+/** Start moving an oxDNA job's folder to <destRoot>/<job_id> (background; poll status). */
+export const archiveOxdnaJob     = (id, destRoot) => _oxdnaJSON('POST', `/oxdna/jobs/${id}/archive`, { dest_root: destRoot })
+export const unarchiveOxdnaJob   = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/unarchive`)
+export const oxdnaArchiveStatus  = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/archive-status`)
 export const getOxdnaHealth      = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/health`)
 export const getOxdnaMetrics     = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/metrics`)
 export const getOxdnaDisplay     = (id, align = true) => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/display?align=${align ? 'true' : 'false'}`)
@@ -2024,6 +2028,16 @@ export const stopOxdnaLive       = (id)          => _oxdnaJSON('POST', `/oxdna/l
 export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)
 /** List NAMD/MD jobs (for the trajectory-keyframe dropdown). */
 export const listMdJobs          = ()            => _oxdnaJSON('GET',  '/md/jobs')
+/** Start moving an MD job's folder to <destRoot>/<job_id> (background; poll status). */
+export const archiveMdJob        = (id, destRoot) => _oxdnaJSON('POST', `/md/jobs/${id}/archive`, { dest_root: destRoot })
+export const unarchiveMdJob      = (id)          => _oxdnaJSON('POST', `/md/jobs/${id}/unarchive`)
+export const mdArchiveStatus     = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/archive-status`)
+
+// ── Host filesystem browse (archive folder picker, routes_fs.py) ────────────────
+/** Subdirectories of an absolute host path (default: home). {path, parent, entries}. */
+export const fsListDir           = (path)        => _oxdnaJSON('GET',  `/fs/listdir${path ? `?path=${encodeURIComponent(path)}` : ''}`)
+/** Create a folder under an absolute host path; returns the refreshed listing. */
+export const fsMkdir             = (path, name)  => _oxdnaJSON('POST', '/fs/mkdir', { path, name })
 /** Composite NAMD trajectory ({keys, frames, markers, stages}) — same shape as
  *  getOxdnaTrajectory, so the animation trajectory path is shared. */
 export const getMdTrajectory     = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory`)
@@ -3009,6 +3023,13 @@ export async function listLibraryFiles() {
 
 export async function getLibraryFileContent(path) {
   return _request('GET', `/library/content?path=${encodeURIComponent(path)}`)
+}
+
+/** Aggregate facts about the active design / open file: total bases, loadouts,
+ *  MD + oxDNA jobs and their on-disk sizes, and assemblies that use the part. */
+export async function getDesignAbout(path) {
+  const q = path ? `?path=${encodeURIComponent(path)}` : ''
+  return _request('GET', `/design/about${q}`)
 }
 
 export async function uploadLibraryFile(content, filename, opts = {}) {

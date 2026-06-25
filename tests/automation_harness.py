@@ -1321,6 +1321,86 @@ def assert_geometric_length_delta(
     return result
 
 
+# ── Crossover extra-bases oracle ──────────────────────────────────────────────
+
+def assert_crossover_extra_bases(
+    design: Design,
+    sequence: str,
+    *,
+    crossover_filter: str | None = None,
+    expected_count: int | None = None,
+) -> int:
+    """Junction-metadata oracle: the right crossovers carry the requested extra bases.
+
+    Extra bases (``Crossover.extra_bases``, e.g. "TT") are single-stranded inserts at a
+    placed crossover junction — junction METADATA outside the strand graph, so
+    :func:`canonical_topology` and :func:`assert_spec_matches_calls` are **blind** to them
+    (exactly as they are to a loop/skip mark).  This is therefore the load-bearing pin for
+    a ``crossover_extra_bases`` spec — the analog of :func:`assert_geometric_length_delta`
+    for loop_skip — reading the realised ``extra_bases`` back off the built design.
+
+    Two modes, mirroring the build-spec op's two addressing modes:
+
+    * **bulk** — pass ``crossover_filter`` ∈ ``{"all","scaffold","staple"}``.  Every
+      crossover of that type MUST carry ``sequence`` (uppercased); every *other* crossover
+      MUST be untouched (``extra_bases is None``).  That exclusivity is the can-go-red
+      guard: a bulk set that bled onto the wrong junction type fails here.  The filter set
+      must be non-empty (a vacuous pass guard).
+    * **precise** — omit ``crossover_filter`` and pass ``expected_count`` (use ``1`` for a
+      single-junction set).  Exactly ``expected_count`` crossovers MUST carry ``sequence``;
+      all others MUST be ``None`` — so a precise op that hit more than its target fails.
+
+    Returns the number of crossovers carrying the sequence.
+    """
+    from backend.core.crossover_positions import enumerate_crossovers
+
+    seq = sequence.upper()
+    assert design.crossovers, (
+        "design has no crossovers — this oracle would pass vacuously; run "
+        "auto_crossover / full_autostaple before setting extra bases."
+    )
+    by_id = {x.id: (x.extra_bases or None) for x in design.crossovers}
+    carrying = {cid for cid, eb in by_id.items() if eb == seq}
+
+    if crossover_filter is not None:
+        assert crossover_filter in ("all", "scaffold", "staple"), (
+            f"crossover_filter must be all|scaffold|staple, got {crossover_filter!r}"
+        )
+        targeted = {
+            rec["id"] for rec in enumerate_crossovers(design)
+            if crossover_filter == "all" or rec["crossover_type"] == crossover_filter
+        }
+        assert targeted, (
+            f"no {crossover_filter} crossovers in the design — vacuous; pick a filter "
+            "whose set is non-empty for this fixture."
+        )
+        missing = {cid for cid in targeted if by_id.get(cid) != seq}
+        assert not missing, (
+            f"{len(missing)} {crossover_filter} crossover(s) do not carry extra bases "
+            f"{seq!r} — the bulk set did not reach every targeted junction."
+        )
+        bled = {cid for cid in by_id if cid not in targeted and by_id[cid] is not None}
+        assert not bled, (
+            f"{len(bled)} non-{crossover_filter} crossover(s) were annotated — the bulk "
+            "set bled onto junctions outside its filter (can-go-red guard tripped)."
+        )
+        return len(targeted)
+
+    assert expected_count is not None, (
+        "precise mode needs expected_count (e.g. 1 for a single-junction set)."
+    )
+    annotated = {cid for cid, eb in by_id.items() if eb is not None}
+    assert annotated == carrying, (
+        f"{len(annotated - carrying)} crossover(s) carry a DIFFERENT extra-base sequence "
+        f"than {seq!r} — a precise set wrote the wrong value somewhere."
+    )
+    assert len(carrying) == expected_count, (
+        f"{len(carrying)} crossover(s) carry extra bases {seq!r}, expected exactly "
+        f"{expected_count} — a precise set hit the wrong number of junctions."
+    )
+    return len(carrying)
+
+
 # ── Circularity oracle (parametric disc primitives) ───────────────────────────
 
 def assert_circular_disc(
@@ -2546,7 +2626,10 @@ def assert_relaxed_geometry_recovered(job, design: Design, workspace, *,
     display = hox.read_relaxed_positions(job.job_id, workspace)
     assert display.get("ready") is True, (
         "relaxed last_conf did not read back (display route not ready)")
-    positions = display["positions"]
+    # The /display route also surfaces crossover extra-base inserts (helix_id
+    # "__xb__") so they render at their real simulated positions; this oracle pins
+    # the REAL design nucleotides, so drop the inserts before the design-key checks.
+    positions = [p for p in display["positions"] if p["helix_id"] != "__xb__"]
 
     geom = _geometry_for_design(design)
     expected = expected_count if expected_count is not None else len(geom)
@@ -2569,6 +2652,78 @@ def assert_relaxed_geometry_recovered(job, design: Design, workspace, *,
         f"(missing {len(design_keys - recovered_keys)}, extra "
         f"{len(recovered_keys - design_keys)})")
     return display
+
+
+def assert_extra_bases_in_oxdna(design: Design, *, expected_count: int,
+                                expected_sequence: str | None = None) -> list:
+    """Physical-layer oracle: crossover ``extra_bases`` are materialized as
+    single-stranded nucleotides in the oxDNA topology — inserted on the
+    crossover-owning strand, threaded in-chain (3′/5′) between their flanking real
+    nucleotides, carrying their own base identity, and NOT consuming the strand's
+    designed sequence.
+
+    Pins exactly the inserted nucleotides by differencing the oxDNA topology of
+    *design* against a copy with every ``extra_bases`` cleared.  Can-go-red: raises
+    if ``expected_count <= 0`` (vacuity guard) or the design carries no extra bases.
+
+    *Physical-layer only*: reads the oxDNA topology the writer emits; it never
+    asserts the inserts were written into ``Design`` topology (they are not — they
+    are junction metadata, mirrored into the CG model only).
+    """
+    from collections import defaultdict
+    from backend.physics import oxdna_interface as ox
+
+    assert expected_count > 0, "vacuity: expected_count must be > 0 to pin an insertion"
+    assert any(x.extra_bases for x in design.crossovers), (
+        "design carries no crossover extra_bases — nothing to materialize")
+
+    bare = design.model_copy(deep=True)
+    for x in bare.crossovers:
+        x.extra_bases = None
+
+    order_bare = ox._strand_nucleotide_order(bare)
+    order = ox._strand_nucleotide_order(design)
+    assert len(order) - len(order_bare) == expected_count, (
+        f"oxDNA order grew by {len(order) - len(order_bare)}, "
+        f"expected {expected_count} extra-base nucleotides")
+
+    rows, _ = ox.topology_rows(design)
+    assert len(rows) == len(order), "topology row count must equal the nucleotide order"
+    xb_keys = [k for k in order if k[0] == ox._XB_SENTINEL]
+    assert len(xb_keys) == expected_count, (
+        f"{len(xb_keys)} extra-base keys in topology order, expected {expected_count}")
+
+    # The inserts add to the total nucleotide count but do not consume the strand's
+    # designed sequence (so real nucleotides keep their assigned bases).
+    _, t_bare = ox.count_undefined_bases(bare)
+    _, t = ox.count_undefined_bases(design)
+    assert t - t_bare == expected_count, (
+        "count_undefined total did not grow by exactly the inserted nucleotides")
+
+    idx = {k: i for i, k in enumerate(order)}
+    inserts = ox._extra_base_inserts(design)
+    assert len(inserts) == expected_count, "insert map size must equal the inserted count"
+
+    runs: dict = defaultdict(list)
+    for xbkey, (prev_key, next_key, k, n) in inserts.items():
+        i = idx[xbkey]
+        si, base, _n3, _n5 = rows[i]
+        if expected_sequence is not None:
+            assert base.upper() == expected_sequence[k].upper(), (
+                f"extra base index {k} is {base!r}, expected {expected_sequence[k]!r}")
+        # Same strand as its flanking real nucleotides (the junction's owning strand).
+        assert rows[idx[prev_key]][0] == si == rows[idx[next_key]][0], (
+            "extra base assigned to a different strand than its crossover junction")
+        runs[(prev_key, next_key)].append((k, xbkey))
+
+    # Backbone chain continuity through each run: prev → eb0 → … → eb(n-1) → next.
+    for (prev_key, next_key), items in runs.items():
+        items.sort()
+        chain = [idx[prev_key]] + [idx[xk] for _, xk in items] + [idx[next_key]]
+        for a, b in zip(chain, chain[1:]):
+            assert rows[a][2] == b, f"3′ neighbour break in extra-base chain ({a}→{b})"
+            assert rows[b][3] == a, f"5′ neighbour break in extra-base chain ({b}←{a})"
+    return order
 
 
 def assert_field_ready_specimen(result, design: Design, workspace, *,

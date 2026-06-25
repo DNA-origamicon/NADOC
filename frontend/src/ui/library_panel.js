@@ -9,6 +9,7 @@
 import { openFileBrowser } from './file_browser.js'
 import { showToast } from './toast.js'
 import { confirmAndDeleteFile } from './file_deletion.js'
+import { formatBytes } from './format_bytes.js'
 
 function _relativeTime(isoString) {
   const ms  = Date.now() - new Date(isoString).getTime()
@@ -28,8 +29,14 @@ function _relativeTime(isoString) {
 const _SORT_COLS = [
   { key: 'name',     label: 'Name',     defaultDir: 'asc'  },
   { key: 'modified', label: 'Modified', defaultDir: 'desc' },
+  { key: 'size',     label: 'Size',     defaultDir: 'desc' },
   { key: 'type',     label: 'Type',     defaultDir: 'asc'  },
 ]
+
+// Total on-disk footprint of an entry: the .nadoc file + its simulation jobs.
+function _entryDiskBytes(e) {
+  return e.disk_bytes ?? e.size_bytes ?? 0
+}
 
 function _sortFiles(files, key, dir) {
   const d = dir === 'asc' ? 1 : -1
@@ -37,6 +44,8 @@ function _sortFiles(files, key, dir) {
     files.sort((a, b) => d * a.name.localeCompare(b.name))
   } else if (key === 'modified') {
     files.sort((a, b) => d * (new Date(a.mtime_iso) - new Date(b.mtime_iso)))
+  } else if (key === 'size') {
+    files.sort((a, b) => d * (_entryDiskBytes(a) - _entryDiskBytes(b)) || a.name.localeCompare(b.name))
   } else if (key === 'type') {
     files.sort((a, b) => {
       const t = (a.type === b.type ? 0 : a.type === 'part' ? -1 : 1) * d
@@ -311,6 +320,18 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     mtimeEl.className   = 'lib-row-mtime'
     mtimeEl.textContent = _relativeTime(file.mtime_iso)
 
+    const sizeEl = document.createElement('span')
+    sizeEl.className = 'lib-row-size'
+    const diskBytes = _entryDiskBytes(file)
+    sizeEl.textContent = diskBytes ? formatBytes(diskBytes) : ''
+    const simBytes = file.sim_bytes ?? 0
+    if (simBytes > 0) {
+      sizeEl.classList.add('lib-row-size-sim')   // highlight designs carrying sim data
+      sizeEl.title = `File ${formatBytes(file.size_bytes ?? 0)} + simulation data ${formatBytes(simBytes)}`
+    } else if (diskBytes) {
+      sizeEl.title = `File ${formatBytes(diskBytes)}`
+    }
+
     const actEl = _makeActionsEl([
       { label: '✎', title: 'Rename', fn: (e) => { e.stopPropagation(); _startRename(rowEl, nameEl, file) } },
       { label: '↗', title: 'Move',   fn: async (e) => { e.stopPropagation(); await _moveItem(file) } },
@@ -321,7 +342,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       }},
     ])
 
-    rowEl.append(iconEl, nameEl, mtimeEl, actEl)
+    rowEl.append(iconEl, nameEl, mtimeEl, sizeEl, actEl)
     rowEl.addEventListener('click', () => {
       if (file.type === 'assembly') onOpenAssembly(file.path, file.name)
       else                          onOpenPart(file.path, file.name)

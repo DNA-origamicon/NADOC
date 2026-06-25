@@ -31,6 +31,7 @@ the joints a ``mate`` creates by an optional ``ref`` key a ``gear``/``belt``/
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from backend.core.models import Direction, LatticeType
@@ -248,6 +249,11 @@ _DESIGN_OP_KEYS = {
     "nick": {"op", "helix", "bp_index", "direction"},
     "ligate": {"op", "helix", "bp_index", "direction"},
     "loop_skip": {"op", "helix", "bp_index", "delta"},
+    # Two addressing modes (mutually exclusive, validated in _parse_design_op):
+    #   bulk     → {op, sequence, filter}                  (filter ∈ all|scaffold|staple)
+    #   precise  → {op, sequence, helix_a, helix_b, bp_index}
+    "crossover_extra_bases": {"op", "sequence", "filter",
+                              "helix_a", "helix_b", "bp_index"},
     "bend": {"op", "plane_a_bp", "plane_b_bp", "curvature_deg_per_bp", "direction_deg"},
     "twist": {"op", "plane_a_bp", "plane_b_bp", "total_degrees", "degrees_per_nm"},
     "circle_segment": {"op", "radius_nm", "plane", "offset_nm", "strand_filter",
@@ -261,6 +267,10 @@ _DESIGN_OP_KEYS = {
 # Ops that create their own helices from scratch → may be the FIRST op (all others
 # need existing helices to extrude/nick/ligate/deform).
 _PRIMORDIAL_DESIGN_OPS = {"bundle", "circle_segment"}
+
+# Extra-base sequences are single-stranded inserts — A/C/G/T plus N (any); "" clears.
+_EXTRA_BASES_RE = re.compile(r"^[ACGTNacgtn]*$")
+_CROSSOVER_FILTERS = ("all", "scaffold", "staple")
 
 
 def _parse_design_op(raw, *, where: str) -> BuildOp:
@@ -306,6 +316,41 @@ def _parse_design_op(raw, *, where: str) -> BuildOp:
                 f"{here}: 'delta' must be -1 (skip), 0 (remove), or +1 (loop), "
                 f"got {p['delta']}"
             )
+    elif op == "crossover_extra_bases":
+        # Set single-stranded extra bases on placed crossover junction(s) — junction
+        # metadata, not a strand-graph edit, so it requires crossovers already placed
+        # (run auto_crossover / full_autostaple first).  Crossovers carry random uuids,
+        # so a junction is addressed declaratively in one of two mutually-exclusive modes:
+        #   • bulk    — 'filter' (all|scaffold|staple): annotate every matching crossover
+        #   • precise — 'helix_a' + 'helix_b' + 'bp_index': one junction by its two cells
+        seq = _as_str(_get(raw, "sequence", where=here), key="sequence", where=here)
+        if not _EXTRA_BASES_RE.match(seq):
+            raise BuildSpecError(
+                f"{here}: 'sequence' must match [ACGTNacgtn]* (\"\" clears), got {seq!r}"
+            )
+        p["sequence"] = seq.upper()
+        has_loc = any(k in raw for k in ("helix_a", "helix_b", "bp_index"))
+        has_filter = "filter" in raw
+        if has_loc and has_filter:
+            raise BuildSpecError(
+                f"{here}: give EITHER 'filter' (bulk) OR 'helix_a'+'helix_b'+'bp_index' "
+                f"(precise), not both"
+            )
+        if has_loc:
+            p["mode"] = "precise"
+            p["helix_a"] = _as_cell(_get(raw, "helix_a", where=here), where=here)
+            p["helix_b"] = _as_cell(_get(raw, "helix_b", where=here), where=here)
+            p["bp_index"] = _as_int(_get(raw, "bp_index", where=here), key="bp_index", where=here)
+            if p["bp_index"] < 0:
+                raise BuildSpecError(f"{here}: 'bp_index' must be ≥ 0")
+        else:
+            p["mode"] = "bulk"
+            filt = _as_str(raw.get("filter", "all"), key="filter", where=here)
+            if filt not in _CROSSOVER_FILTERS:
+                raise BuildSpecError(
+                    f"{here}: 'filter' must be one of {list(_CROSSOVER_FILTERS)}, got {filt!r}"
+                )
+            p["filter"] = filt
     elif op == "circle_segment":
         # A parametric flat disc: a SQUARE-lattice row of helices whose per-cell
         # lengths trace a circle of radius_nm (the chord profile assumes the SQUARE

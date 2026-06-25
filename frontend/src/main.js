@@ -6612,6 +6612,11 @@ async function main() {
     showLinkerConfigModal({ readOnly: true })
   })
 
+  document.getElementById('menu-help-about-file')?.addEventListener('click', async () => {
+    const { showAboutFileModal } = await import('./ui/about_file_modal.js')
+    showAboutFileModal({ api, path: _workspacePath })
+  })
+
   // MD Engines: Help-menu install/status panel + sidebar install gates.
   const mdEngines = initMdEngines({ api })
   mdEngines.mountSidebarGates()

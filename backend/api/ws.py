@@ -128,6 +128,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             build_p_gro_order,
             build_p_pdb_order,
             centroid_offset,
+            md_rigid_reference,
         )
         from backend.core.md_metrics import derive_total_ns, parse_log_metrics
         from backend.core.md_import import resolve_md_config
@@ -186,18 +187,12 @@ async def md_run_ws(websocket: WebSocket) -> None:
         # matching P-atom in the current design get np.zeros(3); track these with
         # eq_valid so they can be excluded from the Kabsch computation (including
         # them would skew the centroid and H matrix).
-        _p_ref = {(a.helix_id, a.bp_index, a.direction): np.array([a.x, a.y, a.z])
-                  for a in model.atoms if a.name == "P"}
-        _eq_list  = [_p_ref.get((hid, bpi, d)) for hid, bpi, d in p_order]
-        eq_valid  = np.array([v is not None for v in _eq_list], dtype=bool)
-        eq_positions = np.array([v if v is not None else np.zeros(3) for v in _eq_list])
+        # Equilibrium P-atom reference + rigid mask for the Kabsch alignment.  Shared
+        # with md_trajectory so the extra-base ("__xb__") handling can't drift (the
+        # str-vs-int rigid-mask compare crashed the live display before this).
+        eq_positions, eq_valid, rigid_mask = md_rigid_reference(model, p_order)
         n_valid = int(eq_valid.sum())
         logs.append(f"Eq-pos    : {n_valid}/{len(p_order)} valid design P-atoms")
-
-        # Rigid mask: exclude ssDNA (bp_index < 0) from Kabsch rotation computation.
-        # Terminal / loop nucleotides have large thermal fluctuations that would
-        # bias the rigid-body rotation fit away from the true dsDNA orientation.
-        rigid_mask = eq_valid & np.array([bpi >= 0 for _, bpi, _ in p_order], dtype=bool)
         n_rigid = int(rigid_mask.sum())
         logs.append(f"Rigid P   : {n_rigid}/{len(p_order)} (bp≥0 for Kabsch)")
 

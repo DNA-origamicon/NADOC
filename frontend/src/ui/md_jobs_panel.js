@@ -22,6 +22,9 @@ import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol
 import { shouldForceDisplayReload } from './md_display_state.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
+import { formatBytes } from './format_bytes.js'
+import { initJobArchive } from './job_archive_action.js'
+import * as api from '../api/client.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
 const _C = {
@@ -96,7 +99,7 @@ export function mdHasMetrics(job, persisted = null) {
  *  every poll (visible stutter).  Mirrors the oxDNA panel. */
 export function mdListSignature(jobs, selectedId) {
   return (jobs ?? [])
-    .map(j => `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}:${j.out_of_date ? 1 : 0}`)
+    .map(j => `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}`)
     .join('|') + `#${selectedId ?? ''}`
 }
 
@@ -154,6 +157,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const healthSpinner = document.getElementById('md-jobs-health-spinner')
   const loadFramesBtn = document.getElementById('md-jobs-load-frames-btn')
   const deleteBtn     = document.getElementById('md-jobs-delete-btn')
+  const archiveBtn    = document.getElementById('md-jobs-archive-btn')
+  const archiveProgressEl = document.getElementById('md-jobs-archive-progress')
+  const _archive      = initJobArchive({ api, kind: 'md' })
   const prodBox       = document.getElementById('md-jobs-production')
   const prodStepsInput = document.getElementById('md-jobs-prod-steps')
   const prodTimeEl    = document.getElementById('md-jobs-prod-time')
@@ -886,6 +892,30 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
   })
 
+  function _setArchiveProgress(st) {
+    if (!archiveProgressEl) return
+    if (!st) { archiveProgressEl.style.display = 'none'; archiveProgressEl.textContent = ''; return }
+    const pct = st.total_bytes ? Math.round((st.moved_bytes / st.total_bytes) * 100) : 0
+    archiveProgressEl.style.display = ''
+    archiveProgressEl.textContent =
+      `${formatBytes(st.moved_bytes || 0)} / ${formatBytes(st.total_bytes || 0)} (${pct}%)`
+  }
+
+  archiveBtn?.addEventListener('click', async () => {
+    if (!_selectedId) return
+    const job = _jobs.find(j => j.job_id === _selectedId)
+    if (!job) return
+    archiveBtn.disabled = true; deleteBtn && (deleteBtn.disabled = true)
+    const action = job.archived ? _archive.unarchive : _archive.archive
+    try {
+      await action(job, { onProgress: _setArchiveProgress })
+    } finally {
+      archiveBtn.disabled = false; deleteBtn && (deleteBtn.disabled = false)
+      _setArchiveProgress(null)
+      await _fetchJobs()
+    }
+  })
+
   prodBtn?.addEventListener('click', async () => {
     if (!_selectedId) return
     if (prodBtn.disabled) return
@@ -1164,6 +1194,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       ts.textContent = _fmtJobTime(job.created_at)
       row.appendChild(ts)
 
+      // On-disk size of this job's folder (archive location when archived).
+      const size = document.createElement('span')
+      size.style.cssText = `font-size:10px;color:${job.archived ? _C.warn : _C.dim};flex-shrink:0;font-family:var(--font-mono)`
+      size.textContent = job.size_bytes ? formatBytes(job.size_bytes) : ''
+      if (job.archived) size.title = `Archived → ${job.archive_path || ''}`
+      row.appendChild(size)
+      if (job.archived) {
+        const box = Object.assign(document.createElement('span'), { textContent: '📦' })
+        box.style.cssText = 'flex-shrink:0;font-size:10px'
+        box.title = `Archived → ${job.archive_path || ''}`
+        row.appendChild(box)
+      }
+
       // Out-of-date marker: the design changed since this MD job was prepared.
       if (jobOutOfDate(job)) {
         const warn = Object.assign(document.createElement('span'), { textContent: '⚠' })
@@ -1347,6 +1390,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
     if (startBtn) startBtn.style.display = ['queued', 'stopped', 'failed'].includes(job.status) ? '' : 'none'
     if (stopBtn) stopBtn.style.display = (job.status === 'running') ? '' : 'none'
+    if (archiveBtn) {
+      // Archive/unarchive only for non-running jobs; label tracks archived state.
+      archiveBtn.style.display = job.status === 'running' ? 'none' : ''
+      archiveBtn.textContent = job.archived ? 'Unarchive' : 'Archive'
+    }
 
     _showDetailError(['failed', 'stopped'].includes(job.status) ? (job.error ?? 'Unknown error') : null)
     _renderProgress(job, liveMetrics)

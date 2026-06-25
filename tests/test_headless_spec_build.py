@@ -31,6 +31,7 @@ from tests.automation_harness import (
     assert_assembly_roundtrip_stable,
     assert_circular_disc,
     assert_converges_to_constraint,
+    assert_crossover_extra_bases,
     assert_deformation_angle,
     assert_gear_ratio,
     assert_instances_from_file,
@@ -260,6 +261,124 @@ def test_loop_skip_spec_survives_roundtrip():
     reloaded = roundtrip_nadoc(looped)
     assert geometric_nucleotide_count(reloaded) == geometric_nucleotide_count(looped)
     assert any(ls.delta for hh in reloaded.helices for ls in hh.loop_skips)
+
+
+# ── crossover_extra_bases op ──────────────────────────────────────────────────
+# Extra bases are single-stranded inserts at a placed crossover junction
+# (Crossover.extra_bases) — junction METADATA outside the strand graph, so (like a
+# loop/skip mark) canonical_topology / assert_spec_matches_calls are BLIND to them: the
+# load-bearing pin is assert_crossover_extra_bases, which reads extra_bases back off the
+# built design.  The op needs crossovers placed first → every spec routes (auto_scaffold
+# + auto_crossover) before annotating.
+
+def _xover_base_spec():
+    """A routed square bundle with real (staple) crossovers placed."""
+    return _routed_spec()
+
+
+def test_crossover_extra_bases_spec_is_non_vacuous():
+    """Before any extra-bases op, the routed design carries crossovers but none has
+    extra bases — so the pins below are can-go-red, not vacuous."""
+    base = hs.build_design(_xover_base_spec())
+    assert base.crossovers, "fixture must place crossovers for these pins to mean anything"
+    assert all(x.extra_bases is None for x in base.crossovers)
+
+
+def test_crossover_extra_bases_bulk_all_spec():
+    """A bulk crossover_extra_bases (filter=all) sets the sequence on every crossover —
+    pinned by reading extra_bases back (canonical_topology is blind to it)."""
+    spec = _xover_base_spec()
+    spec["ops"].append({"op": "crossover_extra_bases", "sequence": "TT", "filter": "all"})
+    built = hs.build_design(spec)
+    assert_crossover_extra_bases(built, "TT", crossover_filter="all")
+
+
+def test_crossover_extra_bases_bulk_staple_spec():
+    """A bulk set filtered to staple crossovers annotates exactly those and leaves any
+    other junction type untouched (the bled-onto-wrong-type can-go-red guard)."""
+    spec = _xover_base_spec()
+    spec["ops"].append({"op": "crossover_extra_bases", "sequence": "TTT", "filter": "staple"})
+    built = hs.build_design(spec)
+    assert_crossover_extra_bases(built, "TTT", crossover_filter="staple")
+
+
+def test_crossover_extra_bases_precise_spec():
+    """A precise set targets ONE junction by its two helix cells + bp index and hits
+    exactly that crossover (others stay None) — addressing survives rebuild (no uuids)."""
+    routed = hs.build_design(_xover_base_spec())
+    xo = routed.crossovers[0]
+    gp = {h.id: list(h.grid_pos) for h in routed.helices}
+    spec = _xover_base_spec()
+    spec["ops"].append({
+        "op": "crossover_extra_bases",
+        "helix_a": gp[xo.half_a.helix_id], "helix_b": gp[xo.half_b.helix_id],
+        "bp_index": xo.half_a.index, "sequence": "AT",
+    })
+    built = hs.build_design(spec)
+    assert_crossover_extra_bases(built, "AT", expected_count=1)
+
+
+def test_crossover_extra_bases_matches_hand_calls():
+    """The spec drives the SAME wrappers as the hand sequence — topology is identical
+    (assert_spec_matches_calls is blind to extra_bases, so this pins the façade is
+    faithful for everything BUT the metadata; the value itself is pinned above)."""
+    def hand():
+        with hb.scratch_session(LatticeType.SQUARE):
+            hb.create_bundle(TEETH_CELLS, 96, lattice=LatticeType.SQUARE, name="sq")
+            hb.auto_scaffold(seamless=False)
+            hb.auto_crossover()
+            hb.set_crossover_extra_bases_bulk("GC", crossover_filter="all")
+            return design_state.get_or_404().model_copy(deep=True)
+
+    spec = _xover_base_spec()
+    spec["ops"].append({"op": "crossover_extra_bases", "sequence": "GC", "filter": "all"})
+    spec_built = assert_spec_matches_calls(
+        lambda: hs.build_design(spec), hand, kind="design")
+    # and the metadata the fingerprint can't see really landed
+    assert_crossover_extra_bases(spec_built, "GC", crossover_filter="all")
+
+
+def test_crossover_extra_bases_clear_is_inverse():
+    """Setting then clearing ("") extra bases restores the no-extra-bases baseline."""
+    spec = _xover_base_spec()
+    spec["ops"].append({"op": "crossover_extra_bases", "sequence": "TT", "filter": "all"})
+    spec["ops"].append({"op": "crossover_extra_bases", "sequence": "", "filter": "all"})
+    built = hs.build_design(spec)
+    assert all(x.extra_bases is None for x in built.crossovers)
+
+
+def test_crossover_extra_bases_requires_crossovers():
+    """Targeting a junction that doesn't exist (no crossovers placed) raises — the op
+    annotates placed junctions, it does not create them."""
+    spec = {"lattice": "square", "ops": [
+        {"op": "bundle", "cells": _TEETH, "length_bp": 96, "name": "sq"},
+        {"op": "crossover_extra_bases", "sequence": "TT", "filter": "all"},
+    ]}
+    with pytest.raises(HTTPException):
+        hs.build_design(spec)
+
+
+def test_crossover_extra_bases_both_modes_rejected():
+    """A spec giving BOTH a filter and a location is a parse error (ambiguous addressing)."""
+    with pytest.raises(BuildSpecError):
+        hs.build_design({"lattice": "square", "ops": [
+            {"op": "crossover_extra_bases", "sequence": "TT", "filter": "all",
+             "helix_a": [0, 0], "helix_b": [1, 0], "bp_index": 8},
+        ]})
+
+
+def test_crossover_extra_bases_bad_sequence_rejected():
+    """A sequence with a non-ACGTN base is a parse error."""
+    with pytest.raises(BuildSpecError):
+        hs.build_design({"lattice": "square", "ops": [
+            {"op": "crossover_extra_bases", "sequence": "TX", "filter": "all"}]})
+
+
+def test_crossover_extra_bases_bad_filter_rejected():
+    """An unknown filter is a parse error."""
+    with pytest.raises(BuildSpecError):
+        hs.build_design({"lattice": "square", "ops": [
+            {"op": "crossover_extra_bases", "sequence": "TT", "filter": "loops"}]})
 
 
 # ── circle_segment op (AF-11 Phase 2) ─────────────────────────────────────────
@@ -1309,9 +1428,10 @@ def test_spec_build_adds_no_coverage():
     """AF-11 composes already-covered wrappers — like AF-10, it moves the oracle
     count, not the route-coverage count."""
     from tests.automation_harness import headless_coverage_report
+    # crossover_extra_bases added the single + batch extra-bases PATCH routes: 39 -> 41.
     # AF-14 Phase 1's place_cluster_joint added one route (add_joint): 34 → 35;
     # the full_sequence feature added assign_staple_sequences: 35 → 36;
     # the periodic straggler added polymerize_periodic_assembly: 36 → 37;
     # AF-25's seek_features added /design/features/seek: 37 → 38;
     # AF-26's return_to_latest added /design/loadouts/{id}/select: 38 → 39.
-    assert headless_coverage_report()["covered"] == 39
+    assert headless_coverage_report()["covered"] == 41

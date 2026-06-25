@@ -1376,19 +1376,30 @@ def _frame_atomistic_overrides(design, frame: dict):
     so DISPLAY uses it; the long sequential O3'→P bonds are handled separately by
     ``close_backbone=True`` (display-only backbone closure), which made the σ
     per-domain position smoother (a prior band-aid) unnecessary."""
-    from backend.physics.oxdna_interface import oxdna_backbone_site
+    from backend.physics.oxdna_interface import oxdna_backbone_site, _XB_SENTINEL
     from backend.core.cg_to_atomistic import deformed_helix_axes
+    # Crossover extra-base inserts: keyed (_XB_SENTINEL, crossover_id, k).  Their
+    # backbone-site positions drive the heavy-rep placement; they are EXCLUDED from
+    # frame3 (real-nucleotide overrides only) so deformed_helix_axes never forms a
+    # junk "__xb__" helix group.
+    xb_pos_override = {
+        (key[1], key[2]): oxdna_backbone_site(rec["backbone_position"], rec["a1"], rec["a3"])
+        for key, rec in frame.items()
+        if key[0] == _XB_SENTINEL and rec.get("backbone_position") is not None
+        and rec.get("a1") is not None and rec.get("a3") is not None
+    }
     # Collapse loop-insertion copies to their 3-tuple base (last copy wins) — both the
     # backbone-site override and deformed_helix_axes are keyed by (helix, bp, dir).
     frame3 = {key[:3]: rec for key, rec in frame.items()
-              if rec.get("backbone_position") is not None
+              if key[0] != _XB_SENTINEL
+              and rec.get("backbone_position") is not None
               and rec.get("a1") is not None and rec.get("a3") is not None}
     nuc_pos_override = {
         key: oxdna_backbone_site(rec["backbone_position"], rec["a1"], rec["a3"])
         for key, rec in frame3.items()
     }
     axis_override = deformed_helix_axes(design, frame3, sigma=2.0)
-    return nuc_pos_override, axis_override
+    return nuc_pos_override, axis_override, xb_pos_override
 
 
 def build_display_model(design, frame: dict):
@@ -1399,9 +1410,10 @@ def build_display_model(design, frame: dict):
     identical to ``build_atomistic_model(design)`` (overrides change positions, never
     topology), so the renderer's serial-keyed bond list stays valid."""
     from backend.core.atomistic import build_atomistic_model
-    nuc_pos_override, axis_override = _frame_atomistic_overrides(design, frame)
+    nuc_pos_override, axis_override, xb_pos_override = _frame_atomistic_overrides(design, frame)
     return build_atomistic_model(
         design, nuc_pos_override=nuc_pos_override, axis_override=axis_override,
+        xb_pos_override=xb_pos_override,
         close_backbone=True, relaxed_oxdna_phase=True)
 
 

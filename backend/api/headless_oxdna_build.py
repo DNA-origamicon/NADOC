@@ -283,11 +283,20 @@ def wait_for_terminal(job_id: str, workspace, *, timeout: float = 30.0,
     job straight from ``workspace`` (explicit, no global override needed) so polling
     is independent of any active session.
     """
+    from backend.core.oxdna_runner import is_running
+
     workspace = Path(workspace)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         job = OxdnaJob.load(job_id, workspace)
         if job.status in _TERMINAL:
+            # The runner writes the terminal status to disk just BEFORE it
+            # deregisters from the in-memory running set; a follow-up op
+            # (append_production / append_field) rejects a job that still reads as
+            # running.  Wait out that teardown window (bounded by the deadline) so a
+            # programmatic relax→append chain doesn't race the thread shutdown.
+            while is_running(job_id) and time.monotonic() < deadline:
+                time.sleep(poll_s)
             return job
         time.sleep(poll_s)
     return OxdnaJob.load(job_id, workspace)

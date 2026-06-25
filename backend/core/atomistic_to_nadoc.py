@@ -68,6 +68,46 @@ class ComparisonResult:
 # ── Chain map ─────────────────────────────────────────────────────────────────
 
 
+# Must equal backend.physics.oxdna_interface._XB_SENTINEL (kept local to avoid a
+# core→physics import).  Crossover extra-base atoms map to ("__xb__", crossover_id, k)
+# so the MD trajectory keys them uniquely (their stored helix/bp/direction is the
+# SOURCE nucleotide's, which would otherwise collide across multiple inserts).
+_XB_SENTINEL = "__xb__"
+
+
+def md_pkey(atom) -> tuple:
+    """The MD/trajectory nucleotide key for a P atom.
+
+    ``("__xb__", crossover_id, extra_base_k)`` for a crossover extra-base insert
+    (whose stored helix/bp/direction is the SOURCE nucleotide's and would collide),
+    else ``(helix_id, bp_index, direction)``.  Single source of truth shared by
+    ``build_chain_map`` and the MD alignment-reference builder so they can never
+    drift (a missed copy crashed the live MD display on the str-vs-int compare)."""
+    if getattr(atom, "crossover_id", None) is not None:
+        return (_XB_SENTINEL, atom.crossover_id, atom.extra_base_k)
+    return (atom.helix_id, atom.bp_index, atom.direction)
+
+
+def md_rigid_reference(model, p_order):
+    """Build the Kabsch alignment reference for an MD CG frame.
+
+    Returns ``(eq_positions (N,3), eq_valid (N,), rigid_mask (N,))`` for the N
+    entries of *p_order* (the design's P-atom equilibrium positions in nm).
+    ``rigid_mask`` excludes entries with no design P atom, ssDNA / loop nucleotides
+    (``bp_index < 0``), AND crossover extra-base inserts (keyed by a string
+    ``crossover_id``) — all flexible, so including them would bias the rigid-body
+    rotation fit.  The ``isinstance`` guard keeps the string insert keys from
+    crashing the ``bp_index >= 0`` compare (the live-display bug)."""
+    import numpy as np
+    p_ref = {md_pkey(a): np.array([a.x, a.y, a.z]) for a in model.atoms if a.name == "P"}
+    eq_list = [p_ref.get(tuple(k)) for k in p_order]
+    eq_valid = np.array([v is not None for v in eq_list], dtype=bool)
+    eq_positions = np.array([v if v is not None else np.zeros(3) for v in eq_list])
+    rigid_mask = eq_valid & np.array(
+        [isinstance(bpi, int) and bpi >= 0 for _, bpi, _ in p_order], dtype=bool)
+    return eq_positions, eq_valid, rigid_mask
+
+
 def build_chain_map(model: "AtomisticModel") -> ChainMap:
     """
     Build (chain_letter, seq_num) → (helix_id, bp_index, direction) from P atoms.
@@ -75,12 +115,16 @@ def build_chain_map(model: "AtomisticModel") -> ChainMap:
     chain_letter and seq_num match the PDB written by NADOC's atomistic model —
     the same file that pdb2gmx consumes.  5'-terminal P atoms are included here;
     they are filtered by build_p_gro_order when reading GROMACS output.
+
+    Crossover extra-base P atoms map to the unique key
+    ``(_XB_SENTINEL, crossover_id, extra_base_k)`` (their stored helix/bp/direction
+    is the SOURCE nucleotide's and would collide), so the MD trajectory can address
+    each insert — matching the oxDNA ``__xb__`` contract the frontend already routes.
     """
     chain_map: ChainMap = {}
     for atom in model.atoms:
         if atom.name == "P":
-            key = (atom.chain_id, atom.seq_num)
-            chain_map[key] = (atom.helix_id, atom.bp_index, atom.direction)
+            chain_map[(atom.chain_id, atom.seq_num)] = md_pkey(atom)
     return chain_map
 
 

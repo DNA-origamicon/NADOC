@@ -154,7 +154,8 @@ def test_oxdna_coverage_report_separate_from_design_assembly():
     from tests.automation_harness import oxdna_coverage_report
 
     # AF-25 added seek_features (37→38); AF-26 added return_to_latest/select_loadout (38→39).
-    assert headless_coverage_report()["covered"] == 39  # /oxdna audit is separate
+    # crossover_extra_bases added the single + batch extra-bases PATCH routes (39->41).
+    assert headless_coverage_report()["covered"] == 41  # /oxdna audit is separate
     ox = oxdna_coverage_report()
     assert ox["total"] == ox["covered"] + ox["uncovered"]
     covered = {r["endpoint"] for r in ox["covered_routes"]}

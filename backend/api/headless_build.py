@@ -25,14 +25,19 @@ from __future__ import annotations
 import contextlib
 import itertools
 
+from fastapi import HTTPException
+
 from backend.api import doc_context
 from backend.api import state as design_state
 from backend.api.crud import (
+    BatchCrossoverExtraBasesRequest,
     BundleContinuationRequest,
     BundleDeformedContinuationRequest,
     BundleRequest,
     BundleSegmentRequest,
     CircleSegmentRequest,
+    CrossoverExtraBasesBatchEntry,
+    CrossoverExtraBasesRequest,
     NickRequest,
     OverhangExtrudeRequest,
     add_bundle_continuation as _route_extrude,
@@ -44,11 +49,13 @@ from backend.api.crud import (
     auto_break as _route_auto_break,
     auto_crossover as _route_auto_crossover,
     auto_merge as _route_auto_merge,
+    batch_patch_crossover_extra_bases as _route_batch_xo_extra_bases,
     create_bundle as _route_create_bundle,
     delete_strand as _route_delete_strand,
     get_deformed_frame as _route_deformed_frame,
     ligate_strand as _route_ligate,
     overhang_extrude as _route_overhang_extrude,
+    patch_crossover_extra_bases as _route_set_xo_extra_bases,
     select_loadout as _route_select_loadout,
 )
 from backend.api.routes_clusters import (
@@ -489,6 +496,84 @@ def auto_scaffold(*, seamless: bool = False) -> Design:
 def auto_crossover() -> Design:
     """Place all compliant staple crossovers in bulk (POST /design/crossovers/auto)."""
     _route_auto_crossover()
+    return design_state.get_or_404()
+
+
+# ── Crossover extra-bases wrappers ───────────────────────────────────────────────
+# Extra bases are single-stranded nucleotides inserted at a placed crossover junction
+# (``Crossover.extra_bases``, e.g. "TT" to relieve strain) — junction METADATA, not a
+# strand-graph edit, so they're invisible to ``canonical_topology`` (pin the effect by
+# reading ``extra_bases`` directly, the way loop/skip pins read ``Helix.loop_skips``).
+# Both wrappers drive the real PATCH route handlers (single + batch), so a scripted
+# extra-base set is the same ``crossover-extra-bases`` minor-log entry the UI records,
+# and they chain after auto_crossover inside a build (the crossovers must exist first).
+# ``auto_crossover`` assigns crossovers random UUIDs, so neither wrapper takes an id:
+# the junction is addressed declaratively — by its two helices + bp (precise) or by a
+# scaffold/staple/all filter (bulk) — and the id is resolved here against the live design.
+
+_CROSSOVER_FILTERS = ("all", "scaffold", "staple")
+
+
+def set_crossover_extra_bases(
+    helix_a_id: str, helix_b_id: str, bp_index: int, sequence: str,
+) -> Design:
+    """Set (or clear) extra bases on the crossover linking two helices at ``bp_index``.
+
+    Addresses the junction by its two helices (order-independent) and shared bp index
+    rather than by uuid, so it survives a rebuild.  ``sequence`` must match
+    ``[ACGTNacgtn]*``; ``""`` clears the extra bases.  Drives
+    ``PATCH /design/crossovers/{id}/extra-bases`` → records a ``crossover-extra-bases``
+    minor-log entry.  Raises ``HTTPException(404)`` if no such crossover exists.
+    """
+    design = design_state.get_or_404()
+    pair = {helix_a_id, helix_b_id}
+    match = next(
+        (x for x in design.crossovers
+         if x.half_a.index == bp_index
+         and {x.half_a.helix_id, x.half_b.helix_id} == pair),
+        None,
+    )
+    if match is None:
+        raise HTTPException(
+            404,
+            detail=f"No crossover links helices {helix_a_id!r} and {helix_b_id!r} "
+                   f"at bp {bp_index}.",
+        )
+    _route_set_xo_extra_bases(match.id, CrossoverExtraBasesRequest(sequence=sequence))
+    return design_state.get_or_404()
+
+
+def set_crossover_extra_bases_bulk(sequence: str, *, crossover_filter: str = "all") -> Design:
+    """Set (or clear) extra bases on every crossover matching ``crossover_filter``.
+
+    ``crossover_filter`` ∈ ``{"all", "scaffold", "staple"}`` — the common strain-relief
+    sweep (e.g. a poly-T loop at every staple junction).  ``sequence`` must match
+    ``[ACGTNacgtn]*``; ``""`` clears.  Drives the atomic batch route
+    ``PATCH /design/crossovers/extra-bases/batch`` → one ``crossover-extra-bases-batch``
+    minor-log entry.  Raises ``HTTPException`` on a bad filter or when no crossover matches.
+    """
+    if crossover_filter not in _CROSSOVER_FILTERS:
+        raise HTTPException(
+            422,
+            detail=f"crossover_filter must be one of {_CROSSOVER_FILTERS}, "
+                   f"got {crossover_filter!r}.",
+        )
+    from backend.core.crossover_positions import enumerate_crossovers  # noqa: PLC0415
+
+    design = design_state.get_or_404()
+    ids = [
+        rec["id"] for rec in enumerate_crossovers(design)
+        if crossover_filter == "all" or rec["crossover_type"] == crossover_filter
+    ]
+    if not ids:
+        raise HTTPException(
+            404,
+            detail=f"No {crossover_filter} crossovers to annotate "
+                   f"(design has {len(design.crossovers)} crossover(s)).",
+        )
+    _route_batch_xo_extra_bases(BatchCrossoverExtraBasesRequest(
+        entries=[CrossoverExtraBasesBatchEntry(crossover_id=i, sequence=sequence) for i in ids],
+    ))
     return design_state.get_or_404()
 
 

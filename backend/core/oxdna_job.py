@@ -106,10 +106,19 @@ class OxdnaJob:
     # the feature log back to so the job becomes runnable again (None = no log).
     design_fingerprint:  Optional[str]           = None
     feature_log_position: Optional[int]          = None
+    # Archival: heavy job folders can be moved off the workspace to an external
+    # location (see backend.core.job_archive).  When archived, ``archive_path`` is
+    # the absolute path of the moved folder and ``job_dir`` resolves there, so every
+    # consumer that reads job files through job_dir()/stage_dir() keeps working and
+    # new jobs can still be chained off the archived parent.
+    archived:            bool                    = False
+    archive_path:        Optional[str]           = None
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
     def job_dir(self, workspace_dir: Path) -> Path:
+        if self.archived and self.archive_path:
+            return Path(self.archive_path)
         return workspace_dir / "oxdna_jobs" / self.job_id
 
     def stage_dir(self, workspace_dir: Path, stage_name: str) -> Path:
@@ -135,7 +144,8 @@ class OxdnaJob:
 
     @classmethod
     def load(cls, job_id: str, workspace_dir: Path) -> "OxdnaJob":
-        path = workspace_dir / "oxdna_jobs" / job_id / "job.json"
+        from backend.core.job_archive import resolve_job_json
+        path = resolve_job_json(workspace_dir, "oxdna_jobs", job_id)
         data = json.loads(path.read_text())
         data["status"] = OxdnaStatus(data["status"])
         data["stages"] = [OxdnaStageStatus(**s) for s in data.get("stages", [])]
@@ -150,20 +160,32 @@ class OxdnaJob:
         data.setdefault("relax_retries", 0)
         data.setdefault("design_fingerprint", None)
         data.setdefault("feature_log_position", None)
+        data.setdefault("archived", False)
+        data.setdefault("archive_path", None)
         return cls(**data)
 
     @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["OxdnaJob"]:
-        jobs_dir = workspace_dir / "oxdna_jobs"
-        if not jobs_dir.exists():
-            return []
+        from backend.core.job_archive import archived_job_ids
         result: list[OxdnaJob] = []
-        for jdir in sorted(jobs_dir.iterdir(), key=lambda p: p.name):
-            if (jdir / "job.json").exists():
-                try:
-                    result.append(cls.load(jdir.name, workspace_dir))
-                except Exception:
-                    pass
+        seen: set[str] = set()
+        jobs_dir = workspace_dir / "oxdna_jobs"
+        if jobs_dir.exists():
+            for jdir in sorted(jobs_dir.iterdir(), key=lambda p: p.name):
+                if jdir.is_dir() and (jdir / "job.json").exists():
+                    try:
+                        result.append(cls.load(jdir.name, workspace_dir))
+                        seen.add(jdir.name)
+                    except Exception:
+                        pass
+        # Archived jobs live outside the workspace; the index records where.
+        for jid in archived_job_ids(workspace_dir, "oxdna_jobs"):
+            if jid in seen:
+                continue
+            try:
+                result.append(cls.load(jid, workspace_dir))
+            except Exception:
+                pass
         return result
 
     def to_dict(self) -> dict:

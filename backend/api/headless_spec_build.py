@@ -26,6 +26,12 @@ rim-radius ratio ``radius_a / radius_b``; a ``polymerize`` op drives ``hab.polym
 replicating a SINGLE seed mate into a chain of ``count`` identical parts marching along
 the seed's part-to-part offset).
 ``loop_skip`` ops drive ``hb.loop_skip`` (the AF-3 wrapper);
+``crossover_extra_bases`` ops set single-stranded extra bases on placed crossover
+junction(s) — precise mode (``helix_a``+``helix_b``+``bp_index``) drives
+``hb.set_crossover_extra_bases``, bulk mode (``filter`` ∈ all|scaffold|staple) drives
+``hb.set_crossover_extra_bases_bulk``.  Extra bases are junction METADATA outside the
+strand graph, so — like loop_skip — ``canonical_topology``/``assert_spec_matches_calls``
+is blind to them; the load-bearing pin reads ``Crossover.extra_bases`` directly.
 ``bend``/``twist`` ops are *unscoped* geometric deformations driven through
 ``hb.add_bend`` / ``hb.add_twist`` (the AF-6 wrappers); ``circle_segment`` drives
 ``hb.circle_segment`` (the AF-4 parametric-disc wrapper — takes the *radius* and runs
@@ -107,6 +113,14 @@ def _run_design_op(op: BuildOp, lattice: LatticeType) -> None:
         hb.ligate(_resolve_helix_id(p["helix"]), p["bp_index"], p["direction"])
     elif op.op == "loop_skip":
         hb.loop_skip(_resolve_helix_id(p["helix"]), p["bp_index"], p["delta"])
+    elif op.op == "crossover_extra_bases":
+        if p["mode"] == "precise":
+            hb.set_crossover_extra_bases(
+                _resolve_helix_id(p["helix_a"]), _resolve_helix_id(p["helix_b"]),
+                p["bp_index"], p["sequence"],
+            )
+        else:
+            hb.set_crossover_extra_bases_bulk(p["sequence"], crossover_filter=p["filter"])
     elif op.op == "circle_segment":
         kwargs = {"plane": p["plane"], "offset_nm": p["offset_nm"],
                   "strand_filter": p["strand_filter"], "ligate_adjacent": p["ligate_adjacent"]}

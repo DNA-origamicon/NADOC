@@ -96,10 +96,18 @@ class MdJob:
     # rolled back to its run state.
     design_fingerprint: Optional[str] = None
     feature_log_position: Optional[int] = None
+    # Archival: heavy job folders can be moved off the workspace to an external
+    # location (see backend.core.job_archive).  When archived, ``archive_path`` is
+    # the absolute path of the moved folder and ``job_dir`` resolves there, so the
+    # package/output readers keep working and the job entry stays in the list.
+    archived: bool = False
+    archive_path: Optional[str] = None
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
     def job_dir(self, workspace_dir: Path) -> Path:
+        if self.archived and self.archive_path:
+            return Path(self.archive_path)
         return workspace_dir / "md_jobs" / self.job_id
 
     def package_dir(self, workspace_dir: Path) -> Path:
@@ -121,7 +129,8 @@ class MdJob:
 
     @classmethod
     def load(cls, job_id: str, workspace_dir: Path) -> "MdJob":
-        path = workspace_dir / "md_jobs" / job_id / "job.json"
+        from backend.core.job_archive import resolve_job_json
+        path = resolve_job_json(workspace_dir, "md_jobs", job_id)
         data = json.loads(path.read_text())
         data["status"]   = MdStatus(data["status"])
         data["segments"] = [MdSegmentStatus(**s) for s in data.get("segments", [])]
@@ -134,21 +143,32 @@ class MdJob:
         data.setdefault("prep_params", None)
         data.setdefault("design_fingerprint", None)
         data.setdefault("feature_log_position", None)
+        data.setdefault("archived", False)
+        data.setdefault("archive_path", None)
         return cls(**data)
 
     @classmethod
     def list_jobs(cls, workspace_dir: Path) -> list["MdJob"]:
-        jobs_dir = workspace_dir / "md_jobs"
-        if not jobs_dir.exists():
-            return []
+        from backend.core.job_archive import archived_job_ids
         result = []
-        for jdir in sorted(jobs_dir.iterdir(), key=lambda p: p.name):
-            json_path = jdir / "job.json"
-            if json_path.exists():
-                try:
-                    result.append(cls.load(jdir.name, workspace_dir))
-                except Exception:
-                    pass
+        seen: set[str] = set()
+        jobs_dir = workspace_dir / "md_jobs"
+        if jobs_dir.exists():
+            for jdir in sorted(jobs_dir.iterdir(), key=lambda p: p.name):
+                if jdir.is_dir() and (jdir / "job.json").exists():
+                    try:
+                        result.append(cls.load(jdir.name, workspace_dir))
+                        seen.add(jdir.name)
+                    except Exception:
+                        pass
+        # Archived jobs live outside the workspace; the index records where.
+        for jid in archived_job_ids(workspace_dir, "md_jobs"):
+            if jid in seen:
+                continue
+            try:
+                result.append(cls.load(jid, workspace_dir))
+            except Exception:
+                pass
         return result
 
     def to_dict(self) -> dict:

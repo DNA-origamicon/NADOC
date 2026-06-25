@@ -2314,6 +2314,23 @@ _(none yet — first session. Candidates the audit already suggests:)_
   `primitive_kind` is read. This mirrors AF-12 P2's "name validity is a build-time check" rule and keeps the pure parser
   free of catalog knowledge.
 
+### Banked from `crossover_extra_bases` (design op — extra bases at crossover junctions)
+_headless-coverage Δ:_ **39 → 41 / 239** (the single + batch extra-bases PATCH routes flipped to covered) ·
+_oracle shipped:_ `assert_crossover_extra_bases(design, seq, *, crossover_filter | expected_count)`.
+- **Extra bases were automatable manually but NOT declaratively — a real gap, not a deferred item.** The topology field
+  (`Crossover.extra_bases`) + the single/batch PATCH routes + the `crossover-extra-bases` minor-log entry all existed;
+  the build-spec had `auto_crossover` (places junctions, zero params) but no way to *annotate* them. Closed with one op,
+  two addressing modes, mirroring loop_skip's shape.
+- **Address placed junctions declaratively, never by uuid.** `auto_crossover` assigns random uuids, so a portable spec
+  can't reference them. Precise mode addresses a junction by its two helix cells + shared bp index (order-independent on
+  the pair); bulk mode by a `scaffold|staple|all` filter resolved through the existing `enumerate_crossovers`
+  `crossover_type` (NO new placement/topology reasoning — `feedback_crossover_no_reasoning` respected: the op only sets
+  metadata on junctions the engine already placed).
+- **The pin must READ extra_bases back — `canonical_topology` is blind to it (like a loop/skip mark).** Extra bases are
+  junction metadata outside the strand graph, so `assert_spec_matches_calls` only proves topology preservation, never the
+  value landed. `assert_crossover_extra_bases` is the load-bearing pin; its exclusivity check (every NON-targeted
+  crossover must stay `None`) is the can-go-red guard against a bulk set bleeding onto the wrong junction type.
+
 ## Difficulties ledger (genuinely-stuck items + why)
 
 **2026-06-23 — Tier 6 physics is mock-validated, not engine-validated (the AF-24 gap).** Tier 6 (AF-18..AF-23)
@@ -2398,3 +2415,33 @@ kept. **Open, validated work, priority order:** AF-13 P5 knob clause (constraint
 AF-12 primitives-in-build-spec > `polymerize_periodic` > assembly-level `constraints` + `bind_overhangs` (both
 correctly deferred — blocked on an assembly headless-oxDNA path / overhang-binding firming). See the backlog's
 `## Next-session handoff` audit banner for the full finding.
+
+---
+
+## 2026-06-25 — crossover extra bases: simulate + validate + render (end-to-end)
+
+Extra bases at crossovers (`Crossover.extra_bases`, e.g. "TT" — single-stranded thymines) were design
+metadata that reached only the atomistic/GROMACS path; the **oxDNA CG** model ignored them and the renderer
+drew them on a geometric Bézier arc, not the real conformation. This session wired them through both, with
+validation. Durable details in `memory/project_oxdna_extra_bases.md`.
+
+- **oxDNA wiring** (`backend/physics/oxdna_interface.py`): extra bases now materialize as ssDNA particles
+  `("__xb__", crossover_id, k)` in the topology+configuration via one shared strand-walk generator
+  (`_walk_strand_nucleotides`) + `crossover_extra_base_junctions` + `_resolve_extra_base_geometry`, threaded
+  through all 7 walk consumers. **Gotcha (banked):** the relaxation health check's `backbone_bond_pairs` must
+  thread the inserts or it measures a phantom `prev→next` bond across the widened gap → spurious FENE
+  over-stretch → relaxation falsely fails after 3 escalations.
+- **Validation**: `tests/test_oxdna_extra_bases.py` (unit pins + `assert_extra_bases_in_oxdna` oracle, can-go-red),
+  `tests/test_oxdna_extra_base_production.py` (real-CUDA, `@pytest.mark.slow`, `NADOC_RUN_OXDNA_SLOW=1`) — 6hb
+  and 18hb × {one crossover, all crossovers} all reached `completed` relax + 5M-step production. Surfaced + fixed
+  a real `wait_for_terminal` relax→append race (terminal-on-disk before the runner deregisters) that bites any
+  headless automation chaining relax→production.
+- **Rendering** (real simulated positions, not the arc): Phase 1 CG beads/slabs (`design_renderer.js`
+  `partitionExtraBaseUpdates` routes `__xb__` updates to the bead instances; live Playwright e2e); Phase 0 Atom
+  `crossover_id`/`extra_base_k` identity; Phase 2 atomistic + surface heavy reps (`xb_pos_override` threaded into
+  `build_atomistic_model`; **skip the scipy bridge minimisation when sim positions are present** or it re-seats
+  the insert onto the design arc); Phase 3 MD CG trajectory (unique `__xb__` P-atom keys via shared
+  `md_pkey`/`md_rigid_reference` in `atomistic_to_nadoc.py`). **Gotcha (banked):** the live MD display ws handler
+  (`backend/api/ws.py`) had a DUPLICATE copy of the rigid-mask `bp_index >= 0` compare that crashed on the
+  string `crossover_id` (`Display failed` after the seed frame) — now both copies route through the shared
+  helper so the `__xb__` handling can't drift.

@@ -396,3 +396,67 @@ export function updateExtraBaseInstances(
     slabsMesh.setMatrixAt(idx, _uMat)
   }
 }
+
+/**
+ * Split FEM/trajectory position updates into real-nucleotide updates and a
+ * per-crossover map of simulation-driven extra-base positions.
+ *
+ * Extra-base inserts arrive with the sentinel key shape
+ * ``{helix_id:"__xb__", bp_index:<crossover_id>, direction:<k>}`` (k is the 0-based
+ * index within the crossover's insert run).  Real nucleotides pass through
+ * untouched for the helix renderer.
+ *
+ * @returns {{real: Array|undefined, simXb: Map<string, Map<number, {pos:number[], normal:number[]}>>|null}}
+ *   ``simXb`` is null when there are no inserts in the frame (Bezier fallback).
+ *   ``real`` is the original array reference when there were no inserts at all.
+ */
+export function partitionExtraBaseUpdates(updates) {
+  if (!updates) return { real: updates, simXb: null }
+  let simXb = null
+  let real = updates
+  for (let i = 0; i < updates.length; i++) {
+    if (updates[i].helix_id === '__xb__') { real = null; break }
+  }
+  if (real) return { real: updates, simXb: null }   // common case: no inserts, no copy
+  real = []
+  for (const u of updates) {
+    if (u.helix_id !== '__xb__') { real.push(u); continue }
+    if (!simXb) simXb = new Map()
+    const cid = u.bp_index
+    let m = simXb.get(cid)
+    if (!m) { m = new Map(); simXb.set(cid, m) }
+    m.set(u.direction | 0, {
+      pos: u.backbone_position,
+      normal: [u.nx ?? 0, u.ny ?? 0, u.nz ?? 0],
+    })
+  }
+  return { real, simXb }
+}
+
+const _simNorm = new THREE.Vector3()
+
+/**
+ * Place a SINGLE extra-base bead + slab at its REAL simulated position (from an
+ * oxDNA/MD relaxed frame or trajectory), instead of the geometric Bezier arc.
+ * The bead sits at the backbone position; the slab orients its base face along the
+ * per-frame base normal (a1) and sits one SLAB_OFFSET inward toward the base.
+ * Does NOT set needsUpdate — batch then call flushExtraBaseMeshes() once.
+ *
+ * @param {number} idx          instance index (beadStartIdx + k)
+ * @param {ArrayLike<number>} pos  real backbone position (nm) [x,y,z]
+ * @param {ArrayLike<number>} baseNormal  per-frame a1 [nx,ny,nz]
+ * @param {THREE.Vector3} avgAx average helix axis (slab in-plane reference)
+ */
+export function setExtraBaseInstanceFromSim(beadsMesh, slabsMesh, idx, pos, baseNormal, avgAx) {
+  _uPt.set(pos[0], pos[1], pos[2])
+  _uMat.compose(_uPt, ID_QUAT, _uScl.set(1, 1, 1))
+  beadsMesh.setMatrixAt(idx, _uMat)
+
+  _simNorm.set(baseNormal?.[0] ?? 0, baseNormal?.[1] ?? 0, baseNormal?.[2] ?? 0)
+  if (_simNorm.lengthSq() < 1e-12) _simNorm.set(0, 0, 1)
+  _simNorm.normalize()
+  arcSlabQuaternion(_simNorm, avgAx, _uQuat)
+  _uSlab.copy(_uPt).addScaledVector(_simNorm, SLAB_OFFSET)
+  _uMat.compose(_uSlab, _uQuat, _uScl.set(SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK))
+  slabsMesh.setMatrixAt(idx, _uMat)
+}

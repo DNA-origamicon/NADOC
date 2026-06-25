@@ -1081,14 +1081,17 @@ def _backfill_failure_kind(job: MdJob) -> None:
 @router.get("/md/jobs")
 async def list_md_jobs() -> list[dict]:
     from backend.core.oxdna_staleness import current_active_design_fingerprint
-    jobs = MdJob.list_jobs(_workspace())
-    jobs = [reconcile_job_status(j, _workspace()) for j in jobs]
+    from backend.core.design_disk_usage import dir_size_bytes_cached
+    ws = _workspace()
+    jobs = MdJob.list_jobs(ws)
+    jobs = [reconcile_job_status(j, ws) for j in jobs]
     current_fp = current_active_design_fingerprint()
     out: list[dict] = []
     for j in jobs:
         _backfill_failure_kind(j)
         d = j.to_dict()
         d["out_of_date"] = _md_job_out_of_date(j, current_fp)
+        d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
         out.append(d)
     return out
 
@@ -1150,13 +1153,56 @@ async def get_md_job_display(job_id: str) -> dict:
 @router.delete("/md/jobs/{job_id}")
 async def delete_md_job(job_id: str) -> dict:
     """Delete an MD job and every generated file/folder beneath its job dir."""
+    from backend.core.job_archive import purge_index_entry
+    ws = _workspace()
     job = _load_job(job_id)
     if is_running(job_id) or job.status == MdStatus.running:
         raise HTTPException(400, "Stop the MD job before deleting it")
-    job_dir = job.job_dir(_workspace())
+    job_dir = job.job_dir(ws)
     if job_dir.exists():
         shutil.rmtree(job_dir)
+    purge_index_entry(ws, "md_jobs", job_id)   # drop archived-job index entry if any
     return {"ok": True, "job_id": job_id, "deleted": str(job_dir)}
+
+
+# ── Archive / unarchive ────────────────────────────────────────────────────────
+
+class ArchiveRequest(BaseModel):
+    dest_root: str   # parent directory; the job moves to <dest_root>/<job_id>
+
+
+@router.post("/md/jobs/{job_id}/archive", status_code=202)
+async def archive_md_job(job_id: str, body: ArchiveRequest) -> dict:
+    """Start moving a job's folder to ``dest_root`` in the background (poll status)."""
+    from backend.core import job_archive
+    ws = _workspace()
+    job = _load_job(job_id)
+    if is_running(job_id) or job.status == MdStatus.running:
+        raise HTTPException(400, "Stop the MD job before archiving it")
+    try:
+        job_archive.start_archive(job, ws, "md_jobs", Path(body.dest_root))
+    except (ValueError, FileExistsError, FileNotFoundError) as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "job_id": job_id, "action": "archive"}
+
+
+@router.post("/md/jobs/{job_id}/unarchive", status_code=202)
+async def unarchive_md_job(job_id: str) -> dict:
+    """Start moving an archived job's folder back into the workspace (poll status)."""
+    from backend.core import job_archive
+    ws = _workspace()
+    job = _load_job(job_id)
+    try:
+        job_archive.start_unarchive(job, ws, "md_jobs")
+    except (ValueError, FileExistsError, FileNotFoundError) as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "job_id": job_id, "action": "unarchive"}
+
+
+@router.get("/md/jobs/{job_id}/archive-status")
+async def md_archive_status(job_id: str) -> dict:
+    from backend.core import job_archive
+    return job_archive.task_status("md_jobs", job_id) or {"state": "idle"}
 
 
 @router.post("/md/jobs/{job_id}/production")

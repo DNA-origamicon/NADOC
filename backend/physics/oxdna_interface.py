@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, NamedTuple, Optional
 
 import numpy as np
 
@@ -160,6 +160,169 @@ def _build_ls_lookup(design: Design) -> dict[tuple[str, int], int]:
     return ls
 
 
+# Sentinel occupying element 0 of an extra-base key — never a real helix id.
+_XB_SENTINEL = "__xb__"
+
+
+def crossover_extra_base_junctions(design: Design) -> dict[tuple[str, int], tuple[str, str]]:
+    """Map each strand-domain junction that carries crossover extra bases to
+    ``(crossover_id, extra_bases_string)``.
+
+    Keyed by ``(strand_id, prev_domain_index)`` — the junction sitting *after*
+    domain ``prev_domain_index`` of that strand (i.e. before domain
+    ``prev_domain_index + 1``).  Strand-scoped so it is robust even if two strand
+    transitions ever shared a ``(helix, bp)`` junction position.
+
+    Mirrors the atomistic ground truth (``backend/core/atomistic.py``
+    ``extra_base_xover_src``): a crossover's extra bases are single-stranded
+    nucleotides on the crossover-owning strand, inserted at the domain→domain
+    transition where the strand leaves one helix's 3′ exit for the next helix's
+    5′ entry.  Forced-ligation extra bases are intentionally out of scope here.
+    """
+    pos_to_xo: dict[tuple[str, int], tuple[str, str]] = {}
+    for xo in design.crossovers:
+        if not xo.extra_bases:
+            continue
+        for half in (xo.half_a, xo.half_b):
+            pos_to_xo[(half.helix_id, half.index)] = (xo.id, xo.extra_bases)
+    if not pos_to_xo:
+        return {}
+
+    out: dict[tuple[str, int], tuple[str, str]] = {}
+    for strand in design.strands:
+        doms = strand.domains
+        for di in range(len(doms) - 1):
+            prev, nxt = doms[di], doms[di + 1]
+            if prev.helix_id != nxt.helix_id and prev.end_bp == nxt.start_bp:
+                hit = pos_to_xo.get((prev.helix_id, prev.end_bp))
+                if hit is not None:
+                    out[(strand.id, di)] = hit
+    return out
+
+
+class _NucStep(NamedTuple):
+    """One emitted nucleotide in the canonical oxDNA order.  Real nucleotides and
+    crossover extra-base inserts both flow through here so every walk site agrees."""
+    key:            tuple
+    strand:         object        # the owning Strand
+    strand_idx:     int           # 1-based, oxDNA convention
+    domain_index:   Optional[int] # None for extra-base inserts
+    helix_id:       Optional[str] # None for inserts
+    bp:             Optional[int]
+    direction:      Optional[str] # Direction.value; None for inserts
+    overhang_id:    Optional[str]
+    base_override:  Optional[str] # set ONLY for extra bases (their own base char)
+    is_extra_base:  bool
+    eb_k:           Optional[int] # 0-based position within the insert run
+    eb_n:           Optional[int] # run length
+    flank_prev_key: Optional[tuple]  # extra-base only: preceding real nt key
+    flank_next_key: Optional[tuple]  # extra-base only: following real nt key
+
+
+def _walk_strand_nucleotides(design: Design) -> Iterator[_NucStep]:
+    """Yield one :class:`_NucStep` per emitted nucleotide, in oxDNA order,
+    INCLUDING crossover extra-base inserts.  Single source of truth for the
+    strand→domain→bp walk shared by ``_strand_nucleotide_order``, ``topology_rows``,
+    ``count_undefined_bases``, ``_strand_nucleotide_provenance`` and the
+    extra-base geometry resolver — so the nucleotide order can never drift between
+    them.  Loop copies (delta≥1) emit 4-tuple keys; skips (delta≤-1) are dropped;
+    extra bases emit ``(_XB_SENTINEL, crossover_id, k)`` keys threaded in-chain
+    between the flanking real nucleotides on the same strand."""
+    ls_lookup = _build_ls_lookup(design)
+    junctions = crossover_extra_base_junctions(design)
+    for si, strand in enumerate(design.strands, start=1):
+        # Per-domain emitted real keys (with loop expansion), so an insert can name
+        # its flanking nucleotides (last of prev domain, first of next domain).
+        dom_keys: list[list[tuple]] = []
+        for domain in strand.domains:
+            keys: list[tuple] = []
+            lo = min(domain.start_bp, domain.end_bp)
+            hi = max(domain.start_bp, domain.end_bp)
+            bp_range = (range(lo, hi + 1) if domain.direction == Direction.FORWARD
+                        else range(hi, lo - 1, -1))
+            for bp in bp_range:
+                delta = ls_lookup.get((domain.helix_id, bp), 0)
+                if delta <= -1:
+                    continue  # deleted position: no nucleotide
+                n_copies = max(1, delta + 1)
+                for k in range(n_copies):
+                    keys.append((domain.helix_id, bp, domain.direction.value)
+                                if n_copies == 1
+                                else (domain.helix_id, bp, domain.direction.value, k))
+            dom_keys.append(keys)
+
+        for di, domain in enumerate(strand.domains):
+            for key in dom_keys[di]:
+                yield _NucStep(
+                    key=key, strand=strand, strand_idx=si, domain_index=di,
+                    helix_id=domain.helix_id, bp=key[1], direction=domain.direction.value,
+                    overhang_id=domain.overhang_id, base_override=None,
+                    is_extra_base=False, eb_k=None, eb_n=None,
+                    flank_prev_key=None, flank_next_key=None,
+                )
+            hit = junctions.get((strand.id, di))
+            if hit is None or di + 1 >= len(strand.domains):
+                continue
+            if not dom_keys[di] or not dom_keys[di + 1]:
+                continue  # degenerate (all-skip) flank: nothing to bridge
+            xo_id, extra = hit
+            prev_key = dom_keys[di][-1]
+            next_key = dom_keys[di + 1][0]
+            n = len(extra)
+            for k, ch in enumerate(extra):
+                yield _NucStep(
+                    key=(_XB_SENTINEL, xo_id, k), strand=strand, strand_idx=si,
+                    domain_index=None, helix_id=None, bp=None, direction=None,
+                    overhang_id=None, base_override=ch, is_extra_base=True,
+                    eb_k=k, eb_n=n, flank_prev_key=prev_key, flank_next_key=next_key,
+                )
+
+
+def _extra_base_inserts(design: Design) -> dict[tuple, tuple]:
+    """``{extra_base_key: (flank_prev_key, flank_next_key, k, n)}`` — the data the
+    geometry resolver needs to interpolate each insert between its flanking real
+    nucleotides.  Empty for designs without crossover extra bases."""
+    out: dict[tuple, tuple] = {}
+    for step in _walk_strand_nucleotides(design):
+        if step.is_extra_base:
+            out[step.key] = (step.flank_prev_key, step.flank_next_key, step.eb_k, step.eb_n)
+    return out
+
+
+def _resolve_extra_base_geometry(prev_nuc: dict, next_nuc: dict, k: int, n: int) -> dict:
+    """Geometry for the k-th of n single-stranded extra bases bridging two real
+    nucleotides: evenly spaced along the chord prev→next (5′→3′ along the strand),
+    base normal taken perpendicular to that chord.  Even spacing keeps consecutive
+    backbone separations ≈ chord/(n+1), inside oxDNA's FENE range (no degenerate
+    overlap, no over-stretch at config load)."""
+    t = (k + 1) / (n + 1)
+    p0 = np.asarray(prev_nuc["backbone_position"], dtype=float)
+    p1 = np.asarray(next_nuc["backbone_position"], dtype=float)
+    pos = (1.0 - t) * p0 + t * p1
+    chord = p1 - p0
+    nrm = float(np.linalg.norm(chord))
+    if nrm > 1e-9:
+        a3 = chord / nrm                      # 5′→3′ along the insert
+    else:
+        a3 = np.asarray(prev_nuc["axis_tangent"], dtype=float)
+        a3 = a3 / (np.linalg.norm(a3) + 1e-14)
+    bn = np.asarray(prev_nuc["base_normal"], dtype=float)
+    a1 = bn - np.dot(bn, a3) * a3             # project base normal ⟂ a3
+    if float(np.linalg.norm(a1)) < 1e-9:      # degenerate: pick any ⟂ vector
+        a1 = np.cross(a3, np.array([1.0, 0.0, 0.0]))
+        if float(np.linalg.norm(a1)) < 1e-9:
+            a1 = np.cross(a3, np.array([0.0, 1.0, 0.0]))
+    a1 = a1 / (np.linalg.norm(a1) + 1e-14)
+    return {
+        "helix_id": None, "bp_index": None,
+        # direction "FORWARD" so nuc_conf_line uses a3 as-is (chord is already 5′→3′).
+        "direction": "FORWARD",
+        "backbone_position": pos.tolist(),
+        "base_normal": a1.tolist(),
+        "axis_tangent": a3.tolist(),
+    }
+
+
 def _strand_nucleotide_order(design: Design) -> list[tuple]:
     """
     Return a flat list of nucleotide keys in the oxDNA order.
@@ -167,31 +330,13 @@ def _strand_nucleotide_order(design: Design) -> list[tuple]:
     Normal positions use 3-tuples (helix_id, bp_index, direction).
     Loop insertions (delta≥1) emit n_copies 4-tuples
     (helix_id, bp_index, direction, copy_k) for k=0..n_copies-1.
+    Crossover extra bases emit (``_XB_SENTINEL``, crossover_id, k) keys, threaded
+    in-chain at the owning strand's domain→domain junction.
 
     Deleted positions (delta=-1) are excluded entirely.
     This order must be consistent between topology and configuration files.
     """
-    ls_lookup = _build_ls_lookup(design)
-    order: list[tuple] = []
-    for strand in design.strands:
-        for domain in strand.domains:
-            lo = min(domain.start_bp, domain.end_bp)
-            hi = max(domain.start_bp, domain.end_bp)
-            if domain.direction == Direction.FORWARD:
-                bp_range = range(lo, hi + 1)
-            else:
-                bp_range = range(hi, lo - 1, -1)
-            for bp in bp_range:
-                delta = ls_lookup.get((domain.helix_id, bp), 0)
-                if delta <= -1:
-                    continue  # deleted position: no nucleotide
-                n_copies = max(1, delta + 1)
-                if n_copies == 1:
-                    order.append((domain.helix_id, bp, domain.direction.value))
-                else:
-                    for k in range(n_copies):
-                        order.append((domain.helix_id, bp, domain.direction.value, k))
-    return order
+    return [step.key for step in _walk_strand_nucleotides(design)]
 
 
 def count_undefined_bases(
@@ -208,31 +353,26 @@ def count_undefined_bases(
 
     Returns ``(undefined_count, total_count)``.
     """
-    ls_lookup = _build_ls_lookup(design)
     undefined = 0
     total = 0
-    for strand in design.strands:
-        if exclude_reference and strand.is_reference:
+    cur_strand = None
+    seq = ""
+    seq_idx = 0
+    for step in _walk_strand_nucleotides(design):
+        if step.strand is not cur_strand:
+            cur_strand = step.strand
+            seq = (step.strand.sequence or "").upper()
+            seq_idx = 0
+        if exclude_reference and step.strand.is_reference:
             continue
-        seq = (strand.sequence or "").upper()
-        seq_idx = 0
-        for domain in strand.domains:
-            lo = min(domain.start_bp, domain.end_bp)
-            hi = max(domain.start_bp, domain.end_bp)
-            if domain.direction == Direction.FORWARD:
-                bp_range = range(lo, hi + 1)
-            else:
-                bp_range = range(hi, lo - 1, -1)
-            for bp in bp_range:
-                delta = ls_lookup.get((domain.helix_id, bp), 0)
-                if delta <= -1:
-                    continue  # deletion: no nucleotide written
-                for _ in range(max(1, delta + 1)):
-                    base = seq[seq_idx] if seq_idx < len(seq) else 'N'
-                    total += 1
-                    if base not in "ACGT":
-                        undefined += 1
-                    seq_idx += 1
+        if step.is_extra_base:
+            base = (step.base_override or "N").upper()  # carries its own base, no seq_idx
+        else:
+            base = seq[seq_idx] if seq_idx < len(seq) else 'N'
+            seq_idx += 1
+        total += 1
+        if base not in "ACGT":
+            undefined += 1
     return undefined, total
 
 
@@ -250,91 +390,54 @@ def topology_rows(design: Design) -> tuple[list[tuple[int, str, int, int]], int]
     particle indices are shifted by ``+N_protein`` because protein beads occupy
     the leading indices in the ANM-oxDNA convention.
     """
-    order = _strand_nucleotide_order(design)
+    steps = list(_walk_strand_nucleotides(design))
+    order = [s.key for s in steps]
     n_strands = len(design.strands)
 
-    # Build per-nucleotide sequence lookup (key matches order tuple format).
-    ls_lookup = _build_ls_lookup(design)
+    # Per-nucleotide sequence: real nts consume the strand sequence string in order;
+    # extra bases carry their own base char and do NOT advance the sequence cursor.
     seq_lookup: dict[tuple, str] = {}
-    for strand in design.strands:
-        seq = strand.sequence or ""
-        seq_idx = 0
-        for domain in strand.domains:
-            lo = min(domain.start_bp, domain.end_bp)
-            hi = max(domain.start_bp, domain.end_bp)
-            if domain.direction == Direction.FORWARD:
-                bp_range = range(lo, hi + 1)
-            else:
-                bp_range = range(hi, lo - 1, -1)
-            for bp in bp_range:
-                delta = ls_lookup.get((domain.helix_id, bp), 0)
-                if delta <= -1:
-                    continue  # deletion: no character in scadnano sequence string
-                n_copies = max(1, delta + 1)
-                for copy_k in range(n_copies):
-                    base = seq[seq_idx] if seq_idx < len(seq) else 'N'
-                    if n_copies == 1:
-                        seq_lookup[(domain.helix_id, bp, domain.direction.value)] = base
-                    else:
-                        seq_lookup[(domain.helix_id, bp, domain.direction.value, copy_k)] = base
-                    seq_idx += 1
+    cur_strand = None
+    seq = ""
+    seq_idx = 0
+    for step in steps:
+        if step.strand is not cur_strand:
+            cur_strand = step.strand
+            seq = step.strand.sequence or ""
+            seq_idx = 0
+        if step.is_extra_base:
+            seq_lookup[step.key] = step.base_override or 'N'
+        else:
+            seq_lookup[step.key] = seq[seq_idx] if seq_idx < len(seq) else 'N'
+            seq_idx += 1
 
-    # Build index map for neighbour lookup (4-tuple key for loop copies).
     index_map: dict[tuple, int] = {k: i for i, k in enumerate(order)}
 
-    # Build neighbour maps (5′ and 3′ in oxDNA convention).
-    # oxDNA a3 axis points in 5′→3′ direction.  neighbour lists:
-    #   3p_nbr: index of the nucleotide that this one is bonded to on the 3′ side
-    #   5p_nbr: index of the nucleotide that this one is bonded to on the 5′ side
+    # Neighbour maps (oxDNA 5′→3′ convention): thread per-strand in emission order,
+    # so loop copies AND extra-base inserts bond in-chain automatically.
+    #   3p_nbr: the nucleotide bonded on the 3′ side; 5p_nbr: on the 5′ side.
     three_prime_nbr: dict[int, int] = {}
     five_prime_nbr:  dict[int, int] = {}
+    cur_strand = None
+    strand_nuc_indices: list[int] = []
 
-    for strand in design.strands:
-        strand_nuc_indices: list[int] = []
-        for domain in strand.domains:
-            lo = min(domain.start_bp, domain.end_bp)
-            hi = max(domain.start_bp, domain.end_bp)
-            if domain.direction == Direction.FORWARD:
-                bp_range = range(lo, hi + 1)
-            else:
-                bp_range = range(hi, lo - 1, -1)
-            for bp in bp_range:
-                delta = ls_lookup.get((domain.helix_id, bp), 0)
-                if delta <= -1:
-                    continue
-                n_copies = max(1, delta + 1)
-                for copy_k in range(n_copies):
-                    if n_copies == 1:
-                        key: tuple = (domain.helix_id, bp, domain.direction.value)
-                    else:
-                        key = (domain.helix_id, bp, domain.direction.value, copy_k)
-                    if key in index_map:
-                        strand_nuc_indices.append(index_map[key])
-
-        for k, idx in enumerate(strand_nuc_indices):
-            if k + 1 < len(strand_nuc_indices):
-                three_prime_nbr[idx] = strand_nuc_indices[k + 1]
+    def _thread(indices: list[int]) -> None:
+        for k, idx in enumerate(indices):
+            if k + 1 < len(indices):
+                three_prime_nbr[idx] = indices[k + 1]
             if k - 1 >= 0:
-                five_prime_nbr[idx] = strand_nuc_indices[k - 1]
+                five_prime_nbr[idx] = indices[k - 1]
 
-    # Build strand index lookup (1-based per oxDNA convention).
-    strand_idx_map: dict[tuple, int] = {}
-    for si, strand in enumerate(design.strands, start=1):
-        for domain in strand.domains:
-            lo = min(domain.start_bp, domain.end_bp)
-            hi = max(domain.start_bp, domain.end_bp)
-            delta_map = {bp: ls_lookup.get((domain.helix_id, bp), 0)
-                         for bp in range(lo, hi + 1)}
-            for bp in range(lo, hi + 1):
-                delta = delta_map.get(bp, 0)
-                if delta <= -1:
-                    continue
-                n_copies = max(1, delta + 1)
-                for copy_k in range(n_copies):
-                    if n_copies == 1:
-                        strand_idx_map[(domain.helix_id, bp, domain.direction.value)] = si
-                    else:
-                        strand_idx_map[(domain.helix_id, bp, domain.direction.value, copy_k)] = si
+    for step in steps:
+        if step.strand is not cur_strand:
+            _thread(strand_nuc_indices)
+            cur_strand = step.strand
+            strand_nuc_indices = []
+        strand_nuc_indices.append(index_map[step.key])
+    _thread(strand_nuc_indices)
+
+    # Strand index lookup (1-based per oxDNA convention).
+    strand_idx_map: dict[tuple, int] = {step.key: step.strand_idx for step in steps}
 
     rows: list[tuple[int, str, int, int]] = []
     for i, key in enumerate(order):
@@ -426,7 +529,11 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
     order = _strand_nucleotide_order(design)
     ls_lookup_conf = _build_ls_lookup(design)
     resolved_map: dict[tuple, dict] = {}
+    # Pass 1: real nucleotides (3-tuple + loop 4-tuple).  Extra-base inserts depend
+    # on flanking real nucleotides resolved here, so they are done in pass 2.
     for key in order:
+        if key[0] == _XB_SENTINEL:
+            continue
         nuc = geo_map.get(key[:3])  # geo_map always uses 3-tuple keys
         if len(key) == 4:
             _h_id, _bp, _dir, _copy_k = key
@@ -437,6 +544,12 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
             nuc = _compute_nuc_geometry(design, key[0], key[1], key[2])
         if nuc is not None:
             resolved_map[key] = nuc
+    # Pass 2: crossover extra bases, interpolated between their resolved flanks.
+    for key, (prev_key, next_key, k, n) in _extra_base_inserts(design).items():
+        prev_nuc = resolved_map.get(prev_key)
+        next_nuc = resolved_map.get(next_key)
+        if prev_nuc is not None and next_nuc is not None:
+            resolved_map[key] = _resolve_extra_base_geometry(prev_nuc, next_nuc, k, n)
     return resolved_map
 
 
@@ -601,6 +714,8 @@ def read_configuration(
     for i, key in enumerate(order):
         if offset + i >= len(data_lines):
             break
+        if key[0] == _XB_SENTINEL:
+            continue  # extra-base insert: occupies a particle slot but is not a design key
         parts = data_lines[offset + i].split()
         if len(parts) < 3:
             continue
@@ -619,6 +734,7 @@ def read_configuration_full(
     design:    Design,
     *,
     copies:    bool = False,
+    include_extra_bases: bool = False,
 ) -> dict[tuple, dict]:
     """
     Read an oxDNA configuration (.dat) and return position + orientation per nuc.
@@ -642,6 +758,11 @@ def read_configuration_full(
     instead of sitting at the design position (the long-bond artifact).  Designs
     without insertions are unaffected (``_strand_nucleotide_order`` emits only
     3-tuples there), so this is a no-op for them.
+
+    ``include_extra_bases=True`` keeps crossover extra-base inserts under their
+    ``(_XB_SENTINEL, crossover_id, k)`` key (default drops them so the design-keyed
+    display + recovery oracle stay clean).  Used by the relaxed-display + heavy-rep
+    routes to render extra bases at their real simulated positions.
     """
     order = _strand_nucleotide_order(design)
     lines = Path(conf_path).read_text(encoding="utf-8").splitlines()
@@ -652,6 +773,8 @@ def read_configuration_full(
     for i, key in enumerate(order):
         if offset + i >= len(data_lines):
             break
+        if key[0] == _XB_SENTINEL and not include_extra_bases:
+            continue  # extra-base insert: not a design key (kept only for particle alignment)
         parts = data_lines[offset + i].split()
         if len(parts) < 9:
             continue
@@ -673,6 +796,7 @@ def configuration_full_from_particles(
     design: Design,
     *,
     copies: bool = False,
+    include_extra_bases: bool = False,
 ) -> dict[tuple, dict]:
     """In-memory twin of :func:`read_configuration_full`: build the SAME
     ``(helix_id, bp_index, direction) -> {backbone_position(nm), a1, a3}`` map
@@ -696,6 +820,8 @@ def configuration_full_from_particles(
         j = offset + i
         if j >= len(particles):
             break
+        if key[0] == _XB_SENTINEL and not include_extra_bases:
+            continue  # extra-base insert: not a design key (kept only for particle alignment)
         p = particles[j]
         pos_nm = np.asarray(p.pos, dtype=float) * OXDNA_LENGTH_UNIT
         ori = np.asarray(p.orientation, dtype=float)
@@ -748,6 +874,7 @@ def read_configuration_unwrapped(
     rotate:     bool = True,
     align:      bool = True,
     copies:     bool = False,
+    include_extra_bases: bool = False,
 ) -> dict[tuple, dict]:
     """Read a relaxed oxDNA config and undo periodic-boundary wrapping for display.
 
@@ -774,7 +901,11 @@ def read_configuration_unwrapped(
     Returns the same shape as ``read_configuration_full`` (positions nm + a1 + a3);
     the a1/a3 orientation vectors are rotated by the same alignment.
     """
-    relax = read_configuration_full(conf_path, design, copies=copies)
+    relax = read_configuration_full(conf_path, design, copies=copies,
+                                    include_extra_bases=include_extra_bases)
+    # Reference stays design-keyed (no extra bases) so the Kabsch fit aligns on the
+    # rigid duplex, not the floppy single-stranded inserts; inserts are still carried
+    # through the transform via their backbone-bond connection to the strand.
     ref = read_configuration_full(reference_path, design, copies=copies)
     box = _parse_box_nm(conf_path)
     if box is None or not np.all(box > 0):
@@ -1109,12 +1240,22 @@ def backbone_bond_pairs(design: Design) -> list[tuple[tuple, tuple]]:
     adjacent along a strand backbone.  Keys are the 3-tuple form (loop copies
     collapsed to their base bp).  Used by the relaxation health check to measure
     over-stretched backbone bonds (steric-clash proxy) on a relaxed config.
+
+    At a crossover carrying extra bases the two flanking real nucleotides are NOT
+    directly bonded — the single-stranded inserts sit between them — so an
+    ``_XB_SENTINEL`` placeholder is threaded in for each insert.  Those keys are
+    absent from the health check's position map (the read-back drops them), so the
+    junction's bonds are simply skipped rather than measured as one phantom bond
+    spanning the whole (now wider) gap — which would otherwise read as a spurious
+    FENE over-stretch and fail an otherwise-healthy relaxation.
     """
     pairs: list[tuple[tuple, tuple]] = []
     ls_lookup = _build_ls_lookup(design)
+    junctions = crossover_extra_base_junctions(design)
     for strand in design.strands:
         seq_keys: list[tuple] = []
-        for domain in strand.domains:
+        doms = strand.domains
+        for di, domain in enumerate(doms):
             lo = min(domain.start_bp, domain.end_bp)
             hi = max(domain.start_bp, domain.end_bp)
             if domain.direction == Direction.FORWARD:
@@ -1126,6 +1267,11 @@ def backbone_bond_pairs(design: Design) -> list[tuple[tuple, tuple]]:
                 if delta <= -1:
                     continue
                 seq_keys.append((domain.helix_id, bp, domain.direction.value))
+            hit = junctions.get((strand.id, di))
+            if hit is not None and di + 1 < len(doms):
+                xo_id, extra = hit
+                for k in range(len(extra)):
+                    seq_keys.append((_XB_SENTINEL, xo_id, k))
         for a, b in zip(seq_keys, seq_keys[1:]):
             pairs.append((a, b))
     return pairs
@@ -1159,33 +1305,21 @@ def _strand_nucleotide_provenance(design: Design) -> list[dict]:
     IS the 0-based oxDNA particle index).  Lets anchor selections (cluster /
     domain / overhang) resolve to particle indices without re-deriving the
     topology traversal."""
-    ls_lookup = _build_ls_lookup(design)
     prov: list[dict] = []
-    for strand in design.strands:
-        for di, domain in enumerate(strand.domains):
-            lo = min(domain.start_bp, domain.end_bp)
-            hi = max(domain.start_bp, domain.end_bp)
-            bp_range = (range(lo, hi + 1) if domain.direction == Direction.FORWARD
-                        else range(hi, lo - 1, -1))
-            for bp in bp_range:
-                delta = ls_lookup.get((domain.helix_id, bp), 0)
-                if delta <= -1:
-                    continue
-                n_copies = max(1, delta + 1)
-                for k in range(n_copies):
-                    key = ((domain.helix_id, bp, domain.direction.value)
-                           if n_copies == 1
-                           else (domain.helix_id, bp, domain.direction.value, k))
-                    prov.append({
-                        "particle":     len(prov),
-                        "strand_id":    strand.id,
-                        "domain_index": di,
-                        "helix_id":     domain.helix_id,
-                        "bp":           bp,
-                        "direction":    domain.direction.value,
-                        "overhang_id":  domain.overhang_id,
-                        "key":          key,
-                    })
+    for step in _walk_strand_nucleotides(design):
+        # Extra-base inserts carry helix_id/bp/direction/domain_index = None, so no
+        # anchor kind (overhang/cluster/domain) ever selects them — they only occupy
+        # the correct particle index so real-nucleotide anchors stay aligned.
+        prov.append({
+            "particle":     len(prov),
+            "strand_id":    step.strand.id,
+            "domain_index": step.domain_index,
+            "helix_id":     step.helix_id,
+            "bp":           step.bp,
+            "direction":    step.direction,
+            "overhang_id":  step.overhang_id,
+            "key":          step.key,
+        })
     return prov
 
 

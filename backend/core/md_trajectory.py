@@ -41,6 +41,7 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
         build_chain_map,
         build_p_pdb_order,
         centroid_offset,
+        md_rigid_reference,
     )
 
     model = build_atomistic_model(design)
@@ -48,12 +49,9 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
     pdb_text = Path(coordinate_path).read_text(errors="replace")
     p_order = build_p_pdb_order(pdb_text, cm)
 
-    _p_ref = {(a.helix_id, a.bp_index, a.direction): np.array([a.x, a.y, a.z])
-              for a in model.atoms if a.name == "P"}
-    _eq_list = [_p_ref.get((hid, bpi, d)) for hid, bpi, d in p_order]
-    eq_valid = np.array([v is not None for v in _eq_list], dtype=bool)
-    eq_positions = np.array([v if v is not None else np.zeros(3) for v in _eq_list])
-    rigid_mask = eq_valid & np.array([bpi >= 0 for _, bpi, _ in p_order], dtype=bool)
+    # Equilibrium P-atom reference + rigid mask for the Kabsch alignment (shared with
+    # the live-display ws handler; handles crossover extra-base "__xb__" inserts).
+    eq_positions, eq_valid, rigid_mask = md_rigid_reference(model, p_order)
     if int(rigid_mask.sum()) < 3:
         eq_centroid = np.zeros(3)
         eq_centered = None

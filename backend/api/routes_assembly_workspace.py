@@ -125,8 +125,16 @@ def _patch_references(old_ref: str, new_ref: str) -> list[str]:
 
 @router.get("/library/files", status_code=200)
 def list_library_files() -> list:
-    """Scan workspace for .nadoc / .nass files and subdirectories, sorted by mtime desc."""
+    """Scan workspace for .nadoc / .nass files and subdirectories, sorted by mtime desc.
+
+    Each part also reports its simulation footprint on disk: ``sim_bytes`` is the
+    total size of every MD/oxDNA job folder tied back to that .nadoc file, and
+    ``disk_bytes`` is the file itself + ``sim_bytes`` — so the welcome screen can
+    surface which designs are carrying a lot of simulation data.
+    """
     _asm._WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+    from backend.core.design_disk_usage import sim_bytes_by_source_path, _norm
+    sim_by_path = sim_bytes_by_source_path(_asm._WORKSPACE_DIR)
     entries = []
     for p in _asm._WORKSPACE_DIR.rglob("*"):
         # Skip hidden files / system dirs
@@ -146,17 +154,121 @@ def list_library_files() -> list:
                     "size_bytes": 0,
                 })
             elif p.suffix in (".nadoc", ".nass"):
+                sim = sim_by_path.get(_norm(rel), 0) if p.suffix == ".nadoc" else 0
                 entries.append({
                     "name":       p.stem,
                     "path":       rel,
                     "type":       "assembly" if p.suffix == ".nass" else "part",
                     "mtime_iso":  mtime,
                     "size_bytes": stat.st_size,
+                    "sim_bytes":  sim,
+                    "disk_bytes": stat.st_size + sim,
                 })
         except OSError:
             continue
     entries.sort(key=lambda e: e["mtime_iso"], reverse=True)
     return entries
+
+
+@router.get("/design/about", status_code=200)
+def design_about(path: Optional[str] = None) -> dict:
+    """Aggregate everything we know about the active design / a workspace file.
+
+    Topology counts (total bases, loadouts, features-per-loadout) come from the
+    live active design; the on-disk facts (file size, MD/oxDNA jobs + their
+    sizes, assemblies that use this part) are keyed off ``path`` — the workspace-
+    relative .nadoc path of the file currently open. ``path`` may be omitted for
+    an unsaved design, in which case the disk-keyed sections are empty.
+    """
+    from backend.core.design_disk_usage import (
+        assemblies_referencing,
+        jobs_for_source_path,
+    )
+    from backend.core.models import Design
+
+    ws = _asm._WORKSPACE_DIR
+
+    # Topology comes from the live active design when one is open (what's on
+    # screen, edits included); otherwise fall back to the file on disk so the
+    # panel still works when invoked straight from the welcome screen.
+    design = None
+    try:
+        design = design_state.get_or_404()
+    except HTTPException:
+        design = None
+    if design is None and path:
+        fpath = ws / path
+        if fpath.is_file():
+            try:
+                design = Design.from_json(fpath.read_text())
+            except Exception:  # noqa: BLE001 — advisory panel, never 500
+                design = None
+    if design is None:
+        return {"empty": True, "path": path, "name": (Path(path).stem if path else None)}
+
+    # ── Topology (from the live design) ──────────────────────────────────────
+    total_bases = sum(
+        abs(d.end_bp - d.start_bp) + 1
+        for s in design.strands
+        for d in s.domains
+    )
+
+    loadouts_info = []
+    if design.loadouts:
+        from backend.api.crud import _decode_loadout_design_snapshot
+        for lo in design.loadouts:
+            is_active = lo.id == design.active_loadout_id
+            if is_active:
+                fcount = len(design.feature_log)
+            else:
+                try:
+                    fcount = len(_decode_loadout_design_snapshot(lo.design_snapshot_gz_b64).feature_log)
+                except Exception:  # noqa: BLE001 — advisory count, never 500 the panel
+                    fcount = None
+            loadouts_info.append({
+                "id": lo.id,
+                "name": lo.name,
+                "feature_count": fcount,
+                "is_active": is_active,
+                "snapshot_size_bytes": lo.snapshot_size_bytes,
+            })
+
+    # ── On-disk facts (keyed off the open file path) ─────────────────────────
+    file_size = 0
+    jobs: list[dict] = []
+    assemblies: list[dict] = []
+    if path:
+        fpath = ws / path
+        try:
+            file_size = fpath.stat().st_size if fpath.is_file() else 0
+        except OSError:
+            file_size = 0
+        jobs = jobs_for_source_path(ws, path)
+        assemblies = assemblies_referencing(ws, path)
+
+    oxdna_jobs = [j for j in jobs if j["kind"] == "oxdna"]
+    md_jobs    = [j for j in jobs if j["kind"] == "md"]
+    oxdna_bytes = sum(j["size_bytes"] for j in oxdna_jobs)
+    md_bytes    = sum(j["size_bytes"] for j in md_jobs)
+
+    return {
+        "path": path,
+        "name": (Path(path).stem if path else (design.metadata.name or "Untitled")),
+        "file_size_bytes": file_size,
+        "total_bases": total_bases,
+        "strand_count": len(design.strands),
+        "helix_count": len(design.helices),
+        "loadout_count": len(design.loadouts),
+        "feature_log_count": len(design.feature_log),
+        "loadouts": loadouts_info,
+        "oxdna_jobs": oxdna_jobs,
+        "md_jobs": md_jobs,
+        "oxdna_total_bytes": oxdna_bytes,
+        "md_total_bytes": md_bytes,
+        "sim_total_bytes": oxdna_bytes + md_bytes,
+        "total_disk_bytes": file_size + oxdna_bytes + md_bytes,
+        "assemblies": assemblies,
+    }
 
 
 @router.post("/library/upload", status_code=201)
@@ -321,11 +433,13 @@ def library_delete(path: str, delete_jobs: bool = False) -> dict:
                 detail="Stop running job(s) before deleting their folders: "
                 + ", ".join(running),
             )
+        from backend.core.job_archive import purge_index_entry
         for _kind, j in jobs:
             job_dir = j.job_dir(_asm._WORKSPACE_DIR)
             if job_dir.exists():
                 shutil.rmtree(str(job_dir))
                 deleted_jobs.append(j.job_id)
+            purge_index_entry(_asm._WORKSPACE_DIR, f"{_kind}_jobs", j.job_id)
 
     if dest.is_dir():
         shutil.rmtree(str(dest))

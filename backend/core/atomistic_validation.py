@@ -305,19 +305,11 @@ def latest_job_for_design(design_source: str, workspace: Path) -> Optional[str]:
     ``design_source_path`` matches ``design_source`` (by file stem) AND that has at
     least one stage ``last_conf.dat`` to read.  ``None`` if there is no relaxed job."""
     from backend.core.oxdna_job import OxdnaJob
-    jobs_dir = workspace / "oxdna_jobs"
-    if not jobs_dir.is_dir():
-        return None
     stem = Path(design_source).stem
     best: tuple[float, str] | None = None
-    for d in jobs_dir.iterdir():
-        jj = d / "job.json"
-        if not jj.exists():
-            continue
-        try:
-            job = OxdnaJob.load(d.name, workspace)
-        except Exception:
-            continue
+    # list_jobs is archive-aware, so a relaxed job seeded from this design is still
+    # discoverable (and chainable) after its folder has been archived off-workspace.
+    for job in OxdnaJob.list_jobs(workspace):
         if not job.design_source_path or Path(job.design_source_path).stem != stem:
             continue
         if not any((job.stage_dir(workspace, st.name) / "last_conf.dat").exists()

@@ -14,7 +14,7 @@
 import * as THREE from 'three'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
 import { resolveRepOverrides } from './representation_overrides.js'
-import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances } from './crossover_connections.js'
+import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances, setExtraBaseInstanceFromSim, partitionExtraBaseUpdates } from './crossover_connections.js'
 import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 
 /**
@@ -38,6 +38,11 @@ export function initDesignRenderer(scene, storeRef) {
   let _xoverSlabsMesh   = null   // InstancedMesh for extra-base slabs
   let _xoverArcDataMap  = null   // Map<xoId, arcDataEntry> for O(1) lookup during animation
   let _xoverGlowLive    = []     // {pos: THREE.Vector3, arcData, localIdx} — live positions for selection glow
+  // Extra-base inserts driven by a simulation frame (oxDNA/MD relaxed or trajectory):
+  // Map<crossover_id, Map<k, {pos:THREE.Vector3, normal:[nx,ny,nz]}>>.  When an arc
+  // is present here, its beads are placed at the REAL simulated positions and the
+  // geometric Bezier interpolation is skipped for it.  Null/empty → all arcs Bezier.
+  let _simXbByCrossover = null
   let _detailLevel      = 0      // current LOD (0=full,1=beads,2=cylinders); re-applied to xover extras after _rebuild
   let _currentMode      = 'normal'
   const _glowLayer         = createGlowLayer(scene)
@@ -319,6 +324,7 @@ export function initDesignRenderer(scene, storeRef) {
     _xoverSlabsMesh  = null
     _xoverArcDataMap = null
     _xoverGlowLive   = []
+    _simXbByCrossover = null   // drop stale simulation-driven insert positions
 
     if (!geometry || !design || geometry.length === 0) {
       _helixCtrl = null
@@ -826,15 +832,22 @@ export function initDesignRenderer(scene, storeRef) {
      * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
      */
     applyFemPositions(updates, amp = 1.0) {
-      _helixCtrl?.applyFemPositions(updates, amp)
+      // Split off crossover extra-base inserts (helix_id "__xb__"): the simulation
+      // frame carries their REAL positions, which the helix renderer can't place
+      // (no design key). Route them to the extra-base bead/slab instances below.
+      // simXb is null when the frame has no inserts or updates===null → Bezier.
+      const { real: realUpdates, simXb } = partitionExtraBaseUpdates(updates)
+      _simXbByCrossover = simXb
+
+      _helixCtrl?.applyFemPositions(realUpdates, amp)
       // Keep crossover arc lines (owned by unfold_view) in sync — applyFemPositions
       // moves beads/cones/slabs but not the arcs, which otherwise lag at the
       // original design positions during an mrDNA/oxDNA display overlay.
-      _femArcUpdater?.(updates, amp)
+      _femArcUpdater?.(realUpdates, amp)
       // Extra-base crossover beads live in a separate group and are not touched
-      // by the helix renderer's FEM/MD overlay. Re-interpolate every arc from the
-      // now-live (MD-moved, or reverted-to-geometry when updates===null) endpoint
-      // positions so the extra bases track the deformation instead of freezing.
+      // by the helix renderer's FEM/MD overlay. Drive them from the simulation
+      // frame when present, else re-interpolate from the now-live endpoint
+      // positions (reverted-to-geometry when updates===null).
       this.applyClusterCrossoverUpdate([])
     },
 
@@ -1092,6 +1105,24 @@ export function initDesignRenderer(scene, storeRef) {
       for (const ad of _xoverArcData) {
         if (_hiddenCrossoverIds.has(ad.xoId)) continue
         if (moved.size && !moved.has(ad.nucA?.helix_id) && !moved.has(ad.nucB?.helix_id)) continue
+
+        // Simulation-driven: place each extra base at its REAL simulated position.
+        const sim = _simXbByCrossover?.get(ad.xoId)
+        if (sim) {
+          for (let k = 0; k < ad.beadCount; k++) {
+            const s = sim.get(k)
+            if (!s) continue
+            setExtraBaseInstanceFromSim(
+              _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + k, s.pos, s.normal, ad.avgAx)
+            for (const g of _xoverGlowLive) {
+              if (g.arcData === ad && g.localIdx === k) g.pos.copy(s.pos)
+            }
+          }
+          dirty = true
+          continue
+        }
+
+        // Geometric fallback: Bezier-interpolate from the live endpoint positions.
         const posA = _liveXoverPos(ad.nucA, _clusterXoverPosA)
         const posB = _liveXoverPos(ad.nucB, _clusterXoverPosB)
         if (!posA || !posB) continue

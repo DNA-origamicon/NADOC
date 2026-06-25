@@ -16,11 +16,13 @@ from __future__ import annotations
 
 import dataclasses
 import stat
+import time
 
 import pytest
 
 from backend.api import headless_oxdna_build as hox
-from backend.core.oxdna_job import OxdnaStatus
+from backend.core import job_archive
+from backend.core.oxdna_job import OxdnaJob, OxdnaStatus
 from tests.automation_harness import (
     assert_equilibration_timeline,
     assert_field_campaign,
@@ -96,6 +98,37 @@ def test_create_then_start_two_step(sequenced_6hb, tmp_path, mock_oxdna):
     assert_relaxed_geometry_recovered(job, sequenced_6hb, tmp_path)
 
 
+def test_display_route_surfaces_extra_bases(tmp_path, mock_oxdna):
+    """The CG /display route surfaces crossover extra-base inserts (helix_id
+    "__xb__", bp_index=crossover_id, direction=k) so the renderer can place them at
+    their real simulated positions — while ``assert_relaxed_geometry_recovered``
+    (which filters them) still recovers every real nucleotide."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from backend.core.models import LatticeType
+    from tests.conftest import SIX_HB_CELLS
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(SIX_HB_CELLS, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
+        hb.auto_scaffold(seamless=True)
+        hb.full_autostaple()
+        d = design_state.get_or_404().model_copy(deep=True)
+    d = _sequence_for_oxdna(d)
+    d.crossovers[0].extra_bases = "TT"
+
+    job = hox.run_relaxation(d, tmp_path, min_bp_retained=0.0)
+    assert job.status is OxdnaStatus.completed, job.error
+
+    display = hox.read_relaxed_positions(job.job_id, tmp_path)
+    xb = [p for p in display["positions"] if p["helix_id"] == "__xb__"]
+    assert len(xb) == 2, "both extra bases must appear in the display payload"
+    assert all(p["bp_index"] == d.crossovers[0].id for p in xb)
+    assert all(len(p["backbone_position"]) == 3 for p in xb)
+    # The real nucleotides are still all present and design-keyed alongside them.
+    real = [p for p in display["positions"] if p["helix_id"] != "__xb__"]
+    assert real and all(isinstance(p["bp_index"], int) for p in real)
+
+
 def test_append_production_after_completion(sequenced_6hb, tmp_path, mock_oxdna):
     """A completed relaxation can be extended with an unbiased production stage —
     it reaches completed again and the relaxed geometry still reads back."""
@@ -151,6 +184,72 @@ def test_multiple_field_children_from_one_parent(sequenced_6hb, tmp_path, mock_o
     grandchild = hox.append_field(ids[0], tmp_path, field_pN=2.0, dir=[0, 0, 1], anchors=[anchor])
     hox.wait_for_terminal(grandchild["job_id"], tmp_path)
     assert OxdnaJob.load(grandchild["job_id"], tmp_path).parent_job_id == ids[0]
+
+
+# ── Archive ⇄ unarchive: full round trip on a real relaxed job ─────────────────
+
+def _await_archive(job_id, *, timeout=20.0):
+    """Block until the background archive/unarchive move for an oxDNA job ends."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        st = job_archive.task_status("oxdna_jobs", job_id)
+        if st and st["state"] in ("done", "error"):
+            return st
+        time.sleep(0.02)
+    raise AssertionError(
+        f"archive task for {job_id} never finished: {job_archive.task_status('oxdna_jobs', job_id)}")
+
+
+def test_archive_unarchive_round_trip_preserves_job_and_chaining(sequenced_6hb, tmp_path, mock_oxdna):
+    """Full archive ⇄ unarchive round trip on a REAL relaxed oxDNA job.
+
+    Builds a relaxed parent from a simulated design, moves its folder onto a
+    separate 'external drive' dir, and proves the three properties the feature
+    promises: (1) the job stays discoverable and its relaxed geometry still reads
+    back from the archive location; (2) a NEW field child can be chained off the
+    ARCHIVED parent (the headline property — parent-file reads all flow through
+    ``job_dir()``, which resolves to the archive); (3) unarchiving moves it back
+    intact with the index cleared. ``tmp_path`` cleans everything up.
+    """
+    d = sequenced_6hb
+    external = tmp_path / "external_drive"            # stand-in for an external disk
+
+    parent = hox.run_relaxation(d, tmp_path, min_bp_retained=0.0)
+    assert parent.status is OxdnaStatus.completed, parent.error
+    assert_relaxed_geometry_recovered(parent, d, tmp_path)         # baseline read-back
+    ws_dir = tmp_path / "oxdna_jobs" / parent.job_id
+    assert ws_dir.is_dir()
+
+    # ── Archive ────────────────────────────────────────────────────────────────
+    job_archive.start_archive(OxdnaJob.load(parent.job_id, tmp_path), tmp_path, "oxdna_jobs", external)
+    assert _await_archive(parent.job_id)["state"] == "done"
+
+    assert not ws_dir.exists()                                     # folder moved off-workspace
+    assert (external / parent.job_id / "design.json").exists()    # data really moved
+    assert job_archive.archived_job_ids(tmp_path, "oxdna_jobs") == [parent.job_id]
+
+    archived = OxdnaJob.load(parent.job_id, tmp_path)
+    assert archived.archived and archived.job_dir(tmp_path) == external / parent.job_id
+    assert parent.job_id in {j.job_id for j in OxdnaJob.list_jobs(tmp_path)}   # still listed
+    assert_relaxed_geometry_recovered(archived, d, tmp_path)       # geometry still reads back
+
+    # ── Chain a field child off the ARCHIVED parent (the headline property) ──────
+    anchor = {"kind": "domain", "strand_id": d.strands[0].id, "domain_index": 0}
+    child_info = hox.append_field(parent.job_id, tmp_path, field_pN=2.0, dir=[1, 0, 0], anchors=[anchor])
+    assert child_info["parent_job_id"] == parent.job_id
+    child = hox.wait_for_terminal(child_info["job_id"], tmp_path)
+    assert child.status is OxdnaStatus.completed, child.error      # read parent's relaxed conf FROM the archive
+
+    # ── Unarchive ────────────────────────────────────────────────────────────────
+    job_archive.start_unarchive(OxdnaJob.load(parent.job_id, tmp_path), tmp_path, "oxdna_jobs")
+    assert _await_archive(parent.job_id)["state"] == "done"
+
+    assert ws_dir.is_dir()                                         # back in the workspace
+    assert not (external / parent.job_id).exists()                # archive copy removed
+    assert job_archive.archived_job_ids(tmp_path, "oxdna_jobs") == []
+    restored = OxdnaJob.load(parent.job_id, tmp_path)
+    assert restored.archived is False and restored.archive_path is None
+    assert_relaxed_geometry_recovered(restored, d, tmp_path)       # data intact after the round trip
 
 
 def test_run_config_persisted_for_panel_cards(sequenced_6hb, tmp_path, mock_oxdna):

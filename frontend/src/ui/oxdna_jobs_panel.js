@@ -29,6 +29,8 @@ import { createButton } from './primitives/button.js'
 import { el } from './primitives/dom.js'
 import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
+import { formatBytes } from './format_bytes.js'
+import { initJobArchive } from './job_archive_action.js'
 import * as api from '../api/client.js'
 
 const POLL_MS = 1500
@@ -473,6 +475,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   const startBtn   = document.getElementById('oxdna-jobs-start-btn')
   const stopBtn    = document.getElementById('oxdna-jobs-stop-btn')
   const deleteBtn  = document.getElementById('oxdna-jobs-delete-btn')
+  const archiveBtn = document.getElementById('oxdna-jobs-archive-btn')
+  const archiveProgressEl = document.getElementById('oxdna-jobs-archive-progress')
+  const _archive   = initJobArchive({ api, kind: 'oxdna' })
   const errorEl    = document.getElementById('oxdna-jobs-detail-error')
   const errorLogBtn = document.getElementById('oxdna-jobs-errorlog-btn')
   const progressEl = document.getElementById('oxdna-jobs-progress')
@@ -737,7 +742,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // selection) — a running job's health/progress changing must NOT re-render the
   // list, or the row spinners restart their animation every poll.
   function _listSignature(jobs) {
-    return jobs.map(j => `${j.job_id}:${j.status}:${productionState(j)}:${j.out_of_date ? 1 : 0}`).join(',') +
+    return jobs.map(j => `${j.job_id}:${j.status}:${productionState(j)}:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}`).join(',') +
            `|sel=${_selectedId}`
   }
 
@@ -789,6 +794,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     ts.textContent = formatJobTime(job.created_at)
     ts.style.cssText = `flex-shrink:0;color:${_C.dim};font-size:10px;font-family:var(--font-mono)`
 
+    // On-disk size of this job's folder (resolves to the archive location when archived).
+    const size = document.createElement('span')
+    size.textContent = job.size_bytes ? formatBytes(job.size_bytes) : ''
+    size.style.cssText = `flex-shrink:0;color:${job.archived ? _C.warn : _C.dim};font-size:10px;font-family:var(--font-mono)`
+    if (job.archived) size.title = `Archived → ${job.archive_path || ''}`
+
     // Status symbol: animated spinner while active, else the badge shape.
     const sym = jobIsActive(job)
       ? makeSpinner(badge.color, 10)
@@ -797,7 +808,13 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     sym.title = badge.label
     if (!jobIsActive(job)) sym.style.color = badge.color
 
-    row.append(idx, label, ts)
+    row.append(idx, label, ts, size)
+    if (job.archived) {
+      const box = Object.assign(document.createElement('span'), { textContent: '📦' })
+      box.style.cssText = 'flex-shrink:0;font-size:10px'
+      box.title = `Archived → ${job.archive_path || ''}`
+      row.append(box)
+    }
     // Out-of-date marker: the design changed since this job was relaxed, so
     // live/production would be inconsistent (only Relax stays available).
     if (jobOutOfDate(job)) {
@@ -903,6 +920,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     }
     if (stopBtn)  stopBtn.style.display  = job.status === 'running' ? '' : 'none'
     if (deleteBtn) deleteBtn.style.display = job.status === 'running' ? 'none' : ''
+    if (archiveBtn) {
+      // Archive/unarchive only for non-running jobs; label tracks archived state.
+      archiveBtn.style.display = job.status === 'running' ? 'none' : ''
+      archiveBtn.textContent = job.archived ? 'Unarchive' : 'Archive'
+    }
 
     _updateButtons(job)
 
@@ -1445,6 +1467,30 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _clearRunCards()   // drop the E-field arrow / anchor glow of the deleted job
     _emitJobSelected()
     _fetchJobs()
+  })
+
+  function _setArchiveProgress(st) {
+    if (!archiveProgressEl) return
+    if (!st) { archiveProgressEl.style.display = 'none'; archiveProgressEl.textContent = ''; return }
+    const pct = st.total_bytes ? Math.round((st.moved_bytes / st.total_bytes) * 100) : 0
+    archiveProgressEl.style.display = ''
+    archiveProgressEl.textContent =
+      `${formatBytes(st.moved_bytes || 0)} / ${formatBytes(st.total_bytes || 0)} (${pct}%)`
+  }
+
+  archiveBtn?.addEventListener('click', async () => {
+    if (!_selectedId) return
+    const job = _selectedJob()
+    if (!job) return
+    archiveBtn.disabled = true; deleteBtn && (deleteBtn.disabled = true)
+    const action = job.archived ? _archive.unarchive : _archive.archive
+    try {
+      await action(job, { onProgress: _setArchiveProgress })
+    } finally {
+      archiveBtn.disabled = false; deleteBtn && (deleteBtn.disabled = false)
+      _setArchiveProgress(null)
+      await _fetchJobs()
+    }
   })
 
   // ── OxDNA display toggle ───────────────────────────────────────────────────

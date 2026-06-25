@@ -618,4 +618,5 @@ def test_align_cluster_edge_adds_no_coverage():
     # the periodic straggler flipped polymerize_periodic_assembly (36 → 37);
     # AF-25's seek_features flipped /design/features/seek (37 → 38);
     # AF-26's return_to_latest flipped /design/loadouts/{id}/select (38 → 39).
-    assert rep["covered"] == 39
+    # crossover_extra_bases flipped the single + batch extra-bases PATCH routes (39 -> 41).
+    assert rep["covered"] == 41
