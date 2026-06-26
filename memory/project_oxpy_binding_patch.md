@@ -1,3 +1,30 @@
+---
+name: oxpy-binding-patch
+description: "The user's ~/oxDNA oxpy build is locally patched to expose BaseForce.F0/.dir read-write (needed for NADOC live-field steering); reapply after any clean rebuild."
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: e4528887-ebff-427d-83cc-f00bd959c679
+---
+
+NADOC's live oxDNA engine (`backend/physics/oxdna_live.py`, AF-21, shipped 2026-06-23) re-aims a uniform electric field LIVE between simulation bursts by mutating `force.F0` / `force.dir` on the field's `ConstantRateForce` handle. Stock oxpy does **not** expose those — only `stiff`/`rate`/`pos0` are bound on `BaseForce`, and `dir` only on `MovingTrap`. (The earlier idea of `ConfigInfo.subscribe("end_of_step", cb)` + `particle.force` injection does NOT work: oxDNA's MD backend fires no per-step event, so the callback never runs.)
+
+**The patch (git-untracked in the user's `~/oxDNA` tree — reapply after any clean clone/rebuild):** two lines added in `~/oxDNA/src/oxpy/bindings_includes/Forces/BaseForce.h`, beside the existing `stiff`/`rate`/`pos0` bindings:
+```cpp
+force.def_readwrite("F0", &BaseForce::_F0, "...");
+force.def_readwrite("dir", &BaseForce::_direction, "...");
+```
+then `cd ~/oxDNA/build && make -j12` (the venv editable-install of `~/oxDNA/build/python` auto-picks-up the refreshed `core.so` — no reinstall).
+
+Without it, `LiveOxdnaSession` / `hox.run_live_field`'s real-oxpy path dies with `AttributeError` on `force.F0`; the gated real-oxpy tests (`pytest.importorskip("oxpy")`) would error rather than skip. The GPU-free path (mock stepper) is unaffected.
+
+oxpy itself was built 2026-06-23 (`-DPython=ON`, CUDA reused) and editable-installed into `.venv`; `import oxpy` works with no PYTHONPATH. See the design-automation loop's `design_automation_backlog.md` Tier-6 as-built note + the AF-21 handoff. Related: [[ssdna-flexible-segments]] is unrelated; physics lives under `oxdna_*`.
+
+
+---
+
+# Detailed build notes (merged from repo topic file)
+
 # oxpy build + field-steering binding patch (oxDNA LIVE)
 
 The oxDNA **LIVE** field feature (`backend/physics/oxdna_live.py`,
