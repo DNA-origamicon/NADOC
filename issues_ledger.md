@@ -810,6 +810,34 @@ pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 wit
   so a future unknown type doesn't silently inherit the move/rotate UI. Route through the panel module; gate vitest
   + smoke + one app exercise (load a headless design carrying the entry). Low priority.
 
+## ISSUE-13 — `resize_strand_ends` re-trims a helix axis to a different endpoint convention than `create_bundle` (geometry-convention off-by-one; ask-first)
+
+- **Status:** `[ ]` OPEN. Discovered 2026-06-26 during AF-30 (`/automate-feature`, strand end-resize headless
+  wrapper). NOT fixed — it's a geometry-convention question (CLAUDE.md: geometry/axis changes ask-first).
+- **Symptom:** `make_bundle_design` (and siblings) set a fresh helix's `axis_end` to
+  `axis_start + length_bp · BDNA_RISE_PER_BP` (for a 42-bp helix: `42·rise ≈ 14.028 nm`). But the axis re-trim
+  inside `resize_strand_ends` (`backend/core/lattice.py:4490`) recomputes the endpoints from the strand-coverage
+  union as `axis_start + (max_bp_index − min_bp_index) · rise` — i.e. `(length_bp − 1)·rise ≈ 13.694 nm`, one
+  rise SHORTER. So the FIRST resize of *any* strand end on a freshly-created bundle silently shifts that helix's
+  `axis_end` by ~0.334 nm even when the resized end is the *other* end, and the shift never reverts.
+- **Impact:** LOW for geometry correctness — **the convention shift does not change the nucleotide count** (the
+  geometry kernel emits per `length_bp`, which is identical under both axis-endpoint conventions; the resize's own
+  intended count change is a separate, correct effect that AF-30's `assert_geometric_length_delta` pins cleanly). The
+  visible effect is the axis-arrow length and any consumer that reads `axis_end` directly. The concrete bite: a
+  `+δ` then `−δ` resize is NOT a `canonical_topology` identity from a raw bundle (the fingerprint includes axis
+  floats), even though the strand bp-ranges restore exactly — AF-30's inverse-pair test works around it by
+  capturing `start` AFTER a settling resize (both ±δ runs then share the re-trim convention).
+- **Where:** `backend/core/lattice.py:4515-4516` (`offset_hi_nm = (hi_bp - old_bp_start) * BDNA_RISE_PER_BP`)
+  vs the `make_bundle_*` constructors' `length_bp · rise`. `shift_domains` (`lattice.py:4554`) uses the same
+  re-trim convention, so it shares the discrepancy.
+- **Desired behavior (ASK USER FIRST — do NOT just patch):** decide which convention is canonical — `length_bp·rise`
+  (axis_end one rise past the last bp center) or `(length_bp−1)·rise` (axis_end at the last bp center) — and make
+  both `create_bundle` and the re-trim agree. This is the same family of three-layer/geometry-boundary question as
+  ISSUE-11; confirm whether downstream geometry/rendering expects the axis to bracket bp centers or span the full
+  bp count before changing either site.
+- **Scope:** a one-line change at one of the two sites IF approved; would let AF-30's inverse pair drop its
+  settling step. Low priority (cosmetic axis offset; no nucleotide-count impact).
+
 ## Next-session handoff
 
 _Living pointer — each session overwrites this. Last updated 2026-06-08 (ISSUE-7 shipped: negative-bp element

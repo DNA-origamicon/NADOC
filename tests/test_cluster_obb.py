@@ -619,4 +619,9 @@ def test_align_cluster_edge_adds_no_coverage():
     # AF-25's seek_features flipped /design/features/seek (37 → 38);
     # AF-26's return_to_latest flipped /design/loadouts/{id}/select (38 → 39).
     # crossover_extra_bases flipped the single + batch extra-bases PATCH routes (39 -> 41).
-    assert rep["covered"] == 41
+    # AF-27's connect_overhangs flipped create_overhang_connection (41 → 42);
+    # the hinge flexible-relax flipped flexible_relax (42 → 43);
+    # AF-31's place_crossover + delete_crossover flipped both (43 → 45).
+    # AF-32's force_ligate + delete_forced_ligation flipped both (45 → 47);
+    # AF-30's strand_end_resize flipped strand-end-resize (47 → 48).
+    assert rep["covered"] == 48

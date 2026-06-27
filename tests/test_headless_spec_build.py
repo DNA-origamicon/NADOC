@@ -1434,4 +1434,10 @@ def test_spec_build_adds_no_coverage():
     # the periodic straggler added polymerize_periodic_assembly: 36 → 37;
     # AF-25's seek_features added /design/features/seek: 37 → 38;
     # AF-26's return_to_latest added /design/loadouts/{id}/select: 38 → 39.
-    assert headless_coverage_report()["covered"] == 41
+    # crossover_extra_bases added the single + batch extra-bases PATCH routes: 39 → 41.
+    # AF-27's connect_overhangs added create_overhang_connection: 41 → 42.
+    # The hinge flexible-relax added flexible_relax: 42 → 43.
+    # AF-31's place_crossover + delete_crossover added both: 43 → 45.
+    # AF-32's force_ligate + delete_forced_ligation added both: 45 → 47.
+    # AF-30's strand_end_resize added strand-end-resize: 47 → 48.
+    assert headless_coverage_report()["covered"] == 48

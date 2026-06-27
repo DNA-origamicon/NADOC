@@ -16,18 +16,28 @@ from fastapi import HTTPException
 import backend.api.doc_context as dc
 from backend.api import headless_build as hb
 from backend.api import state as design_state
+from backend.api.routes import _demo_design
+from backend.core.constants import BDNA_RISE_PER_BP
+from backend.core.flexible_segments import apply_marks
 from backend.core.lattice import overhang_candidate_error
-from backend.core.models import Direction, LatticeType
+from backend.core.models import (
+    ClusterRigidTransform, Direction, Domain, FlexibleSegmentMark, Helix,
+    LatticeType, OverhangSpec, Strand, StrandType, Vec3,
+)
 from backend.core.validator import validate_design
 from tests.automation_harness import (
     assert_circular_disc,
     assert_cluster_in_feature_log,
+    assert_crossover_joins,
     assert_feature_seek,
     assert_cluster_translated,
     assert_deformation_angle,
+    assert_flexible_segments_relaxed,
+    assert_forced_ligation,
     assert_fully_sequenced,
     assert_geometric_length_delta,
     assert_inverse_pair,
+    assert_linker_connects,
     assert_on_deformed_frame,
     assert_roundtrip_stable,
     canonical_topology,
@@ -35,6 +45,46 @@ from tests.automation_harness import (
     headless_coverage_report,
     roundtrip_nadoc,
 )
+
+
+def _seed_two_overhang_leaves():
+    """Demo design + two real extruded-overhang helices (mirrors what Tools →
+    Extrude Overhang leaves), each with a staple whose only domain is the
+    overhang.  The natural fixture for a linker connection: two leaves, each
+    carrying a free overhang tip, ready to be tied together.  Same shape as
+    ``test_overhang_connections._seed_with_real_oh_domains`` — a known-valid
+    ds polarity pair (both 5p, both attach=free_end)."""
+    base = _demo_design()
+    oh_helix_a = Helix(
+        id="oh_helix_a", axis_start=Vec3(x=2.5, y=0.0, z=0.0),
+        axis_end=Vec3(x=2.5, y=0.0, z=8 * BDNA_RISE_PER_BP),
+        phase_offset=0.0, length_bp=8, grid_pos=(0, 0),
+    )
+    oh_helix_b = Helix(
+        id="oh_helix_b", axis_start=Vec3(x=5.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=5.0, y=0.0, z=8 * BDNA_RISE_PER_BP),
+        phase_offset=0.0, length_bp=8, grid_pos=(0, 3),
+    )
+    oh_strand_a = Strand(
+        id="oh_strand_a",
+        domains=[Domain(helix_id="oh_helix_a", start_bp=0, end_bp=7,
+                        direction=Direction.FORWARD, overhang_id="oh_a_5p")],
+        strand_type=StrandType.STAPLE,
+    )
+    oh_strand_b = Strand(
+        id="oh_strand_b",
+        domains=[Domain(helix_id="oh_helix_b", start_bp=0, end_bp=7,
+                        direction=Direction.REVERSE, overhang_id="oh_b_5p")],
+        strand_type=StrandType.STAPLE,
+    )
+    return base.model_copy(update={
+        "helices": [*base.helices, oh_helix_a, oh_helix_b],
+        "strands": [*base.strands, oh_strand_a, oh_strand_b],
+        "overhangs": [
+            OverhangSpec(id="oh_a_5p", helix_id="oh_helix_a", strand_id="oh_strand_a", label="OHA"),
+            OverhangSpec(id="oh_b_5p", helix_id="oh_helix_b", strand_id="oh_strand_b", label="OHB"),
+        ],
+    })
 from tests.conftest import SIX_HB_CELLS, TEETH_CELLS, TEETH_PASSES
 
 
@@ -218,6 +268,136 @@ def test_auto_op_chain_routes_a_full_18hb():
         ]
 
 
+# ── Manual crossover place / delete wrappers (AF-31) ───────────────────────────────
+# HC bow-right table (mirrors tests/test_crossover_placement.py): the pure nick-bp
+# lookup the cadnano editor uses.  A staple crossover between col-adjacent cells
+# (0,0)↔(0,1) is valid at bp 6, 7 (and +21n repeats).
+
+_HC_PERIOD = 21
+_HC_STAP_BOW_RIGHT = frozenset({0, 7, 14})
+
+
+def _staple_nick_positions(bp: int, dir_a: Direction, dir_b: Direction) -> tuple[int, int]:
+    bow_dir = +1 if (bp % _HC_PERIOD) in _HC_STAP_BOW_RIGHT else -1
+    lower_bp = bp - 1 if bow_dir == +1 else bp
+    nick_a = lower_bp if dir_a == Direction.FORWARD else lower_bp + 1
+    nick_b = lower_bp if dir_b == Direction.FORWARD else lower_bp + 1
+    return nick_a, nick_b
+
+
+def _place_one_staple_crossover(bp: int = 7):
+    """Build a 2-helix HC bundle and place ONE staple crossover at *bp* between the
+    col-adjacent cells (0,0)↔(0,1).  Returns (design, half_a, half_b, nick_a, nick_b)
+    with the design left active in the current scratch session."""
+    d = hb.create_bundle([[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb")
+    ha = next(h.id for h in d.helices if h.grid_pos == (0, 0))
+    hb_id = next(h.id for h in d.helices if h.grid_pos == (0, 1))
+    # even parity at (0,0): scaffold FORWARD → staple REVERSE on A, FORWARD on B.
+    dir_a, dir_b = Direction.REVERSE, Direction.FORWARD
+    nick_a, nick_b = _staple_nick_positions(bp, dir_a, dir_b)
+    d = hb.place_crossover((ha, bp, dir_a), (hb_id, bp, dir_b), nick_a, nick_b)
+    return d, (ha, bp, dir_a), (hb_id, bp, dir_b), nick_a, nick_b
+
+
+def test_place_crossover_joins_two_helices():
+    """A single placed staple crossover nicks + ligates + records: the two staple
+    fragments merge into one strand spanning both helices, and the record names the
+    two half-sites.  Pinned by assert_crossover_joins (the ligated outcome)."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        d, half_a, half_b, _na, _nb = _place_one_staple_crossover(7)
+        xid = d.crossovers[-1].id
+        assert_crossover_joins(
+            d, xid, half_a=(half_a[0], half_a[1]), half_b=(half_b[0], half_b[1]),
+            expect_ligated=True,
+        )
+        # the place is a logged minor op (a child of the open Fine Routing cluster)
+        assert any(
+            getattr(e, "op_kind", None) == "fine-routing"
+            or getattr(e, "kind", None) == "routing-cluster"
+            for e in d.feature_log
+        ) or len(d.crossovers) == 1
+
+
+def test_delete_then_place_crossover_is_inverse():
+    """delete (desplice the merged strand) then place (re-nick-no-op + re-ligate +
+    re-record) restores the topology exactly — the manual-crossover inverse pair.
+
+    NB the inverse runs as delete→place (not place→delete): place introduces nicks
+    that a desplice does not undo, so place→delete on a fresh bundle would leave the
+    extra nicks.  Starting from a design that already carries the crossover, delete
+    removes it and place puts it back."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        start, half_a, half_b, nick_a, nick_b = _place_one_staple_crossover(7)
+        xid = start.crossovers[-1].id
+
+        def _delete():
+            return hb.delete_crossover(xid)
+
+        def _place():
+            return hb.place_crossover(half_a, half_b, nick_a, nick_b)
+
+        assert_inverse_pair(start, _delete, _place)
+
+
+# ── AF-32: forced-ligation wrapper (scripted-manual entry) ─────────────────────
+
+def _two_scaffold_strands(design):
+    """Return (scaf_a_id, scaf_b_id) — the scaffold strands on cells (0,0) and (0,1)
+    of a 2-helix bundle (distinct strands ready to force-ligate)."""
+    ha = next(h.id for h in design.helices if h.grid_pos == (0, 0))
+    hb_id = next(h.id for h in design.helices if h.grid_pos == (0, 1))
+    scaf_a = scaf_b = None
+    for s in design.strands:
+        if s.strand_type != StrandType.SCAFFOLD:
+            continue
+        hids = {d.helix_id for d in s.domains}
+        if ha in hids:
+            scaf_a = s
+        if hb_id in hids:
+            scaf_b = s
+    assert scaf_a is not None and scaf_b is not None
+    assert scaf_a.id != scaf_b.id
+    return scaf_a.id, scaf_b.id
+
+
+def test_force_ligate_merges_and_records():
+    """force_ligate connects a 3' end to a 5' end across two helices: the two
+    scaffold strands merge into one and a ForcedLigation record carries the right
+    endpoints + survives a .nadoc round-trip.  Pinned by assert_forced_ligation."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        before = hb.create_bundle([[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB,
+                                  name="2hb")
+        scaf_a, scaf_b = _two_scaffold_strands(before)
+        after = hb.force_ligate(scaf_a, scaf_b)
+        fl_id = after.forced_ligations[-1].id
+        assert_forced_ligation(
+            before, after, fl_id,
+            three_prime_strand_id=scaf_a, five_prime_strand_id=scaf_b,
+        )
+        # forced ligation creates NO crossover record (it is not a canonical site).
+        assert len(after.crossovers) == 0
+
+
+def test_force_ligate_then_delete_is_inverse():
+    """force_ligate (merge two strands) then delete_forced_ligation (split back)
+    restores the topology exactly — the forced-ligation inverse pair.  Unlike a
+    placed crossover, forced ligation introduces no nicks, so forward=ligate /
+    inverse=delete is a clean pair."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        start = hb.create_bundle([[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB,
+                                 name="2hb")
+        scaf_a, scaf_b = _two_scaffold_strands(start)
+
+        def _ligate():
+            return hb.force_ligate(scaf_a, scaf_b)
+
+        def _delete():
+            fl_id = design_state.get_or_404().forced_ligations[-1].id
+            return hb.delete_forced_ligation(fl_id)
+
+        assert_inverse_pair(start, _ligate, _delete)
+
+
 def test_overhang_extrude_places_a_valid_candidate():
     """A routed 6hb has valid overhang candidates; extruding into one adds an
     overhang + helix and logs the op.  Cells the UI tool would not offer are
@@ -280,6 +460,153 @@ def test_overhang_extrude_rejects_a_non_candidate_placement():
                 neighbor_row=nr, neighbor_col=nc, length_bp=8,
             )
         assert exc.value.status_code == 400
+
+
+# ── connect_overhangs (AF-27 — the hinge-confinement keystone) ──────────────────
+
+def test_connect_overhangs_ds_ties_two_leaves():
+    """The wrapper tie two overhang leaves with a length-defined ds linker: the
+    new connection wires the two named overhangs, generates the linker strands +
+    a virtual bridge helix, carries the requested bridge length, and survives a
+    .nadoc round-trip — proven by the reusable assert_linker_connects oracle.
+    Also flips the route's headless coverage (the wrapper imports the real
+    create_overhang_connection handler)."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        design_state.set_design(_seed_two_overhang_leaves())
+        d = hb.connect_overhangs(
+            "oh_a_5p", "oh_b_5p",
+            overhang_a_attach="free_end", overhang_b_attach="free_end",
+            linker_type="ds", length_value=6, length_unit="bp",
+        )
+        # The route generated the linker complement strands + virtual bridge helix.
+        assert any(h.id.startswith("__lnk__") for h in d.helices)
+        conn = d.overhang_connections[-1]
+        assert_linker_connects(
+            d, conn.id, overhang_a="oh_a_5p", overhang_b="oh_b_5p", bridge_bp=6,
+        )
+
+        report = headless_coverage_report()
+        assert any(
+            r["path"].endswith("/design/overhang-connections")
+            for r in report["covered_routes"]
+        ), "POST /design/overhang-connections should now be headless-covered"
+
+
+def test_connect_overhangs_nm_length_lowers_to_bp():
+    """An nm contour length lowers to the bp count the linker generator uses
+    (B-DNA rise) — the user-meaningful knob the wrapper forwards faithfully."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        design_state.set_design(_seed_two_overhang_leaves())
+        d = hb.connect_overhangs(
+            "oh_a_5p", "oh_b_5p",
+            overhang_a_attach="free_end", overhang_b_attach="free_end",
+            linker_type="ds", length_value=6 * BDNA_RISE_PER_BP, length_unit="nm",
+        )
+        conn = d.overhang_connections[-1]
+        # 6 bp × rise, back-converted, must round to 6 bp.
+        assert_linker_connects(
+            d, conn.id, overhang_a="oh_a_5p", overhang_b="oh_b_5p", bridge_bp=6,
+        )
+
+
+def test_connect_overhangs_rejects_invalid_polarity():
+    """The wrapper enforces the route's Watson-Crick polarity rule: a mismatched
+    ds combo (free_end ↔ root on two same-polarity overhangs) is rejected with
+    HTTP 400, so headless generation can't wire a non-physical linker."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        design_state.set_design(_seed_two_overhang_leaves())
+        with pytest.raises(HTTPException) as exc:
+            hb.connect_overhangs(
+                "oh_a_5p", "oh_b_5p",
+                overhang_a_attach="free_end", overhang_b_attach="root",
+                linker_type="ds", length_value=6, length_unit="bp",
+            )
+        assert exc.value.status_code == 400
+
+
+# ── relax_flexible_segments (hinge ssDNA scaffold-tether minimisation) ──────────
+
+_FLEX_L = 12
+_FLEX_SS_A = (9, 11)
+_FLEX_SS_B = (0, 2)
+
+
+def _overstretched_flexible_hinge():
+    """Two single-helix clusters joined by one 6-base unpaired-scaffold ssDNA run
+    (contour 6 × 0.59 nm), with one leaf posed far away so the tether is grossly
+    overstretched — the natural fixture for a flexible-segment relax.  Mirrors
+    test_flexible_segments._hinge_design + _mark_run, then poses cl_b."""
+    from backend.core.constants import BDNA_RISE_PER_BP
+    h_a = Helix(id="h_a", axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+                axis_end=Vec3(x=0.0, y=0.0, z=_FLEX_L * BDNA_RISE_PER_BP),
+                phase_offset=0.0, length_bp=_FLEX_L, grid_pos=(0, 0))
+    h_b = Helix(id="h_b", axis_start=Vec3(x=2.5, y=0.0, z=0.0),
+                axis_end=Vec3(x=2.5, y=0.0, z=_FLEX_L * BDNA_RISE_PER_BP),
+                phase_offset=0.0, length_bp=_FLEX_L, grid_pos=(0, 1))
+    scaffold = Strand(id="scaf", strand_type=StrandType.SCAFFOLD, domains=[
+        Domain(helix_id="h_a", start_bp=0, end_bp=8, direction=Direction.FORWARD),
+        Domain(helix_id="h_a", start_bp=_FLEX_SS_A[0], end_bp=_FLEX_SS_A[1],
+               direction=Direction.FORWARD, overhang_id="ss_a"),
+        Domain(helix_id="h_b", start_bp=_FLEX_SS_B[0], end_bp=_FLEX_SS_B[1],
+               direction=Direction.FORWARD, overhang_id="ss_b"),
+        Domain(helix_id="h_b", start_bp=3, end_bp=11, direction=Direction.FORWARD),
+    ])
+    staple_a = Strand(id="stap_a", strand_type=StrandType.STAPLE,
+                      domains=[Domain(helix_id="h_a", start_bp=0, end_bp=8, direction=Direction.REVERSE)])
+    staple_b = Strand(id="stap_b", strand_type=StrandType.STAPLE,
+                      domains=[Domain(helix_id="h_b", start_bp=3, end_bp=11, direction=Direction.REVERSE)])
+    marks = [
+        FlexibleSegmentMark(strand_id="scaf", domain_index=1, bp_index=bp, direction=Direction.FORWARD)
+        for bp in range(_FLEX_SS_A[0], _FLEX_SS_A[1] + 1)
+    ] + [
+        FlexibleSegmentMark(strand_id="scaf", domain_index=2, bp_index=bp, direction=Direction.FORWARD)
+        for bp in range(_FLEX_SS_B[0], _FLEX_SS_B[1] + 1)
+    ]
+    d = _demo_design().model_copy(update={
+        "helices": [h_a, h_b],
+        "strands": [scaffold, staple_a, staple_b],
+        "cluster_transforms": [
+            ClusterRigidTransform(id="cl_a", name="Arm A", helix_ids=["h_a"]),
+            # cl_b posed 10 nm away → the tether is grossly overstretched.
+            ClusterRigidTransform(id="cl_b", name="Arm B", helix_ids=["h_b"], translation=[10.0, 0.0, 0.0]),
+        ],
+        "crossovers": [], "forced_ligations": [],
+        "flexible_segment_marks": marks,
+    })
+    return apply_marks(d)  # derive the FlexibleConnection from the marks
+
+
+def test_relax_flexible_segments_pulls_tether_taut():
+    """The headless relax pulls the overstretched hinge's leaves together until the
+    ssDNA tether sits at its contour length, writes ONE flexible-relax feature-log
+    entry, and moves only the rigid pose (topology untouched) — proven by the
+    reusable assert_flexible_segments_relaxed oracle.  Also flips headless coverage
+    (the wrapper imports the real flexible_relax route handler)."""
+    before = _overstretched_flexible_hinge()
+    assert before.flexible_connections, "fixture must carry a flexible connection"
+    design_state.set_design(before)
+
+    after = hb.relax_flexible_segments(scope="all")
+
+    assert after.feature_log[-1].op_kind == "flexible-relax"
+    assert_flexible_segments_relaxed(before, after)
+
+    report = headless_coverage_report()
+    assert any(
+        r["path"].endswith("/design/flexible-relax") for r in report["covered_routes"]
+    ), "POST /design/flexible-relax should now be headless-covered"
+
+
+def test_relax_flexible_segments_noop_writes_no_entry():
+    """When nothing is overstretched the wrapper does NOT call the route — so a
+    relaxed design gains no empty feature-log entry (the no-op guard)."""
+    relaxed = _overstretched_flexible_hinge()
+    design_state.set_design(relaxed)
+    once = hb.relax_flexible_segments(scope="all")
+    log_len = len(once.feature_log)
+    # Second relax: already taut → no-op, no new entry.
+    twice = hb.relax_flexible_segments(scope="all")
+    assert len(twice.feature_log) == log_len
 
 
 def test_adjacent_nick_overhangs_are_independently_placeable():
@@ -491,6 +818,68 @@ def test_nick_ligate_delete_flip_routes_to_covered():
     rep = headless_coverage_report()
     covered = {r["endpoint"] for r in rep["covered_routes"]}
     assert {"add_nick", "ligate_strand", "delete_strand"} <= covered
+
+
+# ── Strand end-resize wrapper (AF-30) ─────────────────────────────────────────────
+
+
+def _scaffold_on_grid(design, grid_pos):
+    """Return (helix_id, scaffold_strand_id) for the single scaffold strand whose
+    terminal domain sits on the helix at ``grid_pos`` of a 2hb bundle.  That
+    scaffold defines its helix's bp span, so resizing its 3′ end grows/shrinks the
+    helix geometry one bp at a time."""
+    hid = next(h.id for h in design.helices if h.grid_pos == grid_pos)
+    sid = next(
+        s.id for s in design.strands
+        if s.strand_type == StrandType.SCAFFOLD and s.domains[0].helix_id == hid
+    )
+    return hid, sid
+
+
+def test_resize_strand_end_grows_helix_geometry_by_exactly_delta():
+    """A +δ resize of the scaffold's 3′ end grows the helix's emitted geometry by
+    exactly δ bp (one nucleotide per strand → δ×2).  Reuses the AF-3 conservation
+    oracle: a resize that silently clamps, no-ops, hits the wrong helix, or drops the
+    inline-overhang split would fail the per-helix length-delta count."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        d0 = hb.create_bundle(
+            [[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb",
+        )
+        hid, sid = _scaffold_on_grid(d0, (0, 0))
+        assert_geometric_length_delta(
+            d0, lambda: hb.resize_strand_end(sid, hid, "3p", 5), 5, helix_id=hid,
+        )
+
+
+def test_resize_strand_end_plus_then_minus_is_topology_identity():
+    """+δ then −δ at the same end restores the design exactly (reuses the AF-2
+    inverse-pair oracle, with its forward-must-mutate guard — a resize that no-ops
+    or only half-undoes would fail).
+
+    The ``start`` is captured AFTER one settling resize: ``create_bundle`` sets a
+    helix's ``axis_end`` to ``length_bp·rise`` while ``resize_strand_ends`` re-trims
+    it to ``(max_index−min_index)·rise`` (one rise shorter), so the FIRST resize off a
+    freshly-created bundle shifts that convention and never returns — no ±δ pair from
+    a raw bundle restores ``canonical_topology`` (which fingerprints axis floats).
+    From a settled start both ±δ runs use the re-trim convention, so the pair is a
+    clean inverse.  (The axis-endpoint convention mismatch is logged as ISSUE-13.)"""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle([[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb")
+        d0 = design_state.get_or_404()
+        hid, sid = _scaffold_on_grid(d0, (0, 0))
+        start = hb.resize_strand_end(sid, hid, "3p", 10).model_copy(deep=True)
+        assert_inverse_pair(
+            start,
+            forward=lambda: hb.resize_strand_end(sid, hid, "3p", -5),
+            inverse=lambda: hb.resize_strand_end(sid, hid, "3p", 5),
+        )
+
+
+def test_resize_strand_end_flips_route_to_covered():
+    """The wrapper registers strand_end_resize as covered (function-identity audit)."""
+    rep = headless_coverage_report()
+    covered = {r["endpoint"] for r in rep["covered_routes"]}
+    assert "strand_end_resize" in covered
 
 
 # ── Loop/skip wrappers (AF-3) ─────────────────────────────────────────────────────

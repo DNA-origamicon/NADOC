@@ -11,9 +11,13 @@ itself is trustworthy:
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from backend.core.models import LatticeType, StrandType
+
+_PRIMITIVES_DIR = Path("workspace/Primitives")
 from tests.automation_harness import (
     assert_deformation_angle,
     assert_roundtrip_stable,
@@ -102,15 +106,15 @@ def test_coverage_report_shape_and_known_wrappers():
 def test_coverage_report_lists_real_backlog_routes():
     """A still-unwrapped backlog route shows up as uncovered.
 
-    AF-15 Phase 1 covered POST /design/cluster + PATCH /design/cluster/{id}, so this
-    re-points to /design/strand-end-resize (a drag-arrow resize op with a coord route
-    — headless-reachable, a later AF candidate) — still unwrapped today.
+    AF-30 covered POST /design/strand-end-resize, so this re-points to
+    /design/relax-bond (the generic bond-relax route — an AF-27 P2 candidate, still
+    unwrapped today).
     """
     report = headless_coverage_report()
     covered_paths = {r["path"] for r in report["covered_routes"]}
     uncovered_paths = {r["path"] for r in report["uncovered_routes"]}
-    assert any(p.endswith("/design/strand-end-resize") for p in uncovered_paths)
-    assert not any(p.endswith("/design/strand-end-resize") for p in covered_paths)
+    assert any(p.endswith("/design/relax-bond") for p in uncovered_paths)
+    assert not any(p.endswith("/design/relax-bond") for p in covered_paths)
 
 
 def test_coverage_report_marks_af2_routes_covered():
@@ -148,6 +152,299 @@ def test_coverage_report_marks_af9_gear_routes_covered():
     assert {"create_gear_relation", "patch_joint"} <= covered
 
 
+def test_coverage_report_marks_af31_crossover_routes_covered():
+    """AF-31 flipped place_crossover + delete_crossover (manual crossover) → covered."""
+    report = headless_coverage_report()
+    covered = {r["endpoint"] for r in report["covered_routes"]}
+    assert {"place_crossover", "delete_crossover"} <= covered
+
+
+def test_coverage_report_marks_af30_strand_end_resize_covered():
+    """AF-30 flipped strand_end_resize (the cadnano drag-arrow resize) → covered."""
+    report = headless_coverage_report()
+    covered = {r["endpoint"] for r in report["covered_routes"]}
+    assert "strand_end_resize" in covered
+
+
+def test_coverage_report_marks_af32_forced_ligation_routes_covered():
+    """AF-32 flipped forced_ligation + delete_forced_ligation (manual force-ligate) → covered."""
+    report = headless_coverage_report()
+    covered = {r["endpoint"] for r in report["covered_routes"]}
+    assert {"forced_ligation", "delete_forced_ligation"} <= covered
+
+
+# ── The forced-ligation oracle PASSES on a real ligation and FIRES otherwise (AF-32) ──
+
+def _force_ligated_two_helix():
+    """Active scratch session: a 2-helix HC bundle whose two scaffold strands are
+    forced-ligated.  Returns (before, after, fl_id, scaf_a_id, scaf_b_id)."""
+    from backend.api import headless_build as hb
+    from backend.core.models import StrandType
+
+    before = hb.create_bundle([[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb")
+    ha = next(h.id for h in before.helices if h.grid_pos == (0, 0))
+    hb_id = next(h.id for h in before.helices if h.grid_pos == (0, 1))
+    scaf_a = scaf_b = None
+    for s in before.strands:
+        if s.strand_type != StrandType.SCAFFOLD:
+            continue
+        hids = {d.helix_id for d in s.domains}
+        if ha in hids:
+            scaf_a = s
+        if hb_id in hids:
+            scaf_b = s
+    after = hb.force_ligate(scaf_a.id, scaf_b.id)
+    return before, after, after.forced_ligations[-1].id, scaf_a.id, scaf_b.id
+
+
+def test_assert_forced_ligation_passes_on_real_ligation():
+    """The oracle passes on a real forced ligation (record + merge + round-trip)."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_forced_ligation
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        before, after, fl_id, sa, sb = _force_ligated_two_helix()
+        assert_forced_ligation(before, after, fl_id,
+                               three_prime_strand_id=sa, five_prime_strand_id=sb)
+
+
+def test_assert_forced_ligation_fires_on_missing_record():
+    """A bogus fl_id must raise (clause 2)."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_forced_ligation
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        before, after, _fl_id, sa, sb = _force_ligated_two_helix()
+        with pytest.raises(AssertionError):
+            assert_forced_ligation(before, after, "nope",
+                                   three_prime_strand_id=sa, five_prime_strand_id=sb)
+
+
+def test_assert_forced_ligation_fires_on_swapped_endpoints():
+    """Naming the 3' and 5' strands the wrong way round must raise (the stored
+    endpoint no longer matches the re-derived one — clause 2)."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_forced_ligation
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        before, after, fl_id, sa, sb = _force_ligated_two_helix()
+        with pytest.raises(AssertionError):
+            assert_forced_ligation(before, after, fl_id,
+                                   three_prime_strand_id=sb, five_prime_strand_id=sa)
+
+
+def test_assert_forced_ligation_fires_when_not_merged():
+    """A FL record present with correct endpoints but the strands NOT merged
+    (count unchanged) must raise (clause 3 — the backbone-merge pin).  Built by
+    re-attaching the record to the un-merged `before` strand graph.  (Clause 5's
+    round-trip persistence is exercised positively by the passing test, which
+    re-reads the record after a real export→import.)"""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_forced_ligation
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        before, after, fl_id, sa, sb = _force_ligated_two_helix()
+        fl = after.forced_ligations[-1]
+        faux = before.model_copy(update={"forced_ligations": [fl]})
+        with pytest.raises(AssertionError):
+            assert_forced_ligation(before, faux, fl_id,
+                                   three_prime_strand_id=sa, five_prime_strand_id=sb)
+
+
+# ── The hinge golden-equality oracle PASSES on the built primitive + FIRES (AF-33) ──
+
+_HINGE_GOLDEN = _PRIMITIVES_DIR / "2x2_single_hinge_link.nadoc"
+
+
+@pytest.mark.skipif(
+    not _HINGE_GOLDEN.exists(),
+    reason=f"hinge primitive golden missing: {_HINGE_GOLDEN} (hand-built, not in repo)",
+)
+def test_assert_matches_primitive_passes_on_built_hinge():
+    """The oracle passes when the code-built 2x2 hinge reproduces the golden."""
+    from backend.api.headless_hinge_build import build_hinge_primitive
+    from tests.automation_harness import assert_matches_primitive
+
+    d = build_hinge_primitive("2x2_single_hinge_link")
+    assert_matches_primitive(d, "2x2_single_hinge_link", primitives_dir=_PRIMITIVES_DIR)
+
+
+@pytest.mark.skipif(
+    not _HINGE_GOLDEN.exists(),
+    reason=f"hinge primitive golden missing: {_HINGE_GOLDEN} (hand-built, not in repo)",
+)
+def test_assert_matches_primitive_fires_on_dropped_link():
+    """Dropping a cross-gap FL link must raise — the FL-set check is load-bearing
+    because canonical_topology is blind to forced_ligations (clause 3)."""
+    from backend.api.headless_hinge_build import build_hinge_primitive
+    from tests.automation_harness import assert_matches_primitive
+
+    d = build_hinge_primitive("2x2_single_hinge_link")
+    maimed = d.model_copy(update={"forced_ligations": d.forced_ligations[:1]})
+    with pytest.raises(AssertionError, match="forced-ligation set"):
+        assert_matches_primitive(maimed, "2x2_single_hinge_link", primitives_dir=_PRIMITIVES_DIR)
+
+
+@pytest.mark.skipif(
+    not _HINGE_GOLDEN.exists(),
+    reason=f"hinge primitive golden missing: {_HINGE_GOLDEN} (hand-built, not in repo)",
+)
+def test_assert_matches_primitive_fires_on_wrong_topology():
+    """A design with the wrong leaf layout (a plain bundle, no gap) must raise on
+    the canonical-topology clause (clause 2)."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_matches_primitive
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        wrong = hb.create_bundle(
+            [[0, 0], [0, 1]], 32, lattice=LatticeType.SQUARE, name="not-a-hinge",
+        )
+        with pytest.raises(AssertionError, match="topology"):
+            assert_matches_primitive(
+                wrong, "2x2_single_hinge_link", primitives_dir=_PRIMITIVES_DIR)
+
+
+def test_assert_matches_primitive_fires_on_unknown_name():
+    """An unknown primitive name fails the catalog-resolution guard (clause 1)."""
+    from backend.api.headless_hinge_build import build_hinge_primitive
+    from tests.automation_harness import assert_matches_primitive
+
+    d = build_hinge_primitive("2x2_single_hinge_link")
+    with pytest.raises(AssertionError, match="no primitive named"):
+        assert_matches_primitive(d, "no_such_primitive", primitives_dir=_PRIMITIVES_DIR)
+
+
+# ── The scaffold-routing-compliance oracle PASSES on a real route, FIRES otherwise (AF-34) ──
+
+def test_scaffold_compliant_oracle_passes_on_seamless_route():
+    """A genuine seamless autoscaffold output (end crossovers in extended ssDNA) is
+    compliant when checked with require_seams=False — the green path."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_scaffold_routing_compliant
+    from tests.conftest import SIX_HB_CELLS
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(SIX_HB_CELLS, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
+        out = hb.auto_scaffold(seamless=True)
+        scaffolds = assert_scaffold_routing_compliant(out, require_seams=False)
+        assert len(scaffolds) == 1
+
+
+def test_scaffold_compliant_oracle_fires_on_seamless_raster():
+    """The load-bearing red: a seamless route has NO seam crossovers, so checking it
+    with require_seams=True raises (the exact LESSONS H8 regression — a seamless
+    raster passed off as a seamed routing)."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_scaffold_routing_compliant
+    from tests.conftest import SIX_HB_CELLS
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(SIX_HB_CELLS, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
+        out = hb.auto_scaffold(seamless=True)
+        with pytest.raises(AssertionError, match="not compliant"):
+            assert_scaffold_routing_compliant(out, require_seams=True)
+
+
+def test_scaffold_compliant_oracle_fires_on_no_scaffold():
+    """The non-vacuity guard: a design with no scaffold strand raises rather than
+    passing vacuously (the invariant checker returns [] on an un-routed design)."""
+    from backend.core.models import Design
+    from tests.automation_harness import assert_scaffold_routing_compliant
+
+    with pytest.raises(AssertionError, match="no scaffold strand"):
+        assert_scaffold_routing_compliant(Design(), require_seams=False)
+
+
+# ── The crossover-join oracle PASSES on a real place and FIRES otherwise (AF-31) ──
+
+def _cycle_unligated_design():
+    """A linear scaffold + one crossover whose two halves point at that strand's 3'
+    end and 5' start — ligation would close a circle, so it stays RECORDED but
+    UNLIGATED (mirrors tests/test_crud._cycle_design, a tested route behavior)."""
+    from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.models import (
+        Crossover, DesignMetadata, Design, Direction, Domain, HalfCrossover,
+        Helix, Strand, StrandType, Vec3,
+    )
+
+    helix = Helix(id="h0", axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+                  axis_end=Vec3(x=0.0, y=0.0, z=42 * BDNA_RISE_PER_BP), length_bp=42)
+    scaffold = Strand(
+        id="s0",
+        domains=[Domain(helix_id="h0", start_bp=0, end_bp=41, direction=Direction.FORWARD)],
+        strand_type=StrandType.SCAFFOLD,
+    )
+    xover = Crossover(
+        id="x_cycle",
+        half_a=HalfCrossover(helix_id="h0", index=41, strand=Direction.FORWARD),
+        half_b=HalfCrossover(helix_id="h0", index=0, strand=Direction.FORWARD),
+    )
+    return Design(id="d_cycle", helices=[helix], strands=[scaffold], crossovers=[xover],
+                  lattice_type=LatticeType.HONEYCOMB, metadata=DesignMetadata(name="cycle"))
+
+
+def _place_ligated_crossover():
+    """Active scratch session: a 2-helix HC bundle with ONE staple crossover placed
+    at bp 7 (ligated).  Returns (design, xover_id, half_a, half_b) with half_* as
+    ``(helix_id, index)`` pairs."""
+    from backend.api import headless_build as hb
+    from backend.core.models import Direction
+
+    d = hb.create_bundle([[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb")
+    ha = next(h.id for h in d.helices if h.grid_pos == (0, 0))
+    hb_id = next(h.id for h in d.helices if h.grid_pos == (0, 1))
+    # bp 7 ∈ HC staple bow-right {0,7,14} → lower_bp = 6; A REVERSE → 7, B FORWARD → 6.
+    d = hb.place_crossover((ha, 7, Direction.REVERSE), (hb_id, 7, Direction.FORWARD), 7, 6)
+    return d, d.crossovers[-1].id, (ha, 7), (hb_id, 7)
+
+
+def test_assert_crossover_joins_passes_on_ligated_place():
+    """The oracle passes on a real placed-and-ligated crossover."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_crossover_joins
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        d, xid, half_a, half_b = _place_ligated_crossover()
+        assert_crossover_joins(d, xid, half_a=half_a, half_b=half_b, expect_ligated=True)
+
+
+def test_assert_crossover_joins_handles_unligated_outcome():
+    """The oracle accepts the recorded-but-unligated (cycle-avoidance) outcome when
+    expect_ligated=False — and FIRES if that design is asserted as ligated."""
+    from tests.automation_harness import assert_crossover_joins
+
+    d = _cycle_unligated_design()
+    # expect_ligated=False is the correct outcome here.
+    assert_crossover_joins(d, "x_cycle", half_a=("h0", 41), half_b=("h0", 0),
+                           expect_ligated=False)
+    # asserting it ligated must go red.
+    with pytest.raises(AssertionError):
+        assert_crossover_joins(d, "x_cycle", half_a=("h0", 41), half_b=("h0", 0),
+                               expect_ligated=True)
+
+
+def test_assert_crossover_joins_fires_on_missing_record():
+    """A bogus crossover id must raise (clause 1)."""
+    from tests.automation_harness import assert_crossover_joins
+
+    d = _cycle_unligated_design()
+    with pytest.raises(AssertionError):
+        assert_crossover_joins(d, "nope", half_a=("h0", 41), half_b=("h0", 0),
+                               expect_ligated=False)
+
+
+def test_assert_crossover_joins_fires_on_wrong_half_site():
+    """A record present but at a different half-site must raise (clause 2)."""
+    from backend.api import headless_build as hb
+    from tests.automation_harness import assert_crossover_joins
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        d, xid, half_a, half_b = _place_ligated_crossover()
+        with pytest.raises(AssertionError):
+            assert_crossover_joins(d, xid, half_a=half_a, half_b=(half_b[0], 99),
+                                   expect_ligated=True)
+
+
 def test_oxdna_coverage_report_separate_from_design_assembly():
     """AF-13's physical-layer audit (oxdna_coverage_report) is scoped to /oxdna and
     does NOT perturb the design/assembly coverage number."""
@@ -155,7 +452,11 @@ def test_oxdna_coverage_report_separate_from_design_assembly():
 
     # AF-25 added seek_features (37→38); AF-26 added return_to_latest/select_loadout (38→39).
     # crossover_extra_bases added the single + batch extra-bases PATCH routes (39->41).
-    assert headless_coverage_report()["covered"] == 41  # /oxdna audit is separate
+    # AF-27 P1 connect_overhangs (41→42); AF-29 relax_flexible_segments (42→43);
+    # AF-31 place_crossover + delete_crossover (43→45);
+    # AF-32 force_ligate + delete_forced_ligation (45→47);
+    # AF-30 strand_end_resize (47→48).
+    assert headless_coverage_report()["covered"] == 48  # /oxdna audit is separate
     ox = oxdna_coverage_report()
     assert ox["total"] == ox["covered"] + ox["uncovered"]
     covered = {r["endpoint"] for r in ox["covered_routes"]}
@@ -579,6 +880,129 @@ def test_binding_resolves_oracle_fires_on_degenerate_self_pair():
         broken = a.model_copy(update={"overhang_bindings": [same]})
         with pytest.raises(AssertionError, match="sub-domain with itself"):
             assert_binding_resolves(broken, bid)
+
+
+# ── The linker-connection oracle PASSES on a real tie and FIRES otherwise (AF-27) ──
+
+def _build_linked_leaves():
+    """Two overhang leaves tied by a ds linker (length 6 bp), captured as a
+    standalone design + the new connection id."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from tests.test_headless_build import _seed_two_overhang_leaves
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        design_state.set_design(_seed_two_overhang_leaves())
+        d = hb.connect_overhangs(
+            "oh_a_5p", "oh_b_5p",
+            overhang_a_attach="free_end", overhang_b_attach="free_end",
+            linker_type="ds", length_value=6, length_unit="bp",
+        )
+        return d.model_copy(deep=True), d.overhang_connections[-1].id
+
+
+def test_linker_connects_oracle_passes_on_real_connection():
+    """assert_linker_connects is green when the connection wires the two named
+    overhangs at the requested bridge length — and stays green across round-trip."""
+    from tests.automation_harness import assert_linker_connects
+
+    d, cid = _build_linked_leaves()
+    reimported = assert_linker_connects(
+        d, cid, overhang_a="oh_a_5p", overhang_b="oh_b_5p", bridge_bp=6,
+    )
+    assert any(c.id == cid for c in reimported.overhang_connections)
+
+
+def test_linker_connects_oracle_fires_when_no_connection():
+    """Red-test: the leaves carry the two overhangs but NO connection — the
+    oracle raises (the wiring the structure fingerprint can't see is absent)."""
+    from tests.automation_harness import assert_linker_connects
+    from tests.test_headless_build import _seed_two_overhang_leaves
+
+    bare = _seed_two_overhang_leaves()
+    with pytest.raises(AssertionError, match="no overhang connection"):
+        assert_linker_connects(
+            bare, "ghost-conn", overhang_a="oh_a_5p", overhang_b="oh_b_5p",
+        )
+
+
+def test_linker_connects_oracle_fires_on_wrong_overhang():
+    """Red-test: the connection exists but the caller named the wrong partner
+    overhang — the join-set assertion raises."""
+    from tests.automation_harness import assert_linker_connects
+
+    d, cid = _build_linked_leaves()
+    with pytest.raises(AssertionError, match="joins"):
+        assert_linker_connects(
+            d, cid, overhang_a="oh_a_5p", overhang_b="ghost-partner", bridge_bp=6,
+        )
+
+
+def test_linker_connects_oracle_fires_on_wrong_bridge_bp():
+    """Red-test: a bridge length that lowered to a different bp count than
+    expected — the contour-length assertion raises."""
+    from tests.automation_harness import assert_linker_connects
+
+    d, cid = _build_linked_leaves()
+    with pytest.raises(AssertionError, match="bridge length"):
+        assert_linker_connects(
+            d, cid, overhang_a="oh_a_5p", overhang_b="oh_b_5p", bridge_bp=99,
+        )
+
+
+# ── The flexible-segment relax oracle PASSES on a real relax and FIRES otherwise ──
+
+def _relaxed_flex_pair():
+    """(before, after): an overstretched hinge and its headless-relaxed result."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from tests.test_headless_build import _overstretched_flexible_hinge
+
+    before = _overstretched_flexible_hinge()
+    design_state.set_design(before)
+    after = hb.relax_flexible_segments(scope="all").model_copy(deep=True)
+    return before, after
+
+
+def test_flexible_relax_oracle_passes_on_real_relax():
+    """assert_flexible_segments_relaxed is green when the tether is taut, a pose
+    moved, and topology is unchanged."""
+    from tests.automation_harness import assert_flexible_segments_relaxed
+
+    before, after = _relaxed_flex_pair()
+    assert_flexible_segments_relaxed(before, after)
+
+
+def test_flexible_relax_oracle_fires_when_still_overstretched():
+    """Red-test: comparing the overstretched design to itself (no relax) fails the
+    contour-constraint clause."""
+    from tests.automation_harness import assert_flexible_segments_relaxed
+
+    before, _after = _relaxed_flex_pair()
+    with pytest.raises(AssertionError, match="overstretched after relax"):
+        assert_flexible_segments_relaxed(before, before)
+
+
+def test_flexible_relax_oracle_fires_on_topology_change():
+    """Red-test: a 'relax' that also mutated the strand graph fails the
+    Three-Layer topology pin (relax must be pose-only)."""
+    from tests.automation_harness import assert_flexible_segments_relaxed
+
+    _before, after = _relaxed_flex_pair()
+    # Drop a staple strand → same poses (still taut) but different topology.
+    tampered = after.copy_with(strands=[s for s in after.strands if s.id != "stap_a"])
+    with pytest.raises(AssertionError, match="topology"):
+        assert_flexible_segments_relaxed(after, tampered, require_moved=False)
+
+
+def test_flexible_relax_oracle_fires_on_no_move():
+    """Red-test: a relaxed design compared to itself with require_moved fails the
+    vacuous-pass guard (no rigid leaf moved)."""
+    from tests.automation_harness import assert_flexible_segments_relaxed
+
+    _before, after = _relaxed_flex_pair()
+    with pytest.raises(AssertionError, match="no cluster pose changed"):
+        assert_flexible_segments_relaxed(after, after, require_moved=True)
 
 
 # ── The mate-coincidence oracle PASSES on a real mate and FIRES otherwise ──────

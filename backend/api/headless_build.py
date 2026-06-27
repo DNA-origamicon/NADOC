@@ -38,8 +38,14 @@ from backend.api.crud import (
     CircleSegmentRequest,
     CrossoverExtraBasesBatchEntry,
     CrossoverExtraBasesRequest,
+    ForcedLigationRequest,
+    HalfCrossoverRequest,
     NickRequest,
+    OverhangConnectionCreateRequest,
     OverhangExtrudeRequest,
+    PlaceCrossoverRequest,
+    StrandEndResizeEntry,
+    StrandEndResizeRequest,
     add_bundle_continuation as _route_extrude,
     add_bundle_deformed_continuation as _route_deformed_continuation,
     add_bundle_segment as _route_extrude_segment,
@@ -51,12 +57,18 @@ from backend.api.crud import (
     auto_merge as _route_auto_merge,
     batch_patch_crossover_extra_bases as _route_batch_xo_extra_bases,
     create_bundle as _route_create_bundle,
+    create_overhang_connection as _route_create_overhang_connection,
+    delete_crossover as _route_delete_crossover,
+    delete_forced_ligation as _route_delete_forced_ligation,
     delete_strand as _route_delete_strand,
+    forced_ligation as _route_forced_ligation,
     get_deformed_frame as _route_deformed_frame,
     ligate_strand as _route_ligate,
     overhang_extrude as _route_overhang_extrude,
     patch_crossover_extra_bases as _route_set_xo_extra_bases,
+    place_crossover as _route_place_crossover,
     select_loadout as _route_select_loadout,
+    strand_end_resize as _route_strand_end_resize,
 )
 from backend.api.routes_clusters import (
     AddClusterBody,
@@ -75,6 +87,11 @@ from backend.api.routes_deformation import (
 from backend.api.routes_feature_log import (
     SeekFeaturesBody,
     seek_features as _route_seek_features,
+)
+from backend.api.routes_flexible_segments import (
+    FlexibleRelaxBody,
+    FlexibleRelaxTransform,
+    flexible_relax as _route_flexible_relax,
 )
 from backend.api.routes_loop_skip import (
     LoopSkipInsertRequest,
@@ -96,6 +113,7 @@ from backend.core.circle_primitive import (
     circle_footprint,
 )
 from backend.core.constants import BDNA_RISE_PER_BP
+from backend.core.flexible_relax import compute_relax_transforms
 from backend.core.models import Design, Direction, LatticeType, StrandType
 
 _scratch_counter = itertools.count()
@@ -365,6 +383,34 @@ def delete_strand(strand_id: str) -> Design:
     return design_state.get_or_404()
 
 
+def resize_strand_end(
+    strand_id: str,
+    helix_id: str,
+    end: str,
+    delta_bp: int,
+) -> Design:
+    """Grow/shrink a terminal strand domain by a signed *delta_bp* (POST /design/strand-end-resize).
+
+    The cadnano drag-arrow op: ``end`` selects the ``"5p"`` or ``"3p"`` terminus of
+    ``strand``'s terminal domain on ``helix_id``; a positive ``delta_bp`` moves that
+    end toward higher global bp, a negative one toward lower.  When the new bp lies
+    outside the helix's current bp span the helix axis grows to accommodate it (and
+    re-trims when it shrinks), so a resize that *defines* a helix's extent changes
+    that helix's emitted geometry one bp at a time.
+
+    **Mechanical pass-through** — the caller supplies the explicit end + signed delta;
+    the wrapper does NOT decide *where* to resize (no geometric reasoning).  ``+δ``
+    then ``−δ`` at the same end is its own inverse (canonical topology restored).
+    Records a ``strand-end-resize`` minor-log entry.
+    """
+    _route_strand_end_resize(StrandEndResizeRequest(entries=[
+        StrandEndResizeEntry(
+            strand_id=strand_id, helix_id=helix_id, end=end, delta_bp=delta_bp,
+        ),
+    ]))
+    return design_state.get_or_404()
+
+
 # ── Loop/skip wrappers ───────────────────────────────────────────────────────────
 # Loop/skip marks live on Helix.loop_skips and change the *effective* bp count of a
 # helix: a loop (+1) inserts one extra base, a skip (−1) deletes one — the geometry
@@ -496,6 +542,119 @@ def auto_scaffold(*, seamless: bool = False) -> Design:
 def auto_crossover() -> Design:
     """Place all compliant staple crossovers in bulk (POST /design/crossovers/auto)."""
     _route_auto_crossover()
+    return design_state.get_or_404()
+
+
+# ── Manual crossover place / delete wrappers ─────────────────────────────────────
+# The manual counterpart to ``auto_crossover``: place (or remove) a SINGLE named
+# crossover at explicit half-sites — the scripted analog of the cadnano editor's
+# crossover drag.  Both are MECHANICAL pass-throughs: the caller supplies the two
+# half-sites + the two nick bp (the bow-direction nick positions the editor derives
+# from the click), so the wrapper forwards them verbatim — it does NOT decide *where*
+# to cross (``feedback_crossover_no_reasoning``: never reason geometrically about
+# crossover placement).  CROSSOVER = nick + ligate + record (a topological edit).
+#
+# Edge case the route handles and the oracle must too: when ligating the two halves
+# would close a cycle (both ends already on the same strand), the route RECORDS the
+# crossover but leaves it UNLIGATED (returns ``placement_warnings``); the marker auto-
+# clears when the strand is later nicked.  ``unligated_crossover_ids`` reports which.
+
+
+def place_crossover(
+    half_a: tuple[str, int, Direction],
+    half_b: tuple[str, int, Direction],
+    nick_bp_a: int,
+    nick_bp_b: int,
+    *,
+    process_id: str = "manual",
+) -> Design:
+    """Place one crossover at two explicit half-sites (POST /design/crossovers/place).
+
+    ``half_a`` / ``half_b`` are ``(helix_id, index, strand)`` triples (``strand`` a
+    :class:`~backend.core.models.Direction`); ``nick_bp_a`` / ``nick_bp_b`` are the
+    bp at which to nick each helix before ligating (the bow-direction positions the
+    editor computes — often ``index`` or ``index±1``).  The op is atomic: nick +
+    ligate + record, recorded as a ``crossover-place`` minor-log entry, exactly like
+    a clicked crossover.  The new :class:`~backend.core.models.Crossover` is the LAST
+    entry of the returned design's ``crossovers``.
+
+    If ligating the two halves would circularize a strand the crossover is recorded
+    but left UNLIGATED (the strands stay split); :func:`backend.api.crud.unligated_crossover_ids`
+    reports it.  Pin the result with
+    :func:`tests.automation_harness.assert_crossover_joins` (which handles both the
+    ligated and the unligated-to-avoid-circular outcome).
+    """
+    _route_place_crossover(PlaceCrossoverRequest(
+        half_a=HalfCrossoverRequest(helix_id=half_a[0], index=half_a[1], strand=half_a[2]),
+        half_b=HalfCrossoverRequest(helix_id=half_b[0], index=half_b[1], strand=half_b[2]),
+        nick_bp_a=nick_bp_a,
+        nick_bp_b=nick_bp_b,
+        process_id=process_id,
+    ))
+    return design_state.get_or_404()
+
+
+def delete_crossover(crossover_id: str) -> Design:
+    """Remove a crossover by id (DELETE /design/crossovers/{id}).
+
+    The exact inverse of :func:`place_crossover`: if the crossover joins two domains
+    of one multi-domain strand, the strand is split back (desplice) into its two
+    single-helix fragments.  Records a ``crossover-delete`` minor-log entry.
+    """
+    _route_delete_crossover(crossover_id)
+    return design_state.get_or_404()
+
+
+# ── Forced-ligation wrappers (manual-only — scripted-manual entry, NOT autorouting) ──
+# Forced ligation connects ANY 3' end to ANY 5' end bypassing the crossover lookup
+# tables, merging two strands into ONE multi-domain strand + a ForcedLigation record.
+# The route contract is explicit that it must NEVER be called by autocrossover /
+# autobreak / any automated routing pipeline — so this wrapper is the *scripted-manual*
+# replay of a user's pencil-tool ligation, not a hook an autorouter may reach for.
+# The FL record lives on ``design.forced_ligations`` (OFF the strand graph), so it is
+# invisible to ``canonical_topology`` — pin its persistence by reading the record after
+# a ``.nadoc`` round-trip (the same blind-spot as clusters / overhang-connections).
+
+
+def force_ligate(
+    three_prime_strand_id: str,
+    five_prime_strand_id: str,
+    *,
+    is_periodic_seam: bool = False,
+) -> Design:
+    """Forced-ligate a 3' end to a 5' end (POST /design/forced-ligation).
+
+    Connects the 3' end of ``three_prime_strand_id`` to the 5' end of
+    ``five_prime_strand_id`` regardless of helix adjacency or crossover lookup
+    tables, merging the two strands into ONE multi-domain strand and appending a
+    :class:`~backend.core.models.ForcedLigation` record (NO crossover record is
+    created — this is not a canonical crossover site).  ``is_periodic_seam`` marks
+    a ligation made across the 2D editor's periodic-boundary mirror.
+
+    **Manual-only / scripted-manual.** Forced ligation must never be driven by
+    autocrossover, autobreak, or any automated routing pipeline; this wrapper is
+    the headless replay of a user's manual pencil-tool ligation, NOT an autorouting
+    entry point.
+
+    The new ForcedLigation is the LAST entry of the returned design's
+    ``forced_ligations``.  Pin the result with
+    :func:`tests.automation_harness.assert_forced_ligation`.
+    """
+    _route_forced_ligation(ForcedLigationRequest(
+        three_prime_strand_id=three_prime_strand_id,
+        five_prime_strand_id=five_prime_strand_id,
+        is_periodic_seam=is_periodic_seam,
+    ))
+    return design_state.get_or_404()
+
+
+def delete_forced_ligation(fl_id: str) -> Design:
+    """Remove a forced ligation by id (DELETE /design/forced-ligations/{id}).
+
+    The exact inverse of :func:`force_ligate`: splits the merged strand back into
+    its two fragments at the junction and drops the ForcedLigation record.
+    """
+    _route_delete_forced_ligation(fl_id)
     return design_state.get_or_404()
 
 
@@ -671,6 +830,89 @@ def overhang_extrude(
         helix_id=helix_id, bp_index=bp_index, direction=direction,
         is_five_prime=is_five_prime, neighbor_row=neighbor_row,
         neighbor_col=neighbor_col, length_bp=length_bp,
+    ))
+    return design_state.get_or_404()
+
+
+def connect_overhangs(
+    overhang_a_id: str,
+    overhang_b_id: str,
+    *,
+    overhang_a_attach: str = "free_end",
+    overhang_b_attach: str = "free_end",
+    linker_type: str = "ds",
+    length_value: float,
+    length_unit: str = "bp",
+    name: str | None = None,
+    bridge_sequence: str | None = None,
+) -> Design:
+    """Tie two overhangs together with a length-defined LINKER strand
+    (POST /design/overhang-connections).
+
+    This is the hinge-confinement keystone: a script can extrude an overhang on
+    each of two leaves, but only this op joins them with a linker whose contour
+    length (``length_value`` bp/nm) physically *confines the hinge angle*.  The
+    route appends a metadata :class:`OverhangConnection` AND generates its linker
+    complement strand(s) — for ``ds`` also a virtual ``__lnk__`` bridge helix —
+    so this is a real (replayable, feature-logged) **topological** edit, not a
+    display pose.
+
+    ``overhang_*_attach`` is ``"root"`` (the embedded crossover end) or
+    ``"free_end"`` (the protruding tip); ``linker_type`` is ``"ss"`` or ``"ds"``.
+    The accepted (attach × end × linker_type) combos are constrained by the
+    Watson-Crick polarity rule the route enforces — a mismatched combo raises
+    ``HTTPException`` 400, exactly as the UI greys it out.  The new connection is
+    the LAST entry of the returned design's ``overhang_connections``.
+
+    Pin the connection with
+    :func:`tests.automation_harness.assert_linker_connects`.
+    """
+    _route_create_overhang_connection(OverhangConnectionCreateRequest(
+        overhang_a_id=overhang_a_id,
+        overhang_a_attach=overhang_a_attach,
+        overhang_b_id=overhang_b_id,
+        overhang_b_attach=overhang_b_attach,
+        linker_type=linker_type,
+        length_value=length_value,
+        length_unit=length_unit,
+        name=name,
+        bridge_sequence=bridge_sequence,
+    ))
+    return design_state.get_or_404()
+
+
+def relax_flexible_segments(
+    *,
+    scope: str = "all",
+    conn_id: str | None = None,
+    label: str | None = None,
+) -> Design:
+    """Relax overstretched flexible ssDNA segments headlessly
+    (computes the pose, then commits via POST /design/flexible-relax).
+
+    The hinge ssDNA-scaffold counterpart to :func:`connect_overhangs`: where a
+    linker confines a hinge by its contour length, the *flexible scaffold tether*
+    sets the hinge's geometric rest pose.  This runs the **same** position-based
+    constraint solver the in-app "Relax flexible segments" command runs (ported
+    to :mod:`backend.core.flexible_relax`), pulling the smaller cluster of each
+    flexible-connected pair in until no tether exceeds its contour length
+    ("free until taut"), then commits all moved clusters as ONE feature-log step.
+
+    ``scope="all"`` sweeps every flexible pair; ``scope="one"`` relaxes just the
+    pair of ``conn_id``.  **Display/pose-layer only** — moves
+    ``cluster_transforms``, never the strand graph.  Returns the relaxed design
+    (unchanged when nothing was overstretched — the route is not called, so no
+    empty feature-log entry is written).
+
+    Pin with :func:`tests.automation_harness.assert_flexible_segments_relaxed`.
+    """
+    design = design_state.get_or_404()
+    transforms, _residual = compute_relax_transforms(design, scope=scope, conn_id=conn_id)
+    if not transforms:
+        return design
+    _route_flexible_relax(FlexibleRelaxBody(
+        transforms=[FlexibleRelaxTransform(**t) for t in transforms],
+        label=label,
     ))
     return design_state.get_or_404()
 

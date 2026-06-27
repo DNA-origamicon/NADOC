@@ -863,6 +863,151 @@ def assert_binding_resolves(
         )
 
 
+# ── Overhang-linker connection oracle (AF-27 — the hinge-confinement keystone) ──
+
+def assert_linker_connects(
+    design: Design,
+    conn_id: str,
+    *,
+    overhang_a: str,
+    overhang_b: str,
+    bridge_bp: int | None = None,
+):
+    """AF-27: an overhang LINKER connection joins the two named overhangs, carries
+    the requested contour length, and **survives a ``.nadoc`` round-trip**.
+
+    An :class:`~backend.core.models.OverhangConnection` is the design-layer tie
+    that confines a hinge: the linker's contour length (its bridge bp count) is
+    precisely what bounds the angle between the two leaves.  Creating one is a
+    real topological edit — it appends the connection metadata AND generates the
+    linker complement strand(s) (and, for ``ds``, a virtual ``__lnk__`` bridge
+    helix).  This pins that the connection actually wires the two overhangs the
+    caller asked for and that the wiring *persists* across save/load.
+
+    Why a round-trip pin and not :func:`canonical_topology`: the structure
+    fingerprint sorts helices/strands by grid position and bp range — it does
+    **not** fingerprint ``overhang_connections``, so a build that dropped the
+    connection (or rewired it to a different overhang) while keeping the linker
+    strands could slip past a topology check.  Only re-reading the connection
+    after a real export→import catches that — the same blind-spot the
+    cluster / loop-skip / binding oracles work around.
+
+    Asserts, on both ``design`` and its :func:`roundtrip_nadoc` re-import:
+
+      1. **The connection exists** under ``conn_id``.
+      2. **It joins the two named overhangs** (order-independent — A/B is a set).
+      3. **Its bridge length matches** ``bridge_bp`` (when given) — the
+         length_value/length_unit lowered through the same
+         ``_length_value_to_bp`` the route's linker generator uses.
+
+    Can-go-red: a design carrying the two overhangs but **no** connection (or one
+    whose endpoints were rewired) fails clause 1/2; a length that lowered to a
+    different bp count fails clause 3; a connection the import silently dropped
+    fails the round-trip pass.  Returns the re-imported design.
+    """
+    from backend.core.lattice import _length_value_to_bp
+
+    def _check(d: Design, where: str):
+        conn = next((c for c in d.overhang_connections if c.id == conn_id), None)
+        assert conn is not None, (
+            f"{where}: no overhang connection {conn_id!r} "
+            f"(of {[c.id for c in d.overhang_connections]})"
+        )
+        assert {conn.overhang_a_id, conn.overhang_b_id} == {overhang_a, overhang_b}, (
+            f"{where}: connection {conn_id!r} joins "
+            f"{{{conn.overhang_a_id!r}, {conn.overhang_b_id!r}}}, "
+            f"expected {{{overhang_a!r}, {overhang_b!r}}}"
+        )
+        if bridge_bp is not None:
+            got = _length_value_to_bp(conn.length_value, conn.length_unit)
+            assert got == bridge_bp, (
+                f"{where}: connection {conn_id!r} has bridge length {got} bp "
+                f"({conn.length_value:g} {conn.length_unit}), expected {bridge_bp} bp"
+            )
+        return conn
+
+    _check(design, "in-memory")
+    reimported = roundtrip_nadoc(design)
+    _check(reimported, "after .nadoc round-trip")
+    return reimported
+
+
+# ── Flexible ssDNA-segment relax oracle (hinge scaffold-tether minimisation) ──
+
+def assert_flexible_segments_relaxed(
+    before: Design,
+    after: Design,
+    *,
+    tol_nm: float = 0.05,
+    require_moved: bool = True,
+):
+    """A headless flexible-segment relax left every hinge ssDNA tether **not
+    overstretched**, moved a rigid pose to get there, and **did not touch topology**.
+
+    The in-app "Relax flexible segments" command pulls a hinge's rigid leaves
+    together until each unpaired-ssDNA scaffold tether is taut at its contour
+    length ("free until taut").  The headless port
+    (:func:`backend.core.flexible_relax.compute_relax_transforms` via
+    :func:`~backend.api.headless_build.relax_flexible_segments`) must reach the
+    SAME physical state.  This oracle pins the solver-independent correctness
+    criterion — the *result* satisfies the constraint — plus the Three-Layer guard:
+
+      1. **Constraint satisfied (the load-bearing pin).** For every
+         ``flexible_connection`` in ``after``, the chord between its two anchors —
+         measured on the POSED geometry (``_geometry_for_design``, which applies
+         the relaxed cluster transforms) — is ``≤ contour_length_nm + tol_nm``.
+         A relax that left a tether stretched past its contour fails here.
+      2. **A pose actually moved** (``require_moved``).  At least one cluster's
+         ``translation``/``rotation`` differs from ``before`` — so on a design
+         that WAS overstretched, a no-op "relax" cannot pass vacuously (the
+         can-go-red guard, same shape as the AF-2 forward-mutated guard).
+      3. **Topology unchanged.**  ``canonical_topology(before) ==
+         canonical_topology(after)`` — the relax is a display/pose-layer move; it
+         must never edit the strand graph (the Three-Layer Law, made into a pin).
+
+    Can-go-red: an un-relaxed (still-overstretched) ``after`` fails clause 1; a
+    pose that didn't move fails clause 2; a relax that mutated topology fails
+    clause 3.
+    """
+    from backend.core.flexible_relax import _anchor_world_pos, _geom_index
+
+    conns = list(after.flexible_connections or [])
+    assert conns, "design has no flexible_connections — nothing to assert relaxed"
+
+    geom = _geom_index(after)
+    checked = 0
+    for c in conns:
+        pa = _anchor_world_pos(geom, after, c.anchor_a)
+        pb = _anchor_world_pos(geom, after, c.anchor_b)
+        if pa is None or pb is None:
+            continue
+        chord = float(((pa - pb) ** 2).sum() ** 0.5)
+        assert chord <= c.contour_length_nm + tol_nm, (
+            f"flexible connection {c.id!r} still overstretched after relax: "
+            f"chord {chord:.3f} nm > contour {c.contour_length_nm:.3f} + {tol_nm} nm"
+        )
+        checked += 1
+    assert checked, "no flexible connection's anchors resolved — vacuous relax check"
+
+    if require_moved:
+        before_poses = {
+            ct.id: (tuple(ct.translation), tuple(ct.rotation)) for ct in before.cluster_transforms
+        }
+        moved = any(
+            before_poses.get(ct.id) != (tuple(ct.translation), tuple(ct.rotation))
+            for ct in after.cluster_transforms
+        )
+        assert moved, (
+            "no cluster pose changed — a relax on an overstretched design must move "
+            "at least one rigid leaf (vacuous-pass guard)"
+        )
+
+    assert canonical_topology(before) == canonical_topology(after), (
+        "flexible-segment relax changed the strand-graph topology — it must be a "
+        "display/pose-layer move only (Three-Layer Law)"
+    )
+
+
 # ── File-backed part oracle (AF-12 — build from a saved validated primitive) ──
 
 def assert_part_from_file(assembly, instance_id, expected_topology):
@@ -1259,6 +1404,358 @@ def assert_inverse_pair(
         f"strands {len(before[1])}→{len(after[1])}."
     )
     return end
+
+
+# ── Manual crossover-placement oracle ──────────────────────────────────────────
+
+def _strand_spans_both(design: Design, half_a, half_b) -> bool:
+    """True iff a SINGLE strand has a domain covering ``half_a``'s (helix, index)
+    AND a domain covering ``half_b``'s — i.e. the backbone actually crosses between
+    the two helices at those bp (the crossover ligated, merging the two fragments).
+    """
+    def _covers(dm, helix_id, index) -> bool:
+        return dm.helix_id == helix_id and min(dm.start_bp, dm.end_bp) <= index <= max(dm.start_bp, dm.end_bp)
+
+    for s in design.strands:
+        on_a = any(_covers(dm, half_a.helix_id, half_a.index) for dm in s.domains)
+        on_b = any(_covers(dm, half_b.helix_id, half_b.index) for dm in s.domains)
+        if on_a and on_b:
+            return True
+    return False
+
+
+def assert_crossover_joins(
+    design: Design,
+    xover_id: str,
+    *,
+    half_a: tuple[str, int],
+    half_b: tuple[str, int],
+    expect_ligated: bool = True,
+):
+    """AF-31: a manually-placed crossover records the two named half-sites and (when
+    it ligated) actually merged the backbone between them.
+
+    A crossover = nick + ligate + record.  The route appends a
+    :class:`~backend.core.models.Crossover` record AND, unless ligating would
+    circularize a strand, merges the two fragments into one multi-domain strand.
+    This pins **both** halves of that contract — not just that a record was appended,
+    but that the strand graph was actually wired (or, for the cycle-avoidance case,
+    deliberately *not*).
+
+    ``half_a`` / ``half_b`` are ``(helix_id, index)`` pairs (or any object with
+    ``.helix_id`` / ``.index``); the A/B order does not matter (a crossover is
+    symmetric).  Asserts, in order:
+
+      1. **The record exists** under ``xover_id``.
+      2. **It joins the two named half-sites** (order-independent — compared as a
+         set of ``(helix_id, index)``).
+      3. **Ligation outcome matches** ``expect_ligated``:
+         * ``True`` (the default): the crossover is NOT in
+           :func:`~backend.api.crud.unligated_crossover_ids` **and** a single strand
+           spans both half-sites — the load-bearing pin that the backbone actually
+           crossed, which a "record appended but ligate silently failed" build (nick
+           bp wrong → no terminal match) would fail even though it is not in the
+           same-strand unligated set.
+         * ``False``: the crossover IS in ``unligated_crossover_ids`` (recorded but
+           left split to avoid a cycle) — the documented ``placement_warnings`` case.
+      4. **The design validates** — but **only for the ligated outcome**.  A
+         recorded-but-unligated crossover deliberately sits at a strand terminus
+         that the validator flags as non-physical ("Nick the strand to ligate"), so
+         the gate is skipped when ``expect_ligated`` is False.
+
+    Can-go-red: a missing record (1); a record rewired to a different half-site (2);
+    a place that appended the record but didn't merge the backbone, or one that
+    ligated when the caller expected the cycle-avoidance split (3).  Returns the
+    crossover record.
+    """
+    from backend.api.crud import unligated_crossover_ids
+
+    def _key(h):
+        helix_id = h[0] if isinstance(h, tuple) else h.helix_id
+        index = h[1] if isinstance(h, tuple) else h.index
+        return (helix_id, index)
+
+    xo = next((x for x in design.crossovers if x.id == xover_id), None)
+    assert xo is not None, (
+        f"no crossover {xover_id!r} (of {[x.id for x in design.crossovers]})"
+    )
+    got = {(xo.half_a.helix_id, xo.half_a.index), (xo.half_b.helix_id, xo.half_b.index)}
+    exp = {_key(half_a), _key(half_b)}
+    assert got == exp, f"crossover {xover_id!r} joins {got}, expected {exp}"
+
+    is_ligated = xover_id not in set(unligated_crossover_ids(design))
+    if expect_ligated:
+        assert is_ligated, (
+            f"crossover {xover_id!r} left unligated (resolves to a single strand) "
+            "but expected it to merge the backbone"
+        )
+        assert _strand_spans_both(design, xo.half_a, xo.half_b), (
+            f"crossover {xover_id!r} recorded but no single strand spans both "
+            f"half-sites — the backbone was not actually merged"
+        )
+        # The ligated design must be physical (no unresolved nicks). Skipped for the
+        # unligated outcome, whose terminus-on-crossover state the validator flags by
+        # design ("Nick the strand to ligate").
+        report = validate_design(design)
+        assert report.passed, f"design did not validate after place:\n{report}"
+    else:
+        assert not is_ligated, (
+            f"crossover {xover_id!r} ligated, but expected the cycle-avoidance "
+            "split (recorded-but-unligated) outcome"
+        )
+    return xo
+
+
+# ── Forced-ligation oracle ─────────────────────────────────────────────────────
+
+def assert_forced_ligation(
+    before: Design,
+    after: Design,
+    fl_id: str,
+    *,
+    three_prime_strand_id: str,
+    five_prime_strand_id: str,
+):
+    """AF-32: a forced ligation merged the named 3'/5' strand ends into one strand,
+    recorded the right junction endpoints, and the record persists across a
+    ``.nadoc`` round-trip.
+
+    Forced ligation connects the 3' end of one strand to the 5' end of another
+    (bypassing the crossover lookup tables), producing a SINGLE multi-domain
+    strand plus a :class:`~backend.core.models.ForcedLigation` record — NO
+    crossover record.  Unlike a placed crossover, the merged backbone is the only
+    proof in the strand graph that the ligation happened, while the *record* (with
+    its endpoint metadata) lives on ``design.forced_ligations``, OFF the strand
+    graph — so ``canonical_topology`` is blind to it.
+
+    ``before`` is the design *before* the ligation (still carrying both named
+    strands); ``after`` is the design the wrapper returned.  The expected junction
+    endpoints are re-derived from ``before`` exactly as the route does — the 3'
+    end is the *last* domain of ``three_prime_strand_id``, the 5' end the *first*
+    domain of ``five_prime_strand_id`` — so a route that swapped 3'/5', or stored
+    the wrong helix/bp, is caught.  Asserts, in order:
+
+      1. **Both named strands exist in** ``before`` (so the endpoints are derivable).
+      2. **The record exists** under ``fl_id`` in ``after``, and its stored 3'/5'
+         endpoints ``(helix_id, bp, direction)`` match the re-derived ones.
+      3. **The two strands merged into one** — ``after`` has exactly one fewer
+         strand than ``before``.
+      4. **A single strand spans both endpoints** — the backbone actually crosses
+         the junction (the merge happened, not just a record appended).
+      5. **The record survives a ``.nadoc`` round-trip** — re-read after
+         export→import, the FL record is still present with the same endpoints
+         (the load-bearing pin: ``canonical_topology`` can't see it, so only a
+         real round-trip proves persistence).
+
+    Can-go-red: a missing strand (1); no record or wrong stored endpoint (2); no
+    merge / wrong strand count (3); a record appended without the backbone merge
+    (4); a round-trip that dropped the record (5).  Returns the FL record.
+    """
+    class _Site:
+        __slots__ = ("helix_id", "index")
+
+        def __init__(self, helix_id, index):
+            self.helix_id = helix_id
+            self.index = index
+
+    sa = next((s for s in before.strands if s.id == three_prime_strand_id), None)
+    sb = next((s for s in before.strands if s.id == five_prime_strand_id), None)
+    assert sa is not None, (
+        f"3' strand {three_prime_strand_id!r} not in the before-design strands"
+    )
+    assert sb is not None, (
+        f"5' strand {five_prime_strand_id!r} not in the before-design strands"
+    )
+    three_dom = sa.domains[-1]
+    five_dom = sb.domains[0]
+    exp_three = (three_dom.helix_id, three_dom.end_bp, str(three_dom.direction))
+    exp_five = (five_dom.helix_id, five_dom.start_bp, str(five_dom.direction))
+
+    def _read_record(design: Design, label: str):
+        fl = next((f for f in design.forced_ligations if f.id == fl_id), None)
+        assert fl is not None, (
+            f"no forced ligation {fl_id!r} in {label} "
+            f"(of {[f.id for f in design.forced_ligations]})"
+        )
+        got_three = (fl.three_prime_helix_id, fl.three_prime_bp, str(fl.three_prime_direction))
+        got_five = (fl.five_prime_helix_id, fl.five_prime_bp, str(fl.five_prime_direction))
+        assert got_three == exp_three, (
+            f"forced ligation {fl_id!r} 3' endpoint {got_three} != expected {exp_three} "
+            f"in {label}"
+        )
+        assert got_five == exp_five, (
+            f"forced ligation {fl_id!r} 5' endpoint {got_five} != expected {exp_five} "
+            f"in {label}"
+        )
+        return fl
+
+    fl = _read_record(after, "the ligated design")
+
+    assert len(after.strands) == len(before.strands) - 1, (
+        f"forced ligation should merge two strands into one "
+        f"(strands {len(before.strands)}→{len(before.strands) - 1}), "
+        f"but after has {len(after.strands)}"
+    )
+    assert _strand_spans_both(
+        after, _Site(exp_three[0], exp_three[1]), _Site(exp_five[0], exp_five[1])
+    ), (
+        f"forced ligation {fl_id!r} recorded but no single strand spans both "
+        f"endpoints — the backbone was not actually merged"
+    )
+
+    _read_record(roundtrip_nadoc(after), "the round-tripped design")
+    return fl
+
+
+def _fl_endpoint_set(design: Design):
+    """Order-independent fingerprint of a design's forced-ligation links.
+
+    Each FL is keyed by its 3′/5′ ``(helix_id, bp, direction)`` endpoints — NOT
+    its uuid id, so two designs with the same physical links match regardless of
+    how the records were ordered or which uuids they drew.  ``canonical_topology``
+    is blind to ``forced_ligations`` (they live OFF the strand graph, like
+    clusters/overhang-connections), so this set is the load-bearing complement to
+    a topology-equality check.
+    """
+    return frozenset(
+        (
+            fl.three_prime_helix_id, fl.three_prime_bp, str(fl.three_prime_direction),
+            fl.five_prime_helix_id, fl.five_prime_bp, str(fl.five_prime_direction),
+        )
+        for fl in design.forced_ligations
+    )
+
+
+def assert_matches_primitive(
+    design: Design,
+    primitive_name: str,
+    *,
+    primitives_dir,
+):
+    """AF-33: a code-built hinge primitive is byte-for-byte the validated hand-built
+    golden ``workspace/Primitives/<primitive_name>.nadoc``.
+
+    The whole point of "recreate the standard hinges in code" is that the builder
+    must not *drift* from the saved primitive — a generated hinge that differs from
+    the golden is worthless.  This is the golden-equality oracle: it loads the saved
+    primitive and asserts the built ``design`` reproduces it on every axis a hinge
+    is defined by.  Asserts, in order:
+
+      1. **The golden exists** in ``primitives_dir`` (resolved via
+         :func:`primitive_catalog.design_path`, the same resolver the assembly
+         ``from_primitive`` grammar uses) — a guard so a renamed/missing file fails
+         loudly instead of vacuously.
+      2. **Topology equality** — ``canonical_topology(design)`` equals the golden's
+         (same helices in the same lattice cells carrying the same strand paths +
+         axis geometry), so a wrong leaf layout / duplex span / dropped strand is
+         caught.
+      3. **Forced-ligation endpoint-set equality** — :func:`_fl_endpoint_set` of
+         the built design equals the golden's.  This is **load-bearing**:
+         ``canonical_topology`` does NOT fingerprint ``forced_ligations`` (the same
+         off-strand-graph blind-spot as clusters/overhang-connections), so a
+         dropped, extra, or mis-wired cross-gap link slips past clause 2 entirely —
+         only the FL-set check sees it.
+      4. **Round-trip stable** — the built design survives a ``.nadoc``
+         export→import with its ``canonical_topology`` *and* FL-set unchanged (an
+         import that silently altered the primitive is caught).
+      5. **Validator passes** — the built design passes :func:`validate_design`.
+
+    Can-go-red: a dropped/extra/mis-wired link (clause 3); a wrong leaf layout or
+    duplex span (clause 2); a primitive the import silently altered (clause 4); an
+    unknown ``primitive_name`` (clause 1).  Returns the loaded golden design.
+    """
+    from pathlib import Path
+
+    from backend.core import primitive_catalog as _pc
+
+    path = _pc.design_path(Path(primitives_dir), primitive_name)
+    assert path is not None, (
+        f"catalog has no primitive named {primitive_name!r} in {primitives_dir} — "
+        "cannot load the golden to compare against"
+    )
+    golden = Design.from_json(path.read_text(encoding="utf-8"))
+
+    built_topo = canonical_topology(design)
+    golden_topo = canonical_topology(golden)
+    assert built_topo == golden_topo, (
+        f"built primitive topology != golden {primitive_name!r}: "
+        f"helices {len(built_topo[0])} vs {len(golden_topo[0])}, "
+        f"strands {len(built_topo[1])} vs {len(golden_topo[1])}"
+    )
+
+    built_fls = _fl_endpoint_set(design)
+    golden_fls = _fl_endpoint_set(golden)
+    assert built_fls == golden_fls, (
+        f"built primitive forced-ligation set != golden {primitive_name!r}: "
+        f"built-only {sorted(built_fls - golden_fls)}, "
+        f"golden-only {sorted(golden_fls - built_fls)}"
+    )
+
+    reloaded = roundtrip_nadoc(design)
+    assert canonical_topology(reloaded) == golden_topo, (
+        f"a .nadoc round-trip changed the built primitive {primitive_name!r}'s topology"
+    )
+    assert _fl_endpoint_set(reloaded) == golden_fls, (
+        f"a .nadoc round-trip dropped/altered the built primitive {primitive_name!r}'s "
+        "forced-ligation links"
+    )
+
+    report = validate_design(design)
+    assert report.passed, (
+        f"built primitive {primitive_name!r} did not validate:\n{report}"
+    )
+    return golden
+
+
+# ── Scaffold-routing-compliance oracle (AF-34) ────────────────────────────────
+
+def assert_scaffold_routing_compliant(
+    design: Design, *, require_seams: bool = True,
+):
+    """AF-34: a headless autoscaffold output is *routing-compliant* origami — a real
+    seamed (or seamless) route, NOT a single-pass raster with scaffold crossovers
+    buried inside staple domains.
+
+    This is the reusable harness face of
+    :func:`backend.core.scaffold_invariants.scaffold_routing_invariants` — the
+    regression gate added after the 2026-06-26 hinge incident, where a new routing
+    path shipped a seamless raster (no seam crossovers, zero ssDNA margin) and the
+    full suite stayed green because ``validate_design`` encodes none of these
+    properties (LESSONS H8).  Until now that gate was asserted only *inside*
+    ``test_scaffold_invariants.py`` over a few fixed entry points; this exposes it so
+    any headless build can pin its own autoscaffold output.
+
+    Two clauses:
+
+      1. **Non-vacuity** — the design actually HAS a (non-reference) scaffold strand.
+         An un-routed / empty design carries no scaffold crossovers, so the invariant
+         checker returns ``[]`` *vacuously*; without this guard the oracle would pass
+         on a design ``auto_scaffold`` silently failed to route.
+      2. **Compliant** — ``scaffold_routing_invariants(design, require_seams=...)``
+         returns no violations: (seamed) genuine mid-helix seam crossovers are present
+         AND every non-seam (end/turn) scaffold crossover sits ≥ ``MIN_SSDNA_MARGIN``
+         bp clear of any staple domain on its helix.  Pass ``require_seams=False`` for
+         an inherently seamless / zig-zag route (it legitimately has no seams).
+
+    Can-go-red: a design with no scaffold (clause 1); a seamless raster checked with
+    ``require_seams=True`` (clause 2 — no seams); a scaffold crossover buried in a
+    staple (clause 2 — margin).  Returns the scaffold strand list.
+    """
+    from backend.core.scaffold_invariants import scaffold_routing_invariants
+
+    scaffolds = [
+        s for s in design.strands if s.is_scaffold and not s.is_reference
+    ]
+    assert scaffolds, (
+        "non-vacuity: design has no scaffold strand, so routing compliance is "
+        "vacuous — did auto_scaffold actually route a scaffold?"
+    )
+    violations = scaffold_routing_invariants(design, require_seams=require_seams)
+    assert not violations, (
+        "scaffold routing is not compliant (seamless raster / buried crossovers):\n"
+        + "\n".join(f"  - {v}" for v in violations)
+    )
+    return scaffolds
 
 
 # ── Geometric length oracle ───────────────────────────────────────────────────
