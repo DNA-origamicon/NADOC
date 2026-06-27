@@ -136,6 +136,15 @@ def auto_scaffold_seamless(
         result.warnings.append("No scaffold strands found.")
         return design, result
 
+    # Forced-ligation hinge: route ONE seamless strand through the gap rungs via the
+    # column-major serpentine realizer.  Self-gated → falls through on any miss.
+    if design.forced_ligations:
+        from backend.core.hinge_weave_router import realize_hinge_weave_seamless
+
+        woven = realize_hinge_weave_seamless(design.model_copy(deep=True))
+        if woven is not None:
+            return woven
+
     # Irregular multi-section designs (teeth, dumbbells) fragment under the native
     # zig/bridge route; the section router decomposes them into uniform sub-bundles,
     # routes the windows seamless and the backbone seamed (so it closes into a circle

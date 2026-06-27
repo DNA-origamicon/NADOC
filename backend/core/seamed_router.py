@@ -1134,7 +1134,17 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
     classic seamed pipeline below; designs with manual forced ligations are never
     overridden.  See backend/core/section_router.py.
     """
-    if not design.forced_ligations:
+    if design.forced_ligations:
+        # Forced-ligation hinge designs (cross-gap scaffold bridges): route one
+        # SEAMED, compliant strand through the bridges.  route_hinge is self-gated
+        # against the scaffold-routing invariants and returns None for anything it
+        # cannot route compliantly (incl. genuine one-off manual anchors), which
+        # falls through to the classic preserve-the-anchor pipeline — no regression.
+        from backend.core.hinge_router import route_hinge
+        hinged = route_hinge(design.model_copy(deep=True))
+        if hinged is not None:
+            return hinged
+    else:
         coverage = _scaffold_coverage(design)
         from backend.core.section_router import has_multisection_helix, route_sections
         if has_multisection_helix(coverage):
