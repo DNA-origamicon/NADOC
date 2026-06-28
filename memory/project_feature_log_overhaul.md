@@ -205,3 +205,22 @@ Frontend smoke (`just frontend`):
 - Run autoscaffold → ◆ entry appears in Feature Log; click ↶ revert → design returns to pre-scaffold.
 - Hard-refresh after autoscaffold → snapshot survives via `localStorage`-persisted design; revert still works.
 - Open assembly file → auto-switches to Scene tab; assembly panel visible.
+
+## Reference-based clean delete (2026-06-27)
+
+Supersedes the conservative "non-reconstructable means dependent" rule above for dependency
+analysis. `backend/core/feature_dependencies.py` now marks a later feature as a dependent only
+when its added/modified topology structurally references an id produced by the deleted feature
+(transitively including true dependents). It scans field-level references such as strand-domain
+helix ids, crossover/forced-ligation endpoints, cluster membership, flexible marks/connections,
+overhang anchors, and modified strand ids. `targets=None` remains the conservative unknown
+fallback.
+
+`crud._delete_snapshot_feature` now uses structural subtraction for additive clean deletes:
+remove the produced ids from the live design, prune cluster membership and empty clusters, scrub
+the same ids out of surviving snapshot/routing-cluster pre/post payloads, then seek to end. This
+fixes the `workspace/2x2_strutted_corner.nadoc` F2 case: deleting the independent
+`extrude-segment` removes only `h_XY_0_4`/`h_XY_0_5` and their strands, while later Fine Routing,
+flexible mark/relax, and cluster move entries survive. Non-additive rollback cases such as
+auto-break still use the older pre-state/replay path so removed or modified existing strands can
+be restored correctly.

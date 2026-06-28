@@ -31,6 +31,8 @@ from tests.automation_harness import (
 
 _PRIMITIVES = Path("workspace/Primitives")
 _GOLDEN_2X2 = _PRIMITIVES / "2x2_single_hinge_link.nadoc"
+_GOLDEN_2X4 = _PRIMITIVES / "2x4_double_hinge_link.nadoc"
+_GOLDEN_2X6 = _PRIMITIVES / "2x6_triple_hinge_link.nadoc"
 
 
 def test_build_2x2_has_the_hinge_shape():
@@ -75,9 +77,38 @@ def test_build_is_isolated_from_active_design():
 
 
 def test_unknown_primitive_name_raises():
-    """2x4/2x6 are AF-33 P2 — an unsupported name fails loudly, not silently."""
-    with pytest.raises(KeyError, match="2x4/2x6 are AF-33 P2|unknown hinge primitive"):
-        build_hinge_primitive("2x4_double_hinge_link")
+    """An unsupported name fails loudly, not silently (2x2/2x4/2x6 are supported)."""
+    with pytest.raises(KeyError, match="unknown hinge primitive"):
+        build_hinge_primitive("9x9_nonexistent_hinge")
+
+
+def test_build_2x4_has_the_hinge_shape():
+    """The built 2x4 hinge: two 2×4 SQUARE leaves, two links (4 reciprocal FLs).
+
+    Structure-only checks (no golden needed): 16 helices (rows {0,1,4,5} × cols
+    {0..3}), 28 strands (32 from the bundle minus the 4 merged by the FL links),
+    exactly 4 forced ligations, passing validator.
+    """
+    d = build_hinge_primitive("2x4_double_hinge_link")
+    assert len(d.helices) == 16
+    assert len(d.strands) == 28
+    assert len(d.forced_ligations) == 4
+    assert {h.grid_pos for h in d.helices} == {
+        (r, c) for r in (0, 1, 4, 5) for c in range(4)
+    }
+    assert validate_design(d).passed
+
+
+def test_build_2x6_has_the_hinge_shape():
+    """The built 2x6 hinge: two 2×6 SQUARE leaves, three links (6 reciprocal FLs)."""
+    d = build_hinge_primitive("2x6_triple_hinge_link")
+    assert len(d.helices) == 24
+    assert len(d.strands) == 42
+    assert len(d.forced_ligations) == 6
+    assert {h.grid_pos for h in d.helices} == {
+        (r, c) for r in (0, 1, 4, 5) for c in range(6)
+    }
+    assert validate_design(d).passed
 
 
 def test_build_2x2_autoscaffolds_compliantly():
@@ -171,6 +202,107 @@ def test_build_hinge_rejects_bad_dimensions(k, n):
         build_hinge(k, n)
 
 
+# ── Overhang / staple-level FLs must not derail scaffold routing ──────────────
+# Regression for workspace/3x6_hinge_bound_end_to_root.nadoc: an in-app "bound end
+# to root" overhang binding emits a forced ligation whose endpoint helix carries
+# only staples (no scaffold).  Scaffold routing owns only both-endpoints-scaffold
+# FLs; a staple-only helix and a staple FL must be ignored by routing (and the FL
+# preserved verbatim), not break the hinge realizer into the fragmenting fallback.
+
+
+def test_scaffold_fls_filter_excludes_staple_only_endpoint_fl():
+    """``_scaffold_fls`` keeps the scaffold rungs and drops a staple-level FL whose
+    endpoint helix is not scaffold-covered."""
+    from backend.core.models import Direction, ForcedLigation
+    from backend.core.hinge_weave_router import _scaffold_fls
+    from backend.core.seamed_router import _scaffold_coverage
+
+    d = build_hinge(3, 6)
+    cov = _scaffold_coverage(d)
+    rail = next(h for h in d.helices if h.grid_pos == (2, 0))
+    staple_fl = ForcedLigation(
+        three_prime_helix_id=rail.id, three_prime_bp=rail.bp_start + 10,
+        three_prime_direction=Direction.REVERSE,
+        five_prime_helix_id="h_staple_only", five_prime_bp=0,
+        five_prime_direction=Direction.FORWARD,
+    )
+    fls = list(d.forced_ligations) + [staple_fl]
+    kept = _scaffold_fls(fls, cov)
+    assert staple_fl not in kept                 # staple FL excluded
+    assert len(kept) == len(d.forced_ligations)  # all 6 rungs kept
+
+
+def test_hinge_with_staple_only_helix_still_routes_to_one_strand():
+    """A staple-only helix in the gap (the 'root' of a bound-end-to-root binding)
+    must not break the hinge realizer's rectangular-leaf analysis.  Before the fix
+    the extra helix made ``_analyze_leaves`` decline → classic fallback fragmented
+    the scaffold; now it is excluded and the hinge routes to one seamed strand."""
+    from backend.core.models import Direction, Domain, Strand, StrandType
+
+    d = build_hinge(3, 6)
+    rung_fls = {
+        (f.three_prime_helix_id, f.three_prime_bp,
+         f.five_prime_helix_id, f.five_prime_bp)
+        for f in d.forced_ligations
+    }
+    base = d.helices[0]
+    root = base.model_copy(update={"id": "h_root", "grid_pos": (3, 0)})  # gap row
+    root_stpl = Strand(
+        id="stpl_root",
+        domains=[Domain(helix_id="h_root", start_bp=base.bp_start,
+                        end_bp=base.bp_start + 3, direction=Direction.FORWARD)],
+        strand_type=StrandType.STAPLE,
+    )
+    d = d.model_copy(update={
+        "helices": list(d.helices) + [root],
+        "strands": list(d.strands) + [root_stpl],
+    })
+
+    design_state.set_design(d)
+    out = hb.auto_scaffold()
+    scaffolds = assert_scaffold_routing_compliant(out, require_seams=True)
+    assert len(scaffolds) == 1
+    assert validate_design(out).passed
+    # every scaffold helix (not the staple-only root) is in the single strand
+    scaf_helix_ids = {h.id for h in out.helices if h.id != "h_root"}
+    assert {dm.helix_id for dm in scaffolds[0].domains} == scaf_helix_ids
+    assert {
+        (f.three_prime_helix_id, f.three_prime_bp,
+         f.five_prime_helix_id, f.five_prime_bp)
+        for f in out.forced_ligations
+    } == rung_fls  # rungs preserved
+
+
+def test_real_bound_end_to_root_design_routes_and_preserves_all_fls():
+    """End-to-end on the reported file: a 3x6 hinge with a 'bound end to root'
+    overhang binding (2 staple-level FLs + 1 staple-only helix on top of the 6
+    scaffold rungs) routes to ONE scaffold strand with ALL 8 forced ligations
+    preserved verbatim.  The .nadoc is not git-tracked → skip if absent."""
+    import json
+
+    fixture = Path("workspace/3x6_hinge_bound_end_to_root.nadoc")
+    if not fixture.exists():
+        pytest.skip(f"{fixture} not present in this checkout")
+    d = Design.model_validate(json.loads(fixture.read_text()))
+    orig_fls = {
+        (f.three_prime_helix_id, f.three_prime_bp,
+         f.five_prime_helix_id, f.five_prime_bp)
+        for f in d.forced_ligations
+    }
+    assert len(orig_fls) == 8
+
+    design_state.set_design(d)
+    out = hb.auto_scaffold()
+    scaffolds = assert_scaffold_routing_compliant(out, require_seams=True)
+    assert len(scaffolds) == 1
+    assert validate_design(out).passed
+    assert {
+        (f.three_prime_helix_id, f.three_prime_bp,
+         f.five_prime_helix_id, f.five_prime_bp)
+        for f in out.forced_ligations
+    } == orig_fls  # both the 6 rungs AND the 2 root-binding FLs preserved
+
+
 @pytest.mark.skipif(
     not _GOLDEN_2X2.exists(),
     reason=f"hinge primitive golden missing: {_GOLDEN_2X2} (hand-built, not in repo)",
@@ -184,3 +316,29 @@ def test_build_2x2_matches_golden():
     """
     d = build_hinge_primitive("2x2_single_hinge_link")
     assert_matches_primitive(d, "2x2_single_hinge_link", primitives_dir=_PRIMITIVES)
+
+
+@pytest.mark.skipif(
+    not _GOLDEN_2X4.exists(),
+    reason=f"hinge primitive golden missing: {_GOLDEN_2X4} (hand-built, not in repo)",
+)
+def test_build_2x4_matches_golden():
+    """AF-33 P2 load-bearing pin: the code-built 2x4 == the hand-built golden.
+
+    The 2x4 golden carries ASYMMETRIC hand-authored gap trims (``3p −16`` / ``5p −2``
+    by column parity) replayed verbatim from its feature log — so a drifted trim, a
+    dropped/mis-wired link, or a wrong leaf would fail on canonical topology and/or
+    the forced-ligation endpoint set (``canonical_topology`` is blind to FL records).
+    """
+    d = build_hinge_primitive("2x4_double_hinge_link")
+    assert_matches_primitive(d, "2x4_double_hinge_link", primitives_dir=_PRIMITIVES)
+
+
+@pytest.mark.skipif(
+    not _GOLDEN_2X6.exists(),
+    reason=f"hinge primitive golden missing: {_GOLDEN_2X6} (hand-built, not in repo)",
+)
+def test_build_2x6_matches_golden():
+    """AF-33 P2 load-bearing pin: the code-built 2x6 == the golden (3 links, no trims)."""
+    d = build_hinge_primitive("2x6_triple_hinge_link")
+    assert_matches_primitive(d, "2x6_triple_hinge_link", primitives_dir=_PRIMITIVES)

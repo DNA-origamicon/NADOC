@@ -624,4 +624,5 @@ def test_align_cluster_edge_adds_no_coverage():
     # AF-31's place_crossover + delete_crossover flipped both (43 → 45).
     # AF-32's force_ligate + delete_forced_ligation flipped both (45 → 47);
     # AF-30's strand_end_resize flipped strand-end-resize (47 → 48).
-    assert rep["covered"] == 48
+    # AF-27 P2's relax_overhang_connection + relax_bond flipped both (48 → 50).
+    assert rep["covered"] == 50

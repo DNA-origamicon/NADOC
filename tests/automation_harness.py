@@ -31,7 +31,7 @@ from backend.api.crud import DesignImportRequest, import_design
 from backend.api.headless_build import scratch_session
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.design_geometry import _geometry_for_design
-from backend.core.models import Design
+from backend.core.models import Design, Vec3
 from backend.core.oxdna_health import RMSF_PRELIM_FRAMES
 from backend.core.validator import validate_design
 
@@ -1008,6 +1008,172 @@ def assert_flexible_segments_relaxed(
     )
 
 
+# ── Linker / bond relax pose oracles (AF-27 P2) ───────────────────────────────
+
+def _relax_pose_moved(before: Design, after: Design) -> bool:
+    """True iff at least one cluster's rigid transform (translation/rotation)
+    differs between ``before`` and ``after`` — the pose-moved guard shared by the
+    relax oracles (same shape as the AF-2 forward-mutated guard)."""
+    bp = {
+        ct.id: (tuple(ct.translation), tuple(ct.rotation))
+        for ct in before.cluster_transforms
+    }
+    return any(
+        bp.get(ct.id) != (tuple(ct.translation), tuple(ct.rotation))
+        for ct in after.cluster_transforms
+    )
+
+
+def _assert_relax_pose(
+    before: Design,
+    after: Design,
+    strain_before: float,
+    strain_after: float,
+    *,
+    label: str,
+    require_reduced: bool,
+    eps: float = 1e-3,
+):
+    """The strain-reduction relax contract, shared by the linker + bond pose
+    oracles.  ``strain`` is the *caller's* independently-measured deviation of the
+    relaxed quantity from its natural target (``|chord − natural_span|``); the
+    relax must (1) reduce it, (2) move a rigid pose to do so, and (3) leave the
+    strand-graph topology untouched (the Three-Layer Law)."""
+    if require_reduced:
+        assert strain_after < strain_before - eps, (
+            f"{label}: relax did not reduce strain |chord − natural span|: "
+            f"{strain_before:.4f} → {strain_after:.4f} nm — a relax must pull the "
+            "bond/linker toward its natural span (can-go-red on a no-op / degenerate "
+            "hinge where the moving anchor sits on the joint axis)"
+        )
+        assert _relax_pose_moved(before, after), (
+            f"{label}: no cluster pose changed — a strain-reducing relax must move "
+            "at least one rigid cluster (vacuous-pass guard)"
+        )
+    assert canonical_topology(before) == canonical_topology(after), (
+        f"{label}: relax changed the strand-graph topology — it must be a "
+        "display/pose-layer move only (Three-Layer Law)"
+    )
+
+
+def assert_linker_relaxed_pose(
+    before: Design,
+    after: Design,
+    conn_id: str,
+    *,
+    natural_span_nm: float | None = None,
+    require_reduced: bool = True,
+    eps: float = 1e-3,
+):
+    """A headless overhang-LINKER relax pulled the linker toward its natural span,
+    moved a rigid pose to get there, and **did not touch topology** (AF-27 P2).
+
+    The relax counterpart to :func:`assert_linker_connects`.  The in-app /
+    headless "Relax Linker" command
+    (:func:`~backend.api.headless_build.relax_overhang_connection`) swings the
+    joint-connected rigid cluster so the linker's connector arcs collapse — the
+    geometric rest pose that *confines the hinge angle* by the linker's contour
+    length.  The relax internally optimises connector-arc residuals; this oracle
+    pins the **solver-independent** consequence: the anchor-to-anchor chord moves
+    toward the linker's natural duplex span.
+
+      1. **Strain reduced (the load-bearing pin).**  ``strain(d) = |chord(d) −
+         natural_span|`` where ``chord`` is the distance between the two linker
+         attach anchors *re-measured on the POSED geometry*
+         (``_geometry_for_design`` → ``linker_relax._anchor_pos_and_normal``, the
+         same ground-truth anchor lookup the relax uses, not its optimiser) and
+         ``natural_span`` is the ds duplex visualLength
+         (``_ds_target_length_nm``; pass ``natural_span_nm`` for an ss FJC R_ee).
+         ``strain(after) < strain(before)`` — a relax that left the linker no
+         closer to its natural span fails here (and so does a *degenerate* hinge
+         whose moving anchor lies on the joint axis, where rotation cannot change
+         the chord — the natural can-go-red).
+      2. **A pose actually moved** (``require_reduced``).  At least one cluster's
+         transform differs from ``before`` (vacuous-pass guard).
+      3. **Topology unchanged.**  ``canonical_topology`` equal before/after — the
+         relax is a display/pose-layer move (the Three-Layer Law as a pin).
+
+    Can-go-red: a no-op / degenerate relax fails clause 1 + 2; a topology-mutating
+    relax fails clause 3.
+    """
+    from backend.core.linker_relax import _anchor_pos_and_normal, _ds_target_length_nm
+
+    def _conn(d: Design):
+        c = next((c for c in d.overhang_connections if c.id == conn_id), None)
+        assert c is not None, f"no overhang connection {conn_id!r} in design"
+        return c
+
+    def _chord(d: Design, c) -> float:
+        nucs = _geometry_for_design(d)
+        pa, _na = _anchor_pos_and_normal(nucs, c, c.overhang_a_id, True)
+        pb, _nb = _anchor_pos_and_normal(nucs, c, c.overhang_b_id, False)
+        assert pa is not None and pb is not None, (
+            f"linker {conn_id!r} anchors did not resolve in posed geometry — "
+            "vacuous relax check"
+        )
+        return math.dist(tuple(pa), tuple(pb))
+
+    c_after = _conn(after)
+    span = natural_span_nm if natural_span_nm is not None else _ds_target_length_nm(c_after)
+    strain_before = abs(_chord(before, _conn(before)) - span)
+    strain_after = abs(_chord(after, c_after) - span)
+    _assert_relax_pose(
+        before, after, strain_before, strain_after,
+        label=f"linker {conn_id!r}", require_reduced=require_reduced, eps=eps,
+    )
+
+
+def assert_bond_relaxed_pose(
+    before: Design,
+    after: Design,
+    *,
+    side_a: dict,
+    side_b: dict,
+    target_nm: float,
+    require_reduced: bool = True,
+    eps: float = 1e-3,
+):
+    """A generic backbone-bond relax pulled the bond chord toward its target,
+    moved a rigid pose, and **did not touch topology** (AF-27 P2 sibling).
+
+    The :func:`assert_linker_relaxed_pose` analog for the generic
+    :func:`~backend.api.headless_build.relax_bond` (crossover / forced-ligation /
+    linker-arc / strand-arc).  ``side_a`` / ``side_b`` are the two bond endpoints
+    (``{helix_id, bp_index, direction, strand_id?}``); ``target_nm`` is the chord
+    target the relax closes onto (crossover ~0.13, ligation 0, arc ~0.67).
+
+    Same three clauses as the linker oracle — strain ``|chord − target_nm|``
+    reduced + a pose moved + ``canonical_topology`` unchanged — with the chord
+    re-measured between the two named nucleotides on the POSED geometry (so the
+    pin is independent of the relax's own ``relax_info``).  Can-go-red identically.
+    """
+    def _pos(d: Design, side: dict):
+        nucs = _geometry_for_design(d)
+        for n in nucs:
+            if n.get("helix_id") != side["helix_id"]:
+                continue
+            if n.get("bp_index") != side["bp_index"]:
+                continue
+            if n.get("direction") != side["direction"]:
+                continue
+            if side.get("strand_id") and n.get("strand_id") != side["strand_id"]:
+                continue
+            p = n.get("backbone_position") or n.get("base_position")
+            assert p is not None, f"bond endpoint {side} has no backbone position"
+            return tuple(p)
+        raise AssertionError(f"bond endpoint {side} not found in posed geometry")
+
+    def _chord(d: Design) -> float:
+        return math.dist(_pos(d, side_a), _pos(d, side_b))
+
+    strain_before = abs(_chord(before) - target_nm)
+    strain_after = abs(_chord(after) - target_nm)
+    _assert_relax_pose(
+        before, after, strain_before, strain_after,
+        label="bond", require_reduced=require_reduced, eps=eps,
+    )
+
+
 # ── File-backed part oracle (AF-12 — build from a saved validated primitive) ──
 
 def assert_part_from_file(assembly, instance_id, expected_topology):
@@ -1705,6 +1871,178 @@ def assert_matches_primitive(
         f"built primitive {primitive_name!r} did not validate:\n{report}"
     )
     return golden
+
+
+# ── Primitive-placement oracle (AF-35) ────────────────────────────────────────
+# Independent (does NOT call the graft under test) plane→axis mapping + helpers.
+# The only thing shared with the implementation is ``_lattice_position`` (the
+# lattice CONSTANT — the spec, not the code under test), so a bug in the graft's
+# plane mapping / per-helix translation / id remap is caught, not masked.
+_PLACE_PLANE_AXES = {"XY": ("x", "y"), "XZ": ("x", "z"), "YZ": ("y", "z")}
+
+
+def _placement_plane(primitive: Design) -> str:
+    """The primitive's construction plane — the plane whose normal is the helix axis."""
+    h = primitive.helices[0]
+    dx = abs(h.axis_end.x - h.axis_start.x)
+    dy = abs(h.axis_end.y - h.axis_start.y)
+    dz = abs(h.axis_end.z - h.axis_start.z)
+    return max((dz, "XY"), (dy, "XZ"), (dx, "YZ"))[1]
+
+
+def _min_cell(helices):
+    return min(h.grid_pos for h in helices if h.grid_pos is not None)
+
+
+def _placement_subdesign(design: Design, helix_ids) -> Design:
+    """Carve out the helices in ``helix_ids`` + the strands/FLs/clusters wholly on them."""
+    hids = set(helix_ids)
+    return Design(
+        lattice_type=design.lattice_type,
+        helices=[h for h in design.helices if h.id in hids],
+        strands=[
+            s for s in design.strands if s.domains and all(dm.helix_id in hids for dm in s.domains)
+        ],
+        forced_ligations=[
+            fl for fl in design.forced_ligations
+            if fl.three_prime_helix_id in hids and fl.five_prime_helix_id in hids
+        ],
+        cluster_transforms=[
+            c for c in design.cluster_transforms if c.helix_ids and all(h in hids for h in c.helix_ids)
+        ],
+    )
+
+
+def _translate_subdesign(sub: Design, grid_delta, world_delta, plane: str) -> Design:
+    """Rigidly translate a sub-design's helices (grid + axes) — independent of the graft."""
+    a, b = _PLACE_PLANE_AXES[plane]
+    dr, dc = grid_delta
+    dlx, dly = world_delta
+
+    def _shift(v: Vec3) -> Vec3:
+        comps = {"x": v.x, "y": v.y, "z": v.z}
+        comps[a] += dlx
+        comps[b] += dly
+        return Vec3(**comps)
+
+    new_helices = [
+        h.model_copy(
+            update={
+                "grid_pos": (h.grid_pos[0] + dr, h.grid_pos[1] + dc),
+                "axis_start": _shift(h.axis_start),
+                "axis_end": _shift(h.axis_end),
+            }
+        )
+        for h in sub.helices
+    ]
+    return sub.model_copy(update={"helices": new_helices})
+
+
+def _fl_grid_set(design: Design):
+    """Forced-ligation links keyed by helix *grid_pos* (id-independent — survives remap)."""
+    gp = {h.id: h.grid_pos for h in design.helices}
+    return frozenset(
+        (
+            gp[fl.three_prime_helix_id], fl.three_prime_bp, str(fl.three_prime_direction),
+            gp[fl.five_prime_helix_id], fl.five_prime_bp, str(fl.five_prime_direction),
+        )
+        for fl in design.forced_ligations
+    )
+
+
+def _cluster_grid_sets(design: Design):
+    """Cluster groupings keyed by member helix *grid_pos* (id-independent)."""
+    gp = {h.id: h.grid_pos for h in design.helices}
+    return frozenset(frozenset(gp[h] for h in c.helix_ids) for c in design.cluster_transforms)
+
+
+def assert_primitive_placed(
+    before: Design,
+    after: Design,
+    primitive: Design,
+    *,
+    anchor_cell,
+    plane: str | None = None,
+):
+    """AF-35: a whole primitive was placed into a host design **verbatim** — a clean
+    rigid translation of the standalone primitive, anchored at ``anchor_cell``, with
+    the host's existing content untouched.
+
+    ``before`` / ``after`` are the host design pre- / post-placement; ``primitive``
+    is the standalone primitive that was placed.  The user's decision (2026-06-27)
+    is **preserve-verbatim**: a hinge's scaffold + cross-gap forced-ligation links
+    *are* the hinge, so placement must reproduce the primitive's topology, geometry,
+    FL links, and cluster groupings exactly — only translated.
+
+    Asserts, in order:
+      1. **Non-vacuity** — at least one helix was added (``after`` ⊋ ``before`` by
+         helix id); an empty placement cannot pass.
+      2. **Additive** — the host's original helices/strands/FL/cluster records appear
+         **unchanged** in ``after`` (``canonical_topology`` of the host portion equals
+         ``before``'s).  Placement never mutates the existing strand graph.
+      3. **Anchored** — the placed sub-structure's anchor cell (min ``grid_pos``)
+         equals the requested ``anchor_cell`` (it landed where asked).
+      4. **Verbatim shape + geometry** — offset-corrected back by the lattice vector
+         implied by ``anchor_cell`` (re-derived here from ``_lattice_position`` — the
+         lattice constant, NOT the graft), the placed sub-structure's
+         ``canonical_topology`` equals the primitive's.  Because the correction is
+         computed independently of the graft, a wrong plane mapping / per-helix
+         translation / dropped helix all diverge here.
+      5. **Forced-ligation links preserved** — the placed FL set (keyed by grid_pos,
+         so id-independent) equals the primitive's.  Load-bearing: ``canonical_topology``
+         is blind to ``forced_ligations`` (the off-strand-graph blind-spot), so a
+         dropped / mis-wired cross-gap hinge link slips past clause 4 entirely.
+      6. **Cluster groupings preserved** — the placed rigid-leaf clusters (keyed by
+         member grid_pos) equal the primitive's (also invisible to clause 4).
+
+    Can-go-red: nothing placed (1); a placement that mutated the host (2); a
+    placement at the wrong cell (3); a distorted/mis-translated copy (4); a dropped
+    or mis-wired forced-ligation link (5); a lost cluster grouping (6).
+    """
+    from backend.core.lattice import _lattice_position
+
+    anchor_cell = tuple(anchor_cell)
+    assert primitive.helices, "primitive has no helices — vacuous oracle"
+    plane = plane or _placement_plane(primitive)
+
+    before_ids = {h.id for h in before.helices}
+    placed_ids = {h.id for h in after.helices} - before_ids
+    assert placed_ids, "no helices were placed (after == before) — nothing to validate"
+
+    # (2) additive — host portion unchanged
+    host_portion = _placement_subdesign(after, before_ids)
+    assert canonical_topology(host_portion) == canonical_topology(before), (
+        "placement mutated the host design's existing content (not additive)"
+    )
+
+    placed = _placement_subdesign(after, placed_ids)
+
+    # (3) anchored at the requested cell
+    landed = _min_cell(placed.helices)
+    assert landed == anchor_cell, (
+        f"primitive landed at {landed}, not the requested anchor {anchor_cell}"
+    )
+
+    # (4) verbatim — offset-correct independently and compare to the primitive
+    src_anchor = _min_cell(primitive.helices)
+    grid_delta = (src_anchor[0] - anchor_cell[0], src_anchor[1] - anchor_cell[1])
+    fx, fy = _lattice_position(anchor_cell[0], anchor_cell[1], primitive.lattice_type)
+    tx, ty = _lattice_position(src_anchor[0], src_anchor[1], primitive.lattice_type)
+    corrected = _translate_subdesign(placed, grid_delta, (tx - fx, ty - fy), plane)
+    assert canonical_topology(corrected) == canonical_topology(primitive), (
+        "placed sub-structure is not a verbatim copy of the primitive "
+        "(shape/geometry differ after offset-correction)"
+    )
+
+    # (5) forced-ligation links preserved (canonical_topology is blind to these)
+    assert _fl_grid_set(corrected) == _fl_grid_set(primitive), (
+        "placement dropped or mis-wired the primitive's forced-ligation links"
+    )
+
+    # (6) cluster groupings preserved (also invisible to canonical_topology)
+    assert _cluster_grid_sets(corrected) == _cluster_grid_sets(primitive), (
+        "placement lost or altered the primitive's rigid-leaf cluster groupings"
+    )
 
 
 # ── Scaffold-routing-compliance oracle (AF-34) ────────────────────────────────

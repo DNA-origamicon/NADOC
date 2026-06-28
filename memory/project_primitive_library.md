@@ -124,10 +124,20 @@ many click points (incl. wrong-parity targets) the committed anchor **always kep
 - `tests/test_primitives_router.py` (+5 placement-spec); `tests/test_lattice.py`
   (segment-from-empty).
 
-**Deferred (architecture leaves room):** multi-op feature-log replay (hinges /
-pretransformed clusters needing id-remap + per-op cell offset), SQUARE + other lattices,
-non-origin **face** selection, footprint rotation. The `placement` spec + the `derive_*`
-seam generalize: a multi-op primitive becomes "replay each op additively, cells offset".
+**Deferred (architecture leaves room):** ~~multi-op feature-log replay~~ (shipped
+HEADLESS as AF-35, 2026-06-27 — see below), SQUARE + other lattices, non-origin **face**
+selection, footprint rotation. The `placement` spec + the `derive_*` seam generalize.
+
+**Headless multi-op placement (AF-35, 2026-06-27) — backend/core, not the GUI yet.**
+`backend/core/primitive_placement.place_primitive_into` + `hb.place_primitive(name, *,
+anchor_cell, plane)` place a WHOLE hinge (or any helices/strands/FL/cluster primitive) into
+a design. **User decision: preserve the primitive's scaffold/FL routing VERBATIM** → built
+as a rigid GRAFT (copy the primitive's own geometry + translate by one lattice vector +
+remap ids), NOT a feature-log op-replay (a replay routes through `bundle-segment`, a
+different builder → AF-30 ISSUE-13 axis drift). Pinned by `assert_primitive_placed`
+(additive + anchored + verbatim + FL/cluster survived). This is the HEADLESS path; the GUI
+placement pipeline is still single-op (`bundle-segment`) — wiring the graft into the
+frontend placement flow is a future follow-up.
 
 ## Parametric circle (flat disc) — 2026-06-11
 

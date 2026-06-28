@@ -44,6 +44,9 @@ from backend.api.crud import (
     OverhangConnectionCreateRequest,
     OverhangExtrudeRequest,
     PlaceCrossoverRequest,
+    RelaxBondEndpoint,
+    RelaxBondRequest,
+    RelaxLinkerRequest,
     StrandEndResizeEntry,
     StrandEndResizeRequest,
     add_bundle_continuation as _route_extrude,
@@ -67,6 +70,8 @@ from backend.api.crud import (
     overhang_extrude as _route_overhang_extrude,
     patch_crossover_extra_bases as _route_set_xo_extra_bases,
     place_crossover as _route_place_crossover,
+    relax_bond_endpoint as _route_relax_bond,
+    relax_overhang_connection as _route_relax_overhang_connection,
     select_loadout as _route_select_loadout,
     strand_end_resize as _route_strand_end_resize,
 )
@@ -917,6 +922,85 @@ def relax_flexible_segments(
     return design_state.get_or_404()
 
 
+def relax_overhang_connection(
+    conn_id: str,
+    *,
+    joint_ids: list[str] | None = None,
+    bin_index: int | None = None,
+    r_ee_min_nm: float | None = None,
+    r_ee_max_nm: float | None = None,
+) -> Design:
+    """Relax a linker connection's display POSE
+    (POST /design/overhang-connections/{conn_id}/relax).
+
+    The relax counterpart to :func:`connect_overhangs`: once two leaves are tied
+    by a length-defined linker, this swings the joint-connected rigid cluster(s)
+    so the linker's connector arcs collapse toward their natural duplex/FJC span —
+    the geometric rest pose that *confines the hinge angle* by the linker's contour
+    length.  ``joint_ids`` omitted → the 1-DOF auto-pick path (the route requires
+    exactly one joint between the two overhangs' clusters); pass an explicit list
+    for the multi-DOF case.  ``bin_index`` / ``r_ee_*`` select the ss-linker FJC
+    histogram bin + kinematic limits (ds linkers ignore them).
+
+    **Three-Layer note — this is a DISPLAY/POSE move, NOT a topological edit.**
+    The route rotates ``cluster_transforms`` (and logs one ``ClusterOpLogEntry``
+    per touched cluster); it never edits the strand graph, so
+    ``canonical_topology`` is unchanged — that invariant is the load-bearing pin
+    in :func:`tests.automation_harness.assert_linker_relaxed_pose`.
+
+    Pin with :func:`tests.automation_harness.assert_linker_relaxed_pose`.
+    """
+    _route_relax_overhang_connection(conn_id, RelaxLinkerRequest(
+        joint_ids=joint_ids,
+        bin_index=bin_index,
+        r_ee_min_nm=r_ee_min_nm,
+        r_ee_max_nm=r_ee_max_nm,
+    ))
+    return design_state.get_or_404()
+
+
+def relax_bond(
+    bond_type: str,
+    *,
+    bond_id: str | None = None,
+    linker_side: str | None = None,
+    side_a: dict | None = None,
+    side_b: dict | None = None,
+    side_to_move: str | None = None,
+    joint_ids: list[str] | None = None,
+    target_nm: float | None = None,
+) -> Design:
+    """Relax any stretched backbone bond's display POSE (POST /design/relax-bond).
+
+    The generic sibling of :func:`relax_overhang_connection`: one entry point for
+    crossovers, forced ligations, linker connector arcs, and intra-strand
+    cross-helix arcs.  Identify the bond by EITHER a record id (``bond_id``, with
+    ``linker_side`` for a ``linker_arc``) OR the two nucleotide endpoints
+    (``side_a`` + ``side_b``, each a dict ``{helix_id, bp_index, direction,
+    strand_id?}``).  ``side_to_move`` is required for the 0-DOF rigid-translate
+    case (no joints between the two clusters); it is ignored once a joint exists.
+    ``target_nm`` overrides the type-default chord target (crossover ~0.13 nm,
+    ligation 0, linker/strand arc ~0.67 nm).
+
+    **Three-Layer note — POSE only.**  Like the linker relax, this moves
+    ``cluster_transforms`` (0-DOF translate / 1-DOF or N-DOF joint rotate) and
+    never edits the strand graph; ``canonical_topology`` is unchanged.
+
+    Pin with :func:`tests.automation_harness.assert_bond_relaxed_pose`.
+    """
+    _route_relax_bond(RelaxBondRequest(
+        bond_type=bond_type,
+        bond_id=bond_id,
+        linker_side=linker_side,
+        side_a=RelaxBondEndpoint(**side_a) if side_a is not None else None,
+        side_b=RelaxBondEndpoint(**side_b) if side_b is not None else None,
+        side_to_move=side_to_move,
+        joint_ids=joint_ids,
+        target_nm=target_nm,
+    ))
+    return design_state.get_or_404()
+
+
 # ── feature-log timeline navigation (scrub / seek — undo the build to a point) ──
 
 def seek_features(position: int, sub_position: int | None = None) -> Design:
@@ -1109,3 +1193,69 @@ def place_cluster_joint(
         max_angle_deg=max_angle_deg,
     ))
     return design_state.get_or_404()
+
+
+# ── Multi-op primitive PLACEMENT (AF-35 — preserve-verbatim graft) ────────────────
+# Place a WHOLE pre-built primitive (a hinge: two rigid leaves + cross-gap forced-
+# ligation links) additively into the active design, rigidly translated so its anchor
+# cell lands on a requested lattice cell.  Unlike the single-op ``extrude_segment``
+# placement (one bundle-create footprint), a hinge is a MULTI-op primitive whose
+# scaffold + FL routing must survive placement verbatim (user decision 2026-06-27) —
+# so this GRAFTS the primitive's own helices/strands/forced_ligations/cluster_transforms
+# (see ``backend.core.primitive_placement``) rather than re-running its build ops at an
+# offset (which would route through a different builder and risk geometry drift).
+# Commits via snapshot + set_design_silent → one undo step (additive + revertable).
+
+
+def _source_hinge_primitive(name: str) -> Design:
+    """Build a named hinge primitive standalone (the placement source).
+
+    Lazy import to avoid the ``headless_hinge_build`` → ``headless_build`` cycle.
+    """
+    from backend.api import headless_hinge_build as hhb
+
+    if name not in hhb.HINGE_PRIMITIVE_NAMES:
+        raise ValueError(
+            f"unknown primitive {name!r}; pass primitive=<Design> for non-hinge "
+            f"primitives (built-in hinge names: {hhb.HINGE_PRIMITIVE_NAMES})"
+        )
+    return hhb.build_hinge_primitive(name)
+
+
+def place_primitive(
+    name: str | None = None,
+    *,
+    anchor_cell,
+    plane: str | None = None,
+    primitive: Design | None = None,
+) -> Design:
+    """Place a whole primitive into the active design, anchored at ``anchor_cell``.
+
+    Replays a primitive additively (its anchor cell → ``anchor_cell``), preserving
+    its scaffold + forced-ligation routing **verbatim** (a rigid graft, not a
+    re-route).  ``name`` builds a built-in hinge primitive as the source; for any
+    other primitive pass ``primitive=<Design>`` (e.g. ``Design.from_json(...)``).
+    ``plane`` defaults to the primitive's own construction plane.
+
+    The placed sub-structure is a clean rigid translation of the standalone
+    primitive (fresh ids, host content untouched).  Commits as a single undoable
+    step.  Pin with :func:`tests.automation_harness.assert_primitive_placed`.
+
+    Raises ``ValueError`` (via ``place_primitive_into``) on a lattice mismatch, a
+    footprint-distorting (honeycomb odd-parity) shift, a host collision, or a
+    primitive carrying content the graft cannot place verbatim.
+    """
+    from backend.core.primitive_placement import place_primitive_into
+
+    if primitive is None:
+        if name is None:
+            raise ValueError("pass a primitive name or an explicit primitive=<Design>")
+        primitive = _source_hinge_primitive(name)
+
+    host = design_state.get_or_404()
+    placed = place_primitive_into(
+        host, primitive, anchor_cell=tuple(anchor_cell), plane=plane,
+    )
+    design_state.snapshot()
+    design_state.set_design_silent(placed)
+    return placed

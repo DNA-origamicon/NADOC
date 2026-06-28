@@ -21,11 +21,12 @@ from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.flexible_segments import apply_marks
 from backend.core.lattice import overhang_candidate_error
 from backend.core.models import (
-    ClusterRigidTransform, Direction, Domain, FlexibleSegmentMark, Helix,
-    LatticeType, OverhangSpec, Strand, StrandType, Vec3,
+    ClusterJoint, ClusterRigidTransform, Direction, Domain, FlexibleSegmentMark,
+    Helix, LatticeType, OverhangConnection, OverhangSpec, Strand, StrandType, Vec3,
 )
 from backend.core.validator import validate_design
 from tests.automation_harness import (
+    assert_bond_relaxed_pose,
     assert_circular_disc,
     assert_cluster_in_feature_log,
     assert_crossover_joins,
@@ -38,7 +39,9 @@ from tests.automation_harness import (
     assert_geometric_length_delta,
     assert_inverse_pair,
     assert_linker_connects,
+    assert_linker_relaxed_pose,
     assert_on_deformed_frame,
+    assert_primitive_placed,
     assert_roundtrip_stable,
     canonical_topology,
     geometric_nucleotide_count,
@@ -522,6 +525,187 @@ def test_connect_overhangs_rejects_invalid_polarity():
                 linker_type="ds", length_value=6, length_unit="bp",
             )
         assert exc.value.status_code == 400
+
+
+# ── relax_overhang_connection + relax_bond (AF-27 P2 — linker/bond pose) ─────────
+
+def _two_overhang_leaves_with_joint(*, joint_origin, length_bp=24):
+    """Two real extruded-overhang leaves, each in its own helix-level cluster,
+    with ONE revolute joint on cluster A (the 1-DOF relax case) and a ds linker
+    connection tying the two overhangs.  ``joint_origin`` is the cluster-A-local
+    hinge-axis origin: place it OFF the moving overhang (e.g. ``[0,0,0]``) so the
+    relax can swing the chord toward the linker's natural span; place it ON the
+    overhang (``[2.5,0,0]``) for the degenerate no-op case.
+
+    The grid_pos-less ``demo_helix`` from the base demo design is dropped so the
+    fixture's ``canonical_topology`` is well-defined (every helix keyed by cell).
+    """
+    base = _seed_with_real_oh_domains_for_relax()
+    ca = ClusterRigidTransform(
+        id="cluster_a", name="A", helix_ids=["oh_helix_a"],
+        translation=[0.0, 0.0, 0.0], rotation=[0.0, 0.0, 0.0, 1.0], pivot=[0.0, 0.0, 0.0],
+    )
+    cb = ClusterRigidTransform(
+        id="cluster_b", name="B", helix_ids=["oh_helix_b"],
+        translation=[0.0, 0.0, 0.0], rotation=[0.0, 0.0, 0.0, 1.0], pivot=[0.0, 0.0, 0.0],
+    )
+    joint = ClusterJoint(
+        id="joint_a", cluster_id="cluster_a", name="Hinge",
+        local_axis_origin=list(joint_origin), local_axis_direction=[0.0, 1.0, 0.0],
+        min_angle_deg=-180.0, max_angle_deg=180.0,
+    )
+    conn = OverhangConnection(
+        name="L1", overhang_a_id="oh_a_5p", overhang_a_attach="free_end",
+        overhang_b_id="oh_b_5p", overhang_b_attach="root",
+        linker_type="ds", length_value=length_bp, length_unit="bp",
+    )
+    return base.model_copy(update={
+        "cluster_transforms": [ca, cb],
+        "cluster_joints": [joint],
+        "overhang_connections": [conn],
+    }), conn.id
+
+
+def _seed_with_real_oh_domains_for_relax():
+    """Two extruded-overhang helices (oh_helix_a/b at cells (0,0)/(0,3)), each with
+    a staple whose only domain is the overhang — and NO grid_pos-less base helix,
+    so the fingerprint is well-defined.  Mirrors
+    ``test_overhang_connections._seed_with_real_oh_domains`` minus the demo base."""
+    oh_helix_a = Helix(
+        id="oh_helix_a", axis_start=Vec3(x=2.5, y=0.0, z=0.0),
+        axis_end=Vec3(x=2.5, y=0.0, z=8 * BDNA_RISE_PER_BP),
+        phase_offset=0.0, length_bp=8, grid_pos=(0, 0),
+    )
+    oh_helix_b = Helix(
+        id="oh_helix_b", axis_start=Vec3(x=5.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=5.0, y=0.0, z=8 * BDNA_RISE_PER_BP),
+        phase_offset=0.0, length_bp=8, grid_pos=(0, 3),
+    )
+    oh_strand_a = Strand(
+        id="oh_strand_a",
+        domains=[Domain(helix_id="oh_helix_a", start_bp=0, end_bp=7,
+                        direction=Direction.FORWARD, overhang_id="oh_a_5p")],
+        strand_type=StrandType.STAPLE,
+    )
+    oh_strand_b = Strand(
+        id="oh_strand_b",
+        domains=[Domain(helix_id="oh_helix_b", start_bp=0, end_bp=7,
+                        direction=Direction.REVERSE, overhang_id="oh_b_5p")],
+        strand_type=StrandType.STAPLE,
+    )
+    return _demo_design().model_copy(update={
+        "helices": [oh_helix_a, oh_helix_b],
+        "strands": [oh_strand_a, oh_strand_b],
+        "overhangs": [
+            OverhangSpec(id="oh_a_5p", helix_id="oh_helix_a", strand_id="oh_strand_a", label="OHA"),
+            OverhangSpec(id="oh_b_5p", helix_id="oh_helix_b", strand_id="oh_strand_b", label="OHB"),
+        ],
+    })
+
+
+def test_relax_overhang_connection_pulls_linker_toward_natural_span():
+    """hb.relax_overhang_connection swings the joint-connected cluster so the
+    linker's connector arcs collapse: the anchor chord moves toward the duplex's
+    natural span, a rigid pose moves, and the strand graph is untouched — pinned
+    by assert_linker_relaxed_pose.  Also flips the route's headless coverage."""
+    seeded, conn_id = _two_overhang_leaves_with_joint(joint_origin=[0.0, 0.0, 0.0])
+    design_state.set_design(seeded)
+    before = design_state.get_or_404()
+    after = hb.relax_overhang_connection(conn_id)
+    assert_linker_relaxed_pose(before, after, conn_id)
+
+    report = headless_coverage_report()
+    assert any(
+        r["path"].endswith("/design/overhang-connections/{conn_id}/relax")
+        for r in report["covered_routes"]
+    ), "the linker-relax route should now be headless-covered"
+
+
+def test_relax_overhang_connection_degenerate_hinge_is_a_noop():
+    """When the moving overhang sits ON the hinge axis, rotation cannot change the
+    chord — the relax is a no-op and the strain-reduction oracle (rightly) fires.
+    Guards that the pass above is non-vacuous."""
+    seeded, conn_id = _two_overhang_leaves_with_joint(joint_origin=[2.5, 0.0, 0.0])
+    design_state.set_design(seeded)
+    before = design_state.get_or_404()
+    after = hb.relax_overhang_connection(conn_id)
+    with pytest.raises(AssertionError):
+        assert_linker_relaxed_pose(before, after, conn_id)
+
+
+def test_relax_overhang_connection_is_pose_only():
+    """The relax never edits the strand graph — canonical_topology unchanged
+    (the Three-Layer Law); only cluster_transforms + feature_log move."""
+    seeded, conn_id = _two_overhang_leaves_with_joint(joint_origin=[0.0, 0.0, 0.0])
+    design_state.set_design(seeded)
+    before = design_state.get_or_404()
+    after = hb.relax_overhang_connection(conn_id)
+    assert canonical_topology(before) == canonical_topology(after)
+
+
+def _two_helices_with_crossover(*, with_joint):
+    """Two parallel helices in separate clusters joined by a crossover record at
+    bp 6, optionally with a revolute joint (1-DOF) on cluster A.  No grid_pos-less
+    base helix.  Returns (seeded_design, side_a_dict, side_b_dict)."""
+    from backend.core.models import Crossover, HalfCrossover
+
+    L = 12
+    h_a = Helix(id="bond_h_a", axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+                axis_end=Vec3(x=0.0, y=0.0, z=L * BDNA_RISE_PER_BP),
+                phase_offset=0.0, length_bp=L, grid_pos=(0, 0))
+    h_b = Helix(id="bond_h_b", axis_start=Vec3(x=2.5, y=0.0, z=0.0),
+                axis_end=Vec3(x=2.5, y=0.0, z=L * BDNA_RISE_PER_BP),
+                phase_offset=0.0, length_bp=L, grid_pos=(0, 1))
+    s_a = Strand(id="bond_strand_a", domains=[Domain(helix_id="bond_h_a", start_bp=0,
+                end_bp=L - 1, direction=Direction.FORWARD)], strand_type=StrandType.STAPLE)
+    s_b = Strand(id="bond_strand_b", domains=[Domain(helix_id="bond_h_b", start_bp=0,
+                end_bp=L - 1, direction=Direction.REVERSE)], strand_type=StrandType.STAPLE)
+    ca = ClusterRigidTransform(id="bond_cluster_a", name="A", helix_ids=["bond_h_a"],
+                translation=[0, 0, 0], rotation=[0, 0, 0, 1], pivot=[0, 0, 0])
+    cb = ClusterRigidTransform(id="bond_cluster_b", name="B", helix_ids=["bond_h_b"],
+                translation=[0, 0, 0], rotation=[0, 0, 0, 1], pivot=[0, 0, 0])
+    joints = [ClusterJoint(id="bond_joint", cluster_id="bond_cluster_a", name="Hinge",
+                local_axis_origin=[1.25, 0.0, L * BDNA_RISE_PER_BP / 2],
+                local_axis_direction=[0.0, 1.0, 0.0], min_angle_deg=-90.0,
+                max_angle_deg=90.0)] if with_joint else []
+    xo = Crossover(id="bond_xover_01",
+                   half_a=HalfCrossover(helix_id="bond_h_a", index=6, strand=Direction.FORWARD),
+                   half_b=HalfCrossover(helix_id="bond_h_b", index=6, strand=Direction.REVERSE))
+    seeded = _demo_design().model_copy(update={
+        "helices": [h_a, h_b], "strands": [s_a, s_b],
+        "cluster_transforms": [ca, cb], "cluster_joints": joints, "crossovers": [xo],
+    })
+    side_a = {"helix_id": "bond_h_a", "bp_index": 6, "direction": "FORWARD"}
+    side_b = {"helix_id": "bond_h_b", "bp_index": 6, "direction": "REVERSE"}
+    return seeded, side_a, side_b
+
+
+def test_relax_bond_crossover_closes_the_gap():
+    """hb.relax_bond on a crossover record pulls the two backbone endpoints toward
+    the crossover chord target (0-DOF rigid translate of the chosen side), moves a
+    pose, and leaves topology untouched — pinned by assert_bond_relaxed_pose.
+    Flips the generic relax-bond route's headless coverage."""
+    seeded, side_a, side_b = _two_helices_with_crossover(with_joint=False)
+    design_state.set_design(seeded)
+    before = design_state.get_or_404()
+    after = hb.relax_bond("crossover", bond_id="bond_xover_01", side_to_move="b")
+    assert_bond_relaxed_pose(before, after, side_a=side_a, side_b=side_b, target_nm=0.13)
+
+    report = headless_coverage_report()
+    assert any(
+        r["path"].endswith("/design/relax-bond")
+        for r in report["covered_routes"]
+    ), "POST /design/relax-bond should now be headless-covered"
+
+
+def test_relax_bond_one_dof_rotates_joint_cluster():
+    """With one joint between the clusters, hb.relax_bond rotates the joint's
+    cluster (1-DOF) to close the crossover chord — same pose oracle."""
+    seeded, side_a, side_b = _two_helices_with_crossover(with_joint=True)
+    design_state.set_design(seeded)
+    before = design_state.get_or_404()
+    after = hb.relax_bond("crossover", bond_id="bond_xover_01")
+    assert_bond_relaxed_pose(before, after, side_a=side_a, side_b=side_b, target_nm=0.13)
 
 
 # ── relax_flexible_segments (hinge ssDNA scaffold-tether minimisation) ──────────
@@ -1334,3 +1518,65 @@ def test_full_sequence_flips_assign_staples_route_to_covered():
     rep = headless_coverage_report()
     covered = {r["endpoint"] for r in rep["covered_routes"]}
     assert "assign_staple_sequences_endpoint" in covered
+
+
+# ── AF-35: multi-op primitive PLACEMENT (preserve-verbatim graft) ─────────────────
+
+_HINGE = "2x2_single_hinge_link"
+
+
+def test_place_primitive_into_empty_is_verbatim_copy():
+    """Placing a hinge into an EMPTY square design reproduces the primitive verbatim
+    (topology + geometry + FL links + clusters), translated to the anchor cell."""
+    from backend.api.headless_hinge_build import build_hinge_primitive
+
+    primitive = build_hinge_primitive(_HINGE)
+    anchor = (10, 5)
+    with hb.scratch_session(LatticeType.SQUARE):
+        before = design_state.get_or_404().model_copy(deep=True)
+        hb.place_primitive(_HINGE, anchor_cell=anchor)
+        after = design_state.get_or_404()
+        assert_primitive_placed(before, after, primitive, anchor_cell=anchor)
+        assert validate_design(after).passed
+        # the empty host adopts the primitive's lattice + its full content
+        assert len(after.helices) == len(primitive.helices)
+        assert len(after.forced_ligations) == len(primitive.forced_ligations) == 2
+
+
+def test_place_primitive_is_additive_over_existing_design():
+    """Placing a hinge into a NON-empty host leaves the host's bundle untouched and
+    grafts the hinge alongside it (additive)."""
+    from backend.api.headless_hinge_build import build_hinge_primitive
+
+    primitive = build_hinge_primitive(_HINGE)
+    anchor = (20, 0)  # well clear of the host bundle's cells
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle([[0, 0], [0, 1]], 32, lattice=LatticeType.SQUARE)
+        host_before = design_state.get_or_404().model_copy(deep=True)
+        hb.place_primitive(_HINGE, anchor_cell=anchor)
+        after = design_state.get_or_404()
+        # the oracle's additive clause proves the host bundle is unchanged
+        assert_primitive_placed(host_before, after, primitive, anchor_cell=anchor)
+        assert len(after.helices) == len(host_before.helices) + len(primitive.helices)
+        assert validate_design(after).passed
+
+
+def test_place_primitive_is_revertable():
+    """Placement is a single undo step: undo restores the pre-placement design."""
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle([[0, 0], [0, 1]], 32, lattice=LatticeType.SQUARE)
+        before = design_state.get_or_404().model_copy(deep=True)
+        hb.place_primitive(_HINGE, anchor_cell=(20, 0))
+        assert len(design_state.get_or_404().helices) > len(before.helices)
+        design_state.undo()
+        restored = design_state.get_or_404()
+        assert canonical_topology(restored) == canonical_topology(before)
+
+
+def test_place_primitive_rejects_collision():
+    """A placement that would overlap a host-occupied cell raises (no silent overlap)."""
+    with hb.scratch_session(LatticeType.SQUARE):
+        # host bundle occupies (0,0)/(0,1); the hinge's anchor cell is (0,0) → collision
+        hb.create_bundle([[0, 0], [0, 1]], 32, lattice=LatticeType.SQUARE)
+        with pytest.raises(ValueError, match="collide"):
+            hb.place_primitive(_HINGE, anchor_cell=(0, 0))

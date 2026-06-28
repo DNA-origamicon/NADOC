@@ -346,14 +346,15 @@ export function initKeyboardShortcuts(deps) {
     },
   })
 
-  // Number hotkeys 1–6 — workflow shortcuts (routing → sequencing in order)
+  // Number hotkeys — workflow shortcuts (routing → sequencing in order).
+  // Auto Crossover / Autobreak are intentionally hotkey-less; the one-click
+  // Full Autostaple (which subsumes them) owns '2'.
   for (const [key, menuId, desc] of [
-    ['1', 'menu-routing-scaffold-ends',  'Autoscaffold'],
-    ['2', 'menu-routing-auto-crossover', 'Auto Crossover'],
-    ['3', 'menu-routing-autobreak',      'Autobreak'],
-    ['4', 'menu-seq-update-routing',     'Add Loops/Skips'],
-    ['5', 'menu-seq-assign-scaffold',    'Scaffold sequence'],
-    ['6', 'menu-seq-assign-staples',     'Staple sequence'],
+    ['1', 'menu-routing-scaffold-ends',    'Autoscaffold'],
+    ['2', 'menu-routing-full-autostaple',  'Full Autostaple'],
+    ['4', 'menu-seq-update-routing',       'Add Loops/Skips'],
+    ['5', 'menu-seq-assign-scaffold',      'Scaffold sequence'],
+    ['6', 'menu-seq-assign-staples',       'Staple sequence'],
   ]) {
     registerShortcut({
       key, ctrl: false, shift: false, alt: false,

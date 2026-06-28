@@ -2250,7 +2250,9 @@ def compute_nick_plan(
 # ── Autobreak: tick-mark nicking ──────────────────────────────────────────────
 
 
-def nick_all_major_ticks(design: Design) -> Design:
+def nick_all_major_ticks(
+    design: Design, skip_strand_ids: frozenset[str] = frozenset()
+) -> Design:
     """Nick every non-scaffold strand at *all* major tick marks (co-linear only).
 
     Major tick marks:
@@ -2261,6 +2263,9 @@ def nick_all_major_ticks(design: Design) -> Design:
     nucleotides leave the strand's helix — so a nick never lands on a crossover
     junction and multi-domain crossover strands stay traversed.  After this every
     staple is fragmented at the tick grid, ready for crossover placement / regrowth.
+
+    ``skip_strand_ids`` names hand-routed staples (locked / overhang) that are left
+    whole — never nicked — so full-autostaple does not split them.
     """
     is_hc    = design.lattice_type == LatticeType.HONEYCOMB
     period   = 21 if is_hc else 32
@@ -2274,6 +2279,8 @@ def nick_all_major_ticks(design: Design) -> Design:
     result = design
     for strand in design.strands:
         if strand.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER) or strand.is_reference:
+            continue
+        if strand.id in skip_strand_ids:
             continue
         positions = _strand_nucleotide_positions(strand)
         total = len(positions)
@@ -2333,10 +2340,37 @@ def make_autobreak(design: Design) -> Design:
 # ── Stage 3: grow / merge short staples ───────────────────────────────────────
 
 
+def _overhang_base_count(strand) -> int:
+    """Number of single-stranded overhang bases carried by ``strand``."""
+    return sum(
+        abs(d.end_bp - d.start_bp) + 1
+        for d in strand.domains
+        if getattr(d, "overhang_id", None) is not None
+    )
+
+
+def _carries_overhang(strand) -> bool:
+    return any(getattr(d, "overhang_id", None) is not None for d in strand.domains)
+
+
+def _merge_cap(s1, s2, base_cap: int) -> int:
+    """Length cap for the staple formed by merging ``s1`` and ``s2``.
+
+    A staple bearing an overhang is capped at ``48 + its overhang nt``: the overhang
+    counts toward the strand's measured length but is single-stranded, so it should
+    not eat into the duplex budget — the bound portion gets a flat 48-nt allowance.
+    Plain staples keep the lattice ``base_cap`` (56).
+    """
+    if _carries_overhang(s1) or _carries_overhang(s2):
+        return 48 + _overhang_base_count(s1) + _overhang_base_count(s2)
+    return base_cap
+
+
 def grow_staples(
     design: Design,
     max_merged_length: int = 56,
     min_length: int | None = None,
+    locked_ids: frozenset[str] = frozenset(),
 ) -> Design:
     """Ligate co-linear staple fragments back into long staples.
 
@@ -2348,16 +2382,23 @@ def grow_staples(
 
     ``min_length`` defaults to three tick-segments for the design's lattice —
     21 nt honeycomb (3×7) / 24 nt square (3×8).
+
+    ``locked_ids`` names hand-routed staples that are never merged (neither grown
+    nor absorbed into a neighbour).  An overhang-bearing staple is *not* locked —
+    it may grow — but its merge cap is ``48 + overhang nt`` (see ``_merge_cap``).
     """
     if min_length is None:
         min_length = 21 if design.lattice_type == LatticeType.HONEYCOMB else 24
-    result = make_merge_short_staples(design, max_merged_length=max_merged_length)
-    result = _absorb_short_staples(result, min_length=min_length, max_length=max_merged_length)
+    result = make_merge_short_staples(
+        design, max_merged_length=max_merged_length, locked_ids=locked_ids)
+    result = _absorb_short_staples(
+        result, min_length=min_length, max_length=max_merged_length, locked_ids=locked_ids)
     return result
 
 
 def _absorb_short_staples(
-    design: Design, min_length: int = 14, max_length: int = 56
+    design: Design, min_length: int = 14, max_length: int = 56,
+    locked_ids: frozenset[str] = frozenset(),
 ) -> Design:
     """Eliminate sub-*min_length* staples by folding each into a co-linear neighbour.
 
@@ -2396,7 +2437,7 @@ def _absorb_short_staples(
         five: dict = {}
         three: dict = {}
         for s in res.strands:
-            if not _is_staple(s):
+            if not _is_staple(s) or s.id in locked_ids:
                 continue
             f = s.domains[0]
             five[(f.helix_id, f.start_bp, f.direction)] = s.id
@@ -2420,7 +2461,7 @@ def _absorb_short_staples(
             if nbid is None or nbid == short.id:
                 continue
             nb = _by_id(res, nbid)
-            if nb is None or L1 + _len(nb) > max_length:
+            if nb is None or L1 + _len(nb) > _merge_cap(short, nb, max_length):
                 continue
             pos_nb = _strand_nucleotide_positions(nb)
             merged = pos_short + pos_nb if side == "3prime" else pos_nb + pos_short
@@ -2435,9 +2476,14 @@ def _absorb_short_staples(
             nb = _by_id(res, nbid)
             if nb is None:
                 continue
+            # Rebalance nicks the neighbour; never nick an overhang staple (it must
+            # not be split).  A straight in-cap merge (pass 1) into one is still fine.
+            if _carries_overhang(nb):
+                continue
             L2 = _len(nb)
+            cap = _merge_cap(short, nb, max_length)
             lo_x = max(min_length - L1, 1)            # S + N_near >= min
-            hi_x = min(max_length - L1, L2 - min_length)  # S + N_near <= max  AND  N_far >= min
+            hi_x = min(cap - L1, L2 - min_length)     # S + N_near <= cap  AND  N_far >= min
             if lo_x > hi_x:
                 continue
             # Co-linear-with-S domain of the neighbour, in 5'→3' order.  Nick strictly
@@ -2495,7 +2541,7 @@ def _absorb_short_staples(
     while True:
         progressed = False
         for s in result.strands:
-            if not _is_staple(s) or _len(s) >= min_length:
+            if not _is_staple(s) or s.id in locked_ids or _len(s) >= min_length:
                 continue
             out = _absorb_one(result, s)
             if out is not None:
@@ -2514,12 +2560,14 @@ def _absorb_short_staples(
 def make_merge_short_staples(
     design: Design,
     max_merged_length: int = 56,
+    locked_ids: frozenset[str] = frozenset(),
 ) -> Design:
     """Stage 3 of the autostaple pipeline: re-merge adjacent short staple strands.
 
-    Finds adjacent pairs whose combined length ≤ max_merged_length and whose
-    merged domain sequence is sandwich-free, then removes the nick.  Repeats
-    until no further merges are possible.
+    Finds adjacent pairs whose combined length ≤ the pair's cap (``max_merged_length``,
+    or ``48 + overhang nt`` when either member bears an overhang) and whose merged
+    domain sequence is sandwich-free, then removes the nick.  Repeats until no
+    further merges are possible.  Staples in ``locked_ids`` are never merged.
 
     Merge order favours **growing the shortest segments first**: candidates are
     taken in ascending order of (shorter member, combined length), so a 7-nt
@@ -2532,7 +2580,7 @@ def make_merge_short_staples(
         five_prime: dict[tuple[str, int, "Direction"], "Strand"] = {}
         for s in result.strands:
             if (s.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
-                or s.is_reference or not s.domains):
+                or s.is_reference or not s.domains or s.id in locked_ids):
                 continue
             f = s.domains[0]
             five_prime[(f.helix_id, f.start_bp, f.direction)] = s
@@ -2540,7 +2588,7 @@ def make_merge_short_staples(
         candidates: list[tuple[int, int, str, str]] = []
         for s1 in result.strands:
             if (s1.strand_type in (StrandType.SCAFFOLD, StrandType.LINKER)
-                    or s1.is_reference or not s1.domains):
+                    or s1.is_reference or not s1.domains or s1.id in locked_ids):
                 continue
             last = s1.domains[-1]
             if last.direction == Direction.FORWARD:
@@ -2555,7 +2603,7 @@ def make_merge_short_staples(
             pos1 = _strand_nucleotide_positions(s1)
             pos2 = _strand_nucleotide_positions(s2)
             combined = len(pos1) + len(pos2)
-            if combined > max_merged_length:
+            if combined > _merge_cap(s1, s2, max_merged_length):
                 continue
             if _has_sandwich(_strand_domain_lens(pos1 + pos2)):
                 continue

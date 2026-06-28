@@ -1447,8 +1447,9 @@ window.addEventListener('keydown', (e) => {
 
   // Routing / sequencing number shortcuts
   if (e.key === '1') document.getElementById('menu-routing-scaffold-ends')?.click()
-  if (e.key === '2') document.getElementById('menu-routing-auto-crossover')?.click()
-  if (e.key === '3') { const b = document.getElementById('menu-routing-autobreak'); if (b && !b.disabled) b.click() }
+  // '2' = one-click Full Autostaple (subsumes Auto Crossover + Autobreak, which
+  // are now hotkey-less).
+  if (e.key === '2') { const b = document.getElementById('menu-routing-full-autostaple'); if (b && !b.disabled) b.click() }
   if (e.key === '4') { const b = document.getElementById('menu-seq-update-routing'); if (b && !b.disabled) b.click() }
   if (e.key === '5') document.getElementById('menu-seq-assign-scaffold')?.click()
   if (e.key === '6') document.getElementById('menu-seq-assign-staples')?.click()

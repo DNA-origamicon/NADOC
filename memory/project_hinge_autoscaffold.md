@@ -276,6 +276,34 @@ user's reported bug; the cycle fixes it.)
 - Circular import: `SeamlessResult` is imported LAZILY inside the function (top-level
   caused a cycle); keep lazy.
 
+## STAPLE/OVERHANG FLs NO LONGER DERAIL ROUTING (2026-06-27) — `bound end to root`
+Reopened bug: `workspace/3x6_hinge_bound_end_to_root.nadoc` (a 3x6 hinge + an in-app
+"bound end to root" OVERHANG BINDING B1) had autoscaffold OVERRIDE the binding +
+fragment the scaffold into 8 strands. **Root cause:** the design's 8 forced ligations
+were two kinds — 6 genuine scaffold rungs (both endpoints SCAFFOLD) + **2 staple-level
+FLs from the overhang duplex** (both endpoints on STAPLE strands, into a staple-ONLY
+helix `h_XY_3_0` = the "root"). The realizers assumed ALL `forced_ligations` are
+scaffold rungs: (a) `_analyze_leaves` demanded a rectangular grid → the lone staple-only
+root helix made it non-rectangular → decline; (b) the gate required EVERY FL to be a
+rail↔rail rung → the 2 staple FLs failed → decline. Both declined → classic fallback
+preserved the 6 rung seeds but couldn't consolidate (8 strands) and ignored the binding.
+**Fix (user-chosen "router-side filter"):** scaffold routing now owns ONLY FLs whose
+BOTH endpoints are scaffold-covered (`_scaffold_fls(forced_ligations, coverage)`), and
+`_analyze_leaves(design, scaffold_hids)` builds the leaf grid from scaffold-covered
+helices only (staple-only helices excluded). Staple/overhang FLs are carried through
+VERBATIM (the self-gate's `orig==new` over ALL FLs enforces it). Applied in BOTH
+`realize_hinge_weave` + `realize_hinge_weave_seamless` (+ `route_hinge`'s drop-rederive
+fallback splits `scaf_fls`/`other_fls`, keeping `other_fls` through the seed and output).
+**VERIFIED on the real file: seamed AND seamless → 1 strand, all 8 FLs preserved, gate
+clean, validates, full 36-scaffold-helix coverage, 6 rungs honored as in-strand junctions.**
+Tests in `test_headless_hinge_build.py`: `_scaffold_fls` filter pin, self-contained
+staple-only-helix-doesn't-fragment pin, + guarded real-file end-to-end (skips if .nadoc
+absent). `test_hinge_weave_router::test_declines_non_hinge_bundle` updated for the new
+`_analyze_leaves` arity. Full suite green (3340 pass). NB the per-helix coverage filter
+classifies by helix, not per-endpoint-strand-type — correct for the staple-ONLY-helix
+case; a staple FL sitting on a scaffold-covered helix would still be seen as scaffold
+(not the reported scenario; revisit if it arises).
+
 ## ⚠️ WORKSPACE FIXTURE CORRUPTION (2026-06-27) — `2x6_triple_hinge_link.nadoc`
 The 2x6 PRIMITIVE file (`workspace/Primitives/`) got OVERWRITTEN with a ROUTED design
 (1 scaffold strand + 17 crossovers, vs the original 18 seed strands + 0 crossovers) —

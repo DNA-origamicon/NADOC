@@ -77,22 +77,36 @@ def route_hinge(design: Design) -> tuple[Design, SeamedResult] | None:
         return None
     adj = _build_adj(design, coverage)
 
-    # Cross-gap helix pairs = FL endpoints that are NOT lattice scaffold-neighbours
-    # (the physical gap).  An FL between lattice-adjacent helices is a genuine
-    # one-off manual anchor, not a hinge bridge → decline so it is preserved as-is.
+    # Scaffold routing owns only FLs whose endpoints are both scaffold; overhang /
+    # staple-binding FLs (e.g. a ``bound end to root`` overhang duplex) are carried
+    # through untouched.
+    scaf_fls = [
+        fl for fl in design.forced_ligations
+        if fl.three_prime_helix_id in coverage and fl.five_prime_helix_id in coverage
+    ]
+    other_fls = [
+        fl for fl in design.forced_ligations
+        if fl.three_prime_helix_id not in coverage or fl.five_prime_helix_id not in coverage
+    ]
+    if not scaf_fls:
+        return None
+
+    # Cross-gap helix pairs = scaffold-FL endpoints that are NOT lattice
+    # scaffold-neighbours (the physical gap).  An FL between lattice-adjacent helices
+    # is a genuine one-off manual anchor, not a hinge bridge → decline so it is
+    # preserved as-is.
     gap_pairs: set[tuple[str, str]] = set()
-    for fl in design.forced_ligations:
+    for fl in scaf_fls:
         a, b = fl.three_prime_helix_id, fl.five_prime_helix_id
-        if a not in coverage or b not in coverage:
-            return None
         if b in adj.get(a, set()):
             return None  # lattice-adjacent → not a gap bridge
         gap_pairs.add((min(a, b), max(a, b)))
 
-    # ── Route the seeds (FL records dropped) through the proven seamed pipeline ──
+    # ── Route the seeds (scaffold FL records dropped, others kept) through the
+    #    proven seamed pipeline ──
     from backend.core.seamed_router import auto_scaffold_seamed
 
-    seed = design.model_copy(update={"forced_ligations": []})
+    seed = design.model_copy(update={"forced_ligations": list(other_fls)})
     routed, result = auto_scaffold_seamed(seed.model_copy(deep=True))
 
     scaf = _scaffold_strands(routed)
@@ -121,7 +135,7 @@ def route_hinge(design: Design) -> tuple[Design, SeamedResult] | None:
     if bridged != gap_pairs:
         return None
 
-    out = routed.model_copy(update={"forced_ligations": new_fls})
+    out = routed.model_copy(update={"forced_ligations": new_fls + list(other_fls)})
 
     # ── Self-gate: never return a non-compliant routing (the regression gate) ────
     if scaffold_routing_invariants(out, require_seams=True):

@@ -196,9 +196,58 @@ def test_delete_independent_parallel_extrusion_survives():
     assert len(after.helices) == 2  # seg1 removed, seg2 survived
 
 
-def test_delete_extrusion_with_dependent_auto_op_lists_then_cascades():
-    # auto-break after a segment depends on it (non-replayable, baked on top).
-    _fresh_bundle(); _seg(1); client.post("/api/design/auto-break")
+def test_delete_workspace_independent_strutted_corner_extrude_scrubs_survivors():
+    fixture = REPO_ROOT / "workspace" / "2x2_strutted_corner.nadoc"
+    if not fixture.exists():
+        pytest.skip(f"{fixture} not available")
+    design_state.close_session()
+    design_state.set_design(Design.from_json(fixture.read_text()))
+
+    before = design_state.get_or_404()
+    assert before.feature_log[1].op_kind == "extrude-segment"
+    removed_hids = {"h_XY_0_4", "h_XY_0_5"}
+    removed_strands = {
+        s.id for s in before.strands
+        if any(dom.helix_id in removed_hids for dom in s.domains)
+    }
+    assert removed_strands
+
+    r = client.delete("/api/design/features/1")
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert not payload.get("needs_cascade_decision")
+
+    after = design_state.get_or_404()
+    assert removed_hids.isdisjoint({h.id for h in after.helices})
+    assert removed_strands.isdisjoint({s.id for s in after.strands})
+    assert {"h_XY_4_0", "h_XY_4_1", "h_XY_5_0", "h_XY_5_1"} <= {h.id for h in after.helices}
+    assert len(after.feature_log) == len(before.feature_log) - 1
+    assert not any(removed_hids & set(ct.helix_ids or []) for ct in after.cluster_transforms)
+
+    # Snapshot rewrite consistency: every surviving seek position remains free
+    # of the deleted extrusion's ids.
+    for pos in range(len(after.feature_log)):
+        rr = client.post("/api/design/features/seek", json={"position": pos})
+        assert rr.status_code == 200, rr.text
+        seeked = design_state.get_or_404()
+        assert removed_hids.isdisjoint({h.id for h in seeked.helices})
+        assert removed_strands.isdisjoint({s.id for s in seeked.strands})
+    client.post("/api/design/features/seek", json={"position": -1})
+
+
+def test_delete_extrusion_with_dependent_continuation_lists_then_cascades():
+    # A continuation extending the segment's helix is a true structural
+    # dependent and should still force the cascade decision.
+    from backend.core.constants import BDNA_RISE_PER_BP
+
+    _fresh_bundle(); _seg(1)
+    r = client.post("/api/design/bundle-continuation", json={
+        "cells": [[0, 1]],
+        "length_bp": 21,
+        "plane": "XY",
+        "offset_nm": round(21 * BDNA_RISE_PER_BP, 6),
+    })
+    assert r.status_code == 201, r.text
     helices_before = len(design_state.get_or_404().helices)
 
     # First call: no cascade → reports the dependent WITHOUT mutating.
@@ -210,7 +259,7 @@ def test_delete_extrusion_with_dependent_auto_op_lists_then_cascades():
     assert 2 in dep_idxs
     assert len(design_state.get_or_404().helices) == helices_before  # unchanged
 
-    # Cascade → removes the segment and the dependent auto-break.
+    # Cascade → removes the segment and the dependent continuation.
     r = client.delete("/api/design/features/1?cascade=true")
     assert r.status_code == 200, r.text
     after = design_state.get_or_404()

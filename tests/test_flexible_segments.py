@@ -292,6 +292,36 @@ def test_api_mark_adds_feature_log_entry_and_reverts():
     assert design_state.get_or_404().flexible_segment_marks == []
 
 
+def test_seek_before_mark_drops_flexible_marks():
+    """Seeking the feature-log slider before the flexible-mark op REMOVES the
+    marks and their derived connections.
+
+    Regression: ``_topology_substitute`` now restores ``flexible_segment_marks``
+    (+ the ``flexible_connections`` cache) from the seek snapshot, so a back-seek
+    drops a mark placed after that point. They used to persist at every position
+    — including the empty state — leaving the ssDNA run rendering flexible before
+    it had been marked.
+    """
+    design_state.set_design(_hinge_design())
+    r = client.post("/api/design/flexible-segment/batch",
+                    json={"marks": _run_mark_bodies(), "replace": True})
+    assert r.status_code == 200, r.text
+    assert design_state.get_or_404().flexible_segment_marks
+    assert design_state.get_or_404().flexible_connections
+
+    # Seek to the empty state (before the mark) → marks + connections gone.
+    rr = client.post("/api/design/features/seek", json={"position": -2})
+    assert rr.status_code == 200, rr.text
+    assert design_state.get_or_404().flexible_segment_marks == []
+    assert design_state.get_or_404().flexible_connections == []
+
+    # Seek back to latest → both restored.
+    rr = client.post("/api/design/features/seek", json={"position": -1})
+    assert rr.status_code == 200, rr.text
+    assert design_state.get_or_404().flexible_segment_marks
+    assert design_state.get_or_404().flexible_connections
+
+
 def test_api_mark_feature_log_deletable():
     design_state.set_design(_hinge_design())
     n0 = len(design_state.get_or_404().feature_log)

@@ -3105,7 +3105,9 @@ def auto_crossover() -> dict:
     return _design_response_with_geometry(current, report)
 
 
-def _place_auto_crossovers(design: Design) -> tuple[Design, dict]:
+def _place_auto_crossovers(
+    design: Design, protected_strand_ids: frozenset[str] = frozenset()
+) -> tuple[Design, dict]:
     """Place all possible staple crossovers, skipping a margin around scaffold seams.
 
     Pure core shared by the ``/design/crossovers/auto`` endpoint and full-autostaple.
@@ -3113,6 +3115,11 @@ def _place_auto_crossovers(design: Design) -> tuple[Design, dict]:
     ``7`` (HC) / ``8`` (SQ) bp of an internal scaffold *seam* — a double scaffold
     crossover (see :func:`scaffold_seam_positions`).  Full crossover density is kept at
     the near/far end caps (single u-turn crossovers are not seams).
+
+    ``protected_strand_ids`` names hand-routed staples (manual crossovers / forced
+    ligations / overhangs) that full-autostaple must not disturb: any bow site whose
+    nick would land inside one of these strands is skipped, so auto-crossovers route
+    *around* them instead of splitting them.
     """
     from backend.core.crossover_positions import (
         all_valid_crossover_sites,
@@ -3133,6 +3140,17 @@ def _place_auto_crossovers(design: Design) -> tuple[Design, dict]:
     for xo in design.crossovers:
         occupied.add((xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value))
         occupied.add((xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value))
+
+    # Positions covered by hand-routed strands that must not be split: a bow site
+    # whose nick lands here is skipped so crossovers route around them.
+    protected_pos: set[tuple[str, int, str]] = set()
+    for s in design.strands:
+        if s.id not in protected_strand_ids:
+            continue
+        for d in s.domains:
+            lo, hi = min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp)
+            for b in range(lo, hi + 1):
+                protected_pos.add((d.helix_id, b, d.direction.value))
 
     helix_map = {h.id: h for h in design.helices if h.grid_pos is not None}
 
@@ -3169,6 +3187,15 @@ def _place_auto_crossovers(design: Design) -> tuple[Design, dict]:
         lower_bp = bp - 1 if (bp % period) in bow_right else bp
         nick_a = lower_bp if stap_a == "FORWARD" else lower_bp + 1
         nick_b = lower_bp if stap_b == "FORWARD" else lower_bp + 1
+
+        # Route around hand-routed strands: skip a site whose arm/nick would fall
+        # inside a protected staple on either helix.
+        if protected_pos and any(
+            (hid, b, sd) in protected_pos
+            for hid, sd in ((hid_a, stap_a), (hid_b, stap_b))
+            for b in (lower_bp, lower_bp + 1)
+        ):
+            continue
 
         if any(
             any(abs(lower_bp - sp) <= seam_margin for sp in seams.get(hid, ()))
@@ -8328,7 +8355,8 @@ def _build_entry_info(entry, design):
     :mod:`backend.core.feature_dependencies`.
     """
     from backend.core.feature_dependencies import (
-        EntryInfo, REPLAYABLE_SNAPSHOT_OPS, snapshot_delta, delta_entry_targets,
+        EntryInfo, REPLAYABLE_SNAPSHOT_OPS, snapshot_delta,
+        structural_reference_targets, delta_entry_targets,
     )
 
     ft = entry.feature_type
@@ -8341,12 +8369,10 @@ def _build_entry_info(entry, design):
                 pre = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
                 post = design_state.decode_design_snapshot(entry.post_state_gz_b64)
                 added, modified = snapshot_delta(pre, post)
+                targets = structural_reference_targets(pre, post, added, modified)
         except Exception:
             added, modified = set(), set()
-        # An extrusion's pre-existing inputs == the ids it modified in place
-        # (e.g. the helix a continuation extended). New-bundle segments modify
-        # nothing → empty targets → independent.
-        targets = modified if reconstructable else None
+            targets = None
         return EntryInfo(added=added, modified=modified, targets=targets,
                          reconstructable=reconstructable)
 
@@ -8357,10 +8383,11 @@ def _build_entry_info(entry, design):
                 pre = design_state.decode_design_snapshot(entry.pre_state_gz_b64)
                 post = design_state.decode_design_snapshot(entry.post_state_gz_b64)
                 added, modified = snapshot_delta(pre, post)
+                targets = structural_reference_targets(pre, post, added, modified)
         except Exception:
             added, modified = set(), set()
-        # Fine-Routing rollback-on-a-new-base is deferred → never a survivor.
-        return EntryInfo(added=added, modified=modified, targets=None,
+            targets = None
+        return EntryInfo(added=added, modified=modified, targets=targets,
                          reconstructable=False)
 
     # Overlay delta (deformation / cluster_op / cluster_create / overhang_rotation):
@@ -8368,6 +8395,202 @@ def _build_entry_info(entry, design):
     return EntryInfo(added=set(), modified=set(),
                      targets=delta_entry_targets(entry, design),
                      reconstructable=True)
+
+
+def _filter_removed_ids_from_design(design: Design, removed_ids: set) -> Design:
+    """Drop removed topology ids and prune containers that point at removed helices."""
+    if not removed_ids:
+        return design
+
+    def keep_id(item) -> bool:
+        return getattr(item, 'id', None) not in removed_ids
+
+    removed_helices = {h.id for h in design.helices if h.id in removed_ids}
+    removed_strands = {s.id for s in design.strands if s.id in removed_ids}
+    removed_overhangs = {o.id for o in design.overhangs if o.id in removed_ids or o.helix_id in removed_helices}
+    removed_clusters = {ct.id for ct in design.cluster_transforms if ct.id in removed_ids}
+    removed_protein_assets = {a.id for a in design.protein_assets if a.id in removed_ids}
+
+    new_cts = []
+    for ct in design.cluster_transforms:
+        if ct.id in removed_ids:
+            continue
+        helix_ids = [hid for hid in (ct.helix_ids or []) if hid not in removed_helices]
+        domain_ids = [
+            ref for ref in (ct.domain_ids or [])
+            if ref.strand_id not in removed_strands
+        ]
+        if not helix_ids and not domain_ids:
+            removed_clusters.add(ct.id)
+            continue
+        new_cts.append(ct.model_copy(update={'helix_ids': helix_ids, 'domain_ids': domain_ids}))
+
+    def strand_survives(s) -> bool:
+        return (
+            s.id not in removed_ids
+            and all(dom.helix_id not in removed_helices for dom in s.domains)
+            and all((dom.overhang_id is None or dom.overhang_id not in removed_overhangs) for dom in s.domains)
+            and all((dom.binds_overhang_id is None or dom.binds_overhang_id not in removed_overhangs) for dom in s.domains)
+        )
+
+    def xover_survives(x) -> bool:
+        return (
+            x.id not in removed_ids
+            and x.half_a.helix_id not in removed_helices
+            and x.half_b.helix_id not in removed_helices
+        )
+
+    def fl_survives(f) -> bool:
+        return (
+            f.id not in removed_ids
+            and f.three_prime_helix_id not in removed_helices
+            and f.five_prime_helix_id not in removed_helices
+        )
+
+    return design.copy_with(
+        helices=[h for h in design.helices if h.id not in removed_ids],
+        strands=[s for s in design.strands if strand_survives(s)],
+        crossovers=[x for x in design.crossovers if xover_survives(x)],
+        overhangs=[
+            o for o in design.overhangs
+            if o.id not in removed_ids and o.helix_id not in removed_helices and o.strand_id not in removed_strands
+        ],
+        overhang_connections=[
+            c for c in design.overhang_connections
+            if c.id not in removed_ids and c.overhang_a_id not in removed_overhangs and c.overhang_b_id not in removed_overhangs
+        ],
+        extensions=[
+            e for e in design.extensions
+            if e.id not in removed_ids and e.strand_id not in removed_strands
+        ],
+        photoproduct_junctions=[
+            p for p in design.photoproduct_junctions
+            if p.id not in removed_ids
+        ],
+        forced_ligations=[f for f in design.forced_ligations if fl_survives(f)],
+        cluster_transforms=new_cts,
+        cluster_joints=[
+            j for j in design.cluster_joints
+            if j.id not in removed_ids and j.cluster_id not in removed_clusters
+        ],
+        flexible_segment_marks=[
+            m for m in design.flexible_segment_marks
+            if m.id not in removed_ids and m.strand_id not in removed_strands
+        ],
+        flexible_connections=[
+            fc for fc in design.flexible_connections
+            if (
+                fc.id not in removed_ids
+                and fc.cluster_a_id not in removed_clusters
+                and fc.cluster_b_id not in removed_clusters
+                and fc.anchor_a.strand_id not in removed_strands
+                and fc.anchor_b.strand_id not in removed_strands
+            )
+        ],
+        protein_assets=[
+            a for a in design.protein_assets
+            if a.id not in removed_ids
+        ],
+        protein_attachments=[
+            a for a in design.protein_attachments
+            if a.id not in removed_ids and a.asset_id not in removed_protein_assets
+        ],
+    )
+
+
+def _strip_removed_ids_from_snapshot(payload_b64: str, removed_ids: set) -> tuple[str, int]:
+    snap = design_state.decode_design_snapshot(payload_b64)
+    scrubbed = _filter_removed_ids_from_design(snap, removed_ids)
+    return design_state.encode_design_snapshot(scrubbed)
+
+
+def _snapshot_removed_ids(entry) -> set:
+    from backend.core.feature_dependencies import snapshot_removed
+
+    if not getattr(entry, 'design_snapshot_gz_b64', None) or not getattr(entry, 'post_state_gz_b64', None):
+        return set()
+    pre = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
+    post = design_state.decode_design_snapshot(entry.post_state_gz_b64)
+    return snapshot_removed(pre, post)
+
+
+def _delete_snapshot_feature_by_replay(design: Design, log: list, index: int, entry, deps: list) -> dict:
+    from backend.core.models import SnapshotLogEntry as _SnapEntry
+    from backend.core.validator import validate_design
+
+    removal = {index} | set(deps)
+    state = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
+
+    new_entries: list = list(log[:index])
+    for j in range(index + 1, len(log)):
+        if j in removal:
+            continue
+        e = log[j]
+        if isinstance(e, _SnapEntry):
+            pre_b64, pre_sz = design_state.encode_design_snapshot(state)
+            try:
+                state = _edit_dispatch_run(e.op_kind, state, e.params)
+            except (HTTPException, ValidationError, ValueError) as exc:
+                raise HTTPException(
+                    409,
+                    detail=f"Could not surgically delete: '{_feature_label(e)}' "
+                           f"could not be re-applied without the deleted feature. "
+                           f"Revert to before it instead.",
+                ) from exc
+            post_b64, post_sz = design_state.encode_design_snapshot(state)
+            new_entries.append(e.model_copy(update={
+                'design_snapshot_gz_b64': pre_b64, 'snapshot_size_bytes': pre_sz,
+                'post_state_gz_b64': post_b64, 'post_state_size_bytes': post_sz,
+                'evicted': False,
+            }))
+        else:
+            new_entries.append(e)
+
+    base = state.copy_with(feature_log=new_entries)
+    updated = _seek_feature_log(base, -1)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_replace_response(design, updated, report)
+
+
+def _delete_snapshot_feature_by_subtraction(design: Design, log: list, index: int, deps: list, infos: list) -> dict:
+    from backend.core.models import SnapshotLogEntry as _SnapEntry, RoutingClusterLogEntry as _RoutingEntry
+    from backend.core.validator import validate_design
+
+    removal = {index} | set(deps)
+    removed_ids: set = set()
+    for j in removal:
+        removed_ids |= set(infos[j].added)
+
+    new_entries: list = []
+    for j, e in enumerate(log):
+        if j in removal:
+            continue
+        if j > index and isinstance(e, _SnapEntry) and e.design_snapshot_gz_b64 and e.post_state_gz_b64:
+            pre_b64, pre_sz = _strip_removed_ids_from_snapshot(e.design_snapshot_gz_b64, removed_ids)
+            post_b64, post_sz = _strip_removed_ids_from_snapshot(e.post_state_gz_b64, removed_ids)
+            e = e.model_copy(update={
+                'design_snapshot_gz_b64': pre_b64,
+                'snapshot_size_bytes': pre_sz,
+                'post_state_gz_b64': post_b64,
+                'post_state_size_bytes': post_sz,
+            })
+        elif j > index and isinstance(e, _RoutingEntry) and e.pre_state_gz_b64 and e.post_state_gz_b64:
+            pre_b64, pre_sz = _strip_removed_ids_from_snapshot(e.pre_state_gz_b64, removed_ids)
+            post_b64, post_sz = _strip_removed_ids_from_snapshot(e.post_state_gz_b64, removed_ids)
+            e = e.model_copy(update={
+                'pre_state_gz_b64': pre_b64,
+                'pre_state_size_bytes': pre_sz,
+                'post_state_gz_b64': post_b64,
+                'post_state_size_bytes': post_sz,
+            })
+        new_entries.append(e)
+
+    base = _filter_removed_ids_from_design(design, removed_ids).copy_with(feature_log=new_entries)
+    updated = _seek_feature_log(base, -1)
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_replace_response(design, updated, report)
 
 
 def _delete_snapshot_feature(design: Design, log: list, index: int, entry, cascade: bool) -> dict:
@@ -8381,8 +8604,6 @@ def _delete_snapshot_feature(design: Design, log: list, index: int, entry, casca
     re-seeks so overlay deltas rebuild on top. Pushes undo via ``set_design``.
     """
     from backend.core.feature_dependencies import analyze_dependents
-    from backend.core.models import SnapshotLogEntry as _SnapEntry
-    from backend.core.validator import validate_design
 
     # Earlier entries can never be dependents, so only summarize index..end.
     infos: list = [None] * len(log)
@@ -8406,42 +8627,13 @@ def _delete_snapshot_feature(design: Design, log: list, index: int, entry, casca
                    "geometry can't be rolled back. Revert instead.",
         )
 
-    removal = {index} | set(deps)
-    state = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
-
-    new_entries: list = list(log[:index])
-    for j in range(index + 1, len(log)):
-        if j in removal:
-            continue
-        e = log[j]
-        if isinstance(e, _SnapEntry):
-            # Replayable extrusion survivor: re-derive on the threaded base so
-            # its geometry reflects the now-deleted predecessor's absence.
-            pre_b64, pre_sz = design_state.encode_design_snapshot(state)
-            try:
-                state = _edit_dispatch_run(e.op_kind, state, e.params)
-            except (HTTPException, ValidationError, ValueError) as exc:
-                raise HTTPException(
-                    409,
-                    detail=f"Could not surgically delete: '{_feature_label(e)}' "
-                           f"could not be re-applied without the deleted feature. "
-                           f"Revert to before it instead.",
-                ) from exc
-            post_b64, post_sz = design_state.encode_design_snapshot(state)
-            new_entries.append(e.model_copy(update={
-                'design_snapshot_gz_b64': pre_b64, 'snapshot_size_bytes': pre_sz,
-                'post_state_gz_b64': post_b64, 'post_state_size_bytes': post_sz,
-                'evicted': False,
-            }))
-        else:
-            # Overlay delta survivor — carry unchanged; seek rebuilds its effect.
-            new_entries.append(e)
-
-    base = state.copy_with(feature_log=new_entries)
-    updated = _seek_feature_log(base, -1)
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_replace_response(design, updated, report)
+    try:
+        non_additive = any(_snapshot_removed_ids(log[j]) or infos[j].modified for j in ({index} | set(deps)))
+    except Exception:
+        non_additive = True
+    if non_additive:
+        return _delete_snapshot_feature_by_replay(design, log, index, entry, deps)
+    return _delete_snapshot_feature_by_subtraction(design, log, index, deps, infos)
 
 
 @router.delete("/design/features/{index}", status_code=200)
@@ -9269,6 +9461,23 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
     out-of-date flag never cleared. The snapshot bakes each overhang's rotation at
     op time (identity for a fresh extrude); the rotation delta-replay then overwrites
     it for any overhang with a rotation op in the active window, so this is safe.
+
+    ``cluster_joints`` is restored for the same reason: a joint placement is a
+    ``joint-place`` minor op snapshotted in its routing-cluster's pre/post state, so
+    its *membership* must come from the snapshot — seeking before a joint's creation
+    has to drop it, not leave it dangling (the prior ``_rebase_joints_to_cts`` no-op
+    left joints present at every seek position, including the empty state). Joints
+    store their axis in the cluster's LOCAL frame, so they are invariant under the
+    cluster-transform delta-replay that runs afterwards — restoring the snapshot's
+    list here is safe and complete (world axes are re-derived lazily from whatever
+    ``cluster_transforms`` the delta logic lands on).
+
+    ``flexible_segment_marks`` (+ the derived ``flexible_connections``) are restored on
+    the same principle: a mark is added by a ``flexible-segment-mark`` snapshot op with
+    no delta-replay path, so its *membership* must come from the snapshot — seeking
+    before the mark has to drop it, not leave the ssDNA run rendering flexible. The
+    connection cache is restored alongside its marks so the two stay consistent at every
+    seek position.
     """
     return design.copy_with(
         helices=snap_design.helices,
@@ -9279,6 +9488,9 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
         extensions=snap_design.extensions,
         photoproduct_junctions=snap_design.photoproduct_junctions,
         forced_ligations=snap_design.forced_ligations,
+        cluster_joints=snap_design.cluster_joints,
+        flexible_segment_marks=snap_design.flexible_segment_marks,
+        flexible_connections=snap_design.flexible_connections,
     )
 
 

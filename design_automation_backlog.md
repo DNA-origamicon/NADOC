@@ -156,10 +156,10 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 
 _Living pointer — OVERWRITE this each session (protocol step 8). Keep it ≤8 lines. Do NOT append harness blocks here — those live in `design_automation_harness.md`._
 
-**▶ STATE (2026-06-26):** Tiers 0–7 shipped. **AF-27 P1** + **AF-29** + **AF-30** + **AF-31** + **AF-32** + **AF-33 P1** + **AF-34** done (coverage **48**). **Tier 1 fine-routing set COMPLETE.** Hinge auto-generation: AF-33 P1 (2x2 builder) + AF-34 (2x2 autoscaffold validation, GREEN) SHIPPED → the first fully-headless hinge **build→route→validate** chain works. AF-24 **P2/P3** still open — **owned by the other computer; don't pick them up.**
-**▶ DEPENDENCY (hinge chain):** AF-33 P1 + AF-34 DONE → next: **AF-33 P2 (2x4/2x6 build) → AF-35 (place hinge into a larger design)**. Multi-link ROUTING (G6) is an algorithm blocker tracked in `project_hinge_autoscaffold.md`, NOT an AF item; `test_hinge_router::test_multi_link_hinge_routes` xfail keeps it visible.
-**▶ NEXT (this machine) — AF-33 P2 (2x4/2x6 hinge builder; ASK-FIRST the multi-link gap geometry first).** Decode the sibling goldens' (`2x4_double`/`2x6_triple_hinge_link.nadoc`) OWN feature logs the same way P1 did (`SnapshotLogEntry` params + `RoutingClusterLogEntry.children` = the per-bridge `strand-end-resize` + `forced-ligation-create` constants) → add `_HingeSpec` entries to `headless_hinge_build.py`; pin with `assert_matches_primitive`. NB the bridge trims are ASYMMETRIC hand-authored gap routing (ASK-FIRST, don't re-derive). NB **2x4/2x6 will NOT autoscaffold yet** (multi-link merge falls back → the `test_hinge_router` xfail), so AF-33 P2 ships the BUILDER only; their AF-34-style route validation waits on G6. — OR resume **AF-27 P2** (`hb.relax_overhang_connection`/`hb.relax_bond`; VERIFY relax is a DISPLAY pose, `canonical_topology` UNCHANGED; ASK-FIRST attach-endpoint/ss-vs-ds/bridge-length). Older open: AF-24 P2/P3 (OTHER COMPUTER), Tier F AF-ATOM P2/P3, AF-12 P2c.
-**▶ GOTCHAS banked:** (AF-34) a plain `create_bundle` routed seamed is NOT compliant (its blunt full-length staples bury the end crossovers → 2bp margin) — so the oracle's GREEN meta-test uses a SEAMLESS route at `require_seams=False` (its end crossovers land in extended ssDNA) and the same seamless route at `require_seams=True` is the load-bearing RED; the genuine seamed-green path is the HINGE end-to-end (its duplex shift leaves proper margins). `build_hinge_primitive` needs NO golden file (builds from scratch) so the AF-34 end-to-end runs in a clean checkout. (AF-33) the 2x2 golden's recipe is `create_bundle(len=40, ligate_adjacent=True)` → resize EVERY helix's low-bp end +8 (shift duplex into bp 8…39) → 2 gap-bridge `(resize,force_ligate)` pairs; the bridge trims are ASYMMETRIC (`scaf_1_0` 3p −3, `scaf_1_1` 5p −16) — that's hand-authored gap geometry, replayed as a constant, NOT re-derived (ASK-FIRST). Replaying create-at-40-then-shift (not create-at-32) is load-bearing: AF-30 ISSUE-13 axis re-trim means only the same op sequence reproduces the golden's axis floats. `_fl_endpoint_set` check is load-bearing (canonical_topology blind to FLs). The whole golden recipe lives in the file's own `feature_log` (SnapshotLogEntry params + RoutingClusterLogEntry children) — decode it to extend to 2x4/2x6. (AF-30) the inverse pair is NOT clean from a raw `create_bundle` — `resize_strand_ends`' axis re-trim uses `(max_index−min_index)·rise` but `create_bundle` uses `length_bp·rise` (one rise longer), so the FIRST resize shifts the helix `axis_end` convention and `canonical_topology` (fingerprints axis floats) never restores → capture `start` AFTER a settling resize so both ±δ runs share the re-trim convention (logged ISSUE-13, ask-first geometry convention). The resize DOES change the nuc count (that's the point); the ISSUE-13 *axis-endpoint* off-by-one does NOT, so `assert_geometric_length_delta` stays clean — but pick the resized strand so its terminal domain DEFINES the helix extent, else the count won't move (resizing inward, within another strand's span, leaves `length_bp` unchanged). (AF-32) force-ligate→delete is a CLEAN inverse pair; `assert_forced_ligation` takes BOTH `before` AND `after`; 2hb HC bundle `[[0,0],[0,1]]` has one scaffold strand per helix off `create_bundle`. (AF-31) inverse pair is **delete→place** (place adds nicks). (AF-29) `cluster_gizmo.js` NOT rewired to pure `flexible_relax_solver.js`.
+**▶ STATE (2026-06-27):** Tiers 0–7 + AF-36 + **AF-27 P1+P2 (overhang-LINKER create + relax wrappers)** done (coverage **50**). AF-27 P2 shipped `hb.relax_overhang_connection` + generic `hb.relax_bond` (both VERIFIED display-pose: only `cluster_transforms`+`ClusterOpLogEntry` move, `canonical_topology` unchanged) + 2 NEW reusable oracles `assert_linker_relaxed_pose` / `assert_bond_relaxed_pose` (STRAIN-REDUCTION: `|chord − natural_span|` falls + pose-moved + topology-unchanged). AF-24 **P2/P3** still **OTHER COMPUTER — don't pick up.**
+**▶ DEPENDENCY (hinge chain):** AF-33/34/35/36 + AF-27 P1/P2 DONE. Multi-link ROUTING (G6) is an algorithm blocker in `project_hinge_autoscaffold.md`, NOT an AF item; `test_hinge_router::test_multi_link_hinge_routes` xfail keeps it visible.
+**▶ NEXT cycle — COMPOSE the full hinge-with-linker end-to-end (the AF-27 keystone now has all its pieces).** Drive a `scratchpad/build_linked_hinge.py` generator (lift the AF-36 pattern): `build_hinge(k,n)` → `overhang_extrude` a staple overhang on EACH leaf at the gap face → `hb.connect_overhangs` (P1) to tie them with a ds/ss linker whose contour CONFINES the angle → place a revolute joint on the gap edge → `hb.relax_overhang_connection` to settle the rest pose → set absolute hinge angle → save. **ASK-FIRST** (still un-answered, the real blocker): WHICH overhang nucleotide is the linker attach endpoint, ss-vs-ds, and the bridge length for a given gap — directionality/topology, do NOT infer. Augment = compose `assert_linker_connects` (P1) + `assert_linker_relaxed_pose` (P2) on the generated design. Consider promoting the generator to a headless module (`headless_hinge_build.build_linked_hinge`) if it stabilises. Older open: AF-24 P2/P3 (OTHER COMPUTER), Tier F AF-ATOM P2/P3.
+**▶ GOTCHAS banked:** (AF-27 P2) the linker relax optimises CONNECTOR-ARC residuals (toward ~0.67nm each) by rotating the joint cluster — it does NOT directly minimise the raw anchor-to-anchor chord, but the consequence is the chord moves to the duplex's natural span (`_ds_target_length_nm`); so the solver-independent oracle is STRAIN-REDUCTION (`|chord − natural_span|` falls), NOT chord-≤-contour (which is either vacuous for a long linker already within, or unsatisfiable for a short one that can't close). The natural relax fixture is DEGENERATE: with the joint origin ON the moving overhang (`[2.5,0,0]`) the anchor is on the hinge axis so rotation can't change the chord (cluster transform changes by a tiny θ but strain is flat) — that's the load-bearing can-go-red; move the joint origin OFF the overhang (`[0,0,0]`) for a real reduction. Both relax routes are POSE-ONLY (mutate `cluster_transforms` + append a `ClusterOpLogEntry`, never the strand graph → `canonical_topology` invariant). DROP the grid_pos-less `demo_helix` from any relax test fixture or `canonical_topology` raises (sorts helix tuples, None grid_pos breaks `<`). The relax resolves linker anchors from the CONNECTION METADATA alone (geometry emits the `__lnk__` bridge), so a metadata-only `OverhangConnection` (no real bridge strands) is a valid fixture AND keeps `canonical_topology` seeing only the two real overhang helices. (AF-36) hinge ssDNA is PHASE-PAIRED short/long, NOT uniform: neighbouring rail helices carry OPPOSITE phase → the TOWARD-facing rail takes a SHORT (2nt) tether, the AWAY-facing one a LONG (16nt ≈ 1 turn to re-phase); `_rail_faces_toward` (scaffold backbone radial · rail-pair chord at the gap-face duplex-edge bp) decides it, validated byte-for-byte vs the goldens; ALL ssDNA on the leaf-A rail, leaf B blunt. The 2x2 golden was INVERTED (mis-authored) — the user CORRECTED it mid-session; SURFACE a golden that contradicts a stated rule, don't silently match. Feature-log SEEK was blind to `cluster_joints`/`flexible_segment_marks`/`flexible_connections` (`_topology_substitute` swapped only strand-graph + overhangs) → they persisted at EVERY seek incl. the empty state; fix restores them from the seek snapshot (membership is topology-like, same rationale as overhangs; joints store a LOCAL-frame axis so invariant under the cluster-transform delta replay). Commit a relax as a logged `cluster_op` (`transform_cluster(log=True)` per moved cluster, from `compute_relax_transforms`), NOT the `flexible-relax` route, for seek fidelity (seek reconstructs cluster poses ONLY from `cluster_op`). "Set hinge angle = X°" → compose the fold onto the relaxed REST pose, solving θ so the SIGNED dihedral about the hinge axis == X (linear in θ → exact); place the joint BEFORE folding (rotation about its own axis leaves the hinge line invariant). (AF-35) preserve-verbatim placement is a rigid GRAFT, NOT a route-replay: `create_bundle` is destructive (the GUI placement uses `bundle-segment`, a DIFFERENT builder whose axis floats differ from `create_bundle`'s by the AF-30 ISSUE-13 re-trim) — so the only way to land the primitive's EXACT axis geometry is to copy its already-built helices and translate by one rigid lattice vector. `canonical_topology` rounds axes to 4 dp, so float add-then-subtract of the same world-delta is exact. The hinge ALSO carries 2 identity `cluster_transforms` (the rigid leaves) + a construction `feature_log` → the graft copies+remaps the clusters (verbatim) but does NOT graft the feature_log (it's the standalone's history, not the host's). `assert_primitive_placed` offset-corrects INDEPENDENTLY via `_lattice_position` (ground-truth lattice constant, NOT the graft's own `_world_delta`) so a graft plane-mapping/translation bug can't mask itself. Honeycomb odd-parity shift = non-rigid (stagger flips) → the graft raises (same rule as the GUI's parity-snap); SQUARE is unconstrained. Placement does NOT shift along-axis (`offset_nm`) — deferred. (AF-34) a plain `create_bundle` routed seamed is NOT compliant (its blunt full-length staples bury the end crossovers → 2bp margin) — so the oracle's GREEN meta-test uses a SEAMLESS route at `require_seams=False` (its end crossovers land in extended ssDNA) and the same seamless route at `require_seams=True` is the load-bearing RED; the genuine seamed-green path is the HINGE end-to-end (its duplex shift leaves proper margins). `build_hinge_primitive` needs NO golden file (builds from scratch) so the AF-34 end-to-end runs in a clean checkout. (AF-33) the 2x2 golden's recipe is `create_bundle(len=40, ligate_adjacent=True)` → resize EVERY helix's low-bp end +8 (shift duplex into bp 8…39) → 2 gap-bridge `(resize,force_ligate)` pairs; the bridge trims are ASYMMETRIC (`scaf_1_0` 3p −3, `scaf_1_1` 5p −16) — that's hand-authored gap geometry, replayed as a constant, NOT re-derived (ASK-FIRST). Replaying create-at-40-then-shift (not create-at-32) is load-bearing: AF-30 ISSUE-13 axis re-trim means only the same op sequence reproduces the golden's axis floats. `_fl_endpoint_set` check is load-bearing (canonical_topology blind to FLs). The whole golden recipe lives in the file's own `feature_log` (SnapshotLogEntry params + RoutingClusterLogEntry children). **(AF-33 P2, done)** 2x4 trims are ASYMMETRIC by column parity (even `3p −16` / odd `5p −2`) and differ from 2x2 → per-primitive constants, transcribed verbatim; 2x6 was generated by `build_hinge(2,6)` so it has NO trims (`build_hinge(2,6)` reproduces the 2x6 golden byte-for-byte; `build_hinge(2,4)` does NOT — golden has hand trims). Per-bridge (trim→FL) replay == golden's all-trims-then-all-FLs (per-column strand independence). (AF-30) the inverse pair is NOT clean from a raw `create_bundle` — `resize_strand_ends`' axis re-trim uses `(max_index−min_index)·rise` but `create_bundle` uses `length_bp·rise` (one rise longer), so the FIRST resize shifts the helix `axis_end` convention and `canonical_topology` (fingerprints axis floats) never restores → capture `start` AFTER a settling resize so both ±δ runs share the re-trim convention (logged ISSUE-13, ask-first geometry convention). The resize DOES change the nuc count (that's the point); the ISSUE-13 *axis-endpoint* off-by-one does NOT, so `assert_geometric_length_delta` stays clean — but pick the resized strand so its terminal domain DEFINES the helix extent, else the count won't move (resizing inward, within another strand's span, leaves `length_bp` unchanged). (AF-32) force-ligate→delete is a CLEAN inverse pair; `assert_forced_ligation` takes BOTH `before` AND `after`; 2hb HC bundle `[[0,0],[0,1]]` has one scaffold strand per helix off `create_bundle`. (AF-31) inverse pair is **delete→place** (place adds nicks). (AF-29) `cluster_gizmo.js` NOT rewired to pure `flexible_relax_solver.js`.
 **▶ REFERENCE (read on demand, NOT per loop):** shipped wrapper signatures + banked gotchas → `design_automation_harness.md` (consult per-item). Per-item metrics rows + data fits → `design_automation_metrics.md`. Oracle catalog + lessons + difficulties → `design_automation_log.md`.
 
 ## Backlog (ranked, validation-first). Probed status is the 2026-06-16 audit; verify before claiming.
@@ -239,13 +239,22 @@ _Living pointer — OVERWRITE this each session (protocol step 8). Keep it ≤8 
     `_seed_with_real_oh_domains`; the 3 hinge primitives carry NO overhangs yet — they'd need
     `overhang_extrude` first). Tests: 3 in `test_headless_build.py` + 4 in `test_automation_harness.py`; 3
     coverage-count meta-tests bumped 41→42. Full suite **3189 passed / 60 skipped**.
-  - [ ] **Phase 2 — `hb.relax_overhang_connection(...)` + `hb.relax_bond(...)` relax wrappers.** Import
-    `relax_overhang_connection`/`RelaxLinkerRequest` + `relax_bond_endpoint`/`RelaxBondRequest`. **Augment:**
-    `assert_linker_relaxed_pose(before, after, conn_id)` — reads the connection's display-pose / bridge
-    geometry and asserts the relaxed linker spans the leaf-to-leaf gap within its FJC contour length AND the
-    pose moved (can-go-red on a no-op relax); **AND** asserts the strand graph (`canonical_topology`) is
-    UNCHANGED by the relax (the load-bearing three-layer pin — relax is a pose, not an edit). Coverage flat if
-    relax is display-only / +1 if it's a distinct mutation route — settle from the verify above.
+  - [x] **Phase 2 — `hb.relax_overhang_connection(...)` + `hb.relax_bond(...)` relax wrappers. SHIPPED 2026-06-27.**
+    Imports `relax_overhang_connection`/`RelaxLinkerRequest` + `relax_bond_endpoint`/`RelaxBondRequest`/
+    `RelaxBondEndpoint` (covered by function identity → coverage **48 → 50**). **VERIFIED display-pose** — both
+    routes mutate only `cluster_transforms` (+ a `ClusterOpLogEntry`), never the strand graph, so
+    `canonical_topology` is unchanged (the load-bearing Three-Layer pin). **Augments (2, both NEW reusable):**
+    `assert_linker_relaxed_pose(before, after, conn_id)` — STRAIN-REDUCTION (user choice 2026-06-27, not raw
+    chord-within-contour): `strain = |anchor_chord − natural_span|` re-measured on the POSED geometry
+    (`_anchor_pos_and_normal`, the relax's own anchor lookup — NOT its optimiser) must FALL + a pose moved +
+    topology unchanged; and `assert_bond_relaxed_pose(before, after, *, side_a, side_b, target_nm)` — the
+    generic-bond analog (`strain = |bond_chord − target_nm|`). **GOTCHA found:** the natural relax fixture is
+    DEGENERATE — the moving overhang's anchor sits ON the hinge axis (`joint_origin=[2.5,0,0]`), so rotation
+    can't change the chord and strain is flat; moving the joint origin OFF the overhang (`[0,0,0]`) makes the
+    relax drive the chord exactly to the natural span. That degenerate case is the oracle's load-bearing
+    can-go-red. Tests: 5 in `test_headless_build.py` (linker pass/degenerate/pose-only + bond 0-DOF/1-DOF) + 5
+    in `test_automation_harness.py` (pass + 2 linker red + bond pass + bond red) + coverage meta bumped 48→50
+    in 3 files. Full suite **3341 passed / 61 skipped**.
 
 - [x] **AF-29 — hinge ssDNA flexible-segment RELAX, headless + JS↔Python parity (the hinge rest-pose keystone).
   SHIPPED 2026-06-25 (user request, sibling of AF-27).** The in-app "Relax flexible segments" command pulls a
@@ -265,6 +274,63 @@ _Living pointer — OVERWRITE this each session (protocol step 8). Keep it ≤8 
   in-app. Tests: 4 in `test_flexible_relax.py` (solver+parity) + 2 in `test_headless_build.py` (taut + no-op) + 4 oracle
   red-tests + 3 vitest. **NB cluster_gizmo.js NOT rewired** to the pure module (its live 3D drag can't be headlessly
   verified) — the module is its faithful tested copy; wiring it as the single source is a clean follow-up.
+
+- [ ] **AF-37 — design-layer DIRECT overhang-BINDING + sub-domain headless wrappers (the WC-duplex-that-locks-a-joint).
+  GAP found 2026-06-27 (user's "directly bound" hinge test).** The user asked to build a hinge whose two overhangs
+  are **directly bound to each other** (a real Watson-Crick duplex between the overhangs that LOCKS the connecting
+  ClusterJoint to the duplex-satisfying angle — the `OverhangBinding` system, Phase 5), in a **root** vs **free-end**
+  variant. AF-27 wrapped `connect_overhangs` (the LINKER/bridge path) + the relax, but the **entire design-layer
+  direct-binding surface is UNWRAPPED** (confirmed `rg` over `headless_build.py` → NONE): `create_overhang_binding`
+  (`POST /design/overhang-bindings`), the bind/lock `patch_overhang_binding` (`PATCH …/{id}` — sets `bound`, which
+  drives `_apply_driver_to_joint` to freeze the joint at `locked_angle_deg`), and the sub-domain ops a root-vs-free-end
+  bind needs to be DISTINCT: `sub-domains/split` (`POST …/sub-domains/split`), `sub-domains/{id}` PATCH (sequence),
+  `generate-binder`/`generate-random` (to make the two halves WC-complementary), and the overhang sequence PATCH
+  (`PATCH /design/overhang/{id}`). **Why root-vs-free-end NEEDS the gap closed:** an extruded overhang carries ONE
+  whole sub-domain, so `_sub_domain_at_attach(root)` == `_sub_domain_at_attach(free_end)` — the two variants are
+  identical until the overhang is SPLIT into a root + free-end sub-domain and each pair sequenced complementary.
+  **CONFIRMED completable via direct route calls (2026-06-27) — the gap is "no headless wrappers", not "impossible".**
+  The true no-linker bind was built by hand-driving the unwrapped routes: `overhang_extrude` ×2 → `split_sub_domain`
+  (offset 4, → root + free-end halves) → `patch_sub_domain(sequence_override=…)` to make the bound pair WC-complementary
+  (`AACC`↔`GGTT`) → `create_overhang_binding(sub_domain_a, sub_domain_b, target_joint_id)` → `patch_overhang_binding(bound=True)`.
+  **`bound=True` RELOCATES topology** (driven OH's domain moves onto the driver helix antiparallel, **driven helix DELETED**
+  → a real duplex, `overhang_connections`==0, NO `__lnk__` bridge) but by design does **NOT** auto-lock the joint
+  (`locked_angle_deg` stays None — the in-app flow is a separate right-click "Relax bond"; reverted to manual 2026-05-14).
+  Closing it = `relax_bond("crossover", bond_id=<the OH→parent crossover spanning the two clusters>)`. Built both
+  configs → `workspace/3x6_hinge_bound_{root_to_root,end_to_root}.nadoc` (root_to_root: ohA offset-0 ↔ ohB offset-0;
+  end_to_root: ohA offset-4 ↔ ohB offset-0; both close to ~175°, the 4 bp register offset is small vs the ~38 bp lever).
+  The earlier `connect_overhangs(length_value=0)` files (`3x6_hinge_direct_{root,free_end}.nadoc`) are the WRONG path —
+  a zero-bridge LINKER (the "1 bp linker mediating" the user flagged), NOT the no-linker bind. **Three-layer:** creating a binding/sub-domain is a
+  topological/annotation edit (allowed); the bind→joint-lock writes the joint angle window (design-layer). **One phase
+  per session** (suggested split: P1 `hb.create_overhang_binding` + `hb.set_binding_bound` + an `assert_binding_locks_joint`
+  oracle [the bound binding froze the joint to `locked_angle_deg`, survives round-trip — `canonical_topology` blind to
+  bindings, same blind-spot as connections]; P2 the sub-domain `split`/sequence wrappers + an `assert_subdomains_tile`
+  / WC-complement oracle so a root-vs-free-end bind is constructible headlessly). **ASK-FIRST** the sub-domain split
+  point + which sequences (directionality/sequence choices). See `memory/project_overhang_binding_extensions.md`,
+  `project_overhang_subdomains.md`, `project_oh_binder.md`.
+  - [ ] **BLOCKED + REVERTED 2026-06-27.** A first headless attempt (binding wrappers `split_sub_domain` /
+    `set_sub_domain_sequence` / `create_overhang_binding` / `set_binding_bound` + a composed
+    `build_bound_end_to_root_hinge` generator + a crossover-constrained `overhang_placement` module + a
+    full-autostaple tweak) was built and then **reverted in full** — it rested on assumptions that don't hold.
+    The **actual desired manual ops are F8–F13 of `workspace/3x6_autogen_hinge.nadoc`** (the new reference;
+    the old `3x6_hinge_bound_end_to_root.nadoc` is gone): on a **200 bp seamed + already-autostapled** hinge,
+    extrude a **10 bp** overhang on `h_XY_2_0` bp 56→gap(3,0) AND on `h_XY_5_1` bp 40→gap(4,1) (DIFFERENT
+    columns 0/1 + DIFFERENT bp), `generate-random` a rare sequence on A (`CGGACTAGGC`), set B = its revcomp
+    (`GCCTAGTCCG`), create binding B1 (whole sub-domains, no split), bind.
+    **Gaps to automating this (the blockers):**
+    1. **Overhang positions are design decisions, not auto-derivable** — the pair is on different columns/bp,
+       reaching diagonally across the gap into the end-to-root register; there is no model for choosing a
+       *bindable, gap-spanning* site pair (→ janky binding UX).
+    2. **Automatic overhang generation correctness** — must invoke the real rare-sequence `generate-random`
+       (Johnson 5-mer, no hairpin/dimer) for one half + revcomp the other; the attempt hardcoded a placeholder.
+    3. **Order is route-first** — seamed scaffold + full-autostaple run BEFORE the overhangs are extruded onto
+       finished staples; the attempt extruded onto the bare bundle then routed, which is what forced the (now
+       reverted) full-autostaple change. With the real order the original "protect overhang staples wholesale"
+       behaviour is correct (the overhang strand was routed as a plain staple before the overhang was added).
+    4. **Better overhang binding development** — `bound=True` relocates the duplex but does **NOT** lock the
+       joint (`locked_angle=None`, joint stays ±180°); confining the hinge needs a separate `relax_bond`, and
+       the whole bind→lock flow is manual/janky.
+    Until those mature, recreating F8–F13 headlessly is out of reach. See `memory/project_overhang_binding_extensions.md`,
+    `project_overhang_subdomains.md`, `project_oh_binder.md`.
 
 #### Fine-routing wrappers (intake 2026-06-26 — the user's "automate ALL fine routing ops" request)
 
@@ -777,8 +843,8 @@ See `memory/project_hinge_autoscaffold.md` (the router + the `scaffold_invariant
   ROUTING-ALGORITHM problem, not a wrapper+oracle item — it is the standing **blocker** for full multi-link generality,
   NOT a new AF item. AF-34's hinge leg pins the 2x2 path and rides the existing xfail for 2x4/2x6.
 
-- [~] **AF-33 — headless hinge-primitive BUILDER + golden-equality oracle (recreate the standard hinges in code).**
-  **P1 (2x2_single) SHIPPED 2026-06-26.** `backend/api/headless_hinge_build.py::build_hinge_primitive(name="2x2_single_hinge_link")`
+- [x] **AF-33 — headless hinge-primitive BUILDER + golden-equality oracle (recreate the standard hinges in code).**
+  **P1 (2x2_single) SHIPPED 2026-06-26; P2 (2x4_double + 2x6_triple) SHIPPED 2026-06-27.** `backend/api/headless_hinge_build.py::build_hinge_primitive(name="2x2_single_hinge_link")`
   recreates the golden FROM SCRATCH by replaying its own feature-log recipe through the shipped wrappers: `hb.create_bundle`
   (length 40, ligated) → a `_shift_duplexes(+8)` that resizes every helix's *low-bp* end (derived from live strand
   directions, no lattice-parity reasoning) into the canonical bp 8…39 span → 2 gap-bridge `hb.resize_strand_end` (AF-30) +
@@ -791,8 +857,14 @@ See `memory/project_hinge_autoscaffold.md` (the router + the `scaffold_invariant
   wrong-topology / unknown-name + positive) in `test_automation_harness.py`. Full suite **3240 passed / 61 skipped / 2 xfailed**.
   **Validation gained, not just a passthrough:** proves the code-built 2x2 hinge is byte-for-byte the validated hand-built
   primitive — topology AND the off-strand-graph FL links AND save/load persistence — so a builder that drifted (wrong shift,
-  dropped/mis-wired link, altered leaf) fails. **P2 (2x4/2x6) still OPEN** — same builder, more bridges; settle the multi-link
-  gap geometry with the user first (`build_hinge_primitive` raises `KeyError` for those names today).
+  dropped/mis-wired link, altered leaf) fails. **P2 (2x4/2x6) SHIPPED 2026-06-27** — added `_HingeSpec` entries for
+  `2x4_double_hinge_link` (2 links, ASYMMETRIC hand-authored trims `3p −16`/`5p −2` by column parity — transcribed
+  verbatim from the golden's feature log, NOT re-derived) and `2x6_triple_hinge_link` (3 links, NO trims — the golden was
+  generated by `build_hinge(2,6)`'s uniform geometry). Pinned by `test_build_2x4_matches_golden` /
+  `test_build_2x6_matches_golden` (`assert_matches_primitive` reused, no new oracle) + 2 shape tests; coverage flat (48).
+  NB **builder only** — 2x4/2x6 multi-link routing still falls back (the `test_hinge_router` xfail / G6 blocker), so their
+  AF-34-style autoscaffold validation is pending. `build_hinge(2,4)` does NOT match the 2x4 golden (lacks the hand trims);
+  `build_hinge(2,6)` DOES match the 2x6 golden.
   <details><summary>original spec</summary>
   A builder (in `headless_build.py`, or a small `headless_hinge_build.py` if it grows) that constructs each standard
   hinge — `2x2_single` / `2x4_double` / `2x6_triple` — FROM SCRATCH: build the two-leaf SQUARE bundle (the gapped
@@ -845,8 +917,26 @@ See `memory/project_hinge_autoscaffold.md` (the router + the `scaffold_invariant
   this adds a new autoscaffold return path, add it to `ROUTING_ENTRY_POINTS`.
   </details>
 
-- [ ] **AF-35 — headless multi-op primitive PLACEMENT (feature-log replay) + placed-substructure oracle (compose a
-  hinge into a larger design).** Today only SINGLE-op extrude primitives place headlessly (one `bundle-segment`); a
+- [x] **AF-35 — headless multi-op primitive PLACEMENT + placed-substructure oracle (compose a hinge into a larger
+  design). SHIPPED 2026-06-27.** User chose **preserve-verbatim** (the ASK-FIRST below) → built as a **rigid GRAFT**,
+  not an op-replay: `place_primitive_into(host, primitive, *, anchor_cell, plane)` in NEW pure
+  `backend/core/primitive_placement.py` copies the primitive's own helices/strands/forced_ligations/cluster_transforms,
+  translates them by ONE rigid lattice vector (grid_pos + axis floats, in-plane), remaps every id (helix/strand/cluster
+  + all internal refs), and appends — host content untouched. `hb.place_primitive(name, *, anchor_cell, plane, primitive)`
+  sources a built-in hinge via `build_hinge_primitive` (or takes an explicit `primitive=Design`) and commits via
+  `snapshot`+`set_design_silent` (one undo step). **NOT a feature-log replay** (the route-driven replay would go through
+  `bundle-segment`, a different builder → AF-30 ISSUE-13 axis drift; copying the already-correct geometry is what makes
+  "verbatim" literally true). **Augment: NEW `assert_primitive_placed(before, after, primitive, *, anchor_cell, plane)`**
+  — additive (host portion's `canonical_topology` unchanged) + anchored (placed min-cell == `anchor_cell`) + verbatim
+  (offset-corrected INDEPENDENTLY via `_lattice_position` → `canonical_topology` == primitive) + FL links survived
+  (grid-keyed set, the canonical_topology blind-spot) + cluster groupings survived. Coverage **FLAT (48)** — grafts via a
+  `backend/core` service, imports no new route handler. Tests: 4 in `test_headless_build.py` (empty/additive/revertable/collision)
+  + 7 red in `test_automation_harness.py` (vacuous/wrong-anchor/dropped-FL/lost-cluster/distorted/mutated-host). Full suite
+  **3329 passed / 61 skipped**. **Validation gained, not just a passthrough:** proves a saved multi-op primitive composes
+  into a bigger design as an EXACT rigid copy at the requested cell, with its hinge FL links + leaf clusters intact and the
+  host untouched — none of which `canonical_topology` alone can see (it's blind to FLs/clusters and to absolute placement).
+  <details><summary>original spec</summary>
+  Today only SINGLE-op extrude primitives place headlessly (one `bundle-segment`); a
   hinge is a MULTI-op primitive (bundle-create + the grouped staple/FL op) and there is **no headless way to drop it
   into an existing design at a cell offset** — the deferred "multi-op feature-log replay (hinges / pretransformed
   clusters needing id-remap + per-op cell offset)" from `project_primitive_library.md`. A wrapper
@@ -863,6 +953,7 @@ See `memory/project_hinge_autoscaffold.md` (the router + the `scaffold_invariant
   building. Coverage +1 if it drives a distinct replay route; flat if it loops existing wrappers. **Lower priority than
   AF-33/34** — a standalone generated hinge (AF-33 → AF-34) is the first end-to-end win; AF-35 is the composability
   extension.
+  </details>
 
 ### Tier 5 — physical-layer validation (oxDNA-in-the-loop) + constraint satisfaction (the eventual goal)
 

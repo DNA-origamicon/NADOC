@@ -911,6 +911,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onAnimateConfig
           // features depend on it, the backend returns a (non-mutating)
           // decision payload → offer cascade-delete or revert.
           const resp = await api.deleteFeature(i)
+          if (resp == null) {
+            const err = store.getState().lastError
+            window.alert(`Delete failed: ${err?.message || 'unknown error'}`)
+            return
+          }
           if (resp?.needs_cascade_decision) {
             const choice = await showDependentsDecision({
               targetLabel: resp.target_label,

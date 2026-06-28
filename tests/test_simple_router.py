@@ -378,6 +378,134 @@ def test_full_autostaple_keeps_full_crossover_density():
     )
 
 
+# ── 4. route around hand-routed connections (manual crossovers / overhangs) ────
+
+
+def _run_full_autostaple_pipeline(design):
+    """Compose the full-autostaple stages on a loaded design (no global state)."""
+    from backend.core.sequences import assign_scaffold_sequence, assign_staple_sequences
+    from backend.core.lattice import grow_staples, nick_all_major_ticks
+    from backend.api.crud import _place_auto_crossovers
+    from backend.api.routes_assign_sequences import (
+        _linearize_staple_precursors, _locked_and_overhang_staple_ids,
+    )
+    seq, _, _ = assign_scaffold_sequence(design, "M13mp18")
+    locked, overhang = _locked_and_overhang_staple_ids(seq)
+    protected = locked | overhang
+    prec, _ = _linearize_staple_precursors(seq)
+    nicked = nick_all_major_ticks(prec, skip_strand_ids=protected)
+    crossed, _ = _place_auto_crossovers(nicked, protected_strand_ids=protected)
+    clean = grow_staples(crossed, max_merged_length=56, locked_ids=locked)
+    return assign_staple_sequences(clean), locked, overhang
+
+
+def _load_example():
+    from pathlib import Path
+    from backend.core.models import Design
+    p = Path(__file__).resolve().parent.parent / "workspace" / "3x6_hinge_bound_end_to_root.nadoc"
+    return Design.model_validate_json(p.read_text())
+
+
+def _manual_xo_key(xo):
+    return (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value,
+            xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value)
+
+
+def test_full_autostaple_preserves_manual_connections_and_overhangs():
+    """The 3x6 hinge has 30 user crossovers, 8 forced ligations, and 2 overhang
+    staples.  Full-autostaple must re-route the free staples without disturbing any
+    of them, and leave a valid design."""
+    from pathlib import Path
+
+    import pytest
+
+    from backend.core.validator import validate_design
+
+    # The hand-built fixture is not git-tracked and no longer present in this
+    # checkout (the headless regenerator was reverted; the desired manual ops now
+    # live in workspace/3x6_autogen_hinge.nadoc — see AF-37, blocked).
+    fixture = Path(__file__).resolve().parent.parent / "workspace" / "3x6_hinge_bound_end_to_root.nadoc"
+    if not fixture.exists():
+        pytest.skip(f"{fixture.name} absent (hand-built fixture; see 3x6_autogen_hinge.nadoc)")
+
+    d = _load_example()
+    manual_before = {_manual_xo_key(x) for x in d.crossovers if x.process_id == "manual"}
+    forced_before = len(d.forced_ligations or [])
+    assert manual_before and forced_before  # guard: fixture still has them
+
+    clean, locked, overhang = _run_full_autostaple_pipeline(d)
+
+    manual_after = {_manual_xo_key(x) for x in clean.crossovers if x.process_id == "manual"}
+    assert manual_before <= manual_after, "full-autostaple dropped a manual crossover"
+    assert len(clean.forced_ligations or []) == forced_before, "a forced ligation was lost"
+
+    # The 2 overhang staples are preserved intact (same ids, never split).
+    assert overhang == {"stpl_XY_2_0", "stpl_XY_5_0"}
+    by_id = {s.id: s for s in clean.strands}
+    for sid in overhang:
+        assert sid in by_id, f"overhang staple {sid} vanished"
+
+    report = validate_design(clean)
+    assert report.passed, [r.message for r in report.results if not r.ok]
+
+
+def test_locked_detection_flags_strand_through_a_manual_staple_crossover():
+    """A staple traversing a process_id='manual' crossover is locked (and its
+    crossover survives linearization)."""
+    from backend.core.models import (
+        Crossover, Design, Direction, Domain, HalfCrossover, Helix, Strand, StrandType, Vec3,
+    )
+    from backend.api.routes_assign_sequences import (
+        _locked_and_overhang_staple_ids, _linearize_staple_precursors,
+    )
+
+    hA = Helix(id="hA", grid_pos=(0, 0), axis_start=Vec3(x=0, y=0, z=0),
+               axis_end=Vec3(x=0, y=0, z=10), length_bp=64, bp_start=0)
+    hB = Helix(id="hB", grid_pos=(0, 1), axis_start=Vec3(x=0, y=2, z=0),
+               axis_end=Vec3(x=0, y=2, z=10), length_bp=64, bp_start=0)
+    # One staple crossing A→B at bp 20, recorded as a manual crossover.
+    crosser = Strand(id="crosser", strand_type=StrandType.STAPLE, domains=[
+        Domain(helix_id="hA", start_bp=40, end_bp=20, direction=Direction.REVERSE),
+        Domain(helix_id="hB", start_bp=20, end_bp=40, direction=Direction.FORWARD),
+    ])
+    free = Strand(id="free", strand_type=StrandType.STAPLE, domains=[
+        Domain(helix_id="hA", start_bp=0, end_bp=19, direction=Direction.FORWARD),
+    ])
+    xo = Crossover(
+        half_a=HalfCrossover(helix_id="hA", index=20, strand=Direction.REVERSE),
+        half_b=HalfCrossover(helix_id="hB", index=20, strand=Direction.FORWARD),
+        process_id="manual",
+    )
+    d = Design(helices=[hA, hB], strands=[crosser, free], crossovers=[xo])
+
+    locked, overhang = _locked_and_overhang_staple_ids(d)
+    assert locked == {"crosser"} and not overhang
+
+    prec, rep = _linearize_staple_precursors(d)
+    # Manual crossover kept; the locked strand preserved whole (still 2 domains).
+    assert any(x.process_id == "manual" for x in prec.crossovers)
+    kept = next((s for s in prec.strands if s.id == "crosser"), None)
+    assert kept is not None and len(kept.domains) == 2
+    assert rep["locked_strand_count"] == 1
+
+
+def test_merge_cap_overhang_strand_is_48_plus_overhang_length():
+    from backend.core.lattice import _merge_cap
+    from backend.core.models import Direction, Domain, Strand, StrandType
+
+    plain = Strand(id="p", strand_type=StrandType.STAPLE, domains=[
+        Domain(helix_id="h", start_bp=0, end_bp=20, direction=Direction.FORWARD)])
+    # Binding domain + a 7-nt overhang domain.
+    ovh = Strand(id="o", strand_type=StrandType.STAPLE, domains=[
+        Domain(helix_id="h", start_bp=0, end_bp=20, direction=Direction.FORWARD),
+        Domain(helix_id="h", start_bp=21, end_bp=27, direction=Direction.FORWARD,
+               overhang_id="ov1")])
+
+    assert _merge_cap(plain, plain, 56) == 56          # plain pair: lattice cap
+    assert _merge_cap(plain, ovh, 56) == 48 + 7        # overhang pair: 48 + 7 nt
+    assert _merge_cap(ovh, ovh, 56) == 48 + 7 + 7      # both overhangs sum
+
+
 def test_grow_staples_rebalances_instead_of_exceeding_the_cap():
     # A 14-nt fragment is below the honeycomb minimum (21); its only co-linear
     # neighbour is 49 nt, so a straight merge would be 63 nt (over the 56 cap).

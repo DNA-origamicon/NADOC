@@ -62,19 +62,39 @@ def _scaffold_strands(design: Design):
     return [s for s in design.strands if s.is_scaffold and not s.is_reference]
 
 
-def _fls_all_rungs(design: Design, gp, rail_a, rail_b) -> bool:
-    """True iff every forced ligation is a gap rung (rail A ↔ rail B, same column)."""
-    for fl in design.forced_ligations:
+def _scaffold_fls(forced_ligations, coverage):
+    """Forced ligations whose BOTH endpoints lie on scaffold-covered helices.
+
+    Scaffold routing owns only these.  Overhang / staple-binding FLs (e.g. an
+    overhang-duplex bind whose endpoint helix carries only staples, like a
+    ``bound end to root`` binding) are NOT scaffold rungs — they must be ignored
+    by scaffold routing and left untouched.  See ``memory/project_hinge_autoscaffold.md``.
+    """
+    return [
+        fl for fl in forced_ligations
+        if fl.three_prime_helix_id in coverage and fl.five_prime_helix_id in coverage
+    ]
+
+
+def _fls_all_rungs(fls, gp, rail_a, rail_b) -> bool:
+    """True iff every given forced ligation is a gap rung (rail A ↔ rail B, same column)."""
+    for fl in fls:
         ga, gb = gp[fl.three_prime_helix_id], gp[fl.five_prime_helix_id]
         if {ga[0], gb[0]} != {rail_a, rail_b} or ga[1] != gb[1]:
             return False
     return True
 
 
-def _analyze_leaves(design: Design):
-    """Return (rows, cols, leaf_a_rows, leaf_b_rows) or None if not a 2-leaf gap."""
-    gp = {h.id: tuple(h.grid_pos) for h in design.helices if h.grid_pos is not None}
-    if len(gp) != len(design.helices):
+def _analyze_leaves(design: Design, scaffold_hids):
+    """Return (rows, cols, leaf_a_rows, leaf_b_rows) or None if not a 2-leaf gap.
+
+    Only scaffold-covered helices define the leaf grid; staple-only helices (e.g. an
+    overhang / root-binding helix) are excluded so they don't break the rectangular
+    bundle assumption.
+    """
+    scaf_helices = [h for h in design.helices if h.id in scaffold_hids]
+    gp = {h.id: tuple(h.grid_pos) for h in scaf_helices if h.grid_pos is not None}
+    if not gp or len(gp) != len(scaf_helices):
         return None
     rows = sorted({r for r, _ in gp.values()})
     cols = sorted({c for _, c in gp.values()})
@@ -95,7 +115,8 @@ def realize_hinge_weave(design: Design) -> tuple[Design, SeamedResult] | None:
     Returns ``(updated_design, result)`` or ``None`` if the realization is not
     applicable or fails any self-gate (caller falls back).
     """
-    analysis = _analyze_leaves(design)
+    coverage = _scaffold_coverage(design)
+    analysis = _analyze_leaves(design, set(coverage))
     if analysis is None:
         return None
     rows, cols, leaf_a, leaf_b = analysis
@@ -105,10 +126,15 @@ def realize_hinge_weave(design: Design) -> tuple[Design, SeamedResult] | None:
 
     rail_a, rail_b = leaf_a[-1], leaf_b[0]
     gp_pre = {h.id: tuple(h.grid_pos) for h in design.helices}
-    # Every forced ligation must be a gap rung (inner rail A ↔ inner rail B, same
-    # column).  An FL between lattice-adjacent helices is a one-off manual anchor,
-    # not a hinge bridge → decline so the classic preserve pipeline handles it.
-    for fl in design.forced_ligations:
+    # Scaffold routing owns only FLs with both endpoints on scaffold; overhang /
+    # staple-binding FLs are preserved untouched and ignored here.
+    scaf_fls = _scaffold_fls(design.forced_ligations, coverage)
+    if not scaf_fls:
+        return None
+    # Every scaffold forced ligation must be a gap rung (inner rail A ↔ inner rail B,
+    # same column).  An FL between lattice-adjacent helices is a one-off manual
+    # anchor, not a hinge bridge → decline so the classic preserve pipeline handles it.
+    for fl in scaf_fls:
         ga, gb = gp_pre[fl.three_prime_helix_id], gp_pre[fl.five_prime_helix_id]
         if {ga[0], gb[0]} != {rail_a, rail_b} or ga[1] != gb[1]:
             return None
@@ -124,7 +150,6 @@ def realize_hinge_weave(design: Design) -> tuple[Design, SeamedResult] | None:
     helix_by_id = {h.id: h for h in design.helices}
     # The scaffold *duplex* (seed coverage) — crossover faces are relative to this,
     # not the helix geometry, which may already be pre-extended past the duplex.
-    coverage = _scaffold_coverage(design)
     duplex = {
         hid: (min(iv["lo"] for iv in ivs), max(iv["hi"] for iv in ivs))
         for hid, ivs in coverage.items()
@@ -137,7 +162,7 @@ def realize_hinge_weave(design: Design) -> tuple[Design, SeamedResult] | None:
     rail_rows = {rail_a, rail_b}
     near_lo_votes = 0
     rung_count = 0
-    for fl in design.forced_ligations:
+    for fl in scaf_fls:
         for hid, bp in (
             (fl.three_prime_helix_id, fl.three_prime_bp),
             (fl.five_prime_helix_id, fl.five_prime_bp),
@@ -323,7 +348,8 @@ def realize_hinge_weave_seamless(
     """
     from backend.core.seamless_router import SeamlessResult  # lazy: avoid import cycle
 
-    analysis = _analyze_leaves(design)
+    coverage = _scaffold_coverage(design)
+    analysis = _analyze_leaves(design, set(coverage))
     if analysis is None:
         return None
     rows, cols, leaf_a, leaf_b = analysis
@@ -334,7 +360,10 @@ def realize_hinge_weave_seamless(
     rail_a, rail_b = leaf_a[-1], leaf_b[0]
     rail_rows = {rail_a, rail_b}
     gp = {h.id: tuple(h.grid_pos) for h in design.helices}
-    if not design.forced_ligations or not _fls_all_rungs(design, gp, rail_a, rail_b):
+    # Scaffold routing owns only both-endpoints-scaffold FLs; overhang / staple-
+    # binding FLs are preserved untouched and ignored here.
+    scaf_fls = _scaffold_fls(design.forced_ligations, coverage)
+    if not scaf_fls or not _fls_all_rungs(scaf_fls, gp, rail_a, rail_b):
         return None
 
     id_of = {v: key for key, v in gp.items()}
@@ -342,14 +371,13 @@ def realize_hinge_weave_seamless(
     is_hc = design.lattice_type == LatticeType.HONEYCOMB
     period = HC_CROSSOVER_PERIOD if is_hc else SQ_CROSSOVER_PERIOD
     bow = _HC_SCAF_BOW_RIGHT if is_hc else _SQ_SCAF_BOW_RIGHT
-    coverage = _scaffold_coverage(design)
     duplex = {
         hid: (min(iv["lo"] for iv in ivs), max(iv["hi"] for iv in ivs))
         for hid, ivs in coverage.items()
     }
     # Which end the rungs occupy → rail folds go to the opposite (outer) end.
     near_lo, rung_n = 0, 0
-    for fl in design.forced_ligations:
+    for fl in scaf_fls:
         for hid, bp in (
             (fl.three_prime_helix_id, fl.three_prime_bp),
             (fl.five_prime_helix_id, fl.five_prime_bp),

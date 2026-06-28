@@ -2,6 +2,19 @@
 from backend.core.feature_dependencies import (
     EntryInfo,
     analyze_dependents,
+    snapshot_delta,
+    structural_reference_targets,
+)
+from backend.core.models import (
+    Crossover,
+    Design,
+    Direction,
+    Domain,
+    HalfCrossover,
+    Helix,
+    Strand,
+    StrandType,
+    Vec3,
 )
 
 
@@ -39,14 +52,14 @@ def test_reference_dependency_is_caught():
     assert analyze_dependents(infos, 0) == [1]
 
 
-def test_non_reconstructable_later_op_is_always_dependent():
-    # An auto-op (non-reconstructable) after K is a dependent even if it
-    # references nothing K produced — its result is baked with K.
+def test_non_reconstructable_independent_later_op_survives():
+    # Non-reconstructable no longer means dependent by itself. A baked snapshot
+    # that references nothing K produced can be scrubbed.
     infos = [
         _snap(added={'hA'}, reconstructable=True),                 # K
         _snap(added={'s1'}, targets=set(), reconstructable=False), # auto-scaffold
     ]
-    assert analyze_dependents(infos, 0) == [1]
+    assert analyze_dependents(infos, 0) == []
 
 
 def test_unknown_targets_treated_as_dependent():
@@ -93,3 +106,34 @@ def test_delta_entry_on_produced_helix_is_dependent():
         _snap(targets={'hA'}, reconstructable=True),               # bend scoped to hA
     ]
     assert analyze_dependents(infos, 0) == [1]
+
+
+def test_structural_targets_include_added_strand_domain_helix_refs():
+    h = Helix(id="h_removed", axis_start=Vec3(x=0, y=0, z=0), axis_end=Vec3(x=0, y=0, z=10), length_bp=10)
+    pre = Design(helices=[h], strands=[])
+    post = pre.copy_with(strands=[
+        Strand(
+            id="s_new",
+            strand_type=StrandType.STAPLE,
+            domains=[Domain(helix_id="h_removed", start_bp=0, end_bp=5, direction=Direction.FORWARD)],
+        )
+    ])
+    added, modified = snapshot_delta(pre, post)
+
+    assert structural_reference_targets(pre, post, added, modified) >= {"h_removed"}
+
+
+def test_structural_targets_include_added_crossover_endpoint_refs():
+    h1 = Helix(id="h_removed", axis_start=Vec3(x=0, y=0, z=0), axis_end=Vec3(x=0, y=0, z=10), length_bp=10)
+    h2 = Helix(id="h_survivor", axis_start=Vec3(x=1, y=0, z=0), axis_end=Vec3(x=1, y=0, z=10), length_bp=10)
+    pre = Design(helices=[h1, h2])
+    post = pre.copy_with(crossovers=[
+        Crossover(
+            id="xo",
+            half_a=HalfCrossover(helix_id="h_removed", index=5, strand=Direction.FORWARD),
+            half_b=HalfCrossover(helix_id="h_survivor", index=5, strand=Direction.REVERSE),
+        )
+    ])
+    added, modified = snapshot_delta(pre, post)
+
+    assert structural_reference_targets(pre, post, added, modified) >= {"h_removed", "h_survivor"}

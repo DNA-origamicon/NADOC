@@ -103,10 +103,11 @@ def test_declines_non_rung_forced_ligation():
 def test_declines_non_hinge_bundle():
     """A plain contiguous bundle (no gap) is not a hinge → analysis returns None."""
     from backend.core.lattice import make_bundle_design
+    from backend.core.seamed_router import _scaffold_coverage
     design = make_bundle_design(
         [(0, 0), (0, 1), (1, 0), (1, 1)], length_bp=64,
         lattice_type=LatticeType.SQUARE)
-    assert _analyze_leaves(design) is None
+    assert _analyze_leaves(design, set(_scaffold_coverage(design))) is None
     assert realize_hinge_weave(design) is None
 
 

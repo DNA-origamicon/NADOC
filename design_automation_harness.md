@@ -8,7 +8,10 @@ oracle catalog row lives in `design_automation_log.md`; the metrics row in `desi
 
 ## Index (shipped wrappers — do NOT rebuild)
 
-- AF-33 P1 hinge-primitive builder (2x2)
+- AF-27 P2 overhang-linker + bond relax (pose)
+- AF-36 hinge-design generator + phase-paired `build_hinge` + seek-fidelity
+- AF-35 multi-op primitive placement (graft)
+- AF-33 P1/P2 hinge-primitive builder (2x2/2x4/2x6)
 - AF-30 strand end-resize
 - AF-32 forced-ligation place/delete
 - AF-31 manual crossover place/delete
@@ -54,13 +57,91 @@ _Below: the verbatim `▶ HARNESS NOW AVAILABLE` blocks, plus the historical han
 (audit notes, priority-track scoping, Tier-6/7 as-built assessments) that preceded them._
 
 
-> **■ HARNESS NOW AVAILABLE — AF-33 P1 hinge-primitive builder, 2x2 (2026-06-26).**
+> **■ HARNESS NOW AVAILABLE — AF-27 P2 overhang-linker + generic-bond RELAX wrappers (pose-layer, 2026-06-27).**
+> - `from backend.api import headless_build as hb` →
+>   `hb.relax_overhang_connection(conn_id, *, joint_ids=None, bin_index=None, r_ee_min_nm=None, r_ee_max_nm=None) -> Design`
+>   wraps `POST /design/overhang-connections/{conn_id}/relax` — swings the joint-connected rigid cluster so a
+>   ds/ss linker's connector arcs collapse toward the duplex/FJC natural span (the hinge rest pose). `joint_ids=None`
+>   → 1-DOF auto-pick (route requires exactly one joint between the two overhangs' clusters); the ss-only `bin_index`/
+>   `r_ee_*` pick the FJC histogram bin + limits.
+> - `hb.relax_bond(bond_type, *, bond_id=None, linker_side=None, side_a=None, side_b=None, side_to_move=None,
+>   joint_ids=None, target_nm=None) -> Design` wraps `POST /design/relax-bond` — generic for crossover / forced-ligation
+>   / linker_arc / strand_arc. Identify the bond by a record id (`bond_id`, + `linker_side` for `linker_arc`) OR the two
+>   nuc endpoints `side_a`/`side_b` (each a dict `{helix_id, bp_index, direction, strand_id?}`). `side_to_move` required
+>   only for the 0-DOF rigid-translate case. Coverage **48 → 50** (imports `relax_overhang_connection` + `relax_bond_endpoint`).
+> - **Both are POSE-ONLY** — mutate `cluster_transforms` + append a `ClusterOpLogEntry`, NEVER the strand graph →
+>   `canonical_topology` unchanged (the load-bearing Three-Layer pin, verified). NOT a topological edit (unlike P1's `connect_overhangs`).
+> - **Augments — 2 NEW reusable oracles** `assert_linker_relaxed_pose(before, after, conn_id, *, natural_span_nm=None,
+>   require_reduced=True)` + `assert_bond_relaxed_pose(before, after, *, side_a, side_b, target_nm, require_reduced=True)`
+>   (share private `_assert_relax_pose`/`_relax_pose_moved`). STRAIN-REDUCTION (user choice 2026-06-27): `|chord −
+>   natural_span|` (linker: anchor chord vs `_ds_target_length_nm`; bond: endpoint chord vs `target_nm`), re-measured on
+>   the POSED geometry, must FALL + a pose moved + topology unchanged.
+> - GOTCHAS: the relax optimises connector-ARC residuals internally, NOT the raw anchor chord — but the chord moves to
+>   the natural span, so strain-reduction is the right solver-independent property (chord-≤-contour is vacuous for a long
+>   linker / unsatisfiable for a short one). The natural fixture is DEGENERATE: joint origin ON the moving overhang
+>   (`[2.5,0,0]`) → anchor on the hinge axis → rotation can't change the chord (strain flat) = the load-bearing can-go-red;
+>   put the origin OFF the overhang (`[0,0,0]`) for a real reduction. DROP the grid_pos-less `demo_helix` from any relax
+>   fixture or `canonical_topology` raises (None grid_pos breaks the helix-tuple sort). A metadata-only `OverhangConnection`
+>   (no real bridge strands) is a valid relax fixture — the geometry layer emits the `__lnk__` bridge from the connection
+>   metadata, and `canonical_topology` then sees only the two real overhang helices.
+>
+> **■ HARNESS NOW AVAILABLE — AF-36 end-to-end HINGE DESIGN generator + phase-paired `build_hinge` + seek-fidelity (2026-06-27, MANUALLY VALIDATED).**
+> - `build_hinge(rows_per_leaf, n_cols, *, lattice=SQUARE, length_bp=40, short_ssdna_bp=2, long_ssdna_bp=16) -> Design`
+>   (`backend/api/headless_hinge_build.py`) NOW emits **phase-paired short/long ssDNA** (was uniform). Per column it extends
+>   the **leaf-A rail** scaffold into the gap by `short_ssdna_bp` when that rail's gap-face backbone faces TOWARD the far
+>   leaf, else `long_ssdna_bp` (it must reach ~1 helical turn further to re-phase). Decider: `_rail_faces_toward(design,
+>   rail_a_hid, rail_b_hid, bp)` (scaffold backbone radial at `bp`, axis-projected, · the rail-A→rail-B chord; `>0`==toward).
+>   Reproduces the 2x2/2x4 goldens byte-for-byte; `build_hinge(3,6)` → 3 short + 3 long. Leaf B stays blunt.
+> - **Seek-fidelity fix** (`_topology_substitute` in `crud.py`): the feature-log seek snapshot restorer now ALSO restores
+>   `cluster_joints` + `flexible_segment_marks` + `flexible_connections` → joints/marks/connections toggle correctly across
+>   the slider (were stuck-on at every position incl. empty). Pins: `test_seek_before_joint_placement_drops_the_joint`
+>   (`test_joints.py`), `test_seek_before_mark_drops_flexible_marks` (`test_flexible_segments.py`).
+> - **End-to-end generation recipe** (`scratchpad/build_3x6_hinge.py` — the user's design driver, NOT a repo module; lift the
+>   pattern): `build_hinge(k,n,length_bp)` → mark every unpaired scaffold bead flexible (`batch_flexible_segment` with
+>   `replace=True`) → relax via `compute_relax_transforms(design, scope="all")` + `hb.transform_cluster(..., commit=True,
+>   log=True)` per moved cluster (NOT the `flexible-relax` route — `cluster_op` is the only seek-faithful pose commit) →
+>   `hb.place_cluster_joint(clusterB, edge=<gap edge>, anchor="corner")` (pick the OBB edge whose direction is parallel to
+>   the rung-centroid spread AND whose midpoint is nearest the rungs) → set angle by composing a fold onto the relaxed pose
+>   so the signed dihedral about the hinge axis == target (`Rδ·R1`, pivot at the relaxed pivot; θ = target − rest_dihedral)
+>   → `save_design(FilePathRequest(path=...))`. Validate with `assert_flexible_segments_relaxed` (per-tether chord ≤ its own
+>   contour). Coverage **FLAT** (no new route). **MANUALLY VALIDATED 2026-06-27.**
+>
+> **■ HARNESS NOW AVAILABLE — AF-35 multi-op primitive PLACEMENT (preserve-verbatim graft, 2026-06-27).**
+> - `from backend.api import headless_build as hb` →
+>   `hb.place_primitive(name=None, *, anchor_cell, plane=None, primitive=None) -> Design` — places a WHOLE primitive
+>   into the active design, its anchor cell (min `grid_pos`) → `anchor_cell`. `name` builds a built-in hinge via
+>   `build_hinge_primitive`; for any other primitive pass `primitive=Design.from_json(...)`. `plane` defaults to the
+>   primitive's own construction plane. Commits via `snapshot`+`set_design_silent` → ONE undo step (additive + revertable).
+> - Pure core: `from backend.core.primitive_placement import place_primitive_into` →
+>   `place_primitive_into(host, primitive, *, anchor_cell, plane=None) -> Design` (HTTP-free, `backend/core`). Copies the
+>   primitive's `helices`/`strands`/`forced_ligations`/`cluster_transforms`, translates by ONE rigid lattice vector
+>   (grid_pos + axis floats, in-plane per `_PLANE_AXES`), remaps every id + internal ref. Helpers: `detect_plane`,
+>   `primitive_anchor_cell`, `translate_design`. **RAISES** on: a primitive with any other populated field (the
+>   `_UNSUPPORTED_LIST_FIELDS` guard — crossovers/overhangs/loop_skips/etc — so "verbatim" stays honest), a host/primitive
+>   lattice mismatch, a non-rigid shift (honeycomb odd-parity → footprint distortion), or a host-cell collision.
+> - **Why a GRAFT not an op-replay** (the user's preserve-verbatim decision, 2026-06-27): replaying the build ops at an
+>   offset would route through `bundle-segment` (a DIFFERENT builder → AF-30 ISSUE-13 axis drift vs `create_bundle`). Copying
+>   the primitive's already-correct geometry and translating rigidly is the only way "verbatim" is literally true. The hinge
+>   ALSO carries 2 identity `cluster_transforms` (rigid leaves) → grafted+remapped; its `feature_log` is the standalone's
+>   history → NOT grafted. Coverage **FLAT** (imports a `backend/core` service, no new route handler).
+> - **Augment — NEW `assert_primitive_placed(before, after, primitive, *, anchor_cell, plane=None)`** (6 clauses):
+>   non-vacuity + additive (host `canonical_topology` unchanged) + anchored (placed min-cell == `anchor_cell`) + verbatim
+>   (offset-corrected INDEPENDENTLY via `_lattice_position`, NOT the graft's `_world_delta` → `canonical_topology` ==
+>   primitive) + FL-links-survived (grid-keyed set — the canonical_topology blind-spot) + clusters-survived. Reusable
+>   helpers in the harness: `_placement_subdesign`, `_translate_subdesign`, `_fl_grid_set`, `_cluster_grid_sets`.
+> - GOTCHA: `canonical_topology` rounds axes to 4 dp, so float add-then-subtract of the same world-delta is exact. Placement
+>   does NOT shift along-axis (`offset_nm`) — deferred. Honeycomb is restricted to even-parity (shape-preserving) shifts.
+>
+> **■ HARNESS NOW AVAILABLE — AF-33 P1/P2 hinge-primitive builder, 2x2/2x4/2x6 (P1 2026-06-26, P2 2026-06-27).**
 > - `from backend.api.headless_hinge_build import build_hinge_primitive` →
 >   `build_hinge_primitive(name="2x2_single_hinge_link", *, lattice=LatticeType.SQUARE) -> Design` — recreates a
 >   standard hinge primitive FROM SCRATCH (returns a standalone deep copy, runs in a scratch session). Composes the
 >   shipped wrappers ONLY — `hb.create_bundle` → `_shift_duplexes(+8)` → per-bridge `hb.resize_strand_end`+`hb.force_ligate`
->   — introduces NO new route (coverage stays flat). `HINGE_PRIMITIVE_NAMES` lists supported names; **P1 ships only
->   `2x2_single_hinge_link`** — 2x4/2x6 raise `KeyError` (AF-33 P2). Builds carry a real `bundle-create` feature-log entry.
+>   — introduces NO new route (coverage stays flat). `HINGE_PRIMITIVE_NAMES` now lists **all three: `2x2_single_hinge_link`
+>   / `2x4_double_hinge_link` / `2x6_triple_hinge_link`** (P2 added the latter two as `_HingeSpec` entries); an unknown
+>   name raises `KeyError`. Builds carry a real `bundle-create` feature-log entry. **P2 ships the BUILDER only** — 2x4/2x6
+>   multi-link routing still falls back (the `test_hinge_router` xfail / G6 blocker), so their AF-34-style autoscaffold
+>   validation is pending. The parametric `build_hinge(k, n)` generator is separate (uniform geometry, no hand trims).
 > - **Augment — NEW `assert_matches_primitive(design, primitive_name, *, primitives_dir)`** (golden-equality):
 >   `canonical_topology` == golden AND `_fl_endpoint_set` == golden (LOAD-BEARING — topology fingerprint is blind to
 >   `forced_ligations`) AND `roundtrip_nadoc`-stable (topology + FL-set) AND `validate_design`. `primitives_dir` =
@@ -73,6 +154,14 @@ _Below: the verbatim `▶ HARNESS NOW AVAILABLE` blocks, plus the historical han
 >   `create-at-32`) is load-bearing — AF-30 ISSUE-13 axis re-trim means only the same op sequence reproduces the golden's
 >   axis floats. The bridge trims are HAND-AUTHORED gap geometry (constant, not re-derived — ASK-FIRST). To extend to
 >   2x4/2x6: decode the sibling goldens' `RoutingClusterLogEntry.children` params the same way (the recipe is recorded).
+> - **P2 (2026-06-27) — the 2x4/2x6 specs, transcribed verbatim.** Decoded each golden's feature log
+>   (`bundle-create` params → `cells`; the *Fine Routing* cluster's per-column `strand-end-resize` + `forced-ligation-create`
+>   → the bridge `trim` + `(three, five)`). **2x4 carries ASYMMETRIC trims** that differ from 2x2: by COLUMN PARITY,
+>   even cols `scaf_1_c 3p −16` / odd cols `scaf_1_c 5p −2` (vs 2x2's `3p −3` / `5p −16`) — NOT a derivable rule, replayed
+>   as constants. **2x6 was generated by `build_hinge(2,6)`** (uniform LO-end FL, NO trims) so its spec bridges carry no
+>   `trim` — `build_hinge(2,6)` reproduces the 2x6 golden byte-for-byte; `build_hinge(2,4)` does NOT (golden has the hand
+>   trims). Per-bridge (trim→FL) ordering reproduces the golden's all-trims-then-all-FLs because each column's strands are
+>   independent. Pinned by `test_build_2x4_matches_golden` / `test_build_2x6_matches_golden` (`assert_matches_primitive`).
 >
 > **■ HARNESS NOW AVAILABLE — AF-30 strand end-resize (2026-06-26).**
 > - `from backend.api import headless_build as hb` →

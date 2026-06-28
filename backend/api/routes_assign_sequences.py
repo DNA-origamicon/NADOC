@@ -103,8 +103,61 @@ def assign_scaffold_sequence_endpoint(body: _ScaffoldSeqBody = _ScaffoldSeqBody(
     return resp
 
 
+def _manual_connection_positions(design: Design) -> set[tuple[str, int, Direction]]:
+    """Endpoints of user-issued connections full-autostaple must not disturb.
+
+    Every half of a ``process_id == "manual"`` crossover plus both ends of every
+    forced ligation.  A staple touching one of these positions was hand-routed.
+    """
+    positions: set[tuple[str, int, Direction]] = set()
+    for xo in design.crossovers:
+        if xo.process_id == "manual":
+            positions.add((xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand))
+            positions.add((xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand))
+    for fl in getattr(design, "forced_ligations", None) or []:
+        positions.add((fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction))
+        positions.add((fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction))
+    return positions
+
+
+def _locked_and_overhang_staple_ids(design: Design) -> tuple[set[str], set[str]]:
+    """Classify staples full-autostaple must leave intact.
+
+    Returns ``(locked_ids, overhang_ids)``:
+      * **locked** — staples touching a manual crossover or forced ligation.  The
+        user hand-routed these, so they are never linearized, nicked, or merged,
+        and auto-crossovers route around them.
+      * **overhang** — staples carrying an overhang domain.  Never split or nicked,
+        but may still grow by absorbing a free co-linear neighbour (the merge is
+        capped at 48 + overhang nt — see ``_merge_cap`` in lattice.py).
+
+    A strand can be in both sets; the two are used for different stages.
+    """
+    manual_pos = _manual_connection_positions(design)
+    locked: set[str] = set()
+    overhang: set[str] = set()
+    for s in design.strands:
+        if s.strand_type != StrandType.STAPLE or s.is_reference:
+            continue
+        if any(d.overhang_id is not None or d.binds_overhang_id is not None for d in s.domains):
+            overhang.add(s.id)
+        for d in s.domains:
+            if ((d.helix_id, d.start_bp, d.direction) in manual_pos
+                    or (d.helix_id, d.end_bp, d.direction) in manual_pos):
+                locked.add(s.id)
+                break
+    return locked, overhang
+
+
 def _linearize_staple_precursors(design: Design) -> tuple[Design, dict]:
-    """Remove staple crossovers and split staples into single-domain precursors."""
+    """Drop *auto* staple crossovers and split free staples into single-domain
+    precursors, leaving user-issued connections intact.
+
+    Manual crossovers are kept (auto crossovers are dropped and re-placed). Locked
+    staples (touching a manual crossover / forced ligation) and overhang staples
+    are preserved whole and excluded from the rebuild; the auto stages downstream
+    route around them.
+    """
     helix_map = {h.id: h for h in design.helices if h.grid_pos is not None}
 
     def _is_scaffold_half(half: HalfCrossover) -> bool:
@@ -117,21 +170,24 @@ def _linearize_staple_precursors(design: Design) -> tuple[Design, dict]:
 
     kept_crossovers = [
         xo for xo in design.crossovers
-        if _is_scaffold_half(xo.half_a) or _is_scaffold_half(xo.half_b)
+        if xo.process_id == "manual"
+        or _is_scaffold_half(xo.half_a) or _is_scaffold_half(xo.half_b)
     ]
+
+    locked_ids, overhang_ids = _locked_and_overhang_staple_ids(design)
+    preserve_ids = locked_ids | overhang_ids
+
     preserved_strands: list[Strand] = []
     staple_domains: dict[tuple[str, Direction], list[Domain]] = {}
     for strand in design.strands:
         if (
             strand.strand_type != StrandType.STAPLE
             or strand.is_reference
+            or strand.id in preserve_ids
         ):
             preserved_strands.append(strand)
             continue
         for domain in strand.domains:
-            if domain.overhang_id is not None or domain.binds_overhang_id is not None:
-                preserved_strands.append(strand.model_copy(update={"domains": [domain]}))
-                continue
             staple_domains.setdefault((domain.helix_id, domain.direction), []).append(domain)
 
     rebuilt_staples: list[Strand] = []
@@ -172,6 +228,8 @@ def _linearize_staple_precursors(design: Design) -> tuple[Design, dict]:
     return updated, {
         "removed_staple_crossover_count": len(design.crossovers) - len(kept_crossovers),
         "rebuilt_precursor_count": len(rebuilt_staples),
+        "locked_strand_count": len(locked_ids),
+        "overhang_strand_count": len(overhang_ids),
     }
 
 
@@ -267,15 +325,23 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
                 0,
             )
 
+        # Classify the staples the user hand-routed; every auto stage below leaves
+        # them intact.  Locked staples (manual crossover / forced ligation) are
+        # never touched and crossovers route around them; overhang staples are
+        # never split or nicked but may still grow into a free neighbour.
+        locked_ids, overhang_ids = _locked_and_overhang_staple_ids(sequenced)
+        protected_ids = locked_ids | overhang_ids
+
         # Order matters: nick the staples on the tick grid FIRST, then place
         # crossovers onto the fragmented substrate, then grow fragments back into
         # ≤56-nt staples.  Placing crossovers after nicking assembles them into
         # open chains (no staple cycles), so every crossover stays traversed and
         # none has to be pruned — which is also why full density is preserved.
         precursors, precursor_report = _linearize_staple_precursors(sequenced)
-        nicked = nick_all_major_ticks(precursors)
-        crossed, crossover_report = _place_auto_crossovers(nicked)
-        clean = grow_staples(crossed, max_merged_length=56)
+        nicked = nick_all_major_ticks(precursors, skip_strand_ids=protected_ids)
+        crossed, crossover_report = _place_auto_crossovers(
+            nicked, protected_strand_ids=protected_ids)
+        clean = grow_staples(crossed, max_merged_length=56, locked_ids=locked_ids)
         clean = assign_staple_sequences(clean)
         _assert_no_circular_staples(clean)
         _run.full_report = {

@@ -136,6 +136,33 @@ def test_create_joint_logs_joint_place_minor_op(cluster_id):
     assert p['local_axis_direction'] == pytest.approx(_AXIS_DIRECTION)
 
 
+def test_seek_before_joint_placement_drops_the_joint(cluster_id):
+    """Seeking the feature-log slider to before a joint's creation REMOVES it.
+
+    Regression: ``_topology_substitute`` now restores ``cluster_joints`` from the
+    seek snapshot (joint placement is a ``joint-place`` minor op captured in its
+    Fine Routing cluster's pre/post state), so a back-seek drops a joint placed
+    after that point. It used to persist at every position — including the empty
+    state — because the joint rebase was a no-op and the snapshot substitution
+    skipped ``cluster_joints``.
+    """
+    client.post(
+        f"/api/design/cluster/{cluster_id}/joint",
+        json={"axis_origin": _AXIS_ORIGIN, "axis_direction": _AXIS_DIRECTION},
+    )
+    assert len(design_state.get_or_404().cluster_joints) == 1
+
+    # Seek to the empty state (before every feature) → the joint is gone.
+    r = client.post("/api/design/features/seek", json={"position": -2})
+    assert r.status_code == 200
+    assert len(design_state.get_or_404().cluster_joints) == 0
+
+    # Seek back to latest → the joint is restored.
+    r = client.post("/api/design/features/seek", json={"position": -1})
+    assert r.status_code == 200
+    assert len(design_state.get_or_404().cluster_joints) == 1
+
+
 def test_create_joint_pushes_undo(cluster_id):
     """Creating a joint should be undoable."""
     client.post(

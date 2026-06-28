@@ -106,15 +106,17 @@ def test_coverage_report_shape_and_known_wrappers():
 def test_coverage_report_lists_real_backlog_routes():
     """A still-unwrapped backlog route shows up as uncovered.
 
-    AF-30 covered POST /design/strand-end-resize, so this re-points to
-    /design/relax-bond (the generic bond-relax route — an AF-27 P2 candidate, still
-    unwrapped today).
+    AF-27 P2 covered POST /design/relax-bond + .../{conn_id}/relax, so this
+    re-points to the linker display-pose PATCH
+    (/design/overhang-connections/{conn_id}/display-pose — the authored-hinge-angle
+    annotation route, still unwrapped today).
     """
+    _route = "/design/overhang-connections/{conn_id}/display-pose"
     report = headless_coverage_report()
     covered_paths = {r["path"] for r in report["covered_routes"]}
     uncovered_paths = {r["path"] for r in report["uncovered_routes"]}
-    assert any(p.endswith("/design/relax-bond") for p in uncovered_paths)
-    assert not any(p.endswith("/design/relax-bond") for p in covered_paths)
+    assert any(p.endswith(_route) for p in uncovered_paths)
+    assert not any(p.endswith(_route) for p in covered_paths)
 
 
 def test_coverage_report_marks_af2_routes_covered():
@@ -455,8 +457,9 @@ def test_oxdna_coverage_report_separate_from_design_assembly():
     # AF-27 P1 connect_overhangs (41→42); AF-29 relax_flexible_segments (42→43);
     # AF-31 place_crossover + delete_crossover (43→45);
     # AF-32 force_ligate + delete_forced_ligation (45→47);
-    # AF-30 strand_end_resize (47→48).
-    assert headless_coverage_report()["covered"] == 48  # /oxdna audit is separate
+    # AF-30 strand_end_resize (47→48);
+    # AF-27 P2 relax_overhang_connection + relax_bond (48→50).
+    assert headless_coverage_report()["covered"] == 50  # /oxdna audit is separate
     ox = oxdna_coverage_report()
     assert ox["total"] == ox["covered"] + ox["uncovered"]
     covered = {r["endpoint"] for r in ox["covered_routes"]}
@@ -981,6 +984,94 @@ def test_flexible_relax_oracle_fires_when_still_overstretched():
     before, _after = _relaxed_flex_pair()
     with pytest.raises(AssertionError, match="overstretched after relax"):
         assert_flexible_segments_relaxed(before, before)
+
+
+# ── The linker/bond relax-POSE oracles PASS on a real relax and FIRE otherwise ──
+
+def _relaxed_linker_pair(*, joint_origin):
+    """(before, after, conn_id): a joint-connected ds-linker design and its
+    headless-relaxed result.  ``joint_origin`` off the moving overhang reduces
+    strain; on it is the degenerate no-op."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from tests.test_headless_build import _two_overhang_leaves_with_joint
+
+    before, conn_id = _two_overhang_leaves_with_joint(joint_origin=joint_origin)
+    design_state.set_design(before)
+    after = hb.relax_overhang_connection(conn_id).model_copy(deep=True)
+    return before, after, conn_id
+
+
+def test_linker_relaxed_pose_oracle_passes_on_real_relax():
+    """assert_linker_relaxed_pose is green when the relax pulled the linker toward
+    its natural span, moved a pose, and left topology unchanged."""
+    from tests.automation_harness import assert_linker_relaxed_pose
+
+    before, after, cid = _relaxed_linker_pair(joint_origin=[0.0, 0.0, 0.0])
+    assert_linker_relaxed_pose(before, after, cid)
+
+
+def test_linker_relaxed_pose_oracle_fires_on_degenerate_noop():
+    """Red-test: a degenerate hinge (moving overhang on the joint axis) cannot
+    change the chord — strain is not reduced, so the oracle fires."""
+    from tests.automation_harness import assert_linker_relaxed_pose
+
+    before, after, cid = _relaxed_linker_pair(joint_origin=[2.5, 0.0, 0.0])
+    with pytest.raises(AssertionError, match="reduce strain"):
+        assert_linker_relaxed_pose(before, after, cid)
+
+
+def test_linker_relaxed_pose_oracle_fires_on_topology_mutation():
+    """Red-test: a relax that also edited the strand graph fails the Three-Layer
+    pin (canonical_topology unchanged), even with strain-checking off."""
+    from backend.core.models import Direction, Domain, Strand, StrandType
+    from tests.automation_harness import assert_linker_relaxed_pose
+
+    before, after, cid = _relaxed_linker_pair(joint_origin=[0.0, 0.0, 0.0])
+    tampered = after.model_copy(update={"strands": [
+        *after.strands,
+        Strand(id="intruder",
+               domains=[Domain(helix_id="oh_helix_a", start_bp=0, end_bp=3,
+                               direction=Direction.FORWARD)],
+               strand_type=StrandType.STAPLE),
+    ]})
+    with pytest.raises(AssertionError, match="topology"):
+        assert_linker_relaxed_pose(before, tampered, cid, require_reduced=False)
+
+
+def _relaxed_bond_pair(*, with_joint):
+    """(before, after, side_a, side_b): a crossover-bond design and its relaxed
+    result via hb.relax_bond."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from tests.test_headless_build import _two_helices_with_crossover
+
+    before, side_a, side_b = _two_helices_with_crossover(with_joint=with_joint)
+    design_state.set_design(before)
+    if with_joint:
+        after = hb.relax_bond("crossover", bond_id="bond_xover_01")
+    else:
+        after = hb.relax_bond("crossover", bond_id="bond_xover_01", side_to_move="b")
+    return before, after.model_copy(deep=True), side_a, side_b
+
+
+def test_bond_relaxed_pose_oracle_passes_on_real_relax():
+    """assert_bond_relaxed_pose is green when the bond chord closed toward its
+    target, a pose moved, and topology is unchanged."""
+    from tests.automation_harness import assert_bond_relaxed_pose
+
+    before, after, side_a, side_b = _relaxed_bond_pair(with_joint=False)
+    assert_bond_relaxed_pose(before, after, side_a=side_a, side_b=side_b, target_nm=0.13)
+
+
+def test_bond_relaxed_pose_oracle_fires_on_noop():
+    """Red-test: comparing the un-relaxed design to itself fails the
+    strain-reduction clause (the bond chord did not move toward target)."""
+    from tests.automation_harness import assert_bond_relaxed_pose
+
+    before, _after, side_a, side_b = _relaxed_bond_pair(with_joint=False)
+    with pytest.raises(AssertionError, match="reduce strain"):
+        assert_bond_relaxed_pose(before, before, side_a=side_a, side_b=side_b, target_nm=0.13)
 
 
 def test_flexible_relax_oracle_fires_on_topology_change():
@@ -2144,3 +2235,105 @@ def test_oxpy_parity_oracle_fires_on_low_confidence():
     batch = _parity_result(conf=1); batch["mutation"] = None
     with pytest.raises(AssertionError, match="INCONCLUSIVE"):
         assert_oxpy_equilibrium_parity(live, batch, min_confidence=2)
+
+
+# ── AF-35: assert_primitive_placed (multi-op primitive placement) ─────────────────
+
+def _place_hinge_into_empty(anchor=(10, 5)):
+    """Build a 2x2 hinge, place it into an empty SQUARE design, return
+    (before, after, primitive, anchor)."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from backend.api.headless_hinge_build import build_hinge_primitive
+    from tests.automation_harness import assert_primitive_placed  # noqa: F401
+
+    primitive = build_hinge_primitive("2x2_single_hinge_link")
+    with hb.scratch_session(LatticeType.SQUARE):
+        before = design_state.get_or_404().model_copy(deep=True)
+        hb.place_primitive("2x2_single_hinge_link", anchor_cell=anchor)
+        after = design_state.get_or_404().model_copy(deep=True)
+    return before, after, primitive, anchor
+
+
+def test_assert_primitive_placed_passes_on_real_placement():
+    from tests.automation_harness import assert_primitive_placed
+
+    before, after, primitive, anchor = _place_hinge_into_empty()
+    assert_primitive_placed(before, after, primitive, anchor_cell=anchor)
+
+
+def test_assert_primitive_placed_fires_on_vacuous_placement():
+    """Nothing placed (after == before) must raise (clause 1)."""
+    from tests.automation_harness import assert_primitive_placed
+
+    before, _after, primitive, anchor = _place_hinge_into_empty()
+    with pytest.raises(AssertionError, match="no helices were placed"):
+        assert_primitive_placed(before, before, primitive, anchor_cell=anchor)
+
+
+def test_assert_primitive_placed_fires_on_wrong_anchor():
+    """A placement at a different cell than claimed must raise (clause 3)."""
+    from tests.automation_harness import assert_primitive_placed
+
+    before, after, primitive, _anchor = _place_hinge_into_empty(anchor=(10, 5))
+    with pytest.raises(AssertionError, match="anchor"):
+        assert_primitive_placed(before, after, primitive, anchor_cell=(0, 0))
+
+
+def test_assert_primitive_placed_fires_on_dropped_link():
+    """Dropping a placed forced-ligation link must raise (clause 5) — canonical_topology
+    is blind to it, so this is load-bearing."""
+    from tests.automation_harness import assert_primitive_placed
+
+    before, after, primitive, anchor = _place_hinge_into_empty()
+    maimed = after.model_copy(update={"forced_ligations": after.forced_ligations[:1]})
+    with pytest.raises(AssertionError, match="forced-ligation"):
+        assert_primitive_placed(before, maimed, primitive, anchor_cell=anchor)
+
+
+def test_assert_primitive_placed_fires_on_lost_cluster():
+    """Losing a placed rigid-leaf cluster grouping must raise (clause 6)."""
+    from tests.automation_harness import assert_primitive_placed
+
+    before, after, primitive, anchor = _place_hinge_into_empty()
+    maimed = after.model_copy(update={"cluster_transforms": after.cluster_transforms[:1]})
+    with pytest.raises(AssertionError, match="cluster"):
+        assert_primitive_placed(before, maimed, primitive, anchor_cell=anchor)
+
+
+def test_assert_primitive_placed_fires_on_distorted_geometry():
+    """A placed helix nudged off its rigid position must raise the verbatim clause (4)."""
+    from backend.core.models import Vec3
+    from tests.automation_harness import assert_primitive_placed
+
+    before, after, primitive, anchor = _place_hinge_into_empty()
+    h0 = after.helices[-1]
+    bent = h0.model_copy(update={"axis_start": Vec3(x=h0.axis_start.x + 5.0,
+                                                    y=h0.axis_start.y, z=h0.axis_start.z)})
+    maimed = after.model_copy(update={"helices": after.helices[:-1] + [bent]})
+    with pytest.raises(AssertionError, match="verbatim"):
+        assert_primitive_placed(before, maimed, primitive, anchor_cell=anchor)
+
+
+def test_assert_primitive_placed_fires_on_mutated_host():
+    """A placement that altered the host's existing content must raise (clause 2)."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from backend.api.headless_hinge_build import build_hinge_primitive
+    from tests.automation_harness import assert_primitive_placed
+
+    primitive = build_hinge_primitive("2x2_single_hinge_link")
+    anchor = (20, 0)
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle([[0, 0], [0, 1]], 32, lattice=LatticeType.SQUARE)
+        host_before = design_state.get_or_404().model_copy(deep=True)
+        hb.place_primitive("2x2_single_hinge_link", anchor_cell=anchor)
+        after = design_state.get_or_404().model_copy(deep=True)
+    # tamper a HOST helix in `after` (shorten it) → additive clause must fire
+    host_h = next(h for h in after.helices if h.grid_pos == (0, 0))
+    tampered = host_h.model_copy(update={"length_bp": host_h.length_bp - 5})
+    maimed = after.model_copy(
+        update={"helices": [tampered if h.id == host_h.id else h for h in after.helices]}
+    )
+    with pytest.raises(AssertionError, match="additive|mutated"):
+        assert_primitive_placed(host_before, maimed, primitive, anchor_cell=anchor)

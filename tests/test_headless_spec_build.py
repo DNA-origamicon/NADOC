@@ -1440,4 +1440,5 @@ def test_spec_build_adds_no_coverage():
     # AF-31's place_crossover + delete_crossover added both: 43 → 45.
     # AF-32's force_ligate + delete_forced_ligation added both: 45 → 47.
     # AF-30's strand_end_resize added strand-end-resize: 47 → 48.
-    assert headless_coverage_report()["covered"] == 48
+    # AF-27 P2's relax_overhang_connection + relax_bond added both: 48 → 50.
+    assert headless_coverage_report()["covered"] == 50

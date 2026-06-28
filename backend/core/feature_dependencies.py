@@ -6,24 +6,11 @@ module computes, for a target entry K, the set of *later* entries that cannot
 survive K's removal — its **dependents** — so the caller can either surgically
 delete K (when there are none) or ask the user to cascade-delete K + dependents.
 
-A later entry is a dependent of K when it can't be cleanly re-derived on a
-K-free base. Two independent reasons:
-
-  1. **Reference dependency** — the entry consumes an id that K produced or
-     modified (e.g. a continuation extruded onto a helix K created; a bend
-     scoped to a cluster whose helices K built).
-  2. **Non-reconstructability** — the entry's result is only available baked
-     *with* K's geometry and we have no way to re-run it on a K-free base. Today
-     that means everything except the replayable extrusion snapshot ops and the
-     pure overlay deltas (deformation / cluster_op / cluster_create /
-     overhang_rotation, which `_seek_feature_log` rebuilds from the log).
-
-The two are kept SEPARATE on purpose. The eventual goal (deferred) is to teach
-auto-ops (auto-scaffold/break/merge/crossover) to re-run on a new base — at
-which point they become *reconstructable*, and only reason (1) would still mark
-them as dependents. To get there, flip `reconstructable` for those op_kinds and
-give the reconstruction path a way to re-execute them; the analysis below needs
-no change. See `EntryInfo.reconstructable` and `analyze_dependents`.
+A later entry is a dependent of K when it structurally references an id that K
+produced (or that a true dependent produced). Reconstructability is deliberately
+not part of the dependency decision: baked snapshot entries can survive a clean
+delete when their added/modified objects do not point at the removed ids, because
+the delete path scrubs those ids out of their baked snapshots.
 
 The module is PURE: it operates on already-decoded `Design` objects + log
 entries, never touches gzip/snapshots/HTTP. The caller (crud.delete_feature)
@@ -57,7 +44,9 @@ _DELTA_FEATURE_TYPES = frozenset({
 _ID_COLLECTIONS = (
     'helices', 'strands', 'crossovers', 'overhang_connections',
     'extensions', 'photoproduct_junctions', 'forced_ligations',
-    'overhangs', 'protein_assets', 'protein_attachments',
+    'overhangs', 'cluster_transforms', 'cluster_joints',
+    'flexible_segment_marks', 'flexible_connections',
+    'protein_assets', 'protein_attachments',
 )
 
 
@@ -94,6 +83,114 @@ def snapshot_delta(pre, post) -> tuple[set, set]:
     added = post_ids - pre_ids
     modified = {i for i in (pre_ids & post_ids) if pm[i] != qm[i]}
     return added, modified
+
+
+def snapshot_removed(pre, post) -> set:
+    """Return ids present in ``pre`` but absent from ``post``."""
+    return set(_id_map(pre)) - set(_id_map(post))
+
+
+def _add(v, out: set) -> None:
+    if v:
+        out.add(v)
+
+
+def _strand_domain_refs(strand, out: set) -> None:
+    for dom in getattr(strand, 'domains', None) or []:
+        _add(getattr(dom, 'helix_id', None), out)
+        _add(getattr(dom, 'overhang_id', None), out)
+        _add(getattr(dom, 'binds_overhang_id', None), out)
+
+
+def _strand_domain_helix(design, strand_id: str, domain_index: int):
+    for strand in getattr(design, 'strands', None) or []:
+        if strand.id != strand_id:
+            continue
+        domains = getattr(strand, 'domains', None) or []
+        if 0 <= domain_index < len(domains):
+            return getattr(domains[domain_index], 'helix_id', None)
+    return None
+
+
+def _object_refs(item, design=None) -> set:
+    """Return ids referenced by one id-bearing object.
+
+    This intentionally follows the typed model fields that can point at DNA
+    topology ids instead of doing a blind string scan over JSON.
+    """
+    out: set = set()
+    name = item.__class__.__name__
+
+    if name == 'Strand':
+        _strand_domain_refs(item, out)
+    elif name == 'Crossover':
+        _add(item.half_a.helix_id, out)
+        _add(item.half_b.helix_id, out)
+    elif name == 'ForcedLigation':
+        _add(item.three_prime_helix_id, out)
+        _add(item.five_prime_helix_id, out)
+    elif name == 'OverhangSpec':
+        _add(item.helix_id, out)
+        _add(item.strand_id, out)
+        _add(item.parent_overhang_id, out)
+    elif name == 'OverhangConnection':
+        _add(item.overhang_a_id, out)
+        _add(item.overhang_b_id, out)
+        _add(getattr(item, 'target_joint_id', None), out)
+    elif name == 'OverhangBinding':
+        _add(item.sub_domain_a_id, out)
+        _add(item.sub_domain_b_id, out)
+        _add(item.overhang_a_id, out)
+        _add(item.overhang_b_id, out)
+        _add(item.target_joint_id, out)
+    elif name == 'StrandExtension':
+        _add(item.strand_id, out)
+    elif name == 'ClusterRigidTransform':
+        for ref in item.domain_ids or []:
+            _add(ref.strand_id, out)
+    elif name == 'ClusterJoint':
+        _add(item.cluster_id, out)
+    elif name == 'FlexibleSegmentMark':
+        _add(item.strand_id, out)
+        if design is not None:
+            _add(_strand_domain_helix(design, item.strand_id, item.domain_index), out)
+    elif name == 'FlexibleConnection':
+        _add(item.cluster_a_id, out)
+        _add(item.cluster_b_id, out)
+        for anchor in [item.anchor_a, item.anchor_b, *(item.segment_bead_keys or [])]:
+            _add(anchor.strand_id, out)
+            if design is not None:
+                _add(_strand_domain_helix(design, anchor.strand_id, anchor.domain_index), out)
+    elif name == 'ProteinAttachment':
+        _add(getattr(item, 'asset_id', None), out)
+        _add(getattr(item, 'helix_id', None), out)
+        _add(getattr(item, 'strand_id', None), out)
+    else:
+        _add(getattr(item, 'helix_id', None), out)
+        _add(getattr(item, 'strand_id', None), out)
+        _add(getattr(item, 'cluster_id', None), out)
+    return out
+
+
+def structural_reference_targets(pre, post, added: set, modified: set) -> set:
+    """Ids referenced by objects this entry added or modified.
+
+    Own-id membership alone is not enough for clean delete: a later entry can
+    create a new object whose *fields* point at a removed helix or strand. This
+    scan returns those field-level references. Modified strands also target
+    their own id, so a later edit to a strand produced by K is considered a true
+    dependent even when its domains stay on unrelated helices.
+    """
+    qm = _id_map(post)
+    out: set = set()
+    for iid in set(added) | set(modified):
+        item = qm.get(iid)
+        if item is None:
+            continue
+        out |= _object_refs(item, post)
+        if iid in modified:
+            out.add(iid)
+    return out
 
 
 def _cluster_helices(design, cluster_id: str) -> Optional[set]:
@@ -136,14 +233,13 @@ def delta_entry_targets(entry, design) -> Optional[set]:
 class EntryInfo:
     """Per-entry summary the dependency graph closure operates on.
 
-    * added/modified — ids this entry created / changed in place (drives
-      transitive growth of the removed set when the entry is itself dropped).
-    * targets — pre-existing ids this entry consumes, or None = 'unknown'
+    * added/modified — ids this entry created / changed in place. Added ids
+      drive transitive growth of the removed set; modified ids are kept for
+      reconstruction strategy decisions and as self-targets for structural refs.
+    * targets — ids this entry structurally references, or None = 'unknown'
       (treated as a reference to everything ⇒ dependent).
-    * reconstructable — can this entry be re-derived on a K-free base? True for
-      replayable extrusion snapshots + overlay deltas; False otherwise (auto-ops,
-      circle, protein, assembly, routing-cluster, evicted/diff snapshots). The
-      future auto-op-replay work flips this for those op_kinds.
+    * reconstructable — retained as metadata for callers that need to choose a
+      reconstruction strategy; it does NOT gate dependency analysis.
     """
     added: set = field(default_factory=set)
     modified: set = field(default_factory=set)
@@ -157,14 +253,14 @@ def analyze_dependents(infos: list, k: int) -> list:
     Transitive: when an entry is marked dependent, the ids IT produced join the
     removed set, so entries built on a dependent are caught too.
     """
-    removed = set(infos[k].added) | set(infos[k].modified)
+    removed = set(infos[k].added)
     deps: list = []
     for j in range(k + 1, len(infos)):
         r = infos[j]
         if r is None:
             continue
         referenced = (r.targets is None) or bool(r.targets & removed)
-        if referenced or not r.reconstructable:
+        if referenced:
             deps.append(j)
-            removed |= set(r.added) | set(r.modified)
+            removed |= set(r.added)
     return deps
