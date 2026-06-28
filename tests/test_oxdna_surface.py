@@ -194,6 +194,12 @@ def _run_client(monkeypatch, tmp_path):
     monkeypatch.setattr(routes_oxdna, "find_oxdna", lambda: "/usr/bin/true")
     monkeypatch.setattr(routes_oxdna, "is_running", lambda *_a, **_k: False)
     monkeypatch.setattr(routes_oxdna, "start_job", lambda *_a, **_k: None)  # don't launch oxDNA
+    # These tests exercise /run COMPOSITION (field/surface/anchor branching), not the
+    # design-staleness guard (which has its own tests). The guard compares the job
+    # snapshot's fingerprint to the *global* active design — ambient state another
+    # test left behind — so without this it spuriously 409s under parallel/reordered
+    # runs. Neutralize it so the run logic is what's under test.
+    monkeypatch.setattr(routes_oxdna, "_current_design_fingerprint", lambda: None)
     return TestClient(app), routes_oxdna
 
 

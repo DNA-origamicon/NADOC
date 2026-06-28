@@ -272,3 +272,88 @@ def extrude_valid_overhang(design: Design, length_bp: int = 12) -> tuple[Design,
         new_ovhg = next(o for o in out.overhangs if o.helix_id == new_helix_id)
         return out, new_ovhg.id
     raise AssertionError("design has no valid overhang site")
+
+
+# ---------------------------------------------------------------------------
+# Slow-test registry (auto-applies the ``slow`` marker)
+#
+# A handful of tests drive REAL simulation binaries (oxDNA/oxpy, GROMACS, the
+# protein fork) or parse on-disk MD trajectories with MDAnalysis. They cost
+# seconds each and dominate suite wall time; everything else is sub-100ms.
+#
+# Rather than scatter ``@pytest.mark.slow`` across ~45 call sites (and silently
+# rot as new heavy tests appear), the heavy tests are listed here in ONE place
+# and marked at collection time. ``just test-fast`` runs ``-m "not slow"`` to
+# skip them for the tight dev loop; ``just test`` runs everything.
+#
+# To refresh after adding/renaming heavy tests, run the suite with
+# ``--durations=0`` and fold any new >=~2s "call" entries into the sets below.
+# (Pre-existing inline ``@pytest.mark.slow`` decorators are still honored too.)
+# ---------------------------------------------------------------------------
+
+# Whole modules where every test is a heavy real-sim / trajectory test.
+_SLOW_MODULES = {
+    "test_md_trajectory",
+}
+
+# Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
+_SLOW_TESTS = {
+    "test_oxdna_http_lifecycle",
+    "test_runner_real_binary_status_lifecycle",
+    # headless build+optimize (real router/oxdna passes)
+    "test_build_and_optimize_oracle_fires_on_unreachable",
+    "test_build_and_optimize_converges",
+    "test_build_and_optimize_oracle_fires_on_vacuous",
+    "test_build_and_check_reports_radius_of_gyration",
+    "test_build_and_check_resolves_end_to_end_landmarks",
+    "test_apply_loop_skips_spec_honors_marks_per_helix",
+    # extra-base heavy reps
+    "test_heavy_rep_extra_bases_follow_sim_positions",
+    "test_md_chain_map_keys_extra_bases_uniquely",
+    "test_md_rigid_reference_tolerates_extra_base_keys",
+    # headless oxdna field campaigns / sweeps / relaxed measurements (real oxpy)
+    "test_run_live_field_real_oxpy_steers",
+    "test_field_campaign_distinguishes_designs",
+    "test_field_campaign_is_reproducible",
+    "test_field_campaign_oracle_fires_on_indistinguishable",
+    "test_field_campaign_records_a_failed_design",
+    "test_field_sweep_maps_response_surface",
+    "test_field_sweep_oracle_fires_on_unbounded_window",
+    "test_field_validation_deflection_scales_with_field",
+    "test_iterate_oracle_fires_on_exhaustion",
+    "test_iterate_converges_to_constraint",
+    "test_read_flexibility_map_returns_mean_and_confidence",
+    "test_relaxed_measurement_segment_angle_fires_on_wrong_target",
+    "test_relaxed_measurement_fires_on_wrong_target",
+    "test_relaxed_measurement_radius_of_gyration_fires_on_wrong_target",
+    "test_assert_relaxed_measurement_radius_of_gyration",
+    "test_assert_relaxed_measurement_end_to_end",
+    "test_assert_relaxed_measurement_segment_angle",
+    "test_check_relaxed_constraint_met_on_real_run",
+    "test_multiple_field_children_from_one_parent",
+    # protein fork run
+    "test_prepared_hybrid_job_runs_on_fork",
+    # atomistic trajectory audits (MDAnalysis loads)
+    "test_trajectory_audit_route",
+    "test_audit_trajectory_frames_clean",
+    "test_audit_trajectory_frames_catches_bad_frame",
+    "test_audit_trajectory_frames_explicit_indices",
+    # headless build (full routing / saturation passes)
+    "test_make_18hb_routed_design_is_deterministic",
+    "test_apply_deformations_geometry_honors_marks_per_helix",
+    "test_fill_all_overhang_candidates_saturates_and_stays_valid",
+    "test_auto_op_chain_routes_a_full_18hb",
+}
+
+
+def pytest_collection_modifyitems(config, items):
+    """Auto-apply the ``slow`` marker to the heavy real-sim/trajectory tests
+    registered above, so ``-m 'not slow'`` (``just test-fast``) skips them."""
+    import pytest
+
+    for item in items:
+        module = item.module.__name__.rsplit(".", 1)[-1] if item.module else ""
+        # item.originalname is the bare function name without any param id.
+        name = getattr(item, "originalname", None) or item.name.split("[")[0]
+        if module in _SLOW_MODULES or name in _SLOW_TESTS:
+            item.add_marker(pytest.mark.slow)

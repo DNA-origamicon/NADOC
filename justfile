@@ -17,9 +17,18 @@ start:
 dev:
     uv run uvicorn backend.api.main:app --reload --timeout-graceful-shutdown 5 --reload-dir backend --reload-dir scripts --reload-exclude 'workspace/**' --reload-exclude 'experiments/**' --reload-exclude 'runs/**' --reload-exclude 'bp_health_runs/**' --reload-exclude 'gromacs_run/**' --reload-exclude 'memory/**' --host 0.0.0.0 --port 8000
 
-# Run all tests
+# Run all tests, parallel across cores (~2.5x faster than serial).
+# --dist loadfile keeps each file's tests on one worker: tests share a
+# module-level TestClient(app) over global per-doc backend state, so a file's
+# tests must stay in-process and in-order. Dropped -v (printed all 3410 names
+# for no signal); failures still print full tracebacks.
 test:
-    uv run pytest tests/ -v
+    uv run pytest tests/ -n auto --dist loadfile
+
+# Fast dev loop: skip the heavy real-binary sims (oxDNA/MD/GROMACS/atomistic),
+# parallel. ~30s vs ~2.5min full. Run plain `just test` before pushing.
+test-fast:
+    uv run pytest tests/ -n auto --dist loadfile -m "not slow"
 
 # Run frontend unit tests (Vitest), single pass
 test-frontend:
@@ -31,7 +40,7 @@ test-frontend-watch:
 
 # Run backend + frontend unit tests together ("is everything green?")
 test-all:
-    uv run pytest tests/
+    uv run pytest tests/ -n auto --dist loadfile
     cd frontend && npm test
 
 # Commit gate for main.js refactor work: the full smoke suite — app boot, the

@@ -14,6 +14,8 @@ Index only. Open the topic file when relevant. Hard rules and commands live in `
 - **`manual_validation_debt.md` (repo root)** — shift-register of features shipped with the "live gesture/visual NOT hand-checked" caveat. One item/loop: read `▶ HEAD` → USER TODO block → shift → commit. Push-intake: carve-up/fix loops append PENDING `MV-N` rows. `## Next loop` pointer in-file.
 - **`design_automation_{backlog,log,harness,metrics}.md` (repo root)** — the design-automation loop, invoked by **`/automate-feature`**. Each session gives one UI-only/API-less op a headless entry point + a reusable validation oracle (toward automated validation + text-to-DNA-origami). Anti-shovel metric = "validation gained, not a passthrough". New code → `headless_*`/`backend/core`, never a god-file. **Four-file layout (split 2026-06-25 to cut per-loop context):** read `backlog` (protocol + ranked items + ≤8-line `## Next-session handoff`) + `log` (oracle catalog + lessons + difficulties) per loop; open `harness` (do-not-rebuild wrapper signatures + gotchas) and `metrics` (per-item rows + data fits) **on demand only**, never wholesale.
 
+- [test_parallelization](project_test_parallelization.md) — backend suite runs parallel (`just test` = `pytest -n auto --dist loadfile`, ~2.5min); `just test-fast` skips slow real-sim tests (~45s); slow registry in `tests/conftest.py`; global active-design isolation gotcha under xdist.
+
 ## Path-scoped architecture maps
 
 These live in `/home/joshua/NADOC/.claude/rules/` and load automatically when matching files are read. Don't open them manually unless you need cross-area context.
