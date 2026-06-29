@@ -3369,6 +3369,13 @@ def autodetect_overhangs(design: Design) -> Design:
             term_dom = domains[term_idx]
             if term_dom.overhang_id is not None:
                 continue  # already tagged — preserve existing annotation
+            if term_dom.binds_overhang_id is not None:
+                # An overhang-BINDING domain (e.g. an end-to-root binder spliced
+                # onto a staple by apply_end_to_root_binder) is a deliberate
+                # ssDNA-on-another-overhang's-helix terminal — NOT a free tip to
+                # re-tag as a new overhang. Without this guard a save→load would
+                # spawn a phantom overhang for the consumed partner.
+                continue
             # Skip only if this terminal domain's bp range actually overlaps the
             # helix's scaffold coverage. A domain entirely outside the scaffold
             # range is a free ssDNA tail (overhang) even when the helix carries
@@ -3432,7 +3439,7 @@ def _antiparallel_partner_domains(
 
     Same helix, opposite direction, overlapping bp range — the Watson-Crick
     partner of a binder domain (mirrors the linker-complement geometry in
-    ``_make_complement_domain`` / ``deformation._linker_complement_domain_refs``).
+    ``_make_complement_domain`` / ``deformation._overhang_binding_partner_refs``).
     The binder strand itself, and other binder/linker strands, are excluded as
     candidates — only a real overhang-bearing strand (staple) or an
     already-tagged overhang domain can be the bound partner.
@@ -3650,14 +3657,20 @@ def tag_painted_binder(design: Design, strand: Strand) -> Strand:
     })
 
 
-def make_binder_for_overhang(design: Design, overhang_id: str) -> Design:
-    """Create a new OH-binder strand antiparallel to *overhang_id*.
+def _binder_domain_for_overhang(
+    design: Design, overhang_id: str
+) -> tuple[Domain, Optional[str]]:
+    """Build the antiparallel binder domain + RC sequence for *overhang_id*.
 
-    The new strand is a single domain on the overhang's helix at the same bp
-    range, opposite direction (``_make_complement_domain``), tagged
-    ``binds_overhang_id=overhang_id``, magenta. When the overhang already has a
-    sequence the binder's ``sequence`` is set to its reverse complement (same
-    length); otherwise it is left unset (rendered as N×length until assigned).
+    Returns ``(complement_domain, seq)`` where the domain lives on the overhang's
+    helix at the same bp range, opposite direction (``_make_complement_domain``),
+    tagged ``binds_overhang_id=overhang_id``; and ``seq`` is the reverse
+    complement of the overhang's assembled 5'→3' sequence (handles sub-domain
+    overrides + short/partial sequences → trailing N's, LESSONS F3), or ``None``
+    when the overhang has no real bases yet.
+
+    Shared by ``make_binder_for_overhang`` (standalone OH_BINDER strand) and
+    ``apply_end_to_root_binder`` (splice into a partner's staple).
 
     Raises ``ValueError`` if the overhang or its backing domain is not found.
     """
@@ -3673,14 +3686,27 @@ def make_binder_for_overhang(design: Design, overhang_id: str) -> Design:
 
     comp = _make_complement_domain(oh_dom, binds_overhang_id=overhang_id)
 
-    # Reverse complement of the overhang's assembled 5'→3' sequence (handles
-    # sub-domain overrides + short/partial sequences → trailing N's, LESSONS F3).
     from backend.core.sequences import _assemble_overhang_5to3, complement_base
     oh_len = abs(oh_dom.end_bp - oh_dom.start_bp) + 1
     oh_bases = _assemble_overhang_5to3(spec, oh_len)
     seq = None
     if any(b != "N" for b in oh_bases):
         seq = "".join(complement_base(b) for b in reversed(oh_bases))
+    return comp, seq
+
+
+def make_binder_for_overhang(design: Design, overhang_id: str) -> Design:
+    """Create a new OH-binder strand antiparallel to *overhang_id*.
+
+    The new strand is a single domain on the overhang's helix at the same bp
+    range, opposite direction (``_make_complement_domain``), tagged
+    ``binds_overhang_id=overhang_id``, magenta. When the overhang already has a
+    sequence the binder's ``sequence`` is set to its reverse complement (same
+    length); otherwise it is left unset (rendered as N×length until assigned).
+
+    Raises ``ValueError`` if the overhang or its backing domain is not found.
+    """
+    comp, seq = _binder_domain_for_overhang(design, overhang_id)
 
     import uuid as _uuid_local
     new_strand = Strand(
@@ -3691,6 +3717,112 @@ def make_binder_for_overhang(design: Design, overhang_id: str) -> Design:
         sequence=seq,
     )
     return design.copy_with(strands=[*design.strands, new_strand])
+
+
+def apply_end_to_root_binder(design: Design, a_id: str, b_id: str) -> Design:
+    """Regenerate overhang *b_id* as the reverse complement of overhang *a_id*.
+
+    The binder domain (antiparallel to A, on A's helix at A's bp range, sequence
+    = RC(A)) **replaces overhang B's free tip domain in B's own staple strand**,
+    splicing it in contiguously: B's bundle-embedded (root) domain → the binder
+    domain. The strand stays continuous because the geometry/atomistic/cadnano
+    pipelines bond consecutive ``strand.domains`` across helix jumps.
+
+    Because the binder lands on A's helix (not B's old overhang helix), three
+    pieces of B's old extruded geometry are cleaned up so the relocation is
+    consistent in BOTH 3D and the caDNAno editor:
+
+    1. **Forced ligation** for the root→binder junction. The overhang-extrude
+       crossover used to represent the parent→tip backbone jump; the tip now
+       sits on A's (non-adjacent) helix, which is exactly what a forced ligation
+       is for. A ``ForcedLigation`` record is added at the splice junction (the
+       earlier domain's 3' end → the later domain's 5' end, in strand order).
+    2. **Stale crossover dropped.** B's overhang crossover (B's root helix ↔ B's
+       now-orphaned tip helix) is removed — otherwise the caDNAno view keeps
+       drawing a line to the deleted helix / old bp index.
+    3. **Orphaned tip helix deleted.** If nothing else references B's old overhang
+       helix it is removed (it would otherwise render as a dangling axis line),
+       and its id is scrubbed from any cluster transform's ``helix_ids``.
+
+    Overhang B is consumed: its ``OverhangSpec`` is removed (a domain cannot be
+    both an overhang and a binder), so after apply A is the sole free overhang and
+    B is its binding domain. The strand sequence is dropped so
+    ``assign_staple_sequences`` re-derives it (RC of A via ``binds_overhang_id``).
+
+    Raises ``ValueError`` on missing overhangs/domains or if B's overhang domain
+    is not a terminal domain of a multi-domain (root → tip) staple.
+    """
+    binder_dom, _seq = _binder_domain_for_overhang(design, a_id)
+
+    b_spec = next((o for o in design.overhangs if o.id == b_id), None)
+    if b_spec is None:
+        raise ValueError(f"overhang {b_id!r} not found")
+
+    # Locate B's staple strand + the index of B's backing (tip) domain.
+    b_strand = None
+    b_dom_idx = -1
+    for s in design.strands:
+        for di, d in enumerate(s.domains):
+            if d.overhang_id == b_id:
+                b_strand, b_dom_idx = s, di
+                break
+        if b_strand is not None:
+            break
+    if b_strand is None:
+        raise ValueError(f"no domain references overhang {b_id!r}")
+    n_dom = len(b_strand.domains)
+    if n_dom < 2 or b_dom_idx not in (0, n_dom - 1):
+        raise ValueError(
+            f"overhang {b_id!r} must be a terminal domain of a multi-domain "
+            f"(root → tip) staple to splice the binder (idx {b_dom_idx} of {n_dom})"
+        )
+
+    b_tip_dom = b_strand.domains[b_dom_idx]
+    b_tip_helix = b_tip_dom.helix_id
+    root_dom = b_strand.domains[b_dom_idx - 1 if b_dom_idx == n_dom - 1 else b_dom_idx + 1]
+
+    # 1. Splice: binder replaces B's tip in B's own staple.
+    new_domains = list(b_strand.domains)
+    new_domains[b_dom_idx] = binder_dom
+    new_strand = b_strand.model_copy(update={"domains": new_domains, "sequence": None})
+    new_strands = [new_strand if s.id == b_strand.id else s for s in design.strands]
+    new_overhangs = [o for o in design.overhangs if o.id != b_id]
+
+    # 2. Forced ligation for the root↔binder junction. In 5'→3' strand order the
+    #    earlier domain's 3' end (``end_bp``) ligates to the later domain's 5' end
+    #    (``start_bp``) — same convention as POST /design/forced-ligation.
+    earlier, later = (root_dom, binder_dom) if b_dom_idx == n_dom - 1 else (binder_dom, root_dom)
+    fl = ForcedLigation(
+        three_prime_helix_id=earlier.helix_id, three_prime_bp=earlier.end_bp,
+        three_prime_direction=earlier.direction,
+        five_prime_helix_id=later.helix_id, five_prime_bp=later.start_bp,
+        five_prime_direction=later.direction,
+    )
+    new_forced = [*design.forced_ligations, fl]
+
+    # 3. Drop B's stale overhang crossover (B's root helix ↔ B's tip helix).
+    def _is_b_overhang_xover(xo: Crossover) -> bool:
+        helices = {xo.half_a.helix_id, xo.half_b.helix_id}
+        return b_tip_helix in helices and root_dom.helix_id in helices
+    new_crossovers = [xo for xo in design.crossovers if not _is_b_overhang_xover(xo)]
+
+    # 4. Delete B's now-orphaned overhang helix (nothing references it anymore).
+    helix_still_used = any(
+        d.helix_id == b_tip_helix for s in new_strands for d in s.domains)
+    if helix_still_used:
+        new_helices = design.helices
+        new_clusters = design.cluster_transforms
+    else:
+        new_helices = [h for h in design.helices if h.id != b_tip_helix]
+        new_clusters = [
+            ct.model_copy(update={"helix_ids": [h for h in ct.helix_ids if h != b_tip_helix]})
+            if b_tip_helix in ct.helix_ids else ct
+            for ct in design.cluster_transforms
+        ]
+
+    return design.copy_with(
+        strands=new_strands, overhangs=new_overhangs, forced_ligations=new_forced,
+        crossovers=new_crossovers, helices=new_helices, cluster_transforms=new_clusters)
 
 
 def migrate_split_staple_domains(design: Design) -> Design:

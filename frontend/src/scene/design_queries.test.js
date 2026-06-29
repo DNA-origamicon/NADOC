@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead } from './design_queries.js'
+import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, ovhgBinderDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead } from './design_queries.js'
 
 describe('surfaceSegments', () => {
   it('collects segments from surface-rep overrides only', () => {
@@ -46,6 +46,34 @@ describe('ovhgDomainIds', () => {
   it('returns null when the overhang/strand/domains are missing', () => {
     expect(ovhgDomainIds('o1', { overhangs: [] })).toBeNull()
     expect(ovhgDomainIds('o1', { overhangs: [{ id: 'o1', strand_id: 's1' }], strands: [{ id: 's1', domains: [] }] })).toBeNull()
+  })
+})
+
+describe('ovhgBinderDomainIds', () => {
+  it('returns refs for every domain binding the overhang, across strands', () => {
+    const design = {
+      strands: [
+        { id: 'binder', domains: [{ binds_overhang_id: 'o1' }] },
+        { id: 'linker', domains: [{ binds_overhang_id: 'o1' }] },
+      ],
+    }
+    expect(ovhgBinderDomainIds('o1', design)).toEqual([
+      { strand_id: 'binder', domain_index: 0 },
+      { strand_id: 'linker', domain_index: 0 },
+    ])
+  })
+  it('returns only the bound domain indices within a multi-domain strand (end-to-root: root + binder)', () => {
+    // mirrors an end-to-root STAPLE: domain 0 = root (no binds), domain 1 = binder.
+    const design = {
+      strands: [{ id: 's1', domains: [{}, { binds_overhang_id: 'o1' }, { binds_overhang_id: 'other' }] }],
+    }
+    expect(ovhgBinderDomainIds('o1', design)).toEqual([{ strand_id: 's1', domain_index: 1 }])
+  })
+  it('returns [] for an unknown overhang, no binders, or missing design', () => {
+    expect(ovhgBinderDomainIds('nope', { strands: [{ id: 's1', domains: [{ binds_overhang_id: 'o1' }] }] })).toEqual([])
+    expect(ovhgBinderDomainIds('o1', { strands: [{ id: 's1', domains: [{}] }] })).toEqual([])
+    expect(ovhgBinderDomainIds('o1', {})).toEqual([])
+    expect(ovhgBinderDomainIds(null, { strands: [] })).toEqual([])
   })
 })
 

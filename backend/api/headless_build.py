@@ -59,7 +59,10 @@ from backend.api.crud import (
     auto_crossover as _route_auto_crossover,
     auto_merge as _route_auto_merge,
     batch_patch_crossover_extra_bases as _route_batch_xo_extra_bases,
+    ConnectionVersionCreateRequest,
+    apply_connection_version as _route_apply_connection_version,
     create_bundle as _route_create_bundle,
+    create_connection_version as _route_create_connection_version,
     create_overhang_connection as _route_create_overhang_connection,
     delete_crossover as _route_delete_crossover,
     delete_forced_ligation as _route_delete_forced_ligation,
@@ -883,6 +886,63 @@ def connect_overhangs(
         name=name,
         bridge_sequence=bridge_sequence,
     ))
+    return design_state.get_or_404()
+
+
+def create_connection_version(
+    overhang_a_id: str,
+    overhang_b_id: str,
+    *,
+    connection_type: str,
+    overhang_a_seq: str | None = None,
+    overhang_b_seq: str | None = None,
+    bridge_length: int = 0,
+    bridge_seq: str | None = None,
+    applied: bool = False,
+    name: str | None = None,
+) -> Design:
+    """Append a candidate ConnectionVersion for an overhang pair
+    (POST /design/connection-versions).
+
+    A ConnectionVersion is a persisted *candidate* for how a pair should connect
+    (its ``connection_type`` is a CT-variant id such as ``"end-to-root"`` or
+    ``"root-to-root-dsdna-linker"``, plus per-side sequences / bridge length).
+    Creating one does NOT materialize topology — that's :func:`apply_connection_version`.
+    Use this + apply for the DIRECT binding / end-to-root path; use
+    :func:`connect_overhangs` only for the linker path.
+
+    The new version is the LAST entry of the returned design's
+    ``connection_versions``.
+    """
+    _route_create_connection_version(ConnectionVersionCreateRequest(
+        overhang_a_id=overhang_a_id,
+        overhang_b_id=overhang_b_id,
+        connection_type=connection_type,
+        overhang_a_seq=overhang_a_seq,
+        overhang_b_seq=overhang_b_seq,
+        bridge_length=bridge_length,
+        bridge_seq=bridge_seq,
+        applied=applied,
+        name=name,
+    ))
+    return design_state.get_or_404()
+
+
+def apply_connection_version(version_id: str) -> Design:
+    """Materialize a ConnectionVersion atomically (one undo)
+    (POST /design/connection-versions/{version_id}/apply).
+
+    Sets both overhang sequences, tears down the pair's current connection /
+    binding, then (re)creates the version's connection type:
+      • linker variants → an :class:`OverhangConnection` + linker strand(s);
+      • ``root-to-root`` → an :class:`OverhangBinding` record;
+      • ``end-to-root`` → regenerate overhang B as A's reverse-complement binder,
+        splicing the binder domain into B's root staple (consumes B).
+
+    Pin the end-to-root case with
+    :func:`tests.automation_harness.assert_end_to_root_binder`.
+    """
+    _route_apply_connection_version(version_id)
     return design_state.get_or_404()
 
 

@@ -625,4 +625,5 @@ def test_align_cluster_edge_adds_no_coverage():
     # AF-32's force_ligate + delete_forced_ligation flipped both (45 → 47);
     # AF-30's strand_end_resize flipped strand-end-resize (47 → 48).
     # AF-27 P2's relax_overhang_connection + relax_bond flipped both (48 → 50).
-    assert rep["covered"] == 50
+    # end-to-root binder flipped create_connection_version + apply_connection_version (50 → 52).
+    assert rep["covered"] == 52

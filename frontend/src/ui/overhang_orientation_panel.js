@@ -15,7 +15,7 @@
  */
 import * as THREE from 'three'
 import { initOverhangGizmo } from '../scene/overhang_gizmo.js'
-import { isExtrudeOverhang, ovhgDomainIds } from '../scene/design_queries.js'
+import { isExtrudeOverhang, ovhgDomainIds, ovhgBinderDomainIds } from '../scene/design_queries.js'
 
 /**
  * Build the rotation patch ops for `activeIds`: compose the world-space delta
@@ -37,6 +37,14 @@ export function buildOverhangRotationOps(activeIds, currentDesign, R_delta, base
     ops.push({ overhang_id: id, rotation: [R_new.x, R_new.y, R_new.z, R_new.w] })
   }
   return ops
+}
+
+// The overhang's own strand domains PLUS any binder domains hybridized to it
+// (OH_BINDER, LINKER complement, or end-to-root binder spliced into a STAPLE).
+// This is the full set of domains that must rotate rigidly with the overhang —
+// including a binder's toehold extending past the overhang on the same helix.
+function domsForOverhang(id, design) {
+  return [...(ovhgDomainIds(id, design) ?? []), ...ovhgBinderDomainIds(id, design)]
 }
 
 export function initOverhangOrientationPanel({
@@ -150,7 +158,7 @@ export function initOverhangOrientationPanel({
       const o = currentDesign?.overhangs?.find(x => x.id === id)
       if (!o) continue
       helixIds.push(o.helix_id)
-      const domIds = ovhgDomainIds(id, currentDesign)
+      const domIds = domsForOverhang(id, currentDesign)
       if (domIds) allDomainIds.push(...domIds)
       if (isExtrudeOverhang(id, currentDesign)) {
         extrudeHelixIds.push(o.helix_id)
@@ -168,7 +176,7 @@ export function initOverhangOrientationPanel({
       if (!o) continue
       const pivot = _ooPivotPositions[id]
         ?? new THREE.Vector3(o.pivot[0], o.pivot[1], o.pivot[2])
-      const domIds = ovhgDomainIds(id, currentDesign)
+      const domIds = domsForOverhang(id, currentDesign)
       const isExtrude = isExtrudeOverhang(id, currentDesign)
       helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, q_inc, domIds,
         isExtrude ? { forceAxes: true } : undefined)
@@ -200,7 +208,7 @@ export function initOverhangOrientationPanel({
       const o = currentDesign?.overhangs?.find(x => x.id === id)
       if (!o) continue
       helixIds.push(o.helix_id)
-      const domIds = ovhgDomainIds(id, currentDesign)
+      const domIds = domsForOverhang(id, currentDesign)
       if (domIds) allDomainIds.push(...domIds)
       if (isExtrudeOverhang(id, currentDesign)) extrudeHelixIds.push(o.helix_id)
     }
@@ -221,7 +229,7 @@ export function initOverhangOrientationPanel({
       const inc = new THREE.Quaternion(base[0], base[1], base[2], base[3]).invert().multiply(R_curInv)
       const pivot = _ooPivotPositions[id]
         ?? new THREE.Vector3(o.pivot[0], o.pivot[1], o.pivot[2])
-      const domIds = ovhgDomainIds(id, currentDesign)
+      const domIds = domsForOverhang(id, currentDesign)
       const isExtrude = isExtrudeOverhang(id, currentDesign)
       helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, inc, domIds,
         isExtrude ? { forceAxes: true } : undefined)
@@ -302,7 +310,7 @@ export function initOverhangOrientationPanel({
     onDragStart: (helixIds) => {
       const { currentDesign } = store.getState()
       const helixCtrl = designRenderer.getHelixCtrl()
-      const allDomainIds = _ooActiveIds.flatMap(id => ovhgDomainIds(id, currentDesign) ?? [])
+      const allDomainIds = _ooActiveIds.flatMap(id => domsForOverhang(id, currentDesign))
       helixCtrl?.captureClusterBase(helixIds, allDomainIds.length ? allDomainIds : null)
       const extrudeHelixIds = _ooActiveIds
         .filter(id => isExtrudeOverhang(id, currentDesign))
@@ -323,7 +331,7 @@ export function initOverhangOrientationPanel({
         if (!o) continue
         const pivot = _ooPivotPositions[id]
           ?? new THREE.Vector3(o.pivot[0], o.pivot[1], o.pivot[2])
-        const domIds = ovhgDomainIds(id, currentDesign)
+        const domIds = domsForOverhang(id, currentDesign)
         const isExtrude = isExtrudeOverhang(id, currentDesign)
         helixCtrl?.applyClusterTransform([o.helix_id], pivot, pivot, R_delta, domIds,
           isExtrude ? { forceAxes: true } : undefined)

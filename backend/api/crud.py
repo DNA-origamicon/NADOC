@@ -122,6 +122,7 @@ from backend.core.models import (
     LatticeType,
     OverhangConnection,
     OverhangBinding,
+    ConnectionVersion,
     OverhangSpec,
     Strand,
     StrandType,
@@ -7027,6 +7028,342 @@ def delete_overhang_connection(conn_id: str) -> dict:
         fn=_fn,
     )
     return _design_response(updated, report)
+
+
+# ── Connection versions (design-exploration candidates) ───────────────────────
+# Pure metadata: alternative connection specs for the same overhang pair, with
+# at most one `applied` (materialized) per pair. Persisted on the design so they
+# survive save/reload. Materializing a version ("Apply") is frontend-orchestrated
+# in v1 (resize overhangs + set sequences + recreate the real connection/binding);
+# these endpoints only store/manage the candidate specs.
+
+class ConnectionVersionCreateRequest(BaseModel):
+    overhang_a_id: str
+    overhang_b_id: str
+    connection_type: str                       # CT variant id
+    overhang_a_seq: Optional[str] = None
+    overhang_b_seq: Optional[str] = None
+    bridge_length: int = 0
+    bridge_seq: Optional[str] = None
+    applied: bool = False
+    name: Optional[str] = None                 # auto V1/V2/… per pair if omitted
+
+
+class ConnectionVersionPatchRequest(BaseModel):
+    name: Optional[str] = None
+    connection_type: Optional[str] = None
+    overhang_a_seq: Optional[str] = None
+    overhang_b_seq: Optional[str] = None
+    bridge_length: Optional[int] = None
+    bridge_seq: Optional[str] = None
+    applied: Optional[bool] = None
+
+
+def _cv_clean_seq(s) -> Optional[str]:
+    if not s:
+        return None
+    cleaned = "".join(ch for ch in str(s).upper() if ch in "ACGTN")
+    return cleaned or None
+
+
+def _cv_pair_key(a: str, b: str) -> frozenset:
+    return frozenset((a, b))
+
+
+def _assign_connection_version_names(d: Design) -> None:
+    """Fill empty version names V1, V2, … per (unordered) overhang pair."""
+    by_pair: dict = {}
+    for v in d.connection_versions:
+        by_pair.setdefault(_cv_pair_key(v.overhang_a_id, v.overhang_b_id), []).append(v)
+    for versions in by_pair.values():
+        versions.sort(key=lambda v: v.created_at)
+        used = {v.name for v in versions if v.name}
+        n = 1
+        for v in versions:
+            if v.name:
+                continue
+            while f"V{n}" in used:
+                n += 1
+            v.name = f"V{n}"
+            used.add(v.name)
+            n += 1
+
+
+def _cv_enforce_applied_mutex(d: Design, applied_id: str) -> None:
+    """When version `applied_id` is applied, clear `applied` on its pair-siblings."""
+    target = next((v for v in d.connection_versions if v.id == applied_id), None)
+    if target is None or not target.applied:
+        return
+    key = _cv_pair_key(target.overhang_a_id, target.overhang_b_id)
+    for v in d.connection_versions:
+        if v.id != applied_id and _cv_pair_key(v.overhang_a_id, v.overhang_b_id) == key:
+            v.applied = False
+
+
+@router.post("/design/connection-versions", status_code=201)
+def create_connection_version(body: ConnectionVersionCreateRequest) -> dict:
+    """Append a candidate connection version for an overhang pair."""
+    design = design_state.get_or_404()
+    ids = {o.id for o in design.overhangs}
+    for oid in (body.overhang_a_id, body.overhang_b_id):
+        if oid not in ids:
+            raise HTTPException(404, detail=f"Overhang {oid!r} not found.")
+    if body.overhang_a_id == body.overhang_b_id:
+        raise HTTPException(400, detail="A connection version needs two distinct overhangs.")
+
+    version = ConnectionVersion(
+        name=(body.name or "").strip(),
+        overhang_a_id=body.overhang_a_id,
+        overhang_b_id=body.overhang_b_id,
+        connection_type=body.connection_type,
+        overhang_a_seq=_cv_clean_seq(body.overhang_a_seq),
+        overhang_b_seq=_cv_clean_seq(body.overhang_b_seq),
+        bridge_length=max(0, int(body.bridge_length or 0)),
+        bridge_seq=_cv_clean_seq(body.bridge_seq),
+        applied=bool(body.applied),
+    )
+
+    def _fn(d: Design) -> None:
+        d.connection_versions = [*d.connection_versions, version]
+        _cv_enforce_applied_mutex(d, version.id)
+        _assign_connection_version_names(d)
+
+    updated, report = design_state.mutate_and_validate(_fn)
+    return _design_response(updated, report)
+
+
+@router.patch("/design/connection-versions/{version_id}", status_code=200)
+def patch_connection_version(version_id: str, body: ConnectionVersionPatchRequest) -> dict:
+    """Update a candidate version's fields. Setting applied=True clears applied
+    on the pair's other versions (at most one materialized per pair)."""
+    design = design_state.get_or_404()
+    if not any(v.id == version_id for v in design.connection_versions):
+        raise HTTPException(404, detail=f"Connection version {version_id!r} not found.")
+    patch = body.model_dump(exclude_unset=True)
+
+    def _fn(d: Design) -> None:
+        v = next((x for x in d.connection_versions if x.id == version_id), None)
+        if v is None:
+            return
+        if "name" in patch and (patch["name"] or "").strip():
+            v.name = patch["name"].strip()
+        if "connection_type" in patch and patch["connection_type"]:
+            v.connection_type = patch["connection_type"]
+        if "overhang_a_seq" in patch:
+            v.overhang_a_seq = _cv_clean_seq(patch["overhang_a_seq"])
+        if "overhang_b_seq" in patch:
+            v.overhang_b_seq = _cv_clean_seq(patch["overhang_b_seq"])
+        if "bridge_length" in patch and patch["bridge_length"] is not None:
+            v.bridge_length = max(0, int(patch["bridge_length"]))
+        if "bridge_seq" in patch:
+            v.bridge_seq = _cv_clean_seq(patch["bridge_seq"])
+        if "applied" in patch and patch["applied"] is not None:
+            v.applied = bool(patch["applied"])
+            if v.applied:
+                _cv_enforce_applied_mutex(d, v.id)
+
+    updated, report = design_state.mutate_and_validate(_fn)
+    return _design_response(updated, report)
+
+
+@router.delete("/design/connection-versions/{version_id}", status_code=200)
+def delete_connection_version(version_id: str) -> dict:
+    """Remove a candidate version (does NOT touch any materialized topology)."""
+    design = design_state.get_or_404()
+    if not any(v.id == version_id for v in design.connection_versions):
+        raise HTTPException(404, detail=f"Connection version {version_id!r} not found.")
+
+    def _fn(d: Design) -> None:
+        d.connection_versions = [v for v in d.connection_versions if v.id != version_id]
+
+    updated, report = design_state.mutate_and_validate(_fn)
+    return _design_response(updated, report)
+
+
+# ── Connection-version mapping helpers (mirror frontend ct_icons.js) ───────────
+
+def _cv_attach_pair(t: str):
+    if isinstance(t, str):
+        if t.startswith("end-to-root"): return ("free_end", "root")
+        if t.startswith("root-to-end"): return ("root", "free_end")
+        if t.startswith("root-to-root"): return ("root", "root")
+        if t.startswith("end-to-end"):   return ("free_end", "free_end")
+    return ("root", "root")
+
+
+def _cv_is_direct(t: str) -> bool:
+    return t in ("end-to-root", "root-to-root")
+
+
+def _cv_is_indirect(t: str) -> bool:
+    return t in ("root-to-root-indirect", "end-to-end-indirect")
+
+
+def _cv_linker_type(t: str) -> str:
+    return "ds" if (isinstance(t, str) and "dsdna" in t) else "ss"
+
+
+def _cv_sub_domain_at_attach(d: Design, ovhg_id: str, attach: str):
+    ov = next((o for o in d.overhangs if o.id == ovhg_id), None)
+    if ov is None or not ov.sub_domains:
+        return None
+    ordered = sorted(ov.sub_domains, key=lambda sd: sd.start_bp_offset or 0)
+    return (ordered[0] if attach == "root" else ordered[-1]).id
+
+
+@router.post("/design/connection-versions/{version_id}/apply", status_code=200)
+def apply_connection_version(version_id: str) -> dict:
+    """Materialize a candidate version ATOMICALLY (one undo): set both overhang
+    sequences (resizing each overhang to the sequence length), tear down the
+    pair's current OverhangConnection / OverhangBinding, and (re)create the
+    version's connection type (linker with bridge, or a direct binding). Marks
+    the version ``applied`` and clears ``applied`` on the pair's other versions.
+
+    This is the backend replacement for the v1 frontend-orchestrated apply — it
+    handles overhang LENGTH + sequence + connection-type changes in one step.
+    """
+    from backend.core.cluster_reconcile import MutationReport
+    from backend.core.lattice import (
+        generate_linker_topology, remove_linker_topology, assign_overhang_connection_names,
+        apply_end_to_root_binder,
+    )
+
+    design = design_state.get_or_404()
+    v = next((x for x in design.connection_versions if x.id == version_id), None)
+    if v is None:
+        raise HTTPException(404, detail=f"Connection version {version_id!r} not found.")
+    a_id, b_id, vtype = v.overhang_a_id, v.overhang_b_id, v.connection_type
+    direct = _cv_is_direct(vtype)
+    indirect = _cv_is_indirect(vtype)
+    attach_a, attach_b = _cv_attach_pair(vtype)
+    bridge_seq = (v.bridge_seq or "").upper().strip() or None
+    a_label = next((o.label for o in design.overhangs if o.id == a_id), a_id[:8])
+    b_label = next((o.label for o in design.overhangs if o.id == b_id), b_id[:8])
+
+    def _fn(d: Design):
+        # 1. Sequences + length: patch each overhang (resizes domain to len(seq)).
+        if v.overhang_a_seq:
+            d = _build_overhang_patch(d, a_id, OverhangPatchRequest(sequence=v.overhang_a_seq))[0]
+        if v.overhang_b_seq:
+            d = _build_overhang_patch(d, b_id, OverhangPatchRequest(sequence=v.overhang_b_seq))[0]
+        # 2. Tear down EVERY materialized connection / binding that shares either
+        #    overhang — an overhang can be in only one applied connection, so any
+        #    prior one involving a_id or b_id (even with a third overhang) is
+        #    unapplied here before the new one is created.
+        def _involves(x):
+            return a_id in (x.overhang_a_id, x.overhang_b_id) or \
+                   b_id in (x.overhang_a_id, x.overhang_b_id)
+        for c in list(d.overhang_connections):
+            if _involves(c):
+                d = remove_linker_topology(
+                    d.model_copy(update={"overhang_connections":
+                                         [x for x in d.overhang_connections if x.id != c.id]}),
+                    c.id)
+        d = d.model_copy(update={"overhang_bindings": [
+            b for b in d.overhang_bindings if not _involves(b)]})
+        # 3. Create the version's connection type.
+        report = None
+        if vtype == "end-to-root":
+            # Regenerate overhang B as A's reverse-complement binder: splice the
+            # antiparallel binder domain (on A's helix, RC of A) into B's root
+            # staple in place of B's free tip. B is consumed (its OverhangSpec is
+            # removed); A becomes double-stranded. Step-1's B sequence patch is
+            # overridden by the splice (harmless). See lattice.apply_end_to_root_binder.
+            d = apply_end_to_root_binder(d, a_id, b_id)
+        elif direct:
+            sd_a = _cv_sub_domain_at_attach(d, a_id, attach_a)
+            sd_b = _cv_sub_domain_at_attach(d, b_id, attach_b)
+            if sd_a and sd_b:
+                used = {b.name for b in d.overhang_bindings}
+                n = 1
+                while f"B{n}" in used:
+                    n += 1
+                binding = OverhangBinding(
+                    name=f"B{n}", sub_domain_a_id=sd_a, sub_domain_b_id=sd_b,
+                    overhang_a_id=a_id, overhang_b_id=b_id,
+                )
+                d = d.model_copy(update={"overhang_bindings": [*d.overhang_bindings, binding]})
+        else:
+            conn = OverhangConnection(
+                overhang_a_id=a_id, overhang_a_attach=attach_a,
+                overhang_b_id=b_id, overhang_b_attach=attach_b,
+                linker_type=_cv_linker_type(vtype),
+                length_value=0 if indirect else max(1, int(v.bridge_length or 1)),
+                length_unit="bp", bridge_sequence=bridge_seq,
+            )
+            d = assign_overhang_connection_names(
+                d.model_copy(update={"overhang_connections": [*d.overhang_connections, conn]}))
+            d = generate_linker_topology(d, conn)
+            report = MutationReport(new_helix_origins={f"__lnk__{conn.id}": None})
+        # 4. Mark this version applied; clear `applied` on every version that
+        #    shares either overhang (mirrors the topology teardown in step 2).
+        d = d.model_copy(update={"connection_versions": [
+            ver.model_copy(update={"applied": ver.id == version_id})
+            if (ver.id == version_id or _involves(ver)) else ver
+            for ver in d.connection_versions]})
+        return (d, report) if report else d
+
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind="overhang-bulk",
+        label=f"Apply version {v.name or v.id[:8]} ({a_label}↔{b_label})",
+        params={"version_id": version_id, "connection_type": vtype},
+        fn=_fn,
+    )
+    return _design_response_with_geometry(updated, report)
+
+
+@router.post("/design/overhang-bindings/{binding_id}/relax", status_code=200)
+def relax_overhang_binding(binding_id: str) -> dict:
+    """Settle a direct binding's geometry like a linker relax — move the two
+    overhangs' clusters together so the bound duplex chord collapses. Uses the
+    shared bond-relax core: rotate the joint if one connects the two clusters,
+    otherwise rigid-translate the driven cluster. Run while the overhangs are in
+    their separate (un-relocated) positions — the frontend un-relocates first.
+    """
+    from backend.core.bond_relax import relax_bond as core_relax_bond
+    from backend.core.binding_relax import _sub_domain_junction_anchor, _resolve_driver_side
+    from backend.core.linker_relax import _overhang_owning_cluster_id
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    binding = next((b for b in design.overhang_bindings if b.id == binding_id), None)
+    if binding is None:
+        raise HTTPException(404, detail=f"Overhang binding {binding_id!r} not found.")
+
+    cluster_a = _overhang_owning_cluster_id(design, binding.overhang_a_id)
+    cluster_b = _overhang_owning_cluster_id(design, binding.overhang_b_id)
+    if cluster_a is None or cluster_b is None:
+        raise HTTPException(422, detail="Both overhangs must be in clusters to relax a binding.")
+    if cluster_a == cluster_b:
+        raise HTTPException(422, detail="Binding spans a single cluster — nothing to relax.")
+
+    geometry = _geometry_for_design(design)
+    # Driver = the side whose cluster stays; the driven side moves (0-DOF case).
+    driver_side = _resolve_driver_side(design, binding, cluster_a, cluster_b)
+    side_to_move = "b" if driver_side == "a" else "a"
+
+    # Plain binding relax: close the bound-junction chord (no overhang aim).
+    anchor_a, _, _ = _sub_domain_junction_anchor(design, binding.sub_domain_a_id, geometry)
+    anchor_b, _, _ = _sub_domain_junction_anchor(design, binding.sub_domain_b_id, geometry)
+    if anchor_a is None or anchor_b is None:
+        raise HTTPException(422, detail="Could not resolve binding anchors from geometry.")
+    target_nm = _BOND_TYPE_DEFAULT_TARGET_NM.get("crossover", 0.67)
+    try:
+        updated, _info = core_relax_bond(
+            design,
+            anchor_a=anchor_a, anchor_b=anchor_b,
+            cluster_a_id=cluster_a, cluster_b_id=cluster_b,
+            target_nm=target_nm, side_to_move=side_to_move,
+            joint_ids=None, source_tag="bond-relax:binding",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(422, detail=f"relax_overhang_binding failed: {exc!r}")
+
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response_with_geometry(updated, report)
 
 
 @router.patch("/design/overhang-connections/{conn_id}/display-pose", status_code=200)

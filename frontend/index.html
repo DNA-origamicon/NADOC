@@ -5302,6 +5302,90 @@
           </div>
         </div>
 
+        <!-- Overhang Connections (collapsible) — connection-type picker + two
+             overhang dropdowns. Reuses the shared .ct-button-box / .ct-popover /
+             .ct-option / .ct-tile styles defined globally near the Overhangs
+             Manager modal. Placed directly below the Overhangs section. -->
+        <style>
+          #oconn-generate:disabled, #oconn-secondary:disabled, #oconn-apply:disabled { background:#21262d; border-color:#30363d; color:#6e7681; cursor:not-allowed; }
+          .oconn-group-header { padding:4px 6px; margin-bottom:2px; font-size:11px; color:#c9d1d9; font-weight:600; border-bottom:1px solid #21262d; cursor:pointer; user-select:none; display:flex; align-items:center; gap:5px; }
+          .oconn-group-header:hover { color:#fff; }
+          .oconn-chevron { color:#8b949e; font-size:9px; width:9px; display:inline-block; }
+          .oconn-version-row { display:flex; align-items:center; gap:6px; padding:3px 6px 3px 16px; border:1px solid #21262d; border-radius:4px; margin-bottom:3px; cursor:pointer; font-size:11px; }
+          .oconn-version-row:hover { border-color:#6e7681; }
+          .oconn-version-row.is-selected { border-color:#1f6feb; background:rgba(31,111,235,0.12); }
+          .oconn-version-row.is-applied { box-shadow:inset 3px 0 0 #238636; }
+          .oconn-applied-badge { color:#3fb950; font-size:10px; }
+          .oconn-row { display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #21262d; border-radius:4px; margin-bottom:4px; cursor:pointer; font-size:11px; }
+          .oconn-row:hover { border-color:#6e7681; }
+          .oconn-row.is-selected { border-color:#1f6feb; background:rgba(31,111,235,0.12); }
+          .oconn-row-main { flex:1; min-width:0; }
+          .oconn-row-name { color:#c9d1d9; font-weight:600; }
+          .oconn-row-summary { color:#8b949e; }
+          .oconn-row-del { flex:0 0 auto; background:transparent; border:none; color:#8b949e; font-size:14px; line-height:1; cursor:pointer; padding:0 2px; }
+          .oconn-row-del:hover { color:#f85149; }
+        </style>
+        <div class="panel-section" id="overhang-connections-section">
+          <h2 id="oconn-heading" style="cursor:pointer;user-select:none">
+            Overhang Connections <span id="oconn-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+          </h2>
+          <div id="oconn-body" style="display:none">
+            <div style="display:flex;flex-direction:column;gap:8px;align-items:center">
+              <div style="display:flex;flex-direction:column;gap:3px;width:100%">
+                <label for="oconn-select-a" style="font-size:11px;color:#8b949e">Overhang A</label>
+                <select id="oconn-select-a"
+                  style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:12px;padding:4px 6px;outline:none"></select>
+                <div id="oconn-seq-row-a" hidden style="display:flex;gap:4px;align-items:center">
+                  <input id="oconn-seq-input-a" type="text" spellcheck="false" autocomplete="off"
+                    style="flex:1;min-width:0;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:11px;padding:3px 5px;outline:none">
+                  <button id="oconn-seq-gen-a" type="button" title="Generate a sequence for overhang A"
+                    style="padding:3px 8px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:11px;cursor:pointer">Gen</button>
+                </div>
+              </div>
+              <button id="oconn-button-box" class="ct-button-box" type="button" aria-haspopup="true" aria-expanded="false">
+                <!-- Filled by JS with the currently-selected variant tile. -->
+              </button>
+              <div style="display:flex;flex-direction:column;gap:3px;width:100%">
+                <label for="oconn-select-b" style="font-size:11px;color:#8b949e">Overhang B</label>
+                <select id="oconn-select-b"
+                  style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:12px;padding:4px 6px;outline:none"></select>
+                <div id="oconn-seq-row-b" hidden style="display:flex;gap:4px;align-items:center">
+                  <input id="oconn-seq-input-b" type="text" spellcheck="false" autocomplete="off"
+                    style="flex:1;min-width:0;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:11px;padding:3px 5px;outline:none">
+                  <button id="oconn-seq-gen-b" type="button" title="Generate a sequence for overhang B"
+                    style="padding:3px 8px;background:#21262d;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:monospace;font-size:11px;cursor:pointer">Gen</button>
+                </div>
+              </div>
+              <!-- Linker length: hidden for direct + indirect variants. -->
+              <div id="oconn-length-row" style="display:flex;flex-direction:column;gap:3px;width:100%">
+                <label for="oconn-length" style="font-size:11px;color:#8b949e">Linker length (bp)</label>
+                <input id="oconn-length" type="number" min="1" step="1" value="12"
+                  style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:12px;padding:4px 6px;outline:none">
+              </div>
+              <div id="oconn-pair-warning" hidden
+                style="width:100%;box-sizing:border-box;color:#f0883e;font-size:11px;line-height:1.3"></div>
+              <div style="display:flex;gap:6px;width:100%">
+                <button id="oconn-generate" type="button" disabled
+                  style="flex:1;min-width:0;box-sizing:border-box;padding:6px 4px;background:#1f6feb;border:1px solid #1f6feb;border-radius:4px;color:#fff;font-family:var(--font-ui);font-size:12px;cursor:pointer">Connect</button>
+                <button id="oconn-apply" type="button" disabled
+                  style="flex:1;min-width:0;box-sizing:border-box;padding:6px 4px;background:#8957e5;border:1px solid #8957e5;border-radius:4px;color:#fff;font-family:var(--font-ui);font-size:12px;cursor:pointer">Apply</button>
+                <button id="oconn-secondary" type="button" disabled
+                  style="flex:1;min-width:0;box-sizing:border-box;padding:6px 4px;background:#238636;border:1px solid #238636;border-radius:4px;color:#fff;font-family:var(--font-ui);font-size:12px;cursor:pointer">Relax</button>
+              </div>
+            </div>
+            <!-- Interactive list of created linkers + direct bindings (scrollable field). -->
+            <div style="font-size:11px;color:#8b949e;margin-top:10px;margin-bottom:3px">Linkers &amp; bindings</div>
+            <div id="oconn-list"
+              style="height:160px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117;padding:4px"></div>
+            <!-- Sequence + edit details for the selected row (filled by JS). -->
+            <div id="oconn-details" hidden
+              style="margin-top:8px;border:1px solid #30363d;border-radius:4px;background:#0d1117;padding:6px;font-size:11px"></div>
+          </div>
+          <div id="oconn-popover" class="ct-popover" hidden role="listbox">
+            <!-- Filled by JS with one .ct-option per connection-type variant. -->
+          </div>
+        </div>
+
         <!-- Strand Animation (collapsible) — un/hybridization of a selected
              overhang + its binder, ported from the Strand Animations sandbox. -->
         <div class="panel-section" id="strand-anim-panel">

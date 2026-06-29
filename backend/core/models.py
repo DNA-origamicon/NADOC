@@ -546,6 +546,36 @@ class OverhangBinding(BaseModel):
         return self
 
 
+class ConnectionVersion(BaseModel):
+    """A candidate connection spec between two overhangs (design-exploration).
+
+    Pure metadata — NOT a materialized topology. Lets the user create and keep
+    several alternative connections for the SAME overhang pair (e.g. different
+    sequences / GC content, different bridge length, or a different connection
+    type) and compare them, with at most ONE materialized (``applied``) at a
+    time. ``connection_type`` is the frontend Connection-Type variant id (e.g.
+    ``"end-to-end-ssdna-linker"`` / ``"root-to-root"``) — it encodes the attach
+    ends, ss/ds, and direct-vs-linker for the materialize step.
+
+    Persisted on ``Design`` so versions survive save / reload. Applying a
+    version (frontend-orchestrated in v1) sets its overhang sequences + bridge
+    and (re)creates the real OverhangConnection / OverhangBinding, clearing the
+    previously-applied one for the pair.
+    """
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = ""                       # auto V1, V2, … per pair
+    created_at: float = Field(default_factory=time.time)
+    overhang_a_id: str
+    overhang_b_id: str
+    connection_type: str                 # CT variant id (attach / ss-ds / direct)
+    overhang_a_seq: Optional[str] = None
+    overhang_b_seq: Optional[str] = None
+    bridge_length: int = 0               # bp — linkers only (0 for direct/indirect)
+    bridge_seq: Optional[str] = None
+    applied: bool = False                # the materialized version for this pair
+
+
 class AssemblyOverhangConnection(BaseModel):
     """
     Cross-part overhang connection (linker) between two PartInstances.
@@ -1906,6 +1936,7 @@ class Design(BaseModel):
     overhangs: List[OverhangSpec] = Field(default_factory=list)
     overhang_connections: List[OverhangConnection] = Field(default_factory=list)
     overhang_bindings: List[OverhangBinding] = Field(default_factory=list)
+    connection_versions: List[ConnectionVersion] = Field(default_factory=list)
     # Flexible ssDNA segments (pose & explore mechanisms): user-marked ssDNA beads
     # (marks) + derived ties between EXISTING clusters (connections). The rigid
     # arms are the user's own clusters; flexible segments are a per-bead display

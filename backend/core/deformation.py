@@ -919,32 +919,53 @@ def _quat_from_theta_phi(
     ]
 
 
-def _linker_complement_domain_refs(
+def _overhang_binding_partner_refs(
     design: "Design", helix_id: str, oh_domain: "Domain",
 ) -> list:
-    """LINKER strand domains that pair Watson-Crick with *oh_domain* on *helix_id*.
+    """Domains that pair Watson-Crick with *oh_domain* on *helix_id* and must
+    follow the overhang frame when the overhang rotates.
 
-    Same helix, opposite direction, overlapping bp range. These are the
-    complement halves of generated linker strands (see
-    ``generate_linker_topology``); they MUST follow the OH frame when the OH
-    rotates — otherwise the linker bridge anchors would render at the OH's
-    pre-rotation position (Bug 06 / LESSONS E4).
+    Same helix, opposite direction, overlapping bp range, AND bound to this
+    overhang. Three binder kinds qualify (all carry ``binds_overhang_id``):
 
-    Returns an empty list when no linker strand pairs with this OH (the
-    common case when no `OverhangConnection` references it).
+    * LINKER complement domains (``generate_linker_topology``) — otherwise the
+      linker bridge anchors render at the OH's pre-rotation position
+      (Bug 06 / LESSONS E4).
+    * standalone OH_BINDER strand domains (``make_binder_for_overhang``).
+    * end-to-root binder domains spliced into a STAPLE strand
+      (``apply_end_to_root_binder``) — these are STAPLE-typed, so a strand-type
+      filter would miss them; the ``binds_overhang_id`` link is the only marker.
+
+    A binder may extend BEYOND the overhang's bp range on the same helix (a
+    toehold from dragging the binder's free end). The whole domain still rides
+    along because ``_apply_cluster_transforms_domain_aware`` masks by the
+    binder domain's OWN full bp range, not the overhang's.
+
+    The legacy ``StrandType.LINKER`` fallback keeps old linker complements that
+    predate ``binds_overhang_id`` tagging working.
+
+    Returns an empty list when nothing binds this OH (the common case).
     """
     from backend.core.models import DomainRef, StrandType
     oh_lo = min(oh_domain.start_bp, oh_domain.end_bp)
     oh_hi = max(oh_domain.start_bp, oh_domain.end_bp)
     out: list = []
     for s in design.strands:
-        if s.strand_type != StrandType.LINKER:
-            continue
         for di, d in enumerate(s.domains):
             if d.helix_id != helix_id:
                 continue
             if d.direction == oh_domain.direction:
                 continue   # not antiparallel — skip
+            # A partner is any domain bound to THIS overhang (OH_BINDER, LINKER
+            # complement, OR an end-to-root binder spliced into a STAPLE), plus
+            # a legacy fallback for old LINKER complements that predate the
+            # binds_overhang_id tag.
+            is_partner = (
+                d.binds_overhang_id == oh_domain.overhang_id
+                or s.strand_type == StrandType.LINKER
+            )
+            if not is_partner:
+                continue
             d_lo = min(d.start_bp, d.end_bp)
             d_hi = max(d.start_bp, d.end_bp)
             if d_hi < oh_lo or d_lo > oh_hi:
@@ -978,7 +999,13 @@ def _linker_complement_for_bp_range(
     bp_lo: int, bp_hi: int,
 ) -> list:
     """LINKER strand domains pairing Watson-Crick with *oh_domain* that
-    overlap the bp interval ``[bp_lo, bp_hi]`` (inclusive)."""
+    overlap the bp interval ``[bp_lo, bp_hi]`` (inclusive).
+
+    NOTE: deliberately LINKER-only — this feeds Layer-2 sub-domain (theta/phi)
+    chain rotation, which truncates partners to the affected slice. OH_BINDER /
+    end-to-root binders are co-rotated only by Layer 1 (whole-overhang
+    ``_overhang_binding_partner_refs``); extending them here would shear a
+    binder that runs past the overhang's free tip."""
     from backend.core.models import DomainRef, StrandType
     out: list = []
     for s in design.strands:
@@ -1065,7 +1092,7 @@ def apply_overhang_rotation_if_needed(
 
         # ── Layer 1: whole-overhang rotation (legacy) ──────────────────────
         if ovhg.rotation != _IDENTITY_QUAT:
-            partner_refs = _linker_complement_domain_refs(design, helix.id, domain)
+            partner_refs = _overhang_binding_partner_refs(design, helix.id, domain)
             synthetic = ClusterRigidTransform(
                 id="__ovhg_rot__",
                 helix_ids=[helix.id],

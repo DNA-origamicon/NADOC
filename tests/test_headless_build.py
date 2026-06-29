@@ -33,6 +33,7 @@ from tests.automation_harness import (
     assert_feature_seek,
     assert_cluster_translated,
     assert_deformation_angle,
+    assert_end_to_root_binder,
     assert_flexible_segments_relaxed,
     assert_forced_ligation,
     assert_fully_sequenced,
@@ -525,6 +526,129 @@ def test_connect_overhangs_rejects_invalid_polarity():
                 linker_type="ds", length_value=6, length_unit="bp",
             )
         assert exc.value.status_code == 400
+
+
+# ── end-to-root direct binding (regenerate B as A's RC binder) ──────────────────
+
+def _place_two_overhangs_on_6hb():
+    """Route a 6hb, then extrude TWO overhangs on distinct staple termini.
+
+    Unlike ``_seed_two_overhang_leaves`` (single-domain synthetic strands), each
+    overhang here extends a real bundle-anchored staple — so the staple has a
+    ROOT domain plus the overhang tip.  That's what the end-to-root splice needs
+    (a root to splice the binder onto) AND what makes the round-trip autodetect
+    guard load-bearing (the spliced binder is a terminal domain on a strand
+    anchored to scaffold).  Returns ``(design, [overhang_id, overhang_id])``."""
+    hb.create_bundle(SIX_HB_CELLS, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
+    hb.auto_scaffold(seamless=False)
+    hb.auto_crossover()
+    hb.auto_break()
+    hb.assign_scaffold_sequence()
+    d = _place_one_overhang(design_state.get_or_404())
+    assert d is not None and len(d.overhangs) == 1, "first overhang site"
+    d = _place_one_overhang(d)
+    assert d is not None and len(d.overhangs) == 2, "second overhang site"
+    return d, [o.id for o in d.overhangs]
+
+
+def test_apply_end_to_root_regenerates_b_as_rc_binder_of_a():
+    """Applying an end-to-root ConnectionVersion regenerates overhang B as the
+    reverse complement of overhang A: a binder domain (antiparallel to A, on A's
+    helix, RC of A's sequence) is spliced into B's root staple in place of B's
+    tip, and B's OverhangSpec is consumed.  The reusable assert_end_to_root_binder
+    oracle proves the geometry, the splice, B's removal, the RC sequence, and that
+    all of it survives a .nadoc round-trip (the phantom-overhang guard's red test).
+    Also flips the apply route's headless coverage."""
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        _d, (a_id, b_id) = _place_two_overhangs_on_6hb()
+        hb.create_connection_version(
+            a_id, b_id, connection_type="end-to-root",
+            overhang_a_seq="AAACCCGG",   # 8 nt for the 8-bp overhang → RC = CCGGGTTT
+        )
+        vid = design_state.get_or_404().connection_versions[-1].id
+        d = hb.apply_connection_version(vid)
+        assert_end_to_root_binder(d, overhang_a_id=a_id, overhang_b_id=b_id)
+
+        report = headless_coverage_report()
+        assert any(
+            r["path"].endswith("/connection-versions/{version_id}/apply")
+            for r in report["covered_routes"]
+        ), "POST .../connection-versions/{id}/apply should now be headless-covered"
+
+
+def test_apply_end_to_root_cadnano_clean_after_apply():
+    """caDNAno-editor validation after Apply: B's relocated binder must not leave
+    a dangling helix or a crossover that points at it.
+
+    The user hit two editor artefacts — an orphaned helical-axis line and a
+    crossover line still drawn to overhang B's OLD helix/bp. This pins the data
+    the editor renders from:
+      • design-level (what the 2D view draws crossover lines from): B's overhang
+        helix is deleted, NO crossover references it, and a forced ligation now
+        carries the root→binder junction (via assert_end_to_root_binder);
+      • the caDNAno EXPORT (the editor's serialized form): exports cleanly, drops
+        exactly the orphan vstrand, and has no staple/scaffold pointer to a
+        non-existent helix num.
+    """
+    from backend.core.cadnano import export_cadnano
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        d0, (a_id, b_id) = _place_two_overhangs_on_6hb()
+        # B's overhang (tip) helix — orphaned + its crossover stale after the splice.
+        b_tip_helix = next(dom.helix_id for s in d0.strands for dom in s.domains
+                           if dom.overhang_id == b_id)
+        pre_helices = len(d0.helices)
+        assert any(b_tip_helix in (xo.half_a.helix_id, xo.half_b.helix_id)
+                   for xo in d0.crossovers), "expected B's overhang crossover pre-apply"
+
+        hb.create_connection_version(a_id, b_id, connection_type="end-to-root",
+                                     overhang_a_seq="AAACCCGG")
+        vid = design_state.get_or_404().connection_versions[-1].id
+        d = hb.apply_connection_version(vid)
+
+        # Design-level invariants the 2D view renders from (orphan helix / stale
+        # crossover / forced ligation), incl. a .nadoc round-trip.
+        assert_end_to_root_binder(d, overhang_a_id=a_id, overhang_b_id=b_id)
+        assert not any(h.id == b_tip_helix for h in d.helices)
+        assert not any(b_tip_helix in (xo.half_a.helix_id, xo.half_b.helix_id)
+                       for xo in d.crossovers)
+
+        # The editor's serialized form exports cleanly + drops the orphan vstrand.
+        cad = export_cadnano(d)
+        assert len(cad["vstrands"]) == len(d.helices) == pre_helices - 1
+        nums = {vs["num"] for vs in cad["vstrands"]}
+        for vs in cad["vstrands"]:
+            for arr in (vs["scaf"], vs["stap"]):
+                for ph, _pi, nh, _ni in arr:
+                    assert ph == -1 or ph in nums, f"dangling 5' pointer → num {ph}"
+                    assert nh == -1 or nh in nums, f"dangling 3' pointer → num {nh}"
+
+
+def test_autonomous_build_end_to_root_binding_is_valid_and_roundtrip_stable():
+    """AF-37 (end-to-root, ConnectionVersion-apply path) — the AUTONOMOUS-DESIGN
+    composition gate: the full headless grammar with NO GUI
+    (create_bundle → auto_scaffold → auto_crossover → auto_break →
+    assign_scaffold_sequence → overhang_extrude ×2 → create_connection_version
+    → apply_connection_version) yields a design that
+
+      • passes ``validate_design`` and is byte-stable across a ``.nadoc``
+        round-trip (``assert_roundtrip_stable`` — the AF acceptance oracle), AND
+      • genuinely carries the regenerated RC binder + its topology cleanup
+        (``assert_end_to_root_binder``: binder on A's helix, B consumed, no orphan
+        helix, no stale crossover, forced ligation at the junction).
+
+    Proves a direct end-to-root overhang connection is reachable AND produces a
+    valid, manufacturable design during fully autonomous design — not just a
+    locally-correct splice. (AF-37's earlier sub-domain-split / bind-lock path was
+    reverted as janky; this is the cleaner ConnectionVersion-apply route.)
+    """
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        _d, (a_id, b_id) = _place_two_overhangs_on_6hb()
+        hb.create_connection_version(a_id, b_id, connection_type="end-to-root",
+                                     overhang_a_seq="AAACCCGG")
+        vid = design_state.get_or_404().connection_versions[-1].id
+        built = hb.apply_connection_version(vid)
+    assert_roundtrip_stable(lambda: built)                              # validate + topology-stable
+    assert_end_to_root_binder(built, overhang_a_id=a_id, overhang_b_id=b_id)
 
 
 # ── relax_overhang_connection + relax_bond (AF-27 P2 — linker/bond pose) ─────────

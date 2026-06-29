@@ -105,6 +105,16 @@ pen-tag, overhang→binder RC + partial-pad, linker complement binds. Full suite
 **1612 passed** (2 fails = pre-existing router flakes `test_advanced_seamed_*` +
 `test_teeth_closing_zig`, order-dependent, unrelated).
 
+## Overhang orientation co-rotates binders (2026-06-29)
+Editing an overhang's orientation ("Edit Orientation" → `OverhangSpec.rotation`)
+now co-rotates its binding domain — including a binder's toehold extending past
+the overhang on the same helix, and end-to-root binders spliced into a STAPLE
+strand. The geometry-time co-rotation predicate (`_overhang_binding_partner_refs`
+in deformation.py, Layer 1) keys on `binds_overhang_id`, not strand type. Frontend
+live-preview parity via `ovhgBinderDomainIds` + `domsForOverhang` (orientation
+panel). See [[overhang-connections]] gotcha #7. Tests:
+`tests/test_overhang_binder_rotation.py`.
+
 ## Caveats / NOT done
 - **Frontend UI not click-tested in a live browser** — build is clean and wiring
   mirrors working patterns, but menus/colors/spreadsheet/manager were not exercised

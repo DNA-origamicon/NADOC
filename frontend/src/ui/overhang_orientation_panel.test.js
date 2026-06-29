@@ -20,6 +20,7 @@ vi.mock('../scene/overhang_gizmo.js', () => ({ initOverhangGizmo: () => gizmo })
 vi.mock('../scene/design_queries.js', () => ({
   isExtrudeOverhang: (id) => id === 'ext',
   ovhgDomainIds: () => ['d1'],
+  ovhgBinderDomainIds: () => [],
 }))
 
 const { initOverhangOrientationPanel, buildOverhangRotationOps } =

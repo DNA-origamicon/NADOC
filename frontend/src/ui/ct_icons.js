@@ -328,3 +328,123 @@ export function ctTileSvg(type, L, R, forbidden, hasA, hasB) {
     default:                          return _endToRootSvg(L, R, forbidden, leftColor, rightColor)
   }
 }
+
+// ── Shared variant list + polarity-pairing rules ─────────────────────────────
+// Additive exports (2026-06-28) so any surface — the per-part Overhangs Manager
+// modal, the assembly manager, and the right-sidebar "Overhang Connections"
+// section — can share ONE source of truth for the 12 connection-type variants
+// and the Watson-Crick polarity-validity rule. The two pre-existing popups keep
+// their own private copies for now; new surfaces should import these.
+
+/** The 12 connection-type variants (id + human label). Order = picker order. */
+export const CT_VARIANTS = [
+  { id: 'end-to-root',               label: 'End-to-Root' },
+  { id: 'root-to-root',              label: 'Root-to-Root' },
+  { id: 'root-to-root-indirect',     label: 'Root-to-Root Indirect' },
+  { id: 'end-to-end-indirect',       label: 'End-to-End Indirect' },
+  { id: 'root-to-root-ssdna-linker', label: 'Root-to-Root ssDNA Linker' },
+  { id: 'end-to-end-ssdna-linker',   label: 'End-to-End ssDNA Linker' },
+  { id: 'end-to-root-ssdna-linker',  label: 'End-to-Root ssDNA Linker' },
+  { id: 'root-to-end-ssdna-linker',  label: 'Root-to-End ssDNA Linker' },
+  { id: 'root-to-root-dsdna-linker', label: 'Root-to-Root dsDNA Linker' },
+  { id: 'end-to-end-dsdna-linker',   label: 'End-to-End dsDNA Linker' },
+  { id: 'end-to-root-dsdna-linker',  label: 'End-to-Root dsDNA Linker' },
+  { id: 'root-to-end-dsdna-linker',  label: 'Root-to-End dsDNA Linker' },
+]
+
+/** Parse the 5p/3p terminal-end suffix from an overhang id
+ *  (`ovhg_<helix>_<bp>_<5p|3p>`). Returns '5p' | '3p' | null. */
+export function endOf(ovhgId) {
+  if (typeof ovhgId !== 'string') return null
+  if (ovhgId.endsWith('_5p')) return '5p'
+  if (ovhgId.endsWith('_3p')) return '3p'
+  return null
+}
+
+// Combination validity. `L`/`R` are the two overhangs' FREE-END polarities
+// ('5p' | '3p' | null). Returns true when the (type, L, R) triple is NOT a
+// physical Watson-Crick antiparallel pairing for that connection type.
+// Byte-identical to `_ctIsForbidden` (per-part popup) and `_isForbidden`
+// (assembly popup) — the canonical rule, now shared.
+export function ctIsForbidden(type, L, R) {
+  if (L == null || R == null) return false
+  if (type === 'root-to-root-dsdna-linker' || type === 'end-to-end-dsdna-linker') return L !== R
+  if (type === 'root-to-root-ssdna-linker' || type === 'end-to-end-ssdna-linker' ||
+      type === 'root-to-root-indirect'    || type === 'end-to-end-indirect')      return L === R
+  if (type === 'end-to-root-dsdna-linker' || type === 'root-to-end-dsdna-linker') return L === R
+  if (type === 'end-to-root-ssdna-linker' || type === 'root-to-end-ssdna-linker') return L !== R
+  if (type === 'end-to-root')  return L !== R
+  if (type === 'root-to-root') return L === R
+  return false
+}
+
+/** Human-readable reason a (type, L, R) triple is forbidden, or null when
+ *  it's valid / undetermined. Surfaced as the button's hover title. */
+export function ctForbiddenReason(type, L, R) {
+  if (!ctIsForbidden(type, L, R)) return null
+  const pol = (p) => (p === '5p' ? "5'" : "3'")
+  const pair = `${pol(L)}/${pol(R)}`
+  if (type === 'end-to-root')
+    return `End-to-root direct: Watson-Crick hybridization needs the same polarity on both overhangs. ${pair} would force a parallel duplex.`
+  if (type === 'root-to-root')
+    return `Root-to-root direct: antiparallel pairing needs opposite polarities. ${pair} would force a parallel duplex.`
+  if (type === 'root-to-root-dsdna-linker' || type === 'end-to-end-dsdna-linker')
+    return `dsDNA linker (same attach): bridge strands run antiparallel; the linked overhangs must share polarity. ${pair} would force the bridge halves parallel.`
+  if (type === 'end-to-root-dsdna-linker' || type === 'root-to-end-dsdna-linker')
+    return `dsDNA linker (mixed attach): one root + one free-end flips comp-first polarity on one side, so overhangs must have OPPOSITE polarity. ${pair} would force the bridge halves parallel.`
+  if (type === 'root-to-root-ssdna-linker' || type === 'end-to-end-ssdna-linker' ||
+      type === 'root-to-root-indirect'    || type === 'end-to-end-indirect')
+    return `Single-strand bridge (same attach): one continuous 5'→3' strand can't terminate ${pair}. Pick overhangs with opposite polarities.`
+  if (type === 'end-to-root-ssdna-linker' || type === 'root-to-end-ssdna-linker')
+    return `Single-strand bridge (mixed attach): one root + one free-end flips comp-first polarity on one side, so overhangs must MATCH polarity. ${pair} breaks the continuous 5'→3' bridge.`
+  return 'This polarity combination is not valid for the selected connection type.'
+}
+
+// ── Variant → backend mapping helpers (pure) ─────────────────────────────────
+// Mirror the per-part popup (`_ctAttachPair` / `_ctIsDirectType` /
+// `_ctIsIndirectType` / `_ctLinkerTypeForId` / `_ctVariantForConnection`) so a
+// new surface can drive the create flow without re-deriving them.
+
+/** Map a CT variant id to its (attach_a, attach_b) pair. Longest-prefix first
+ *  so `end-to-root-*` / `root-to-end-*` don't collide with the same-attach
+ *  families. */
+export function ctAttachPair(id) {
+  if (typeof id === 'string') {
+    if (id.startsWith('end-to-root')) return ['free_end', 'root']
+    if (id.startsWith('root-to-end')) return ['root', 'free_end']
+    if (id.startsWith('root-to-root')) return ['root', 'root']
+    if (id.startsWith('end-to-end'))   return ['free_end', 'free_end']
+  }
+  return ['root', 'root']
+}
+
+/** Direct (no bridge) connection types → "Make complementary" + a binding. */
+export function ctIsDirect(id) {
+  return id === 'end-to-root' || id === 'root-to-root'
+}
+
+/** Indirect = shared zero-length ss linker (no user-controllable length). */
+export function ctIsIndirect(id) {
+  return id === 'root-to-root-indirect' || id === 'end-to-end-indirect'
+}
+
+/** Backend `linker_type` for a variant id ('ds' | 'ss'). Indirect → 'ss'. */
+export function ctLinkerType(id) {
+  return (typeof id === 'string' && id.includes('dsdna')) ? 'ds' : 'ss'
+}
+
+/** Map an existing OverhangConnection back to the CT variant id it was created
+ *  from (for list-row → reselect). Returns null if unrecognised. */
+export function ctVariantForConnection(conn) {
+  if (!conn) return null
+  const kind = conn.linker_type === 'ds' ? 'dsdna' : 'ssdna'
+  const a = conn.overhang_a_attach
+  const b = conn.overhang_b_attach
+  let family
+  if      (a === 'root'     && b === 'root')     family = 'root-to-root'
+  else if (a === 'free_end' && b === 'free_end') family = 'end-to-end'
+  else if (a === 'free_end' && b === 'root')     family = 'end-to-root'
+  else if (a === 'root'     && b === 'free_end') family = 'root-to-end'
+  else return null
+  return `${family}-${kind}-linker`
+}

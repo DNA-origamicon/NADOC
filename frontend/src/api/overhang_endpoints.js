@@ -82,6 +82,40 @@ export async function deleteOverhangConnection(connId) {
   return _syncFromDesignResponse(json)
 }
 
+// ── Connection versions (design-exploration candidates; metadata only) ────────
+export async function createConnectionVersion(payload) {
+  // payload: { overhang_a_id, overhang_b_id, connection_type, overhang_a_seq?,
+  //            overhang_b_seq?, bridge_length?, bridge_seq?, applied?, name? }
+  const json = await _request('POST', '/design/connection-versions', payload)
+  return _syncFromDesignResponse(json)
+}
+
+export async function patchConnectionVersion(versionId, patch) {
+  const json = await _request('PATCH', `/design/connection-versions/${encodeURIComponent(versionId)}`, patch)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteConnectionVersion(versionId) {
+  const json = await _request('DELETE', `/design/connection-versions/${encodeURIComponent(versionId)}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function relaxOverhangBinding(bindingId) {
+  // Move the bound overhangs' clusters together (joint-rotate if a joint
+  // connects them, else rigid-translate the driven cluster) — the binding
+  // analogue of relaxLinker. Run while the overhangs are un-relocated.
+  const json = await _request('POST', `/design/overhang-bindings/${encodeURIComponent(bindingId)}/relax`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function applyConnectionVersion(versionId) {
+  // Atomically materializes the version: sets both overhang sequences (resizing
+  // each overhang to the sequence length), tears down the pair's current
+  // connection/binding, and (re)creates the version's connection type.
+  const json = await _request('POST', `/design/connection-versions/${encodeURIComponent(versionId)}/apply`)
+  return _syncFromDesignResponse(json)
+}
+
 export async function patchConnectionDisplayPose(connId, patch) {
   // patch: subset of { unbound_angle_deg, bound_angle_deg } — authored hinge
   // angles for the animation player; the server auto-detects + stores

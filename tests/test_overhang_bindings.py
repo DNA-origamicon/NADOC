@@ -849,3 +849,62 @@ def test_binding_display_fields_roundtrip_and_default_none():
     restored = OverhangBinding.model_validate_json(b2.model_dump_json())
     assert restored.unbound_angle_deg == 15.0
     assert restored.bound_angle_deg == -2.0
+
+
+# ── Binding relax (cluster move: joint-rotate, else rigid-translate) ──────────
+
+def test_relax_overhang_binding_rotates_joint_cluster():
+    """A binding whose clusters are connected by a joint → relax rotates the
+    joint's cluster to bring the bound overhangs together."""
+    design_state.set_design(_seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT"))
+    r = client.post("/api/design/overhang-bindings", json={
+        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
+    })
+    assert r.status_code == 201, r.text
+    bid = design_state.get_or_404().overhang_bindings[0].id
+    rot_before = list(next(c for c in design_state.get_or_404().cluster_transforms
+                           if c.id == "cluster_a").rotation)
+    rr = client.post(f"/api/design/overhang-bindings/{bid}/relax")
+    assert rr.status_code == 200, rr.text
+    rot_after = list(next(c for c in design_state.get_or_404().cluster_transforms
+                          if c.id == "cluster_a").rotation)
+    assert rot_after != rot_before   # joint_a (on cluster_a) rotated → cluster moved
+
+
+def test_relax_overhang_binding_translates_when_no_joint():
+    """No joint between the clusters → relax rigid-translates the driven cluster."""
+    d = _seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT")
+    d = d.model_copy(update={"cluster_joints": []})   # 0-DOF
+    design_state.set_design(d)
+    r = client.post("/api/design/overhang-bindings", json={
+        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
+    })
+    assert r.status_code == 201, r.text
+    bid = design_state.get_or_404().overhang_bindings[0].id
+    # driver='a' (no joints), so the driven cluster_b translates.
+    tr_before = list(next(c for c in design_state.get_or_404().cluster_transforms
+                          if c.id == "cluster_b").translation)
+    rr = client.post(f"/api/design/overhang-bindings/{bid}/relax")
+    assert rr.status_code == 200, rr.text
+    tr_after = list(next(c for c in design_state.get_or_404().cluster_transforms
+                         if c.id == "cluster_b").translation)
+    assert tr_after != tr_before   # cluster_b rigid-translated to close the chord
+
+
+def test_relax_overhang_binding_404():
+    design_state.set_design(_seed_two_clusters_with_overhangs())
+    assert client.post("/api/design/overhang-bindings/nope/relax").status_code == 404
+
+
+def test_relax_overhang_binding_leaves_overhang_rotation_identity():
+    """Relax does the cluster move only — it never writes per-overhang rotation."""
+    design_state.set_design(_seed_two_clusters_with_overhangs(seq_a="AAGG", seq_b="CCTT"))
+    r = client.post("/api/design/overhang-bindings", json={
+        "sub_domain_a_id": "sd_a", "sub_domain_b_id": "sd_b",
+    })
+    assert r.status_code == 201, r.text
+    bid = design_state.get_or_404().overhang_bindings[0].id
+    rr = client.post(f"/api/design/overhang-bindings/{bid}/relax")
+    assert rr.status_code == 200, rr.text
+    rots = [list(o.rotation) for o in design_state.get_or_404().overhangs]
+    assert all(rot == [0.0, 0.0, 0.0, 1.0] for rot in rots), rots

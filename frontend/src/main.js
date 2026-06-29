@@ -92,6 +92,7 @@ import { initOverhangsManagerPopup,
 import { initAssemblyOverhangsManagerPopup,
          open as openAssemblyOverhangsManager,
        } from './ui/assembly_overhangs_manager_popup.js'
+import { initOverhangConnectionsPanel } from './ui/overhang_connections_panel.js'
 import { initPolymerizePanel }     from './ui/polymerize_panel.js'
 import { initBeltPathPanel }       from './ui/belt_path_panel.js'
 import { initStrandAnimPanel }     from './ui/strand_anim_panel.js'
@@ -3687,6 +3688,7 @@ async function main() {
   })
 
   initOverhangsManagerPopup({ store })
+  initOverhangConnectionsPanel({ store, scene, designRenderer, createGlowLayer })   // right-sidebar "Overhang Connections" section
   document.getElementById('menu-tools-overhangs-manager')?.addEventListener('click', () => {
     const { currentDesign } = store.getState()
     if (!currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }

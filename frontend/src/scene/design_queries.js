@@ -35,6 +35,23 @@ export function ovhgDomainIds(ovhgId, design) {
   return strand.domains.map((_, i) => ({ strand_id: strand.id, domain_index: i }))
 }
 
+// Returns {strand_id, domain_index} for every domain in the design that BINDS the
+// given overhang (Domain.binds_overhang_id === ovhgId) — strand-type-agnostic, so it
+// covers standalone OH_BINDER strands, LINKER complements, AND end-to-root binders
+// spliced into a STAPLE strand. Used so the orientation-edit live preview rotates the
+// binder (and any toehold extending past the overhang on the same helix) with the
+// overhang. The per-overhang filter keeps OTHER overhangs' binders out.
+export function ovhgBinderDomainIds(ovhgId, design) {
+  if (!ovhgId) return []
+  const out = []
+  for (const s of design?.strands ?? []) {
+    s.domains?.forEach((d, i) => {
+      if (d.binds_overhang_id === ovhgId) out.push({ strand_id: s.id, domain_index: i })
+    })
+  }
+  return out
+}
+
 /** Geometry key "helix:bp:dir" for a flexible-connection anchor, or null. */
 export function flexAnchorKey(anc, design) {
   const s = design?.strands?.find(s => s.id === anc.strand_id)

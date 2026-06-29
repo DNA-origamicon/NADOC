@@ -204,8 +204,16 @@ def test_delete_workspace_independent_strutted_corner_extrude_scrubs_survivors()
     design_state.set_design(Design.from_json(fixture.read_text()))
 
     before = design_state.get_or_404()
-    assert before.feature_log[1].op_kind == "extrude-segment"
+    # This fixture is gitignored + untracked, so its contents vary per machine.
+    # The assertions below are pinned to a SPECIFIC capture (extrude-segment at
+    # feature_log[1] creating h_XY_0_4 / h_XY_0_5). If the local file was
+    # regenerated with a different routing / feature-log, skip rather than fail
+    # on the stale pins — the same scrub-on-delete behaviour is covered
+    # fixture-free by test_delete_independent_parallel_extrusion_survives above.
     removed_hids = {"h_XY_0_4", "h_XY_0_5"}
+    entry1_kind = getattr(before.feature_log[1], "op_kind", None) if len(before.feature_log) > 1 else None
+    if entry1_kind != "extrude-segment" or not (removed_hids & {h.id for h in before.helices}):
+        pytest.skip("2x2_strutted_corner.nadoc does not match this test's pinned structure")
     removed_strands = {
         s.id for s in before.strands
         if any(dom.helix_id in removed_hids for dom in s.domains)

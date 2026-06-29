@@ -459,7 +459,8 @@ def test_oxdna_coverage_report_separate_from_design_assembly():
     # AF-32 force_ligate + delete_forced_ligation (45→47);
     # AF-30 strand_end_resize (47→48);
     # AF-27 P2 relax_overhang_connection + relax_bond (48→50).
-    assert headless_coverage_report()["covered"] == 50  # /oxdna audit is separate
+    # end-to-root binder: create_connection_version + apply_connection_version (50→52).
+    assert headless_coverage_report()["covered"] == 52  # /oxdna audit is separate
     ox = oxdna_coverage_report()
     assert ox["total"] == ox["covered"] + ox["uncovered"]
     covered = {r["endpoint"] for r in ox["covered_routes"]}

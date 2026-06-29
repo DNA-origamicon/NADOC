@@ -2043,3 +2043,35 @@ staleness/job feature "doesn't work in the app but passes tests".
 
 ---
 
+
+### AF-37 (end-to-root) — direct end-to-root overhang connection via ConnectionVersion-apply (2026-06-29)
+
+**Deliverable:** the design-layer DIRECT end-to-root overhang connection is now headless + composable into
+autonomous design — without the reverted sub-domain-split / bind-lock surface. `hb.create_connection_version(
+overhang_a_id, overhang_b_id, connection_type="end-to-root", overhang_a_seq=…)` then `hb.apply_connection_version(
+id)` runs `lattice.apply_end_to_root_binder`: regenerate overhang B as A's reverse complement by splicing the
+binder domain (antiparallel, on A's helix, RC of A via the extracted `_binder_domain_for_overhang` shared with
+`make_binder_for_overhang`) into B's root staple in place of B's tip, then clean the relocation — add a
+`ForcedLigation` at the root→binder junction, drop B's stale overhang crossover, delete B's orphaned overhang
+helix (+ scrub cluster `helix_ids`). B is consumed (its `OverhangSpec` removed). Route coverage **50 → 52**.
+
+**Oracle(s):** `assert_end_to_root_binder` (8 clauses, all re-checked after a `.nadoc` round-trip: A survives;
+exactly-one binder on A's helix antiparallel at A's bp range; spliced into a ≥2-domain staple terminal; B
+consumed; binder reads RC(A); no orphan helix; no stale crossover; forced ligation at the junction — the
+"exactly-one" + "B-gone" after re-import is the red test for the `autodetect_overhangs` `binds_overhang_id`
+skip-guard). PLUS the **autonomous-build composition gate**
+`test_autonomous_build_end_to_root_binding_is_valid_and_roundtrip_stable` wraps the full headless grammar
+(bundle → auto_scaffold → auto_crossover → auto_break → assign_scaffold_sequence → overhang_extrude ×2 →
+create+apply end-to-root) in `assert_roundtrip_stable` (validate_design passes before+after, canonical_topology
+byte-stable) + `assert_end_to_root_binder`. PLUS a caDNAno-export validation
+(`test_apply_end_to_root_cadnano_clean_after_apply`: orphan vstrand dropped, no dangling pointer).
+
+**Tests:** `test_headless_build.py` (+3: regenerate / cadnano-clean / autonomous-composition),
+`test_connection_versions.py` (+1 HTTP endpoint). Full suite **3364 passed / 68 skipped**, no drop. Lint clean.
+
+**"Validation gained, not just a passthrough:** before this, end-to-root apply was inert and there was no headless
+way to reach a directly-bound overhang at all (AF-37's sub-domain-split path was reverted as janky). Now an
+autonomous build can MAKE the connection AND a reusable oracle proves the *result* — a real RC-binder duplex
+spliced into B's staple, B consumed, the relocation's orphan helix + stale crossover cleaned and replaced by a
+forced ligation, the whole design passing `validate_design` and surviving a `.nadoc` round-trip (the round-trip
+clause is the load-bearing pin for the phantom-overhang guard that `canonical_topology` is blind to)."

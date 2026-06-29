@@ -932,6 +932,179 @@ def assert_linker_connects(
     return reimported
 
 
+def assert_end_to_root_binder(
+    design: Design,
+    *,
+    overhang_a_id: str,
+    overhang_b_id: str,
+):
+    """End-to-root apply: overhang *B* was regenerated as A's reverse-complement
+    binder, spliced into B's root staple — and the wiring **survives a ``.nadoc``
+    round-trip**.
+
+    Applying an ``end-to-root`` ConnectionVersion does not append metadata like a
+    linker does; it performs a real **topological** edit: a binder domain
+    (antiparallel to A, on A's helix at A's bp range, sequence = RC(A), tagged
+    ``binds_overhang_id == overhang_a_id``) replaces overhang B's free tip domain
+    inside B's own staple strand, and overhang B's :class:`OverhangSpec` is
+    removed (a domain cannot be both an overhang and a binder). A's free end is
+    now double-stranded; B is consumed into the binding domain.
+
+    Asserts, on both ``design`` and its :func:`roundtrip_nadoc` re-import:
+
+      1. **A survives** as a free overhang (its spec + backing domain still exist).
+      2. **Exactly one binder domain** is tagged ``binds_overhang_id == overhang_a_id``,
+         and it lives on A's helix, at A's bp range, antiparallel to A.
+      3. **It is spliced into a staple strand** (B's former root): the owning strand
+         is a STAPLE with ≥2 domains and the binder is a *terminal* domain — i.e.
+         B-root → binder is one continuous 5'→3' strand.
+      4. **B is consumed**: no ``OverhangSpec`` with id ``overhang_b_id`` remains and
+         no domain is tagged ``overhang_id == overhang_b_id``.
+      5. **The binder reads RC(A)** after :func:`assign_staple_sequences` re-derives
+         the strand (the per-domain reverse-complement sync via ``binds_overhang_id``).
+
+    Why the round-trip pin: import re-runs ``autodetect_overhangs``; without the
+    ``binds_overhang_id`` skip-guard the terminal, unscaffolded binder would be
+    re-tagged as a *phantom* new overhang for the consumed B. Clause 2 ("exactly
+    one") + clause 4 ("B gone, no new overhang") after re-import is the red test
+    for that guard.
+
+    Can-go-red: a no-op apply (B's tip still present, no binder) fails clauses 2-4;
+    a binder placed on B's helix instead of A's fails clause 2; a binder created as
+    a standalone strand (not spliced) fails clause 3; a phantom overhang spawned on
+    round-trip fails clause 2/4 after re-import. Returns the re-imported design.
+    """
+    from backend.core.sequences import (
+        _assemble_overhang_5to3,
+        assign_staple_sequences,
+        complement_base,
+    )
+
+    def _backing_domain(d: Design, ovhg_id: str):
+        for s in d.strands:
+            for dom in s.domains:
+                if dom.overhang_id == ovhg_id:
+                    return s, dom
+        return None, None
+
+    def _check(d: Design, where: str):
+        # 1. A survives as a free overhang.
+        spec_a = next((o for o in d.overhangs if o.id == overhang_a_id), None)
+        assert spec_a is not None, f"{where}: overhang A {overhang_a_id!r} vanished"
+        _s_a, dom_a = _backing_domain(d, overhang_a_id)
+        assert dom_a is not None, f"{where}: overhang A has no backing domain"
+
+        # 2. Exactly one binder domain, on A's helix, A's bp range, antiparallel.
+        binders = [
+            (s, dom)
+            for s in d.strands
+            for dom in s.domains
+            if dom.binds_overhang_id == overhang_a_id
+        ]
+        assert len(binders) == 1, (
+            f"{where}: expected exactly 1 binder for {overhang_a_id!r}, "
+            f"got {len(binders)} (phantom overhang / re-tag?)"
+        )
+        b_strand, binder = binders[0]
+        assert binder.helix_id == dom_a.helix_id, (
+            f"{where}: binder on helix {binder.helix_id!r}, A on {dom_a.helix_id!r}"
+        )
+        assert binder.direction != dom_a.direction, (
+            f"{where}: binder not antiparallel to A"
+        )
+        assert {binder.start_bp, binder.end_bp} == {dom_a.start_bp, dom_a.end_bp}, (
+            f"{where}: binder bp range {{{binder.start_bp},{binder.end_bp}}} "
+            f"!= A's {{{dom_a.start_bp},{dom_a.end_bp}}}"
+        )
+
+        # 3. Spliced into a staple strand, terminal, contiguous.
+        from backend.core.models import StrandType
+        assert b_strand.strand_type == StrandType.STAPLE, (
+            f"{where}: binder owner is {b_strand.strand_type}, expected staple "
+            f"(a standalone OH_BINDER strand means it was NOT spliced into B)"
+        )
+        assert len(b_strand.domains) >= 2, (
+            f"{where}: binder strand has {len(b_strand.domains)} domain(s); "
+            f"a spliced B-root→binder strand needs ≥2"
+        )
+        b_idx = b_strand.domains.index(binder)
+        assert b_idx in (0, len(b_strand.domains) - 1), (
+            f"{where}: binder is domain {b_idx} of {len(b_strand.domains)} — "
+            f"not a strand terminal (splice should keep it terminal)"
+        )
+
+        # 4. B is consumed.
+        assert not any(o.id == overhang_b_id for o in d.overhangs), (
+            f"{where}: overhang B {overhang_b_id!r} spec still present"
+        )
+        _s_b, dom_b = _backing_domain(d, overhang_b_id)
+        assert dom_b is None, f"{where}: a domain still tagged overhang_id={overhang_b_id!r}"
+
+        # 5. Binder reads RC(A) after sequence sync. Only runnable when a scaffold
+        #    sequence exists (assign_staple_sequences needs one); when it doesn't,
+        #    clause 2's binds_overhang_id link already guarantees the RC sync (that
+        #    mechanism is pinned in tests/test_oh_binder.py).
+        from backend.core.models import StrandType as _ST
+        scaffold_sequenced = any(
+            s.strand_type == _ST.SCAFFOLD and s.sequence for s in d.strands
+        )
+        oh_len = abs(dom_a.end_bp - dom_a.start_bp) + 1
+        a_bases = _assemble_overhang_5to3(spec_a, oh_len)
+        if scaffold_sequenced and any(base != "N" for base in a_bases):
+            expected = "".join(complement_base(base) for base in reversed(a_bases))
+            synced = assign_staple_sequences(d)
+            synced_strand = next(s for s in synced.strands if s.id == b_strand.id)
+            seq = synced_strand.sequence or ""
+            assert len(seq) >= oh_len, (
+                f"{where}: synced strand sequence too short ({len(seq)} < {oh_len})"
+            )
+            got = seq[:oh_len] if b_idx == 0 else seq[-oh_len:]
+            assert got == expected, (
+                f"{where}: binder reads {got!r}, expected RC(A) {expected!r}"
+            )
+
+        # 6. No orphaned helix — B's old overhang helix (now empty after the binder
+        #    relocated to A's helix) must be deleted, else it renders as a dangling
+        #    axis line. Assert EVERY helix is referenced by ≥1 strand domain.
+        used_helices = {dom.helix_id for s in d.strands for dom in s.domains}
+        orphans = [h.id for h in d.helices if h.id not in used_helices]
+        assert not orphans, f"{where}: orphaned helices (no domains): {orphans}"
+
+        # 7. No stale crossover — every crossover half must reference a live helix
+        #    (B's overhang crossover, which pointed at the deleted tip helix, must
+        #    be gone; this is the caDNAno stale-line the user hit).
+        helix_ids = {h.id for h in d.helices}
+        for xo in d.crossovers:
+            assert xo.half_a.helix_id in helix_ids and xo.half_b.helix_id in helix_ids, (
+                f"{where}: stale crossover → deleted helix "
+                f"({xo.half_a.helix_id} ↔ {xo.half_b.helix_id})"
+            )
+
+        # 8. Forced ligation at the root→binder junction — the relocated tip lands
+        #    on A's (non-adjacent) helix, so the parent→tip backbone jump is now a
+        #    forced ligation, not a lattice crossover. Assert one matches the splice
+        #    junction (earlier domain's 3' end → later domain's 5' end).
+        root = b_strand.domains[b_idx - 1 if b_idx == len(b_strand.domains) - 1 else b_idx + 1]
+        earlier, later = (root, binder) if b_idx == len(b_strand.domains) - 1 else (binder, root)
+        match = any(
+            fl.three_prime_helix_id == earlier.helix_id and fl.three_prime_bp == earlier.end_bp
+            and fl.five_prime_helix_id == later.helix_id and fl.five_prime_bp == later.start_bp
+            for fl in d.forced_ligations
+        )
+        assert match, (
+            f"{where}: no forced ligation at the root→binder junction "
+            f"(expected 3'={earlier.helix_id}:{earlier.end_bp} → "
+            f"5'={later.helix_id}:{later.start_bp}; "
+            f"have {[(fl.three_prime_helix_id, fl.three_prime_bp, fl.five_prime_helix_id, fl.five_prime_bp) for fl in d.forced_ligations]})"
+        )
+        return binder
+
+    _check(design, "in-memory")
+    reimported = roundtrip_nadoc(design)
+    _check(reimported, "after .nadoc round-trip")
+    return reimported
+
+
 # ── Flexible ssDNA-segment relax oracle (hinge scaffold-tether minimisation) ──
 
 def assert_flexible_segments_relaxed(

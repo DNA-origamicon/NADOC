@@ -732,7 +732,53 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       tbody.appendChild(tr)
     })
 
+    _appendConnectionVersionRows(state)
     _appendAssemblyLinkerRows(state, highlightedIds)
+  }
+
+  // ── Connection-version rows (design-mode candidate connections) ────────
+  //
+  // Every ConnectionVersion (applied + drafts) shows as a read-only row so all
+  // candidate sequences are visible/exportable in one place. The Notes column
+  // reports the version + applied state, e.g. "V2 of 3 (applied)".
+  function _appendConnectionVersionRows(state) {
+    const design = state.currentDesign
+    const versions = design?.connection_versions ?? []
+    if (!versions.length) return
+    const ohById = Object.fromEntries((design.overhangs ?? []).map(o => [o.id, o]))
+    const _label = (id) => ohById[id]?.label ?? id
+    // Per-pair totals (unordered pair) for the "of N" suffix.
+    const totals = {}
+    const _key = (v) => [v.overhang_a_id, v.overhang_b_id].sort().join('|')
+    for (const v of versions) totals[_key(v)] = (totals[_key(v)] ?? 0) + 1
+
+    for (const v of versions) {
+      const tr = document.createElement('tr')
+      tr.classList.add('sheet-linker')
+      const segs = [v.overhang_a_seq, v.bridge_seq, v.overhang_b_seq].filter(Boolean)
+      const seq = segs.join(' · ')
+      const note = `${v.name || 'V?'} of ${totals[_key(v)]}${v.applied ? ' (applied)' : ''}`
+      for (const col of COLUMNS) {
+        if (col.toggleable && hiddenCols.has(col.key)) continue
+        const td = document.createElement('td')
+        switch (col.key) {
+          case 'start': td.className = 'sheet-col-endpoint'; td.textContent = _label(v.overhang_a_id); break
+          case 'end':   td.className = 'sheet-col-endpoint'; td.textContent = _label(v.overhang_b_id); break
+          case 'sequence': {
+            const span = document.createElement('span')
+            if (seq) { span.className = 'sheet-seq'; span.textContent = seq.length > 40 ? seq.slice(0, 38) + '…' : seq; span.title = seq }
+            else     { span.className = 'sheet-seq-none'; span.textContent = '(no sequence)' }
+            td.appendChild(span)
+            break
+          }
+          case 'length': td.textContent = v.overhang_a_seq ? v.overhang_a_seq.length : ''; break
+          case 'notes':  td.textContent = note; td.title = note; break
+          // ovhg_5p / ovhg_3p / group / color — left empty for version rows
+        }
+        tr.appendChild(td)
+      }
+      tbody.appendChild(tr)
+    }
   }
 
   // ── Assembly-level linker rows ────────────────────────────────────

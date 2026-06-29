@@ -85,6 +85,24 @@ _Below: the verbatim `▶ HARNESS NOW AVAILABLE` blocks, plus the historical han
 >   (no real bridge strands) is a valid relax fixture — the geometry layer emits the `__lnk__` bridge from the connection
 >   metadata, and `canonical_topology` then sees only the two real overhang helices.
 >
+> **■ HARNESS NOW AVAILABLE — end-to-root direct binding: ConnectionVersion create + apply wrappers (TOPOLOGICAL, 2026-06-29).**
+> - `from backend.api import headless_build as hb` →
+>   `hb.create_connection_version(overhang_a_id, overhang_b_id, *, connection_type, overhang_a_seq=None, overhang_b_seq=None, bridge_length=0, bridge_seq=None, applied=False, name=None) -> Design`
+>   wraps `POST /design/connection-versions` (records a candidate, NO topology) — the new version is `design.connection_versions[-1]`.
+>   `hb.apply_connection_version(version_id) -> Design` wraps `POST /design/connection-versions/{id}/apply` (one undo).
+>   Coverage **50 → 52**. Use this pair for the DIRECT binding / end-to-root path; `connect_overhangs` is the LINKER path only.
+> - For `connection_type="end-to-root"`, apply runs `lattice.apply_end_to_root_binder`: splices A's RC binder domain (on A's
+>   helix, antiparallel) into overhang B's root staple in place of B's tip and **consumes B** (its `OverhangSpec` removed).
+>   This IS a topological edit. `make_binder_for_overhang` + this share extracted `lattice._binder_domain_for_overhang`.
+> - **Augment = `from tests.automation_harness import assert_end_to_root_binder`** (binder geometry + splice + B consumed +
+>   RC + `.nadoc` round-trip; see the log's oracle catalog).
+> - GOTCHAS: the splice needs B's staple to have a ROOT domain (B's overhang must be a TIP extending a bundle-anchored
+>   staple) — the single-domain synthetic overhang fixtures (`_seed_two_overhang_leaves`, `_seed_real`) are too minimal;
+>   build a real routed bundle + `_place_one_overhang` ×2 (see `_place_two_overhangs_on_6hb`) so B has a root AND the
+>   round-trip autodetect guard is exercised. The guard is `autodetect_overhangs` skipping `binds_overhang_id` terminals
+>   (lattice.py:3370) — load-bearing: without it save→load spawns a phantom B overhang. The oracle's clause-5 RC check
+>   only runs when a scaffold sequence exists (`assign_staple_sequences` needs one).
+>
 > **■ HARNESS NOW AVAILABLE — AF-36 end-to-end HINGE DESIGN generator + phase-paired `build_hinge` + seek-fidelity (2026-06-27, MANUALLY VALIDATED).**
 > - `build_hinge(rows_per_leaf, n_cols, *, lattice=SQUARE, length_bp=40, short_ssdna_bp=2, long_ssdna_bp=16) -> Design`
 >   (`backend/api/headless_hinge_build.py`) NOW emits **phase-paired short/long ssDNA** (was uniform). Per column it extends
