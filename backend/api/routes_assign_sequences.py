@@ -40,7 +40,9 @@ from backend.api.crud import (
     _design_response_with_geometry,
     _place_auto_crossovers,
 )
-from backend.core.models import Design, Direction, Domain, HalfCrossover, Strand, StrandType
+from backend.core.models import (
+    Design, Direction, Domain, HalfCrossover, Strand, StrandType, _backfill_dropped_junctions,
+)
 
 router = APIRouter()
 
@@ -327,8 +329,11 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
 
         # Classify the staples the user hand-routed; every auto stage below leaves
         # them intact.  Locked staples (manual crossover / forced ligation) are
-        # never touched and crossovers route around them; overhang staples are
-        # never split or nicked but may still grow into a free neighbour.
+        # never touched and crossovers route around them.  Overhang staples are kept
+        # whole through linearization + tick-nicking (preserving their overhang_id),
+        # but their duplex BODY is still woven in by crossovers — only the overhang
+        # tip/binder domains are protected from crossover placement (an overhang is
+        # embedded in the structure, not a standalone strand).
         locked_ids, overhang_ids = _locked_and_overhang_staple_ids(sequenced)
         protected_ids = locked_ids | overhang_ids
 
@@ -339,10 +344,31 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
         # none has to be pruned — which is also why full density is preserved.
         precursors, precursor_report = _linearize_staple_precursors(sequenced)
         nicked = nick_all_major_ticks(precursors, skip_strand_ids=protected_ids)
-        crossed, crossover_report = _place_auto_crossovers(
-            nicked, protected_strand_ids=protected_ids)
+        # Iterate crossover placement to a FIXPOINT. A single pass is order-dependent
+        # (it nicks staples + recomputes coverage every step but only re-ligates at the
+        # end, so progressive fragmentation falsely starves later bow sites — see the
+        # WARNING in _place_auto_crossovers).  Each re-run starts from the placed +
+        # re-ligated state and fills the gaps; locked/overhang are RE-DETECTED per pass
+        # (detection is content-based — overhang_id domains + manual-connection touches —
+        # so protection follows the staple even after ligation renames it).
+        crossed = nicked
+        total_placed = 0
+        for _ in range(12):  # safety bound; placement is monotonic so it converges fast
+            locked_i, overhang_i = _locked_and_overhang_staple_ids(crossed)
+            crossed, crossover_report = _place_auto_crossovers(
+                crossed, protected_strand_ids=locked_i, tip_only_strand_ids=overhang_i)
+            total_placed += crossover_report["placed"]
+            if crossover_report["placed"] == 0:
+                break
+        crossover_report = {**crossover_report, "placed": total_placed}
         clean = grow_staples(crossed, max_merged_length=56, locked_ids=locked_ids)
         clean = assign_staple_sequences(clean)
+        # Record a Crossover for any bare same-bp lattice-neighbour junction left in the
+        # strand graph — chiefly an overhang's body→tip attachment, which crossover
+        # placement deliberately skips (the tip is protected) but which IS a real,
+        # valid crossover and must be recorded (else the cadnano editor keeps offering
+        # "add crossover" there).  Mismatched-bp attachments stay forced ligations.
+        _backfill_dropped_junctions(clean)
         _assert_no_circular_staples(clean)
         _run.full_report = {
             "scaffold": {

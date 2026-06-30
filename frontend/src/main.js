@@ -52,7 +52,6 @@ import { initAssemblyLasso, toggleInstanceSelection } from './scene/assembly_las
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { initScaffoldModal } from './ui/scaffold_modal.js'
 import { initAutoscaffoldPicker } from './ui/autoscaffold_picker.js'
-import { initAutobreakModal } from './ui/autobreak_modal.js'
 import { initNewDesignModal } from './ui/new_design_modal.js'
 import { initSliceHighlighter } from './scene/slice_highlighter.js'
 import { vecClose } from './scene/vec_math.js'
@@ -3496,15 +3495,6 @@ async function main() {
   // ── Routing: Autoscaffold (seamed / seamless picker) ──────────────────────
   initAutoscaffoldPicker({ store, api, setRoutingCheck: _setRoutingCheck })
 
-  document.getElementById('menu-routing-auto-crossover')?.addEventListener('click', async () => {
-    if (!store.getState().currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
-    const result = await api.addAutoCrossover()
-    if (!result) {
-      showToast('Auto Crossover failed: ' + (store.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
-    } else {
-      showToast('Auto crossovers placed.')
-    }
-  })
 
   document.getElementById('menu-routing-full-autostaple')?.addEventListener('click', async () => {
     if (!store.getState().currentDesign?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
@@ -3535,8 +3525,8 @@ async function main() {
     }
   })
 
-  // ── Routing: Autobreak modal → ui/autobreak_modal.js ──────────────────────
-  initAutobreakModal({ store, api })
+  // Auto Crossover + Autobreak were retired from the Routing menu in favour of
+  // one-click Full Autostaple ('2'); autobreak_modal.js is kept unwired for revival.
 
   // ── Sequencing ────────────────────────────────────────────────────────────
 

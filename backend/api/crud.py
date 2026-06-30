@@ -3089,12 +3089,23 @@ def auto_crossover() -> dict:
     (e.g. HC pair (6,7) → canonical 6; SQ pair (7,8) → canonical 7).
     The upper bp (bow-right position) is skipped to avoid double-processing.
 
-    Crossovers are placed at full density everywhere except within 7 (HC) / 8 (SQ)
-    bp of an internal scaffold seam (a double scaffold crossover); near/far end caps
-    keep full density.  Logic lives in the shared :func:`_place_auto_crossovers` core.
+    Crossovers are placed everywhere a valid bow site survives the gates, except
+    within 7 (HC) / 8 (SQ) bp of an internal scaffold seam (a double scaffold
+    crossover).  A single pass of :func:`_place_auto_crossovers` is order-dependent and
+    starves some valid sites (see its WARNING), so this iterates it to a FIXPOINT —
+    each re-run starts from the placed + re-ligated state and fills the gaps.
     """
     design = design_state.get_or_404()
-    new_design, stats = _place_auto_crossovers(design)
+    new_design = design
+    placed_total = 0
+    sites_considered = 0
+    for _ in range(12):  # safety bound; placement is monotonic so it converges fast
+        new_design, stats = _place_auto_crossovers(new_design)
+        sites_considered = sites_considered or stats['sites_considered']
+        placed_total += stats['placed']
+        if stats['placed'] == 0:
+            break
+    stats = {'sites_considered': sites_considered, 'placed': placed_total}
 
     current, report, _entry = design_state.mutate_with_feature_log(
         op_kind='auto-crossover',
@@ -3107,20 +3118,43 @@ def auto_crossover() -> dict:
 
 
 def _place_auto_crossovers(
-    design: Design, protected_strand_ids: frozenset[str] = frozenset()
+    design: Design,
+    protected_strand_ids: frozenset[str] = frozenset(),
+    *,
+    tip_only_strand_ids: frozenset[str] = frozenset(),
 ) -> tuple[Design, dict]:
     """Place all possible staple crossovers, skipping a margin around scaffold seams.
 
     Pure core shared by the ``/design/crossovers/auto`` endpoint and full-autostaple.
-    A staple crossover is placed at every valid bow site except where it falls within
+    A staple crossover is placed at most valid bow sites except where it falls within
     ``7`` (HC) / ``8`` (SQ) bp of an internal scaffold *seam* — a double scaffold
-    crossover (see :func:`scaffold_seam_positions`).  Full crossover density is kept at
-    the near/far end caps (single u-turn crossovers are not seams).
+    crossover (see :func:`scaffold_seam_positions`).  Single u-turn end caps are not
+    seams, so they are not excluded.
+
+    WARNING — ONE call is a SINGLE order-dependent pass, NOT a full-density guarantee.
+    Each placement nicks the two staples in-place and ``sr`` (the staple-coverage
+    map) is recomputed every iteration, but fragments are only re-ligated once at the
+    very end.  So as the pass proceeds the staples become progressively fragmented,
+    and the ``_staple_arm_too_short`` / ``_coverage_hole`` gates below can FALSELY
+    reject a later bow site whose arm was shortened by an earlier nearby placement.
+    The result is order-dependent gaps: valid sites — including one half of a
+    double-crossover pair, which then renders as a lone, "wrong-bowing" arc — get
+    silently skipped.  **Both callers therefore iterate this to a fixpoint** (re-run
+    until a pass places 0): each re-run starts from the already-placed + re-ligated
+    state and fills the gaps.  Keep this function a single pass; do the looping in the
+    caller so locked/overhang protection can be re-detected on the re-ligated strands.
 
     ``protected_strand_ids`` names hand-routed staples (manual crossovers / forced
-    ligations / overhangs) that full-autostaple must not disturb: any bow site whose
-    nick would land inside one of these strands is skipped, so auto-crossovers route
-    *around* them instead of splitting them.
+    ligations) that full-autostaple must not disturb: any bow site whose nick would
+    land inside one of these strands is skipped, so auto-crossovers route *around*
+    them instead of splitting them — the whole staple is protected.
+
+    ``tip_only_strand_ids`` names overhang staples.  An overhang is *embedded* in the
+    duplex structure, not a standalone strand, so its duplex **body** must still be
+    woven in with crossovers — only its overhang TIP / binder domains (those carrying
+    ``overhang_id`` / ``binds_overhang_id``) are protected here.  This decouples
+    crossover routing from the linearization protection (where overhang staples are
+    kept whole to preserve their ``overhang_id``).
     """
     from backend.core.crossover_positions import (
         all_valid_crossover_sites,
@@ -3143,12 +3177,22 @@ def _place_auto_crossovers(
         occupied.add((xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value))
 
     # Positions covered by hand-routed strands that must not be split: a bow site
-    # whose nick lands here is skipped so crossovers route around them.
+    # whose nick lands here is skipped so crossovers route around them.  Locked
+    # staples are protected whole; overhang staples are protected only on their
+    # overhang TIP / binder domains so the duplex body stays eligible for crossovers.
     protected_pos: set[tuple[str, int, str]] = set()
     for s in design.strands:
-        if s.id not in protected_strand_ids:
+        tip_only = s.id in tip_only_strand_ids
+        # Overhang (tip-only) protection WINS over locked-full protection: an overhang
+        # staple is routinely flagged "locked" by its own overhang-attachment forced
+        # ligation, but that must not protect its duplex body — only the tip.  Genuine
+        # locked (hand-routed) non-overhang staples are still protected whole.
+        fully = s.id in protected_strand_ids and not tip_only
+        if not (fully or tip_only):
             continue
         for d in s.domains:
+            if not fully and not (d.overhang_id is not None or d.binds_overhang_id is not None):
+                continue  # overhang body domain — leave eligible so it gets woven in
             lo, hi = min(d.start_bp, d.end_bp), max(d.start_bp, d.end_bp)
             for b in range(lo, hi + 1):
                 protected_pos.add((d.helix_id, b, d.direction.value))
@@ -3212,8 +3256,11 @@ def _place_auto_crossovers(
         hb_min = hb.bp_start if hb else 0
         hb_max = (hb.bp_start + hb.length_bp - 1) if hb else 0
 
-        # Full crossover density: every valid bow site is placed (matching the
-        # standalone auto-crossover endpoint and the hand-routed convention).
+        # Intended behaviour: place every valid bow site (matching the standalone
+        # auto-crossover endpoint and the hand-routed convention).  In practice the
+        # single-pass order dependence documented in this function's WARNING means
+        # some valid sites are starved on any one pass — do NOT read this as a
+        # full-density guarantee.
         # Staple nicks are routed AT bow columns by the break stage
         # (allow_crossover_breaks=True), so no phase thinning is needed to leave
         # mid-arm room — the seam bow-phase carries the nick, the others carry
@@ -4731,6 +4778,15 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
 
     sequence_was_set = "sequence" in body.model_fields_set
     label_was_set = body.label is not None
+
+    # Auto-assign on set: _build_overhang_patch cleared the parent strand's
+    # sequence, so re-derive real bases for it AND any complement / binder domain
+    # (binds_overhang_id) that reads this overhang's reverse-complement, so the
+    # result is simulation-ready without a manual Assign Staple Sequences. No-op
+    # until the scaffold is sequenced.
+    if sequence_was_set:
+        from backend.core.sequences import reassign_if_sequenced
+        updated = reassign_if_sequenced(updated)
 
     # A sequence (or label) write changes a build-fingerprint field, so it must
     # be a real feature-log step — otherwise seeking the slider back to this
@@ -6856,6 +6912,11 @@ def create_overhang_connection(body: OverhangConnectionCreateRequest) -> dict:
         })
         nxt = assign_overhang_connection_names(nxt)
         nxt = generate_linker_topology(nxt, conn)
+        # Auto-assign so the new linker complement (binds_overhang_id) carries the
+        # real reverse-complement of its overhang for simulation — no-op until the
+        # scaffold is sequenced.
+        from backend.core.sequences import reassign_if_sequenced
+        nxt = reassign_if_sequenced(nxt)
         # The virtual __lnk__ bridge helix is invisible to clustering — orphan it
         # so the reconciler doesn't pull it into a cluster via lattice proximity.
         return nxt, MutationReport(new_helix_origins={bridge_id: None})
@@ -7066,6 +7127,29 @@ def _cv_clean_seq(s) -> Optional[str]:
     return cleaned or None
 
 
+def _cv_sequence_for_live_overhang(d: Design, overhang_id: str, seq: Optional[str]) -> Optional[str]:
+    """Return *seq* adjusted to the overhang's current backing-domain length.
+
+    Connection versions remember sequence content, but the live overhang geometry
+    can change later via free-end resize. Applying a stale version must not use
+    an old sequence length to resize the user's current geometry back.
+    """
+    cleaned = _cv_clean_seq(seq)
+    if cleaned is None:
+        return None
+    live_len = _ovhg_backing_length(d, overhang_id)
+    if live_len is None:
+        ov = next((o for o in d.overhangs if o.id == overhang_id), None)
+        live_len = sum(sd.length_bp for sd in (ov.sub_domains or [])) if ov else None
+    if live_len is None or live_len <= 0:
+        return cleaned
+    if len(cleaned) == live_len:
+        return cleaned
+    if len(cleaned) > live_len:
+        return cleaned[:live_len]
+    return cleaned + ("N" * (live_len - len(cleaned)))
+
+
 def _cv_pair_key(a: str, b: str) -> frozenset:
     return frozenset((a, b))
 
@@ -7211,6 +7295,41 @@ def _cv_sub_domain_at_attach(d: Design, ovhg_id: str, attach: str):
     return (ordered[0] if attach == "root" else ordered[-1]).id
 
 
+def _cv_create_bound_binding(d: Design, a_id: str, b_id: str, attach_a: str,
+                             attach_b: str, connection_type: str) -> Design:
+    """Materialize a DIRECT connection (root-to-root OR end-to-root) as a single
+    non-consuming `OverhangBinding`, relocated on apply so the duplex renders
+    immediately and overhang B's embedded-strand bond is left stretched.
+
+    Unified path (2026-06-30, replaces the end-to-root binder splice): A is the
+    driver (its helix HOSTS the duplex), B is the driven side (its tip domain is
+    relocated onto A's helix, antiparallel — `compute_bind_topology`/`apply_bind_topology`).
+    Neither overhang is consumed; both stay in `design.overhangs`. The bound flag is
+    set but NO cluster relax runs, so the cross-helix root↔tip bond is visibly
+    stretched until the user hits Relax.
+    """
+    from backend.core.binding_relax import apply_bind_topology, compute_bind_topology
+
+    sd_a = _cv_sub_domain_at_attach(d, a_id, attach_a)
+    sd_b = _cv_sub_domain_at_attach(d, b_id, attach_b)
+    if not (sd_a and sd_b):
+        return d  # no sub-domains → can't bind (mirrors the old direct silent-skip)
+    used = {b.name for b in d.overhang_bindings}
+    n = 1
+    while f"B{n}" in used:
+        n += 1
+    binding = OverhangBinding(
+        name=f"B{n}", sub_domain_a_id=sd_a, sub_domain_b_id=sd_b,
+        overhang_a_id=a_id, overhang_b_id=b_id,
+        driver_oh_id=a_id, driven_oh_id=b_id, connection_type=connection_type,
+        bound=True,
+    )
+    topology = compute_bind_topology(d, binding, driver_side="a")
+    binding = binding.model_copy(update={"prior_driven_topology": topology.snapshot})
+    d = d.model_copy(update={"overhang_bindings": [*d.overhang_bindings, binding]})
+    return apply_bind_topology(d, topology)
+
+
 @router.post("/design/connection-versions/{version_id}/apply", status_code=200)
 def apply_connection_version(version_id: str) -> dict:
     """Materialize a candidate version ATOMICALLY (one undo): set both overhang
@@ -7222,10 +7341,10 @@ def apply_connection_version(version_id: str) -> dict:
     This is the backend replacement for the v1 frontend-orchestrated apply — it
     handles overhang LENGTH + sequence + connection-type changes in one step.
     """
+    from backend.core.binding_relax import revert_bind_topology
     from backend.core.cluster_reconcile import MutationReport
     from backend.core.lattice import (
         generate_linker_topology, remove_linker_topology, assign_overhang_connection_names,
-        apply_end_to_root_binder,
     )
 
     design = design_state.get_or_404()
@@ -7241,11 +7360,16 @@ def apply_connection_version(version_id: str) -> dict:
     b_label = next((o.label for o in design.overhangs if o.id == b_id), b_id[:8])
 
     def _fn(d: Design):
-        # 1. Sequences + length: patch each overhang (resizes domain to len(seq)).
-        if v.overhang_a_seq:
-            d = _build_overhang_patch(d, a_id, OverhangPatchRequest(sequence=v.overhang_a_seq))[0]
-        if v.overhang_b_seq:
-            d = _build_overhang_patch(d, b_id, OverhangPatchRequest(sequence=v.overhang_b_seq))[0]
+        # 1. Sequences: patch each overhang, but preserve the live geometry
+        #    length. A version can be created, then the user can drag-resize one
+        #    of its overhangs before applying; the captured sequence length must
+        #    not snap the overhang back to its old size.
+        applied_a_seq = _cv_sequence_for_live_overhang(d, a_id, v.overhang_a_seq)
+        applied_b_seq = _cv_sequence_for_live_overhang(d, b_id, v.overhang_b_seq)
+        if applied_a_seq:
+            d = _build_overhang_patch(d, a_id, OverhangPatchRequest(sequence=applied_a_seq))[0]
+        if applied_b_seq:
+            d = _build_overhang_patch(d, b_id, OverhangPatchRequest(sequence=applied_b_seq))[0]
         # 2. Tear down EVERY materialized connection / binding that shares either
         #    overhang — an overhang can be in only one applied connection, so any
         #    prior one involving a_id or b_id (even with a third overhang) is
@@ -7259,30 +7383,22 @@ def apply_connection_version(version_id: str) -> dict:
                     d.model_copy(update={"overhang_connections":
                                          [x for x in d.overhang_connections if x.id != c.id]}),
                     c.id)
+        # Bound direct bindings relocated the driven OH's domain — revert that
+        # relocation (restore the driven helix + domain + crossovers) BEFORE dropping
+        # the binding, else the relocated domain is orphaned on the driver helix.
+        for bd in [b for b in d.overhang_bindings if _involves(b)]:
+            if bd.bound and bd.prior_driven_topology:
+                d = revert_bind_topology(d, bd.prior_driven_topology)
         d = d.model_copy(update={"overhang_bindings": [
             b for b in d.overhang_bindings if not _involves(b)]})
         # 3. Create the version's connection type.
         report = None
-        if vtype == "end-to-root":
-            # Regenerate overhang B as A's reverse-complement binder: splice the
-            # antiparallel binder domain (on A's helix, RC of A) into B's root
-            # staple in place of B's free tip. B is consumed (its OverhangSpec is
-            # removed); A becomes double-stranded. Step-1's B sequence patch is
-            # overridden by the splice (harmless). See lattice.apply_end_to_root_binder.
-            d = apply_end_to_root_binder(d, a_id, b_id)
-        elif direct:
-            sd_a = _cv_sub_domain_at_attach(d, a_id, attach_a)
-            sd_b = _cv_sub_domain_at_attach(d, b_id, attach_b)
-            if sd_a and sd_b:
-                used = {b.name for b in d.overhang_bindings}
-                n = 1
-                while f"B{n}" in used:
-                    n += 1
-                binding = OverhangBinding(
-                    name=f"B{n}", sub_domain_a_id=sd_a, sub_domain_b_id=sd_b,
-                    overhang_a_id=a_id, overhang_b_id=b_id,
-                )
-                d = d.model_copy(update={"overhang_bindings": [*d.overhang_bindings, binding]})
+        if direct:
+            # BOTH root-to-root and end-to-root: one non-consuming bound binding,
+            # relocated on apply (duplex forms now; B's embedded-strand bond left
+            # stretched). The only per-type difference is the attach pair. (Replaces
+            # the end-to-root binder splice that consumed B — removed 2026-06-30.)
+            d = _cv_create_bound_binding(d, a_id, b_id, attach_a, attach_b, vtype)
         else:
             conn = OverhangConnection(
                 overhang_a_id=a_id, overhang_a_attach=attach_a,
@@ -7295,10 +7411,19 @@ def apply_connection_version(version_id: str) -> dict:
                 d.model_copy(update={"overhang_connections": [*d.overhang_connections, conn]}))
             d = generate_linker_topology(d, conn)
             report = MutationReport(new_helix_origins={f"__lnk__{conn.id}": None})
+        # 3b. Auto-assign so the materialized connection's complement / binder
+        #     domains (binds_overhang_id) carry real reverse-complement bases for
+        #     simulation — no-op until the scaffold is sequenced.
+        from backend.core.sequences import reassign_if_sequenced
+        d = reassign_if_sequenced(d)
         # 4. Mark this version applied; clear `applied` on every version that
         #    shares either overhang (mirrors the topology teardown in step 2).
         d = d.model_copy(update={"connection_versions": [
-            ver.model_copy(update={"applied": ver.id == version_id})
+            ver.model_copy(update={
+                "applied": ver.id == version_id,
+                **({"overhang_a_seq": applied_a_seq} if ver.id == version_id and applied_a_seq else {}),
+                **({"overhang_b_seq": applied_b_seq} if ver.id == version_id and applied_b_seq else {}),
+            })
             if (ver.id == version_id or _involves(ver)) else ver
             for ver in d.connection_versions]})
         return (d, report) if report else d
@@ -7314,15 +7439,19 @@ def apply_connection_version(version_id: str) -> dict:
 
 @router.post("/design/overhang-bindings/{binding_id}/relax", status_code=200)
 def relax_overhang_binding(binding_id: str) -> dict:
-    """Settle a direct binding's geometry like a linker relax — move the two
-    overhangs' clusters together so the bound duplex chord collapses. Uses the
-    shared bond-relax core: rotate the joint if one connects the two clusters,
-    otherwise rigid-translate the driven cluster. Run while the overhangs are in
-    their separate (un-relocated) positions — the frontend un-relocates first.
+    """Settle a DIRECT binding's geometry — UNIFIED for root-to-root AND
+    end-to-root (2026-06-30).
+
+    A direct connection relocated the driven overhang's tip onto the driver's
+    helix on apply, leaving the driven tip↔root backbone bond stretched across
+    helices. This closes that bond to one backbone-bond length (~0.67 nm) by
+    swinging the driver's overhang duplex about its root (persisted as the
+    driver's OverhangSpec.rotation; the driven tip co-rotates) plus cluster
+    kinematics (rotate the connecting joint(s), else rigid-translate the driven
+    root cluster). Same rigid body → swing only. The binding stays bound — there
+    is no longer an unbind/rebind dance.
     """
-    from backend.core.bond_relax import relax_bond as core_relax_bond
-    from backend.core.binding_relax import _sub_domain_junction_anchor, _resolve_driver_side
-    from backend.core.linker_relax import _overhang_owning_cluster_id
+    from backend.core.direct_relax import relax_direct_binding
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
@@ -7330,32 +7459,10 @@ def relax_overhang_binding(binding_id: str) -> dict:
     if binding is None:
         raise HTTPException(404, detail=f"Overhang binding {binding_id!r} not found.")
 
-    cluster_a = _overhang_owning_cluster_id(design, binding.overhang_a_id)
-    cluster_b = _overhang_owning_cluster_id(design, binding.overhang_b_id)
-    if cluster_a is None or cluster_b is None:
-        raise HTTPException(422, detail="Both overhangs must be in clusters to relax a binding.")
-    if cluster_a == cluster_b:
-        raise HTTPException(422, detail="Binding spans a single cluster — nothing to relax.")
-
-    geometry = _geometry_for_design(design)
-    # Driver = the side whose cluster stays; the driven side moves (0-DOF case).
-    driver_side = _resolve_driver_side(design, binding, cluster_a, cluster_b)
-    side_to_move = "b" if driver_side == "a" else "a"
-
-    # Plain binding relax: close the bound-junction chord (no overhang aim).
-    anchor_a, _, _ = _sub_domain_junction_anchor(design, binding.sub_domain_a_id, geometry)
-    anchor_b, _, _ = _sub_domain_junction_anchor(design, binding.sub_domain_b_id, geometry)
-    if anchor_a is None or anchor_b is None:
-        raise HTTPException(422, detail="Could not resolve binding anchors from geometry.")
-    target_nm = _BOND_TYPE_DEFAULT_TARGET_NM.get("crossover", 0.67)
+    driver_oh_id = binding.driver_oh_id or binding.overhang_a_id
+    driven_oh_id = binding.driven_oh_id or binding.overhang_b_id
     try:
-        updated, _info = core_relax_bond(
-            design,
-            anchor_a=anchor_a, anchor_b=anchor_b,
-            cluster_a_id=cluster_a, cluster_b_id=cluster_b,
-            target_nm=target_nm, side_to_move=side_to_move,
-            joint_ids=None, source_tag="bond-relax:binding",
-        )
+        updated, info = relax_direct_binding(design, driver_oh_id, driven_oh_id)
     except HTTPException:
         raise
     except Exception as exc:
@@ -7363,7 +7470,9 @@ def relax_overhang_binding(binding_id: str) -> dict:
 
     design_state.set_design(updated)
     report = validate_design(updated)
-    return _design_response_with_geometry(updated, report)
+    payload = _design_response_with_geometry(updated, report)
+    payload["relax_info"] = info
+    return payload
 
 
 @router.patch("/design/overhang-connections/{conn_id}/display-pose", status_code=200)

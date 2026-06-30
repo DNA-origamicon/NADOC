@@ -394,7 +394,10 @@ def _run_full_autostaple_pipeline(design):
     protected = locked | overhang
     prec, _ = _linearize_staple_precursors(seq)
     nicked = nick_all_major_ticks(prec, skip_strand_ids=protected)
-    crossed, _ = _place_auto_crossovers(nicked, protected_strand_ids=protected)
+    # Mirrors the real full-autostaple call: overhang staples get TIP-only protection
+    # (their duplex body is woven in), locked staples are protected whole.
+    crossed, _ = _place_auto_crossovers(
+        nicked, protected_strand_ids=locked, tip_only_strand_ids=overhang)
     clean = grow_staples(crossed, max_merged_length=56, locked_ids=locked)
     return assign_staple_sequences(clean), locked, overhang
 
@@ -413,8 +416,10 @@ def _manual_xo_key(xo):
 
 def test_full_autostaple_preserves_manual_connections_and_overhangs():
     """The 3x6 hinge has 30 user crossovers, 8 forced ligations, and 2 overhang
-    staples.  Full-autostaple must re-route the free staples without disturbing any
-    of them, and leave a valid design."""
+    staples.  Full-autostaple must re-route the free staples and weave the overhang
+    BODIES into the structure (an overhang is embedded, not standalone) — without
+    disturbing the manual crossovers / forced ligations, and while preserving each
+    overhang's tip (its ``overhang_id``).  The result must validate."""
     from pathlib import Path
 
     import pytest
@@ -439,14 +444,144 @@ def test_full_autostaple_preserves_manual_connections_and_overhangs():
     assert manual_before <= manual_after, "full-autostaple dropped a manual crossover"
     assert len(clean.forced_ligations or []) == forced_before, "a forced ligation was lost"
 
-    # The 2 overhang staples are preserved intact (same ids, never split).
+    # The 2 overhang staples are detected on input; their duplex bodies are now woven
+    # in (so the original strand id may be split/merged away), but every overhang TIP
+    # survives — pinned by overhang_id, not strand id.
     assert overhang == {"stpl_XY_2_0", "stpl_XY_5_0"}
-    by_id = {s.id: s for s in clean.strands}
-    for sid in overhang:
-        assert sid in by_id, f"overhang staple {sid} vanished"
+    oh_ids_before = {dm.overhang_id for s in d.strands for dm in s.domains if dm.overhang_id}
+    oh_ids_after = {dm.overhang_id for s in clean.strands for dm in s.domains if dm.overhang_id}
+    assert oh_ids_before and oh_ids_before <= oh_ids_after, "an overhang tip (overhang_id) was lost"
 
     report = validate_design(clean)
     assert report.passed, [r.message for r in report.results if not r.ok]
+
+
+def _minimal_overhang_design():
+    """2 main helices (crossover-neighbours) + an overhang helix.  ``ohstap`` is an
+    overhang staple: a duplex BODY on h0 (REVERSE) spanning many crossover sites plus a
+    free tip on the overhang helix (``overhang_id``).  ``nstap`` is a normal staple on
+    h1.  Used to exercise overhang-body weaving + the crossover-placement fixpoint."""
+    from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.models import Design, Domain, Helix, Strand, Vec3
+
+    L = 48
+    helices = [
+        Helix(id="h0", grid_pos=(0, 0), axis_start=Vec3(x=0, y=0, z=0),
+              axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP), length_bp=L, bp_start=0),
+        Helix(id="h1", grid_pos=(1, 0), axis_start=Vec3(x=2.5, y=0, z=0),
+              axis_end=Vec3(x=2.5, y=0, z=L * BDNA_RISE_PER_BP), length_bp=L, bp_start=0),
+        Helix(id="hoh", grid_pos=(0, 1), axis_start=Vec3(x=0, y=2.5, z=0),
+              axis_end=Vec3(x=0, y=2.5, z=12 * BDNA_RISE_PER_BP), length_bp=12, bp_start=0),
+    ]
+    ohstap = Strand(id="ohstap", strand_type=StrandType.STAPLE, domains=[
+        Domain(helix_id="h0", start_bp=L - 1, end_bp=0, direction=Direction.REVERSE),
+        Domain(helix_id="hoh", start_bp=0, end_bp=11, direction=Direction.FORWARD, overhang_id="oh1"),
+    ])
+    nstap = Strand(id="nstap", strand_type=StrandType.STAPLE, domains=[
+        Domain(helix_id="h1", start_bp=0, end_bp=L - 1, direction=Direction.FORWARD),
+    ])
+    scaf = Strand(id="scaf", strand_type=StrandType.SCAFFOLD, domains=[
+        Domain(helix_id="h0", start_bp=0, end_bp=L - 1, direction=Direction.FORWARD),
+    ])
+    return Design(helices=helices, strands=[scaf, ohstap, nstap], lattice_type=LatticeType.SQUARE)
+
+
+def _h0_body_xovers(res):
+    return sum(1 for x in res.crossovers for h in (x.half_a, x.half_b)
+               if h.helix_id == "h0" and h.strand.value == "REVERSE")
+
+
+def test_overhang_staple_body_woven_tip_protected():
+    """An overhang is embedded in the duplex structure, not a standalone strand: its
+    BODY must be woven in with crossovers while only its tip (``overhang_id``) is
+    protected — even when the overhang staple is ALSO flagged 'locked' (it routinely
+    is, via its own overhang-attachment forced ligation).  Pins the
+    tip-only-precedence-over-locked decoupling in ``_place_auto_crossovers``.
+    """
+    from backend.api.crud import _place_auto_crossovers
+
+    # OLD whole-staple protection (overhang in protected_strand_ids only) → body NOT woven.
+    full_only, _ = _place_auto_crossovers(
+        _minimal_overhang_design(), protected_strand_ids=frozenset({"ohstap"}))
+    assert _h0_body_xovers(full_only) == 0
+
+    # NEW: overhang in BOTH sets (locked + overhang). Tip-only WINS → the body IS woven.
+    woven, _ = _place_auto_crossovers(
+        _minimal_overhang_design(),
+        protected_strand_ids=frozenset({"ohstap"}), tip_only_strand_ids=frozenset({"ohstap"}))
+    assert _h0_body_xovers(woven) > 0, "overhang body was not woven in"
+    # The free tip (on hoh) is never crossed.
+    assert not any(h.helix_id == "hoh" for x in woven.crossovers for h in (x.half_a, x.half_b))
+
+
+def test_overhang_crossover_placement_iterates_to_fixpoint():
+    """A single ``_place_auto_crossovers`` pass is order-dependent: weaving the overhang
+    body fragments it and starves adjacent bow sites, so one pass under-fills.  Callers
+    iterate to a FIXPOINT (re-run until a pass places 0) to fill the gaps.  Pins BOTH
+    that the single pass really starves (a later pass adds more) AND that iteration
+    converges — the regression guard for the starvation fix."""
+    from backend.api.crud import _place_auto_crossovers
+
+    kw = dict(protected_strand_ids=frozenset({"ohstap"}), tip_only_strand_ids=frozenset({"ohstap"}))
+    cur = _minimal_overhang_design()
+    placed = []
+    for _ in range(12):
+        cur, s = _place_auto_crossovers(cur, **kw)
+        placed.append(s["placed"])
+        if s["placed"] == 0:
+            break
+    assert placed[0] > 0
+    assert sum(placed[1:]) > 0, "single pass already full — starvation not reproduced (vacuous)"
+    assert placed[-1] == 0, "crossover placement did not converge to a fixpoint"
+
+
+def test_full_autostaple_records_overhang_attachment_crossover():
+    """A driver overhang's body→tip attachment that is same-bp + lattice-neighbour is a
+    REAL crossover, but crossover placement skips it (the tip is protected).  Full-autostaple
+    must still RECORD it (the end-of-pipeline junction backfill), else the cadnano editor
+    keeps offering 'add crossover' there over an un-recognised strand backbone.  Pins that
+    no same-bp-neighbour overhang attachment is left bare."""
+    from backend.core.crossover_positions import crossover_neighbor
+    from tests.conftest import extrude_valid_overhang
+
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle(_SQ6_CELLS, 96, lattice=LatticeType.SQUARE, name="t")
+        hb.auto_scaffold()
+        hb.full_autostaple()
+        out, _oh = extrude_valid_overhang(design_state.get_or_404(), length_bp=8)
+        design_state.set_design(out)
+        hb.full_autostaple()
+        res = design_state.get_or_404().model_copy(deep=True)
+
+    gp = {h.id: tuple(h.grid_pos) for h in res.helices if h.grid_pos is not None}
+
+    def is_neighbor(ha, hb_, idx):
+        a, b = gp.get(ha), gp.get(hb_)
+        if not a or not b:
+            return False
+        return any(
+            crossover_neighbor(res.lattice_type, a[0], a[1], idx, is_scaffold=sc) == b
+            or crossover_neighbor(res.lattice_type, b[0], b[1], idx, is_scaffold=sc) == a
+            for sc in (False, True))
+
+    xo_junctions = {
+        frozenset({(x.half_a.helix_id, x.half_a.index), (x.half_b.helix_id, x.half_b.index)})
+        for x in res.crossovers
+    }
+
+    checked = 0
+    for s in res.strands:
+        for i in range(len(s.domains) - 1):
+            a, b = s.domains[i], s.domains[i + 1]
+            if a.helix_id == b.helix_id or not (a.overhang_id or b.overhang_id):
+                continue
+            if a.end_bp == b.start_bp and is_neighbor(a.helix_id, b.helix_id, a.end_bp):
+                key = frozenset({(a.helix_id, a.end_bp), (b.helix_id, b.start_bp)})
+                assert key in xo_junctions, (
+                    f"overhang attachment {a.helix_id}@{a.end_bp}-{b.helix_id}@{b.start_bp} "
+                    "left bare (no crossover record)")
+                checked += 1
+    assert checked > 0, "no same-bp overhang attachment present — test is vacuous"
 
 
 def test_locked_detection_flags_strand_through_a_manual_staple_crossover():

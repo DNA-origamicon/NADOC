@@ -529,6 +529,21 @@ class OverhangBinding(BaseModel):
     #   "crossovers":       [<Crossover.to_dict()>, ...]  # ones that referenced the driven helix
     # }
     prior_driven_topology: Optional[Dict[str, Any]] = None
+    # Unified direct-connection model (2026-06-30): a direct OverhangBinding is now
+    # the single mechanism for BOTH root-to-root and end-to-root (the end-to-root
+    # splice was removed). These persist the apply-time driver/driven decision and
+    # the originating connection-type so co-rotation, relax, and revert read a STABLE
+    # driver/driven instead of re-deriving it from the joint heuristic
+    # (`_resolve_driver_side`), which can flip if joints change post-apply.
+    #   * driver_oh_id  — the overhang whose helix HOSTS the duplex (stays put; its
+    #     OverhangSpec.rotation carries the relax swing; the driven rides along).
+    #   * driven_oh_id  — the overhang whose tip domain was relocated onto the driver
+    #     helix (its embedded-strand bond is the one stretched on apply / relaxed).
+    #   * connection_type — the CT variant id (e.g. "root-to-root" / "end-to-root").
+    # None on legacy bindings created before this field existed.
+    driver_oh_id: Optional[str] = None
+    driven_oh_id: Optional[str] = None
+    connection_type: Optional[str] = None
 
     @model_validator(mode='after')
     def _check_self_consistency(self) -> 'OverhangBinding':
@@ -1719,53 +1734,76 @@ def _reclassify_invalid_crossovers(design: 'Design') -> None:
         design.forced_ligations = list(design.forced_ligations) + new_fls
 
 
-def _backfill_dropped_forced_ligations(design: 'Design') -> None:
-    """Add ForcedLigation records for cross-helix domain transitions that
-    aren't covered by any existing Crossover or ForcedLigation.
+def _backfill_dropped_junctions(design: 'Design') -> None:
+    """Add Crossover / ForcedLigation records for cross-helix domain transitions
+    in the strand graph that no existing record covers.
 
-    Older importers silently dropped scadnano-style loopouts (consecutive
-    cross-helix domains where ``d0.end_bp != d1.start_bp``) instead of
-    classifying them as ForcedLigations. This pass heals affected
-    .nadoc files on load by emitting the missing FL records. Existing
-    crossovers and forced ligations are preserved verbatim.
+    Older importers silently dropped scadnano-style loopouts, and an autostaple
+    pass can ligate a junction without writing its crossover record — either way a
+    cross-helix domain transition ends up with no Crossover or ForcedLigation
+    annotating it. This pass heals those on load, classifying each *uncovered*
+    junction with the SAME rule as :func:`extract_crossovers_from_strands`: a
+    same-bp transition between valid lattice neighbours becomes a **Crossover**;
+    everything else (mismatched-bp loopouts, non-neighbour junctions) becomes a
+    **ForcedLigation**.
+
+    Because it reuses that classifier, a crossover-valid junction can never be
+    minted as a forced ligation here (the previous version emitted a ForcedLigation
+    for *every* uncovered transition, which is how a same-bp neighbour crossover got
+    recorded — and rendered — as a forced ligation). Junctions already annotated by
+    an existing Crossover or ForcedLigation are left untouched: no duplicates, and
+    no reclassification of records already stored in the file.
 
     Mutates *design* in place.
     """
-    covered: set[tuple[str, int, str, str, int, str]] = set()
+    from backend.core.crossover_positions import extract_crossovers_from_strands  # noqa: PLC0415
+
+    # Junctions (unordered {helix,bp} endpoint pair) already annotated by a record.
+    def _junction(a_hid: str, a_bp: int, b_hid: str, b_bp: int) -> frozenset:
+        return frozenset({(a_hid, a_bp), (b_hid, b_bp)})
+
+    covered_xo: set[tuple] = set()
+    covered_junctions: set[frozenset] = set()
     for xo in design.crossovers:
         a = (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value)
         b = (xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value)
-        covered.add(a + b)
-        covered.add(b + a)
+        covered_xo.add(a + b)
+        covered_xo.add(b + a)
+        covered_junctions.add(_junction(xo.half_a.helix_id, xo.half_a.index, xo.half_b.helix_id, xo.half_b.index))
+    covered_fl: set[tuple] = set()
     for fl in design.forced_ligations:
-        covered.add((
+        covered_fl.add((
             fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction.value,
             fl.five_prime_helix_id,  fl.five_prime_bp,  fl.five_prime_direction.value,
         ))
+        covered_junctions.add(_junction(fl.three_prime_helix_id, fl.three_prime_bp, fl.five_prime_helix_id, fl.five_prime_bp))
+
+    xos, fls = extract_crossovers_from_strands(design.strands, design.helices, design.lattice_type)
+
+    new_xos: list[Crossover] = []
+    for xo in xos:
+        a = (xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand.value)
+        b = (xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand.value)
+        junc = _junction(xo.half_a.helix_id, xo.half_a.index, xo.half_b.helix_id, xo.half_b.index)
+        # Skip if a record (crossover OR a stale forced ligation) already sits here —
+        # never duplicate, and never reclassify a record already stored in the file.
+        if a + b in covered_xo or junc in covered_junctions:
+            continue
+        new_xos.append(xo)
 
     new_fls: list[ForcedLigation] = []
-    seen: set[tuple] = set()
-    for strand in design.strands:
-        for i in range(len(strand.domains) - 1):
-            d0 = strand.domains[i]
-            d1 = strand.domains[i + 1]
-            if d0.helix_id == d1.helix_id:
-                continue
-            key = (
-                d0.helix_id, d0.end_bp, d0.direction.value,
-                d1.helix_id, d1.start_bp, d1.direction.value,
-            )
-            if key in covered or key in seen:
-                continue
-            seen.add(key)
-            new_fls.append(ForcedLigation(
-                three_prime_helix_id=d0.helix_id,
-                three_prime_bp=d0.end_bp,
-                three_prime_direction=d0.direction,
-                five_prime_helix_id=d1.helix_id,
-                five_prime_bp=d1.start_bp,
-                five_prime_direction=d1.direction,
-            ))
+    for fl in fls:
+        key = (
+            fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction.value,
+            fl.five_prime_helix_id,  fl.five_prime_bp,  fl.five_prime_direction.value,
+        )
+        junc = _junction(fl.three_prime_helix_id, fl.three_prime_bp, fl.five_prime_helix_id, fl.five_prime_bp)
+        if key in covered_fl or junc in covered_junctions:
+            continue
+        new_fls.append(fl)
+
+    if new_xos:
+        design.crossovers = list(design.crossovers) + new_xos
     if new_fls:
         design.forced_ligations = list(design.forced_ligations) + new_fls
 
@@ -2251,11 +2289,11 @@ class Design(BaseModel):
         # transitions weren't between adjacent lattice cells). They now
         # become ForcedLigations.
         _reclassify_invalid_crossovers(design)
-        # Backfill ForcedLigations for cross-helix transitions that older
-        # imports silently dropped (mismatched-bp loopouts, etc.). Existing
-        # Crossover and ForcedLigation records are preserved; only un-covered
-        # transitions are added.
-        _backfill_dropped_forced_ligations(design)
+        # Backfill records for cross-helix transitions that older imports or an
+        # incomplete autostaple left un-annotated, classifying each (same-bp
+        # neighbour → Crossover, else → ForcedLigation) so a crossover-valid
+        # junction is never recorded as a forced ligation. Existing records kept.
+        _backfill_dropped_junctions(design)
         return design
 
 

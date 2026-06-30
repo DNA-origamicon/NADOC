@@ -95,8 +95,7 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     // Number-hotkey targets + mode indicator.
     mountIds({
       'menu-routing-scaffold-ends': 'button',
-      'menu-routing-auto-crossover': 'button',
-      'menu-routing-autobreak': 'button',
+      'menu-routing-full-autostaple': 'button',
       'menu-seq-update-routing': 'button',
       'menu-seq-assign-scaffold': 'button',
       'menu-seq-assign-staples': 'button',
@@ -167,10 +166,11 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
   it('number hotkeys click their (enabled) menu target; disabled targets are ignored', async () => {
     const d = makeDeps()
     initKeyboardShortcuts(d)
-    const btn = document.getElementById('menu-routing-autobreak')
+    // '2' = Full Autostaple (Auto Crossover [old 2] + Autobreak [old 3] are retired).
+    const btn = document.getElementById('menu-routing-full-autostaple')
     const click = vi.fn()
     btn.click = click
-    await press('3')
+    await press('2')
     expect(click).toHaveBeenCalledTimes(1)
 
     // Disabled → no click.

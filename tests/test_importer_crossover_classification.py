@@ -197,6 +197,42 @@ def test_from_json_backfills_dropped_forced_ligations():
     assert (fl.five_prime_helix_id,  fl.five_prime_bp)  == ("h2", 25)
 
 
+def test_from_json_backfills_bare_neighbour_junction_as_crossover():
+    """A same-bp lattice-neighbour junction left with NO record (an autostaple
+    pass ligated the strand but never wrote the crossover record) must be
+    backfilled as a **Crossover**, never a ForcedLigation.
+
+    Regression: the old backfill emitted a ForcedLigation for *every* uncovered
+    transition, so this junction rendered as a (wrong-bowing, un-recognised)
+    forced ligation that also blocked autostaple from ever re-placing it.
+    """
+    from backend.core.models import Design
+
+    h0 = _helix("h0", grid_pos=(0, 0))
+    h1 = _helix("h1", grid_pos=(1, 0))   # lattice-adjacent
+    # Strand crosses h0→h1 at the SAME bp (7) — a real DX crossover junction —
+    # but the file stores NO crossover and NO forced ligation for it.
+    s = Strand(
+        id="s",
+        strand_type=StrandType.STAPLE,
+        domains=[
+            Domain(helix_id="h0", start_bp=0, end_bp=7,  direction=Direction.FORWARD),
+            Domain(helix_id="h1", start_bp=7, end_bp=20, direction=Direction.REVERSE),
+        ],
+    )
+    d = Design(helices=[h0, h1], strands=[s], lattice_type=LatticeType.SQUARE)
+    reloaded = Design.from_json(d.to_json())
+    # Healed as a crossover, NOT a forced ligation.
+    assert len(reloaded.forced_ligations) == 0
+    assert len(reloaded.crossovers) == 1
+    xo = reloaded.crossovers[0]
+    assert {(xo.half_a.helix_id, xo.half_a.index), (xo.half_b.helix_id, xo.half_b.index)} == {("h0", 7), ("h1", 7)}
+    # Idempotent: a second load adds nothing.
+    twice = Design.from_json(reloaded.to_json())
+    assert len(twice.crossovers) == 1
+    assert len(twice.forced_ligations) == 0
+
+
 def test_from_json_backfill_idempotent():
     """Loading twice (e.g. save → load → save → load) produces no duplicate
     FLs because the second pass sees the previously-backfilled records as

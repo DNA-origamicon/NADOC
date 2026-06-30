@@ -27,7 +27,7 @@ import {
   // menu bar operations
   createDesign, importDesign,
   exportDesign, exportCadnano, exportSequenceCsv,
-  addAutoCrossover, addAutoBreak, addFullAutostaple, routeForPolymerization,
+  addFullAutostaple, routeForPolymerization,
   autoScaffoldSeamed, autoScaffoldSeamless,
   assignScaffoldSequence, syncScaffoldSequenceResponse, assignStapleSequences,
   applyAllDeformations,
@@ -1030,12 +1030,8 @@ document.getElementById('menu-edit-redo')?.addEventListener('click', () => redoD
   modal?.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('visible') })
 })()
 
-document.getElementById('menu-routing-auto-crossover')?.addEventListener('click', async () => {
-  if (!editorStore.getState().design?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
-  const result = await addAutoCrossover()
-  if (!result) showToast('Auto Crossover failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
-  else showToast('Auto crossovers placed.')
-})
+// Auto Crossover + Autobreak retired from the Routing menu in favour of one-click
+// Full Autostaple ('2'). The backend endpoints + autobreak modal markup remain for revival.
 
 document.getElementById('menu-routing-full-autostaple')?.addEventListener('click', async () => {
   if (!editorStore.getState().design?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
@@ -1063,37 +1059,13 @@ document.getElementById('menu-routing-polymerization')?.addEventListener('click'
   else showToast(`Routed for polymerization: ${nBridges} bridging staple(s) across the seam.`)
 })
 
-;(() => {
-  const modal = document.getElementById('autobreak-modal')
-  const runBtn = document.getElementById('ab-run')
-  const cancelBtn = document.getElementById('ab-cancel')
-
-  document.getElementById('menu-routing-autobreak')?.addEventListener('click', () => {
-    if (!editorStore.getState().design?.helices?.length) { showToast('No design loaded.', { severity: 'error' }); return }
-    modal.classList.add('visible')
-  })
-
-  async function _runAutoBreak() {
-    modal.classList.remove('visible')
-    _showProgress('Autobreak', 'Running nick planner…')
-    const result = await addAutoBreak({})
-    _hideProgress()
-    if (!result) showToast('Autobreak failed: ' + (editorStore.getState().lastError?.message ?? 'unknown error'), { severity: 'error' })
-    else showToast('Autobreak complete.')
-  }
-
-  runBtn?.addEventListener('click', _runAutoBreak)
-  cancelBtn?.addEventListener('click', () => modal.classList.remove('visible'))
-  modal?.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('visible') })
-})()
-
 document.getElementById('menu-seq-update-routing')?.addEventListener('click', async () => {
   const design = editorStore.getState().design
   if (!design) { showToast('No design loaded.', { severity: 'error' }); return }
   const hasCrossovers = design.strands?.some(s =>
     s.domains?.some((d, i) => i > 0 && d.helix_id !== s.domains[i - 1].helix_id)
   )
-  if (!hasCrossovers) { showToast('Place crossovers first (Auto Crossover) before adding loops/skips.', { severity: 'error' }); return }
+  if (!hasCrossovers) { showToast('Place crossovers first (Full Autostaple) before adding loops/skips.', { severity: 'error' }); return }
   _showProgress('Adding loops/skips…')
   const result = await applyAllDeformations()
   _hideProgress()
