@@ -16,6 +16,7 @@
  */
 
 import * as THREE from 'three'
+import { assembleOverhangSequence } from './design_queries.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -217,11 +218,14 @@ export function initSequenceOverlay(scene, storeRef) {
 
     // ── Overhang sequences — read directly from design.overhangs ─────────────
     // This works even when assign_staple_sequences hasn't been called yet,
-    // because OverhangSpec.sequence is set as soon as the user assigns one.
-    // Nucs already assigned via strand.sequence are not overwritten.
+    // because the overhang's bases are set as soon as the user assigns one.
+    // Use the ASSEMBLED sequence (sub-domain overrides → parent → N) so a split /
+    // per-sub-domain-sequenced overhang still shows its real bases. Nucs already
+    // assigned via strand.sequence are not overwritten.
     const overhangSeqMap = new Map()   // overhang_id → sequence string
     for (const ovhg of (design.overhangs ?? [])) {
-      if (ovhg.sequence) overhangSeqMap.set(ovhg.id, ovhg.sequence)
+      const asm = assembleOverhangSequence(ovhg)
+      if (asm && /[ACGT]/i.test(asm)) overhangSeqMap.set(ovhg.id, asm)
     }
     if (overhangSeqMap.size > 0) {
       // Group geometry nucs by overhang_id

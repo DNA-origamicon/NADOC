@@ -1,5 +1,46 @@
 import { describe, it, expect } from 'vitest'
-import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, ovhgBinderDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead } from './design_queries.js'
+import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, ovhgBinderDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead, assembleOverhangSequence, overhangHasSequenceOverride } from './design_queries.js'
+
+describe('assembleOverhangSequence', () => {
+  it('uses the top-level sequence when there are no overrides', () => {
+    const oh = { sequence: 'acgt', sub_domains: [{ start_bp_offset: 0, length_bp: 4 }] }
+    expect(assembleOverhangSequence(oh)).toBe('ACGT')
+  })
+  it('pads with N to the domain length', () => {
+    const oh = { sequence: 'AC', sub_domains: [{ start_bp_offset: 0, length_bp: 4 }] }
+    expect(assembleOverhangSequence(oh, 4)).toBe('ACNN')
+  })
+  it('reads split sub-domain overrides (the gap this fixes)', () => {
+    const oh = { sequence: null, sub_domains: [
+      { start_bp_offset: 0, length_bp: 2, sequence_override: 'gg' },
+      { start_bp_offset: 2, length_bp: 2, sequence_override: 'TT' },
+    ] }
+    expect(assembleOverhangSequence(oh)).toBe('GGTT')
+  })
+  it('mixes override + parent slice per sub-domain', () => {
+    const oh = { sequence: 'AAAACCCC', sub_domains: [
+      { start_bp_offset: 0, length_bp: 4 },                       // parent slice AAAA
+      { start_bp_offset: 4, length_bp: 4, sequence_override: 'gggg' },
+    ] }
+    expect(assembleOverhangSequence(oh)).toBe('AAAAGGGG')
+  })
+  it('all-N when neither parent nor overrides set', () => {
+    const oh = { sequence: null, sub_domains: [{ start_bp_offset: 0, length_bp: 3 }] }
+    expect(assembleOverhangSequence(oh)).toBe('NNN')
+  })
+  it('returns empty string for a null overhang', () => {
+    expect(assembleOverhangSequence(null)).toBe('')
+  })
+})
+
+describe('overhangHasSequenceOverride', () => {
+  it('true when any sub-domain has an override', () => {
+    expect(overhangHasSequenceOverride({ sub_domains: [{ sequence_override: 'A' }] })).toBe(true)
+  })
+  it('false for a whole-overhang (no override)', () => {
+    expect(overhangHasSequenceOverride({ sequence: 'ACGT', sub_domains: [{ length_bp: 4 }] })).toBe(false)
+  })
+})
 
 describe('surfaceSegments', () => {
   it('collects segments from surface-rep overrides only', () => {

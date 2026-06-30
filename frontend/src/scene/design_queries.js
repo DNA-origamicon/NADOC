@@ -106,3 +106,50 @@ export function connIdForBead(nuc, design) {
   }
   return null
 }
+
+/**
+ * Pure JS mirror of backend `sequences._assemble_overhang_5to3`: assemble an
+ * overhang's bases 5'→3' from its sub-domains (sequence_override → parent
+ * `ovhg.sequence` slice → 'N'), padded/trimmed to `domainLen`. When `domainLen`
+ * is omitted it defaults to the overhang's nominal length (Σ sub-domain length_bp,
+ * else parent-sequence length). Used so the sidebar + 3D sequence overlay show the
+ * REAL overhang sequence even when it lives in split sub-domain overrides rather
+ * than the top-level field.
+ *
+ * @param {object} ovhg — OverhangSpec ({ sequence, sub_domains })
+ * @param {number} [domainLen]
+ * @returns {string} assembled bases (length === domainLen), '' for a null overhang
+ */
+export function assembleOverhangSequence(ovhg, domainLen) {
+  if (!ovhg) return ''
+  const parent = ovhg.sequence ? String(ovhg.sequence).toUpperCase() : null
+  const subs = [...(ovhg.sub_domains ?? [])].sort((a, b) => (a.start_bp_offset ?? 0) - (b.start_bp_offset ?? 0))
+  const nominal = subs.length
+    ? subs.reduce((n, sd) => n + (sd.length_bp ?? 0), 0)
+    : (parent?.length ?? 0)
+  const len = domainLen ?? nominal
+  const slot = (s, n) => {
+    s = (s ?? '').toUpperCase()
+    return (s.length >= n ? s.slice(0, n) : s + 'N'.repeat(n - s.length))
+  }
+  let out
+  if (!subs.length) {
+    out = parent !== null ? slot(parent, len) : 'N'.repeat(len)
+  } else {
+    out = ''
+    for (const sd of subs) {
+      const n = sd.length_bp ?? 0
+      if (sd.sequence_override) out += slot(sd.sequence_override, n)
+      else if (parent !== null) out += slot(parent.slice(sd.start_bp_offset ?? 0, (sd.start_bp_offset ?? 0) + n), n)
+      else out += 'N'.repeat(n)
+    }
+  }
+  return out.length >= len ? out.slice(0, len) : out + 'N'.repeat(len - out.length)
+}
+
+/** True if any of the overhang's sub-domains carries a per-sub-domain
+ *  `sequence_override` — i.e. its sequence is authored per sub-domain (via the
+ *  Domain Designer), so the sidebar's single Sequence field is read-only. */
+export function overhangHasSequenceOverride(ovhg) {
+  return (ovhg?.sub_domains ?? []).some(sd => !!sd.sequence_override)
+}

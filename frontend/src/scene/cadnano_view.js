@@ -16,7 +16,8 @@
  *   - orthographic camera (pan + zoom only, no rotation)
  *   - alternating translucent row-band background planes
  *   - slice plane shown in YZ read-only mode as a BP position indicator
- *   - disables sequences overlay on entry, restores previous state on exit
+ *   - the base-sequence overlay is kept (remapped to flat positions), so "show
+ *     base sequences" works in the 2D view too
  *
  * Usage:
  *   const cadnanoView = initCadnanoView(sceneCtx, designRenderer,
@@ -52,7 +53,6 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
   let _bandGroup     = null
 
   // Saved state restored on exit
-  let _savedShowSeq         = null
   let _savedSliceWasVisible = false
   let _savedSlicePlane      = 'XY'
   let _savedSliceOffset     = 0
@@ -393,18 +393,14 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
 
   // ── Side-effect helpers ──────────────────────────────────────────────────────
 
-  function _enableSideEffects() {
-    const state = store.getState()
-    _savedShowSeq = state.showSequences
-    if (state.showSequences) store.setState({ showSequences: false })
-  }
-
-  function _restoreSideEffects() {
-    if (_savedShowSeq !== null) {
-      store.setState({ showSequences: _savedShowSeq })
-      _savedShowSeq = null
-    }
-  }
+  // The base-sequence overlay is KEPT in cadnano mode (the user's "show base
+  // sequences" toggle works in the flat 2D view too): reapplyPositions /
+  // the entry+exit animations remap its instance matrices to the cadnano flat
+  // bead positions unconditionally, and its letter quads face +X (the ortho
+  // camera's view axis), so the labels read correctly. Previously this force-hid
+  // the overlay on entry; that left cadnano with no way to show sequences.
+  function _enableSideEffects() {}
+  function _restoreSideEffects() {}
 
   // ── Public API ───────────────────────────────────────────────────────────────
 

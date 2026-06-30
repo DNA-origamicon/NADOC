@@ -514,6 +514,27 @@ def assign_staple_sequences(design: Design) -> Design:
     return design.model_copy(update={"strands": new_strands})
 
 
+def reassign_if_sequenced(design: Design) -> Design:
+    """Re-run :func:`assign_staple_sequences` IFF the scaffold already carries a
+    sequence — so staples, overhangs, linker complements and overhang binders
+    added/edited by a connection or sequence op propagate to **real bases**
+    automatically (no manual "Assign Staple Sequences" step before simulation).
+
+    No-op (returns ``design`` unchanged) when the scaffold is unsequenced — there
+    is nothing to pair staples against yet — or when assignment raises. This is
+    the auto-assign-on-connect/set hook: a complement domain
+    (``binds_overhang_id``) only becomes the reverse-complement of its overhang
+    once this runs, and the oxDNA / atomistic exporters read ``strand.sequence``.
+    """
+    scaffold = _active_scaffold(design)
+    if scaffold is None or not scaffold.sequence:
+        return design
+    try:
+        return assign_staple_sequences(design)
+    except Exception:
+        return design
+
+
 # ── Periodic-cell consensus sequence assignment ────────────────────────────────
 
 

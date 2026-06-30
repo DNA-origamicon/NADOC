@@ -22,6 +22,7 @@
  * @returns {{ rebuild: Function }}
  */
 import { showToast } from './toast.js'
+import { assembleOverhangSequence, overhangHasSequenceOverride } from '../scene/design_queries.js'
 
 /**
  * Pure: overhangs whose backing strand is still live (or that have no strand).
@@ -165,11 +166,20 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
       nameInput.title       = ovhg.id
       nameInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box'
 
+      // Show the ASSEMBLED sequence (sub-domain overrides → parent → N), not just
+      // the top-level field — so a split / per-sub-domain-sequenced overhang shows
+      // its real bases instead of blank. When the sequence is authored per
+      // sub-domain, the single field can't represent it for editing → read-only
+      // (edit it in the Domain Designer).
+      const perSubDomain = overhangHasSequenceOverride(ovhg)
       const seqInput = document.createElement('input')
       seqInput.type        = 'text'
       seqInput.placeholder = 'Sequence…'
-      seqInput.value       = ovhg.sequence ?? ''
-      seqInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box;letter-spacing:.05em'
+      seqInput.value       = assembleOverhangSequence(ovhg)
+      seqInput.readOnly    = perSubDomain
+      if (perSubDomain) seqInput.title = 'Sequenced per sub-domain — edit in the Domain Designer'
+      seqInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box;letter-spacing:.05em' +
+        (perSubDomain ? ';opacity:.7;cursor:not-allowed' : '')
 
       for (const inp of [nameInput, seqInput]) {
         inp.addEventListener('keydown', e => e.stopPropagation())
@@ -190,7 +200,10 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
 
       function _syncGenBtn() {
         const v = seqInput.value.trim()
-        genBtn.style.display = (!v || /^n+$/i.test(v)) ? '' : 'none'
+        // Hide Gen for per-sub-domain overhangs (it would clobber the top-level
+        // field, which is not what drives their sequence) and once a real
+        // sequence is present.
+        genBtn.style.display = (!perSubDomain && (!v || /^n+$/i.test(v))) ? '' : 'none'
       }
       _syncGenBtn()
       seqInput.addEventListener('input', _syncGenBtn)
@@ -200,10 +213,13 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
       saveBtn.style.cssText = 'padding:2px 7px;background:#1f6feb;border:none;border-radius:4px;' +
                               'color:#fff;font-size:11px;cursor:pointer;white-space:nowrap'
       saveBtn.addEventListener('click', async () => {
-        const patch = {
-          sequence: seqInput.value.trim().toUpperCase() || null,
-          label:    nameInput.value.trim() || null,
-        }
+        // For per-sub-domain overhangs the displayed (assembled) sequence is
+        // read-only — only the label is editable here; the sequence is owned by
+        // the sub-domains (Domain Designer), so don't push it to the top-level field.
+        const patch = perSubDomain
+          ? { label: nameInput.value.trim() || null }
+          : { sequence: seqInput.value.trim().toUpperCase() || null,
+              label:    nameInput.value.trim() || null }
         await api.patchOverhang(ovhg.id, patch)
       })
 
