@@ -8,6 +8,7 @@ oracle catalog row lives in `design_automation_log.md`; the metrics row in `desi
 
 ## Index (shipped wrappers — do NOT rebuild)
 
+- AF-38 direct-bind relax (binding + end-to-root, pose)
 - AF-27 P2 overhang-linker + bond relax (pose)
 - AF-36 hinge-design generator + phase-paired `build_hinge` + seek-fidelity
 - AF-35 multi-op primitive placement (graft)
@@ -57,6 +58,37 @@ _Below: the verbatim `▶ HARNESS NOW AVAILABLE` blocks, plus the historical han
 (audit notes, priority-track scoping, Tier-6/7 as-built assessments) that preceded them._
 
 
+> **■ HARNESS NOW AVAILABLE — AF-38 DIRECT-bind RELAX wrappers (binding + end-to-root, pose-layer, 2026-06-29).**
+> Completes "relax for ALL connection types": AF-27 P2 covered ds/ss LINKER + generic bond; these add the two DIRECT-bind paths.
+> - `from backend.api import headless_build as hb` →
+>   `hb.relax_overhang_binding(binding_id) -> Design` wraps `POST /design/overhang-bindings/{binding_id}/relax` — the
+>   root-to-root DIRECT-binding relax: moves the two bound overhangs' clusters together (joint-rotate if a joint connects
+>   them, else rigid-translate the driven cluster, via the shared `core/bond_relax`) so the bound sub-domain junction
+>   chord collapses to ~one backbone bond.
+> - `hb.relax_end_to_root(version_id) -> Design` wraps `POST /design/connection-versions/{version_id}/relax-end-to-root` —
+>   **version-keyed** (end-to-root has no connection/binding record; resolves overhang A from `version.overhang_a_id`). Closes
+>   the spliced ForcedLigation chord (B-root ↔ binder) by **swinging A's overhang duplex about A's root bead** (2-DOF,
+>   persisted as A's `OverhangSpec.rotation` → binder co-rotates) **+ cluster kinematics** (joint-rotate / rigid-translate);
+>   same rigid body → swing only. Coverage **52 → 54** (imports `relax_overhang_binding` + `relax_end_to_root_version`).
+> - **Both POSE-ONLY** — write `cluster_transforms` (+ `OverhangSpec.rotation` for end-to-root) + feature-log, NEVER the
+>   strand graph → `canonical_topology` unchanged (the Three-Layer pin; end-to-root's rotation/cluster poses don't touch
+>   helix axes, which is all `canonical_topology` reads).
+> - **Augments — 2 NEW reusable oracles** `assert_binding_relaxed_pose(before, after, binding_id, *, target_nm=0.67)`
+>   (reuses `_assert_relax_pose`; strain = `|sub-domain-junction-chord − target|` via `binding_relax._sub_domain_junction_anchor`)
+>   + `assert_end_to_root_relaxed_pose(before, after, overhang_a_id, *, target_nm=0.67)` (strain = `|FL-chord − target|` via
+>   `end_to_root_relax._find_binder_and_root`/`_bead_pos`; custom pose-moved clause that ALSO accepts an `OverhangSpec.rotation`
+>   change so the same-rigid-body swing-only relax isn't a false-negative). Both re-measure the chord on POSED geometry, NOT the
+>   relax's `relax_info` (solver-independent). Can-go-red on no-op (strain unchanged) + topology mutation.
+> - **GOTCHA:** the binding-relax fixture is direction-sensitive — with a Y-axis joint the two whole-overhang sub-domain anchors
+>   carry a y-offset that rotation can't close (chord already at its x-z minimum → false degenerate). Use a **Z-axis joint**
+>   (`local_axis_direction=[0,0,1]`) so the rotation acts in the anchors' z=0 plane and the chord actually reduces. (The linker
+>   fixture dodges this because its anchors are the complement-nuc positions, not the overhang ends.)
+> - **GAPS noted (not closed this loop):** (1) ss-LINKER relax is *wrapped* (`relax_overhang_connection` dispatches to
+>   `relax_ss_linker`) and the oracle supports it (`assert_linker_relaxed_pose(natural_span_nm=R_ee)`), but there's **no
+>   ss-specific headless test** exercising the FJC-bin path — easy follow-up. (2) Direct-binding **CREATION** is still unwrapped
+>   (AF-37 blockers 1–4): you can now RELAX a root-to-root binding headlessly but must construct the `OverhangBinding`/sub-domain
+>   split by hand (the fixtures build the model directly). End-to-root CREATION *is* wrapped (the ConnectionVersion-apply path).
+>
 > **■ HARNESS NOW AVAILABLE — AF-27 P2 overhang-linker + generic-bond RELAX wrappers (pose-layer, 2026-06-27).**
 > - `from backend.api import headless_build as hb` →
 >   `hb.relax_overhang_connection(conn_id, *, joint_ids=None, bin_index=None, r_ee_min_nm=None, r_ee_max_nm=None) -> Design`

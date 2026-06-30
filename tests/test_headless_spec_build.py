@@ -1442,4 +1442,7 @@ def test_spec_build_adds_no_coverage():
     # AF-30's strand_end_resize added strand-end-resize: 47 → 48.
     # AF-27 P2's relax_overhang_connection + relax_bond added both: 48 → 50.
     # end-to-root binder added create_connection_version + apply_connection_version: 50 → 52.
-    assert headless_coverage_report()["covered"] == 52
+    # AF-38's relax_overhang_binding + relax_end_to_root added both: 52 → 54.
+    # Unifying direct connections (2026-06-30) dropped the /relax-end-to-root route +
+    # its wrapper; relax_overhang_binding now covers both direct types (54 → 53).
+    assert headless_coverage_report()["covered"] == 53

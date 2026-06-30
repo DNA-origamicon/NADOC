@@ -2075,3 +2075,45 @@ autonomous build can MAKE the connection AND a reusable oracle proves the *resul
 spliced into B's staple, B consumed, the relocation's orphan helix + stale crossover cleaned and replaced by a
 forced ligation, the whole design passing `validate_design` and surviving a `.nadoc` round-trip (the round-trip
 clause is the load-bearing pin for the phantom-overhang guard that `canonical_topology` is blind to)."
+
+### AF-38 — direct-bind RELAX wrappers (root-to-root binding + end-to-root) + minimized-bond oracles (2026-06-29)
+
+**Item:** Capture the "relax" feature for ALL overhang connection types. AF-27 P2 already wrapped ds/ss
+LINKER relax + the generic bond relax; this loop adds the two DIRECT-bind paths so every connection type
+has a headless relax entry + a reusable oracle that checks the **minimized bond distance**.
+
+**Shape:** two headless wrappers in `backend/api/headless_build.py` (no god-file growth):
+`relax_overhang_binding(binding_id)` (wraps `POST /design/overhang-bindings/{id}/relax`) and
+`relax_end_to_root(version_id)` (wraps the new version-keyed `POST /design/connection-versions/{id}/relax-end-to-root`).
+Coverage **52 → 54** (both imported by function identity).
+
+**Oracle(s) — 2 NEW reusable:** `assert_binding_relaxed_pose(before, after, binding_id, *, target_nm=0.67)`
+(strain = `|sub-domain-junction chord − target|` via `binding_relax._sub_domain_junction_anchor`, reuses
+`_assert_relax_pose`) and `assert_end_to_root_relaxed_pose(before, after, overhang_a_id, *, target_nm=0.67)`
+(strain = `|ForcedLigation chord − target|` via `end_to_root_relax._find_binder_and_root`/`_bead_pos`; custom
+pose-moved clause that accepts an `OverhangSpec.rotation` change so the same-rigid-body swing-only relax is not
+a false negative). Both re-measure the chord on POSED geometry (solver-independent), assert strain reduced + a
+pose moved + `canonical_topology` unchanged (Three-Layer pin). Same strain-reduction shape as AF-27 P2's
+linker/bond oracles.
+
+**Tests:** `test_headless_build.py` (+4: binding close / binding pose-only / end-to-root close+coverage /
+end-to-root same-body swing-only) + `test_automation_harness.py` (+5: binding pass/no-op, end-to-root
+pass/same-body/no-op) + coverage meta bumped 52→54. Backend solver + endpoint for the end-to-root relax itself
+shipped same day with `tests/test_end_to_root_relax.py` (7).
+
+**GOTCHA banked:** the binding-relax fixture is direction-sensitive — a Y-axis joint leaves a y-offset between
+the two whole-overhang sub-domain anchors that rotation can't close (chord already at its x-z minimum → false
+degenerate). Use a Z-axis joint so rotation acts in the anchors' z=0 plane. The linker fixture dodges this
+because its anchors are complement-nuc positions, not overhang ends.
+
+**Gaps noted (not closed):** (1) ss-LINKER relax is wrapped + oracle-supported (`natural_span_nm=R_ee`) but has
+no ss-specific headless test (the FJC-bin path is unexercised) — easy follow-up. (2) Direct-binding CREATION is
+still unwrapped (AF-37 blockers 1–4): root-to-root bindings must be model-constructed by hand for the relax
+fixture; only end-to-root CREATION is wrapped (apply path).
+
+**"Validation gained, not just a passthrough:** before this there was no headless way to relax a directly-bound
+overhang (root-to-root or end-to-root) and nothing proved a direct-bind relax actually minimizes its bond. Now
+both relax paths are driveable headlessly AND a reusable oracle proves the *result* — the bound sub-domain
+junction (root-to-root) / spliced ForcedLigation (end-to-root) chord is pulled toward one backbone bond on the
+posed geometry, a pose moved (cluster and/or the end-to-root duplex swing), and the strand graph is untouched —
+none of which any prior pin asserted for the direct-bind relax."

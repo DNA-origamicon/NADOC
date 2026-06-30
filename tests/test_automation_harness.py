@@ -460,7 +460,10 @@ def test_oxdna_coverage_report_separate_from_design_assembly():
     # AF-30 strand_end_resize (47→48);
     # AF-27 P2 relax_overhang_connection + relax_bond (48→50).
     # end-to-root binder: create_connection_version + apply_connection_version (50→52).
-    assert headless_coverage_report()["covered"] == 52  # /oxdna audit is separate
+    # direct-bind relax: relax_overhang_binding + relax_end_to_root (52→54).
+    # Unifying direct connections (2026-06-30) dropped /relax-end-to-root + its wrapper;
+    # relax_overhang_binding now covers both direct types (54→53).
+    assert headless_coverage_report()["covered"] == 53  # /oxdna audit is separate
     ox = oxdna_coverage_report()
     assert ox["total"] == ox["covered"] + ox["uncovered"]
     covered = {r["endpoint"] for r in ox["covered_routes"]}
@@ -1073,6 +1076,53 @@ def test_bond_relaxed_pose_oracle_fires_on_noop():
     before, _after, side_a, side_b = _relaxed_bond_pair(with_joint=False)
     with pytest.raises(AssertionError, match="reduce strain"):
         assert_bond_relaxed_pose(before, before, side_a=side_a, side_b=side_b, target_nm=0.13)
+
+
+# The legacy `assert_binding_relaxed_pose` oracle (sub-domain junction chord target)
+# is superseded by `assert_direct_binding_relaxed_pose` (driven tip↔root chord) now
+# that the unified `relax_overhang_binding` closes the embedded-strand bond — see
+# test_direct_binding_relaxed_pose_oracle_* below.
+
+
+def _relaxed_direct_binding_pair(*, same_body=False):
+    """(before, after, driver_oh_id, driven_oh_id): an applied DIRECT binding and
+    its relaxed result via hb.relax_overhang_binding (the unified solve)."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from tests.test_headless_build import _applied_direct_binding
+
+    before, bid = _applied_direct_binding(same_body=same_body)
+    design_state.set_design(before)
+    after = hb.relax_overhang_binding(bid)
+    return before, after.model_copy(deep=True), "oh_a", "oh_b"
+
+
+def test_direct_binding_relaxed_pose_oracle_passes_on_real_relax():
+    """assert_direct_binding_relaxed_pose is green when the driven overhang's
+    tip↔root chord closed, a pose moved (joint + duplex swing), topology unchanged."""
+    from tests.automation_harness import assert_direct_binding_relaxed_pose
+
+    before, after, drv, dvn = _relaxed_direct_binding_pair()
+    assert_direct_binding_relaxed_pose(before, after, drv, dvn)
+
+
+def test_direct_binding_relaxed_pose_oracle_accepts_same_body_swing():
+    """Same-rigid-body relax moves NO cluster but swings the duplex (the driver's
+    overhang rotation) — the oracle's pose-moved clause accepts the rotation change."""
+    from tests.automation_harness import assert_direct_binding_relaxed_pose
+
+    before, after, drv, dvn = _relaxed_direct_binding_pair(same_body=True)
+    assert_direct_binding_relaxed_pose(before, after, drv, dvn)
+
+
+def test_direct_binding_relaxed_pose_oracle_fires_on_noop():
+    """Red-test: comparing the un-relaxed direct binding to itself fails the
+    strain-reduction clause."""
+    from tests.automation_harness import assert_direct_binding_relaxed_pose
+
+    before, _after, drv, dvn = _relaxed_direct_binding_pair()
+    with pytest.raises(AssertionError, match="reduce"):
+        assert_direct_binding_relaxed_pose(before, before, drv, dvn)
 
 
 def test_flexible_relax_oracle_fires_on_topology_change():

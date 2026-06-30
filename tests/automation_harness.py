@@ -932,54 +932,45 @@ def assert_linker_connects(
     return reimported
 
 
-def assert_end_to_root_binder(
+def assert_direct_binding_applied(
     design: Design,
     *,
     overhang_a_id: str,
     overhang_b_id: str,
+    connection_type: str | None = None,
 ):
-    """End-to-root apply: overhang *B* was regenerated as A's reverse-complement
-    binder, spliced into B's root staple — and the wiring **survives a ``.nadoc``
-    round-trip**.
+    """A DIRECT connection (root-to-root OR end-to-root) materialized as ONE
+    non-consuming, relocated ``OverhangBinding`` — and the wiring **survives a
+    ``.nadoc`` round-trip**.
 
-    Applying an ``end-to-root`` ConnectionVersion does not append metadata like a
-    linker does; it performs a real **topological** edit: a binder domain
-    (antiparallel to A, on A's helix at A's bp range, sequence = RC(A), tagged
-    ``binds_overhang_id == overhang_a_id``) replaces overhang B's free tip domain
-    inside B's own staple strand, and overhang B's :class:`OverhangSpec` is
-    removed (a domain cannot be both an overhang and a binder). A's free end is
-    now double-stranded; B is consumed into the binding domain.
+    Unified model (2026-06-30, replaced the end-to-root binder splice): applying a
+    direct ``ConnectionVersion`` creates a bound ``OverhangBinding`` and relocates
+    the DRIVEN overhang B's tip domain onto the DRIVER overhang A's helix
+    (antiparallel, same bp range) so the duplex renders. NEITHER overhang is
+    consumed — both keep their ``OverhangSpec``. The driven tip↔root backbone bond
+    is left stretched (closed later by Relax).
 
     Asserts, on both ``design`` and its :func:`roundtrip_nadoc` re-import:
 
-      1. **A survives** as a free overhang (its spec + backing domain still exist).
-      2. **Exactly one binder domain** is tagged ``binds_overhang_id == overhang_a_id``,
-         and it lives on A's helix, at A's bp range, antiparallel to A.
-      3. **It is spliced into a staple strand** (B's former root): the owning strand
-         is a STAPLE with ≥2 domains and the binder is a *terminal* domain — i.e.
-         B-root → binder is one continuous 5'→3' strand.
-      4. **B is consumed**: no ``OverhangSpec`` with id ``overhang_b_id`` remains and
-         no domain is tagged ``overhang_id == overhang_b_id``.
-      5. **The binder reads RC(A)** after :func:`assign_staple_sequences` re-derives
-         the strand (the per-domain reverse-complement sync via ``binds_overhang_id``).
+      1. **Both overhangs survive** (A and B specs both present — B is NOT consumed).
+      2. **Exactly one bound binding** joins the pair, with ``bound`` True,
+         ``driver_oh_id == overhang_a_id``, ``driven_oh_id == overhang_b_id``,
+         ``prior_driven_topology`` populated, and ``connection_type`` matching (when
+         given).
+      3. **B's tip relocated onto A's helix** — B's ``overhang_id`` domain shares A's
+         tip domain's helix + bp range, antiparallel; B's ``OverhangSpec.helix_id``
+         moved to A's helix too.
+      4. **No orphaned helices** (every helix is referenced by ≥1 strand domain).
 
-    Why the round-trip pin: import re-runs ``autodetect_overhangs``; without the
-    ``binds_overhang_id`` skip-guard the terminal, unscaffolded binder would be
-    re-tagged as a *phantom* new overhang for the consumed B. Clause 2 ("exactly
-    one") + clause 4 ("B gone, no new overhang") after re-import is the red test
-    for that guard.
+    Why the round-trip pin: import re-runs ``autodetect_overhangs``; the relocated
+    driven tip keeps its ``overhang_id`` tag, so the existing skip-guard must keep
+    it from being re-tagged as a phantom overhang. Clause 1 + 3 after re-import is
+    the red test for that.
 
-    Can-go-red: a no-op apply (B's tip still present, no binder) fails clauses 2-4;
-    a binder placed on B's helix instead of A's fails clause 2; a binder created as
-    a standalone strand (not spliced) fails clause 3; a phantom overhang spawned on
-    round-trip fails clause 2/4 after re-import. Returns the re-imported design.
+    Can-go-red: a consuming apply (B spec gone) fails clause 1; an apply that does
+    not relocate (B's tip still on its own helix) fails clause 3; a missing/unbound
+    binding fails clause 2. Returns the re-imported design.
     """
-    from backend.core.sequences import (
-        _assemble_overhang_5to3,
-        assign_staple_sequences,
-        complement_base,
-    )
-
     def _backing_domain(d: Design, ovhg_id: str):
         for s in d.strands:
             for dom in s.domains:
@@ -988,116 +979,78 @@ def assert_end_to_root_binder(
         return None, None
 
     def _check(d: Design, where: str):
-        # 1. A survives as a free overhang.
+        # 1. Both overhangs survive (B not consumed).
         spec_a = next((o for o in d.overhangs if o.id == overhang_a_id), None)
+        spec_b = next((o for o in d.overhangs if o.id == overhang_b_id), None)
         assert spec_a is not None, f"{where}: overhang A {overhang_a_id!r} vanished"
+        assert spec_b is not None, (
+            f"{where}: overhang B {overhang_b_id!r} consumed — the unified direct "
+            f"model must NOT remove either overhang"
+        )
         _s_a, dom_a = _backing_domain(d, overhang_a_id)
+        _s_b, dom_b = _backing_domain(d, overhang_b_id)
         assert dom_a is not None, f"{where}: overhang A has no backing domain"
+        assert dom_b is not None, f"{where}: overhang B has no backing domain"
 
-        # 2. Exactly one binder domain, on A's helix, A's bp range, antiparallel.
-        binders = [
-            (s, dom)
-            for s in d.strands
-            for dom in s.domains
-            if dom.binds_overhang_id == overhang_a_id
-        ]
-        assert len(binders) == 1, (
-            f"{where}: expected exactly 1 binder for {overhang_a_id!r}, "
-            f"got {len(binders)} (phantom overhang / re-tag?)"
+        # 2. Exactly one bound binding for the pair, driver/driven recorded.
+        pair = {overhang_a_id, overhang_b_id}
+        bindings = [b for b in d.overhang_bindings
+                    if {b.overhang_a_id, b.overhang_b_id} == pair]
+        assert len(bindings) == 1, (
+            f"{where}: expected exactly 1 binding for the pair, got {len(bindings)}"
         )
-        b_strand, binder = binders[0]
-        assert binder.helix_id == dom_a.helix_id, (
-            f"{where}: binder on helix {binder.helix_id!r}, A on {dom_a.helix_id!r}"
+        bnd = bindings[0]
+        assert bnd.bound, f"{where}: binding is not bound (apply must relocate)"
+        assert bnd.driver_oh_id == overhang_a_id and bnd.driven_oh_id == overhang_b_id, (
+            f"{where}: driver/driven = {bnd.driver_oh_id}/{bnd.driven_oh_id}, "
+            f"expected {overhang_a_id}/{overhang_b_id}"
         )
-        assert binder.direction != dom_a.direction, (
-            f"{where}: binder not antiparallel to A"
+        assert bnd.prior_driven_topology is not None, (
+            f"{where}: bound binding has no prior_driven_topology snapshot"
         )
-        assert {binder.start_bp, binder.end_bp} == {dom_a.start_bp, dom_a.end_bp}, (
-            f"{where}: binder bp range {{{binder.start_bp},{binder.end_bp}}} "
+        if connection_type is not None:
+            assert bnd.connection_type == connection_type, (
+                f"{where}: connection_type {bnd.connection_type!r} != {connection_type!r}"
+            )
+
+        # 3. B's tip relocated onto A's helix (the duplex), antiparallel, same range.
+        assert dom_b.helix_id == dom_a.helix_id, (
+            f"{where}: B's tip on helix {dom_b.helix_id!r}, A on {dom_a.helix_id!r} "
+            f"— apply must relocate B's tip onto A's helix"
+        )
+        assert dom_b.direction != dom_a.direction, (
+            f"{where}: B's relocated tip not antiparallel to A"
+        )
+        assert {dom_b.start_bp, dom_b.end_bp} == {dom_a.start_bp, dom_a.end_bp}, (
+            f"{where}: B's relocated bp range {{{dom_b.start_bp},{dom_b.end_bp}}} "
             f"!= A's {{{dom_a.start_bp},{dom_a.end_bp}}}"
         )
-
-        # 3. Spliced into a staple strand, terminal, contiguous.
-        from backend.core.models import StrandType
-        assert b_strand.strand_type == StrandType.STAPLE, (
-            f"{where}: binder owner is {b_strand.strand_type}, expected staple "
-            f"(a standalone OH_BINDER strand means it was NOT spliced into B)"
-        )
-        assert len(b_strand.domains) >= 2, (
-            f"{where}: binder strand has {len(b_strand.domains)} domain(s); "
-            f"a spliced B-root→binder strand needs ≥2"
-        )
-        b_idx = b_strand.domains.index(binder)
-        assert b_idx in (0, len(b_strand.domains) - 1), (
-            f"{where}: binder is domain {b_idx} of {len(b_strand.domains)} — "
-            f"not a strand terminal (splice should keep it terminal)"
+        assert spec_b.helix_id == dom_a.helix_id, (
+            f"{where}: B's OverhangSpec.helix_id {spec_b.helix_id!r} not moved to A's "
+            f"helix {dom_a.helix_id!r}"
         )
 
-        # 4. B is consumed.
-        assert not any(o.id == overhang_b_id for o in d.overhangs), (
-            f"{where}: overhang B {overhang_b_id!r} spec still present"
-        )
-        _s_b, dom_b = _backing_domain(d, overhang_b_id)
-        assert dom_b is None, f"{where}: a domain still tagged overhang_id={overhang_b_id!r}"
-
-        # 5. Binder reads RC(A) after sequence sync. Only runnable when a scaffold
-        #    sequence exists (assign_staple_sequences needs one); when it doesn't,
-        #    clause 2's binds_overhang_id link already guarantees the RC sync (that
-        #    mechanism is pinned in tests/test_oh_binder.py).
-        from backend.core.models import StrandType as _ST
-        scaffold_sequenced = any(
-            s.strand_type == _ST.SCAFFOLD and s.sequence for s in d.strands
-        )
-        oh_len = abs(dom_a.end_bp - dom_a.start_bp) + 1
-        a_bases = _assemble_overhang_5to3(spec_a, oh_len)
-        if scaffold_sequenced and any(base != "N" for base in a_bases):
-            expected = "".join(complement_base(base) for base in reversed(a_bases))
-            synced = assign_staple_sequences(d)
-            synced_strand = next(s for s in synced.strands if s.id == b_strand.id)
-            seq = synced_strand.sequence or ""
-            assert len(seq) >= oh_len, (
-                f"{where}: synced strand sequence too short ({len(seq)} < {oh_len})"
-            )
-            got = seq[:oh_len] if b_idx == 0 else seq[-oh_len:]
-            assert got == expected, (
-                f"{where}: binder reads {got!r}, expected RC(A) {expected!r}"
-            )
-
-        # 6. No orphaned helix — B's old overhang helix (now empty after the binder
-        #    relocated to A's helix) must be deleted, else it renders as a dangling
-        #    axis line. Assert EVERY helix is referenced by ≥1 strand domain.
+        # 4. No orphaned helices.
         used_helices = {dom.helix_id for s in d.strands for dom in s.domains}
         orphans = [h.id for h in d.helices if h.id not in used_helices]
         assert not orphans, f"{where}: orphaned helices (no domains): {orphans}"
 
-        # 7. No stale crossover — every crossover half must reference a live helix
-        #    (B's overhang crossover, which pointed at the deleted tip helix, must
-        #    be gone; this is the caDNAno stale-line the user hit).
-        helix_ids = {h.id for h in d.helices}
-        for xo in d.crossovers:
-            assert xo.half_a.helix_id in helix_ids and xo.half_b.helix_id in helix_ids, (
-                f"{where}: stale crossover → deleted helix "
-                f"({xo.half_a.helix_id} ↔ {xo.half_b.helix_id})"
-            )
-
-        # 8. Forced ligation at the root→binder junction — the relocated tip lands
-        #    on A's (non-adjacent) helix, so the parent→tip backbone jump is now a
-        #    forced ligation, not a lattice crossover. Assert one matches the splice
-        #    junction (earlier domain's 3' end → later domain's 5' end).
-        root = b_strand.domains[b_idx - 1 if b_idx == len(b_strand.domains) - 1 else b_idx + 1]
-        earlier, later = (root, binder) if b_idx == len(b_strand.domains) - 1 else (binder, root)
-        match = any(
-            fl.three_prime_helix_id == earlier.helix_id and fl.three_prime_bp == earlier.end_bp
-            and fl.five_prime_helix_id == later.helix_id and fl.five_prime_bp == later.start_bp
-            for fl in d.forced_ligations
+        # 5. No IMPROPER crossover — the relocated overhang-extrude bond crosses to a
+        #    non-adjacent helix at a mismatched bp, so it MUST be a ForcedLigation, not a
+        #    crossover (else the cadnano editor draws a line to the wrong end). Every
+        #    remaining crossover must be a valid lattice crossover (halves at the same bp).
+        bad_xo = [xo for xo in d.crossovers
+                  if int(xo.half_a.index) != int(xo.half_b.index)]
+        assert not bad_xo, (
+            f"{where}: improper crossover(s) at mismatched bp (must be forced ligations): "
+            f"{[(xo.id, xo.half_a.helix_id, xo.half_a.index, xo.half_b.helix_id, xo.half_b.index) for xo in bad_xo]}"
         )
-        assert match, (
-            f"{where}: no forced ligation at the root→binder junction "
-            f"(expected 3'={earlier.helix_id}:{earlier.end_bp} → "
-            f"5'={later.helix_id}:{later.start_bp}; "
-            f"have {[(fl.three_prime_helix_id, fl.three_prime_bp, fl.five_prime_helix_id, fl.five_prime_bp) for fl in d.forced_ligations]})"
-        )
-        return binder
+        # And validate_design must agree (the improper-crossover guard).
+        from backend.core.validator import validate_design
+        bad_msgs = [r.message for r in validate_design(d).results
+                    if not r.ok and "Improper crossover" in r.message]
+        assert not bad_msgs, f"{where}: validate_design flagged improper crossovers: {bad_msgs}"
+        return bnd
 
     _check(design, "in-memory")
     reimported = roundtrip_nadoc(design)
@@ -1344,6 +1297,128 @@ def assert_bond_relaxed_pose(
     _assert_relax_pose(
         before, after, strain_before, strain_after,
         label="bond", require_reduced=require_reduced, eps=eps,
+    )
+
+
+def assert_binding_relaxed_pose(
+    before: Design,
+    after: Design,
+    binding_id: str,
+    *,
+    target_nm: float = 0.67,
+    require_reduced: bool = True,
+    eps: float = 1e-3,
+):
+    """A headless DIRECT overhang-BINDING relax closed the bound sub-domain
+    junction chord, moved a rigid pose, and **did not touch topology**.
+
+    The direct-binding (root-to-root) counterpart of
+    :func:`assert_linker_relaxed_pose`.  The relax
+    (:func:`~backend.api.headless_build.relax_overhang_binding`) moves the two
+    bound overhangs' clusters together so the bound sub-domain junction chord
+    collapses to one backbone bond.  Same three clauses as the linker/bond
+    oracles — strain ``|chord − target_nm|`` reduced + a cluster pose moved +
+    ``canonical_topology`` unchanged — with the chord re-measured between the two
+    bound sub-domains' junction anchors on the POSED geometry
+    (``binding_relax._sub_domain_junction_anchor``, the relax's own anchor lookup,
+    not its optimiser).  Can-go-red on a no-op / topology-mutating relax.
+    """
+    from backend.core.binding_relax import _sub_domain_junction_anchor
+
+    def _binding(d: Design):
+        b = next((b for b in d.overhang_bindings if b.id == binding_id), None)
+        assert b is not None, f"no overhang binding {binding_id!r} in design"
+        return b
+
+    def _chord(d: Design, b) -> float:
+        nucs = _geometry_for_design(d)
+        pa, _na, _pa = _sub_domain_junction_anchor(d, b.sub_domain_a_id, nucs)
+        pb, _nb, _pb = _sub_domain_junction_anchor(d, b.sub_domain_b_id, nucs)
+        assert pa is not None and pb is not None, (
+            f"binding {binding_id!r} sub-domain anchors did not resolve in posed "
+            "geometry — vacuous relax check"
+        )
+        return math.dist(tuple(pa), tuple(pb))
+
+    b_after = _binding(after)
+    strain_before = abs(_chord(before, _binding(before)) - target_nm)
+    strain_after = abs(_chord(after, b_after) - target_nm)
+    _assert_relax_pose(
+        before, after, strain_before, strain_after,
+        label=f"binding {binding_id!r}", require_reduced=require_reduced, eps=eps,
+    )
+
+
+def _overhang_rotation_changed(before: Design, after: Design, overhang_id: str) -> bool:
+    """True iff *overhang_id*'s ball-joint rotation quaternion differs — the
+    pose-moved guard for the end-to-root relax, whose 2-DOF duplex swing is
+    stored on ``OverhangSpec.rotation`` (not a cluster transform)."""
+    rb = next((tuple(o.rotation) for o in before.overhangs if o.id == overhang_id), None)
+    ra = next((tuple(o.rotation) for o in after.overhangs if o.id == overhang_id), None)
+    return rb != ra
+
+
+def assert_direct_binding_relaxed_pose(
+    before: Design,
+    after: Design,
+    driver_oh_id: str,
+    driven_oh_id: str,
+    *,
+    target_nm: float = 0.67,
+    require_reduced: bool = True,
+    eps: float = 1e-3,
+):
+    """A headless DIRECT-binding relax closed the driven overhang's stretched
+    tip↔root chord, moved a pose (duplex swing and/or cluster), and **did not touch
+    topology**.
+
+    Unified for root-to-root + end-to-root. The driven overhang's tip was relocated
+    onto the driver's helix on apply, leaving the tip↔root backbone bond stretched.
+    The "bond" whose distance is minimised is that chord — the relocated tip's
+    connecting bead ↔ the driven root's connecting bead — re-derived on the POSED
+    geometry via the relax's own anchor helpers
+    (``direct_relax._find_driven_tip_and_root`` + ``_bead_pos``).
+
+      1. **Strain reduced** — ``strain = |chord − target_nm|`` falls (the
+         minimized-bond-distance pin; can-go-red on a no-op).
+      2. **A pose moved** — a cluster transform changed OR the DRIVER's overhang
+         rotation changed (the 2-DOF duplex swing lives on the driver's
+         ``OverhangSpec.rotation``, so a same-rigid-body relax that only swings the
+         duplex still counts).
+      3. **Topology unchanged** — ``canonical_topology`` equal (the swing +
+         cluster move are display/pose-layer only; the Three-Layer Law).
+    """
+    from backend.core.direct_relax import _bead_pos, _find_driven_tip_and_root
+
+    def _chord(d: Design) -> float:
+        strand, _bi, tip_dom, root_dom, cb_bp, cr_bp = _find_driven_tip_and_root(
+            d, driven_oh_id)
+        nucs = _geometry_for_design(d)
+        pb = _bead_pos(nucs, strand_id=strand.id, helix_id=tip_dom.helix_id, bp=cb_bp)
+        pr = _bead_pos(nucs, strand_id=strand.id, helix_id=root_dom.helix_id, bp=cr_bp)
+        assert pb is not None and pr is not None, (
+            f"direct binding {driven_oh_id!r} tip/root anchors did not resolve in "
+            "posed geometry — vacuous relax check"
+        )
+        return math.dist(tuple(pb), tuple(pr))
+
+    strain_before = abs(_chord(before) - target_nm)
+    strain_after = abs(_chord(after) - target_nm)
+    if require_reduced:
+        assert strain_after < strain_before - eps, (
+            f"direct binding {driven_oh_id!r}: relax did not reduce the stretched "
+            f"tip↔root chord strain |chord − {target_nm}|: "
+            f"{strain_before:.4f} → {strain_after:.4f} nm (can-go-red on a no-op)"
+        )
+        moved = (_relax_pose_moved(before, after)
+                 or _overhang_rotation_changed(before, after, driver_oh_id))
+        assert moved, (
+            f"direct binding {driven_oh_id!r}: neither a cluster pose nor the driver's "
+            "overhang rotation changed — a strain-reducing relax must move a pose"
+        )
+    assert canonical_topology(before) == canonical_topology(after), (
+        f"direct binding {driven_oh_id!r}: relax changed the strand-graph topology — "
+        "it must be a display/pose-layer move only (Three-Layer Law)"
     )
 
 

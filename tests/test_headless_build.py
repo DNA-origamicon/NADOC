@@ -16,13 +16,15 @@ from fastapi import HTTPException
 import backend.api.doc_context as dc
 from backend.api import headless_build as hb
 from backend.api import state as design_state
+from backend.api.crud import _cv_create_bound_binding
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.flexible_segments import apply_marks
 from backend.core.lattice import overhang_candidate_error
 from backend.core.models import (
-    ClusterJoint, ClusterRigidTransform, Direction, Domain, FlexibleSegmentMark,
-    Helix, LatticeType, OverhangConnection, OverhangSpec, Strand, StrandType, Vec3,
+    ClusterJoint, ClusterRigidTransform, ConnectionVersion, Direction, Domain,
+    FlexibleSegmentMark, Helix, LatticeType, OverhangBinding, OverhangConnection,
+    OverhangSpec, Strand, StrandType, Vec3,
 )
 from backend.core.validator import validate_design
 from tests.automation_harness import (
@@ -33,7 +35,8 @@ from tests.automation_harness import (
     assert_feature_seek,
     assert_cluster_translated,
     assert_deformation_angle,
-    assert_end_to_root_binder,
+    assert_direct_binding_applied,
+    assert_direct_binding_relaxed_pose,
     assert_flexible_segments_relaxed,
     assert_forced_ligation,
     assert_fully_sequenced,
@@ -551,13 +554,12 @@ def _place_two_overhangs_on_6hb():
     return d, [o.id for o in d.overhangs]
 
 
-def test_apply_end_to_root_regenerates_b_as_rc_binder_of_a():
-    """Applying an end-to-root ConnectionVersion regenerates overhang B as the
-    reverse complement of overhang A: a binder domain (antiparallel to A, on A's
-    helix, RC of A's sequence) is spliced into B's root staple in place of B's
-    tip, and B's OverhangSpec is consumed.  The reusable assert_end_to_root_binder
-    oracle proves the geometry, the splice, B's removal, the RC sequence, and that
-    all of it survives a .nadoc round-trip (the phantom-overhang guard's red test).
+def test_apply_end_to_root_relocates_b_not_consumes():
+    """Applying an end-to-root ConnectionVersion materializes ONE non-consuming,
+    relocated OverhangBinding: B's tip domain relocates onto A's helix (antiparallel
+    duplex), NEITHER overhang is consumed, and it all survives a .nadoc round-trip
+    (the phantom-overhang guard's red test). The reusable assert_direct_binding_applied
+    oracle proves the relocation + driver/driven + round-trip.
     Also flips the apply route's headless coverage."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
         _d, (a_id, b_id) = _place_two_overhangs_on_6hb()
@@ -567,7 +569,8 @@ def test_apply_end_to_root_regenerates_b_as_rc_binder_of_a():
         )
         vid = design_state.get_or_404().connection_versions[-1].id
         d = hb.apply_connection_version(vid)
-        assert_end_to_root_binder(d, overhang_a_id=a_id, overhang_b_id=b_id)
+        assert_direct_binding_applied(d, overhang_a_id=a_id, overhang_b_id=b_id,
+                                      connection_type="end-to-root")
 
         report = headless_coverage_report()
         assert any(
@@ -577,26 +580,28 @@ def test_apply_end_to_root_regenerates_b_as_rc_binder_of_a():
 
 
 def test_apply_end_to_root_cadnano_clean_after_apply():
-    """caDNAno-editor validation after Apply: B's relocated binder must not leave
-    a dangling helix or a crossover that points at it.
+    """caDNAno-editor validation after Apply: B's relocated tip must not leave a
+    dangling helix or an IMPROPER crossover.
 
-    The user hit two editor artefacts — an orphaned helical-axis line and a
-    crossover line still drawn to overhang B's OLD helix/bp. This pins the data
-    the editor renders from:
-      • design-level (what the 2D view draws crossover lines from): B's overhang
-        helix is deleted, NO crossover references it, and a forced ligation now
-        carries the root→binder junction (via assert_end_to_root_binder);
-      • the caDNAno EXPORT (the editor's serialized form): exports cleanly, drops
-        exactly the orphan vstrand, and has no staple/scaffold pointer to a
-        non-existent helix num.
+    The user hit editor artefacts — an orphaned helical-axis line and a crossover
+    line drawn to the WRONG end of the overhang (the relocated overhang-extrude
+    crossover sat at an invalid lattice position). This pins the data the editor
+    renders from:
+      • design-level: B's overhang helix is deleted; NO crossover references it; the
+        relocated root↔tip bond is a ForcedLigation (NOT an invalid crossover), and
+        there are no improper (mismatched-bp) crossovers anywhere
+        (via assert_direct_binding_applied + the explicit checks below);
+      • the caDNAno EXPORT: exports cleanly, drops exactly the orphan vstrand, and
+        has no staple/scaffold pointer to a non-existent helix num.
     """
     from backend.core.cadnano import export_cadnano
     with hb.scratch_session(LatticeType.HONEYCOMB):
         d0, (a_id, b_id) = _place_two_overhangs_on_6hb()
-        # B's overhang (tip) helix — orphaned + its crossover stale after the splice.
+        # B's overhang (tip) helix — orphaned + its crossover relocated after apply.
         b_tip_helix = next(dom.helix_id for s in d0.strands for dom in s.domains
                            if dom.overhang_id == b_id)
         pre_helices = len(d0.helices)
+        pre_fl = len(d0.forced_ligations)
         assert any(b_tip_helix in (xo.half_a.helix_id, xo.half_b.helix_id)
                    for xo in d0.crossovers), "expected B's overhang crossover pre-apply"
 
@@ -605,12 +610,18 @@ def test_apply_end_to_root_cadnano_clean_after_apply():
         vid = design_state.get_or_404().connection_versions[-1].id
         d = hb.apply_connection_version(vid)
 
-        # Design-level invariants the 2D view renders from (orphan helix / stale
-        # crossover / forced ligation), incl. a .nadoc round-trip.
-        assert_end_to_root_binder(d, overhang_a_id=a_id, overhang_b_id=b_id)
+        # Design-level invariants the 2D view renders from (orphan helix deleted /
+        # B's overhang crossover converted to a ForcedLigation), incl. .nadoc round-trip.
+        assert_direct_binding_applied(d, overhang_a_id=a_id, overhang_b_id=b_id,
+                                      connection_type="end-to-root")
         assert not any(h.id == b_tip_helix for h in d.helices)
         assert not any(b_tip_helix in (xo.half_a.helix_id, xo.half_b.helix_id)
                        for xo in d.crossovers)
+        # The relocated root↔tip bond is now a ForcedLigation (drawn correctly in 2D),
+        # NOT an invalid lattice crossover.
+        assert len(d.forced_ligations) == pre_fl + 1, "relocate must emit one forced ligation"
+        assert all(int(xo.half_a.index) == int(xo.half_b.index) for xo in d.crossovers), \
+            "no improper (mismatched-bp) crossover may remain"
 
         # The editor's serialized form exports cleanly + drops the orphan vstrand.
         cad = export_cadnano(d)
@@ -632,14 +643,12 @@ def test_autonomous_build_end_to_root_binding_is_valid_and_roundtrip_stable():
 
       • passes ``validate_design`` and is byte-stable across a ``.nadoc``
         round-trip (``assert_roundtrip_stable`` — the AF acceptance oracle), AND
-      • genuinely carries the regenerated RC binder + its topology cleanup
-        (``assert_end_to_root_binder``: binder on A's helix, B consumed, no orphan
-        helix, no stale crossover, forced ligation at the junction).
+      • genuinely carries the relocated, non-consuming duplex binding + its topology
+        cleanup (``assert_direct_binding_applied``: B's tip relocated onto A's helix,
+        BOTH overhangs kept, no orphan helix).
 
     Proves a direct end-to-root overhang connection is reachable AND produces a
-    valid, manufacturable design during fully autonomous design — not just a
-    locally-correct splice. (AF-37's earlier sub-domain-split / bind-lock path was
-    reverted as janky; this is the cleaner ConnectionVersion-apply route.)
+    valid, manufacturable design during fully autonomous design.
     """
     with hb.scratch_session(LatticeType.HONEYCOMB):
         _d, (a_id, b_id) = _place_two_overhangs_on_6hb()
@@ -648,7 +657,8 @@ def test_autonomous_build_end_to_root_binding_is_valid_and_roundtrip_stable():
         vid = design_state.get_or_404().connection_versions[-1].id
         built = hb.apply_connection_version(vid)
     assert_roundtrip_stable(lambda: built)                              # validate + topology-stable
-    assert_end_to_root_binder(built, overhang_a_id=a_id, overhang_b_id=b_id)
+    assert_direct_binding_applied(built, overhang_a_id=a_id, overhang_b_id=b_id,
+                                  connection_type="end-to-root")
 
 
 # ── relax_overhang_connection + relax_bond (AF-27 P2 — linker/bond pose) ─────────
@@ -765,6 +775,94 @@ def test_relax_overhang_connection_is_pose_only():
     before = design_state.get_or_404()
     after = hb.relax_overhang_connection(conn_id)
     assert canonical_topology(before) == canonical_topology(after)
+
+
+# ── relax_overhang_binding (UNIFIED direct-bind relax: root-to-root + end-to-root) ──
+
+def _applied_direct_binding(*, cluster_b_translation=(4.0, 0.0, 0.0), same_body=False):
+    """A + B as [root → overhang-tip] staples; a DIRECT connection APPLIED (B's tip
+    relocated onto A's helix via _cv_create_bound_binding, neither consumed, the
+    tip↔root bond left stretched). Separate clusters + a joint on B's cluster (the
+    1-DOF case) unless ``same_body``. Returns ``(seeded_design, binding_id)``."""
+    L = 16
+    ha = Helix(id="e2r_ha", axis_start=Vec3(x=0, y=0, z=0),
+               axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP),
+               phase_offset=0.0, length_bp=L, grid_pos=(0, 0))
+    hb_ = Helix(id="e2r_hb", axis_start=Vec3(x=0, y=0, z=0),
+                axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP),
+                phase_offset=0.0, length_bp=L, grid_pos=(0, 4))
+    sa = Strand(id="e2r_sa", strand_type=StrandType.STAPLE, domains=[
+        Domain(helix_id="e2r_ha", start_bp=0, end_bp=3, direction=Direction.FORWARD),
+        Domain(helix_id="e2r_ha", start_bp=4, end_bp=11, direction=Direction.FORWARD, overhang_id="oh_a")])
+    sb = Strand(id="e2r_sb", strand_type=StrandType.STAPLE, domains=[
+        Domain(helix_id="e2r_hb", start_bp=0, end_bp=3, direction=Direction.FORWARD),
+        Domain(helix_id="e2r_hb", start_bp=4, end_bp=11, direction=Direction.FORWARD, overhang_id="oh_b")])
+    if same_body:
+        clusters = [ClusterRigidTransform(id="cAB", name="AB", helix_ids=["e2r_ha", "e2r_hb"],
+                    translation=[0, 0, 0], rotation=[0, 0, 0, 1], pivot=[0, 0, 0])]
+        joints = []
+    else:
+        clusters = [
+            ClusterRigidTransform(id="cA", name="A", helix_ids=["e2r_ha"],
+                                  translation=[0, 0, 0], rotation=[0, 0, 0, 1], pivot=[0, 0, 0]),
+            ClusterRigidTransform(id="cB", name="B", helix_ids=["e2r_hb"],
+                                  translation=list(cluster_b_translation),
+                                  rotation=[0, 0, 0, 1], pivot=[0, 0, 0]),
+        ]
+        joints = [ClusterJoint(id="jB", cluster_id="cB", name="Hinge",
+                  local_axis_origin=[0.0, 0.0, 6 * BDNA_RISE_PER_BP],
+                  local_axis_direction=[0.0, 1.0, 0.0], min_angle_deg=-180.0, max_angle_deg=180.0)]
+    d = _demo_design().model_copy(update={
+        "helices": [ha, hb_], "strands": [sa, sb],
+        "overhangs": [OverhangSpec(id="oh_a", helix_id="e2r_ha", strand_id="e2r_sa", label="OHA", sequence="ACGTACGT"),
+                      OverhangSpec(id="oh_b", helix_id="e2r_hb", strand_id="e2r_sb", label="OHB", sequence="ACGTACGT")],
+        "cluster_transforms": clusters, "cluster_joints": joints,
+    })
+    d = _cv_create_bound_binding(d, "oh_a", "oh_b", "root", "root", "root-to-root")
+    return d, d.overhang_bindings[0].id
+
+
+def test_relax_overhang_binding_closes_tip_root_chord():
+    """hb.relax_overhang_binding swings A's overhang duplex + rotates the jointed
+    cluster so the driven overhang's stretched tip↔root chord collapses toward one
+    backbone bond — strain reduced, a pose moved, topology untouched
+    (assert_direct_binding_relaxed_pose). Also flips the route's headless coverage."""
+    seeded, bid = _applied_direct_binding()
+    design_state.set_design(seeded)
+    before = design_state.get_or_404()
+    after = hb.relax_overhang_binding(bid)
+    assert_direct_binding_relaxed_pose(before, after, "oh_a", "oh_b")
+
+    report = headless_coverage_report()
+    assert any(
+        r["path"].endswith("/design/overhang-bindings/{binding_id}/relax")
+        for r in report["covered_routes"]
+    ), "the binding-relax route should now be headless-covered"
+
+
+def test_relax_overhang_binding_is_pose_only():
+    """The binding relax never edits the strand graph — canonical_topology
+    unchanged (the Three-Layer Law); only the driver's rotation + cluster_transforms
+    + feature_log move."""
+    seeded, bid = _applied_direct_binding()
+    design_state.set_design(seeded)
+    before = design_state.get_or_404()
+    after = hb.relax_overhang_binding(bid)
+    assert canonical_topology(before) == canonical_topology(after)
+
+
+def test_relax_overhang_binding_same_body_swings_duplex_only():
+    """Both overhangs on ONE rigid body: no cluster can move, but the 2-DOF duplex
+    swing (stored on the DRIVER's overhang rotation) still reduces the chord — the
+    oracle's pose-moved clause accepts the rotation change, not just a cluster move."""
+    seeded, bid = _applied_direct_binding(same_body=True)
+    design_state.set_design(seeded)
+    before = design_state.get_or_404()
+    after = hb.relax_overhang_binding(bid)
+    assert_direct_binding_relaxed_pose(before, after, "oh_a", "oh_b")
+    # the swing landed on A's overhang rotation, not a cluster transform
+    a_after = next(o for o in after.overhangs if o.id == "oh_a")
+    assert tuple(a_after.rotation) != (0.0, 0.0, 0.0, 1.0)
 
 
 def _two_helices_with_crossover(*, with_joint):
