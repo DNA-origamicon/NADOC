@@ -3,8 +3,9 @@
  * tool's end-polarity / pairing / arc math. Real module + real THREE (no mocks),
  * mirroring cluster_gizmo.test.js. Oracles come from the spec, not the code.
  */
-import { describe, it, expect } from 'vitest'
-import { endRole, isValidPair, ligationArgs, crossoverArcPoints } from './force_crossover_tool.js'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { createMockStore } from '../test-helpers/mock_store.js'
+import { endRole, isValidPair, ligationArgs, crossoverArcPoints, initForceCrossoverTool } from './force_crossover_tool.js'
 
 const three = (sid) => ({ strand_id: sid, is_three_prime: true })
 const five  = (sid) => ({ strand_id: sid, is_five_prime: true })
@@ -65,5 +66,102 @@ describe('crossoverArcPoints', () => {
     const pts = crossoverArcPoints(nucA, nucB, 16)
     // Midpoint sample is pulled perpendicular to the chord (bow = chord × axis).
     expect(Math.abs(pts[8].y)).toBeGreaterThan(0.1)
+  })
+})
+
+describe('initForceCrossoverTool selection clearing', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="view-tools"><button class="sf-btn" data-key="fxover"></button></div><div id="mode-indicator"></div>'
+    vi.clearAllMocks()
+  })
+
+  function makeEntry(strandId, role, x) {
+    const nuc = {
+      strand_id: strandId,
+      is_three_prime: role === '3p',
+      is_five_prime: role === '5p',
+      backbone_position: [x, 0, 0],
+      axis_tangent: [0, 0, 1],
+      base_normal: [0, 1, 0],
+    }
+    return {
+      id: x,
+      nuc,
+      instMesh: {
+        visible: true,
+        getMatrixAt: vi.fn(),
+      },
+    }
+  }
+
+  it('clears stale strand selection/glow before a forced ligation response can re-highlight merged strands', async () => {
+    const entries = [
+      makeEntry('three-strand', '3p', 0),
+      makeEntry('five-strand', '5p', 1),
+    ]
+    const store = createMockStore({
+      assemblyActive: false,
+      selectedObject: { type: 'strand', id: 'three-strand', data: { strand_id: 'three-strand' } },
+      selectableTypes: { strands: true, ends: true },
+      currentDesign: { strands: [{ id: 'three-strand' }, { id: 'five-strand' }] },
+    })
+    const designRenderer = {
+      getBackboneEntries: vi.fn(() => entries),
+      clearGlow: vi.fn(),
+      clearPreviewGlow: vi.fn(),
+      clearPreviewArc: vi.fn(),
+      setGlowEntries: vi.fn(),
+    }
+    const selectionManager = {
+      getSelectionLevel: vi.fn(() => 'strand'),
+      setSelectionLevel: vi.fn(),
+      clearSelection: vi.fn(() => {
+        store.setState({
+          selectedObject: null,
+          multiSelectedStrandIds: [],
+          multiSelectedDomainIds: [],
+          multiSelectedOverhangIds: [],
+        })
+        designRenderer.clearGlow()
+      }),
+    }
+    const api = {
+      forcedLigation: vi.fn(async (threeId, fiveId) => {
+        expect(selectionManager.clearSelection).toHaveBeenCalled()
+        expect(store.getState().selectedObject).toBe(null)
+        store.setState({
+          currentDesign: { strands: [{ id: threeId, domains: [{}, {}] }], forced_ligations: [{ id: 'fl1' }] },
+        })
+        return true
+      }),
+    }
+    const canvas = document.createElement('canvas')
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 200 })
+
+    const tool = initForceCrossoverTool({
+      store,
+      canvas,
+      camera: {},
+      designRenderer,
+      selectionManager,
+      api,
+      getCamera: () => ({})
+    })
+
+    tool.activate()
+    expect(store.getState().selectedObject).toBe(null)
+
+    expect(tool.testApi.pickEnd('three-strand')).toBe(true)
+    const committed = await tool.testApi.pickEnd('five-strand')
+
+    expect(committed).toBe(true)
+    expect(api.forcedLigation).toHaveBeenCalledWith('three-strand', 'five-strand')
+    expect(selectionManager.clearSelection).toHaveBeenCalledTimes(3)
+    expect(store.getState().selectedObject).toBe(null)
+    expect(store.getState().multiSelectedStrandIds).toEqual([])
+    expect(store.getState().multiSelectedDomainIds).toEqual([])
+    expect(store.getState().multiSelectedOverhangIds).toEqual([])
+    expect(designRenderer.clearGlow).toHaveBeenCalled()
+    expect(designRenderer.setGlowEntries).toHaveBeenCalledTimes(1) // the temporary anchor only; no post-commit strand highlight
   })
 })

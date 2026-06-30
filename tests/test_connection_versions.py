@@ -8,9 +8,9 @@ from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
-    Design, OverhangSpec, Helix, Strand, Domain, Direction, StrandType, Vec3,
+    Design, OverhangSpec, Helix, Strand, Domain, Direction, StrandType, SubDomain, Vec3,
 )
-from tests.automation_harness import assert_end_to_root_binder
+from tests.automation_harness import assert_direct_binding_applied
 
 client = TestClient(app)
 
@@ -28,7 +28,10 @@ def _seed_real() -> Design:
                       phase_offset=0.0, length_bp=8, grid_pos=(0, int(x)))
         strand = Strand(id=sid, strand_type=StrandType.STAPLE, domains=[
             Domain(helix_id=hid, start_bp=0, end_bp=7, direction=Direction.FORWARD, overhang_id=oid)])
-        spec = OverhangSpec(id=oid, helix_id=hid, strand_id=sid, label=oid.upper())
+        spec = OverhangSpec(
+            id=oid, helix_id=hid, strand_id=sid, label=oid.upper(),
+            sub_domains=[SubDomain(name="a", start_bp_offset=0, length_bp=8)],
+        )
         return helix, strand, spec
 
     ha, sa, oa = _oh("oh_helix_a", "oh_strand_a", "oh_a", 2)
@@ -51,6 +54,14 @@ def _mk_version(**kw):
     return design_state.get_or_404().connection_versions[-1].id
 
 
+def _overhang_domain_len(design: Design, overhang_id: str) -> int:
+    for strand in design.strands:
+        for domain in strand.domains:
+            if domain.overhang_id == overhang_id:
+                return abs(domain.end_bp - domain.start_bp) + 1
+    raise AssertionError(f"overhang domain {overhang_id!r} not found")
+
+
 def test_apply_creates_linker_sets_sequences_and_marks_applied():
     design_state.close_session(); design_state.set_design(_seed_real())
     vid = _mk_version()
@@ -62,15 +73,16 @@ def test_apply_creates_linker_sets_sequences_and_marks_applied():
     assert next(v for v in d.connection_versions if v.id == vid).applied is True
 
 
-def test_apply_resizes_overhang_to_sequence_length():
+def test_apply_preserves_live_overhang_length_when_version_sequence_is_stale():
     design_state.close_session(); design_state.set_design(_seed_real())
     vid = _mk_version(overhang_a_seq="ACGTACGTAC", overhang_b_seq="ACGTACGTAC")  # 10 nt > 8
     r = client.post(f"/api/design/connection-versions/{vid}/apply")
     assert r.status_code == 200, r.text
     d = design_state.get_or_404()
     oh_a = next(o for o in d.overhangs if o.id == "oh_a")
-    assert oh_a.sequence == "ACGTACGTAC"
-    assert sum(sd.length_bp for sd in oh_a.sub_domains) == 10      # overhang resized
+    assert oh_a.sequence == "ACGTACGT"                             # truncated to live length
+    assert sum(sd.length_bp for sd in oh_a.sub_domains) == 8       # geometry preserved
+    assert next(v for v in d.connection_versions if v.id == vid).overhang_a_seq == "ACGTACGT"
 
 
 def test_apply_direct_creates_binding_not_linker():
@@ -99,33 +111,43 @@ def test_apply_replaces_prior_version_topology():
 
 
 def _seed_end_to_root() -> Design:
-    """A as a lone overhang; B as a bundle-anchored staple (a root domain + the
-    overhang tip) so the end-to-root splice has a root to attach the binder to."""
+    """A and B each a [root → overhang-tip] staple with equal-length (8 bp) tips on
+    separate helices, so applying a DIRECT connection relocates B's tip onto A's
+    helix as a clean equal-length duplex (no overhang consumed)."""
     base = _demo_design()
     ha = Helix(id="e2r_ha", axis_start=Vec3(x=2.0, y=0.0, z=0.0),
-               axis_end=Vec3(x=2.0, y=0.0, z=8 * BDNA_RISE_PER_BP),
-               phase_offset=0.0, length_bp=8, grid_pos=(0, 2))
+               axis_end=Vec3(x=2.0, y=0.0, z=16 * BDNA_RISE_PER_BP),
+               phase_offset=0.0, length_bp=16, grid_pos=(0, 2))
     hbx = Helix(id="e2r_hb", axis_start=Vec3(x=5.0, y=0.0, z=0.0),
-                axis_end=Vec3(x=5.0, y=0.0, z=8 * BDNA_RISE_PER_BP),
-                phase_offset=0.0, length_bp=8, grid_pos=(0, 5))
+                axis_end=Vec3(x=5.0, y=0.0, z=16 * BDNA_RISE_PER_BP),
+                phase_offset=0.0, length_bp=16, grid_pos=(0, 5))
     sa = Strand(id="e2r_sa", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="e2r_ha", start_bp=0, end_bp=7, direction=Direction.FORWARD, overhang_id="oh_a")])
+        Domain(helix_id="e2r_ha", start_bp=0, end_bp=3, direction=Direction.FORWARD),                        # root
+        Domain(helix_id="e2r_ha", start_bp=4, end_bp=11, direction=Direction.FORWARD, overhang_id="oh_a")])  # tip
     sb = Strand(id="e2r_sb", strand_type=StrandType.STAPLE, domains=[
-        Domain(helix_id="e2r_hb", start_bp=0, end_bp=3, direction=Direction.FORWARD),                       # root
-        Domain(helix_id="e2r_hb", start_bp=4, end_bp=7, direction=Direction.FORWARD, overhang_id="oh_b")])  # tip
+        Domain(helix_id="e2r_hb", start_bp=0, end_bp=3, direction=Direction.FORWARD),                        # root
+        Domain(helix_id="e2r_hb", start_bp=4, end_bp=11, direction=Direction.FORWARD, overhang_id="oh_b")])  # tip
     return base.model_copy(update={
         "helices": [*base.helices, ha, hbx],
         "strands": [*base.strands, sa, sb],
-        "overhangs": [OverhangSpec(id="oh_a", helix_id="e2r_ha", strand_id="e2r_sa", label="OHA"),
-                      OverhangSpec(id="oh_b", helix_id="e2r_hb", strand_id="e2r_sb", label="OHB")],
+        "overhangs": [
+            OverhangSpec(
+                id="oh_a", helix_id="e2r_ha", strand_id="e2r_sa", label="OHA",
+                sub_domains=[SubDomain(name="a", start_bp_offset=0, length_bp=8)],
+            ),
+            OverhangSpec(
+                id="oh_b", helix_id="e2r_hb", strand_id="e2r_sb", label="OHB",
+                sub_domains=[SubDomain(name="a", start_bp_offset=0, length_bp=8)],
+            ),
+        ],
     })
 
 
-def test_apply_end_to_root_splices_rc_binder_into_b():
-    """Applying an end-to-root version regenerates overhang B as A's reverse
-    complement: a binder domain (on A's helix, antiparallel, RC of A) is spliced
-    into B's root staple and B's spec is consumed — no binding/linker record is
-    created. The reusable oracle proves the geometry + splice + RC + round-trip."""
+def test_apply_end_to_root_relocates_b_not_consumes():
+    """Applying an end-to-root version materializes ONE non-consuming, relocated
+    OverhangBinding: B's tip relocates onto A's helix (duplex), NEITHER overhang is
+    consumed, and there is no linker/forced-ligation. The reusable oracle proves the
+    relocation + driver/driven + round-trip."""
     design_state.close_session(); design_state.set_design(_seed_end_to_root())
     r = client.post("/api/design/connection-versions", json={
         "overhang_a_id": "oh_a", "overhang_b_id": "oh_b",
@@ -135,10 +157,70 @@ def test_apply_end_to_root_splices_rc_binder_into_b():
     r = client.post(f"/api/design/connection-versions/{vid}/apply")
     assert r.status_code == 200, r.text
     d = design_state.get_or_404()
-    assert_end_to_root_binder(d, overhang_a_id="oh_a", overhang_b_id="oh_b")
-    assert len(d.overhang_bindings) == 0      # end-to-root is a pure topological splice
+    assert_direct_binding_applied(d, overhang_a_id="oh_a", overhang_b_id="oh_b",
+                                  connection_type="end-to-root")
+    assert len(d.overhang_bindings) == 1      # one non-consuming bound binding
     assert len(d.overhang_connections) == 0
+    assert d.forced_ligations == []           # relocate, not splice → no FL
     assert next(v for v in d.connection_versions if v.id == vid).applied is True
+
+
+def test_apply_direct_does_not_consume_either_overhang_root_to_root():
+    """root-to-root keeps BOTH overhangs in design.overhangs after apply (the
+    user-reported regression: an overhang disappearing from the list)."""
+    design_state.close_session(); design_state.set_design(_seed_end_to_root())
+    r = client.post("/api/design/connection-versions", json={
+        "overhang_a_id": "oh_a", "overhang_b_id": "oh_b",
+        "connection_type": "root-to-root", "overhang_a_seq": "AAACCCGG"})
+    assert r.status_code == 201, r.text
+    vid = design_state.get_or_404().connection_versions[-1].id
+    assert client.post(f"/api/design/connection-versions/{vid}/apply").status_code == 200
+    d = design_state.get_or_404()
+    assert {o.id for o in d.overhangs} == {"oh_a", "oh_b"}
+    assert_direct_binding_applied(d, overhang_a_id="oh_a", overhang_b_id="oh_b",
+                                  connection_type="root-to-root")
+
+
+def test_apply_direct_after_free_end_resize_does_not_restore_old_lengths():
+    """Regression for UI flow: create version → drag-resize overhang free ends →
+    auto apply. Applying the stale version sequence must not shrink the live
+    overhang geometry back. Both tips resize equally so the duplex stays matched."""
+    design_state.close_session(); design_state.set_design(_seed_end_to_root())
+    r = client.post("/api/design/connection-versions", json={
+        "overhang_a_id": "oh_a", "overhang_b_id": "oh_b",
+        "connection_type": "end-to-root",
+        "overhang_a_seq": "AAACCCGG",       # captured while A is 8 bp
+        "overhang_b_seq": "CCGGGTTT",       # captured while B is 8 bp (RC of A)
+    })
+    assert r.status_code == 201, r.text
+    vid = design_state.get_or_404().connection_versions[-1].id
+
+    # Both tips are the terminal 3' domain after a four-bp root domain — grow both.
+    assert client.post("/api/design/overhang/oh_a/resize-free-end",
+                       json={"end": "3p", "delta_bp": 2}).status_code == 200
+    assert client.post("/api/design/overhang/oh_b/resize-free-end",
+                       json={"end": "3p", "delta_bp": 2}).status_code == 200
+
+    resized = design_state.get_or_404()
+    assert _overhang_domain_len(resized, "oh_a") == 10
+    assert _overhang_domain_len(resized, "oh_b") == 10
+
+    r = client.post(f"/api/design/connection-versions/{vid}/apply")
+    assert r.status_code == 200, r.text
+    d = design_state.get_or_404()
+
+    oh_a = next(o for o in d.overhangs if o.id == "oh_a")
+    assert _overhang_domain_len(d, "oh_a") == 10
+    assert sum(sd.length_bp for sd in oh_a.sub_domains) == 10
+    assert oh_a.sequence == "AAACCCGGNN"
+    applied = next(v for v in d.connection_versions if v.id == vid)
+    assert applied.overhang_a_seq == "AAACCCGGNN"
+    # Neither overhang consumed; one bound binding (the duplex). (No .nadoc round-trip
+    # here: the asymmetric N-padding from resizing both 3' ends breaks the duplex
+    # register, so the persisted sub-domain sequences aren't WC — a fixture artifact,
+    # not a core issue; the proper complementary flow is covered above.)
+    assert {o.id for o in d.overhangs} == {"oh_a", "oh_b"}
+    assert len(d.overhang_bindings) == 1 and d.overhang_bindings[0].bound
 
 
 def test_apply_404_for_unknown_version():

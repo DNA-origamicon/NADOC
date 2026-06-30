@@ -13,10 +13,12 @@ Two binder kinds are pinned here, both keyed on ``Domain.binds_overhang_id``:
      overhang's bp range on the same helix (a toehold from dragging the binder's
      free end). The whole domain — incl. the part past the overhang — must rotate
      rigidly. A control STAPLE (not a binder) must NOT move.
-  2. An **end-to-root** binder spliced into a STAPLE strand
-     (``apply_end_to_root_binder``). It is STAPLE-typed, so a strand-type filter
-     would miss it; only the ``binds_overhang_id`` link identifies it. This is the
-     case the old filter failed.
+  2. A **relocated DIRECT-binding partner** overhang (root-to-root / end-to-root).
+     Applying a direct connection relocates the DRIVEN overhang B's tip domain onto
+     the DRIVER A's helix; that domain carries ``overhang_id`` (NOT
+     ``binds_overhang_id``), so the partner-ref lookup must recognise the bound
+     ``OverhangBinding`` driver/driven link. This is the "the other overhang doesn't
+     track" bug.
 """
 
 from __future__ import annotations
@@ -28,10 +30,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import state as design_state
+from backend.api.crud import _cv_create_bound_binding
 from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
-from backend.core.lattice import apply_end_to_root_binder
 from backend.core.models import (
     Design, Direction, Domain, Helix, OverhangSpec, Strand, StrandType, Vec3,
 )
@@ -222,19 +224,18 @@ def _seed_end_to_root() -> tuple[Design, str, str]:
     return d, "oh_a", "oh_b"
 
 
-def test_end_to_root_binder_follows_rotated_overhang():
+def test_relocated_direct_binding_partner_follows_rotated_driver():
     d, a_id, b_id = _seed_end_to_root()
-    d = apply_end_to_root_binder(d, a_id, b_id)
+    # Apply a direct connection: relocates B's tip domain onto A's helix (the duplex).
+    d = _cv_create_bound_binding(d, a_id, b_id, "root", "root", "root-to-root")
 
-    # Locate the spliced binder domain: a STAPLE-strand domain on A's helix tagged
-    # binds_overhang_id == a_id.
+    # Locate B's relocated tip domain: tagged overhang_id == b_id, now on A's helix.
     binders = [(s, di) for s in d.strands for di, dom in enumerate(s.domains)
-               if dom.binds_overhang_id == a_id]
-    assert len(binders) == 1, f"expected one end-to-root binder, got {len(binders)}"
+               if dom.overhang_id == b_id]
+    assert len(binders) == 1, f"expected one relocated B tip, got {len(binders)}"
     b_strand, b_di = binders[0]
-    assert b_strand.strand_type == StrandType.STAPLE, "end-to-root binder must be STAPLE-typed"
     binder_dom = b_strand.domains[b_di]
-    assert binder_dom.helix_id == "oh_helix_a"
+    assert binder_dom.helix_id == "oh_helix_a", "B's tip must relocate onto A's helix"
 
     design_state.set_design(d)
     pre = _get_geom()

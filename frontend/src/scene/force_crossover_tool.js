@@ -180,8 +180,10 @@ export function initForceCrossoverTool({
     const { three_prime_strand_id, five_prime_strand_id } = ligationArgs(_firstEnd.nuc, secondEntry.nuc)
     _clearFirstEnd()
     _setModeText()
+    selectionManager.clearSelection?.()
     try {
       const ok = await api.forcedLigation(three_prime_strand_id, five_prime_strand_id)
+      if (ok) selectionManager.clearSelection?.()
       if (!ok) {
         const err = store.getState().lastError
         console.error('[force-xover] forced ligation failed:', err?.message)
@@ -239,6 +241,7 @@ export function initForceCrossoverTool({
     // Disable the selection manager entirely (lasso/multi-select/click) and force
     // the End level so the End button lights up.
     _prevSelectableTypes = { ...store.getState().selectableTypes }
+    selectionManager.clearSelection?.()
     store.setState({
       forceXoverActive: true,
       selectedObject: null,

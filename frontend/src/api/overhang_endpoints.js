@@ -101,9 +101,11 @@ export async function deleteConnectionVersion(versionId) {
 }
 
 export async function relaxOverhangBinding(bindingId) {
-  // Move the bound overhangs' clusters together (joint-rotate if a joint
-  // connects them, else rigid-translate the driven cluster) — the binding
-  // analogue of relaxLinker. Run while the overhangs are un-relocated.
+  // UNIFIED direct-binding relax (root-to-root + end-to-root): swing the driver's
+  // overhang duplex about its root (persisted as the driver's overhang rotation;
+  // the driven tip co-rotates) + cluster kinematics (joint-rotate, else rigid-
+  // translate the driven root cluster) so the driven tip↔root bond closes to one
+  // backbone bond. Same rigid body → swing only. The binding stays bound.
   const json = await _request('POST', `/design/overhang-bindings/${encodeURIComponent(bindingId)}/relax`)
   return _syncFromDesignResponse(json)
 }

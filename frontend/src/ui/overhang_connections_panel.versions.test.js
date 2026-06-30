@@ -183,8 +183,35 @@ describe('overhang connections — versions (Connect / Add version / Apply)', ()
     await new Promise(r => setTimeout(r, 0))
     expect(createConnectionVersion).toHaveBeenCalled()
     expect(createConnectionVersion.mock.calls[0][0].connection_type).toBe('end-to-root')
-    expect(applyConnectionVersion).toHaveBeenCalledWith('vE2R')  // ← runs apply_end_to_root_binder
+    expect(applyConnectionVersion).toHaveBeenCalledWith('vE2R')  // ← relocate-on-apply (non-consuming)
     expect(createOverhangBinding).not.toHaveBeenCalled()         // ← NOT the old direct-binding method
+  })
+
+  it('Connect for root-to-root creates a version then APPLIES it (same path as end-to-root) — not the old OverhangBinding', async () => {
+    // root-to-root is valid iff polarities DIFFER (5p ↔ 3p). A pre-sequenced so the
+    // sequence step only patches B (no random-gen network call).
+    const aId = 'ovhg_h1_5_5p', bId = 'ovhg_h2_9_3p'
+    const ohs = [
+      { id: aId, label: 'OH1', sequence: 'AAACCCGG', sub_domains: [{ id: 'sdA', length_bp: 8 }] },
+      { id: bId, label: 'OH2', sub_domains: [{ id: 'sdB', length_bp: 8 }] },
+    ]
+    const st = (versions) => ({ currentDesign: {
+      overhangs: ohs, strands: [], overhang_connections: [], overhang_bindings: [], connection_versions: versions } })
+    const vR2R = { id: 'vR2R', name: 'V1', created_at: 1, overhang_a_id: aId, overhang_b_id: bId,
+      connection_type: 'root-to-root', overhang_a_seq: 'AAACCCGG', overhang_b_seq: null,
+      bridge_length: 0, bridge_seq: null, applied: false }
+    store.setState(st([]))
+    selectPair(aId, bId)
+    pickVariant('root-to-root')
+    expect($('oconn-generate').textContent).toBe('Connect')      // never-paired pair
+    expect($('oconn-generate').disabled).toBe(false)             // valid polarity → enabled
+    createConnectionVersion.mockImplementationOnce(async () => { store.setState(st([vR2R])) })
+    $('oconn-generate').dispatchEvent(new Event('click'))        // "Connect"
+    await new Promise(r => setTimeout(r, 0))
+    expect(createConnectionVersion).toHaveBeenCalled()
+    expect(createConnectionVersion.mock.calls[0][0].connection_type).toBe('root-to-root')
+    expect(applyConnectionVersion).toHaveBeenCalledWith('vR2R')  // ← backend creates the OverhangBinding
+    expect(createOverhangBinding).not.toHaveBeenCalled()         // ← NOT the old direct-binding path
   })
 
   it('deleting a version row calls deleteConnectionVersion', async () => {

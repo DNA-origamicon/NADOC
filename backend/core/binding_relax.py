@@ -44,6 +44,7 @@ from backend.core.models import (
     Design,
     Direction,
     Domain,
+    ForcedLigation,
     Helix,
     OverhangBinding,
     Strand,
@@ -77,6 +78,12 @@ class BindTopology:
     target_end_bp: int
     target_direction: 'Direction'
     snapshot: Dict[str, Any]
+    # ForcedLigation that REPLACES the relocated overhang-extrude crossover (the
+    # root↔tip backbone bond). After relocation the crossover's halves sit on
+    # non-adjacent helices at mismatched bp — an INVALID lattice crossover — so the
+    # bond is represented as a ForcedLigation (drawn correctly in 3D + cadnano).
+    # None for the legacy single-domain / no-crossover case (keeps the rewrite path).
+    forced_ligation: Optional['ForcedLigation'] = None
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -186,6 +193,8 @@ def _half_in_range(half, helix_id: str, lo: int, hi: int) -> bool:
 def compute_bind_topology(
     design: Design,
     binding: OverhangBinding,
+    *,
+    driver_side: Optional[str] = None,
 ) -> BindTopology:
     """Describe the topology edit for binding *binding*.
 
@@ -194,9 +203,17 @@ def compute_bind_topology(
     pre-bind domain values + affected crossovers) that the caller persists
     on ``binding.prior_driven_topology`` so unbind can restore.
 
+    ``driver_side`` ('a' | 'b') forces which overhang HOSTS the duplex,
+    overriding the joint heuristic. The unified direct-apply path passes the
+    attach-derived driver (end-to-root → A hosts); the legacy root-to-root
+    bound-toggle leaves it ``None`` to keep the heuristic. When forced, the
+    same-cluster guard is relaxed — relocation is a pure topology move that is
+    valid even within one rigid body (the later relax just becomes swing-only).
+
     Raises ``HTTPException(422)`` when:
       * either overhang is unrouted (not on any cluster);
-      * both overhangs share a cluster (relocation would be a no-op);
+      * both overhangs share a cluster AND ``driver_side`` is None (heuristic
+        path — relocation target would be ambiguous);
       * a strand-domain anchor for either OH cannot be found.
     """
     # Find the two OHs.
@@ -207,20 +224,24 @@ def compute_bind_topology(
             f"OverhangBinding {binding.id}: overhangs do not resolve."
         ))
 
-    cluster_a = _overhang_owning_cluster_id(design, oh_a.id)
-    cluster_b = _overhang_owning_cluster_id(design, oh_b.id)
-    if cluster_a is None or cluster_b is None:
-        raise HTTPException(422, detail=(
-            "Binding endpoints are not owned by any cluster — bind requires "
-            "both overhangs to be in clusters."
-        ))
-    if cluster_a == cluster_b:
-        raise HTTPException(422, detail=(
-            "Binding spans a single rigid body — both overhangs sit on the "
-            "same cluster, so no relocation is possible."
-        ))
-
-    driver_side = _resolve_driver_side(design, binding, cluster_a, cluster_b)
+    # Cluster checks only constrain the HEURISTIC driver pick. When the caller
+    # forces ``driver_side`` (the unified direct-apply path), relocation is a pure
+    # topology move — valid with no clusters or a single shared cluster — so we skip
+    # them entirely.
+    if driver_side not in ('a', 'b'):
+        cluster_a = _overhang_owning_cluster_id(design, oh_a.id)
+        cluster_b = _overhang_owning_cluster_id(design, oh_b.id)
+        if cluster_a is None or cluster_b is None:
+            raise HTTPException(422, detail=(
+                "Binding endpoints are not owned by any cluster — bind requires "
+                "both overhangs to be in clusters."
+            ))
+        if cluster_a == cluster_b:
+            raise HTTPException(422, detail=(
+                "Binding spans a single rigid body — both overhangs sit on the "
+                "same cluster, so no relocation is possible."
+            ))
+        driver_side = _resolve_driver_side(design, binding, cluster_a, cluster_b)
     driver_oh = oh_a if driver_side == 'a' else oh_b
     driven_oh = oh_b if driver_side == 'a' else oh_a
 
@@ -291,6 +312,34 @@ def compute_bind_topology(
         "prior_ovhg_helix_id": driven_oh.helix_id,
         "crossovers": xover_snapshots,
     }
+
+    # ForcedLigation for the relocated root↔tip junction. When the driven overhang
+    # is a multi-domain (root → tip) staple AND it actually carries an overhang-
+    # extrude crossover, relocation moves the tip onto the driver's (non-adjacent)
+    # helix at the driver's bp range — so the old crossover would become an INVALID
+    # lattice crossover (mismatched bp / non-adjacent helices). Represent the bond
+    # as a ForcedLigation instead (3'→5' in strand order: earlier domain's end → later
+    # domain's start), mirroring the convention POST /design/forced-ligation uses.
+    relocate_fl = None
+    n_dom = len(driven_strand.domains)
+    if n_dom >= 2 and xover_snapshots:
+        is_tip_last = driven_di == n_dom - 1
+        root_dom = (driven_strand.domains[driven_di - 1] if is_tip_last
+                    else driven_strand.domains[driven_di + 1])
+        if is_tip_last:
+            relocate_fl = ForcedLigation(
+                three_prime_helix_id=root_dom.helix_id, three_prime_bp=root_dom.end_bp,
+                three_prime_direction=root_dom.direction,
+                five_prime_helix_id=target_helix_id, five_prime_bp=target_start_bp,
+                five_prime_direction=target_direction)
+        else:
+            relocate_fl = ForcedLigation(
+                three_prime_helix_id=target_helix_id, three_prime_bp=target_end_bp,
+                three_prime_direction=target_direction,
+                five_prime_helix_id=root_dom.helix_id, five_prime_bp=root_dom.start_bp,
+                five_prime_direction=root_dom.direction)
+        snapshot["forced_ligation"] = relocate_fl.model_dump(mode="json")
+
     return BindTopology(
         driver_oh_id=driver_oh.id,
         driven_oh_id=driven_oh.id,
@@ -302,6 +351,7 @@ def compute_bind_topology(
         target_end_bp=target_end_bp,
         target_direction=target_direction,
         snapshot=snapshot,
+        forced_ligation=relocate_fl,
     )
 
 
@@ -352,46 +402,53 @@ def apply_bind_topology(design: Design, topology: BindTopology) -> Design:
     else:
         new_helices = [h for h in design.helices if h.id != driven_helix_id]
 
-    # 4) REWRITE crossovers whose half lies on the driven helix WITHIN
-    #    the driven OH's bp range so they now point at the driver helix
-    #    at the mapped bp + flipped direction. Preserves each Crossover
-    #    record (and its id) so the OH→parent arc still has a
-    #    `crossover_id` in `xoBySiteKey` — the user's right-click on the
-    #    stretched arc reaches the Relax bond menu.
+    # 4) The relocated tip's overhang-extrude crossover(s) — those whose half lies
+    #    on the driven helix WITHIN the driven OH's bp range. After relocation the
+    #    tip sits on the driver's (non-adjacent) helix at a different bp, so the old
+    #    crossover would be an INVALID lattice crossover.
     #
-    #    SCOPE: crossovers OUTSIDE the OH's bp range are left untouched,
-    #    even when their half happens to be on the same OH helix. This
-    #    matters when one extruded helix hosts MULTIPLE overhangs (e.g.
-    #    OH-5p at bp 199 and OH-3p at bp 200 share one helix) — binding
-    #    just ONE of those OHs must not relocate the OTHER's crossover.
+    #    * Multi-domain driven staple (a root↔tip junction exists) → DROP those
+    #      crossovers and add the ForcedLigation that represents the same backbone
+    #      bond (drawn correctly in 3D + cadnano). This is what the old end-to-root
+    #      splice did, generalized to every direct relocation.
+    #    * Legacy single-domain / no-FL case → fall back to the original rewrite
+    #      (preserves the crossover record + its id).
+    #
+    #    SCOPE: crossovers OUTSIDE the OH's bp range are left untouched even when
+    #    their half is on the same OH helix — one extruded helix may host MULTIPLE
+    #    overhangs; binding just ONE must not touch the OTHER's crossover.
     prior_domain = topology.snapshot["prior_domain"]
     prior_lo = min(int(prior_domain["start_bp"]), int(prior_domain["end_bp"]))
     prior_hi = max(int(prior_domain["start_bp"]), int(prior_domain["end_bp"]))
-    new_crossovers = []
-    for xo in design.crossovers:
-        new_ha = xo.half_a
-        new_hb = xo.half_b
-        if _half_in_range(xo.half_a, driven_helix_id, prior_lo, prior_hi):
-            new_ha = _rewrite_half_to_driver(
-                xo.half_a, driven_helix_id, topology, prior_domain,
-            )
-        if _half_in_range(xo.half_b, driven_helix_id, prior_lo, prior_hi):
-            new_hb = _rewrite_half_to_driver(
-                xo.half_b, driven_helix_id, topology, prior_domain,
-            )
-        if new_ha is xo.half_a and new_hb is xo.half_b:
-            new_crossovers.append(xo)
-        else:
-            new_crossovers.append(xo.model_copy(update={
-                "half_a": new_ha,
-                "half_b": new_hb,
-            }))
+
+    def _in_oh_range(xo: Crossover) -> bool:
+        return (_half_in_range(xo.half_a, driven_helix_id, prior_lo, prior_hi)
+                or _half_in_range(xo.half_b, driven_helix_id, prior_lo, prior_hi))
+
+    new_forced = list(design.forced_ligations)
+    if topology.forced_ligation is not None:
+        new_crossovers = [xo for xo in design.crossovers if not _in_oh_range(xo)]
+        new_forced.append(topology.forced_ligation)
+    else:
+        new_crossovers = []
+        for xo in design.crossovers:
+            new_ha = xo.half_a
+            new_hb = xo.half_b
+            if _half_in_range(xo.half_a, driven_helix_id, prior_lo, prior_hi):
+                new_ha = _rewrite_half_to_driver(xo.half_a, driven_helix_id, topology, prior_domain)
+            if _half_in_range(xo.half_b, driven_helix_id, prior_lo, prior_hi):
+                new_hb = _rewrite_half_to_driver(xo.half_b, driven_helix_id, topology, prior_domain)
+            if new_ha is xo.half_a and new_hb is xo.half_b:
+                new_crossovers.append(xo)
+            else:
+                new_crossovers.append(xo.model_copy(update={"half_a": new_ha, "half_b": new_hb}))
 
     return design.model_copy(update={
         "strands": new_strands,
         "overhangs": new_overhangs,
         "helices": new_helices,
         "crossovers": new_crossovers,
+        "forced_ligations": new_forced,
     })
 
 
@@ -496,15 +553,26 @@ def revert_bind_topology(design: Design, snapshot: Dict[str, Any]) -> Design:
             restored_xovers.append(snapshot_xovers_by_id.pop(xo.id))
         else:
             restored_xovers.append(xo)
-    # Any snapshot crossovers not matched above get appended.
+    # Any snapshot crossovers not matched above get appended. (On a multi-domain
+    # bind the crossover was DROPPED in favour of a ForcedLigation, so its snapshot
+    # entry lands here.)
     for sxo in snapshot_xovers_by_id.values():
         restored_xovers.append(sxo)
+
+    # 5) Remove the relocate ForcedLigation we added on bind (if any), so unbind
+    #    restores the pre-bind topology exactly.
+    new_forced = design.forced_ligations
+    fl_dict = snapshot.get("forced_ligation")
+    if fl_dict is not None:
+        fl_id = fl_dict.get("id")
+        new_forced = [fl for fl in design.forced_ligations if fl.id != fl_id]
 
     return design.model_copy(update={
         "helices": new_helices,
         "strands": new_strands,
         "overhangs": new_overhangs,
         "crossovers": restored_xovers,
+        "forced_ligations": new_forced,
     })
 
 

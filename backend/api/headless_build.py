@@ -74,6 +74,7 @@ from backend.api.crud import (
     patch_crossover_extra_bases as _route_set_xo_extra_bases,
     place_crossover as _route_place_crossover,
     relax_bond_endpoint as _route_relax_bond,
+    relax_overhang_binding as _route_relax_overhang_binding,
     relax_overhang_connection as _route_relax_overhang_connection,
     select_loadout as _route_select_loadout,
     strand_end_resize as _route_strand_end_resize,
@@ -1058,6 +1059,27 @@ def relax_bond(
         joint_ids=joint_ids,
         target_nm=target_nm,
     ))
+    return design_state.get_or_404()
+
+
+def relax_overhang_binding(binding_id: str) -> Design:
+    """Relax a DIRECT overhang binding's display POSE
+    (POST /design/overhang-bindings/{binding_id}/relax).
+
+    The direct-binding (root-to-root) sibling of :func:`relax_overhang_connection`:
+    moves the two bound overhangs' clusters together so the bound sub-domain
+    junction chord collapses to one backbone bond — joint-rotate when a joint
+    connects the clusters, else rigid-translate the driven cluster. Reuses the
+    shared ``backend.core.bond_relax`` core on the two sub-domain junction anchors.
+
+    **Three-Layer note — POSE only.** Moves ``cluster_transforms`` (+ a
+    ``ClusterOpLogEntry``); never edits the strand graph, so ``canonical_topology``
+    is unchanged — the load-bearing pin in
+    :func:`tests.automation_harness.assert_binding_relaxed_pose`.
+
+    Pin with :func:`tests.automation_harness.assert_binding_relaxed_pose`.
+    """
+    _route_relax_overhang_binding(binding_id)
     return design_state.get_or_404()
 
 

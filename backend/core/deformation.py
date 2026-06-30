@@ -949,6 +949,17 @@ def _overhang_binding_partner_refs(
     from backend.core.models import DomainRef, StrandType
     oh_lo = min(oh_domain.start_bp, oh_domain.end_bp)
     oh_hi = max(oh_domain.start_bp, oh_domain.end_bp)
+    # Unified direct-connection co-rotation: a bound OverhangBinding relocates the
+    # DRIVEN overhang's own tip domain onto the DRIVER's helix (antiparallel, same
+    # bp range). That relocated domain carries `overhang_id` (NOT `binds_overhang_id`),
+    # so it would be invisible to the binder check below — the cause of "the other
+    # overhang doesn't track." Map driven_oh_id → driver_oh_id for every bound
+    # binding so the relocated driven domain co-rotates when the DRIVER swings.
+    driven_to_driver = {
+        b.driven_oh_id: b.driver_oh_id
+        for b in design.overhang_bindings
+        if b.bound and b.driver_oh_id and b.driven_oh_id
+    }
     out: list = []
     for s in design.strands:
         for di, d in enumerate(s.domains):
@@ -957,12 +968,14 @@ def _overhang_binding_partner_refs(
             if d.direction == oh_domain.direction:
                 continue   # not antiparallel — skip
             # A partner is any domain bound to THIS overhang (OH_BINDER, LINKER
-            # complement, OR an end-to-root binder spliced into a STAPLE), plus
-            # a legacy fallback for old LINKER complements that predate the
-            # binds_overhang_id tag.
+            # complement), the relocated DRIVEN overhang of a bound direct binding
+            # whose driver is THIS overhang, plus a legacy fallback for old LINKER
+            # complements that predate the binds_overhang_id tag.
             is_partner = (
                 d.binds_overhang_id == oh_domain.overhang_id
                 or s.strand_type == StrandType.LINKER
+                or (d.overhang_id is not None
+                    and driven_to_driver.get(d.overhang_id) == oh_domain.overhang_id)
             )
             if not is_partner:
                 continue
@@ -1052,8 +1065,18 @@ def apply_overhang_rotation_if_needed(
 
     strand_by_id = {s.id: s for s in design.strands}
 
+    # Driven overhangs of a bound direct binding move ONLY as the driver's
+    # co-rotation partner (the relax swing is written onto the DRIVER's rotation);
+    # they must never self-rotate about their own pivot, or the swing double-applies.
+    driven_bound_oh_ids = {
+        b.driven_oh_id for b in design.overhang_bindings
+        if b.bound and b.driven_oh_id
+    }
+
     for ovhg in design.overhangs:
         if ovhg.helix_id != helix.id:
+            continue
+        if ovhg.id in driven_bound_oh_ids:
             continue
 
         # Sub-domain chain may be the only source of rotation, so check both

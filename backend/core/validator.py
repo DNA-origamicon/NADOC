@@ -206,6 +206,31 @@ def validate_design(design: Design) -> ValidationReport:
             f"Strand nicked at crossover location(s) — non-physical: {shown}{more}",
         ))
 
+    # ── Improper crossovers (invalid lattice position) ───────────────────────
+    # A real lattice crossover joins two helices at the SAME bp column (the
+    # backbone jumps between helices at one z-position). A crossover whose two
+    # halves sit at DIFFERENT bp indices is not a lattice crossover at all — it is
+    # a backbone bond between arbitrary positions / non-adjacent helices, which
+    # MUST be a ForcedLigation instead (else the cadnano editor draws a line to the
+    # wrong end). This caught the relocation bug where an overhang-extrude crossover
+    # was rewritten onto the driver helix at a mismatched bp; relocation now emits a
+    # ForcedLigation (see binding_relax.apply_bind_topology).
+    improper_xovers: List[str] = []
+    for xo in design.crossovers:
+        if int(xo.half_a.index) != int(xo.half_b.index):
+            improper_xovers.append(
+                f"crossover {xo.id!r}: halves at mismatched bp "
+                f"({xo.half_a.helix_id} bp {xo.half_a.index} ↔ "
+                f"{xo.half_b.helix_id} bp {xo.half_b.index}) — must be a forced ligation"
+            )
+    if improper_xovers:
+        shown = "; ".join(improper_xovers[:20])
+        more = f" (+{len(improper_xovers) - 20} more)" if len(improper_xovers) > 20 else ""
+        report.results.append(ValidationResult(
+            False,
+            f"Improper crossover(s) at invalid lattice positions: {shown}{more}",
+        ))
+
     # ── Overhang chain topology (Alt A: parent_overhang_id) ───────────────
     # Each spec's parent_overhang_id (when set) must reference an existing
     # OverhangSpec, and the parent chain must form a tree (no cycles).

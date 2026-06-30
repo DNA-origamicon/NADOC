@@ -3833,6 +3833,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** The active selectionLevel ('default'|'cluster'|'strand'|'domain'|'end'|'xover'). */
     getSelectionLevel() { return _selLevel },
+
+    /** Clear the current 3D selection, including the private highlight mode.
+     *  Use this when another tool owns the gesture; setting selectedObject=null
+     *  alone does not reset the cached _mode/_strandId used after scene rebuilds. */
+    clearSelection() { _clearAll() },
+
     /** Set the active selectionLevel; emits it so the filter row reflects.
      *  Returning to 'default' drops any hover preview. */
     setSelectionLevel(level) {

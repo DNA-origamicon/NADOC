@@ -22,18 +22,19 @@ const OHS = [
 ]
 const BINDING = (bound) => ({
   id: 'b1', name: 'B1', bound, overhang_a_id: IDA, overhang_b_id: IDB,
+  driver_oh_id: IDA, driven_oh_id: IDB, connection_type: 'root-to-root',
   sub_domain_a_id: 'sdA', sub_domain_b_id: 'sdB',
 })
 const LINKER = {
   id: 'c1', name: 'L1', linker_type: 'ds', length_value: 12, length_unit: 'bp',
   overhang_a_id: IDA, overhang_a_attach: 'root', overhang_b_id: IDB, overhang_b_attach: 'root',
 }
-function design({ bindings = [], connections = [] } = {}) {
-  return { currentDesign: { overhangs: OHS, strands: [], overhang_connections: connections, overhang_bindings: bindings } }
+function design({ bindings = [], connections = [], versions = [] } = {}) {
+  return { currentDesign: { overhangs: OHS, strands: [], overhang_connections: connections, overhang_bindings: bindings, connection_versions: versions } }
 }
 const sec = () => document.getElementById('oconn-secondary')
 
-describe('overhang connections — Bind / Relax secondary button', () => {
+describe('overhang connections — unified direct Relax secondary button', () => {
   let store
   beforeAll(() => {
     mountIds({
@@ -59,37 +60,33 @@ describe('overhang connections — Bind / Relax secondary button', () => {
     document.querySelector(`#oconn-popover [data-variant="${variant}"]`).dispatchEvent(new Event('click'))
   }
 
-  it('direct (unbound) → "Relax" moves the clusters then binds', async () => {
-    setup({ bindings: [BINDING(false)] }, 'root-to-root')
+  it('root-to-root → "Relax" calls relaxOverhangBinding once (no unbind/rebind dance)', async () => {
+    setup({ bindings: [BINDING(true)] }, 'root-to-root')
     expect(sec().textContent).toBe('Relax')
     expect(sec().disabled).toBe(false)
     sec().dispatchEvent(new Event('click'))
     await new Promise(r => setTimeout(r, 0))
-    expect(relaxOverhangBinding).toHaveBeenCalledWith('b1')                  // cluster move only
-    expect(patchOverhangBinding).toHaveBeenCalledWith('b1', { bound: true }) // relocate
-  })
-
-  it('direct + already-bound → "Relax" un-relocates, moves, re-relocates', async () => {
-    setup({ bindings: [BINDING(true)] }, 'root-to-root')
-    sec().dispatchEvent(new Event('click'))
-    await new Promise(r => setTimeout(r, 0))
-    expect(patchOverhangBinding).toHaveBeenCalledWith('b1', { bound: false })  // un-relocate first
     expect(relaxOverhangBinding).toHaveBeenCalledWith('b1')
-    expect(patchOverhangBinding).toHaveBeenCalledWith('b1', { bound: true })   // re-relocate
+    expect(patchOverhangBinding).not.toHaveBeenCalled()   // binding stays bound
   })
 
-  it('end-to-root → "Relax" is inert (behavior removed — clean slate)', async () => {
-    setup({ bindings: [BINDING(false)] }, 'end-to-root')
+  it('end-to-root → "Relax" uses the SAME unified relaxOverhangBinding as root-to-root', async () => {
+    setup({ bindings: [BINDING(true)] }, 'end-to-root')
     expect(sec().textContent).toBe('Relax')
-    expect(sec().disabled).toBe(true)
+    expect(sec().disabled).toBe(false)
     sec().dispatchEvent(new Event('click'))
     await new Promise(r => setTimeout(r, 0))
-    expect(relaxOverhangBinding).not.toHaveBeenCalled()
-    expect(patchOverhangBinding).not.toHaveBeenCalled()
+    expect(relaxOverhangBinding).toHaveBeenCalledWith('b1')
   })
 
   it('direct + no binding yet → "Relax" disabled', () => {
     setup({}, 'root-to-root')
+    expect(sec().textContent).toBe('Relax')
+    expect(sec().disabled).toBe(true)
+  })
+
+  it('end-to-root + no binding yet → "Relax" disabled', () => {
+    setup({}, 'end-to-root')
     expect(sec().textContent).toBe('Relax')
     expect(sec().disabled).toBe(true)
   })

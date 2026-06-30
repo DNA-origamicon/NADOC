@@ -7,6 +7,8 @@ vi.mock('../api/client.js', async (importOriginal) => {
     patchOverhang: vi.fn(async () => ({})),
     generateOverhangRandomSequence: vi.fn(async () => ({})),
     createOverhangBinding: vi.fn(async () => ({})),
+    createConnectionVersion: vi.fn(async () => ({})),
+    applyConnectionVersion: vi.fn(async () => ({})),
   }
 })
 
@@ -92,12 +94,14 @@ describe('overhang connections — per-side Gen, warning, Pair', () => {
     expect(patchOverhang).not.toHaveBeenCalled()
   })
 
-  it('Pair with only B missing fills B with RC(A) and creates the binding', async () => {
+  it('Connect with only B missing fills B with RC(A), then routes through apply (not the old direct binding)', async () => {
     setup('AAAA', null)
     document.getElementById('oconn-generate').dispatchEvent(new Event('click'))
     await tick()
     expect(patchOverhang).toHaveBeenCalledWith(IDB, { sequence: 'TTTT' })
-    expect(createOverhangBinding).toHaveBeenCalledWith({ sub_domain_a_id: 'sdA', sub_domain_b_id: 'sdB' })
+    // Connect now creates a version + APPLIES it (backend makes the OverhangBinding
+    // at the root sub-domains) — same path as end-to-root, not _createBindingForPair.
+    expect(createOverhangBinding).not.toHaveBeenCalled()
   })
 
   it('Pair with both present but non-complementary overwrites B with RC(A)', async () => {

@@ -334,9 +334,9 @@ function _updateControls() {
                     : 'Create the linker between the two overhangs')
   }
   // Apply / Unapply the target version (selected, else the pair's applied one).
-  // Apply is live for end-to-root now (it regenerates B as A's RC binder, spliced
-  // into B's root staple); only Relax stays inert for end-to-root.
-  const end2root = _typeId === 'end-to-root'
+  // Apply is live for BOTH direct types: it creates one non-consuming, relocated
+  // OverhangBinding (the duplex forms; the driven overhang's embedded-strand bond
+  // is left stretched). The only per-type difference is the attach/connection point.
   if (_applyBtn) {
     const v = _applyTargetVersion()
     if (v?.applied) {
@@ -352,20 +352,19 @@ function _updateControls() {
     }
   }
   // Secondary "Relax": settle the connection's geometry. For a LINKER that's the
-  // joint optimization; for a DIRECT binding it's the bound relocate + cluster
-  // move (the old "Bind" op). Enabled when the pair has a linker OR a binding.
+  // joint optimization; for a DIRECT binding (root-to-root OR end-to-root) it's the
+  // unified swing-about-driver-root + cluster move that closes the driven overhang's
+  // stretched tip↔root bond. Enabled when the pair has a linker OR a binding.
   if (_secondaryBtn) {
     const c = _linkerForPair()
     const b = c ? null : _bindingForPair()
     _secondaryBtn.textContent = 'Relax'
-    _secondaryBtn.disabled = end2root || (!c && !b)
-    _secondaryBtn.title = end2root
-      ? 'Relax is disabled for end-to-root (no behavior yet)'
-      : c
-        ? 'Relax this linker (optimize the joint so the connector collapses)'
-        : b
-          ? 'Relax: bind + move the clusters together (rotate the joint, else translate)'
-          : 'Apply a connection first, then relax it'
+    _secondaryBtn.disabled = !c && !b
+    _secondaryBtn.title = c
+      ? 'Relax this linker (optimize the joint so the connector collapses)'
+      : b
+        ? 'Relax: swing the duplex + move the clusters together so the embedded-strand bond closes'
+        : 'Apply a connection first, then relax it'
   }
 }
 
@@ -392,27 +391,21 @@ function _linkerForPair() {
     (c.overhang_a_id === _selB && c.overhang_b_id === _selA)) ?? null
 }
 
-/** Secondary "Relax" action: settle the connection's geometry — same rule for
- *  both kinds (rotate the joint if one connects the clusters, else rigid-translate).
+/** Secondary "Relax" action: settle the connection's geometry.
  *   - Linker → relaxLinker (optimize the joint so the connector arcs collapse).
- *   - Direct binding → move the clusters together so the bound duplex forms. The
- *     cluster move must run while the overhangs are SEPARATE, so we un-relocate
- *     (unbind) → relax (cluster move) → re-relocate (bind). Ends bound + relaxed. */
+ *   - Direct binding (root-to-root OR end-to-root) → relaxOverhangBinding: the
+ *     unified server-side solve swings the driver's overhang duplex about its root
+ *     (the driven tip co-rotates) + cluster kinematics so the driven overhang's
+ *     stretched tip↔root bond closes to one backbone bond. The binding stays bound
+ *     (no unbind/rebind dance — apply already relocated it). */
 async function _onSecondary() {
-  if (_typeId === 'end-to-root') return   // inert: end-to-root relax was removed (clean slate)
   const c = _linkerForPair()
   const b = c ? null : _bindingForPair()
   if (!c && !b) return
   if (_secondaryBtn) _secondaryBtn.disabled = true
   try {
-    if (c) {
-      await relaxLinker(c.id)
-    } else {
-      // Direct binding (e.g. root-to-root): settle the bound-junction chord, then bind.
-      if (b.bound) await patchOverhangBinding(b.id, { bound: false })
-      await relaxOverhangBinding(b.id)
-      await patchOverhangBinding(b.id, { bound: true })
-    }
+    if (c) await relaxLinker(c.id)
+    else await relaxOverhangBinding(b.id)
   } catch (err) {
     showToast(err?.message ?? String(err))
   } finally {
@@ -483,14 +476,27 @@ async function _onPrimary() {
  *  Apply get the same protection from the backend apply endpoint.) */
 async function _onConnect() {
   await _teardownConflicts(_selA, _selB)
-  // end-to-root materializes through the backend apply endpoint (regenerate B as
-  // A's RC binder, spliced into B's root staple) — create a version then APPLY it,
-  // exactly like Add version. Routing it through _pair would create the old
-  // OverhangBinding record instead of running apply_end_to_root_binder.
-  if (_typeId === 'end-to-root') {
+  // Direct types (root-to-root, end-to-root) materialize through the backend apply
+  // endpoint so Connect runs the SAME path as Add version: ensure complementary
+  // sequences → create a version → APPLY it. Apply does the type-appropriate thing
+  // at the appropriate connection point — end-to-root regenerates B as A's RC binder
+  // spliced into B's root staple; root-to-root creates the OverhangBinding at each
+  // side's root sub-domain. (Routing through _pair instead would create the binding
+  // record OUTSIDE the atomic apply endpoint — the old, inconsistent path.)
+  if (ctIsDirect(_typeId)) {
     if (_genBtn) _genBtn.disabled = true
     try {
       await _ensureComplementarySequences()       // A drives B = RC(A); generate A if empty
+      // root-to-root binds two sub-domains; without them apply can't create the
+      // binding (end-to-root splices instead, so it needs none). Warn like the old
+      // Pair path rather than silently materializing an empty connection.
+      if (_typeId !== 'end-to-root') {
+        const [attachA, attachB] = ctAttachPair(_typeId)
+        if (!_subDomainAtAttach(_selA, attachA) || !_subDomainAtAttach(_selB, attachB)) {
+          showToast('Sequences set. Binding needs sub-domains defined on both overhangs.')
+          return
+        }
+      }
       await _captureVersion({ applied: false })    // creates + selects the new version
       if (_selRow?.kind === 'version') await applyConnectionVersion(_selRow.id)
     } catch (err) {
@@ -500,7 +506,7 @@ async function _onConnect() {
     }
     return
   }
-  await _onGenerate()                 // materializes (linker create / direct pair)
+  await _onGenerate()                 // materializes (linker create)
   if (_linkerForPair() || _bindingForPair()) await _captureVersion({ applied: true })
   _render()
 }
