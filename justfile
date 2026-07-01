@@ -55,6 +55,12 @@ smoke:
 oxdna-doctor *ARGS:
     uv run python scripts/oxdna_doctor.py {{ARGS}}
 
+# mrdna round-trip benchmarks: forward-translation traceability + back-map +
+# no-explosion guards across a few designs. --fast = Phase A only (no GPU).
+# Run ./scripts/setup-mrdna.sh first. (e.g. `just bench-mrdna --fast`)
+bench-mrdna *ARGS:
+    uv run python scripts/benchmark_mrdna_roundtrip.py {{ARGS}}
+
 # Audit the atomistic ball-and-stick display of an oxDNA job's relaxed frame (default 6hb_sim_tests, latest job)
 audit-atomistic *ARGS:
     uv run python scripts/audit_atomistic.py {{ARGS}}

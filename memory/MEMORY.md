@@ -1,6 +1,6 @@
 # NADOC — Memory Index
 
-Index only. Open the topic file when relevant. Hard rules and commands live in `/home/joshua/NADOC/CLAUDE.md`.
+Index only. Open the topic file when relevant. Hard rules and commands live in `CLAUDE.md` (repo root).
 
 ## Read first when relevant
 
@@ -18,7 +18,7 @@ Index only. Open the topic file when relevant. Hard rules and commands live in `
 
 ## Path-scoped architecture maps
 
-These live in `/home/joshua/NADOC/.claude/rules/` and load automatically when matching files are read. Don't open them manually unless you need cross-area context.
+These live in `.claude/rules/` (repo root) and load automatically when matching files are read. Don't open them manually unless you need cross-area context.
 
 | Rule file | Triggers on |
 |---|---|
@@ -60,6 +60,23 @@ These live in `/home/joshua/NADOC/.claude/rules/` and load automatically when ma
 - [user_todo_smoke_tests](feedback_user_todo_smoke_tests.md) — manual smoke tests get a `USER TODO` block with numbered steps
 - [playwright_fixtures_location](feedback_playwright_fixtures_location.md) — test-generated `.nadoc` files live in `workspace/playwright_tests/`, deleted when no longer needed
 
+**MD / simulation feedback:**
+- [c1_pair_builder](feedback_c1_pair_builder.md) — PSF scaffold-before-staples ordering → greedy C1' mispair at 12.58 Å; sort all candidates by distance first
+- [wc_calibration](feedback_wc_calibration.md) — template-built structures have ~25% WC pairs with inflated ref distances (>8 Å); use C1' as primary metric
+- [cg_pipeline_lessons](feedback_cg_pipeline_lessons.md) — oxDNA segfaults, PCA vs direct override, mrdna bead model (1 bead/bp not 1/nt), per-helix spline
+- [gromacs_debugging](feedback_gromacs_debugging.md) — inspect em.gro bond lengths FIRST; dt/gen-vel fixes are secondary
+- [sd_em_constraints](feedback_sd_em_constraints.md) — SD/steep integrators support constraints=h-bonds; L-BFGS cannot
+- [no_parallel_gromacs](feedback_no_parallel_gromacs.md) — parallel `gmx mdrun` is slower on this hardware; always run serially
+- [mrdna_gromacs_atomistic](feedback_mrdna_gromacs_atomistic.md) — mrdna atomistic PDB unusable with CHARMM27 (Epot 9e27, Fmax inf); use NADOC templates
+- [mdanalysis_live_reload](feedback_mdanalysis_live_reload.md) — `_reopen()` broken; rebuild Universe from disk to discover new frames
+- [browser_console_debugging](feedback_browser_console_debugging.md) — use `console.log` not `console.debug`; add timestamps to stop DevTools collapsing
+- [pbc_trajectory_alignment](feedback_pbc_trajectory_alignment.md) — PBC correction diagnostics; median vs mean centroid; strand-boundary vs wrap artifact
+- [bundle_param_extraction](feedback_bundle_param_extraction.md) — topology vs geometry assignment; PCA sign; Euler gimbal lock; crossover centroid bias
+- [namd_pdb_serial_limit](feedback_namd_pdb_serial_limit.md) — NAMD discards HETATM records with serials ≥10000; cap with `(serial-1)%9999+1`
+- [namd_cufix_oc_stub](feedback_namd_cufix_oc_stub.md) — MGH validates OTMG NBFIX partners (OC, OG2P1…); fix `par_stub_ions_nbfix.str`
+- [namd_anisotropic_barostat](feedback_namd_anisotropic_barostat.md) — `useFlexibleCell yes` → Z runaway for axial-PBC cells; use isotropic NPT
+- [no_bulk_reformat](feedback_no_bulk_reformat.md) — no repo-wide `ruff format` commits (collide with other computer); rely on the pre-commit hook
+
 ## Active topic files
 
 One line per entry, grouped by area (bold lead). Open the topic file for detail.
@@ -88,6 +105,15 @@ One line per entry, grouped by area (bold lead). Open the topic file for detail.
 - [oxdna_efield](project_oxdna_efield.md) — E-field via per-nt `string` forces + anchor traps. SHIPPED 2026-06-18 (gizmo + anchor UI + "⚡ Run field" → `POST /oxdna/jobs/{id}/field`; `measure_field_response` oracle; field-deflecting mock, no GPU). TODO: deflection-map viz + real GPU validation.
 - [oxdna_relaxation](project_oxdna_relaxation.md) — SHIPPED: oxDNA CUDA 3-stage relax sub-panel + NAMD-seed handoff. §25 (2026-06-18): hard surface + Anchors + consolidated `POST /oxdna/jobs/{id}/run` + relax-on-surface + KEYSTONE `fix_diffusion=false` for absolute-coord forces. NOT GPU-verified.
 - [benchmark_tuning](project_benchmark_tuning.md) (proxy trials → fastest backend in `metadata.hardware_defaults[host]`, MV-BENCH) · [md_engines_panel](project_md_engines_panel.md) (Help▸MD Engines install/status + auto-build, `core/engines.py`+`engine_install.py`, MV-ENGINES)
+**MrDNA / ARBD (CG reference engine):** [mrdna_arbd_setup](project_mrdna_arbd_setup.md) (install paths, 5 py3.13 patches, validated tutorial, re-patch script) · [mrdna_bead_model](project_mrdna_bead_model.md) (CRITICAL: 1 DNA bead per bp not per nt; per-helix approach; diagnostic script)
+**oxDNA CG:** [oxdna_benchmarks](project_oxdna_benchmarks.md) (CPU timing U6hb, step counts, required input keys, box sizing) · [oxdna_extra_bases](project_oxdna_extra_bases.md) (`Crossover.extra_bases` → ssDNA inserts in topo/config; CRITICAL phantom-FENE-bond gotcha; read-back drops inserts) · [skip_twist_selfconsistency](project_skip_twist_selfconsistency.md) (tune SQ skip period until oxDNA mean matches straight analytic; `geometry_rmsd` gate + `bundle_twist` steer; reference must be strand-walk keyed) · [regional_autorefine](project_regional_autorefine.md) (Phase 5: NON-uniform skip placement from deviation+strain fields, anti-clustering even-slots; 5.0/5.1 built+green, 5.2–5.4 pending) · [skip_twist_curvature_sweep](project_skip_twist_curvature_sweep.md) (exp31: 3x6x400 skip-count sweep ±4 vs twist + NEW `measure_bundle_curvature` guard, 3 placement strategies; **benchmark CUDA-proxy fails→forces CPU, use real CUDA**; launched 2026-06-27, ~25h. exp31 DONE: incremental-gap wins/reaches flat-0, deviation-guided WORST→LESSONS A6. exp32=profile-guided refiner `backend/core/profile_guided_refine.py`) · [md_twist_validation](project_md_twist_validation.md) (exp33: atomistic NAMD validation of oxDNA twist, 3 structures seeded from oxDNA-relaxed, carved-NVT, AUTO-triggered after exp32 via `scripts/trigger_md_after_exp32.sh`; EXP_DIR-parametrized monitor/watchdog)
+**Multi-resolution / CG bridge:** [multiresolution_roadmap](project_multiresolution_roadmap.md) (ARBD/mrdna reference CG; phase checklist; staged export) · [crossover_parameterization](project_crossover_parameterization.md) (2hb_xover_val, 6-DOF Boltzmann inversion, mrdna SegmentModel injection) · [bundle_stiffness_params](project_bundle_stiffness_params.md) (inter-helix stiffness DB; 0T complete, 1T pending) · [pipeline_validation_log](pipeline_validation_log.md) (running validation test log) · [session_handoff](project_session_handoff.md) (next: mrdna→GROMACS bridge; NADOC→mrdna design bridge)
+**NAMD production / solvation:** [btube_benchmark](project_btube_benchmark.md) (GROMACS vs NAMD timing; GPU PME disabled; dt trick) · [periodic_cell](project_periodic_cell.md) (21 bp NAMD periodic cell; 5 failure modes + fixes) · [namd_solvate](project_namd_solvate.md) (GMX editconf+solvate → PSF merge → NAMD; 4 bugs) · [water_shell_carve](project_water_shell_carve.md) (drop bulk water >N Å to fit large origami on 12 GB GPU) · [3x4sq_md_run](project_3x4sq_md_run.md) (square-lattice health-fail root cause, WC calibration) · [exp30_18hb_production](project_exp30_18hb_production.md) (224-strand 18hb to k=0 unattended; topology scale bugs)
+**Atomistic skip-site / GROMACS:** [atomistic_skip_backbone](project_atomistic_skip_backbone.md) (`_minimize_backbone_bridge` + residual strain) · [skip_site_gromacs_fix](project_skip_site_gromacs_fix.md) (constrained EM, gen-vel=no, 50 ps NVT root-cause + fix) · [langevin_heating](project_langevin_heating.md) (T(t) formula; 50 ps min for skip structures) · [gromacs_package_structure](project_gromacs_package_structure.md) (key vars, MDP regex, `_has_skips`, file layout)
+**MD job system / runners:** [md_job_system](project_md_job_system.md) (`md_job.py`, `namd_metrics`, `md_health`, `md_protocols`, `namd_runner`, `routes_md`; REST `/api/md/`) · [md_prep_relaxation](project_md_prep_relaxation.md) (exp29 prep-for-relaxation harness; ENM k-release melt; read HANDOFF first)
+**MD visualization / overlay:** [md_viz_tools](project_md_viz_tools.md) (trajectory + RMSF map; reuse oxDNA display controller; CG-only v1) · [md_panel_status](project_md_panel_status.md) (MD overlay status; live stale-Universe + PBC wrapping artifacts) · [md_sidebar_audit](project_md_sidebar_audit.md) (ranked Display-MD findings R1–R12; R1/R2 fixed) · [md_live_model_cache](project_md_live_model_cache.md) (`/ws/md-run` rebuilt full atomistic model per load→~20 GB pile-up; fixed w/ single-flight `atomistic_cache.py`+md_panel debounce; py-spy diag)
+**Automation / jobs infra:** [af25_af26_job_log_sync](project_af25_af26_job_log_sync.md) (AF-25 seek_features + AF-26 roll/return lifecycle oracle; COMPLETE) · [job_activity_spinner](project_job_activity_spinner.md) (`/api/jobs/active` + welcome spinner + concurrency guard) · [job_disk_usage](project_job_disk_usage.md) (welcome disk column + About panel) · [job_archive](project_job_archive.md) (move job folders off-workspace; `job_dir()` archive-awareness invariant)
+**Dev infra:** [dev_server_shutdown_hang](project_dev_server_shutdown_hang.md) (uvicorn `--reload` wedges on long-lived status websockets; `--timeout-graceful-shutdown 5`) · [nadoc_overview](project_nadoc_overview.md) (what NADOC is, its layers, deformed vs non-deformed export)
 **Atomistic/GROMACS/seq:** [atomistic_calibration](project_atomistic_calibration.md) (C1'-C1' OK, 4 issues) · [o3prime_investigation](project_o3prime_investigation.md) (C3'-O3'-P=93.6°, fix=template re-extract) · [gromacs_export](project_gromacs_export.md) (v1, amber99sb-ildn) · [sequence_clear_fix](project_sequence_clear_fix.md) (incomplete; clarify intent) · [log_atomistic_o3prime](log_atomistic_o3prime.md) (long debug log, reference)
 **Imports/validation:** [sq_importer_fix](project_sq_importer_fix.md) (fixed Apr 20; scaffold open) · [crossover_distance_script](project_crossover_distance_script.md) (`scripts/measure_crossover_distances.py`)
 **Assembly overhaul (12 phases shipped):** [assembly_overhaul](project_assembly_overhaul.md) (planning) · [assembly_part_context](project_assembly_part_context.md) (part-context UI; feature-log/anim deferred)

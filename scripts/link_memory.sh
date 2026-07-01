@@ -9,8 +9,12 @@
 # Safe to re-run. Backs up any existing real dir to memory.pre-symlink-bak.
 set -euo pipefail
 
-REPO_MEM="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/memory"
-SLUG="-home-joshua-NADOC"   # matches ~/.claude/projects/<slug>; change if your path differs
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_MEM="$REPO_ROOT/memory"
+# Claude Code's slug is the project root's absolute path with '/' -> '-'.
+# Auto-derive so this works on every machine regardless of where the repo lives.
+# Override by exporting MEMORY_SLUG before running.
+SLUG="${MEMORY_SLUG:-$(printf '%s' "$REPO_ROOT" | sed 's:/:-:g')}"
 AUTO="$HOME/.claude/projects/$SLUG/memory"
 
 mkdir -p "$(dirname "$AUTO")"
