@@ -92,8 +92,11 @@ export function initBenchmarkPanel({ api, getWorkspacePath = () => null, sleep, 
       return `Best: ${rec.backend}${rec.backend === 'CUDA' ? ` device ${rec.device}` : ''}` +
              ` (${_fmt(rec.steps_per_s, 0)} steps/s)`
     }
-    return `Best: +p${rec.threads} ${rec.devices ? `GPU ${rec.devices}` : 'CPU-only'}` +
-           ` (${_fmt(rec.ns_per_day, 2)} ns/day)`
+    // Prefer the honest label the backend measured (e.g. "+p16 GPU:0" / "GPU:all"); on a
+    // CUDA-only NAMD build an empty `devices` still means the GPU, so never say "CPU-only"
+    // unless that's genuinely what ran.
+    const namdLabel = rec.label || `+p${rec.threads} ${rec.devices ? `GPU:${rec.devices}` : 'CPU'}`
+    return `Best: ${namdLabel} (${_fmt(rec.ns_per_day, 2)} ns/day)`
   }
 
   function _applyToInputs(engine, rec) {
@@ -134,6 +137,10 @@ export function initBenchmarkPanel({ api, getWorkspacePath = () => null, sleep, 
           </button>
           <div class="bench-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:5px;min-height:14px"></div>
           <div class="bench-results" style="font-size:10px;color:#8b949e;font-family:var(--font-mono);margin-top:4px;white-space:pre-line"></div>
+          <details class="bench-log-details" style="display:none;margin-top:6px">
+            <summary style="cursor:pointer;user-select:none;font-size:10px;color:#8b949e;font-weight:600">Log output &amp; engine calls</summary>
+            <pre class="bench-log" style="margin:4px 0 0;padding:6px;max-height:170px;overflow:auto;background:#010409;border:1px solid #21262d;border-radius:3px;font-size:10px;line-height:1.35;color:#9da7b1;font-family:var(--font-mono);white-space:pre-wrap;word-break:break-word"></pre>
+          </details>
           <div class="bench-note" style="font-size:10px;color:#8b949e;margin-top:4px;font-style:italic"></div>
           <button type="button" class="bench-apply-btn"
             style="display:none;width:100%;font-size:var(--text-xs);padding:5px;margin-top:5px;background:#1a3a1a;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;font-weight:600">
@@ -153,6 +160,8 @@ export function initBenchmarkPanel({ api, getWorkspacePath = () => null, sleep, 
     const cancelBtn = el.querySelector('.bench-cancel-btn')
     const statusEl = el.querySelector('.bench-status')
     const resultsEl = el.querySelector('.bench-results')
+    const logDetails = el.querySelector('.bench-log-details')
+    const logEl = el.querySelector('.bench-log')
     const noteEl = el.querySelector('.bench-note')
     const applyBtn = el.querySelector('.bench-apply-btn')
 
@@ -193,7 +202,7 @@ export function initBenchmarkPanel({ api, getWorkspacePath = () => null, sleep, 
 
     el._bench = {
       runBtn, spinner, progress, barFill, etaEl, cancelBtn,
-      statusEl, resultsEl, noteEl, applyBtn,
+      statusEl, resultsEl, logDetails, logEl, noteEl, applyBtn,
       setId: (id) => { _lastId = id }, setRec: (r) => { _lastRec = r },
       setCancelId: (id) => { _cancelId = id },
     }
@@ -203,7 +212,17 @@ export function initBenchmarkPanel({ api, getWorkspacePath = () => null, sleep, 
     const ctx = el && el._bench
     if (!ctx) return null
     const { runBtn, spinner, progress, barFill, etaEl, cancelBtn,
-            statusEl, resultsEl, noteEl, applyBtn } = ctx
+            statusEl, resultsEl, logDetails, logEl, noteEl, applyBtn } = ctx
+
+    // Live log: replace the pane's text, keeping the view pinned to the bottom unless
+    // the user has scrolled up to read earlier output.
+    const _showLog = (text) => {
+      if (!text) return
+      logDetails.style.display = ''
+      const atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 30
+      logEl.textContent = text
+      if (atBottom) logEl.scrollTop = logEl.scrollHeight
+    }
 
     // Dummy-proof: if this machine has only one possible config (no GPU → CPU-only),
     // there's nothing to compare — warn before wasting a run.
@@ -221,6 +240,8 @@ export function initBenchmarkPanel({ api, getWorkspacePath = () => null, sleep, 
     // Reset UI + lock both Dynamics panels for the duration.
     applyBtn.style.display = 'none'
     resultsEl.textContent = ''
+    logEl.textContent = ''
+    logDetails.style.display = 'none'
     noteEl.textContent = ''
     spinner.style.display = ''
     progress.style.display = ''
@@ -268,6 +289,7 @@ export function initBenchmarkPanel({ api, getWorkspacePath = () => null, sleep, 
       if (state.results && state.results.length) {
         resultsEl.textContent = state.results.map((r) => _resultLine(engine, r)).join('\n')
       }
+      _showLog(state.log)
       if (state.state !== 'running') break
       await _sleep(1500)
     }

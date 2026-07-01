@@ -350,7 +350,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       // via the crossoverArcs filter.  Synthesize crossover-like entries keyed by
       // their 3'/5' endpoints so arcs get a non-null crossover_id.
       for (const fl of (design.forced_ligations ?? [])) {
-        const synthetic = { id: fl.id }
+        const synthetic = { id: fl.id, extra_bases: fl.extra_bases }
         xoBySiteKey.set(`${fl.three_prime_helix_id}:${fl.three_prime_bp}:${fl.three_prime_direction}`, synthetic)
         xoBySiteKey.set(`${fl.five_prime_helix_id}:${fl.five_prime_bp}:${fl.five_prime_direction}`, synthetic)
       }
@@ -397,6 +397,12 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
           fromNuc:      conn.fromNuc,
           toNuc:        conn.toNuc,
           crossover_id: xoForArc?.id ?? null,
+          // Crossovers/forced-ligations carrying extra bases render their backbone
+          // as bead+slab+connector-cone instances (crossover_connections.js). The
+          // thin point-to-point arc line is redundant there, so it is collapsed to
+          // zero length — but the arc stays in _arcMeta so its updateExtraBaseArc()
+          // calls keep driving those beads/slabs.
+          isExtraBase: (xoForArc?.extra_bases?.length ?? 0) > 0,
           isPeriodicSeam: conn.isPeriodicSeam ?? false,
           merged:       (conn.fromNuc?.strand_type === 'scaffold') ? 'scaffold' : 'staple',
           vertIdx:      0,   // filled in by _buildMerged
@@ -634,6 +640,26 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     return scratch.set(target.x - base3D.x, target.y - base3D.y, target.z - base3D.z)
   }
 
+  /** Collapse the visible line of every extra-base arc to a single point (its
+   *  first vertex) → zero-length segments → nothing drawn.  The bead/slab/connector
+   *  instances (driven by the same arcs via updateExtraBaseArc) are untouched, so
+   *  they stay attached.  Call after the arc position buffers are written, before
+   *  flagging needsUpdate. */
+  function _collapseExtraBaseArcLines() {
+    for (const e of _arcMeta) {
+      if (!e.isExtraBase) continue
+      const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
+      if (!merged) continue
+      const buf = merged.positions
+      const base = e.vertIdx
+      const bx = buf[base * 3], by = buf[base * 3 + 1], bz = buf[base * 3 + 2]
+      for (let j = 1; j <= ARC_SEGS; j++) {
+        const bi = (base + j) * 3
+        buf[bi] = bx; buf[bi + 1] = by; buf[bi + 2] = bz
+      }
+    }
+  }
+
   function _updateArcPositions(t, offsets, straightPosMap = null, parentHelixResolver = null) {
     for (const e of _arcMeta) {
       const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
@@ -712,6 +738,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         designRenderer.updateExtraBaseArc(e.crossover_id, _sv0, _sCtrl, _sv1)
       }
     }
+    _collapseExtraBaseArcLines()
     if (_scaffoldMerged) _scaffoldMerged.geo.attributes.position.needsUpdate = true
     if (_stapleMerged)   _stapleMerged.geo.attributes.position.needsUpdate   = true
     designRenderer.flushExtraBaseMeshes()
@@ -759,6 +786,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       }
       if (e.crossover_id) designRenderer.updateExtraBaseArc(e.crossover_id, _sv0, _sCtrl, _sv1)
     }
+    _collapseExtraBaseArcLines()
     if (_scaffoldMerged) _scaffoldMerged.geo.attributes.position.needsUpdate = true
     if (_stapleMerged)   _stapleMerged.geo.attributes.position.needsUpdate   = true
     designRenderer.flushExtraBaseMeshes()
@@ -1216,6 +1244,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
           designRenderer.updateExtraBaseArc(e.crossover_id, _sv0, _sCtrl, _sv1)
         }
       }
+      _collapseExtraBaseArcLines()
       if (_scaffoldMerged) _scaffoldMerged.geo.attributes.position.needsUpdate = true
       if (_stapleMerged)   _stapleMerged.geo.attributes.position.needsUpdate   = true
       designRenderer.flushExtraBaseMeshes()
@@ -1538,12 +1567,13 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
           } : null,
         },
         arcs: _arcMeta.map(e => ({
-          xoverId:   e.crossover_id ?? '(no id)',
-          fromHelix: e.fromHelixId,
-          toHelix:   e.toHelixId,
-          type:      e.merged,
-          hidden:    e.hidden,
-          vertIdx:   e.vertIdx,
+          xoverId:     e.crossover_id ?? '(no id)',
+          fromHelix:   e.fromHelixId,
+          toHelix:     e.toHelixId,
+          type:        e.merged,
+          hidden:      e.hidden,
+          isExtraBase: e.isExtraBase,
+          vertIdx:     e.vertIdx,
         })),
       }
     },

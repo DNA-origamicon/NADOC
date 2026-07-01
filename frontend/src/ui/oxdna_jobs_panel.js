@@ -31,6 +31,7 @@ import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol
 import { formatJobTime } from '../scene/trajectory_range.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
+import { confirmNoConcurrentJob, confirmGpuNotBusy } from './job_activity.js'
 import * as api from '../api/client.js'
 
 const POLL_MS = 1500
@@ -444,7 +445,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, oxdnaLive = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, oxdnaLive = null, getDesignLattice = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -456,6 +457,22 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   const prodBtn       = document.getElementById('oxdna-jobs-prod-btn')
   const prodStepsInput = document.getElementById('oxdna-jobs-prod-steps')
   const prodStatus    = document.getElementById('oxdna-jobs-prod-status')
+  const autorefineBtn     = document.getElementById('oxdna-jobs-autorefine-btn')
+  const autorefineStopBtn = document.getElementById('oxdna-jobs-autorefine-stop-btn')
+  const autorefineStatus  = document.getElementById('oxdna-jobs-autorefine-status')
+  const autorefineResult  = document.getElementById('oxdna-jobs-autorefine-result')
+  const autorefineDevToggle = document.getElementById('oxdna-jobs-deviation-toggle')
+  const autorefineDevStatus = document.getElementById('oxdna-jobs-deviation-status')
+  let _autorefineRunning = false
+  let _autorefineRunId = null
+  let _autorefineFinalJobId = null    // the run's final oxDNA job (auto-selected on completion)
+  let _autorefineLastAppliedPeriod = null  // last skip period applied live to the design
+  let _autorefineCleanForDesign = false  // a run finished + design unchanged since (re-run guard)
+  const _autorefineJobs = new Set()   // distinct job ids seen → live iteration count
+  const _arJobIds = new Set()         // jobs created by autorefine → [AR] tag in the list (persists across runs)
+  let _arSelectedJobId = null         // in-flight autorefine job auto-selected during the run
+  let _arBase = '', _arColor = '#8b949e', _arSpin = 0, _arSpinTimer = null
+  let _devBusy = false
   const exportBtn     = document.getElementById('oxdna-jobs-export-btn')
   const advToggle     = document.getElementById('oxdna-jobs-adv-toggle')
   const advArrow      = document.getElementById('oxdna-jobs-adv-arrow')
@@ -528,6 +545,288 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   let _lastFrameIndex = null   // last live frame the relaxed display was refreshed to
   let _displayBaseText = ''    // base display-status text (countdown appended while running)
   let _displayBaseColor = _C.ok
+
+  // ── Autorefine skips/loops (square-lattice self-consistency tuning loop) ────────
+  const _SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+  function _renderArStatus() {
+    if (!autorefineStatus) return
+    const prefix = _autorefineRunning ? _SPIN[_arSpin % _SPIN.length] + ' ' : ''
+    autorefineStatus.textContent = prefix + (_arBase || '')
+    autorefineStatus.style.color = _arColor
+  }
+  function _setAutorefineStatus(msg, color, spinning = false) {
+    _arBase = msg || ''; _arColor = color || '#8b949e'
+    if (spinning && !_arSpinTimer) {
+      _arSpinTimer = setInterval(() => { _arSpin++; _renderArStatus() }, 120)
+    } else if (!spinning && _arSpinTimer) {
+      clearInterval(_arSpinTimer); _arSpinTimer = null
+    }
+    _renderArStatus()
+  }
+  function _updateAutorefineButton() {
+    if (!autorefineBtn) return
+    const lattice = getDesignLattice?.()
+    const ok = lattice === 'SQUARE' && !_autorefineRunning && _available
+    autorefineBtn.disabled = !ok
+    autorefineBtn.style.cursor = ok ? 'pointer' : 'not-allowed'
+    autorefineBtn.style.background = ok ? '#3a2a12' : '#2a1f12'
+    autorefineBtn.style.color = ok ? '#e3b341' : '#484f58'
+    autorefineBtn.style.borderColor = ok ? '#bb8009' : '#30363d'
+    autorefineBtn.title = (lattice && lattice !== 'SQUARE')
+      ? 'Autorefine currently supports SQUARE lattice designs only (curved/twisted '
+        + 'designs and other lattices are planned).'
+      : 'Autorefine skips/loops: iteratively tune the design\'s skip/loop placement, '
+        + 'relaxing in oxDNA each round, until the simulated time-averaged structure '
+        + 'matches the geometry your design depicts. Reports a before-vs-after deviation score.'
+    if (autorefineStopBtn) {
+      autorefineStopBtn.style.display = _autorefineRunning ? 'block' : 'none'
+      if (_autorefineRunning) autorefineStopBtn.disabled = false
+    }
+  }
+  const _fmtTwist = v => (v == null ? '—' : `${Number(v).toFixed(1)}°`)
+  const _fmtNm    = v => (v == null ? '—' : `${Number(v).toFixed(2)} nm`)
+  const _SUBSTAGE = { mc: 'relaxing', md_relax: 'relaxing', equil: 'equilibrating',
+                      production: 'producing' }
+  function _iterRow(it) {
+    const badge = it.early_reject ? '<span style="color:#f0883e">rejected (early)</span>'
+      : it.status === 'met' ? '<span style="color:#3fb950">accepted ✓</span>'
+      : it.status === 'unmet' ? '<span style="color:#f0883e">rejected</span>'
+      : `<span style="color:#6e7681">${it.status || '—'}</span>`
+    return `<div style="display:flex;justify-content:space-between;gap:8px;color:#8b949e">`
+      + `<span>period ${it.period} → ${_fmtTwist(it.twist_residual_deg)}</span>${badge}</div>`
+  }
+  // Fine-tune summary: edits kept + the worst-local-deviation before→after they achieved.
+  function _finetuneBlock(ft) {
+    if (!ft) return ''
+    const kept = ft.edits_kept || []
+    const rows = kept.map(e =>
+      `<div style="color:#c9d1d9">• ${e.op} h${e.helix_id} bp${e.bp_index} → dev ${_fmtNm(e.dev_max)}, twist ${_fmtTwist(e.twist)}</div>`).join('')
+    const b = ft.before || {}, a = ft.after || {}
+    return `<div style="margin-top:4px;border-top:1px solid #21262d;padding-top:3px">`
+      + `<div style="color:#6e7681;margin-bottom:2px">Fine-tune — ${kept.length} of ${ft.n_candidates ?? 0} `
+      + `hotspot edit${kept.length === 1 ? '' : 's'} kept</div>`
+      + `<div style="color:#8b949e">Worst local deviation ${_fmtNm(b.dev_max)} → `
+      + `<span style="color:#3fb950">${_fmtNm(a.dev_max)}</span></div>`
+      + (rows || '<div style="color:#6e7681">no edit improved the structure — left as uniform</div>')
+      + `</div>`
+  }
+  function _renderAutorefineResult(res) {
+    if (!autorefineResult || !res) return
+    const b = res.before || {}, a = res.after || {}
+    const row = (label, before, after, hi) => `<tr${hi ? ' style="font-weight:600"' : ''}>`
+      + `<td style="padding:1px 6px;color:#8b949e">${label}</td>`
+      + `<td style="padding:1px 6px;text-align:right;color:#f0883e">${before}</td>`
+      + `<td style="padding:1px 6px;text-align:right;color:#3fb950">${after}</td></tr>`
+    const twist = (hi) => row('Global twist deviation', _fmtTwist(b.twist_residual_deg), _fmtTwist(a.twist_residual_deg), hi)
+    const dev   = (hi) => row('Deviation from design', _fmtNm(b.rmsd_nm), _fmtNm(a.rmsd_nm), hi)
+    // Plain square lattice (no bend/twist) headlines global twist; otherwise RMSD.
+    const headline = res.primary_metric === 'global_twist_deg' ? twist(true) + dev(false)
+                                                               : dev(true) + twist(false)
+    const iters = (res.iterations || []).map(_iterRow).join('')
+    autorefineResult.innerHTML = `
+      <div style="font-size:var(--text-xs);border:1px solid #30363d;border-radius:3px;padding:5px;background:#0d1117">
+        <div style="color:#e3b341;font-weight:600;margin-bottom:3px">Autorefine — before vs after</div>
+        <table style="width:100%;border-collapse:collapse;font-size:var(--text-xs)">
+          <tr style="color:#6e7681"><td></td><td style="text-align:right">Before</td><td style="text-align:right">After</td></tr>
+          ${headline}
+          <tr><td style="padding:1px 6px;color:#8b949e">Skip period (bp)</td>
+              <td style="padding:1px 6px;text-align:right;color:#6e7681">—</td>
+              <td style="padding:1px 6px;text-align:right;color:#c9d1d9">${res.converged_period ?? '—'}</td></tr>
+        </table>
+        ${iters ? `<div style="margin-top:4px;border-top:1px solid #21262d;padding-top:3px">`
+          + `<div style="color:#6e7681;margin-bottom:2px">Iterations tried</div>${iters}</div>` : ''}
+        ${_finetuneBlock(res.finetune)}
+        <div style="color:#6e7681;margin-top:3px">${
+          res.status === 'met' ? 'Converged: simulated structure matches the design within tolerance.'
+          : res.status === 'stopped' ? 'Stopped — showing the best result reached so far.'
+          : 'Best achieved (did not fully converge within the iteration budget).'}</div>
+      </div>`
+  }
+  // Apply a period's skips to the design LIVE (deduped), so the user watches the skips
+  // move each iteration and can stop early if they dislike the automated placement.
+  async function _maybeApplyPeriod(runId, period) {
+    if (period == null || period === _autorefineLastAppliedPeriod) return
+    const applied = await api.applyAutorefineSkips(runId, period)
+    if (applied) {
+      api.syncDesignResponse(applied)   // editor + Feature Log update (fires design-changed)
+      _autorefineLastAppliedPeriod = period
+    }
+  }
+  function _pollAutorefine(id) {
+    const tick = async () => {
+      const s = await api.getAutorefine(id)
+      if (!s) {
+        _autorefineRunning = false
+        _setAutorefineStatus('Status unavailable: ' + (api.lastErrorMessage?.() || 'error'), '#f85149')
+        _updateAutorefineButton(); return
+      }
+      if (s.state === 'running') {
+        const ev = s.last_event || {}
+        // Live sub-stage from the in-flight job (relaxing / producing); iteration count
+        // = distinct jobs the run has spawned so far.
+        let sub = s.phase === 'before' ? 'baseline' : 'working'
+        if (s.current_job_id) {
+          _autorefineJobs.add(s.current_job_id)
+          _arJobIds.add(s.current_job_id)         // tag it [AR] in the job list
+          const job = await api.getOxdnaJob(s.current_job_id).catch(() => null)
+          const run = (job?.stages || []).find(st => st.status === 'running')
+          if (run) sub = _SUBSTAGE[run.kind] || run.kind
+          // Select the in-flight autorefine job as soon as it appears (and follow each
+          // new iteration's job) so the user watches the active run in the list.
+          if (s.current_job_id !== _arSelectedJobId) {
+            _arSelectedJobId = s.current_job_id
+            await _fetchJobs()
+            if (_jobs.some(j => j.job_id === s.current_job_id)) await _selectJob(s.current_job_id)
+          }
+        }
+        const iter = _autorefineJobs.size
+        if (s.phase === 'finetune') {
+          // Fine-tune pass: report the greedy edit search (hotspots found, each add/remove
+          // kept or reverted).  The exact pattern lands on the design at completion.
+          let t = 'Fine-tuning'
+          if (ev.ft_phase === 'candidates') t += ` · ${ev.n ?? 0} hotspot${ev.n === 1 ? '' : 's'} found`
+          else if (ev.ft_phase === 'edit')
+            t += ` · edit ${(ev.i ?? 0) + 1}: ${ev.op} h${ev.helix_id} bp${ev.bp_index}`
+              + ` — ${ev.accepted ? '✓ kept' : '✗ reverted'} (dev ${_fmtNm(ev.dev_max)})`
+          else t += ' · measuring'
+          _setAutorefineStatus(`${t} · ${sub}…`, '#e3b341', true)
+        } else {
+          let last = ''
+          if (s.phase === 'iteration')
+            last = `  ·  last: period ${ev.period} → ${_fmtTwist(ev.steering?.bundle_twist_residual_deg)}`
+              + (ev.early_reject ? ' (rejected early)' : '')
+          _setAutorefineStatus(`Autorefine · iteration ${iter} · ${sub}…${last}`, '#e3b341', true)
+          // Land THIS iteration's (uniform) skip pattern on the design so the user sees it move.
+          await _maybeApplyPeriod(id, s.current_period)
+        }
+        setTimeout(tick, 3000)
+      } else if (s.state === 'done' || s.state === 'stopped') {
+        _autorefineRunning = false; _autorefineRunId = null
+        const finalJob = s.current_job_id || null
+        const period = s.result?.converged_period
+        _setAutorefineStatus(s.state === 'stopped' ? '■ Autorefine stopped.' : '✓ Autorefine complete.',
+                             s.state === 'stopped' ? '#f0883e' : '#3fb950')
+        _renderAutorefineResult(s.result)
+        // Ensure the final converged pattern is on the design (a revertable/seekable feature-log
+        // entry).  A fine-tuned/regional run has an EXPLICIT non-uniform pattern → apply it with
+        // no period (the backend lays converged_skips verbatim); a plain uniform run applies the
+        // converged period (per-iteration applies usually landed it already).
+        const placement = s.result?.placement
+        if (placement === 'finetuned' || placement === 'regional') {
+          const applied = await api.applyAutorefineSkips(id)   // no period → explicit pattern
+          if (applied) {
+            api.syncDesignResponse(applied)
+            showToast(`Autorefine ${placement} skips applied — see the Feature Log`, 'ok')
+          }
+        } else if (period != null) {
+          await _maybeApplyPeriod(id, period)
+          showToast(`Autorefine skips applied (period ${period} bp) — see the Feature Log`, 'ok')
+        }
+        // Set AFTER the apply's design-changed event (which clears these) so they persist.
+        _autorefineFinalJobId = finalJob
+        _autorefineCleanForDesign = true
+        await _fetchJobs()                     // the run's jobs are now listed…
+        if (finalJob && _jobs.some(j => j.job_id === finalJob))
+          await _selectJob(finalJob)           // …select the final one → deviation unlocks
+        _updateAutorefineButton(); _updateButtons(_selectedJob())
+      } else {
+        _autorefineRunning = false; _autorefineRunId = null
+        _setAutorefineStatus('✕ Autorefine error: ' + (s.error || 'unknown'), '#f85149')
+        _updateAutorefineButton()
+      }
+    }
+    tick()
+  }
+  autorefineBtn?.addEventListener('click', async () => {
+    if (autorefineBtn.disabled || _autorefineRunning) return
+    if (getDesignLattice?.() !== 'SQUARE') {
+      _setAutorefineStatus('Square-lattice designs only for now.', '#f85149'); return
+    }
+    // If a run already finished on this exact design (nothing edited since), make the
+    // user confirm a redundant re-run.
+    if (_autorefineCleanForDesign) {
+      if (!confirm('You already autorefined this design and nothing has changed since. '
+                 + 'Running again will repeat the same simulations. Run anyway?')) return
+    } else if (!confirm('Autorefine runs many oxDNA simulations (a relax + production each round) '
+               + 'and can take a long time. Start now?')) return
+    _autorefineRunning = true
+    _autorefineJobs.clear()
+    _arSelectedJobId = null
+    _autorefineLastAppliedPeriod = null
+    _updateAutorefineButton()
+    if (autorefineResult) autorefineResult.innerHTML = ''
+    _setAutorefineStatus('Starting autorefine…', '#e3b341', true)
+    const r = await api.startAutorefine({
+      backend: backendSel?.value || 'CUDA',
+      device: deviceInput?.value || '0',
+      salt_concentration: parseFloat(saltInput?.value || '0.5'),
+      design_source_path: _currentPartPath(),   // so the run's jobs list with this design
+      // fine-tune (gentle global + local skip edits) is the standard autorefine now —
+      // always on (the route defaults finetune=True).
+    })
+    if (!r || !r.autorefine_id) {
+      _autorefineRunning = false
+      _setAutorefineStatus('Failed to start: ' + (api.lastErrorMessage?.() || 'error'), '#f85149')
+      _updateAutorefineButton(); return
+    }
+    _autorefineRunId = r.autorefine_id
+    _updateAutorefineButton()        // reveal the Stop button
+    _pollAutorefine(r.autorefine_id)
+  })
+  autorefineStopBtn?.addEventListener('click', async () => {
+    if (!_autorefineRunId) return
+    autorefineStopBtn.disabled = true
+    _setAutorefineStatus('Stopping autorefine…', '#f0883e', true)
+    await api.stopAutorefine(_autorefineRunId)   // poll loop transitions to stopped
+  })
+
+  // ── Deviation map toggle (mean structure of the latest autorefine, coloured by
+  //    per-base deviation from design) — enabled only after a run completes. ────────
+  // Deviation map is a per-JOB display (like the flexibility map): the selected job's
+  // production mean structure recoloured by per-base deviation from its design.  Gated
+  // (in _updateButtons, mirroring the flex toggle) on the selected job having sampling.
+  function _setDevStatus(text, color = '#8b949e') {
+    if (autorefineDevStatus) { autorefineDevStatus.textContent = text || ''; autorefineDevStatus.style.color = color }
+  }
+  function _setDeviationOff() {
+    if (oxdnaDisplay?.mode() === 'deviation') oxdnaDisplay.stopAndRestore()
+    if (autorefineDevToggle) autorefineDevToggle.checked = false
+    _setDevStatus('')
+    _updateButtons(_selectedJob())
+  }
+  async function _refreshDeviation() {
+    if (!_selectedId) return
+    _devBusy = true; _updateButtons(_selectedJob())
+    _setDevStatus('Loading deviation map…')
+    const resp = await api.getOxdnaDeviation(_selectedId)
+    _devBusy = false; _updateButtons(_selectedJob())
+    if (!resp || !resp.ready) {
+      if (autorefineDevToggle) autorefineDevToggle.checked = false
+      _setDevStatus('Deviation map unavailable: ' + (resp?.reason || api.lastErrorMessage?.() || 'not ready'), '#f85149')
+      return
+    }
+    const r = oxdnaDisplay?.displayDeviation(resp)
+    if (!r?.ok) {
+      if (autorefineDevToggle) autorefineDevToggle.checked = false
+      _setDevStatus('Could not render deviation map (' + (r?.reason || 'error') + ')', '#f85149')
+      return
+    }
+    _setDevStatus(`Mean vs design — deviation ${_fmtNm(r.min)} (green) → ${_fmtNm(r.max)} (red), `
+      + `mean ${_fmtNm(r.mean)}, ${r.nFrames ?? '?'} frames`, '#3fb950')
+    _updateButtons(_selectedJob())
+  }
+  autorefineDevToggle?.addEventListener('change', async () => {
+    if (autorefineDevToggle.checked) {
+      if (!_selectedId) { autorefineDevToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); return }
+      oxdnaLive?.stop()                 // mutually exclusive with relaxed / flex / trajectory / live
+      if (displayToggle?.checked) _setDisplayOff()
+      if (flexToggle?.checked) _setFlexOff()
+      if (trajToggle?.checked) _setTrajOff()
+      await _refreshDeviation()
+    } else {
+      _setDeviationOff()
+    }
+  })
   // Trajectory status: base summary text, OR a "building…" / "preparing playback…"
   // overlay while a heavy reconstruction is in flight (declared here, before the player
   // init below, because the player's onBeforePlay callback reads _trajPrep).
@@ -692,6 +991,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // ── Launch ─────────────────────────────────────────────────────────────────
   runBtn?.addEventListener('click', async () => {
     if (_launching || !_available) return
+    if (!(await confirmNoConcurrentJob())) return
+    if (!(await confirmGpuNotBusy(deviceInput?.value || '0'))) return
     oxdnaLive?.stop()   // a relaxation supersedes any live session (shared overlay)
     _launching = true
     runBtn.disabled = true
@@ -808,7 +1109,15 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     sym.title = badge.label
     if (!jobIsActive(job)) sym.style.color = badge.color
 
-    row.append(idx, label, ts, size)
+    row.append(idx)
+    // [AR] designation for jobs created by an Autorefine run.
+    if (_arJobIds.has(job.job_id)) {
+      const ar = Object.assign(document.createElement('span'), { textContent: '[AR]' })
+      ar.style.cssText = `flex-shrink:0;color:#e3b341;font-family:var(--font-mono);font-weight:600`
+      ar.title = 'Created by Autorefine skips/loops'
+      row.append(ar)
+    }
+    row.append(label, ts, size)
     if (job.archived) {
       const box = Object.assign(document.createElement('span'), { textContent: '📦' })
       box.style.cssText = 'flex-shrink:0;font-size:10px'
@@ -817,7 +1126,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     }
     // Out-of-date marker: the design changed since this job was relaxed, so
     // live/production would be inconsistent (only Relax stays available).
-    if (jobOutOfDate(job)) {
+    // Suppressed WHILE an autorefine run is active: the loop deliberately edits the
+    // design (it lands each iteration's skip pattern live), which would otherwise flag
+    // every job stale mid-run — don't surface design-difference warnings until the run
+    // completes.
+    if (jobOutOfDate(job) && !_autorefineRunning) {
       const warn = Object.assign(document.createElement('span'), { textContent: '⚠' })
       warn.className = 'oxdna-job-stale-warn'   // stable hook for the AF-26 staleness e2e
       warn.style.cssText = `flex-shrink:0;color:${_C.warn};font-size:11px`
@@ -1084,6 +1397,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     const prodActive  = _visibleJobs().some(isProductionRunning)
     if (runBtn)  _setBtnSpinner(runBtn,  relaxActive, '▶ Relax', 'Relaxing…')
     if (prodBtn) _setBtnSpinner(prodBtn, prodActive,  'Full Sim', 'Running…')
+    _updateAutorefineButton()   // gate by lattice + availability + in-flight autorefine
 
     if (prodBtn) {
       prodBtn.disabled = !prodReady
@@ -1115,6 +1429,19 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       }
       if (!ok && !liveOn && flexStatus && oxdnaDisplay?.mode() !== 'rmsf') {
         _setFlexStatus('Waiting for a production or field run', _C.dim)
+      }
+    }
+
+    // Deviation map — same gate as the flexibility map (any job with sampling).
+    if (autorefineDevToggle && !_devBusy) {
+      const ok = !liveOn && (samplingState(job) === 'done' || samplingState(job) === 'running')
+      autorefineDevToggle.disabled = !ok
+      const lab = autorefineDevToggle.closest('label')
+      if (lab) {
+        lab.style.opacity = ok ? '1' : '0.5'
+        lab.style.cursor = ok ? 'pointer' : 'not-allowed'
+        lab.title = ok ? 'Mean structure of this job, recoloured green→red by per-base deviation from design.'
+          : (liveOn ? 'Stop Live to use the deviation map' : 'Select a job with a production run.')
       }
     }
 
@@ -1176,6 +1503,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   prodBtn?.addEventListener('click', async () => {
     if (!_selectedId || prodBtn.disabled) return
     if (!(await _ensureJobCurrent('a production run'))) return
+    if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
     oxdnaLive?.stop()   // a production run supersedes any live session (shared overlay)
     const steps = parseInt(prodStepsInput?.value || '5000000', 10)
 
@@ -1313,6 +1641,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       oxdnaLive?.stop()   // mutually exclusive with the live overlay
       if (displayToggle?.checked) _setDisplayOff()   // mutually exclusive with OxDNA display
       if (trajToggle?.checked) _setTrajOff()
+      if (autorefineDevToggle?.checked) _setDeviationOff()
       await _refreshFlex()
     } else {
       _setFlexOff()
@@ -1385,6 +1714,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       oxdnaLive?.stop()   // mutually exclusive with the live overlay
       if (displayToggle?.checked) _setDisplayOff()   // mutually exclusive overlays
       if (flexToggle?.checked) _setFlexOff()
+      if (autorefineDevToggle?.checked) _setDeviationOff()
       await _refreshTraj()
     } else {
       _setTrajOff()
@@ -1397,6 +1727,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   }
   seedBtn?.addEventListener('click', async () => {
     if (!_selectedId || seedBtn.disabled || _seeding) return
+    if (!(await confirmNoConcurrentJob())) return
     const src = _selectedJob()
     _seeding = true
     seedBtn.disabled = true
@@ -1439,6 +1770,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // ── Detail actions ───────────────────────────────────────────────────────
   startBtn?.addEventListener('click', async () => {
     if (!_selectedId) return
+    if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
     await api.startOxdnaJob(_selectedId)
     _fetchJobs()
   })
@@ -1542,6 +1874,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   function _allDisplaysOff() {
     if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
     else if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
+    else if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
     else _setDisplayOff()
     // Defensive: ensure every checkbox is cleared and the renderer restored.
     trajPlayer.stop()
@@ -1549,6 +1882,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     if (displayToggle) displayToggle.checked = false
     if (flexToggle) flexToggle.checked = false
     if (trajToggle) trajToggle.checked = false
+    if (autorefineDevToggle) autorefineDevToggle.checked = false
     if (trajControls) trajControls.style.display = 'none'
   }
   displayToggle?.addEventListener('change', async () => {
@@ -1557,6 +1891,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       oxdnaLive?.stop()   // mutually exclusive with the live overlay
       if (flexToggle?.checked) _setFlexOff()   // mutually exclusive with the flexibility map
       if (trajToggle?.checked) _setTrajOff()
+      if (autorefineDevToggle?.checked) _setDeviationOff()
       await _refreshDisplay()
     } else {
       _setDisplayOff()
@@ -1591,7 +1926,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // The client emits this on every design sync; refetch so the ⚠ markers update
   // even off the Dynamics tab (where the 1.5 s poll is paused) — e.g. when the user
   // seeks the Feature Log back to a job's run position, clearing its stale flag.
-  window.addEventListener('nadoc:design-changed', () => { _fetchJobs() })
+  window.addEventListener('nadoc:design-changed', () => {
+    // A design edit makes a re-run no longer redundant; drop any live deviation overlay
+    // (it no longer matches the edited design).  The deviation DATA stays available for
+    // the run's final job (a historical result) — its toggle re-enables on re-selection.
+    _autorefineCleanForDesign = false
+    if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
+    _fetchJobs()
+  })
 
   // ── Design switched/opened → re-filter the list to the new design ─────────
   // Without this the list keeps showing the previous design's jobs (and the

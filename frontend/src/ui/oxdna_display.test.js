@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { toFemUpdates, viridisHex, rmsfColorMap, framesToUpdates, initOxdnaDisplay, repKind, rmsfToVertexColors } from './oxdna_display.js'
+import { toFemUpdates, viridisHex, rmsfColorMap, framesToUpdates, initOxdnaDisplay, repKind, rmsfToVertexColors, deviationHex, deviationColorMap } from './oxdna_display.js'
 
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
@@ -53,6 +53,47 @@ describe('viridisHex', () => {
     const mid = viridisHex(0.5)
     expect(mid).not.toBe(viridisHex(0))
     expect(mid).not.toBe(viridisHex(1))
+  })
+})
+
+describe('deviationHex', () => {
+  it('ramps green (low deviation) → red (high), clamped + NaN-safe', () => {
+    expect(deviationHex(0)).toBe((63 << 16) | (185 << 8) | 80)    // green = matches design
+    expect(deviationHex(1)).toBe((248 << 16) | (81 << 8) | 73)    // red = far from design
+    expect(deviationHex(-5)).toBe(deviationHex(0))                // clamp low
+    expect(deviationHex(99)).toBe(deviationHex(1))                // clamp high
+    expect(deviationHex(NaN)).toBe(deviationHex(0))               // NaN-safe
+    expect(deviationHex(0.5)).not.toBe(deviationHex(0))           // amber midpoint distinct
+  })
+})
+
+describe('deviationColorMap', () => {
+  it('returns null for not-ready / empty responses', () => {
+    expect(deviationColorMap(null)).toBe(null)
+    expect(deviationColorMap({ ready: false, positions: [] })).toBe(null)
+    expect(deviationColorMap({ ready: true, positions: [] })).toBe(null)
+  })
+  it('scales deviation min→max and colours the extremes green/red', () => {
+    const resp = {
+      ready: true, min_deviation: 0.3, max_deviation: 2.1,
+      positions: [
+        { helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0, deviation: 0.3 },
+        { helix_id: 'h0', bp_index: 1, direction: 'FORWARD', backbone_position: [1, 0, 0], nx: 1, ny: 0, nz: 0, deviation: 2.1 },
+      ],
+    }
+    const map = deviationColorMap(resp)
+    expect(map.updates).toHaveLength(2)
+    expect(map.updates[0]).not.toHaveProperty('deviation')          // stripped to applyFem shape
+    expect(map.colorByKey['h0:0:FORWARD']).toBe(deviationHex(0))     // best match → green
+    expect(map.colorByKey['h0:1:FORWARD']).toBe(deviationHex(1))     // worst → red
+    expect(map.min).toBe(0.3)
+    expect(map.max).toBe(2.1)
+  })
+  it('handles a uniform deviation without dividing by zero', () => {
+    const resp = { ready: true, min_deviation: 0.8, max_deviation: 0.8,
+      positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0, deviation: 0.8 }] }
+    const map = deviationColorMap(resp)
+    expect(map.colorByKey['h0:0:FORWARD']).toBe(deviationHex(0))
   })
 })
 

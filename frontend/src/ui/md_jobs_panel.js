@@ -24,6 +24,7 @@ import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
+import { confirmNoConcurrentJob, confirmGpuNotBusy } from './job_activity.js'
 import * as api from '../api/client.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
@@ -74,6 +75,31 @@ export function seededBadge(job) {
 /** Pure: is the job in an in-progress state (a spinner should show)? */
 export function mdJobIsActive(job) {
   return ['queued', 'preparing', 'running'].includes(job?.status)
+}
+
+// Production segments of a fast job (HMR + GPU-resident, 4 fs) run ~9x the speed
+// of its strain-relief first segment (1 fs, standard CUDA): 4x from the larger
+// timestep and ~2.4x per step from GPU-resident acceleration (benchmarked
+// 1.7 -> 16 ns/day NPT on an RTX 3080 Ti).
+export const FAST_PHASE_SPEEDUP = 9
+
+/** Pure: when a fast-relaxation job is still in its slow strain-relief FIRST
+ *  segment (1 fs, standard CUDA — the only non-fast segment in a fast ladder),
+ *  return `{asterisk, tooltip}` explaining production will be ~FAST_PHASE_SPEEDUP
+ *  faster, with an estimated production rate from the current speed.  Returns null
+ *  when not applicable (job isn't fast mode, or it has moved past segment 0). */
+export function fastPhaseSpeedNote(job, nsPerDay) {
+  if (job?.prep_params?.fast !== true) return null
+  if ((job?.current_segment_idx ?? 0) !== 0) return null
+  const est = (typeof nsPerDay === 'number' && isFinite(nsPerDay) && nsPerDay > 0)
+    ? Math.round(nsPerDay * FAST_PHASE_SPEEDUP) : null
+  const tooltip =
+    'Strain-relief first segment (1 fs, standard CUDA) — the slowest stage by design. '
+    + 'The production segments use hydrogen-mass repartitioning + GPU-resident acceleration '
+    + 'at a 4 fs timestep'
+    + (est ? `, expected to reach ~${est} ns/day` : '')
+    + ` (≈${FAST_PHASE_SPEEDUP}× this rate). The Speed jumps at the next segment.`
+  return { asterisk: true, tooltip }
 }
 
 /** A spinning circular activity indicator (shared CSS class .nadoc-spinner). */
@@ -137,6 +163,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const watershellInput = document.getElementById('md-jobs-watershell')
   const minstepsInput = document.getElementById('md-jobs-minsteps')
   const autostartChk  = document.getElementById('md-jobs-autostart')
+  const fastChk       = document.getElementById('md-jobs-fast')
   const displayToggle = document.getElementById('md-jobs-display-toggle')
   const displayStatus = document.getElementById('md-jobs-display-status')
   const showAllToggle = document.getElementById('md-jobs-show-all')
@@ -686,6 +713,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   function _stopMdDisplay(status = 'Off') {
     clearInterval(_displayTimer)
     _displayTimer = null
+    // Kill any in-flight backend trajectory/RMSF/surface analysis for this job so a
+    // heavy MDAnalysis read of the live DCD can't keep running after the user
+    // toggles the view off (the run-away that used to wedge the server).
+    if (_displayJobId) api.cancelMdAnalysis(_displayJobId)
     _displayJobId = null
     _displayKey = null
     if (displayToggle) displayToggle.checked = false
@@ -929,6 +960,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       actionLabel: 'a production run',
     })
     if (!proceed) return
+    if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
     const steps = _productionSteps()
     const ns = _productionNs(steps)
     if (prodStatus) {
@@ -1026,6 +1058,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       console.log(`[${_ts()}] md-jobs: Relax clicked but already launching`)
       return
     }
+    if (!(await confirmNoConcurrentJob())) return
+    if (!(await confirmGpuNotBusy(devicesInput?.value?.trim() || '0'))) return
     _launching = true
     runBtn.disabled = true
 
@@ -1041,6 +1075,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       water_shell_nm: (parseFloat(watershellInput?.value ?? '0') || 0) / 10,
       minimize_steps: parseInt(minstepsInput?.value  ?? '10000', 10),
       autostart:      autostartChk?.checked ?? true,
+      fast:           fastChk?.checked ?? true,
       design_source_path: _currentPartPath() || null,
     }
 
@@ -1105,6 +1140,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // ── Stop button ────────────────────────────────────────────────────────────
   startBtn?.addEventListener('click', async () => {
     if (!_selectedId) return
+    if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
     // oxDNA-seeded jobs run the SAME restrained relaxation ladder, starting from
     // the seeded (oxDNA-relaxed) structure — they no longer skip it (jumping
     // straight to unrestrained production blew the structure up).
@@ -1652,9 +1688,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         const { symbol, color } = _segSymbol(seg.status, health)
         dot.style.cssText = `color:${color};font-size:11px;cursor:default;flex-shrink:0`
         dot.textContent = symbol
-        const advisory = _productionAdvisory(health)
-        dot.title = advisory
-          ? `${seg.name} · ${seg.percent}% · ${seg.status} · WC below advisory; consider stopping`
+        const warnNote = _productionAdvisory(health)
+          ? 'WC below advisory'
+          : (_isAdvisoryWarning(health) ? (health.reason || 'below health threshold') : null)
+        dot.title = warnNote
+          ? `${seg.name} · ${seg.percent}% · ${seg.status} · ${warnNote}`
           : `${seg.name} · ${seg.percent}% · ${seg.status}`
         row.appendChild(dot)
       })
@@ -1662,6 +1700,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       const allDone   = segs.every(s => s.status === 'done')
       const anyFailed = segs.some(s => s.status === 'failed')
       const anyRun    = segs.some(s => s.status === 'running')
+      const anyWarn   = segs.some(s => s.status === 'done'
+        && (_isAdvisoryWarning(healthBySegment.get(s.name)) || _productionAdvisory(healthBySegment.get(s.name))))
       if (anyRun) {
         // Spinning circle next to the stage currently running.
         const spin = makeSpinner(_C.warn, 10)
@@ -1669,8 +1709,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         row.appendChild(spin)
       } else {
         const stageStat = document.createElement('span')
-        stageStat.style.cssText = `color:${anyFailed ? _C.err : allDone ? _C.ok : _C.dim};margin-left:4px`
-        stageStat.textContent = anyFailed ? '✗' : allDone ? '✓' : ''
+        const color = anyFailed ? _C.err : anyWarn ? _C.warn : allDone ? _C.ok : _C.dim
+        stageStat.style.cssText = `color:${color};margin-left:4px`
+        stageStat.textContent = anyFailed ? '✗' : anyWarn ? '⚠' : allDone ? '✓' : ''
         row.appendChild(stageStat)
       }
 
@@ -1678,11 +1719,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     })
   }
 
-  // A checkpoint that did not fully pass but the run was allowed to continue: a
-  // non-blocking advisory breach (WC ref-relative below threshold; backend
-  // `blocking === false`).  Surfaced as ⚠, distinct from a ✗ hard failure.
+  // A checkpoint that dipped below a health threshold (C1' or WC).  Health is
+  // advisory — the run is never stopped for it — so any not-passed sample is
+  // surfaced as a ⚠ warning on the stage.
   function _isAdvisoryWarning(health) {
-    return !!health && health.passed === false && health.blocking === false
+    return !!health && health.passed === false
   }
 
   function _segSymbol(status, health = null) {
@@ -1747,12 +1788,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     const wcThreshold = health ? _wcThresholdForStage(health.stage) : 0.85
     const wcAdvisory = _productionAdvisory(health) || _isAdvisoryWarning(health)
     const wcValue = wcAdvisory ? `⚠ ${_fmtPct(health?.wc_ref_relative_fraction ?? null)}` : _fmtPct(health?.wc_ref_relative_fraction ?? null)
+    // Fast-mode jobs spend their first segment in a slow strain-relief stage; flag
+    // its Speed with a "*" + hover tooltip so the low number doesn't look broken.
+    const speedNote = fastPhaseSpeedNote(job, scalar?.ns_per_day ?? null)
+    const speedValue = _fmt(scalar?.ns_per_day ?? null, 1, ' ns/day')
     const cards = [
       { label: 'Temp',       value: _fmt(scalar?.temperature_k ?? null, 1, 'K'),          color: _C.text },
       { label: 'Pressure avg', value: _fmt(pressure, 2, 'bar'),                            color: _C.text, title: pressureTitle },
       { label: 'Base pairs', value: _fmtPct(health?.c1_paired_fraction ?? null),          color: _healthColor(health?.c1_paired_fraction, 0.90) },
       { label: 'WC health',  value: wcValue,                                               color: wcAdvisory ? _C.warn : _healthColor(health?.wc_ref_relative_fraction, wcThreshold), wcTrend: true },
-      { label: 'Speed',      value: _fmt(scalar?.ns_per_day ?? null, 1, ' ns/day'),        color: _C.muted },
+      { label: 'Speed',      value: (speedNote && speedValue !== '—') ? `${speedValue} *` : speedValue, color: _C.muted, title: speedNote?.tooltip },
       { label: 'Latest',     value: health ? _shortStage(health.stage) : (persisted?.stage ? _shortStage(persisted.stage) : '—'), color: _C.muted },
     ]
 

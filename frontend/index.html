@@ -1727,6 +1727,16 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    /* Per-design simulation-activity spinner: empty (zero width) unless a running
+       MD/oxDNA job fills it. Gold matches the .lib-row-size-sim "has sim data" cue. */
+    .lib-row-status {
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+      color: #d29922;
+      cursor: help;
+    }
+    .lib-row-status:not(:empty) { margin-right: 6px; }
     .lib-row-path {
       font-size: var(--text-xs);
       color: #484f58;
@@ -3457,6 +3467,23 @@
                   Full Sim
                 </button>
               </div>
+              <!-- autorefine skips/loops (self-consistency tuning loop) -->
+              <div style="margin-bottom:6px">
+                <div style="display:flex;gap:5px;align-items:center">
+                  <button id="oxdna-jobs-autorefine-btn" disabled
+                          title="Autorefine skips/loops: iteratively tune the design's skip/loop placement, relaxing in oxDNA each round, until the simulated time-averaged structure matches the geometry your design depicts. Square-lattice only for now (curved/twisted designs planned). Reports a before-vs-after deviation score."
+                          style="flex:1;font-size:var(--text-xs);padding:5px;background:#2a1f12;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
+                    ✦ Autorefine skips/loops
+                  </button>
+                  <button id="oxdna-jobs-autorefine-stop-btn"
+                          title="Stop the running autorefine — cancels the in-flight simulation and ends the loop, keeping the best result so far."
+                          style="display:none;font-size:var(--text-xs);padding:5px 8px;background:#3a1418;border:1px solid #b62324;color:#ff7b72;border-radius:3px;cursor:pointer;font-weight:600">
+                    ■ Stop
+                  </button>
+                </div>
+                <div id="oxdna-jobs-autorefine-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+                <div id="oxdna-jobs-autorefine-result" style="margin-top:4px"></div>
+              </div>
               <!-- live (ephemeral, in-process oxpy) session status -->
               <div id="oxdna-jobs-live-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
               <!-- production parameters (enabled once a relaxation completes) -->
@@ -3642,6 +3669,12 @@
                 <div id="oxdna-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px">Waiting for production</div>
                 <div id="oxdna-jobs-flex-bar" style="margin-top:3px;display:none"></div>
                 <div id="oxdna-jobs-flex-legend" style="display:none"></div>
+                <!-- Deviation map: autorefine mean structure, coloured by per-base deviation from design (enabled when the autorefine run's job is selected) -->
+                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                       title="Average structure of the selected autorefine run, each base recoloured green (matches design) → red (far from design). Select the autorefine run's job in the list to enable.">
+                  <input id="oxdna-jobs-deviation-toggle" type="checkbox" disabled> Deviation map (autorefine)
+                </label>
+                <div id="oxdna-jobs-deviation-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                 <!-- View trajectory: scrub the composite relaxation + all production runs -->
                 <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
                        title="Play/scrub the composite trajectory: relaxation stages + every production run, with markers at each transition">
@@ -3828,6 +3861,11 @@
                   <label style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
                     <input id="md-jobs-autostart" type="checkbox" checked style="accent-color:#3fb950">
                     Start immediately
+                  </label>
+                  <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
+                         title="Hydrogen-mass repartitioning + 4 fs timestep + NAMD GPU-resident on the hard ladder. ~4x faster NPT on a capped box, same simulated ns per stage. Auto-disabled for declash/soft ladders. Uncheck if a very large design fails the first hard segment with a GPU out-of-memory error.">
+                    <input id="md-jobs-fast" type="checkbox" checked style="accent-color:#3fb950">
+                    Fast relaxation (HMR + GPU-resident, 4&nbsp;fs)
                   </label>
                 </div>
               </div>

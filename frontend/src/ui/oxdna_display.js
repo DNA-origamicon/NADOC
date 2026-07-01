@@ -99,6 +99,46 @@ export function rmsfToVertexColors(rmsf, lo, hi) {
   return out
 }
 
+// Deviation ramp: green (matches design) → amber → red (far from design).  A
+// good→bad ramp reads more naturally than viridis for "how wrong is each base".
+const _DEV_RAMP = [[63, 185, 80], [210, 153, 34], [248, 81, 73]]
+
+export function deviationHex(t) {
+  const x = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0))
+  const seg = x * (_DEV_RAMP.length - 1)
+  const i = Math.min(_DEV_RAMP.length - 2, Math.floor(seg))
+  const f = seg - i
+  const a = _DEV_RAMP[i], b = _DEV_RAMP[i + 1]
+  const r = Math.round(a[0] + (b[0] - a[0]) * f)
+  const g = Math.round(a[1] + (b[1] - a[1]) * f)
+  const bl = Math.round(a[2] + (b[2] - a[2]) * f)
+  return (r << 16) | (g << 8) | bl
+}
+
+/** Pure: deviation-map response → {updates, colorByKey, min, max} (mirrors
+ *  rmsfColorMap, but reads per-nucleotide `deviation` and colours green→red). */
+export function deviationColorMap(resp, loBound, hiBound) {
+  if (!resp || !resp.ready || !Array.isArray(resp.positions) || !resp.positions.length) {
+    return null
+  }
+  const dataLo = Number.isFinite(resp.min_deviation) ? resp.min_deviation : 0
+  const dataHi = Number.isFinite(resp.max_deviation) ? resp.max_deviation : 0
+  const lo = Number.isFinite(loBound) ? loBound : dataLo
+  const hi = Number.isFinite(hiBound) ? hiBound : dataHi
+  const span = hi - lo
+  const updates = []
+  const colorByKey = {}
+  for (const p of resp.positions) {
+    updates.push({
+      helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction,
+      backbone_position: p.backbone_position, nx: p.nx, ny: p.ny, nz: p.nz,
+    })
+    const t = span > 1e-9 ? (p.deviation - lo) / span : 0.0
+    colorByKey[`${p.helix_id}:${p.bp_index}:${p.direction}`] = deviationHex(t)
+  }
+  return { updates, colorByKey, min: dataLo, max: dataHi }
+}
+
 /**
  * Pure: turn one composite-trajectory frame (flat float list) + the shared key
  * list into applyFemPositions updates.  keys = [[helix,bp,dir], …]; frame holds
@@ -500,6 +540,28 @@ export function initOxdnaDisplay({
   }
 
   /**
+   * Render a DEVIATION map: a job's time-averaged mean structure, each bead recoloured
+   * green→red by its distance from the designed position.  Takes a PRE-FETCHED response
+   * from GET /oxdna/jobs/{id}/deviation.  CG beads only (v1 — no heavy reps).  Returns
+   * {ok, n, min, max, mean, nFrames}.
+   */
+  function displayDeviation(resp) {
+    if (!designRenderer) return { ok: false, reason: 'no renderer' }
+    _epoch++
+    const map = deviationColorMap(resp)
+    if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
+    designRenderer.applyFemPositions(map.updates)
+    designRenderer.applyScalarColors(map.colorByKey)
+    _active = true
+    _mode = 'deviation'
+    _jobId = null   // autorefine-scoped (spans the run's final job), not one job id
+    return {
+      ok: true, n: map.updates.length, min: map.min, max: map.max,
+      mean: resp.mean_deviation, nFrames: resp.n_frames,
+    }
+  }
+
+  /**
    * Recolour the active flexibility map to a custom RMSF range [lo, hi] (values
    * outside clamp to the endpoints) — driven by the workspace scale widget.
    * Positions are untouched (only colours change).  No-op unless the RMSF map is
@@ -610,6 +672,7 @@ export function initOxdnaDisplay({
     displayJob,
     displayLiveFrame,
     displayRmsf,
+    displayDeviation,
     recolorRmsf,
     loadTrajectory,
     showFrame,

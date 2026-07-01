@@ -94,6 +94,7 @@ import {
   parseEndKey,
   parseLineKey,
 } from './element_keys.js'
+import { skipMapFromHelices, sequenceColumns } from './sequence_layout.js'
 
 // Crossover indicator geometry
 const XOVER_R = 4            // sprite circle radius (world-space px)
@@ -1617,17 +1618,19 @@ export function initPathview(canvasEl, containerEl, {
     return m
   }
 
-  // Resolve the sequence character at position `i` within a domain.
-  // Checks strand.sequence first, then falls back to the overhang spec.
-  function _seqCharAt(strand, seqIdx, i, dom, ovhMap) {
+  // Resolve the sequence character for a column emitted by `sequenceColumns`.
+  // `seqIndex` is the skip/loop-compressed index into strand.sequence; `domCol` is the
+  // present-column index within the domain (used only for overhang strands, whose own
+  // sequence is indexed per-domain).  Checks strand.sequence first, then the overhang.
+  function _seqCharAt(strand, seqIndex, domCol, dom, ovhMap) {
     if (strand.sequence) {
-      const ch = strand.sequence[seqIdx + i]?.toUpperCase()
+      const ch = strand.sequence[seqIndex]?.toUpperCase()
       if (ch) return ch
     }
     // Fallback: overhang domain with its own sequence
     if (dom.overhang_id) {
       const ovhSeq = ovhMap.get(dom.overhang_id)
-      if (ovhSeq) return ovhSeq[i]?.toUpperCase() ?? null
+      if (ovhSeq) return ovhSeq[domCol]?.toUpperCase() ?? null
     }
     return null
   }
@@ -1647,29 +1650,39 @@ export function initPathview(canvasEl, containerEl, {
     // below must add that shift — otherwise the mirrored sequence letters get culled.
     // (The chars still draw at `cx`; the ctx translate places them on the mirror side.)
     const ghostShiftX = _ghostPass * _pbPeriod() * BP_W
+    // Skip-aware: `sequenceColumns` walks only PRESENT columns and carries the compressed
+    // index into the (skip/loop-compressed) sequence string, so letters stay aligned with
+    // the antiparallel strand across deletions (the old geometric index drifted after the
+    // first skip).  Deleted columns are simply not yielded → nothing drawn there.
+    const skipMap = skipMapFromHelices(_design.helices)
+    // A loop column (nBases === 2) holds TWO inserted nucleotides in one geometric column;
+    // draw both, squeezed side-by-side and 5'→3'-ordered along the strand direction (so the
+    // reading order is left→right on a FORWARD strand, right→left on a REVERSE one), at a
+    // reduced font so they fit within the single cell.
+    const loopFontSize = fontSize * 0.66
+    const baseFont = ctx.font
+    const loopFont = `bold ${loopFontSize}px Courier New, monospace`
     for (const strand of _design.strands) {
       const hasSeq = !!strand.sequence
       const hasOvh = !hasSeq && strand.domains.some(d => d.overhang_id && ovhMap.has(d.overhang_id))
       if (!hasSeq && !hasOvh) continue
-      let seqIdx = 0
-      for (const dom of strand.domains) {
-        const info = _rowMap.get(dom.helix_id)
-        const lo = Math.min(dom.start_bp, dom.end_bp)
-        const hi = Math.max(dom.start_bp, dom.end_bp)
-        const count = hi - lo + 1
-        if (!info) { seqIdx += count; continue }
-        const isFwd = dom.direction === 'FORWARD'
-        const y = isFwd ? info.fwdY : info.revY
-        for (let i = 0; i < count; i++) {
-          const ch = _seqCharAt(strand, seqIdx, i, dom, ovhMap)
+      for (const col of sequenceColumns(strand, skipMap)) {
+        const info = _rowMap.get(col.helixId)
+        if (!info) continue
+        const y = col.isFwd ? info.fwdY : info.revY
+        const cx = _bpCenterX(col.bp)
+        const sx = (cx + ghostShiftX) * _zoom + _panX
+        if (sx < -BP_W * _zoom || sx > canvasEl.width + BP_W * _zoom) continue
+        const n = col.nBases
+        if (n > 1) ctx.font = loopFont
+        for (let j = 0; j < n; j++) {
+          const ch = _seqCharAt(strand, col.seqIndex + j, col.domCol, col.dom, ovhMap)
           if (!ch || !VALID_BASES.has(ch)) continue
-          const bp = isFwd ? lo + i : hi - i
-          const cx = _bpCenterX(bp)
-          const sx = (cx + ghostShiftX) * _zoom + _panX
-          if (sx < -BP_W * _zoom || sx > canvasEl.width + BP_W * _zoom) continue
-          ctx.fillText(ch, cx, y)
+          // 5'→3' along the strand: FORWARD reads left→right, REVERSE right→left
+          const off = n > 1 ? (col.isFwd ? 1 : -1) * (j - (n - 1) / 2) * (BP_W * 0.5) : 0
+          ctx.fillText(ch, cx + off, y)
         }
-        seqIdx += count
+        if (n > 1) ctx.font = baseFont
       }
     }
   }
@@ -1682,28 +1695,22 @@ export function initPathview(canvasEl, containerEl, {
     ctx.strokeStyle = CLR_UNDEF_BORDER
     ctx.lineWidth = 1 / _zoom
     const ghostShiftX = _ghostPass * _pbPeriod() * BP_W   // mirror-pass translate (see _drawSequences)
+    const half = CELL_H / 2
+    // Skip-aware (mirrors _drawSequences): only PRESENT columns are candidates; a deleted
+    // column is not "undefined", it simply has no nucleotide, so it must not be flagged.
+    const skipMap = skipMapFromHelices(_design.helices)
     for (const strand of _design.strands) {
-      let seqIdx = 0
-      for (const dom of strand.domains) {
-        const info = _rowMap.get(dom.helix_id)
-        const lo = Math.min(dom.start_bp, dom.end_bp)
-        const hi = Math.max(dom.start_bp, dom.end_bp)
-        const count = hi - lo + 1
-        if (!info) { seqIdx += count; continue }
-        const isFwd = dom.direction === 'FORWARD'
-        const y = isFwd ? info.fwdY : info.revY
-        const half = CELL_H / 2
-        for (let i = 0; i < count; i++) {
-          const ch = _seqCharAt(strand, seqIdx, i, dom, ovhMap)
-          if (ch && VALID_BASES.has(ch)) continue
-          const bp = isFwd ? lo + i : hi - i
-          const x = _bpToX(bp)
-          const sx = (x + ghostShiftX) * _zoom + _panX
-          if (sx + BP_W * _zoom < 0 || sx > canvasEl.width) continue
-          ctx.fillRect(x, y - half, BP_W, CELL_H)
-          ctx.strokeRect(x, y - half, BP_W, CELL_H)
-        }
-        seqIdx += count
+      for (const col of sequenceColumns(strand, skipMap)) {
+        const info = _rowMap.get(col.helixId)
+        if (!info) continue
+        const ch = _seqCharAt(strand, col.seqIndex, col.domCol, col.dom, ovhMap)
+        if (ch && VALID_BASES.has(ch)) continue
+        const y = col.isFwd ? info.fwdY : info.revY
+        const x = _bpToX(col.bp)
+        const sx = (x + ghostShiftX) * _zoom + _panX
+        if (sx + BP_W * _zoom < 0 || sx > canvasEl.width) continue
+        ctx.fillRect(x, y - half, BP_W, CELL_H)
+        ctx.strokeRect(x, y - half, BP_W, CELL_H)
       }
     }
   }

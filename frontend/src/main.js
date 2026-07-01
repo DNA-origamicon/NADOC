@@ -1926,6 +1926,7 @@ async function main() {
   oxdnaPanel = initOxdnaJobsPanel({
     oxdnaDisplay, oxdnaLive, getWorkspacePath: () => _workspacePath,
     getRunElements: _oxdnaRunElements,
+    getDesignLattice: () => store.getState().currentDesign?.lattice_type ?? null,
     // Clicking a job echoes its run conditions into every card (field arrow,
     // surface, anchor chips + 3D glow) — what was used during that run.
     applyRunConfig: (cfg) => {

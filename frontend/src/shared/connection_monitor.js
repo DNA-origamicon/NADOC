@@ -166,3 +166,17 @@ export function notifyRequestSuccess() {
     _scheduleNext()   // push the idle heartbeat out — real traffic already proved liveness
   }
 }
+
+/**
+ * Called when an API request is taking unusually long (the busy popup just fired).
+ * Runs a /health probe NOW — which has its own short timeout — so a wedged backend
+ * (event loop stuck) surfaces as "reconnecting…" within seconds instead of the user
+ * staring at a frozen screen, WITHOUT aborting the slow request itself. A merely
+ * busy-but-healthy backend answers /health (heavy work runs off the event loop), so
+ * this never false-flags a legitimately long operation.
+ */
+export function pokeProbe() {
+  if (!_started || _probing) return
+  clearTimeout(_timer)
+  _probe()
+}

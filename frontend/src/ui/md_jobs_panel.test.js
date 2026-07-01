@@ -122,3 +122,33 @@ describe('mdShouldShowInheritedSeed', () => {
     expect(mdShouldShowInheritedSeed(null, null)).toBe(false)
   })
 })
+
+import { fastPhaseSpeedNote, FAST_PHASE_SPEEDUP } from './md_jobs_panel.js'
+
+describe('fastPhaseSpeedNote', () => {
+  const fastJob = (idx) => ({ prep_params: { fast: true }, current_segment_idx: idx })
+
+  it('flags the slow strain-relief first segment of a fast job', () => {
+    const note = fastPhaseSpeedNote(fastJob(0), 1.7)
+    expect(note).not.toBeNull()
+    expect(note.asterisk).toBe(true)
+    expect(note.tooltip).toContain(`~${Math.round(1.7 * FAST_PHASE_SPEEDUP)} ns/day`)
+    expect(note.tooltip).toMatch(/GPU-resident/)
+  })
+
+  it('returns null once past segment 0 (production speed is real)', () => {
+    expect(fastPhaseSpeedNote(fastJob(1), 16)).toBeNull()
+  })
+
+  it('returns null for non-fast jobs', () => {
+    expect(fastPhaseSpeedNote({ prep_params: { fast: false }, current_segment_idx: 0 }, 3.8)).toBeNull()
+    expect(fastPhaseSpeedNote({ current_segment_idx: 0 }, 3.8)).toBeNull()
+    expect(fastPhaseSpeedNote(null, 3.8)).toBeNull()
+  })
+
+  it('omits the estimate when speed is not yet known', () => {
+    const note = fastPhaseSpeedNote(fastJob(0), null)
+    expect(note.asterisk).toBe(true)
+    expect(note.tooltip).not.toMatch(/ns\/day,/)   // no "~N ns/day," estimate clause
+  })
+})

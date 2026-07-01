@@ -36,8 +36,12 @@ const SQ_PLUS_Z  = new Set([0, 8, 16, 24])  // _stapH
 const SQ_MINUS_Z = new Set([7, 15, 23, 31]) // _stapL
 
 // Local geometry templates (duplicated from helix_renderer to avoid coupling).
-const GEO_SPHERE   = new THREE.SphereGeometry(BEAD_RADIUS, 8, 6)
-const GEO_UNIT_BOX = new THREE.BoxGeometry(1, 1, 1)
+const GEO_SPHERE    = new THREE.SphereGeometry(BEAD_RADIUS, 8, 6)
+const GEO_UNIT_BOX  = new THREE.BoxGeometry(1, 1, 1)
+const GEO_UNIT_CONE = new THREE.ConeGeometry(1, 1, 8)  // backbone arrow, apex along +Y
+
+export const CONN_RADIUS = 0.075  // nm — matches helix_renderer CONE_RADIUS
+const Y_HAT = new THREE.Vector3(0, 1, 0)
 
 // Palette — matches helix_renderer.js / constants.py
 const C_SCAFFOLD_BACKBONE = 0x0070bb
@@ -156,9 +160,10 @@ function xoverSlabColor(nuc, stapleColorMap, customColors) {
 /**
  * Build extra-base bead + slab meshes for crossovers with extra bases.
  *
- * Line rendering (straight segments and arcs) is handled exclusively by
- * unfold_view.js — this module only produces the InstancedMesh objects for
- * extra-base backbone beads and nucleotide slabs along the arc path.
+ * Crossover ARC lines (for regular, no-insert crossovers) are handled by
+ * unfold_view.js.  This module produces the InstancedMesh objects for extra-base
+ * backbone beads, nucleotide slabs, AND the arrow-cone backbone connectors that
+ * thread prev_real → eb0 → … → eb_{n-1} → next_real along the insert run.
  *
  * @param {object} design      — the current design (must have .crossovers)
  * @param {Array}  geometry    — flat nucleotide array from /design/geometry
@@ -264,7 +269,20 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
   slabsMesh.name     = 'xoverExtraSlabs'    // DEBUG ID
   slabsMesh.userData = { debugType: 'xoverExtraSlabs' }
 
+  // Backbone connectors: one arrow cone per segment threading
+  // prev_real → eb0 → … → eb_{n-1} → next_real, i.e. (beadCount + 1) per arc.
+  const totalSegs = totalBeads + arcCrossovers.length
+  const connMesh = new THREE.InstancedMesh(
+    GEO_UNIT_CONE,
+    new THREE.MeshPhongMaterial({ color: 0xffffff }),
+    Math.max(1, totalSegs),
+  )
+  connMesh.frustumCulled = false
+  connMesh.name     = 'xoverExtraConnectors'   // DEBUG ID
+  connMesh.userData = { debugType: 'xoverExtraConnectors' }
+
   let beadIdx = 0
+  let connIdx = 0
   const ctrl   = new THREE.Vector3()
   const pt     = new THREE.Vector3()
   const tan    = new THREE.Vector3()
@@ -289,6 +307,7 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
 
     // Bead + slab instances
     const beadStartIdx = beadIdx
+    const connStartIdx = connIdx
     const beadColor = xoverNucColor(nucA, stapleColorMap, customColors)
     const slabColor = xoverSlabColor(nucA, stapleColorMap, customColors)
 
@@ -324,11 +343,24 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
       beadIdx++
     }
 
+    // Initial connector positions along the geometric arc (sim frames re-thread
+    // them through the live bead positions later via setExtraBaseConnectors).
+    const cpts = [posA.clone()]
+    for (let i = 1; i <= n; i++) {
+      const p = new THREE.Vector3()
+      bezierAt(posA, ctrl, posB, i / (n + 1), p)
+      cpts.push(p)
+    }
+    cpts.push(posB.clone())
+    setExtraBaseConnectors(connMesh, connStartIdx, cpts, n + 1, beadColor)
+    connIdx += n + 1
+
     arcData.push({
       xoId: xo.id,
       nucA, nucB,
       beadStartIdx,
       beadCount: n,
+      connStartIdx,
       avgAx: avgAx.clone(),
       zOffset,
       bowDir: bowDir.clone(),
@@ -342,10 +374,13 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
   if (beadsMesh.instanceColor) beadsMesh.instanceColor.needsUpdate = true
   slabsMesh.instanceMatrix.needsUpdate = true
   if (slabsMesh.instanceColor) slabsMesh.instanceColor.needsUpdate = true
+  connMesh.instanceMatrix.needsUpdate = true
+  if (connMesh.instanceColor) connMesh.instanceColor.needsUpdate = true
   group.add(beadsMesh)
   group.add(slabsMesh)
+  group.add(connMesh)
 
-  return { group, arcData, beadsMesh, slabsMesh }
+  return { group, arcData, beadsMesh, slabsMesh, connMesh }
 }
 
 // ── Live update (called every animation frame) ──────────────────────────────
@@ -459,4 +494,50 @@ export function setExtraBaseInstanceFromSim(beadsMesh, slabsMesh, idx, pos, base
   _uSlab.copy(_uPt).addScaledVector(_simNorm, SLAB_OFFSET)
   _uMat.compose(_uSlab, _uQuat, _uScl.set(SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK))
   slabsMesh.setMatrixAt(idx, _uMat)
+}
+
+// Scratch for connector-cone placement — separate set so a per-frame connector
+// sync can't alias the bead/slab update scratches above.
+const _kDir  = new THREE.Vector3()
+const _kMid  = new THREE.Vector3()
+const _kQuat = new THREE.Quaternion()
+const _kMat  = new THREE.Matrix4()
+const _kScl  = new THREE.Vector3()
+const _kCol  = new THREE.Color()
+
+/**
+ * Place the backbone-arrow connector cones threading one extra-base run:
+ *   posA(real) → bead0 → … → bead_{n-1} → posB(real).
+ * Mirrors the helix_renderer backbone cone — one cone per segment, apex along
+ * the chain direction, radius = CONN_RADIUS.  Does NOT set needsUpdate.
+ *
+ * @param {THREE.InstancedMesh} connMesh
+ * @param {number} connStartIdx  first cone instance index for this arc
+ * @param {ArrayLike<THREE.Vector3>} points  ordered path points (length ≥ segCount+1)
+ * @param {number} segCount      number of segments (= beadCount + 1)
+ * @param {number|null} colorHex  strand color; null leaves color untouched
+ */
+export function setExtraBaseConnectors(connMesh, connStartIdx, points, segCount, colorHex) {
+  for (let s = 0; s < segCount; s++) {
+    const from = points[s]
+    const to   = points[s + 1]
+    _kDir.subVectors(to, from)
+    const dist = _kDir.length()
+    const h = Math.max(1e-4, dist)
+    _kDir.multiplyScalar(dist > 1e-9 ? 1 / dist : 0)
+    _kMid.copy(from).addScaledVector(_kDir, dist / 2)
+    _kQuat.setFromUnitVectors(Y_HAT, dist > 1e-9 ? _kDir : Y_HAT)
+    _kMat.compose(_kMid, _kQuat, _kScl.set(CONN_RADIUS, h, CONN_RADIUS))
+    connMesh.setMatrixAt(connStartIdx + s, _kMat)
+    if (colorHex != null) connMesh.setColorAt(connStartIdx + s, _kCol.setHex(colorHex))
+  }
+}
+
+/** Zero-scale an arc's connector cones (hidden crossover), keeping their position. */
+export function hideExtraBaseConnectors(connMesh, connStartIdx, segCount) {
+  for (let s = 0; s < segCount; s++) {
+    connMesh.getMatrixAt(connStartIdx + s, _kMat)
+    _kMid.setFromMatrixPosition(_kMat)
+    connMesh.setMatrixAt(connStartIdx + s, _kMat.compose(_kMid, ID_QUAT, _kScl.set(0, 0, 0)))
+  }
 }

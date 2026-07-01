@@ -10,6 +10,9 @@ import { openFileBrowser } from './file_browser.js'
 import { showToast } from './toast.js'
 import { confirmAndDeleteFile } from './file_deletion.js'
 import { formatBytes } from './format_bytes.js'
+import { fetchActiveJobs, activeJobForPath, jobActivityTooltip, normPath } from './job_activity.js'
+
+const _JOB_POLL_MS = 4000   // welcome-screen activity-spinner refresh cadence
 
 function _relativeTime(isoString) {
   const ms  = Date.now() - new Date(isoString).getTime()
@@ -115,6 +118,13 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   let _sortDir = 'desc'
   let _query   = ''
 
+  // Per-design simulation activity: active MD/oxDNA jobs (polled) + a map from
+  // workspace file path → the row's status <span>, so the spinner can be updated
+  // in place without rebuilding rows (which would restart its CSS animation).
+  let _activeJobs = []
+  const _statusEls = new Map()
+  let _jobPollTimer = null
+
   // ── Action buttons ──────────────────────────────────────────────────────────
 
   const actionsEl = document.createElement('div')
@@ -213,6 +223,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
 
   function _render() {
     treeEl.innerHTML = ''
+    _statusEls.clear()   // rows are rebuilt below; re-registered in _renderFileRow
     // Apply search filter: include files matching the query, plus every folder
     // explicitly. _buildTree will only create folders for ancestors of kept files.
     const entries = !_query ? _allEntries : _allEntries.filter(e => {
@@ -311,6 +322,13 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     nameEl.className   = 'lib-row-name'
     nameEl.textContent = file.name
 
+    // Simulation-activity spinner (shown only while this design has a running/
+    // preparing MD or oxDNA job). Registered by path so polling updates it in place.
+    const statusEl = document.createElement('span')
+    statusEl.className = 'lib-row-status'
+    _statusEls.set(normPath(file.path), statusEl)
+    _applyJobStatus(statusEl, file.path)
+
     const pathEl = document.createElement('span')
     pathEl.className = 'lib-row-path'
     const parentFolder = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : ''
@@ -342,7 +360,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       }},
     ])
 
-    rowEl.append(iconEl, nameEl, mtimeEl, sizeEl, actEl)
+    rowEl.append(iconEl, statusEl, nameEl, mtimeEl, sizeEl, actEl)
     rowEl.addEventListener('click', () => {
       if (file.type === 'assembly') onOpenAssembly(file.path, file.name)
       else                          onOpenPart(file.path, file.name)
@@ -364,6 +382,39 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
       el.appendChild(b)
     }
     return el
+  }
+
+  // ── Simulation-activity spinner ───────────────────────────────────────────────
+
+  // Fill (or clear) a row's status span from the current _activeJobs snapshot.
+  // Reuses the global .nadoc-spinner CSS class for the rotating indicator.
+  function _applyJobStatus(statusEl, path) {
+    const job = activeJobForPath(_activeJobs, path)
+    if (!job) {
+      if (statusEl.firstChild) statusEl.replaceChildren()
+      statusEl.title = ''
+      return
+    }
+    if (!statusEl.querySelector('.nadoc-spinner')) {
+      const spin = document.createElement('span')
+      spin.className = 'nadoc-spinner'
+      spin.setAttribute('aria-hidden', 'true')
+      statusEl.replaceChildren(spin)
+    }
+    statusEl.title = jobActivityTooltip(job)
+  }
+
+  async function _refreshJobStatuses() {
+    // Skip work while the welcome screen is hidden (editor open).
+    if (mount.offsetParent === null) return
+    _activeJobs = await fetchActiveJobs()
+    for (const [path, el] of _statusEls) _applyJobStatus(el, path)
+  }
+
+  function _startJobPolling() {
+    if (_jobPollTimer != null) return
+    _refreshJobStatuses()
+    _jobPollTimer = setInterval(_refreshJobStatuses, _JOB_POLL_MS)
   }
 
   // ── New folder input ──────────────────────────────────────────────────────────
@@ -583,5 +634,6 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   }
 
   refresh()
-  return { refresh }
+  _startJobPolling()
+  return { refresh, refreshJobStatuses: _refreshJobStatuses }
 }

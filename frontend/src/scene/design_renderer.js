@@ -14,7 +14,7 @@
 import * as THREE from 'three'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
 import { resolveRepOverrides } from './representation_overrides.js'
-import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances, setExtraBaseInstanceFromSim, partitionExtraBaseUpdates } from './crossover_connections.js'
+import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances, setExtraBaseInstanceFromSim, partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors } from './crossover_connections.js'
 import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 
 /**
@@ -36,6 +36,7 @@ export function initDesignRenderer(scene, storeRef) {
   let _xoverArcData     = null   // arc metadata for extra-base crossovers
   let _xoverBeadsMesh   = null   // InstancedMesh for extra-base beads
   let _xoverSlabsMesh   = null   // InstancedMesh for extra-base slabs
+  let _xoverConnMesh    = null   // InstancedMesh for extra-base backbone connector cones
   let _xoverArcDataMap  = null   // Map<xoId, arcDataEntry> for O(1) lookup during animation
   let _xoverGlowLive    = []     // {pos: THREE.Vector3, arcData, localIdx} — live positions for selection glow
   // Extra-base inserts driven by a simulation frame (oxDNA/MD relaxed or trajectory):
@@ -164,9 +165,15 @@ export function initDesignRenderer(scene, storeRef) {
         _xoverBeadsMesh.setColorAt(idx, _col.setHex(bc))
         _xoverSlabsMesh.setColorAt(idx, _col.setHex(sc))
       }
+      if (_xoverConnMesh) {
+        for (let s = 0; s < ad.beadCount + 1; s++) {
+          _xoverConnMesh.setColorAt(ad.connStartIdx + s, _col.setHex(bc))
+        }
+      }
     }
     if (_xoverBeadsMesh.instanceColor) _xoverBeadsMesh.instanceColor.needsUpdate = true
     if (_xoverSlabsMesh.instanceColor) _xoverSlabsMesh.instanceColor.needsUpdate = true
+    if (_xoverConnMesh?.instanceColor) _xoverConnMesh.instanceColor.needsUpdate = true
   }
 
   /** Crossover extra-base beads/slabs are children of root, NOT part of the helix
@@ -178,6 +185,7 @@ export function initDesignRenderer(scene, storeRef) {
     const show = _detailLevel < 2
     if (_xoverBeadsMesh) _xoverBeadsMesh.visible = show
     if (_xoverSlabsMesh) _xoverSlabsMesh.visible = show
+    if (_xoverConnMesh)  _xoverConnMesh.visible  = show
   }
 
   /** Zero the InstancedMesh scale for every extra-base bead/slab whose crossover
@@ -207,6 +215,7 @@ export function initDesignRenderer(scene, storeRef) {
       _xoverBeadsMesh.instanceMatrix.needsUpdate = true
       _xoverSlabsMesh.instanceMatrix.needsUpdate = true
     }
+    _syncExtraBaseConnectors()
   }
 
   /** Hide (zero-scale) or restore (reposition) extra-base beads/slabs for
@@ -252,6 +261,7 @@ export function initDesignRenderer(scene, storeRef) {
       _xoverBeadsMesh.instanceMatrix.needsUpdate = true
       _xoverSlabsMesh.instanceMatrix.needsUpdate = true
     }
+    _syncExtraBaseConnectors()
   }
 
   const _clusterXoverPosA = new THREE.Vector3()
@@ -263,6 +273,49 @@ export function initDesignRenderer(scene, storeRef) {
     if (live) return out.copy(live)
     const bp = nuc?.backbone_position
     return bp ? out.set(bp[0], bp[1], bp[2]) : null
+  }
+
+  // Reusable point buffer for connector threading (grown on demand, never freed).
+  const _connPts = []
+  const _connBeadMat = new THREE.Matrix4()
+  function _connPoint(i) {
+    while (_connPts.length <= i) _connPts.push(new THREE.Vector3())
+    return _connPts[i]
+  }
+
+  function _xoverArcHidden(ad, refIds, refHidden) {
+    if (_hiddenCrossoverIds.has(ad.xoId)) return true
+    if (refHidden && refIds.has(ad.nucA?.strand_id) && refIds.has(ad.nucB?.strand_id)) return true
+    return false
+  }
+
+  /** Re-thread the extra-base backbone connector cones through the CURRENT bead
+   *  positions (read from the bead InstancedMesh) and the two live real endpoints.
+   *  Derived from the already-correct beads, so it is mode-agnostic (sim / Bezier /
+   *  cluster). Hidden arcs get zero-scale cones. */
+  function _syncExtraBaseConnectors() {
+    if (!_xoverConnMesh || !_xoverArcData || !_xoverBeadsMesh) return
+    const design = storeRef.getState().currentDesign
+    const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
+    const refHidden = storeRef.getState().showReferenceGeometry === false
+    for (const ad of _xoverArcData) {
+      const segCount = ad.beadCount + 1
+      if (_xoverArcHidden(ad, refIds, refHidden)) {
+        hideExtraBaseConnectors(_xoverConnMesh, ad.connStartIdx, segCount)
+        continue
+      }
+      const posA = _liveXoverPos(ad.nucA, _clusterXoverPosA)
+      const posB = _liveXoverPos(ad.nucB, _clusterXoverPosB)
+      if (!posA || !posB) continue
+      _connPoint(0).copy(posA)
+      for (let k = 0; k < ad.beadCount; k++) {
+        _xoverBeadsMesh.getMatrixAt(ad.beadStartIdx + k, _connBeadMat)
+        _connPoint(k + 1).setFromMatrixPosition(_connBeadMat)
+      }
+      _connPoint(ad.beadCount + 1).copy(posB)
+      setExtraBaseConnectors(_xoverConnMesh, ad.connStartIdx, _connPts, segCount, null)
+    }
+    _xoverConnMesh.instanceMatrix.needsUpdate = true
   }
 
   /**
@@ -322,6 +375,7 @@ export function initDesignRenderer(scene, storeRef) {
     _xoverArcData    = null
     _xoverBeadsMesh  = null
     _xoverSlabsMesh  = null
+    _xoverConnMesh   = null
     _xoverArcDataMap = null
     _xoverGlowLive   = []
     _simXbByCrossover = null   // drop stale simulation-driven insert positions
@@ -351,6 +405,7 @@ export function initDesignRenderer(scene, storeRef) {
       _xoverArcData    = xoverResult.arcData
       _xoverBeadsMesh  = xoverResult.beadsMesh
       _xoverSlabsMesh  = xoverResult.slabsMesh
+      _xoverConnMesh   = xoverResult.connMesh
       _xoverArcDataMap = new Map()
       for (const ad of _xoverArcData) _xoverArcDataMap.set(ad.xoId, ad)
       // Extra-base beads+slabs are children of root — no separate scene.add() needed.
@@ -1170,6 +1225,7 @@ export function initDesignRenderer(scene, storeRef) {
     flushExtraBaseMeshes() {
       if (_xoverBeadsMesh) _xoverBeadsMesh.instanceMatrix.needsUpdate = true
       if (_xoverSlabsMesh) _xoverSlabsMesh.instanceMatrix.needsUpdate = true
+      _syncExtraBaseConnectors()
     },
 
     getAxisArrows() {

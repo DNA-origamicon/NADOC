@@ -93,6 +93,28 @@ describe('oxDNA sweep', () => {
     expect(document.getElementById('oxdna-jobs-device').value).toBe('0')
   })
 
+  it('reveals the log details pane and shows live engine output', async () => {
+    const api = makeApi({
+      getBenchmark: vi.fn()
+        .mockResolvedValueOnce({ state: 'running', trials_done: 0, trials_total: 1,
+          fraction: 0, results: [],
+          commands: [{ label: 'CPU', cmd: '/usr/bin/oxDNA input.txt' }],
+          log: '$ /usr/bin/oxDNA input.txt\nstep 1\nstep 2' })
+        .mockResolvedValueOnce({ state: 'completed', trials_done: 1, trials_total: 1,
+          fraction: 1, results: [{ label: 'CPU', backend: 'CPU', device: '0', steps_per_s: 5 }],
+          recommendation: { backend: 'CPU', device: '0', steps_per_s: 5 }, note: '',
+          log: '$ /usr/bin/oxDNA input.txt\nstep 1\nstep 2\nstep 3 done' }),
+    })
+    const panel = initBenchmarkPanel({ api, sleep: async () => {} })
+    const el = document.getElementById('ox-mount')
+    panel.mountOxdna(el)
+    await panel.runSweep('oxdna', el)
+    const details = el.querySelector('.bench-log-details')
+    expect(details.style.display).not.toBe('none')           // pane revealed
+    expect(el.querySelector('.bench-log').textContent).toContain('step 3 done')  // latest output
+    expect(el.querySelector('.bench-log').textContent).toContain('/usr/bin/oxDNA')  // engine call
+  })
+
   it('locks other panel buttons during the run and restores after', async () => {
     const seen = {}
     const api = makeApi({
@@ -156,6 +178,32 @@ describe('cancel', () => {
     expect(el.querySelector('.bench-status').textContent).toContain('kept existing defaults')
     expect(el.querySelector('.bench-apply-btn').style.display).toBe('none')
     expect(document.getElementById('ox-other-btn').disabled).toBe(false)
+  })
+})
+
+describe('NAMD sweep', () => {
+  it('shows the honest winning label (a CUDA-build GPU run is never called "CPU-only")', async () => {
+    const api = makeApi({
+      getBenchmark: vi.fn().mockResolvedValue({
+        state: 'completed', trials_done: 2, trials_total: 2, fraction: 1,
+        results: [
+          { label: '+p16 GPU:0', threads: 16, devices: '0', ns_per_day: 32.6 },
+          { label: '+p8 GPU:0', threads: 8, devices: '0', ns_per_day: 29.5 },
+        ],
+        // devices:'0' but the point: even devices:'' must not render "CPU-only" — the
+        // backend now sends the real label, so the UI uses it verbatim.
+        recommendation: { threads: 16, devices: '0', label: '+p16 GPU:0', ns_per_day: 32.6 },
+        note: '',
+      }),
+    })
+    const panel = initBenchmarkPanel({ api, sleep: async () => {} })
+    const el = document.getElementById('md-mount')
+    panel.mountNamd(el)
+    await panel.runSweep('namd', el)
+    const status = el.querySelector('.bench-status').textContent
+    expect(status).toContain('+p16 GPU:0')
+    expect(status).not.toContain('CPU-only')
+    expect(status).toContain('32.6')
   })
 })
 

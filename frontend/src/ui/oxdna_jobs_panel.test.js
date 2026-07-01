@@ -15,6 +15,12 @@ vi.mock('../api/client.js', () => ({
 }))
 
 import * as api from '../api/client.js'
+
+// Drain the microtask queue. The concurrent-job guard adds an async hop (it awaits
+// the active-jobs query) before a launch proceeds, so launch-flow assertions flush
+// generously rather than counting exact ticks.
+const flush = async (n = 12) => { for (let i = 0; i < n; i++) await Promise.resolve() }
+
 import {
   formatProgress, latestHealth, detailStatusText, stageChips, jobDisplayName,
   productionState, jobListStatus, formatEta, seedReady, initOxdnaJobsPanel,
@@ -891,7 +897,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     const seed = $('oxdna-jobs-seed-btn')
     expect(seed.disabled).toBe(false)
     seed.click()
-    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    await flush()
 
     expect(api.createMdJob).toHaveBeenCalledTimes(1)
     const body = api.createMdJob.mock.calls[0][0]
@@ -917,7 +923,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
 
     expect($('oxdna-jobs-body').style.display).not.toBe('none')   // open before
     $('oxdna-jobs-seed-btn').click()
-    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    await flush()
 
     expect($('oxdna-jobs-body').style.display).toBe('none')        // oxDNA collapsed
     expect(mdClicked).toBe(1)                                      // MD opened (was collapsed by default)

@@ -22,7 +22,7 @@ function _signalDesignChanged() {
 }
 import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
-import { notifyRequestFailure, notifyRequestSuccess } from '../shared/connection_monitor.js'
+import { notifyRequestFailure, notifyRequestSuccess, pokeProbe } from '../shared/connection_monitor.js'
 import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
 
 const BASE = '/api'
@@ -201,6 +201,12 @@ const _API_PERF_THRESHOLD_MS = 200
  *  imports, full-design relax, etc.). */
 const _BUSY_POPUP_DELAY_MS = 5000
 
+/** Hard ceiling on any single request. Purely an anti-hang backstop for a wedged
+ *  backend (so a request can't wait forever) — set well above the slowest real op
+ *  (autostaple / big import / bounded MD analysis), since fast wedge DETECTION
+ *  comes from pokeProbe(), not from this ceiling. */
+const _REQUEST_TIMEOUT_MS = 240000
+
 /** Once the popup actually appears, keep it visible for at least this many
  *  milliseconds even if the response arrives sooner. Avoids one-frame flashes
  *  for ops that finish just after the threshold. */
@@ -242,7 +248,19 @@ function _busyHeaderForPath(method, path) {
   return 'Working…'
 }
 
-export async function _request(method, path, body, { signal, suppressBusy = false, docId } = {}) {
+export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS } = {}) {
+  // Hard timeout so a wedged-but-listening backend (event loop stuck) can't make a
+  // request hang forever — without it the welcome screen waited indefinitely and
+  // looked dead. On timeout the catch below flags the connection down. Generous by
+  // default so it never aborts a legitimately long op; the fast "is the server
+  // actually wedged?" signal comes from pokeProbe() below, not from this ceiling.
+  const _timeoutCtrl = new AbortController()
+  const _timeoutTimer = setTimeout(
+    () => _timeoutCtrl.abort(new DOMException('Request timed out', 'TimeoutError')), timeoutMs)
+  if (signal) {
+    if (signal.aborted) _timeoutCtrl.abort(signal.reason)
+    else signal.addEventListener('abort', () => _timeoutCtrl.abort(signal.reason), { once: true })
+  }
   const opts = {
     method,
     headers: {
@@ -253,7 +271,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
       ...(docId !== undefined ? docHeadersFor(docId) : docHeaders()),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal,
+    signal: _timeoutCtrl.signal,
   }
   // Show a centred indeterminate progress popup if the call hasn't returned
   // within _BUSY_POPUP_DELAY_MS. Fast calls clear the timer before it fires
@@ -265,6 +283,10 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     _busyShown = true
     _busyShownAt = performance.now()
     showOpProgress(_busyHeaderForPath(method, path), '')
+    // A slow request might mean the backend is wedged, not just busy — probe
+    // /health now (short timeout, off the event loop) so a true hang surfaces as
+    // "reconnecting…" in seconds instead of waiting out the request ceiling.
+    pokeProbe()
   }, _BUSY_POPUP_DELAY_MS)
   const t0 = performance.now()
   let r, json, tNetwork = 0
@@ -278,6 +300,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     throw err
   } finally {
     clearTimeout(_busyTimer)
+    clearTimeout(_timeoutTimer)
     if (_busyShown) {
       // Keep the popup up for a minimum visible time so it doesn't flash for
       // calls that finish just a hair past the trigger threshold. Most ops
@@ -1980,6 +2003,18 @@ export const deleteOxdnaJob      = (id)          => _oxdnaJSON('DELETE', `/oxdna
 export const archiveOxdnaJob     = (id, destRoot) => _oxdnaJSON('POST', `/oxdna/jobs/${id}/archive`, { dest_root: destRoot })
 export const unarchiveOxdnaJob   = (id)          => _oxdnaJSON('POST', `/oxdna/jobs/${id}/unarchive`)
 export const oxdnaArchiveStatus  = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/archive-status`)
+/** Start an autorefine-skips/loops run on the current (square-lattice) design → {autorefine_id}. */
+export const startAutorefine     = (body)        => _oxdnaJSON('POST', '/design/oxdna/autorefine/start', body)
+/** Poll an autorefine run → {state, phase, last_event, result?, error?}. */
+export const getAutorefine       = (id)          => _oxdnaJSON('GET',  `/design/oxdna/autorefine/${id}`)
+/** Request cancellation of a running autorefine (kills the in-flight job + ends the loop). */
+export const stopAutorefine      = (id)          => _oxdnaJSON('POST', `/design/oxdna/autorefine/${id}/stop`)
+/** Apply an autorefine's skips to the active design (feature-log entry).  Pass `period`
+ *  to apply a specific iteration's pattern live; omit it to apply the converged result. */
+export const applyAutorefineSkips = (id, period) => _oxdnaJSON('POST',
+  `/design/oxdna/autorefine/${id}/apply${period != null ? `?period=${period}` : ''}`)
+/** Per-nucleotide deviation map of a job's production mean structure vs its design. */
+export const getOxdnaDeviation   = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/deviation`)
 export const getOxdnaHealth      = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/health`)
 export const getOxdnaMetrics     = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/metrics`)
 export const getOxdnaDisplay     = (id, align = true) => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/display?align=${align ? 'true' : 'false'}`)
@@ -2046,6 +2081,12 @@ export const getMdTrajectoryMeta = (id)          => _oxdnaJSON('GET',  `/md/jobs
 /** Per-nucleotide flexibility map (RMSF) over the NAMD run — same shape as
  *  getOxdnaRmsf, so the flexibility-map display code is shared. */
 export const getMdRmsf           = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/rmsf`)
+/** Kill the in-flight trajectory/RMSF/surface analysis for a job (view toggled
+ *  off / job deselected) so a heavy MDAnalysis read of a live DCD can't run away.
+ *  `kind` cancels one view; omit to cancel all. Never throws. */
+export const cancelMdAnalysis = (id, kind) =>
+  _oxdnaJSON('POST', `/md/jobs/${id}/analysis/cancel${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`)
+    .catch(() => null)
 /** Per-frame NAMD heavy atoms ({idx:{atoms,bonds}}) for trajectory frame indices. */
 export const getMdFramesAtomistic = (id, frameIndices) =>
   _oxdnaJSON('POST', `/md/jobs/${id}/frames-atomistic`, { frame_indices: frameIndices })
@@ -3019,6 +3060,19 @@ export async function saveAssemblyAs(path, overwrite = true) {
 
 export async function listLibraryFiles() {
   return _request('GET', '/library/files')   // returns array directly
+}
+
+/** Currently-busy (running/preparing) MD + oxDNA jobs across the workspace, for the
+ *  welcome-screen activity spinner and the concurrent-job guard. See routes_jobs.py. */
+export async function listActiveJobs() {
+  return _request('GET', '/jobs/active')   // { jobs, count, any_running }
+}
+
+/** Current external GPU-compute contention (a non-NADOC process holding the GPU),
+ *  so the MD/oxDNA panels can warn before a second run OOMs the card. Returns
+ *  { available, busy, processes, message, ... }. See routes_md.py gpu_status. */
+export async function gpuStatus(devices = '0') {
+  return _request('GET', `/md/gpu-status?devices=${encodeURIComponent(devices)}`)
 }
 
 export async function getLibraryFileContent(path) {

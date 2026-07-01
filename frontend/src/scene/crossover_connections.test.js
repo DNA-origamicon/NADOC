@@ -1,5 +1,68 @@
 import { describe, it, expect } from 'vitest'
-import { partitionExtraBaseUpdates } from './crossover_connections.js'
+import * as THREE from 'three'
+import { partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors, CONN_RADIUS } from './crossover_connections.js'
+
+function mockMesh(n) {
+  const mats = Array.from({ length: n }, () => new THREE.Matrix4())
+  const cols = new Array(n).fill(null)
+  return {
+    setMatrixAt(i, m) { mats[i].copy(m) },
+    getMatrixAt(i, m) { m.copy(mats[i]) },
+    setColorAt(i, c) { cols[i] = c.getHex() },
+    _mats: mats,
+    _cols: cols,
+  }
+}
+
+function decompose(mesh, i) {
+  const pos = new THREE.Vector3(), quat = new THREE.Quaternion(), scl = new THREE.Vector3()
+  mesh._mats[i].decompose(pos, quat, scl)
+  return { pos, quat, scl }
+}
+
+describe('setExtraBaseConnectors', () => {
+  const V = (x, y, z) => new THREE.Vector3(x, y, z)
+
+  it('places one cone per segment: midpoint position, full-length height, CONN_RADIUS girth', () => {
+    const mesh = mockMesh(2)
+    // path: posA(0,0,0) → bead(1,0,0) → posB(3,0,0): 2 segments of length 1 and 2.
+    setExtraBaseConnectors(mesh, 0, [V(0, 0, 0), V(1, 0, 0), V(3, 0, 0)], 2, 0x00ff00)
+
+    const s0 = decompose(mesh, 0)
+    expect(s0.pos.x).toBeCloseTo(0.5)        // midpoint of [0,1]
+    expect(s0.scl.y).toBeCloseTo(1)          // segment length
+    expect(s0.scl.x).toBeCloseTo(CONN_RADIUS)
+    expect(s0.scl.z).toBeCloseTo(CONN_RADIUS)
+
+    const s1 = decompose(mesh, 1)
+    expect(s1.pos.x).toBeCloseTo(2)          // midpoint of [1,3]
+    expect(s1.scl.y).toBeCloseTo(2)          // segment length
+    expect(mesh._cols[0]).toBe(0x00ff00)     // colored when colorHex given
+  })
+
+  it('writes into the arc-specific slot range (connStartIdx offset)', () => {
+    const mesh = mockMesh(4)
+    setExtraBaseConnectors(mesh, 2, [V(0, 0, 0), V(0, 4, 0)], 1, null)
+    const s = decompose(mesh, 2)
+    expect(s.pos.y).toBeCloseTo(2)
+    expect(s.scl.y).toBeCloseTo(4)
+    expect(mesh._cols[2]).toBeNull()         // null colorHex leaves color untouched
+  })
+})
+
+describe('hideExtraBaseConnectors', () => {
+  it('zeros the cone scale while keeping its position', () => {
+    const mesh = mockMesh(1)
+    setExtraBaseConnectors(mesh, 0, [new THREE.Vector3(0, 0, 0), new THREE.Vector3(2, 0, 0)], 1, null)
+    const before = decompose(mesh, 0)
+    hideExtraBaseConnectors(mesh, 0, 1)
+    const after = decompose(mesh, 0)
+    expect(after.scl.x).toBeCloseTo(0)
+    expect(after.scl.y).toBeCloseTo(0)
+    expect(after.scl.z).toBeCloseTo(0)
+    expect(after.pos.x).toBeCloseTo(before.pos.x)   // position preserved
+  })
+})
 
 describe('partitionExtraBaseUpdates', () => {
   it('passes real updates through untouched (no copy) when there are no inserts', () => {
