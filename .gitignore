@@ -138,6 +138,19 @@ experiments/*/results/*.pdb
 experiments/*/results/*.dcd
 experiments/*/results/*.psf
 
+# ── exp31+ skip-twist / autorefine / MD-validation run packages ──────────────
+# The per-experiment `ws/` (and `ws_<variant>/`) working dirs hold generated
+# oxDNA/NAMD job trees — multi-GB trajectory.dat sets, never pushed.  Matches the
+# "track experiment docs/scripts, keep generated run packages local" convention
+# above; extends it to exp31–exp35+ which the older exp-specific rules didn't cover.
+experiments/**/ws/
+experiments/**/ws_*/
+# Per-run driver / watchdog / monitor process logs at each experiment root
+# (result logs live under results/ and stay tracked).
+experiments/*/*.log
+# Aggregated per-sweep result dumps (multi-MB, regenerable from run.py + ws/).
+experiments/*/results/results.json
+
 # ── Editor / tool local state (machine-specific, not user content) ───────────
 .codex
 .coverage
