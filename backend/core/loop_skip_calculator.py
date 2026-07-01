@@ -917,11 +917,22 @@ def apply_loop_skips(
     return design.copy_with(helices=new_helices)
 
 
-def sq_lattice_periodic_skips(design: "Design") -> dict[str, list[LoopSkip]]:
-    """Return one skip per 48 bp on every helix of a square-lattice design.
+SQ_SKIP_PERIOD_DEFAULT = 48
+"""Canonical square-lattice de-twist skip period (one deletion per 48 bp per helix).
+The self-consistency tuning loop (skip_twist_tuning.py) treats this as the seed knob
+and validates/adjusts it against the simulated mean structure."""
+
+
+def sq_lattice_periodic_skips(
+    design: "Design", skip_period: int = SQ_SKIP_PERIOD_DEFAULT,
+) -> dict[str, list[LoopSkip]]:
+    """Return one skip per ``skip_period`` bp on every helix of a square-lattice design.
 
     Skips are staggered by helix index so no two helices share the same
-    cross-sectional slice: offset_i = (i * 48) // N.
+    cross-sectional slice: offset_i = (i * skip_period) // N.  ``skip_period`` defaults
+    to the canonical 48 bp (caller behaviour unchanged); the skip-twist tuning loop
+    varies it to drive the simulated global twist to match the straight analytic
+    depiction.
 
     Positions that already carry a loop_skip are left unchanged (the caller
     adds these mods *before* deformation mods so deformation results win on
@@ -931,8 +942,10 @@ def sq_lattice_periodic_skips(design: "Design") -> dict[str, list[LoopSkip]]:
 
     if design.lattice_type != LatticeType.SQUARE:
         return {}
+    if skip_period < 1:
+        raise ValueError(f"skip_period must be >= 1, got {skip_period}")
 
-    SKIP_PERIOD = 48
+    SKIP_PERIOD = int(skip_period)
     helices = sorted(design.helices, key=lambda h: h.id)
     n = len(helices)
     if n == 0:
