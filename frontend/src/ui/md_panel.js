@@ -108,6 +108,8 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   let _browseDir = ''     // last directory visited in file browser
 
   let _ws        = null
+  let _reopenTimer = null   // debounce handle: coalesce bursty _openWebSocket calls
+  let _wsSig     = null     // config|mode of the last opened socket (skip redundant reopen)
   let _nFrames   = 0
   let _curFrame  = 0
   let _dtPs      = null
@@ -375,7 +377,26 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     _openWebSocket()
   })
 
+  // Debounced entry point.  Each open tears down any in-flight socket and fires a
+  // fresh server-side `load`, which rebuilds the (large) atomistic model.  Bursts
+  // of re-opens (rapid representation toggles, event-driven refreshes) used to
+  // stack N concurrent server builds — coalesce them into a single open so only
+  // the latest survives.  The backend cache (atomistic_cache.py) is the real
+  // safety net; this just stops us asking for redundant work.
   function _openWebSocket() {
+    if (_reopenTimer) clearTimeout(_reopenTimer)
+    _reopenTimer = setTimeout(() => { _reopenTimer = null; _openWebSocketNow() }, 120)
+  }
+
+  function _openWebSocketNow() {
+    // Skip a redundant reopen: same config + mode and the socket is already
+    // connecting/open — the existing load already covers this request.
+    const sig = `${_configPath}|${_repr}`
+    if (_wsSig === sig && _ws &&
+        (_ws.readyState === WebSocket.CONNECTING || _ws.readyState === WebSocket.OPEN)) {
+      return
+    }
+    _wsSig = sig
     if (_ws) {
       _ws.onclose = null
       _ws.close()
@@ -808,6 +829,8 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       _latestOnReady = false
       _latestOnceOnReady = false
       _setLive(false)
+      if (_reopenTimer) { clearTimeout(_reopenTimer); _reopenTimer = null }
+      _wsSig = null
       if (_ws) {
         try {
           _ws.onclose = null
@@ -824,6 +847,8 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       _setPlaying(false)
       _setLive(false)
       _displayVisible = true
+      if (_reopenTimer) { clearTimeout(_reopenTimer); _reopenTimer = null }
+      _wsSig = null
       if (_ws) {
         try {
           _ws.onclose = null

@@ -119,7 +119,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
         import MDAnalysis as mda  # type: ignore
 
-        from backend.core.atomistic import build_atomistic_model
+        from backend.core.atomistic_cache import build_atomistic_model_cached
         from backend.core.atomistic_to_nadoc import (
             _GRO_DNA_RESNAMES,
             _extract_universe,
@@ -172,8 +172,11 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     "Select a topology from a NADOC-generated GROMACS run directory."
                 )
 
-        # Build chain map from current design.
-        model    = build_atomistic_model(design)
+        # Build chain map from current design.  Cached + single-flight: rapid
+        # re-opens (repr changes, reconnects) for the same design collapse to one
+        # build instead of piling up N concurrent multi-GB models (see
+        # backend/core/atomistic_cache.py).
+        model    = build_atomistic_model_cached(design)
         cm       = build_chain_map(model)
         pdb_text = input_pdb.read_text(errors="replace")
         p_order  = build_p_pdb_order(pdb_text, cm) if is_namd else build_p_gro_order(pdb_text, cm)
@@ -337,6 +340,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             "atom_meta":     None,
             "heavy_idx":     None,
             "c1p_idx":       c1p_idx,
+            "dna_p_idx":     dna_p_sel.indices,   # cached for the O(1) last-frame fast path
             "logs":          logs,
             "warnings":      load_warnings,
             # Sequential rotation tracking: reset on load.
@@ -380,8 +384,14 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
         return result
 
-    def _seek_sync(frame_idx: int) -> dict:
-        """Extract one frame — runs in asyncio.to_thread."""
+    def _seek_sync(frame_idx: int, _injected=None) -> dict:
+        """Extract one frame — runs in asyncio.to_thread.
+
+        ``_injected = (all_positions_A, dims_A, time_ps)`` supplies a frame already
+        read by the O(1) ``dcd_fast`` last-frame path, bypassing the MDAnalysis
+        trajectory seek (and its offset-recalc retry storm on a live, growing DCD).
+        When None, the frame is read from the Universe as before (full-trajectory
+        scrub / ballstick path)."""
         import numpy as _np
         from backend.core.atomistic_to_nadoc import _GRO_DNA_RESNAMES, _unwrap_min_image
 
@@ -391,13 +401,20 @@ async def md_run_ws(websocket: WebSocket) -> None:
         mode     = _ctx["mode"]
         n_frames = _ctx["n_frames"]
 
-        ts      = u.trajectory[frame_idx]
-        time_ps = float(ts.time)
+        if _injected is None:
+            ts      = u.trajectory[frame_idx]
+            time_ps = float(ts.time)
+        else:
+            _all_pos, _dims_inj, time_ps = _injected
 
         if mode in ("nadoc", "beads"):
-            dna_p       = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
-            p_raw       = dna_p.positions / 10.0                   # Å → nm, box coords
-            dims        = u.dimensions
+            if _injected is None:
+                dna_p   = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
+                p_raw   = dna_p.positions / 10.0                   # Å → nm, box coords
+                dims    = u.dimensions
+            else:
+                p_raw   = _all_pos[_ctx["dna_p_idx"]] / 10.0       # Å → nm, box coords
+                dims    = _dims_inj
             eq_pos      = _ctx.get("eq_positions")
             eq_valid    = _ctx.get("eq_valid")
             rigid_mask  = _ctx.get("rigid_mask")
@@ -522,7 +539,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
             c1p_idx = _ctx.get("c1p_idx")
             normals = None
             if c1p_idx is not None and _np.all(c1p_idx >= 0) and len(c1p_idx) == len(p_order):
-                c1p_raw = u.atoms[c1p_idx].positions / 10.0        # Å → nm
+                c1p_raw = (u.atoms[c1p_idx].positions if _injected is None
+                           else _all_pos[c1p_idx]) / 10.0          # Å → nm
                 dn      = c1p_raw - p_raw                          # intra-residue vector (no PBC issue)
                 if R_align is not None:
                     dn = dn @ R_align.T                            # rotate into aligned frame
@@ -720,7 +738,36 @@ async def md_run_ws(websocket: WebSocket) -> None:
         if u is None:
             raise RuntimeError("No trajectory loaded.")
 
-        # Re-read the trajectory in place (cheap) to discover appended frames.
+        # Fast path — O(1) direct last-frame read.  A DCD is fixed-record, so the
+        # latest frame's byte offset is arithmetic from the file size; we skip
+        # MDAnalysis' load_new (which rescans offsets and, on a file NAMD is mid-write
+        # on, retry-storms a core).  CG/bead display only; ballstick and any non
+        # fixed-record DCD fall through to the MDAnalysis path below.
+        if _ctx.get("mode") in ("nadoc", "beads"):
+            from backend.core import dcd_fast  # noqa: PLC0415
+            try:
+                layout = dcd_fast.read_layout(_ctx["xtc_path"])
+            except Exception:  # noqa: BLE001 — unsupported layout → MDAnalysis fallback
+                layout = None
+            if layout is not None and layout.n_atoms == len(u.atoms) and layout.n_frames > 0:
+                _ctx["n_frames"] = layout.n_frames
+                _ctx["R_prev"] = None
+                _ctx["prev_frame_idx"] = -999
+                for idx in (layout.n_frames - 1, layout.n_frames - 2):
+                    if idx < 0:
+                        break
+                    try:
+                        coords, cell = dcd_fast.read_frame(_ctx["xtc_path"], layout, idx)
+                        frame_msg = _seek_sync(idx, _injected=(
+                            coords, dcd_fast.cell_to_dimensions(cell), idx * layout.delta_ps))
+                        _ctx["latest_frame_cache"] = frame_msg
+                        _ctx["latest_frame_sig"] = sig
+                        return frame_msg
+                    except Exception:  # noqa: BLE001 — torn trailing frame → try one back
+                        continue
+
+        # Fallback: MDAnalysis load_new + seek (full-trajectory scrub, ballstick mode,
+        # or a DCD whose layout dcd_fast can't treat as fixed-record).
         u.load_new(_ctx["xtc_path"])
         n_frames = len(u.trajectory)
         _ctx["n_frames"] = n_frames
