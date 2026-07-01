@@ -179,12 +179,31 @@ def crossover_extra_base_junctions(design: Design) -> dict[tuple[str, int], tupl
     transition where the strand leaves one helix's 3′ exit for the next helix's
     5′ entry.  Forced-ligation extra bases are intentionally out of scope here.
     """
+    # Register each crossover at ONLY its owning (src) half — the half sitting at a
+    # domain 3′ end — mirroring the atomistic ground truth's ``domain_end_to_strand``
+    # src pick (half_a preferred when both halves are domain ends).  Registering BOTH
+    # halves double-fires the walk below on reciprocal crossovers (two strands cross
+    # at the same junction), so two strands would emit the SAME ``(_XB_SENTINEL,
+    # xo_id, k)`` insert key → an index-map collision that corrupts the topology
+    # n3/n5 threading (mismatched cross-strand bond pointers).  Single owning strand
+    # per crossover keeps the insert keys unique and matches NAMD/GROMACS.
+    domain_ends: set[tuple[str, int, str]] = set()
+    for strand in design.strands:
+        for d in strand.domains:
+            domain_ends.add((d.helix_id, d.end_bp, d.direction.value))
+
     pos_to_xo: dict[tuple[str, int], tuple[str, str]] = {}
     for xo in design.crossovers:
         if not xo.extra_bases:
             continue
-        for half in (xo.half_a, xo.half_b):
-            pos_to_xo[(half.helix_id, half.index)] = (xo.id, xo.extra_bases)
+        ha, hb = xo.half_a, xo.half_b
+        if (ha.helix_id, ha.index, ha.strand.value) in domain_ends:
+            owning = ha
+        elif (hb.helix_id, hb.index, hb.strand.value) in domain_ends:
+            owning = hb
+        else:
+            continue  # neither half is a domain 3′ end (no in-chain insert site)
+        pos_to_xo[(owning.helix_id, owning.index)] = (xo.id, xo.extra_bases)
     if not pos_to_xo:
         return {}
 
@@ -374,6 +393,46 @@ def count_undefined_bases(
         if base not in "ACGT":
             undefined += 1
     return undefined, total
+
+
+_WC_COMPLEMENT = {"A": "T", "T": "A", "G": "C", "C": "G"}
+
+
+def designed_pair_complementarity(design: Design) -> tuple[int, int]:
+    """Count how many designed Watson-Crick pairs carry sequence-complementary
+    bases, vs the total number of designed pairs.
+
+    A *designed pair* is a ``(helix, bp)`` column that carries BOTH a FORWARD and a
+    REVERSE nucleotide (a duplex position).  oxDNA only forms a hydrogen bond
+    between complementary bases (A-T / G-C); a pair whose two bases are NOT
+    complementary cannot bond, so it reads as "melted" no matter how long the
+    relaxation runs.  Returns ``(n_complementary, n_pairs)``.
+
+    The dominant cause of a low ratio is a **stale sequence after a topology edit
+    that changed the nucleotide count** — most often adding/removing loops or skips
+    on an already-sequenced design.  ``strand.sequence`` is consumed in walk order
+    (skips drop a position without consuming a character — see ``topology_rows``),
+    so deleting one nucleotide shifts every downstream base by one and de-registers
+    the staple from the scaffold.  Re-running Assign Sequences re-derives the
+    sequences against the current skip pattern and restores complementarity.
+
+    Uses the SAME base assignment as ``write_topology`` (via ``topology_rows``), so
+    the ratio reflects exactly what oxDNA receives.  Read-only over topology.
+    """
+    rows, _ = topology_rows(design)
+    order = _strand_nucleotide_order(design)
+    base_of = {key: row[1] for key, row in zip(order, rows)}
+    fwd = {(k[0], k[1]): k for k in order if len(k) == 3 and k[2] == "FORWARD"}
+    rev = {(k[0], k[1]): k for k in order if len(k) == 3 and k[2] == "REVERSE"}
+    n_comp = 0
+    n_pairs = 0
+    for col in fwd.keys() & rev.keys():
+        bf = base_of.get(fwd[col], "N")
+        br = base_of.get(rev[col], "N")
+        n_pairs += 1
+        if _WC_COMPLEMENT.get(bf) == br:
+            n_comp += 1
+    return n_comp, n_pairs
 
 
 # ── Topology writer ───────────────────────────────────────────────────────────

@@ -272,6 +272,40 @@ def read_flexibility_map(job_id: str, workspace) -> dict:
         return asyncio.run(_route_get_rmsf(job_id))
 
 
+def read_twist_series(job_id: str, workspace, design, analytic_reference) -> dict:
+    """Per-FRAME differential bundle twist + correlation-corrected stats for a job's production
+    run (the τ / N_eff diagnostic).  Locates the production trajectories + the relaxed reference
+    the SAME way the rmsf route does, then calls
+    :func:`backend.core.oxdna_health.production_twist_series`.
+
+    Use alongside :func:`read_flexibility_map`: that returns twist measured on the time-AVERAGE
+    structure (one number); this returns the per-frame twist series so the run's effective
+    independent-sample count is visible (is an 8M run long enough, or is the slow twist mode
+    under-sampled?).  ``analytic_reference`` is the design's analytic core geometry
+    (``core_reference_geometry(design)``).  Returns ``{ready, n_frames, twist_per_frame,
+    twist_on_mean_structure, analytic_twist, stats}``.
+    """
+    from pathlib import Path
+
+    from backend.api.routes_oxdna import _design_ref_conf, _stage_trajectories
+    from backend.core.oxdna_health import production_twist_series
+    from backend.core.oxdna_job import OxdnaJob
+
+    workspace = Path(workspace)
+    job = OxdnaJob.load(job_id, workspace)
+    prod = [s for s in job.stages if s.kind in ("production", "field") and s.status in ("done", "running")]
+    if not prod:
+        return {"ready": False, "reason": "no production run"}
+    jd = job.job_dir(workspace)
+    trajs: list = []
+    for s in prod:
+        trajs.extend(_stage_trajectories(job.stage_dir(workspace, s.name)))
+    if not trajs:
+        return {"ready": False, "reason": "no frames yet"}
+    ref_conf = _design_ref_conf(jd, design)
+    return production_twist_series(design, trajs, ref_conf, analytic_reference)
+
+
 # ── Polling + one-call orchestration ──────────────────────────────────────────
 
 def wait_for_terminal(job_id: str, workspace, *, timeout: float = 30.0,
@@ -885,7 +919,9 @@ def run_relaxation_tuned(design: Design, workspace, *, hostname: str | None = No
 # ── Constraint-driven design: the iterate-until-met loop (AF-13 Phase 4) ───────
 
 def _pool_until_conclusive(job, workspace, parsed_constraint, *, production_steps,
-                           max_production_rounds, timeout):
+                           max_production_rounds, timeout, reference=None,
+                           should_stop=None, early_reject_factor=None,
+                           early_reject_min_frames=20, screen_steps=None):
     """Append production runs to ``job`` (pooling more frames each round) until the
     constraint verdict is conclusive (``met``/``unmet``) or the round budget is
     exhausted.  Returns ``(verdict, n_rounds)``.
@@ -893,17 +929,50 @@ def _pool_until_conclusive(job, workspace, parsed_constraint, *, production_step
     The flexibility-map route pools EVERY production stage's frames, so each extra
     round raises the pooled-frame count toward ``min_confidence`` — this is the
     concrete "run a longer production" response to an ``inconclusive`` verdict.
+    ``reference`` is the design's analytic geometry, threaded to the verdict for the
+    self-consistency measures (``geometry_match`` / ``bundle_twist``).
+
+    EARLY REJECT (``early_reject_factor`` set): high confidence is needed only to
+    ACCEPT (certify ``met``) — not to REJECT.  Once at least ``early_reject_min_frames``
+    are pooled and the measurement is outside tolerance by more than
+    ``early_reject_factor x tol`` (grossly off — a margin no further sampling will close,
+    since the systematic deviation stabilises fast while only thermal noise keeps
+    shrinking), short-circuit to ``unmet`` instead of pooling on to ``min_confidence``.
+    This stops wasting production rounds on a knob value that is clearly wrong.
+
+    ``screen_steps`` (if set) makes the FIRST round a short, cheap SCREEN — every
+    production stage emits ~100 frames regardless of step count, so a short round is
+    enough (correlated) sampling to early-reject a grossly-off knob fast; the longer
+    ``production_steps`` rounds that follow add the decorrelated frames a confident
+    ACCEPT needs.
     """
     from backend.core.oxdna_health import check_relaxed_constraint
 
     verdict = None
     for r in range(1, max_production_rounds + 1):
-        append_production(job.job_id, workspace, steps=production_steps)
-        wait_for_terminal(job.job_id, workspace, timeout=timeout)
+        if should_stop and should_stop():        # cancellation between pooling rounds
+            return verdict, r - 1
+        steps = screen_steps if (r == 1 and screen_steps) else production_steps
+        append_production(job.job_id, workspace, steps=steps)
+        settled = wait_for_terminal(job.job_id, workspace, timeout=timeout)
+        if settled is not None and settled.status is not OxdnaStatus.completed:
+            # The production stage did not complete — e.g. a stochastic blow-up the
+            # dt-halving gate could not recover, so the job is now ``failed``/``stopped``.
+            # Another round would append onto a non-completed job and 400; stop pooling
+            # and report the iteration as inconclusive (an unusable measurement) so the
+            # caller treats this knob as unmeasured rather than crashing the whole run.
+            return verdict, r - 1
         rmsf = read_flexibility_map(job.job_id, workspace)
-        verdict = check_relaxed_constraint(parsed_constraint, rmsf)
+        verdict = check_relaxed_constraint(parsed_constraint, rmsf,
+                                           reference_positions=reference)
         if verdict["status"] != "inconclusive":
             return verdict, r
+        m = verdict.get("measured_nm")
+        if (early_reject_factor and m is not None
+                and verdict["n_frames"] >= early_reject_min_frames
+                and abs(m - verdict["target_nm"]) > early_reject_factor * verdict["tol_nm"]):
+            rejected = {**verdict, "status": "unmet", "met": False, "early_reject": True}
+            return rejected, r
     return verdict, max_production_rounds
 
 
@@ -911,7 +980,11 @@ def iterate_to_constraint(build_fn, adjust_fn, constraint, workspace, *,
                           initial_knob, max_iterations: int = 8,
                           production_steps: int = 6000,
                           max_production_rounds: int = 8, timeout: float = 30.0,
-                          tuned: bool = False, **relax_params) -> dict:
+                          tuned: bool = False, reference_fn=None, on_iteration=None,
+                          on_measure=None, should_stop=None, on_job=None,
+                          early_reject_factor=None,
+                          early_reject_min_frames=20, screen_steps=None,
+                          **relax_params) -> dict:
     """Closed **build → relax → measure → adjust** loop that drives a parametric
     design knob until a relaxed-structure constraint is met (AF-13 Phase 4 — the
     capstone of the physical-layer tier).
@@ -962,18 +1035,45 @@ def iterate_to_constraint(build_fn, adjust_fn, constraint, workspace, *,
     knob = initial_knob
     history: list[dict] = []
     job = None
+
+    def _stopped():
+        return {"status": "stopped", "knob": knob, "job": job, "iterations": history,
+                "verdict": history[-1]["verdict"] if history else None}
+
     for _ in range(max_iterations):
+        if should_stop and should_stop():      # cancellation before a new build
+            return _stopped()
         design = build_fn(knob)
+        # Self-consistency measures (geometry_match / bundle_twist) compare the mean
+        # structure to the design's ANALYTIC geometry; that reference changes every
+        # iteration (skips remove nucleotides), so it is recomputed per build here.
+        reference = reference_fn(design) if reference_fn else None
         job = relax(design, workspace, timeout=timeout, **relax_params)
+        if on_job:                             # let the caller track/stop this job
+            on_job(job)
         if job.status != OxdnaStatus.completed:
+            if should_stop and should_stop():  # job interrupted by a stop request
+                return _stopped()
             history.append({"knob": knob, "verdict": None, "job_id": job.job_id,
                             "production_rounds": 0, "error": job.error})
             break
         verdict, rounds = _pool_until_conclusive(
             job, workspace, parsed, production_steps=production_steps,
-            max_production_rounds=max_production_rounds, timeout=timeout)
+            max_production_rounds=max_production_rounds, timeout=timeout,
+            reference=reference, should_stop=should_stop,
+            early_reject_factor=early_reject_factor,
+            early_reject_min_frames=early_reject_min_frames, screen_steps=screen_steps)
         history.append({"knob": knob, "verdict": verdict, "job_id": job.job_id,
                         "production_rounds": rounds})
+        if on_measure is not None:             # post-measurement hook: harvest spatial
+            try:                               # fields (deviation/strain) for the NEXT
+                on_measure(design, reference, job, workspace)   # build (regional autorefine)
+            except Exception:                  # best-effort — never crash the loop on a
+                pass                           # field-read failure (falls back to uniform)
+        if on_iteration:                       # progress hook (e.g. live UI updates)
+            on_iteration(history[-1])
+        if should_stop and should_stop():
+            return _stopped()
         status = verdict["status"] if verdict else "inconclusive"
         if status == "met":
             return {"status": "met", "knob": knob, "job": job,

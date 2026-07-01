@@ -70,6 +70,32 @@ class TestArchiveRoundTrip:
         assert ja.archived_job_ids(ws, "oxdna_jobs") == []
         assert OxdnaJob.list_jobs(ws)[0].archived is False
 
+    def test_archive_job_sync_moves_and_indexes(self, tmp_path: Path) -> None:
+        # The blocking archive_job (for headless/scripted callers) moves the folder,
+        # flips `archived`, updates the index, and leaves the job loadable — same end
+        # state as the async start_archive, but inline (no task polling).
+        ws = tmp_path / "ws"; ws.mkdir()
+        arch = tmp_path / "ext"
+        job = new_oxdna_job("demo", [], design_source_path="demo.nadoc")
+        job.save(ws)
+        (job.job_dir(ws) / "trajectory.dat").write_bytes(b"x" * 4096)
+
+        dest = ja.archive_job(job, ws, "oxdna_jobs", arch)
+        assert dest == str(arch / job.job_id)
+        assert not (ws / "oxdna_jobs" / job.job_id).exists()        # source moved
+        assert (arch / job.job_id / "trajectory.dat").exists()       # data preserved
+        assert ja.archived_job_ids(ws, "oxdna_jobs") == [job.job_id]
+        j2 = OxdnaJob.list_jobs(ws)[0]
+        assert j2.archived and j2.job_dir(ws) == arch / job.job_id
+
+    def test_archive_job_sync_rejects_double_archive(self, tmp_path: Path) -> None:
+        ws = tmp_path / "ws"; ws.mkdir()
+        job = new_oxdna_job("d", [])
+        job.save(ws)
+        job.archived = True
+        with pytest.raises(ValueError):
+            ja.archive_job(job, ws, "oxdna_jobs", tmp_path / "ext")
+
     def test_archive_rejects_double_archive(self, tmp_path: Path) -> None:
         ws = tmp_path / "ws"; ws.mkdir()
         job = new_oxdna_job("d", [])

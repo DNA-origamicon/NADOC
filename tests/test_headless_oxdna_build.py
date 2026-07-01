@@ -144,6 +144,57 @@ def test_append_production_after_completion(sequenced_6hb, tmp_path, mock_oxdna)
     assert_relaxed_geometry_recovered(job, sequenced_6hb, tmp_path)
 
 
+def test_pool_until_conclusive_stops_on_failed_production(monkeypatch, tmp_path):
+    """A production round that ends FAILED (e.g. a stochastic blow-up the dt-halving gate
+    could not recover) must STOP the pooling loop instead of appending another round onto
+    the now-non-completed job — which would 400 ("Production requires a completed
+    relaxation job") and crash the whole autorefine run.  Regression for the user-reported
+    autorefine production error."""
+    import types
+
+    appends = {"n": 0}
+    monkeypatch.setattr(hox, "append_production",
+                        lambda *a, **k: appends.__setitem__("n", appends["n"] + 1))
+    # The (only) production round ends FAILED — the blow-up the dt-halving couldn't recover.
+    failed = types.SimpleNamespace(job_id="j1", status=OxdnaStatus.failed)
+    monkeypatch.setattr(hox, "wait_for_terminal", lambda *a, **k: failed)
+    monkeypatch.setattr(hox, "read_flexibility_map",
+                        lambda *a, **k: pytest.fail("must not measure a failed production"))
+
+    job = types.SimpleNamespace(job_id="j1", status=OxdnaStatus.completed)
+    verdict, rounds = hox._pool_until_conclusive(
+        job, tmp_path,
+        {"measure": "bundle_twist", "target_nm": 0.0, "tol_nm": 5.0, "min_confidence": 10},
+        production_steps=1000, max_production_rounds=3, timeout=5.0)
+    assert appends["n"] == 1          # appended once, did NOT loop to a 2nd round
+    assert verdict is None and rounds == 0
+
+
+def test_autorefine_regional_runs_end_to_end_and_reports_pattern(tmp_path, mock_oxdna):
+    """Phase 5 integration: autorefine in REGIONAL mode runs the full baseline + iterate
+    loop on the (mock) engine, reports placement='regional', and captures the EXACT
+    converged non-uniform deletion pattern (converged_skips) for the apply route.  Field
+    biasing itself (deviation/strain) needs a real engine and is validated in 5.4."""
+    from backend.api.skip_twist_tuning import (
+        autorefine_sq_design, build_sq_skip_design, square_cells,
+    )
+
+    base = build_sq_skip_design(square_cells(2, 3), 40, None)   # square, sequenced, no skips
+    result = autorefine_sq_design(
+        base, tmp_path, regional=True, backend="CPU",
+        tol_twist_deg=8.0, min_confidence=10, baseline_min_confidence=5,
+        initial_period=24, max_iterations=1, production_steps=1000, screen_steps=1000,
+        max_production_rounds=2, timeout=120.0,
+        # mock-engine overrides (the mock copies the conf — keep it fast + gate-free)
+        mc_steps=100, md_relax_steps=100, equil_steps=100,
+        min_bp_retained=0.0, max_relax_retries=0)
+
+    assert result["placement"] == "regional"
+    assert result["status"] in {"met", "exhausted"}
+    skips = result.get("converged_skips") or {}
+    assert sum(len(v) for v in skips.values()) > 0      # a concrete pattern was captured
+
+
 def test_run_field_spawns_child_field_job(sequenced_6hb, tmp_path, mock_oxdna):
     """A field run is a CHILD job branched from the relaxed parent: it links back
     via parent_job_id, runs a single field stage from the relaxed structure, and

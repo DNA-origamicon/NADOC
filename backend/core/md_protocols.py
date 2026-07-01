@@ -20,6 +20,7 @@ from __future__ import annotations
 import io
 import json
 import math
+import re
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -68,11 +69,19 @@ def _common_header(
     *,
     rigid_bonds: str = "all",
     timestep: float = 2.0,
+    gpu_resident: bool = False,
+    structure_psf: Optional[str] = None,
 ) -> str:
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
+    # GPU-resident (NAMD 3 "GPUresident on") keeps integration + bonded forces on
+    # the GPU for a ~3x throughput win.  Safe ONLY for capped (non-periodic)
+    # solvated boxes: it builds bonded exclusions from local pair lists and so
+    # would silently drop the long-range wrap bonds of a periodic cell.  This
+    # md_protocols path only ever produces capped boxes, so it is sound here.
+    gpu_line = "GPUresident        on\n" if gpu_resident else ""
     return f"""\
-structure          {name_stem}.psf
+structure          {structure_psf or f"{name_stem}.psf"}
 coordinates        {name_stem}.pdb
 
 paraTypeCharmm     on
@@ -107,7 +116,7 @@ timestep           {timestep:g}
 nonbondedFreq      1
 fullElectFrequency 2
 stepspercycle      12
-
+{gpu_line}
 outputEnergies     9600
 xstFreq            9600
 restartfreq        9600
@@ -122,14 +131,24 @@ def _segment_conf(
     mgh_extrabonds: bool,
     *,
     minimize_steps: int = 0,
+    fast: bool = False,
+    structure_psf: Optional[str] = None,
 ) -> str:
     # Soft integrator: flexible H bonds + 1 fs timestep.  Needed for declashed
     # designs whose residual single-stranded contacts crash rigid-bond RATTLE.
+    # Fast mode (HMR + GPU-resident + 4 fs) applies only to hard segments — it is
+    # incompatible with the soft integrator's flexible bonds.
+    fast = fast and not spec.soft
     rigid_bonds = "none" if spec.soft else "all"
-    timestep = 1.0 if spec.soft else 2.0
+    timestep = 1.0 if spec.soft else (4.0 if fast else 2.0)
+    # The HMR PSF (heavy hydrogens) is valid ONLY with rigid bonds, so soft
+    # segments fall back to the unmodified PSF; only the hard, fast segments use
+    # it together with GPU-resident + 4 fs.
+    eff_psf = structure_psf if fast else None
     lines = [
         _common_header(
-            name_stem, box, mgh_extrabonds, rigid_bonds=rigid_bonds, timestep=timestep
+            name_stem, box, mgh_extrabonds, rigid_bonds=rigid_bonds, timestep=timestep,
+            gpu_resident=fast, structure_psf=eff_psf,
         )
     ]
     lines.append(f"outputName         output/{spec.name}\n")
@@ -196,7 +215,9 @@ def _min_conf(
     enm_file: Optional[str] = None,
 ) -> str:
     # enm_file overrides the default {name_stem}_k{scale}.enm.extra — used by the
-    # declash protocol to minimise against an ss-excluded network.
+    # declash protocol to minimise against an ss-excluded network.  Minimisation
+    # (and the soft first segment it feeds) stays on the unmodified PSF + standard
+    # CUDA; the HMR PSF only enters at the first hard, rigid-bond fast segment.
     enm = enm_file or f"{name_stem}_k{scale:g}.enm.extra"
     lines = [_common_header(name_stem, box, mgh_extrabonds, rigid_bonds="none")]
     lines.append(f"outputName         output/{min_name}\n")
@@ -502,6 +523,90 @@ def write_declashed_pdb(coor_path: Path, src_pdb: Path, dst_pdb: Path) -> int:
     return ai
 
 
+# ── Hydrogen Mass Repartitioning ──────────────────────────────────────────────
+
+_HMR_WATER_RESNAMES = {"TIP3", "TIP3P", "TIP4", "SPC", "SPCE", "HOH", "WAT"}
+
+
+def write_hmr_psf(src_psf: Path, dst_psf: Path, factor: float = 3.0) -> int:
+    """Write dst_psf = src_psf with non-water hydrogen masses scaled by ``factor``.
+
+    Hydrogen Mass Repartitioning lets the dynamics run at a 4 fs timestep with
+    ``rigidBonds all`` (a ~2x throughput win) by moving mass from the fast X-H
+    stretch onto the hydrogen: each non-water H goes 1.008 -> 3.024 amu (factor 3)
+    and the donated mass (2.016 amu) is subtracted from its single bonded heavy
+    partner, conserving total mass exactly.  Water is left untouched (already
+    rigid; repartitioning it would perturb solvent density).
+
+    Only the mass token of each atom record is rewritten, at its original column
+    width, so atom ordering and every other field stay byte-for-byte intact.
+    Returns the number of hydrogens repartitioned.
+    """
+    lines = src_psf.read_text().splitlines()
+
+    def _find(tag: str) -> int:
+        for i, l in enumerate(lines):
+            if tag in l:
+                return i
+        raise RuntimeError(f"{tag} not found in {src_psf}")
+
+    natom_i = _find("!NATOM")
+    n_atoms = int(lines[natom_i].split()[0])
+    nbond_i = _find("!NBOND")
+    n_bonds = int(lines[nbond_i].split()[0])
+
+    mass = [0.0] * (n_atoms + 1)            # 1-based
+    resname = [""] * (n_atoms + 1)
+    span: list[Optional[tuple[int, int, int, int]]] = [None] * (n_atoms + 1)
+    for k in range(n_atoms):
+        li = natom_i + 1 + k
+        toks = list(re.finditer(r"\S+", lines[li]))
+        aid = int(toks[0].group())
+        resname[aid] = toks[3].group()
+        m = toks[7]                          # atomid seg resid resname name type charge MASS
+        mass[aid] = float(m.group())
+        span[aid] = (li, m.start(), m.end(), m.end() - m.start())
+
+    neigh: list[list[int]] = [[] for _ in range(n_atoms + 1)]
+    read, li = 0, nbond_i + 1
+    while read < n_bonds:
+        nums = lines[li].split()
+        for j in range(0, len(nums), 2):
+            a, b = int(nums[j]), int(nums[j + 1])
+            neigh[a].append(b)
+            neigh[b].append(a)
+            read += 1
+        li += 1
+
+    def _is_h(aid: int) -> bool:
+        return 0.9 <= mass[aid] <= 1.5
+
+    heavy_delta: dict[int, float] = {}
+    n_hmr = 0
+    for aid in range(1, n_atoms + 1):
+        if not _is_h(aid) or resname[aid] in _HMR_WATER_RESNAMES:
+            continue
+        parents = [p for p in neigh[aid] if not _is_h(p)]
+        if len(parents) != 1:                # ion-model H bonded to >1 heavy: skip
+            continue
+        new_h = mass[aid] * factor
+        heavy_delta[parents[0]] = heavy_delta.get(parents[0], 0.0) + (new_h - mass[aid])
+        mass[aid] = new_h
+        n_hmr += 1
+    for aid, d in heavy_delta.items():
+        mass[aid] -= d
+
+    out = list(lines)
+    for aid in range(1, n_atoms + 1):
+        sp = span[aid]
+        if sp is None:
+            continue
+        li, s, e, w = sp
+        out[li] = out[li][:s] + f"{mass[aid]:.4f}".rjust(w) + out[li][e:]
+    dst_psf.write_text("\n".join(out) + "\n")
+    return n_hmr
+
+
 def rebuild_declashed_references(
     package_dir: Path,
     name_stem: str,
@@ -619,6 +724,7 @@ def mgh_slow_release_segments(
     *,
     soft: bool = False,
     nvt_only: bool = False,
+    timestep_fs: float = 2.0,
 ) -> tuple[str, list[SegmentSpec]]:
     """Return (min_name, segments) for the mgh_slow_release protocol.
 
@@ -642,12 +748,15 @@ def mgh_slow_release_segments(
     """
     min_name = f"{name_stem}_00_min_enm_k0p5"
 
-    # A 2 fs timestep makes 2,400,000 steps = 4.8 ns per stage.
+    # Each stage targets 4.8 ns of relaxation.  Step count scales inversely with
+    # the timestep so fast mode (4 fs) keeps the same simulated time (1.2M steps)
+    # rather than doubling it — fast mode is a wall-clock win, not a science change.
+    stage_steps = int(round(2_400_000 * (2.0 / timestep_fs)))
     npt_ladder = [
-        (0.5,  2_400_000, "300K_NPT_ENM_k0p5"),
-        (0.1,  2_400_000, "300K_NPT_ENM_k0p1"),
-        (0.01, 2_400_000, "300K_NPT_ENM_k0p01"),
-        (None, 2_400_000, "300K_NPT_MGHH_only"),
+        (0.5,  stage_steps, "300K_NPT_ENM_k0p5"),
+        (0.1,  stage_steps, "300K_NPT_ENM_k0p1"),
+        (0.01, stage_steps, "300K_NPT_ENM_k0p01"),
+        (None, stage_steps, "300K_NPT_MGHH_only"),
     ]
 
     # Percentages and their fraction of total steps
@@ -722,6 +831,7 @@ def prepare_mgh_slow_release(
     progress=None,
     declash: bool = False,
     force_soft: bool = False,
+    fast: bool = False,
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Build the solvated package and all stage configs in job_dir.
 
@@ -821,12 +931,29 @@ def prepare_mgh_slow_release(
         progress("finalize", None, "Writing simulation configs…")
     (package_dir / "output").mkdir(exist_ok=True)
 
+    # Fast mode: HMR PSF + 4 fs + GPU-resident on the hard ladder (~4x in NPT).
+    # Disabled for the soft integrator (HMR / 4 fs need rigid bonds), so a declash
+    # / force-soft ladder always runs the classic 2 fs standard-CUDA path.
+    soft_ladder = declash or force_soft
+    fast = fast and not soft_ladder
+
     # Build segment list.  A water-shell carve leaves vacuum corners, so the
     # whole ladder must run NVT (barostat off) — an NPT piston would collapse the
-    # cell onto the DNA's periodic image.
+    # cell onto the DNA's periodic image.  Fast mode halves the step count (4 fs)
+    # to hold each stage at its 4.8 ns relaxation target.
     min_name, segments = mgh_slow_release_segments(
-        name_stem, soft=declash or force_soft, nvt_only=carve_shell,
+        name_stem, soft=soft_ladder, nvt_only=carve_shell,
+        timestep_fs=4.0 if fast else 2.0,
     )
+
+    # The HMR PSF enters at the first hard, rigid-bond segment; minimisation and
+    # the soft strain-relief first segment keep the unmodified PSF.
+    structure_psf: Optional[str] = None
+    n_hmr = 0
+    if fast:
+        hmr_psf = package_dir / f"{name_stem}_hmr.psf"
+        n_hmr = write_hmr_psf(package_dir / f"{name_stem}.psf", hmr_psf)
+        structure_psf = hmr_psf.name
 
     # Write minimization conf
     (package_dir / f"{min_name}.conf").write_text(
@@ -844,7 +971,8 @@ def prepare_mgh_slow_release(
     # Write segment confs
     for spec in segments:
         (package_dir / f"{spec.name}.conf").write_text(
-            _segment_conf(spec, name_stem, box, mgh_extrabonds)
+            _segment_conf(spec, name_stem, box, mgh_extrabonds,
+                          fast=fast, structure_psf=structure_psf)
         )
 
     charge_audit = {}
@@ -917,10 +1045,19 @@ def prepare_mgh_slow_release(
             "extra_bonds_file": f"{name_stem}_k{min_scale:g}.enm.extra",
         },
         "aksimentiev_enm": enm_report,
+        "fast_relaxation": {
+            "enabled": fast,
+            "hydrogens_repartitioned": n_hmr,
+            "structure_psf": structure_psf,
+            "gpu_resident": fast,
+            "timestep_fs": 4.0 if fast else 2.0,
+            "note": "HMR (non-water H x3) + GPUresident + 4 fs on the hard ladder; "
+                    "capped box only, ~4x NPT throughput vs standard CUDA 2 fs.",
+        },
         "relax_protocol_settings": {
             "stage_length_steps": 2_400_000,
             "stage_length_ns_at_2fs": 4.8,
-            "timestep_fs": 2.0,
+            "timestep_fs": 4.0 if fast else 2.0,
             "temperature_k": 300.0,
             "langevin_damping_ps_inv": 5.0,
             "pme_grid_spacing_ang": 1.5,

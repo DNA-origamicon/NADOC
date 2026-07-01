@@ -148,6 +148,22 @@ class TestNamdMetrics:
         expected = 1.0 / 0.027123
         assert m.ns_per_day == pytest.approx(expected, rel=1e-4)
 
+    def test_parse_ns_per_day_namd3_format(self, tmp_path: Path) -> None:
+        """NAMD 3 (esp. GPU-resident) prints '<ns> ns/day' instead of '<days> days/ns'.
+
+        Take the LAST Benchmark line and ignore the earlier 'Initial time' lines.
+        """
+        from backend.core.namd_metrics import parse_namd_log
+
+        log = tmp_path / "n3.log"
+        log.write_text(
+            "Info: Initial time: 16 CPUs 0.0101308 s/step 34.1137 ns/day 0 MB memory\n"
+            "Info: Benchmark time: 16 CPUs 0.0117889 s/step 29.3158 ns/day 0 MB memory\n"
+            "Info: Benchmark time: 16 CPUs 0.0102826 s/step 33.6101 ns/day 0 MB memory\n"
+        )
+        m = parse_namd_log(log)
+        assert m.ns_per_day == pytest.approx(33.6101, rel=1e-4)  # last Benchmark line
+
     def test_missing_log_returns_warning(self, tmp_path: Path) -> None:
         from backend.core.namd_metrics import parse_namd_log
 
@@ -430,6 +446,7 @@ class TestProductionAppend:
         fastapi.APIRouter = _Router
         fastapi.BackgroundTasks = object
         fastapi.HTTPException = _HTTPException
+        fastapi.Request = object
         concurrency = types.ModuleType("fastapi.concurrency")
         concurrency.run_in_threadpool = _run_in_threadpool
         assembly = types.ModuleType("backend.api.assembly")

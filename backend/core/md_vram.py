@@ -132,6 +132,99 @@ def detect_vram_mb(devices: str = "0") -> Optional[int]:
         return None
 
 
+# A compute process holding at least this much VRAM counts as "GPU-intensive" —
+# enough to flag a background NAMD/GROMACS/oxDNA run while ignoring incidentals
+# like a remote-desktop server's small context.
+_GPU_BUSY_PROC_MB = 500
+
+
+def detect_gpu_activity(devices: str = "0") -> Optional[dict]:
+    """Current GPU load: memory, utilisation and the compute processes using it.
+
+    Returns ``{used_mb, total_mb, free_mb, util_pct, processes:[{pid, name,
+    mem_mb}]}`` or ``None`` if ``nvidia-smi`` is unavailable.  ``name`` is the
+    process basename (e.g. ``namd3``).  Best-effort — any query failure yields
+    ``None`` so callers can degrade to "unknown / proceed".
+    """
+    exe = shutil.which("nvidia-smi")
+    if not exe:
+        return None
+    dev = _first_device_id(devices)
+    try:
+        mem = subprocess.run(
+            [exe, f"--id={dev}", "--query-gpu=memory.used,memory.total,utilization.gpu",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=10,
+        )
+        apps = subprocess.run(
+            [exe, "--query-compute-apps=pid,process_name,used_memory",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+    if mem.returncode != 0 or not mem.stdout.strip():
+        return None
+
+    try:
+        used_s, total_s, util_s = (c.strip() for c in mem.stdout.strip().splitlines()[0].split(","))
+        used_mb, total_mb = int(used_s), int(total_s)
+        util_pct = int(util_s)
+    except (ValueError, IndexError):
+        return None
+
+    procs: list[dict] = []
+    for line in apps.stdout.splitlines() if apps.returncode == 0 else []:
+        parts = [c.strip() for c in line.split(",")]
+        if len(parts) < 3:
+            continue
+        try:
+            pid, mem_mb = int(parts[0]), int(parts[2])
+        except ValueError:
+            continue  # e.g. used_memory reported as "[N/A]"
+        procs.append({"pid": pid, "name": parts[1].split("/")[-1], "mem_mb": mem_mb})
+
+    return {
+        "used_mb": used_mb, "total_mb": total_mb,
+        "free_mb": max(0, total_mb - used_mb), "util_pct": util_pct,
+        "processes": procs,
+    }
+
+
+def gpu_contention_summary(activity: Optional[dict], own_pids=()) -> dict:
+    """Decide whether the GPU is too busy to start a new run, from raw activity.
+
+    Pure (no I/O) so it is unit-testable.  ``own_pids`` are this app's own running
+    NAMD PIDs — excluded so the concurrent-job guard, not this one, speaks for
+    them.  ``busy`` is True when any *external* compute process holds at least
+    ``_GPU_BUSY_PROC_MB``.  Returns ``{available, busy, processes, used_mb,
+    total_mb, free_mb, util_pct, message}``.
+    """
+    if not activity:
+        return {"available": False, "busy": False, "processes": [], "message": ""}
+    own = set(own_pids or ())
+    heavy = [
+        p for p in activity["processes"]
+        if p["mem_mb"] >= _GPU_BUSY_PROC_MB and p["pid"] not in own
+    ]
+    busy = bool(heavy)
+    if busy:
+        who = ", ".join(f"{p['name']} ({p['mem_mb']:,} MB)" for p in heavy)
+        message = (
+            f"GPU {activity['used_mb']:,}/{activity['total_mb']:,} MB in use by another "
+            f"process: {who}. Starting a second GPU run may run out of VRAM or slow both "
+            f"to a crawl."
+        )
+    else:
+        message = ""
+    return {
+        "available": True, "busy": busy, "processes": heavy,
+        "used_mb": activity["used_mb"], "total_mb": activity["total_mb"],
+        "free_mb": activity["free_mb"], "util_pct": activity["util_pct"],
+        "message": message,
+    }
+
+
 def max_atoms_for_vram(vram_mb: float) -> int:
     """Largest system (atoms) expected to fit in *vram_mb* of GPU memory."""
     return int(vram_mb * _USABLE_FRACTION / _MB_PER_MATOM * 1e6)

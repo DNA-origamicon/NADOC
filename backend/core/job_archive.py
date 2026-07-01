@@ -207,8 +207,8 @@ def _run_unarchive(job, workspace_dir: Path, kind: str) -> None:
         _set_task(kind, job.job_id, state="error", error=str(e))
 
 
-def start_archive(job, workspace_dir: Path, kind: str, dest_root: Path) -> None:
-    """Spawn the background archive move. Raises if it can't be started."""
+def _check_archive_preconditions(job, workspace_dir: Path, kind: str, dest_root: Path) -> None:
+    """Shared validation for archiving a job (async or sync).  Raises on any problem."""
     if job.archived:
         raise ValueError("job is already archived")
     if is_running(kind, job.job_id):
@@ -225,15 +225,38 @@ def start_archive(job, workspace_dir: Path, kind: str, dest_root: Path) -> None:
             f"job folder is a symlink (already relocated to {os.path.realpath(src)}); "
             "archive does not apply — move or relink it manually"
         )
-    dest_root = Path(dest_root).expanduser()
     dest = dest_root / job.job_id
     if dest.exists():
         raise FileExistsError(f"destination already exists: {dest}")
     if dest_root.resolve() == (workspace_dir / kind).resolve() or \
        _within(dest_root.resolve(), src.resolve()):
         raise ValueError("invalid archive destination")
+
+
+def start_archive(job, workspace_dir: Path, kind: str, dest_root: Path) -> None:
+    """Spawn the background archive move. Raises if it can't be started."""
+    dest_root = Path(dest_root).expanduser()
+    _check_archive_preconditions(job, workspace_dir, kind, dest_root)
     t = threading.Thread(target=_run_archive, args=(job, workspace_dir, kind, dest_root), daemon=True)
     t.start()
+
+
+def archive_job(job, workspace_dir: Path, kind: str, dest_root: Path) -> str:
+    """Synchronously archive a job's folder to ``dest_root/<job_id>`` (copy-then-delete),
+    update the index + ``job.archived``, and return the archive path.
+
+    The BLOCKING analog of :func:`start_archive` for headless / scripted callers — e.g. an
+    experiment driver that archives each run to an external drive right after extracting its
+    metrics, to keep the workspace from filling up over a long unattended series.  Same
+    validation; raises ``RuntimeError`` if the move itself fails (the partial copy is rolled
+    back by ``_run_archive``)."""
+    dest_root = Path(dest_root).expanduser()
+    _check_archive_preconditions(job, workspace_dir, kind, dest_root)
+    _run_archive(job, workspace_dir, kind, dest_root)
+    st = task_status(kind, job.job_id)
+    if st and st.get("state") == "error":
+        raise RuntimeError(f"archive failed: {st.get('error')}")
+    return str(dest_root / job.job_id)
 
 
 def start_unarchive(job, workspace_dir: Path, kind: str) -> None:

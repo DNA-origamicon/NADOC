@@ -56,13 +56,27 @@ def _hardware() -> dict:
     }
 
 
+def _namd_is_cuda_build() -> bool:
+    """Whether the installed NAMD is a CUDA build (its "CPU-only" trial still uses the
+    GPU, so the grid must not offer one).  False if NAMD isn't found."""
+    try:
+        from backend.core.namd_runner import find_namd, namd_is_cuda_build
+
+        return namd_is_cuda_build(find_namd())
+    except Exception:  # noqa: BLE001 — detection is best-effort; fall back to CPU grid
+        return False
+
+
 @router.get("/benchmark/hardware")
 async def benchmark_hardware() -> dict:
     """Report local hardware and the config grids the sweeps would run."""
     hw = _hardware()
     oxdna_grid = [c.label for c in bench.oxdna_config_grid(hw["cuda_devices"])]
     namd_grid = [
-        c.label for c in bench.namd_config_grid(hw["thread_ladder"], hw["cuda_devices"])
+        c.label
+        for c in bench.namd_config_grid(
+            hw["thread_ladder"], hw["cuda_devices"], cuda_build=_namd_is_cuda_build()
+        )
     ]
     return {**hw, "oxdna_grid": oxdna_grid, "namd_grid": namd_grid}
 
@@ -96,7 +110,9 @@ async def start_namd_benchmark(body: StartBenchmarkRequest) -> dict:
     syn, plan = runner.build_synthetic_design(n_target, max_nt=bench.NAMD_MAX_NT)
 
     hw = _hardware()
-    configs = bench.namd_config_grid(hw["thread_ladder"], hw["cuda_devices"])
+    configs = bench.namd_config_grid(
+        hw["thread_ladder"], hw["cuda_devices"], cuda_build=_namd_is_cuda_build()
+    )
     bid = runner.new_benchmark_id()
     runner.start_namd_benchmark(bid, syn, configs, _workdir(bid), plan)
     return {"benchmark_id": bid, "trials_total": len(configs)}

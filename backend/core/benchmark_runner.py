@@ -35,8 +35,46 @@ from backend.core.models import Design
 # oxDNA: a short MD stage long enough for a stable steps/s.  NAMD: a few hundred MD
 # steps after a tiny minimize is enough for NAMD to emit its "days/ns" Benchmark line.
 OXDNA_BENCH_STEPS = 2_000
-NAMD_BENCH_STEPS = 2_000
-NAMD_MIN_STEPS = 200
+# NAMD requires every ``minimize``/``run`` count to be a multiple of ``stepspercycle``
+# (12, set in ``md_protocols._common_header``) or it FATALs at startup — so both bench
+# step counts are exact multiples of it.  Keep ``_round_to_cycle`` as the guard for any
+# caller-supplied ``steps``.
+NAMD_STEPS_PER_CYCLE = 12  # MUST match _common_header's "stepspercycle"
+NAMD_BENCH_STEPS = 2_004  # 167 × 12
+# The synthetic proxy is written from raw ideal geometry (helix-junction clashes,
+# ~+1e6 kcal/mol VDW).  Production fast mode (4 fs + GPUresident) crashes on that
+# ("Low global CUDA exclusion count") unless the system is settled first, so the
+# one-time settle does a solid minimize THEN a short soft (rigidBonds-none) MD warmup
+# before any timed trial.  Validated: min 2004 + warmup 1200 → VDW ≈ −4.8e6, fast mode
+# stable.  (Bench trials still measure only the fast-mode ``run`` from that restart.)
+NAMD_MIN_STEPS = 2_004  # 167 × 12
+NAMD_SETTLE_MD_STEPS = 1_200  # 100 × 12
+
+
+def _round_to_cycle(steps: int) -> int:
+    """Round ``steps`` to the nearest positive multiple of ``NAMD_STEPS_PER_CYCLE``."""
+    n = round(steps / NAMD_STEPS_PER_CYCLE) * NAMD_STEPS_PER_CYCLE
+    return max(NAMD_STEPS_PER_CYCLE, n)
+
+# How much of each trial's log to surface in the in-card details view.
+_LOG_TAIL_BYTES = 6_000
+
+
+def _tail_text(path: Path, max_bytes: int = _LOG_TAIL_BYTES) -> str:
+    """Best-effort tail of a log file (last ``max_bytes`` bytes); '' if unreadable.
+
+    Drops a leading partial line after truncation so the view starts on a clean line.
+    """
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return ""
+    if len(data) > max_bytes:
+        data = data[-max_bytes:]
+        cut = data.find(b"\n")
+        if cut != -1:
+            data = data[cut + 1 :]
+    return data.decode("utf-8", "replace")
 
 
 # ── In-memory progress registry ──────────────────────────────────────────────────
@@ -59,6 +97,41 @@ class BenchmarkState:
     started_at: float = 0.0
     # Wall-clock seconds each completed trial took — drives the ETA estimate.
     trial_seconds: list[float] = field(default_factory=list)
+    # Live command + log capture for the in-card "log output" details view.  One block
+    # per launched process: {"label", "cmd", "log_path": str|None, "text": str|None}.
+    # The running block's file is tailed live by to_dict(); a finished block snapshots
+    # its tail (via finish_block) before the temp dir is removed.
+    log_blocks: list[dict] = field(default_factory=list)
+
+    def start_block(self, label: str, cmd: str, log_path) -> None:
+        self.log_blocks.append(
+            {"label": label, "cmd": cmd, "log_path": str(log_path), "text": None}
+        )
+
+    def finish_block(self) -> None:
+        """Snapshot the running block's log tail before its temp dir is cleaned up."""
+        if not self.log_blocks:
+            return
+        b = self.log_blocks[-1]
+        if b["text"] is None:
+            b["text"] = _tail_text(Path(b["log_path"])) if b["log_path"] else ""
+        b["log_path"] = None
+
+    def render_log(self) -> str:
+        """Combined command + log view: each block's command line then its log tail.
+
+        Live-tails the still-running block's file (text is None, log_path set).
+        """
+        parts: list[str] = []
+        for b in self.log_blocks:
+            parts.append(f"$ {b['cmd']}")
+            text = b["text"]
+            if text is None and b["log_path"]:
+                text = _tail_text(Path(b["log_path"]))
+            if text:
+                parts.append(text.rstrip("\n"))
+            parts.append("")
+        return "\n".join(parts).strip()
 
     def fraction(self) -> float:
         if self.trials_total <= 0:
@@ -94,6 +167,10 @@ class BenchmarkState:
             "error": self.error,
             "fraction": self.fraction(),
             "eta_seconds": self.eta_seconds(),
+            "commands": [
+                {"label": b["label"], "cmd": b["cmd"]} for b in self.log_blocks
+            ],
+            "log": self.render_log(),
         }
 
 
@@ -158,6 +235,18 @@ def build_synthetic_design(n_target: int, *, max_nt: int) -> tuple[Design, dict]
 
 
 # ── NAMD launcher (CPU-only safe) ────────────────────────────────────────────────
+
+
+def _namd_cmd_str(namd_bin: str, conf: str, threads: int, devices: str) -> str:
+    """Display string for a NAMD launch (mirrors ``_run_namd_bench``'s command).
+
+    Omits the environment-plumbing core-binding prefix so the log view stays readable.
+    """
+    parts = [namd_bin, f"+p{threads}", "+setcpuaffinity"]
+    if devices:
+        parts += ["+devices", devices]
+    parts.append(f"{conf}.conf")
+    return " ".join(parts)
 
 
 async def _run_namd_bench(
@@ -230,6 +319,36 @@ async def run_oxdna_trials(
         write_topology(design, topo)
         write_configuration(design, geometry, conf)
 
+        # Settle the proxy first.  The synthetic bundle is written from RAW ideal
+        # geometry, whose helix-junction clashes give a ~1e15 starting energy; an MD
+        # trial launched straight onto it is numerically unstable on CUDA (the huge
+        # forces overflow the GPU cell list → "exited with code 1") and meaningless on
+        # CPU.  A short CPU Monte-Carlo relax (oxDNA MC is CPU-only, like the real
+        # pipeline's stage 1) removes the clashes once, and every timed trial starts
+        # from that settled config.  Falls back to the raw conf if the pre-relax fails.
+        trial_conf = conf
+        prerelax_dir = workdir / "prerelax"
+        prerelax_dir.mkdir(parents=True, exist_ok=True)
+        pre_spec = OxdnaStageSpec(
+            name="bench_prerelax", kind="mc", sim_type="MC", steps=1000,
+            backend="CPU", device="0", max_backbone_force=5.0,
+            max_backbone_force_far=10.0, external_forces=False,
+            print_conf_interval_override=10_000,  # only the final settled conf
+        )
+        pre_input = (prerelax_dir / "input.txt").resolve()
+        pre_input.write_text(render_stage_input(pre_spec, f"../{topo.name}", f"../{conf.name}"))
+        pre_log = prerelax_dir / "oxdna.log"
+        state.start_block("settle proxy (MC pre-relax)", f"{oxdna_bin} {pre_input}", pre_log)
+        try:
+            rc, _ = await runner(oxdna_bin, pre_input, prerelax_dir, pre_log,
+                                 f"bench-{state.benchmark_id}-prerelax")
+            settled = prerelax_dir / "last_conf.dat"
+            if rc == 0 and settled.exists():
+                trial_conf = settled
+        except Exception:  # noqa: BLE001 — fall back to the raw conf, never abort the sweep
+            trial_conf = conf
+        state.finish_block()
+
         for i, cfg in enumerate(configs):
             state.current_label = cfg.label
             stage_dir = workdir / f"trial_{i}"
@@ -249,23 +368,33 @@ async def run_oxdna_trials(
                 max_backbone_force=5.0,
                 max_backbone_force_far=10.0,
                 external_forces=False,
+                # Measure COMPUTE, not I/O: write no intermediate trajectory frames
+                # and sample energy sparsely.  A 2k-step trial otherwise spends ~95%
+                # of its time writing ~100 trajectory frames (identical cost on CPU
+                # and CUDA), which masks CUDA's per-step speedup and mis-picks CPU.
+                print_conf_interval_override=steps + 1,
+                print_energy_every_override=max(1, steps // 10),
             )
-            # topology/conf live in the parent workdir; oxDNA runs with cwd=stage_dir,
-            # so reference them relatively. The input path itself must be absolute —
-            # a repo-relative path wouldn't resolve from inside stage_dir.
+            # topology lives in the parent workdir; the trial starts from the settled
+            # pre-relax conf (or the raw conf if pre-relax failed).  oxDNA runs with
+            # cwd=stage_dir, so reference both relatively.  The input path itself must
+            # be absolute — a repo-relative path wouldn't resolve from inside stage_dir.
+            conf_rel = f"../{trial_conf.relative_to(workdir).as_posix()}"
             input_path = (stage_dir / "input.txt").resolve()
             input_path.write_text(
-                render_stage_input(spec, f"../{topo.name}", f"../{conf.name}")
+                render_stage_input(spec, f"../{topo.name}", conf_rel)
             )
             steps_per_s = None
             error = None
+            trial_log = stage_dir / "oxdna.log"
+            state.start_block(cfg.label, f"{oxdna_bin} {input_path}", trial_log)
             t0 = time.time()
             try:
                 rc, _ = await runner(
                     oxdna_bin,
                     input_path,
                     stage_dir,
-                    stage_dir / "oxdna.log",
+                    trial_log,
                     f"bench-{state.benchmark_id}-{i}",
                 )
                 elapsed = max(1e-6, time.time() - t0)
@@ -275,6 +404,7 @@ async def run_oxdna_trials(
                     error = f"oxDNA exited with code {rc}"
             except Exception as exc:  # noqa: BLE001  (CancelledError is not Exception → propagates)
                 error = str(exc)
+            state.finish_block()
             state.trial_seconds.append(max(1e-6, time.time() - t0))
             state.results.append(
                 {
@@ -318,9 +448,22 @@ def _write_namd_bench_confs(
 
     The MD conf restarts from the minimize output so each per-config trial measures
     only MD throughput (ns/day) on an already-settled system.
-    """
-    from backend.core.md_protocols import _common_header
 
+    The timed ``bench.conf`` mirrors **production fast mode** — HMR PSF + 4 fs +
+    ``GPUresident on`` (see ``md_protocols``) — so the reported ns/day predicts what a
+    real relaxation/production run achieves, not a conservative 2 fs lower bound.  The
+    one-time ``bench_min.conf`` stays on the unmodified PSF (minimisation needs no HMR /
+    timestep and runs declash-safe with ``rigidBonds none``).
+    """
+    from backend.core.md_protocols import _common_header, write_hmr_psf
+
+    # NAMD FATALs at startup unless minimize/run counts are multiples of stepspercycle.
+    min_steps = _round_to_cycle(NAMD_MIN_STEPS)
+    settle_md_steps = _round_to_cycle(NAMD_SETTLE_MD_STEPS)
+    run_steps = _round_to_cycle(steps)
+    # One-time settle: minimize, THEN a short soft (rigidBonds none, 2 fs) MD warmup so
+    # the raw-geometry proxy is declashed enough for the fast-mode trials (GPUresident is
+    # intolerant of the residual strain a bare minimize leaves).  Its restart feeds bench.
     (package_dir / "bench_min.conf").write_text(
         _common_header(name_stem, box, False, rigid_bonds="none")
         + "outputName         output/bench_min\n"
@@ -330,21 +473,36 @@ def _write_namd_bench_confs(
         + "langevinDamping    5\n"
         + "langevinPiston     off\n"
         + "constraints        off\n"
-        + f"minimize           {NAMD_MIN_STEPS}\n"
+        + f"minimize           {min_steps}\n"
+        + f"run                {settle_md_steps}\n"
     )
+
+    # Hydrogen-Mass-Repartitioned PSF: rewrites only hydrogen masses, so the dynamics
+    # can take 4 fs steps with rigidBonds all (production's ~2x lever).  Atom ordering
+    # is byte-identical, so bench.conf restarts cleanly from the standard-PSF minimize.
+    hmr_psf = package_dir / f"{name_stem}_hmr.psf"
+    write_hmr_psf(package_dir / f"{name_stem}.psf", hmr_psf)
     (package_dir / "bench.conf").write_text(
-        _common_header(name_stem, box, False)
+        # 4 fs + GPUresident on + HMR PSF == production fast mode (the rest of the
+        # header — rigidBonds all, PME, capped box — already matches).
+        _common_header(
+            name_stem, box, False,
+            timestep=4.0, gpu_resident=True, structure_psf=hmr_psf.name,
+        )
         + "outputName         output/bench\n"
         + "dcdFreq            0\n"
         + "binCoordinates     output/bench_min.coor\n"
         + "extendedSystem     output/bench_min.xsc\n"
+        # ``temperature`` assigns fresh Boltzmann velocities at restart (the minimize
+        # writes no .vel file).  Do NOT add ``reinitvels`` alongside it: with a restart
+        # conf NAMD 3.0.2 then FATALs with a misleading "langevinTemp is required"
+        # config error (bisected — temperature-only restart runs clean, rc=0).
         + "temperature        300\n"
-        + "reinitvels         300\n"
         + "langevinTemp       300\n"
         + "langevinDamping    5\n"
         + "langevinPiston     off\n"
         + "constraints        off\n"
-        + f"run                {steps}\n"
+        + f"run                {run_steps}\n"
     )
 
 
@@ -379,7 +537,20 @@ async def run_namd_trials(
         from backend.core.hardware import cpu_count
 
         min_log = package_dir / "output" / "bench_min.log"
-        await runner(namd_bin, "bench_min", package_dir, min_log, cpu_count(), "")
+        state.start_block(
+            "minimize (once)",
+            _namd_cmd_str(namd_bin, "bench_min", cpu_count(), ""),
+            min_log,
+        )
+        min_rc = await runner(namd_bin, "bench_min", package_dir, min_log, cpu_count(), "")
+        state.finish_block()
+        # The minimize produces the restart EVERY trial reads.  If it fails, all trials
+        # would die the same way (missing bench_min.coor) — fail fast with the real
+        # cause instead of N confusing per-config errors.
+        if min_rc not in (0, None):
+            state.state = "failed"
+            state.error = f"NAMD minimize failed (exit code {min_rc}); see the log."
+            return
 
         for cfg in configs:
             state.current_label = cfg.label
@@ -390,6 +561,9 @@ async def run_namd_trials(
             )
             ns_per_day = None
             error = None
+            state.start_block(
+                cfg.label, _namd_cmd_str(namd_bin, "bench", cfg.threads, cfg.devices), log
+            )
             t0 = time.time()
             try:
                 rc = await runner(
@@ -403,6 +577,7 @@ async def run_namd_trials(
                     error = f"NAMD exited with code {rc}"
             except Exception as exc:  # noqa: BLE001  (CancelledError is not Exception → propagates)
                 error = str(exc)
+            state.finish_block()
             state.trial_seconds.append(max(1e-6, time.time() - t0))
             state.results.append(
                 {
@@ -452,6 +627,7 @@ def _finalize_namd(state: BenchmarkState) -> None:
     state.recommendation = {
         "threads": best["threads"],
         "devices": best["devices"],
+        "label": best.get("label"),  # honest human label (e.g. "+p16 GPU:0" / "GPU:all")
         "ns_per_day": best["ns_per_day"],
         "proxy_nucleotides": state.proxy_nucleotides,
     }

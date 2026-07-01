@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import state as design_state
@@ -67,15 +68,30 @@ def test_oxdna_grid_no_gpu_is_cpu_only():
     assert len(grid) == 1 and grid[0].backend == "CPU"
 
 
-def test_namd_grid_ladder_times_targets_with_cpu_only():
+def test_namd_grid_cpu_build_is_cpu_only():
+    # A CPU (non-CUDA) NAMD build cannot use the GPU → only CPU-thread configs.
     devs = [{"index": 0, "name": "A"}]
-    grid = bench.namd_config_grid([4, 8], devs)
-    # 2 thread values × (CPU-only + 1 GPU) = 4 configs
-    assert len(grid) == 4
-    cpu_only = [c for c in grid if c.devices == ""]
-    assert len(cpu_only) == 2  # one per thread value
-    gpu = [c for c in grid if c.devices == "0"]
-    assert {c.threads for c in gpu} == {4, 8}
+    grid = bench.namd_config_grid([4, 8], devs, cuda_build=False)
+    assert {c.label for c in grid} == {"+p4 CPU", "+p8 CPU"}
+    assert all(c.devices == "" for c in grid)
+
+
+def test_namd_grid_cuda_build_single_gpu_has_no_fake_cpu_arm():
+    # On a CUDA build a "CPU-only" trial still runs on the GPU, so it must NOT appear;
+    # a single-GPU box just sweeps thread counts on that GPU.
+    devs = [{"index": 0, "name": "A"}]
+    grid = bench.namd_config_grid([4, 8], devs, cuda_build=True)
+    assert {c.label for c in grid} == {"+p4 GPU:0", "+p8 GPU:0"}
+    assert all(c.devices == "0" for c in grid)
+
+
+def test_namd_grid_cuda_build_multi_gpu_adds_all_gpus_target():
+    # Multi-GPU: per-device configs PLUS a genuine "use all GPUs" config (devices="").
+    devs = [{"index": 0, "name": "A"}, {"index": 1, "name": "B"}]
+    grid = bench.namd_config_grid([8], devs, cuda_build=True)
+    assert {c.label for c in grid} == {"+p8 GPU:0", "+p8 GPU:1", "+p8 GPU:all"}
+    all_gpu = [c for c in grid if c.label.endswith("GPU:all")]
+    assert len(all_gpu) == 1 and all_gpu[0].devices == ""
 
 
 # ── Synthetic size + cap ──────────────────────────────────────────────────────────
@@ -233,12 +249,46 @@ def test_run_oxdna_trials_sequential_and_cleans_up(tmp_path, monkeypatch):
         )
     )
 
-    assert len(order) == 2  # both trials ran
-    assert order == sorted(order)  # sequential, in config order
+    # A CPU MC pre-relax settles the proxy first, then the two timed trials run.
+    assert order[0].endswith("prerelax")  # proxy settled before any timing
+    trials = order[1:]
+    assert len(trials) == 2  # both trials ran
+    assert trials == sorted(trials)  # sequential, in config order
     assert state.state == "completed"
-    assert state.trials_done == 2
+    assert state.trials_done == 2  # pre-relax is not counted as a trial
     assert state.recommendation is not None
     assert not workdir.exists()  # temp dir cleaned up
+
+
+def test_run_oxdna_trials_prerelaxes_and_suppresses_trajectory(tmp_path, monkeypatch):
+    # The proxy is written from raw ideal geometry (clashing, ~1e15 energy); a CPU MC
+    # pre-relax settles it once, and the timed trials start from THAT conf with
+    # trajectory output off so the wall-time reflects compute, not frame I/O.
+    monkeypatch.setenv("OXDNA_BIN", "/usr/bin/true")
+    design, plan = br.build_synthetic_design(300, max_nt=50_000)
+    from backend.core.design_geometry import _geometry_for_design
+
+    geometry = _geometry_for_design(design)
+    configs = [bench.OxdnaTrialConfig("CUDA:0", "CUDA", "0")]
+    inputs: dict[str, str] = {}
+
+    async def fake_runner(oxdna_bin, input_path, stage_dir, log, job_id):
+        if job_id.endswith("prerelax"):
+            (stage_dir / "last_conf.dat").write_text("settled\n")  # produce a settled conf
+        inputs[job_id] = input_path.read_text()
+        return 0, None
+
+    state = br.BenchmarkState(benchmark_id="t3", engine="oxdna", trials_total=1,
+                              proxy_nucleotides=plan["proxy_nucleotides"])
+    asyncio.run(br.run_oxdna_trials(state, design, geometry, configs, tmp_path / "r",
+                                    steps=2000, runner=fake_runner))
+
+    pre = next(v for k, v in inputs.items() if k.endswith("prerelax"))
+    assert "sim_type = MC" in pre and "backend = CPU" in pre   # CPU MC pre-relax
+    trial = next(v for k, v in inputs.items() if k.endswith("-0"))
+    assert "../prerelax/last_conf.dat" in trial                # starts from the settled conf
+    assert "print_conf_interval = 2001" in trial               # no intermediate trajectory frames
+    assert state.recommendation is not None
 
 
 def test_run_oxdna_trials_no_binary_fails_gracefully(tmp_path, monkeypatch):
@@ -318,6 +368,54 @@ def test_apply_before_completion_409():
 
 def test_get_unknown_benchmark_404():
     assert client.get("/api/benchmark/nope").status_code == 404
+
+
+# ── Live command + log capture (in-card details view) ──────────────────────────────
+
+
+def test_log_block_lifecycle_live_then_snapshot(tmp_path):
+    """A running block live-tails its file; finish_block snapshots before cleanup."""
+    st = br.BenchmarkState(benchmark_id="lg", engine="oxdna", trials_total=1)
+    log = tmp_path / "oxdna.log"
+    log.write_text("step 1\nstep 2\n")
+    st.start_block("CPU", "/usr/bin/oxDNA input.txt", log)
+
+    d = st.to_dict()
+    assert d["commands"] == [{"label": "CPU", "cmd": "/usr/bin/oxDNA input.txt"}]
+    assert "$ /usr/bin/oxDNA input.txt" in d["log"]
+    assert "step 2" in d["log"]  # live tail while running
+
+    log.write_text("step 1\nstep 2\nstep 3\n")  # more output arrives
+    assert "step 3" in st.to_dict()["log"]  # picked up live
+
+    st.finish_block()
+    log.unlink()  # temp dir cleaned — snapshot must survive
+    assert "step 3" in st.to_dict()["log"]
+
+
+def test_run_oxdna_trials_captures_commands_and_logs(tmp_path, monkeypatch):
+    monkeypatch.setenv("OXDNA_BIN", "/usr/bin/true")
+    design, _ = br.build_synthetic_design(300, max_nt=50_000)
+    from backend.core.design_geometry import _geometry_for_design
+
+    geometry = _geometry_for_design(design)
+    configs = [bench.OxdnaTrialConfig("CPU", "CPU", "0")]
+
+    async def fake_runner(oxdna_bin, input_path, stage_dir, log, job_id):
+        log.write_text(f"running {job_id}\nT = 0.1\n")  # emit a log line per launch
+        return 0, None
+
+    st = br.BenchmarkState(benchmark_id="lc", engine="oxdna", trials_total=1)
+    asyncio.run(
+        br.run_oxdna_trials(
+            st, design, geometry, configs, tmp_path / "r", steps=10, runner=fake_runner
+        )
+    )
+    d = st.to_dict()
+    labels = [c["label"] for c in d["commands"]]
+    assert labels == ["settle proxy (MC pre-relax)", "CPU"]  # pre-relax + the trial
+    assert "/usr/bin/true" in d["log"]  # the engine call surfaced
+    assert "running bench-lc" in d["log"]  # snapshotted log content survives cleanup
 
 
 # ── ETA + fraction (pure) ─────────────────────────────────────────────────────────
@@ -412,3 +510,68 @@ def test_start_rejected_while_one_running(monkeypatch):
     assert r.status_code == 409
     r2 = client.post("/api/benchmark/namd", json={})
     assert r2.status_code == 409
+
+
+# ── Real-engine end-to-end (slow; needs a real NAMD binary) ─────────────────────────
+#
+# Regression guard for the NAMD benchmark having NEVER run end-to-end against a real
+# binary (it was unit-mocked only).  Two FATALs hid here until exercised: minimize/run
+# step counts that weren't multiples of stepsPerCycle, and a `reinitvels` line that made
+# NAMD mis-report a missing `langevinTemp`.  This test builds a simple 6hb FROM SCRATCH,
+# presses the Benchmark button (the real route + background runner + frontend-style
+# poll), and asserts the sweep actually COMPLETES with a throughput number.  The runner
+# solvates/minimises/runs in a temp workdir it rmtrees in a finally — nothing persists.
+
+
+@pytest.mark.slow
+def test_namd_benchmark_completes_end_to_end_on_a_6hb(monkeypatch):
+    from backend.api import routes_benchmark
+    from backend.api.headless_build import build_bundle
+    from backend.core.hardware import cpu_count
+    from backend.core.models import LatticeType
+    from backend.core.namd_runner import find_namd
+
+    try:
+        find_namd()
+    except RuntimeError:
+        pytest.skip("NAMD not installed on this machine")
+
+    # Build a small honeycomb 6hb the same way the user would, from an empty design.
+    design = build_bundle(
+        list(bench.SIX_HB_CELLS), 32, lattice=LatticeType.HONEYCOMB, name="bench6hb"
+    )
+    design_state.set_design(design)
+
+    # Keep the sweep to a single CPU trial so the real solvate→minimize→MD→parse path
+    # runs in ~a minute (the point is "does it complete", not "which config wins").
+    monkeypatch.setattr(
+        bench,
+        "namd_config_grid",
+        lambda *a, **k: [bench.NamdTrialConfig(f"+p{cpu_count()} CPU", cpu_count(), "")],
+    )
+
+    # Press the button: the real route counts the design's nucleotides, builds the
+    # synthetic proxy, picks the grid, and starts the background sweep.
+    resp = asyncio.run(
+        routes_benchmark.start_namd_benchmark(routes_benchmark.StartBenchmarkRequest())
+    )
+    bid = resp["benchmark_id"]
+
+    # Poll exactly like the frontend until the run leaves the "running" state.
+    deadline = time.monotonic() + 300
+    state = None
+    while time.monotonic() < deadline:
+        state = br.get_state(bid)
+        assert state is not None
+        if state.state != "running":
+            break
+        time.sleep(1.0)
+
+    assert state is not None and state.state == "completed", (
+        f"benchmark did not complete: state={state and state.state} "
+        f"error={state and state.error}\n--- log ---\n{state and state.render_log()[-2000:]}"
+    )
+    assert state.recommendation is not None
+    assert (state.recommendation.get("ns_per_day") or 0) > 0
+    # The single trial succeeded (no per-config error surfaced).
+    assert all(r.get("error") is None for r in state.results)

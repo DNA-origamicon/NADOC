@@ -1,5 +1,5 @@
 """
-NAMD Runner — async segmented execution with health gates.
+NAMD Runner — async segmented execution with advisory health checks.
 
 Manages a single NAMD job end-to-end:
   1. Runs minimization (blocking subprocess, short)
@@ -7,9 +7,10 @@ Manages a single NAMD job end-to-end:
   3. After each segment, calls md_health.run_health_check()
   4. Updates job.json on every state change
   5. Appends to output/health.jsonl and output/metrics.jsonl
-  6. Stops on a BLOCKING health-gate failure (C1' backbone breach / hard error)
-     or explicit cancellation.  A WC-only breach is advisory: it warns and the
-     ladder continues (WC ref-relative is a calibration-noisy metric).
+  6. Health is ADVISORY ONLY — a below-threshold checkpoint (C1' or WC) is
+     recorded on the sample and surfaced as a UI warning, but never stops the
+     run.  The run only stops on a NAMD subprocess failure or explicit
+     cancellation.
 
 The runner uses asyncio.create_subprocess_exec so it doesn't block the
 FastAPI event loop.  A running job's asyncio.Task is stored in _RUNNING so the
@@ -19,11 +20,13 @@ API can cancel it.
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 import os
 import shutil
 import signal
+import subprocess
 import threading
 import time
 from dataclasses import dataclass
@@ -59,6 +62,12 @@ class _RunningHandle:
 
 _RUNNING: dict[str, _RunningHandle] = {}
 _ACTIVE_PIDS: dict[str, int] = {}
+
+
+def active_namd_pids() -> set[int]:
+    """PIDs of NAMD runs this server launched — used to exclude our own jobs from
+    the external-GPU-contention check (the concurrent-job guard covers them)."""
+    return set(_ACTIVE_PIDS.values())
 
 
 def is_running(job_id: str) -> bool:
@@ -308,8 +317,7 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
     post-processing for a completed segment, then leaves the job:
 
     - ``completed`` when the last segment finished,
-    - ``failed``    when a health gate failed or a segment died with no usable
-      checkpoint, or
+    - ``failed``    when a segment died with no usable checkpoint, or
     - ``running``   when there is still work to do — the next pending segment, or
       the current segment partway through a NAMD checkpoint.  These resumable
       states are picked up and relaunched by ``resume_interrupted_jobs`` (startup
@@ -396,17 +404,11 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
             blocking                = hresult.blocking,
             reason                  = hresult.reason or (hresult.error or ""),
         ))
-        # A blocking failure (C1' breach / hard error) stops the run; a WC-only
-        # breach is advisory — warn and let the ladder continue.
-        if not hresult.passed and hresult.blocking:
-            active.status = "failed"
-            job.status = MdStatus.failed
-            job.error = f"Health gate failed after {active.name}: {hresult.reason or hresult.error}"
-            job.save(workspace_dir)
-            return job
+        # Health is advisory only — a below-threshold checkpoint warns and is
+        # flagged in the UI, but never stops the run.
         if not hresult.passed:
             logger.warning(
-                "[%s] Health warning after %s (advisory, continuing): %s",
+                "[%s] Health warning after %s (below threshold, continuing): %s",
                 job.job_id, active.name, hresult.reason or hresult.error,
             )
 
@@ -479,6 +481,26 @@ def find_namd() -> str:
         "~/Applications/NAMD_3.0.2_Linux-x86_64-multicore-CUDA/namd3, or add namd3 to "
         "PATH.  See docs/namd_setup.md."
     )
+
+
+@functools.lru_cache(maxsize=8)
+def namd_is_cuda_build(namd_bin: str) -> bool:
+    """True if ``namd_bin`` is a CUDA/GPU build (vs a CPU-only multicore build).
+
+    Runs the binary with no config file so it prints its startup banner
+    (``NAMD 3.0.2 for Linux-x86_64-multicore-CUDA`` / ``Built with CUDA version …``)
+    and exits; the presence of "CUDA" in that banner marks a GPU build.  Cached per
+    path.  Matters because a CUDA-only binary runs on the GPU **even when the benchmark
+    omits ``+devices``** — so a "CPU-only" trial on such a build is a fiction (it still
+    uses the GPU), and the config grid must not offer it.
+    """
+    try:
+        out = subprocess.run(
+            [namd_bin], capture_output=True, text=True, timeout=60
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "CUDA" in (out.stdout + out.stderr)
 
 
 def find_gmx() -> str:
@@ -829,7 +851,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 hresult.wc_ref_relative_fraction or 0.0,
                 hresult.passed,
                 ("" if hresult.passed
-                 else f" {'FAIL' if hresult.blocking else 'WARN'}: {hresult.reason or hresult.error}"),
+                 else f" WARN: {hresult.reason or hresult.error}"),
             )
             append_health_jsonl(output_dir, spec.name, spec.stage, hresult)
 
@@ -849,21 +871,12 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             )
             job.health_samples.append(sample)
 
-            # A blocking failure (C1' backbone breach / hard error) stops the run.
-            if not hresult.passed and hresult.blocking:
-                if idx < len(job.segments):
-                    job.segments[idx].status = "failed"
-                job.status = MdStatus.failed
-                job.error  = (
-                    f"Health gate failed after {spec.name}: {hresult.reason or hresult.error}"
-                )
-                job.save(workspace_dir)
-                return
-
-            # A non-blocking (WC-only) breach: warn and continue the ladder.
+            # Health is advisory only — a below-threshold checkpoint (C1' or WC,
+            # or a diagnostic compute error) is recorded on the sample and flagged
+            # in the UI as a warning, but it never stops the run.
             if not hresult.passed:
                 logger.warning(
-                    "[%s] Health warning after %s (advisory, continuing): %s",
+                    "[%s] Health warning after %s (below threshold, continuing): %s",
                     job.job_id, spec.name, hresult.reason or hresult.error,
                 )
 

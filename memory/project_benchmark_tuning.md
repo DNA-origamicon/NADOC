@@ -24,6 +24,14 @@ for the current machine and stores it in the design, keyed by hostname.
   **Cancel** button. **All other controls in BOTH Dynamics panels are disabled**
   (`_lockPanels` saves+restores prior `disabled` state; Cancel stays clickable) — a
   concurrent job would corrupt timing.
+- **Live "Log output & engine calls" pane** (2026-06-30): a native `<details>` inside the
+  card body shows the actual engine command lines + a live tail of each trial's log file
+  as the sweep runs (so a hung vs working run is visible). Backend: `BenchmarkState.log_blocks`
+  (one per launched process — pre-relax/minimize + each trial) with `start_block`/`finish_block`;
+  the running block's file is live-tailed by `to_dict()` (`_tail_text`, last 6 KB), finished
+  blocks snapshot their tail BEFORE the temp dir is `rmtree`d. Surfaced via the existing poll
+  as `to_dict()["commands"]` + `["log"]`. Frontend `runSweep` `_showLog` pins-to-bottom unless
+  the user scrolled up.
 - **Cancel** → `POST /benchmark/{id}/cancel` → `cancel_benchmark` cancels the asyncio
   task; the runner's CancelledError path kills the in-flight subprocess + `rmtree`s the
   temp dir; state → `cancelled`; existing defaults untouched (Apply never ran).
@@ -74,11 +82,12 @@ for the current machine and stores it in the design, keyed by hostname.
 - **Size cap is honest**: `proxy_nucleotides` stored + extrapolation note surfaced.
 
 ## Tests
-- `tests/test_benchmark.py` (24): parse, ladder, grids, plan+cap, pick-best tie-breaks,
+- `tests/test_benchmark.py` (26): parse, ladder, grids, plan+cap, pick-best tie-breaks,
   metadata round-trip, synthetic-no-undefined-bases, mocked-runner sequential+cleanup,
-  routes (hardware/apply→metadata/409/404).
-- `frontend/src/ui/benchmark_panel.test.js` (5): mount, oxDNA sweep poll→apply-fills-inputs,
-  failed sweep, NAMD apply, null-start.
+  routes (hardware/apply→metadata/409/404), log-block live-tail-then-snapshot + oxDNA
+  command/log capture.
+- `frontend/src/ui/benchmark_panel.test.js` (6): mount, oxDNA sweep poll→apply-fills-inputs,
+  log-pane reveal + live output, failed sweep, NAMD apply, null-start.
 
 ## Headless access (AF-17, 2026-06-19)
 
@@ -92,10 +101,60 @@ Feature automation can now run a benchmark + relax on its result without the pan
 - This is the bridge AF-13 P4's iterate-until-met loop uses so each relaxation runs on the fastest discovered
   backend instead of a hard-coded CPU. See `design_automation_log.md` AF-17 row. NAMD headless tuning still TODO.
 
+## NAMD path never ran end-to-end → two FATALs (FIXED 2026-06-30)
+The NAMD sweep was only ever unit-mocked; the first real-binary run failed entirely. Root causes,
+both in `_write_namd_bench_confs`:
+1. **stepsPerCycle**: `minimize 200` / `run 2000` aren't multiples of `stepspercycle` (12, set in
+   `md_protocols._common_header`) → NAMD FATALs at the TCL `minimize`/`run` command. Fix: constants now
+   `NAMD_MIN_STEPS=204`, `NAMD_BENCH_STEPS=2004`, plus `_round_to_cycle()` guards any caller `steps`.
+2. **`reinitvels` → misleading `langevinTemp` FATAL**: a restart conf (`binCoordinates`) with BOTH
+   `temperature` and `reinitvels` makes NAMD 3.0.2 abort with "'langevinTemp' is a required
+   configuration option" even though it's present. Bisected: `temperature`-only restart runs clean
+   (rc=0); `reinitvels` is the trigger and is redundant (`temperature` already assigns fresh Boltzmann
+   velocities). Fix: dropped the `reinitvels` line from `bench.conf`.
+Also: the minimize's return code was IGNORED → a failed minimize cascaded into N confusing per-trial
+"missing bench_min.coor" errors. Now fails fast with the real minimize exit code.
+Regression guard: `test_namd_benchmark_completes_end_to_end_on_a_6hb` (`@pytest.mark.slow`, skips if no
+NAMD) builds a 6hb from scratch, presses the real route + polls, asserts `completed` + ns/day > 0.
+
+## NAMD benchmark aligned to production fast-mode (2026-06-30)
+The plain bench conf (2 fs, no HMR, `GPUresident off`) under-reported throughput ~3-5x vs a real
+run — a user's 3x6x200 read 5.8 ns/day while production fast-mode gives ~16. The timed `bench.conf`
+now mirrors production fast mode: **HMR PSF (`{stem}_hmr.psf` via `write_hmr_psf`) + 4 fs +
+`GPUresident on`**. Gotchas found + fixed:
+- **GPUresident crashes on the raw proxy** ("Low global CUDA exclusion count") — the synthetic bundle
+  has ~+1e6 kcal/mol VDW clashes and a 204-step minimize doesn't clear them. Fix: the one-time settle
+  is now `minimize 2004` + a short soft `run 1200` (rigidBonds none) → VDW ≈ −4.8e6, fast mode stable.
+  Trials still measure only the fast-mode `run` restarting from that settled conf. Constants:
+  `NAMD_MIN_STEPS=2004`, `NAMD_SETTLE_MD_STEPS=1200`.
+- **Parser missed NAMD 3's `ns/day` format**: GPUresident prints `29.3 ns/day` (value-first, no colon)
+  vs the old `0.027 days/ns`. `namd_metrics.parse_namd_log` now handles both, taking the LAST
+  Benchmark line (`_RE_DAYS_PER_NS` / `_RE_NS_PER_DAY`). Non-GPUresident runs still emit days/ns.
+- With the `multicore-CUDA` binary EVERY trial uses the GPU (the `+devices` flag only picks which),
+  so `GPUresident on` is valid for all grid configs. Verified full 6-config sweep on a capped 4000-nt
+  proxy: ~28-34 ns/day, `completed`. NOTE the benchmark is still a proxy (≤`NAMD_MAX_NT=4000`, 6hb rod),
+  so its absolute ns/day ≈ production for same-size systems but won't equal a much larger real design.
+
+## "CPU-only" NAMD config was a fiction on CUDA builds (FIXED 2026-06-30)
+User saw "best = +p16 CPU 29 ns/day" and rightly asked how CPU beats GPU. Root cause: the
+installed NAMD is a `multicore-CUDA` binary — it ALWAYS runs on a GPU; omitting `+devices`
+just auto-selects device 0. Verified: the `devices=""` trial logs "binding to CUDA device 0 …
+Running with GPU-resident mode". So "+p16 CPU" and "+p16 GPU:0" were the SAME GPU path (why they
+tied within noise); the "CPU" label was wrong and there was no real CPU-only result.
+Fix:
+- `namd_runner.namd_is_cuda_build(bin)` (lru_cached) runs the binary bare, greps its banner for
+  "CUDA". `routes_benchmark._namd_is_cuda_build()` feeds it to the grid.
+- `benchmark.namd_config_grid(..., cuda_build=)`: CUDA build → per-GPU targets only (no fake CPU
+  arm); single GPU → just thread-count sweep on GPU:0; **multi**-GPU → adds a real `GPU:all`
+  (`devices=""`) config. CPU build / NAMD absent → CPU-thread configs (unchanged).
+- Recommendation now carries the honest `label`; frontend `_recLine` uses it (never prints
+  "CPU-only" for a GPU run). Real grid here: `['+p8 GPU:0','+p16 GPU:0','+p32 GPU:0']`.
+
 ## Verification status
 - oxDNA sweep **GPU-verified end-to-end** at runner level: CPU 477 vs CUDA 1045 steps/s
   on RTX 2080 SUPER → recommends CUDA, temp dir cleaned.
+- **NAMD sweep now verified end-to-end** (2026-06-30, RTX 3080 Ti / 32-core): full 6-config grid
+  completes, e.g. +p16 CPU 116 ns/day; single-CPU slow test green in ~9 s.
 - Live `GET /benchmark/hardware` confirmed against real nvidia-smi (12 CPU, 1 GPU).
 - Routes/apply/metadata TestClient-pinned; full panel flow vitest-pinned.
-- **NOT verified**: live browser button gesture (dev server was wedged mid-reload) →
-  see **MV-BENCH** in `manual_validation_debt.md`. NAMD real-binary ns/day not run here.
+- **NOT verified**: live browser button gesture → see **MV-BENCH** in `manual_validation_debt.md`.

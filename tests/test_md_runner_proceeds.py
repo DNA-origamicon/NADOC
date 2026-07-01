@@ -196,10 +196,12 @@ def test_wc_only_breach_warns_and_continues(
     assert all((not s.passed) and (not s.blocking) for s in final.health_samples)
 
 
-def test_c1_breach_still_fails_the_run(
+def test_c1_breach_warns_and_continues(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A C1' (backbone) breach is blocking — the run still stops at the checkpoint."""
+    """Health is advisory only — a C1' (backbone) breach no longer stops the run.
+    The ladder marches to completed and the breach is recorded as a warning on
+    every checkpoint sample (surfaced as a ⚠ in the UI)."""
     job = _setup_package(tmp_path)
     _install_fakes(monkeypatch)
     monkeypatch.setattr(
@@ -215,11 +217,12 @@ def test_c1_breach_still_fails_the_run(
     asyncio.run(nr.run_job(job, tmp_path))
 
     final = MdJob.load(job.job_id, tmp_path)
-    assert final.status == MdStatus.failed
-    assert "Health gate failed" in (final.error or "")
-    # Stopped at the first segment; the second never ran.
-    assert final.segments[0].status == "failed"
-    assert final.segments[1].status == "pending"
+    assert final.status == MdStatus.completed
+    assert [s.status for s in final.segments] == ["done", "done"]
+    assert final.error is None
+    # The below-threshold breach is still recorded on each checkpoint.
+    assert final.health_samples
+    assert all(not s.passed for s in final.health_samples)
 
 
 def test_resume_clears_stale_error_and_uses_checkpoint(

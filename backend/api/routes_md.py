@@ -28,7 +28,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
@@ -97,6 +97,15 @@ class CreateJobRequest(BaseModel):
         description="Run the WHOLE ladder with the soft integrator (rigidBonds none "
                     "+ 1 fs), not just the first segment. The instability 'Fix' remedy "
                     "sets this for a model that keeps blowing up rigid-bond RATTLE.",
+    )
+    fast: bool = Field(
+        True,
+        description="Fast relaxation (DEFAULT): hydrogen-mass repartitioning + 4 fs "
+                    "timestep + NAMD GPU-resident on the hard ladder (~4x NPT throughput "
+                    "on a capped box). Auto-disabled for soft/declash ladders. Same "
+                    "simulated ns per stage (step count halved), wall-clock ~4x shorter. "
+                    "Set false (or untick in the UI) if a very large design fails the "
+                    "first hard segment with a GPU out-of-memory error.",
     )
     design_source_path: Optional[str] = Field(
         None,
@@ -280,15 +289,35 @@ def _md_segment_dcds(job: MdJob) -> list[tuple[str, str, Path]]:
     return out
 
 
+async def _run_md_analysis(request, job_id: str, kind: str, qualname: str,
+                           args: tuple, *, timeout_s: float = 180.0):
+    """Run a heavy md_trajectory analysis in a killable subprocess, cancelling it if
+    the client disconnects (the frontend aborts the fetch when the view is toggled
+    off).  Supersedes any in-flight analysis for the same (job_id, kind)."""
+    from backend.core import md_analysis_runner  # noqa: PLC0415
+
+    task = asyncio.create_task(md_analysis_runner.run_analysis(
+        job_id, kind, "backend.core.md_trajectory", qualname, args, timeout_s=timeout_s))
+    try:
+        while not task.done():
+            if request is not None and await request.is_disconnected():
+                md_analysis_runner.cancel(job_id, kind)
+                task.cancel()
+                break
+            await asyncio.sleep(0.25)
+        return await task
+    except asyncio.CancelledError:
+        md_analysis_runner.cancel(job_id, kind)
+        raise
+
+
 @router.get("/md/jobs/{job_id}/trajectory")
-async def get_md_job_trajectory(job_id: str) -> dict:
+async def get_md_job_trajectory(job_id: str, request: Request) -> dict:
     """Composite scrub-able NAMD trajectory (every written segment, CG/nadoc beads)
     for an animation trajectory keyframe — SAME payload shape as the oxDNA
     /trajectory endpoint ({ready, n_frames, keys, frames, markers, stages}), so the
     animation player's trajectory path is reused unchanged. Deforms the active
     design (like the live Display-MD toggle)."""
-    from backend.core.md_trajectory import md_composite_trajectory
-
     job = _load_job(job_id)
     package_dir = job.package_dir(_workspace())
     psf = package_dir / f"{job.name_stem}.psf"
@@ -299,7 +328,8 @@ async def get_md_job_trajectory(job_id: str) -> dict:
     if not segments:
         return {"ready": False, "reason": "no trajectory yet"}
     design = design_state.get_or_404()
-    result = await run_in_threadpool(md_composite_trajectory, psf, segments, ref, design)
+    result = await _run_md_analysis(
+        request, job_id, "trajectory", "md_composite_trajectory", (psf, segments, ref, design))
     return {"ready": result["n_frames"] > 0, **result}
 
 
@@ -322,14 +352,13 @@ async def get_md_job_trajectory_meta(job_id: str) -> dict:
 
 
 @router.get("/md/jobs/{job_id}/rmsf")
-async def get_md_job_rmsf(job_id: str) -> dict:
+async def get_md_job_rmsf(job_id: str, request: Request) -> dict:
     """Per-nucleotide flexibility map (RMSF) over the NAMD run — the MD analogue of
     GET /oxdna/jobs/{id}/rmsf. Pools EVERY written segment (flex-map gating is "all
     segments"), Kabsch-aligns each frame to the design, and returns the per-base mean
     backbone position + base normal + RMSF. SAME payload shape as the oxDNA endpoint,
     so the frontend flexibility-map code consumes it unchanged. A confidence block
     flags short runs (autocorrelated frames → true error ≥ 1/sqrt(2N))."""
-    from backend.core.md_trajectory import md_rmsf
     from backend.core.oxdna_health import rmsf_confidence
 
     inputs = _md_traj_inputs(job_id)
@@ -337,7 +366,8 @@ async def get_md_job_rmsf(job_id: str) -> dict:
         return {"ready": False, "reason": "topology/reference or trajectory not found",
                 "positions": []}
     psf, ref, segments, design = inputs
-    result = await run_in_threadpool(md_rmsf, psf, segments, ref, design)
+    result = await _run_md_analysis(
+        request, job_id, "rmsf", "md_rmsf", (psf, segments, ref, design))
     if result.get("ready"):
         result["confidence"] = rmsf_confidence(result.get("n_frames", 0))
     return result
@@ -372,31 +402,43 @@ def _md_traj_inputs(job_id: str):
 
 
 @router.post("/md/jobs/{job_id}/frames-atomistic")
-async def md_frames_atomistic_route(job_id: str, body: MdFramesAtomisticBody) -> dict:
+async def md_frames_atomistic_route(job_id: str, body: MdFramesAtomisticBody,
+                                    request: Request) -> dict:
     """Per-frame DNA heavy atoms for NAMD trajectory frame indices (Phase 2b) —
     {idx: {atoms, bonds}}. The NAMD model's own atoms, rendered directly."""
-    from backend.core.md_trajectory import md_frames_atomistic
-
     inputs = _md_traj_inputs(job_id)
     if inputs is None:
         return {}
     psf, ref, segments, design = inputs
-    return await run_in_threadpool(md_frames_atomistic, psf, segments, ref, design, body.frame_indices)
+    return await _run_md_analysis(
+        request, job_id, "atomistic", "md_frames_atomistic",
+        (psf, segments, ref, design, body.frame_indices))
 
 
 @router.post("/md/jobs/{job_id}/frames-surface")
-async def md_frames_surface_route(job_id: str, body: MdFramesSurfaceBody) -> dict:
+async def md_frames_surface_route(job_id: str, body: MdFramesSurfaceBody,
+                                  request: Request) -> dict:
     """Per-frame molecular surface from the NAMD DNA heavy atoms (Phase 2b) —
     surface-batch shape {idx: {vertices, faces}}."""
-    from backend.core.md_trajectory import md_frames_surface
-
     inputs = _md_traj_inputs(job_id)
     if inputs is None:
         return {}
     psf, ref, segments, design = inputs
-    return await run_in_threadpool(
-        md_frames_surface, psf, segments, ref, design, body.frame_indices,
-        body.probe_radius, body.grid_spacing, body.radius_inflate, body.smooth)
+    return await _run_md_analysis(
+        request, job_id, "surface", "md_frames_surface",
+        (psf, segments, ref, design, body.frame_indices, body.probe_radius,
+         body.grid_spacing, body.radius_inflate, body.smooth))
+
+
+@router.post("/md/jobs/{job_id}/analysis/cancel")
+async def md_cancel_analysis(job_id: str, kind: Optional[str] = None) -> dict:
+    """Kill the in-flight trajectory/RMSF/surface analysis for this job — wired to
+    the frontend toggling a view OFF, so a heavy MDAnalysis read of a live, growing
+    DCD can't run away after the user stops looking at it.  ``kind`` (rmsf /
+    trajectory / surface / atomistic) cancels one view; omit it to cancel all."""
+    from backend.core import md_analysis_runner  # noqa: PLC0415
+
+    return {"cancelled": md_analysis_runner.cancel(job_id, kind)}
 
 
 def _display_dcd_freq(steps: int) -> int:
@@ -875,12 +917,16 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
         ion_conc_mM = 0.0
         mg_conc_mM = 12.5
 
+    # Fast mode runs the hard ladder GPU-resident (GPU-bound): +p4 matches +p16 in
+    # throughput while freeing ~12 cores, so cap threads when fast is on.
+    job_threads = min(body.threads, 4) if body.fast else body.threads
+
     job = new_job(
         design_name    = name,
         protocol       = body.protocol,
         name_stem      = "",       # filled in after prep
         package_subdir = "",       # filled in after prep
-        threads        = body.threads,
+        threads        = job_threads,
         devices        = body.devices,
         design_source_path = body.design_source_path,
         seed_oxdna_job_id  = body.oxdna_job_id if seeded else None,
@@ -1015,6 +1061,7 @@ async def _prepare_job_bg(
             atomistic_model = seed_model,
             declash         = body.declash,
             force_soft      = body.force_soft,
+            fast            = body.fast,
             progress        = tracker.report,
         )
         logger.info("prep %s: done; package=%s name_stem=%s segments=%d",
@@ -1527,6 +1574,23 @@ async def namd_available() -> dict:
         "gmx_path":       gmx_path,
         "recommended_threads": default_threads(),
     }
+
+
+@router.get("/md/gpu-status")
+async def gpu_status(devices: str = "0") -> dict:
+    """Report external GPU-compute contention before the user starts a run.
+
+    Flags a background process (e.g. an experiment's NAMD, a manual GROMACS run)
+    holding the GPU, so the panel can warn before a second run OOMs the card.
+    This app's own running NAMD jobs are excluded — the concurrent-job guard
+    covers those.  Never throws: returns ``available:False`` if nvidia-smi is
+    absent or the query fails.
+    """
+    from backend.core.md_vram import detect_gpu_activity, gpu_contention_summary  # noqa: PLC0415
+    from backend.core.namd_runner import active_namd_pids  # noqa: PLC0415
+
+    activity = await run_in_threadpool(detect_gpu_activity, devices)
+    return gpu_contention_summary(activity, own_pids=active_namd_pids())
 
 
 # ── Molecular Dynamics load ────────────────────────────────────────────────────

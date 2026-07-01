@@ -309,6 +309,150 @@ def production_rmsf(
     return out
 
 
+def twist_series_stats(series) -> dict:
+    """Mean + correlation-corrected sampling error of a per-frame scalar time series.
+
+    A production trajectory's frames are NOT independent: a slow collective mode (e.g. a long
+    bundle's global twist) decorrelates over an integrated autocorrelation time ``tau_int`` of
+    many frames, so the naive ``std/sqrt(N)`` badly UNDER-states the error.  This returns the
+    honest version:
+
+      ``tau_int = 1 + 2·Σ_{t≥1} rho(t)``  (rho = normalised autocovariance, summed up to the
+      first non-positive lag — the standard automatic window), ``N_eff = N / tau_int`` effectively
+      independent samples, and ``sem = std / sqrt(N_eff)``.
+
+    ``N_eff`` is the key diagnostic: if ``N_eff`` is only a handful despite hundreds of frames,
+    the slow mode is under-sampled and a LONGER run (or more seeds) is needed; if ``N_eff`` ≈ N,
+    the frames are effectively independent and the run length is fine.  Returns
+    ``{n, mean, std, tau_int, n_eff, sem}``.
+    """
+    a = np.asarray(series, dtype=float)
+    n = int(a.size)
+    if n < 2:
+        m = float(a.mean()) if n else 0.0
+        return {"n": n, "mean": m, "std": 0.0, "tau_int": 1.0, "n_eff": float(n), "sem": 0.0}
+    mean = float(a.mean())
+    d = a - mean
+    var = float((d * d).mean())
+    if var <= 0.0:                                  # constant series → fully correlated-free
+        return {"n": n, "mean": mean, "std": 0.0, "tau_int": 1.0, "n_eff": float(n), "sem": 0.0}
+    tau = 1.0
+    for t in range(1, n):
+        rho = float((d[:-t] * d[t:]).mean()) / var
+        if rho <= 0.0:                              # automatic windowing at first zero-crossing
+            break
+        tau += 2.0 * rho
+    tau = max(1.0, tau)
+    n_eff = n / tau
+    std = var ** 0.5
+    return {"n": n, "mean": mean, "std": std, "tau_int": tau,
+            "n_eff": n_eff, "sem": std / (n_eff ** 0.5)}
+
+
+def detect_equilibration(series, *, min_remaining: int = 20) -> dict:
+    """Automatic equilibration / burn-in detection (Chodera, *JCTC* 2016): pick the discard
+    cutoff ``t0`` that MAXIMISES the effective sample count ``N_eff`` of the kept tail
+    ``series[t0:]``.
+
+    A production trajectory often opens with a monotonic TRANSIENT (e.g. a freshly-built bundle
+    relaxing its over-wound global twist) before it reaches the stationary fluctuating regime.
+    Including that ramp biases the mean AND inflates the integrated autocorrelation time (a drift
+    reads as a long τ), so the honest estimate discards it.  Keeping the transient lowers N_eff
+    (high τ); the cutoff that maximises N_eff sits just after equilibration — so this finds the
+    burn-in automatically with no hand-tuned threshold.
+
+    Returns ``{t0, n_eff, stats}`` where ``stats = twist_series_stats(series[t0:])``.  ``t0`` is a
+    FRAME index (multiply by steps-per-frame for physical burn-in length).
+    """
+    a = np.asarray(series, dtype=float)
+    n = a.size
+    if n < min_remaining + 2:
+        st = twist_series_stats(series)
+        return {"t0": 0, "n_eff": st["n_eff"], "stats": st}
+    step = max(1, n // 200)                          # coarse scan — n is ≤ a few thousand frames
+    best_t0, best_neff, best_stats = 0, -1.0, None
+    for t0 in range(0, n - min_remaining, step):
+        st = twist_series_stats(a[t0:])
+        if st["n_eff"] > best_neff:
+            best_t0, best_neff, best_stats = t0, st["n_eff"], st
+    return {"t0": best_t0, "n_eff": best_neff, "stats": best_stats}
+
+
+def production_twist_series(
+    design,
+    production_traj_path,
+    reference_conf_path,
+    analytic_reference,
+    *,
+    n_slices: int = 0,
+) -> dict:
+    """Per-FRAME differential bundle twist over a production trajectory, vs the single value
+    measured on the time-AVERAGE structure.
+
+    The flexibility-map path (:func:`production_rmsf`) averages each nucleotide's POSITION over
+    frames and then measures twist on that one mean structure.  Averaging the positions of a
+    fluctuating helix pulls every site toward its mean (a "shrinkage" that can bias a twist
+    measure), AND collapses the whole run to a single number with no error bar.  This instead
+    measures twist on EACH frame (differential sim − analytic, the same quantity the steering
+    uses) and returns the time series + its correlation-corrected statistics
+    (:func:`twist_series_stats`), so we can (a) compare the two estimators and (b) see how many
+    effectively-independent twist samples an 8M run actually contains.
+
+    Mirrors ``production_rmsf``'s frame handling (PBC-unwrap + Kabsch-align each frame, backbone
+    site, pooled across a list of trajectory paths).  Returns ``{n_frames, analytic_twist,
+    twist_per_frame, twist_on_mean_structure, stats}`` (``stats`` is over the per-frame
+    differential series).  ``ready=False`` if no frames or fewer than two helices.
+    """
+    from backend.physics.oxdna_interface import (
+        _parse_box_nm,
+        oxdna_backbone_site,
+        read_configuration_full,
+        read_trajectory_frames_full,
+        unwrap_align_to_reference,
+    )
+    ref = read_configuration_full(reference_conf_path, design)
+    paths = (list(production_traj_path)
+             if isinstance(production_traj_path, (list, tuple))
+             else [production_traj_path])
+    analytic_twist = measure_bundle_twist(analytic_reference, n_slices=n_slices)
+
+    per_frame: list[float] = []
+    acc: dict[tuple, list] = {}                     # key → [bb xyz, …] for the mean-structure twist
+    n_frames = 0
+    for path in paths:
+        frames = read_trajectory_frames_full(path, design)
+        box = _parse_box_nm(path)
+        for fr in frames:
+            aligned = (unwrap_align_to_reference(fr, ref, design, box)
+                       if box is not None and np.all(box > 0) else fr)
+            frame_positions = []
+            for k, v in aligned.items():
+                bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
+                frame_positions.append({"helix_id": k[0], "bp_index": k[1], "direction": k[2],
+                                        "backbone_position": bb})
+                acc.setdefault(k, []).append(bb)
+            core = _filter_to_reference_core(frame_positions, analytic_reference)
+            try:
+                per_frame.append(measure_bundle_twist(core, n_slices=n_slices) - analytic_twist)
+            except ValueError:
+                continue                            # degenerate frame (too few helices) — skip
+            n_frames += 1
+
+    if n_frames == 0 or not per_frame:
+        return {"ready": False, "n_frames": 0, "twist_per_frame": [],
+                "twist_on_mean_structure": None, "analytic_twist": analytic_twist, "stats": None}
+
+    mean_positions = [{"helix_id": k[0], "bp_index": k[1], "direction": k[2],
+                       "backbone_position": np.mean(v, axis=0)} for k, v in acc.items()]
+    mean_core = _filter_to_reference_core(mean_positions, analytic_reference)
+    twist_on_mean = measure_bundle_twist(mean_core, n_slices=n_slices) - analytic_twist
+    return {"ready": True, "n_frames": n_frames, "analytic_twist": analytic_twist,
+            "twist_per_frame": [round(t, 3) for t in per_frame],
+            "twist_on_mean_structure": round(twist_on_mean, 3),
+            "stats": twist_series_stats(per_frame),
+            "equilibrated": detect_equilibration(per_frame)}
+
+
 # Below this many pooled frames the flexibility map is flagged "preliminary"
 # (rel. error ≳ 10%).  RMSF converges slowly, so a short run is untrustworthy.
 RMSF_PRELIM_FRAMES = 50
@@ -559,6 +703,452 @@ def measure_inter_helix_spacing(positions, landmark_a, landmark_b) -> float:
     w = c_b - c_a
     perp = w - float(np.dot(w, mean_dir)) * mean_dir    # drop the axial component
     return float(np.linalg.norm(perp))
+
+
+def measure_geometry_rmsd(positions, reference_positions) -> float:
+    """Per-nucleotide RMSD (nm) of a relaxed/mean position map to an *analytic
+    reference* geometry, after optimal rigid (Kabsch) superposition.
+
+    This is the self-consistency measure (option (a)): "does the simulated
+    time-averaged structure match the geometry the design *depicts*?"  ``positions``
+    is the production mean structure (from :func:`production_rmsf`); ``reference_positions``
+    is the analytic B-DNA geometry of the SAME design (same ``_geometry_for_design``
+    shape — a list of ``{helix_id, bp_index, direction, backbone_position}`` dicts).
+    Both are keyed by ``(helix_id, bp_index, direction)``; the RMSD is computed over
+    the nucleotides present in BOTH maps, so passing a *core-only* reference (paired
+    duplex, ragged ssDNA ends dropped) restricts the comparison to the rigid core.
+
+    Kabsch removes only the overall translation + rotation (where the bundle floats in
+    the oxDNA box is irrelevant); a residual global twist or bend is NOT a rigid motion
+    and therefore SURVIVES into the RMSD — exactly the signal we want.  Pure magnitude
+    (a distance), so direction-/handedness-agnostic.  Read-only over the Physical layer.
+
+    Raises ``ValueError`` on an empty map or fewer than three shared nucleotides (a
+    rigid superposition is undetermined below three non-collinear points).
+    """
+    if not positions:
+        raise ValueError("measure_geometry_rmsd: empty position map")
+    if not reference_positions:
+        raise ValueError("measure_geometry_rmsd: empty reference map")
+    cur = _backbone_lookup(positions)
+    ref = _backbone_lookup(reference_positions)
+    shared = sorted(set(cur) & set(ref))
+    if len(shared) < 3:
+        raise ValueError(
+            f"measure_geometry_rmsd: only {len(shared)} nucleotide(s) shared between "
+            "the mean structure and the analytic reference — need >= 3 to superpose")
+    P = np.array([cur[k] for k in shared])      # simulated mean
+    Q = np.array([ref[k] for k in shared])      # analytic reference
+    _R, Pa, Qc, _Qm = _kabsch_superpose(P, Q)
+    return float(np.sqrt(((Pa - Qc) ** 2).sum(axis=1).mean()))
+
+
+def _kabsch_superpose(P, Q):
+    """Optimal rigid (Kabsch) superposition of point set ``P`` onto ``Q``.
+
+    Returns ``(R, Pa, Qc, Qmean)`` where ``R`` is the rotation (rows convention:
+    ``Pa = (P − P̄) @ R.T``), ``Pa`` the rotation-aligned centred ``P``, ``Qc`` the
+    centred ``Q``, and ``Qmean`` ``Q``'s centroid — so ``Pa + Qmean`` places the
+    aligned ``P`` in ``Q``'s frame.  Reflection-guarded."""
+    P = np.asarray(P, float)
+    Q = np.asarray(Q, float)
+    Pc = P - P.mean(axis=0)
+    Qmean = Q.mean(axis=0)
+    Qc = Q - Qmean
+    H = Pc.T @ Qc
+    U, _s, Vt = np.linalg.svd(H)
+    d = np.sign(np.linalg.det(Vt.T @ U.T)) or 1.0
+    R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T
+    return R, Pc @ R.T, Qc, Qmean
+
+
+def geometry_deviation_map(positions, reference_positions) -> dict:
+    """PER-NUCLEOTIDE deviation of a relaxed/mean structure from the analytic design,
+    after Kabsch superposition — the spatial breakdown of :func:`measure_geometry_rmsd`.
+
+    Returns ``{positions:[{helix_id, bp_index, direction, backbone_position (the aligned
+    MEAN position, in the design frame), nx, ny, nz (mean a1, rotated), deviation (nm)}],
+    min_deviation, max_deviation, mean_deviation, n_shared}`` — the display feed for the
+    autorefine "deviation map" (mean structure recoloured by distance from design).
+    Read-only over the Physical layer."""
+    if not positions:
+        raise ValueError("geometry_deviation_map: empty position map")
+    if not reference_positions:
+        raise ValueError("geometry_deviation_map: empty reference map")
+    cur_pos = _backbone_lookup(positions)
+    cur_a1 = {(p["helix_id"], int(p["bp_index"]),
+               getattr(p["direction"], "value", p["direction"])):
+              np.array([p.get("nx", 0.0), p.get("ny", 0.0), p.get("nz", 0.0)], float)
+              for p in positions}
+    ref = _backbone_lookup(reference_positions)
+    shared = sorted(set(cur_pos) & set(ref))
+    if len(shared) < 3:
+        raise ValueError(
+            f"geometry_deviation_map: only {len(shared)} shared nucleotide(s) — "
+            "need >= 3 to superpose")
+    P = np.array([cur_pos[k] for k in shared])
+    Q = np.array([ref[k] for k in shared])
+    R, Pa, Qc, Qmean = _kabsch_superpose(P, Q)
+    dev = np.linalg.norm(Pa - Qc, axis=1)       # per-nucleotide deviation (nm)
+    aligned = Pa + Qmean                         # aligned mean positions in design frame
+    out = []
+    for i, k in enumerate(shared):
+        a1 = R @ cur_a1.get(k, np.zeros(3))      # rotate a1 into the aligned frame
+        out.append({"helix_id": k[0], "bp_index": k[1], "direction": k[2],
+                    "backbone_position": aligned[i].tolist(),
+                    "nx": float(a1[0]), "ny": float(a1[1]), "nz": float(a1[2]),
+                    "deviation": float(dev[i])})
+    return {"positions": out, "min_deviation": float(dev.min()),
+            "max_deviation": float(dev.max()), "mean_deviation": float(dev.mean()),
+            "n_shared": len(shared)}
+
+
+def _bundle_axis_frame(pts):
+    """Right-handed frame ``(centroid C, axis L, e1, e2)`` for a bundle point cloud.
+
+    ``L`` is the bundle's principal (long) direction; ``e1``/``e2`` span the
+    cross-sectional plane with ``e1 x e2 == L`` — so a rotation carrying ``e1`` toward
+    ``e2`` is a RIGHT-handed twist about ``L``.  ``L`` is sign-normalised (largest
+    component positive) for determinism; the twist sign is invariant to that choice
+    (reversing ``L`` reverses both the traversal order and the frame handedness, which
+    cancel).
+    """
+    pts = np.asarray(pts, dtype=float)
+    C = pts.mean(axis=0)
+    _, sv, vh = np.linalg.svd(pts - C, full_matrices=False)
+    if sv[0] < 1e-9:
+        raise ValueError("_bundle_axis_frame: points are coincident — no axis")
+    L = vh[0]
+    if L[int(np.argmax(np.abs(L)))] < 0:
+        L = -L
+    e1 = vh[1] - float(vh[1] @ L) * L
+    n1 = np.linalg.norm(e1)
+    if n1 < 1e-9:                                # degenerate 2nd singular vector
+        seed = np.array([1.0, 0.0, 0.0]) if abs(L[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        e1 = seed - float(seed @ L) * L
+        n1 = np.linalg.norm(e1)
+    e1 = e1 / n1
+    e2 = np.cross(L, e1)                         # e1 x e2 == L (right-handed)
+    return C, L, e1, e2
+
+
+def measure_bundle_twist(positions, *, n_slices: int = 0) -> float:
+    """SIGNED global twist (degrees, right-handed about the bundle axis) accumulated
+    from one end of the bundle to the other.
+
+    A straight (untwisted) bundle keeps the SAME cross-sectional arrangement of helices
+    at every axial level → 0.  A globally twisted bundle (the square-lattice
+    over-/under-wind that skips correct) rotates that cross-section progressively along
+    the long axis; this returns the total rotation, signed (+ right-handed, − left-handed).
+
+    USE DIFFERENTIALLY.  On real lattice geometry a small reproducible OFFSET survives
+    (ragged ends + the base-pair groove asymmetry the per-turn slab average does not
+    fully cancel — e.g. a dead-straight analytic 2×3 bundle reads ≈ −9°, not 0).  For
+    self-consistency steering (option (a)) the signal is ``twist(sim) − twist(analytic)``
+    of the SAME design: the offset cancels and the residual is the real over/under-wind.
+
+    Method: fit the bundle axis ``L`` + a right-handed cross-section frame
+    (:func:`_bundle_axis_frame`); bin every nucleotide into ``n_slices`` axial slabs;
+    per slab, average each helix's backbone sites to a 2-D cross-section centre; for
+    each consecutive slab pair, best-fit the signed 2-D rotation
+    (``atan2(Σ aᵢ×bᵢ, Σ aᵢ·bᵢ)``) over the helices common to both slabs (centred to
+    drop translation/bend), and ACCUMULATE — so a twist beyond ±180° is unwound
+    correctly rather than aliased.  ``positions`` should be the rigid duplex CORE (pass
+    a core-filtered map); ssDNA ends have ill-defined cross-section centres.
+
+    Raises ``ValueError`` on an empty map, fewer than two helices (no cross-section to
+    rotate), or a degenerate axis.
+    """
+    if not positions:
+        raise ValueError("measure_bundle_twist: empty position map")
+    # Collapse each (helix, bp) column to its base-pair midpoint: averaging the two
+    # complementary backbone sites lands ON the helix axis, so the fast per-helix
+    # backbone spiral (~34°/bp) — which, combined with the lattice's per-helix phase
+    # offsets, would otherwise masquerade as a coherent cross-section rotation — is
+    # killed at the source rather than left for the slab average to fight.
+    bp_pts: dict = {}
+    for p in positions:
+        bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
+            np.asarray(p["backbone_position"], dtype=float))
+    keys = list(bp_pts.keys())
+    pts = np.array([np.mean(bp_pts[k], axis=0) for k in keys])
+    helix_ids = [k[0] for k in keys]
+    if len(set(helix_ids)) < 2:
+        raise ValueError(
+            "measure_bundle_twist: need >= 2 helices to define a cross-section twist")
+    C, L, e1, e2 = _bundle_axis_frame(pts)
+    t = (pts - C) @ L                                   # axial coordinate
+    u = np.column_stack([(pts - C) @ e1, (pts - C) @ e2])   # 2-D cross-section coords
+    span = float(t.max() - t.min())
+    if span < 1e-6:
+        raise ValueError("measure_bundle_twist: zero axial span")
+    if n_slices <= 0:                                   # ~one B-DNA turn (~3.5 nm) per slab
+        n_slices = max(3, int(round(span / 3.5)))
+    edges = np.linspace(t.min(), t.max(), n_slices + 1)
+    slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
+
+    # Per slab: {helix_id: mean 2-D cross-section centre} + the slab's mean axial level.
+    slab_centres: list[dict] = [dict() for _ in range(n_slices)]
+    slab_t: list[float] = [0.0] * n_slices
+    acc: list[dict] = [dict() for _ in range(n_slices)]
+    acc_t: list[list] = [[] for _ in range(n_slices)]
+    for i, hid in enumerate(helix_ids):
+        acc[slab[i]].setdefault(hid, []).append(u[i])
+        acc_t[slab[i]].append(t[i])
+    for k in range(n_slices):
+        for hid, vs in acc[k].items():
+            slab_centres[k][hid] = np.mean(vs, axis=0)
+        if acc_t[k]:
+            slab_t[k] = float(np.mean(acc_t[k]))
+
+    total = 0.0
+    prev = None
+    first_t = last_t = None
+    for k in range(n_slices):
+        cur = slab_centres[k]
+        if prev is not None:
+            common = sorted(set(prev) & set(cur))
+            if len(common) >= 2:
+                A = np.array([prev[h] for h in common])
+                B = np.array([cur[h] for h in common])
+                A = A - A.mean(axis=0)                  # drop translation/bend
+                B = B - B.mean(axis=0)
+                cross = float(np.sum(A[:, 0] * B[:, 1] - A[:, 1] * B[:, 0]))
+                dot = float(np.sum(A[:, 0] * B[:, 0] + A[:, 1] * B[:, 1]))
+                total += float(np.degrees(np.arctan2(cross, dot)))
+                if first_t is None:
+                    first_t = prev_t
+                last_t = slab_t[k]
+        if cur:
+            prev, prev_t = cur, slab_t[k]
+    # The accumulation spans only first-slab-centre → last-slab-centre, i.e.
+    # (1 − 1/n_slices) of the bundle; rescale to the full axial span (exact for a
+    # uniform twist, the regime skips correct).
+    if first_t is not None and last_t is not None and abs(last_t - first_t) > 1e-6:
+        total *= span / (last_t - first_t)
+    return total
+
+
+def measure_bundle_twist_profile(positions, *, n_slices: int = 0) -> list[tuple[float, float]]:
+    """Per-slab CUMULATIVE twist profile ``[(axial_t_nm, cumulative_twist_deg), …]`` — the
+    spatially-resolved breakdown of :func:`measure_bundle_twist` (whose scalar return is the
+    last value of this profile).  Drives the Phase-5 iterative profile-matcher: the residual
+    over-twist RATE between adjacent slabs (the slope of ``profile_sim − profile_analytic``)
+    says WHERE the bundle locally over-winds and therefore where deletion density must rise.
+
+    Same method as :func:`measure_bundle_twist` (bp-midpoint collapse → axis frame → ~1-turn
+    slabs → centred per-slab cross-section rotation, accumulated), returning the running total
+    at each slab centre rather than only the end.  Logic is intentionally duplicated rather
+    than refactored — ``measure_bundle_twist``'s behaviour is locked/load-bearing (its small
+    reproducible offset is relied on differentially).  Use the profile DIFFERENTIALLY too.
+    """
+    if not positions:
+        raise ValueError("measure_bundle_twist_profile: empty position map")
+    bp_pts: dict = {}
+    for p in positions:
+        bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
+            np.asarray(p["backbone_position"], dtype=float))
+    keys = list(bp_pts.keys())
+    pts = np.array([np.mean(bp_pts[k], axis=0) for k in keys])
+    helix_ids = [k[0] for k in keys]
+    if len(set(helix_ids)) < 2:
+        raise ValueError("measure_bundle_twist_profile: need >= 2 helices")
+    C, L, e1, e2 = _bundle_axis_frame(pts)
+    t = (pts - C) @ L
+    u = np.column_stack([(pts - C) @ e1, (pts - C) @ e2])
+    span = float(t.max() - t.min())
+    if span < 1e-6:
+        raise ValueError("measure_bundle_twist_profile: zero axial span")
+    if n_slices <= 0:
+        n_slices = max(3, int(round(span / 3.5)))
+    edges = np.linspace(t.min(), t.max(), n_slices + 1)
+    slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
+
+    slab_centres: list[dict] = [dict() for _ in range(n_slices)]
+    slab_t: list[float] = [0.0] * n_slices
+    acc: list[dict] = [dict() for _ in range(n_slices)]
+    acc_t: list[list] = [[] for _ in range(n_slices)]
+    for i, hid in enumerate(helix_ids):
+        acc[slab[i]].setdefault(hid, []).append(u[i])
+        acc_t[slab[i]].append(t[i])
+    for k in range(n_slices):
+        for hid, vs in acc[k].items():
+            slab_centres[k][hid] = np.mean(vs, axis=0)
+        if acc_t[k]:
+            slab_t[k] = float(np.mean(acc_t[k]))
+
+    profile: list[tuple[float, float]] = []
+    total = 0.0
+    prev = None
+    first_t = last_t = None
+    for k in range(n_slices):
+        cur = slab_centres[k]
+        if prev is not None:
+            common = sorted(set(prev) & set(cur))
+            if len(common) >= 2:
+                A = np.array([prev[h] for h in common]); B = np.array([cur[h] for h in common])
+                A = A - A.mean(axis=0); B = B - B.mean(axis=0)
+                cross = float(np.sum(A[:, 0] * B[:, 1] - A[:, 1] * B[:, 0]))
+                dot = float(np.sum(A[:, 0] * B[:, 0] + A[:, 1] * B[:, 1]))
+                total += float(np.degrees(np.arctan2(cross, dot)))
+                if first_t is None:
+                    first_t = prev_t
+                last_t = slab_t[k]
+        if cur:
+            prev, prev_t = cur, slab_t[k]
+            profile.append((slab_t[k], total))
+    # Rescale so the endpoint matches measure_bundle_twist's full-span value.
+    if first_t is not None and last_t is not None and abs(last_t - first_t) > 1e-6:
+        scale = span / (last_t - first_t)
+        profile = [(tt, val * scale) for tt, val in profile]
+    return profile
+
+
+def measure_bundle_bend(positions, *, n_slices: int = 0) -> float:
+    """Global AXIS BEND (degrees): the end-to-end deflection of the bundle's centroid
+    polyline.  A straight bundle's per-slab centroids are collinear → ~0; a bowed/bent
+    bundle deflects.  Companion GUARD to :func:`measure_bundle_twist` for regional skip
+    placement — redistributing deletions to match the local twist profile must not silently
+    introduce net bend (the twist↔bend coupling pitfall).  Use DIFFERENTIALLY (regional −
+    uniform of the SAME design) so a fixed lattice offset cancels.  Returns 0.0 when there
+    are too few slabs to define curvature.
+
+    Method mirrors :func:`measure_bundle_twist`: collapse each (helix, bp) column to its
+    base-pair midpoint (kills the per-helix backbone spiral), fit the bundle axis, bin into
+    ~1-turn axial slabs, take each slab's 3-D centroid, and return the angle between the
+    first and last segments of that centroid polyline.  Pass the rigid duplex CORE.
+    """
+    if not positions:
+        raise ValueError("measure_bundle_bend: empty position map")
+    bp_pts: dict = {}
+    for p in positions:
+        bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
+            np.asarray(p["backbone_position"], dtype=float))
+    pts = np.array([np.mean(v, axis=0) for v in bp_pts.values()])
+    if len(pts) < 4:
+        return 0.0
+    C, L, _e1, _e2 = _bundle_axis_frame(pts)
+    t = (pts - C) @ L
+    span = float(t.max() - t.min())
+    if span < 1e-6:
+        return 0.0
+    if n_slices <= 0:
+        n_slices = max(3, int(round(span / 3.5)))
+    edges = np.linspace(t.min(), t.max(), n_slices + 1)
+    slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
+    centroids = [pts[slab == k].mean(axis=0) for k in range(n_slices) if np.any(slab == k)]
+    if len(centroids) < 3:
+        return 0.0
+    centroids = np.array(centroids)
+    d0, d1 = centroids[1] - centroids[0], centroids[-1] - centroids[-2]
+    n0, n1 = float(np.linalg.norm(d0)), float(np.linalg.norm(d1))
+    if n0 < 1e-9 or n1 < 1e-9:
+        return 0.0
+    return float(np.degrees(np.arccos(np.clip(np.dot(d0, d1) / (n0 * n1), -1.0, 1.0))))
+
+
+def measure_bundle_curvature(positions, *, n_slices: int = 0) -> float:
+    """INTEGRATED total absolute curvature of the bundle centreline (degrees per nm).
+
+    Companion to :func:`measure_bundle_twist`: a skip pattern that cancels global twist is
+    only useful if the bundle also stays STRAIGHT.  :func:`measure_bundle_bend` reports the
+    end-to-end deflection (angle between the first and last centroid segment) and so reads
+    ~0 for an S-bend whose two halves curve oppositely and cancel — yet that bundle is just
+    as deformed.  This instead sums the |turning angle| at EVERY interior vertex of the
+    slab-centroid polyline and normalises by the polyline arc length, so any local curving
+    (single bow, S-bend, or kink) contributes.  A straight bundle reads ~0; a uniform arc of
+    radius ``R`` reads ``degrees(1/R)`` (its constant κ).  Like twist, use DIFFERENTIALLY
+    (``curvature(sim) − curvature(analytic)``) so the small fixed lattice offset cancels.
+
+    Method mirrors :func:`measure_bundle_bend`: collapse each ``(helix, bp)`` column to its
+    base-pair midpoint (kills the per-helix backbone spiral), fit the bundle axis, bin into
+    ~1-turn axial slabs, take each slab's 3-D centroid, then accumulate the turning angle
+    between consecutive segments of that centroid polyline divided by its total length.
+    Returns 0.0 when there are too few slabs to define curvature.  Pass the rigid duplex CORE.
+    """
+    if not positions:
+        raise ValueError("measure_bundle_curvature: empty position map")
+    bp_pts: dict = {}
+    for p in positions:
+        bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
+            np.asarray(p["backbone_position"], dtype=float))
+    pts = np.array([np.mean(v, axis=0) for v in bp_pts.values()])
+    if len(pts) < 4:
+        return 0.0
+    C, L, _e1, _e2 = _bundle_axis_frame(pts)
+    t = (pts - C) @ L
+    span = float(t.max() - t.min())
+    if span < 1e-6:
+        return 0.0
+    if n_slices <= 0:
+        n_slices = max(3, int(round(span / 3.5)))
+    edges = np.linspace(t.min(), t.max(), n_slices + 1)
+    slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
+    centroids = [pts[slab == k].mean(axis=0) for k in range(n_slices) if np.any(slab == k)]
+    if len(centroids) < 3:
+        return 0.0
+    centroids = np.array(centroids)
+    segs = np.diff(centroids, axis=0)                       # consecutive polyline segments
+    seg_len = np.linalg.norm(segs, axis=1)
+    arc = float(seg_len.sum())
+    if arc < 1e-9:
+        return 0.0
+    total_turn = 0.0
+    for k in range(len(segs) - 1):
+        n0, n1 = float(seg_len[k]), float(seg_len[k + 1])
+        if n0 < 1e-9 or n1 < 1e-9:
+            continue
+        cos = float(np.dot(segs[k], segs[k + 1]) / (n0 * n1))
+        total_turn += float(np.degrees(np.arccos(np.clip(cos, -1.0, 1.0))))
+    return total_turn / arc                                  # deg per nm
+
+
+def measure_bundle_curvature_profile(positions, *, n_slices: int = 0) -> list[tuple[float, float]]:
+    """Per-position CUMULATIVE bending profile ``[(axial_t_nm, cumulative_turning_deg), …]`` — the
+    curvature analogue of :func:`measure_bundle_twist_profile`.  The running sum of |turning angle|
+    along the slab-centroid polyline: a straight bundle stays ~flat near 0, a bent region ramps,
+    and the LOCAL SLOPE between adjacent points is the local curvature (deg/nm) — so the profile
+    says WHERE the bundle bends, the way the twist profile says where it over-winds.  The endpoint
+    equals the total absolute turning (the un-normalised cousin of :func:`measure_bundle_curvature`).
+    Use DIFFERENTIALLY (sim − analytic) like the twist profile.  Pass the rigid duplex CORE.
+    """
+    if not positions:
+        raise ValueError("measure_bundle_curvature_profile: empty position map")
+    bp_pts: dict = {}
+    for p in positions:
+        bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
+            np.asarray(p["backbone_position"], dtype=float))
+    pts = np.array([np.mean(v, axis=0) for v in bp_pts.values()])
+    if len(pts) < 4:
+        return []
+    C, L, _e1, _e2 = _bundle_axis_frame(pts)
+    t = (pts - C) @ L
+    span = float(t.max() - t.min())
+    if span < 1e-6:
+        return []
+    if n_slices <= 0:
+        n_slices = max(3, int(round(span / 3.5)))
+    edges = np.linspace(t.min(), t.max(), n_slices + 1)
+    slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
+    cen, cen_t = [], []
+    for k in range(n_slices):
+        m = slab == k
+        if np.any(m):
+            cen.append(pts[m].mean(axis=0)); cen_t.append(float(t[m].mean()))
+    if len(cen) < 3:
+        return []
+    cen = np.array(cen)
+    segs = np.diff(cen, axis=0)
+    seg_len = np.linalg.norm(segs, axis=1)
+    profile = [(cen_t[0], 0.0), (cen_t[1], 0.0)]            # turning is defined at interior vertices
+    total = 0.0
+    for k in range(len(segs) - 1):
+        n0, n1 = float(seg_len[k]), float(seg_len[k + 1])
+        if n0 >= 1e-9 and n1 >= 1e-9:
+            cos = float(np.dot(segs[k], segs[k + 1]) / (n0 * n1))
+            total += float(np.degrees(np.arccos(np.clip(cos, -1.0, 1.0))))
+        profile.append((cen_t[k + 2], total))
+    return profile
 
 
 def measure_field_response(
@@ -958,16 +1548,21 @@ class ConstraintSpecError(ValueError):
 
 
 _CONSTRAINT_MEASURES = frozenset(
-    {"end_to_end", "radius_of_gyration", "segment_angle", "inter_helix_spacing"})
+    {"end_to_end", "radius_of_gyration", "segment_angle", "inter_helix_spacing",
+     "geometry_match", "bundle_twist"})
 # How many landmarks each measure consumes.  0 = whole-structure (no landmarks).
 # NB: target_nm/tol_nm carry the measure's native unit — nm for length measures
-# (end_to_end, radius_of_gyration, inter_helix_spacing), DEGREES for the angular
-# segment_angle (the field names are kept for backward compatibility).  For
-# inter_helix_spacing the two landmarks each only NAME a helix (any nucleotide on
-# it); the measure groups every site of that helix to fit its axis.
+# (end_to_end, radius_of_gyration, inter_helix_spacing, geometry_match), DEGREES for
+# the angular measures (segment_angle, bundle_twist).  The field names are kept for
+# backward compatibility.  For inter_helix_spacing the two landmarks each only NAME a
+# helix (any nucleotide on it); the measure groups every site of that helix to fit its
+# axis.  geometry_match + bundle_twist are whole-structure *self-consistency* measures
+# (no landmarks) that compare the mean structure to the design's ANALYTIC geometry —
+# they require a ``reference_positions`` supplied at check time (not in the spec).
+_REFERENCE_MEASURES = frozenset({"geometry_match", "bundle_twist"})
 _MEASURE_LANDMARK_COUNT = {
     "end_to_end": 2, "radius_of_gyration": 0, "segment_angle": 3,
-    "inter_helix_spacing": 2}
+    "inter_helix_spacing": 2, "geometry_match": 0, "bundle_twist": 0}
 _CONSTRAINT_KEYS = frozenset(
     {"measure", "landmarks", "target_nm", "tol_nm", "min_confidence"})
 
@@ -1000,11 +1595,26 @@ def _require_number(value, name: str, *, positive: bool = False) -> float:
     return float(value)
 
 
-def _dispatch_measure(measure: str, positions, landmarks):
+def _filter_to_reference_core(positions, reference):
+    """Sub-list of ``positions`` whose ``(helix_id, bp_index, direction)`` key is
+    present in ``reference`` — the reference (a core-only analytic geometry) doubles
+    as the CORE MASK, so ragged ssDNA ends absent from the reference are dropped from
+    the simulated mean before a self-consistency measure runs."""
+    ref_keys = {
+        (p["helix_id"], int(p["bp_index"]),
+         getattr(p["direction"], "value", p["direction"]))
+        for p in reference}
+    return [p for p in positions
+            if (p["helix_id"], int(p["bp_index"]),
+                getattr(p["direction"], "value", p["direction"])) in ref_keys]
+
+
+def _dispatch_measure(measure: str, positions, landmarks, reference=None):
     """Compute the named relaxed-structure measure from a position map + the
     parsed (already-validated) landmark list.  Adding a new ``measure_*`` kind =
     add it to :data:`_CONSTRAINT_MEASURES` + :data:`_MEASURE_LANDMARK_COUNT` and a
-    branch here."""
+    branch here.  ``reference`` (the design's analytic geometry) is required by the
+    self-consistency measures in :data:`_REFERENCE_MEASURES`."""
     if measure == "end_to_end":
         return measure_end_to_end(positions, landmarks[0], landmarks[1])
     if measure == "radius_of_gyration":
@@ -1014,6 +1624,17 @@ def _dispatch_measure(measure: str, positions, landmarks):
             positions, landmarks[0], landmarks[1], landmarks[2])
     if measure == "inter_helix_spacing":
         return measure_inter_helix_spacing(positions, landmarks[0], landmarks[1])
+    if measure in _REFERENCE_MEASURES:
+        if not reference:
+            raise ConstraintSpecError(
+                f"constraint measure {measure!r} is a self-consistency measure — it "
+                "needs the design's analytic reference geometry (reference_positions)")
+        core = _filter_to_reference_core(positions, reference)
+        if measure == "geometry_match":
+            return measure_geometry_rmsd(core, reference)
+        # bundle_twist: report the SIGNED residual vs the analytic depiction, so the
+        # reproducible measurement offset cancels (target a 0° residual).
+        return measure_bundle_twist(core) - measure_bundle_twist(reference)
     raise ConstraintSpecError(  # unreachable — parse pins the measure
         f"no measurement implemented for {measure!r}")
 
@@ -1078,7 +1699,7 @@ def parse_constraint_spec(spec) -> dict:
             "tol_nm": tol, "min_confidence": int(min_conf)}
 
 
-def check_relaxed_constraint(constraint, relaxed_output) -> dict:
+def check_relaxed_constraint(constraint, relaxed_output, reference_positions=None) -> dict:
     """REPORT (do not assert) whether a relaxed structure meets a declarative
     constraint — the AF-13 P3 reporter that AF-13 P4's iterate-until-met loop and
     the AF-11 grammar's ``constraints`` block consume.
@@ -1087,6 +1708,11 @@ def check_relaxed_constraint(constraint, relaxed_output) -> dict:
     via :func:`parse_constraint_spec`).  ``relaxed_output`` is the dict returned by
     :func:`~backend.api.headless_oxdna_build.read_flexibility_map` (the production
     mean structure): ``{ready, positions, confidence:{n_frames,...}, ...}``.
+    ``reference_positions`` is the design's ANALYTIC geometry (core-only) — required
+    by the self-consistency measures (``geometry_match`` / ``bundle_twist``) and
+    ignored by the others.  For ``geometry_match`` the verdict also carries a
+    ``steering`` block (``{bundle_twist_residual_deg}``) — the SIGNED over/under-wind
+    vs the depiction, since the RMSD gate itself is unsigned.
 
     Returns ``{met, status, measured_nm, target_nm, tol_nm, n_frames,
     min_confidence, confidence}`` where ``status`` is one of:
@@ -1116,8 +1742,24 @@ def check_relaxed_constraint(constraint, relaxed_output) -> dict:
     has_structure = bool(out.get("ready")) and bool(positions)
 
     measured = None
+    steering = None
     if has_structure:
-        measured = _dispatch_measure(c["measure"], positions, c["landmarks"])
+        if c["measure"] in _REFERENCE_MEASURES and reference_positions:
+            # Compute BOTH self-consistency metrics so the verdict carries the unsigned
+            # RMSD-to-design AND the SIGNED twist residual regardless of which one gates
+            # — the other is the companion the optimizer (direction) and the before/after
+            # panel read.  geometry_match RMSD is too insensitive to a distributed global
+            # twist to gate a large bundle, so bundle_twist is the right gate for plain
+            # square lattices; both are still reported either way.
+            rmsd = _dispatch_measure("geometry_match", positions, [],
+                                     reference=reference_positions)
+            twist = _dispatch_measure("bundle_twist", positions, [],
+                                      reference=reference_positions)
+            steering = {"geometry_rmsd_nm": rmsd, "bundle_twist_residual_deg": twist}
+            measured = rmsd if c["measure"] == "geometry_match" else twist
+        else:
+            measured = _dispatch_measure(
+                c["measure"], positions, c["landmarks"], reference=reference_positions)
 
     if not has_structure or n_frames < min_conf:
         status, met = "inconclusive", False
@@ -1126,9 +1768,12 @@ def check_relaxed_constraint(constraint, relaxed_output) -> dict:
     else:
         status, met = "unmet", False
 
-    return {"met": met, "status": status, "measured_nm": measured,
-            "target_nm": target, "tol_nm": tol, "n_frames": n_frames,
-            "min_confidence": min_conf, "confidence": confidence}
+    result = {"met": met, "status": status, "measured_nm": measured,
+              "target_nm": target, "tol_nm": tol, "n_frames": n_frames,
+              "min_confidence": min_conf, "confidence": confidence}
+    if steering is not None:
+        result["steering"] = steering
+    return result
 
 
 # Reading + PBC-unwrapping + Kabsch-aligning a whole multi-stage trajectory is the
@@ -1559,6 +2204,47 @@ def backbone_fene_stretch(
         if d_units >= rmax_units:
             n_over += 1
     return (max_u, n_over)
+
+
+def backbone_strain_field(
+    design: Design,
+    full_map: dict[tuple[str, int, str], dict],
+    *,
+    r0_units: float = FENE_R0_OXDNA2,
+) -> dict[tuple[str, int], float]:
+    """PER-(helix, bp) backbone strain of a relaxed/mean structure — the spatial
+    breakdown of :func:`backbone_fene_stretch`'s scalar maximum.
+
+    For every bonded backbone pair, the strain is ``|bond_length - r0|`` in oxDNA units
+    (deviation of the reconstructed backbone-site spacing from the relaxed B-DNA value;
+    0 == relaxed).  Each bond's strain is attributed to BOTH its nucleotides as the MAX
+    over that nucleotide's incident bonds, then the two strands at a ``(helix, bp)``
+    column are collapsed by MAX (worst-case local tensile strain at that position).
+
+    This is the "where is the structure mechanically stressed" field that biases regional
+    skip placement (a deletion adds local tensile strain, so placement is steered AWAY
+    from already-strained sites — see :mod:`backend.core.regional_skip_placer`).
+    Read-only over the Physical layer; never written back into topology.
+    """
+    pairs = backbone_bond_pairs(design)
+    per_nt: dict[tuple[str, int, str], float] = {}
+    for a, b in pairs:
+        pa = full_map.get(a)
+        pb = full_map.get(b)
+        if pa is None or pb is None:
+            continue
+        sa = oxdna_backbone_site(pa["backbone_position"], pa["a1"], pa["a3"])
+        sb = oxdna_backbone_site(pb["backbone_position"], pb["a1"], pb["a3"])
+        strain = abs(float(np.linalg.norm(sa - sb)) / OXDNA_LENGTH_UNIT - r0_units)
+        for k in (a, b):
+            if strain > per_nt.get(k, -1.0):
+                per_nt[k] = strain
+    out: dict[tuple[str, int], float] = {}
+    for (helix_id, bp_index, _direction), s in per_nt.items():
+        key = (helix_id, int(bp_index))
+        if s > out.get(key, -1.0):
+            out[key] = s
+    return out
 
 
 # ── top-level stage health check ──────────────────────────────────────────────

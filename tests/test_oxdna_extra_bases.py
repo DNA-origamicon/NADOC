@@ -9,6 +9,8 @@ strand's designed sequence — while the relaxed read-back stays keyed to the re
 design nucleotides.  See backend/physics/oxdna_interface.py.
 """
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -272,6 +274,68 @@ def test_md_rigid_reference_tolerates_extra_base_keys(routed_6hb):
     assert not any(bool(rigid[i]) for i in xb_idx), "extra-base inserts must be non-rigid"
     assert int(rigid.sum()) > 0, "real nucleotides must remain rigid"
     assert bool(eq_valid.all()), "every P atom should resolve to a design equilibrium position"
+
+
+# ── regression: reciprocal crossover must own the insert on ONE strand only ────
+
+def _half(helix_id, index, direction):
+    return SimpleNamespace(
+        helix_id=helix_id, index=index, strand=SimpleNamespace(value=direction)
+    )
+
+
+def _dom(helix_id, start_bp, end_bp, direction):
+    return SimpleNamespace(
+        helix_id=helix_id, start_bp=start_bp, end_bp=end_bp,
+        direction=SimpleNamespace(value=direction),
+    )
+
+
+def test_reciprocal_crossover_owns_insert_on_one_strand():
+    """A reciprocal crossover — two strands swapping helices at the SAME junction
+    position — must materialize its extra bases on exactly ONE owning strand.
+
+    Pins the VoltronCore failure: when both halves were registered, both strands
+    matched the same crossover and emitted identical ``(_XB_SENTINEL, xo_id, k)``
+    insert keys, colliding in ``topology_rows``' index map and writing cross-strand
+    n3/n5 pointers that fail oxDNA's topology-consistency check at startup.
+    Mirrors the atomistic ground truth (``domain_end_to_strand``, half_a preferred).
+    """
+    # Strand 1: helix h0 (5→10) → helix h1 (10→15); 3′ exit of dom0 at (h0, 10).
+    s1 = SimpleNamespace(id="s1", domains=[
+        _dom("h0", 5, 10, "FORWARD"), _dom("h1", 10, 15, "FORWARD")])
+    # Strand 2 reciprocates: helix h1 (5→10) → helix h0 (10→15); 3′ exit at (h1, 10).
+    s2 = SimpleNamespace(id="s2", domains=[
+        _dom("h1", 5, 10, "REVERSE"), _dom("h0", 10, 15, "REVERSE")])
+    xo = SimpleNamespace(
+        id="xo-recip", extra_bases="TT",
+        half_a=_half("h0", 10, "FORWARD"),   # domain end of s1 → atomistic src
+        half_b=_half("h1", 10, "REVERSE"),   # domain end of s2
+    )
+    design = SimpleNamespace(strands=[s1, s2], crossovers=[xo])
+
+    junctions = ox.crossover_extra_base_junctions(design)
+    owners = [sid for (sid, _di) in junctions]
+    assert owners == ["s1"], f"expected single owning strand s1, got {owners}"
+    assert all(v == ("xo-recip", "TT") for v in junctions.values())
+
+
+# ── regression: bulk extra bases keep every insert key unique + topology sane ──
+
+def test_all_crossovers_insert_keys_unique_and_topology_consistent(routed_6hb):
+    """Every insert key is unique and n3/n5 pointers are reciprocal even with TT on
+    every crossover — the global invariant the reciprocal-crossover bug broke."""
+    d = _with_extra(routed_6hb, "TT", all_crossovers=True)
+    insert_keys = [s.key for s in ox._walk_strand_nucleotides(d) if s.is_extra_base]
+    assert insert_keys, "expected inserts on a fully-crossed design"
+    assert len(insert_keys) == len(set(insert_keys)), "insert keys must be unique"
+
+    rows, _n = ox.topology_rows(d)
+    for i, (_si, _b, n3, n5) in enumerate(rows):
+        if n3 != -1:
+            assert rows[n3][3] == i, f"particle {i} n3={n3} not reciprocated"
+        if n5 != -1:
+            assert rows[n5][2] == i, f"particle {i} n5={n5} not reciprocated"
 
 
 # ── the oracle is can-go-red ──────────────────────────────────────────────────

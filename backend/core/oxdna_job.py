@@ -81,6 +81,16 @@ class OxdnaJob:
     # straight to the capped equil).
     max_relax_retries:   int                     = 3
     relax_retries:       int                     = 0
+    # Auto-recovery budget for unbiased MD sampling stages (production / field / run).
+    # These run at the fast production timestep (dt=0.005); a large or floppy design
+    # can go numerically unstable late in the run (a single particle's coordinates
+    # explode → oxDNA aborts with "a cell contains more than _max_n_per_cell
+    # particles").  When that happens the runner re-runs the SAME stage from the clean
+    # relaxed seed at half the timestep, up to this many times, before failing.
+    # ``production_retries`` counts how many halvings have been spent.  Keeps the fast
+    # dt the default and only pays the slower, stabler timestep on designs that need it.
+    max_production_retries: int                   = 2
+    production_retries:     int                   = 0
     # Electric-field branches: a field run is its own job seeded from a relaxed
     # parent's structure.  ``parent_job_id`` links a field child to its relaxed
     # parent (None for a normal relaxation job); ``efield`` records the field
@@ -158,6 +168,8 @@ class OxdnaJob:
         data.setdefault("run_config", None)
         data.setdefault("max_relax_retries", 3)
         data.setdefault("relax_retries", 0)
+        data.setdefault("max_production_retries", 2)
+        data.setdefault("production_retries", 0)
         data.setdefault("design_fingerprint", None)
         data.setdefault("feature_log_position", None)
         data.setdefault("archived", False)

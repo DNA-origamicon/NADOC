@@ -86,6 +86,14 @@ class OxdnaStageSpec:
     # mandatory (refresh_vel for MC) and `relax_type` for DNANM_relax.
     parfile:              str | None = None
     relax_type:           str = "harmonic_force"   # DNANM_relax algorithm
+    # ── Output-cadence overrides (benchmark trials) ─────────────────────────────
+    # None → derive from `steps` as usual (~100 trajectory + energy samples).  A
+    # short THROUGHPUT trial sets print_conf_interval high (no intermediate frames)
+    # so the wall-time reflects COMPUTE, not trajectory I/O — otherwise frame writes
+    # (identical on CPU and CUDA) dominate a 2k-step trial and HIDE CUDA's speedup,
+    # making the sweep mis-recommend CPU.
+    print_conf_interval_override: int | None = None
+    print_energy_every_override:  int | None = None
 
     def to_status(self) -> OxdnaStageStatus:
         return OxdnaStageStatus(name=self.name, kind=self.kind, steps=self.steps)
@@ -244,8 +252,8 @@ def render_stage_input(
     ``print_energy_every`` is sized to ~100 energy samples over the stage so the
     runner can derive live progress from the energy.dat line count.
     """
-    print_energy_every = max(1, spec.steps // 100)
-    conf_interval = print_conf_interval(spec)
+    print_energy_every = spec.print_energy_every_override or max(1, spec.steps // 100)
+    conf_interval = spec.print_conf_interval_override or print_conf_interval(spec)
     is_md = spec.sim_type == "MD"
 
     lines: list[str] = []

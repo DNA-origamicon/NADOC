@@ -10,9 +10,11 @@ without a real oxDNA install.
 
 from __future__ import annotations
 
+import json
 import math
 import stat
 import time
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -266,6 +268,25 @@ def test_render_equil_has_large_force_cap():
     assert "sim_type = MD" in txt
 
 
+def test_render_output_cadence_overrides():
+    # Benchmark trials override the output cadence so the timed stage writes no
+    # intermediate trajectory frames (print_conf_interval > steps) and samples energy
+    # sparsely — otherwise frame I/O dominates a short trial and hides CUDA's speedup.
+    from backend.core.oxdna_protocol import OxdnaStageSpec
+    spec = OxdnaStageSpec(name="bench", kind="md_relax", sim_type="MD", steps=2000,
+                          backend="CUDA", device="0",
+                          print_conf_interval_override=2001,
+                          print_energy_every_override=200)
+    txt = render_stage_input(spec, "t", "c")
+    assert "print_conf_interval = 2001" in txt
+    assert "print_energy_every = 200" in txt
+    # Default (no override) still derives ~100 samples from steps.
+    base = render_stage_input(
+        OxdnaStageSpec(name="b", kind="md_relax", sim_type="MD", steps=2000,
+                       backend="CUDA"), "t", "c")
+    assert "print_conf_interval = 20" in base and "print_energy_every = 20" in base
+
+
 def test_expected_energy_lines():
     specs = build_relaxation_stages(md_relax_steps=10_000)
     assert expected_energy_lines(specs[1]) == 100
@@ -333,6 +354,28 @@ def test_large_structure_skip_compaction_no_fene_violation():
     default = _intra_backbone_bond_lengths_nm(design, compact_skips=False)
     assert default.max() > _FENE_MAX_NM
     assert (default > _FENE_MAX_NM).sum() >= 18 * 6  # ~one stretched bond per skip
+
+
+def test_skip_after_sequencing_deregisters_complementarity():
+    """A skip dropped onto an ALREADY-sequenced design de-registers the staples from
+    the scaffold: ``strand.sequence`` is consumed in walk order and a deleted position
+    consumes no character, so every downstream base shifts by one.  The structure then
+    relaxes to a low base-pair ceiling because oxDNA only H-bonds complementary bases.
+    This is the 3x6x400_test failure (relax stuck at ~34%); the guard below blocks it."""
+    from backend.core.models import LoopSkip
+    from backend.physics.oxdna_interface import designed_pair_complementarity
+
+    seqd = _sequence_for_oxdna(make_18hb_design(120))
+    n_comp, n_pairs = designed_pair_complementarity(seqd)
+    assert n_pairs > 0
+    assert n_comp / n_pairs > 0.95            # a freshly-sequenced design is ~complementary
+
+    # Add one skip per helix WITHOUT re-sequencing → downstream bases de-register.
+    skipped = seqd.model_copy(deep=True)
+    for h in skipped.helices:
+        h.loop_skips = [LoopSkip(bp_index=h.bp_start + h.length_bp // 2, delta=-1)]
+    n_comp2, n_pairs2 = designed_pair_complementarity(skipped)
+    assert n_comp2 / n_pairs2 < 0.80          # de-registered (oxDNA could not hold it)
 
 
 def test_large_structure_oxdna_files_self_consistent(tmp_path):
@@ -409,6 +452,149 @@ def test_production_stage_spec():
     assert p.min_bp_retained == 0.0          # sampling: no bp gate
     txt = render_stage_input(p, "t.top", "c.dat", forces_name="forces.txt")
     assert "max_backbone_force" not in txt and "external_forces" not in txt
+
+
+# ── production explosion recovery (auto dt-halving) ───────────────────────────
+
+_EXPLOSION_LOG = (
+    "INFO: diffusion fixed.. -20102.3 -20102.3\n"
+    "INFO: diffusion fixed.. 1.7e+13 1.7e+13\n"
+    "ERROR: A cell contains more than _max_n_per_cell (114) particles: the problem "
+    "is most likely due to particles with very large coordinates, which may be caused "
+    "by incorrectly-defined external forces and/or large time steps.\n"
+)
+_CONFIG_LOAD_ERROR_LOG = (
+    "INFO: Initializing backend\n"
+    "ERROR: Caught a RuntimeError: a particle has an invalid topology entry\n"
+)
+
+
+def test_log_indicates_explosion_distinguishes_blowup_from_setup_error(tmp_path):
+    from backend.core import oxdna_runner as r
+    boom = tmp_path / "boom.log"
+    boom.write_text(_EXPLOSION_LOG)
+    setup = tmp_path / "setup.log"
+    setup.write_text(_CONFIG_LOAD_ERROR_LOG)
+    clean = tmp_path / "clean.log"
+    clean.write_text("INFO: END OF THE SIMULATION, everything went OK!\n")
+    assert r._log_indicates_explosion(boom) is True
+    assert r._log_indicates_explosion(setup) is False   # config-load error ≠ blow-up
+    assert r._log_indicates_explosion(clean) is False
+    assert r._log_indicates_explosion(tmp_path / "missing.log") is False
+
+
+def test_structure_blew_up_detects_nonaborting_explosion(tmp_path):
+    """A completed sampling stage whose final structure has ballooned far beyond its
+    relaxed seed is flagged as blown up — the non-aborting explosion the crash-based
+    dt-halving (``_log_indicates_explosion``) never sees because oxDNA exited 0."""
+    from backend.core import oxdna_runner as r
+
+    def conf(p, coords):
+        p.write_text("t = 0\nb = 500 500 500\nE = 0 0 0\n"
+                     + "\n".join(f"{x} {y} {z}  0 0 0  0 0 0" for x, y, z in coords))
+
+    ref = tmp_path / "ref.dat"; conf(ref, [(0, 0, 0), (2, 1, 160)])      # relaxed extent ~160
+    sd = tmp_path / "stage"; sd.mkdir()
+    conf(sd / "last_conf.dat", [(0, 0, 0), (430, 354, 261)])             # exploded extent ~430
+    assert r._conf_max_extent(ref) == 160.0
+    assert r._structure_blew_up(sd, ref) is True
+    conf(sd / "last_conf.dat", [(0, 0, 0), (40, 20, 150)])               # stable swell/bend
+    assert r._structure_blew_up(sd, ref) is False
+    conf(sd / "last_conf.dat", [(0, 0, 0), (float("nan"), 1, 1)])        # NaN coordinate
+    assert r._structure_blew_up(sd, ref) is True
+
+
+def test_halve_dt_and_restart_transforms_stage(tmp_path):
+    """The recovery step halves the stage dt, rewinds the stage to pending, clears its
+    (exploded) outputs, and bumps the retry counter — so the re-run starts fresh from
+    the relaxed seed at the finer timestep."""
+    from backend.core import oxdna_runner as r
+    from backend.core.oxdna_protocol import build_production_stage
+
+    spec = build_production_stage(name="1_production", steps=5_000_000)
+    assert spec.dt == 0.005
+    job = new_oxdna_job("demo", [spec.to_status()], n_nucleotides=100)
+    job.save(tmp_path)
+    specs = [spec]
+    # Simulate the exploded stage having written outputs.
+    sd = job.stage_dir(tmp_path, "1_production")
+    sd.mkdir(parents=True, exist_ok=True)
+    (sd / "last_conf.dat").write_text("garbage exploded conf")
+    (sd / "energy.dat").write_text("…")
+
+    r._halve_dt_and_restart(job, tmp_path, specs, 0)
+
+    assert job.production_retries == 1
+    assert specs[0].dt == 0.0025                       # halved
+    assert job.stages[0].status == "pending"
+    assert job.current_stage_idx == 0
+    assert not (sd / "last_conf.dat").exists()         # exploded checkpoint cleared
+    assert not (sd / "energy.dat").exists()
+    # Specs persisted so a server restart resumes at the reduced dt.
+    persisted = json.loads((job.job_dir(tmp_path) / "stages_spec.json").read_text())
+    assert persisted[0]["dt"] == 0.0025
+
+
+def test_production_retries_roundtrip(tmp_path):
+    job = new_oxdna_job("demo", [])
+    job.production_retries = 1
+    job.save(tmp_path)
+    loaded = OxdnaJob.load(job.job_id, tmp_path)
+    assert loaded.production_retries == 1
+    assert loaded.max_production_retries == 2
+    # Old jobs (no field in job.json) load with the defaults.
+    raw = json.loads((job.job_dir(tmp_path) / "job.json").read_text())
+    del raw["production_retries"], raw["max_production_retries"]
+    (job.job_dir(tmp_path) / "job.json").write_text(json.dumps(raw))
+    back = OxdnaJob.load(job.job_id, tmp_path)
+    assert back.production_retries == 0 and back.max_production_retries == 2
+
+
+def test_run_job_recovers_from_production_explosion(tmp_path, monkeypatch, design, geometry):
+    """End-to-end: a production stage that explodes on the first attempt is
+    automatically re-run at half dt and reaches `completed` — no user intervention."""
+    import asyncio
+
+    from backend.core import oxdna_runner as r
+    from backend.core.oxdna_health import OxdnaHealthResult
+    from backend.core.oxdna_protocol import build_production_stage
+
+    spec = build_production_stage(name="1_production", steps=1_000_000)
+    job = new_oxdna_job("voltron-prod", [spec.to_status()], n_nucleotides=len(geometry))
+    r.prepare_oxdna_job(design, geometry, job, tmp_path, [spec])
+
+    monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
+    monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
+    monkeypatch.setattr(
+        r, "run_oxdna_health_check",
+        lambda *a, **k: OxdnaHealthResult(passed=True, bp_retained_fraction=0.9,
+                                          potential_energy=-1.3, fene_safe=True),
+    )
+
+    calls = {"n": 0}
+
+    async def fake_run(oxdna_bin, input_path, stage_dir, log_path, job_id, on_spawn=None):
+        calls["n"] += 1
+        if on_spawn:
+            on_spawn(12345)
+        if calls["n"] == 1:
+            Path(log_path).write_text(_EXPLOSION_LOG)        # blow up first try
+            return 1, 12345
+        # Second try (halved dt): succeed — write a checkpoint + energy.
+        (Path(stage_dir) / "last_conf.dat").write_text("t = 0\nb = 1 1 1\nE = 0 0 0\n")
+        (Path(stage_dir) / "energy.dat").write_text("0 -1.3 0.3 -1.0\n")
+        Path(log_path).write_text("INFO: END OF THE SIMULATION, everything went OK!\n")
+        return 0, 12345
+
+    monkeypatch.setattr(r, "_run_oxdna_async", fake_run)
+
+    specs = [spec]
+    asyncio.run(r.run_job(job, tmp_path, specs))
+
+    assert calls["n"] == 2                       # exploded once, recovered once
+    assert job.status == OxdnaStatus.completed
+    assert job.production_retries == 1
+    assert specs[0].dt == 0.0025                  # ran the recovery at half dt
 
 
 def test_job_progress_eta(tmp_path):
@@ -988,6 +1174,252 @@ def test_measure_inter_helix_spacing_rejects_bad_input():
         measure_inter_helix_spacing(positions, (0, 0, "forward"), (2, 0, "forward"))
 
 
+# ── geometry_rmsd (self-consistency: simulated mean vs analytic depiction) ───────
+def _straight_bundle(n_helix=4, n_axial=12, radius=1.2, rise=0.34):
+    """Synthetic CORE position list: ``n_helix`` straight helices on a ring of the
+    given radius, each sampled at ``n_axial`` axial levels along +z."""
+    import math
+    out = []
+    for h in range(n_helix):
+        ang = 2 * math.pi * h / n_helix
+        x, y = radius * math.cos(ang), radius * math.sin(ang)
+        for i in range(n_axial):
+            out.append(_pos(h, i, "forward", (x, y, rise * i)))
+    return out
+
+
+def _twist_bundle(total_deg, n_helix=4, n_axial=12, radius=1.2, rise=0.34):
+    """Same bundle but the cross-section rotates ``total_deg`` (right-handed about
+    +z) progressively from the first axial level to the last."""
+    import math
+    out = []
+    zmax = rise * (n_axial - 1)
+    for h in range(n_helix):
+        ang0 = 2 * math.pi * h / n_helix
+        for i in range(n_axial):
+            z = rise * i
+            phi = math.radians(total_deg) * (z / zmax if zmax else 0.0)
+            a = ang0 + phi
+            out.append(_pos(h, i, "forward",
+                            (radius * math.cos(a), radius * math.sin(a), z)))
+    return out
+
+
+def _apply_rigid(positions, axis=(0.3, 0.5, 0.8), deg=37.0, shift=(5.0, -2.0, 9.0)):
+    """Rotate + translate a position list by a fixed rigid motion (for Kabsch invariance)."""
+    import numpy as np
+    ax = np.asarray(axis, float); ax /= np.linalg.norm(ax)
+    th = np.radians(deg)
+    K = np.array([[0, -ax[2], ax[1]], [ax[2], 0, -ax[0]], [-ax[1], ax[0], 0]])
+    R = np.eye(3) + np.sin(th) * K + (1 - np.cos(th)) * (K @ K)   # Rodrigues
+    s = np.asarray(shift, float)
+    return [_pos(p["helix_id"], p["bp_index"], p["direction"],
+                 tuple(R @ np.asarray(p["backbone_position"], float) + s))
+            for p in positions]
+
+
+def test_measure_geometry_rmsd_zero_for_rigid_motion():
+    """Identical geometry → 0; a pure rigid rotation+translation of the simulated
+    structure → ~0 (Kabsch superposes it out — where the bundle floats is irrelevant)."""
+    from backend.core.oxdna_health import measure_geometry_rmsd
+    ref = _straight_bundle()
+    assert measure_geometry_rmsd(ref, ref) < 1e-9
+    assert measure_geometry_rmsd(_apply_rigid(ref), ref) < 1e-6
+
+
+def test_measure_geometry_rmsd_grows_with_twist():
+    """A residual global twist is NOT a rigid motion, so it survives Kabsch and shows
+    up as a nonzero RMSD that grows monotonically with the twist magnitude."""
+    from backend.core.oxdna_health import measure_geometry_rmsd
+    ref = _straight_bundle()
+    r10 = measure_geometry_rmsd(_twist_bundle(10.0), ref)
+    r30 = measure_geometry_rmsd(_twist_bundle(30.0), ref)
+    r60 = measure_geometry_rmsd(_twist_bundle(60.0), ref)
+    assert 0.0 < r10 < r30 < r60          # monotone in the deviation
+    # Even rigidly re-posed, the twisted structure cannot be aligned away.
+    assert measure_geometry_rmsd(_apply_rigid(_twist_bundle(30.0)), ref) > 0.05
+
+
+def test_measure_geometry_rmsd_uses_shared_nucleotides_only():
+    """Nucleotides absent from the reference (e.g. ragged ssDNA ends not in a
+    core-only reference) are ignored — RMSD is over the intersection."""
+    from backend.core.oxdna_health import measure_geometry_rmsd
+    ref = _straight_bundle()
+    sim = ref + [_pos(99, 0, "forward", (1e3, 1e3, 1e3))]   # stray nt not in ref
+    assert measure_geometry_rmsd(sim, ref) < 1e-9
+
+
+def test_geometry_deviation_map_per_nucleotide():
+    """Per-nucleotide deviation: ~0 for a rigidly-posed match, and larger (growing with
+    distance from centre) under a global twist — the spatial breakdown of the RMSD."""
+    from backend.core.oxdna_health import geometry_deviation_map
+    ref = _straight_bundle(n_axial=24)
+    m = geometry_deviation_map(_apply_rigid(ref), ref)
+    assert m["n_shared"] == len(ref)
+    assert max(p["deviation"] for p in m["positions"]) < 1e-6   # rigid pose => no deviation
+    assert all({"helix_id", "bp_index", "direction", "backbone_position", "deviation"}
+               <= set(p) for p in m["positions"])
+    tw = geometry_deviation_map(_twist_bundle(40.0, n_axial=24), ref)
+    assert tw["max_deviation"] > tw["mean_deviation"] > 0.0       # twist => real spread
+    assert tw["min_deviation"] <= tw["mean_deviation"] <= tw["max_deviation"]
+
+
+def test_measure_geometry_rmsd_rejects_bad_input():
+    from backend.core.oxdna_health import measure_geometry_rmsd
+    ref = _straight_bundle()
+    with pytest.raises(ValueError, match="empty position map"):
+        measure_geometry_rmsd([], ref)
+    with pytest.raises(ValueError, match="empty reference map"):
+        measure_geometry_rmsd(ref, [])
+    with pytest.raises(ValueError, match="shared"):
+        measure_geometry_rmsd(ref, [_pos(7, 7, "forward", (0.0, 0.0, 0.0))])
+
+
+# ── bundle_twist (signed global twist the skips control) ─────────────────────────
+def test_measure_bundle_twist_zero_for_straight_bundle():
+    """A straight bundle (cross-section identical at every level) has ~0 global twist."""
+    from backend.core.oxdna_health import measure_bundle_twist
+    assert abs(measure_bundle_twist(_straight_bundle())) < 1.0
+
+
+def test_measure_bundle_twist_signed_and_accurate():
+    """Recovers a known imposed twist in magnitude AND sign (right-handed +, about the
+    bundle axis), the signed signal the optimizer steers on."""
+    from backend.core.oxdna_health import measure_bundle_twist
+    for total in (45.0, 90.0, -60.0):
+        got = measure_bundle_twist(_twist_bundle(total, n_axial=24))
+        assert abs(got - total) < 5.0, f"expected ~{total}, got {got:.1f}"
+
+
+def test_measure_bundle_twist_accumulates_beyond_180():
+    """Accumulating slab-to-slab rotations unwinds a >180° twist instead of aliasing
+    it to its (wrong-signed) complement — 270° reads ~270°, not −90°."""
+    from backend.core.oxdna_health import measure_bundle_twist
+    got = measure_bundle_twist(_twist_bundle(270.0, n_axial=48))
+    assert abs(got - 270.0) < 10.0
+
+
+def test_measure_bundle_twist_differential_recovers_residual():
+    """Self-consistency steering uses twist(sim) − twist(analytic): a geometry-dependent
+    measurement offset cancels and the imposed over/under-wind is recovered."""
+    from backend.core.oxdna_health import measure_bundle_twist
+    ref = _straight_bundle(n_axial=24)            # the analytic depiction
+    for residual in (40.0, -50.0):
+        sim = _twist_bundle(residual, n_axial=24)
+        delta = measure_bundle_twist(sim) - measure_bundle_twist(ref)
+        assert abs(delta - residual) < 5.0
+
+
+def test_measure_bundle_twist_rejects_bad_input():
+    from backend.core.oxdna_health import measure_bundle_twist
+    with pytest.raises(ValueError, match="empty"):
+        measure_bundle_twist([])
+    with pytest.raises(ValueError, match=">= 2 helices"):
+        measure_bundle_twist([_pos(0, i, "forward", (0.0, 0.0, float(i)))
+                              for i in range(5)])
+
+
+# ── bundle_curvature (integrated |κ| guard — straight ⇒ 0, arc ⇒ 1/R, S-bend ⇒ >0) ──
+def _arc_bundle(radius_nm, sweep_deg, *, n_helix=4, n_axial=40, sep=0.4):
+    """A bundle whose centreline follows a circular arc of ``radius_nm`` sweeping
+    ``sweep_deg`` in the xy-plane; the ``n_helix`` helices sit symmetrically about the
+    centreline along ±z so each slab centroid lands ON the arc."""
+    import math
+    out = []
+    for i in range(n_axial):
+        th = math.radians(sweep_deg) * (i / (n_axial - 1))
+        cx, cy = radius_nm * math.cos(th), radius_nm * math.sin(th)
+        for h in range(n_helix):
+            z = sep * (h - (n_helix - 1) / 2.0)
+            out.append(_pos(h, i, "forward", (cx, cy, z)))
+    return out
+
+
+def _s_bundle(radius_nm, sweep_deg, *, n_helix=4, n_axial=80, sep=0.4):
+    """Two opposite arcs joined into an S: the end tangents are parallel (end-to-end bend
+    ≈ 0) but the centreline is curved throughout (integrated curvature > 0)."""
+    import math
+    out = []
+    half = n_axial // 2
+    for i in range(n_axial):
+        if i < half:                                  # first arc curving +
+            th = math.radians(sweep_deg) * (i / (half - 1))
+            cx, cy = radius_nm * math.sin(th), radius_nm * (1 - math.cos(th))
+        else:                                         # second arc curving − (mirror)
+            j = i - half + 1
+            th = math.radians(sweep_deg) * (j / half)
+            ox = radius_nm * math.sin(math.radians(sweep_deg))
+            oy = radius_nm * (1 - math.cos(math.radians(sweep_deg)))
+            cx = ox + radius_nm * (math.sin(math.radians(sweep_deg)) - math.sin(math.radians(sweep_deg) - th))
+            cy = oy + radius_nm * (math.cos(math.radians(sweep_deg) - th) - math.cos(math.radians(sweep_deg)))
+        for h in range(n_helix):
+            z = sep * (h - (n_helix - 1) / 2.0)
+            out.append(_pos(h, i, "forward", (cx, cy, z)))
+    return out
+
+
+def test_measure_bundle_curvature_zero_for_straight_bundle():
+    """A straight bundle has ~0 integrated curvature."""
+    from backend.core.oxdna_health import measure_bundle_curvature
+    assert measure_bundle_curvature(_straight_bundle(n_axial=40)) < 0.02
+
+
+def test_measure_bundle_curvature_recovers_inverse_radius():
+    """A uniform arc of radius R reads κ ≈ degrees(1/R) deg/nm, and a tighter arc
+    (smaller R) reads a proportionally larger curvature."""
+    import math
+    from backend.core.oxdna_health import measure_bundle_curvature
+    # Fixed slab count → identical discretization, so the comparison isolates 1/R.
+    for R in (20.0, 40.0):
+        kappa = measure_bundle_curvature(_arc_bundle(R, 60.0, n_axial=80), n_slices=20)
+        assert abs(kappa - math.degrees(1.0 / R)) < 0.15 * math.degrees(1.0 / R)
+    k20 = measure_bundle_curvature(_arc_bundle(20.0, 60.0, n_axial=80), n_slices=20)
+    k40 = measure_bundle_curvature(_arc_bundle(40.0, 60.0, n_axial=80), n_slices=20)
+    assert 1.8 < k20 / k40 < 2.2                   # κ ∝ 1/R → halving R doubles κ
+
+
+def test_measure_bundle_curvature_catches_s_bend_that_bend_misses():
+    """An S-bend's endpoints are ~collinear so measure_bundle_bend reads ~0, but the
+    centreline is curved throughout → integrated curvature is clearly nonzero."""
+    from backend.core.oxdna_health import measure_bundle_bend, measure_bundle_curvature
+    s = _s_bundle(25.0, 45.0)
+    assert measure_bundle_bend(s) < 15.0          # endpoints nearly parallel
+    assert measure_bundle_curvature(s) > 0.2      # but real curvature is captured
+
+
+def test_measure_bundle_curvature_rejects_empty():
+    from backend.core.oxdna_health import measure_bundle_curvature
+    with pytest.raises(ValueError, match="empty"):
+        measure_bundle_curvature([])
+
+
+def test_curvature_profile_flat_for_straight_ramps_for_arc():
+    from backend.core.oxdna_health import measure_bundle_curvature_profile
+    flat = measure_bundle_curvature_profile(_straight_bundle(n_axial=40))
+    assert max(v for _, v in flat) < 2.0                      # straight → ~flat near zero
+    arc = measure_bundle_curvature_profile(_arc_bundle(25.0, 90.0, n_axial=80))
+    vals = [v for _, v in arc]
+    assert vals == sorted(vals)                                # cumulative turning is monotone
+    assert vals[-1] > 40.0                                     # a 90° arc turns a lot
+
+
+def test_curvature_profile_catches_s_bend_endpoint():
+    # An S-bend's end tangents are ~parallel (small bend) but the centreline turns throughout →
+    # the cumulative curvature profile ramps to a clearly nonzero endpoint.
+    from backend.core.oxdna_health import (
+        measure_bundle_bend, measure_bundle_curvature_profile)
+    s = _s_bundle(25.0, 45.0)
+    prof = measure_bundle_curvature_profile(s)
+    assert measure_bundle_bend(s) < 15.0
+    assert prof[-1][1] > 30.0
+
+
+def test_curvature_profile_rejects_empty():
+    from backend.core.oxdna_health import measure_bundle_curvature_profile
+    with pytest.raises(ValueError, match="empty"):
+        measure_bundle_curvature_profile([])
+
+
 def test_parse_constraint_spec_inter_helix_spacing_two_landmarks():
     """inter_helix_spacing is a two-landmark nm measure (each landmark names a
     helix) — it parses with exactly 2 landmarks, like end_to_end."""
@@ -1023,6 +1455,146 @@ def test_check_constraint_inter_helix_spacing_dispatches():
     # Out of tolerance → unmet.
     off = check_relaxed_constraint({**spec, "target_nm": 5.0}, well)
     assert off["status"] == "unmet" and off["met"] is False
+
+
+# ── geometry_match / bundle_twist as reference-aware constraints (self-consistency) ─
+def test_parse_constraint_spec_self_consistency_measures_no_landmarks():
+    """geometry_match (nm) and bundle_twist (deg) are whole-structure measures — they
+    parse with zero landmarks and target 0 (perfect match / no residual wind)."""
+    from backend.core.oxdna_health import parse_constraint_spec
+    gm = parse_constraint_spec({"measure": "geometry_match", "target_nm": 0.0,
+                                "tol_nm": 1.5})
+    assert gm["measure"] == "geometry_match" and gm["landmarks"] == []
+    bt = parse_constraint_spec({"measure": "bundle_twist", "target_nm": 0.0,
+                                "tol_nm": 5.0})
+    assert bt["measure"] == "bundle_twist" and bt["landmarks"] == []
+    with pytest.raises(Exception, match="no landmarks"):
+        parse_constraint_spec({"measure": "geometry_match", "landmarks": _LANDMARKS,
+                               "target_nm": 0.0, "tol_nm": 1.0})
+
+
+def test_check_geometry_match_requires_reference():
+    """The self-consistency measures fail loudly without an analytic reference rather
+    than silently measuring nothing."""
+    from backend.core.oxdna_health import check_relaxed_constraint
+    out = {"ready": True, "positions": _straight_bundle(),
+           "confidence": {"n_frames": 60}}
+    with pytest.raises(Exception, match="analytic reference"):
+        check_relaxed_constraint(
+            {"measure": "geometry_match", "target_nm": 0.0, "tol_nm": 1.0}, out)
+
+
+def test_check_geometry_match_dispatches_with_reference_and_steering():
+    """geometry_match gates on RMSD-to-analytic (confidence-gated) AND reports the
+    companion SIGNED twist residual for steering.  A matched structure is 'met'; a
+    twisted one is 'unmet' with a nonzero, correctly-signed residual."""
+    from backend.core.oxdna_health import check_relaxed_constraint
+    ref = _straight_bundle(n_axial=24)
+    spec = {"measure": "geometry_match", "target_nm": 0.0, "tol_nm": 0.1,
+            "min_confidence": 50}
+
+    matched = {"ready": True, "positions": _apply_rigid(ref),
+               "confidence": {"n_frames": 60}}
+    v = check_relaxed_constraint(spec, matched, reference_positions=ref)
+    assert v["status"] == "met" and v["measured_nm"] < 0.05
+    assert abs(v["steering"]["bundle_twist_residual_deg"]) < 5.0
+
+    twisted = {"ready": True, "positions": _twist_bundle(40.0, n_axial=24),
+               "confidence": {"n_frames": 60}}
+    v = check_relaxed_constraint(spec, twisted, reference_positions=ref)
+    assert v["status"] == "unmet" and v["measured_nm"] > 0.1
+    assert v["steering"]["bundle_twist_residual_deg"] > 10.0     # signed, right-handed
+
+    # Confidence gate still governs — too few frames → inconclusive even if matched.
+    weak = {"ready": True, "positions": _apply_rigid(ref),
+            "confidence": {"n_frames": 5}}
+    assert check_relaxed_constraint(
+        spec, weak, reference_positions=ref)["status"] == "inconclusive"
+
+
+def test_check_self_consistency_filters_to_reference_core():
+    """The reference doubles as the core mask: stray nucleotides in the mean structure
+    that are absent from the (core-only) reference do not perturb the verdict."""
+    from backend.core.oxdna_health import check_relaxed_constraint
+    ref = _straight_bundle(n_axial=24)
+    sim = _apply_rigid(ref) + [_pos(99, 0, "forward", (50.0, 50.0, 50.0))]  # ssDNA-end stand-in
+    out = {"ready": True, "positions": sim, "confidence": {"n_frames": 60}}
+    v = check_relaxed_constraint(
+        {"measure": "geometry_match", "target_nm": 0.0, "tol_nm": 0.5,
+         "min_confidence": 50}, out, reference_positions=ref)
+    assert v["status"] == "met"          # stray nt ignored, not pulled into the RMSD
+
+
+def test_check_constraint_reports_both_metrics_in_steering():
+    """Whichever self-consistency measure gates, the verdict's steering carries BOTH
+    the RMSD-to-design and the signed twist residual (so the optimizer + before/after
+    panel always see both)."""
+    from backend.core.oxdna_health import check_relaxed_constraint
+    ref = _straight_bundle(n_axial=24)
+    out = {"ready": True, "positions": _twist_bundle(30.0, n_axial=24),
+           "confidence": {"n_frames": 60}}
+    for measure, tol in (("geometry_match", 0.1), ("bundle_twist", 5.0)):
+        v = check_relaxed_constraint(
+            {"measure": measure, "target_nm": 0.0, "tol_nm": tol, "min_confidence": 50},
+            out, reference_positions=ref)
+        assert "geometry_rmsd_nm" in v["steering"]
+        assert "bundle_twist_residual_deg" in v["steering"]
+        # the gating measured value is the chosen metric
+        expect = v["steering"]["geometry_rmsd_nm"] if measure == "geometry_match" \
+            else v["steering"]["bundle_twist_residual_deg"]
+        assert abs(v["measured_nm"] - expect) < 1e-9
+
+
+def test_pool_until_conclusive_early_rejects_grossly_off(monkeypatch):
+    """A grossly-off knob is rejected after ONE round (high confidence is needed only to
+    ACCEPT) — saving the remaining production rounds; without early-reject it would pool
+    all rounds and stay inconclusive."""
+    import backend.api.headless_oxdna_build as hox
+    from backend.core.oxdna_health import parse_constraint_spec
+
+    calls = {"n": 0}
+
+    def fake_flex(job_id, workspace):
+        calls["n"] += 1
+        return {"ready": True, "positions": _twist_bundle(40.0, n_axial=24),
+                "confidence": {"n_frames": 100}}                  # << min_confidence=400
+
+    monkeypatch.setattr(hox, "append_production", lambda *a, **k: {})
+    monkeypatch.setattr(hox, "wait_for_terminal", lambda *a, **k: None)
+    monkeypatch.setattr(hox, "read_flexibility_map", fake_flex)
+    ref = _straight_bundle(n_axial=24)
+    parsed = parse_constraint_spec({"measure": "bundle_twist", "target_nm": 0.0,
+                                    "tol_nm": 5.0, "min_confidence": 400})
+
+    class _Job:
+        job_id = "x"
+
+    v, n = hox._pool_until_conclusive(
+        _Job(), None, parsed, production_steps=1000, max_production_rounds=8, timeout=1,
+        reference=ref, early_reject_factor=3.0, early_reject_min_frames=20)
+    assert v["status"] == "unmet" and v.get("early_reject") and n == 1 and calls["n"] == 1
+
+    # Without early-reject it pools every round and stays inconclusive (40°, 100 frames).
+    calls["n"] = 0
+    v2, n2 = hox._pool_until_conclusive(
+        _Job(), None, parsed, production_steps=1000, max_production_rounds=8, timeout=1,
+        reference=ref)
+    assert v2["status"] == "inconclusive" and n2 == 8 and calls["n"] == 8
+
+
+def test_check_bundle_twist_constraint_differential():
+    """bundle_twist as a constraint reports the SIGNED residual vs the analytic
+    reference (target 0°); a matched structure is within tol, a wound one is unmet."""
+    from backend.core.oxdna_health import check_relaxed_constraint
+    ref = _straight_bundle(n_axial=24)
+    spec = {"measure": "bundle_twist", "target_nm": 0.0, "tol_nm": 5.0,
+            "min_confidence": 50}
+    ok = {"ready": True, "positions": ref, "confidence": {"n_frames": 60}}
+    assert check_relaxed_constraint(spec, ok, reference_positions=ref)["status"] == "met"
+    wound = {"ready": True, "positions": _twist_bundle(30.0, n_axial=24),
+             "confidence": {"n_frames": 60}}
+    v = check_relaxed_constraint(spec, wound, reference_positions=ref)
+    assert v["status"] == "unmet" and abs(v["measured_nm"] - 30.0) < 6.0
 
 
 def test_composite_trajectory(design, geometry, tmp_path):
@@ -2012,6 +2584,28 @@ def test_oxdna_create_rejects_unsequenced(monkeypatch, tmp_path):
     assert "sequence" in r.json()["detail"].lower()
 
 
+def test_oxdna_create_rejects_deregistered_sequences(monkeypatch, tmp_path):
+    """A fully-sequenced design whose staples no longer COMPLEMENT the scaffold (the
+    stale-sequence-after-skip class — every base defined, but ~random complementarity)
+    is rejected at job creation with an actionable message, instead of wasting a long
+    relaxation that melts to a low base-pair ceiling (the 3x6x400_test symptom)."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    from backend.core.models import LoopSkip
+    import backend.api.routes_oxdna as routes_oxdna
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    d = _sequence_for_oxdna(make_18hb_design(120))   # fully sequenced, complementary
+    for h in d.helices:                              # skips AFTER sequencing → de-register
+        h.loop_skips = [LoopSkip(bp_index=h.bp_start + h.length_bp // 3 * (k + 1), delta=-1)
+                        for k in range(3)]
+    _set_active_design(d)
+    r = TestClient(app).post("/api/oxdna/jobs", json={"backend": "CPU", "autostart": False})
+    assert r.status_code == 400
+    detail = r.json()["detail"].lower()
+    assert "complementary" in detail and "assign sequences" in detail
+
+
 def test_oxdna_create_counts_strand_nucleotides_not_lattice(monkeypatch, tmp_path):
     """n_nucleotides must be the simulated nucleotide count (strand order), NOT
     len(geometry): the geometry endpoint emits a slot for every lattice position
@@ -2957,3 +3551,59 @@ def test_rmsf_route_works_for_a_field_run(design, geometry, monkeypatch, tmp_pat
     assert body["ready"] is True
     assert body["n_frames"] == 3
     assert len(body["positions"]) > 0
+
+
+def test_twist_series_stats_autocorrelation_and_neff():
+    """twist_series_stats: correlation-corrected error — constant→tau1/N_eff=N/sem0;
+    anticorrelated→tau1 (no inflation); slowly-varying→tau>1, N_eff<N, sem inflated above
+    the naive std/sqrt(N)."""
+    import math
+
+    from backend.core.oxdna_health import twist_series_stats
+
+    # constant series: zero variance → tau=1, fully "independent", zero error
+    c = twist_series_stats([5.0] * 8)
+    assert c["std"] == 0.0 and c["tau_int"] == 1.0 and c["n_eff"] == 8 and c["sem"] == 0.0
+
+    # alternating series: rho(1) < 0 → window closes at lag 1 → no inflation
+    alt = twist_series_stats([1.0, -1.0] * 16)
+    assert alt["tau_int"] == 1.0 and abs(alt["n_eff"] - 32) < 1e-9
+
+    # slowly-varying (one full slow cosine): strong positive short-lag autocorrelation
+    n = 200
+    slow = [math.cos(2 * math.pi * i / n) for i in range(n)]
+    s = twist_series_stats(slow)
+    assert s["tau_int"] > 1.0                      # correlated frames detected
+    assert s["n_eff"] < n                          # fewer effective samples than frames
+    naive = s["std"] / math.sqrt(n)
+    assert s["sem"] > naive                        # honest error exceeds the naive std/sqrt(N)
+
+
+def test_twist_series_stats_degenerate():
+    from backend.core.oxdna_health import twist_series_stats
+
+    assert twist_series_stats([])["n"] == 0
+    one = twist_series_stats([3.3])
+    assert one["n"] == 1 and one["mean"] == 3.3 and one["sem"] == 0.0
+
+
+def test_detect_equilibration_finds_burn_in():
+    """detect_equilibration: a ramp transient + stationary noise → cutoff lands at/after the ramp,
+    recovering the stationary mean and a high N_eff; an already-stationary series → t0≈0."""
+    import math
+
+    from backend.core.oxdna_health import detect_equilibration
+
+    # 80-sample monotonic ramp (transient) from +90 → 0, then 400 samples stationary ~0 ± noise
+    ramp = [90.0 * (1 - i / 80) for i in range(80)]
+    stat = [3.0 * math.sin(i) for i in range(400)]      # bounded, decorrelated-ish, mean ~0
+    eq = detect_equilibration(ramp + stat)
+    assert eq["t0"] >= 60                                # discarded ~the whole transient
+    assert abs(eq["stats"]["mean"]) < 10                 # recovered the stationary mean, not biased
+    # keeping the ramp would inflate τ → fewer effective samples than the trimmed tail
+    from backend.core.oxdna_health import twist_series_stats
+    assert eq["n_eff"] > twist_series_stats(ramp + stat)["n_eff"]
+
+    # already-stationary input → little/no burn-in
+    flat = detect_equilibration([5.0 + 2.0 * math.sin(i) for i in range(300)])
+    assert flat["t0"] <= 30

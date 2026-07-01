@@ -1249,6 +1249,7 @@ SnapshotOpKind = Literal[
     'create-far-ends',
     'overhang-bulk',
     'apply-loop-skips',
+    'autorefine-skips',
     'flexible-segment-mark',
     'flexible-segment-unmark',
     'flexible-relax',

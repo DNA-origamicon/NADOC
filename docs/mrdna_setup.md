@@ -6,6 +6,49 @@ pre-relaxation engine.
 
 ---
 
+## Quick install (one command)
+
+Two pieces: the **ARBD** GPU binary (compiled once, see Step 1) and the **mrdna**
+Python package (cloned, patched, editable-installed). The Python half is fully
+scripted and idempotent:
+
+```bash
+./scripts/setup-mrdna.sh
+```
+
+It clones mrdna to `$MRDNA_TOOL_PATH` (default `~/mrdna-tool`, a **persistent**
+path — never `/tmp`), applies the NumPy-2.x compatibility patches, editable-installs
+it into NADOC's `.venv` (`--no-deps`), writes the privacy config, verifies the import,
+and checks for the ARBD binary. Re-run it anytime — it skips what's already done.
+
+> The script is the single source of truth for the mrdna Python install. The
+> manual Steps 2–6 below are the same actions, kept as reference/troubleshooting.
+> **Step 1 (ARBD) is still manual** — it's a compiled CUDA binary, not scriptable
+> cross-machine. The cadnano patches (old Step 4) are NOT needed for the NADOC
+> bridge, which builds from lists, never via cadnano.
+
+After a fresh OS install or if mrdna "stopped working" (usually: the old checkout
+was in `/tmp` and got wiped on reboot), this one command restores it.
+
+### Verify the round trip
+
+After install, confirm NADOC<->mrdna translation is faithful and nothing explodes
+from a bad starting position:
+
+```bash
+just bench-mrdna --fast     # Phase A only — forward-translation traceability, no GPU
+just bench-mrdna            # Phase A+B — adds a short ARBD round trip + explosion guard
+```
+
+`scripts/benchmark_mrdna_roundtrip.py` runs a few designs (tiny+crossover, a
+honeycomb bundle, and a square-lattice design) and asserts, per design, that every
+NADOC nucleotide maps to exactly one mrdna bead, that the bead cloud matches NADOC's
+own render geometry, that the back-mapped positions land in-frame inside the design
+extent, and that a short relaxation doesn't balloon the structure. Exit code is
+non-zero on any failure, so it doubles as a smoke gate.
+
+---
+
 ## What you're installing
 
 | Component | Purpose | Source |

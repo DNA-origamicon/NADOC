@@ -63,6 +63,7 @@ from backend.physics.oxdna_interface import (
     DEFAULT_ANCHOR_STIFF,
     _strand_nucleotide_order,
     count_undefined_bases,
+    designed_pair_complementarity,
     oxdna_backbone_site,
     pn_to_oxdna_force,
     read_configuration_unwrapped,
@@ -75,6 +76,12 @@ from backend.physics.oxdna_interface import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["oxdna"])
+
+# Minimum fraction of designed Watson-Crick pairs that must be sequence-complementary
+# for an oxDNA relaxation to be worth starting.  A correctly-sequenced design reads
+# ~0.99 (a few frayed ends aside); a stale-after-skip design reads ~0.27 (≈ random).
+# 0.80 cleanly separates the two — nothing legitimate sits in between.
+_MIN_PAIR_COMPLEMENTARITY = 0.80
 
 
 # ── Request models ────────────────────────────────────────────────────────────
@@ -390,6 +397,29 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             "Watson-Crick partners to hold the structure together during relaxation. "
             "Finish assigning sequences (a scaffold, e.g. M13mp18, plus all staple "
             "sequences) before starting an oxDNA relaxation.",
+        )
+
+    # Complementarity check: every base may be defined (A/C/G/T) yet the staples
+    # may not COMPLEMENT the scaffold at the paired positions — oxDNA only H-bonds
+    # complementary bases (A-T/G-C), so a de-registered design relaxes to a low
+    # base-pair ceiling and fails the health gate with a cryptic "N% retention".
+    # The usual cause is adding/removing loops or skips on an already-sequenced
+    # design: skips drop a nucleotide without consuming a sequence character, so
+    # every downstream base shifts by one and the staple de-registers from the
+    # scaffold (verified on 3x6x400_test: 150 skips dropped complementarity from
+    # 99% to 27%).  Block with an actionable message instead of wasting the run.
+    n_comp, n_pairs = designed_pair_complementarity(design)
+    if n_pairs > 0 and n_comp / n_pairs < _MIN_PAIR_COMPLEMENTARITY:
+        pct = round(100 * n_comp / n_pairs)
+        raise HTTPException(
+            400,
+            f"Only {pct}% of base pairs are Watson-Crick complementary "
+            f"({n_comp}/{n_pairs}) — the staple sequences do not match the scaffold "
+            "at the paired positions, so oxDNA cannot bond them and the structure "
+            "would relax to a low base-pair ceiling. This usually means sequences "
+            "were assigned BEFORE loops/skips were added (adding a skip shifts every "
+            "downstream base). Re-run Assign Sequences to re-derive them against the "
+            "current structure, then start the relaxation.",
         )
 
     # Relax-on-a-surface elements (field excluded by design).
@@ -1091,6 +1121,48 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
     result["confidence"] = rmsf_confidence(result.get("n_frames", 0))
     result["production_running"] = any(s.status == "running" for s in prod_stages)
     return result
+
+
+@router.get("/oxdna/jobs/{job_id}/deviation")
+async def get_oxdna_deviation(job_id: str) -> dict:
+    """Per-nucleotide DEVIATION map: the production mean structure recoloured by each
+    base's distance (nm) from its DESIGNED position, after Kabsch superposition — the
+    deviation counterpart of GET /oxdna/jobs/{id}/rmsf.  Available for ANY job with a
+    production/field run (no autorefine required).  Returns ``{ready, positions:[{…,
+    deviation}], min/max/mean_deviation, n_frames, confidence, production_running}``.
+    """
+    from backend.api.skip_twist_tuning import core_reference_geometry
+    from backend.core.models import Design
+    from backend.core.oxdna_health import (
+        geometry_deviation_map, production_rmsf, rmsf_confidence,
+    )
+
+    job = _load_job(job_id)
+    prod_stages = [s for s in job.stages if s.kind in ("production", "field")]
+    if not prod_stages:
+        return {"ready": False, "reason": "no production or field run yet"}
+    jd = job.job_dir(_workspace())
+    usable = [s for s in prod_stages if s.status in ("done", "running")]
+    trajs: list[Path] = []
+    for s in usable:
+        trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
+    if not trajs:
+        return {"ready": False, "reason": "sampling starting — no frames yet"}
+    design = Design.model_validate_json((jd / "design.json").read_text())
+    ref_conf = _design_ref_conf(jd, design)
+
+    def _compute():
+        mean = production_rmsf(design, trajs, ref_conf)
+        if not mean.get("ready") or not mean.get("positions"):
+            return None, mean
+        return geometry_deviation_map(mean["positions"], core_reference_geometry(design)), mean
+
+    dev, mean = await run_in_threadpool(_compute)
+    if dev is None:
+        return {"ready": False, "reason": "no frames yet"}
+    dev["confidence"] = rmsf_confidence(mean.get("n_frames", 0))
+    dev["production_running"] = any(s.status == "running" for s in prod_stages)
+    return {"ready": True, "n_frames": mean.get("n_frames"), **dev}
 
 
 @router.get("/oxdna/jobs/{job_id}/trajectory")

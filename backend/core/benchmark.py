@@ -71,16 +71,31 @@ def oxdna_config_grid(cuda_devices: list[dict]) -> list[OxdnaTrialConfig]:
 def namd_config_grid(
     thread_ladder: list[int],
     cuda_devices: list[dict],
+    *,
+    cuda_build: bool = False,
 ) -> list[NamdTrialConfig]:
-    """``thread_ladder × ({each GPU} ∪ {CPU-only})``.
+    """``thread_ladder × device-targets``, where the targets depend on the NAMD build.
 
-    The CPU-only trial carries ``devices=""`` — the runner omits the ``+devices``
-    flag entirely in that case (passing ``+devices ""`` confuses NAMD).
+    ``devices=""`` means the runner omits the ``+devices`` flag entirely (passing
+    ``+devices ""`` confuses NAMD).  What that empty target *does* depends on the binary:
+
+    - **CUDA build** (``cuda_build=True``): NAMD always runs on a GPU — even with no
+      ``+devices`` it auto-selects one.  So a "CPU-only" trial is a fiction (it still
+      uses the GPU) and is omitted.  Targets are one per GPU; on a *multi*-GPU box the
+      empty target is kept as a genuine "use all GPUs" config (labelled ``GPU:all``).
+    - **CPU build** (or NAMD not detected): the only real target is CPU threads
+      (``devices=""``), since a non-CUDA binary cannot use the GPU.
     """
-    targets: list[tuple[str, str]] = [("", "CPU")]
-    for dev in cuda_devices:
-        idx = str(dev["index"])
-        targets.append((idx, f"GPU:{idx}"))
+    targets: list[tuple[str, str]] = []
+    if cuda_build and cuda_devices:
+        for dev in cuda_devices:
+            idx = str(dev["index"])
+            targets.append((idx, f"GPU:{idx}"))
+        if len(cuda_devices) > 1:
+            # No +devices on a multi-GPU CUDA build == use every GPU — a distinct config.
+            targets.append(("", "GPU:all"))
+    else:
+        targets.append(("", "CPU"))
     grid: list[NamdTrialConfig] = []
     for threads in thread_ladder:
         for devices, dev_label in targets:

@@ -33,12 +33,12 @@ class NamdLogMetrics:
 
 # ── Regexes ───────────────────────────────────────────────────────────────────
 
-# "Info: Benchmark time: 16 CPUs 0.002345 s/step 0.027123 days/ns 16.00 MB memory"
-_RE_BENCHMARK = re.compile(r"(\d+\.\d+(?:e[+-]?\d+)?)\s+days/ns")
-
-# "WallClock: 60.000  CPUTime: 58.000  Memory: 1200.000 MB"  (alternate timing)
-# ns/day also appears as: "ns/day:" in some NAMD versions
-_RE_NSDAY = re.compile(r"ns/day:\s*([\d.]+(?:e[+-]?\d+)?)")
+# NAMD reports throughput on "Benchmark time:" lines in one of two historical formats:
+#   older builds:  "... 0.002345 s/step 0.027123 days/ns 16.00 MB"   (value = days/ns)
+#   NAMD 3 (esp. GPU-resident):  "... 0.0117889 s/step 29.3158 ns/day 0 MB"  (value = ns/day)
+# Each interval prints one line; the LAST is the most equilibrated, so we take findall[-1].
+_RE_DAYS_PER_NS = re.compile(r"([\d.]+(?:e[+-]?\d+)?)\s+days/ns")
+_RE_NS_PER_DAY = re.compile(r"([\d.]+(?:e[+-]?\d+)?)\s+ns/day")
 
 
 # ── Parser ────────────────────────────────────────────────────────────────────
@@ -96,22 +96,22 @@ def parse_namd_log(log_path: Path) -> NamdLogMetrics:
         m.total_energy_kcal = _get("TOTAL")
         m.kinetic_kcal     = _get("KINETIC")
 
-    # ns/day from Benchmark line (present at end of completed run)
-    bench = _RE_BENCHMARK.search(text)
-    if bench:
+    # ns/day from the Benchmark lines (present once a run has timed steps).  Prefer the
+    # last "days/ns" value (old format); else the last "ns/day" value (NAMD 3 format).
+    dpns = _RE_DAYS_PER_NS.findall(text)
+    nspd = _RE_NS_PER_DAY.findall(text)
+    if dpns:
         try:
-            dpns = float(bench.group(1))
-            if dpns > 0:
-                m.ns_per_day = 1.0 / dpns
+            d = float(dpns[-1])
+            if d > 0:
+                m.ns_per_day = 1.0 / d
         except ValueError:
             m.warnings.append("Could not parse days/ns from Benchmark line.")
-    else:
-        nsday = _RE_NSDAY.search(text)
-        if nsday:
-            try:
-                m.ns_per_day = float(nsday.group(1))
-            except ValueError:
-                pass
+    elif nspd:
+        try:
+            m.ns_per_day = float(nspd[-1])
+        except ValueError:
+            m.warnings.append("Could not parse ns/day from Benchmark line.")
 
     return m
 

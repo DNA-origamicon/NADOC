@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import shutil
 import signal
@@ -805,6 +806,109 @@ def _escalate_relax_and_rewind(
                 specs[relax_idx].max_backbone_force, specs[relax_idx].name)
 
 
+# ── Unbiased-MD explosion recovery (production / field / run) ──────────────────
+
+# Kinds that run at the fast production timestep and are eligible for dt-halving
+# recovery.  Relax/equil stages instead escalate via _escalate_relax_and_rewind.
+_DT_HALVE_KINDS = frozenset({"production", "field", "run"})
+# Stages whose final structure should stay ~compact, so a large extent increase means a
+# numerical blow-up.  Excludes "field": a field run intentionally DEFLECTS/displaces the
+# structure under an applied force, so its extent legitimately grows.
+_BLOWUP_EXTENT_KINDS = frozenset({"production", "run"})
+
+# Substrings oxDNA prints when a particle's coordinates blow up (the integrator
+# diverged — usually too-large a timestep for a transiently stiff/strained contact,
+# amplified by mixed-precision CUDA).  Matched case-insensitively in the stage log.
+_EXPLOSION_MARKERS = (
+    "_max_n_per_cell",                      # cell list overflow from huge coordinates
+    "particles with very large coordinates",
+    "nan",                                  # NaN energy/coordinate
+)
+
+
+def _log_indicates_explosion(log_path: Path) -> bool:
+    """True when the stage's oxDNA log shows a numerical blow-up (vs. a config-load
+    or setup error).  Only the tail matters — the explosion is the last thing printed
+    before the non-zero exit."""
+    try:
+        text = log_path.read_text(errors="replace")
+    except OSError:
+        return False
+    tail = text[-4000:].lower()
+    return any(marker in tail for marker in _EXPLOSION_MARKERS)
+
+
+# A sampling stage's final structure whose overall extent has grown past this multiple
+# of its relaxed-seed extent has blown apart — even if oxDNA exited 0 (the expansion
+# stayed under the hard _max_n_per_cell abort threshold).  Stable production swells
+# modestly or bends (extent <= ~1x); a melt/explosion balloons it several-fold.
+_EXPLOSION_EXTENT_FACTOR = 2.0
+
+
+def _conf_max_extent(conf_path: Path) -> "float | None":
+    """Largest per-axis coordinate span (oxDNA units) of a configuration, or None if
+    unreadable — a cheap rotation-robust proxy for the structure's overall size."""
+    try:
+        lines = conf_path.read_text(errors="replace").splitlines()
+    except OSError:
+        return None
+    lo = [float("inf")] * 3
+    hi = [float("-inf")] * 3
+    seen = False
+    for ln in lines[3:]:                       # skip the t= / b= / E= header lines
+        p = ln.split()
+        if len(p) < 3:
+            continue
+        try:
+            xyz = (float(p[0]), float(p[1]), float(p[2]))
+        except ValueError:
+            continue
+        if not all(math.isfinite(v) for v in xyz):
+            return float("inf")                # NaN/inf coordinate = definitely blown up
+        seen = True
+        for i in range(3):
+            lo[i] = min(lo[i], xyz[i]); hi[i] = max(hi[i], xyz[i])
+    return max(hi[i] - lo[i] for i in range(3)) if seen else None
+
+
+def _structure_blew_up(stage_dir: Path, ref_conf: Path) -> bool:
+    """True if a COMPLETED sampling stage's final structure has expanded far beyond its
+    relaxed-seed extent.  Catches the numerical blow-up that finishes without an oxDNA
+    abort (so :func:`_log_indicates_explosion` never sees it) and would otherwise hand a
+    blown-apart structure to display / measurement."""
+    cur = _conf_max_extent(stage_dir / "last_conf.dat")
+    ref = _conf_max_extent(ref_conf)
+    if cur is None or ref is None or ref < 1e-6:
+        return False
+    return cur > _EXPLOSION_EXTENT_FACTOR * ref
+
+
+def _halve_dt_and_restart(
+    job: OxdnaJob,
+    workspace_dir: Path,
+    specs: list[OxdnaStageSpec],
+    idx: int,
+) -> None:
+    """Spend one production retry: halve this sampling stage's timestep and restart it
+    from the clean relaxed seed (NOT the exploded checkpoint).  Resetting the stage's
+    outputs makes ``_starting_conf`` fall back to the previous stage's relaxed
+    ``last_conf.dat`` (or the job's seeded ``conf.dat`` for a production-only job), so
+    the re-run integrates the well-relaxed structure at the stabler, finer timestep."""
+    job.production_retries += 1
+    specs[idx] = replace(specs[idx], dt=specs[idx].dt / 2.0)
+    job.stages[idx].status     = "pending"
+    job.stages[idx].started_at = None
+    job.stages[idx].resumed    = False
+    _reset_stage_outputs(job.stage_dir(workspace_dir, specs[idx].name))
+    job.current_stage_idx = idx
+    _persist_specs(job, workspace_dir, specs)
+    job.save(workspace_dir)
+    logger.info("[%s] %s went unstable (coordinate blow-up) → halving dt and "
+                "restarting from the relaxed seed (attempt %d/%d): dt=%s",
+                job.job_id, specs[idx].name, job.production_retries,
+                job.max_production_retries, specs[idx].dt)
+
+
 # ── Main runner coroutine ─────────────────────────────────────────────────────
 
 async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> None:
@@ -899,7 +1003,21 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
             raise asyncio.CancelledError
 
         if rc != 0:
-            # A stage crashed.  If it's at/after the relax stage and retry budget
+            # A stage crashed.  First: an unbiased MD sampling stage (production /
+            # field / run) that went numerically unstable late in the run — a single
+            # particle's coordinates explode and oxDNA aborts.  The relaxed structure
+            # was fine (it ran for a while), so escalating the relax is the wrong
+            # lever; instead re-run THIS stage at half the timestep from the clean
+            # relaxed seed.  Keeps the fast dt the default, auto-stabilises designs
+            # that need it (large / floppy structures), no user intervention.
+            if (spec.kind in _DT_HALVE_KINDS
+                    and job.production_retries < job.max_production_retries
+                    and _log_indicates_explosion(log_path)):
+                logger.info("[%s] %s crashed (rc=%d) with a blow-up signature → "
+                            "halve dt and restart", job.job_id, spec.name, rc)
+                _halve_dt_and_restart(job, workspace_dir, specs, idx)
+                continue
+            # Otherwise: if it's at/after the relax stage and retry budget
             # remains, escalate the relax and retry the hand-off (the canonical case:
             # a standard-potential stage aborting at config load on a residual
             # over-stretched backbone bond).
@@ -912,7 +1030,17 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
                 continue
             job.stages[idx].status = "failed"
             job.status = OxdnaStatus.failed
-            job.error = f"oxDNA failed for {spec.name} (rc={rc}). See {spec.name}/oxdna.log"
+            if spec.kind in _DT_HALVE_KINDS and _log_indicates_explosion(log_path):
+                job.error = (
+                    f"{spec.name} kept going numerically unstable (the structure's "
+                    f"coordinates blew up) even after {job.max_production_retries} "
+                    f"automatic timestep reduction(s), down to dt={spec.dt}. The design "
+                    f"is likely too floppy or strained to sample — relaxing it longer, "
+                    f"or stiffening the structure (e.g. fewer/shorter single-stranded "
+                    f"extra bases at crossovers), is the likely fix."
+                )
+            else:
+                job.error = f"oxDNA failed for {spec.name} (rc={rc}). See {spec.name}/oxdna.log"
             job.save(workspace_dir)
             return
 
@@ -979,6 +1107,31 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
             logger.info("[%s] %s not equil-ready (%d over-stretched) but retries "
                         "disabled → proceeding to capped equil",
                         job.job_id, spec.name, res.n_fene_over)
+
+        # ── Non-aborting blow-up gate (extend dt-halving to silent explosions) ──
+        # An unbiased sampling stage can go numerically unstable and BALLOON the
+        # structure without ever tripping oxDNA's hard abort (it exits 0).  The health
+        # check above can still pass (bp can stay paired while the bundle swells), so
+        # without this the job would finish "done" with a blown-apart structure that
+        # display / autorefine then measures.  Treat it exactly like a crash blow-up:
+        # halve dt and re-run from the relaxed seed; fail clearly once the budget is out.
+        if spec.kind in _BLOWUP_EXTENT_KINDS and _structure_blew_up(stage_dir, conf):
+            if job.production_retries < job.max_production_retries:
+                logger.info("[%s] %s completed but the structure blew up (extent > %.1f× "
+                            "the relaxed seed) → halve dt and restart",
+                            job.job_id, spec.name, _EXPLOSION_EXTENT_FACTOR)
+                _halve_dt_and_restart(job, workspace_dir, specs, idx)
+                continue
+            job.stages[idx].status = "failed"
+            job.status = OxdnaStatus.failed
+            job.error = (
+                f"{spec.name} finished but the structure blew up (it expanded far beyond "
+                f"its relaxed size) even after {job.max_production_retries} automatic "
+                f"timestep reduction(s), down to dt={spec.dt}. The design is likely too "
+                f"floppy/strained to sample at this timestep — relax it longer or lower dt."
+            )
+            job.save(workspace_dir)
+            return
 
         job.stages[idx].status = "done"
         job.current_stage_idx = idx + 1

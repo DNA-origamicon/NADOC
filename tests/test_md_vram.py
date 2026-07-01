@@ -199,3 +199,32 @@ def test_auto_water_shell_no_vram_reading(monkeypatch):
     monkeypatch.setattr(V, "detect_vram_mb", lambda devices="0": None)
     out = V.auto_water_shell(make_6hb_design(42))
     assert out["shell_nm"] == 0.0 and out["note"] is None  # leave user's choice alone
+
+
+# ── External GPU-contention detection (pre-launch warning) ────────────────────
+
+def _activity(procs, used=4000, total=12288, util=40):
+    return {"used_mb": used, "total_mb": total, "free_mb": total - used,
+            "util_pct": util, "processes": procs}
+
+
+def test_gpu_contention_flags_external_heavy_process():
+    act = _activity([{"pid": 419257, "name": "namd3", "mem_mb": 2336}])
+    out = V.gpu_contention_summary(act)
+    assert out["available"] is True and out["busy"] is True
+    assert out["processes"][0]["name"] == "namd3"
+    assert "namd3" in out["message"] and "2,336 MB" in out["message"]
+
+
+def test_gpu_contention_ignores_small_and_own_processes():
+    act = _activity([
+        {"pid": 100, "name": "nxnode.bin", "mem_mb": 287},   # below threshold
+        {"pid": 200, "name": "namd3", "mem_mb": 8000},        # our own job
+    ])
+    out = V.gpu_contention_summary(act, own_pids={200})
+    assert out["busy"] is False and out["processes"] == []
+
+
+def test_gpu_contention_no_nvidia_smi():
+    out = V.gpu_contention_summary(None)
+    assert out["available"] is False and out["busy"] is False
