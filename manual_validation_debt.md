@@ -294,6 +294,14 @@ call. A break in any of those passes every automated gate.
 
 ## VALIDATED (user-confirmed pass)
 
+### MV-20 — oxDNA "Graphs and Metrics" card ✅ VALIDATED 2026-07-02
+Twist / curvature / base-pairing graphs (spatial + temporal) over a job or its
+parent/child lineage, with per-metric Generate/Display/Export + ETA loading bars,
+in the oxDNA Dynamics panel (collapsible, last card; Export-ZIP button below it).
+User confirmed the card in the running app. Wiring + collapse + card ordering +
+real-canvas draw are e2e-covered (`e2e/oxdna_metrics_card.spec.js`); compute is
+route + unit-pinned. See [[project_oxdna_metrics_card]].
+
 ### MV-6 — Belt polymerize ✅ VALIDATED 2026-06-07
 Discharges #32. User manually validated the belt-polymerize gesture: a built belt
 assembly → Polymerize along the belt path → evenly-spaced copies render along the tube.

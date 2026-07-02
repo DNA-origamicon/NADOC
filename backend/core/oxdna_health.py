@@ -453,6 +453,207 @@ def production_twist_series(
             "equilibrated": detect_equilibration(per_frame)}
 
 
+def count_trajectory_frames(traj_path) -> int:
+    """Fast, memory-light frame count of an oxDNA ``.dat`` trajectory — the number of
+    ``t = …`` header lines (frames are split on those, see
+    ``read_trajectory_frames_full``).  Streams the file line by line so a multi-GB
+    trajectory isn't materialised; used to size the metric-compute progress bar/ETA
+    without paying the full per-nucleotide parse twice."""
+    from pathlib import Path
+    n = 0
+    try:
+        with Path(traj_path).open("r", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("t "):
+                    n += 1
+    except OSError:
+        return 0
+    return n
+
+
+def differential_profile(sim_profile, analytic_profile):
+    """``sim − analytic`` of two cumulative profiles that share a shape but NOT their exact
+    sample positions.  The spatial profiles (:func:`measure_bundle_twist_profile`,
+    :func:`measure_bundle_curvature_profile`) are meant to be read DIFFERENTIALLY, but the
+    simulated mean and the analytic reference have different slab centres (different
+    nucleotide sets), so a plain element-wise subtract is ill-defined.  Both are normalised
+    to a 0..1 axial parameter over their own span, the analytic curve is linearly
+    interpolated onto the sim's sample points, and subtracted — returning
+    ``[(sim_axial_t_nm, sim_val − analytic_val), …]``.  Empty ``analytic_profile`` → the sim
+    profile unchanged (no reference to subtract)."""
+    sim = [(float(t), float(v)) for t, v in sim_profile]
+    if not sim:
+        return []
+    ana = [(float(t), float(v)) for t, v in analytic_profile]
+    if not ana:
+        return sim
+    st = np.array([t for t, _ in sim]); sv = np.array([v for _, v in sim])
+    at = np.array([t for t, _ in ana]); av = np.array([v for _, v in ana])
+
+    def _norm(x):
+        lo, hi = float(x.min()), float(x.max())
+        return (x - lo) / (hi - lo) if hi - lo > 1e-9 else np.zeros_like(x)
+
+    sn, an = _norm(st), _norm(at)
+    # np.interp needs ascending xp; the analytic profile's normalised t is monotone by span.
+    order = np.argsort(an)
+    interp = np.interp(sn, an[order], av[order])
+    return [(round(float(t), 3), round(float(s - i), 3)) for t, s, i in zip(st, sv, interp)]
+
+
+def base_pairing_spatial_profile(per_pair_formed_frac, mean_positions, *, n_slices: int = 0):
+    """Fraction-of-pairs-formed vs axial position ``[(axial_t_nm, fraction), …]`` — localises
+    WHERE a bundle melts (ends fray first, core holds), the spatial companion to the per-frame
+    base-pairing series.  ``per_pair_formed_frac`` maps ``(helix_id, bp_index) → fraction of
+    frames that pair was H-bonded`` (from :func:`base_pair_retention`'s formed test accumulated
+    over the trajectory); ``mean_positions`` is the time-averaged per-nucleotide structure used
+    only to place each pair on the bundle axis.  Bins pairs into ~1-turn axial slabs (same
+    machinery as the twist/curvature profiles) and averages the formed fraction per slab.  Not
+    differential — a fraction is already absolute.  Returns ``[]`` when the geometry is degenerate."""
+    if not per_pair_formed_frac or not mean_positions:
+        return []
+    bp_pts: dict = {}
+    for p in mean_positions:
+        key = (p["helix_id"], int(p["bp_index"]))
+        if key in per_pair_formed_frac:
+            bp_pts.setdefault(key, []).append(np.asarray(p["backbone_position"], dtype=float))
+    keys = list(bp_pts.keys())
+    if len(keys) < 3:
+        return []
+    pts = np.array([np.mean(bp_pts[k], axis=0) for k in keys])
+    C, L, _e1, _e2 = _bundle_axis_frame(pts)
+    t = (pts - C) @ L
+    span = float(t.max() - t.min())
+    if span < 1e-6:
+        return []
+    if n_slices <= 0:
+        n_slices = max(3, int(round(span / 3.5)))
+    edges = np.linspace(t.min(), t.max(), n_slices + 1)
+    slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
+    fracs = np.array([per_pair_formed_frac[k] for k in keys])
+    out: list[tuple[float, float]] = []
+    for k in range(n_slices):
+        m = slab == k
+        if np.any(m):
+            out.append((round(float(t[m].mean()), 3), round(float(fracs[m].mean()), 4)))
+    return out
+
+
+def production_metric_series(
+    design,
+    production_traj_path,
+    reference_conf_path,
+    analytic_reference,
+    *,
+    n_slices: int = 0,
+    on_frame=None,
+) -> dict:
+    """SINGLE-PASS per-frame twist, curvature AND base-pairing over a production trajectory,
+    plus the three mean-structure spatial profiles — the compute behind the "Graphs and
+    Metrics" card.  Reading frames dominates the cost, so all metrics are gathered in one
+    walk (do NOT read the trajectory three times).
+
+    Per frame: differential bundle twist (``measure_bundle_twist − analytic``) and curvature
+    (``measure_bundle_curvature − analytic``) on the reference CORE, and the base-pairing
+    fraction (:func:`base_pair_retention` on the FULL frame map — melting is a whole-structure
+    readout, not core-only).  Accumulates the time-mean structure (for the twist/curvature
+    spatial profiles, made differential vs the analytic profiles) and each pair's formed-frame
+    count (for :func:`base_pairing_spatial_profile`).  ``on_frame()`` is invoked once per
+    measured frame so a caller can drive an ETA bar.
+
+    Frame handling mirrors :func:`production_twist_series` exactly (PBC-unwrap + Kabsch-align,
+    backbone site, pooled across a list of trajectory paths).  Returns a per-metric dict with
+    ``temporal`` (per_frame + stats) and ``spatial`` ([(axial_t, value)]) sections; ``ready``
+    is False if no frames or fewer than two helices.
+    """
+    from backend.physics.oxdna_interface import (
+        _parse_box_nm,
+        oxdna_backbone_site,
+        read_configuration_full,
+        read_trajectory_frames_full,
+        unwrap_align_to_reference,
+    )
+    ref = read_configuration_full(reference_conf_path, design)
+    paths = (list(production_traj_path)
+             if isinstance(production_traj_path, (list, tuple))
+             else [production_traj_path])
+    analytic_twist = measure_bundle_twist(analytic_reference, n_slices=n_slices)
+    analytic_curv = measure_bundle_curvature(analytic_reference, n_slices=n_slices)
+
+    twist_pf: list[float] = []
+    curv_pf: list[float] = []
+    bp_pf: list[float] = []
+    acc: dict[tuple, list] = {}                     # key → [bb xyz, …] for the mean structure
+    formed: dict[tuple, int] = {}                   # (helix,bp) → frames the pair was H-bonded
+    total_pair: dict[tuple, int] = {}               # (helix,bp) → frames the pair was designed
+    n_frames = 0
+    n_designed = 0
+    for path in paths:
+        frames = read_trajectory_frames_full(path, design)
+        box = _parse_box_nm(path)
+        for fr in frames:
+            aligned = (unwrap_align_to_reference(fr, ref, design, box)
+                       if box is not None and np.all(box > 0) else fr)
+            frame_positions = []
+            for k, v in aligned.items():
+                bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
+                frame_positions.append({"helix_id": k[0], "bp_index": k[1], "direction": k[2],
+                                        "backbone_position": bb})
+                acc.setdefault(k, []).append(bb)
+            core = _filter_to_reference_core(frame_positions, analytic_reference)
+            try:
+                twist_pf.append(measure_bundle_twist(core, n_slices=n_slices) - analytic_twist)
+                curv_pf.append(measure_bundle_curvature(core, n_slices=n_slices) - analytic_curv)
+            except ValueError:
+                continue                            # degenerate frame (too few helices) — skip
+            # base pairing on the FULL frame map + per-pair accumulation (mirrors base_pair_retention)
+            fwd = {(a, b) for (a, b, d) in aligned if d == "FORWARD"}
+            rev = {(a, b) for (a, b, d) in aligned if d == "REVERSE"}
+            designed = fwd & rev
+            n_designed = max(n_designed, len(designed))
+            n_formed = 0
+            for hid, bp in designed:
+                f = aligned[(hid, bp, "FORWARD")]; r = aligned[(hid, bp, "REVERSE")]
+                fb = f["backbone_position"] + OXDNA_BASE_SITE_NM * f["a1"]
+                rb = r["backbone_position"] + OXDNA_BASE_SITE_NM * r["a1"]
+                total_pair[(hid, bp)] = total_pair.get((hid, bp), 0) + 1
+                if float(np.linalg.norm(fb - rb)) <= BP_FORMED_CUTOFF_NM:
+                    formed[(hid, bp)] = formed.get((hid, bp), 0) + 1
+                    n_formed += 1
+            bp_pf.append(n_formed / len(designed) if designed else 0.0)
+            n_frames += 1
+            if on_frame is not None:
+                on_frame()
+
+    if n_frames == 0 or not twist_pf:
+        return {"ready": False, "n_frames": 0}
+
+    mean_positions = [{"helix_id": k[0], "bp_index": k[1], "direction": k[2],
+                       "backbone_position": np.mean(v, axis=0)} for k, v in acc.items()]
+    mean_core = _filter_to_reference_core(mean_positions, analytic_reference)
+    twist_sp = differential_profile(measure_bundle_twist_profile(mean_core, n_slices=n_slices),
+                                    measure_bundle_twist_profile(analytic_reference, n_slices=n_slices))
+    curv_sp = differential_profile(measure_bundle_curvature_profile(mean_core, n_slices=n_slices),
+                                   measure_bundle_curvature_profile(analytic_reference, n_slices=n_slices))
+    pair_frac = {k: formed.get(k, 0) / total_pair[k] for k in total_pair}
+    bp_sp = base_pairing_spatial_profile(pair_frac, mean_positions, n_slices=n_slices)
+
+    return {
+        "ready": True, "n_frames": n_frames,
+        "twist": {"temporal": {"per_frame": [round(x, 3) for x in twist_pf],
+                               "stats": twist_series_stats(twist_pf),
+                               "analytic": round(analytic_twist, 3)},
+                  "spatial": twist_sp},
+        "curvature": {"temporal": {"per_frame": [round(x, 4) for x in curv_pf],
+                                   "stats": twist_series_stats(curv_pf),
+                                   "analytic": round(analytic_curv, 4)},
+                      "spatial": curv_sp},
+        "base_pairing": {"temporal": {"per_frame": [round(x, 4) for x in bp_pf],
+                                      "n_designed": n_designed},
+                         "spatial": bp_sp},
+    }
+
+
 # Below this many pooled frames the flexibility map is flagged "preliminary"
 # (rel. error ≳ 10%).  RMSF converges slowly, so a short run is untrustworthy.
 RMSF_PRELIM_FRAMES = 50

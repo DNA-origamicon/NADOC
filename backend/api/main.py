@@ -65,6 +65,7 @@ from backend.api.routes_md import router as md_router
 from backend.api.routes_oxdna import router as oxdna_router
 from backend.api.routes_oxdna_live import router as oxdna_live_router
 from backend.api.routes_autorefine import router as autorefine_router
+from backend.api.routes_oxdna_metrics import router as oxdna_metrics_router
 from backend.api.routes_primitives import router as primitives_router
 from backend.api.routes_protein import router as protein_router
 from backend.api.routes_assign_sequences import router as assign_sequences_router
@@ -184,6 +185,7 @@ app.include_router(md_router,          prefix="/api")
 app.include_router(oxdna_router,       prefix="/api")
 app.include_router(oxdna_live_router,  prefix="/api")
 app.include_router(autorefine_router,  prefix="/api")
+app.include_router(oxdna_metrics_router, prefix="/api")
 app.include_router(benchmark_router,   prefix="/api")
 app.include_router(engines_router,     prefix="/api")
 app.include_router(primitives_router,  prefix="/api")

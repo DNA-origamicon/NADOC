@@ -989,17 +989,8 @@ async def delete_oxdna_job(job_id: str) -> dict:
 
     # Collect the full descendant subtree (children, grandchildren, …) so a chained
     # lineage is removed as a unit.
-    all_jobs = OxdnaJob.list_jobs(ws)
-    children_of: dict[str, list[OxdnaJob]] = {}
-    for j in all_jobs:
-        if j.parent_job_id:
-            children_of.setdefault(j.parent_job_id, []).append(j)
-    descendants: list[OxdnaJob] = []
-    stack = list(children_of.get(job_id, []))
-    while stack:
-        d = stack.pop()
-        descendants.append(d)
-        stack.extend(children_of.get(d.job_id, []))
+    from backend.core.oxdna_job import descendants_of
+    descendants = descendants_of(job_id, OxdnaJob.list_jobs(ws))
 
     for d in descendants:
         if is_running(d.job_id) or d.status == OxdnaStatus.running:

@@ -801,6 +801,183 @@ def _write_traj(design, geometry, path, n_frames, box_nm=80.0):
     path.write_text("\n".join(out) + "\n")
 
 
+# ── Graphs & Metrics card: differential_profile / base_pairing_spatial_profile /
+#    count_trajectory_frames / production_metric_series ──────────────────────────
+
+def test_differential_profile_subtracts_on_shared_axis():
+    """sim − analytic on a common normalised axial grid; identical profiles → ~0."""
+    from backend.core.oxdna_health import differential_profile
+    sim = [(0.0, 0.0), (5.0, 10.0), (10.0, 20.0)]
+    same = differential_profile(sim, sim)
+    assert all(abs(v) < 1e-6 for _, v in same)
+    # analytic sampled at DIFFERENT positions but same shape (linear 0→20) → still ~0.
+    analytic = [(0.0, 0.0), (2.0, 5.0), (4.0, 10.0), (6.0, 15.0), (8.0, 20.0)]
+    diff = differential_profile(sim, analytic)
+    assert [t for t, _ in diff] == [0.0, 5.0, 10.0]     # keeps the sim's sample positions
+    assert all(abs(v) < 1e-6 for _, v in diff)
+
+
+def test_differential_profile_nonzero_when_sim_exceeds_analytic():
+    from backend.core.oxdna_health import differential_profile
+    sim = [(0.0, 0.0), (5.0, 30.0), (10.0, 60.0)]       # sim over-twists 3× the analytic
+    analytic = [(0.0, 0.0), (5.0, 10.0), (10.0, 20.0)]
+    diff = differential_profile(sim, analytic)
+    assert diff[-1][1] == pytest.approx(40.0, abs=1e-6)  # 60 − 20
+    assert differential_profile(sim, []) == [(0.0, 0.0), (5.0, 30.0), (10.0, 60.0)]  # no ref → sim
+
+
+def _paired_bundle(n_helix=4, n_axial=12, radius=1.2, rise=0.34):
+    """Straight bundle with BOTH strands present at every (helix, bp) — so it has
+    designed base pairs (unlike ``_straight_bundle``, which is FORWARD-only)."""
+    import math
+    out = []
+    for h in range(n_helix):
+        ang = 2 * math.pi * h / n_helix
+        x, y = radius * math.cos(ang), radius * math.sin(ang)
+        for i in range(n_axial):
+            out.append(_pos(h, i, "FORWARD", (x, y, rise * i)))
+            out.append(_pos(h, i, "REVERSE", (x + 0.1, y, rise * i)))
+    return out
+
+
+def test_base_pairing_spatial_profile_flat_when_uniform():
+    from backend.core.oxdna_health import base_pairing_spatial_profile
+    mean = _paired_bundle(n_axial=40)
+    frac = {(p["helix_id"], p["bp_index"]): 1.0 for p in mean}
+    prof = base_pairing_spatial_profile(frac, mean)
+    assert prof and all(v == pytest.approx(1.0) for _, v in prof)
+
+
+def test_base_pairing_spatial_profile_dips_at_melted_end():
+    from backend.core.oxdna_health import base_pairing_spatial_profile
+    mean = _paired_bundle(n_axial=40)
+    # High-bp end is melted (formed fraction 0.1), the rest holds (1.0).
+    frac = {(p["helix_id"], p["bp_index"]): (0.1 if p["bp_index"] >= 34 else 1.0) for p in mean}
+    prof = base_pairing_spatial_profile(frac, mean)
+    # First slab (low axial t) holds; last slab (high axial t) dips.
+    assert prof[0][1] > 0.8
+    assert prof[-1][1] < 0.5
+
+
+def test_count_trajectory_frames(tmp_path):
+    from backend.core.oxdna_health import count_trajectory_frames
+    p = tmp_path / "traj.dat"
+    p.write_text("t = 0\nb = 1 1 1\nE = 0 0 0\n1 0 0\n"
+                 "t = 100\nb = 1 1 1\nE = 0 0 0\n1 0 0\n"
+                 "t = 200\nb = 1 1 1\nE = 0 0 0\n1 0 0\n")
+    assert count_trajectory_frames(p) == 3
+    assert count_trajectory_frames(tmp_path / "missing.dat") == 0
+
+
+def test_production_metric_series_one_pass_all_metrics(design, geometry, tmp_path):
+    """Single pass over a trajectory yields twist, curvature AND base-pairing — temporal
+    (per-frame) + spatial (profile) sections — and calls the progress hook per frame."""
+    from backend.core.oxdna_health import production_metric_series
+    from backend.api.skip_twist_tuning import core_reference_geometry
+    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
+    traj = tmp_path / "prod.dat"; _write_traj(design, geometry, traj, 4)
+    analytic = core_reference_geometry(design)
+
+    seen = []
+    out = production_metric_series(design, traj, ref, analytic, on_frame=lambda: seen.append(1))
+    assert out["ready"] is True
+    assert out["n_frames"] == 4
+    assert len(seen) == 4                                    # progress hook fired per frame
+    for key in ("twist", "curvature", "base_pairing"):
+        assert len(out[key]["temporal"]["per_frame"]) == 4
+        assert out[key]["spatial"]                          # non-empty profile
+    # Base pairing is a fraction in [0, 1]; identical frames → constant.
+    assert all(0.0 <= v <= 1.0 for v in out["base_pairing"]["temporal"]["per_frame"])
+    assert out["base_pairing"]["temporal"]["n_designed"] > 0
+
+
+def test_resolve_job_chain_and_descendants():
+    """resolve_job_chain returns the whole lineage (root + descendants) chronologically;
+    descendants_of returns only the subtree below a job."""
+    from backend.core.oxdna_job import descendants_of, new_oxdna_job, resolve_job_chain
+    root = new_oxdna_job("d", []);  root.job_id = "root";  root.created_at = 1.0
+    c1 = new_oxdna_job("d", []);    c1.job_id = "c1";      c1.parent_job_id = "root";  c1.created_at = 2.0
+    c2 = new_oxdna_job("d", []);    c2.job_id = "c2";      c2.parent_job_id = "c1";    c2.created_at = 3.0
+    other = new_oxdna_job("d", []); other.job_id = "x";    other.created_at = 5.0
+    allj = [c2, other, root, c1]
+    assert [j.job_id for j in descendants_of("root", allj)] == ["c1", "c2"] or \
+           sorted(j.job_id for j in descendants_of("root", allj)) == ["c1", "c2"]
+    # From any node in the lineage, the full chain resolves the same, in time order.
+    assert [j.job_id for j in resolve_job_chain("c2", allj)] == ["root", "c1", "c2"]
+    assert [j.job_id for j in resolve_job_chain("root", allj)] == ["root", "c1", "c2"]
+    assert [j.job_id for j in resolve_job_chain("x", allj)] == ["x"]
+
+
+def _seed_production_job(design, geometry, ws, n_frames, *, parent_job_id=None):
+    """Create an oxDNA job with a completed production stage holding ``n_frames`` frames."""
+    from backend.core.oxdna_job import new_oxdna_job
+    from backend.core.oxdna_protocol import build_production_stage
+    spec = build_production_stage(name="1_production")
+    job = new_oxdna_job("d", [spec.to_status()], parent_job_id=parent_job_id)
+    job.stages[0].status = "done"
+    job.status = OxdnaStatus.completed
+    job.save(ws)
+    (job.job_dir(ws) / "design.json").write_text(design.model_dump_json())
+    sd = job.stage_dir(ws, "1_production"); sd.mkdir(parents=True, exist_ok=True)
+    _write_traj(design, geometry, sd / "trajectory.dat", n_frames)
+    return job
+
+
+def _run_metrics(job_id, scope):
+    """Start a metric run and poll to completion (background daemon thread)."""
+    from backend.api.routes_oxdna_metrics import MetricsStartRequest, get_metrics, start_metrics
+    r = start_metrics(job_id, MetricsStartRequest(scope=scope))
+    rid = r["metrics_id"]
+    for _ in range(200):
+        st = get_metrics(rid)
+        if st["state"] != "running":
+            return st
+        time.sleep(0.05)
+    raise AssertionError("metric run did not finish")
+
+
+def test_metrics_route_latest_scope(design, geometry, tmp_path, monkeypatch):
+    """start → poll → result: one job, all three metrics, both domains, progress reaches 1."""
+    import backend.api.routes_oxdna as routes_oxdna
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    job = _seed_production_job(design, geometry, tmp_path, 4)
+    st = _run_metrics(job.job_id, "latest")
+    assert st["state"] == "done"
+    assert st["progress"] == 1.0
+    res = st["result"]
+    assert res["ready"] is True and res["jobs"] == [job.job_id]
+    for key in ("twist", "curvature", "base_pairing"):
+        assert len(res[key]["temporal"]["per_frame"]) == 4
+        assert len(res[key]["spatial"]) == 1                 # one job → one overlay series
+        assert res[key]["spatial"][0]["points"]
+
+
+def test_metrics_route_chain_concatenates(design, geometry, tmp_path, monkeypatch):
+    """chain scope resolves the parent/child lineage: temporal concatenates (4+3 frames),
+    spatial overlays one profile per job."""
+    import backend.api.routes_oxdna as routes_oxdna
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    parent = _seed_production_job(design, geometry, tmp_path, 4)
+    child = _seed_production_job(design, geometry, tmp_path, 3, parent_job_id=parent.job_id)
+    st = _run_metrics(child.job_id, "chain")
+    assert st["state"] == "done"
+    res = st["result"]
+    assert set(res["jobs"]) == {parent.job_id, child.job_id}
+    assert len(res["twist"]["temporal"]["per_frame"]) == 7   # 4 + 3 concatenated
+    assert len(res["twist"]["spatial"]) == 2                 # one overlay per job
+    # Boundaries mark where each job's frames start in the concatenated series.
+    starts = [b["start_frame"] for b in res["twist"]["temporal"]["boundaries"]]
+    assert starts == [0, 4]
+
+
+def test_metrics_route_unknown_job_404():
+    from fastapi import HTTPException
+    from backend.api.routes_oxdna_metrics import MetricsStartRequest, start_metrics
+    with pytest.raises(HTTPException) as ei:
+        start_metrics("nope", MetricsStartRequest(scope="latest"))
+    assert ei.value.status_code == 404
+
+
 def test_build_production_stage_custom_name():
     """Each production re-run gets its own uniquely-named stage dir."""
     from backend.core.oxdna_protocol import build_production_stage

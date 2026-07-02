@@ -23,6 +23,7 @@ import { filterJobsForPart } from './md_jobs_panel.js'
 import { initFlexScale } from './flex_scale.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
+import { initOxdnaMetricsCard } from './oxdna_metrics_card.js'
 import { showConfirm } from './primitives/confirm.js'
 import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
@@ -1923,6 +1924,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     // the run's final job (a historical result) — its toggle re-enables on re-selection.
     _autorefineCleanForDesign = false
     if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
+    _metricsCard?.refresh()      // cached twist/curve/bp graphs no longer match the edited design
     _fetchJobs()
   })
 
@@ -1938,6 +1940,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _emitJobSelected()
     if (_collapsed) _renderList()   // re-filter cached jobs to the new path
     else _fetchJobs()               // fresh fetch + re-filter
+  })
+
+  // Graphs & Metrics card — a child module reading the panel's job selection.
+  const _metricsCard = initOxdnaMetricsCard({
+    getSelectedJob: _selectedJob,
+    getJobs: () => _jobs,
   })
 
   // initial availability probe (cheap) so the status line is populated.

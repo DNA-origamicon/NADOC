@@ -2019,6 +2019,11 @@ export const applyAutorefineSkips = (id, period) => _oxdnaJSON('POST',
   `/design/oxdna/autorefine/${id}/apply${period != null ? `?period=${period}` : ''}`)
 /** Per-nucleotide deviation map of a job's production mean structure vs its design. */
 export const getOxdnaDeviation   = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/deviation`)
+/** Graphs & Metrics card: start a background twist/curvature/base-pairing compute for a
+ *  job (`{scope:'latest'|'chain'}`) → {metrics_id}; poll `getOxdnaMetricsRun`. */
+export const startOxdnaMetrics   = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/metrics/start`, body)
+/** Poll a Graphs & Metrics run → {state, progress, eta_s, frames_done, frames_total, result?}. */
+export const getOxdnaMetricsRun  = (runId)       => _oxdnaJSON('GET',  `/oxdna/metrics/${runId}`)
 export const getOxdnaHealth      = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/health`)
 export const getOxdnaMetrics     = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/metrics`)
 export const getOxdnaDisplay     = (id, align = true) => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/display?align=${align ? 'true' : 'false'}`)

@@ -206,6 +206,38 @@ class OxdnaJob:
         return data
 
 
+def descendants_of(job_id: str, all_jobs: list["OxdnaJob"]) -> list["OxdnaJob"]:
+    """Every job chained BELOW ``job_id`` (children, grandchildren, …) via
+    ``parent_job_id`` — a field/production run seeds off its parent's end state, so a
+    lineage is deleted/measured as a unit.  Cascades to any depth."""
+    children_of: dict[str, list[OxdnaJob]] = {}
+    for j in all_jobs:
+        if j.parent_job_id:
+            children_of.setdefault(j.parent_job_id, []).append(j)
+    out: list[OxdnaJob] = []
+    stack = list(children_of.get(job_id, []))
+    while stack:
+        d = stack.pop()
+        out.append(d)
+        stack.extend(children_of.get(d.job_id, []))
+    return out
+
+
+def resolve_job_chain(job_id: str, all_jobs: list["OxdnaJob"]) -> list["OxdnaJob"]:
+    """The FULL parent/child lineage ``job_id`` belongs to — walk up to the root
+    ancestor, then collect the root + all its descendants — ordered by ``created_at``
+    (chronological, so a temporal metric can concatenate the runs end-to-end).  A
+    childless, parentless job returns just itself."""
+    by_id = {j.job_id: j for j in all_jobs}
+    root = by_id.get(job_id)
+    if root is None:
+        return []
+    while root.parent_job_id and root.parent_job_id in by_id:
+        root = by_id[root.parent_job_id]
+    lineage = [root, *descendants_of(root.job_id, all_jobs)]
+    return sorted(lineage, key=lambda j: j.created_at)
+
+
 def new_oxdna_job(
     design_name: str,
     stages: list[OxdnaStageStatus],
