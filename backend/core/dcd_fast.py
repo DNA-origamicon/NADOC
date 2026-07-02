@@ -40,6 +40,7 @@ class DcdLayout:
     istart: int
     nsavc: int
     delta_ps: float      # timestep between saved frames, in ps (0 if unknown)
+    first_ps: float      # simulation time of frame 0 = istart·dt, in ps (0 if unknown)
 
 
 def read_layout(path) -> DcdLayout:
@@ -76,7 +77,11 @@ def read_layout(path) -> DcdLayout:
             delta_akma = struct.unpack(f"{endian}f", struct.pack(f"{endian}i", icntrl[9]))[0]
         else:
             delta_akma = 0.0
-        delta_ps = float(delta_akma) * 0.04888821 * nsavc  # AKMA → ps, per saved frame
+        step_ps  = float(delta_akma) * 0.04888821            # AKMA → ps, per integrator step
+        delta_ps = step_ps * nsavc                           # ps per saved frame
+        # Absolute time of the first saved frame.  Continuation segments (.contN.dcd)
+        # start at ISTART != 0, so frame time is first_ps + idx·delta_ps, not idx·delta_ps.
+        first_ps = step_ps * istart
 
         if nfixed != 0:
             raise UnsupportedDCD("fixed atoms (NFIXED>0) — variable-size frames")
@@ -100,7 +105,7 @@ def read_layout(path) -> DcdLayout:
     frame_bytes = cell_bytes + 3 * coord_block
     n_frames = max(0, (size - header_bytes) // frame_bytes)
     return DcdLayout(endian, n_atoms, has_cell, header_bytes, frame_bytes,
-                     int(n_frames), istart, nsavc, delta_ps)
+                     int(n_frames), istart, nsavc, delta_ps, first_ps)
 
 
 def read_frame(path, layout: DcdLayout, frame_idx: int):

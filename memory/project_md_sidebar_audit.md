@@ -102,18 +102,23 @@ stale cached-frame reuse (unit-tested), but the reload cost on representation to
 is unmitigated. `beads` mode shares the `nadoc` stream and only differs in overlay
 sizing — correct, but bead-size changes don't re-render until the next frame.
 
-## R10 — Live vs scrub playback / frame seek
-**Risk: low.** Scrub `seek` is robust (clamped server-side). The live countdown bar and
-`_livePendingPoll` "Fetching…" pulse are cosmetic; if a poll's frame never returns
-(backend error), the bar can sit in pulse indefinitely with no timeout/abort surfaced
-to the user beyond an Output-log line. No test on the live-bar state machine.
+## R10 — Live vs scrub playback / frame seek  **[FIXED 2026-07-01]**
+**Risk: low.** Scrub `seek` is robust (clamped server-side; now also lazily reloads the
+Universe when a seek lands beyond its stale frame count — see md-panel-status). The
+"Fetching…" pulse could previously sit forever if a poll never returned. → **Fixed:**
+per-interval pacing via `nextLivePollAction` (md_display_state.js) — never stacks a poll
+on an outstanding one, and after `_LIVE_POLL_TIMEOUT` (15 s) surfaces a warn + re-polls
+instead of pulsing indefinitely. Pure fn unit-tested (`md_display_state.test.js`); the
+live-bar DOM wiring itself is not exercised in a live-app session.
 
-## R11 — PBC/Kabsch alignment quality
+## R11 — PBC/Kabsch alignment quality  **[PARTIAL 2026-07-01]**
 **Risk: low (correctness, not crash).** `_seek_sync` does sequential unwrap + dynamic-T
-+ hybrid nearest-image + Kabsch with a gimbal-lock inlier re-fit. Heuristic-heavy and
-only loosely validated; a late-frame >60° drift can still mis-align. Warnings about
-missing `view_whole.xtc` are logged to Output but easy to miss. No regression test pins
-the alignment output numerically (the happy-path test only checks keys exist).
++ hybrid nearest-image + Kabsch with a gimbal-lock inlier re-fit. Heuristic-heavy; a
+late-frame >60° drift can still mis-align. → **Numerical pin added:**
+`test_md_run_ws_dcd_alignment_matches_design_eq` feeds a frame == design geometry and
+asserts rigid-atom RMSD < 0.5 Å (catches scale/axis/broken-Kabsch regressions). Does NOT
+pin the hard late-frame >60°-drift case (would need a real drifted trajectory). The
+`view_whole.xtc`-missing warnings are still Output-log only.
 
 ## R12 — Displacement-amplitude slider / prewarm / health-gate display
 **Risk: low.** Amp slider only affects `nadoc` mode (`applyFemPositions(updates, _amp)`);

@@ -46,6 +46,19 @@ def test_layout_and_frames_match_mdanalysis(tmp_path):
         assert np.allclose(F.cell_to_dimensions(cell), u.dimensions, atol=1e-2)
 
 
+def test_first_ps_is_istart_times_step(tmp_path):
+    # first_ps (frame-0 absolute time) must be istart · per-step dt, i.e. the
+    # per-saved-frame dt divided by nsavc, times istart.  Continuation segments
+    # (.contN.dcd) start at istart != 0 and would otherwise mis-time frame 0.
+    dcd = _write_dcd(tmp_path, 10, 3)
+    layout = F.read_layout(dcd)
+    if layout.nsavc > 0 and layout.delta_ps != 0.0:
+        expected = layout.istart * (layout.delta_ps / layout.nsavc)
+        assert layout.first_ps == pytest.approx(expected, rel=1e-6, abs=1e-9)
+    else:
+        assert layout.first_ps == 0.0
+
+
 def test_out_of_range_frame_raises(tmp_path):
     dcd = _write_dcd(tmp_path, 20, 3)
     layout = F.read_layout(dcd)

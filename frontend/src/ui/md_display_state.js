@@ -99,6 +99,53 @@ export function shouldForceDisplayReload({ key, displayKey, displayJobId, jobId,
 }
 
 /**
+ * Live-poll pacing decision, evaluated once per live interval tick.
+ *
+ * `get_latest` is fire-and-forget: without pacing the fixed 5 s interval keeps
+ * firing even when the previous poll hasn't returned, so a slow load (GROMACS XTC
+ * still does load_new per poll) backs the requests up on the server; and if a poll
+ * NEVER returns (backend error mid-refresh) the "Fetching…" bar pulses forever with
+ * no user-visible failure. This gates both:
+ *
+ *   'send'    — no poll outstanding → send the next get_latest.
+ *   'skip'    — a poll is outstanding and hasn't waited past the timeout → wait,
+ *               don't stack another request.
+ *   'timeout' — a poll has been outstanding longer than timeoutMs → surface it and
+ *               re-poll (clear the stuck pending state).
+ *
+ * @param {object} p
+ * @param {boolean} p.pending   a get_latest is outstanding (sent, no frame back yet)
+ * @param {number}  p.waitedMs  ms since that outstanding poll was sent
+ * @param {number}  p.timeoutMs how long to wait before declaring the poll stuck
+ */
+export function nextLivePollAction({ pending, waitedMs, timeoutMs }) {
+  if (!pending) return 'send'
+  if (waitedMs >= timeoutMs) return 'timeout'
+  return 'skip'
+}
+
+/**
+ * Map an MD-display readiness state to the toggle indicator's visual spec.
+ *
+ * `color` is a palette KEY (resolved to a hex by the panel), so this stays pure and
+ * DOM/theme-free.  States:
+ *   'warming' — the display socket is loading (parse PSF + build model) in the
+ *               background; toggling now would wait for that load.
+ *   'ready'   — the socket load finished (Universe + model parsed); toggling paints
+ *               the latest frame near-instantly.
+ *   'error'   — the last load/stream failed.
+ *   anything else (incl. 'off'/undefined) — hidden (no job to warm / idle).
+ */
+export function mdReadinessIndicator(state) {
+  switch (state) {
+    case 'warming': return { show: true, color: 'warn', text: 'warming…' }
+    case 'ready':   return { show: true, color: 'ok',   text: 'ready' }
+    case 'error':   return { show: true, color: 'err',  text: 'error' }
+    default:        return { show: false, color: 'dim', text: '' }
+  }
+}
+
+/**
  * Frame-apply gating: a cached frame may only be re-applied to the scene when the
  * stream mode still matches the current scene representation. A 'nadoc' frame is
  * meaningless once the scene switched to an atomistic representation, and vice

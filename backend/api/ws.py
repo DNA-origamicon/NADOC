@@ -14,6 +14,7 @@ Routes
 from __future__ import annotations
 
 import asyncio
+import os
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -22,6 +23,18 @@ from backend.core.models import Design
 import numpy as np
 
 router = APIRouter()
+
+# Per-frame [ws seek] alignment diagnostics (RMSD/rotation-jump) print to the
+# server log.  Useful for watching a live run's alignment quality, but noisy under
+# fast scrub playback — set NADOC_MD_SEEK_QUIET=1 to silence.  Default: emit.
+_MD_SEEK_DIAG = os.environ.get("NADOC_MD_SEEK_QUIET", "") not in ("1", "true", "yes")
+
+# Above this atom count, skip MDAnalysis' whole-system mda_unwrap make-whole (it
+# walks the bond graph on every frame access — minutes for a solvated origami).
+# The in-house per-frame P-atom unwrap in _seek_sync handles displayed-DNA PBC, so
+# this only drops redundant, pathologically-slow work.  Small (validated) systems
+# keep the transformation unchanged.
+_UNWRAP_MAX_ATOMS = 200_000
 
 
 # ── MD trajectory streaming WebSocket ─────────────────────────────────────────
@@ -78,11 +91,31 @@ async def md_run_ws(websocket: WebSocket) -> None:
         """Add PBC make-whole transformation to the Universe if bond data exists.
 
         GRO topologies carry no bond information — calling guess_bonds() on a
-        solvated system (200k+ atoms) would take hours (O(n²)).  Only TPR files
+        solvated system (200k+ atoms) would take hours (O(n²)).  Only TPR/PSF files
         provide bonds directly, so we skip unwrapping for GRO.  The centroid
         offset computed in _load_sync still re-centres the structure correctly.
+
+        Even WITH bonds, ``mda_unwrap`` walks the full bond graph on every frame
+        access — pathological for a solvated system (measured to run for MINUTES on
+        the 1.03 M-atom 3x6x200 PSF, effectively hanging the load).  We only ever
+        display DNA, and ``_seek_sync`` already makes the displayed atoms whole
+        per-frame with the in-house P-atom pipeline (``_unwrap_min_image`` +
+        dynamic-T + Kabsch for CG; residue-local nearest-image for ballstick), which
+        is exactly why the GRO path works fine WITHOUT this transformation.  So for
+        large systems we skip the whole-system make-whole entirely and lean on that
+        pipeline — the difference between an instant-ish load and a multi-minute one.
         """
         try:
+            n_atoms = len(u.atoms)
+            if n_atoms > _UNWRAP_MAX_ATOMS:
+                logs.append(
+                    f"PBC make_whole skipped ({n_atoms} atoms > {_UNWRAP_MAX_ATOMS} "
+                    "threshold — mda_unwrap is O(bond-graph)/frame and would stall "
+                    "the load). The in-house per-frame P-atom unwrap handles PBC for "
+                    "the displayed DNA."
+                )
+                return
+
             from MDAnalysis.transformations import unwrap as mda_unwrap  # type: ignore
             try:
                 _ = u.bonds   # raises NoDataError when topology has no bonds
@@ -126,8 +159,10 @@ async def md_run_ws(websocket: WebSocket) -> None:
             _unwrap_min_image,
             build_chain_map,
             build_p_gro_order,
+            build_p_order_from_universe,
             build_p_pdb_order,
             centroid_offset,
+            load_segid_chain_map,
             md_rigid_reference,
         )
         from backend.core.md_metrics import derive_total_ns, parse_log_metrics
@@ -178,12 +213,45 @@ async def md_run_ws(websocket: WebSocket) -> None:
         # backend/core/atomistic_cache.py).
         model    = build_atomistic_model_cached(design)
         cm       = build_chain_map(model)
-        pdb_text = input_pdb.read_text(errors="replace")
-        p_order  = build_p_pdb_order(pdb_text, cm) if is_namd else build_p_gro_order(pdb_text, cm)
-        logs.append(
-            f"Chain map : {len(cm)} P atoms, {len(p_order)} "
-            f"{'PDB/DCD' if is_namd else 'GRO/XTC'} P entries"
-        )
+
+        # Open the Universe up front — for NAMD we build p_order from the PSF's own
+        # segids (below), which needs the topology.
+        logs.append("Opening MDAnalysis Universe…")
+        u        = mda.Universe(str(topology_path), str(xtc_path))
+        n_frames = len(u.trajectory)
+        logs.append(f"Frames    : {n_frames}")
+
+        # Build p_order: the design (helix,bp,dir) key per trajectory DNA P atom, in
+        # trajectory atom order (the index-based frame extraction relies on this).
+        if is_namd:
+            # Prefer mapping via the PSF segids + the package's charge_audit
+            # segid→chain_id table.  psfgen collapses NADOC's multi-char chain ids
+            # into the reference PDB's 1-char chainID field, so the PDB-key path
+            # (build_p_pdb_order) collides across strands and drops atoms; the segid
+            # map is collision-free.  Fall back to the reference PDB when the package
+            # has no charge_audit or the map is incomplete.
+            seg2chain = load_segid_chain_map(run_dir)
+            p_order = None
+            if seg2chain:
+                cand, n_unmapped = build_p_order_from_universe(u, cm, seg2chain)
+                if n_unmapped == 0 and cand:
+                    p_order = cand
+                    logs.append(f"P-order   : segid-mapped ({len(p_order)} DNA P atoms)")
+                else:
+                    logs.append(
+                        f"P-order   : segid map incomplete ({n_unmapped} unmapped) "
+                        "— falling back to reference PDB"
+                    )
+            if p_order is None:
+                pdb_text = input_pdb.read_text(errors="replace")
+                p_order = build_p_pdb_order(pdb_text, cm)
+                logs.append(f"P-order   : reference-PDB ({len(p_order)} entries)")
+        else:
+            pdb_text = input_pdb.read_text(errors="replace")
+            p_order = build_p_gro_order(pdb_text, cm)
+            logs.append(f"P-order   : GRO/XTC ({len(p_order)} entries)")
+
+        logs.append(f"Chain map : {len(cm)} design P atoms")
 
         # Design equilibrium positions for each entry in p_order (nm, NADOC frame).
         # Used for Kabsch rotation alignment.  Entries in p_order that have no
@@ -206,12 +274,6 @@ async def md_run_ws(websocket: WebSocket) -> None:
             eq_centroid  = eq_positions[rigid_mask].mean(axis=0)
             eq_centered  = eq_positions - eq_centroid
             eq_centered[~rigid_mask] = 0.0   # only rigid atoms contribute to H
-
-        # Open MDAnalysis Universe.
-        logs.append("Opening MDAnalysis Universe…")
-        u        = mda.Universe(str(topology_path), str(xtc_path))
-        n_frames = len(u.trajectory)
-        logs.append(f"Frames    : {n_frames}")
 
         # PBC unwrapping (make molecules whole).
         _try_unwrap(u, logs)
@@ -517,23 +579,25 @@ async def md_run_ws(websocket: WebSocket) -> None:
                                 R_align = R_inlier
                                 _mob_c  = _mob_c2
                                 _mc     = _mc2
-                        print(f"[ws seek] frame={frame_idx} rotation jump {_angle_deg:.1f}° "
-                              f"→ inlier Kabsch applied", flush=True)
+                        if _MD_SEEK_DIAG:
+                            print(f"[ws seek] frame={frame_idx} rotation jump {_angle_deg:.1f}° "
+                                  f"→ inlier Kabsch applied", flush=True)
 
                 p_nm = _mc @ R_align.T + eq_centroid
                 _ctx["R_prev"]         = R_align
                 _ctx["prev_frame_idx"] = frame_idx
 
                 # Server-side diagnostic (one line per frame).
-                _delta = _np.linalg.norm(p_nm - eq_pos, axis=1)
-                _nr = int(_rm.sum()) if _rm is not None else len(p_nm)
-                _rd = _delta[_rm] if _rm is not None else _delta
-                print(f"[ws seek] frame={frame_idx} n_rigid={_nr} "
-                      f"RMSD_all={_np.sqrt((_delta**2).mean())*10:.2f}Å "
-                      f"RMSD_rigid={_np.sqrt((_rd**2).mean())*10:.2f}Å "
-                      f"max={_delta.max()*10:.2f}Å "
-                      f"n>2Å={int((_delta>0.2).sum())} "
-                      f"n>5Å={int((_delta>0.5).sum())}", flush=True)
+                if _MD_SEEK_DIAG:
+                    _delta = _np.linalg.norm(p_nm - eq_pos, axis=1)
+                    _nr = int(_rm.sum()) if _rm is not None else len(p_nm)
+                    _rd = _delta[_rm] if _rm is not None else _delta
+                    print(f"[ws seek] frame={frame_idx} n_rigid={_nr} "
+                          f"RMSD_all={_np.sqrt((_delta**2).mean())*10:.2f}Å "
+                          f"RMSD_rigid={_np.sqrt((_rd**2).mean())*10:.2f}Å "
+                          f"max={_delta.max()*10:.2f}Å "
+                          f"n>2Å={int((_delta>0.2).sum())} "
+                          f"n>5Å={int((_delta>0.5).sum())}", flush=True)
 
             # Step 4 — Base normals (P→C1') rotated into the aligned frame.
             c1p_idx = _ctx.get("c1p_idx")
@@ -759,7 +823,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     try:
                         coords, cell = dcd_fast.read_frame(_ctx["xtc_path"], layout, idx)
                         frame_msg = _seek_sync(idx, _injected=(
-                            coords, dcd_fast.cell_to_dimensions(cell), idx * layout.delta_ps))
+                            coords, dcd_fast.cell_to_dimensions(cell),
+                            layout.first_ps + idx * layout.delta_ps))
                         _ctx["latest_frame_cache"] = frame_msg
                         _ctx["latest_frame_sig"] = sig
                         return frame_msg
@@ -794,6 +859,28 @@ async def md_run_ws(websocket: WebSocket) -> None:
     async def _refresh_latest(force: bool = False) -> dict:
         async with _latest_refresh_lock:
             return await asyncio.to_thread(_refresh_latest_sync, force)
+
+    def _seek_growing_sync(frame_idx: int) -> dict:
+        """Seek a frame for scrub/playback, discovering frames appended since load.
+
+        The live ``get_latest`` fast path (``dcd_fast``) advances ``_ctx['n_frames']``
+        past what the MDAnalysis Universe knows — the Universe indexed all frame
+        offsets at open time, so ``u.trajectory[idx]`` for one of the newer frames
+        would raise IndexError and surface as an error toast + blank scene.  Reload
+        the trajectory (``load_new`` re-reads offsets) only when the requested frame
+        is beyond the Universe's current length; the common in-range scrub stays on
+        the plain MDAnalysis seek and keeps its sequential-Kabsch tracking.
+        """
+        u = _ctx.get("universe")
+        if u is None:
+            raise RuntimeError("No trajectory loaded.")
+        if frame_idx >= len(u.trajectory):
+            u.load_new(_ctx["xtc_path"])
+            _ctx["n_frames"] = len(u.trajectory)
+            _ctx["R_prev"] = None
+            _ctx["prev_frame_idx"] = -999
+        idx = max(0, min(frame_idx, len(u.trajectory) - 1))
+        return _seek_sync(idx)
 
     try:
         while True:
@@ -863,10 +950,9 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 if _ctx["universe"] is None:
                     await websocket.send_json({"type": "error", "message": "No trajectory loaded."})
                     continue
-                frame_idx = int(msg.get("frame_idx", 0))
-                frame_idx = max(0, min(frame_idx, _ctx["n_frames"] - 1))
+                frame_idx = max(0, int(msg.get("frame_idx", 0)))
                 try:
-                    frame_msg = await asyncio.to_thread(_seek_sync, frame_idx)
+                    frame_msg = await asyncio.to_thread(_seek_growing_sync, frame_idx)
                 except Exception as exc:
                     await websocket.send_json({"type": "error", "message": str(exc)})
                     continue

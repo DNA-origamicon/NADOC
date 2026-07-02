@@ -12,6 +12,14 @@
  */
 
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import {
+  targetStreamMode,
+  sceneUsesAtomistic,
+  sceneUsesNativeCg,
+  canReapplyFrame,
+  decideReload,
+  nextLivePollAction,
+} from './md_display_state.js'
 
 const _WS_URL  = `ws://${location.host}/ws/md-run`
 const _BASE_FPS = 10   // target fps at 1× speed
@@ -110,6 +118,8 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   let _ws        = null
   let _reopenTimer = null   // debounce handle: coalesce bursty _openWebSocket calls
   let _wsSig     = null     // config|mode of the last opened socket (skip redundant reopen)
+  let _loadInFlight   = false  // true between sending 'load' and receiving 'ready'/'error'
+  let _loadConfigPath = null   // config path of the in-flight load (for decideReload)
   let _nFrames   = 0
   let _curFrame  = 0
   let _dtPs      = null
@@ -128,7 +138,9 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   let _liveTimer    = null
   let _liveRafId    = null    // requestAnimationFrame id for countdown bar
   let _livePollAt   = 0       // performance.now() when last get_latest was sent
+  let _livePollSentAt = 0     // performance.now() of the outstanding get_latest (timeout tracking)
   const _LIVE_INTERVAL = 5000 // must match the setInterval below
+  const _LIVE_POLL_TIMEOUT = 15000 // a get_latest is "stuck" after ~3 missed intervals
   let _repr      = 'nadoc'
   let _opacity   = 1.0
   let _beadSize  = 1.0
@@ -415,6 +427,8 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
 
     _ws.onopen = () => {
       _emitMdDisplayEvent({ state: 'loading', message: 'Loading MD trajectory...' })
+      _loadInFlight   = true
+      _loadConfigPath = _configPath
       _ws.send(JSON.stringify({
         action:          'load',
         config_path:     _configPath,
@@ -432,6 +446,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
 
     _ws.onerror = () => _log('WebSocket error.', 'error')
     _ws.onclose = () => {
+      _loadInFlight = false
       _setPlaying(false)
       _setLive(false)
       _restoreDesign()
@@ -471,6 +486,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     }
 
     if (msg.type === 'ready') {
+      _loadInFlight = false
       _nFrames = msg.n_frames
       _dtPs    = msg.dt_ps
       _nstComp = msg.nstxout_comp
@@ -519,6 +535,14 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     }
 
     if (msg.type === 'frame') {
+      // Live polling (dcd_fast) discovers frames appended after load — grow the
+      // scrubber range so the user can scrub into them (the backend lazily reloads
+      // the Universe when a seek lands beyond its original length).
+      if (msg.n_frames && msg.n_frames > _nFrames) {
+        _nFrames = msg.n_frames
+        if (scrubber) scrubber.max = Math.max(0, _nFrames - 1)
+        if (statusLine && !_live) statusLine.textContent = `Ready — ${_nFrames} frames`
+      }
       _updateTimeline(msg.frame_idx)
       _lastFrameMsg = msg
       if (_displayVisible) {
@@ -539,6 +563,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     }
 
     if (msg.type === 'error') {
+      _loadInFlight = false
       _log('Error: ' + msg.message, 'error')
       if (statusLine) statusLine.textContent = 'Error — see Output'
       _emitMdDisplayEvent({ state: 'error', message: msg.message })
@@ -630,7 +655,29 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     if (_ws?.readyState === WebSocket.OPEN) {
       _ws.send(JSON.stringify({ action: 'get_latest' }))
       _livePendingPoll = true   // enter waiting state; bar switches to pulse
+      _livePollSentAt  = performance.now()
     }
+  }
+
+  // Per-interval pacing for live polling: never stack get_latest on top of an
+  // outstanding one (a slow GROMACS load_new poll would back up), and if a poll
+  // never returns, surface it and re-poll instead of pulsing "Fetching…" forever.
+  function _livePollTick() {
+    if (!_live) return
+    const action = nextLivePollAction({
+      pending:  _livePendingPoll,
+      waitedMs: performance.now() - _livePollSentAt,
+      timeoutMs: _LIVE_POLL_TIMEOUT,
+    })
+    if (action === 'send') {
+      _sendPoll()
+    } else if (action === 'timeout') {
+      _log('Live poll timed out — no frame returned; retrying.', 'warn')
+      if (statusLine) statusLine.textContent = 'Live poll stalled — retrying…'
+      _livePendingPoll = false   // clear the stuck state so the bar leaves "Fetching…"
+      _sendPoll()
+    }
+    // 'skip' → an outstanding poll is still within the timeout; wait.
   }
 
   function _tickLiveBar() {
@@ -675,7 +722,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       _setPlaying(false)
       _startLiveBar()
       _sendPoll()          // immediately request the latest frame
-      _liveTimer = setInterval(_sendPoll, _LIVE_INTERVAL)
+      _liveTimer = setInterval(_livePollTick, _LIVE_INTERVAL)
     } else {
       _stopLiveBar()
     }
@@ -685,22 +732,15 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   }
   liveBtn?.addEventListener('click', () => _setLive(!_live))
 
-  function _sceneUsesNativeCg() {
-    return _sceneRepr === 'full' || _sceneRepr === 'beads' || _sceneRepr === 'cylinders'
-  }
-
-  function _sceneUsesAtomistic() {
-    return _sceneRepr === 'vdw' || _sceneRepr === 'ballstick'
-  }
-
-  function _targetStreamMode() {
-    return _sceneUsesAtomistic() ? 'ballstick' : 'nadoc'
-  }
+  // Thin closures over the live _sceneRepr around the shared pure helpers
+  // (md_display_state.js) so the decision logic is unit-tested in one place.
+  function _sceneUsesNativeCg() { return sceneUsesNativeCg(_sceneRepr) }
+  function _sceneUsesAtomistic() { return sceneUsesAtomistic(_sceneRepr) }
+  function _targetStreamMode() { return targetStreamMode(_sceneRepr) }
 
   function _reapplyCachedFrame() {
     if (!_autoDisplayActive || !_lastFrameMsg) return
-    if (_repr === 'nadoc' && !_sceneUsesNativeCg()) return
-    if (_repr === 'ballstick' && !_sceneUsesAtomistic()) return
+    if (!canReapplyFrame(_repr, _sceneRepr)) return
     if (_sceneUsesNativeCg()) designRenderer?.setDesignVisible(true)
     _applyFrame(_lastFrameMsg)
   }
@@ -770,8 +810,15 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     displayLatest(configPath, { forceReload = false, live = true } = {}) {
       if (!configPath) return
       const nextMode = _targetStreamMode()
-      const modeChanged = _repr !== nextMode
-      const alreadyOpen = _ws?.readyState === WebSocket.OPEN && _configPath === configPath && !modeChanged
+      const action = decideReload({
+        wsState: _ws?.readyState ?? null,
+        loadInFlight: _loadInFlight,
+        loadConfigPath: _loadConfigPath,
+        currentConfig: _configPath,
+        requestedConfig: configPath,
+        modeChanged: _repr !== nextMode,
+        forceReload,
+      })
       _autoDisplayActive = true
       _displayVisible = true
       _repr = nextMode
@@ -789,11 +836,12 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
         atomisticRenderer?.setMode?.(_sceneRepr)
       }
       _setConfigPath(configPath, _basename(configPath))
-      if (alreadyOpen && !forceReload) {
-        if (live) _setLive(true)
-        else {
-          _setLive(false)
-        }
+      // A load for this exact target is already in flight — let the pending
+      // 'ready' apply the (now updated) latest/live flags; do NOT tear down the
+      // mid-handshake socket (that caused NS_BINDING_ABORTED).
+      if (action === 'wait-in-flight') return
+      if (action === 'reuse-open') {
+        _setLive(live)
         if (_lastFrameMsg) _reapplyCachedFrame()
         else _sendPoll()
         return
@@ -804,15 +852,26 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     prewarmLatest(configPath, { forceReload = false } = {}) {
       if (!configPath) return
       const nextMode = _targetStreamMode()
-      const modeChanged = _repr !== nextMode
-      const alreadyOpen = _ws?.readyState === WebSocket.OPEN && _configPath === configPath && !modeChanged
+      const action = decideReload({
+        wsState: _ws?.readyState ?? null,
+        loadInFlight: _loadInFlight,
+        loadConfigPath: _loadConfigPath,
+        currentConfig: _configPath,
+        requestedConfig: configPath,
+        modeChanged: _repr !== nextMode,
+        forceReload,
+      })
       _displayVisible = false
       _autoDisplayActive = false
       _repr = nextMode
       _latestOnReady = true
       _latestOnceOnReady = true
       _setConfigPath(configPath, _basename(configPath))
-      if (alreadyOpen && !forceReload) {
+      if (action === 'wait-in-flight') return
+      if (action === 'reuse-open') {
+        // Socket already warm — no load event will fire, so signal readiness
+        // explicitly for the toggle's indicator dot.
+        _emitMdDisplayEvent({ state: 'ready', message: 'MD display warm' })
         _setLive(false)
         _sendPoll()
         return
@@ -858,6 +917,22 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       }
       _restoreDesign()
       _autoDisplayActive = false
+    },
+
+    // Toggle-off variant of stopAndRestore: revert the scene to native positions but
+    // KEEP the display socket + cached frame warm.  Switching back to prewarm then
+    // shows 'ready' instantly (no 143 MB PSF re-parse) and re-toggling re-applies the
+    // cached frame with no reload.  Returns true when a warm socket was retained.
+    stopDisplayKeepWarm() {
+      _setPlaying(false)
+      _setLive(false)
+      _displayVisible = false
+      _autoDisplayActive = false
+      _latestOnReady = false
+      _latestOnceOnReady = false
+      _restoreDesign()   // reverts positions; does not touch _ws / _lastFrameMsg
+      return !!(_ws && (_ws.readyState === WebSocket.OPEN ||
+                        _ws.readyState === WebSocket.CONNECTING))
     },
   }
 }

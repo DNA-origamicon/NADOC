@@ -130,6 +130,24 @@ pre-relaxed instead of from ideal B-DNA — for seeded jobs the NAMD relaxation
 ladder is optional and production can run minimize-then-produce directly from the
 seeded structure.
 
+### Live MD display
+A **"Display MD (live)"** toggle in the Dynamics tab streams the latest frame of a
+running (or completed) NAMD job onto the design model — PBC-unwrapped and
+Kabsch-aligned to the design so the structure sits still while it breathes,
+updating as the simulation writes frames. The newest DCD frame is read in **O(1)**
+by a direct byte-seek (`backend/core/dcd_fast.py`) rather than reparsing the whole
+growing trajectory, so a live poll is ~tens of ms. Trajectory atoms are mapped to
+the design through the PSF's **segids** (via the package's `charge_audit.json`),
+which handles solvated multi-segment CHARMM/psfgen packages where the reference
+PDB's single-character chain field collides across strands.
+
+Opening a design that has a running MD job **prewarms** the display in the
+background (parse the topology + build the atomistic model once), and a readiness
+dot beside the toggle shows *warming → ready*, so flipping it on paints the latest
+frame instantly. Toggling off keeps the socket warm (no re-parse), and a re-toggle
+re-applies the cached frame immediately. A trajectory scrubber, playback, and a
+flexibility (RMSF) map mirror the oxDNA display controls.
+
 ### FEM structural analysis
 Euler-Bernoulli beam model; RMSF heatmap via eigenvalue decomposition; real-time
 WebSocket streaming.

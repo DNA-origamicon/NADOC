@@ -139,6 +139,115 @@ def md_fixture_dir(demo_design_loaded):
                "n_p_atoms": len(cm), "n_p_order": n}
 
 
+@pytest.fixture
+def namd_dcd_fixture(demo_design_loaded):
+    """Build a NAMD-style DCD fixture that drives the dcd_fast LIVE fast path.
+
+    The live NAMD display reads the latest DCD frame through
+    ``backend.core.dcd_fast`` (an O(1) byte-seek), NOT MDAnalysis ``load_new`` —
+    the GRO/XTC fixture above only exercises the MDAnalysis fallback, so the real
+    live path had no WS-level coverage.  This fixture yields a genuine CHARMM DCD
+    (MDAnalysis' writer emits NAMD-compatible records), a ``.gro`` topology, and
+    the design's own PDB as the NAMD reference coordinate.  ``is_namd`` triggers on
+    the ``.dcd`` suffix, so ``_load_sync`` walks P atoms via ``build_p_pdb_order``;
+    the DCD atoms are laid out in exactly that order and the P positions are the
+    design's own (PDB Å) so the alignment pipeline should reproduce design eq.
+
+    Yields a dict whose ``write(k)`` callable (re)writes the DCD with k frames
+    (frame f nudged f·shift Å so successive frames differ).
+    """
+    import MDAnalysis as mda  # type: ignore
+
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.atomistic_to_nadoc import (
+        build_chain_map,
+        build_p_pdb_order,
+        md_rigid_reference,
+    )
+    from backend.core.pdb_export import export_pdb
+
+    design = demo_design_loaded
+    pdb_text = export_pdb(design)
+    model    = build_atomistic_model(design)
+    cm       = build_chain_map(model)
+    p_order  = build_p_pdb_order(pdb_text, cm)
+    eq_positions, _eq_valid, rigid_mask = md_rigid_reference(model, p_order)
+
+    # P-atom coords (Å, PDB frame) in build_p_pdb_order's exact walk order.
+    p_xyz = []
+    for line in pdb_text.splitlines():
+        if not line.startswith(("ATOM  ", "HETATM")):
+            continue
+        if len(line) < 54 or line[12:16].strip() != "P":
+            continue
+        if cm.get((line[21], int(line[22:26]))) is None:
+            continue
+        p_xyz.append([float(line[30:38]), float(line[38:46]), float(line[46:54])])
+    p_xyz = np.array(p_xyz, dtype=np.float32)
+    n = len(p_order)
+    assert len(p_xyz) == n, (len(p_xyz), n)
+
+    # Two atoms per residue: P + C1' (C1' feeds the P→C1' base-normal step).
+    n_atoms       = n * 2
+    atom_resindex = [r for i in range(n) for r in (i, i)]
+    names         = [nm for _ in range(n) for nm in ("P", "C1'")]
+    u = mda.Universe.empty(
+        n_atoms=n_atoms, n_residues=n, n_segments=1,
+        atom_resindex=atom_resindex, residue_segindex=[0] * n,
+        trajectory=True,
+    )
+    u.add_TopologyAttr("name",    names)
+    u.add_TopologyAttr("resname", ["DA"] * n)
+    u.add_TopologyAttr("resid",   list(range(1, n + 1)))
+    u.add_TopologyAttr("segid",   ["A"])
+
+    base = np.empty((n_atoms, 3), dtype=np.float32)
+    base[0::2] = p_xyz                       # P atoms = design positions (Å)
+    base[1::2] = p_xyz + np.array([0.5, 0.0, 0.0], dtype=np.float32)  # C1' offset
+
+    with tempfile.TemporaryDirectory() as td:
+        pdb_path = os.path.join(td, "input_nadoc.pdb")
+        with open(pdb_path, "w") as f:
+            f.write(pdb_text)
+        gro = os.path.join(td, "t.gro")
+        dcd = os.path.join(td, "t.dcd")
+        u.atoms.positions = base
+        u.dimensions      = [200.0, 200.0, 200.0, 90.0, 90.0, 90.0]
+        u.atoms.write(gro)
+
+        def write(k, shift=0.05):
+            with mda.Writer(dcd, n_atoms=n_atoms) as w:
+                for fr in range(k):
+                    pos = base.copy()
+                    pos[:, 0] += fr * shift
+                    u.atoms.positions = pos
+                    u.dimensions      = [200.0, 200.0, 200.0, 90.0, 90.0, 90.0]
+                    w.write(u.atoms)
+
+        write(3)
+        yield {"dir": td, "gro": gro, "dcd": dcd, "pdb": pdb_path,
+               "n_p_order": n, "eq_positions": eq_positions,
+               "rigid_mask": rigid_mask, "write": write}
+
+
+def _await_md_ready(ws, expect_frames=None):
+    """Drain load logs and return the 'ready' message (fails on early error)."""
+    for _ in range(80):
+        m = ws.receive_json()
+        if m["type"] == "ready":
+            if expect_frames is not None:
+                assert m["n_frames"] == expect_frames, m
+            return m
+        assert m["type"] == "log", m
+    raise AssertionError("no 'ready' message received")
+
+
+def _load_namd(ws, fix, mode="nadoc"):
+    ws.send_json({"action": "load", "topology_path": fix["gro"],
+                  "xtc_path": fix["dcd"], "coordinate_path": fix["pdb"],
+                  "mode": mode})
+
+
 # ── /ws/md-run — GROMACS trajectory streaming ────────────────────────────────
 
 
@@ -350,6 +459,105 @@ def test_md_run_ws_get_latest_tolerates_torn_final_frame(client, md_fixture_dir)
         assert gl["type"] == "frame", f"torn frame surfaced as: {gl}"
         # Last complete frame — strictly fewer than the original 5 (index 4).
         assert gl["frame_idx"] < 4
+
+
+def test_md_run_ws_dcd_fast_path_get_latest(client, namd_dcd_fixture):
+    """Live NAMD path: get_latest reads the last DCD frame via dcd_fast.
+
+    Exercises the O(1) fast path that every real NAMD live run uses — previously
+    validated only by the dcd_fast unit tests, never end-to-end through the WS +
+    PBC/Kabsch pipeline.
+    """
+    fix = namd_dcd_fixture
+    with client.websocket_connect("/ws/md-run") as ws:
+        _load_namd(ws, fix)
+        _await_md_ready(ws, expect_frames=3)
+        ws.send_json({"action": "get_latest"})
+        gl = ws.receive_json()
+        assert gl["type"] == "frame", gl
+        assert gl["frame_idx"] == 2
+        assert len(gl["positions"]) == fix["n_p_order"]
+
+
+def test_md_run_ws_dcd_get_latest_follows_growing(client, namd_dcd_fixture):
+    """dcd_fast must discover frames NAMD appends after load (the real live path)."""
+    fix = namd_dcd_fixture
+    fix["write"](2)
+    with client.websocket_connect("/ws/md-run") as ws:
+        _load_namd(ws, fix)
+        _await_md_ready(ws, expect_frames=2)
+        ws.send_json({"action": "get_latest"})
+        assert ws.receive_json()["frame_idx"] == 1
+        fix["write"](6)   # NAMD flushes more frames to the same DCD
+        ws.send_json({"action": "get_latest"})
+        gl = ws.receive_json()
+        assert gl["type"] == "frame", gl
+        assert gl["frame_idx"] == 5, "dcd_fast did not discover appended frames"
+        assert gl["n_frames"] == 6
+
+
+def test_md_run_ws_dcd_tolerates_torn_final_frame(client, namd_dcd_fixture):
+    """A half-flushed trailing DCD frame must not error the live stream."""
+    import os
+
+    fix = namd_dcd_fixture
+    fix["write"](5)
+    # Chop bytes off the end so the trailing frame is incomplete.
+    with open(fix["dcd"], "r+b") as f:
+        f.truncate(os.path.getsize(fix["dcd"]) - 40)
+    with client.websocket_connect("/ws/md-run") as ws:
+        _load_namd(ws, fix)
+        _await_md_ready(ws)
+        ws.send_json({"action": "get_latest"})
+        gl = ws.receive_json()
+        assert gl["type"] == "frame", f"torn frame surfaced as: {gl}"
+        assert gl["frame_idx"] < 4
+
+
+def test_md_run_ws_dcd_seek_discovers_frames_appended_after_load(client, namd_dcd_fixture):
+    """Fix 3: scrubbing to a frame appended after load must not raise IndexError.
+
+    The MDAnalysis Universe indexes frame offsets at open time; the live dcd_fast
+    path advances the reported n_frames past that.  A seek into the newer range
+    lazily reloads the Universe (load_new) instead of erroring + blanking the
+    scene.
+    """
+    fix = namd_dcd_fixture
+    fix["write"](2)
+    with client.websocket_connect("/ws/md-run") as ws:
+        _load_namd(ws, fix)
+        _await_md_ready(ws, expect_frames=2)
+        fix["write"](6)   # NAMD appends AFTER the Universe indexed only 2 frames
+        ws.send_json({"action": "seek", "frame_idx": 5})
+        got = ws.receive_json()
+        assert got["type"] == "frame", f"seek beyond stale Universe errored: {got}"
+        assert got["frame_idx"] == 5
+        assert got["n_frames"] == 6
+
+
+def test_md_run_ws_dcd_alignment_matches_design_eq(client, namd_dcd_fixture):
+    """Numeric regression pin for the PBC + Kabsch pipeline (Fix 6).
+
+    Frame 0 of the fixture IS the design's P geometry, so the full
+    unwrap → dynamic-T → Kabsch pipeline must return the design equilibrium
+    positions (identity alignment).  A scale (Å/nm), axis-swap, or broken-Kabsch
+    regression blows the rigid-atom RMSD up well past this bound; the happy-path
+    tests above only assert message shape, not numerics.
+    """
+    fix = namd_dcd_fixture
+    with client.websocket_connect("/ws/md-run") as ws:
+        _load_namd(ws, fix)
+        _await_md_ready(ws, expect_frames=3)
+        ws.send_json({"action": "seek", "frame_idx": 0})
+        got = ws.receive_json()
+        assert got["type"] == "frame", got
+        pos = np.array([[p["x"], p["y"], p["z"]] for p in got["positions"]])
+        assert np.all(np.isfinite(pos))
+        rm  = fix["rigid_mask"]
+        eq  = fix["eq_positions"]
+        d   = np.linalg.norm(pos[rm] - eq[rm], axis=1)
+        rmsd_A = float(np.sqrt((d ** 2).mean()) * 10.0)
+        assert rmsd_A < 0.5, f"rigid RMSD to design eq = {rmsd_A:.2f} Å"
 
 
 def test_md_run_ws_load_seek_ballstick(client, md_fixture_dir):

@@ -19,7 +19,7 @@ import { rollMdJobDesign } from '../api/client.js'
 import { docKey, docHeaders } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
-import { shouldForceDisplayReload } from './md_display_state.js'
+import { shouldForceDisplayReload, mdReadinessIndicator } from './md_display_state.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 import { formatBytes } from './format_bytes.js'
@@ -166,6 +166,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const fastChk       = document.getElementById('md-jobs-fast')
   const displayToggle = document.getElementById('md-jobs-display-toggle')
   const displayStatus = document.getElementById('md-jobs-display-status')
+  const displayIndicator      = document.getElementById('md-jobs-display-indicator')
+  const displayIndicatorDot   = document.getElementById('md-jobs-display-indicator-dot')
+  const displayIndicatorLabel = document.getElementById('md-jobs-display-indicator-label')
   const showAllToggle = document.getElementById('md-jobs-show-all')
 
   // List + detail
@@ -248,6 +251,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     arrow.classList.toggle('is-collapsed', _collapsed)
     setSectionCollapsed('dynamics', 'md-jobs-panel', _collapsed)
     if (!_collapsed) _onOpen()
+    else _stopMdPrewarm()   // collapsing the panel tears down the background prewarm
   })
 
   // ── Advanced drawer (collapsible card) ──────────────────────────────────────
@@ -374,6 +378,21 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   function _isDynamicsTabVisible() {
     const pane = document.getElementById('tab-content-dynamics')
     return !!pane && !pane.hidden
+  }
+
+  // Readiness dot next to the Display-MD toggle: 'warming' | 'ready' | 'error' | 'off'.
+  // Reflects the background prewarm (socket load) as well as the live display, so the
+  // user can see when toggling will paint instantly vs pay the ~5 s load.
+  let _displayIndicatorState = 'off'
+  function _setDisplayIndicator(state) {
+    _displayIndicatorState = state
+    if (!displayIndicator) return
+    const spec = mdReadinessIndicator(state)
+    displayIndicator.style.display = spec.show ? 'inline-flex' : 'none'
+    if (spec.show) {
+      if (displayIndicatorDot) displayIndicatorDot.style.background = _C[spec.color] ?? _C.dim
+      if (displayIndicatorLabel) displayIndicatorLabel.textContent = spec.text
+    }
   }
 
   function _setDisplayStatus(text, color = _C.dim, loading = false) {
@@ -665,27 +684,48 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   async function _refreshMdPrewarm(force = false) {
     if (displayToggle?.checked) return
-    if (!_isDynamicsTabVisible()) return
+    // NB: intentionally NOT gated on the Dynamics tab being visible.  Prewarm now
+    // warms the display socket (parse PSF + build model, ~5 s) in the background as
+    // soon as a design with a loadable MD job is open, so toggling Display MD later
+    // paints the latest frame instantly instead of paying that load inline.  It is
+    // still self-gating: no ready job → no socket opened (returns below).
     if (!mdDisplayController?.prewarmLatest) return
 
     const job = _selectDisplayJob()
-    if (!job) return
+    if (!job) {
+      // No job to warm — release any previously-warmed socket (free its Universe)
+      // but keep the re-check timer running so a job that starts later gets warmed.
+      mdDisplayController.stopPrewarm?.()
+      _prewarmKey = null
+      _setDisplayIndicator('off')
+      return
+    }
 
     try {
       const d = await _fetchDisplayMeta(job.job_id)
-      if (!d?.ready || !d.config_path) return
+      // Display may have been toggled ON during the await (e.g. a quick off→on).
+      // Bail so this stale prewarm can't clobber the controller's _displayVisible
+      // back to false and suppress the just-started live stream.
+      if (displayToggle?.checked) return
+      if (!d?.ready || !d.config_path) { _setDisplayIndicator('off'); return }
       const key = `${d.config_path}|${d.trajectory_path ?? ''}|${d.segment_name ?? ''}`
       const forceReload = force || key !== _prewarmKey
+      // A fresh load will emit 'loading'→'ready'; show 'warming' up front. A reuse of
+      // an already-warm socket stays 'ready' (the controller re-emits ready on reuse).
+      if (forceReload && _displayIndicatorState !== 'ready') _setDisplayIndicator('warming')
       _prewarmKey = key
       mdDisplayController.prewarmLatest(d.config_path, { forceReload })
     } catch (err) {
       console.warn(`[${_ts()}] md-jobs: MD display prewarm failed`, err)
+      _setDisplayIndicator('error')
     }
   }
 
-  function _startMdPrewarm() {
+  function _startMdPrewarm(force = true) {
     if (_prewarmTimer) return
-    _refreshMdPrewarm(true)
+    // force=false lets the first refresh REUSE an already-warm socket (e.g. right
+    // after toggling display off — see _stopMdDisplay) instead of re-parsing the PSF.
+    _refreshMdPrewarm(force)
     _prewarmTimer = setInterval(_refreshMdPrewarm, _MD_PREWARM_INTERVAL_MS)
   }
 
@@ -718,13 +758,23 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // toggles the view off (the run-away that used to wedge the server).
     if (_displayJobId) api.cancelMdAnalysis(_displayJobId)
     _displayJobId = null
+    const displayKeyBefore = _displayKey
     _displayKey = null
     if (displayToggle) displayToggle.checked = false
     _mdFrameShown = false
     _clearInheritedSeed()             // drop any inherited oxDNA-seed overlay too (restore native)
-    mdDisplayController?.stopAndRestore?.()
+    // Revert the scene to native but KEEP the display socket + cached frame warm, so
+    // the indicator stays 'ready' and a re-toggle is instant (no PSF re-parse).  Only
+    // fall back to a fresh warm-up when there was no warm socket to keep.
+    const keptWarm = mdDisplayController?.stopDisplayKeepWarm?.()
     _setDisplayStatus(status, _C.dim)
-    if (_isDynamicsTabVisible()) _startMdPrewarm()
+    if (keptWarm) {
+      _prewarmKey = displayKeyBefore  // so the next (non-forced) refresh reuses the socket
+      _setDisplayIndicator('ready')
+      _startMdPrewarm(false)          // non-forced → decideReload 'reuse-open', no re-warm
+    } else {
+      _startMdPrewarm()               // no warm socket → fresh background warm-up
+    }
   }
 
   displayToggle?.addEventListener('change', () => {
@@ -995,15 +1045,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
   })
 
+  // Leaving the Dynamics tab stops the live DISPLAY (it deforms the model, which
+  // shouldn't persist off-tab) but KEEPS the background prewarm socket warm, so
+  // returning + re-toggling is instant.  Prewarm now spans tabs (Option 1); it is
+  // torn down only on Display-MD handoff (_startMdDisplay) or app teardown.
   document.querySelectorAll('#left-tab-strip .left-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       setTimeout(() => {
         if (displayToggle?.checked && !_isDynamicsTabVisible()) {
-          _stopMdDisplay('Native positions restored')
-        } else if (_isDynamicsTabVisible()) {
+          _stopMdDisplay('Native positions restored')  // also resumes prewarm
+        } else if (!displayToggle?.checked) {
           _startMdPrewarm()
-        } else {
-          _stopMdPrewarm()
         }
       }, 0)
     })
@@ -1011,8 +1063,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   window.addEventListener('nadoc:left-tab-change', evt => {
     if (evt.detail?.activeTab !== 'dynamics') {
-      if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
-      else _stopMdPrewarm()
+      if (displayToggle?.checked) _stopMdDisplay('Native positions restored')  // resumes prewarm
     } else if (!displayToggle?.checked) {
       _startMdPrewarm()
     }
@@ -1020,12 +1071,25 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   // Editing the design after a prep invalidates every MD job — refetch so the
   // out-of-date ⚠ markers appear immediately (main.js dispatches this on each design
-  // change), not only on the next poll.
-  window.addEventListener('nadoc:design-changed', () => { _fetchJobs() })
+  // change), not only on the next poll.  Then, if the design has a loadable MD job,
+  // start warming the display socket in the BACKGROUND regardless of which tab is
+  // active — so opening a design that has a running MD job makes Display MD instant
+  // to toggle (Option 1).  Both are cheap no-ops when nothing applies: _startMdPrewarm
+  // is idempotent, and _refreshMdPrewarm opens no socket unless a ready job exists.
+  window.addEventListener('nadoc:design-changed', async () => {
+    await _fetchJobs()
+    if (!displayToggle?.checked) _startMdPrewarm()
+  })
 
   window.addEventListener('nadoc:md-display-state', evt => {
-    if (!displayToggle?.checked) return
     const state = evt.detail?.state
+    // Drive the readiness dot for BOTH prewarm (toggle off) and live display.
+    // 'loading' → warming; 'ready'/'frame' → ready; 'error' → error.
+    if (state === 'error') _setDisplayIndicator('error')
+    else if (state === 'ready' || state === 'frame') _setDisplayIndicator('ready')
+    else if (state === 'loading') _setDisplayIndicator('warming')
+
+    if (!displayToggle?.checked) return
     const message = evt.detail?.message
     if (!message) return
     // A real MD frame just landed → it overwrote any inherited-seed placeholder, so

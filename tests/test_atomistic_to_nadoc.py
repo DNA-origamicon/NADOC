@@ -52,9 +52,11 @@ from backend.core.atomistic_to_nadoc import (
     build_chain_map,
     build_p_gro_order,
     centroid_offset,
+    build_p_order_from_universe,
     compare_to_design,
     extract_from_gro,
     extract_from_pdb,
+    load_segid_chain_map,
 )
 
 from tests.conftest import make_minimal_design
@@ -691,6 +693,131 @@ class TestUnwrapMinImage:
         # Box x=0 → x-axis correction skipped → magnitude > 1 nm → no shift.
         out = _unwrap_min_image(positions, np.array([0.0, 3.0, 3.0]))
         assert np.allclose(out, positions)
+
+    @staticmethod
+    def _loop_reference(positions, box_nm):
+        """The original per-atom sequential implementation, kept as the oracle."""
+        out = positions.copy()
+        for i in range(1, len(out)):
+            delta = out[i] - out[i - 1]
+            for d in range(3):
+                if box_nm[d] > 0:
+                    delta[d] -= np.round(delta[d] / box_nm[d]) * box_nm[d]
+            if np.linalg.norm(delta) <= 1.0:  # _P_BACKBONE_MAX_NM
+                out[i] = out[i - 1] + delta
+        return out
+
+    def test_vectorised_matches_loop_with_boundaries_and_wraps(self):
+        """The vectorised unwrap must reproduce the sequential loop bit-for-bit,
+        including multiple strand boundaries and PBC wraps in one array."""
+        rng = np.random.default_rng(7)
+        box = np.array([15.2, 8.66, 74.6])
+        # 2000-atom backbone: small ~0.6 nm intra-strand steps, with random PBC
+        # wraps injected, plus a strand boundary (big jump) every ~250 atoms.
+        pos = np.zeros((2000, 3))
+        for i in range(1, 2000):
+            if i % 250 == 0:                    # strand boundary — large displacement
+                pos[i] = pos[i - 1] + rng.uniform(-1, 1, 3) * box
+            else:
+                pos[i] = pos[i - 1] + rng.normal(scale=0.06, size=3)
+        wrapped = pos - np.round(pos / box) * box   # wrap every atom into the box
+        ref = self._loop_reference(wrapped, box)
+        got = _unwrap_min_image(wrapped, box)
+        assert np.allclose(got, ref, atol=1e-9), np.abs(got - ref).max()
+
+    def test_vectorised_matches_loop_nonperiodic_axis(self):
+        """Equivalence also holds when one axis is non-periodic (box[d]==0)."""
+        rng = np.random.default_rng(11)
+        box = np.array([0.0, 8.66, 74.6])
+        pos = np.cumsum(rng.normal(scale=0.06, size=(500, 3)), axis=0)
+        wrapped = pos.copy()
+        for d in (1, 2):
+            wrapped[:, d] -= np.round(wrapped[:, d] / box[d]) * box[d]
+        assert np.allclose(
+            _unwrap_min_image(wrapped, box), self._loop_reference(wrapped, box), atol=1e-9
+        )
+
+    def test_short_arrays_pass_through(self):
+        """0- and 1-atom inputs are returned unchanged (no consecutive pairs)."""
+        assert _unwrap_min_image(np.zeros((0, 3)), np.array([3.0, 3.0, 3.0])).shape == (0, 3)
+        one = np.array([[1.0, 2.0, 3.0]])
+        assert np.allclose(_unwrap_min_image(one, np.array([3.0, 3.0, 3.0])), one)
+
+
+# ── NAMD psfgen segid → NADOC chain mapping (Display-MD fix) ──────────────────
+
+
+class TestSegidChainMap:
+    def test_load_from_charge_audit(self, tmp_path):
+        import json
+        (tmp_path / "charge_audit.json").write_text(json.dumps({
+            "topology_metadata": {"segments": [
+                {"segid": "D000", "chain_id": "A"},
+                {"segid": "D001", "chain_id": "AA"},
+                {"segid": "D002", "chain_id": "AB"},
+            ]}
+        }))
+        assert load_segid_chain_map(tmp_path) == {"D000": "A", "D001": "AA", "D002": "AB"}
+
+    def test_load_alt_top_level_segments(self, tmp_path):
+        import json
+        (tmp_path / "charge_audit.json").write_text(
+            json.dumps({"segments": [{"segid": "S1", "chain_id": "C1"}]})
+        )
+        assert load_segid_chain_map(tmp_path) == {"S1": "C1"}
+
+    def test_load_missing_or_bad(self, tmp_path):
+        assert load_segid_chain_map(tmp_path) is None            # no file
+        (tmp_path / "charge_audit.json").write_text("{ not json")
+        assert load_segid_chain_map(tmp_path) is None            # unparseable
+        (tmp_path / "charge_audit.json").write_text("{}")
+        assert load_segid_chain_map(tmp_path) is None            # no segments
+
+
+class TestBuildPOrderFromUniverse:
+    @staticmethod
+    def _universe():
+        """2-segment DNA topology whose per-segment resids COLLIDE (1,2,3 each) and
+        whose 1-char chainIDs would collide too — exactly the psfgen case the segid
+        map exists to disambiguate."""
+        mda = pytest.importorskip("MDAnalysis")
+        u = mda.Universe.empty(
+            n_atoms=6, n_residues=6, n_segments=2,
+            atom_resindex=[0, 1, 2, 3, 4, 5],
+            residue_segindex=[0, 0, 0, 1, 1, 1],
+            trajectory=True,
+        )
+        u.add_TopologyAttr("name", ["P"] * 6)
+        u.add_TopologyAttr("resname", ["DA"] * 6)
+        u.add_TopologyAttr("resid", [1, 2, 3, 1, 2, 3])
+        u.add_TopologyAttr("segid", ["D000", "D001"])
+        return u
+
+    def test_maps_by_segid_not_colliding_chainid(self):
+        u = self._universe()
+        seg2chain = {"D000": "X", "D001": "Y"}
+        cm = {
+            ("X", 1): (0, 0, 1), ("X", 2): (0, 1, 1), ("X", 3): (0, 2, 1),
+            ("Y", 1): (1, 0, 1), ("Y", 2): (1, 1, 1), ("Y", 3): (1, 2, 1),
+        }
+        order, n_unmapped = build_p_order_from_universe(u, cm, seg2chain)
+        assert n_unmapped == 0
+        # Trajectory atom order, correctly split across the two colliding-resid segments.
+        assert order == [(0, 0, 1), (0, 1, 1), (0, 2, 1), (1, 0, 1), (1, 1, 1), (1, 2, 1)]
+        assert len(set(order)) == 6   # no collision collapsed two atoms onto one key
+
+    def test_counts_unmapped_atoms(self):
+        u = self._universe()
+        seg2chain = {"D000": "X", "D001": "Y"}
+        cm = {("X", 1): (0, 0, 1), ("X", 2): (0, 1, 1), ("X", 3): (0, 2, 1)}  # Y absent
+        order, n_unmapped = build_p_order_from_universe(u, cm, seg2chain)
+        assert n_unmapped == 3
+        assert order == [(0, 0, 1), (0, 1, 1), (0, 2, 1)]
+
+    def test_unknown_segid_is_unmapped(self):
+        u = self._universe()
+        order, n_unmapped = build_p_order_from_universe(u, {}, {"D000": "X"})  # D001 unknown
+        assert n_unmapped == 6   # X has no cm entries + D001 has no chain
 
 
 # ── compare_to_design / centroid_offset / _compute_comparison ────────────────

@@ -294,6 +294,7 @@ def extrude_valid_overhang(design: Design, length_bp: int = 12) -> tuple[Design,
 # Whole modules where every test is a heavy real-sim / trajectory test.
 _SLOW_MODULES = {
     "test_md_trajectory",
+    "test_md_display_ready_live",   # real-job load: parses 143 MB PSF + builds model
 }
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.

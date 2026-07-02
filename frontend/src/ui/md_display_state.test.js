@@ -6,6 +6,8 @@ import {
   sceneUsesNativeCg,
   decideReload,
   canReapplyFrame,
+  nextLivePollAction,
+  mdReadinessIndicator,
   shouldForceDisplayReload,
 } from './md_display_state.js'
 
@@ -153,5 +155,37 @@ describe('canReapplyFrame', () => {
     expect(canReapplyFrame('ballstick', 'vdw')).toBe(true)
     expect(canReapplyFrame('ballstick', 'ballstick')).toBe(true)
     expect(canReapplyFrame('ballstick', 'full')).toBe(false)
+  })
+})
+
+describe('nextLivePollAction', () => {
+  const T = 15000
+  it('sends when no poll is outstanding', () => {
+    expect(nextLivePollAction({ pending: false, waitedMs: 0, timeoutMs: T })).toBe('send')
+    expect(nextLivePollAction({ pending: false, waitedMs: 999999, timeoutMs: T })).toBe('send')
+  })
+  it('skips (no stacking) while a poll is outstanding within the timeout', () => {
+    expect(nextLivePollAction({ pending: true, waitedMs: 0, timeoutMs: T })).toBe('skip')
+    expect(nextLivePollAction({ pending: true, waitedMs: T - 1, timeoutMs: T })).toBe('skip')
+  })
+  it('reports timeout once an outstanding poll passes the deadline', () => {
+    expect(nextLivePollAction({ pending: true, waitedMs: T, timeoutMs: T })).toBe('timeout')
+    expect(nextLivePollAction({ pending: true, waitedMs: T + 5000, timeoutMs: T })).toBe('timeout')
+  })
+})
+
+describe('mdReadinessIndicator', () => {
+  it('shows a warming state', () => {
+    expect(mdReadinessIndicator('warming')).toEqual({ show: true, color: 'warn', text: 'warming…' })
+  })
+  it('shows a ready state', () => {
+    expect(mdReadinessIndicator('ready')).toEqual({ show: true, color: 'ok', text: 'ready' })
+  })
+  it('shows an error state', () => {
+    expect(mdReadinessIndicator('error')).toEqual({ show: true, color: 'err', text: 'error' })
+  })
+  it('hides for off/unknown/undefined', () => {
+    for (const s of ['off', 'idle', undefined, null, 'whatever'])
+      expect(mdReadinessIndicator(s).show).toBe(false)
   })
 })

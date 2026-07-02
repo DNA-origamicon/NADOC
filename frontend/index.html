@@ -3775,6 +3775,13 @@
                        title="Live latest frame of the running/selected MD job, deforming the design model">
                   <input id="md-jobs-display-toggle" type="checkbox" style="accent-color:#58a6ff">
                   Display MD (live)
+                  <span id="md-jobs-display-indicator"
+                        title="MD display readiness"
+                        style="display:none;align-items:center;gap:4px;margin-left:4px;font-size:9px;color:#8b949e">
+                    <span id="md-jobs-display-indicator-dot"
+                          style="width:7px;height:7px;border-radius:50%;background:#484f58;display:inline-block;flex-shrink:0"></span>
+                    <span id="md-jobs-display-indicator-label"></span>
+                  </span>
                 </label>
                 <div id="md-jobs-display-status" style="font-size:10px;color:#484f58;margin-top:2px;min-height:12px"></div>
                 <!-- Flexibility map (avg structure over the whole run recoloured by per-base RMSF) -->
