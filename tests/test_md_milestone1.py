@@ -45,6 +45,18 @@ class TestMdJob:
         assert loaded.devices        == "0"
         assert loaded.status         == MdStatus.queued
 
+    def test_parent_job_id_roundtrip(self, tmp_path: Path) -> None:
+        """A derived (refit/retry) job records its origin so the list can nest it."""
+        from backend.core.md_job import MdJob, new_job
+
+        parent = new_job("A", "mgh_slow_release", "A", "pkg/A")
+        child = new_job("A", "mgh_slow_release", "A", "pkg/A",
+                        parent_job_id=parent.job_id)
+        assert parent.parent_job_id is None
+        assert child.parent_job_id == parent.job_id
+        child.save(tmp_path)
+        assert MdJob.load(child.job_id, tmp_path).parent_job_id == parent.job_id
+
     def test_list_jobs(self, tmp_path: Path) -> None:
         from backend.core.md_job import new_job, MdJob
 
@@ -495,6 +507,10 @@ class TestProductionAppend:
             "name_stem": "D",
             "box_ang": [100.0, 90.0, 80.0],
             "mgh_extrabonds": False,
+            # A fast relaxation ladder ran (4 fs rigid validated) — this is what
+            # makes production HMR/4fs-eligible.
+            "fast_relaxation": {"enabled": True},
+            "declash": False,
             "minimization": {"name": "D_00_min_k5"},
             "segments": [{
                 "name": "D_16_310K_NPT_k0_qualification_p100",
@@ -515,6 +531,11 @@ class TestProductionAppend:
         text = json.dumps(manifest, indent=2)
         (package_dir / "manifest.json").write_text(text)
         (package_dir / "nadoc_md_run.json").write_text(text)
+        # Fast production (HMR + 4 fs) reuses a pre-built HMR PSF when present.
+        # Provide both so _append_production_segments takes the fast path without
+        # having to parse a real PSF here.
+        (package_dir / "D.psf").write_text("* stub\n")
+        (package_dir / "D_hmr.psf").write_text("* stub\n")
         output_dir = package_dir / "output"
         output_dir.mkdir()
         for ext in ("coor", "vel", "xsc"):
@@ -528,14 +549,21 @@ class TestProductionAppend:
     ) -> None:
         routes_md = self._routes_md(tmp_path, monkeypatch)
 
+        # Conservative fallback: 1 fs → steps == fs.
         steps, length_ns = routes_md._production_steps_and_ns(
-            routes_md.ProductionRequest(length_ns=0.25)
+            routes_md.ProductionRequest(length_ns=0.25), 1.0
         )
-
         assert steps == 250_000
         assert length_ns == pytest.approx(0.25)
 
-    def test_appended_production_uses_conservative_unrestrained_settings(
+        # Fast path: same simulated ns reached in 1/4 the steps at 4 fs.
+        steps4, ns4 = routes_md._production_steps_and_ns(
+            routes_md.ProductionRequest(length_ns=0.25), 4.0
+        )
+        assert steps4 == 62_500
+        assert ns4 == pytest.approx(0.25)
+
+    def test_appended_production_uses_fast_hmr_settings_by_default(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -543,33 +571,102 @@ class TestProductionAppend:
         routes_md = self._routes_md(tmp_path, monkeypatch)
         job = self._ready_job(tmp_path)
 
-        segments = routes_md._append_production_segments(job, 1000)
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(length_ns=1.0))
+        assert plan["fast"] is True
+        assert plan["timestep_fs"] == pytest.approx(4.0)
+        assert plan["total_steps"] == 250_000  # 1 ns at 4 fs
+
+        segments = routes_md._append_production_segments(job, plan)
 
         assert [int(s.percent) for s in segments] == [10, 50, 100]
         assert all(s.min_wc_ref_relative == pytest.approx(0.25) for s in segments)
-        assert all(s.damping == pytest.approx(1.0) for s in segments)
-        assert all("conservative production" in s.stage for s in segments)
+        assert all(s.damping == pytest.approx(5.0) for s in segments)
+        assert all(s.temp == pytest.approx(300.0) for s in segments)
+        assert all("fast production" in s.stage for s in segments)
 
         package_dir = job.package_dir(tmp_path)
         conf = (package_dir / f"{segments[0].name}.conf").read_text()
-        assert "timestep           1.0" in conf
-        assert "rigidBonds         none" in conf
-        assert "langevinDamping    1.0" in conf
+        assert "structure          D_hmr.psf" in conf
+        assert "timestep           4" in conf
+        assert "rigidBonds         all" in conf
+        assert "GPUresident        on" in conf
+        # PME every 4 fs at a 4 fs step (fullElect 1) — matches the Aksimentiev
+        # reference and stays under the r-RESPA ~4 fs resonance limit.
+        assert "fullElectFrequency 1" in conf
         assert "PMEGridSpacing     1.0" in conf
         assert "cutoff             12.0" in conf
-        assert "switchdist         10.0" in conf
-        assert "pairlistdist       14.0" in conf
+        # Thermostat/barostat aligned to the Aksimentiev reference.
+        assert "langevinTemp       300" in conf
+        assert "langevinDamping    5" in conf
+        assert "langevinPistonPeriod  200.0" in conf
+        assert "langevinPistonDecay   100.0" in conf
 
         manifest = json.loads((package_dir / "manifest.json").read_text())
-        assert manifest["production_extension"]["timestep_fs"] == pytest.approx(1.0)
-        assert manifest["production_extension"]["settings"] == "conservative_unrestrained"
+        assert manifest["production_extension"]["timestep_fs"] == pytest.approx(4.0)
+        assert manifest["production_extension"]["settings"] == "fast_hmr_gpuresident_4fs"
+        assert manifest["production_extension"]["fast_production"]["enabled"] is True
         assert manifest["production_extension"]["health_gate"] == {
             "min_c1_paired": 0.90,
             "min_wc_ref_relative": 0.25,
         }
-        assert manifest["production_extension"]["advisory_gate"] == {
-            "wc_ref_relative": 0.75,
-        }
+
+    def test_fast_plan_eligibility_gate(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Eligibility keys off fast_relaxation.enabled + declash — NOT the presence
+        of a soft segment.  A normal fast ladder always has one soft strain-relief
+        segment, and that must NOT knock production back to the slow 1 fs path."""
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        job = self._ready_job(tmp_path)
+        package_dir = job.package_dir(tmp_path)
+        mpath = package_dir / "manifest.json"
+
+        def _plan_with(**manifest_overrides):
+            m = json.loads(mpath.read_text())
+            m.update(manifest_overrides)
+            mpath.write_text(json.dumps(m, indent=2))
+            return routes_md._production_fast_plan(job, routes_md.ProductionRequest(length_ns=1.0))
+
+        # Fast ladder + a lone soft strain-relief segment → still FAST (the bug).
+        plan = _plan_with(
+            fast_relaxation={"enabled": True},
+            declash=False,
+            segments=[{"name": "x_soft", "soft": True}],
+        )
+        assert plan["fast"] is True
+
+        # Declash design → conservative even though the ladder ran fast.
+        assert _plan_with(fast_relaxation={"enabled": True}, declash=True)["fast"] is False
+
+        # Relaxation never ran fast (old job) → conservative.
+        assert _plan_with(fast_relaxation={"enabled": False}, declash=False)["fast"] is False
+
+    def test_declash_job_falls_back_to_conservative_production(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        job = self._ready_job(tmp_path)
+        # A soft/declash relaxation cannot run HMR + rigid bonds → conservative.
+        package_dir = job.package_dir(tmp_path)
+        manifest = json.loads((package_dir / "manifest.json").read_text())
+        manifest["declash"] = True
+        (package_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(length_ns=0.001))
+        assert plan["fast"] is False
+        assert plan["timestep_fs"] == pytest.approx(1.0)
+
+        segments = routes_md._append_production_segments(job, plan)
+        conf = (package_dir / f"{segments[0].name}.conf").read_text()
+        assert "structure          D.psf" in conf
+        assert "timestep           1\n" in conf
+        assert "rigidBonds         none" in conf
+        assert "GPUresident" not in conf
+        assert all("conservative production" in s.stage for s in segments)
+        manifest = json.loads((package_dir / "manifest.json").read_text())
+        assert manifest["production_extension"]["settings"] == "conservative_unrestrained"
 
     def _seeded_job(self, tmp_path: Path):
         """An oxDNA-seeded job whose package is built but NO relaxation has run
@@ -610,7 +707,8 @@ class TestProductionAppend:
 
         job = self._seeded_job(tmp_path)
         with pytest.raises(Exception) as exc:
-            routes_md._append_production_segments(job, 1000)
+            routes_md._append_production_segments(
+                job, {"total_steps": 1000, "length_ns": 0.001, "timestep_fs": 1.0, "fast": False})
         assert getattr(exc.value, "status_code", None) == 400
 
     def test_display_meta_seeded_job_not_production_ready_without_checkpoint(
@@ -635,7 +733,8 @@ class TestProductionAppend:
         job.seed_oxdna_job_id = None          # remove the seed provenance
         job.save(tmp_path)
         with pytest.raises(Exception) as exc:
-            routes_md._append_production_segments(job, 1000)
+            routes_md._append_production_segments(
+                job, {"total_steps": 1000, "length_ns": 0.001, "timestep_fs": 1.0, "fast": False})
         assert getattr(exc.value, "status_code", None) == 400
 
 

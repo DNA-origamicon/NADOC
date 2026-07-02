@@ -359,6 +359,42 @@ def _jsonl_records(path: Path) -> list[dict]:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+@router.post("/oxdna/jobs/estimate-disk")
+async def estimate_oxdna_disk(body: CreateOxdnaJobRequest) -> dict:
+    """Forecast the disk an oxDNA relaxation would write vs. free space.
+
+    Best-effort — any error returns ``warn=False`` so the forecast never blocks a
+    launch.  oxDNA prints a bounded number of configs, so this rarely warns; it
+    still catches an already-near-full disk.
+    """
+    from backend.core.disk_guard import forecast, oxdna_run_output_bytes
+    from backend.core.oxdna_protocol import print_conf_interval
+
+    try:
+        design = design_state.get_or_404()
+        n_nt = len(_strand_nucleotide_order(design))
+        specs = build_relaxation_stages(
+            mc_steps=body.mc_steps, md_relax_steps=body.md_relax_steps,
+            equil_steps=body.equil_steps)
+        stages = [(s.steps, print_conf_interval(s)) for s in specs]
+        predicted = oxdna_run_output_bytes(stages, n_nt)
+    except Exception as exc:  # noqa: BLE001 — a forecast must never block a launch
+        logger.warning("estimate_oxdna_disk failed (allowing launch): %s", exc)
+        return {**forecast(_workspace(), 0), "skipped": True}
+    return forecast(_workspace(), predicted)
+
+
+@router.post("/oxdna/jobs/{job_id}/estimate-run-disk")
+async def estimate_oxdna_run_disk(job_id: str, body: RunRequest) -> dict:
+    """Forecast the disk an oxDNA production/run stage would write vs. free space."""
+    from backend.core.disk_guard import forecast, oxdna_run_output_bytes
+
+    job = _load_job(job_id)
+    interval = max(1, int(body.steps) // 100)
+    predicted = oxdna_run_output_bytes([(body.steps, interval)], job.n_nucleotides)
+    return forecast(job.job_dir(_workspace()), predicted)
+
+
 @router.post("/oxdna/jobs")
 async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
     """Prepare a new 3-stage oxDNA relaxation job from the active design.

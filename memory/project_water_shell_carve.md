@@ -95,3 +95,78 @@ Tests: tests/test_md_water_shell.py, tests/test_md_declash.py. Caveat: under NVT
 around the (ENM-restrained) DNA with a water–vacuum interface — fine for restrained
 equilibration; revisit before long *unrestrained* production (DNA could drift toward
 a vacuum corner). See [[md-job-system]] [[exp30-18hb-production]].
+
+## Shell → NVT PRODUCTION path (in progress 2026-07-02)
+
+Goal: long *unrestrained* production on a carved shell to clear >16 ns/day on a
+CURVED origami (box mostly empty water; carve follows the molecular surface). Chosen
+over full-box NpT (tops out ~12.6 ns/day at 4fs HMR on ~1M atoms / one 3080 Ti — see
+[[md-job-system]] production-speed work). Production params also aligned to the
+Aksimentiev reference (300 K, langevinDamping 5, piston 200/100, cutoff12/switch10/
+pairlist14, PME 1.0, fullElect every 4 fs = fullElectFrequency 1 at a 4 fs HMR step).
+
+**KEY CORRECTION — do NOT delete water in place.** Carved cell can't run NpT (vacuum
+corners collapse under the piston) → production must be NVT + a weak DNA COM
+restraint. And **re-solvate the RELAXED DNA** through the tested pipeline, NOT delete
+far water from the equilibrated ionated box: bulk Cl- (repelled from DNA) + excess
+Mg2+ live in that far water, so deleting it strands charged ions in vacuum / breaks
+neutrality. `build_namd_solvated_package` re-ionises from the carved solvent volume
+(neutrality exact) and already accepts `atomistic_model=` (seed relaxed DNA) +
+`water_shell_nm=`. Maps 1:1 onto the paper's pre-production recipe: relax DNA (done)
+→ re-solvate w/ shell → minimize → 1 ns solvent equil (DNA position-restrained, NVT,
+1 fs) → NVT production + COM restraint.
+
+Build steps:
+1. DONE — `backend/core/md_shell_reprep.py` (+ tests/test_md_shell_reprep.py, 5):
+   `read_namd_coor(path)` (NAMD binary .coor, endian-auto) + `com_restraint_colvars(
+   n_dna_atoms, center, force_constant=1.0)` (3× distanceZ pinning DNA COM over
+   serials 1..n_dna — DNA is first in every NADOC PSF; internal DOF free). Colvars was
+   NOT previously in the codebase.
+2. TODO — `stamp_relaxed_dna_model`: build_atomistic_model(design) then overwrite the
+   first n_dna atoms' xyz from the checkpoint .coor (PSF DNA order == model order).
+3. TODO — re-solvate: build_namd_solvated_package(atomistic_model=stamped,
+   water_shell_nm=1.5, + source job's prep_params; job c89a67841933 = 12.5 mM MgCl2
+   screening, no NaCl, padding 1.2).
+4. TODO — segment protocol: min → solvent-equil(DNA-restrained, NVT, 1 fs, ~1 ns) →
+   COM-NVT production (`colvars on` + `colvarsConfig`), HMR 4 fs.
+5. TODO — endpoint (POST /md/jobs/{id}/shell-production or refit variant) + FE button.
+
+Reference: 3x6x200_test, job `c89a67841933` (relaxed to 04_300K_NPT_MGHH_only;
+~1.03M atoms full box, 156×89×768 Å).
+
+### Findings + BLOCKER (2026-07-02 build/run)
+
+Built `backend/core/md_shell_reprep.py`: `read_namd_coor`, `com_restraint_colvars`
+(3× distanceZ pinning DNA COM by leading serial range), `stamp_relaxed_dna_model`,
+`prepare_shell_nvt_production` (orchestrator). Added optional `colvars_file` to
+`md_protocols._segment_conf`. Tests: tests/test_md_shell_reprep.py (8, green).
+
+**Reversals learned the hard way:**
+1. **Do NOT seed re-solvation from the checkpoint's relaxed coords.** (a) The MD PSF
+   is psfgen → hydrogens interleaved, so `build_atomistic_model` HEAVY order (149,750)
+   ≠ checkpoint row order (232,109 DNA atoms w/ H): `checkpoint[:n_heavy]` maps garbage.
+   (b) The relaxed coords have DRIFTED/spread in the periodic cell → bigger bbox →
+   bigger re-solvation box → carve WORSE (745k) than the compact design build (668k).
+   → Orchestrator now seeds the **design build** (no stamp); design-strain is relieved
+   by the restrained equil, not by coord reuse.
+2. **Neutrality needs `require_full_topology=True` + `protocol=EQUILIBRIUM_AWARE`.** The
+   default (heavy-atom Python PSF) path left net −11438 e (DA/DC naming, no psfgen
+   neutralising Na). With full topology → psfgen (ADE/CYT), netQ **+0.00**. ✓
+3. **This structure is COMPACT, not sparse-curved.** 47% bbox occupancy, ~straight
+   flat 3×6 bundle (PCA spread 200/38/19 Å). 15 Å shell → 668k atoms = only **1.55×**
+   vs 1.03M (NOT the 2.5-5× of a hollow/curved design). Projected ~19.5 ns/day
+   (clears 16, modest). n_dna for the colvars range = ATOM-record count in the built
+   PDB (232,109 w/ H), NOT the heavy model count.
+
+**BLOCKER — carved min crashes the GPU:** `FATAL ... CudaTileListKernel.cu
+buildTileLists ... illegal memory access` at minimize step 1 (both +p8 and +p1).
+NOT the margin gotcha (no margin set) and NOT atoms-outside-box (the ORIG full-box
+build has MORE atoms outside — 71,874 vs 60,744 — and minimised fine). Specific to
+the carved cell's vacuum regions × GPU tile list. VoltronCore reportedly ran carved
+(step 9600) so it's structure/config-specific — unresolved; needs dedicated GPU
+debugging (try: no-ENM-extrabonds min to isolate; CPU-only min then GPU dynamics;
+patch/twoAway settings; or a thin bulk-water margin instead of hard vacuum).
+
+Net: shell is NOT a quick win for a compact bundle. The shipped **full-box 4 fs HMR**
+production (12.6 ns/day, paper-faithful) is the reliable path; >16 needs the shell
+(blocked) or a 2nd GPU. Scratch build/run scripts under the session scratchpad.

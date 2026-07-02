@@ -3660,6 +3660,76 @@
                 </div>
               </div>
 
+              <!-- ── Visualizations & processing (collapsible; mutually-exclusive views;
+                   the view radios enable only once a job is selected) ── -->
+              <div class="ox-card">
+                <div id="oxdna-jobs-viz-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="oxdna-jobs-viz-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Visualizations &amp; processing</span>
+                </div>
+                <div id="oxdna-jobs-viz-body" class="ox-card__body">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
+                    <input id="oxdna-jobs-viz-off" name="oxdna-viz" type="radio" value="off" checked> Off (native positions)
+                  </label>
+                  <!-- display toggle -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:6px;cursor:pointer">
+                    <input id="oxdna-jobs-display-toggle" name="oxdna-viz" type="radio" value="display"> OxDNA display
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px;margin-left:18px;cursor:pointer"
+                         title="On: superpose the relaxed structure onto the design pose. Off: show it in its own simulation frame — how it actually settled (e.g. resting on the hard surface), lined up with the surface grid.">
+                    <input id="oxdna-jobs-align-toggle" type="checkbox" checked> Align to design pose
+                  </label>
+                  <div id="oxdna-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <!-- Flexibility map (avg production structure recoloured by per-base RMSF; unlocks after a production run) -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                         title="Average structure over the production run, recoloured rigid→flexible by per-base RMSF">
+                    <input id="oxdna-jobs-flex-toggle" name="oxdna-viz" type="radio" value="flex" disabled> Flexibility map (RMSF)
+                  </label>
+                  <div id="oxdna-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px">Waiting for production</div>
+                  <div id="oxdna-jobs-flex-bar" style="margin-top:3px;display:none"></div>
+                  <div id="oxdna-jobs-flex-legend" style="display:none"></div>
+                  <!-- Deviation map: autorefine mean structure, coloured by per-base deviation from design (enabled when the autorefine run's job is selected) -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                         title="Average structure of the selected autorefine run, each base recoloured green (matches design) → red (far from design). Select the autorefine run's job in the list to enable.">
+                    <input id="oxdna-jobs-deviation-toggle" name="oxdna-viz" type="radio" value="deviation" disabled> Deviation map (autorefine)
+                  </label>
+                  <div id="oxdna-jobs-deviation-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <!-- View trajectory: scrub the composite relaxation + all production runs -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                         title="Play/scrub the composite trajectory: relaxation stages + every production run, with markers at each transition">
+                    <input id="oxdna-jobs-traj-toggle" name="oxdna-viz" type="radio" value="traj" disabled> View trajectory
+                  </label>
+                  <div id="oxdna-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <div id="oxdna-jobs-traj-controls" style="display:none;margin-top:4px">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <button id="oxdna-jobs-traj-play" title="Play / pause"
+                              style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
+                      <div style="position:relative;flex:1;min-width:0">
+                        <input id="oxdna-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
+                               style="width:100%;display:block;margin:0">
+                        <!-- stage-transition markers overlaid on the slider track -->
+                        <div id="oxdna-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
+                      </div>
+                    </div>
+                    <div id="oxdna-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
+                  </div>
+                  <!-- Heavy-rep (atomistic/surface) reconstruction detail for ALL three
+                       displays above. Only matters when the scene is in an atomistic or
+                       surface representation; CG beads ignore it. -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:8px"
+                         title="When the scene is in an atomistic or surface representation, oxDNA frames are rebuilt into that heavy geometry. Coarse snaps the trajectory to a downsampled set of pre-built frames (fast). Fine rebuilds the exact frame on every step (accurate, but can be very slow on large designs).">
+                    Atomistic/surface detail:
+                    <select id="oxdna-jobs-heavy-granularity"
+                            style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                      <option value="coarse">Coarse — snap to downsampled frames (fast)</option>
+                      <option value="fine">Fine — rebuild every frame (slow)</option>
+                    </select>
+                  </label>
+                  <div id="oxdna-jobs-heavy-warn" style="display:none;font-size:9px;color:#d29922;margin-top:2px">
+                    Fine mode rebuilds the full atomistic/surface geometry every frame — playback &amp; scrubbing can be very slow. Toggle the display off any time to cancel.
+                  </div>
+                </div>
+              </div>
+
               <!-- ── Health (collapsible card — selected run's metrics) ─────── -->
               <div class="ox-card">
                 <div id="oxdna-jobs-health-toggle" class="ox-card__header" style="color:#c9d1d9">
@@ -3683,63 +3753,6 @@
                   <button id="oxdna-jobs-delete-btn" style="flex:1;font-size:var(--text-xs);padding:4px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Delete</button>
                 </div>
                 <div id="oxdna-jobs-archive-progress" style="display:none;font-size:var(--text-xs);color:#d29922;margin-top:4px"></div>
-                <!-- display toggle -->
-                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:pointer">
-                  <input id="oxdna-jobs-display-toggle" type="checkbox"> OxDNA display
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px;margin-left:18px;cursor:pointer"
-                       title="On: superpose the relaxed structure onto the design pose. Off: show it in its own simulation frame — how it actually settled (e.g. resting on the hard surface), lined up with the surface grid.">
-                  <input id="oxdna-jobs-align-toggle" type="checkbox" checked> Align to design pose
-                </label>
-                <div id="oxdna-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                <!-- Flexibility map (avg production structure recoloured by per-base RMSF; unlocks after a production run) -->
-                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
-                       title="Average structure over the production run, recoloured rigid→flexible by per-base RMSF">
-                  <input id="oxdna-jobs-flex-toggle" type="checkbox" disabled> Flexibility map (RMSF)
-                </label>
-                <div id="oxdna-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px">Waiting for production</div>
-                <div id="oxdna-jobs-flex-bar" style="margin-top:3px;display:none"></div>
-                <div id="oxdna-jobs-flex-legend" style="display:none"></div>
-                <!-- Deviation map: autorefine mean structure, coloured by per-base deviation from design (enabled when the autorefine run's job is selected) -->
-                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
-                       title="Average structure of the selected autorefine run, each base recoloured green (matches design) → red (far from design). Select the autorefine run's job in the list to enable.">
-                  <input id="oxdna-jobs-deviation-toggle" type="checkbox" disabled> Deviation map (autorefine)
-                </label>
-                <div id="oxdna-jobs-deviation-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                <!-- View trajectory: scrub the composite relaxation + all production runs -->
-                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
-                       title="Play/scrub the composite trajectory: relaxation stages + every production run, with markers at each transition">
-                  <input id="oxdna-jobs-traj-toggle" type="checkbox" disabled> View trajectory
-                </label>
-                <div id="oxdna-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                <div id="oxdna-jobs-traj-controls" style="display:none;margin-top:4px">
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <button id="oxdna-jobs-traj-play" title="Play / pause"
-                            style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
-                    <div style="position:relative;flex:1;min-width:0">
-                      <input id="oxdna-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
-                             style="width:100%;display:block;margin:0">
-                      <!-- stage-transition markers overlaid on the slider track -->
-                      <div id="oxdna-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
-                    </div>
-                  </div>
-                  <div id="oxdna-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
-                </div>
-                <!-- Heavy-rep (atomistic/surface) reconstruction detail for ALL three
-                     displays above. Only matters when the scene is in an atomistic or
-                     surface representation; CG beads ignore it. -->
-                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:8px"
-                       title="When the scene is in an atomistic or surface representation, oxDNA frames are rebuilt into that heavy geometry. Coarse snaps the trajectory to a downsampled set of pre-built frames (fast). Fine rebuilds the exact frame on every step (accurate, but can be very slow on large designs).">
-                  Atomistic/surface detail:
-                  <select id="oxdna-jobs-heavy-granularity"
-                          style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
-                    <option value="coarse">Coarse — snap to downsampled frames (fast)</option>
-                    <option value="fine">Fine — rebuild every frame (slow)</option>
-                  </select>
-                </label>
-                <div id="oxdna-jobs-heavy-warn" style="display:none;font-size:9px;color:#d29922;margin-top:2px">
-                  Fine mode rebuilds the full atomistic/surface geometry every frame — playback &amp; scrubbing can be very slow. Toggle the display off any time to cancel.
-                </div>
                 <!-- NAMD seed handoff (enabled once relaxation completes) -->
                 <button id="oxdna-jobs-seed-btn" disabled
                         title="Start a NAMD all-atom run from this relaxed structure instead of ideal B-DNA"
@@ -3802,45 +3815,6 @@
                   </label>
                   <div id="md-jobs-prod-status" style="font-size:10px;color:#484f58;margin-top:3px;min-height:12px"></div>
                 </div>
-                <label style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
-                       title="Live latest frame of the running/selected MD job, deforming the design model">
-                  <input id="md-jobs-display-toggle" type="checkbox" style="accent-color:#58a6ff">
-                  Display MD (live)
-                  <span id="md-jobs-display-indicator"
-                        title="MD display readiness"
-                        style="display:none;align-items:center;gap:4px;margin-left:4px;font-size:9px;color:#8b949e">
-                    <span id="md-jobs-display-indicator-dot"
-                          style="width:7px;height:7px;border-radius:50%;background:#484f58;display:inline-block;flex-shrink:0"></span>
-                    <span id="md-jobs-display-indicator-label"></span>
-                  </span>
-                </label>
-                <div id="md-jobs-display-status" style="font-size:10px;color:#484f58;margin-top:2px;min-height:12px"></div>
-                <!-- Flexibility map (avg structure over the whole run recoloured by per-base RMSF) -->
-                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
-                       title="Average structure over the whole NAMD run, recoloured rigid→flexible by per-base RMSF (all segments pooled)">
-                  <input id="md-jobs-flex-toggle" type="checkbox" disabled> Flexibility map (RMSF)
-                </label>
-                <div id="md-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                <div id="md-jobs-flex-bar" style="margin-top:3px;display:none"></div>
-                <div id="md-jobs-flex-legend" style="display:none"></div>
-                <!-- View trajectory: scrub every written segment (relaxation + production) -->
-                <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
-                       title="Play/scrub the composite NAMD trajectory: every written segment, with a marker at each transition. Replaces VMD for reviewing MD runs.">
-                  <input id="md-jobs-traj-toggle" type="checkbox" disabled> View trajectory
-                </label>
-                <div id="md-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                <div id="md-jobs-traj-controls" style="display:none;margin-top:4px">
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <button id="md-jobs-traj-play" title="Play / pause"
-                            style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
-                    <div style="position:relative;flex:1;min-width:0">
-                      <input id="md-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
-                             style="width:100%;display:block;margin:0">
-                      <div id="md-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
-                    </div>
-                  </div>
-                  <div id="md-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
-                </div>
               </div>
 
               <!-- ── Benchmark (self-rendered collapsible card — auto-tune threads/devices) ── -->
@@ -3857,6 +3831,59 @@
                     Show jobs for all designs
                   </label>
                   <div id="md-jobs-list" style="max-height:160px;overflow-y:auto;scrollbar-width:thin"></div>
+                </div>
+              </div>
+
+              <!-- ── Visualizations & processing (collapsible; mutually-exclusive views;
+                   the view radios enable only once a job is selected) ── -->
+              <div class="ox-card">
+                <div id="md-jobs-viz-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="md-jobs-viz-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Visualizations &amp; processing</span>
+                </div>
+                <div id="md-jobs-viz-body" class="ox-card__body">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
+                    <input id="md-jobs-viz-off" name="md-viz" type="radio" value="off" checked style="accent-color:#58a6ff">
+                    Off (native positions)
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
+                         title="Live latest frame of the running/selected MD job, deforming the design model">
+                    <input id="md-jobs-display-toggle" name="md-viz" type="radio" value="display" style="accent-color:#58a6ff">
+                    Display MD (live)
+                    <span id="md-jobs-display-indicator"
+                          title="MD display readiness"
+                          style="display:none;align-items:center;gap:4px;margin-left:4px;font-size:9px;color:#8b949e">
+                      <span id="md-jobs-display-indicator-dot"
+                            style="width:7px;height:7px;border-radius:50%;background:#484f58;display:inline-block;flex-shrink:0"></span>
+                      <span id="md-jobs-display-indicator-label"></span>
+                    </span>
+                  </label>
+                  <div id="md-jobs-display-status" style="font-size:10px;color:#484f58;margin-top:2px;min-height:12px"></div>
+                  <!-- Flexibility map (avg structure over the whole run recoloured by per-base RMSF) -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                         title="Average structure over the whole NAMD run, recoloured rigid→flexible by per-base RMSF (all segments pooled)">
+                    <input id="md-jobs-flex-toggle" name="md-viz" type="radio" value="flex" disabled> Flexibility map (RMSF)
+                  </label>
+                  <div id="md-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <div id="md-jobs-flex-bar" style="margin-top:3px;display:none"></div>
+                  <div id="md-jobs-flex-legend" style="display:none"></div>
+                  <!-- View trajectory: scrub every written segment (relaxation + production) -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                         title="Play/scrub the composite NAMD trajectory: every written segment, with a marker at each transition. Replaces VMD for reviewing MD runs.">
+                    <input id="md-jobs-traj-toggle" name="md-viz" type="radio" value="traj" disabled> View trajectory
+                  </label>
+                  <div id="md-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <div id="md-jobs-traj-controls" style="display:none;margin-top:4px">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <button id="md-jobs-traj-play" title="Play / pause"
+                              style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
+                      <div style="position:relative;flex:1;min-width:0">
+                        <input id="md-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
+                               style="width:100%;display:block;margin:0">
+                        <div id="md-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
+                      </div>
+                    </div>
+                    <div id="md-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
+                  </div>
                 </div>
               </div>
 

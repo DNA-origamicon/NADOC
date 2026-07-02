@@ -13,6 +13,7 @@
  */
 
 import { showConfirm } from './primitives/confirm.js'
+import { formatBytes } from './format_bytes.js'
 import { listActiveJobs, gpuStatus } from '../api/client.js'
 
 /** Pure: normalize a workspace path for comparison (slashes + trailing slash). */
@@ -114,6 +115,53 @@ export async function confirmNoConcurrentJob({ excludeJobId = null } = {}) {
  * @param {string} [devices] CUDA device string for the run (default '0')
  * @returns {Promise<boolean>} true to proceed with the launch, false to abort
  */
+/**
+ * Pure: build the disk-space warning message from a forecast, or null when no
+ * warning is warranted. Split out so the threshold/wording is unit-testable
+ * without the network or a modal.
+ *
+ * @param {object} forecast  {free_bytes, predicted_bytes, free_after_bytes, warn, ...}
+ * @returns {?string} popup body text, or null if the run is fine to launch
+ */
+export function diskWarningMessage(forecast) {
+  if (!forecast || forecast.warn !== true) return null
+  const free = formatBytes(forecast.free_bytes)
+  const predicted = formatBytes(forecast.predicted_bytes)
+  const after = forecast.free_after_bytes
+  const afterStr = after < 0
+    ? `run OUT of disk (short by ${formatBytes(-after)})`
+    : `leave only ${formatBytes(after)} free`
+  return (
+    `This run is estimated to write about ${predicted} of trajectory and restart ` +
+    `data. You currently have ${free} free, so finishing it would ${afterStr}.\n\n` +
+    'Simulations that fill the disk can corrupt their output and wedge the machine. ' +
+    'Free up space (delete or archive old jobs) first, or start anyway if you know ' +
+    'the run will be stopped early.'
+  )
+}
+
+/**
+ * Guard against launching a run that would leave too little free disk. Given a
+ * disk-space forecast from the backend (see estimateMdDisk / estimateOxdnaDisk),
+ * show a Continue/Cancel warning when finishing the run would drop free space
+ * below the 10 GB floor; otherwise resolve true immediately. Never blocks on a
+ * missing/failed forecast — a forecast must never prevent a launch.
+ *
+ * @param {?object} forecast  the backend forecast dict (or null/undefined)
+ * @returns {Promise<boolean>} true to proceed with the launch, false to abort
+ */
+export async function confirmDiskSpaceOk(forecast) {
+  const message = diskWarningMessage(forecast)
+  if (!message) return true
+  return showConfirm({
+    title: 'Low disk space for this run',
+    message,
+    danger: true,
+    confirmLabel: 'Start anyway',
+    cancelLabel: 'Cancel',
+  })
+}
+
 export async function confirmGpuNotBusy(devices = '0') {
   let status
   try {

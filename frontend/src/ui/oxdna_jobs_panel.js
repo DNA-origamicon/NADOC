@@ -28,10 +28,11 @@ import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 import { el } from './primitives/dom.js'
 import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
+import { flattenJobTree, descendantIds } from './job_tree.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
-import { confirmNoConcurrentJob, confirmGpuNotBusy } from './job_activity.js'
+import { confirmNoConcurrentJob, confirmGpuNotBusy, confirmDiskSpaceOk } from './job_activity.js'
 import * as api from '../api/client.js'
 
 const POLL_MS = 1500
@@ -269,66 +270,10 @@ export function jobListStatus(job) {
   return { label: job?.status ?? 'unknown', color: _STATUS_COLOR[job?.status] || _C.dim }
 }
 
-/** Pure: flatten the job set into a pre-order render list, following the
- *  parent_job_id chain to ANY depth (relax → field1 → field2 → …).  Returns
- *  [{ job, depth, index }] where depth 0 = a root relaxation and depth≥1 = a
- *  field/production child (indent by depth); `index` is the GLOBAL run number
- *  (1..N) of a child among all non-root jobs in created_at order, so chained runs
- *  read Field 1 → Field 2 → … regardless of nesting.  Roots are newest first;
- *  children oldest first (run order).  An orphan child (parent absent) is treated
- *  as its own root. */
-export function flattenJobTree(jobs) {
-  const list = jobs || []
-  const ids = new Set(list.map(j => j.job_id))
-  const childrenOf = new Map()
-  const roots = []
-  for (const j of list) {
-    const pid = j.parent_job_id
-    if (pid && ids.has(pid)) {
-      if (!childrenOf.has(pid)) childrenOf.set(pid, [])
-      childrenOf.get(pid).push(j)
-    } else {
-      roots.push(j)
-    }
-  }
-  // Global run numbering: every non-root job by created_at ascending.
-  const runNo = new Map()
-  list.filter(j => j.parent_job_id && ids.has(j.parent_job_id))
-    .slice().sort((a, b) => (a.created_at || 0) - (b.created_at || 0))
-    .forEach((j, i) => runNo.set(j.job_id, i + 1))
-  const out = []
-  const visit = (job, depth) => {
-    out.push({ job, depth, index: runNo.get(job.job_id) || 0 })
-    for (const k of (childrenOf.get(job.job_id) || [])
-      .slice().sort((a, b) => (a.created_at || 0) - (b.created_at || 0))) {
-      visit(k, depth + 1)
-    }
-  }
-  roots.slice().sort((a, b) => (b.created_at || 0) - (a.created_at || 0)).forEach(r => visit(r, 0))
-  return out
-}
-
-/** Pure: the set of ALL descendant job ids (children, grandchildren, …) of jobId,
- *  for the delete-cascade warning count. */
-export function descendantIds(jobs, jobId) {
-  const childrenOf = new Map()
-  for (const j of jobs || []) {
-    const pid = j.parent_job_id
-    if (pid) {
-      if (!childrenOf.has(pid)) childrenOf.set(pid, [])
-      childrenOf.get(pid).push(j.job_id)
-    }
-  }
-  const out = new Set()
-  const stack = [...(childrenOf.get(jobId) || [])]
-  while (stack.length) {
-    const id = stack.pop()
-    if (out.has(id)) continue
-    out.add(id)
-    for (const c of (childrenOf.get(id) || [])) stack.push(c)
-  }
-  return out
-}
+// Job-tree flatten + descendant-cascade helpers now live in the shared job_tree.js
+// (both panels render the same parent→child hierarchy; imported at the top).
+// Re-exported so existing importers (and tests) keep resolving them from here.
+export { flattenJobTree, descendantIds }
 
 /** Pure: the confirm-dialog copy for deleting a job.  A relaxed parent with
  *  field children warns that the children go too (cascade); a field child / a
@@ -518,6 +463,18 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   const trajLabel     = document.getElementById('oxdna-jobs-traj-label')
   const heavyGranSel  = document.getElementById('oxdna-jobs-heavy-granularity')
   const heavyWarn     = document.getElementById('oxdna-jobs-heavy-warn')
+  const vizOffRadio   = document.getElementById('oxdna-jobs-viz-off')
+
+  // The OxDNA display / Flexibility / Deviation / Trajectory views are mutually-
+  // exclusive radios in the "Visualizations & processing" card (they share one bead
+  // overlay).  Keep the "Off" radio checked whenever no view is active, so the group
+  // always shows a selection — including after a programmatic turn-off (job switch,
+  // lost trajectory, live-mode takeover, design edit).
+  function _syncVizOffRadio() {
+    if (!vizOffRadio) return
+    const anyOn = [displayToggle, flexToggle, trajToggle, autorefineDevToggle].some(t => t?.checked)
+    if (!anyOn) vizOffRadio.checked = true
+  }
 
   // Atomistic/surface reconstruction detail (coarse=snap to downsampled bake /
   // fine=rebuild every frame). Applies to all three displays; only visible effect
@@ -792,6 +749,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     if (oxdnaDisplay?.mode() === 'deviation') oxdnaDisplay.stopAndRestore()
     if (autorefineDevToggle) autorefineDevToggle.checked = false
     _setDevStatus('')
+    _syncVizOffRadio()
     _updateButtons(_selectedJob())
   }
   async function _refreshDeviation() {
@@ -817,7 +775,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   }
   autorefineDevToggle?.addEventListener('change', async () => {
     if (autorefineDevToggle.checked) {
-      if (!_selectedId) { autorefineDevToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); return }
+      if (!_selectedId) { autorefineDevToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return }
       oxdnaLive?.stop()                 // mutually exclusive with relaxed / flex / trajectory / live
       if (displayToggle?.checked) _setDisplayOff()
       if (flexToggle?.checked) _setFlexOff()
@@ -881,9 +839,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     if (advArrow) advArrow.style.transform = _advOpen ? 'rotate(90deg)' : ''
   })
 
-  // Jobs + Health cards: simple collapse (start open).
+  // Jobs + Visualizations + Health cards: simple collapse (start open).
   for (const [tid, bid, aid] of [
     ['oxdna-jobs-list-toggle',   'oxdna-jobs-list-body',   'oxdna-jobs-list-arrow'],
+    ['oxdna-jobs-viz-toggle',    'oxdna-jobs-viz-body',    'oxdna-jobs-viz-arrow'],
     ['oxdna-jobs-health-toggle', 'oxdna-jobs-health-body', 'oxdna-jobs-health-arrow'],
   ]) {
     const t = document.getElementById(tid)
@@ -1017,6 +976,16 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       body.surface = { dir: el.surface.dir, offset_nm: el.surface.offsetNm, stiff: el.surface.stiff }
     }
     if (el.anchors?.length) body.anchors = el.anchors
+    try {
+      const fc = await api.estimateOxdnaDisk(body)
+      if (!(await confirmDiskSpaceOk(fc))) {
+        _launching = false
+        runBtn.disabled = false
+        _setStatus('', _C.muted)
+        _updateButtons(_selectedJob())
+        return
+      }
+    } catch { /* forecast is best-effort — never block a launch on it */ }
     const job = await api.createOxdnaJob(body).catch(() => null)
     _launching = false
     _updateButtons(_selectedJob())
@@ -1468,17 +1437,22 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       }
     }
 
-    // OxDNA display (relaxed positions) — always available with a job, EXCEPT while
-    // a live session owns the overlay, when it is locked too.
+    // OxDNA display (relaxed positions) — available once a job is selected, EXCEPT
+    // while a live session owns the overlay, when it is locked too.  With no job
+    // selected only "Off" is selectable (the card is always visible now).
     if (displayToggle) {
-      displayToggle.disabled = liveOn
+      const ok = !liveOn && !!job
+      displayToggle.disabled = !ok
       const lab = displayToggle.closest('label')
       if (lab) {
-        lab.style.opacity = liveOn ? '0.5' : '1'
-        lab.style.cursor = liveOn ? 'not-allowed' : 'pointer'
-        lab.title = liveOn ? 'Stop Live to use the OxDNA display' : ''
+        lab.style.opacity = ok ? '1' : '0.5'
+        lab.style.cursor = ok ? 'pointer' : 'not-allowed'
+        lab.title = liveOn ? 'Stop Live to use the OxDNA display'
+          : (!job ? 'Select an oxDNA job first' : '')
       }
     }
+    // Nothing selectable but "Off"? keep "Off" checked so the group shows a selection.
+    _syncVizOffRadio()
   }
   function _setProdStatus(text, color = _C.dim) {
     if (prodStatus) { prodStatus.textContent = text; prodStatus.style.color = color }
@@ -1523,6 +1497,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       _setProdStatus('Field needs ≥1 anchor — add a fixed strand in the Anchors card, or disable the field.', _C.err)
       return
     }
+
+    try {
+      const fc = await api.estimateOxdnaRunDisk(_selectedId, { steps })
+      if (!(await confirmDiskSpaceOk(fc))) return
+    } catch { /* forecast is best-effort — never block a launch on it */ }
 
     prodBtn.disabled = true
     if (runBtn) runBtn.disabled = true     // grey out both immediately on press
@@ -1607,6 +1586,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _setFlexBar('off')
     _setFlexLegend(null, null)
     _setFlexStatus('Off', _C.dim)
+    _syncVizOffRadio()
   }
   async function _refreshFlex() {
     if (!_selectedId || !oxdnaDisplay) return
@@ -1633,10 +1613,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   }
   flexToggle?.addEventListener('change', async () => {
     if (flexToggle.checked) {
-      if (!_selectedId) { flexToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); return }
+      if (!_selectedId) { flexToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return }
       const ss = samplingState(_selectedJob())
       if (ss !== 'done' && ss !== 'running') {
-        flexToggle.checked = false; _setFlexStatus('Waiting for a production or field run', _C.warn); return
+        flexToggle.checked = false; _setFlexStatus('Waiting for a production or field run', _C.warn); _syncVizOffRadio(); return
       }
       oxdnaLive?.stop()   // mutually exclusive with the live overlay
       if (displayToggle?.checked) _setDisplayOff()   // mutually exclusive with OxDNA display
@@ -1677,6 +1657,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _heavyBuildKind = null
     _trajPrep = null
     _setTrajStatus('', _C.dim)
+    _syncVizOffRadio()
   }
   // Heavy reconstruction in/out → flip the building notice. The display controller
   // fires this around every atomistic/surface rebuild in ANY mode; _renderTraj/Flex
@@ -1707,9 +1688,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   }
   trajToggle?.addEventListener('change', async () => {
     if (trajToggle.checked) {
-      if (!_selectedId) { trajToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); return }
+      if (!_selectedId) { trajToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return }
       if (!hasTrajectory(_selectedJob())) {
-        trajToggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); return
+        trajToggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); _syncVizOffRadio(); return
       }
       oxdnaLive?.stop()   // mutually exclusive with the live overlay
       if (displayToggle?.checked) _setDisplayOff()   // mutually exclusive overlays
@@ -1868,6 +1849,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _lastFrameIndex = null
     _displayBaseText = ''
     _setDisplayStatus('Display off', _C.dim)
+    _syncVizOffRadio()
   }
   // Turn off whichever overlay is active (relaxed display / flexibility map /
   // trajectory player) — they share the one bead overlay.
@@ -1887,7 +1869,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   }
   displayToggle?.addEventListener('change', async () => {
     if (displayToggle.checked) {
-      if (!_selectedId) { displayToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); return }
+      if (!_selectedId) { displayToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return }
       oxdnaLive?.stop()   // mutually exclusive with the live overlay
       if (flexToggle?.checked) _setFlexOff()   // mutually exclusive with the flexibility map
       if (trajToggle?.checked) _setTrajOff()
@@ -1896,6 +1878,15 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     } else {
       _setDisplayOff()
     }
+  })
+
+  // "Off" radio: turn off whichever overlay is active (native positions).  The
+  // browser already unchecked the active view; _allDisplaysOff tears every overlay
+  // down and restores the renderer (idempotent).
+  vizOffRadio?.addEventListener('change', () => {
+    if (!vizOffRadio.checked) return
+    _allDisplaysOff()
+    vizOffRadio.checked = true   // _allDisplaysOff's teardowns leave this set; keep it explicit
   })
 
   // ── Live mode took over the bead overlay → drop our relaxed/flex/traj overlay ─

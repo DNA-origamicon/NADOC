@@ -6,7 +6,42 @@ import {
   activeJobForPath,
   jobActivityTooltip,
   pickBlockingJob,
+  diskWarningMessage,
 } from './job_activity.js'
+
+const GiB = 1024 ** 3
+
+describe('diskWarningMessage', () => {
+  it('returns null when the forecast does not warn', () => {
+    expect(diskWarningMessage(null)).toBeNull()
+    expect(diskWarningMessage({ warn: false })).toBeNull()
+    expect(diskWarningMessage(undefined)).toBeNull()
+  })
+
+  it('warns with sizes when finishing would leave little free space', () => {
+    const msg = diskWarningMessage({
+      warn: true,
+      free_bytes: 12 * GiB,
+      predicted_bytes: 9 * GiB,
+      free_after_bytes: 3 * GiB,
+    })
+    expect(msg).toContain('9 GB')      // predicted
+    expect(msg).toContain('12 GB')     // free now
+    expect(msg).toContain('3 GB')      // free after
+    expect(msg).toContain('leave only')
+  })
+
+  it('flags an outright overflow when the run needs more than is free', () => {
+    const msg = diskWarningMessage({
+      warn: true,
+      free_bytes: 4 * GiB,
+      predicted_bytes: 10 * GiB,
+      free_after_bytes: -6 * GiB,
+    })
+    expect(msg).toContain('OUT of disk')
+    expect(msg).toContain('6 GB')      // shortfall
+  })
+})
 
 describe('normPath', () => {
   it('normalizes separators and trailing slash', () => {

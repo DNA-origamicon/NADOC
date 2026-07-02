@@ -34,6 +34,13 @@ from pathlib import Path
 from typing import Optional
 
 from backend.core.md_job import MdJob, MdStatus, MdHealthSample
+from backend.core.disk_guard import (
+    ABORT_MIN_FREE_BYTES,
+    DISK_ABORT_RC,
+    GiB,
+    free_bytes,
+    wait_proc_with_disk_guard,
+)
 from backend.core.md_health import run_health_check, append_health_jsonl
 from backend.core.namd_metrics import parse_namd_log
 from backend.core.md_protocols import segments_from_manifest
@@ -589,7 +596,7 @@ async def _run_namd_async(
             try: on_spawn(pid)
             except Exception: pass  # noqa: E722,S110 — persistence must never break the run
         try:
-            rc = await proc.wait()
+            rc = await wait_proc_with_disk_guard(proc, package_dir, kill=_kill_process_group)
         except asyncio.CancelledError:
             _kill_process_group(pid)
             raise
@@ -686,10 +693,31 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         job.namd_pid = p
         job.save(workspace_dir)
 
+    def _disk_floor_ok(label: str) -> bool:
+        """Fail the job (don't launch) if free disk is already below the abort
+        floor — starting a segment we know will trip the in-run guard just wastes
+        setup time and risks wedging the disk."""
+        fb = free_bytes(package_dir)
+        if fb >= ABORT_MIN_FREE_BYTES:
+            return True
+        logger.error("[%s] Refusing to start %s: only %.1f GB free (floor %.0f GB)",
+                     job.job_id, label, fb / GiB, ABORT_MIN_FREE_BYTES / GiB)
+        job.status = MdStatus.failed
+        job.failure_kind = "disk_full"
+        job.error = (
+            f"Not enough free disk to start {label}: {fb / GiB:.1f} GB free, "
+            f"need at least {ABORT_MIN_FREE_BYTES / GiB:.0f} GB. "
+            "Free up space (delete/archive old jobs), then resume."
+        )
+        job.save(workspace_dir)
+        return False
+
     # ── Minimization ─────────────────────────────────────────────────────────
 
     min_coor = output_dir / f"{min_name}.coor"
     if not min_coor.exists():
+        if not _disk_floor_ok("minimization"):
+            return
         logger.info("[%s] Running minimization: %s", job.job_id, min_name)
         job.status = MdStatus.running
         job.save(workspace_dir)
@@ -783,6 +811,11 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 job.save(workspace_dir)
                 return
         else:
+            if not _disk_floor_ok(spec.name):
+                if idx < len(job.segments):
+                    job.segments[idx].status = "failed"
+                    job.save(workspace_dir)
+                return
             resume_step = _resume_step(output_dir, spec.name, spec.steps)
             if resume_step is not None:
                 conf_name = _write_resume_conf(
@@ -815,6 +848,22 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 if pid:
                     _kill_process_group(pid)
                 raise asyncio.CancelledError
+
+            if rc == DISK_ABORT_RC:
+                fb = free_bytes(package_dir)
+                logger.error("[%s] Disk guard aborted %s: %.1f GB free",
+                             job.job_id, spec.name, fb / GiB)
+                if idx < len(job.segments):
+                    job.segments[idx].status = "failed"
+                job.status = MdStatus.failed
+                job.failure_kind = "disk_full"
+                job.error = (
+                    f"Stopped: free disk fell below {ABORT_MIN_FREE_BYTES / GiB:.0f} GB "
+                    f"while running {spec.name} ({fb / GiB:.1f} GB free). "
+                    "Free up space (delete/archive old jobs), then resume."
+                )
+                job.save(workspace_dir)
+                return
 
             if rc != 0:
                 logger.error(

@@ -42,6 +42,7 @@ from backend.core.md_protocols import (
     prepare_mgh_slow_release,
     prepare_equilibrium_aware_namd,
     segments_from_manifest,
+    write_hmr_psf,
 )
 from backend.core.md_prep_progress import (
     PrepTracker,
@@ -579,12 +580,36 @@ def _seed_production_available(job: MdJob) -> bool:
 
 def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
                                   box: tuple[float, float, float],
-                                  mgh_extrabonds: bool) -> str:
+                                  mgh_extrabonds: bool, *,
+                                  fast: bool = False,
+                                  structure_psf: Optional[str] = None) -> str:
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
     extras = "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n" if mgh_extrabonds else ""
+    # Fast mode = the fast-relaxation win applied to unrestrained production.  The
+    # HMR PSF (non-water hydrogens x3) lets ``rigidBonds all`` run stably at a 4 fs
+    # timestep; ``GPUresident on`` keeps integration + bonded forces on the GPU;
+    # light multiple-timestepping (fullElectFrequency 2) skips a PME evaluation
+    # every other step.  Together ~10x throughput vs the 1 fs / rigidBonds none /
+    # CPU-integrated conservative path (1.3 -> >16 ns/day).  Electrostatics (PME
+    # grid, cutoff, barostat coupling) are LEFT IDENTICAL to the conservative run,
+    # so the production ensemble is unchanged — only integrator/throughput knobs
+    # move.  GPUresident is sound here because the solvated box is capped (no
+    # covalent bond wraps the periodic image).
+    if fast:
+        psf = structure_psf or f"{name_stem}.psf"
+        rigid, ts, gpu_line = "all", 4.0, "GPUresident        on\n"
+        # fullElectFrequency 1 at 4 fs → reciprocal PME every 4 fs, matching the
+        # Aksimentiev reference (2 fs x 2).  fullElect 2 here would be PME every
+        # 8 fs, past the r-RESPA resonance-stability limit (~4 fs) — and it only
+        # bought ~0.7 ns/day.  stepspercycle 10 → 40 fs pairlist rebuild.
+        nbf, fef, spc = 1, 1, 10
+    else:
+        psf = f"{name_stem}.psf"
+        rigid, ts, gpu_line = "none", 1.0, ""
+        nbf, fef, spc = 1, 1, 10
     return f"""\
-structure          {name_stem}.psf
+structure          {psf}
 coordinates        {name_stem}.pdb
 
 seed               54321
@@ -608,24 +633,24 @@ cutoff             12.0
 pairlistdist       14.0
 PME                yes
 PMEGridSpacing     1.0
-rigidBonds         none
+rigidBonds         {rigid}
 rigidTolerance     1.0e-8
-timestep           1.0
-nonbondedFreq      1
-fullElectFrequency 1
-stepspercycle      10
-langevin           on
-langevinTemp       310
-langevinDamping    1.0
+timestep           {ts:g}
+nonbondedFreq      {nbf}
+fullElectFrequency {fef}
+stepspercycle      {spc}
+{gpu_line}langevin           on
+langevinTemp       300
+langevinDamping    5
 langevinHydrogen   off
 useGroupPressure   yes
 useFlexibleCell    no
 useConstantArea    no
 langevinPiston     on
 langevinPistonTarget  1.01325
-langevinPistonPeriod  400.0
-langevinPistonDecay   200.0
-langevinPistonTemp 310
+langevinPistonPeriod  200.0
+langevinPistonDecay   100.0
+langevinPistonTemp 300
 outputEnergies     100
 xstFreq            1000
 restartfreq        1000
@@ -647,7 +672,7 @@ def _seed_production_conf(spec: SegmentSpec, name_stem: str,
                          mgh_extrabonds: bool, minimize_steps: int) -> str:
     """Production conf that starts DIRECTLY from the oxDNA-seeded solvated
     structure (no relaxation checkpoint): minimize first to clear fresh-solvent
-    clashes, assign velocities at 310 K, then run unrestrained.  Used when the
+    clashes, assign velocities at 300 K, then run unrestrained.  Used when the
     user skips the NAMD relaxation ladder on a seeded job."""
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
@@ -684,17 +709,17 @@ nonbondedFreq      1
 fullElectFrequency 1
 stepspercycle      10
 langevin           on
-langevinTemp       310
-langevinDamping    1.0
+langevinTemp       300
+langevinDamping    5
 langevinHydrogen   off
 useGroupPressure   yes
 useFlexibleCell    no
 useConstantArea    no
 langevinPiston     on
 langevinPistonTarget  1.01325
-langevinPistonPeriod  400.0
-langevinPistonDecay   200.0
-langevinPistonTemp 310
+langevinPistonPeriod  200.0
+langevinPistonDecay   100.0
+langevinPistonTemp 300
 outputEnergies     100
 xstFreq            1000
 restartfreq        1000
@@ -704,28 +729,62 @@ outputName         output/{spec.name}
 dcdFile            output/{spec.name}.dcd
 dcdFreq            {spec.dcd_freq}
 xstFile            output/{spec.name}.xst
-temperature        310
+temperature        300
 minimize           {minimize_steps}
-reinitvels         310
+reinitvels         300
 run                {spec.steps}
 """
 
 
-def _production_steps_and_ns(body: ProductionRequest) -> tuple[int, float]:
+def _production_steps_and_ns(body: ProductionRequest, timestep_fs: float) -> tuple[int, float]:
+    """Convert a production request into (integration steps, simulated ns).
+
+    ``steps`` is a raw integration-step count (timestep-independent); ``length_ns``
+    is a wall of simulated time, so the step count needed to reach it scales
+    inversely with the timestep — the whole point of the 4 fs fast path is fewer
+    steps for the same ns."""
     if body.steps is not None:
         steps = max(100, int(body.steps))
-        return steps, steps / 1_000_000.0
+        return steps, steps * timestep_fs / 1_000_000.0
     length_ns = body.length_ns if body.length_ns is not None else 1.0
-    steps = max(100, int(round(length_ns * 1_000_000)))  # 1 fs/step
-    return steps, steps / 1_000_000.0
+    steps = max(100, int(round(length_ns * 1_000_000.0 / timestep_fs)))
+    return steps, length_ns
+
+
+def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
+    """Resolve the production timestep, step count, and fast-mode eligibility.
+
+    Production is HMR/4fs-eligible exactly when the relaxation ladder itself
+    already validated 4 fs rigid dynamics for THIS design
+    (``fast_relaxation.enabled``) and it is not a declash design (residual
+    single-stranded contacts that crash rigidBonds RATTLE).  Note a NORMAL fast
+    ladder always carries ONE soft strain-relief segment, so "any soft segment"
+    is the wrong signal — it would force every design back to the slow path."""
+    package_dir = job.package_dir(_workspace())
+    try:
+        manifest = json.loads((package_dir / "manifest.json").read_text())
+    except (OSError, ValueError):
+        manifest = {}
+    relaxed_fast = bool(manifest.get("fast_relaxation", {}).get("enabled"))
+    declash = bool(manifest.get("declash"))
+    fast = relaxed_fast and not declash
+    timestep_fs = 4.0 if fast else 1.0
+    total_steps, length_ns = _production_steps_and_ns(body, timestep_fs)
+    return {
+        "total_steps": total_steps,
+        "length_ns": length_ns,
+        "timestep_fs": timestep_fs,
+        "fast": fast,
+    }
 
 
 def _append_production_segments(
     job: MdJob,
-    total_steps: int,
+    plan: dict,
     *,
     continue_from_production: bool = False,
 ) -> list[SegmentSpec]:
+    total_steps = plan["total_steps"]
     from_seed = False
     if continue_from_production:
         checkpoint_idx, checkpoint, reason = _completed_production_checkpoint(job)
@@ -755,9 +814,27 @@ def _append_production_segments(
     mgh_extrabonds = bool(manifest.get("mgh_extrabonds"))
     min_steps = int(manifest.get("minimization", {}).get("steps", 4800) or 4800)
 
+    # Fast production (HMR + GPUresident + 4 fs) needs the HMR PSF (non-water H x3)
+    # so rigidBonds all stays stable at 4 fs.  A fast relaxation ladder already
+    # wrote {stem}_hmr.psf; otherwise build it once here.  A from-seed job
+    # (reconstructed, unequilibrated coords) always runs the conservative path.
+    fast = bool(plan.get("fast")) and not from_seed
+    timestep_fs = 4.0 if fast else 1.0
+    structure_psf: Optional[str] = None
+    n_hmr = 0
+    if fast:
+        src_psf = package_dir / f"{name_stem}.psf"
+        hmr_psf = package_dir / f"{name_stem}_hmr.psf"
+        if src_psf.exists():
+            if not hmr_psf.exists():
+                n_hmr = write_hmr_psf(src_psf, hmr_psf)
+            structure_psf = hmr_psf.name
+        else:                       # no PSF to repartition — fall back to safe path
+            fast, timestep_fs = False, 1.0
+
     existing = {s["name"] for s in manifest.get("segments", [])}
     stage_idx = len({s["stage"] for s in manifest.get("segments", [])}) + 1
-    length_ns = total_steps / 1_000_000.0
+    length_ns = total_steps * timestep_fs / 1_000_000.0
     label_ns = f"{length_ns:g}".replace(".", "p")
     previous = "" if from_seed else checkpoint.name
     segments: list[SegmentSpec] = []
@@ -767,13 +844,14 @@ def _append_production_segments(
         if name in existing:
             previous = name
             continue
+        stage_label = "fast" if fast else "conservative"
         spec = SegmentSpec(
             name=name,
-            stage=f"{length_ns:g} ns conservative production run",
+            stage=f"{length_ns:g} ns {stage_label} production run",
             percent=pct,
             steps=steps,
-            temp=310.0,
-            damping=1.0,
+            temp=300.0,
+            damping=5.0,
             scale=None,
             npt=True,
             previous=previous,
@@ -787,7 +865,10 @@ def _append_production_segments(
         if from_seed and not previous:
             conf = _seed_production_conf(spec, name_stem, box, mgh_extrabonds, min_steps)
         else:
-            conf = _conservative_production_conf(spec, name_stem, box, mgh_extrabonds)
+            conf = _conservative_production_conf(
+                spec, name_stem, box, mgh_extrabonds,
+                fast=fast, structure_psf=structure_psf,
+            )
         (package_dir / f"{spec.name}.conf").write_text(conf)
         segments.append(spec)
         previous = name
@@ -805,8 +886,18 @@ def _append_production_segments(
         "continue_from_production": continue_from_production,
         "first_new_segment": segments[0].name,
         "last_new_segment": segments[-1].name,
-        "timestep_fs": 1.0,
-        "settings": "conservative_unrestrained",
+        "timestep_fs": timestep_fs,
+        "settings": "fast_hmr_gpuresident_4fs" if fast else "conservative_unrestrained",
+        "fast_production": {
+            "enabled": fast,
+            "hydrogens_repartitioned": n_hmr,
+            "structure_psf": structure_psf,
+            "gpu_resident": fast,
+            "timestep_fs": timestep_fs,
+            "note": "HMR (non-water H x3) + GPUresident + 4 fs; production "
+                    "electrostatics unchanged from the conservative path — "
+                    "integrator/throughput knobs only (~10x, 1.3 -> >16 ns/day).",
+        },
         "health_gate": {"min_c1_paired": 0.90, "min_wc_ref_relative": 0.25},
         "advisory_gate": {"wc_ref_relative": 0.75},
         "warning": warning,
@@ -901,8 +992,76 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     return job.to_dict()
 
 
+@router.post("/md/jobs/estimate-disk")
+async def estimate_md_disk(body: CreateJobRequest) -> dict:
+    """Forecast the disk a relaxation run would write vs. free space.
+
+    The panel calls this before ``POST /md/jobs`` so it can pop a Continue/Cancel
+    warning when finishing the run would leave the disk below the 10 GB floor.
+    Best-effort: an oxDNA-seeded job (design resolved later) or any estimation
+    error returns ``warn=False`` so the launch is never blocked by the forecast.
+    """
+    from backend.core.disk_guard import forecast, namd_run_output_bytes
+    from backend.core.md_protocols import design_has_extra_bases, mgh_slow_release_segments
+    from backend.core.md_vram import estimate_profile_from_design
+
+    if body.oxdna_job_id:
+        return {**forecast(_workspace(), 0), "skipped": True}
+    try:
+        design = design_state.get_or_404()
+        profile = await run_in_threadpool(
+            estimate_profile_from_design, design, padding_nm=body.padding_nm)
+        if not profile:
+            return {**forecast(_workspace(), 0), "skipped": True}
+        n_atoms = profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
+        soft = body.declash or body.force_soft or design_has_extra_bases(design)
+        timestep_fs = 4.0 if (body.fast and not soft) else 2.0
+        _, segments = mgh_slow_release_segments("est", timestep_fs=timestep_fs)
+        predicted = namd_run_output_bytes(segments, n_atoms)
+    except Exception as exc:  # noqa: BLE001 — a forecast must never block a launch
+        logger.warning("estimate_md_disk failed (allowing launch): %s", exc)
+        return {**forecast(_workspace(), 0), "skipped": True}
+    return forecast(_workspace(), predicted)
+
+
+def _psf_atom_count(psf_path: Path) -> int:
+    """Total atom count from a PSF ``!NATOM`` header (0 if unreadable)."""
+    if not psf_path.exists():
+        return 0
+    try:
+        with psf_path.open() as fh:
+            for line in fh:
+                if "!NATOM" in line:
+                    return int(line.split()[0])
+    except (OSError, ValueError):
+        return 0
+    return 0
+
+
+@router.post("/md/jobs/{job_id}/estimate-production-disk")
+async def estimate_md_production_disk(job_id: str, body: ProductionRequest) -> dict:
+    """Forecast the disk a production stage of this job would write vs. free space.
+
+    Atom count is exact (from the built PSF); the segment split mirrors
+    :func:`_append_production_segments`.
+    """
+    from backend.core.disk_guard import forecast, namd_run_output_bytes
+
+    job = _load_job(job_id)
+    package_dir = job.package_dir(_workspace())
+    n_atoms = _psf_atom_count(package_dir / f"{job.name_stem}.psf")
+    total_steps = _production_fast_plan(job, body)["total_steps"]
+    segments = [
+        (max(100, int(round(total_steps * frac))),
+         _display_dcd_freq(max(100, int(round(total_steps * frac)))))
+        for frac in (0.10, 0.40, 0.50)
+    ]
+    predicted = namd_run_output_bytes(segments, n_atoms)
+    return forecast(package_dir if package_dir.exists() else _workspace(), predicted)
+
+
 def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
-                    size_factor: float) -> MdJob:
+                    size_factor: float, parent_job_id: Optional[str] = None) -> MdJob:
     """Create the MdJob, persist its prep params, and launch background prep.
 
     Shared by :func:`create_md_job` and :func:`refit_md_job` so a refit reuses the
@@ -930,6 +1089,7 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
         devices        = body.devices,
         design_source_path = body.design_source_path,
         seed_oxdna_job_id  = body.oxdna_job_id if seeded else None,
+        parent_job_id      = parent_job_id,
     )
     # Capture the request so a later refit can rebuild the job with one knob moved.
     job.prep_params = body.model_dump()
@@ -1259,10 +1419,11 @@ async def append_md_production(job_id: str, body: ProductionRequest) -> dict:
     if is_running(job_id) or job.status in (MdStatus.running, MdStatus.preparing):
         raise HTTPException(400, "Cannot append production while the job is running")
     _assert_md_job_current(job)
-    total_steps, length_ns = _production_steps_and_ns(body)
+    plan = _production_fast_plan(job, body)
+    total_steps, length_ns = plan["total_steps"], plan["length_ns"]
     segments = _append_production_segments(
         job,
-        total_steps,
+        plan,
         continue_from_production=body.continue_from_production,
     )
     job = _load_job(job_id)
@@ -1488,7 +1649,7 @@ async def refit_md_job(job_id: str, body: RefitRequest) -> dict:
         size_factor = design_size_factor(design)
 
     job = _spawn_prep_job(new_body, design=design, seeded=seeded, name=name,
-                          size_factor=size_factor)
+                          size_factor=size_factor, parent_job_id=job_id)
     logger.info("refit %s → new job %s (water_shell_nm=%.2f force_soft=%s)",
                 job_id, job.job_id, new_body.water_shell_nm, new_body.force_soft)
     return {"ok": True, "job_id": job.job_id, "refit_from": job_id,

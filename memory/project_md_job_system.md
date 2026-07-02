@@ -140,3 +140,110 @@ so below-threshold done segments show a ⚠ dot; stage-summary row also shows �
 any of its segments warned. Test `test_c1_breach_warns_and_continues` (was
 `…_still_fails_the_run`) now asserts completed + samples recorded. oxDNA runner
 gate (`oxdna_runner.py:948`) left untouched — separate engine, not in scope.
+
+**Fast production runs — HMR + GPUresident + 4 fs (2026-07-02):** production was
+pinned at ~1.3 ns/day because `_conservative_production_conf`/`_seed_production_conf`
+in `routes_md.py` never got the fast-relaxation treatment — they ran `rigidBonds
+none` + `timestep 1.0` + no GPUresident (CPU-integrated 1 fs). Applied the shipped
+fast-relaxation win (`md_protocols.write_hmr_psf` + GPUresident + 4 fs) to the
+production path:
+- `_production_fast_plan(job, body)` decides eligibility from the manifest: fast is
+  the DEFAULT; a **declash / soft-integrator** relaxation (manifest `declash` or any
+  segment `soft:true`) falls back to conservative 1 fs (HMR + rigid bonds crash
+  those flexible-bond structures). Also `from_seed` → conservative.
+- `_production_steps_and_ns(body, timestep_fs)` now takes the timestep so a
+  requested `length_ns` maps to 1/4 the steps at 4 fs (same simulated ns, ~4× fewer
+  steps). Callers pass the plan's timestep.
+- `_append_production_segments(job, plan, …)` (signature changed from `total_steps`
+  int → `plan` dict): if fast, reuse `{stem}_hmr.psf` from a fast relaxation ladder
+  or build it once via `write_hmr_psf`; write fast confs (HMR PSF + `rigidBonds all`
+  + `timestep 4` + `GPUresident on` + `fullElectFrequency 2`). **Electrostatics
+  (PME grid 1.0, cutoff 12, barostat coupling) are LEFT IDENTICAL to the
+  conservative run** — same production ensemble, only integrator/throughput knobs
+  move. Manifest `production_extension` gains `fast_production{…}` + `settings:
+  "fast_hmr_gpuresident_4fs"`.
+- Runner needs NO change: health check keys off the original `{stem}.psf`/pdb (HMR
+  only rewrites masses, not topology/coords/order); resume (`_write_resume_conf`)
+  preserves the structure line + GPUresident (neither in `_RESUME_DROP`).
+- Compounding win: 4 fs (4×) × GPUresident (~3×) × MTS ≈ ~10× → 1.3 → >16 ns/day.
+- Tests: `test_md_milestone1.py` — `test_appended_production_uses_fast_hmr_settings_by_default`,
+  `test_declash_job_falls_back_to_conservative_production`, updated steps/ns test.
+  Full suite green (3523 passed). NOT yet benchmarked on a real GPU production run —
+  the ns/day claim is projected from the fast-relaxation validation, not measured
+  on this production path.
+
+**Disk-space guard + forecast (2026-07-02):** new `backend/core/disk_guard.py`
+owns the whole "will this run out of disk" policy for BOTH engines:
+- Thresholds: `WARN_MIN_FREE_BYTES=10 GiB` (pre-run popup), `ABORT_MIN_FREE_BYTES=5
+  GiB` (in-run kill), `GUARD_POLL_S=15`, sentinel `DISK_ABORT_RC=-99`.
+- `free_bytes(path)` (walks to nearest existing ancestor; returns 1<<62 on OSError
+  so a stat hiccup never aborts a run). `namd_run_output_bytes(segments, n_atoms)`
+  (DCD ≈12·n_atoms+80 B/frame + 48·n_atoms restart/seg, ×1.15 safety);
+  `oxdna_run_output_bytes(stages, n_nt)` (~130 B/nt/frame; oxDNA prints ~100
+  configs/stage so it's bounded/small — the warn rarely fires for CG, but the
+  abort guard still protects a near-full disk). `forecast(dir, predicted)` →
+  {free_bytes, predicted_bytes, free_after_bytes, warn, …}.
+- `wait_proc_with_disk_guard(proc, dir, kill=…)` wraps `proc.wait()`
+  (`asyncio.wait_for` polled): on free<floor it kills the process group and
+  returns `DISK_ABORT_RC`. Called from BOTH `_run_namd_async` and
+  `_run_oxdna_async` (replacing the bare `await proc.wait()`).
+- Runners also do a **pre-launch floor check** before minimization + each
+  segment/stage (`namd_runner._disk_floor_ok`; inline in oxdna_runner) and map
+  `DISK_ABORT_RC` → `status=failed`, NAMD `failure_kind="disk_full"`, with a
+  "free up space then resume" error. In oxDNA the sentinel is handled BEFORE the
+  crash-retry block so it doesn't trigger dt-halve / relax-escalation.
+- Forecast endpoints: `POST /md/jobs/estimate-disk` (relax; active design +
+  `mgh_slow_release_segments` + `estimate_profile_from_design`),
+  `POST /md/jobs/{id}/estimate-production-disk` (exact PSF `!NATOM` count),
+  `POST /oxdna/jobs/estimate-disk`, `POST /oxdna/jobs/{id}/estimate-run-disk`.
+  All best-effort → `skipped:true` / warn=false on any error (never block a launch).
+- Frontend: `job_activity.js` gains pure `diskWarningMessage(forecast)` +
+  `confirmDiskSpaceOk(forecast)` (reuses `showConfirm`), mirroring
+  `confirmNoConcurrentJob`. Wired into 4 launch handlers (MD relax/production,
+  oxDNA relax/production) right by the existing concurrent/GPU confirms. Client
+  fns: `estimateMdDisk`, `estimateMdProductionDisk`, `estimateOxdnaDisk`,
+  `estimateOxdnaRunDisk`. Tests: `tests/test_disk_guard.py` (9),
+  `job_activity.test.js` diskWarningMessage block. VERIFIED via curl on a real
+  job: 100 ns production → predicted 24.7 GB vs 20.6 GB free → warn:true; 1 ns →
+  warn:false. In-browser popup click NOT hand-exercised.
+
+**MD↔oxDNA panel unification + viz radios (2026-07-02):** made the MD job list
+mirror the oxDNA panel's indented parent→child hierarchy, and both panels' display
+toggles mutually-exclusive radios in a "Visualizations & processing" card.
+- `MdJob.parent_job_id` (new field; `new_job(parent_job_id=…)`, load-setdefault).
+  `routes_md._spawn_prep_job(parent_job_id=…)`; the **refit** endpoint passes
+  `parent_job_id=<old job id>` so a refit/retry-derived job nests under its origin.
+  (MD production is still appended *segments* on the same job — NOT a child job —
+  so it does not create a nested row; only refits do.)
+- Frontend: `flattenJobTree`/`descendantIds` moved out of `oxdna_jobs_panel.js` into
+  shared `ui/job_tree.js` (re-exported from the oxDNA panel for existing importers;
+  `job_tree.test.js`). MD `_renderList` rewritten to flatten + indent by depth via a
+  new `_jobRow` (mirrors oxDNA), children labelled `Refit N` (`mdChildRowLabel`,
+  global run number). Removed the old flat `slice(0,8)`.
+- Radios: `index.html` viz toggles for BOTH panels are `type=radio` sharing a group
+  name (`md-viz` / `oxdna-viz`) inside an `.ox-card` titled "Visualizations &
+  processing", plus an explicit **Off** radio (`*-viz-off`, checked by default).
+  oxDNA views = display/flex/deviation/traj; MD views = display/flex/traj. oxDNA
+  "Align to design pose" stays a checkbox (a display modifier, not a view). The
+  existing per-view "on" handlers already tore the others down; added an Off-radio
+  handler (`_allDisplaysOff` on oxDNA; the three teardowns on MD) and a
+  `_syncVizOffRadio()` called from every `_setXOff`/guard-return so the group always
+  shows a selection after a programmatic turn-off. Element IDs unchanged, so all the
+  intricate display/prewarm `.checked` reads keep working.
+- LAYOUT (unified 2026-07-02 follow-up): the viz card is now a **collapsible
+  `ox-card` positioned directly below the Jobs list** in BOTH panels (MD: after Jobs,
+  before Advanced; oxDNA: between Jobs and Health — pulled OUT of `#oxdna-jobs-detail`
+  so it's always visible). Collapse wiring added to each panel's Jobs/Health toggle
+  loop (`{md,oxdna}-jobs-viz-toggle`/`-body`/`-arrow`, start open, non-persistent).
+  GATING: with no job selected only "Off" is selectable — MD `_updateVizToggles(job=
+  _selectedJob())` disables display when `!job` and flex/traj when no trajectory
+  (called from `_applyJobState`, `_clearSelectedJob`, and once at init); oxDNA
+  `_updateButtons` already gated flex/traj/deviation on `samplingState`/`hasTrajectory`
+  (null-job → disabled), and the display radio now also gates on `!!job` (was liveOn
+  only, fine when the card was hidden in the detail). `_syncVizOffRadio()` keeps Off
+  checked whenever nothing is selectable.
+- Verified: `test_md_milestone1.py::TestMdJob` (8, incl. parent_job_id roundtrip),
+  full frontend vitest 1853 green, `just smoke` 22/22 (console-error gate), and a
+  throwaway Playwright spec against the live app confirming both cards render, the
+  radios are grouped/mutually-exclusive, Off is default-checked, and select→Off
+  round-trips (spec deleted after).

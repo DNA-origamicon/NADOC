@@ -33,6 +33,13 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Optional
 
+from backend.core.disk_guard import (
+    ABORT_MIN_FREE_BYTES,
+    DISK_ABORT_RC,
+    GiB,
+    free_bytes,
+    wait_proc_with_disk_guard,
+)
 from backend.core.models import Design
 from backend.core.oxdna_health import (
     FENE_RMAX_UNITS,
@@ -649,7 +656,7 @@ async def _run_oxdna_async(
             try: on_spawn(pid)
             except Exception: pass  # noqa: E722,S110 — persistence must never break the run
         try:
-            rc = await proc.wait()
+            rc = await wait_proc_with_disk_guard(proc, stage_dir, kill=_kill_process_group)
         except asyncio.CancelledError:
             _kill_process_group(pid)
             raise
@@ -991,6 +998,20 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
         job.stages[idx].started_at = time.time()
         job.save(workspace_dir)
 
+        _fb = free_bytes(stage_dir)
+        if _fb < ABORT_MIN_FREE_BYTES:
+            logger.error("[%s] Refusing to start %s: only %.1f GB free (floor %.0f GB)",
+                         job.job_id, spec.name, _fb / GiB, ABORT_MIN_FREE_BYTES / GiB)
+            job.stages[idx].status = "failed"
+            job.status = OxdnaStatus.failed
+            job.error = (
+                f"Not enough free disk to start {spec.name}: {_fb / GiB:.1f} GB free, "
+                f"need at least {ABORT_MIN_FREE_BYTES / GiB:.0f} GB. "
+                "Free up space (delete/archive old jobs), then resume."
+            )
+            job.save(workspace_dir)
+            return
+
         t0 = time.time()
         log_path = stage_dir / "oxdna.log"
         rc, pid = await _run_oxdna_async(oxdna_bin, input_path, stage_dir, log_path, job.job_id,
@@ -1001,6 +1022,20 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
             if pid:
                 _kill_process_group(pid)
             raise asyncio.CancelledError
+
+        if rc == DISK_ABORT_RC:
+            fb = free_bytes(stage_dir)
+            logger.error("[%s] Disk guard aborted %s: %.1f GB free",
+                         job.job_id, spec.name, fb / GiB)
+            job.stages[idx].status = "failed"
+            job.status = OxdnaStatus.failed
+            job.error = (
+                f"Stopped: free disk fell below {ABORT_MIN_FREE_BYTES / GiB:.0f} GB "
+                f"while running {spec.name} ({fb / GiB:.1f} GB free). "
+                "Free up space (delete/archive old jobs), then resume."
+            )
+            job.save(workspace_dir)
+            return
 
         if rc != 0:
             # A stage crashed.  First: an unbiased MD sampling stage (production /

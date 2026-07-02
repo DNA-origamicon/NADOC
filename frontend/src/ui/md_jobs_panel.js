@@ -15,16 +15,17 @@ import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_sta
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progress.js'
 import { showToast } from './toast.js'
 import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
-import { rollMdJobDesign } from '../api/client.js'
+import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk } from '../api/client.js'
 import { docKey, docHeaders } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
+import { flattenJobTree } from './job_tree.js'
 import { shouldForceDisplayReload, mdReadinessIndicator } from './md_display_state.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
-import { confirmNoConcurrentJob, confirmGpuNotBusy } from './job_activity.js'
+import { confirmNoConcurrentJob, confirmGpuNotBusy, confirmDiskSpaceOk } from './job_activity.js'
 import * as api from '../api/client.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
@@ -75,6 +76,12 @@ export function seededBadge(job) {
 /** Pure: is the job in an in-progress state (a spinner should show)? */
 export function mdJobIsActive(job) {
   return ['queued', 'preparing', 'running'].includes(job?.status)
+}
+
+/** Pure: list-row label for a derived (refit/retry) child job — "Refit N", where N
+ *  is its global run number among all non-root jobs (from flattenJobTree). */
+export function mdChildRowLabel(job, index) {
+  return `Refit ${index}`
 }
 
 // Production segments of a fast job (HMR + GPU-resident, 4 fs) run ~9x the speed
@@ -169,7 +176,20 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const displayIndicator      = document.getElementById('md-jobs-display-indicator')
   const displayIndicatorDot   = document.getElementById('md-jobs-display-indicator-dot')
   const displayIndicatorLabel = document.getElementById('md-jobs-display-indicator-label')
+  const vizOffRadio   = document.getElementById('md-jobs-viz-off')
   const showAllToggle = document.getElementById('md-jobs-show-all')
+
+  // The Display / Flexibility / Trajectory views are mutually-exclusive radios in
+  // the "Visualizations & processing" card (each deforms the same design model).
+  // Selecting a view's radio runs its "on" path (which tears the others down);
+  // this keeps the "Off" radio checked whenever no view is active, so the group
+  // always shows a selection — including after a programmatic turn-off (job switch,
+  // lost trajectory, failed load).
+  function _syncVizOffRadio() {
+    if (!vizOffRadio) return
+    const anyOn = [displayToggle, flexToggle, trajToggle].some(t => t?.checked)
+    if (!anyOn) vizOffRadio.checked = true
+  }
 
   // List + detail
   const listEl      = document.getElementById('md-jobs-list')
@@ -261,17 +281,21 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (advArrow) advArrow.style.transform = _advOpen ? 'rotate(90deg)' : ''
   })
 
-  // ── Jobs card: simple collapse (starts open), mirrors the oxDNA panel ───────
-  {
-    const t = document.getElementById('md-jobs-list-toggle')
-    const bd = document.getElementById('md-jobs-list-body')
-    const ar = document.getElementById('md-jobs-list-arrow')
+  // ── Jobs + Visualizations cards: simple collapse (start open), mirror oxDNA ──
+  for (const [tid, bid, aid] of [
+    ['md-jobs-list-toggle', 'md-jobs-list-body', 'md-jobs-list-arrow'],
+    ['md-jobs-viz-toggle',  'md-jobs-viz-body',  'md-jobs-viz-arrow'],
+  ]) {
+    const t = document.getElementById(tid)
+    const bd = document.getElementById(bid)
+    const ar = document.getElementById(aid)
     t?.addEventListener('click', () => {
       const open = bd && bd.style.display !== 'none'
       if (bd) bd.style.display = open ? 'none' : ''
       ar?.classList.toggle('is-collapsed', open)
     })
   }
+  _updateVizToggles(null)   // no job selected yet → only "Off" is selectable
 
   function _applySaltMode() {
     const screening = (saltModeSel?.value ?? 'screening') === 'screening'
@@ -428,6 +452,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (metricsEl) metricsEl.textContent = ''
     _setHealthSpinner(false)
     _renderProductionControls(null)
+    _updateVizToggles(null)   // no job selected → only "Off" is selectable
   }
 
   // Reset every MD INPUT back to its index.html default — used when a design is
@@ -775,11 +800,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     } else {
       _startMdPrewarm()               // no warm socket → fresh background warm-up
     }
+    _syncVizOffRadio()
   }
 
   displayToggle?.addEventListener('change', () => {
     if (displayToggle.checked) _startMdDisplay()
     else _stopMdDisplay('Native positions restored')
+  })
+
+  // "Off" radio: turn every view off (native positions).  The browser already
+  // unchecked whichever view was active; run each teardown (all idempotent) so
+  // the model is restored and any in-flight analysis is cancelled.
+  vizOffRadio?.addEventListener('change', () => {
+    if (!vizOffRadio.checked) return
+    _setFlexOff()
+    _setTrajOff()
+    _stopMdDisplay('Native positions restored')
   })
 
   showAllToggle?.addEventListener('change', () => {
@@ -867,6 +903,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _setFlexBar('off')
     _setFlexLegend(null, null)
     _setFlexStatus('', _C.dim)
+    _syncVizOffRadio()
   }
   async function _refreshFlex() {
     const v = getMdViz?.()
@@ -890,9 +927,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   }
   flexToggle?.addEventListener('change', async () => {
     if (flexToggle.checked) {
-      if (!_selectedId) { flexToggle.checked = false; showToast('Select an MD job first', 'warn'); return }
+      if (!_selectedId) { flexToggle.checked = false; showToast('Select an MD job first', 'warn'); _syncVizOffRadio(); return }
       if (!_mdHasTrajectory(_selectedJob())) {
-        flexToggle.checked = false; _setFlexStatus('No trajectory frames yet', _C.warn); return
+        flexToggle.checked = false; _setFlexStatus('No trajectory frames yet', _C.warn); _syncVizOffRadio(); return
       }
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
       _setTrajOff()
@@ -911,6 +948,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (trajToggle) trajToggle.checked = false
     if (trajControls) trajControls.style.display = 'none'
     _setTrajStatus('', _C.dim)
+    _syncVizOffRadio()
   }
   async function _refreshTraj() {
     const v = getMdViz?.()
@@ -930,9 +968,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   }
   trajToggle?.addEventListener('change', async () => {
     if (trajToggle.checked) {
-      if (!_selectedId) { trajToggle.checked = false; showToast('Select an MD job first', 'warn'); return }
+      if (!_selectedId) { trajToggle.checked = false; showToast('Select an MD job first', 'warn'); _syncVizOffRadio(); return }
       if (!_mdHasTrajectory(_selectedJob())) {
-        trajToggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); return
+        trajToggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); _syncVizOffRadio(); return
       }
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
       _setFlexOff()
@@ -942,16 +980,27 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
   })
 
-  // Enable/disable the viz toggles for the selected job; turn an active tool off if
-  // the job switched away or lost its trajectory.
-  function _updateVizToggles(job) {
-    const ok = _mdHasTrajectory(job)
-    for (const t of [flexToggle, trajToggle]) {
-      if (!t) continue
-      t.disabled = !ok
-      const lab = t.closest('label')
-      if (lab) { lab.style.opacity = ok ? '1' : '0.5'; lab.style.cursor = ok ? 'pointer' : 'not-allowed' }
-    }
+  // Enable/disable one view radio + dim its label.
+  function _setRadioEnabled(t, ok) {
+    if (!t) return
+    t.disabled = !ok
+    const lab = t.closest('label')
+    if (lab) { lab.style.opacity = ok ? '1' : '0.5'; lab.style.cursor = ok ? 'pointer' : 'not-allowed' }
+  }
+
+  // Enable/disable the viz view radios for the current selection.  With NO job
+  // selected only "Off" is selectable (Display needs a job; Flexibility/Trajectory
+  // additionally need a written trajectory).  Turns an active view off if the job
+  // switched away or lost its trajectory, and keeps "Off" checked when nothing is on.
+  function _updateVizToggles(job = _selectedJob()) {
+    const hasJob  = !!job
+    const hasTraj = _mdHasTrajectory(job)
+    _setRadioEnabled(displayToggle, hasJob)
+    _setRadioEnabled(flexToggle, hasTraj)
+    _setRadioEnabled(trajToggle, hasTraj)
+    if (!hasJob && displayToggle?.checked) _stopMdDisplay('Native positions restored')
+    if (!hasTraj) { if (flexToggle?.checked) _setFlexOff(); if (trajToggle?.checked) _setTrajOff() }
+    _syncVizOffRadio()
   }
 
   deleteBtn?.addEventListener('click', async () => {
@@ -1013,6 +1062,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
     const steps = _productionSteps()
     const ns = _productionNs(steps)
+    try {
+      const fc = await estimateMdProductionDisk(_selectedId, { steps, autostart: true })
+      if (!(await confirmDiskSpaceOk(fc))) return
+    } catch { /* forecast is best-effort — never block a launch on it */ }
     if (prodStatus) {
       prodStatus.textContent = `Appending ${steps.toLocaleString()} production steps (${ns.toFixed(3)} ns)...`
       prodStatus.style.color = _C.muted
@@ -1143,6 +1196,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       design_source_path: _currentPartPath() || null,
     }
 
+    try {
+      const fc = await estimateMdDisk(payload)
+      if (!(await confirmDiskSpaceOk(fc))) {
+        _launching = false
+        runBtn.disabled = false
+        return
+      }
+    } catch { /* forecast is best-effort — never block a launch on it */ }
+
     console.log(`[${_ts()}] md-jobs: Relax clicked`, payload)
     if (detailEl) detailEl.style.display = ''
     _showPreparingProgress(payload)
@@ -1239,10 +1301,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // ── Job list rendering ─────────────────────────────────────────────────────
   function _renderList() {
     if (!listEl) return
-    const jobs = _visibleJobs()
+    const jobs = _visibleJobs().slice().sort((a, b) => b.created_at - a.created_at)
     // Skip the rebuild when nothing visible changed, so the row spinners' CSS
     // animation doesn't restart on every poll (visible stutter).
-    const sig = mdListSignature(jobs.slice(0, 8), _selectedId)
+    const sig = mdListSignature(jobs, _selectedId)
     if (sig === _listSig && listEl.childElementCount) return
     _listSig = sig
     listEl.innerHTML = ''
@@ -1255,93 +1317,105 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       listEl.appendChild(empty)
       return
     }
-    jobs.slice(0, 8).forEach((job, i) => {
-      const row = document.createElement('div')
-      const isSelected = job.job_id === _selectedId
-      row.setAttribute('data-job-id', job.job_id)
-      row.style.cssText = [
-        'display:flex;align-items:center;gap:6px;padding:4px 5px;border-radius:3px;cursor:pointer;margin-bottom:2px',
-        `background:${isSelected ? '#161b22' : 'transparent'}`,
-        `border:1px solid ${isSelected ? _C.border : 'transparent'}`,
-      ].join(';')
-      row.addEventListener('click', () => _selectJob(job.job_id))
-      const sb = statusBadge(statusKeyFor('namd', job.status))
-
-      // Leading list index.
-      const idx = document.createElement('span')
-      idx.textContent = `[${i + 1}]`
-      idx.style.cssText = `flex-shrink:0;font-size:10px;color:${_C.dim};font-family:var(--font-mono)`
-      row.appendChild(idx)
-
-      const name = document.createElement('span')
-      name.style.cssText = `flex:1;font-size:var(--text-xs);color:${_C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap`
-      name.textContent = job.design_name
-      row.appendChild(name)
-
-      // "oxDNA seeded" badge — this run started from oxDNA-relaxed coordinates.
-      const badge = seededBadge(job)
-      if (badge) {
-        const seeded = document.createElement('span')
-        seeded.title = `Seeded from oxDNA job ${job.seed_oxdna_job_id}`
-        seeded.textContent = badge
-        seeded.style.cssText = `font-size:9px;color:#4a9eff;border:1px solid #2a4a6a;border-radius:3px;padding:0 4px;flex-shrink:0;margin-right:4px`
-        row.appendChild(seeded)
-      }
-
-      // Timestamp (HH:MM today, else MM-DD HH:MM)
-      const ts = document.createElement('span')
-      ts.style.cssText = `font-size:10px;color:${_C.dim};flex-shrink:0;font-family:var(--font-mono)`
-      ts.textContent = _fmtJobTime(job.created_at)
-      row.appendChild(ts)
-
-      // On-disk size of this job's folder (archive location when archived).
-      const size = document.createElement('span')
-      size.style.cssText = `font-size:10px;color:${job.archived ? _C.warn : _C.dim};flex-shrink:0;font-family:var(--font-mono)`
-      size.textContent = job.size_bytes ? formatBytes(job.size_bytes) : ''
-      if (job.archived) size.title = `Archived → ${job.archive_path || ''}`
-      row.appendChild(size)
-      if (job.archived) {
-        const box = Object.assign(document.createElement('span'), { textContent: '📦' })
-        box.style.cssText = 'flex-shrink:0;font-size:10px'
-        box.title = `Archived → ${job.archive_path || ''}`
-        row.appendChild(box)
-      }
-
-      // Out-of-date marker: the design changed since this MD job was prepared.
-      if (jobOutOfDate(job)) {
-        const warn = Object.assign(document.createElement('span'), { textContent: '⚠' })
-        warn.style.cssText = `flex-shrink:0;color:${_C.warn};font-size:11px`
-        warn.title = 'Design changed since this MD job was prepared — roll the design back, or prepare a new run.'
-        row.appendChild(warn)
-      }
-
-      // "Fix" button for a GPU-out-of-memory failure → opens the downsize popup.
-      if (shouldShowFixButton(job)) {
-        const fix = document.createElement('button')
-        fix.textContent = 'Fix'
-        fix.title = 'Ran out of GPU memory — adjust settings to fit this card'
-        fix.style.cssText =
-          `flex-shrink:0;font-size:10px;color:#fff;background:${_C.warn};`
-          + 'border:none;border-radius:3px;padding:1px 7px;cursor:pointer;font-weight:600'
-        fix.addEventListener('click', (e) => {
-          e.stopPropagation()   // don't trigger row selection
-          _openVramFix(job.job_id)
-        })
-        row.appendChild(fix)
-      }
-
-      // Status symbol: spinner while active, else the badge shape (tooltip = label).
-      const sym = mdJobIsActive(job)
-        ? makeSpinner(sb.color, 10)
-        : Object.assign(document.createElement('span'), { textContent: sb.symbol })
-      sym.style.flexShrink = '0'
-      sym.title = sb.label
-      if (!mdJobIsActive(job)) sym.style.color = sb.color
-      row.appendChild(sym)
-
-      listEl.appendChild(row)
-    })
+    // Parent→child hierarchy (refit/retry children indent under their origin),
+    // mirroring the oxDNA panel's list.
+    let rootNo = 0
+    for (const { job, depth, index } of flattenJobTree(jobs)) {
+      if (depth === 0) rootNo += 1
+      listEl.appendChild(_jobRow(job, { isChild: depth > 0, index, depth, listIndex: rootNo }))
+    }
     if (!_legendEl) { _legendEl = makeStatusLegend(); listEl.after(_legendEl) }
+  }
+
+  // One job row: [N] name · timestamp · status-symbol (a root relaxation, or a
+  // depth-indented numbered refit/retry child).
+  function _jobRow(job, { isChild = false, index = 0, depth = 0, listIndex = 0 }) {
+    const row = document.createElement('div')
+    const isSelected = job.job_id === _selectedId
+    row.setAttribute('data-job-id', job.job_id)
+    row.style.cssText = [
+      'display:flex;align-items:center;gap:6px;padding:4px 5px;border-radius:3px;cursor:pointer;margin-bottom:2px',
+      depth ? `padding-left:${5 + depth * 14}px` : '',
+      `background:${isSelected ? '#161b22' : 'transparent'}`,
+      `border:1px solid ${isSelected ? _C.border : 'transparent'}`,
+    ].filter(Boolean).join(';')
+    row.addEventListener('click', () => _selectJob(job.job_id))
+    const sb = statusBadge(statusKeyFor('namd', job.status))
+
+    // Leading index: root jobs show their list number; children show their run number.
+    const idx = document.createElement('span')
+    idx.textContent = isChild ? '' : `[${listIndex}]`
+    idx.style.cssText = `flex-shrink:0;font-size:10px;color:${_C.dim};font-family:var(--font-mono)`
+    row.appendChild(idx)
+
+    const name = document.createElement('span')
+    name.style.cssText = `flex:1;font-size:var(--text-xs);color:${_C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap`
+    name.textContent = isChild ? mdChildRowLabel(job, index) : job.design_name
+    if (isChild) row.title = 'Refit / retry derived from the parent run'
+    row.appendChild(name)
+
+    // "oxDNA seeded" badge — this run started from oxDNA-relaxed coordinates.
+    const badge = seededBadge(job)
+    if (badge) {
+      const seeded = document.createElement('span')
+      seeded.title = `Seeded from oxDNA job ${job.seed_oxdna_job_id}`
+      seeded.textContent = badge
+      seeded.style.cssText = `font-size:9px;color:#4a9eff;border:1px solid #2a4a6a;border-radius:3px;padding:0 4px;flex-shrink:0;margin-right:4px`
+      row.appendChild(seeded)
+    }
+
+    // Timestamp (HH:MM today, else MM-DD HH:MM)
+    const ts = document.createElement('span')
+    ts.style.cssText = `font-size:10px;color:${_C.dim};flex-shrink:0;font-family:var(--font-mono)`
+    ts.textContent = _fmtJobTime(job.created_at)
+    row.appendChild(ts)
+
+    // On-disk size of this job's folder (archive location when archived).
+    const size = document.createElement('span')
+    size.style.cssText = `font-size:10px;color:${job.archived ? _C.warn : _C.dim};flex-shrink:0;font-family:var(--font-mono)`
+    size.textContent = job.size_bytes ? formatBytes(job.size_bytes) : ''
+    if (job.archived) size.title = `Archived → ${job.archive_path || ''}`
+    row.appendChild(size)
+    if (job.archived) {
+      const box = Object.assign(document.createElement('span'), { textContent: '📦' })
+      box.style.cssText = 'flex-shrink:0;font-size:10px'
+      box.title = `Archived → ${job.archive_path || ''}`
+      row.appendChild(box)
+    }
+
+    // Out-of-date marker: the design changed since this MD job was prepared.
+    if (jobOutOfDate(job)) {
+      const warn = Object.assign(document.createElement('span'), { textContent: '⚠' })
+      warn.style.cssText = `flex-shrink:0;color:${_C.warn};font-size:11px`
+      warn.title = 'Design changed since this MD job was prepared — roll the design back, or prepare a new run.'
+      row.appendChild(warn)
+    }
+
+    // "Fix" button for a GPU-out-of-memory failure → opens the downsize popup.
+    if (shouldShowFixButton(job)) {
+      const fix = document.createElement('button')
+      fix.textContent = 'Fix'
+      fix.title = 'Ran out of GPU memory — adjust settings to fit this card'
+      fix.style.cssText =
+        `flex-shrink:0;font-size:10px;color:#fff;background:${_C.warn};`
+        + 'border:none;border-radius:3px;padding:1px 7px;cursor:pointer;font-weight:600'
+      fix.addEventListener('click', (e) => {
+        e.stopPropagation()   // don't trigger row selection
+        _openVramFix(job.job_id)
+      })
+      row.appendChild(fix)
+    }
+
+    // Status symbol: spinner while active, else the badge shape (tooltip = label).
+    const sym = mdJobIsActive(job)
+      ? makeSpinner(sb.color, 10)
+      : Object.assign(document.createElement('span'), { textContent: sb.symbol })
+    sym.style.flexShrink = '0'
+    sym.title = sb.label
+    if (!mdJobIsActive(job)) sym.style.color = sb.color
+    row.appendChild(sym)
+
+    return row
   }
 
   // ── "Fix" flow (downsize / gentle-retry / resume) ─────────────────────────

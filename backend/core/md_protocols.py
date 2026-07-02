@@ -133,6 +133,7 @@ def _segment_conf(
     minimize_steps: int = 0,
     fast: bool = False,
     structure_psf: Optional[str] = None,
+    colvars_file: Optional[str] = None,
 ) -> str:
     # Soft integrator: flexible H bonds + 1 fs timestep.  Needed for declashed
     # designs whose residual single-stranded contacts crash rigid-bond RATTLE.
@@ -196,6 +197,13 @@ def _segment_conf(
         lines.append(f"extendedSystem     output/{spec.previous}.xsc\n")
     if spec.reinit:
         lines.append(f"reinitvels         {spec.temp:g}\n")
+
+    # Colvars (e.g. a weak DNA centre-of-mass restraint for carved-shell NVT
+    # production — keeps the DNA off the vacuum corners without touching internal
+    # dynamics).  Enabled only when a config file is supplied.
+    if colvars_file:
+        lines.append("colvars            on\n")
+        lines.append(f"colvarsConfig      {colvars_file}\n")
 
     if minimize_steps:
         lines.append(f"minimize           {minimize_steps}\n")

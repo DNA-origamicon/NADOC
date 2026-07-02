@@ -1988,6 +1988,10 @@ export const enginesStatus       = ()            => _oxdnaJSON('GET',  '/engines
 /** Scan ~/Downloads for a user-downloaded NAMD tarball ({candidates, best}). */
 export const scanNamdDownload    = ()            => _oxdnaJSON('GET',  '/engines/namd/scan-download')
 export const createOxdnaJob      = (body)        => _oxdnaJSON('POST', '/oxdna/jobs', body)
+/** Forecast free-disk-after for an oxDNA relaxation run (same body as createOxdnaJob). */
+export const estimateOxdnaDisk   = (body)        => _oxdnaJSON('POST', '/oxdna/jobs/estimate-disk', body)
+/** Forecast free-disk-after for an oxDNA production/run stage ({steps}). */
+export const estimateOxdnaRunDisk = (id, body)   => _oxdnaJSON('POST', `/oxdna/jobs/${id}/estimate-run-disk`, body)
 export const listOxdnaJobs       = ()            => _oxdnaJSON('GET',  '/oxdna/jobs')
 export const getOxdnaJob         = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}`)
 export const getOxdnaErrorLog    = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/error-log`)
@@ -2061,6 +2065,10 @@ export const stopOxdnaLive       = (id)          => _oxdnaJSON('POST', `/oxdna/l
 /** Create a NAMD MD job (routes_md.py).  Pass {oxdna_job_id} to seed the run
  *  from a completed oxDNA job's relaxed coordinates instead of ideal B-DNA. */
 export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)
+/** Forecast free-disk-after for a NAMD relaxation run (same body as createMdJob). */
+export const estimateMdDisk      = (body)        => _oxdnaJSON('POST', '/md/jobs/estimate-disk', body)
+/** Forecast free-disk-after for a NAMD production stage (same body as appendMdProduction). */
+export const estimateMdProductionDisk = (id, body) => _oxdnaJSON('POST', `/md/jobs/${id}/estimate-production-disk`, body)
 /** List NAMD/MD jobs (for the trajectory-keyframe dropdown). */
 export const listMdJobs          = ()            => _oxdnaJSON('GET',  '/md/jobs')
 /** Start moving an MD job's folder to <destRoot>/<job_id> (background; poll status). */

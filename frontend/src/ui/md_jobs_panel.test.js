@@ -61,7 +61,14 @@ describe('filterJobsForPart', () => {
   })
 })
 
-import { mdJobIsActive, makeSpinner, mdHasMetrics, mdListSignature } from './md_jobs_panel.js'
+import { mdJobIsActive, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel } from './md_jobs_panel.js'
+
+describe('mdChildRowLabel', () => {
+  it('labels a derived child by its global run number', () => {
+    expect(mdChildRowLabel({ job_id: 'x' }, 1)).toBe('Refit 1')
+    expect(mdChildRowLabel({ job_id: 'y' }, 3)).toBe('Refit 3')
+  })
+})
 
 describe('mdJobIsActive', () => {
   it('is true for in-progress statuses, false otherwise', () => {

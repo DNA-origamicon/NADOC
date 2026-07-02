@@ -84,6 +84,10 @@ class MdJob:
     seed_oxdna_job_id: Optional[str] = (
         None  # provenance: oxDNA job whose relaxed coords seeded this run
     )
+    # Provenance link to a prior MD job this one was derived from (a refit/retry
+    # spawns a fresh job from a failed one).  Drives the indented job-list
+    # hierarchy: a derived job renders nested under its parent, mirroring oxDNA.
+    parent_job_id: Optional[str] = None
     # True when the user explicitly stopped the job — keeps the startup/supervisor
     # auto-resume from relaunching a deliberately-paused run.  Reset on manual start.
     user_stopped: bool = False
@@ -139,6 +143,7 @@ class MdJob:
         ]
         data.setdefault("design_source_path", None)
         data.setdefault("seed_oxdna_job_id", None)
+        data.setdefault("parent_job_id", None)
         data.setdefault("failure_kind", None)
         data.setdefault("prep_params", None)
         data.setdefault("design_fingerprint", None)
@@ -187,6 +192,7 @@ def new_job(
     devices: str = "0",
     design_source_path: Optional[str] = None,
     seed_oxdna_job_id: Optional[str] = None,
+    parent_job_id: Optional[str] = None,
 ) -> MdJob:
     return MdJob(
         job_id         = uuid.uuid4().hex[:12],
@@ -200,4 +206,5 @@ def new_job(
         devices        = devices,
         design_source_path = design_source_path,
         seed_oxdna_job_id = seed_oxdna_job_id,
+        parent_job_id  = parent_job_id,
     )
