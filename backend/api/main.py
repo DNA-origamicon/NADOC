@@ -57,6 +57,7 @@ from backend.api.routes_sequences import router as sequences_router
 from backend.api.routes_benchmark import router as benchmark_router
 from backend.api.routes_engines import router as engines_router
 from backend.api.routes_flexible_segments import router as flexible_segments_router
+from backend.api.routes_duplex import router as duplex_router
 from backend.api.routes_fs import router as fs_router
 from backend.api.routes_loop_skip import router as loop_skip_router
 from backend.api.routes_jobs import router as jobs_router
@@ -155,6 +156,7 @@ app.include_router(deformation_router, prefix="/api")
 app.include_router(display_geometry_router, prefix="/api")
 app.include_router(display_metadata_router, prefix="/api")
 app.include_router(flexible_segments_router, prefix="/api")
+app.include_router(duplex_router,      prefix="/api")
 app.include_router(export_3dprint_router, prefix="/api")
 app.include_router(export_md_router,   prefix="/api")
 app.include_router(export_structure_router, prefix="/api")

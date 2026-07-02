@@ -41,10 +41,15 @@ import {
   generateRandomSequence, generateOverhangRandomSequence, relaxLinker,
   relaxOverhangBinding,
   createConnectionVersion, patchConnectionVersion, deleteConnectionVersion,
-  applyConnectionVersion,
+  applyConnectionVersion, connectDuplex, patchDuplex, relaxDuplex,
 } from '../api/client.js'
 import { showToast } from './toast.js'
 import { showConfirm } from './primitives/confirm.js'
+import { runOverhangGen } from './overhang_gen.js'
+import {
+  assembleOverhangSequence, overhangDomainLength, pairingSegments,
+  overhangHasDuplex, overhangDuplexSegments, capSequenceToLength, overhangRcOfPartner,
+} from '../scene/design_queries.js'
 
 const _STORAGE = 'nadoc.overhangConnections.connectionType'
 
@@ -57,6 +62,21 @@ const _NEON_B = '#ff36c6'
 const _LINKER_BRIDGE_COLOR = '#ffffff'
 const _LINKER_DS_A_COLOR   = '#dc3545'
 const _LINKER_DS_B_COLOR   = '#27ae60'
+
+// Per-base pairing colors for the sequence previews: which bases actually
+// hybridize (complementary) vs are excess/unpaired. Anchored at the bound /
+// attach sub-domain (see `pairingSegments`).
+const _PAIR_COLOR = {
+  paired:   '#3fb950',   // Watson-Crick complementary → forms the duplex
+  unpaired: '#d29922',   // inside the bound region but a mismatch / N → won't pair
+  excess:   '#8b949e',   // outside the bound region: length beyond partner / undefined N tail
+}
+// Simple preview (no pairing context): defined bases neutral, undefined N greyed.
+const _SEQ_DEFINED_COLOR   = '#c9d1d9'
+const _SEQ_UNDEFINED_COLOR = '#8b949e'
+// Duplex-graph coverage colors (Phase 2): read from the STORED register rather
+// than the attach-anchored heuristic. Toehold = uncovered (unpaired) bases.
+const _DUPLEX_COLOR = { paired: '#3fb950', mismatch: '#d29922', toehold: '#8b949e' }
 
 let _store   = null
 let _inited  = false
@@ -96,6 +116,8 @@ let _secondaryBtn = null   // "Bind" (direct) / "Relax" (linker)
 let _list    = null
 let _seqRowA = null, _seqInputA = null, _seqGenA = null
 let _seqRowB = null, _seqInputB = null, _seqGenB = null
+let _seqPrevA = null, _seqPrevB = null   // colored preview lines under each seq row
+let _driverBox = null                    // driver toggle (Q4), shown when a duplex joins the pair
 let _pairWarnEl = null
 let _collapsed = true   // default collapsed, matching sibling sidebar sections
 
@@ -317,6 +339,8 @@ function _updateControls() {
   // Length only applies to real linker variants (not direct, not indirect).
   if (_lengthRow) _lengthRow.style.display = (direct || indirect) ? 'none' : ''
   _refreshSeqRows()
+  _refreshSeqPreviews()
+  _renderDriverToggle()
   _refreshPairWarning()
   const hasBoth   = _selA != null && _selB != null
   const forbidden = hasBoth && ctIsForbidden(_typeId, endOf(_selA), endOf(_selB))
@@ -354,15 +378,17 @@ function _updateControls() {
   // Secondary "Relax": settle the connection's geometry. For a LINKER that's the
   // joint optimization; for a DIRECT binding (root-to-root OR end-to-root) it's the
   // unified swing-about-driver-root + cluster move that closes the driven overhang's
-  // stretched tip↔root bond. Enabled when the pair has a linker OR a binding.
+  // stretched tip↔root bond. Enabled when the pair has a linker, a legacy binding,
+  // OR a bound duplex (the Proposal-B path for a binding-less direct connection).
   if (_secondaryBtn) {
     const c = _linkerForPair()
     const b = c ? null : _bindingForPair()
+    const dx = (c || b) ? null : _boundDuplexForPair()
     _secondaryBtn.textContent = 'Relax'
-    _secondaryBtn.disabled = !c && !b
+    _secondaryBtn.disabled = !c && !b && !dx
     _secondaryBtn.title = c
       ? 'Relax this linker (optimize the joint so the connector collapses)'
-      : b
+      : (b || dx)
         ? 'Relax: swing the duplex + move the clusters together so the embedded-strand bond closes'
         : 'Apply a connection first, then relax it'
   }
@@ -391,21 +417,34 @@ function _linkerForPair() {
     (c.overhang_a_id === _selB && c.overhang_b_id === _selA)) ?? null
 }
 
+/** The BOUND duplex (if any) joining the current pair with NO legacy binding — the
+ *  Proposal-B direct connection (e.g. a different-length r2r pair relocated by
+ *  `connect_duplex`). Only bound duplexes are relaxable (the driven overhang must
+ *  already be relocated onto the driver's helix). */
+function _boundDuplexForPair() {
+  const dx = _duplexForPair()
+  return dx && dx.bound ? dx : null
+}
+
 /** Secondary "Relax" action: settle the connection's geometry.
  *   - Linker → relaxLinker (optimize the joint so the connector arcs collapse).
  *   - Direct binding (root-to-root OR end-to-root) → relaxOverhangBinding: the
  *     unified server-side solve swings the driver's overhang duplex about its root
  *     (the driven tip co-rotates) + cluster kinematics so the driven overhang's
  *     stretched tip↔root bond closes to one backbone bond. The binding stays bound
- *     (no unbind/rebind dance — apply already relocated it). */
+ *     (no unbind/rebind dance — apply already relocated it).
+ *   - Bound duplex with NO binding (Proposal-B direct connection) → relaxDuplex:
+ *     the SAME solve, driver/driven resolved from the duplex. */
 async function _onSecondary() {
   const c = _linkerForPair()
   const b = c ? null : _bindingForPair()
-  if (!c && !b) return
+  const dx = (c || b) ? null : _boundDuplexForPair()
+  if (!c && !b && !dx) return
   if (_secondaryBtn) _secondaryBtn.disabled = true
   try {
     if (c) await relaxLinker(c.id)
-    else await relaxOverhangBinding(b.id)
+    else if (b) await relaxOverhangBinding(b.id)
+    else await relaxDuplex(dx.id)
   } catch (err) {
     showToast(err?.message ?? String(err))
   } finally {
@@ -428,19 +467,168 @@ function _refreshSeqRows() {
   }
 }
 
+/** Colored preview line under each per-side sequence input. For a DIRECT type
+ *  with both sides chosen it shows which bases hybridize (green) vs are excess /
+ *  unpaired (grey / amber), anchored at the attach sub-domain; otherwise it just
+ *  greys the undefined N bases of whichever side is selected. Undefined bases
+ *  appear as N because `_overhangBases` pads to the current backing-domain
+ *  length — so a dragged-longer overhang no longer looks fully defined. */
+function _refreshSeqPreviews() {
+  if (_seqRowA && !_seqPrevA) { _seqPrevA = _mkPreviewBox(); _seqRowA.insertAdjacentElement('afterend', _seqPrevA) }
+  if (_seqRowB && !_seqPrevB) { _seqPrevB = _mkPreviewBox(); _seqRowB.insertAdjacentElement('afterend', _seqPrevB) }
+  if (_seqPrevA) { _seqPrevA.innerHTML = ''; _seqPrevA.hidden = !_seqRowA || _seqRowA.hidden }
+  if (_seqPrevB) { _seqPrevB.innerHTML = ''; _seqPrevB.hidden = !_seqRowB || _seqRowB.hidden }
+
+  const aOv = _selA ? _overhangs().find(o => o.id === _selA) : null
+  const bOv = _selB ? _overhangs().find(o => o.id === _selB) : null
+  const design = _design()
+
+  // Prefer the STORED duplex register (Phase 2 — reads the graph): if either side
+  // participates in a duplex, colour its bases by coverage (paired / mismatch /
+  // toehold), which handles multivalency + different-length overhangs natively.
+  const aDx = aOv && overhangHasDuplex(design, _selA)
+  const bDx = bOv && overhangHasDuplex(design, _selB)
+  if (aDx || bDx) {
+    if (_seqPrevA && aOv) _seqPrevA.appendChild(_duplexLineEl(_displayName(aOv), design, _selA))
+    if (_seqPrevB && bOv) _seqPrevB.appendChild(_duplexLineEl(_displayName(bOv), design, _selB))
+    return
+  }
+
+  if (ctIsDirect(_typeId) && aOv && bOv) {
+    const [aLine, bLine] = _pairingLineEls({ aId: _selA, bId: _selB, type: _typeId })
+    if (_seqPrevA && aLine) _seqPrevA.appendChild(aLine)
+    if (_seqPrevB && bLine) _seqPrevB.appendChild(bLine)
+    return
+  }
+  if (_seqPrevA && aOv) _seqPrevA.appendChild(_simpleSeqLineEl(null, aOv))
+  if (_seqPrevB && bOv) _seqPrevB.appendChild(_simpleSeqLineEl(null, bOv))
+}
+
+/** A colored preview line for one overhang, read from its DUPLEX coverage
+ *  (green paired / amber mismatch / grey toehold). The driver side (Q4) is
+ *  marked with a ▶. */
+function _duplexLineEl(label, design, overhangId) {
+  const segs = overhangDuplexSegments(design, overhangId)
+    .map(s => ({ text: s.text, color: _DUPLEX_COLOR[s.kind] ?? _SEQ_DEFINED_COLOR }))
+  const dx = _duplexForOverhang(design, overhangId)
+  const lbl = (dx && _driverOverhangId(dx) === overhangId) ? `▶ ${label}` : label
+  return _seqLineEl(lbl, segs)
+}
+
+/** The duplex-graph driver overhang id (Q4). */
+function _driverOverhangId(dx) {
+  return dx.driver === 'right' ? dx.right.overhang_id : dx.left.overhang_id
+}
+
+function _duplexForOverhang(design, overhangId) {
+  return (design?.duplexes ?? []).find(
+    d => d.left.overhang_id === overhangId || d.right.overhang_id === overhangId) ?? null
+}
+
+/** The duplex (if any) joining the current A/B pair, either order. */
+function _duplexForPair() {
+  if (!_selA || !_selB) return null
+  return (_design()?.duplexes ?? []).find(dx => {
+    const ids = new Set([dx.left.overhang_id, dx.right.overhang_id])
+    return ids.has(_selA) && ids.has(_selB)
+  }) ?? null
+}
+
+/** Driver toggle (Q4): two buttons letting the user pick which overhang's helix
+ *  hosts the duplex, overriding the longest-drives default. Rendered into
+ *  `_driverBox` when a duplex joins the current pair. */
+function _renderDriverToggle() {
+  if (_seqRowB && !_driverBox) {
+    _driverBox = document.createElement('div')
+    _driverBox.className = 'oconn-driver-box'
+    _driverBox.style.cssText = 'margin:2px 0 6px 2px;display:flex;gap:6px;align-items:center'
+    ;(_seqPrevB ?? _seqRowB).insertAdjacentElement('afterend', _driverBox)
+  }
+  if (!_driverBox) return
+  _driverBox.innerHTML = ''
+  const dx = _duplexForPair()
+  if (!dx) { _driverBox.hidden = true; return }
+  _driverBox.hidden = false
+
+  const lbl = document.createElement('span')
+  lbl.textContent = 'Driver:'
+  lbl.style.cssText = 'color:#8b949e;font-size:11px'
+  _driverBox.appendChild(lbl)
+
+  const ovById = new Map(_overhangs().map(o => [o.id, o]))
+  // Which duplex side is A vs B in the dropdowns.
+  const sideOfA = dx.left.overhang_id === _selA ? 'left' : 'right'
+  const sideOfB = sideOfA === 'left' ? 'right' : 'left'
+  for (const [side, ovId] of [[sideOfA, _selA], [sideOfB, _selB]]) {
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    const active = dx.driver === side
+    btn.textContent = _displayName(ovById.get(ovId)) || ovId
+    btn.title = active ? 'Drives (its helix hosts the duplex)' : 'Make this overhang the driver'
+    // Individual props (jsdom drops the `background` shorthand in a bulk cssText).
+    btn.style.padding = '2px 8px'
+    btn.style.borderRadius = '4px'
+    btn.style.fontSize = '11px'
+    btn.style.cursor = 'pointer'
+    btn.style.border = `1px solid ${active ? '#1f6feb' : '#30363d'}`
+    btn.style.background = active ? '#1f6feb' : '#161b22'
+    btn.style.color = active ? '#fff' : '#c9d1d9'
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      if (dx.driver === side) return
+      await patchDuplex(dx.id, { driver: side })
+    })
+    _driverBox.appendChild(btn)
+  }
+}
+
+function _mkPreviewBox() {
+  const d = document.createElement('div')
+  d.className = 'oconn-seq-preview'
+  d.style.cssText = 'margin:1px 0 5px 2px'
+  return d
+}
+
+/** Producer: after a DIRECT connect/apply, create the display duplex at the CT
+ *  attach ends (length = min, no resize — the longer overhang keeps its toehold).
+ *  Idempotent (the backend 409s a pair that's already connected → returns null). */
+async function _ensureDuplexForPair() {
+  if (!_selA || !_selB || !ctIsDirect(_typeId)) return
+  const [attachA, attachB] = ctAttachPair(_typeId)
+  await connectDuplex({
+    overhang_a_id: _selA, overhang_a_attach: attachA,
+    overhang_b_id: _selB, overhang_b_attach: attachB,
+  })
+}
+
 /** Non-complementary warning: for a DIRECT binding, when both overhangs already
  *  have sequences that are NOT reverse-complementary, warn that Pair will
  *  overwrite B with the complement of A. */
+/** Number of Watson-Crick complementary positions in the antiparallel overlap of
+ *  two overhang sequences (RC(A) aligned with B from the 5' end, over min length).
+ *  N positions don't count. Zero = the two share NO complementary region. */
+function _complementaryOverlap(aSeq, bSeq) {
+  const rcA = _reverseComplement(aSeq).toUpperCase()
+  const b = String(bSeq ?? '').toUpperCase()
+  const L = Math.min(rcA.length, b.length)
+  let n = 0
+  for (let i = 0; i < L; i++) if (rcA[i] === b[i] && rcA[i] !== 'N') n++
+  return n
+}
+
 function _refreshPairWarning() {
   if (!_pairWarnEl) return
   const aSeq = _seqOf(_selA)
   const bSeq = _seqOf(_selB)
+  // Only warn when the two sequences share NO complementary region at all. A
+  // PARTIAL overlap (e.g. different-length overhangs with a real pairing window)
+  // is a valid connection and is no longer flagged.
   const show = ctIsDirect(_typeId) && _selA && _selB && aSeq && bSeq &&
-               _reverseComplement(aSeq).toUpperCase() !== bSeq.toUpperCase()
+               _complementaryOverlap(aSeq, bSeq) === 0
   _pairWarnEl.hidden = !show
   if (show) {
     _pairWarnEl.textContent =
-      '⚠ Overhang A and B sequences are not complementary — Pair will overwrite B with the complement of A.'
+      '⚠ Overhang A and B sequences share no complementary region.'
   }
 }
 
@@ -486,7 +674,7 @@ async function _onConnect() {
   if (ctIsDirect(_typeId)) {
     if (_genBtn) _genBtn.disabled = true
     try {
-      await _ensureComplementarySequences()       // A drives B = RC(A); generate A if empty
+      await _ensureComplementarySequences(true)    // defer re-derive; apply does it once
       // root-to-root binds two sub-domains; without them apply can't create the
       // binding (end-to-root splices instead, so it needs none). Warn like the old
       // Pair path rather than silently materializing an empty connection.
@@ -499,6 +687,7 @@ async function _onConnect() {
       }
       await _captureVersion({ applied: false })    // creates + selects the new version
       if (_selRow?.kind === 'version') await applyConnectionVersion(_selRow.id)
+      await _ensureDuplexForPair()                 // populate the display duplex live
     } catch (err) {
       showToast(err?.message ?? String(err))
     } finally {
@@ -576,7 +765,15 @@ async function _onApply() {
       await _teardownPair(v.overhang_a_id, v.overhang_b_id)
       await patchConnectionVersion(v.id, { applied: false })
     } else {
+      const beforeIds = new Set((_store.getState().currentDesign?.cluster_transforms ?? [])
+        .map(c => c.id))
       await applyConnectionVersion(v.id)
+      await _ensureDuplexForPair()                 // populate the display duplex live
+      // Apply auto-creates a child DUPLEX cluster (sidebar-listed, gizmo-movable) — tell
+      // the user. [[overhang-duplex-cluster]].
+      const made = (_store.getState().currentDesign?.cluster_transforms ?? [])
+        .find(c => c.overhang_duplex_driver_id && !beforeIds.has(c.id))
+      if (made) showToast(`Cluster ${made.name} made from overhangs`)
     }
   } catch (err) {
     showToast(err?.message ?? String(err))
@@ -662,19 +859,30 @@ async function _pair() {
  *   - both present, not complementary → A drives: overwrite B with RC(A);
  *   - both present + already complementary → no change.
  *  Leaves A with a sequence in every branch (the end-to-root binder reads RC(A)). */
-async function _ensureComplementarySequences() {
+async function _ensureComplementarySequences(deferReassign = false) {
+  // deferReassign: skip the per-write staple re-derivation on the sequence sets below —
+  // the CONNECT flow applies the connection right after, which re-derives once with the
+  // final topology, so the intermediate re-derivations are redundant. Standalone callers
+  // (the Pair path) leave it false so the complements are simulation-ready immediately.
   const aSeq = _seqOf(_selA)
   const bSeq = _seqOf(_selB)
+  // Cap the RC to the TARGET overhang's current length so the sequence write
+  // never resizes it — different-length overhangs keep their lengths (the longer
+  // one keeps its toehold) instead of the shorter being grown to match.
+  const rcCapped = (srcSeq, targetId) =>
+    capSequenceToLength(_reverseComplement(srcSeq).toUpperCase(),
+                        overhangDomainLength(_design(), targetId) ?? undefined)
+  const dr = deferReassign ? { deferReassign: true } : {}
   if (!aSeq && !bSeq) {
-    await generateOverhangRandomSequence(_selA)                       // new random for A
+    await generateOverhangRandomSequence(_selA, dr)                   // new random for A
     const newA = _seqOf(_selA)
-    if (newA) await patchOverhang(_selB, { sequence: _reverseComplement(newA).toUpperCase() })
+    if (newA) await patchOverhang(_selB, { sequence: rcCapped(newA, _selB), ...dr })
   } else if (aSeq && !bSeq) {
-    await patchOverhang(_selB, { sequence: _reverseComplement(aSeq).toUpperCase() })
+    await patchOverhang(_selB, { sequence: rcCapped(aSeq, _selB), ...dr })
   } else if (!aSeq && bSeq) {
-    await patchOverhang(_selA, { sequence: _reverseComplement(bSeq).toUpperCase() })
+    await patchOverhang(_selA, { sequence: rcCapped(bSeq, _selA), ...dr })
   } else if (_reverseComplement(aSeq).toUpperCase() !== bSeq.toUpperCase()) {
-    await patchOverhang(_selB, { sequence: _reverseComplement(aSeq).toUpperCase() })  // A drives B
+    await patchOverhang(_selB, { sequence: rcCapped(aSeq, _selB), ...dr })   // A drives B
   }
 }
 
@@ -733,18 +941,17 @@ function _wireSeqRow(side, input, gen) {
  *  (linker types, or the other side empty) generate a random Johnson sequence. */
 async function _genSide(side) {
   const thisId  = side === 'A' ? _selA : _selB
-  const otherId = side === 'A' ? _selB : _selA
+  // The connected partner only pairs for DIRECT types; linkers pair via a bridge.
+  const otherId = ctIsDirect(_typeId) ? (side === 'A' ? _selB : _selA) : null
   if (!thisId) return
   const gen = side === 'A' ? _seqGenA : _seqGenB
-  const otherSeq = _seqOf(otherId)
   if (gen) gen.disabled = true
   try {
-    if (ctIsDirect(_typeId) && otherSeq) {
-      await patchOverhang(thisId, { sequence: _reverseComplement(otherSeq).toUpperCase() })
-    } else {
-      showToast('Using the Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786')
-      await generateOverhangRandomSequence(thisId)
-    }
+    await runOverhangGen(thisId, otherId, {
+      api: { generateOverhangRandomSequence, patchOverhang },
+      getSeq: (id) => _seqOf(id),
+      rcOfPartner: (targetId, sourceId) => overhangRcOfPartner(_design(), targetId, sourceId),
+    })
   } catch (err) {
     showToast(err?.message ?? String(err))
   } finally {
@@ -975,6 +1182,21 @@ function _renderVersionDetails(v) {
   title.textContent = `${v.name || 'Version'} — ${_typeShortLabel(v.connection_type)}${v.applied ? ' (applied)' : ''}`
   _detailsEl.appendChild(title)
 
+  // For direct types, a colored preview of how the LIVE overhangs currently pair
+  // (green = complementary, amber = mismatch/N, grey = excess / undefined tail),
+  // anchored at the connection-type attach sub-domain. The editable snapshot
+  // fields below remain the version's own stored sequences.
+  if (ctIsDirect(v.connection_type)) {
+    const lines = _pairingLineEls({ aId: v.overhang_a_id, bId: v.overhang_b_id, type: v.connection_type })
+    if (lines.length) {
+      const cap = document.createElement('div')
+      cap.style.cssText = 'color:#6e7681;font-size:10px;margin-bottom:2px'
+      cap.textContent = 'Current overhang pairing:'
+      _detailsEl.appendChild(cap)
+      for (const line of lines) _detailsEl.appendChild(line)
+    }
+  }
+
   const _seqInput = (value, placeholder, onCommit) => {
     const input = document.createElement('input')
     input.type = 'text'; input.spellcheck = false
@@ -1107,11 +1329,24 @@ function _renderBindingDetails(binding) {
   }
   const a = sdLookup.get(binding.sub_domain_a_id)
   const b = sdLookup.get(binding.sub_domain_b_id)
-  for (const [side, ent, color] of [['A', a, _NEON_A], ['B', b, _NEON_B]]) {
-    const line = document.createElement('div')
-    line.style.cssText = `white-space:nowrap;letter-spacing:0.04em;font-family:monospace;font-size:11px;color:${color}`
-    line.textContent = `${side}: ${_resolveSubDomainSeq(ent?.ovhg, ent?.sd) || '(empty)'}`
-    _detailsEl.appendChild(line)
+  // Pairing preview anchored at the bound sub-domains (no guessing — the binding
+  // stores exactly which sub-domains hybridize). Green = complementary, amber =
+  // mismatch/N inside the bound region, grey = excess / undefined N tail.
+  const aId = binding.overhang_a_id ?? a?.ovhg?.id
+  const bId = binding.overhang_b_id ?? b?.ovhg?.id
+  const lines = _pairingLineEls({
+    aId, bId, type: 'root-to-root',
+    sdAId: binding.sub_domain_a_id, sdBId: binding.sub_domain_b_id,
+  })
+  if (lines.length) {
+    for (const line of lines) _detailsEl.appendChild(line)
+  } else {
+    for (const [side, ent, color] of [['A', a, _NEON_A], ['B', b, _NEON_B]]) {
+      const line = document.createElement('div')
+      line.style.cssText = `white-space:nowrap;letter-spacing:0.04em;font-family:monospace;font-size:11px;color:${color}`
+      line.textContent = `${side}: ${_resolveSubDomainSeq(ent?.ovhg, ent?.sd) || '(empty)'}`
+      _detailsEl.appendChild(line)
+    }
   }
 
   // Bound toggle (the binding's one backend-mutable bit).
@@ -1211,6 +1446,86 @@ function _subDomainAtAttach(ovhgId, attach /* 'root' | 'free_end' */) {
   if (!ov || !ov.sub_domains?.length) return null
   const sorted = [...ov.sub_domains].sort((x, y) => (x.start_bp_offset ?? 0) - (y.start_bp_offset ?? 0))
   return attach === 'root' ? sorted[0].id : sorted[sorted.length - 1].id
+}
+
+// ── Sequence-preview rendering (N-padding + complementary coloring) ────────────
+
+/** Full assembled bases of an overhang, 5'→3', N-padded to its CURRENT backing-
+ *  domain length — so bases left undefined after the user drags the overhang
+ *  longer show as 'N'. */
+function _overhangBases(ovhg) {
+  if (!ovhg) return ''
+  return assembleOverhangSequence(ovhg, overhangDomainLength(_design(), ovhg.id) ?? undefined)
+}
+
+/** The bound (duplex) region within one overhang's assembled bases: an explicit
+ *  sub-domain id (a binding's stored pair) wins; else the connection-type attach
+ *  sub-domain (root = first, free_end = last). `{start, len}` indexes into
+ *  `_overhangBases(ovhg)`. */
+function _boundRegion(ovhg, attach, sdId) {
+  const subs = [...(ovhg?.sub_domains ?? [])].sort((x, y) => (x.start_bp_offset ?? 0) - (y.start_bp_offset ?? 0))
+  let sd = sdId ? subs.find(s => s.id === sdId) : null
+  if (!sd) sd = attach === 'root' ? subs[0] : subs[subs.length - 1]
+  if (!sd) return { start: 0, len: 0 }
+  return { start: sd.start_bp_offset ?? 0, len: sd.length_bp ?? 0 }
+}
+
+/** Build a monospace line of colored <span>s from `{text, color}` segments,
+ *  prefixed with an optional dimmed label. */
+function _seqLineEl(label, segments) {
+  const line = document.createElement('div')
+  line.style.cssText = 'white-space:nowrap;letter-spacing:0.06em;font-family:monospace;font-size:11px;line-height:1.5'
+  if (label != null) {
+    const l = document.createElement('span')
+    l.style.cssText = 'color:#8b949e;margin-right:5px'
+    l.textContent = `${label}:`
+    line.appendChild(l)
+  }
+  for (const s of segments) {
+    if (!s.text) continue
+    const span = document.createElement('span')
+    span.textContent = s.text
+    span.style.color = s.color
+    line.appendChild(span)
+  }
+  return line
+}
+
+/** Two colored preview lines (A then B) showing which bases hybridize vs are
+ *  excess/unpaired for a DIRECT overhang pair, anchored at the bound/attach
+ *  sub-domain. `sdAId/sdBId` (a binding's stored pair) override the type's
+ *  attach sub-domain. Returns [] when either overhang is missing. */
+function _pairingLineEls({ aId, bId, type, sdAId = null, sdBId = null }) {
+  const aOv = _overhangs().find(o => o.id === aId)
+  const bOv = _overhangs().find(o => o.id === bId)
+  if (!aOv || !bOv) return []
+  const aBases = _overhangBases(aOv)
+  const bBases = _overhangBases(bOv)
+  const [attachA, attachB] = ctAttachPair(type)
+  const ra = _boundRegion(aOv, attachA, sdAId)
+  const rb = _boundRegion(bOv, attachB, sdBId)
+  const pairLen = Math.min(ra.len, rb.len)
+  const { a, b } = pairingSegments(aBases, bBases, ra.start, rb.start, pairLen)
+  const toColored = (segs) => segs.map(s => ({ text: s.text, color: _PAIR_COLOR[s.kind] }))
+  return [
+    _seqLineEl(_displayName(aOv) || 'A', toColored(a)),
+    _seqLineEl(_displayName(bOv) || 'B', toColored(b)),
+  ]
+}
+
+/** One preview line for a single overhang (no pairing context): defined bases
+ *  neutral, undefined N greyed — so a dragged-longer overhang's undefined tail
+ *  is visible. */
+function _simpleSeqLineEl(label, ovhg) {
+  const bases = _overhangBases(ovhg)
+  const segs = []
+  for (const ch of bases) {
+    const color = ch === 'N' ? _SEQ_UNDEFINED_COLOR : _SEQ_DEFINED_COLOR
+    const prev = segs[segs.length - 1]
+    if (prev && prev.color === color) prev.text += ch
+    else segs.push({ text: ch, color })
+  }
+  return _seqLineEl(label, segs)
 }
 
 function _reverseComplement(seq) {
@@ -1362,7 +1677,37 @@ function _closePopover() {
   _box.setAttribute('aria-expanded', 'false')
 }
 
+/** Open the section for a specific overhang PAIR and select the connection's
+ *  currently-applied version (falling back to the live linker / binding row, or
+ *  nothing if neither exists). Called from the Overhangs list's per-row link
+ *  icon — a singleton entry point, so callers import it directly rather than
+ *  threading the panel's api through main.js. No-op when the section DOM is
+ *  absent (e.g. before init, or in a headless test without the markup). */
+export function openConnectionForPair(aId, bId) {
+  if (!_inited || !_selectA || !_selectB) return
+  _selA = aId || null
+  _selB = bId || null
+  _slotTA = _selA ? ++_clock : 0
+  _slotTB = _selB ? ++_clock : 0
+  // Expand if collapsed (this snaps the dropdowns to the slots + clears _selRow).
+  if (_collapsed) { _collapsed = false; _applyCollapse() }
+  if (_selectA) _selectA.value = _selA ?? ''
+  if (_selectB) _selectB.value = _selB ?? ''
+  // Select the pair's applied version, else its live linker / binding row.
+  const applied = _versionsForPair(_selA, _selB).find(v => v.applied)
+  const c = _linkerForPair()
+  const b = c ? null : _bindingForPair()
+  _selRow = applied ? { kind: 'version', id: applied.id }
+          : c       ? { kind: 'conn',    id: c.id }
+          : b       ? { kind: 'binding', id: b.id }
+          :           null
+  _render()
+  _heading?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' })
+}
+
 const _api = {
   /** Re-read the design and rebuild (exposed for callers / tests). */
   refresh: _refresh,
+  /** Open the section for a pair + select its applied version (link-icon entry). */
+  openConnectionForPair,
 }

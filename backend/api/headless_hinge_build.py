@@ -370,3 +370,146 @@ def build_hinge(
             three, five = (a, b) if not _is_forward(rail_a, c) else (b, a)
             hb.force_ligate(three, five)
         return design_state.get_or_404().model_copy(deep=True)
+
+
+# ── Applied end-to-root 2x2 binding (the relax_2x2 test fixtures) ────────────────
+#
+# Regenerates tests/fixtures/relax_2x2_binding.nadoc + relax_2x2_closebond.nadoc from
+# scratch (design-automation AF-FIXTURES): a two-leaf 2x2 hinge, routed + broken, with
+# ONE applied end-to-root overhang connection — driver overhang on leaf A's inner rail,
+# driven on leaf B's, the duplex on the shared gap helix h_XY_2_0 (in the driver leaf
+# cluster) — plus the revolute hinge joint on the driven leaf and the derived Duplex graph.
+#
+# Discipline (same as build_hinge_primitive): the overhang rail/gap targets, the joint
+# axis, and the close-bond pose are REPLAYED constants transcribed from the hand-built
+# fixture — NOT geometrically inferred (overhang directionality is ASK-FIRST territory).
+
+# How far (nm) to translate the driven leaf past the relaxed pose, along the bond, for the
+# OVER-COMPRESSED close-bond variant → tip↔root chord ~0.37 nm (matches the hand-built fixture's
+# ~0.38 nm), which the two-sided relax re-opens to the ~0.67 nm target. See _over_compress_driven_leaf.
+_CLOSEBOND_COMPRESS_NM = 0.3
+# The revolute hinge joint on the driven leaf, transcribed from the fixture (gap-edge axis).
+_HINGE_JOINT_AXIS_ORIGIN = [-0.7071068286895752, 8.78887964531486, 2.4341214610410464]
+_HINGE_JOINT_AXIS_DIR = [-1.0, 0.0, 0.0]
+# The driver overhang's sequence (arbitrary but fixed; the driven gets its reverse complement).
+_OVERHANG_A_SEQ = "ATCCATCAGAGCGTCA"
+
+
+def _staple_termini(design: Design):
+    out = []
+    for s in design.strands:
+        if not str(s.strand_type).upper().endswith("STAPLE"):
+            continue
+        first, last = s.domains[0], s.domains[-1]
+        out.append((first.helix_id, first.start_bp, first.direction, True))
+        out.append((last.helix_id, last.end_bp, last.direction, False))
+    return out
+
+
+def _extrude_overhang_from_rail(design: Design, src_helix: str, gap_row: int, gap_col: int,
+                                length_bp: int = 16):
+    """Extrude a staple overhang from a terminus on ``src_helix`` into the gap cell
+    (``gap_row``, ``gap_col``); returns ``(design, overhang_id)`` for the first that takes."""
+    from fastapi import HTTPException
+
+    before = {o.id for o in design.overhangs}
+    for hid, bp, dirn, is5 in _staple_termini(design):
+        if hid != src_helix:
+            continue
+        try:
+            d2 = hb.overhang_extrude(hid, bp, direction=dirn, is_five_prime=is5,
+                                     neighbor_row=gap_row, neighbor_col=gap_col,
+                                     length_bp=length_bp)
+        except HTTPException:
+            continue
+        new = [o for o in d2.overhangs if o.id not in before]
+        if new:
+            return d2, new[0].id
+    return design, None
+
+
+def build_applied_2x2_binding(*, lattice: LatticeType = LatticeType.SQUARE,
+                              close_bond: bool = False) -> Design:
+    """Build the ``relax_2x2`` fixture from scratch: a two-leaf 2x2 hinge with an APPLIED
+    end-to-root overhang binding (driver on leaf A, driven on leaf B, duplex on the shared
+    gap helix), a revolute hinge joint on the driven leaf, and the derived Duplex graph.
+
+    ``close_bond=True`` seats the driven leaf in the over-compressed pose (bond < one
+    backbone bond) for the relax-opens test; otherwise the leaves keep their post-apply pose.
+
+    Returns a standalone copy. Composes shipped wrappers + replays the fixture's known
+    overhang/joint/pose constants (NOT inferred — the ASK-FIRST discipline this module already
+    follows for the hinge goldens). Pinned by the six ``test_duplex_*`` / ``relax_2x2`` files.
+    """
+    from backend.core.duplex import synthesize_duplexes_from_bindings
+    from backend.core.models import ClusterJoint
+
+    with hb.scratch_session(lattice):
+        design_state.set_design(build_hinge(2, 2, lattice=lattice))
+        # Route the scaffold into one strand + assign a sequence; do NOT auto-crossover/break —
+        # build_hinge's staple termini sit at bp 8, exactly where the "basic" crossover placer
+        # lands, producing a non-physical nick-at-crossover (the design fails validation). The
+        # overhang/duplex/relax tests need no crossovers, and the inner-rail staple termini are
+        # already valid extrude sites, so the routed-but-uncrossed hinge is the right base.
+        hb.auto_scaffold(seamless=False)
+        hb.assign_scaffold_sequence()
+        d = design_state.get_or_404()
+
+        # Driver overhang on leaf-A inner rail (row 1) → gap row 2 (becomes the duplex helix);
+        # driven on leaf-B inner rail (row 4) → gap row 3 (relocated onto the driver on apply).
+        d, drv = _extrude_overhang_from_rail(d, "h_XY_1_0", 2, 0)
+        d, dvn = _extrude_overhang_from_rail(d, "h_XY_4_0", 3, 0)
+        if not (drv and dvn):
+            raise RuntimeError("could not place both 2x2 overhangs for the applied binding")
+
+        hb.create_connection_version(drv, dvn, connection_type="end-to-root",
+                                     overhang_a_seq=_OVERHANG_A_SEQ)
+        vid = design_state.get_or_404().connection_versions[-1].id
+        d = hb.apply_connection_version(vid)
+
+        # Derive the Duplex graph (the /design/load path does this; a raw model_validate in a
+        # test does not — so the frozen fixture must carry it).
+        d = d.model_copy(update={"duplexes": synthesize_duplexes_from_bindings(d)})
+
+        # Ensure the shared gap helix rides the DRIVER leaf, and add the revolute hinge joint
+        # on the DRIVEN leaf (Cluster 2). Cluster 1 = leaf A (driver), Cluster 2 = leaf B.
+        cl1 = next(c for c in d.cluster_transforms if c.name == "Cluster 1")
+        cl2 = next(c for c in d.cluster_transforms if c.name == "Cluster 2")
+        cls = list(d.cluster_transforms)
+        if "h_XY_2_0" not in cl1.helix_ids:
+            cls = [c.model_copy(update={"helix_ids": [*c.helix_ids, "h_XY_2_0"]})
+                   if c.id == cl1.id else c for c in cls]
+        joint = ClusterJoint(
+            cluster_id=cl2.id, name="Joint", joint_type="revolute",
+            local_axis_origin=list(_HINGE_JOINT_AXIS_ORIGIN),
+            local_axis_direction=list(_HINGE_JOINT_AXIS_DIR),
+            surface_detail=6, min_angle_deg=-180.0, max_angle_deg=180.0,
+        )
+        d = d.model_copy(update={"cluster_transforms": cls, "cluster_joints": [joint]})
+
+        if close_bond:
+            d = _over_compress_driven_leaf(d, drv, dvn)
+        return d.model_copy(deep=True)
+
+
+def _over_compress_driven_leaf(design: Design, driver_oh: str, driven_oh: str) -> Design:
+    """Seat the driven leaf in an OVER-COMPRESSED pose (tip↔root bond ~0.37 nm, well under one
+    backbone bond) for the relax-opens test: relax to the natural target first (the joint-arc
+    minimum IS the target), then translate the driven leaf ``_CLOSEBOND_COMPRESS_NM`` further
+    along the bond so the bond is compressed off the arc — a state the two-sided relax re-opens."""
+    import numpy as np
+
+    from backend.core.direct_relax import _root_anchors, relax_direct_binding
+    from backend.core.design_geometry import _geometry_for_design
+
+    relaxed, _info = relax_direct_binding(design, driver_oh, driven_oh)
+    joint = relaxed.cluster_joints[0]
+    cl2 = next(c for c in relaxed.cluster_transforms if c.id == joint.cluster_id)
+    nucs = _geometry_for_design(relaxed)
+    _pa, _ca, p_b, c_b = _root_anchors(relaxed, nucs, driver_oh, driven_oh)
+    d_dir = np.asarray(c_b, float) - np.asarray(p_b, float)
+    d_dir = d_dir / max(1e-9, np.linalg.norm(d_dir))
+    t2 = np.asarray(cl2.translation, float) + d_dir * _CLOSEBOND_COMPRESS_NM
+    c2 = cl2.model_copy(update={"translation": [float(x) for x in t2]})
+    return relaxed.model_copy(update={"cluster_transforms": [
+        c2 if c.id == cl2.id else c for c in relaxed.cluster_transforms]})

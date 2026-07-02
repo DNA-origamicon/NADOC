@@ -1,0 +1,68 @@
+"""Regression: applying a DIRECT connection between two DIFFERENT-length overhangs
+must NOT resize either one (the shorter must not grow to the longer's length), and
+must NOT create an unequal-length OverhangBinding. The pairing is a Duplex instead.
+
+Root cause fixed: (frontend) the complementary-sequence write is capped to the
+target's length; (backend) `_cv_create_bound_binding` skips different-length pairs.
+See `memory/project_overhang_duplex_foundation.md`.
+"""
+from __future__ import annotations
+
+import pytest
+from fastapi.testclient import TestClient
+
+from backend.api import state as design_state
+from backend.api.main import app
+from backend.api.routes import _demo_design
+from backend.core.models import (
+    ConnectionVersion, Design, Direction, Domain, OverhangSpec, Strand, StrandType,
+    SubDomain,
+)
+
+client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _reset_state():
+    yield
+    design_state.set_design(_demo_design())
+
+
+def _design_diff_lengths() -> Design:
+    """Overhang A = 24 bp, overhang B = 10 bp, plus a root-to-root version to apply."""
+    sa = Strand(id="sa", strand_type=StrandType.STAPLE,
+                domains=[Domain(helix_id="hA", start_bp=0, end_bp=23,
+                                direction=Direction.FORWARD, overhang_id="ohA")])
+    sb = Strand(id="sb", strand_type=StrandType.STAPLE,
+                domains=[Domain(helix_id="hB", start_bp=0, end_bp=9,
+                                direction=Direction.FORWARD, overhang_id="ohB")])
+    ohA = OverhangSpec(id="ohA", helix_id="hA", strand_id="sa", sequence="A" * 24,
+                       sub_domains=[SubDomain(id="sdA", start_bp_offset=0, length_bp=24)])
+    ohB = OverhangSpec(id="ohB", helix_id="hB", strand_id="sb", sequence="T" * 10,
+                       sub_domains=[SubDomain(id="sdB", start_bp_offset=0, length_bp=10)])
+    ver = ConnectionVersion(
+        id="v1", name="V1", overhang_a_id="ohA", overhang_b_id="ohB",
+        connection_type="root-to-root", overhang_a_seq="A" * 24, overhang_b_seq="T" * 10,
+        applied=False,
+    )
+    return Design(strands=[sa, sb], overhangs=[ohA, ohB], connection_versions=[ver])
+
+
+def _dom_len(design_dict, overhang_id):
+    for s in design_dict["strands"]:
+        for d in s["domains"]:
+            if d["overhang_id"] == overhang_id:
+                return abs(d["end_bp"] - d["start_bp"]) + 1
+    return None
+
+
+def test_apply_direct_different_lengths_preserves_both_and_skips_binding():
+    design_state.set_design(_design_diff_lengths())
+    r = client.post("/api/design/connection-versions/v1/apply")
+    assert r.status_code == 200, r.text
+    design = r.json()["design"]
+    # Neither overhang was resized (24 stays 24, 10 stays 10).
+    assert _dom_len(design, "ohA") == 24
+    assert _dom_len(design, "ohB") == 10
+    # No unequal-length binding was created.
+    assert design["overhang_bindings"] == []

@@ -408,6 +408,30 @@ with extruded overhangs: generate a ds linker, confirm the 3D bridge appears
 and the list row shows; delete it; try Make complementary on two sub-domained
 overhangs.
 
+## Sequence previews: N-padding + complementary coloring (2026-06-30)
+Mirrors the sidebar overhang-resize fix into this section. New pure helpers in
+[design_queries.js](frontend/src/scene/design_queries.js): `overhangDomainLength`
+(backing-domain length = `abs(end_bp-start_bp)+1`, the AUTHORITATIVE current
+length when an overhang is dragged longer), `pairingSegments` (antiparallel
+classify of two sides → `paired`/`unpaired`/`excess` runs, anchored at the bound
+region), `isComplement`. Panel renders colored preview lines:
+- **Per-side A/B rows**: a `.oconn-seq-preview` line is inserted under each seq
+  input. Direct type + both sides → pairing colors (green=complementary,
+  amber=mismatch/N, grey=excess/undefined-N-tail) anchored at the attach
+  sub-domain; else just greys undefined N bases of the selected side.
+- **Binding details**: pairing preview anchored at the binding's STORED
+  `sub_domain_a_id`/`sub_domain_b_id` (no polarity guessing — register was the
+  user-confirmed "anchor at bound/attach end, excess at free tip").
+- **Version details (direct only)**: "Current overhang pairing" colored preview
+  from the LIVE overhangs; editable snapshot fields unchanged.
+- Linker details left as-is (already N-pads + colors complement vs bridge).
+Undefined bases come from `assembleOverhangSequence(ovhg, overhangDomainLength)`
+padding to the backing-domain length. Tests: `design_queries.test.js`
+(+pairingSegments/overhangDomainLength/isComplement), new
+`overhang_connections_panel.seqpreview.test.js`. `just test-frontend` 1824 pass.
+**NOT hand-driven**: the live drag-resize-then-open-section gesture wasn't
+checked against a real backend.
+
 ## Next steps (deferred, when user asks)
 1. Optionally archive/retire the old modal once the section reaches parity. The
    section still lacks vs the manager: inline name/length editing on rows, Relax

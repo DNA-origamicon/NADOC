@@ -13,6 +13,39 @@ new items; strike through (and date) when resolved.
 
 ## Open
 
+### DELETE-ON-COMPLETION: legacy OverhangSpec pose overlay + standalone orientation panel (superseded by the duplex CLUSTER)
+- **Where / delete when [[overhang-duplex-cluster]] ships end-to-end:**
+  - `OverhangSpec.rotation` / `OverhangSpec.translation` (backend/core/models.py) — the
+    world-frame per-overhang pose. Superseded by the child `ClusterRigidTransform`
+    (`overhang_duplex_driver_id`) whose pose is stored in the driver part's rest frame
+    (drift-free). Keep the FIELDS until all `.nadoc` are migrated-on-load; delete the
+    OVERLAY application.
+  - `apply_overhang_rotation_if_needed` Layer-1 whole-overhang rotation/translation +
+    `_apply_ovhg_rotations_to_axes` (backend/core/deformation.py) — the overlay + its axis
+    follow. Replaced by the cluster (bead + child-aware axis) path. (Layer-2 sub-domain
+    chain rotation may outlive this — reassess.)
+  - `patch_overhang_rotations_batch` / `OverhangRotationLogEntry` (crud.py, models.py) —
+    the overlay's edit API + feature-log entry. **DO NOT DELETE OUTRIGHT** (scope-corrected
+    2026-07-01): `OverhangRotationLogEntry` is DUAL-PURPOSE — whole-overhang rotation (→ cluster
+    `ClusterOpLogEntry`) AND per-sub-domain θ/φ (NO cluster equivalent). Keep the type + the
+    per-sub-domain path; only whole-overhang-duplex slots migrate. Migrate-on-load still REMAINING
+    (see [[overhang-duplex-cluster]] P4).
+  - `frontend/src/ui/overhang_orientation_panel.js` + `overhang_orientation_menu.js`
+    "Edit/Reset Orientation" — **NOT deleted outright** (scope-corrected 2026-07-01). The panel
+    also orients STANDALONE/unconnected overhangs (no cluster exists → gizmo can't cover). Retired
+    ONLY for duplex-backed overhangs: the menu now routes those to the cluster gizmo ("Move / Rotate
+    duplex" + cluster-identity Reset); standalone overhangs keep the panel. The panel + menu STAY.
+  - `direct_relax.relax_direct_binding` currently writes the pose onto `OverhangSpec`
+    (re-seat + clash). Migrate to write the child cluster (Phase 1b), then this note's
+    OverhangSpec writes go away.
+- **Why it's debt:** dual representation (overlay AND cluster) risks double-transform; the
+  overlay's world-frame storage drifts when the driver part is rotated after the pose is
+  set — the whole reason for the child-cluster rebuild.
+- **Guard already in place:** `validate_design` flags a duplex cluster whose driver still
+  carries a non-identity OverhangSpec pose (double-transform). `materialize_duplex_cluster`
+  clears the pose; `dematerialize` restores it. Do NOT delete until Apply/relax/axis are on
+  the cluster AND a migration-on-load converts existing `.nadoc`.
+
 ### Stale workspace-fixture test skips instead of running (TODO: re-pin or rebuild fixture)
 - **Where:** [tests/test_feature_log_snapshot.py](tests/test_feature_log_snapshot.py)
   `test_delete_workspace_independent_strutted_corner_extrude_scrubs_survivors`.
@@ -54,17 +87,31 @@ new items; strike through (and date) when resolved.
   work-to-be-done 2026-06-04; surfaced while committing CI fixtures for the router
   tests ([[seamless-scaffold-router-architecture-and-hard-won-lessons]]).
 
-### Overhang Bind/Unbind button (legacy OverhangBinding pair model)
-- **Where:** [overhang_sequences_panel.js](frontend/src/ui/overhang_sequences_panel.js)
-  — the per-row Bind/Unbind button (last column of the Overhangs sidebar panel).
-  Drives `api.patchOverhangBinding(id, { bound })` against the **OverhangBinding**
-  pair model (`overhang_a_id`/`overhang_b_id` + `bound` flag).
-- **Why it's debt:** this is an OLD, abandoned method of implementing overhang
-  binding. User flagged it 2026-06-03 ("everything else works fine").
-- **Superseded by:** oh_binder strands — `StrandType.OH_BINDER` +
-  `Domain.binds_overhang_id` (the real binding oligo that hybridizes to the
-  overhang). See [[oh-binder-strands-overhang-binding-oligos]] and the related
-  OverhangBinding extensions / assembly bindings work.
-- **Action:** do NOT extend the Bind/Unbind button or the OverhangBinding model.
-  Slated for removal once the binder migration completes. Inline code comment marks
-  the spot (search `TECH DEBT / FOR REVIEW`).
+### ~~Overhang Bind/Unbind button (legacy OverhangBinding pair model)~~ — REMOVED 2026-06-30
+- **Where:** [overhang_sequences_panel.js](frontend/src/ui/overhang_sequences_panel.js).
+- **Resolution (2026-06-30, final):** the per-row Bind/Unbind toggle was **removed entirely**
+  — user feedback: mixing bind/relax actions between the Overhangs list and the Overhang
+  Connections section was a bad idea; keep each section's job separate. (A short-lived
+  intermediate version rewired the toggle to the unified relax; that was scrapped.)
+- **Replaced by a LINK ICON:** for any overhang that participates in a connection (a
+  `overhang_bindings` / `overhang_connections` / `connection_versions` entry — see pure
+  `connectionPairForOverhang(design, ovhgId)`), the last column shows a chain-link button.
+  Click → `openConnectionForPair(a, b)` (new export from
+  [overhang_connections_panel.js](frontend/src/ui/overhang_connections_panel.js)) which
+  expands the Connections section, sets the A/B dropdowns to the pair, and selects the
+  pair's **applied** ConnectionVersion (falling back to the live linker/binding row).
+  Imported directly (singleton entry point) → **no main.js change**. All bind/unbind /
+  relax lives in the Connections section only.
+- **Keystone backend fix (kept):** `crud.patch_overhang_binding` passes `driver_side`
+  (from `target.driver_oh_id`) into `compute_bind_topology`, so toggling a UNIFIED
+  same-rigid-body root-to-root binding's `bound` flag no longer 422s on the same-cluster
+  guard. This now serves the Connections section's **Bound checkbox** (the proper home of
+  bind/unbind), NOT the removed sidebar button. Legacy bindings (`driver_oh_id=None`)
+  unchanged. Pin: `test_direct_connection_unified.py::
+  test_unbind_then_rebind_roundtrips_same_body_unified_binding` (proven red without it).
+- **Note:** the OverhangBinding model is NOT abandoned — it IS the current unified direct
+  connection record (see [[overhang-connections-panel]]). The old "superseded by oh_binder"
+  framing was stale.
+- **NOT hand-driven in-app** (manual-validation debt): the link icon (appears for connected
+  overhangs, click opens the Connections section on the applied version) is pinned by jsdom
+  but not exercised against a real overhang-bearing design in the running app.

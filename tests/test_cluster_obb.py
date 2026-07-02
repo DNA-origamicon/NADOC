@@ -629,4 +629,7 @@ def test_align_cluster_edge_adds_no_coverage():
     # AF-38's relax_overhang_binding + relax_end_to_root flipped both (52 → 54).
     # Unifying direct connections (2026-06-30) dropped the /relax-end-to-root route +
     # its wrapper; relax_overhang_binding now covers both direct types (54 → 53).
-    assert rep["covered"] == 53
+    # Proposal-B duplex graph: connect_duplex added /design/duplexes/connect (53 → 54).
+    # add_strand_extension added /design/extensions (54 → 55).
+    # relax_duplex added /design/duplexes/{id}/relax (55 → 56).
+    assert rep["covered"] == 56

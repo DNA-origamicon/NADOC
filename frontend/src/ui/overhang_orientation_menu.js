@@ -49,6 +49,12 @@ export function initOverhangOrientationMenu({
   overhangsToSegments,
   editOverridesForSegments,
   createRepresentationMenuItem,
+  onOpenExtensions,
+  // [[overhang-duplex-cluster]] P4: a DUPLEX-backed overhang orients via its cluster gizmo,
+  // not the standalone panel. These route it there; standalone overhangs keep the panel.
+  getDuplexClusterForOverhang,
+  onEditDuplexOrientation,
+  onResetDuplexOrientation,
 }) {
   let _menu = null
 
@@ -60,20 +66,31 @@ export function initOverhangOrientationMenu({
   function show(ovhgIds, clientX, clientY) {
     hide()
 
-    const items = [
-      { label: 'Edit Orientation', onClick: () => getOrientPanel().open(ovhgIds) },
-      {
-        label: 'Reset Orientation',
-        onClick: async () => {
-          await api.patchOverhangRotationsBatch(ovhgIds.map(id => ({ overhang_id: id, rotation: [0, 0, 0, 1] })))
-          if (store.getState().assemblyActive) {
-            const { activeInstanceId, currentAssembly } = store.getState()
-            if (activeInstanceId) assemblyRenderer.invalidateInstance(activeInstanceId)
-            await assemblyRenderer.rebuild(currentAssembly)
-          }
-        },
-      },
-    ]
+    // If the (first) right-clicked overhang is duplex-backed, its orientation is the duplex
+    // CLUSTER's pose → route "Edit"/"Reset Orientation" to the gizmo + a cluster-identity reset
+    // (the standalone panel would fight the cluster). Non-duplex overhangs keep the panel path.
+    const dupCluster = (ovhgIds.length && getDuplexClusterForOverhang)
+      ? getDuplexClusterForOverhang(ovhgIds[0]) : null
+
+    const items = dupCluster
+      ? [
+          { label: 'Move / Rotate duplex', onClick: () => onEditDuplexOrientation?.(dupCluster.id) },
+          { label: 'Reset Orientation', onClick: () => onResetDuplexOrientation?.(dupCluster.id) },
+        ]
+      : [
+          { label: 'Edit Orientation', onClick: () => getOrientPanel().open(ovhgIds) },
+          {
+            label: 'Reset Orientation',
+            onClick: async () => {
+              await api.patchOverhangRotationsBatch(ovhgIds.map(id => ({ overhang_id: id, rotation: [0, 0, 0, 1] })))
+              if (store.getState().assemblyActive) {
+                const { activeInstanceId, currentAssembly } = store.getState()
+                if (activeInstanceId) assemblyRenderer.invalidateInstance(activeInstanceId)
+                await assemblyRenderer.rebuild(currentAssembly)
+              }
+            },
+          },
+        ]
 
     if (ovhgIds.length === 1) {
       items.push({ type: 'separator' })
@@ -92,6 +109,29 @@ export function initOverhangOrientationMenu({
           try { await api.generateBinderForOverhang(ovhgIds[0]) } catch { /* lastError */ }
         },
       })
+    }
+
+    // Extensions (fluorophore / quencher / modification) on the overhang's backing
+    // strand(s) — the SAME Add/Edit-extensions dialog the strand menu offers. This
+    // makes extensions reachable by right-clicking ANY overhang: plain, an applied /
+    // relocated duplex, or a relaxed one (all carry `overhang_id`), which the
+    // overhang-only menu otherwise couldn't reach.
+    if (onOpenExtensions) {
+      const design = store.getState().currentDesign
+      const strandIds = [...new Set(
+        (design?.overhangs ?? [])
+          .filter(o => ovhgIds.includes(o.id))
+          .map(o => o.strand_id)
+          .filter(Boolean),
+      )]
+      if (strandIds.length) {
+        const hasExt = (design?.extensions ?? []).some(e => strandIds.includes(e.strand_id))
+        items.push({ type: 'separator' })
+        items.push({
+          label: hasExt ? 'Edit extensions…' : 'Add extension…',
+          onClick: () => onOpenExtensions(strandIds, clientX, clientY),
+        })
+      }
     }
 
     // Representation override for the overhang region(s) — hover flyout submenu.

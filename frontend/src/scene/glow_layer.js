@@ -108,6 +108,8 @@ export function createMultiColorGlowLayer(scene) {
       for (const s of _sprites) scene.remove(s)
       _sprites = []
     },
+    /** Number of active glow sprites (used by e2e to confirm fluorophores glow). */
+    count() { return _sprites.length },
     dispose() {
       for (const s of _sprites) scene.remove(s)
       _sprites = []

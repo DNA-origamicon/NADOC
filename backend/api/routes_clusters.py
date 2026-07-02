@@ -193,3 +193,91 @@ def delete_cluster(cluster_id: str) -> dict:
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
+
+
+# ── Overhang-duplex cluster rotation point ([[overhang-duplex-cluster]] P2) ────
+class RotationPointBody(BaseModel):
+    kind: str                       # 'overhang_root' | 'centroid'
+    overhang_id: Optional[str] = None
+
+
+@router.get("/design/cluster/{cluster_id}/rotation-points", status_code=200)
+def get_cluster_rotation_points(cluster_id: str) -> dict:
+    """Candidate gizmo rotation points for a DUPLEX cluster: each participating overhang's
+    root bead + the duplex centroid. 404 if the cluster isn't a duplex cluster."""
+    from backend.core.duplex_cluster import duplex_cluster_rotation_points
+
+    design = design_state.get_or_404()
+    cl = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
+    if cl is None or cl.overhang_duplex_driver_id is None:
+        raise HTTPException(404, detail=f"Cluster {cluster_id!r} is not an overhang-duplex cluster.")
+    return {"rotation_points": duplex_cluster_rotation_points(design, cl)}
+
+
+@router.get("/design/cluster/{cluster_id}/duplex-tethers", status_code=200)
+def get_cluster_duplex_tethers(cluster_id: str) -> dict:
+    """Free-until-taut drag tethers for a DUPLEX cluster ([[overhang-duplex-cluster]] P3):
+    each applied connection's backbone bond as {moving, fixed, contour_nm}. 404 unless it's
+    a duplex cluster. Read-only — the client feeds these to the gizmo's taut projector."""
+    from backend.core.duplex_cluster import duplex_cluster_tethers
+
+    design = design_state.get_or_404()
+    cl = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
+    if cl is None or cl.overhang_duplex_driver_id is None:
+        raise HTTPException(404, detail=f"Cluster {cluster_id!r} is not an overhang-duplex cluster.")
+    return {"tethers": duplex_cluster_tethers(design, cl)}
+
+
+@router.get("/design/cluster/{cluster_id}/connection-tethers", status_code=200)
+def get_cluster_connection_tethers(cluster_id: str) -> dict:
+    """Free-until-taut drag tethers from a REGULAR cluster's applied overhang CONNECTIONS
+    (directly-connected duplex + ss/ds linker bridge) to the partner cluster, as
+    {moving, fixed, contour_nm}. Fed (merged with ssDNA flexible tethers) to the gizmo's
+    taut projector for the "Constrained (tethers)" drag. Read-only; empty list if none."""
+    from backend.core.connection_tethers import cluster_connection_tethers
+
+    design = design_state.get_or_404()
+    cl = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
+    if cl is None:
+        raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
+    return {"tethers": cluster_connection_tethers(design, cl)}
+
+
+@router.get("/design/cluster/{cluster_id}/movable-links", status_code=200)
+def get_cluster_movable_links(cluster_id: str) -> dict:
+    """Movable intermediate links (overhang-duplex bodies) for dragging this regular cluster: the
+    link swings live to follow the drag while the partner part stays fixed. Each link carries its
+    backbone bonds to BOTH parts. Read-only; empty if the cluster has no movable-link connections."""
+    from backend.core.connection_tethers import cluster_movable_links
+
+    design = design_state.get_or_404()
+    cl = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
+    if cl is None:
+        raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
+    return {"links": cluster_movable_links(design, cl)}
+
+
+@router.post("/design/cluster/{cluster_id}/rotation-point", status_code=200)
+def set_cluster_rotation_point(cluster_id: str, body: RotationPointBody) -> dict:
+    """Set a DUPLEX cluster's rotation pivot to one of its candidate points (an overhang's
+    root bead or the centroid), rebasing the translation so the geometry doesn't jump.
+    Pushes to the undo stack."""
+    from backend.core.duplex_cluster import (
+        duplex_cluster_rotation_points, set_duplex_cluster_pivot,
+    )
+    from backend.core.validator import validate_design
+
+    design = design_state.get_or_404()
+    cl = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
+    if cl is None or cl.overhang_duplex_driver_id is None:
+        raise HTTPException(404, detail=f"Cluster {cluster_id!r} is not an overhang-duplex cluster.")
+    pts = duplex_cluster_rotation_points(design, cl)
+    match = next((p for p in pts if p["kind"] == body.kind
+                  and (body.kind != "overhang_root" or p["overhang_id"] == body.overhang_id)), None)
+    if match is None:
+        raise HTTPException(422, detail=f"No rotation point {body.kind!r}"
+                            + (f" for overhang {body.overhang_id!r}" if body.overhang_id else "") + ".")
+    updated = set_duplex_cluster_pivot(design, cluster_id, match["point"])
+    design_state.set_design(updated)
+    report = validate_design(updated)
+    return _design_response(updated, report)

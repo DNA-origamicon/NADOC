@@ -79,6 +79,15 @@ from backend.api.crud import (
     select_loadout as _route_select_loadout,
     strand_end_resize as _route_strand_end_resize,
 )
+from backend.api.routes_duplex import (
+    ConnectDuplexBody,
+    connect_duplex as _route_connect_duplex,
+    relax_duplex as _route_relax_duplex,
+)
+from backend.api.routes_extensions import (
+    StrandExtensionRequest,
+    add_strand_extension as _route_add_strand_extension,
+)
 from backend.api.routes_clusters import (
     AddClusterBody,
     PatchClusterBody,
@@ -839,6 +848,94 @@ def overhang_extrude(
         helix_id=helix_id, bp_index=bp_index, direction=direction,
         is_five_prime=is_five_prime, neighbor_row=neighbor_row,
         neighbor_col=neighbor_col, length_bp=length_bp,
+    ))
+    return design_state.get_or_404()
+
+
+def connect_duplex(
+    overhang_a_id: str,
+    overhang_b_id: str,
+    *,
+    overhang_a_attach: str = "free_end",
+    overhang_b_attach: str = "root",
+    driver: str | None = None,
+) -> Design:
+    """Create a register-bearing DIRECT duplex between two overhangs
+    (POST /design/duplexes/connect) — the Proposal-B pairing edge.
+
+    Register = the attach-end paired window, ``length = min(lenA, lenB)`` (NO resize
+    — a longer overhang keeps its toehold). For a DIFFERENT-length pair (no
+    equal-length binding) this also relocates the driven overhang's whole domain
+    onto the driver's helix at the paired window, so the duplex forms in 3D/cadnano.
+    ``driver`` (``'left'``/``'right'``) overrides the longest-drives default.
+
+    Pin the relocation with :func:`tests.automation_harness.assert_duplex_relocated`.
+    """
+    _route_connect_duplex(ConnectDuplexBody(
+        overhang_a_id=overhang_a_id, overhang_a_attach=overhang_a_attach,
+        overhang_b_id=overhang_b_id, overhang_b_attach=overhang_b_attach,
+        driver=driver,
+    ))
+    return design_state.get_or_404()
+
+
+def relax_duplex(duplex_id: str) -> Design:
+    """Relax a BOUND direct duplex's display POSE
+    (POST /design/duplexes/{duplex_id}/relax) — the Proposal-B sibling of
+    :func:`relax_overhang_binding` for a duplex with NO legacy ``OverhangBinding``.
+
+    Resolves driver/driven from the duplex and runs the same swing-about-driver-root
+    + cluster-kinematics solve, closing the driven overhang's stretched tip↔root bond.
+
+    **Three-Layer note — POSE only.** Moves the driver ``OverhangSpec.rotation`` +
+    ``cluster_transforms``; never edits the strand graph, so ``canonical_topology`` is
+    unchanged — the load-bearing pin in
+    :func:`tests.automation_harness.assert_duplex_relaxed`.
+
+    Pin with :func:`tests.automation_harness.assert_duplex_relaxed`.
+    """
+    _route_relax_duplex(duplex_id)
+    return design_state.get_or_404()
+
+
+def materialize_duplex_cluster(driver_oh_id: str) -> Design:
+    """Move the driver overhang's duplex POSE off ``OverhangSpec.rotation``/``translation``
+    onto a first-class CHILD ``ClusterRigidTransform`` (rest frame, parented to the driver
+    part) — Phase 1 of [[overhang-duplex-cluster]]. Geometry-NEUTRAL (the conjugation
+    reproduces the overlay exactly); the duplex becomes a sidebar-listed, gizmo-movable
+    cluster. Not yet wired into Apply (this is the headless primitive entry point).
+
+    **Three-Layer note** — display/pose only: no strand-graph edit, so
+    ``canonical_topology`` is unchanged. Pin with
+    :func:`tests.automation_harness.assert_duplex_cluster_materialized`.
+    """
+    from backend.core.duplex_cluster import materialize_duplex_cluster as _mat
+    out, _cid = _mat(design_state.get_or_404(), driver_oh_id)
+    design_state.set_design(out)
+    return design_state.get_or_404()
+
+
+def add_strand_extension(
+    strand_id: str,
+    end: str,
+    *,
+    sequence: str | None = None,
+    modification: str | None = None,
+    label: str | None = None,
+) -> Design:
+    """Add a terminal 5'/3' extension to a strand (POST /design/extensions).
+
+    A :class:`~backend.core.models.StrandExtension` carries an added ``sequence``
+    (ACGTN) and/or a ``modification`` — a fluorophore/quencher/biotin key
+    (cy3/cy5/fam/tamra/atto488/atto550/bhq1/bhq2/biotin) that the Fluorescence /
+    FRET view glows. At least one of sequence/modification is required. This is how
+    a fluorophore lands on an overhang: extend its staple strand's free-tip end.
+
+    Pin with :func:`tests.automation_harness.assert_extension_present`.
+    """
+    _route_add_strand_extension(StrandExtensionRequest(
+        strand_id=strand_id, end=end, sequence=sequence,
+        modification=modification, label=label,
     ))
     return design_state.get_or_404()
 

@@ -5,6 +5,7 @@ import {
   computeClusterPivotFromEntries,
   computeClusterPivotFromGeometry,
   rebaseClusterTranslationForPivot,
+  ssTetherViolated,
 } from './cluster_gizmo.js'
 
 function nuc(helixId, position, extra = {}) {
@@ -136,5 +137,20 @@ describe('rebaseClusterTranslationForPivot', () => {
     expect(after.x).toBeCloseTo(before.x)
     expect(after.y).toBeCloseTo(before.y)
     expect(after.z).toBeCloseTo(before.z)
+  })
+})
+
+describe('ssTetherViolated (free-until-taut vs rigid strut)', () => {
+  const C = 5.0
+  it('free-until-taut: violated only when over-stretched', () => {
+    expect(ssTetherViolated(false, 6.0, C)).toBe(true)   // over → taut
+    expect(ssTetherViolated(false, 5.0, C)).toBe(false)  // exactly at contour
+    expect(ssTetherViolated(false, 2.0, C)).toBe(false)  // slack (closer) → free
+  })
+  it('rigid strut: violated when over OR under length (resists compression)', () => {
+    expect(ssTetherViolated(true, 6.0, C)).toBe(true)    // over → pull in
+    expect(ssTetherViolated(true, 2.0, C)).toBe(true)    // under → push out
+    expect(ssTetherViolated(true, 5.0, C)).toBe(false)   // exactly at rod length → satisfied
+    expect(ssTetherViolated(true, 5.00005, C)).toBe(false) // within eps
   })
 })

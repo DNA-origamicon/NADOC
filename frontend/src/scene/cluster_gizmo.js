@@ -31,6 +31,7 @@ import * as THREE from 'three'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 
 import { clampQuatToJointBounds } from './assembly_revolute_math.js'
+import { relaxToConvergence } from './flexible_relax_solver.js'
 
 const _incrQuat  = new THREE.Quaternion()   // scratch for incremental rotation
 const _scratchV  = new THREE.Vector3()
@@ -128,6 +129,17 @@ export function rebaseClusterTranslationForPivot(cluster, nextPivot) {
   return [rebased.x, rebased.y, rebased.z]
 }
 
+/**
+ * Is a constraint tether violated? Free-until-taut tethers (ssDNA, direct duplex, ss linker)
+ * resist only OVER-extension (dist > contour). A RIGID tether (a ds-linker rod acting as a
+ * fixed-length strut with ball joints) is bilateral — violated when dist differs from contour
+ * in EITHER direction (also resists compression). The correction target is identical (pull the
+ * moving anchor to `contour` from the fixed anchor), so this just widens the trigger.
+ */
+export function ssTetherViolated(rigid, dist, contour, eps = 1e-4) {
+  return rigid ? Math.abs(dist - contour) > eps : dist > contour
+}
+
 // ── Axis-constrained rotation ring geometry / drag state ─────────────────────
 //
 // When a joint is present we show a single torus ring (radius = bounding
@@ -171,6 +183,7 @@ function _ringRadius(cluster, currentHelixAxes) {
 
 export function initClusterGizmo(store, controls, onLiveTransform = null, captureBase = null, onTransformUpdate = null) {
   let _tc             = null   // TransformControls instance (translate mode)
+  let _rotationSnapDeg = null  // rotate-drag angle snap in degrees, or null for free drag
   let _dummy          = null   // Object3D TC is attached to
   let _clusterId      = null
   let _pivot          = null   // [x, y, z] — centroid at activation time
@@ -190,6 +203,13 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   let _resolveSsWorldPos = null
   let _ssArmed         = null
   let _ssTranslateOnly = false       // relax: when true, skip the rotation pass
+  // Movable intermediate LINKS (duplex bodies) that swing live to follow the drag while the
+  // partner part stays fixed. `_ssLinkDescs` = payload descriptors; `_ssLinks` = armed link
+  // state (base pose + tether start positions + current solved pose); `_ssLinkNearArmed` =
+  // per-frame transient tethers constraining the DRAGGED cluster against each moved link.
+  let _ssLinkDescs     = null
+  let _ssLinks         = null
+  let _ssLinkNearArmed = null
   const _pendingTransforms = new Map()  // clusterId -> { pivot, translation, rotation }
 
   // ── Axis-ring state ─────────────────────────────────────────────────────────
@@ -704,6 +724,8 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _tc.attach(_dummy)
     _tc.setMode('translate')
     _tc.setSpace('world')
+    // Re-apply any rotate-drag snap (TC is recreated on every attach).
+    _tc.setRotationSnap(_rotationSnapDeg == null ? null : THREE.MathUtils.degToRad(_rotationSnapDeg))
     // In Three.js r158+, TransformControls is not an Object3D.
     // The visible gizmo is accessed via getHelper() which returns the _root Object3D.
     scene.add(_tc.getHelper())
@@ -727,12 +749,49 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
         // Arm ssDNA constraints: snapshot each tether's moving-anchor start world
         // position (pM0) + fixed-anchor world position (pF, constant during drag).
         _ssArmed = null
+        _ssLinkNearArmed = null
         if (_constraintType === 'ssdna' && _ssConstraints && _resolveSsWorldPos) {
           _ssArmed = []
           for (const c of _ssConstraints) {
             const pM0 = _resolveSsWorldPos(c.movingKey)
             const pF  = _resolveSsWorldPos(c.fixedKey)
-            if (pM0 && pF) _ssArmed.push({ pM0: pM0.clone(), pF: pF.clone(), contour: c.contour })
+            if (pM0 && pF) _ssArmed.push({ pM0: pM0.clone(), pF: pF.clone(), contour: c.contour, rigid: !!c.rigid })
+          }
+        }
+        // Arm movable links (duplex bodies): snapshot each link cluster's base pose + its bond
+        // start positions, and capture its beads' base so it can be painted as it swings.
+        _ssLinks = null
+        if (_ssLinkDescs?.length && _resolveSsWorldPos) {
+          const design = store.getState().currentDesign
+          _ssLinks = []
+          for (const d of _ssLinkDescs) {
+            const cl = design?.cluster_transforms?.find(c => c.id === d.linkClusterId)
+            if (!cl) continue
+            const pivot = [...cl.pivot]
+            const startPos = [pivot[0] + cl.translation[0], pivot[1] + cl.translation[1], pivot[2] + cl.translation[2]]
+            const baseQuat = [...cl.rotation]
+            const tethers = []
+            for (const t of d.tethers) {
+              const lStart = _resolveSsWorldPos(t.linkKey)
+              const pStart = _resolveSsWorldPos(t.partKey)
+              if (lStart && pStart) {
+                tethers.push({
+                  lStart: [lStart.x, lStart.y, lStart.z],
+                  pStart: [pStart.x, pStart.y, pStart.z],
+                  partDragged: !!t.partDragged, contour: t.contour,
+                })
+              }
+            }
+            if (!tethers.length) continue
+            // append=true: ADD the link's beads to the base snapshot without clearing the
+            // dragged cluster's (captured just above) — else the main cluster loses its base
+            // and freezes while only the link paints.
+            captureBase?.(d.helixIds, d.domainIds, true)
+            _ssLinks.push({
+              clusterId: d.linkClusterId, helixIds: d.helixIds, domainIds: d.domainIds,
+              pivot, startPos, baseQuat, tethers,
+              resultPos: startPos, resultQuat: baseQuat,
+            })
           }
         }
       } else {
@@ -745,11 +804,13 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _tc.addEventListener('change', () => {
       if (!_isDragging) return
       _incrQuat.copy(_dummy.quaternion).multiply(_startQuat.clone().invert())
-      _projectSsdnaConstraints()   // clamp _dummy so no tether exceeds contour
+      _projectSsdnaConstraints()   // clamp _dummy so no static tether exceeds contour
+      _solveLinksChain()           // swing movable-link bodies to follow + re-clamp A against them
       const { currentDesign } = store.getState()
       const cluster = _withPendingTransform(currentDesign?.cluster_transforms?.find(c => c.id === _clusterId))
       if (!cluster) return
       if (onLiveTransform) onLiveTransform(cluster.helix_ids, _startDummyPos, _dummy.position, _incrQuat, cluster.domain_ids?.length ? cluster.domain_ids : null)
+      _paintLinks()                // paint each swung link body + queue its pending transform
       if (onTransformUpdate) {
         const [px, py, pz] = _pivot
         const p = _dummy.position
@@ -825,18 +886,95 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     return out.copy(pM0).sub(_startDummyPos).applyQuaternion(_incrQuat).add(_dummy.position)
   }
 
+  function _ssViolated(t, dist) {
+    return ssTetherViolated(t.rigid, dist, t.contour)
+  }
+
+  // World position of a link-body bead given the link's solved pose (rotate about the link's
+  // START dummy pos, then translate — mirrors the ssDNA paint/candidate convention).
+  function _linkBeadWorld(pStart, link, out = new THREE.Vector3()) {
+    const incrQ = new THREE.Quaternion(...link.resultQuat)
+      .multiply(new THREE.Quaternion(...link.baseQuat).invert())
+    return out.set(pStart[0], pStart[1], pStart[2])
+      .sub(new THREE.Vector3(...link.startPos)).applyQuaternion(incrQ)
+      .add(new THREE.Vector3(...link.resultPos))
+  }
+
+  // Coupled chain solve (movable links): the dragged cluster A is already projected against its
+  // STATIC tethers; here each duplex LINK swings to follow A (its `part_dragged` bond tracks A's
+  // live pose) while staying anchored to the FIXED partner, then A is re-projected against each
+  // moved link. A couple of Gauss-Seidel passes converge the A↔link↔B chain. B never moves.
+  function _solveLinksChain() {
+    if (_constraintType !== 'ssdna' || !_ssLinks?.length) return
+    const aWorld = (p, out) => out.set(p[0], p[1], p[2])
+      .sub(_startDummyPos).applyQuaternion(_incrQuat).add(_dummy.position)
+    const scratch = new THREE.Vector3()
+    for (let pass = 0; pass < 2; pass++) {
+      // 1. Solve each link against [A-side bond (A live), partner bond (fixed)].
+      for (const link of _ssLinks) {
+        const armed = link.tethers.map(t => {
+          const pF = t.partDragged ? aWorld(t.pStart, scratch).toArray() : t.pStart
+          return { pM0: t.lStart, pF, contour: t.contour }
+        })
+        const res = relaxToConvergence(
+          { pos: [...link.startPos], quat: [...link.baseQuat], pivot: [...link.pivot] }, armed,
+        )
+        link.resultPos = res.pos
+        link.resultQuat = res.quat
+      }
+      // 2. Re-project A against each moved link's near bead (A can't overstretch its bond to L).
+      _ssLinkNearArmed = []
+      for (const link of _ssLinks) {
+        for (const t of link.tethers) {
+          if (!t.partDragged) continue
+          _ssLinkNearArmed.push({
+            pM0: new THREE.Vector3(t.pStart[0], t.pStart[1], t.pStart[2]),   // on A (start world)
+            pF: _linkBeadWorld(t.lStart, link).clone(),                       // L's moved bead
+            contour: t.contour, rigid: false,
+          })
+        }
+      }
+      _projectSsdnaConstraints()
+      _incrQuat.copy(_dummy.quaternion).multiply(_startQuat.clone().invert())
+    }
+  }
+
+  // Paint each swung link body + record its pending transform (committed with A on release).
+  function _paintLinks() {
+    if (!_ssLinks?.length || !onLiveTransform) return
+    for (const link of _ssLinks) {
+      const incrQ = new THREE.Quaternion(...link.resultQuat)
+        .multiply(new THREE.Quaternion(...link.baseQuat).invert())
+      onLiveTransform(
+        link.helixIds,
+        new THREE.Vector3(...link.startPos), new THREE.Vector3(...link.resultPos),
+        incrQ, link.domainIds,
+      )
+      setPendingTransform(link.clusterId, {
+        pivot: [...link.pivot],
+        translation: [link.resultPos[0] - link.pivot[0], link.resultPos[1] - link.pivot[1], link.resultPos[2] - link.pivot[2]],
+        rotation: [...link.resultQuat],
+      })
+    }
+  }
+
   function _projectSsdnaConstraints() {
-    if (_constraintType !== 'ssdna' || !_ssArmed?.length || !_pivot) return
+    if (_constraintType !== 'ssdna' || !_pivot) return
+    // Static tethers + per-frame transient tethers to any MOVED movable-link body.
+    const armed = _ssLinkNearArmed?.length
+      ? [...(_ssArmed ?? []), ..._ssLinkNearArmed]
+      : _ssArmed
+    if (!armed?.length) return
     const s = _ssScratch
     s.pivot.set(_pivot[0], _pivot[1], _pivot[2])
     for (let iter = 0; iter < _SS_ITERS; iter++) {
       // ── Rotation pass: accumulate torque about the pivot from violations.
       s.torque.set(0, 0, 0)
       let sumR2 = 0, nViol = 0
-      for (const t of _ssArmed) {
+      for (const t of armed) {
         const pM = _ssCandidatePos(t.pM0, s.pM)
         const dist = pM.distanceTo(t.pF)
-        if (dist <= t.contour || dist < 1e-9) continue
+        if (dist < 1e-9 || !_ssViolated(t, dist)) continue
         s.delta.copy(pM).sub(t.pF).multiplyScalar(t.contour / dist).add(t.pF).sub(pM) // target−pM
         s.r.copy(pM).sub(s.pivot)
         s.torque.add(new THREE.Vector3().crossVectors(s.r, s.delta))
@@ -861,10 +999,10 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       // ── Translation pass: residual after rotation.
       s.dT.set(0, 0, 0)
       let nT = 0
-      for (const t of _ssArmed) {
+      for (const t of armed) {
         const pM = _ssCandidatePos(t.pM0, s.pM)
         const dist = pM.distanceTo(t.pF)
-        if (dist <= t.contour || dist < 1e-9) continue
+        if (dist < 1e-9 || !_ssViolated(t, dist)) continue
         s.delta.copy(pM).sub(t.pF).multiplyScalar(t.contour / dist).add(t.pF).sub(pM)
         s.dT.add(s.delta)
         nT++
@@ -1006,10 +1144,14 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     if (type === 'ssdna') {
       _ssConstraints     = joint?.connections ?? null
       _resolveSsWorldPos = joint?.resolveWorldPos ?? null
+      _ssLinkDescs       = joint?.links ?? null
     } else {
       _ssConstraints = null
       _resolveSsWorldPos = null
       _ssArmed = null
+      _ssLinkDescs = null
+      _ssLinks = null
+      _ssLinkNearArmed = null
     }
     if (_clusterId) {
       // Revolute joints constrain rotation — switch to rotate mode when joint is selected
@@ -1133,6 +1275,11 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _startDummyPos = _dummy.position.clone()
     _startQuat     = _dummy.quaternion.clone()
 
+    // Notify the transform panel (marks the tool dirty so Cancel restores, and
+    // re-syncs the number boxes to the committed value). `translation` is already
+    // expressed relative to the pivot — the same convention the fields use.
+    if (onTransformUpdate) onTransformUpdate([...translation], _dummy.quaternion.clone())
+
     _recordCurrentTransform()
   }
 
@@ -1218,6 +1365,11 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     setTransform,
     setJointRotation,
     setConstraint,
+    /** Set the rotate-drag angle snap in degrees (null = free drag). Applies to the standard rotate rings. */
+    setRotationSnap(deg) {
+      _rotationSnapDeg = deg
+      _tc?.setRotationSnap(deg == null ? null : THREE.MathUtils.degToRad(deg))
+    },
     relaxClusterHeadless,
     getAllPendingTransforms,
     setPendingTransform,
@@ -1234,5 +1386,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     getActiveJoint: () => (_constraintJoint) ?? _activeJoint(),
     /** Returns the pivot [x, y, z] at attach time, or null if not attached. */
     getPivot: () => _pivot,
+    /** Returns the gizmo dummy's world position [x, y, z] (where the handles render), or null. */
+    getGizmoWorldPosition: () => _dummy ? [_dummy.position.x, _dummy.position.y, _dummy.position.z] : null,
   }
 }

@@ -271,6 +271,15 @@ class OverhangSpec(BaseModel):
     label: Optional[str] = None
     rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
     pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    # translation (nm) is a rigid displacement of the overhang duplex, applied
+    # AFTER `rotation` (p' = R·(p−pivot)+pivot+translation) at geometry time, in
+    # lockstep with any bound-driven partner that co-moves with this overhang.
+    # Default [0,0,0]. Used to re-center a DIRECT connection's relocated duplex
+    # onto the MIDPOINT between its two embedded-staple connections — mirroring a
+    # linker bridge's symmetric midpoint placement (see _cv_create_bound_binding /
+    # direct_relax.duplex_midpoint_translation). A display/geometry overlay stored
+    # as topology-layer metadata, exactly like `rotation`; never mutates the graph.
+    translation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
     sub_domains: List[SubDomain] = Field(default_factory=list)
 
     # Chained-overhang link (Alt A foundation, multi-domain audit 07).
@@ -463,6 +472,108 @@ def _sub_domain_at_attach(design: 'Design', overhang_id: str, attach: str) -> Op
     if attach == 'root':
         return sub_doms[0].id
     return sub_doms[-1].id
+
+
+def _overhang_backing_domain(design: 'Design', overhang_id: str):
+    """Return the (Strand, Domain) whose ``domain.overhang_id == overhang_id``.
+
+    The backing domain carries the overhang's helix bp range. ``DuplexEnd``
+    intervals are expressed in THAT helix's bp coordinate — the same convention
+    as ``Domain.start_bp/end_bp`` (order encodes 5'→3'; see
+    ``backend.core.sequences`` which maps overhang offset i → ``d.start_bp +
+    i*sign(d.end_bp - d.start_bp)``). Returns ``(None, None)`` when unresolved.
+    """
+    for s in design.strands:
+        for d in s.domains:
+            if d.overhang_id == overhang_id:
+                return s, d
+    return None, None
+
+
+class DuplexEnd(BaseModel):
+    """One side of a :class:`Duplex` — a contiguous bp interval on an overhang's
+    backing-domain helix.
+
+    ``start_bp`` / ``end_bp`` are inclusive helix bp indices (same coordinate as
+    ``Domain``). Their ORDER encodes polarity: ``start_bp`` is the 5' base of the
+    paired stretch, ``end_bp`` the 3' base (so ``start_bp > end_bp`` for a
+    reverse-direction overhang). Length = ``abs(end_bp - start_bp) + 1``.
+    """
+    overhang_id: str
+    start_bp: int
+    end_bp: int
+
+    @property
+    def length(self) -> int:
+        return abs(self.end_bp - self.start_bp) + 1
+
+    def covered_bp(self) -> set:
+        lo, hi = sorted((self.start_bp, self.end_bp))
+        return set(range(lo, hi + 1))
+
+
+class Duplex(BaseModel):
+    """A hybridization edge pairing a stretch of one overhang with a stretch of
+    another (Proposal-B foundation — see ``memory/project_overhang_duplex_foundation.md``).
+
+    Supersedes :class:`OverhangBinding` (symmetric, equal-length, one-per-overhang,
+    whole-sub-domain). A Duplex is a register-bearing edge: ``left`` and ``right``
+    are bp intervals (the register) that pair antiparallel — ``left`` walked 5'→3'
+    against ``right`` walked 3'→5'. Many duplexes may sit on one overhang
+    (multivalency); the only integrity invariant is that no bp pairs twice on the
+    same overhang. Unpaired bp are simply uncovered; a maximal uncovered run is a
+    toehold (derived, later phase).
+
+    v1 (Q3): both ends are EQUAL length — mismatches (non-WC bases) are allowed
+    and coloured, but bulges (length-asymmetric, gapped) are deferred. The per-base
+    Watson-Crick classification lives in ``backend.core.duplex`` (Phase 1).
+
+    ``driver`` (Q4) names which side's helix HOSTS the duplex when applied (the
+    other side rides it). User-set via a toggle; for multivalent cases the build
+    rule is "longest overhang drives". The geometry-coupling fields
+    (``target_joint_id`` / ``locked_angle_deg``) are reserved for the Phase-4
+    derivation and unused today.
+
+    Phase 0: this model exists and validates but NOTHING consumes ``Design.duplexes``
+    yet — migration from legacy ``OverhangBinding`` is available in
+    ``backend.core.duplex`` but not auto-run, so load behavior is unchanged.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = ""                       # auto D1, D2, …
+    created_at: float = Field(default_factory=time.time)
+    left: DuplexEnd
+    right: DuplexEnd
+    driver: Literal['left', 'right'] = 'left'
+    bound: bool = False
+    binding_mode: Literal['duplex', 'toehold'] = 'duplex'
+    allow_n_wildcard: bool = True
+    # Reserved for the Phase-4 geometry derivation (unused in Phases 0-3).
+    target_joint_id: Optional[str] = None
+    locked_angle_deg: Optional[float] = None
+    connection_type: Optional[str] = None
+    # Phase 4b: when a DIFFERENT-length duplex (no equal-length binding backs it)
+    # relocates its driven overhang's domain onto the driver's helix at the paired-
+    # window range, this holds the pre-relocation snapshot so revert can restore it
+    # — same shape as OverhangBinding.prior_driven_topology. None = not relocated.
+    prior_driven_topology: Optional[Dict[str, Any]] = None
+
+    @model_validator(mode='after')
+    def _check_equal_length_and_distinct(self) -> 'Duplex':
+        if self.left.length != self.right.length:
+            raise ValueError(
+                f"Duplex {self.id}: left ({self.left.length} bp) and right "
+                f"({self.right.length} bp) must be equal length "
+                f"(bulges are deferred — v1 supports mismatches only)."
+            )
+        # A base cannot pair itself: forbid the two ends covering any shared bp on
+        # the same overhang (a same-overhang hairpin with disjoint ranges is fine).
+        if (self.left.overhang_id == self.right.overhang_id and
+                self.left.covered_bp() & self.right.covered_bp()):
+            raise ValueError(
+                f"Duplex {self.id}: the two ends overlap on overhang "
+                f"{self.left.overhang_id} — a base cannot pair itself."
+            )
+        return self
 
 
 class OverhangBinding(BaseModel):
@@ -957,6 +1068,22 @@ class ClusterRigidTransform(BaseModel):
     domains are transformed; helix_ids still lists the helices involved (for
     pivot computation and backward compatibility) but the transform is applied
     at domain granularity.
+
+    parent_cluster_id (None for a normal top-level cluster) makes this a CHILD
+    cluster whose transform is expressed in the parent's REST (rest-geometry /
+    parent-local) frame and composed INSIDE the parent — the child's domains end
+    up at ``T_parent(T_child(p_rest))``. Concretely the geometry pipeline applies
+    child clusters FIRST (on the un-transformed positions, masked to their
+    domains), then the parent transform on top, so:
+      * the child follows the parent rigidly (drift-free — the child's stored
+        rotation/translation never change when the parent moves), AND
+      * editing the child moves only the child's domains, relative to the parent.
+    ``pivot`` is therefore a REST-frame point for a child (its world rotation
+    centre is ``T_parent(pivot)``). This is the model behind the overhang-DUPLEX
+    cluster (see [[overhang-duplex-cluster]]): the duplex domains are a child of
+    the driver part's cluster. A child MUST be domain-level (its ``domain_ids``
+    scope which nucleotides get the local pose). Mirrors the local-frame storage
+    ClusterJoint already uses for its axis.
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = "Cluster"
@@ -966,6 +1093,13 @@ class ClusterRigidTransform(BaseModel):
     translation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
     rotation: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0, 1.0])
     pivot: List[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    parent_cluster_id: Optional[str] = None
+    # Non-None marks this as an auto-created overhang-DUPLEX cluster (child of the driver
+    # part's cluster); the value is the DRIVER overhang id whose helix hosts the duplex.
+    # One duplex cluster covers ALL duplexes on that overhang (multivalency). Used for
+    # sidebar badge, lookup, validation, and to gate the legacy OverhangSpec pose overlay
+    # off for the migrated pose. See [[overhang-duplex-cluster]].
+    overhang_duplex_driver_id: Optional[str] = None
 
 
 class ClusterJoint(BaseModel):
@@ -1976,6 +2110,10 @@ class Design(BaseModel):
     overhang_connections: List[OverhangConnection] = Field(default_factory=list)
     overhang_bindings: List[OverhangBinding] = Field(default_factory=list)
     connection_versions: List[ConnectionVersion] = Field(default_factory=list)
+    # Proposal-B overhang pairing graph (register-bearing Duplex edges). Phase 0:
+    # present + validated, but nothing consumes it yet — legacy designs load with
+    # this empty and behavior is unchanged. See project_overhang_duplex_foundation.md.
+    duplexes: List[Duplex] = Field(default_factory=list)
     # Flexible ssDNA segments (pose & explore mechanisms): user-marked ssDNA beads
     # (marks) + derived ties between EXISTING clusters (connections). The rigid
     # arms are the user's own clusters; flexible segments are a per-bead display
@@ -2183,6 +2321,69 @@ class Design(BaseModel):
                 raise ValueError(
                     f"OverhangBinding {binding.id}: target_joint_id "
                     f"{binding.target_joint_id!r} does not resolve to a cluster_joint."
+                )
+        return self
+
+    @model_validator(mode='after')
+    def _validate_duplexes(self) -> 'Design':
+        """Cross-model checks for Proposal-B :class:`Duplex` edges.
+
+        Short-circuits when ``duplexes`` is empty (every pre-Phase-0 `.nadoc`
+        loads unaffected). When non-empty, enforces per edge:
+
+          • both overhang ids resolve to a live overhang with a backing domain;
+          • each end's bp interval lies inside that backing domain's bp span;
+          • driver names a real side (``'left'``/``'right'`` — guaranteed by the
+            Literal, but the driven overhang must resolve too);
+          • target_joint_id, when set, resolves to a cluster_joint;
+
+        and globally: no bp pairs twice on the same overhang (a base has at most
+        one partner). Length-equality + self-overlap are enforced on the model.
+        Zero-partner-overlap warnings (Q2) are a Phase-3 apply-time concern, not
+        a load-time error.
+        """
+        if not self.duplexes:
+            return self
+
+        joint_ids = {j.id for j in self.cluster_joints}
+        overhang_ids = {o.id for o in self.overhangs}
+        # overhang_id -> set of bp already claimed by some duplex end
+        claimed: dict[str, set] = {}
+
+        for dx in self.duplexes:
+            for side, end in (('left', dx.left), ('right', dx.right)):
+                if end.overhang_id not in overhang_ids:
+                    raise ValueError(
+                        f"Duplex {dx.id}: {side} overhang_id "
+                        f"{end.overhang_id!r} does not resolve."
+                    )
+                _, dom = _overhang_backing_domain(self, end.overhang_id)
+                if dom is None:
+                    raise ValueError(
+                        f"Duplex {dx.id}: {side} overhang {end.overhang_id} has "
+                        f"no backing domain."
+                    )
+                lo, hi = sorted((dom.start_bp, dom.end_bp))
+                e_lo, e_hi = sorted((end.start_bp, end.end_bp))
+                if e_lo < lo or e_hi > hi:
+                    raise ValueError(
+                        f"Duplex {dx.id}: {side} bp interval [{end.start_bp}, "
+                        f"{end.end_bp}] is outside overhang {end.overhang_id}'s "
+                        f"backing domain [{lo}, {hi}]."
+                    )
+                overlap = claimed.setdefault(end.overhang_id, set()) & end.covered_bp()
+                if overlap:
+                    raise ValueError(
+                        f"Duplex {dx.id}: bp {sorted(overlap)} on overhang "
+                        f"{end.overhang_id} are already paired by another duplex "
+                        f"(a base has at most one partner)."
+                    )
+                claimed[end.overhang_id] |= end.covered_bp()
+
+            if dx.target_joint_id is not None and dx.target_joint_id not in joint_ids:
+                raise ValueError(
+                    f"Duplex {dx.id}: target_joint_id {dx.target_joint_id!r} "
+                    f"does not resolve to a cluster_joint."
                 )
         return self
 

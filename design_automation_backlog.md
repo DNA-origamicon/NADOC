@@ -156,6 +156,10 @@ placement (mechanical rules only — `feedback_crossover_no_reasoning`). Change 
 
 _Living pointer — OVERWRITE this each session (protocol step 8). Keep it ≤8 lines. Do NOT append harness blocks here — those live in `design_automation_harness.md`._
 
+**▶ DUPLEX-GRAPH COVERAGE (2026-06-30, Proposal-B — outside the AF numbering; see `project_overhang_duplex_foundation.md`):** the register-bearing overhang `Duplex` graph now has: headless `hb.connect_duplex` (wraps `POST /design/duplexes/connect`; creates the register + relocates a different-length driven onto the driver's paired window); oracle `assert_duplex_relocated` (relocated-but-NOT-stretched length pin, round-trip stable); `summarize_duplexes` readout; and a `validate_design` soft check (flags a duplex whose register has ZERO complementary bases — the Q2 "applied but not pairing" warning; partial mismatches OK). Tests `test_duplex_automation.py` / `test_duplex_relocate.py` / `test_duplex_length_preserve.py`. Remaining duplex geometry: driver-flip re-place for the binding-less path + a binding-less relax (see topic file).
+
+**▶ INTAKE (2026-07-01):** Constrained-move work shipped (ds-linker rigid strut + movable-link duplex swing + selection-driven Move/Rotate) with headless DESCRIPTORS tested (`cluster_connection_tethers` / `cluster_movable_links` in `test_connection_tethers.py`) but the constrained-drag SOLVERS are JS-only in the gizmo → NEW gaps **AF-40** (headless free-until-taut + ds rigid-strut projector port + `assert_tethers_satisfied`) and **AF-41** (headless movable-link chain solve + `assert_link_chain_settled`, depends on AF-40). Both mirror AF-29's parity-port pattern; today these behaviors are human-eye-only (MV-CONNTETHER / MV-CONNLINK / MV-MRSEL). Good self-contained pickups.
+
 **▶ STATE (2026-06-29):** Tiers 0–7 + AF-36 + **AF-27 P1+P2** + **AF-37 end-to-root binding** + **AF-38 direct-bind RELAX** done (coverage **54**). **AF-38 (this loop) = "relax for ALL connection types":** AF-27 P2 had ds/ss LINKER + generic-bond relax; AF-38 adds the two DIRECT-bind paths — `hb.relax_overhang_binding(binding_id)` (root-to-root, wraps `POST /design/overhang-bindings/{id}/relax`) + `hb.relax_end_to_root(version_id)` (version-keyed, wraps the NEW `POST /design/connection-versions/{id}/relax-end-to-root`; solver `backend/core/end_to_root_relax.py` swings A's overhang duplex 2-DOF [persisted as `OverhangSpec.rotation`] + cluster kinematics to close the spliced FL chord; same body → swing only). Oracles `assert_binding_relaxed_pose` + `assert_end_to_root_relaxed_pose` (minimized-bond-distance, strain-reduction on POSED geometry; the e2r pose-moved clause accepts an overhang-ROTATION change, not just a cluster). **GAPS (open):** (1) ss-LINKER relax is wrapped + oracle-supported (`natural_span_nm=R_ee`) but has NO ss-specific headless test; (2) direct-binding CREATION still unwrapped (AF-37 blockers 1–4) — root-to-root bindings are model-built by hand for the relax fixture; only e2r creation is wrapped. AF-37 root-to-root / sub-domain-binding / joint-lock STILL OPEN. AF-24 **P2/P3** still **OTHER COMPUTER — don't pick up.**
 **▶ DEPENDENCY (hinge chain):** AF-33/34/35/36 + AF-27 P1/P2 DONE. Multi-link ROUTING (G6) is an algorithm blocker in `project_hinge_autoscaffold.md`, NOT an AF item; `test_hinge_router::test_multi_link_hinge_routes` xfail keeps it visible.
 **▶ NEXT cycle — COMPOSE the full hinge-with-linker end-to-end (the AF-27 keystone now has all its pieces).** Drive a `scratchpad/build_linked_hinge.py` generator (lift the AF-36 pattern): `build_hinge(k,n)` → `overhang_extrude` a staple overhang on EACH leaf at the gap face → `hb.connect_overhangs` (P1) to tie them with a ds/ss linker whose contour CONFINES the angle → place a revolute joint on the gap edge → `hb.relax_overhang_connection` to settle the rest pose → set absolute hinge angle → save. **ASK-FIRST** (still un-answered, the real blocker): WHICH overhang nucleotide is the linker attach endpoint, ss-vs-ds, and the bridge length for a given gap — directionality/topology, do NOT infer. Augment = compose `assert_linker_connects` (P1) + `assert_linker_relaxed_pose` (P2) on the generated design. Consider promoting the generator to a headless module (`headless_hinge_build.build_linked_hinge`) if it stabilises.
@@ -174,6 +178,37 @@ _Living pointer — OVERWRITE this each session (protocol step 8). Keep it ≤8 
   `headless_coverage_report` (route-vs-wrapper by **function-object identity** → never stale). 8 meta-tests
   in `tests/test_automation_harness.py`, incl. the load-bearing "oracle fires on a corrupted round-trip".
   Coverage at ship: **11 / 239** design+assembly mutation routes wrapped.
+
+- [x] **AF-FIXTURES — headless regeneration of every test fixture (drift-proof provenance). SHIPPED 2026-07-01.**
+  AUDIT: a fixture whose only provenance is a hand-saved `.nadoc` silently drifts when the builder evolves.
+  Found exactly that — the `2x6_triple_hinge_link` golden had been overwritten with a *routed* design
+  (1 merged scaffold + 36 staples) while `build_hinge_primitive` builds the *unrouted* primitive (18
+  scaffolds + 24 staples, 2x2→2x4→2x6 = 6→12→18), so `test_build_2x6_matches_golden` failed (42 vs 37
+  strands). **DELIVERED:**
+  - `scripts/regen_test_fixtures.py` — regenerates every buildable fixture (`--write`), reports the gaps.
+    Regenerated the stale 2x6 golden → 3 golden tests green.
+  - **`build_applied_2x2_binding(*, close_bond=False)`** in `headless_hinge_build.py` — regenerates
+    `relax_2x2_binding.nadoc` + `relax_2x2_closebond.nadoc` (the 6-test-dependency gap) fully headless:
+    `build_hinge(2,2)` → `auto_scaffold` (NO auto_crossover — build_hinge's bp-8 staple termini collide
+    with the "basic" crossover placer → non-physical nick-at-crossover; the duplex tests need no
+    crossovers) → extrude 2 rail overhangs (leaf-A row1→gap row2 = duplex helix; leaf-B row4→gap row3,
+    relocated on apply) → `create_connection_version(end-to-root)` → `apply` → derive Duplex graph
+    (`synthesize_duplexes_from_bindings` — the load path does this, a raw `model_validate` in a test does
+    not) → add revolute hinge joint on the driven leaf. `close_bond` relaxes then translates the driven
+    leaf `_CLOSEBOND_COMPRESS_NM=0.3` along the bond → over-compressed ~0.37 nm (the joint-arc MINIMUM is
+    the 0.67 target, so <target needs a translation OFF the arc, not a rotation — banked lesson). Both
+    outputs VALID (`validate_design.passed`); all 6 dependent files green against the regenerated fixtures;
+    builder itself pinned by `test_build_applied_2x2_binding_*` (valid applied duplex + close-bond<0.67).
+  - Portability hardening (kept): `skipif(fixture missing)` guards on the 5 previously-unguarded
+    `relax_2x2` test files (per-test on `test_duplex_relax` so its 422/404 in-memory tests still run).
+  - **Remaining LOW gaps:** `tests/fixtures/{test343,10-6-10hb_seamed}.nadoc` — tracked (portable) but
+    hand-saved, no builder. Not worth a generator (low value, already portable).
+  - **Have builders (OK):** `18hb_fixture` (`make_18hb_design`), `teeth`/`teeth_unrouted`
+    (`make_teeth_design`), hinge goldens + relax_2x2 via `regen_test_fixtures.py`.
+  - **Deferred augment idea:** a meta-test asserting every `tests/fixtures/*.nadoc` a test reads is
+    git-tracked OR has a `regen_test_fixtures.py` entry — so a new unbuildable/untracked fixture can't
+    sneak in. (The relax_2x2 fixtures remain UNTRACKED but are now regenerable — commit-or-regen is the
+    user's call.)
 
 ### Tier 1 — design-op headless wrappers (REST exists, wrapper missing; small, high validation value)
 
@@ -380,6 +415,41 @@ _Living pointer — OVERWRITE this each session (protocol step 8). Keep it ≤8 
   `backend.core.ssdna_fjc.bin_r_ee(n_bp, bin_index)`. See `project_ssdna_linker_relax.md` (FJC slab+SAW lookup).
   **Validation gained:** proves the ss-linker relax actually pulls the chord to the FJC ensemble R_ee (a *different*
   target than ds), which no test currently exercises — the ds pin says nothing about the ss bin-selection path.
+
+#### Constrained-move solver ports (intake 2026-07-01 — gaps from the "Constrained (tethers)" + movable-link work)
+
+The move/rotate "Constrained (tethers)" drag, the ds-linker **rigid strut** (bilateral), and the **movable-link**
+duplex-swing were all shipped this session, but their SOLVERS live only in the gizmo's live drag
+(`cluster_gizmo.js` `_projectSsdnaConstraints` / `_solveLinksChain`) — there is NO headless entry point that
+*computes* a constrained drag, so every one of these can be validated ONLY by a human-eye WebGL drag
+(`manual_validation_debt.md` MV-CONNTETHER / MV-CONNLINK / MV-MRSEL). The DESCRIPTORS are already headless +
+tested (`cluster_connection_tethers` / `cluster_movable_links` / `duplex_cluster_tethers` +
+`test_connection_tethers.py`); the missing augment is the SOLVE + an oracle. These mirror **AF-29** (which ported
+the flexible-relax solver to `flexible_relax.py` + a JS↔Python parity golden) — do the same for the drag projector.
+
+- [ ] **AF-40 — headless constrained-drag solver (free-until-taut + ds rigid-strut) + tether oracle (intake 2026-07-01).**
+  The gizmo `_projectSsdnaConstraints` (single-body: pull a dragged cluster back so no tether exceeds its contour,
+  PLUS the new `rigid` bilateral case — a ds-linker strut held at its rod length against BOTH compression and
+  extension; pure predicate `ssTetherViolated` in `cluster_gizmo.js`) has no headless twin. Add: extend the pure
+  `flexible_relax_solver.js` (+ its Python parity `backend/core/flexible_relax.py`) with the `rigid` (bilateral)
+  tether case, and a `hb.constrain_cluster_drag(cluster_id, target_translation/rotation)` entry that arms the
+  cluster's `cluster_connection_tethers` and returns the projected pose. Oracle `assert_tethers_satisfied(design,
+  cluster, pose)`: every free tether chord ≤ contour+tol; every RIGID strut within tol of its length (the
+  can-go-red: a compression case a free tether would allow but a strut must reject). Ports the JS `ssTetherViolated`
+  bilateral into the shared golden (edit one ⇒ edit the other, like AF-29). **Validation gained:** the ds-strut
+  "can't compress OR stretch" and the free-until-taut clamp become headlessly assertable — today only MV-CONNTETHER.
+- [ ] **AF-41 — headless movable-link CHAIN solve (duplex swings, partner fixed) + oracle (intake 2026-07-01, depends on AF-40).**
+  `_solveLinksChain` (the coupled 2-body Gauss-Seidel: drag part A → each connected duplex LINK body swings to follow
+  A while the partner part B stays fixed, then A is re-clamped against the moved link) is JS-only — the entire
+  duplex-swing feature is human-eye-only (MV-CONNLINK). Add a headless port that, given a dragged part + its
+  `cluster_movable_links` + a target displacement, returns A's constrained pose AND each link body's swung pose
+  (reusing the AF-40 solver per body + the same Gauss-Seidel coupling). Oracle `assert_link_chain_settled(before,
+  after)`: each link↔part bond ≤ contour+tol on the POSED geometry, the partner part B is unmoved, and A moved but
+  stayed within the chain's reach (can-go-red: B drifts, or a bond overstretches). **Validation gained:** the whole
+  A↔link↔B chain kinematics gets an oracle; also unblocks automated hinge-with-duplex ROM testing (sibling of the
+  AF-27 linker-hinge keystone). **GOTCHA banked:** the link solve must NOT call `relaxClusterHeadless` (clobbers the
+  gizmo singletons) — the pure port sidesteps that; and multi-body live paint needs `captureClusterBase(append=true)`
+  for the 2nd body (the main-cluster-freeze bug, fixed this session).
 
 #### Fine-routing wrappers (intake 2026-06-26 — the user's "automate ALL fine routing ops" request)
 

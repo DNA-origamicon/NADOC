@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { posEulerFromMatrix, eulerDegToQuat } from './rotation_math.js'
+import { posEulerFromMatrix, eulerDegToQuat, stepEulerDeg } from './rotation_math.js'
 import { showToast } from '../ui/toast.js'
 
 /**
@@ -33,6 +33,7 @@ export function initMoveRotatePanel({
   clusterGizmo, instanceGizmo, flexRelax,
   applyAssemblyPrimaryLive, queueAssemblyPrimaryCommit,
   refreshClusterPivotForAttach, isTranslateRotateActive,
+  setClusterRotationPoint,
 }) {
   const _mrPanel         = document.getElementById('move-rotate-panel')
   const _mrClusterSel    = document.getElementById('mr-cluster-sel')
@@ -46,6 +47,7 @@ export function initMoveRotatePanel({
   const _mrPivotSel      = document.getElementById('mr-pivot-sel')
   const _mrRotSection    = document.getElementById('mr-rotation-section')
   const _mrJaSection     = document.getElementById('mr-joint-angle-section')
+  const _mrSnapChk       = document.getElementById('mr-snap-45')
   let   _mrPivotIsJoint  = false
   let   _mrAssemblyCtx   = null
 
@@ -75,22 +77,64 @@ export function initMoveRotatePanel({
     if (_mrJaInp && document.activeElement !== _mrJaInp) _mrJaInp.value = deg.toFixed(1)
   }
 
+  // The DRIVEN overhang of a duplex cluster = the non-driver overhang whose domain is in
+  // the cluster's domain_ids.
+  function _duplexDrivenOverhang(design, cluster) {
+    const driver = cluster.overhang_duplex_driver_id
+    for (const dr of (cluster.domain_ids ?? [])) {
+      const s = design.strands?.find(x => x.id === dr.strand_id)
+      const oid = s?.domains?.[dr.domain_index]?.overhang_id
+      if (oid && oid !== driver) return oid
+    }
+    return null
+  }
+
   function _mrSetPivotOptions(joints, clusterId = null) {
     if (!_mrPivotSel) return
+    // Preserve the current selection across a rebuild. A pivot-point change round-trips
+    // to the server, whose fresh design makes cluster_joints a new array reference →
+    // the joints-changed subscriber re-runs this fn, which would otherwise reset the
+    // <select> to option[0] (centroid) and revert the user's chosen root pivot.
+    const _prevPivot = _mrPivotSel.value
     while (_mrPivotSel.options.length > 1) _mrPivotSel.remove(1)
+    // Overhang-DUPLEX cluster: offer each participating overhang's ROOT bead as a rotation
+    // point (the default option-0 "centroid" already covers the duplex centroid).
+    const design = store.getState().currentDesign
+    const dc = design?.cluster_transforms?.find(
+      c => c.id === clusterId && c.overhang_duplex_driver_id)
+    if (dc) {
+      const ohById = new Map((design.overhangs ?? []).map(o => [o.id, o]))
+      const driven = _duplexDrivenOverhang(design, dc)
+      for (const oid of [dc.overhang_duplex_driver_id, driven].filter(Boolean)) {
+        const opt = document.createElement('option')
+        opt.value = `dup:root:${oid}`
+        opt.textContent = `Rotate about ${ohById.get(oid)?.label ?? oid.slice(0, 8)} root`
+        _mrPivotSel.appendChild(opt)
+      }
+      // Free-until-taut drag against the connection bonds (like the ssDNA-constrained flex drag).
+      const taut = document.createElement('option')
+      taut.value = 'dup:taut'
+      taut.textContent = 'Constrained (taut bonds)'
+      _mrPivotSel.appendChild(taut)
+    }
     for (const j of (joints ?? [])) {
       const opt = document.createElement('option')
       opt.value = j.id
       opt.textContent = `Joint: ${j.name}`
       _mrPivotSel.appendChild(opt)
     }
-    // "ssDNA constrained" — only when every inter-cluster connection from this
-    // cluster passes through a flexible segment (free-until-taut drag).
-    if (flexRelax.hasGate(clusterId)) {
+    // "Constrained (tethers)" — free-until-taut drag against the cluster's tethers:
+    // ssDNA flexible segments AND/OR applied overhang connections (direct duplex / ss-ds
+    // linker bridge). Offered when either kind of tether constrains this cluster.
+    if (flexRelax.hasTetherOption(clusterId)) {
       const opt = document.createElement('option')
       opt.value = 'ssdna'
-      opt.textContent = 'ssDNA constrained'
+      opt.textContent = 'Constrained (tethers)'
       _mrPivotSel.appendChild(opt)
+    }
+    // Restore the prior selection if it still exists after the rebuild (see comment above).
+    if (_prevPivot && [..._mrPivotSel.options].some(o => o.value === _prevPivot)) {
+      _mrPivotSel.value = _prevPivot
     }
   }
 
@@ -163,17 +207,109 @@ export function initMoveRotatePanel({
     _mrJaInp.addEventListener('change', _mrCommitInputs)
   }
 
+  // ── Relative 45° rotation buttons (per world axis) ──────────────────────────
+  // Compose a `deg`-about-axis increment onto the current pose, then commit the
+  // resulting absolute Euler (see rotation_math.stepEulerDeg). Mirrors the overhang
+  // orientation panel's step buttons.
+  function _mrStepAxis(axis, deg) {
+    const cur = [
+      parseFloat(_mrRxInp?.value) || 0,
+      parseFloat(_mrRyInp?.value) || 0,
+      parseFloat(_mrRzInp?.value) || 0,
+    ]
+    const [rx, ry, rz] = stepEulerDeg(cur, axis, deg)
+    if (_mrRxInp) _mrRxInp.value = rx.toFixed(3)
+    if (_mrRyInp) _mrRyInp.value = ry.toFixed(3)
+    if (_mrRzInp) _mrRzInp.value = rz.toFixed(3)
+    _mrCommitInputs()
+  }
+
+  for (const axis of ['x', 'y', 'z']) {
+    document.getElementById(`mr-r${axis}-dec`)?.addEventListener('click', () => _mrStepAxis(axis, -45))
+    document.getElementById(`mr-r${axis}-inc`)?.addEventListener('click', () => _mrStepAxis(axis, +45))
+  }
+
+  // Reset ("restore saved positions") is a tool-lifecycle action (discard the in-progress
+  // move + revert geometry + re-attach at the committed pose) — handled in translate_rotate_tool.js
+  // alongside Cancel/Apply, which own the gizmo + geometry-restore context.
+
+  // ── Snap 45° toggle — snap the rotate-gizmo drag to 45° increments ──────────
+  function _mrApplySnap() {
+    clusterGizmo.setRotationSnap?.(_mrSnapChk?.checked ? 45 : null)
+  }
+  _mrSnapChk?.addEventListener('change', _mrApplySnap)
+
+  // Re-pivot a duplex cluster to a rotation point (overhang root or centroid): the backend
+  // sets the pivot + rebases the translation, then we re-attach the gizmo so it rotates
+  // about the new point. [[overhang-duplex-cluster]] P2.
+  //
+  // NOTE: do NOT call refreshClusterPivotForAttach here. That helper recomputes the pivot
+  // from the cluster's VISUAL CENTROID and queues it as a pending transform — exactly the
+  // centroid we're overriding. It would silently drag the pivot back to the centroid (the
+  // "always rotates about centroid" bug). Instead drop any pending (centroid) transform and
+  // attach directly so the gizmo reads the server-set root pivot verbatim.
+  async function _setDuplexRotationPoint(clusterId, spec) {
+    if (!setClusterRotationPoint) return
+    await setClusterRotationPoint(clusterId, spec)
+    clusterGizmo.clearPendingTransform?.(clusterId)
+    clusterGizmo.attach(clusterId, scene, camera, canvas)
+    // attach() re-sets activeClusterId (detach→null, then →clusterId). That change fires
+    // main.js's activeClusterId subscriber, which repopulates the pivot dropdown and
+    // hardcodes the selection back to 'centroid'. Re-assert the intended pivot AFTER the
+    // attach so the dropdown reflects the point the user actually chose.
+    if (_mrPivotSel) {
+      const want = spec.kind === 'overhang_root' ? `dup:root:${spec.overhangId}` : 'centroid'
+      if ([..._mrPivotSel.options].some(o => o.value === want)) _mrPivotSel.value = want
+    }
+  }
+
+  function _activeDuplexCluster() {
+    const st = store.getState()
+    return st.currentDesign?.cluster_transforms?.find(
+      c => c.id === st.activeClusterId && c.overhang_duplex_driver_id) ?? null
+  }
+
   // Pivot dropdown change
-  _mrPivotSel?.addEventListener('change', () => {
+  _mrPivotSel?.addEventListener('change', async () => {
     const val = _mrPivotSel.value
+    if (val.startsWith('dup:root:')) {
+      _mrShowJointMode(false)
+      const clusterId = store.getState().activeClusterId
+      await _setDuplexRotationPoint(clusterId, {
+        kind: 'overhang_root', overhangId: val.slice('dup:root:'.length) })
+      return
+    }
+    if (val === 'dup:taut') {
+      // Free-until-taut drag: constrain the duplex against its connection bonds so a drag
+      // never overstretches a bond past its contour (~0.67 nm). [[overhang-duplex-cluster]] P3.
+      _mrShowJointMode(false)
+      const clusterId = store.getState().activeClusterId
+      const payload = await flexRelax.buildDuplexTautPayload(clusterId)
+      if (payload) {
+        clusterGizmo.setConstraint('ssdna', payload)
+        showToast('Constrained: drag the duplex — connection bonds won’t overstretch')
+      } else {
+        clusterGizmo.setConstraint('centroid', null)
+        showToast('No applied connection bonds to constrain this duplex.', { severity: 'warning' })
+      }
+      return
+    }
     if (val === 'centroid') {
       _mrShowJointMode(false)
+      const dc = _activeDuplexCluster()
+      if (dc) { await _setDuplexRotationPoint(dc.id, { kind: 'centroid' }); return }
       clusterGizmo.setConstraint('centroid', null)
     } else if (val === 'ssdna') {
       _mrShowJointMode(false)
       const clusterId = store.getState().activeClusterId
-      clusterGizmo.setConstraint('ssdna', flexRelax.buildSsdnaPayload(clusterId))
-      showToast('ssDNA constrained: drag the arm — tethers won’t overstretch')
+      const payload = await flexRelax.buildTethersPayload(clusterId)
+      if (payload) {
+        clusterGizmo.setConstraint('ssdna', payload)
+        showToast('Constrained: drag the cluster — ssDNA tethers & connections won’t overstretch')
+      } else {
+        clusterGizmo.setConstraint('centroid', null)
+        showToast('No tethers to constrain this cluster.', { severity: 'warning' })
+      }
     } else {
       const joint = store.getState().currentDesign?.cluster_joints?.find(j => j.id === val)
       if (joint) { _mrShowJointMode(true); clusterGizmo.setConstraint('joint', joint) }
@@ -208,6 +344,7 @@ export function initMoveRotatePanel({
     syncClusterDropdown:          _mrSyncClusterDropdown,
     showJointMode:                _mrShowJointMode,
     commitInputs:                 _mrCommitInputs,
+    stepAxis:                     _mrStepAxis,
     getAssemblyCtx:               () => _mrAssemblyCtx,
     setAssemblyCtx:               (ctx) => { _mrAssemblyCtx = ctx },
     getPivotIsJoint:              () => _mrPivotIsJoint,

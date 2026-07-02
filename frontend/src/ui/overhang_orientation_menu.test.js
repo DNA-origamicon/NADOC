@@ -157,3 +157,95 @@ describe('initOverhangOrientationMenu', () => {
     expect(document.querySelector('.context-menu')).toBeFalsy()
   })
 })
+
+describe('duplex-backed overhang routes orientation to the cluster gizmo (P4)', () => {
+  afterEach(() => document.querySelectorAll('.context-menu').forEach((m) => m.remove()))
+
+  function initDuplex({ cluster = { id: 'dc1' } } = {}) {
+    const { deps } = makeDeps()
+    const onEditDuplexOrientation = vi.fn()
+    const onResetDuplexOrientation = vi.fn()
+    const getDuplexClusterForOverhang = vi.fn(() => cluster)
+    const menu = initOverhangOrientationMenu({
+      ...deps, getDuplexClusterForOverhang, onEditDuplexOrientation, onResetDuplexOrientation,
+    })
+    return { menu, deps, onEditDuplexOrientation, onResetDuplexOrientation, getDuplexClusterForOverhang }
+  }
+
+  it('swaps "Edit Orientation" (panel) for "Move / Rotate duplex" (gizmo)', () => {
+    const { menu } = initDuplex()
+    menu.show(['ohD'], 0, 0)
+    expect(itemByLabel('Move / Rotate duplex')).toBeTruthy()
+    expect(itemByLabel('Edit Orientation')).toBeFalsy()   // panel path suppressed for a duplex
+  })
+
+  it('"Move / Rotate duplex" activates the gizmo on the duplex cluster', () => {
+    const { menu, onEditDuplexOrientation } = initDuplex()
+    menu.show(['ohD'], 0, 0)
+    itemByLabel('Move / Rotate duplex').click()
+    expect(onEditDuplexOrientation).toHaveBeenCalledWith('dc1')
+  })
+
+  it('"Reset Orientation" resets the cluster pose, not the whole-overhang rotation', async () => {
+    const { menu, onResetDuplexOrientation, deps } = initDuplex()
+    menu.show(['ohD'], 0, 0)
+    itemByLabel('Reset Orientation').click()
+    await flush()
+    expect(onResetDuplexOrientation).toHaveBeenCalledWith('dc1')
+    expect(deps.api.patchOverhangRotationsBatch).not.toHaveBeenCalled()   // NOT the panel reset
+  })
+
+  it('a non-duplex overhang keeps the panel path', () => {
+    const { menu } = initDuplex({ cluster: null })   // getDuplexClusterForOverhang → null
+    menu.show(['oStandalone'], 0, 0)
+    expect(itemByLabel('Edit Orientation')).toBeTruthy()
+    expect(itemByLabel('Move / Rotate duplex')).toBeFalsy()
+  })
+})
+
+describe('extensions reachable from an overhang right-click', () => {
+  afterEach(() => document.querySelectorAll('.context-menu').forEach((m) => m.remove()))
+
+  function initWithExt(design) {
+    const { deps } = makeDeps(design)
+    const onOpenExtensions = vi.fn()
+    const menu = initOverhangOrientationMenu({ ...deps, onOpenExtensions })
+    return { menu, onOpenExtensions }
+  }
+
+  it('offers "Add extension…" and opens the dialog for the overhang\'s backing strand', () => {
+    const { menu, onOpenExtensions } = initWithExt({
+      overhangs: [{ id: 'oh1', strand_id: 'st1' }], extensions: [],
+    })
+    menu.show(['oh1'], 100, 120)
+    const item = itemByLabel('Add extension…')
+    expect(item).toBeTruthy()
+    item.click()
+    expect(onOpenExtensions).toHaveBeenCalledWith(['st1'], 100, 120)
+  })
+
+  it('says "Edit extensions…" when the strand already carries one', () => {
+    const { menu } = initWithExt({
+      overhangs: [{ id: 'oh1', strand_id: 'st1' }],
+      extensions: [{ strand_id: 'st1', end: 'three_prime', modification: 'cy3' }],
+    })
+    menu.show(['oh1'], 0, 0)
+    expect(itemByLabel('Edit extensions…')).toBeTruthy()
+    expect(itemByLabel('Add extension…')).toBeFalsy()
+  })
+
+  it('dedupes strands across multiple selected overhangs on one strand', () => {
+    const { menu, onOpenExtensions } = initWithExt({
+      overhangs: [{ id: 'oh1', strand_id: 'st1' }, { id: 'oh2', strand_id: 'st1' }], extensions: [],
+    })
+    menu.show(['oh1', 'oh2'], 5, 6)
+    itemByLabel('Add extension…').click()
+    expect(onOpenExtensions).toHaveBeenCalledWith(['st1'], 5, 6)
+  })
+
+  it('no extensions item when the dep is absent (unchanged legacy menu)', () => {
+    const { deps } = makeDeps({ overhangs: [{ id: 'oh1', strand_id: 'st1' }] })
+    initOverhangOrientationMenu(deps).show(['oh1'], 0, 0)
+    expect(itemByLabel('Add extension…')).toBeFalsy()
+  })
+})

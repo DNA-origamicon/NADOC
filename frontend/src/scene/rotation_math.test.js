@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { quatToEulerDeg, eulerDegToQuat, extractJointAngleDeg, posEulerFromMatrix } from './rotation_math.js'
+import { quatToEulerDeg, eulerDegToQuat, extractJointAngleDeg, posEulerFromMatrix, stepEulerDeg } from './rotation_math.js'
 
 // Quaternion (as {x,y,z,w}) for `deg` degrees about `axis`.
 const quatAbout = (axis, deg) =>
@@ -67,6 +67,41 @@ describe('extractJointAngleDeg', () => {
   it('guards the degenerate len≈0 case (returns 0)', () => {
     // 180° about X, measured against the Z axis: dot=0 and w=0 → len=0.
     expect(extractJointAngleDeg({ x: 1, y: 0, z: 0, w: 0 }, jointZ)).toBe(0)
+  })
+})
+
+describe('stepEulerDeg', () => {
+  it('+45 twice about X from identity → 90 about X', () => {
+    const once = stepEulerDeg([0, 0, 0], 'x', 45)
+    const twice = stepEulerDeg(once, 'x', 45)
+    expect(twice[0]).toBeCloseTo(90)
+    expect(twice[1]).toBeCloseTo(0)
+    expect(twice[2]).toBeCloseTo(0)
+  })
+
+  it('−45 about Y from identity → −45 about Y', () => {
+    const [rx, ry, rz] = stepEulerDeg([0, 0, 0], 'y', -45)
+    expect(rx).toBeCloseTo(0)
+    expect(ry).toBeCloseTo(-45)
+    expect(rz).toBeCloseTo(0)
+  })
+
+  it('composes as a world-axis premultiply (matches qStep ∘ qCur)', () => {
+    const start = [30, 20, 10]
+    const [rx, ry, rz] = stepEulerDeg(start, 'z', 45)
+    // Reference: world-premultiply a 45°-about-Z step onto the start pose.
+    const qCur = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler((30 * Math.PI) / 180, (20 * Math.PI) / 180, (10 * Math.PI) / 180, 'XYZ'))
+    const qStep = quatAbout([0, 0, 1], 45)
+    const qExp = qStep.clone().multiply(qCur)
+    const [erx, ery, erz] = quatToEulerDeg([qExp.x, qExp.y, qExp.z, qExp.w])
+    expect(rx).toBeCloseTo(erx)
+    expect(ry).toBeCloseTo(ery)
+    expect(rz).toBeCloseTo(erz)
+  })
+
+  it('unknown axis is a no-op (returns a copy of the input)', () => {
+    expect(stepEulerDeg([1, 2, 3], 'w', 45)).toEqual([1, 2, 3])
   })
 })
 

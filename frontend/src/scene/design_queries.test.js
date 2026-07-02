@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, ovhgBinderDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead, assembleOverhangSequence, overhangHasSequenceOverride } from './design_queries.js'
+import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, ovhgBinderDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead, assembleOverhangSequence, overhangHasSequenceOverride, overhangDomainLength, pairingSegments, isComplement, classifyDuplex, overhangDuplexCoverage, overhangHasDuplex, overhangDuplexSegments, capSequenceToLength, overhangRcOfPartner, duplexClusterForOverhang } from './design_queries.js'
 
 describe('assembleOverhangSequence', () => {
   it('uses the top-level sequence when there are no overrides', () => {
@@ -39,6 +39,176 @@ describe('overhangHasSequenceOverride', () => {
   })
   it('false for a whole-overhang (no override)', () => {
     expect(overhangHasSequenceOverride({ sequence: 'ACGT', sub_domains: [{ length_bp: 4 }] })).toBe(false)
+  })
+})
+
+describe('overhangDomainLength', () => {
+  const design = (start, end) => ({
+    strands: [
+      { domains: [{ helix_id: 'h0' }, { overhang_id: 'oh1', start_bp: start, end_bp: end }] },
+    ],
+  })
+  it('mirrors backend abs(end-start)+1', () => {
+    expect(overhangDomainLength(design(0, 3), 'oh1')).toBe(4)   // 4 bp domain
+    expect(overhangDomainLength(design(10, 5), 'oh1')).toBe(6)  // reverse-polarity domain
+  })
+  it('reflects a drag-resized (grown) backing domain', () => {
+    // overhang seq is 4 long but the domain was dragged out to 6 bp
+    const oh = { sequence: 'ACGT' }
+    const len = overhangDomainLength(design(0, 5), 'oh1')
+    expect(assembleOverhangSequence(oh, len)).toBe('ACGTNN')
+  })
+  it('null when no backing domain names the overhang', () => {
+    expect(overhangDomainLength(design(0, 3), 'nope')).toBe(null)
+    expect(overhangDomainLength(null, 'oh1')).toBe(null)
+  })
+})
+
+describe('pairingSegments', () => {
+  const kinds = (segs) => segs.map(s => `${s.kind}:${s.text}`).join(' ')
+
+  it('marks a fully complementary pair as all paired', () => {
+    // A=AAAC (5→>3'), B=GTTT = RC(A). Antiparallel: A[0]A<->B[3]T ✓ ... A[3]C<->B[0]G ✓
+    const { a, b } = pairingSegments('AAAC', 'GTTT', 0, 0, 4)
+    expect(kinds(a)).toBe('paired:AAAC')
+    expect(kinds(b)).toBe('paired:GTTT')
+  })
+
+  it('flags a dragged-longer overhang tail as excess (anchored at the bound sub-domain)', () => {
+    // A grown to 6 nt: AAAC + NN tail; bound region is the original 4-nt sub-domain.
+    const { a } = pairingSegments('AAACNN', 'GTTT', 0, 0, 4)
+    expect(kinds(a)).toBe('paired:AAAC excess:NN')
+  })
+
+  it('flags a non-complementary base inside the bound region as unpaired', () => {
+    // A=AAAA vs B=GTTT (RC(AAAA)=TTTT). A[3]A pairs B[0]G → mismatch; rest pair.
+    const { a } = pairingSegments('AAAA', 'GTTT', 0, 0, 4)
+    expect(kinds(a)).toBe('paired:AAA unpaired:A')
+  })
+
+  it('N inside the bound region never pairs (unpaired, not paired)', () => {
+    const { a } = pairingSegments('AANC', 'GNTT', 0, 0, 4)
+    // A[2]=N never pairs; its antiparallel partner B[1]=N also non-pairing
+    expect(a.some(s => s.kind === 'unpaired' && s.text.includes('N'))).toBe(true)
+  })
+
+  it('honors non-zero bound-region starts on each side', () => {
+    // bound region = A[2..3]='AC', B[1..2]='GT'; antiparallel A[2]<->B[2], A[3]<->B[1].
+    const { a, b } = pairingSegments('TTAC', 'AGTA', 2, 1, 2)
+    expect(kinds(a)).toBe('excess:TT paired:AC')
+    expect(kinds(b)).toBe('excess:A paired:GT excess:A')
+  })
+
+  it('capSequenceToLength: truncate longer, N-pad shorter, keep length (no resize)', () => {
+    expect(capSequenceToLength('ACGTACGTAC', 4)).toBe('ACGT')       // longer → truncated
+    expect(capSequenceToLength('ACG', 6)).toBe('ACGNNN')            // shorter → N-padded
+    expect(capSequenceToLength('ACGT', 4)).toBe('ACGT')             // equal → unchanged
+    expect(capSequenceToLength('acgt', 4)).toBe('ACGT')             // upcased
+    // The bug: RC of a 24-mer must NOT be allowed to grow a 10-mer overhang.
+    expect(capSequenceToLength('N'.repeat(24), 10)).toHaveLength(10)
+  })
+
+  it('isComplement: WC only, N never pairs', () => {
+    expect(isComplement('A', 'T')).toBe(true)
+    expect(isComplement('g', 'c')).toBe(true)
+    expect(isComplement('A', 'G')).toBe(false)
+    expect(isComplement('N', 'N')).toBe(false)
+  })
+})
+
+describe('duplex graph (JS mirror of core/duplex.py)', () => {
+  // Overhang A forward domain [0,5] (6 bp "AAACGG"), B reverse domain [5,0] (6 bp "GTTTCC").
+  const design = (duplexes) => ({
+    strands: [
+      { id: 'sa', domains: [{ helix_id: 'hA', start_bp: 0, end_bp: 5, overhang_id: 'ohA' }] },
+      { id: 'sb', domains: [{ helix_id: 'hB', start_bp: 5, end_bp: 0, overhang_id: 'ohB' }] },
+    ],
+    overhangs: [
+      { id: 'ohA', sequence: 'AAACGG' },
+      { id: 'ohB', sequence: 'GTTTCC' },
+    ],
+    duplexes,
+  })
+  const dx = (aLo, aHi, bLo, bHi, extra = {}) => ({
+    id: 'd1', left: { overhang_id: 'ohA', start_bp: aLo, end_bp: aHi },
+    right: { overhang_id: 'ohB', start_bp: bLo, end_bp: bHi }, ...extra,
+  })
+
+  it('classifyDuplex: all complementary, antiparallel bp register', () => {
+    const d = design([dx(0, 3, 5, 2)])
+    const cls = classifyDuplex(d, d.duplexes[0])
+    expect(cls.length).toBe(4)
+    expect(cls.positions.every(p => p.complementary)).toBe(true)
+    expect(cls.positions[0].left_bp).toBe(0)   // left 5' base
+    expect(cls.positions[0].right_bp).toBe(2)  // pairs right 3' base
+  })
+
+  it('classifyDuplex: counts mismatches (non-complementary partner)', () => {
+    const d = { ...design([dx(0, 3, 5, 2)]), overhangs: [{ id: 'ohA', sequence: 'AAACGG' }, { id: 'ohB', sequence: 'AAACCC' }] }
+    const cls = classifyDuplex(d, d.duplexes[0])
+    expect(cls.positions.filter(p => !p.complementary).length).toBeGreaterThan(0)
+  })
+
+  it('overhangDuplexCoverage: 4 bp duplex on 6 bp overhang → 2 bp toehold', () => {
+    const d = design([dx(0, 3, 5, 2)])
+    const cov = overhangDuplexCoverage(d, 'ohA')
+    expect([0, 1, 2, 3].map(bp => cov[bp])).toEqual(['paired', 'paired', 'paired', 'paired'])
+    expect([4, 5].map(bp => cov[bp])).toEqual(['unpaired', 'unpaired'])
+  })
+
+  it('overhangDuplexCoverage: multivalent disjoint windows both covered', () => {
+    const d = design([dx(0, 1, 5, 4), { ...dx(4, 5, 1, 0), id: 'd2' }])
+    const cov = overhangDuplexCoverage(d, 'ohA')
+    expect(cov[2]).toBe('unpaired')   // middle toehold
+    expect(cov[3]).toBe('unpaired')
+    expect(cov[0]).not.toBe('unpaired')
+    expect(cov[5]).not.toBe('unpaired')
+  })
+
+  it('overhangHasDuplex', () => {
+    expect(overhangHasDuplex(design([dx(0, 3, 5, 2)]), 'ohA')).toBe(true)
+    expect(overhangHasDuplex(design([]), 'ohA')).toBe(false)
+  })
+
+  it('duplexClusterForOverhang: matches the driver directly and the driven via domain_ids', () => {
+    const d = {
+      strands: [{ id: 's1', domains: [{ overhang_id: 'ohDrv' }, { overhang_id: 'ohDvn' }] }],
+      cluster_transforms: [
+        { id: 'plain', overhang_duplex_driver_id: null, domain_ids: [] },
+        { id: 'dc1', overhang_duplex_driver_id: 'ohDrv',
+          domain_ids: [{ strand_id: 's1', domain_index: 1 }] },   // domain 1 = ohDvn
+      ],
+    }
+    expect(duplexClusterForOverhang(d, 'ohDrv')?.id).toBe('dc1')   // driver
+    expect(duplexClusterForOverhang(d, 'ohDvn')?.id).toBe('dc1')   // driven via domain_ids
+    expect(duplexClusterForOverhang(d, 'ohOther')).toBeNull()      // unrelated overhang
+    expect(duplexClusterForOverhang({}, 'ohDrv')).toBeNull()       // empty design
+  })
+
+  it('overhangDuplexSegments: paired run then toehold run, 5\'→3\'', () => {
+    const d = design([dx(0, 3, 5, 2)])
+    const segs = overhangDuplexSegments(d, 'ohA')
+    expect(segs.map(s => `${s.kind}:${s.text}`)).toEqual(['paired:AAAC', 'toehold:GG'])
+  })
+
+  it('overhangRcOfPartner: RC only the paired window, PRESERVE the toehold (keep length)', () => {
+    // 4 bp duplex on the 6 bp ohA (window offsets 0-3, toehold "GG" at offsets 4-5).
+    // Partner ohB="AAACCC" (non-complementary) so the paired window visibly changes.
+    const d = { ...design([dx(0, 3, 5, 2)]), overhangs: [{ id: 'ohA', sequence: 'AAACGG' }, { id: 'ohB', sequence: 'AAACCC' }] }
+    // window ← RC of the aligned ohB bases (antiparallel), toehold "GG" untouched.
+    expect(overhangRcOfPartner(d, 'ohA', 'ohB')).toBe('GTTTGG')
+    // …and the result IS complementary to ohB over the window now.
+    const d2 = { ...d, overhangs: [{ id: 'ohA', sequence: 'GTTTGG' }, { id: 'ohB', sequence: 'AAACCC' }] }
+    expect(classifyDuplex(d2, d2.duplexes[0]).positions.every(p => p.complementary)).toBe(true)
+  })
+
+  it('overhangRcOfPartner: no duplex → full RC over the shorter length (root-aligned)', () => {
+    const d = { ...design([]), overhangs: [{ id: 'ohA', sequence: 'AAACGG' }, { id: 'ohB', sequence: 'AAACCC' }] }
+    expect(overhangRcOfPartner(d, 'ohA', 'ohB')).toBe('GGGTTT')   // RC(AAACCC)
+  })
+
+  it('overhangRcOfPartner: null when the overhang has no backing domain', () => {
+    expect(overhangRcOfPartner({ strands: [], overhangs: [], duplexes: [] }, 'ohA', 'ohB')).toBe(null)
   })
 })
 

@@ -17,6 +17,7 @@ from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP, SSDNA_RISE_PER_BASE_NM
 from backend.core.flexible_segments import (
+    _gate,
     all_cluster_gates,
     apply_marks,
     cluster_flexible_gate,
@@ -126,6 +127,34 @@ def test_gate_false_when_unmarked_rigid_crossing():
     g = cluster_flexible_gate(_hinge_design(), "cl_a")
     assert g["gate"] is False
     assert len(g["rigid_blocking"]) >= 1
+
+
+def test_gate_treats_duplex_child_cluster_as_transparent():
+    """An overhang-duplex CHILD cluster is a movable connector, not a rigid pin — its
+    junction crossing must NOT disable a parent cluster's 'ssDNA constrained' gate.
+    (Regression: materializing a duplex into its own cluster flipped the parents' gate
+    to False.) Synthetic graph: cl_a has a MARKED flexible crossing to cl_b (should gate
+    open) AND an UNMARKED rigid crossing to the duplex child cl_dup (must be ignored)."""
+    F = Direction.FORWARD
+    a1, a2 = ("h_a", 5, F), ("h_a", 9, F)   # cl_a beads
+    d1 = ("h_d", 5, F)                       # duplex-child bead (overhang junction)
+    b1 = ("h_b", 0, F)                       # cl_b bead across a marked ssDNA run
+    adj = {a1: [d1], d1: [a1], a2: [b1], b1: [a2]}
+    bead_domain = {a1: ("scaf", 0), a2: ("scaf", 1), d1: ("ohstrand", 0), b1: ("scaf", 2)}
+    marked = {a2, b1}
+    owner = lambda k: {a1: "cl_a", a2: "cl_a", d1: "cl_dup", b1: "cl_b"}[k]  # noqa: E731
+
+    # Control: WITHOUT duplex transparency the overhang junction blocks the gate.
+    g_off = _gate("cl_a", adj, bead_domain, marked, owner, frozenset())
+    assert g_off["gate"] is False
+    assert len(g_off["rigid_blocking"]) == 1
+
+    # With cl_dup marked as a duplex child, its junction crossing is skipped → the
+    # marked cl_a↔cl_b crossing alone opens the gate.
+    g_on = _gate("cl_a", adj, bead_domain, marked, owner, frozenset({"cl_dup"}))
+    assert g_on["gate"] is True
+    assert g_on["rigid_blocking"] == []
+    assert g_on["n_crossings"] == 1
 
 
 # ── Three-layer guard ──────────────────────────────────────────────────────────

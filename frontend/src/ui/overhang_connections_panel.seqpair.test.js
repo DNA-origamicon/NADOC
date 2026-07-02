@@ -25,7 +25,13 @@ function design(seqA, seqB) {
         { id: IDA, label: 'OH1', sequence: seqA, sub_domains: [{ id: 'sdA', start_bp_offset: 0, length_bp: 4 }] },
         { id: IDB, label: 'OH2', sequence: seqB, sub_domains: [{ id: 'sdB', start_bp_offset: 0, length_bp: 4 }] },
       ],
-      strands: [], overhang_connections: [], overhang_bindings: [],
+      // Backing domains so overhangRcOfPartner (register-aware Gen) can resolve the
+      // overhang→domain register. No duplex → it does a full RC over the 4 bp.
+      strands: [
+        { id: 'sA', domains: [{ helix_id: 'h1', start_bp: 5, end_bp: 8, direction: 'FORWARD', overhang_id: IDA }] },
+        { id: 'sB', domains: [{ helix_id: 'h2', start_bp: 9, end_bp: 12, direction: 'FORWARD', overhang_id: IDB }] },
+      ],
+      overhang_connections: [], overhang_bindings: [],
     },
   }
 }
@@ -58,15 +64,20 @@ describe('overhang connections — per-side Gen, warning, Pair', () => {
   }
   beforeEach(() => { patchOverhang.mockClear(); generateOverhangRandomSequence.mockClear(); createOverhangBinding.mockClear() })
 
-  it('warns when both direct overhangs have non-complementary sequences', () => {
-    setup('AAAA', 'GGGG')   // RC(AAAA)=TTTT ≠ GGGG → not complementary
+  it('warns ONLY when the two overhangs share NO complementary region', () => {
+    setup('AAAA', 'GGGG')   // RC(AAAA)=TTTT vs GGGG → 0 complementary bases
     const warn = document.getElementById('oconn-pair-warning')
     expect(warn.hidden).toBe(false)
-    expect(warn.textContent).toMatch(/not complementary/i)
+    expect(warn.textContent).toMatch(/no complementary region/i)
   })
 
   it('no warning when the direct overhangs ARE complementary', () => {
     setup('AAAA', 'TTTT')   // RC(AAAA)=TTTT → complementary
+    expect(document.getElementById('oconn-pair-warning').hidden).toBe(true)
+  })
+
+  it('no warning on a PARTIAL complementary overlap (a real, partial pairing)', () => {
+    setup('AAAA', 'TTGG')   // RC(AAAA)=TTTT vs TTGG → 2 complementary bases
     expect(document.getElementById('oconn-pair-warning').hidden).toBe(true)
   })
 
@@ -98,7 +109,8 @@ describe('overhang connections — per-side Gen, warning, Pair', () => {
     setup('AAAA', null)
     document.getElementById('oconn-generate').dispatchEvent(new Event('click'))
     await tick()
-    expect(patchOverhang).toHaveBeenCalledWith(IDB, { sequence: 'TTTT' })
+    // Connect defers the staple re-derivation (apply re-derives once with the final topology).
+    expect(patchOverhang).toHaveBeenCalledWith(IDB, { sequence: 'TTTT', deferReassign: true })
     // Connect now creates a version + APPLIES it (backend makes the OverhangBinding
     // at the root sub-domains) — same path as end-to-root, not _createBindingForPair.
     expect(createOverhangBinding).not.toHaveBeenCalled()
@@ -108,7 +120,7 @@ describe('overhang connections — per-side Gen, warning, Pair', () => {
     setup('AAAA', 'GGGG')
     document.getElementById('oconn-generate').dispatchEvent(new Event('click'))
     await tick()
-    expect(patchOverhang).toHaveBeenCalledWith(IDB, { sequence: 'TTTT' })
+    expect(patchOverhang).toHaveBeenCalledWith(IDB, { sequence: 'TTTT', deferReassign: true })
   })
 
   it('Pair with neither present generates A then sets B = RC(A)', async () => {
@@ -119,7 +131,7 @@ describe('overhang connections — per-side Gen, warning, Pair', () => {
     setup(null, null)
     document.getElementById('oconn-generate').dispatchEvent(new Event('click'))
     await tick()
-    expect(generateOverhangRandomSequence).toHaveBeenCalledWith(IDA)
-    expect(patchOverhang).toHaveBeenCalledWith(IDB, { sequence: 'TTTT' })
+    expect(generateOverhangRandomSequence).toHaveBeenCalledWith(IDA, { deferReassign: true })
+    expect(patchOverhang).toHaveBeenCalledWith(IDB, { sequence: 'TTTT', deferReassign: true })
   })
 })

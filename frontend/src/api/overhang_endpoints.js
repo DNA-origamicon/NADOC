@@ -17,11 +17,14 @@ export async function extrudeOverhang({ helixId, bpIndex, direction, isFivePrime
   return _syncFromDesignResponse(json)
 }
 
-export async function patchOverhang(overhangId, { sequence, label, rotation } = {}) {
+export async function patchOverhang(overhangId, { sequence, label, rotation, deferReassign } = {}) {
   const body = {}
   if (sequence !== undefined) body.sequence = sequence
   if (label    !== undefined) body.label    = label
   if (rotation !== undefined) body.rotation = rotation
+  // Skip the per-write staple re-derivation when the caller (the connection-creation
+  // flow) will re-derive once at apply — avoids redundant full re-assignments.
+  if (deferReassign) body.defer_reassign = true
   const json = await _request('PATCH', `/design/overhang/${encodeURIComponent(overhangId)}`, body)
   return _syncFromDesignResponse(json)
 }
@@ -32,8 +35,9 @@ export async function patchOverhangRotationsBatch(ops) {
   return _syncFromDesignResponse(json)
 }
 
-export async function generateOverhangRandomSequence(overhangId) {
-  const json = await _request('POST', `/design/overhang/${encodeURIComponent(overhangId)}/generate-random`)
+export async function generateOverhangRandomSequence(overhangId, { deferReassign } = {}) {
+  const q = deferReassign ? '?defer_reassign=true' : ''
+  const json = await _request('POST', `/design/overhang/${encodeURIComponent(overhangId)}/generate-random${q}`)
   return _syncFromDesignResponse(json)
 }
 
@@ -271,6 +275,51 @@ export async function deleteOverhangBinding(bindingId) {
     'DELETE',
     `/design/overhang-bindings/${encodeURIComponent(bindingId)}`,
   )
+  return _syncFromDesignResponse(json)
+}
+
+// ── Proposal-B Duplex graph (register-bearing overhang pairing) ───────────────
+// See memory/project_overhang_duplex_foundation.md. These sit alongside the
+// legacy binding endpoints (retired in Phase 6).
+
+export async function createDuplex(body) {
+  // body: { left:{overhang_id,start_bp,end_bp}, right:{...}, driver?, bound?,
+  //         binding_mode?, allow_n_wildcard?, connection_type? }
+  const json = await _request('POST', '/design/duplexes', body)
+  return _syncFromDesignResponse(json)
+}
+
+export async function patchDuplex(duplexId, patch) {
+  // patch: subset of { left, right, driver, bound, name }
+  const json = await _request('PATCH', `/design/duplexes/${encodeURIComponent(duplexId)}`, patch)
+  return _syncFromDesignResponse(json)
+}
+
+export async function deleteDuplex(duplexId) {
+  const json = await _request('DELETE', `/design/duplexes/${encodeURIComponent(duplexId)}`)
+  return _syncFromDesignResponse(json)
+}
+
+export async function connectDuplex(body) {
+  // body: { overhang_a_id, overhang_a_attach, overhang_b_id, overhang_b_attach, driver?, allow_n_wildcard? }
+  // Producer: creates a display duplex at the attach ends (length = min, no resize).
+  // Returns null on a 409 (pair already connected) so callers can ignore duplicates.
+  const json = await _request('POST', '/design/duplexes/connect', body)
+  return _syncFromDesignResponse(json)
+}
+
+export async function syncDuplexesFromBindings() {
+  // Ensure every legacy OverhangBinding pair also has a display duplex (idempotent).
+  const json = await _request('POST', '/design/duplexes/sync-from-bindings')
+  return _syncFromDesignResponse(json)
+}
+
+export async function relaxDuplex(duplexId) {
+  // Proposal-B equivalent of relaxOverhangBinding for a duplex-backed direct
+  // connection with NO legacy OverhangBinding (e.g. a different-length root-to-root
+  // pair): same swing-about-driver-root + cluster-kinematics solve that closes the
+  // driven overhang's stretched tip↔root bond. The duplex must be bound.
+  const json = await _request('POST', `/design/duplexes/${encodeURIComponent(duplexId)}/relax`)
   return _syncFromDesignResponse(json)
 }
 

@@ -202,12 +202,16 @@ def batch_flexible_segment(body: FlexibleSegmentBatchBody) -> dict:
 
 @router.get("/design/flexible-connections", status_code=200)
 def get_flexible_connections() -> dict:
-    """Derived flexible connections + per-cluster gate (no mutation). The gate
-    tells the frontend which clusters can use 'ssDNA constrained' drag."""
+    """Derived flexible connections + per-cluster gate (no mutation). The gate tells the
+    frontend which clusters can use the 'Constrained (tethers)' drag via ssDNA segments;
+    ``connection_tether_clusters`` extends that availability to clusters constrained by an
+    applied overhang connection (direct duplex / ss-ds linker) even with no ssDNA marks."""
+    from backend.core.connection_tethers import clusters_with_connection_tethers
     from backend.core.flexible_segments import all_cluster_gates
     design = design_state.get_or_404()
     return {
         "connections": [c.model_dump() for c in design.flexible_connections],
         "gates": all_cluster_gates(design),
         "n_marks": len(design.flexible_segment_marks),
+        "connection_tether_clusters": clusters_with_connection_tethers(design),
     }

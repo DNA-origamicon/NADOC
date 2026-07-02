@@ -195,6 +195,8 @@ def compute_bind_topology(
     binding: OverhangBinding,
     *,
     driver_side: Optional[str] = None,
+    target_start_override: Optional[int] = None,
+    target_end_override: Optional[int] = None,
 ) -> BindTopology:
     """Describe the topology edit for binding *binding*.
 
@@ -271,6 +273,13 @@ def compute_bind_topology(
     )
     target_start_bp = driver_dom.end_bp
     target_end_bp = driver_dom.start_bp
+    # DIFFERENT-length duplex: relocate the driven's whole domain onto only the
+    # driver's PAIRED-WINDOW bp range (from the duplex register), not the driver's
+    # full domain — so a short driven doesn't get stretched to the long driver's
+    # length. Caller passes the window (already the antiparallel start/end).
+    if target_start_override is not None and target_end_override is not None:
+        target_start_bp = target_start_override
+        target_end_bp = target_end_override
 
     # Snapshot the driven side's pre-bind topology for unbind restoration.
     driven_helix = next((h for h in design.helices if h.id == driven_oh.helix_id), None)
@@ -527,13 +536,24 @@ def revert_bind_topology(design: Design, snapshot: Dict[str, Any]) -> Design:
             })
         new_strands.append(strand.model_copy(update={"domains": new_doms}))
 
-    # 3) Restore the driven OverhangSpec.helix_id.
+    # 3) Restore the driven OverhangSpec.helix_id, and zero the DRIVER's midpoint
+    #    placement (rotation + translation). Apply seated the duplex like a bridge by
+    #    writing BOTH onto the driver; they only positioned the now-reverted duplex, so
+    #    leaving them stale would leave the driver overhang rotated/shifted with no
+    #    duplex. (Direct connections start from an un-rotated overhang, so resetting to
+    #    identity restores the pre-apply pose.)
     prior_ovhg_helix_id = snapshot["prior_ovhg_helix_id"]
+    driver_oh_id = snapshot.get("driver_oh_id")
     new_overhangs = []
     for oh in design.overhangs:
         if oh.id == snapshot["driven_oh_id"]:
             new_overhangs.append(oh.model_copy(update={
                 "helix_id": prior_ovhg_helix_id,
+            }))
+        elif oh.id == driver_oh_id:
+            new_overhangs.append(oh.model_copy(update={
+                "rotation": [0.0, 0.0, 0.0, 1.0],
+                "translation": [0.0, 0.0, 0.0],
             }))
         else:
             new_overhangs.append(oh)
@@ -567,12 +587,20 @@ def revert_bind_topology(design: Design, snapshot: Dict[str, Any]) -> Design:
         fl_id = fl_dict.get("id")
         new_forced = [fl for fl in design.forced_ligations if fl.id != fl_id]
 
+    # Drop the auto-created duplex CLUSTER for this driver — the pose it carried is being
+    # torn down with the binding (the driver OverhangSpec was reset to identity above).
+    # [[overhang-duplex-cluster]] P1b.
+    driver = snapshot.get("driver_oh_id")
+    new_clusters = [c for c in design.cluster_transforms
+                    if c.overhang_duplex_driver_id != driver] if driver else design.cluster_transforms
+
     return design.model_copy(update={
         "helices": new_helices,
         "strands": new_strands,
         "overhangs": new_overhangs,
         "crossovers": restored_xovers,
         "forced_ligations": new_forced,
+        "cluster_transforms": new_clusters,
     })
 
 

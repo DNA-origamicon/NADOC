@@ -2131,6 +2131,47 @@ export async function deleteCluster(clusterId) {
   return _syncFromDesignResponse(json)
 }
 
+/** List an overhang-DUPLEX cluster's candidate rotation points (each overhang's root bead
+ *  + the centroid). Returns [{kind, overhang_id, label, point}]. Doc-aware (routes to this
+ *  tab's backend document). [[overhang-duplex-cluster]] P2. */
+export async function getClusterRotationPoints(clusterId) {
+  const json = await _request('GET', `/design/cluster/${encodeURIComponent(clusterId)}/rotation-points`)
+  return json?.rotation_points ?? []
+}
+
+/** Free-until-taut drag tethers for a DUPLEX cluster (each applied connection's backbone
+ *  bond as {moving, fixed, contour_nm}). Doc-aware. [[overhang-duplex-cluster]] P3. */
+export async function getClusterDuplexTethers(clusterId) {
+  const json = await _request('GET', `/design/cluster/${encodeURIComponent(clusterId)}/duplex-tethers`)
+  return json?.tethers ?? []
+}
+
+/** Free-until-taut drag tethers from a REGULAR cluster's applied overhang CONNECTIONS
+ *  (direct duplex + ss/ds linker bridge) to the partner cluster, as {moving, fixed,
+ *  contour_nm}. Merged with ssDNA flexible tethers for the "Constrained (tethers)" drag. */
+export async function getClusterConnectionTethers(clusterId) {
+  const json = await _request('GET', `/design/cluster/${encodeURIComponent(clusterId)}/connection-tethers`)
+  return json?.tethers ?? []
+}
+
+/** Movable intermediate links (overhang-duplex bodies) for dragging a regular cluster: each link
+ *  swings live to follow the drag, anchored to the fixed partner part. Carries its bonds to both
+ *  parts (`part_dragged` marks the bond on the dragged cluster). */
+export async function getClusterMovableLinks(clusterId) {
+  const json = await _request('GET', `/design/cluster/${encodeURIComponent(clusterId)}/movable-links`)
+  return json?.links ?? []
+}
+
+/** Set an overhang-DUPLEX cluster's rotation pivot to one of its candidate points
+ *  (an overhang's root bead — {kind:'overhang_root', overhangId} — or {kind:'centroid'}).
+ *  The backend rebases the translation so the geometry doesn't jump. [[overhang-duplex-cluster]] P2. */
+export async function setClusterRotationPoint(clusterId, { kind, overhangId } = {}) {
+  const body = { kind }
+  if (overhangId) body.overhang_id = overhangId
+  const json = await _request('POST', `/design/cluster/${encodeURIComponent(clusterId)}/rotation-point`, body)
+  return _syncFromDesignResponse(json)
+}
+
 /**
  * Plan B companion: ask the backend to re-emit ds-linker bridge nucs after a
  * cluster commit. Bridge midpoints are derived from live OH anchor positions,

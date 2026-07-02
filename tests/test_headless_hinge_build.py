@@ -20,7 +20,7 @@ import pytest
 
 from backend.api import headless_build as hb
 from backend.api import state as design_state
-from backend.api.headless_hinge_build import build_hinge, build_hinge_primitive
+from backend.api.headless_hinge_build import build_hinge, build_hinge_primitive, build_applied_2x2_binding
 from backend.core.models import Design
 from backend.core.scaffold_invariants import scaffold_routing_invariants
 from backend.core.validator import validate_design
@@ -342,3 +342,43 @@ def test_build_2x6_matches_golden():
     """AF-33 P2 load-bearing pin: the code-built 2x6 == the golden (3 links, no trims)."""
     d = build_hinge_primitive("2x6_triple_hinge_link")
     assert_matches_primitive(d, "2x6_triple_hinge_link", primitives_dir=_PRIMITIVES)
+
+
+# ── AF-FIXTURES: the relax_2x2 fixture builder (regenerates tests/fixtures/relax_2x2_*.nadoc) ──
+
+def test_build_applied_2x2_binding_is_valid_applied_duplex():
+    """The headless builder for the relax_2x2 fixtures produces a VALID two-leaf hinge with ONE
+    applied end-to-root binding: driver + driven overhang, the duplex on the shared gap helix
+    (in the driver leaf cluster), a revolute hinge joint on the driven leaf, and the derived
+    Duplex graph. (The six test_duplex_*/relax_2x2 files exercise it via the frozen fixtures;
+    this pins the builder itself so a drift in the pipeline is caught here.)"""
+    d = build_applied_2x2_binding()
+    assert validate_design(d).passed, "builder output must be a valid design"
+    assert len(d.overhangs) == 2 and len(d.overhang_bindings) == 1
+    b = d.overhang_bindings[0]
+    assert b.bound and b.connection_type == "end-to-root"
+    assert len(d.duplexes) == 1, "the Duplex graph must be derived (load-path parity)"
+    assert len(d.cluster_joints) == 1, "the driven leaf carries the revolute hinge joint"
+    # Both duplex domains land on the shared gap helix, which rides the DRIVER leaf cluster.
+    dup_dom_helices = {dm.helix_id for s in d.strands for dm in s.domains
+                       if dm.overhang_id in (b.driver_oh_id, b.driven_oh_id)}
+    assert "h_XY_2_0" in dup_dom_helices
+    cl1 = next(c for c in d.cluster_transforms if c.name == "Cluster 1")
+    assert "h_XY_2_0" in cl1.helix_ids
+
+
+def test_build_applied_2x2_binding_close_bond_is_over_compressed():
+    """close_bond=True seats the driven leaf so the tip↔root bond is OVER-compressed (< one
+    backbone bond ~0.67 nm) — the state the two-sided relax re-opens (test_duplex_relax's
+    over-compressed test). Pins that the compression actually lands under target."""
+    import numpy as np
+    from backend.core.direct_relax import _root_anchors
+    from backend.core.design_geometry import _geometry_for_design
+
+    d = build_applied_2x2_binding(close_bond=True)
+    assert validate_design(d).passed
+    b = d.overhang_bindings[0]
+    nucs = _geometry_for_design(d)
+    _pa, _ca, p_b, c_b = _root_anchors(d, nucs, b.driver_oh_id, b.driven_oh_id)
+    chord = float(np.linalg.norm(np.asarray(p_b, float) - np.asarray(c_b, float)))
+    assert chord < 0.67, f"close-bond chord {chord:.3f} nm should be under the ~0.67 nm target"

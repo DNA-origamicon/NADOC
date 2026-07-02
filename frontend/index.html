@@ -1022,6 +1022,37 @@
       position: absolute; pointer-events: none;
     }
 
+    /* ── Move / Rotate panel ─────────────────────────────────────────── */
+    .mr-panel { padding: var(--space-3, 12px) var(--space-4, 16px) var(--space-4, 16px); }
+    .mr-title {
+      font-size: var(--text-xs, 11px); font-weight: var(--weight-semibold, 600);
+      text-transform: uppercase; letter-spacing: var(--tracking-uppercase, .06em);
+      color: var(--color-text-muted, #8b949e);
+      margin: 0 0 var(--space-3, 12px);
+    }
+    .mr-section-label {
+      font-size: var(--text-xs, 11px); text-transform: uppercase; letter-spacing: .05em;
+      color: var(--color-text-dim, #6e7681);
+      margin: var(--space-2, 8px) 0 var(--space-1, 4px);
+    }
+    .mr-row { gap: var(--space-2, 8px); margin-bottom: var(--space-2, 8px); }
+    .mr-panel .mr-label { width: 48px; color: var(--color-text-muted, #8b949e); font-size: var(--text-sm, 12px); }
+    .mr-panel input.mr-num {
+      width: 60px; background: var(--color-bg-canvas, #0d1117);
+      border: 1px solid var(--color-border-default, #30363d); border-radius: var(--radius-md, 6px);
+      color: var(--color-text-primary, #e6edf3); padding: 4px 8px; font-size: var(--text-sm, 12px);
+    }
+    .mr-panel input.mr-num:focus { outline: none; border-color: var(--color-accent, #58a6ff); }
+    .mr-select {
+      flex: 1; min-width: 0; background: var(--color-bg-canvas, #0d1117);
+      border: 1px solid var(--color-border-default, #30363d); border-radius: var(--radius-md, 6px);
+      color: var(--color-text-secondary, #c9d1d9); padding: 4px 8px; font-size: var(--text-sm, 12px);
+    }
+    .mr-step { padding: 4px 8px; font-size: var(--text-xs, 11px); flex-shrink: 0; }
+    .mr-check { cursor: pointer; color: var(--color-text-secondary, #c9d1d9); font-size: var(--text-sm, 12px); }
+    .mr-check input { cursor: pointer; width: auto; }
+    .mr-check span { color: var(--color-text-secondary, #c9d1d9); }
+
     /* ── Assembly fixed-instance lock indicator ──────────────────────── */
     .asm-fixed-indicator {
       position: absolute;
@@ -5059,45 +5090,51 @@
           </div>
         </div>
 
-        <div class="panel-section" id="move-rotate-panel" style="display:none">
-          <h2>Move / Rotate</h2>
+        <div class="panel-section mr-panel" id="move-rotate-panel" style="display:none">
+          <div class="mr-title">Move / Rotate</div>
 
           <!-- Cluster selector -->
-          <div class="def-row" style="margin-bottom:6px">
-            <label>Cluster</label>
-            <select id="mr-cluster-sel" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)"></select>
+          <div class="def-row mr-row">
+            <label class="mr-label">Cluster</label>
+            <select id="mr-cluster-sel" class="mr-select"></select>
           </div>
 
           <!-- Translation -->
-          <div style="font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;margin-top:4px">Translation (nm)</div>
-          <div class="def-row"><label>X</label><input type="number" id="mr-tx" step="0.1"><span class="unit">nm</span></div>
-          <div class="def-row"><label>Y</label><input type="number" id="mr-ty" step="0.1"><span class="unit">nm</span></div>
-          <div class="def-row"><label>Z</label><input type="number" id="mr-tz" step="0.1"><span class="unit">nm</span></div>
+          <div class="mr-section-label">Translation (nm)</div>
+          <div class="def-row mr-row"><label class="mr-label">X</label><input type="number" id="mr-tx" class="mr-num" step="0.1"><span class="unit">nm</span></div>
+          <div class="def-row mr-row"><label class="mr-label">Y</label><input type="number" id="mr-ty" class="mr-num" step="0.1"><span class="unit">nm</span></div>
+          <div class="def-row mr-row"><label class="mr-label">Z</label><input type="number" id="mr-tz" class="mr-num" step="0.1"><span class="unit">nm</span></div>
 
           <!-- Rotation section (hidden when joint pivot active) -->
           <div id="mr-rotation-section">
-            <div style="font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;margin-top:4px">Rotation (°)</div>
-            <div class="def-row"><label>X</label><input type="number" id="mr-rx" step="1"><span class="unit">°</span></div>
-            <div class="def-row"><label>Y</label><input type="number" id="mr-ry" step="1"><span class="unit">°</span></div>
-            <div class="def-row"><label>Z</label><input type="number" id="mr-rz" step="1"><span class="unit">°</span></div>
+            <div class="mr-section-label">Rotation (°)</div>
+            <div class="def-row mr-row"><label class="mr-label">X</label><button class="def-btn mr-step" id="mr-rx-dec" title="Rotate −45° about X">−45</button><input type="number" id="mr-rx" class="mr-num" step="1"><button class="def-btn mr-step" id="mr-rx-inc" title="Rotate +45° about X">+45</button><span class="unit">°</span></div>
+            <div class="def-row mr-row"><label class="mr-label">Y</label><button class="def-btn mr-step" id="mr-ry-dec" title="Rotate −45° about Y">−45</button><input type="number" id="mr-ry" class="mr-num" step="1"><button class="def-btn mr-step" id="mr-ry-inc" title="Rotate +45° about Y">+45</button><span class="unit">°</span></div>
+            <div class="def-row mr-row"><label class="mr-label">Z</label><button class="def-btn mr-step" id="mr-rz-dec" title="Rotate −45° about Z">−45</button><input type="number" id="mr-rz" class="mr-num" step="1"><button class="def-btn mr-step" id="mr-rz-inc" title="Rotate +45° about Z">+45</button><span class="unit">°</span></div>
           </div>
 
           <!-- Joint angle section (shown instead of rotation when pivot = joint) -->
           <div id="mr-joint-angle-section" style="display:none">
-            <div style="font-size:var(--text-xs);color:#ff8800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;margin-top:4px">Joint Rotation (°)</div>
-            <div class="def-row"><label style="color:#ff8800">°</label><input type="number" id="mr-ja" step="1"><span class="unit" style="color:#ff8800">°</span></div>
+            <div class="mr-section-label" style="color:#ff8800">Joint Rotation (°)</div>
+            <div class="def-row mr-row"><label class="mr-label" style="color:#ff8800">°</label><input type="number" id="mr-ja" class="mr-num" step="1"><span class="unit" style="color:#ff8800">°</span></div>
           </div>
 
+          <!-- Snap toggle -->
+          <label class="def-row mr-row mr-check">
+            <input type="checkbox" id="mr-snap-45"><span>Snap rotation to 45°</span>
+          </label>
+
           <!-- Pivot -->
-          <div class="def-row" style="margin-top:6px">
-            <label>Pivot</label>
-            <select id="mr-pivot-sel" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+          <div class="def-row mr-row">
+            <label class="mr-label">Pivot</label>
+            <select id="mr-pivot-sel" class="mr-select">
               <option value="centroid">Centroid</option>
             </select>
           </div>
 
-          <!-- Apply / Cancel -->
+          <!-- Reset / Cancel / Apply -->
           <div class="def-btn-row">
+            <button class="def-btn" id="mr-reset-btn" title="Discard this move — restore the affected clusters to their saved positions">Reset</button>
             <button class="def-btn" id="mr-cancel-btn">Cancel</button>
             <button class="def-btn primary" id="mr-apply-btn">Apply</button>
           </div>

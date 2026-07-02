@@ -214,6 +214,16 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
       badge.textContent = cluster.is_default ? `◆ ${countStr}` : countStr
       if (cluster.is_default) badge.title = 'Auto-created default cluster'
 
+      // Duplex tag — clusters that carry an overhang duplex (made from a connection).
+      // Rotation-point dropdown (root/centroid) lives on the Move/Rotate panel.
+      let duplexTag = null
+      if (cluster.overhang_duplex_driver_id) {
+        duplexTag = document.createElement('span')
+        duplexTag.textContent = '⛓'
+        duplexTag.title = 'Overhang-duplex cluster — pick a rotation point in Move/Rotate'
+        duplexTag.style.cssText = 'font-size:var(--text-xs);color:#57d0b0;flex-shrink:0'
+      }
+
       // Visibility toggle button
       const isHidden = _hiddenClusterIds.has(cluster.id)
       const _visOnStyle  = 'background:transparent;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
@@ -254,7 +264,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
         onClusterClick(cluster.id)
       })
 
-      row.append(dot, nameSpan, badge, visBtn, editBtn, delBtn)
+      row.append(dot, nameSpan, ...(duplexTag ? [duplexTag] : []), badge, visBtn, editBtn, delBtn)
       listEl.appendChild(row)
     }
   }

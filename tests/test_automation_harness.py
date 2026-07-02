@@ -463,7 +463,9 @@ def test_oxdna_coverage_report_separate_from_design_assembly():
     # direct-bind relax: relax_overhang_binding + relax_end_to_root (52→54).
     # Unifying direct connections (2026-06-30) dropped /relax-end-to-root + its wrapper;
     # relax_overhang_binding now covers both direct types (54→53).
-    assert headless_coverage_report()["covered"] == 53  # /oxdna audit is separate
+    # Proposal-B duplex graph: connect_duplex (53→54) + add_strand_extension (54→55)
+    # + relax_duplex (55→56).
+    assert headless_coverage_report()["covered"] == 56  # /oxdna audit is separate
     ox = oxdna_coverage_report()
     assert ox["total"] == ox["covered"] + ox["uncovered"]
     covered = {r["endpoint"] for r in ox["covered_routes"]}
@@ -1084,14 +1086,21 @@ def test_bond_relaxed_pose_oracle_fires_on_noop():
 # test_direct_binding_relaxed_pose_oracle_* below.
 
 
-def _relaxed_direct_binding_pair(*, same_body=False):
+def _relaxed_direct_binding_pair(*, same_body=False,
+                                 cluster_b_translation=(8.0, 0.0, 0.0)):
     """(before, after, driver_oh_id, driven_oh_id): an applied DIRECT binding and
-    its relaxed result via hb.relax_overhang_binding (the unified solve)."""
+    its relaxed result via hb.relax_overhang_binding (the unified solve).
+
+    ``cluster_b_translation`` sets the separate-cluster gap. Apply now SEATS the duplex
+    at the oriented midpoint (both bonds minimized), so a *large* gap is needed for the
+    separate-cluster relax to still have a stretched residual to close (a small gap is
+    already closed by placement → a valid no-op). Ignored when ``same_body``."""
     from backend.api import headless_build as hb
     from backend.api import state as design_state
     from tests.test_headless_build import _applied_direct_binding
 
-    before, bid = _applied_direct_binding(same_body=same_body)
+    kw = {} if same_body else {"cluster_b_translation": cluster_b_translation}
+    before, bid = _applied_direct_binding(same_body=same_body, **kw)
     design_state.set_design(before)
     after = hb.relax_overhang_binding(bid)
     return before, after.model_copy(deep=True), "oh_a", "oh_b"
@@ -1107,12 +1116,25 @@ def test_direct_binding_relaxed_pose_oracle_passes_on_real_relax():
 
 
 def test_direct_binding_relaxed_pose_oracle_accepts_same_body_swing():
-    """Same-rigid-body relax moves NO cluster but swings the duplex (the driver's
-    overhang rotation) — the oracle's pose-moved clause accepts the rotation change."""
+    """Same-rigid-body: apply now seats the duplex at the ORIENTED midpoint, so the
+    swing the relax used to perform is already applied — the relax is a valid no-op
+    (no cluster can move, orientation already optimal). The oracle passes as a
+    topology-only check (require_reduced=False), and we confirm apply already closed
+    the bond to within ~one backbone step of the target."""
+    import math
+
+    from backend.core.direct_relax import _bead_pos, _find_driven_tip_and_root
+    from backend.api.crud import _geometry_for_design
     from tests.automation_harness import assert_direct_binding_relaxed_pose
 
     before, after, drv, dvn = _relaxed_direct_binding_pair(same_body=True)
-    assert_direct_binding_relaxed_pose(before, after, drv, dvn)
+    assert_direct_binding_relaxed_pose(before, after, drv, dvn, require_reduced=False)
+    # Apply's oriented placement already minimized the same-body bond.
+    s, _i, td, rd, cb, cr = _find_driven_tip_and_root(before, dvn)
+    nucs = _geometry_for_design(before)
+    chord = math.dist(_bead_pos(nucs, strand_id=s.id, helix_id=td.helix_id, bp=cb),
+                      _bead_pos(nucs, strand_id=s.id, helix_id=rd.helix_id, bp=cr))
+    assert chord < 1.5, chord
 
 
 def test_direct_binding_relaxed_pose_oracle_fires_on_noop():

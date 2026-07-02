@@ -15,6 +15,31 @@ import { registerShortcut } from '../input/shortcuts.js'
  * getEditContext/setEditContext shims. `jointRenderer` is declared AFTER this
  * factory in main(), so it is injected lazily via getJointRenderer().
  */
+/**
+ * Pure decision for the selection→tool bridge. Given the current selection and tool
+ * state, decide whether selecting a cluster should open the Move/Rotate tool, re-target
+ * it to a different cluster, close it (deselection), or do nothing.
+ *
+ * Parts-editor only: open/retarget/close are gated so nothing fires in assembly / cadnano
+ * / unfold modes. Auto-close only applies to tools that were AUTO-opened by selection —
+ * manually-opened tools (toolbar / hotkey / right-click) stay sticky until Apply/Cancel.
+ *
+ * @returns {{ action: 'open'|'retarget'|'close'|'none', clusterId: string|null }}
+ */
+export function decideSelectionAction({ newSel, toolActive, autoOpened, activeClusterId, mode }) {
+  const partsEditor = !!mode && !mode.assemblyActive && !mode.cadnanoActive && !mode.unfoldActive
+  const newCid = newSel?.type === 'cluster' ? (newSel.data?.cluster_id ?? newSel.id ?? null) : null
+  if (!toolActive) {
+    if (partsEditor && newCid) return { action: 'open', clusterId: newCid }
+    return { action: 'none', clusterId: null }
+  }
+  // Tool active: only selection-opened tools react to selection changes.
+  if (!autoOpened) return { action: 'none', clusterId: null }
+  if (!newCid) return { action: 'close', clusterId: null }
+  if (newCid !== activeClusterId) return { action: 'retarget', clusterId: newCid }
+  return { action: 'none', clusterId: null }
+}
+
 export function initTranslateRotateTool(deps) {
   const {
     store, scene, camera, canvas,
@@ -69,6 +94,10 @@ export function initTranslateRotateTool(deps) {
   const _reemitClusterBridges = reemitClusterBridges
   const _refreshClusterOverlays = refreshClusterOverlays
 
+  // True while the tool was opened by selecting a cluster (vs. toolbar/hotkey/right-click).
+  // Only auto-opened sessions auto-close when the cluster is deselected.
+  let _autoOpened = false
+
   async function _onToolPickPointerDown(e) {
     if (e.button != null && e.button !== 0) return
 
@@ -121,7 +150,8 @@ export function initTranslateRotateTool(deps) {
   _confirmBtn.addEventListener('mouseleave', () => { _confirmBtn.style.background = '#1a6b2a'; _confirmBtn.style.transform = 'scale(1)' })
   document.body.appendChild(_confirmBtn)
 
-  async function _activateTranslateRotateTool(targetClusterId = null) {
+  async function _activateTranslateRotateTool(targetClusterId = null, auto = false) {
+    _autoOpened = auto
     const { assemblyActive, activeInstanceId, currentDesign } = store.getState()
 
     // ── Assembly mode: attach instance gizmo ────────────────────────────────
@@ -185,8 +215,14 @@ export function initTranslateRotateTool(deps) {
     const initJoints = store.getState().currentDesign?.cluster_joints?.filter(j => j.cluster_id === first.id) ?? []
     _mrSetPivotOptions(initJoints, first.id)
     _mrSetSelectedPivot('centroid')
-    const [irx, iry, irz] = quatToEulerDeg(first.rotation)
-    _mrSetTransformValues(first.translation[0], first.translation[1], first.translation[2], irx, iry, irz)
+    // Read from the gizmo's pending (pivot-rebased) transform when present so the number
+    // boxes match the pivot the gizmo actually uses (duplex pivot teleport fix — see
+    // move_rotate_panel / cluster P2 notes).
+    const _pend = clusterGizmo.getPendingTransform(first.id)
+    const _t = _pend?.translation ?? first.translation
+    const _r = _pend?.rotation ?? first.rotation
+    const [irx, iry, irz] = quatToEulerDeg(_r)
+    _mrSetTransformValues(_t[0], _t[1], _t[2], irx, iry, irz)
     if (_mrPanel) _mrPanel.style.display = ''
   }
 
@@ -233,6 +269,7 @@ export function initTranslateRotateTool(deps) {
   async function _confirmTranslateRotateTool() {
     if (!getActive()) return
     setActive(false)
+    _autoOpened = false
     _confirmBtn.style.display = 'none'
     if (_mrPanel) _mrPanel.style.display = 'none'
 
@@ -415,6 +452,7 @@ export function initTranslateRotateTool(deps) {
     if (!getActive()) return
     const hadLocalPreview = getClusterDirty()
     setActive(false)
+    _autoOpened = false
     _confirmBtn.style.display = 'none'
     if (_mrPanel) _mrPanel.style.display = 'none'
     // Drop any cluster_op edit context so the next gizmo session takes the
@@ -463,9 +501,91 @@ export function initTranslateRotateTool(deps) {
     if (cancelRestoreCursor !== null) await api.seekFeatures(cancelRestoreCursor)
   }
 
+  // Selection→tool bridge: opening/re-targeting/closing the tool in response to cluster
+  // selection (3D cluster-filter click OR Movable Clusters sidebar row — both surface as a
+  // `selectedObject` of type 'cluster'). Registered from main.js beside the other tool
+  // subscribers so subscription order is explicit.
+  async function _handleSelectionChange(newState, prevState) {
+    if (newState.selectedObject === prevState.selectedObject) return
+    const { action, clusterId } = decideSelectionAction({
+      newSel:          newState.selectedObject,
+      toolActive:      getActive(),
+      autoOpened:      _autoOpened,
+      activeClusterId: newState.activeClusterId,
+      mode: {
+        assemblyActive: newState.assemblyActive,
+        cadnanoActive:  newState.cadnanoActive,
+        unfoldActive:   newState.unfoldActive,
+      },
+    })
+    if (action === 'open') {
+      await _activateTranslateRotateTool(clusterId, true)
+    } else if (action === 'retarget') {
+      // attach() re-sets activeClusterId, which fires the active-cluster subscriber in
+      // main.js (repopulates fields / pivot options / cluster dropdown / centroid constraint).
+      await _refreshClusterPivotForAttach(clusterId)
+      clusterGizmo.attach(clusterId, scene, camera, canvas)
+    } else if (action === 'close') {
+      // Deselection auto-commits pending transforms (safer than discarding a stray move).
+      await _confirmTranslateRotateTool()
+    }
+  }
+
+  // "Reset" — discard the in-progress (uncommitted) move and restore the affected clusters to
+  // their currently-SAVED positions, WITHOUT leaving the tool: exactly what exiting and
+  // re-entering Move/Rotate would show. (Contrast the old behavior, which zeroed to the
+  // identity/creation pose.) Reuses the cancel path's pending-discard + geometry-restore, then
+  // re-attaches the gizmo at the committed pose so the user can keep working.
+  async function _resetActiveClusterToSaved() {
+    if (!getActive()) return
+
+    if (store.getState().assemblyActive) {
+      const { activeInstanceId, currentAssembly } = store.getState()
+      instanceGizmo.detach()
+      _assemblyPendingTransforms.clear()
+      _assemblyPendingPartJoints.clear()
+      if (currentAssembly) {
+        await assemblyRenderer.rebuild(currentAssembly)
+        assemblyRenderer.rebuildLinkers(currentAssembly)
+        assemblyJointRenderer.rebuild(currentAssembly)
+        _syncAssemblyBluntEnds()
+      }
+      // Re-attach at the saved instance matrix so the user can keep moving.
+      if (activeInstanceId) {
+        const ctx = _createAssemblyTransformContext(activeInstanceId)
+        if (ctx) {
+          _moveRotatePanel.setAssemblyCtx(ctx)
+          _attachGroupGizmo(activeInstanceId, ctx)
+          _mrSetTransformValuesFromMatrix(ctx.primaryStart)
+        }
+      }
+      return
+    }
+
+    // Design mode: drop pending transforms (dragged cluster + any movable-link bodies), revert
+    // the live-paint preview to the committed geometry, then re-attach at the saved pose.
+    const clusterId = store.getState().activeClusterId
+    if (!clusterId) return
+    const hadPreview = getClusterDirty()
+    setClusterDirty(false)
+    clusterGizmo.discardPendingTransforms?.()
+    if (hadPreview) {
+      _showProgress('Resetting', 'Restoring saved positions…', { indeterminate: true })
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      try {
+        await _restoreTransformPreviewFromStore()
+      } finally {
+        _hideProgress()
+      }
+    }
+    await _refreshClusterPivotForAttach(clusterId)
+    clusterGizmo.attach(clusterId, scene, camera, canvas)
+  }
+
   _confirmBtn.addEventListener('click', _confirmTranslateRotateTool)
   document.getElementById('mr-apply-btn')?.addEventListener('click', _confirmTranslateRotateTool)
   document.getElementById('mr-cancel-btn')?.addEventListener('click', _cancelTranslateRotateTool)
+  document.getElementById('mr-reset-btn')?.addEventListener('click', _resetActiveClusterToSaved)
 
   document.getElementById('menu-tools-translate-rotate')?.addEventListener('click', () => {
     _activateTranslateRotateTool()
@@ -488,7 +608,9 @@ export function initTranslateRotateTool(deps) {
     activate: _activateTranslateRotateTool,
     confirm: _confirmTranslateRotateTool,
     cancel: _cancelTranslateRotateTool,
+    resetToSaved: _resetActiveClusterToSaved,
     rotateJoint: _rotateJoint,
+    handleSelectionChange: _handleSelectionChange,
     removeToolPickListeners: _removeToolPickListeners,
     hideConfirmBtn: () => { _confirmBtn.style.display = 'none' },
   }

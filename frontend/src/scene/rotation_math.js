@@ -32,6 +32,29 @@ export function posEulerFromMatrix(matrix4) {
   return { pos: [pos.x, pos.y, pos.z], euler: [rx, ry, rz] }
 }
 
+const _AXIS_VECS = {
+  x: new THREE.Vector3(1, 0, 0),
+  y: new THREE.Vector3(0, 1, 0),
+  z: new THREE.Vector3(0, 0, 1),
+}
+
+/**
+ * Compose a relative rotation of `deg` about a WORLD axis onto the current pose.
+ * Takes the current XYZ-Euler degrees, world-premultiplies a `deg`-about-axis
+ * increment (matching the world-space cluster gizmo), and returns the resulting
+ * XYZ-Euler degrees. `axis` is 'x' | 'y' | 'z'.
+ */
+export function stepEulerDeg(eulerDeg, axis, deg) {
+  const vec = _AXIS_VECS[axis]
+  if (!vec) return [eulerDeg[0], eulerDeg[1], eulerDeg[2]]
+  const toRad = d => d * (Math.PI / 180)
+  const qCur = new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(toRad(eulerDeg[0]), toRad(eulerDeg[1]), toRad(eulerDeg[2]), 'XYZ'))
+  const qStep = new THREE.Quaternion().setFromAxisAngle(vec, toRad(deg))
+  const qNew = qStep.multiply(qCur) // world-space (pre-multiply)
+  return quatToEulerDeg([qNew.x, qNew.y, qNew.z, qNew.w])
+}
+
 /** Swing-twist decomposition: signed rotation angle (degrees) about joint.axis_direction. */
 export function extractJointAngleDeg(quaternion, joint) {
   const axisDir = new THREE.Vector3(...joint.axis_direction).normalize()

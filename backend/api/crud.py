@@ -1295,6 +1295,8 @@ def load_design(body: FilePathRequest) -> dict:
     design = autodetect_all_overhangs(design)
     design = _fix_stale_ovhg_pivots(design)
     design = _backfill_sub_domains_if_empty(design)
+    design = _derive_duplexes_if_empty(design)
+    design = _materialize_duplex_clusters_on_load(design)
     design = _recompute_flexible_connections(design)
     design_state.clear_history()   # fresh baseline — no undo into previous session
     design_state.set_design(design)
@@ -1327,6 +1329,8 @@ def import_design(body: DesignImportRequest) -> dict:
     design = autodetect_all_overhangs(design)
     design = _fix_stale_ovhg_pivots(design)
     design = _backfill_sub_domains_if_empty(design)
+    design = _derive_duplexes_if_empty(design)
+    design = _materialize_duplex_clusters_on_load(design)
     design = _recompute_flexible_connections(design)
     design_state.clear_history()
     design_state.set_design(design)
@@ -2491,7 +2495,11 @@ def convert_binder_to_scaffold_endpoint(strand_id: str) -> dict:
 def _build_strand_end_resize(d: Design, body: 'StrandEndResizeRequest') -> Design:
     """Pure builder for a strand end resize."""
     from backend.core.lattice import resize_strand_ends
-    return resize_strand_ends(d, [entry.model_dump() for entry in body.entries])
+    from backend.core.duplex import drop_invalid_duplexes
+    out = resize_strand_ends(d, [entry.model_dump() for entry in body.entries])
+    # A shrink can push a duplex register out of its (now shorter) domain; drop
+    # such duplexes so the resize doesn't break the connections graph.
+    return drop_invalid_duplexes(out)
 
 
 @router.post("/design/strand-end-resize", status_code=200)
@@ -2527,7 +2535,19 @@ def strand_end_resize(body: StrandEndResizeRequest) -> dict:
 def _build_domain_shift(d: Design, body: 'DomainShiftRequest') -> Design:
     """Pure builder for a domain-shift batch."""
     from backend.core.lattice import shift_domains
-    return shift_domains(d, [entry.model_dump() for entry in body.entries])
+    from backend.core.duplex import shift_duplex_ends, drop_invalid_duplexes
+    # Map each moved overhang → its Δbp (pre-shift), so its duplex ends move with
+    # it and the SAME bases stay paired (Q1: a move preserves the register).
+    deltas: dict[str, int] = {}
+    for entry in body.entries:
+        strand = next((s for s in d.strands if s.id == entry.strand_id), None)
+        if strand and 0 <= entry.domain_index < len(strand.domains):
+            oid = strand.domains[entry.domain_index].overhang_id
+            if oid:
+                deltas[oid] = deltas.get(oid, 0) + entry.delta_bp
+    out = shift_domains(d, [entry.model_dump() for entry in body.entries])
+    out = shift_duplex_ends(out, deltas)
+    return drop_invalid_duplexes(out)
 
 
 @router.post("/design/domain-shift", status_code=200)
@@ -4501,6 +4521,12 @@ class OverhangPatchRequest(BaseModel):
     sequence: str | None = None
     label: str | None = None
     rotation: list[float] | None = None  # unit quaternion [qx, qy, qz, qw]; None = no change
+    # When True, skip the auto re-derivation of staple sequences after a sequence write.
+    # Used by the connection-CREATION flow, which sets both overhangs' sequences then
+    # immediately applies the connection (which re-derives once, with the FINAL topology) —
+    # so the intermediate per-set re-derivations are redundant. Standalone edits leave this
+    # False (default) and re-derive as before.
+    defer_reassign: bool = False
 
 
 def _build_overhang_patch(design: Design, overhang_id: str, body: 'OverhangPatchRequest') -> tuple[Design, dict, OverhangSpec]:
@@ -4784,7 +4810,7 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     # (binds_overhang_id) that reads this overhang's reverse-complement, so the
     # result is simulation-ready without a manual Assign Staple Sequences. No-op
     # until the scaffold is sequenced.
-    if sequence_was_set:
+    if sequence_was_set and not body.defer_reassign:
         from backend.core.sequences import reassign_if_sequenced
         updated = reassign_if_sequenced(updated)
 
@@ -5735,7 +5761,7 @@ def random_sequence(body: RandomSequenceRequest) -> dict:
 
 
 @router.post("/design/overhang/{overhang_id}/generate-random", status_code=200)
-def generate_overhang_random_sequence(overhang_id: str) -> dict:
+def generate_overhang_random_sequence(overhang_id: str, defer_reassign: bool = False) -> dict:
     """Generate a rare, structure-safe sequence for a single undefined overhang.
 
     The generated sequence has the same length as the current overhang domain.
@@ -5887,8 +5913,9 @@ def generate_all_overhang_sequences() -> dict:
     updated = design.model_copy(update={"overhangs": new_overhangs})
 
     # Re-derive assembled sequences for affected strands (only if scaffold is sequenced).
+    # Skipped when the caller defers (the connection-creation flow re-derives once at apply).
     scaffold = updated.scaffold()
-    if scaffold is not None and scaffold.sequence is not None:
+    if scaffold is not None and scaffold.sequence is not None and not defer_reassign:
         strands_with_seq = {s.id for s in design.strands if s.sequence is not None}
         to_update = affected_strand_ids & strands_with_seq
         if to_update:
@@ -6014,6 +6041,48 @@ def _backfill_sub_domains_if_empty(design: Design) -> Design:
     if not needs_update:
         return design
     return design.model_copy(update={"overhangs": new_overhangs})
+
+
+def _derive_duplexes_if_empty(design: Design) -> Design:
+    """Bridge helper (Proposal-B Phase 3) called from load/import paths.
+
+    Populate ``design.duplexes`` from legacy ``OverhangBinding`` records so an
+    existing design shows the register-bearing pairing graph (multivalency,
+    toeholds, mismatch colours) in the UI. Read-only + one-time: fires only when
+    ``duplexes`` is empty AND bindings exist. The bindings are left intact (they
+    still drive geometry/relax until Phase 4; retired in Phase 6). Idempotent —
+    a design that already carries duplexes is returned unchanged. See
+    ``memory/project_overhang_duplex_foundation.md``.
+    """
+    if design.duplexes or not design.overhang_bindings:
+        return design
+    from backend.core.duplex import synthesize_duplexes_from_bindings
+    dux = synthesize_duplexes_from_bindings(design)
+    if not dux:
+        return design
+    return design.model_copy(update={"duplexes": dux})
+
+
+def _materialize_duplex_clusters_on_load(design: Design) -> Design:
+    """Migrate legacy per-overhang duplex POSES (``OverhangSpec.rotation``/``translation`` on
+    a bound direct binding/duplex's driver) onto first-class child DUPLEX clusters, so an
+    existing .nadoc shows the duplex as a sidebar-listed, gizmo-movable, drift-free cluster.
+    Geometry+axis neutral (proven on 2x2_OH_test). Idempotent: skips a driver that already
+    has a duplex cluster. [[overhang-duplex-cluster]] P1b."""
+    from backend.core.duplex_cluster import duplex_cluster_for, materialize_duplex_cluster
+    drivers: list[str] = [b.driver_oh_id for b in design.overhang_bindings
+                          if b.bound and b.driver_oh_id]
+    drivers += [(dx.left.overhang_id if dx.driver == 'left' else dx.right.overhang_id)
+                for dx in design.duplexes if dx.bound]
+    seen: set = set()
+    for drv in drivers:
+        if drv in seen or duplex_cluster_for(design, drv) is not None:
+            continue
+        seen.add(drv)
+        if not any(o.id == drv for o in design.overhangs):
+            continue
+        design, _cid = materialize_duplex_cluster(design, drv)
+    return design
 
 
 def _recompute_flexible_connections(design: Design) -> Design:
@@ -7314,6 +7383,22 @@ def _cv_create_bound_binding(d: Design, a_id: str, b_id: str, attach_a: str,
     sd_b = _cv_sub_domain_at_attach(d, b_id, attach_b)
     if not (sd_a and sd_b):
         return d  # no sub-domains → can't bind (mirrors the old direct silent-skip)
+
+    # Length-preservation: a direct binding relocates one WHOLE tip domain onto the
+    # other, so it requires equal-length attach sub-domains. DIFFERENT-length
+    # overhangs are represented by the Duplex (paired window + toehold) — skip the
+    # binding here (its unequal-length record would fail validation anyway; the
+    # binding-based geometry for different lengths is deferred). The duplex is
+    # created separately by the frontend's _ensureDuplexForPair.
+    def _sd_len(sd_id: str) -> Optional[int]:
+        for o in d.overhangs:
+            for sd in (o.sub_domains or []):
+                if sd.id == sd_id:
+                    return sd.length_bp
+        return None
+    if _sd_len(sd_a) != _sd_len(sd_b):
+        return d
+
     used = {b.name for b in d.overhang_bindings}
     n = 1
     while f"B{n}" in used:
@@ -7327,7 +7412,33 @@ def _cv_create_bound_binding(d: Design, a_id: str, b_id: str, attach_a: str,
     topology = compute_bind_topology(d, binding, driver_side="a")
     binding = binding.model_copy(update={"prior_driven_topology": topology.snapshot})
     d = d.model_copy(update={"overhang_bindings": [*d.overhang_bindings, binding]})
-    return apply_bind_topology(d, topology)
+    d = apply_bind_topology(d, topology)
+
+    # Re-seat the relocated duplex like a linker bridge: ORIENTED along and CENTERED
+    # on the chord between its two embedded-staple connections (A's root junction and
+    # B's root junction), so both root bonds share the stretch symmetrically and are
+    # minimized. Persisted as the DRIVER's OverhangSpec.rotation + translation so the
+    # whole duplex (driver overhang + co-moving driven tip partner) transforms rigidly
+    # at geometry time. Zero both first so the placement is measured against the
+    # freshly-relocated (un-seated, identity) geometry, then store the result.
+    from backend.core.direct_relax import duplex_midpoint_placement
+    d = d.model_copy(update={"overhangs": [
+        o.model_copy(update={"rotation": [0.0, 0.0, 0.0, 1.0],
+                             "translation": [0.0, 0.0, 0.0]}) if o.id == a_id else o
+        for o in d.overhangs]})
+    placement = duplex_midpoint_placement(d, a_id, b_id)
+    if placement is not None:
+        rot, trans = placement
+        d = d.model_copy(update={"overhangs": [
+            o.model_copy(update={"rotation": rot, "translation": trans})
+            if o.id == a_id else o
+            for o in d.overhangs]})
+    # Promote the just-placed pose onto a first-class child DUPLEX cluster (sidebar-listed,
+    # gizmo-movable, drift-free) — geometry+axis neutral (proven on 2x2_OH_test).
+    # [[overhang-duplex-cluster]] P1b.
+    from backend.core.duplex_cluster import materialize_duplex_cluster
+    d, _cid = materialize_duplex_cluster(d, a_id)
+    return d
 
 
 @router.post("/design/connection-versions/{version_id}/apply", status_code=200)
@@ -8279,8 +8390,18 @@ def patch_overhang_binding(binding_id: str, body: OverhangBindingPatchRequest) -
         # visually matters — we run a bond-relax inside _fn (post-apply) to
         # rotate the joint's cluster so that crossover chord ≈ 0.67 nm, then
         # lock the joint at the resulting angle.
+        # For a UNIFIED direct binding (created via apply_connection_version /
+        # _cv_create_bound_binding) the driver/driven sides are already pinned on
+        # the record. Pass driver_side so re-bind is a pure topology relocation —
+        # this bypasses the same-cluster / cluster-None guards, which a root-to-root
+        # binding on ONE rigid body would otherwise trip (422) on the second Bind.
+        # Legacy pair bindings have driver_oh_id=None → driver_side stays None →
+        # the guards still apply (unchanged behaviour).
+        driver_side = None
+        if target.driver_oh_id is not None:
+            driver_side = 'a' if target.driver_oh_id == target.overhang_a_id else 'b'
         try:
-            topology = compute_bind_topology(design, target)
+            topology = compute_bind_topology(design, target, driver_side=driver_side)
         except HTTPException:
             raise
         except Exception as exc:
@@ -8409,6 +8530,38 @@ def patch_overhang_binding(binding_id: str, body: OverhangBindingPatchRequest) -
         fn=_fn,
     )
     return _binding_response(updated, report, binding_id=binding_id)
+
+
+def reapply_binding_driver(design: Design, binding_id: str) -> Design:
+    """Re-place a BOUND binding's relocation after its driver changed (the duplex
+    driver toggle, Phase 4b #4/#1–#3). Mechanically = unbind then re-bind with the
+    binding's CURRENT ``driver_oh_id``, reusing the PROVEN bind primitives
+    (``revert_bind_topology`` → ``compute_bind_topology(driver_side=…)`` →
+    ``apply_bind_topology``) so the ENTIRE driven domain relocates onto the new
+    driver's helix (Q4 #1). No-op when the binding isn't bound or has no snapshot.
+    Best-effort: on any failure the design is returned unchanged so the driver
+    field edit still sticks (the user can Unbind→Bind manually)."""
+    from backend.core.binding_relax import (
+        apply_bind_topology, compute_bind_topology, revert_bind_topology,
+    )
+    b = next((x for x in design.overhang_bindings if x.id == binding_id), None)
+    if b is None or not b.bound or not b.prior_driven_topology:
+        return design
+    driver_side = 'a' if b.driver_oh_id == b.overhang_a_id else 'b'
+    try:
+        reverted = revert_bind_topology(design, b.prior_driven_topology)
+        b2 = next((x for x in reverted.overhang_bindings if x.id == binding_id), None)
+        topo = compute_bind_topology(reverted, b2, driver_side=driver_side)
+        applied = apply_bind_topology(reverted, topo)
+        out = applied.model_copy(update={"overhang_bindings": [
+            x.model_copy(update={"prior_driven_topology": topo.snapshot})
+            if x.id == binding_id else x
+            for x in applied.overhang_bindings]})
+        if b.target_joint_id:
+            out = _apply_driver_to_joint(out, b.target_joint_id)
+        return out
+    except Exception:
+        return design
 
 
 @router.patch("/design/overhang-bindings/{binding_id}/display-pose", status_code=200)

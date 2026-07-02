@@ -845,6 +845,9 @@ export function initDesignRenderer(scene, storeRef) {
      */
     setFluorescenceGlow(entries)  { _fluoroGlowLayer.setEntries(entries) },
     clearFluorescenceGlow()       { _fluoroGlowLayer.clear() },
+    /** Active fluorophore glow-sprite count (e2e uses it to confirm the View ▸
+     *  Fluorescence toggle actually rendered the glows). */
+    fluoroGlowCount()             { return _fluoroGlowLayer.count() },
 
     /**
      * Re-read current entry.pos values for all active glow layers.

@@ -81,5 +81,106 @@ The relax PBD solver (`relaxSsdna`/`_projectSsdnaConstraints`/`_maxSsViolation` 
 - **`cluster_gizmo.js` was NOT rewired** to the new pure module (its live 3D drag can't be headlessly verified, so a rewire is unverifiable here) — the module is a faithful tested copy of cluster_gizmo's math. **Clean follow-up:** wire `_projectSsdnaConstraints`/`_maxSsViolation`/`relaxSsdna` to `flexible_relax_solver.js` (the math is proven equal by the parity test) to make it the single source of truth, then eyeball the live drag.
 - Oracle: `assert_flexible_segments_relaxed(before, after)` (`tests/automation_harness.py`) — every connection chord (on posed geometry) ≤ contour+tol + a pose moved + topology unchanged. Fixture `_overstretched_flexible_hinge` in `test_headless_build.py`.
 
+## Duplex-child cluster must be TRANSPARENT to the ssDNA gate (2026-07-01)
+
+**BUG:** after the overhang-duplex-cluster work materialized each direct-connection duplex into
+its own CHILD cluster ([[overhang-duplex-cluster]] P1b), regular clusters carrying a duplex LOST
+the "ssDNA constrained" pivot option. Root cause: `_gate` in `flexible_segments.py` counts every
+inter-cluster crossing; the overhang-junction bond between a parent cluster and its new duplex-child
+cluster is UNMARKED → registered as a `rigid_blocking` crossing → parent gate flipped to `False`.
+Before materialization the overhang beads belonged to the parent (helix-level), so the junction was
+intra-cluster and never blocked. Reproduced on `workspace/2x2_OH_test.nadoc`: Cluster 1/2 gate went
+`false` (`rigid_blocking` = the overhang junction) so the pivot dropdown showed only `centroid`.
+**Fix:** `_gate` takes `duplex_ids` (`_duplex_cluster_ids(design)` = clusters with
+`overhang_duplex_driver_id`) and SKIPS any crossing where either side is a duplex child — a duplex is
+a movable connector (its own `dup:taut` free-until-taut mode), not a rigid pin. `cluster_flexible_gate`
++ `all_cluster_gates` pass it. After: Cluster 1/2 gate `true` again (n_crossings=2, the marked C1↔C2
+runs), Duplex 1 gate `false`/0-crossings (correct — duplex uses `dup:taut`, not `ssdna`). Pin:
+`test_flexible_segments.py::test_gate_treats_duplex_child_cluster_as_transparent` (synthetic `_gate`
+graph; control asserts it blocks WITHOUT the duplex set). e2e probe (throwaway) confirmed the pivot
+dropdown regains `ssdna` on both the direct-activate and the new auto-open selection path.
+
+## Connected overhangs as move constraints — "Constrained (tethers)" (2026-07-01)
+
+The move/rotate "ssDNA constrained" option was GENERALIZED to also constrain a regular cluster
+by its applied overhang CONNECTIONS (directly-connected duplex + ss/ds linker bridge), not just
+ssDNA flexible segments. Renamed the option **"Constrained (tethers)"**. Live-responsive: reuses
+the SAME gizmo free-until-taut projector (`setConstraint('ssdna', {connections,resolveWorldPos})`),
+just with a bigger tether set.
+- **Backend `backend/core/connection_tethers.py`** (new): `cluster_connection_tethers(design, cluster)`
+  → `[{moving,fixed,contour_nm}]` (same shape as `duplex_cluster_tethers`). moving = anchor on the
+  dragged cluster, fixed = on the partner. Direct duplex REUSES `duplex_cluster_tethers` bond
+  endpoints (c↔P) and re-assigns moving/fixed via a bead→cluster owner resolver that remaps a
+  duplex CHILD to its parent (so `owner(c)`=driver-parent, `owner(P)`=driven-part). Contours (user
+  decision): direct duplex = 0.67 nm (near-rigid junction, `_DEFAULT_TARGET_NM`); ss linker =
+  n·0.59; ds linker = (n_bp−1)·0.34 (`linker_relax._ds_target_length_nm`). `_overhang_attach_bead`
+  resolves an overhang's root/free_end bead (root = end_bp if OH domain is strand's first, else
+  start_bp — mirrors deformation/direct_relax). `clusters_with_connection_tethers(design)` = the
+  availability list. Skips a connection where both/neither end lands on the cluster.
+- **API**: `GET /design/cluster/{id}/connection-tethers` ([routes_clusters.py](backend/api/routes_clusters.py));
+  `/design/flexible-connections` gains `connection_tether_clusters` ([routes_flexible_segments.py](backend/api/routes_flexible_segments.py)).
+- **Frontend** ([flex_relax.js](frontend/src/scene/flex_relax.js)): `hasTetherOption(id)` = `hasGate(id)
+  || _connTetherClusters.includes(id)` (option appears for connection-ONLY clusters, no ssDNA marks
+  needed); `buildTethersPayload(id)` (async) MERGES ssDNA tethers (`buildSsdnaPayload`) + connection
+  tethers (GET) into one payload. [move_rotate_panel.js](frontend/src/scene/move_rotate_panel.js):
+  option gated on `hasTetherOption`, labeled "Constrained (tethers)", handler awaits
+  `buildTethersPayload` (fallback to centroid + warn if null).
+- **Verified**: `tests/test_connection_tethers.py` (3: duplex both-parents mirror-image 0.67 nm,
+  ds-linker contour = duplex length, availability list) on real fixtures `2x2_OH_test` (duplex) +
+  `3x6_hinge_interior_linker` (ds linker 9.69 nm); `move_rotate_panel.test.js` updated (async merged
+  payload + connection-only availability). Playwright probe (throwaway): endpoint returns the 0.67 nm
+  tether, dropdown shows "Constrained (tethers)", select runs clean. **NOT hand-driven:** the live
+  free-until-taut DRAG against a duplex/linker tether on the WebGL canvas is human-eye (MV, same tier
+  as MV-DUPTAUT / the ssDNA drag). ss-linker path unverified on a fixture (no ss-linker design handy;
+  code is symmetric with ds).
+
+## Movable-link tethers: duplex/ds-linker swing live during a drag (2026-07-01)
+
+Extends "Constrained (tethers)" so a connected DUPLEX or ds-linker is a movable LINK, not a fixed
+anchor. User decisions: **B (far part) stays fixed, the link follows**; **ds-linker = rigid strut**
+(bilateral, resists compression too); **duplex swings LIVE every frame**.
+- **Phase 1 — ds-linker rigid strut.** `connection_tethers._emit` tags ds-linker tethers `rigid=True`
+  (ss/duplex stay free-until-taut). Threaded through `buildTethersPayload` → gizmo `_ssArmed`. Pure
+  predicate `ssTetherViolated(rigid, dist, contour)` (exported from
+  [cluster_gizmo.js](frontend/src/scene/cluster_gizmo.js)): rigid ⇒ violated when `|dist−contour|>eps`
+  (both over AND under); free ⇒ only `dist>contour`. `_projectSsdnaConstraints` uses it in both passes.
+  Pins: `test_connection_tethers.py` (ds `rigid=True`), `cluster_gizmo.test.js` (`ssTetherViolated`).
+- **Phase 2 — duplex live movable body.** Backend `connection_tethers.cluster_movable_links(design,
+  cluster)` → for the dragged part, each connected duplex-CHILD cluster as `{kind:'duplex',
+  link_cluster_id, helix_ids, domain_ids, tethers:[{l, part, contour_nm, part_dragged}]}` (bonds to
+  BOTH parts; `part_dragged` = the bond on the dragged part). **Split by parent-ness:** dragging the
+  duplex's OWN parent → it rides rigidly → a STATIC tether via `cluster_connection_tethers` (now
+  parent-gated for direct-duplex); dragging the NON-parent part → the duplex is a movable link.
+  Endpoint `GET /design/cluster/{id}/movable-links`. `clusters_with_connection_tethers` counts links
+  too. `_bead_owner_resolver(design, remap_duplex=False)` distinguishes a bead ON the link from a
+  part bead.
+  - **Gizmo coupled live solve** ([cluster_gizmo.js](frontend/src/scene/cluster_gizmo.js)):
+    `setConstraint` payload gains `links`; armed at drag start (`_ssLinks`: base pose + bond start
+    positions + `captureBase` for the link's beads). Per `change` frame `_solveLinksChain()`: 2
+    Gauss-Seidel passes — solve each link via the pure `flexible_relax_solver.relaxToConvergence`
+    (near bond tracks A's LIVE anchor, far bond fixed to B), then re-project A against each moved
+    link's near bead (`_ssLinkNearArmed`, folded into `_projectSsdnaConstraints`). `_paintLinks()`
+    paints each swung link via a SECOND `onLiveTransform(link.helixIds,startPos,resultPos,incrQ,
+    domainIds)` + records its pending transform (committed with A by `commitPendingTransforms`).
+    **Uses the pure solver, NOT `relaxClusterHeadless`** (which clobbers the gizmo `_dummy`/`_clusterId`
+    singletons mid-drag). Link commit reuses the duplex-cluster pending convention (child-frame safe).
+  - **Scoped:** movable-link swing only when dragging the NON-parent part (dragging the parent = the
+    duplex rides it, static tether; avoids the A/L helix-overlap paint problem). ss-linker is not a
+    movable body (rendered from anchors).
+  - Pins: `test_connection_tethers.py` (parent static vs non-parent movable-link split, 2 bonds,
+    dragged flags), `flexible_relax_solver.test.js` (chain: link follows displaced near-anchor while
+    staying anchored to fixed far-anchor). Playwright probe (throwaway): endpoint→payload→arm clean.
+  - **GOTCHA (fixed): main cluster froze while only the link swung.** `helixCtrl.captureClusterBase`
+    CLEARS its base-snapshot maps unless `append=true` ([helix_renderer.js ~4242](frontend/src/scene/helix_renderer.js)).
+    Arming a second body (the link) called `captureBase(link)` which wiped the DRAGGED cluster's base
+    (captured just before) → the dragged cluster's beads had no base → `applyClusterTransform` left them
+    put → it looked frozen while the link (captured last) painted. Fix: the main.js `captureBase`
+    callback gained an `append` param (threaded to `helixCtrl`/`bluntEnds` captureClusterBase); the gizmo
+    captures the dragged cluster with append=false (clears+captures) then each link with **append=true**.
+    Any future multi-body live paint MUST append the extra bodies' base captures.
+  - **NOT hand-driven / RISK:** the live WebGL drag — the duplex visibly swinging, no jitter (the
+    ~0.67 nm near-rigid bonds are the flagged short-tether PBD oscillation risk), and the dual commit
+    (A + duplex) — is human-eye only. MV-CONNLINK. Also the ds-strut "can't compress" feel.
+
 ## Deferred / refine
 Kabsch (SVD) rigid fit instead of linearised torque; bow direction from exit-tangents; refresh gate dropdown when marks change while tool already open; per-frame arc rebuild allocates geometry (fine for few tethers, optimize if many).

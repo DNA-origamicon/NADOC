@@ -1,10 +1,11 @@
 /**
  * Overhang sequences panel — collapsible sidebar list of every overhang on the
  * design, with editable Name + Sequence, a "Gen" button (Johnson et al. random
- * sequence), a "Set" button (persist name/sequence), and a Bind/Unbind toggle
- * for overhangs that belong to an OverhangBinding pair. Clicking a row selects
- * the overhang (so the Strand Animation section can bind to it); selecting a
- * strand elsewhere highlights its matching row(s).
+ * sequence), a "Set" button (persist name/sequence), and — for any overhang that
+ * participates in a connection (linker / binding / version) — a link icon that
+ * opens the Overhang Connections section on that pair with its applied version
+ * selected. Clicking a row selects the overhang (so the Strand Animation section
+ * can bind to it); selecting a strand elsewhere highlights its matching row(s).
  *
  * Stateful: owns DOM, the label-size slider, a row-by-strand highlight map, and
  * a store subscription. So it's a factory — pass dependencies in. The two pure
@@ -17,12 +18,36 @@
  * @param {object} deps
  * @param {object} deps.store              — Zustand-style store (getState/setState/subscribe)
  * @param {object} deps.selectionManager   — needs selectOverhang(overhangId)
- * @param {object} deps.api                — needs generateOverhangRandomSequence/patchOverhang/patchOverhangBinding
+ * @param {object} deps.api                — needs generateOverhangRandomSequence/patchOverhang
  * @param {object} deps.overhangNameOverlay — needs setScale(s)
  * @returns {{ rebuild: Function }}
  */
 import { showToast } from './toast.js'
-import { assembleOverhangSequence, overhangHasSequenceOverride } from '../scene/design_queries.js'
+import { assembleOverhangSequence, overhangHasSequenceOverride, overhangDomainLength, overhangHasDuplex, overhangDuplexSegments, overhangRcOfPartner } from '../scene/design_queries.js'
+import { openConnectionForPair } from './overhang_connections_panel.js'
+import { runOverhangGen } from './overhang_gen.js'
+
+// Inline chain-link glyph for the per-row "open this overhang's connection" icon.
+const _LINK_SVG =
+  '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72"/>' +
+  '<path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>'
+
+/**
+ * Pure: the connection PAIR (if any) this overhang participates in. Prefers a
+ * direct binding, then a linker, then a connection-version group — returns the
+ * partner pair `{ a, b }` to open in the Overhang Connections section, or null
+ * when the overhang has no connection at all. Exported for unit testing.
+ */
+export function connectionPairForOverhang(design, ovhgId) {
+  const involves = (e) => e.overhang_a_id === ovhgId || e.overhang_b_id === ovhgId
+  const hit =
+    (design?.overhang_bindings    ?? []).find(involves) ||
+    (design?.overhang_connections ?? []).find(involves) ||
+    (design?.connection_versions  ?? []).find(involves)
+  return hit ? { a: hit.overhang_a_id, b: hit.overhang_b_id } : null
+}
 
 /**
  * Pure: overhangs whose backing strand is still live (or that have no strand).
@@ -68,6 +93,41 @@ export function selectedStrandIds(state) {
   for (const id of state?.multiSelectedStrandIds ?? []) ids.add(id)
   for (const d of state?.multiSelectedDomainIds ?? []) ids.add(d.strandId)
   return ids
+}
+
+// Duplex coverage colors for the sidebar preview line.
+const _DUPLEX_COLOR = { paired: '#3fb950', mismatch: '#d29922', toehold: '#8b949e' }
+
+/** The duplex-graph driver overhang id for a duplex (Q4). */
+function _driverOverhangId(dx) {
+  return dx.driver === 'right' ? dx.right.overhang_id : dx.left.overhang_id
+}
+
+/** A monospace line of colored spans showing an overhang's duplex coverage
+ *  (paired / mismatch / toehold), or null when it has no bases in a duplex. */
+function _duplexPreviewLine(design, overhangId) {
+  const segs = overhangDuplexSegments(design, overhangId)
+  if (!segs.length) return null
+  const line = document.createElement('div')
+  line.style.cssText = 'grid-column:1 / -1;white-space:nowrap;letter-spacing:.06em;' +
+    'font-family:monospace;font-size:11px;margin:0 0 4px 2px'
+  // ▶ marks the DRIVER overhang (Q4) — the side whose helix hosts the duplex.
+  const dx = (design?.duplexes ?? []).find(
+    d => d.left.overhang_id === overhangId || d.right.overhang_id === overhangId)
+  if (dx && _driverOverhangId(dx) === overhangId) {
+    const mark = document.createElement('span')
+    mark.textContent = '▶ '
+    mark.style.color = '#8b949e'
+    mark.title = 'Driver — this overhang\'s helix hosts the duplex'
+    line.appendChild(mark)
+  }
+  for (const s of segs) {
+    const span = document.createElement('span')
+    span.textContent = s.text
+    span.style.color = _DUPLEX_COLOR[s.kind] ?? '#c9d1d9'
+    line.appendChild(span)
+  }
+  return line
 }
 
 export function initOverhangSequencesPanel({ store, selectionManager, api, overhangNameOverlay }) {
@@ -132,12 +192,8 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
     const hdr = document.createElement('div')
     hdr.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto auto auto;gap:4px;' +
                          'margin-bottom:4px;font-size:var(--text-xs);color:#484f58;text-transform:uppercase;letter-spacing:.05em'
-    hdr.innerHTML = '<span>Name</span><span>Sequence</span><span></span><span></span><span title="Toggle direct binding state for the pair this overhang belongs to (empty if unpaired)">Bind</span>'
+    hdr.innerHTML = '<span>Name</span><span>Sequence</span><span></span><span></span><span title="Open this overhang\'s connection (link to the Overhang Connections section)">Link</span>'
     list.appendChild(hdr)
-
-    // Index bindings by overhang id once per rebuild (small list — linear
-    // scan is fine).
-    const allBindings = design?.overhang_bindings ?? []
 
     for (const ovhg of overhangs) {
       const row = document.createElement('div')
@@ -172,10 +228,14 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
       // sub-domain, the single field can't represent it for editing → read-only
       // (edit it in the Domain Designer).
       const perSubDomain = overhangHasSequenceOverride(ovhg)
+      // Length the bases must fill = the backing domain's current length (it grows
+      // when the user drags the overhang end). Passing it makes the now-undefined
+      // 3' positions render as 'N' instead of leaving the row looking fully defined.
+      const domainLen = overhangDomainLength(design, ovhg.id) ?? undefined
       const seqInput = document.createElement('input')
       seqInput.type        = 'text'
       seqInput.placeholder = 'Sequence…'
-      seqInput.value       = assembleOverhangSequence(ovhg)
+      seqInput.value       = assembleOverhangSequence(ovhg, domainLen)
       seqInput.readOnly    = perSubDomain
       if (perSubDomain) seqInput.title = 'Sequenced per sub-domain — edit in the Domain Designer'
       seqInput.style.cssText = iStyle + 'width:100%;box-sizing:border-box;letter-spacing:.05em' +
@@ -193,17 +253,34 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
                              'color:#3fb950;font-size:11px;cursor:pointer;white-space:nowrap'
       genBtn.addEventListener('click', async () => {
         genBtn.disabled = true
-        showToast('Using Johnson et al. overhang algorithm — DOI: 10.1021/acs.nanolett.9b02786')
-        await api.generateOverhangRandomSequence(ovhg.id)
-        genBtn.disabled = false
+        // Same Gen flow as the Connections panel: coordinates with the connected
+        // partner (RC / new-pair / override choice when both are sequenced).
+        const design0 = store.getState().currentDesign
+        const pair = connectionPairForOverhang(design0, ovhg.id)
+        const partnerId = pair ? (pair.a === ovhg.id ? pair.b : pair.a) : null
+        try {
+          await runOverhangGen(ovhg.id, partnerId, {
+            api: {
+              generateOverhangRandomSequence: api.generateOverhangRandomSequence,
+              patchOverhang: api.patchOverhang,
+            },
+            getSeq: (id) => store.getState().currentDesign?.overhangs?.find(o => o.id === id)?.sequence ?? null,
+            rcOfPartner: (targetId, sourceId) => overhangRcOfPartner(store.getState().currentDesign, targetId, sourceId),
+          })
+        } catch (err) {
+          showToast(err?.message ?? String(err))
+        } finally {
+          genBtn.disabled = false
+        }
       })
 
       function _syncGenBtn() {
         const v = seqInput.value.trim()
+        const connected = !!connectionPairForOverhang(store.getState().currentDesign, ovhg.id)
         // Hide Gen for per-sub-domain overhangs (it would clobber the top-level
-        // field, which is not what drives their sequence) and once a real
-        // sequence is present.
-        genBtn.style.display = (!perSubDomain && (!v || /^n+$/i.test(v))) ? '' : 'none'
+        // field). Otherwise show it when unsequenced OR when connected — so the
+        // pair/RC/override choice is reachable even after a sequence is set.
+        genBtn.style.display = (!perSubDomain && ((!v || /^n+$/i.test(v)) || connected)) ? '' : 'none'
       }
       _syncGenBtn()
       seqInput.addEventListener('input', _syncGenBtn)
@@ -223,57 +300,46 @@ export function initOverhangSequencesPanel({ store, selectionManager, api, overh
         await api.patchOverhang(ovhg.id, patch)
       })
 
-      // ⚠️ TECH DEBT / FOR REVIEW (flagged 2026-06-03): the Bind/Unbind button drives
-      // the LEGACY OverhangBinding pair model (overhang_a_id/overhang_b_id + `bound`
-      // flag, toggled via api.patchOverhangBinding). This whole approach is being
-      // superseded by oh_binder strands (StrandType.OH_BINDER + Domain.binds_overhang_id).
-      // Do NOT extend it; it's slated for removal once the binder migration completes.
-      // See memory project_oh_binder + project_tech_debt.
-      //
-      // Bind/Unbind toggle — visible only when this overhang is in an
-      // OverhangBinding pair. Click toggles `bound` server-side via
-      // patchOverhangBinding; the cluster-pose move (or restore) happens
-      // automatically there. Multiple bindings on one OH are rare —
-      // showing the FIRST binding's state, click cycles its bound flag.
-      const bindWrap = document.createElement('span')
-      const myBindings = allBindings.filter(b =>
-        b.overhang_a_id === ovhg.id || b.overhang_b_id === ovhg.id,
-      )
-      if (myBindings.length === 0) {
-        bindWrap.style.cssText = 'min-width:54px;display:inline-block;color:#484f58;font-size:10px;text-align:center'
-        bindWrap.textContent = '—'
+      // Link icon — shown only when this overhang participates in a connection
+      // (linker / binding / version). Clicking opens the Overhang Connections
+      // section on that pair and selects its applied version. Bind/Unbind state
+      // is NOT touched here — that lives entirely in the Connections section.
+      const linkWrap = document.createElement('span')
+      const pair = connectionPairForOverhang(design, ovhg.id)
+      if (!pair) {
+        linkWrap.style.cssText = 'min-width:54px;display:inline-block;color:#484f58;font-size:10px;text-align:center'
+        linkWrap.textContent = '—'
       } else {
-        const b = myBindings[0]
-        const bindBtn = document.createElement('button')
-        bindBtn.textContent = b.bound ? 'Unbind' : 'Bind'
-        const partnerId = b.overhang_a_id === ovhg.id ? b.overhang_b_id : b.overhang_a_id
+        const linkBtn = document.createElement('button')
+        linkBtn.innerHTML = _LINK_SVG
+        const partnerId = pair.a === ovhg.id ? pair.b : pair.a
         const partner = overhangs.find(o => o.id === partnerId)
         const partnerLabel = partner?.label || partner?.id || partnerId
-        bindBtn.title = `Pair ${b.name ?? b.id.slice(0, 6)} with ${partnerLabel} (${b.bound ? 'bound' : 'unbound'})`
-        bindBtn.style.cssText = 'padding:2px 7px;background:' +
-          (b.bound ? '#1f2a36' : '#162420') +
-          ';border:1px solid ' + (b.bound ? '#5394e0' : '#3fb950') +
-          ';border-radius:4px;color:' + (b.bound ? '#5394e0' : '#3fb950') +
-          ';font-size:11px;cursor:pointer;white-space:nowrap'
-        bindBtn.addEventListener('click', async () => {
-          bindBtn.disabled = true
-          try {
-            await api.patchOverhangBinding(b.id, { bound: !b.bound })
-          } catch (err) {
-            showToast(err?.message || String(err))
-          } finally {
-            bindBtn.disabled = false
-          }
+        linkBtn.title = `Open connection with ${partnerLabel}`
+        linkBtn.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;' +
+          'padding:2px 8px;background:#161b22;border:1px solid #2f81f7;border-radius:4px;' +
+          'color:#2f81f7;cursor:pointer'
+        linkBtn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          openConnectionForPair(pair.a, pair.b)
         })
-        bindWrap.appendChild(bindBtn)
+        linkWrap.appendChild(linkBtn)
       }
 
       row.appendChild(nameInput)
       row.appendChild(seqInput)
       row.appendChild(genBtn)
       row.appendChild(saveBtn)
-      row.appendChild(bindWrap)
+      row.appendChild(linkWrap)
       list.appendChild(row)
+
+      // If this overhang participates in a duplex, show a coverage preview line
+      // below the row: paired (green) / mismatch (amber) / toehold (grey), read
+      // from the register-bearing graph (design.duplexes).
+      if (overhangHasDuplex(design, ovhg.id)) {
+        const prev = _duplexPreviewLine(design, ovhg.id)
+        if (prev) list.appendChild(prev)
+      }
     }
 
     // Apply highlight for whatever is currently selected

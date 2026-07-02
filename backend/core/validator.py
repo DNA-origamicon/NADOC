@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Set, Tuple
 
-from backend.core.models import Design, Strand, StrandType
+from backend.core.models import Design, Strand, StrandType, VALID_MODIFICATIONS
 
 
 @dataclass
@@ -258,5 +258,88 @@ def validate_design(design: Design) -> ValidationReport:
             cur = ovhg_by_id.get(cur.parent_overhang_id) if cur.parent_overhang_id else None
     if chain_errors:
         report.results.append(ValidationResult(False, "; ".join(chain_errors)))
+
+    # ── Duplex pairing health (Proposal-B register-bearing overhang graph) ────
+    # Soft check surfaced in the UI validation panel. Hard invariants (each end
+    # inside its backing domain, no bp paired twice, equal-length ends) are
+    # enforced by Design._validate_duplexes at construction; here we flag a duplex
+    # whose register has ZERO complementary bases — real mismatches, not merely
+    # unsequenced N (which passes via allow_n_wildcard). For a BOUND/relocated
+    # duplex this is the Q2 "applied but the sequences don't actually pair" warning.
+    # Partial mismatches are NOT flagged (mismatched-register kinetics are valid).
+    if design.duplexes:
+        from backend.core.duplex import classify_duplex_pairing
+        unpaired = [
+            (dx.name or dx.id[:6]) for dx in design.duplexes
+            if (cls := classify_duplex_pairing(design, dx))["length"] > 0
+            and cls["n_complementary"] == 0
+        ]
+        if unpaired:
+            report.results.append(ValidationResult(
+                False,
+                "Duplex register has no complementary bases (sequences don't pair): "
+                + ", ".join(unpaired),
+            ))
+
+    # ── Strand extensions (terminal sequence / modification: fluorophore etc.) ─
+    # Each extension must reference a live strand, its modification (if set) must be
+    # a known key (cy3/cy5/fam/tamra/atto488/atto550/bhq1/bhq2/biotin), and any
+    # sequence must be ACGTN. (The model requires end ∈ {five_prime,three_prime}
+    # and at least one of sequence/modification.) Surfaces bad loaded files.
+    if design.extensions:
+        ext_errors: List[str] = []
+        for ext in design.extensions:
+            tag = ext.label or ext.id[:6]
+            if ext.strand_id not in strand_ids:
+                ext_errors.append(f"{tag}: strand {ext.strand_id!r} does not exist")
+            if ext.modification is not None and ext.modification not in VALID_MODIFICATIONS:
+                ext_errors.append(f"{tag}: unknown modification {ext.modification!r}")
+            if ext.sequence is not None and any(c not in "ACGTNacgtn" for c in ext.sequence):
+                ext_errors.append(f"{tag}: sequence has non-ACGTN bases")
+        if ext_errors:
+            report.results.append(ValidationResult(
+                False, "Strand extension(s) invalid: " + "; ".join(ext_errors)))
+
+    # ── Cluster hierarchy + overhang-duplex cluster integrity ─────────────────
+    # A CHILD cluster (parent_cluster_id set) composes inside its parent; it must
+    # reference an existing parent, must be domain-level, and the parent chain must
+    # not cycle. An overhang-DUPLEX cluster (overhang_duplex_driver_id set) must name a
+    # live overhang, and that overhang's legacy OverhangSpec pose MUST be cleared — the
+    # pose lives on the cluster now, so a non-identity overlay would double-transform.
+    # See [[overhang-duplex-cluster]].
+    if design.cluster_transforms:
+        cl_by_id = {c.id: c for c in design.cluster_transforms}
+        cl_errors: List[str] = []
+        for c in design.cluster_transforms:
+            tag = c.name or c.id[:6]
+            if c.parent_cluster_id is not None:
+                if c.parent_cluster_id == c.id:
+                    cl_errors.append(f"{tag}: cluster is its own parent")
+                elif c.parent_cluster_id not in cl_by_id:
+                    cl_errors.append(f"{tag}: parent cluster {c.parent_cluster_id!r} does not exist")
+                elif not c.domain_ids:
+                    cl_errors.append(f"{tag}: child cluster must be domain-level (has no domain_ids)")
+                else:
+                    seen, cur, depth = {c.id}, cl_by_id.get(c.parent_cluster_id), 0
+                    while cur is not None and cur.parent_cluster_id and depth < 64:
+                        if cur.id in seen:
+                            cl_errors.append(f"{tag}: parent chain forms a cycle")
+                            break
+                        seen.add(cur.id)
+                        cur = cl_by_id.get(cur.parent_cluster_id)
+                        depth += 1
+            drv = c.overhang_duplex_driver_id
+            if drv is not None:
+                spec = ovhg_by_id.get(drv)
+                if spec is None:
+                    cl_errors.append(f"{tag}: duplex driver overhang {drv!r} does not exist")
+                elif (list(spec.rotation) != [0.0, 0.0, 0.0, 1.0]
+                      or any(abs(float(t)) > 1e-9 for t in spec.translation)):
+                    cl_errors.append(
+                        f"{tag}: duplex driver {drv!r} still carries an OverhangSpec pose "
+                        "(would double-transform — pose must live on the cluster)")
+        if cl_errors:
+            report.results.append(ValidationResult(
+                False, "Cluster hierarchy invalid: " + "; ".join(cl_errors)))
 
     return report

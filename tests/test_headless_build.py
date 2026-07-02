@@ -826,8 +826,11 @@ def test_relax_overhang_binding_closes_tip_root_chord():
     """hb.relax_overhang_binding swings A's overhang duplex + rotates the jointed
     cluster so the driven overhang's stretched tip↔root chord collapses toward one
     backbone bond — strain reduced, a pose moved, topology untouched
-    (assert_direct_binding_relaxed_pose). Also flips the route's headless coverage."""
-    seeded, bid = _applied_direct_binding()
+    (assert_direct_binding_relaxed_pose). Also flips the route's headless coverage.
+
+    Apply now SEATS the duplex at the oriented midpoint (both bonds minimized), so a
+    large cluster gap is used to leave a genuine stretched residual for the relax."""
+    seeded, bid = _applied_direct_binding(cluster_b_translation=(8.0, 0.0, 0.0))
     design_state.set_design(seeded)
     before = design_state.get_or_404()
     after = hb.relax_overhang_binding(bid)
@@ -852,17 +855,20 @@ def test_relax_overhang_binding_is_pose_only():
 
 
 def test_relax_overhang_binding_same_body_swings_duplex_only():
-    """Both overhangs on ONE rigid body: no cluster can move, but the 2-DOF duplex
-    swing (stored on the DRIVER's overhang rotation) still reduces the chord — the
-    oracle's pose-moved clause accepts the rotation change, not just a cluster move."""
+    """Both overhangs on ONE rigid body: apply now seats the duplex at the ORIENTED
+    midpoint on its own (the pose lives on the child DUPLEX cluster), and no cluster joint
+    can move — so relax is a valid no-op that leaves topology intact. The apply-time
+    orientation is a non-identity duplex-cluster pose."""
+    from backend.core.duplex_cluster import duplex_cluster_for
     seeded, bid = _applied_direct_binding(same_body=True)
     design_state.set_design(seeded)
     before = design_state.get_or_404()
     after = hb.relax_overhang_binding(bid)
-    assert_direct_binding_relaxed_pose(before, after, "oh_a", "oh_b")
-    # the swing landed on A's overhang rotation, not a cluster transform
-    a_after = next(o for o in after.overhangs if o.id == "oh_a")
-    assert tuple(a_after.rotation) != (0.0, 0.0, 0.0, 1.0)
+    assert_direct_binding_relaxed_pose(before, after, "oh_a", "oh_b", require_reduced=False)
+    # Apply already oriented the duplex → the driver's DUPLEX CLUSTER pose is non-identity.
+    cl = duplex_cluster_for(before, "oh_a")
+    assert cl is not None and (tuple(cl.rotation) != (0.0, 0.0, 0.0, 1.0)
+                               or any(abs(t) > 1e-9 for t in cl.translation))
 
 
 def _two_helices_with_crossover(*, with_joint):

@@ -3825,6 +3825,23 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
      *  properties panel reflect it. */
     selectOverhang(overhangId) { _selectOverhangDomain(overhangId) },
 
+    /** Open the Add/Edit-extensions dialog for the given strand id(s) — the SAME
+     *  dialog the strand right-click menu uses. Exposed so the overhang right-click
+     *  menu can reach extensions (fluorophore/modification) for an overhang's
+     *  backing strand, which the overhang-only menu otherwise couldn't. */
+    openExtensionsForStrands(strandIds, x, y) {
+      if (!strandIds?.length) return
+      const design = store.getState().currentDesign
+      const existingsByStrand = new Map()
+      for (const sid of strandIds) {
+        existingsByStrand.set(sid, {
+          five_prime:  (design?.extensions ?? []).find(e => e.strand_id === sid && e.end === 'five_prime')  ?? null,
+          three_prime: (design?.extensions ?? []).find(e => e.strand_id === sid && e.end === 'three_prime') ?? null,
+        })
+      }
+      _openExtensionDialog(x ?? 200, y ?? 200, strandIds, existingsByStrand)
+    },
+
     /** Programmatically select a cluster by ID — same green-glow + 1.3× bead-scale
      *  + cluster `selectedObject` as clicking it in 3D at cluster filter level. Used
      *  by the sidebar "Movable clusters" list so the two paths share one selected

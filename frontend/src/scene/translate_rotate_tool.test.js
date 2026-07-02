@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { initTranslateRotateTool } from './translate_rotate_tool.js'
+import { initTranslateRotateTool, decideSelectionAction } from './translate_rotate_tool.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 import { clearShortcuts } from '../input/shortcuts.js'
@@ -99,7 +99,7 @@ beforeEach(() => {
   clearShortcuts()
   toastCalls.length = 0
   // mode-indicator + the panel/sidebar elements the factory + bodies query by id.
-  mountIds(['mode-indicator', 'mr-apply-btn', 'mr-cancel-btn', 'menu-tools-translate-rotate',
+  mountIds(['mode-indicator', 'mr-apply-btn', 'mr-cancel-btn', 'mr-reset-btn', 'menu-tools-translate-rotate',
             '__mrPanel', '__mrClusterSel', '__mrPivotSel'])
   global.requestAnimationFrame = (cb) => { cb(0); return 0 }
 })
@@ -179,6 +179,28 @@ describe('initTranslateRotateTool — activate (design mode)', () => {
     const t = initTranslateRotateTool(ctx.deps)
     await t.activate('C0')
     expect(ctx.clusterGizmo.attach).toHaveBeenCalledWith('C0', expect.anything(), expect.anything(), expect.anything())
+  })
+
+  it('populates the number boxes from the gizmo PENDING transform, not the stored one (duplex pivot fix)', async () => {
+    // Stored translation is [1,2,3]; the gizmo's pending (pivot-rebased) transform is
+    // [1,0,0]. The fields must reflect the pending so a +45/reset commit rotates about
+    // the gizmo's actual pivot instead of teleporting.
+    const ctx = makeDeps({ state: { currentDesign: { cluster_transforms: [
+      { id: 'C1', translation: [1, 2, 3], rotation: [0, 0, 0, 1], helix_ids: [2] },
+    ], cluster_joints: [] } } })
+    const t = initTranslateRotateTool(ctx.deps)
+    await t.activate('C1')
+    expect(ctx.deps.setTransformValues).toHaveBeenCalledWith(1, 0, 0, expect.any(Number), expect.any(Number), expect.any(Number))
+  })
+
+  it('falls back to the stored transform when the gizmo has no pending transform', async () => {
+    const ctx = makeDeps({ state: { currentDesign: { cluster_transforms: [
+      { id: 'C1', translation: [4, 5, 6], rotation: [0, 0, 0, 1], helix_ids: [2] },
+    ], cluster_joints: [] } } })
+    ctx.deps.clusterGizmo.getPendingTransform = () => null
+    const t = initTranslateRotateTool(ctx.deps)
+    await t.activate('C1')
+    expect(ctx.deps.setTransformValues).toHaveBeenCalledWith(4, 5, 6, expect.any(Number), expect.any(Number), expect.any(Number))
   })
 })
 
@@ -351,6 +373,46 @@ describe('initTranslateRotateTool — cancel', () => {
   })
 })
 
+describe('initTranslateRotateTool — resetToSaved (restore saved positions)', () => {
+  it('inactive → no-op', async () => {
+    const ctx = makeDeps()
+    const t = initTranslateRotateTool(ctx.deps)
+    await t.resetToSaved()
+    expect(ctx.clusterGizmo.discardPendingTransforms).not.toHaveBeenCalled()
+    expect(ctx.clusterGizmo.attach).not.toHaveBeenCalled()
+  })
+
+  it('design mode: discards pending, restores geometry, re-attaches at the saved pose, STAYS active', async () => {
+    const ctx = makeDeps({ state: {
+      activeClusterId: 'C1',
+      currentDesign: { cluster_transforms: [{ id: 'C1', translation: [0, 0, 0], rotation: [0, 0, 0, 1], helix_ids: [1] }], cluster_joints: [] },
+      currentGeometry: [{}], currentHelixAxes: { a: 1 },
+    } })
+    ctx.deps.setActive(true)
+    ctx.deps.setClusterDirty(true)   // an in-progress preview exists
+    const t = initTranslateRotateTool(ctx.deps)
+    await t.resetToSaved()
+    expect(ctx.clusterGizmo.discardPendingTransforms).toHaveBeenCalled()
+    expect(ctx.deps.refreshClusterPivotForAttach).toHaveBeenCalledWith('C1')
+    expect(ctx.clusterGizmo.attach).toHaveBeenCalledWith('C1', expect.anything(), expect.anything(), expect.anything())
+    expect(ctx.active).toBe(true)   // did NOT exit the tool
+    expect(ctx.dirty).toBe(false)   // preview discarded
+  })
+
+  it('assembly mode: clears pending + rebuilds + re-attaches the instance gizmo (stays active)', async () => {
+    const ctx = makeDeps({ state: {
+      assemblyActive: true, activeInstanceId: 'I1', currentAssembly: { instances: [{ id: 'I1' }] },
+    } })
+    ctx.deps.setActive(true)
+    const t = initTranslateRotateTool(ctx.deps)
+    await t.resetToSaved()
+    expect(ctx.deps.assemblyPendingTransforms.clear).toHaveBeenCalled()
+    expect(ctx.deps.assemblyRenderer.rebuild).toHaveBeenCalled()
+    expect(ctx.deps.attachGroupGizmo).toHaveBeenCalled()   // re-attached, not exited
+    expect(ctx.active).toBe(true)
+  })
+})
+
 describe('initTranslateRotateTool — rotateJoint + misc', () => {
   it('inactive → activates the tool then points the gizmo at the joint', async () => {
     const ctx = makeDeps({ state: { currentDesign: { cluster_transforms: [
@@ -380,5 +442,71 @@ describe('initTranslateRotateTool — rotateJoint + misc', () => {
     btn.style.display = 'flex'
     t.hideConfirmBtn()
     expect(btn.style.display).toBe('none')
+  })
+})
+
+describe('decideSelectionAction (selection→tool bridge)', () => {
+  const PARTS = { assemblyActive: false, cadnanoActive: false, unfoldActive: false }
+  const cluster = id => ({ type: 'cluster', data: { cluster_id: id } })
+
+  it('opens the tool when a cluster is selected in the parts editor (tool inactive)', () => {
+    expect(decideSelectionAction({
+      newSel: cluster('c1'), toolActive: false, autoOpened: false, activeClusterId: null, mode: PARTS,
+    })).toEqual({ action: 'open', clusterId: 'c1' })
+  })
+
+  it('does NOT open in assembly / cadnano / unfold modes', () => {
+    for (const mode of [
+      { ...PARTS, assemblyActive: true },
+      { ...PARTS, cadnanoActive: true },
+      { ...PARTS, unfoldActive: true },
+    ]) {
+      expect(decideSelectionAction({
+        newSel: cluster('c1'), toolActive: false, autoOpened: false, activeClusterId: null, mode,
+      })).toEqual({ action: 'none', clusterId: null })
+    }
+  })
+
+  it('does nothing when the selection is not a cluster', () => {
+    expect(decideSelectionAction({
+      newSel: { type: 'strand', data: { strand_id: 's1' } },
+      toolActive: false, autoOpened: false, activeClusterId: null, mode: PARTS,
+    })).toEqual({ action: 'none', clusterId: null })
+    expect(decideSelectionAction({
+      newSel: null, toolActive: false, autoOpened: false, activeClusterId: null, mode: PARTS,
+    })).toEqual({ action: 'none', clusterId: null })
+  })
+
+  it('closes an AUTO-opened tool when the cluster is deselected', () => {
+    expect(decideSelectionAction({
+      newSel: null, toolActive: true, autoOpened: true, activeClusterId: 'c1', mode: PARTS,
+    })).toEqual({ action: 'close', clusterId: null })
+  })
+
+  it('re-targets an AUTO-opened tool when a different cluster is selected', () => {
+    expect(decideSelectionAction({
+      newSel: cluster('c2'), toolActive: true, autoOpened: true, activeClusterId: 'c1', mode: PARTS,
+    })).toEqual({ action: 'retarget', clusterId: 'c2' })
+  })
+
+  it('does nothing when the same cluster is re-selected while the tool is open', () => {
+    expect(decideSelectionAction({
+      newSel: cluster('c1'), toolActive: true, autoOpened: true, activeClusterId: 'c1', mode: PARTS,
+    })).toEqual({ action: 'none', clusterId: null })
+  })
+
+  it('leaves a MANUALLY-opened tool sticky (no close/retarget on selection change)', () => {
+    expect(decideSelectionAction({
+      newSel: null, toolActive: true, autoOpened: false, activeClusterId: 'c1', mode: PARTS,
+    })).toEqual({ action: 'none', clusterId: null })
+    expect(decideSelectionAction({
+      newSel: cluster('c2'), toolActive: true, autoOpened: false, activeClusterId: 'c1', mode: PARTS,
+    })).toEqual({ action: 'none', clusterId: null })
+  })
+
+  it('falls back to newSel.id when data.cluster_id is absent', () => {
+    expect(decideSelectionAction({
+      newSel: { type: 'cluster', id: 'c9' }, toolActive: false, autoOpened: false, activeClusterId: null, mode: PARTS,
+    })).toEqual({ action: 'open', clusterId: 'c9' })
   })
 })

@@ -33,7 +33,7 @@ import { buildSpecMap, buildDomainMapFromDesign, buildJunctionMapFromDomains, bu
 import { initGroupGizmo } from './scene/group_gizmo.js'
 import { initAssemblyTransform } from './scene/assembly_transform.js'
 import { matrixFromInstance, sameInstanceTransform, assemblyTransformOnlyChange, constraintRelevantChanged } from './scene/assembly_diff.js'
-import { flexAnchorKey, connIdForBead, flexibleRunForBead } from './scene/design_queries.js'
+import { flexAnchorKey, connIdForBead, flexibleRunForBead, duplexClusterForOverhang } from './scene/design_queries.js'
 import { computeGroupHiddenInstanceIds } from './scene/assembly_groups_util.js'
 import { initAssemblyPointer } from './scene/assembly_pointer.js'
 import { hexFromInt } from './scene/color_util.js'
@@ -63,7 +63,6 @@ import { initOverhangSequencesPanel } from './ui/overhang_sequences_panel.js'
 import { initStrandGroupsPanel } from './ui/strand_groups_panel.js'
 import { initSelectionFilter } from './ui/selection_filter.js'
 import { initPropertiesPanel } from './ui/properties_panel.js'
-import { initOverhangBindingMenu } from './ui/overhang_binding_menu.js'
 import { initOverhangOrientationMenu } from './ui/overhang_orientation_menu.js'
 import { initBluntEndMenus } from './ui/blunt_end_menus.js'
 import { createScriptRunner }  from './ui/script_runner.js'
@@ -105,7 +104,6 @@ import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initOverhangLocations }   from './scene/overhang_locations.js'
 import { initOverhangLinkArcs }    from './scene/overhang_link_arcs.js'
 import { initFlexibleArcs }        from './scene/flexible_arcs.js'
-import { initOverhangBindingLines } from './scene/overhang_binding_lines.js'
 import { initOverhangUnzipOverlay } from './scene/overhang_unzip_overlay.js'
 import { initMultiOverhangStrandAnim } from './scene/overhang_strand_anim.js'
 import { initUnligatedCrossoverMarkers } from './scene/unligated_crossover_markers.js'
@@ -1662,11 +1660,6 @@ async function main() {
     }
   }
 
-  // ── Overhang Binding Lines (dashed connectors for design.overhang_bindings) ─
-  // Bound bindings → solid green; unbound (pre-bind) → translucent amber.
-  // Right-click on a line exposes a Toggle Bind / Delete menu (capture-phase
-  // contextmenu listener below).
-  const overhangBindingLines = initOverhangBindingLines(scene)
   // Display-only unzip animation driven by the animation player during bind/unbind
   // φ playback. Moves the REAL overhang beads via the helix renderer (no synthetic
   // geometry, no store subscription — the player calls update()/clear() itself).
@@ -1685,47 +1678,6 @@ async function main() {
     getScene:     () => scene,
   })
 
-  store.subscribe((newState, prevState) => {
-    if (newState.currentGeometry === prevState.currentGeometry &&
-        newState.currentDesign   === prevState.currentDesign) return
-    if (newState.assemblyActive) return   // per-part bindings only in design mode for now
-    overhangBindingLines.rebuild(newState.currentDesign, newState.currentGeometry)
-  })
-  {
-    const s = store.getState()
-    if (!s.assemblyActive && s.currentDesign && s.currentGeometry) {
-      overhangBindingLines.rebuild(s.currentDesign, s.currentGeometry)
-    }
-  }
-  // Hide binding lines while in assembly mode (overhang_bindings live on the
-  // per-part design, not on the assembly tree).
-  store.subscribe((newState, prevState) => {
-    if (newState.assemblyActive === prevState.assemblyActive) return
-    overhangBindingLines.setVisible(!newState.assemblyActive)
-  })
-
-  // Right-click on a binding line → custom menu with Toggle Bind / Delete.
-  // Capture-phase so we intercept before selection_manager's contextmenu
-  // handler (which would otherwise interpret the click as "no hit, dismiss").
-  // If we don't hit a binding line we don't preventDefault — the existing
-  // handlers run as usual.
-  const _bindingMenu = initOverhangBindingMenu({ store, api, showToast, showConfirm })
-  canvas.addEventListener('contextmenu', (e) => {
-    if (store.getState().assemblyActive) return  // per-part bindings only
-    if (!overhangBindingLines.isVisible()) return
-    const rect = canvas.getBoundingClientRect()
-    const ndc = {
-      x:  ((e.clientX - rect.left) / rect.width)  * 2 - 1,
-      y: -((e.clientY - rect.top)  / rect.height) * 2 + 1,
-    }
-    const rc = new THREE.Raycaster()
-    rc.setFromCamera(ndc, camera)
-    const hit = overhangBindingLines.hitTest(rc)
-    if (!hit) return
-    e.preventDefault()
-    e.stopPropagation()
-    _bindingMenu.show(hit.bindingId, e.clientX, e.clientY)
-  }, { capture: true })
 
   // Right-click a rendered protein → "Conjugate protein to ssDNA…" → Conjugate Manager.
   canvas.addEventListener('contextmenu', (e) => {
@@ -2578,6 +2530,22 @@ async function main() {
     api, store, assemblyRenderer, openOverhangsManager,
     getOrientPanel: () => _orientPanel,
     overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem,
+    // Reach the SAME extensions dialog the strand menu uses, for the overhang's
+    // backing strand — so right-clicking any overhang (applied/relaxed/etc.) can add
+    // a fluorophore/modification (StrandExtension). See selection_manager.
+    onOpenExtensions: (strandIds, x, y) => selectionManager.openExtensionsForStrands(strandIds, x, y),
+    // [[overhang-duplex-cluster]] P4: a duplex-backed overhang orients via its cluster gizmo.
+    getDuplexClusterForOverhang: (ovhgId) => duplexClusterForOverhang(store.getState().currentDesign, ovhgId),
+    onEditDuplexOrientation: (clusterId) => {
+      store.setState({ activeClusterId: clusterId })
+      _activateTranslateRotateTool(clusterId)   // defined later in main(); menu clicks fire post-init
+    },
+    onResetDuplexOrientation: async (clusterId) => {
+      // Reset the duplex pose to identity (keep the pivot); commit skips the geometry
+      // refetch, so refresh geometry so the reset paints immediately.
+      await api.patchCluster(clusterId, { translation: [0, 0, 0], rotation: [0, 0, 0, 1], commit: true, log: true })
+      await api.getGeometry()
+    },
   })
 
   // ── Blunt end indicators ─────────────────────────────────────────────────────
@@ -4180,12 +4148,15 @@ async function main() {
       // DEBUG — log once per frame so you can see cone state during a drag
       helixCtrl?.logConeDebug('LIVE-FRAME')
     },
-    (helixIds, domainIds) => {
+    (helixIds, domainIds, append = false) => {
+      // `append` = add these beads to the existing base snapshot instead of clearing it —
+      // needed when a drag captures MULTIPLE bodies (the dragged cluster + movable-link
+      // bodies), so the second capture doesn't wipe the first (which froze the main cluster).
       const helixCtrl = designRenderer.getHelixCtrl()
-      helixCtrl?.captureClusterBase(helixIds, domainIds)
-      bluntEnds?.captureClusterBase(helixIds, false, domainIds)
-      if (!domainIds?.length) jointRenderer?.captureClusterBase(helixIds)
-      if (!domainIds?.length) overhangLocations.captureClusterBase(helixIds)
+      helixCtrl?.captureClusterBase(helixIds, domainIds, append)
+      bluntEnds?.captureClusterBase(helixIds, append, domainIds)
+      if (!domainIds?.length) jointRenderer?.captureClusterBase(helixIds, append)
+      if (!domainIds?.length) overhangLocations.captureClusterBase(helixIds, append)
       // DEBUG — snapshot the bead positions at drag-start before any transform
       helixCtrl?.logConeDebug('DRAG-START')
     },
@@ -4393,6 +4364,7 @@ async function main() {
     applyAssemblyPrimaryLive:     _applyAssemblyPrimaryLive,
     queueAssemblyPrimaryCommit:   _queueAssemblyPrimaryCommit,
     refreshClusterPivotForAttach: _refreshClusterPivotForAttach,
+    setClusterRotationPoint:      api.setClusterRotationPoint,
     isTranslateRotateActive:      () => _translateRotateActive,
   })
   const _mrPanel                        = _moveRotatePanel.panel
@@ -4827,7 +4799,7 @@ async function main() {
     // Keep pivot dropdown in sync when joints are added/removed
     if (_translateRotateActive && n.activeClusterId) {
       const joints = n.currentDesign?.cluster_joints?.filter(j => j.cluster_id === n.activeClusterId) ?? []
-      _mrSetPivotOptions(joints)
+      _mrSetPivotOptions(joints, n.activeClusterId)
     }
   })
 
@@ -5854,7 +5826,7 @@ async function main() {
       // refresh the pivot dropdown so the new joint appears immediately.
       if (_translateRotateActive && store.getState().activeClusterId === clusterId) {
         const joints = store.getState().currentDesign?.cluster_joints?.filter(j => j.cluster_id === clusterId) ?? []
-        _mrSetPivotOptions(joints)
+        _mrSetPivotOptions(joints, clusterId)
       }
     },
     onJointRotate: (joint) => _rotateJoint(joint),
@@ -6270,14 +6242,27 @@ async function main() {
     if (!newState.activeClusterId || !newState.translateRotateActive) return
     const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === newState.activeClusterId)
     if (!cluster) return
-    const [rx, ry, rz] = quatToEulerDeg(cluster.rotation)
-    _mrSetTransformValues(cluster.translation[0], cluster.translation[1], cluster.translation[2], rx, ry, rz)
+    // Read from the gizmo's pending (pivot-rebased) transform when present so the number
+    // boxes match the pivot the gizmo actually uses; a +45/reset/typed commit then keeps
+    // position = pivot + field-translation instead of teleporting (duplex pivot bug).
+    const _pend = clusterGizmo.getPendingTransform(newState.activeClusterId)
+    const _t = _pend?.translation ?? cluster.translation
+    const _r = _pend?.rotation ?? cluster.rotation
+    const [rx, ry, rz] = quatToEulerDeg(_r)
+    _mrSetTransformValues(_t[0], _t[1], _t[2], rx, ry, rz)
     const joints = newState.currentDesign?.cluster_joints?.filter(j => j.cluster_id === newState.activeClusterId) ?? []
-    _mrSetPivotOptions(joints)
+    _mrSetPivotOptions(joints, newState.activeClusterId)
     _mrSetSelectedPivot('centroid')
     _mrSyncClusterDropdown(newState.activeClusterId)
     clusterGizmo.setConstraint('centroid', null)
   })
+
+  // Selection→tool bridge: selecting a cluster (3D cluster-filter click OR Movable
+  // Clusters sidebar row — both surface as a `selectedObject` of type 'cluster') auto-opens
+  // Move/Rotate on it; re-targets it to a different cluster; and auto-closes (auto-committing)
+  // when the cluster is deselected. Parts-editor only; sticky for manually-opened tools.
+  // Logic + guards live in translate_rotate_tool.js; this is thin wiring.
+  store.subscribe((newState, prevState) => { _translateRotateTool.handleSelectionChange(newState, prevState) })
 
   // Save/restore selectableTypes when translate/rotate tool activates/deactivates.
   let _savedClusterST = null
@@ -7001,6 +6986,49 @@ async function main() {
       async activateAssemblyMoveTool() {
         await _activateTranslateRotateTool()
         return !!store.getState().translateRotateActive
+      },
+      /** Activate the DESIGN-mode Move/Rotate tool on a specific cluster (the real
+       *  entry point — same fn the Rotate button / cluster-row click call, with the
+       *  cluster pre-targeted). Returns the pivot-select's option values so a gate
+       *  can assert the duplex root options appear. Used by the duplex rotation-point
+       *  e2e (pivot dropdown must hold a non-centroid selection across the round-trip). */
+      async activateDesignMoveTool(clusterId) {
+        store.setState({ activeClusterId: clusterId })
+        await _activateTranslateRotateTool(clusterId)
+        const sel = document.getElementById('mr-pivot-sel')
+        return {
+          active: !!store.getState().translateRotateActive,
+          pivotOptions: sel ? [...sel.options].map(o => o.value) : [],
+          pivotValue: sel?.value ?? null,
+        }
+      },
+      /** Read the current Move/Rotate pivot-select {value, options}. The observable
+       *  for the "dropdown holds a root pivot" gate. */
+      getMoveRotatePivotState() {
+        const sel = document.getElementById('mr-pivot-sel')
+        return {
+          value: sel?.value ?? null,
+          options: sel ? [...sel.options].map(o => o.value) : [],
+        }
+      },
+      /** Move/Rotate gizmo geometry for a cluster: the rotation pivot the gizmo uses,
+       *  the world position where the gizmo HANDLES render, and the cluster's current
+       *  bead centroid (rendered positions). Lets an e2e assert the gizmo sits at its
+       *  pivot and that a +45° step rotates the beads about that pivot. */
+      getClusterGizmoState(clusterId) {
+        const design = store.getState().currentDesign
+        const cluster = design?.cluster_transforms?.find(c => c.id === clusterId)
+        const entries = cluster ? _clusterBackboneEntries(cluster, design) : []
+        let cx = 0, cy = 0, cz = 0
+        for (const e of entries) { cx += e.pos.x; cy += e.pos.y; cz += e.pos.z }
+        const n = entries.length || 1
+        return {
+          pivot:      clusterGizmo.getPivot?.() ?? null,
+          gizmoPos:   clusterGizmo.getGizmoWorldPosition?.() ?? null,
+          beadCount:  entries.length,
+          beadCentroid: [cx / n, cy / n, cz / n],
+          beads:      entries.map(e => [e.pos.x, e.pos.y, e.pos.z]),
+        }
       },
       /** Enter assembly mode on the doc's current server assembly. The 'a'
        *  toggle was removed (real entry is opening/creating a .nass); this

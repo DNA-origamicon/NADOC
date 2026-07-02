@@ -235,7 +235,7 @@ def derive_flexible_connections(design: Design) -> list[FlexibleConnection]:
     return conns
 
 
-def _gate(cluster_id, adj, bead_domain, marked, owner) -> dict:
+def _gate(cluster_id, adj, bead_domain, marked, owner, duplex_ids=frozenset()) -> dict:
     crossings = 0
     rigid_blocking: list[dict] = []
     seen_edges: set = set()
@@ -245,6 +245,14 @@ def _gate(cluster_id, adj, bead_domain, marked, owner) -> dict:
         for v in adj[u]:
             ov = owner(v)
             if ov is None or ov == cluster_id:
+                continue
+            # An overhang-DUPLEX child cluster is a movable connector that rides with its
+            # parts (it has its own free-until-taut "Constrained (taut bonds)" mode), NOT a
+            # rigid pin. Treat it as transparent to the ssDNA gate — skip the overhang-junction
+            # crossing entirely so materializing a duplex doesn't disable a parent cluster's
+            # "ssDNA constrained" option. (Before duplex clusters existed, these overhang beads
+            # belonged to the parent and the junction was intra-cluster.)
+            if ov in duplex_ids or cluster_id in duplex_ids:
                 continue
             ekey = frozenset((u, v))
             if ekey in seen_edges:
@@ -265,6 +273,11 @@ def _gate(cluster_id, adj, bead_domain, marked, owner) -> dict:
     }
 
 
+def _duplex_cluster_ids(design: Design) -> frozenset:
+    """Cluster ids that are overhang-duplex children (movable connectors, not rigid pins)."""
+    return frozenset(c.id for c in design.cluster_transforms if c.overhang_duplex_driver_id)
+
+
 def cluster_flexible_gate(design: Design, cluster_id: str) -> dict:
     """Is the move/rotate 'ssDNA constrained' mode available for this cluster?
 
@@ -275,7 +288,7 @@ def cluster_flexible_gate(design: Design, cluster_id: str) -> dict:
     adj, bead_domain = _build_bead_graph(design)
     marked = _marked_bead_keys(design, bead_domain)
     owner = _owner_fn(design, bead_domain)
-    return _gate(cluster_id, adj, bead_domain, marked, owner)
+    return _gate(cluster_id, adj, bead_domain, marked, owner, _duplex_cluster_ids(design))
 
 
 def all_cluster_gates(design: Design) -> dict[str, dict]:
@@ -283,7 +296,8 @@ def all_cluster_gates(design: Design) -> dict[str, dict]:
     adj, bead_domain = _build_bead_graph(design)
     marked = _marked_bead_keys(design, bead_domain)
     owner = _owner_fn(design, bead_domain)
-    return {c.id: _gate(c.id, adj, bead_domain, marked, owner)
+    duplex_ids = _duplex_cluster_ids(design)
+    return {c.id: _gate(c.id, adj, bead_domain, marked, owner, duplex_ids)
             for c in design.cluster_transforms}
 
 

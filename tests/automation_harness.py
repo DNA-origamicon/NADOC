@@ -1058,6 +1058,142 @@ def assert_direct_binding_applied(
     return reimported
 
 
+def assert_duplex_relocated(
+    design: Design,
+    *,
+    driver_oh_id: str,
+    driven_oh_id: str,
+    driven_length_bp: int,
+):
+    """Phase 4b: a DIFFERENT-length ``Duplex`` (no equal-length binding) relocated
+    the DRIVEN overhang's WHOLE domain onto the DRIVER's helix at the paired-window
+    range — and did NOT stretch the short driven to the long driver's length. The
+    duplex-graph analog of :func:`assert_direct_binding_applied`, for the
+    binding-less path (`connect_duplex` on different-length overhangs).
+
+    Asserts, on both ``design`` and its :func:`roundtrip_nadoc` re-import:
+
+      1. **Both overhangs survive** (neither consumed).
+      2. **Exactly one duplex** joins the pair, ``bound`` True with a populated
+         ``prior_driven_topology`` (so it can be reverted), and its ``driver`` side
+         names ``driver_oh_id``.
+      3. **The driven relocated onto the driver's helix**, antiparallel, keeping its
+         OWN ``driven_length_bp`` (NOT stretched to the driver's length — the whole
+         point of the paired-window target); the driven ``OverhangSpec.helix_id``
+         moved too.
+      4. **No orphaned helices** and **no improper crossover** (`validate_design`
+         agrees) — the relocated bond is a ForcedLigation, not a mismatched-bp xover.
+
+    Can-go-red: a connect that didn't relocate (driven still on its own helix) fails
+    clause 3; a driven stretched to the driver's length fails clause 3's length pin;
+    a missing/unbound duplex fails clause 2. Returns the re-imported design.
+    """
+    def _backing_domain(d: Design, ovhg_id: str):
+        for s in d.strands:
+            for dom in s.domains:
+                if dom.overhang_id == ovhg_id:
+                    return dom
+        return None
+
+    def _check(d: Design, where: str):
+        spec_drv = next((o for o in d.overhangs if o.id == driver_oh_id), None)
+        spec_dvn = next((o for o in d.overhangs if o.id == driven_oh_id), None)
+        assert spec_drv is not None, f"{where}: driver overhang {driver_oh_id!r} vanished"
+        assert spec_dvn is not None, f"{where}: driven overhang {driven_oh_id!r} vanished"
+        dom_drv = _backing_domain(d, driver_oh_id)
+        dom_dvn = _backing_domain(d, driven_oh_id)
+        assert dom_drv is not None and dom_dvn is not None, f"{where}: missing backing domain"
+
+        pair = {driver_oh_id, driven_oh_id}
+        dux = [dx for dx in d.duplexes
+               if {dx.left.overhang_id, dx.right.overhang_id} == pair]
+        assert len(dux) == 1, f"{where}: expected 1 duplex for the pair, got {len(dux)}"
+        dx = dux[0]
+        assert dx.bound, f"{where}: duplex not bound (connect must relocate)"
+        assert dx.prior_driven_topology is not None, (
+            f"{where}: relocated duplex has no prior_driven_topology snapshot")
+        driver_side_oh = dx.left.overhang_id if dx.driver == 'left' else dx.right.overhang_id
+        assert driver_side_oh == driver_oh_id, (
+            f"{where}: duplex driver is {driver_side_oh!r}, expected {driver_oh_id!r}")
+
+        # 3. Driven relocated onto driver's helix, keeping its OWN length.
+        assert dom_dvn.helix_id == dom_drv.helix_id, (
+            f"{where}: driven on helix {dom_dvn.helix_id!r}, driver on {dom_drv.helix_id!r} "
+            f"— connect must relocate the driven onto the driver's helix")
+        assert spec_dvn.helix_id == dom_drv.helix_id, (
+            f"{where}: driven OverhangSpec.helix_id not moved to the driver's helix")
+        got_len = abs(dom_dvn.end_bp - dom_dvn.start_bp) + 1
+        assert got_len == driven_length_bp, (
+            f"{where}: driven relocated to {got_len} bp, expected {driven_length_bp} "
+            f"(a short driven must NOT be stretched to the driver's length)")
+
+        used_helices = {dom.helix_id for s in d.strands for dom in s.domains}
+        orphans = [h.id for h in d.helices if h.id not in used_helices]
+        assert not orphans, f"{where}: orphaned helices: {orphans}"
+        from backend.core.validator import validate_design
+        bad = [r.message for r in validate_design(d).results
+               if not r.ok and "Improper crossover" in r.message]
+        assert not bad, f"{where}: validate_design flagged improper crossovers: {bad}"
+        return dx
+
+    _check(design, "in-memory")
+    reimported = roundtrip_nadoc(design)
+    _check(reimported, "after .nadoc round-trip")
+    return reimported
+
+
+def assert_extension_present(
+    design: Design,
+    ext_id: str,
+    *,
+    strand_id: str,
+    end: str,
+    modification: str | None = None,
+    sequence: str | None = None,
+):
+    """A terminal StrandExtension (added sequence and/or a fluorophore/quencher
+    modification) is wired to the named strand end and **survives a ``.nadoc``
+    round-trip**.
+
+    Extensions live outside the strand graph (their own `__ext_` helix), so
+    `canonical_topology` doesn't fingerprint them — only re-reading after a real
+    export→import proves the label persisted and still resolves. Asserts, on both
+    ``design`` and its :func:`roundtrip_nadoc` re-import:
+
+      1. **The extension exists** under ``ext_id``, on ``strand_id`` at ``end``.
+      2. **Its content matches** the requested ``modification`` / ``sequence`` (when given).
+      3. **It's valid** — `validate_design` raises no "Strand extension" issue (the
+         strand resolves, a modification is a known key, a sequence is ACGTN).
+
+    Can-go-red: a build that dropped the extension (1) / wrong end or content (2) /
+    an unknown modification or dangling strand (3) / a label the import lost
+    (round-trip). Returns the re-imported design.
+    """
+    def _check(d: Design, where: str):
+        ext = next((e for e in d.extensions if e.id == ext_id), None)
+        assert ext is not None, (
+            f"{where}: no extension {ext_id!r} (of {[e.id for e in d.extensions]})")
+        assert ext.strand_id == strand_id and ext.end == end, (
+            f"{where}: extension on {ext.strand_id!r}/{ext.end}, "
+            f"expected {strand_id!r}/{end}")
+        if modification is not None:
+            assert ext.modification == modification, (
+                f"{where}: modification {ext.modification!r} != {modification!r}")
+        if sequence is not None:
+            assert ext.sequence == sequence, (
+                f"{where}: sequence {ext.sequence!r} != {sequence!r}")
+        from backend.core.validator import validate_design
+        bad = [r.message for r in validate_design(d).results
+               if not r.ok and "Strand extension" in r.message]
+        assert not bad, f"{where}: validate_design flagged the extension: {bad}"
+        return ext
+
+    _check(design, "in-memory")
+    reimported = roundtrip_nadoc(design)
+    _check(reimported, "after .nadoc round-trip")
+    return reimported
+
+
 # ── Flexible ssDNA-segment relax oracle (hinge scaffold-tether minimisation) ──
 
 def assert_flexible_segments_relaxed(
@@ -1358,6 +1494,54 @@ def _overhang_rotation_changed(before: Design, after: Design, overhang_id: str) 
     return rb != ra
 
 
+def assert_duplex_cluster_materialized(
+    before: Design,
+    after: Design,
+    driver_oh_id: str,
+    *,
+    eps: float = 1e-6,
+):
+    """A duplex-cluster materialization (Phase 1 [[overhang-duplex-cluster]]) is:
+
+      1. **Geometry-NEUTRAL** — every backbone bead of the driver overhang is unchanged
+         (the world→rest conjugation reproduces the OverhangSpec overlay exactly).
+      2. **Pose moved onto a CHILD cluster** — a new ``ClusterRigidTransform`` carries
+         ``overhang_duplex_driver_id == driver_oh_id`` + non-empty ``domain_ids``, and the
+         driver ``OverhangSpec`` pose is CLEARED (identity rotation, zero translation), so
+         nothing double-transforms.
+      3. **Topology-unchanged** — ``canonical_topology`` byte-identical (display/pose only,
+         the Three-Layer Law).
+
+    Can-go-red: a no-op (no cluster created) fails clause 2; a conjugation bug that shifts
+    the beads fails clause 1; any strand-graph edit fails clause 3.
+    """
+    def _ovhg_beads(d: Design) -> dict:
+        return {n["bp_index"]: tuple(round(x, 6) for x in
+                (n.get("backbone_position") or n.get("base_position")))
+                for n in _geometry_for_design(d) if n.get("overhang_id") == driver_oh_id}
+
+    gb, ga = _ovhg_beads(before), _ovhg_beads(after)
+    assert gb, f"driver overhang {driver_oh_id!r} has no beads before — vacuous check"
+    assert set(gb) == set(ga), "driver overhang bead set changed during materialization"
+    for bp in gb:
+        assert all(abs(x - y) <= eps for x, y in zip(gb[bp], ga[bp])), (
+            f"materialize moved driver overhang bead {bp}: {gb[bp]} → {ga[bp]} "
+            "(the conjugation is not geometry-neutral)")
+
+    cl = next((c for c in after.cluster_transforms
+               if c.overhang_duplex_driver_id == driver_oh_id), None)
+    assert cl is not None, "no duplex cluster was created for the driver overhang"
+    assert cl.domain_ids, "duplex cluster has no domain_ids (must be domain-level)"
+    spec = next((o for o in after.overhangs if o.id == driver_oh_id), None)
+    assert spec is not None, f"driver overhang {driver_oh_id!r} vanished"
+    assert list(spec.rotation) == [0.0, 0.0, 0.0, 1.0] and all(
+        abs(float(t)) <= eps for t in spec.translation), (
+        "driver OverhangSpec pose was not cleared — would double-transform with the cluster")
+
+    assert canonical_topology(before) == canonical_topology(after), (
+        "materialize changed the strand-graph topology — it must be pose-layer only")
+
+
 def assert_direct_binding_relaxed_pose(
     before: Design,
     after: Design,
@@ -1419,6 +1603,36 @@ def assert_direct_binding_relaxed_pose(
     assert canonical_topology(before) == canonical_topology(after), (
         f"direct binding {driven_oh_id!r}: relax changed the strand-graph topology — "
         "it must be a display/pose-layer move only (Three-Layer Law)"
+    )
+
+
+def assert_duplex_relaxed(
+    before: Design,
+    after: Design,
+    duplex_id: str,
+    *,
+    target_nm: float = 0.67,
+    require_reduced: bool = True,
+    eps: float = 1e-3,
+):
+    """A headless BOUND-duplex relax (``headless_build.relax_duplex``) closed the
+    driven overhang's stretched tip↔root chord, moved a pose, and **did not touch
+    topology** — the Proposal-B counterpart of
+    :func:`assert_direct_binding_relaxed_pose` for a duplex with no legacy binding.
+
+    Resolves driver/driven from the duplex's ``driver`` field (identical to the route)
+    and delegates to :func:`assert_direct_binding_relaxed_pose`, so it re-measures the
+    tip↔root chord on the POSED geometry and pins all three clauses (strain reduced +
+    pose moved + ``canonical_topology`` unchanged). Can-go-red on a no-op relax — the
+    exact regression the "Relax did nothing on a duplex" fix addressed.
+    """
+    dx = next((d for d in after.duplexes if d.id == duplex_id), None)
+    assert dx is not None, f"no duplex {duplex_id!r} in design"
+    driver_oh_id = dx.right.overhang_id if dx.driver == "right" else dx.left.overhang_id
+    driven_oh_id = dx.left.overhang_id if dx.driver == "right" else dx.right.overhang_id
+    assert_direct_binding_relaxed_pose(
+        before, after, driver_oh_id, driven_oh_id,
+        target_nm=target_nm, require_reduced=require_reduced, eps=eps,
     )
 
 

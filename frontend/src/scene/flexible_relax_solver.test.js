@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { relaxToConvergence } from './flexible_relax_solver.js'
+import { relaxToConvergence, _internals } from './flexible_relax_solver.js'
 
 // Shared parity fixtures + goldens. backend/core/flexible_relax.py is pinned to
 // the SAME numbers in tests/test_flexible_relax.py (JS↔Python parity) — change
@@ -48,5 +48,25 @@ describe('flexible_relax_solver', () => {
     const r = relaxToConvergence(state, armed, { translateOnly: false })
     expect(r.moved).toBe(false)
     expect(state.pos).toEqual([0, 0, 0])
+  })
+
+  it('movable-link chain: the link body swings to follow a displaced near-anchor while staying anchored to the fixed far-anchor', () => {
+    // Models the duplex LINK during a drag: its near bond tracks the dragged part A (pF moved
+    // away), its far bond stays on the fixed partner B. The link should move so the near bead
+    // approaches A, without abandoning B.
+    const { applyQuat } = _internals
+    const near = { pM0: [1, 0, 0], pF: [3, 0, 0], contour: 1.0 }   // A pulled away → over by 1
+    const far = { pM0: [-1, 0, 0], pF: [-1, 0, 0], contour: 1.0 }  // B fixed → already satisfied
+    const state = { pos: [0, 0, 0], quat: [0, 0, 0, 1], pivot: [0, 0, 0] }
+    const r = relaxToConvergence(state, [near, far], {})
+    expect(r.moved).toBe(true)
+    // Bead world pos under the solved pose (rotate about the start pos [0,0,0], then translate).
+    const bead = (pM0) => {
+      const rot = applyQuat(r.quat, pM0)
+      return [rot[0] + r.pos[0], rot[1] + r.pos[1], rot[2] + r.pos[2]]
+    }
+    const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
+    expect(d(bead(near.pM0), near.pF)).toBeLessThan(2.0)  // near bead followed A (started 2 away)
+    expect(d(bead(far.pM0), far.pF)).toBeLessThan(1.5)    // far bead stayed anchored near B
   })
 })
