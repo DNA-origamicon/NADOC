@@ -100,4 +100,23 @@ describe('flexible arcs — sim-position mode', () => {
     const onSim = beadTranslations(arcs.group).some((p) => p.x === 1 && p.y === 2)
     expect(onSim).toBe(false)
   })
+
+  it('only renders its bead/slab overlay for full and beads representations', () => {
+    const scene = new THREE.Scene()
+    const arcs = initFlexibleArcs(scene, makeRenderer(), () => ({}))
+    arcs.rebuild(makeDesign())
+    expect(beadMesh(arcs.group)).toBeTruthy()
+
+    arcs.setRepresentation('cylinders')
+    expect(arcs.group.visible).toBe(false)
+    expect(arcs.group.children.length).toBe(0)
+
+    arcs.setRepresentation('surface')
+    expect(arcs.group.visible).toBe(false)
+    expect(arcs.group.children.length).toBe(0)
+
+    arcs.setRepresentation('beads')
+    expect(arcs.group.visible).toBe(true)
+    expect(beadMesh(arcs.group)).toBeTruthy()
+  })
 })

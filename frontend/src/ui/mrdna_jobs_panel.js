@@ -82,6 +82,12 @@ export function detailStatusText(job, progress) {
 }
 
 /** Timeline glyphs for the job's stages (coarse, and fine when present). */
+/** Pure: a job that can seed a NAMD run — its FINE stage must have completed (the
+ * seed reconstruction needs the 1-bead/bp fine structure; a coarse-only job can't). */
+export function seedReady(job) {
+  return job?.status === 'completed' && (job?.fine_steps || 0) > 0
+}
+
 export function coarseStageChip(job) {
   const glyph = (st) => st === 'done' ? '●' : st === 'failed' ? '✗' : st === 'running' ? '◐' : '○'
   const stages = job?.stages?.length ? job.stages : [{ name: 'coarse', status: undefined }]
@@ -154,6 +160,9 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   const detailError = $('mrdna-jobs-detail-error')
   const stopBtn = $('mrdna-jobs-stop-btn')
   const deleteBtn = $('mrdna-jobs-delete-btn')
+  const seedBtn = $('mrdna-jobs-seed-btn')
+  const seedStatus = $('mrdna-jobs-seed-status')
+  let _seeding = false
   const displayToggle = $('mrdna-jobs-display-toggle')
   const beadsToggle = $('mrdna-jobs-beads-toggle')
   const displayStatus = $('mrdna-jobs-display-status')
@@ -319,6 +328,13 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     const ready = job.status === 'completed'
     if (displayToggle) displayToggle.disabled = !ready
     if (beadsToggle) beadsToggle.disabled = !ready
+    if (seedBtn && !_seeding) {
+      const ok = seedReady(job)
+      seedBtn.disabled = !ok
+      seedBtn.style.cursor = ok ? 'pointer' : 'not-allowed'
+      seedBtn.style.background = ok ? '#21262d' : '#122117'
+      seedBtn.style.color = ok ? '#c9d1d9' : '#484f58'
+    }
     _renderCurvature(job)
     _syncDisplayStatus()
   }
@@ -347,6 +363,31 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
       if (!_selectedId) return
       await api.stopMrdnaJob(_selectedId)
       await _fetchJobs()
+    })
+  }
+  // ── Use as NAMD seed — only once a FINE-stage relaxation has completed ──────────
+  function _setSeedStatus(text, color = _C.dim) {
+    if (seedStatus) { seedStatus.textContent = text; seedStatus.style.color = color }
+  }
+  if (seedBtn) {
+    seedBtn.addEventListener('click', async () => {
+      if (!_selectedId || seedBtn.disabled || _seeding) return
+      _seeding = true
+      seedBtn.disabled = true
+      _setSeedStatus('Building NAMD seed + solvating (this can take 1–2 min)…', _C.accent)
+      const job = await api.createMdJob({
+        mrdna_job_id: _selectedId,
+        design_source_path: getWorkspacePath?.() || null,
+      })
+      _seeding = false
+      if (job && job.job_id) {
+        _setSeedStatus('NAMD seed job created — see Molecular Dynamics below.', _C.ok)
+        showToast('NAMD seed job created from relaxed mrDNA structure', { severity: 'ok' })
+        window.dispatchEvent(new CustomEvent('nadoc:md-job-created'))
+      } else {
+        _setSeedStatus(api.lastErrorMessage() || 'Failed to create NAMD seed (see console)', _C.err)
+      }
+      _renderDetail()
     })
   }
   if (deleteBtn) {

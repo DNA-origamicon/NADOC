@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { normalizeWorkspacePath, filterJobsForPart, seededBadge } from './md_jobs_panel.js'
 
 describe('seededBadge', () => {
-  it('labels oxDNA-seeded jobs and nothing else', () => {
+  it('labels oxDNA- and mrDNA-seeded jobs and nothing else', () => {
     expect(seededBadge({ seed_oxdna_job_id: 'abc123' })).toBe('oxDNA seeded')
+    expect(seededBadge({ seed_mrdna_job_id: 'def456' })).toBe('mrDNA seeded')
     expect(seededBadge({ seed_oxdna_job_id: null })).toBe('')
     expect(seededBadge({})).toBe('')
     expect(seededBadge(null)).toBe('')

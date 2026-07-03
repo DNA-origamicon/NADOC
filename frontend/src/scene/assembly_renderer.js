@@ -3698,8 +3698,10 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
   const _SKIP_MESH_NAMES = new Set([
     'helixCylinders',
     'overhangCylinders',
+    'overhangFullCylinders',
     'curvedHelixCylindersProxy',
     'curvedOverhangCylindersProxy',
+    'curvedOverhangFullCylindersProxy',
   ])
 
   // Linker binding/bridge cylinders are cylinder-LOD meshes, but UNLIKE the
@@ -4113,7 +4115,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     let legacyHelixCylMesh = null
     helixCtrl.root.traverse(obj => {
       if (!(obj instanceof THREE.InstancedMesh)) return
-      if (obj.name === 'overhangCylinders') legacyOvhgMesh = obj
+      if (obj.name === 'overhangCylinders' || obj.name === 'overhangFullCylinders') legacyOvhgMesh = legacyOvhgMesh ?? obj
       if (obj.name === 'helixCylinders')    legacyHelixCylMesh = obj
     })
     console.info(
@@ -5985,7 +5987,7 @@ function _createSharedInstancingRenderer({ scene, store, api }) {
     tmpHelixCtrl.root.traverse(obj => {
       if (!(obj instanceof THREE.InstancedMesh)) return
       if (obj.name === 'helixCylinders')    tmpHelixCyl = obj
-      if (obj.name === 'overhangCylinders') tmpOvhgCyl  = obj
+      if (obj.name === 'overhangCylinders' || obj.name === 'overhangFullCylinders') tmpOvhgCyl  = tmpOvhgCyl ?? obj
       if (obj.count === 0) return
       tmpMeshes.push(obj)
     })

@@ -99,6 +99,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
   scene.add(group)
   let _design = null
   let _visible = true
+  let _reprVisible = true
   // When an oxDNA/MD display overlay is active, the flexible run's beads are drawn
   // at their SIMULATED positions (keyed "helix:bp:dir" → {pos, n:a1}) instead of the
   // geometric arc. null = geometric-arc mode (the default).
@@ -280,7 +281,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
 
   function _render(live = null) {
     _clear()
-    if (!_design || !_visible) return
+    if (!_design || !_visible || !_reprVisible) return
     const conns = _design.flexible_connections ?? []
     if (!conns.length) return
     const posMap = _entryPosMap()
@@ -308,7 +309,16 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
       : null
     _render(live)
   }
-  function setVisible(v) { _visible = v; group.visible = v; if (v) _render(); else _clear() }
+  function _syncVisibility() {
+    group.visible = _visible && _reprVisible
+    if (group.visible) _render()
+    else _clear()
+  }
+  function setVisible(v) { _visible = v; _syncVisibility() }
+  function setRepresentation(repr) {
+    _reprVisible = (repr === 'full' || repr === 'beads')
+    _syncVisibility()
+  }
   /** Switch to SIMULATED-position mode from an oxDNA/MD frame's applyFemPositions
    *  updates (array of {helix_id,bp_index,direction,backbone_position,nx,ny,nz}), or
    *  pass null/empty to revert to the geometric arc.  Called by the oxDNA display
@@ -336,5 +346,5 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     GEO_BEAD.dispose(); GEO_SLAB.dispose()
   }
 
-  return { rebuild, applyLiveUpdate, setVisible, applySimPositions, dispose, hitTest, group }
+  return { rebuild, applyLiveUpdate, setVisible, setRepresentation, applySimPositions, dispose, hitTest, group }
 }

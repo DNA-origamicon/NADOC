@@ -29,6 +29,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from backend.core.models import StrandType
+from backend.core.sequences import domain_bp_range
 # Shared export resolver used by many routes across crud.py + assembly.py + core;
 # it stays in crud.py and is imported back here (same convention as
 # routes_export_structure.py / routes_camera_poses.py).
@@ -44,48 +45,101 @@ router = APIRouter()
 def export_sequence_csv() -> Response:
     """Export strand sequences in caDNAno-compatible CSV format.
 
-    Returns a CSV file (one row per non-scaffold strand) with columns:
-      Strand, Sequence, Length, Color, Start Helix, Start Position,
-      End Helix, End Position
+    Returns a CSV file matching caDNAno's staple export:
+      Start, End, Sequence, Length, Color
 
-    Scaffold strand is included as the first row (Strand=0).
+    Scaffold and reference strands are excluded.
     """
     import csv
     import io
+    import math
+
+    from backend.core.cadnano import _assign_grid_coords, _HC_PERIOD, _SQ_PERIOD
 
     design = _design_for_export()
 
     output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow([
-        "Strand", "Sequence", "Length", "Color",
-        "Start Helix", "Start Position", "End Helix", "End Position",
-    ])
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow(["Start", "End", "Sequence", "Length", "Color"])
 
-    # Helper: get color from store-independent palette index
-    _PALETTE = [
-        "#FF6B6B", "#FFD93D", "#6BCB77", "#F9844A", "#A29BFE", "#FF9FF3",
-        "#00CEC9", "#E17055", "#74B9FF", "#55EFC4", "#FDCB6E", "#D63031",
-    ]
+    helix_scaffold_dir = {h.id: None for h in design.helices}
+    for strand in design.strands:
+        if strand.strand_type != StrandType.SCAFFOLD:
+            continue
+        for domain in strand.domains:
+            if domain.helix_id in helix_scaffold_dir:
+                helix_scaffold_dir[domain.helix_id] = domain.direction
 
-    strands_sorted = sorted(design.strands, key=lambda s: (s.strand_type == StrandType.STAPLE, s.id))
-    for row_idx, strand in enumerate(strands_sorted):
+    rows, cols, export_dirs = _assign_grid_coords(
+        design.helices, helix_scaffold_dir, design.lattice_type
+    )
+    sorted_helices = sorted(design.helices, key=lambda h: (rows[h.id], cols[h.id]))
+    helix_num_map: dict[str, int] = {}
+    fwd_i = rev_i = 0
+    for h in sorted_helices:
+        if export_dirs[h.id].value == "FORWARD":
+            helix_num_map[h.id] = fwd_i * 2
+            fwd_i += 1
+        else:
+            helix_num_map[h.id] = rev_i * 2 + 1
+            rev_i += 1
+
+    min_bp = 0
+    seen_any = False
+    for strand in design.strands:
+        if strand.is_reference:
+            continue
+        for domain in strand.domains:
+            if domain.helix_id not in helix_num_map:
+                continue
+            for bp in domain_bp_range(domain):
+                min_bp = bp if not seen_any else min(min_bp, bp)
+                seen_any = True
+    for h in design.helices:
+        for ls in h.loop_skips:
+            min_bp = min(min_bp, ls.bp_index)
+
+    period = _SQ_PERIOD if design.lattice_type.value == "SQUARE" else _HC_PERIOD
+    offset = math.ceil((-min_bp) / period) * period if min_bp < 0 else 0
+
+    def _endpoint(helix_id: str, bp: int) -> str:
+        return f"{helix_num_map[helix_id]}[{bp + offset}]"
+
+    def _sequence_for_export(strand, total_nt: int) -> str:
+        if not strand.sequence:
+            return "?" * total_nt
+        seq = strand.sequence.replace(" ", "?")
+        if len(seq) < total_nt:
+            seq += "?" * (total_nt - len(seq))
+        return seq
+
+    strands_sorted = sorted(
+        (
+            s for s in design.strands
+            if s.strand_type != StrandType.SCAFFOLD and not s.is_reference
+        ),
+        key=lambda s: (
+            helix_num_map.get(s.domains[0].helix_id, 10**9) if s.domains else 10**9,
+            s.domains[0].start_bp if s.domains else 10**9,
+            s.id,
+        ),
+    )
+    for strand in strands_sorted:
         if not strand.domains:
             continue
-        total_nt = sum(abs(d.end_bp - d.start_bp) + 1 for d in strand.domains)
-        seq = strand.sequence or ""
         first_d = strand.domains[0]
-        last_d  = strand.domains[-1]
-        color = "#29B6F6" if strand.is_scaffold else _PALETTE[row_idx % len(_PALETTE)]
+        last_d = strand.domains[-1]
+        if first_d.helix_id not in helix_num_map or last_d.helix_id not in helix_num_map:
+            continue
+        total_nt = sum(abs(d.end_bp - d.start_bp) + 1 for d in strand.domains)
+        seq = _sequence_for_export(strand, total_nt)
+        color = (strand.color or "#f7931e").lower()
         writer.writerow([
-            row_idx,
+            _endpoint(first_d.helix_id, first_d.start_bp),
+            _endpoint(last_d.helix_id, last_d.end_bp),
             seq,
-            total_nt,
+            len(seq),
             color,
-            first_d.helix_id,
-            first_d.start_bp,
-            last_d.helix_id,
-            last_d.end_bp,
         ])
 
     csv_bytes = output.getvalue().encode("utf-8")

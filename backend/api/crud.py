@@ -42,6 +42,7 @@ import base64
 import gzip
 import math
 import os
+import re
 import time as _time
 import uuid as _uuid
 
@@ -213,6 +214,13 @@ def _design_for_export() -> Design:
     if not any(s.is_reference for s in d.strands):
         return d
     return d.model_copy(update={"strands": d.active_strands()})
+
+
+def _export_filename_stem(name: str | None, fallback: str = "design") -> str:
+    """Return a conservative filename stem for browser download headers."""
+    stem = re.sub(r"[^A-Za-z0-9._ -]+", "_", (name or "").strip())
+    stem = stem.strip(" .")
+    return stem or fallback
 
 
 def _ensure_default_cluster(design: Design) -> Design:
@@ -1824,8 +1832,7 @@ def export_cadnano_design() -> Response:
     except Exception as exc:
         raise HTTPException(400, detail=f"caDNAno export failed: {exc}") from exc
     json_bytes = _json.dumps(data, separators=(",", ":")).encode("utf-8")
-    design_name = design.metadata.name or "design"
-    filename = f"{design_name}.json"
+    filename = f"{_export_filename_stem(design.metadata.name)}.json"
     return Response(
         content=json_bytes,
         media_type="application/json",

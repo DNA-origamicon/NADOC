@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from backend.api import state as design_state
 from backend.api.main import app
 from backend.api.routes import _demo_design
+from tests.conftest import make_6hb_design
 
 client = TestClient(app)
 
@@ -51,6 +52,17 @@ def test_create_design_returns_201():
     assert body["design"]["metadata"]["name"] == "My Design"
     assert body["design"]["helices"] == []
     assert body["design"]["strands"] == []
+
+
+def test_export_cadnano_uses_design_name_for_download_filename():
+    design = make_6hb_design()
+    design.metadata.name = "Left Arm / Rev A"
+    design_state.set_design(design)
+
+    r = client.get("/api/design/export/cadnano")
+
+    assert r.status_code == 200
+    assert r.headers["Content-Disposition"] == 'attachment; filename="Left Arm _ Rev A.json"'
 
 
 def test_get_geometry_returns_list():

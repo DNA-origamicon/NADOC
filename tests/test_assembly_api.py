@@ -867,12 +867,17 @@ def test_redo_nothing_returns_404():
 
 def test_get_instance_design_inline():
     client.post("/api/assembly")
-    r_i = client.post("/api/assembly/instances", json={"source": _inline_source_dict()})
+    r_i = client.post(
+        "/api/assembly/instances",
+        json={"source": _inline_source_dict(), "name": "Named Part"},
+    )
     inst_id = v1_instances(r_i.json())[0]["id"]
 
     r = client.get(f"/api/assembly/instances/{inst_id}/design")
     assert r.status_code == 200
-    assert "design" in r.json()
+    body = r.json()
+    assert "design" in body
+    assert body["instance_name"] == "Named Part"
 
 
 def test_get_instance_design_not_found_returns_404():

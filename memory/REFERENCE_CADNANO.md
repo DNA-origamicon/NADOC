@@ -55,6 +55,40 @@ helix_num % 2 == 1 → REVERSE
 - Strand start/end bp = global caDNAno indices
 - Loop/skip, strand colors, and strand IDs are preserved on round-trip
 
+## Export: bp offset + canonical width (fixed 2026-07-02)
+NADOC domains carry GLOBAL bp indices that can be **negative** (overhang extruded
+before bp 0) or **exceed `length_bp`** (extra bases, resize-through-boundary,
+negative-bp editor segments). caDNAno arrays are 0-based fixed-width, so
+`export_cadnano`:
+1. scans every `domain_bp_range` + every `loop_skips[*].bp_index` for the true
+   `min_bp/max_bp` envelope;
+2. shifts **every** bp by one uniform `offset = max(0, -min_bp)` (uniform across
+   all helices → crossover / loop-skip columns stay aligned);
+3. sizes `array_len = ceil((max_bp+offset+1)/period)*period`, period = 21 HC / 32 SQ.
+
+The offset is applied at every write site: `_fill_strand` pointers + array index,
+loop/skip arrays, and `stap_colors` 5′ bp key. Row/col/num (`_assign_grid_coords`)
+is untouched.
+
+**Bug this fixed:** old code sized arrays to `max(length_bp)` and indexed directly
+→ `IndexError` (bp ≥ len, crashes export → 400) or silent tail-wrap corruption
+(bp < 0, Python negative index). Regressed silently — export had ~zero test coverage.
+
+**Round-trip is gauge-relabelled, not identity.** Absolute bp origin is a free
+gauge (import re-derives phase/bp_start; SQ grid recovery has a pre-existing ±1
+row/col instability; helix FORWARD/REVERSE can flip; colorless staples get a
+default `#F7931E` injected). So "export = import of export" is asserted as
+**topology conservation**, not raw equality: helix count + per-strand TOTAL base
+count by type + loop/skip delta multiset. Domain SEGMENTATION legitimately differs
+(import coalesces contiguous same-helix runs).
+
+## Test Coverage
+- `tests/test_cadnano.py` — 23 tests, HC/SQ import.
+- `tests/test_cadnano_roundtrip.py` — 50 tests: Tier 1 well-formedness (every
+  non-ERROR `Examples/*.nadoc`), Tier 2 conservation round-trip (nadoc + native
+  JSON fixtures), Tier 3 regression (`2hb_xover_val`, `NS_trans_fix`, `U6hb` +
+  explicit negative-bp no-corruption).
+
 ## HC Physical Geometry (from cadnano2 source)
 ```python
 R = 1.125   # nm
@@ -66,5 +100,3 @@ y = row * 3R + (R if (row%2)^(col%2) else 0)   # row step = 3R = 3.375 nm
 # ODD parity: neighbors at (r, c-1), (r+1, c), (r, c+1)
 ```
 
-## Test Coverage
-`tests/test_cadnano.py` — 23 tests covering HC and SQ import/export round-trips

@@ -71,6 +71,7 @@ export function initRepresentationSwitcher({
   api,
   atomisticRenderer,
   designRenderer,
+  flexibleArcs,
   overhangLinkArcs,
   unfoldView,
   getJointRenderer,
@@ -161,6 +162,7 @@ export function initRepresentationSwitcher({
 
   async function _setRepresentation(repr) {
     setCurrentRepr(repr)
+    flexibleArcs?.setRepresentation?.(repr)
     // ── Deactivate any currently active exclusive mode ────────────────────────
     if (repr !== 'vdw' && repr !== 'ballstick' && atomisticRenderer.getMode() !== 'off') {
       atomisticRenderer.setMode('off')

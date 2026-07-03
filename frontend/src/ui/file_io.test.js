@@ -322,7 +322,7 @@ describe('initFileOpen — openPartFromServer', () => {
     const { fileOpen, deps } = makeOpenFactory()
     await fileOpen.openPartFromServer('p/x.nadoc', 'NiceName')
     expect(deps.resetForNewDesign).toHaveBeenCalled()
-    expect(deps.api.importDesign).toHaveBeenCalledWith('{"x":1}')
+    expect(deps.api.importDesign).toHaveBeenCalledWith('{"x":1,"metadata":{"name":"NiceName"}}')
     expect(deps.setFileName).toHaveBeenCalledWith('NiceName')
     expect(deps.setWorkspacePath).toHaveBeenCalledWith('p/x.nadoc')
     expect(deps.hideWelcome).toHaveBeenCalled()
@@ -334,7 +334,8 @@ describe('initFileOpen — openPartFromServer', () => {
   it('falls back to the path as the filename when no name is given', async () => {
     const { fileOpen, deps } = makeOpenFactory()
     await fileOpen.openPartFromServer('p/x.nadoc')
-    expect(deps.setFileName).toHaveBeenCalledWith('p/x.nadoc')
+    expect(deps.setFileName).toHaveBeenCalledWith('x')
+    expect(deps.api.importDesign).toHaveBeenCalledWith('{"x":1,"metadata":{"name":"x"}}')
   })
   it('on import failure shows the error and returns to the welcome screen', async () => {
     const { fileOpen, deps } = makeOpenFactory({

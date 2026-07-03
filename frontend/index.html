@@ -3888,6 +3888,13 @@
                   <button id="mrdna-jobs-delete-btn"
                           style="flex:1;font-size:var(--text-xs);padding:4px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">🗑 Delete</button>
                 </div>
+                <!-- NAMD seed handoff (enabled once a FINE-stage relaxation completes) -->
+                <button id="mrdna-jobs-seed-btn" disabled
+                        title="Start a NAMD all-atom run seeded from this mrDNA fine-stage relaxed structure instead of ideal B-DNA (needs a fine-stage run)"
+                        style="width:100%;font-size:var(--text-xs);padding:4px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;margin-bottom:6px">
+                  Use as NAMD seed
+                </button>
+                <div id="mrdna-jobs-seed-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
 
                 <!-- display toggles (deform + CG beads; both display-only) -->
                 <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:3px">

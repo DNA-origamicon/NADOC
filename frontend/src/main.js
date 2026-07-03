@@ -2939,6 +2939,12 @@ async function main() {
         if (resp.ok) {
           const body = await resp.json()
           partDesign = body.design
+          if (partDesign && body.instance_name) {
+            partDesign = {
+              ...partDesign,
+              metadata: { ...(partDesign.metadata ?? {}), name: body.instance_name },
+            }
+          }
           _flAppendLog('Part design received from server')
         } else {
           _flAppendLog(`Server returned ${resp.status} — trying local cache…`, 'warn')
@@ -2960,6 +2966,12 @@ async function main() {
               if (resp2.ok) {
                 const body2 = await resp2.json()
                 partDesign = body2.design
+                if (partDesign && body2.instance_name) {
+                  partDesign = {
+                    ...partDesign,
+                    metadata: { ...(partDesign.metadata ?? {}), name: body2.instance_name },
+                  }
+                }
                 _flAppendLog('Part design received after cache restore')
               }
             }
@@ -6473,6 +6485,7 @@ async function main() {
     api,
     atomisticRenderer,
     designRenderer,
+    flexibleArcs,
     overhangLinkArcs,
     unfoldView,
     getJointRenderer: () => jointRenderer,

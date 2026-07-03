@@ -1,5 +1,17 @@
 """
-caDNAno v2 import for NADOC.
+caDNAno v2 import/export for NADOC.
+
+Export note (bp offset + canonical width)
+    NADOC domains carry *global* bp indices that can fall outside a helix's
+    nominal ``length_bp`` — scaffold overhangs extruded through the helix
+    boundary, extra bases, and negative-bp editor segments all produce bp values
+    that are negative or larger than ``length_bp``.  caDNAno arrays are 0-based
+    and fixed-width, so ``export_cadnano`` shifts every bp by a single non-negative
+    offset (a non-negative lattice-period multiple, uniform across all helices to
+    preserve crossover and loop/skip alignment) and sizes the array to the true
+    span rounded up to the lattice period (21 bp HC / 32 bp SQ).  Absolute bp
+    labels are therefore relabelled on export; only the origin is free — relative
+    geometry and crossover register are exact.
 
 caDNAno v2 JSON format
 ══════════════════════
@@ -609,6 +621,52 @@ def _assign_grid_coords(
     cols: Dict[str, int] = {}
     export_dirs: Dict[str, Direction] = {}
 
+    def _direction_for_cell(row: int, col: int) -> Direction:
+        return Direction.FORWARD if (row + col) % 2 == 0 else Direction.REVERSE
+
+    def _center_rows_cols() -> None:
+        # Centre in the caDNAno grid.  Offsets must have equal parity to
+        # preserve FORWARD/REVERSE assignments (parity rule: (row+col)%2).
+        if lattice == LatticeType.SQUARE:
+            center_row, center_col = _CADNANO_SQ_CENTER_ROW, _CADNANO_SQ_CENTER_COL
+        else:
+            center_row, center_col = _CADNANO_HC_CENTER_ROW, _CADNANO_HC_CENTER_COL
+
+        all_rows = list(rows.values())
+        all_cols = list(cols.values())
+        raw_row_off = center_row - (min(all_rows) + max(all_rows)) / 2
+        raw_col_off = center_col - (min(all_cols) + max(all_cols)) / 2
+
+        # Python's round() is banker-rounded at .5.  Search nearby integer
+        # offsets instead so we pick the closest parity-preserving placement
+        # deterministically without accidentally flipping every helix parity.
+        base_row = math.floor(raw_row_off)
+        base_col = math.floor(raw_col_off)
+        candidates: list[tuple[float, int, int, int, int]] = []
+        for row_off in range(base_row - 2, base_row + 4):
+            for col_off in range(base_col - 2, base_col + 4):
+                if (row_off + col_off) % 2 != 0:
+                    continue
+                err = (row_off - raw_row_off) ** 2 + (col_off - raw_col_off) ** 2
+                candidates.append((err, abs(row_off), abs(col_off), row_off, col_off))
+        _, _, _, row_off, col_off = min(candidates)
+        for h_id in rows:
+            rows[h_id] += row_off
+            cols[h_id] += col_off
+
+    # Native NADOC helices and modern imports carry the intended lattice cell.
+    # Prefer it over recovering cells from XY, because XY recovery has to infer a
+    # Y-flip and can move a honeycomb row by one, flipping parity and therefore
+    # the caDNAno neighbor/crossover lattice.
+    if all(h.grid_pos is not None for h in helices):
+        for h in helices:
+            row, col = h.grid_pos  # type: ignore[misc]
+            rows[h.id] = int(row)
+            cols[h.id] = int(col)
+            export_dirs[h.id] = _direction_for_cell(int(row), int(col))
+        _center_rows_cols()
+        return rows, cols, export_dirs
+
     if lattice == LatticeType.SQUARE:
         col_pitch = SQUARE_COL_PITCH   # 2.25 nm
         row_step  = SQUARE_ROW_PITCH   # 2.25 nm (uniform, no stagger)
@@ -680,27 +738,7 @@ def _assign_grid_coords(
                 rows[h.id] = row
                 export_dirs[h.id] = Direction.REVERSE
 
-    # Centre in the caDNAno grid.  Offsets must have equal parity to
-    # preserve FORWARD/REVERSE assignments (parity rule: (row+col)%2).
-    if lattice == LatticeType.SQUARE:
-        center_row, center_col = _CADNANO_SQ_CENTER_ROW, _CADNANO_SQ_CENTER_COL
-    else:
-        center_row, center_col = _CADNANO_HC_CENTER_ROW, _CADNANO_HC_CENTER_COL
-
-    all_rows = list(rows.values())
-    all_cols = list(cols.values())
-    raw_row_off = center_row - (min(all_rows) + max(all_rows)) / 2
-    raw_col_off = center_col - (min(all_cols) + max(all_cols)) / 2
-    row_off = round(raw_row_off)
-    col_off = round(raw_col_off)
-    if (row_off % 2) != (col_off % 2):
-        if abs(raw_row_off - row_off) >= abs(raw_col_off - col_off):
-            row_off += 1
-        else:
-            col_off += 1
-    for h_id in rows:
-        rows[h_id] += row_off
-        cols[h_id] += col_off
+    _center_rows_cols()
 
     return rows, cols, export_dirs
 
@@ -757,9 +795,41 @@ def export_cadnano(design: Design) -> dict:
             helix_num_map[h.id] = rev_i * 2 + 1
             rev_i += 1
 
-    # ── Build linked-list arrays ────────────────────────────────────────────────
-    array_len = max(h.length_bp for h in helices)
+    # ── Determine bp offset + canonical array width ─────────────────────────────
+    # NADOC domains carry GLOBAL bp indices that can be negative (e.g. a scaffold
+    # overhang extruded before bp 0) or exceed the helix length_bp (extra bases,
+    # resize-through-boundary).  caDNAno arrays are 0-based and fixed-width, so we
+    # shift every bp by one uniform non-negative offset — uniform across all
+    # helices to keep crossover / loop-skip columns aligned — and size the array
+    # to the true span rounded up to the lattice period so the caDNAno app renders
+    # it.  Scan every domain bp AND every loop/skip position for the true envelope.
+    min_bp = 0
+    max_bp = 0
+    seen_any = False
+    for strand in design.strands:
+        for domain in strand.domains:
+            if domain.helix_id not in helix_num_map:
+                continue
+            for bp in domain_bp_range(domain):
+                if not seen_any:
+                    min_bp = max_bp = bp
+                    seen_any = True
+                else:
+                    min_bp = min(min_bp, bp)
+                    max_bp = max(max_bp, bp)
+    for h in helices:
+        for ls in h.loop_skips:
+            min_bp = min(min_bp, ls.bp_index)
+            max_bp = max(max_bp, ls.bp_index)
 
+    period = _SQ_PERIOD if design.lattice_type == LatticeType.SQUARE else _HC_PERIOD
+    offset = 0
+    if min_bp < 0:
+        offset = math.ceil((-min_bp) / period) * period
+    needed = max_bp + offset + 1
+    array_len = max(math.ceil(needed / period), 1) * period
+
+    # ── Build linked-list arrays ────────────────────────────────────────────────
     scaf_arrs: Dict[str, List[List[int]]] = {
         h.id: [[-1, -1, -1, -1] for _ in range(array_len)] for h in helices
     }
@@ -771,24 +841,27 @@ def export_cadnano(design: Design) -> dict:
         domains = strand.domains
         n_domains = len(domains)
         for d_idx, domain in enumerate(domains):
+            if domain.helix_id not in helix_num_map:
+                continue  # overhang on a helix not in design.helices — skip
             h_num = helix_num_map[domain.helix_id]
-            bp_list = list(domain_bp_range(domain))
+            # Shift all bp indices by the global offset so nothing is negative.
+            bp_list = [b + offset for b in domain_bp_range(domain)]
             n = len(bp_list)
             prev_d = domains[d_idx - 1] if d_idx > 0 else None
             next_d = domains[d_idx + 1] if d_idx < n_domains - 1 else None
             for i, bp in enumerate(bp_list):
                 if i > 0:
                     ph, pp = h_num, bp_list[i - 1]
-                elif prev_d is not None:
+                elif prev_d is not None and prev_d.helix_id in helix_num_map:
                     ph = helix_num_map[prev_d.helix_id]
-                    pp = prev_d.end_bp
+                    pp = prev_d.end_bp + offset
                 else:
                     ph, pp = -1, -1
                 if i < n - 1:
                     nh, np_ = h_num, bp_list[i + 1]
-                elif next_d is not None:
+                elif next_d is not None and next_d.helix_id in helix_num_map:
                     nh = helix_num_map[next_d.helix_id]
-                    np_ = next_d.start_bp
+                    np_ = next_d.start_bp + offset
                 else:
                     nh, np_ = -1, -1
                 arrays[domain.helix_id][bp] = [ph, pp, nh, np_]
@@ -805,7 +878,7 @@ def export_cadnano(design: Design) -> dict:
         if strand.strand_type != StrandType.STAPLE or not strand.domains:
             continue
         color_int = _hex_to_int(strand.color) if strand.color else 0xF7931E
-        bp_5p = strand.domains[0].start_bp
+        bp_5p = strand.domains[0].start_bp + offset
         h_id = strand.domains[0].helix_id
         if h_id in stap_colors_map:
             stap_colors_map[h_id].append([bp_5p, color_int])
@@ -817,11 +890,12 @@ def export_cadnano(design: Design) -> dict:
         loop_arr = [0] * array_len
         skip_arr = [0] * array_len
         for ls in h.loop_skips:
-            if 0 <= ls.bp_index < array_len:
+            bp_i = ls.bp_index + offset
+            if 0 <= bp_i < array_len:
                 if ls.delta > 0:
-                    loop_arr[ls.bp_index] = ls.delta
+                    loop_arr[bp_i] = ls.delta
                 elif ls.delta < 0:
-                    skip_arr[ls.bp_index] = ls.delta
+                    skip_arr[bp_i] = ls.delta
         loop_map[h.id] = loop_arr
         skip_map[h.id] = skip_arr
 

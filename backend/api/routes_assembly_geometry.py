@@ -68,7 +68,7 @@ def get_instance_design(instance_id: str) -> dict:
     assembly = assembly_state.get_or_404()
     inst     = _find_instance(assembly, instance_id)
     design   = _load_design_from_source(inst.source, _assembly_source_path(assembly))
-    return {"design": design.to_dict()}
+    return {"design": design.to_dict(), "instance_name": inst.name}
 
 
 @router.get("/assembly/instances/{instance_id}/geometry", status_code=200)

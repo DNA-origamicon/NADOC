@@ -49,7 +49,9 @@ const MESH_NAME_TO_REPR = {
   extensionFluorophores:     'full',
   helixCylinders:            'cylinders',
   overhangCylinders:         'cylinders',
+  overhangFullCylinders:     'cylinders',
   curvedHelixCylindersProxy: 'cylinders',
+  curvedOverhangFullCylindersProxy: 'cylinders',
   curvedOvhgGroup:           'cylinders',
   'dna-surface':             'surface',
 }

@@ -381,6 +381,92 @@ def start_gromacs_cg_export(
     return {"job_id": job_id}
 
 
+@router.post("/design/export/gromacs-mrdna-start")
+def start_gromacs_mrdna_export(
+    mrdna_job_id: str,
+    package_name: str | None = None,
+    nvt_steps: int | None = None,
+    solvate: bool = False,
+    ion_conc_mM: float = 10.0,
+):
+    """
+    mrDNA-pre-relaxed GROMACS export.
+
+    Seeds the GROMACS package from a COMPLETED fine-stage mrDNA/ARBD relaxation
+    job (created via ``POST /mrdna/jobs`` with ``fine_steps > 0``) instead of
+    running a fresh CG relaxation.  The job's fine-stage bead positions become the
+    atomistic starting structure via ``nuc_pos_override_from_arbd_strands``
+    (crossover nucleotides INCLUDED at the CG-realistic ~0.3-0.5 nm gap), so the
+    downstream GROMACS EM converges in ~hundreds of steps without the crossover
+    LJ spike.  Sibling of ``/design/export/gromacs-cg-start`` (which runs oxDNA).
+
+    Unlike the other export routes this seeds from the JOB'S design snapshot (the
+    structure the relaxation actually ran on), NOT the live active design — the
+    bead↔nucleotide mapping is only valid against that snapshot's helix geometry.
+
+    Gating (returns 4xx synchronously, before the background job starts):
+      - 404 if the mrDNA job id is unknown;
+      - 409 if the job is not completed, is coarse-only (``fine_steps = 0``), or
+        its fine-stage snapshot/PSF/DCD are missing.
+
+    Returns ``job_id``; poll ``/design/export/gromacs-status/{job_id}`` then fetch
+    ``/design/export/gromacs-result/{job_id}`` when done.
+    """
+    from backend.api.assembly import _WORKSPACE_DIR
+    from backend.core.mrdna_job import MrdnaJob
+    from backend.core.mrdna_runner import (
+        build_md_seed_override,
+        reconcile_mrdna_status,
+        resolve_md_seed_inputs,
+    )
+
+    try:
+        job = MrdnaJob.load(mrdna_job_id, _WORKSPACE_DIR)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"mrDNA job {mrdna_job_id!r} not found")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Failed to load mrDNA job {mrdna_job_id}: {exc}")
+    job = reconcile_mrdna_status(job, _WORKSPACE_DIR)
+
+    # Gate + resolve fine-stage inputs synchronously so the client gets a specific,
+    # immediate error (coarse-only / not finished / missing output) rather than an
+    # opaque background-job failure.
+    try:
+        snapshot, psf, dcd = resolve_md_seed_inputs(job, _WORKSPACE_DIR)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    name   = (package_name or snapshot.metadata.name or job.design_name or "design").replace(" ", "_")
+    job_id = str(_uuid.uuid4())
+    with _gromacs_jobs_lock:
+        _gromacs_jobs[job_id] = {
+            "status": "running", "result": None, "error": None, "name": name,
+        }
+
+    def _run() -> None:
+        try:
+            override = build_md_seed_override(snapshot, psf, dcd)
+            from backend.core.gromacs_package import build_gromacs_package
+            data = build_gromacs_package(
+                snapshot,
+                package_name=name,
+                nuc_pos_override=override,
+                nvt_steps=nvt_steps,
+                solvate=solvate,
+                ion_conc_mM=ion_conc_mM,
+            )
+            with _gromacs_jobs_lock:
+                _gromacs_jobs[job_id]["status"] = "done"
+                _gromacs_jobs[job_id]["result"] = data
+        except Exception as exc:  # noqa: BLE001
+            with _gromacs_jobs_lock:
+                _gromacs_jobs[job_id]["status"] = "error"
+                _gromacs_jobs[job_id]["error"]  = str(exc)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"job_id": job_id}
+
+
 @router.get("/design/export/gromacs-status/{job_id}")
 def gromacs_export_status(job_id: str) -> dict:
     """Poll for job status.  Returns {status, error, name}."""

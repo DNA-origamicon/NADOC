@@ -221,6 +221,21 @@ export function initFileOpen({
   setAssemblyWorkspacePath, setAssemblyName, setAssemblyFileHandle,
   setAssemblyLoadOnProgress, setAssemblyLoadSettle,
 }) {
+  function _partNameFromPath(path, name) {
+    const raw = name || String(path || '').split(/[\\/]/).pop() || 'Part'
+    return raw.replace(/\.[^.]+$/, '') || raw
+  }
+
+  function _contentWithPartName(content, partName) {
+    try {
+      const parsed = JSON.parse(content)
+      parsed.metadata = { ...(parsed.metadata ?? {}), name: partName }
+      return JSON.stringify(parsed)
+    } catch (_) {
+      return content
+    }
+  }
+
   async function openPartFromServer(path, name) {
     showFileLoad('Opening Part')
     flAppendLog(`Path: ${path}`)
@@ -236,10 +251,11 @@ export function initFileOpen({
       flSetProgress(50, 'Importing design…')
       flAppendLog('Parsing and validating design…')
       resetForNewDesign()
-      const ok = await api.importDesign(result.content)
+      const partName = _partNameFromPath(path, name)
+      const ok = await api.importDesign(_contentWithPartName(result.content, partName))
       if (ok) {
         flAppendLog('Design imported successfully.', 'success')
-        setFileName(name ?? path)
+        setFileName(partName)
         setWorkspacePath(path)
         hideWelcome()
         revealWorkspaceForEmptyPart()

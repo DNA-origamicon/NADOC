@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { orderStrandNucleotides } from './helix_renderer.js'
+import { directConnectedOverhangIds, orderStrandNucleotides } from './helix_renderer.js'
 
 // A nucleotide with just the fields orderStrandNucleotides reads. `z` stands in for
 // the axial coordinate so we can assert monotone backbone threading through a loop.
@@ -35,5 +35,22 @@ describe('orderStrandNucleotides', () => {
     const nucs = [nuc(2, 'FORWARD', 0.7), nuc(0, 'FORWARD', 0.0), nuc(1, 'FORWARD', 0.34)]
     orderStrandNucleotides(nucs)
     expect(nucs.map(n => n.bp_index)).toEqual([0, 1, 2])
+  })
+})
+
+describe('directConnectedOverhangIds', () => {
+  it('selects bound direct connections and skips linker/unbound records', () => {
+    const ids = directConnectedOverhangIds({
+      overhang_bindings: [
+        { bound: true, connection_type: 'root-to-root', driver_oh_id: 'ohA', driven_oh_id: 'ohB' },
+        { bound: false, connection_type: 'end-to-root', driver_oh_id: 'free', driven_oh_id: 'skip' },
+        { bound: true, connection_type: 'root-to-root-dsdna-linker', overhang_a_id: 'linkA', overhang_b_id: 'linkB' },
+        { bound: true, connection_type: 'end-to-root', overhang_a_id: 'legacyA', overhang_b_id: 'legacyB' },
+      ],
+      duplexes: [
+        { bound: true, connection_type: 'root-to-root', left: { overhang_id: 'dxA' }, right: { overhang_id: 'dxB' } },
+      ],
+    })
+    expect([...ids].sort()).toEqual(['dxA', 'dxB', 'legacyA', 'legacyB', 'ohA', 'ohB'])
   })
 })

@@ -1080,6 +1080,7 @@ def build_atomistic_model(
     design: Design,
     exclude_helix_ids: set[str] | None = None,
     nuc_pos_override: "dict[tuple[str, int, str], _np.ndarray] | None" = None,
+    nuc_frame_override: "dict[tuple[str, int, str], NucleotidePosition] | None" = None,
     include_proteins: bool = False,
     axis_override: "dict[tuple[str, int], tuple[_np.ndarray, _np.ndarray]] | None" = None,
     frame_override: "dict[tuple, tuple[_np.ndarray, _np.ndarray, _np.ndarray]] | None" = None,
@@ -1104,7 +1105,7 @@ def build_atomistic_model(
     - Extra crossover bases: full ribose + base placed along the interpolation
       line between the two junction nucleotides, with backbone atoms minimised.
     """
-    if nuc_pos_override is None:
+    if nuc_pos_override is None and nuc_frame_override is None:
         ref_model = atomistic_model_from_reference(design, exclude_helix_ids)
         if ref_model is not None:
             return _append_protein_atoms(ref_model, design) if include_proteins else ref_model
@@ -1292,9 +1293,17 @@ def build_atomistic_model(
                         origin, R = _oxdna_rigid_frame(
                             _fo[0], _fo[1], _fo[2], direction, helix.direction)
                     else:
+                        _frame_key = (h_id, bp, dir_str)
+                        _use_prepared_frame = False
+                        if nuc_frame_override is not None and copy_k == 0:
+                            _nfo = nuc_frame_override.get(_frame_key)
+                            if _nfo is not None:
+                                nuc_pos = _nfo
+                                _use_prepared_frame = True
+
                         # Apply CG position override for copy 0 only (NAMD-seed path).
                         if nuc_pos_override is not None and copy_k == 0:
-                            cg_pos = nuc_pos_override.get((h_id, bp, dir_str))
+                            cg_pos = nuc_pos_override.get(_frame_key)
                             if cg_pos is not None:
                                 import dataclasses as _dc
                                 nuc_pos = _dc.replace(nuc_pos, position=cg_pos)
@@ -1309,7 +1318,9 @@ def build_atomistic_model(
                         # piling adjacent nucleotides together (the seed-clash bug).
                         ax_start, ax_hat, bp_start = _helix_axis_cache[h_id]
                         axis_pt = ax_start + (bp - bp_start) * BDNA_RISE_PER_BP * ax_hat
-                        if axis_override is not None:
+                        if _use_prepared_frame:
+                            axis_pt = None
+                        elif axis_override is not None:
                             _ov = axis_override.get((h_id, bp))
                             if _ov is not None:
                                 import dataclasses as _dc

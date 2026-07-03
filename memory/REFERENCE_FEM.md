@@ -4,6 +4,15 @@ description: FEM analysis theory + xpbd notes (DERELICT — both archived 2026-0
 type: project
 originSessionId: 0f03295e-0d56-4711-b877-76c393d9521b
 ---
+## REVIVAL IN PROGRESS (2026-07-02) — see [[project_cando_fem]]
+The FEM is being revived as a native **CanDo-replica** shape predictor (twist/
+curvature/RMSF, 1-to-1 within tolerance, zero export). Phase 0 research is DONE
+(**GO w/ conditions**); the full method spec, reference-data path, and phase plan
+live in `project_cando_fem.md`. Key corrections to the notes below: CanDo has **NO
+twist-stretch coupling** (don't add it); RMSF uses **200 modes @ 298 K** (not 30);
+the real solver is **geometrically NONLINEAR** (archived linear solve can't reach
+90° bends). The constants below (1100/230/460) are CONFIRMED correct.
+
 ## DERELICT (2026-05-10)
 **Both FEM solver and XPBD physics were archived to `archive/physics_xpbd_fem/` per user 2026-05-10.** Neither feature ever reached working-as-intended state:
 - FEM: equilibrium overlay was disabled (u=0 trivially) pending torsional pre-stress that was never implemented; RMSF outputs did not match published references; beam parameters never calibrated against B-DNA stiffness measurements.

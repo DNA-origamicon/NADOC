@@ -7,7 +7,18 @@ import {
   detailStatusText,
   coarseStageChip,
   formatCurvature,
+  seedReady,
 } from './mrdna_jobs_panel.js'
+
+describe('seedReady', () => {
+  it('is true only for a completed FINE-stage job', () => {
+    expect(seedReady({ status: 'completed', fine_steps: 10000 })).toBe(true)
+    expect(seedReady({ status: 'completed', fine_steps: 0 })).toBe(false)   // coarse-only
+    expect(seedReady({ status: 'completed' })).toBe(false)                  // no fine
+    expect(seedReady({ status: 'running', fine_steps: 10000 })).toBe(false)
+    expect(seedReady(null)).toBe(false)
+  })
+})
 
 describe('formatProgress', () => {
   it('is 100% when completed, blank when failed/stopped', () => {

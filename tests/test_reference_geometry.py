@@ -244,7 +244,27 @@ def test_sequence_csv_export_omits_reference_strand():
     design_state.set_design(d)
     r = client.get("/api/design/export/sequence-csv")
     assert r.status_code == 200, r.text
-    assert staple.id not in r.text
+    expected_rows = sum(
+        1 for s in d.strands
+        if s.strand_type != StrandType.SCAFFOLD and not s.is_reference and s.domains
+    )
+    assert len(r.text.splitlines()) == expected_rows + 1
+
+
+def test_sequence_csv_export_matches_cadnano_staple_format():
+    d = make_bundle_design([(0, 0), (0, 1)], length_bp=42)
+    design_state.set_design(d)
+
+    r = client.get("/api/design/export/sequence-csv")
+    assert r.status_code == 200, r.text
+
+    lines = r.text.splitlines()
+    assert lines[0] == "Start,End,Sequence,Length,Color"
+    assert lines == [
+        "Start,End,Sequence,Length,Color",
+        f"0[41],0[0],{'?' * 42},42,#f7931e",
+        f"1[0],1[41],{'?' * 42},42,#f7931e",
+    ]
 
 
 # ── Assembly view excludes reference geometry ────────────────────────────────────

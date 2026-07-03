@@ -118,6 +118,12 @@ class CreateJobRequest(BaseModel):
                     "relaxed coordinates (its OWN design.json + latest last_conf) "
                     "instead of ideal B-DNA.",
     )
+    mrdna_job_id: Optional[str] = Field(
+        None,
+        description="If set, seed the NAMD run from this completed FINE-stage mrDNA "
+                    "job's relaxed CG structure (its OWN design.json snapshot) instead "
+                    "of ideal B-DNA.  Mutually exclusive with oxdna_job_id.",
+    )
 
 
 class ProductionRequest(BaseModel):
@@ -965,15 +971,21 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     except RuntimeError as exc:
         raise HTTPException(400, str(exc))
 
-    seeded = bool(body.oxdna_job_id)
+    if body.oxdna_job_id and body.mrdna_job_id:
+        raise HTTPException(400, "Seed from oxDNA OR mrDNA, not both.")
+    seeded = bool(body.oxdna_job_id or body.mrdna_job_id)
     if seeded:
-        # The seed's design lives on disk (oxDNA job snapshot); it is resolved in
+        # The seed's design lives on disk (the CG job's snapshot); it is resolved in
         # the background worker so its (slow) reconstruction shows on the progress
-        # bar.  A cheap up-front existence check still rejects a bad oxdna_job_id
-        # with a fast 400 before any work is queued.
-        from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
+        # bar.  A cheap up-front existence check still rejects a bad job id with a
+        # fast 400 before any work is queued.
         try:
-            await run_in_threadpool(assert_namd_seed_available, body.oxdna_job_id, _workspace())
+            if body.oxdna_job_id:
+                from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
+                await run_in_threadpool(assert_namd_seed_available, body.oxdna_job_id, _workspace())
+            else:
+                from backend.core.mrdna_runner import assert_mrdna_namd_seed_available  # noqa: PLC0415
+                await run_in_threadpool(assert_mrdna_namd_seed_available, body.mrdna_job_id, _workspace())
         except FileNotFoundError as exc:
             raise HTTPException(400, str(exc))
         design = None
@@ -1089,6 +1101,7 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
         devices        = body.devices,
         design_source_path = body.design_source_path,
         seed_oxdna_job_id  = body.oxdna_job_id if seeded else None,
+        seed_mrdna_job_id  = body.mrdna_job_id if seeded else None,
         parent_job_id      = parent_job_id,
     )
     # Capture the request so a later refit can rebuild the job with one knob moved.
@@ -1151,17 +1164,23 @@ async def _prepare_job_bg(
     try:
         seed_model = None
         if seeded:
-            from backend.core.oxdna_runner import build_namd_seed  # noqa: PLC0415
             tracker.report("seed", None, "Reconstructing relaxed atomic model…")
-            seed = await run_in_threadpool(build_namd_seed, body.oxdna_job_id, ws)
+            if body.oxdna_job_id:
+                from backend.core.oxdna_runner import build_namd_seed  # noqa: PLC0415
+                seed = await run_in_threadpool(build_namd_seed, body.oxdna_job_id, ws)
+                _seed_src = f"oxDNA job {body.oxdna_job_id}"
+            else:
+                from backend.core.mrdna_runner import build_namd_seed_from_mrdna  # noqa: PLC0415
+                seed = await run_in_threadpool(build_namd_seed_from_mrdna, body.mrdna_job_id, ws)
+                _seed_src = f"mrDNA job {body.mrdna_job_id}"
             local_design = seed.design
             seed_model = seed.atomistic_model
             seed_name = (local_design.metadata.name or "design").replace(" ", "_")
             job = MdJob.load(job_id, ws)
             job.design_name = seed_name
             job.save(ws)
-            logger.info("prep %s: seeded from oxDNA job %s (stage %s)",
-                        job_id, body.oxdna_job_id, seed.stage_name)
+            logger.info("prep %s: seeded from %s (stage %s)",
+                        job_id, _seed_src, seed.stage_name)
         else:
             local_design = design
 
@@ -1601,7 +1620,8 @@ async def refit_md_job(job_id: str, body: RefitRequest) -> dict:
     (a water-shell carve also forces the ladder to NVT downstream).
     """
     old = _load_job(job_id)
-    if not (old.prep_params or old.design_source_path or old.seed_oxdna_job_id):
+    if not (old.prep_params or old.design_source_path
+            or old.seed_oxdna_job_id or old.seed_mrdna_job_id):
         raise HTTPException(400, "Cannot refit: original job has no design provenance.")
 
     try:
@@ -1622,14 +1642,19 @@ async def refit_md_job(job_id: str, body: RefitRequest) -> dict:
     params.setdefault("devices", old.devices)
     params.setdefault("design_source_path", old.design_source_path)
     params.setdefault("oxdna_job_id", old.seed_oxdna_job_id)
+    params.setdefault("mrdna_job_id", old.seed_mrdna_job_id)
     valid = {k: v for k, v in params.items() if k in CreateJobRequest.model_fields}
     new_body = CreateJobRequest(**valid)
 
-    seeded = bool(new_body.oxdna_job_id)
+    seeded = bool(new_body.oxdna_job_id or new_body.mrdna_job_id)
     if seeded:
-        from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
         try:
-            await run_in_threadpool(assert_namd_seed_available, new_body.oxdna_job_id, _workspace())
+            if new_body.oxdna_job_id:
+                from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
+                await run_in_threadpool(assert_namd_seed_available, new_body.oxdna_job_id, _workspace())
+            else:
+                from backend.core.mrdna_runner import assert_mrdna_namd_seed_available  # noqa: PLC0415
+                await run_in_threadpool(assert_mrdna_namd_seed_available, new_body.mrdna_job_id, _workspace())
         except FileNotFoundError as exc:
             raise HTTPException(400, str(exc))
         design = None

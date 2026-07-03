@@ -936,6 +936,226 @@ def nuc_pos_override_from_arbd_strands(
     return override
 
 
+def _ssdna_runs(design: Design) -> list:
+    """Enumerate contiguous single-stranded (unpaired) nucleotide runs, each with
+    its anchoring 'root' — the paired nucleotide adjacent to the run in the same
+    strand's 5'→3' chain.  Overhangs and interior unpaired runs both surface here.
+
+    Reuses ``_build_nt_arrays`` (the SAME enumerator mrDNA is built from) for the
+    pairing + 5'→3' topology, so no independent — and error-prone — strand/polarity
+    traversal is done here (CLAUDE.md DNA-topology rule).  Pure: no mrDNA/ARBD/GPU.
+
+    Returns a list of dicts:
+      ``keys``          : [(h_id, bp, dir_str), ...] ss nucleotides, 5'→3'
+      ``ideal_nm``      : matching ideal backbone positions (nm, NADOC frame)
+      ``root_key``      : (h_id, bp, dir_str) of the anchoring paired nt, or None
+      ``root_ideal_nm`` : its ideal position (nm), or None
+      ``root_side``     : '5p' if the root precedes the run, '3p' if it follows
+    """
+    import numpy as np
+
+    r, bp, _stack, three_prime, _orient, _seq, nt_key = _build_nt_arrays(
+        design, return_nt_key=True
+    )
+    N = len(bp)
+    idx_to_key: list = [None] * N
+    for (h_id, bp_idx, direction, k), i in nt_key.items():
+        if k == 0:
+            idx_to_key[i] = (h_id, bp_idx, direction)
+
+    has_incoming = np.zeros(N, dtype=bool)
+    for i in range(N):
+        j = int(three_prime[i])
+        if j >= 0:
+            has_incoming[j] = True
+
+    runs: list = []
+    for start in range(N):
+        if has_incoming[start]:
+            continue  # not a 5' chain start
+        chain: list = []
+        i, guard = start, 0
+        while i >= 0 and guard <= N:
+            chain.append(i)
+            i = int(three_prime[i])
+            guard += 1
+
+        n = len(chain)
+        p = 0
+        while p < n:
+            if bp[chain[p]] >= 0:
+                p += 1
+                continue
+            q = p
+            while q < n and bp[chain[q]] < 0:
+                q += 1
+            run_idxs = chain[p:q]
+            root_idx, root_side = None, None
+            if p - 1 >= 0 and bp[chain[p - 1]] >= 0:
+                root_idx, root_side = chain[p - 1], "5p"
+            elif q < n and bp[chain[q]] >= 0:
+                root_idx, root_side = chain[q], "3p"
+            runs.append({
+                "keys":          [idx_to_key[j] for j in run_idxs],
+                "ideal_nm":      [r[j] / 10.0 for j in run_idxs],
+                "root_key":      idx_to_key[root_idx] if root_idx is not None else None,
+                "root_ideal_nm": (r[root_idx] / 10.0) if root_idx is not None else None,
+                "root_side":     root_side,
+            })
+            p = q
+    return runs
+
+
+def nuc_pos_override_ssdna_from_arbd(
+    design: Design,
+    psf_path: str,
+    dcd_path: str,
+    ds_override: "dict[tuple[str,int,str], np.ndarray]",
+    frame: int = -1,
+    min_beads_for_spline: int = 2,
+) -> "dict[tuple[str,int,str], np.ndarray]":
+    """ssDNA / overhang seed positions from a fine-stage mrDNA run.
+
+    The dsDNA override (``nuc_pos_override_from_arbd_strands``) covers only in-helix
+    base pairs; overhang and interior-unpaired nucleotides get NO entry and would
+    otherwise seed at the ORIGINAL design-axis extrapolation — detached from the
+    now-relaxed body (the sticky-end clash source).  This fills them two ways:
+
+      A (relaxed CG conformation): mrDNA already simulates ssDNA as ``NAS`` beads.
+        For a run with ≥ ``min_beads_for_spline`` assigned NAS beads, spline the
+        Kabsch-aligned bead positions and evaluate per nucleotide, then shift the
+        run so its root-side end meets the relaxed root (continuity).
+      B (root-anchored fallback): for short runs (too few NAS beads to resolve a
+        curve — the typical 2-8 nt sticky end, which mrDNA beads at ~1 per 5 nt),
+        translate the run's ideal geometry so its root nt sits on the RELAXED root
+        position.  No CG detail, but continuous with the moved helix and no jump.
+
+    Returns ``{(h_id, bp, dir_str) → pos_nm}`` for ss nucleotides only.  Merge as
+    ``{**ds_override, **ss_override}`` so ss wins at any shared (interior) key.
+    Physical-layer only.
+    """
+    import sys
+    sys.path.insert(0, _MRDNA_TOOL_PATH)
+    import numpy as np
+    import MDAnalysis as mda
+    from scipy.interpolate import CubicSpline
+    from scipy.spatial.transform import Rotation
+
+    runs = _ssdna_runs(design)
+    if not runs:
+        return {}
+
+    init_pdb = psf_path.replace(".psf", ".pdb")
+    u_init = mda.Universe(psf_path, init_pdb)
+    names  = np.array([a.name for a in u_init.atoms])
+    dna_i  = np.where(names == "DNA")[0]
+    nas_i  = np.where(names == "NAS")[0]
+    dna_init = u_init.atoms.positions[dna_i].astype(float)   # Å, NADOC frame
+    nas_init = u_init.atoms.positions[nas_i].astype(float)
+
+    u = mda.Universe(psf_path, dcd_path)
+    u.trajectory[-1 if frame == -1 else frame]
+    dna_sim = u.atoms.positions[dna_i].astype(float)
+    nas_sim = u.atoms.positions[nas_i].astype(float)
+
+    # Align the ssDNA beads with the SAME rigid transform as the ds body (from the
+    # DNA beads) so ss stays consistent with the relaxed dsDNA it attaches to.
+    if len(dna_init) >= 3 and len(dna_sim) == len(dna_init) and len(nas_sim):
+        ci, cs = dna_init.mean(0), dna_sim.mean(0)
+        rot, _ = Rotation.align_vectors(dna_init - ci, dna_sim - cs)
+        nas_algn_nm = (rot.apply(nas_sim - cs) + ci) / 10.0
+    else:
+        nas_algn_nm = nas_sim / 10.0
+    nas_init_nm = nas_init / 10.0
+
+    # Assign each NAS bead to the run holding its nearest ideal ss nucleotide.
+    run_beads: list = [[] for _ in runs]
+    if len(nas_i):
+        ideal_pts, ideal_run = [], []
+        for ri, run in enumerate(runs):
+            for pt in run["ideal_nm"]:
+                ideal_pts.append(pt)
+                ideal_run.append(ri)
+        ideal_pts = np.array(ideal_pts)
+        for bi in range(len(nas_i)):
+            d = np.linalg.norm(ideal_pts - nas_init_nm[bi], axis=1)
+            run_beads[ideal_run[int(d.argmin())]].append(nas_algn_nm[bi])
+
+    # DO-NO-HARM selector: a long overhang in a dense bundle can clash the body under
+    # ANY straight placement (including the current ideal one).  Rather than trust one
+    # heuristic, we generate up to three candidates per run and keep whichever sits
+    # FARTHEST from the relaxed dsDNA body — so the ss handling can only ever improve
+    # (or match) the clearance the ideal placement already had.  The body proxy is the
+    # relaxed ds backbone cloud (ds_override, ss keys removed); coarse but sufficient
+    # for a RELATIVE choice (the atomistic clash is checked by the seed oracle).
+    from scipy.spatial import cKDTree
+    ss_keys = {k for run in runs for k in run["keys"] if k is not None}
+    body_pts = np.array([v for k, v in ds_override.items() if k not in ss_keys])
+    body_tree = cKDTree(body_pts) if len(body_pts) else None
+
+    def _clearance(pts) -> float:
+        if body_tree is None:
+            return float("inf")
+        return float(body_tree.query(np.asarray(pts))[0].min())
+
+    override: dict = {}
+    n_spline = n_translate = n_ideal = 0
+    for ri, run in enumerate(runs):
+        keys, ideal = run["keys"], [np.asarray(p) for p in run["ideal_nm"]]
+        n = len(keys)
+        root_relaxed = ds_override.get(run["root_key"]) if run["root_key"] else None
+        anchor_idx = 0 if run["root_side"] != "3p" else n - 1
+
+        candidates: list = [("ideal", ideal)]   # detached ideal = today's behavior
+
+        # B: translate the ideal run rigidly onto the relaxed root — PRESERVES the
+        # junction backbone bond (root-adjacent nt lands one bond-length from the
+        # root, NOT on top of it, which would make atoms coincident → LJ=2e37).
+        if root_relaxed is not None and run["root_ideal_nm"] is not None:
+            disp  = np.asarray(root_relaxed) - np.asarray(run["root_ideal_nm"])
+            pos_b = [ideal[i] + disp for i in range(n)]
+            candidates.append(("translate", pos_b))
+        else:
+            pos_b = ideal
+
+        # A: spline the assigned NAS beads (real relaxed ss conformation), hooked onto
+        # B's anchor position so the junction bond is preserved.
+        beads = run_beads[ri]
+        if len(beads) >= min_beads_for_spline and n >= 2:
+            B = np.array(beads)
+            axis = ideal[-1] - ideal[0]
+            if np.linalg.norm(axis) >= 1e-6:
+                B = B[np.argsort(B @ (axis / np.linalg.norm(axis)))]
+            seg = np.linalg.norm(np.diff(B, axis=0), axis=1)
+            t = np.concatenate([[0.0], np.cumsum(seg)])
+            if t[-1] >= 1e-6:
+                try:
+                    cs_spline = CubicSpline(t / t[-1], B, axis=0)
+                    pos_a = [np.asarray(cs_spline(i / (n - 1))) for i in range(n)]
+                    shift = pos_b[anchor_idx] - pos_a[anchor_idx]
+                    candidates.append(("spline", [p + shift for p in pos_a]))
+                except Exception:  # noqa: BLE001 — spline failure → drop candidate
+                    pass
+
+        label, chosen = max(candidates, key=lambda c: _clearance(c[1]))
+        n_spline    += label == "spline"
+        n_translate += label == "translate"
+        n_ideal     += label == "ideal"
+        # 'ideal' == leaving the nt at its detached design position; emit NO override
+        # for it so build_atomistic uses exactly the current path (no change).
+        if label != "ideal":
+            for i, key in enumerate(keys):
+                if key is not None:
+                    override[key] = np.asarray(chosen[i], dtype=float)
+
+    print(
+        f"[ssdna seed] {len(runs)} ss run(s) | {len(override)} nt overrides | "
+        f"placement: {n_spline} spline, {n_translate} translate, {n_ideal} left-ideal",
+        flush=True,
+    )
+    return override
+
+
 def _crossover_junction_keys(design: Design) -> set:
     """
     Return the set of (helix_id, bp_idx, direction_str) override keys that fall

@@ -14,6 +14,7 @@ import numpy as np
 import backend.physics.oxdna_interface as ox
 from backend.core.constants import OXDNA_LENGTH_UNIT, SSDNA_RISE_PER_BASE_NM
 from backend.core.design_geometry import _geometry_for_design
+from backend.core.flexible_display import flexible_segment_atomistic_frame_overrides
 from backend.core.flexible_segments import apply_marks
 from tests.test_flexible_segments import _hinge_design, _mark_run
 
@@ -105,6 +106,45 @@ def test_resolved_map_reseats_flexible_run_onto_arc():
         assert abs(np.linalg.norm(a1) - 1.0) < 1e-4
         assert abs(np.linalg.norm(a3) - 1.0) < 1e-4
         assert abs(float(np.dot(a1, a3))) < 1e-4       # a1 ⟂ a3
+
+
+def test_display_atomistic_overrides_place_flexible_run_on_full_rep_arc():
+    d = _flex_design()
+    geom = _geometry_for_design(d)
+    raw = {(n["helix_id"], n["bp_index"], n["direction"]):
+           np.asarray(n["backbone_position"], float) for n in geom}
+    (_ka, _kb, beads, _contour) = ox.flexible_segment_geo_keys(d)[0]
+
+    overrides = flexible_segment_atomistic_frame_overrides(d)
+
+    assert set(beads).issubset(overrides.keys())
+    moved = [float(np.linalg.norm(overrides[k].position - raw[k])) for k in beads]
+    assert max(moved) > 0.3, "display atomistic/surface overrides left the ssDNA rigid"
+    for k in beads:
+        assert abs(np.linalg.norm(overrides[k].base_normal) - 1.0) < 1e-9
+        assert abs(np.linalg.norm(overrides[k].axis_tangent) - 1.0) < 1e-9
+
+
+def test_atomistic_display_consumes_flexible_full_rep_frames():
+    from backend.core.atomistic import build_atomistic_model
+
+    d = _flex_design()
+    overrides = flexible_segment_atomistic_frame_overrides(d)
+    (_ka, _kb, beads, _contour) = ox.flexible_segment_geo_keys(d)[0]
+
+    model = build_atomistic_model(d, nuc_frame_override=overrides)
+    rigid = build_atomistic_model(d)
+
+    for k in beads:
+        placed = np.array([
+            [a.x, a.y, a.z] for a in model.atoms
+            if (a.helix_id, a.bp_index, a.direction) == k
+        ])
+        rigid_placed = np.array([
+            [a.x, a.y, a.z] for a in rigid.atoms
+            if (a.helix_id, a.bp_index, a.direction) == k
+        ])
+        assert np.linalg.norm(placed.mean(axis=0) - rigid_placed.mean(axis=0)) > 0.3
 
 
 def test_reseat_is_readonly_over_topology():

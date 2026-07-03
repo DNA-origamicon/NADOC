@@ -375,6 +375,135 @@ def load_cached(job_dir: Path, name: str) -> Optional[dict]:
         return None
 
 
+# ── MD seeding: completed fine-stage job → atomistic nuc_pos_override ──────────
+#
+# The DISPLAY path (nuc_pos_override_display_from_coarse) is for the viewer; it
+# shows the actual relaxed shape but EXCLUDES nothing and re-anchors to the coarse
+# axis.  Seeding an atomistic MD run is a different job with different correctness
+# needs, so it uses a different override: nuc_pos_override_from_arbd_strands (the
+# Phase-3b per-helix spline over the FINE stage), which INCLUDES crossover-junction
+# nucleotides at the CG-realistic ~0.3-0.5 nm gap.  That gap is exactly what lets
+# downstream GROMACS EM converge without the ~0.05 nm ideal-B-DNA crossover clash
+# (the 10¹² kJ/mol LJ spike).  Both are Physical-layer only — never write topology.
+
+
+def resolve_md_seed_inputs(job: MrdnaJob, workspace_dir: Path) -> tuple[Design, Path, Path]:
+    """Gate + resolve the inputs to seed an atomistic MD run from a COMPLETED
+    fine-stage mrDNA job: the design snapshot the relaxation ran on, plus the
+    fine-stage ``(PSF, DCD)``.
+
+    Every failure raises ``ValueError`` with a UI-ready message:
+      - the job must be ``completed`` — a running/failed/stopped job has no trusted
+        relaxed output to seed from;
+      - the job must have run the FINE stage (``fine_steps > 0``).  The coarse stage
+        carries one bead per *base pair* with no per-strand backbone, so it cannot
+        seed atomistic coordinates; only the fine stage (1 DNA bead/bp at the
+        FORWARD backbone) drives ``nuc_pos_override_from_arbd_strands``;
+      - the snapshot ``design.json`` and the on-disk fine ``{stem}-N.psf`` + DCD
+        must exist (``_sim_paths`` falls back to the single-stage coarse file when
+        no numbered fine stage is present, which we reject here).
+    """
+    if job.status != MrdnaStatus.completed:
+        raise ValueError(
+            f"mrDNA job is {job.status.value}; only a completed job can seed an MD run."
+        )
+    if job.fine_steps <= 0:
+        raise ValueError(
+            "This mrDNA job is coarse-only (fine_steps = 0).  MD seeding needs the "
+            "fine stage (1 bead per base pair backbone) — re-run the relaxation with "
+            "fine steps before seeding an MD run."
+        )
+    jd = job.job_dir(workspace_dir)
+    design = _load_snapshot_design(jd)
+    if design is None:
+        raise ValueError("mrDNA job design snapshot (design.json) is missing.")
+    psf, dcd = _sim_paths(jd)
+    if "-" not in psf.stem:
+        raise ValueError(
+            "mrDNA job has no fine-stage output on disk (only a coarse stage was "
+            "found); the fine stage is required to seed an MD run."
+        )
+    if not (psf.exists() and dcd.exists()):
+        raise ValueError(
+            "mrDNA job fine-stage output (PSF/DCD) not found; the relaxation may not "
+            "have finished the fine stage."
+        )
+    return design, psf, dcd
+
+
+def build_md_seed_override(design: Design, psf: Path, dcd: Path) -> dict:
+    """Atomistic ``nuc_pos_override`` from a fine-stage mrDNA ``(PSF, DCD)`` — the dict
+    consumed by ``build_gromacs_package(nuc_pos_override=...)``.  Keyed
+    ``(helix_id, bp_index, direction) → position`` in nm.  Physical-layer only.
+
+    Two sources, merged:
+      - dsDNA in-helix base pairs → per-helix Phase-3b spline (crossovers INCLUDED);
+      - ssDNA / overhang nucleotides → relaxed ``NAS`` beads (spline) with a
+        root-anchored fallback, so sticky ends follow the relaxed body instead of
+        seeding at the detached design-axis extrapolation (the ss clash source).
+    ss entries take precedence at any shared (interior-unpaired) key."""
+    from backend.core.mrdna_bridge import (
+        _ensure_mrdna,
+        nuc_pos_override_from_arbd_strands,
+        nuc_pos_override_ssdna_from_arbd,
+    )
+    _ensure_mrdna()
+    ds = nuc_pos_override_from_arbd_strands(design, str(psf), str(dcd))
+    ss = nuc_pos_override_ssdna_from_arbd(design, str(psf), str(dcd), ds)
+    return {**ds, **ss}
+
+
+def assert_mrdna_namd_seed_available(job_id: str, workspace_dir: Path) -> None:
+    """Cheap precheck that a NAMD seed CAN be built from this mrDNA job — mirrors
+    ``oxdna_runner.assert_namd_seed_available``.  Reuses ``resolve_md_seed_inputs``
+    (completed + fine-stage + snapshot/PSF/DCD present) WITHOUT the expensive override
+    build, so the create-job route can reject a bad ``mrdna_job_id`` with a fast 400.
+    Raises ``FileNotFoundError`` (the error the MD route catches) on any gating fail."""
+    job = MrdnaJob.load(job_id, workspace_dir)          # FileNotFoundError if unknown
+    job = reconcile_mrdna_status(job, workspace_dir)
+    try:
+        resolve_md_seed_inputs(job, workspace_dir)
+    except ValueError as exc:
+        raise FileNotFoundError(str(exc)) from exc
+
+
+def build_namd_seed_from_mrdna(job_id: str, workspace_dir: Path):
+    """Build a NAMD starting-structure seed from a completed fine-stage mrDNA job —
+    the mrDNA sibling of ``oxdna_runner.build_namd_seed``.
+
+    Reads the job's OWN ``design.json`` snapshot (never the live editor design) and
+    reconstructs an atomistic model whose backbone follows the mrDNA-relaxed CG
+    structure (``build_md_seed_override`` → ``build_atomistic_model``), then recenters
+    it on the origin (a relaxed structure can sit far off-origin; the PDB's 8-char
+    coordinate fields overflow past ~±1000 Å otherwise).  Returns the shared
+    ``NamdSeed`` artifact.  Physical-layer only — a NAMD INPUT, never topology."""
+    from backend.core.oxdna_runner import NamdSeed
+    from backend.core.atomistic import build_atomistic_model
+
+    job = MrdnaJob.load(job_id, workspace_dir)
+    job = reconcile_mrdna_status(job, workspace_dir)
+    design, psf, dcd = resolve_md_seed_inputs(job, workspace_dir)   # gates; ValueError
+    override = build_md_seed_override(design, psf, dcd)
+    model = build_atomistic_model(design, nuc_pos_override=override)
+
+    if model.atoms:
+        import numpy as np
+        cx, cy, cz = np.mean(
+            [[a.x, a.y, a.z] for a in model.atoms], axis=0).tolist()
+        for a in model.atoms:
+            a.x -= cx
+            a.y -= cy
+            a.z -= cz
+
+    return NamdSeed(
+        design          = design,
+        atomistic_model = model,
+        stage_name      = "mrdna_fine",
+        conf_path       = dcd,
+        source_job_id   = job_id,
+    )
+
+
 # ── Progress (time-based estimate; the bar for a short coarse run) ─────────────
 
 def _estimate_seconds(job: MrdnaJob) -> float:

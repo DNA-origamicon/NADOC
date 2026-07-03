@@ -68,9 +68,11 @@ export function filterJobsForPart(jobs, partPath, showAll) {
   return jobs.filter(j => normalizeWorkspacePath(j.design_source_path) === current)
 }
 
-/** Pure: list badge for a job seeded from an oxDNA relaxation, else ''. */
+/** Pure: list badge for a job seeded from a CG relaxation (oxDNA or mrDNA), else ''. */
 export function seededBadge(job) {
-  return job?.seed_oxdna_job_id ? 'oxDNA seeded' : ''
+  if (job?.seed_oxdna_job_id) return 'oxDNA seeded'
+  if (job?.seed_mrdna_job_id) return 'mrDNA seeded'
+  return ''
 }
 
 /** Pure: is the job in an in-progress state (a spinner should show)? */
@@ -1354,11 +1356,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (isChild) row.title = 'Refit / retry derived from the parent run'
     row.appendChild(name)
 
-    // "oxDNA seeded" badge — this run started from oxDNA-relaxed coordinates.
+    // CG-seeded badge — this run started from oxDNA- or mrDNA-relaxed coordinates.
     const badge = seededBadge(job)
     if (badge) {
       const seeded = document.createElement('span')
-      seeded.title = `Seeded from oxDNA job ${job.seed_oxdna_job_id}`
+      seeded.title = job.seed_oxdna_job_id
+        ? `Seeded from oxDNA job ${job.seed_oxdna_job_id}`
+        : `Seeded from mrDNA job ${job.seed_mrdna_job_id}`
       seeded.textContent = badge
       seeded.style.cssText = `font-size:9px;color:#4a9eff;border:1px solid #2a4a6a;border-radius:3px;padding:0 4px;flex-shrink:0;margin-right:4px`
       row.appendChild(seeded)

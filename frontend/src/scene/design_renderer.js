@@ -948,9 +948,11 @@ export function initDesignRenderer(scene, storeRef) {
 
     getCylinderMesh()                { return _helixCtrl?.getCylinderMesh() ?? null },
     getOverhangCylinderMesh()        { return _helixCtrl?.getOverhangCylinderMesh() ?? null },
+    getOverhangFullCylinderMesh()    { return _helixCtrl?.getOverhangFullCylinderMesh() ?? null },
     getCylinderDomainData()          { return _helixCtrl?.getCylinderDomainData() ?? [] },
     getCylinderDomainAt(id)          { return _helixCtrl?.getCylinderDomainAt(id) ?? null },
     getOverhangCylinderDomainAt(id)  { return _helixCtrl?.getOverhangCylinderDomainAt(id) ?? null },
+    getOverhangFullCylinderDomainAt(id) { return _helixCtrl?.getOverhangFullCylinderDomainAt(id) ?? null },
     getLinkerBridgeCylinderMesh()    { return _helixCtrl?.getLinkerBridgeCylinderMesh() ?? null },
     getLinkerBridgeCylinderAt(id)    { return _helixCtrl?.getLinkerBridgeCylinderAt(id) ?? null },
     highlightCylinderStrands(sids)   { _helixCtrl?.highlightCylinderStrands(sids) },

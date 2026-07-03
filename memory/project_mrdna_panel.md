@@ -185,10 +185,40 @@ Purpose: quick-check designs with programmed curvature (Dietz loop/skip bend).
   no double-count with any applied bend deformation (mrDNA predicts, never refines a
   pre-bent geometry).
 
+## MD-seed handoff (2026-07-02) — seed an MD run from a fine-stage job
+A **completed FINE-stage** mrDNA job can seed a downstream atomistic MD run. Both
+consumers share `mrdna_runner.build_md_seed_override` (ds per-helix Phase-3b spline,
+crossovers INCLUDED, + ssDNA/overhang handling — see below):
+- **GROMACS (headless/API only):** `POST /api/design/export/gromacs-mrdna-start?mrdna_job_id=…`
+  → poll `gromacs-status` → download `gromacs-result`. No UI — the GROMACS export modal
+  was removed 2026-05-17, so this path is scriptable only.
+- **NAMD (in-app):** panel **"Use as NAMD seed"** button (`seedReady` = completed +
+  `fine_steps>0`) → `api.createMdJob({mrdna_job_id})` → a managed MD job in the Molecular
+  Dynamics panel tagged **"mrDNA seeded"** (`seededBadge`). Backend mirrors the oxDNA seed
+  path: `build_namd_seed_from_mrdna` + `assert_mrdna_namd_seed_available` (`mrdna_runner`,
+  reuse `resolve_md_seed_inputs` gating), `seed_mrdna_job_id` on `MdJob`, and the
+  create/refit/prep branches in `routes_md.py`.
+- **Gate — FINE required (decided 2026-07-02):** coarse-only jobs are 409'd / the button
+  is greyed. The coarse override re-idealises + EXCLUDES crossover junctions → seeding from
+  it keeps the very crossover clashes CG relax exists to fix. Only the fine stage seeds.
+- **ssDNA/overhang seed handling** (distinct from the *display* phantom-duplex above, which
+  the user accepts): `nuc_pos_override_ssdna_from_arbd` + `_ssdna_runs` harvest mrDNA's
+  relaxed `NAS` beads so overhangs follow the relaxed body instead of seeding detached at
+  the design axis (restores the ss/ds junction backbone bond a ds-only override leaves at
+  ~1.4 nm). Per run: spline-NAS / root-translate / leave-ideal, chosen by a **do-no-harm
+  clearance selector** (never worse than ideal). Caught+fixed a coincident-atom LJ=2e37 bug
+  via the clash oracle. KNOWN LIMIT: long overhangs through a dense bundle core clash under
+  any placement (baseline too) — separate problem.
+- Validation: `tests/test_mrdna_md_seed.py` (gating + skip-guarded real-job junction/clash
+  + NAMD-seed oracles, run live against `5edf`=`6hb_sim_v2` 200k fine); `seedReady`/`seededBadge`
+  vitest. Live gesture = [[manual_validation_debt]] MV-MRDNA-NAMD / MV-MRDNA-SEED. Deep dive:
+  [[project_multiresolution_roadmap]] Phase 4/5.
+
 ## Three-Layer Law
 mrDNA output is **Physical / display only** — relaxed positions deform the render
 via `applyFemPositions` and draw the bead overlay; NEVER written into topology.
-Same discipline as the oxDNA + MD displays.
+The MD-seed handoff is likewise Physical-layer: the relaxed structure is a
+NAMD/GROMACS INPUT artifact, never topology. Same discipline as the oxDNA + MD displays.
 
 See also: [[project_mrdna_arbd_setup]] (install), [[project_mrdna_bead_model]]
 (1 bead/bp fine-stage caveat — but this panel uses the COARSE 5bp/bead stage),

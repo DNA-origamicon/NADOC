@@ -30,6 +30,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from backend.api import state as design_state
+from backend.core.flexible_display import flexible_segment_atomistic_frame_overrides
 from backend.core.models import RepresentationSegment
 
 router = APIRouter()
@@ -49,6 +50,11 @@ class SurfaceRegionRequest(BaseModel):
 # ── Atomistic + molecular-surface display geometry ────────────────────────────
 
 
+def _flexible_display_override(design):
+    override = flexible_segment_atomistic_frame_overrides(design)
+    return override or None
+
+
 @router.get("/design/atomistic")
 def get_atomistic() -> dict:
     """
@@ -65,6 +71,7 @@ def get_atomistic() -> dict:
     from backend.core.atomistic import build_atomistic_model, atomistic_to_json, merge_models
 
     design = design_state.get_or_404()
+    nuc_frame_override = _flexible_display_override(design)
 
     pdb_model = design_state.get_pdb_atomistic()
 
@@ -76,10 +83,17 @@ def get_atomistic() -> dict:
         if not template_helix_ids:
             return atomistic_to_json(pdb_model)
 
-        template_model = build_atomistic_model(design, exclude_helix_ids=pdb_helix_ids)
+        template_model = build_atomistic_model(
+            design,
+            exclude_helix_ids=pdb_helix_ids,
+            nuc_frame_override=nuc_frame_override,
+        )
         return atomistic_to_json(merge_models(pdb_model, template_model))
 
-    return atomistic_to_json(build_atomistic_model(design))
+    return atomistic_to_json(build_atomistic_model(
+        design,
+        nuc_frame_override=nuc_frame_override,
+    ))
 
 
 @router.get("/design/surface")
@@ -119,7 +133,10 @@ def get_surface(
     from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
 
     design = design_state.get_or_404()
-    model = build_atomistic_model(design)
+    model = build_atomistic_model(
+        design,
+        nuc_frame_override=_flexible_display_override(design),
+    )
 
     t0 = time.perf_counter()
     mesh = compute_surface(
@@ -158,7 +175,10 @@ def get_region_surface(body: SurfaceRegionRequest) -> dict:
         return {"vertices": [], "faces": [], "vertex_colors": None,
                 "stats": {"n_verts": 0, "n_faces": 0, "compute_ms": 0.0}}
 
-    model = build_atomistic_model(design)
+    model = build_atomistic_model(
+        design,
+        nuc_frame_override=_flexible_display_override(design),
+    )
     atoms = [a for a in model.atoms if (a.helix_id, a.bp_index) in colset]
 
     t0 = time.perf_counter()

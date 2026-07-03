@@ -41,12 +41,13 @@ function makeDeps(initialState = {}) {
   }
   const atomisticRenderer = { getMode: vi.fn(() => 'off'), setMode: vi.fn() }
   const designRenderer = { setDetailLevel: vi.fn() }
+  const flexibleArcs = { setRepresentation: vi.fn() }
   const overhangLinkArcs = { setRepresentation: vi.fn() }
   const unfoldView = { refreshArcVisibility: vi.fn() }
   const jointRenderer = { setHullRepr: vi.fn(), setHullScanTick: vi.fn() }
   let lastDetailLevel = 0
   const deps = {
-    store, api, atomisticRenderer, designRenderer, overhangLinkArcs, unfoldView,
+    store, api, atomisticRenderer, designRenderer, flexibleArcs, overhangLinkArcs, unfoldView,
     getJointRenderer: () => jointRenderer,
     getSurfaceMode: vi.fn(() => 'off'),
     applySurfaceMode: vi.fn().mockResolvedValue(undefined),
@@ -141,6 +142,7 @@ describe('setRepresentation — design-mode activation', () => {
     const api = initRepresentationSwitcher(deps)
     await api.setRepresentation('full')
     expect(deps.setCurrentRepr).toHaveBeenCalledWith('full')
+    expect(deps.flexibleArcs.setRepresentation).toHaveBeenCalledWith('full')
     expect(deps.setCGVisible).toHaveBeenCalledWith(true)
     expect(deps.overhangLinkArcs.setRepresentation).toHaveBeenCalledWith('full')
     expect(deps.setLastDetailLevel).toHaveBeenCalledWith(0)

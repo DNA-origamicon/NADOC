@@ -3441,8 +3441,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (beadDist === Infinity && coneDist === Infinity && selectableTypes.strands) {
       const cylMesh   = designRenderer.getCylinderMesh()
       const ovhgCyl   = designRenderer.getOverhangCylinderMesh?.()
+      const ovhgFullCyl = designRenderer.getOverhangFullCylinderMesh?.()
       const bridgeCyl = designRenderer.getLinkerBridgeCylinderMesh?.()
-      const cylTargets = [cylMesh, ovhgCyl, bridgeCyl].filter(m => m?.visible)
+      const cylTargets = [cylMesh, ovhgCyl, ovhgFullCyl, bridgeCyl].filter(m => m?.visible)
       if (cylTargets.length) {
         const cylHit0 = raycaster.intersectObjects(cylTargets)[0]
         if (cylHit0 != null) {
@@ -3466,7 +3467,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
           const dom = cylHit0.object === bridgeCyl ? null
             : cylHit0.object === ovhgCyl
               ? designRenderer.getOverhangCylinderDomainAt(cylHit0.instanceId)
-              : designRenderer.getCylinderDomainAt(cylHit0.instanceId)
+              : cylHit0.object === ovhgFullCyl
+                ? designRenderer.getOverhangFullCylinderDomainAt(cylHit0.instanceId)
+                : designRenderer.getCylinderDomainAt(cylHit0.instanceId)
           if (dom?.strandId) {
             const design = store.getState().currentDesign
             const strand = design?.strands?.find(s => s.id === dom.strandId)
