@@ -62,6 +62,7 @@ from backend.api.routes_fs import router as fs_router
 from backend.api.routes_loop_skip import router as loop_skip_router
 from backend.api.routes_jobs import router as jobs_router
 from backend.api.routes_md import router as md_router
+from backend.api.routes_mrdna import router as mrdna_router
 from backend.api.routes_oxdna import router as oxdna_router
 from backend.api.routes_oxdna_live import router as oxdna_live_router
 from backend.api.routes_autorefine import router as autorefine_router
@@ -183,6 +184,7 @@ app.include_router(assembly_workspace_router, prefix="/api")
 app.include_router(jobs_router,        prefix="/api")
 app.include_router(md_router,          prefix="/api")
 app.include_router(oxdna_router,       prefix="/api")
+app.include_router(mrdna_router,       prefix="/api")
 app.include_router(oxdna_live_router,  prefix="/api")
 app.include_router(autorefine_router,  prefix="/api")
 app.include_router(oxdna_metrics_router, prefix="/api")

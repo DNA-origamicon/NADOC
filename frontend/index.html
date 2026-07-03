@@ -3104,15 +3104,8 @@
 
   <!-- (Extrude controls moved to the right-sidebar #extrude-panel.) -->
 
-  <!-- Context menu for strand-length histogram bin (right-click → delete) -->
-  <div id="scaffold-split-ctx-menu" class="ctx-menu" style="min-width:180px">
-    <div class="ctx-header">Scaffold strand</div>
-    <div class="ctx-btns" style="flex-direction:column;gap:6px">
-      <button id="scaffold-split-btn">Nick</button>
-      <button id="scaffold-assign-seq-btn">Assign sequence…</button>
-      <button id="scaffold-delete-btn" style="background:#2d1515;border-color:#c93c3c;color:#ff6b6b;font-weight:600">Delete strand</button>
-    </div>
-  </div>
+  <!-- (Scaffold right-click menu removed — now the unified `_showScaffoldMenu`
+       built in selection_manager.js.) -->
 
   <div id="hist-ctx-menu" class="ctx-menu" style="min-width:160px">
     <div class="ctx-header" id="hist-ctx-header">0 nt</div>
@@ -3816,6 +3809,98 @@
               </button>
             </div>
           </div><!-- /oxdna-jobs-panel -->
+
+          <!-- ── mrDNA (coarse ARBD relaxation: single Run + CG display) ──── -->
+          <div class="panel-section" id="mrdna-jobs-panel">
+            <h2 id="mrdna-jobs-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+              <span>mrDNA</span>
+              <span id="mrdna-jobs-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+            </h2>
+            <div id="mrdna-jobs-body" style="display:none;margin-top:8px">
+
+              <!-- availability badge (mrDNA + ARBD + GPU) -->
+              <div id="mrdna-jobs-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
+
+              <!-- running job's progress bar -->
+              <div id="mrdna-jobs-progress" style="margin-bottom:6px">
+                <div style="height:4px;background:#161b22;border-radius:2px;overflow:hidden">
+                  <div class="bar" style="height:100%;width:0%;background:#4a9eff;transition:width .3s"></div>
+                </div>
+              </div>
+
+              <!-- two run buttons: Coarse (fast, global shape) + Fine (curvature) -->
+              <div style="display:flex;gap:5px;margin-bottom:6px">
+                <button id="mrdna-jobs-coarse-btn" disabled
+                        title="COARSE relaxation (5 bp/bead, no twist). Fast — settles the global shape and relaxes strained geometry. Does NOT reproduce loop/skip curvature or twist (the coarse model has no twist), so a curved design still reads ~straight. Use Fine to check curvature."
+                        style="flex:1;font-size:var(--text-xs);padding:6px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer;font-weight:600">
+                  ▶ Coarse
+                </button>
+                <button id="mrdna-jobs-fine-btn" disabled
+                        title="FINE relaxation (coarse → 2 bp/bead + orientation/twist). Slower, but develops CURVATURE and twist from loop/skip marks (Dietz bend). Use this to quick-check that a curved design bends as designed — the panel reports designed-vs-simulated curvature."
+                        style="flex:1;font-size:var(--text-xs);padding:6px;background:#122117;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;font-weight:600">
+                  ⤴ Fine (curvature)
+                </button>
+              </div>
+
+              <!-- ── Jobs (list of runs, filtered to this design) ──────────── -->
+              <div class="ox-card">
+                <div id="mrdna-jobs-list-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span class="ox-card__title">Jobs</span>
+                </div>
+                <div class="ox-card__body">
+                  <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
+                    <input id="mrdna-jobs-show-all" type="checkbox"> Show jobs for all designs
+                  </label>
+                  <div id="mrdna-jobs-list" style="max-height:120px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
+                </div>
+              </div>
+
+              <!-- ── Advanced (collapsible card) ──────────────────────────── -->
+              <div class="ox-card">
+                <div id="mrdna-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e;cursor:pointer">
+                  <span id="mrdna-jobs-adv-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Advanced</span>
+                </div>
+                <div id="mrdna-jobs-adv-body" class="ox-card__body" style="display:none">
+                  <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
+                    <label for="mrdna-jobs-coarse-steps" style="font-size:var(--text-xs);color:#8b949e">Coarse steps</label>
+                    <input id="mrdna-jobs-coarse-steps" type="number" value="100000" min="1000" max="50000000" step="10000"
+                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label for="mrdna-jobs-output-period" style="font-size:var(--text-xs);color:#8b949e">Output period</label>
+                    <input id="mrdna-jobs-output-period" type="number" value="10000" min="100" step="1000"
+                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label for="mrdna-jobs-device" style="font-size:var(--text-xs);color:#8b949e">CUDA device</label>
+                    <input id="mrdna-jobs-device" type="text" value="0"
+                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  </div>
+                </div>
+              </div>
+
+              <!-- ── Detail (selected job) ─────────────────────────────────── -->
+              <div id="mrdna-jobs-detail" style="display:none;margin-top:6px;border-top:1px solid #21262d;padding-top:6px">
+                <div id="mrdna-jobs-detail-status" style="font-size:var(--text-xs);color:#c9d1d9;margin-bottom:4px;min-height:14px"></div>
+                <div id="mrdna-jobs-timeline" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px;font-family:var(--font-mono, monospace)"></div>
+                <!-- curvature readout: designed (Dietz) vs simulated (mrDNA) -->
+                <div id="mrdna-jobs-curvature" style="display:none;font-size:var(--text-xs);margin-bottom:6px;padding:5px 6px;background:#12161c;border:1px solid #21262d;border-radius:3px"></div>
+                <div id="mrdna-jobs-detail-error" style="display:none;font-size:var(--text-xs);color:#ff7b72;margin-bottom:4px"></div>
+                <div style="display:flex;gap:5px;margin-bottom:6px">
+                  <button id="mrdna-jobs-stop-btn"
+                          style="display:none;flex:1;font-size:var(--text-xs);padding:4px;background:#3a1418;border:1px solid #b62324;color:#ff7b72;border-radius:3px;cursor:pointer">■ Stop</button>
+                  <button id="mrdna-jobs-delete-btn"
+                          style="flex:1;font-size:var(--text-xs);padding:4px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">🗑 Delete</button>
+                </div>
+
+                <!-- display toggles (deform + CG beads; both display-only) -->
+                <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:3px">
+                  <input id="mrdna-jobs-display-toggle" type="checkbox" disabled> mrDNA display (deform model)
+                </label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:3px">
+                  <input id="mrdna-jobs-beads-toggle" type="checkbox" disabled> CG beads (5 bp/bead cloud)
+                </label>
+                <div id="mrdna-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;min-height:14px"></div>
+              </div>
+
+            </div>
+          </div><!-- /mrdna-jobs-panel -->
 
           <!-- ── MD relaxation panel (job launcher + live progress) ───────── -->
           <div class="panel-section" id="md-jobs-panel">

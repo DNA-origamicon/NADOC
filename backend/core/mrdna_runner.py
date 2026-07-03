@@ -1,0 +1,629 @@
+"""
+mrDNA Runner — background execution of a single coarse ARBD relaxation.
+
+Sibling of ``oxdna_runner.py``, simplified: a mrDNA job has ONE stage (the
+coarse ARBD relaxation).  Unlike oxDNA — where NADOC spawns the ``oxDNA`` binary
+directly and owns the subprocess — mrDNA's relaxation runs inside a blocking
+``SegmentModel.simulate(...)`` call that itself spawns ARBD.  So the runner:
+
+  1. prepare: write a self-contained ``design.json`` snapshot into the job dir.
+  2. build the parameterized mrDNA model (T0 crossover potentials) from the
+     snapshot and call ``model.simulate(coarse_steps, fine_steps=0)`` INTO the
+     job dir (persistent — not ``/tmp`` — so the relaxed display survives a
+     restart).
+  3. extract the relaxed per-nucleotide positions (per-helix coarse spline) +
+     the CG bead cloud and cache them as ``display.json`` / ``beads.json``.
+  4. mark the job completed.
+
+The long-running work runs in a background daemon thread, exactly like the oxDNA
+/ NAMD runners, so the sidebar keeps polling job/progress while ARBD runs.
+Stopping kills the detached ARBD child (found by scanning /proc for the job dir),
+which unblocks ``simulate()`` so the thread finishes and marks the job stopped.
+
+mrDNA output is Physical-layer only — never written back into Design topology.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import signal
+import threading
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+from backend.core.models import Design
+from backend.core.mrdna_job import MrdnaJob, MrdnaStatus
+
+logger = logging.getLogger(__name__)
+
+_SIM_STEM = "mrdna_relax"   # model.simulate(output_name=...) base name
+
+
+# ── Global task registry ──────────────────────────────────────────────────────
+
+@dataclass
+class _RunningHandle:
+    thread:    threading.Thread
+    cancelled: bool = False
+
+
+_RUNNING: dict[str, _RunningHandle] = {}
+
+
+def is_running(job_id: str) -> bool:
+    handle = _RUNNING.get(job_id)
+    return handle is not None and handle.thread.is_alive()
+
+
+def _external_arbd_pid(job: MrdnaJob, workspace_dir: Path) -> Optional[int]:
+    """PID of an ARBD process for this job found by scanning /proc for the job dir
+    in an arbd command line — or None.  Matching by the job dir is self-verifying,
+    so the PID is safe to signal (used to stop a detached run after a restart, and
+    to keep reconcile from mislabelling a still-running orphan ``stopped``)."""
+    needle = str(job.job_dir(workspace_dir).resolve()).encode()
+    try:
+        proc_dirs = list(Path("/proc").iterdir())
+    except OSError:
+        return None
+    for proc_dir in proc_dirs:
+        if not proc_dir.name.isdigit():
+            continue
+        try:
+            cmdline = (proc_dir / "cmdline").read_bytes()
+        except OSError:
+            continue
+        if needle in cmdline and b"arbd" in cmdline.lower():
+            try:
+                return int(proc_dir.name)
+            except ValueError:
+                return None
+    return None
+
+
+# ── Availability probe ────────────────────────────────────────────────────────
+
+def mrdna_available() -> dict:
+    """Probe for a usable mrDNA + ARBD install (mirror /oxdna/available).
+
+    mrDNA relaxation needs BOTH the mrdna Python package (build the model) AND the
+    ARBD binary (run it on the GPU).  ``available`` is true only when both resolve.
+    """
+    from backend.core.mrdna_bridge import find_arbd, find_mrdna
+    mrdna = find_mrdna()
+    arbd = find_arbd()
+    return {
+        "available": bool(mrdna) and bool(arbd),
+        "mrdna": mrdna,
+        "arbd": arbd,
+        "recommended_device": os.environ.get("MRDNA_DEVICE", "0"),
+    }
+
+
+# ── Prepare: write the self-contained job dir ─────────────────────────────────
+
+def prepare_mrdna_job(design: Design, job: MrdnaJob, workspace_dir: Path) -> None:
+    """Write a self-contained ``design.json`` snapshot into the job dir, so the
+    runner (and every display read) is decoupled from live editor state."""
+    jd = job.job_dir(workspace_dir)
+    jd.mkdir(parents=True, exist_ok=True)
+    (jd / "design.json").write_text(design.model_dump_json())
+
+
+def _load_snapshot_design(job_dir: Path) -> Optional[Design]:
+    snap = job_dir / "design.json"
+    if not snap.exists():
+        return None
+    try:
+        return Design.model_validate_json(snap.read_text())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _psf_is_cg(psf: Path) -> bool:
+    """True if a PSF is a mrDNA CG bead model (has 'DNA' beads), not an atomic
+    model — used to skip the atomistic tail multiresolution writes."""
+    try:
+        with psf.open("rb") as fh:
+            return b"DNA" in fh.read(300_000)
+    except OSError:
+        return False
+
+
+def _sim_paths(job_dir: Path) -> tuple[Path, Path]:
+    """(PSF, DCD) of the structure to extract the display from.
+
+    A FINE (multiresolution) run writes numbered stages ``{stem}-N.psf`` (coarse
+    N=0 → fine 1 bp/bead N=1 → fine frozen-twist N=2, + an atomic tail); we take the
+    highest-numbered CG stage (the relaxed fine structure).  A COARSE run writes the
+    single-stage ``{stem}.psf``.  Auto-resolves so both extract the same way."""
+    numbered = []
+    for psf in job_dir.glob(f"{_SIM_STEM}-*.psf"):
+        tail = psf.stem.rsplit("-", 1)[-1]
+        if tail.isdigit():
+            numbered.append((int(tail), psf))
+    for _n, psf in sorted(numbered, reverse=True):
+        dcd = job_dir / "output" / f"{psf.stem}.dcd"
+        if dcd.exists() and _psf_is_cg(psf):
+            return psf, dcd
+    return job_dir / f"{_SIM_STEM}.psf", job_dir / "output" / f"{_SIM_STEM}.dcd"
+
+
+# ── Extraction: relaxed positions + CG bead cloud ─────────────────────────────
+
+# Bumped when the display reconstruction changes so stale ``display.json`` caches
+# from an older algorithm auto-regenerate on the next read (see ``load_display``).
+# v2 = actual-relaxed-axis reconstruction (v1 re-idealised → structures barely moved).
+_DISPLAY_VERSION = 2
+
+
+def _display_positions(design: Design, job_dir: Path) -> tuple[list[dict], int]:
+    """Per-nucleotide relaxed backbone positions (applyFemPositions list) from the
+    DISPLAY reconstruction (actual relaxed axis) + intra-helix gap-fill so every
+    nucleotide moves consistently.  Returns ``(positions, n_override)``; nm."""
+    from backend.core.geometry import nucleotide_positions
+    from backend.core.mrdna_bridge import (
+        _ensure_mrdna,
+        nuc_pos_override_display_from_coarse,
+    )
+
+    _ensure_mrdna()
+    psf, dcd = _sim_paths(job_dir)
+    # DISPLAY reconstruction (actual relaxed axis), NOT the ideal-geometry bridge
+    # version — the user must SEE the real relaxed shape, not a re-idealised one.
+    override = nuc_pos_override_display_from_coarse(design, str(psf), str(dcd))
+
+    positions: list[dict] = []
+    for helix in design.helices:
+        nuc_list = list(nucleotide_positions(helix))
+        dir_disps: dict[str, dict[int, object]] = {"FORWARD": {}, "REVERSE": {}}
+        for nuc in nuc_list:
+            key = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
+            if key in override:
+                dir_disps[nuc.direction.value][nuc.bp_index] = override[key] - nuc.position
+        for nuc in nuc_list:
+            key = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
+            if key in override:
+                pos = override[key]
+            else:
+                d_map = dir_disps[nuc.direction.value]
+                if d_map:
+                    nearest = min(d_map, key=lambda b: abs(b - nuc.bp_index))
+                    pos = nuc.position + d_map[nearest]
+                else:
+                    pos = nuc.position
+            positions.append({
+                "helix_id":          nuc.helix_id,
+                "bp_index":          nuc.bp_index,
+                "direction":         nuc.direction.value,
+                "backbone_position": pos.tolist(),
+            })
+    return positions, len(override)
+
+
+def extract_mrdna_results(design: Design, job_dir: Path) -> dict:
+    """Read the coarse ARBD output and return the cached display payload:
+
+    ``{"positions": [...applyFemPositions...], "beads": [[x,y,z]...],
+       "edges": [[i,j]...], "n_override": int, "n_beads": int}``.  All lengths nm.
+    """
+    psf, dcd = _sim_paths(job_dir)
+    positions, n_override = _display_positions(design, job_dir)
+    beads, edges = _extract_beads_aligned(str(psf), str(dcd))
+    return {
+        "positions":  positions,
+        "beads":      beads,
+        "edges":      edges,
+        "n_override": n_override,
+        "n_beads":    len(beads),
+    }
+
+
+def load_display(job_dir: Path) -> Optional[dict]:
+    """Load the cached relaxed-display payload, REGENERATING it when the cache is
+    from an older reconstruction (no/old ``version``) — so jobs relaxed before the
+    actual-relaxed-axis fix show the real shape without a re-run.  Returns None when
+    there is no cached display and it can't be recomputed."""
+    cached = load_cached(job_dir, "display.json")
+    if cached and cached.get("version") == _DISPLAY_VERSION and cached.get("positions"):
+        return cached
+    design = _load_snapshot_design(job_dir)
+    psf, dcd = _sim_paths(job_dir)
+    if design is None or not (psf.exists() and dcd.exists()):
+        return cached   # can't recompute (e.g. archived without outputs) — serve old
+    positions, _ = _display_positions(design, job_dir)
+    out = {"version": _DISPLAY_VERSION, "positions": positions}
+    try:
+        (job_dir / "display.json").write_text(json.dumps(out))
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _extract_beads_aligned(psf: str, dcd: str) -> tuple[list[list[float]], list[list[int]]]:
+    """The coarse DNA bead cloud (last DCD frame), rigid-body (Kabsch) aligned onto
+    the initial coarse PDB — which mrDNA writes in the NADOC coordinate frame — so
+    the beads overlay the design, PLUS the CG bond connectivity (backbone chain +
+    crossover links) read from the coarse PSF and remapped into the DNA-bead index
+    space.  Returns ``(positions_nm, edges)`` where each edge is ``[i, j]`` into the
+    positions list."""
+    import numpy as np
+
+    from backend.core.mrdna_bridge import _ensure_mrdna
+    _ensure_mrdna()
+    import MDAnalysis as mda
+
+    init_pdb = psf.replace(".psf", ".pdb")
+    u_init = mda.Universe(psf, init_pdb)
+    names = np.array([a.name for a in u_init.atoms])
+    dna = np.where(names == "DNA")[0]
+    ref = u_init.atoms.positions[dna].astype(float)   # NADOC frame, Å
+
+    edges = _psf_dna_edges(psf, u_init=u_init, dna=dna)
+
+    u = mda.Universe(psf, dcd)
+    u.trajectory[-1]
+    sim = u.atoms.positions[dna].astype(float)         # drifted, Å
+
+    if len(ref) >= 3 and len(sim) == len(ref):
+        aligned = _kabsch_apply(sim, ref)
+    else:
+        aligned = sim
+    return (aligned / 10.0).tolist(), edges            # Å → nm
+
+
+def _psf_dna_edges(psf: str, *, u_init=None, dna=None) -> list[list[int]]:
+    """CG bond edges (backbone chain + crossover links) between DNA beads, read from
+    the coarse PSF and remapped into the DNA-bead index space (bonds to non-DNA
+    beads — orientation/ssDNA — are dropped, since only DNA beads are rendered).
+    ``u_init``/``dna`` may be passed to reuse an already-loaded Universe."""
+    import numpy as np
+
+    from backend.core.mrdna_bridge import _ensure_mrdna
+    _ensure_mrdna()
+    import MDAnalysis as mda
+
+    if u_init is None:
+        u_init = mda.Universe(psf, psf.replace(".psf", ".pdb"))
+    if dna is None:
+        names = np.array([a.name for a in u_init.atoms])
+        dna = np.where(names == "DNA")[0]
+
+    global_to_local = {int(g): i for i, g in enumerate(dna)}
+    edges: list[list[int]] = []
+    try:
+        for a, b in u_init.bonds.indices:
+            a, b = int(a), int(b)
+            if a in global_to_local and b in global_to_local:
+                edges.append([global_to_local[a], global_to_local[b]])
+    except Exception:  # noqa: BLE001 — no bonds parsed → just no connections
+        edges = []
+    return edges
+
+
+def load_beads_with_edges(job_dir: Path) -> Optional[dict]:
+    """Load the cached beads payload, backfilling ``edges`` from the coarse PSF for
+    jobs completed before the connections feature (their beads.json has no edges).
+    Returns None if there is no cached bead cloud."""
+    cached = load_cached(job_dir, "beads.json")
+    if not cached or not cached.get("beads"):
+        return None
+    if cached.get("edges"):
+        return cached
+    psf, _ = _sim_paths(job_dir)
+    edges: list[list[int]] = []
+    if psf.exists():
+        try:
+            edges = _psf_dna_edges(str(psf))
+        except Exception:  # noqa: BLE001
+            edges = []
+    cached["edges"] = edges
+    try:
+        (job_dir / "beads.json").write_text(json.dumps(cached))
+    except Exception:  # noqa: BLE001 — display still works from the in-memory copy
+        pass
+    return cached
+
+
+def load_curvature(job_dir: Path) -> Optional[dict]:
+    """Designed-vs-simulated curvature report, computing + caching it on first read
+    for jobs completed before the curvature feature (or when the display cache was
+    regenerated).  Returns None if there's no design snapshot to compute from."""
+    cached = load_cached(job_dir, "curvature.json")
+    if cached:
+        return cached
+    design = _load_snapshot_design(job_dir)
+    if design is None:
+        return None
+    disp = load_display(job_dir)
+    positions = disp.get("positions") if disp else None
+    from backend.core.mrdna_curvature import curvature_report
+    report = curvature_report(design, positions)
+    try:
+        (job_dir / "curvature.json").write_text(json.dumps(report))
+    except Exception:  # noqa: BLE001
+        pass
+    return report
+
+
+def _kabsch_apply(mobile: "any", target: "any") -> "any":
+    """Rigid-body superpose ``mobile`` onto ``target`` (both (N,3)); return the
+    transformed ``mobile``.  Best-fit rotation + translation (no scaling)."""
+    import numpy as np
+
+    mc = mobile.mean(axis=0)
+    tc = target.mean(axis=0)
+    H = (mobile - mc).T @ (target - tc)
+    U, _, Vt = np.linalg.svd(H)
+    d = np.sign(np.linalg.det(Vt.T @ U.T))
+    D = np.diag([1.0, 1.0, d])
+    R = Vt.T @ D @ U.T
+    return (mobile - mc) @ R.T + tc
+
+
+def load_cached(job_dir: Path, name: str) -> Optional[dict]:
+    """Load a cached ``display.json`` / ``beads.json`` payload, or None."""
+    p = job_dir / name
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# ── Progress (time-based estimate; the bar for a short coarse run) ─────────────
+
+def _estimate_seconds(job: MrdnaJob) -> float:
+    """Rough wall-clock estimate for the coarse ARBD run, scaled by system size and
+    step count.  Only drives the progress bar (capped < 1.0 until the thread ends);
+    the true completion signal is the runner thread finishing."""
+    beads = max(1.0, job.n_nucleotides / 2.0)          # ≈ base pairs ≈ coarse beads
+    # Reference: ~635 beads · 1e5 coarse steps ≈ 21 s on an RTX 3080 Ti; be generous.
+    est = 8.0 + (beads / 635.0) * (job.coarse_steps / 1e5) * 30.0
+    # The FINE stage (2 bp/bead + orientation) is ~3× the per-step cost of coarse.
+    if job.fine_steps > 0:
+        est += (beads / 635.0) * (job.fine_steps / 1e5) * 90.0
+    return max(10.0, est)
+
+
+def job_progress(job: MrdnaJob, workspace_dir: Path) -> dict:
+    """Overall progress fraction + ETA for the panel."""
+    stage = job.stages[0] if job.stages else None
+    overall = 0.0
+    eta_seconds: float | None = None
+    if job.status == MrdnaStatus.completed:
+        overall = 1.0
+    elif job.status in (MrdnaStatus.failed, MrdnaStatus.stopped):
+        overall = 0.0
+    elif job.status == MrdnaStatus.running and stage and stage.started_at:
+        elapsed = time.time() - stage.started_at
+        est = _estimate_seconds(job)
+        overall = min(0.97, elapsed / est)
+        eta_seconds = max(0.0, est - elapsed)
+    return {
+        "overall":      overall,
+        "status":       job.status.value,
+        "stage_status": stage.status if stage else None,
+        "eta_seconds":  eta_seconds,
+        "sim_seconds":  job.sim_seconds,
+    }
+
+
+# ── Execution ─────────────────────────────────────────────────────────────────
+
+def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
+    """Thread body: build the model, run the coarse ARBD sim, extract + cache."""
+    jd = job.job_dir(workspace_dir)
+    handle = _RUNNING.get(job.job_id)
+
+    def _cancelled() -> bool:
+        return handle is not None and handle.cancelled
+
+    try:
+        design = _load_snapshot_design(jd)
+        if design is None:
+            raise RuntimeError("job design snapshot (design.json) missing")
+
+        from backend.core.mrdna_bridge import ensure_wsl_cuda_libs
+        ensure_wsl_cuda_libs()
+
+        # Build the parameterized mrDNA model (same T0 crossover potentials the
+        # one-shot /ws/mrdna-relax used).
+        from backend.parameterization.mrdna_inject import (
+            CrossoverPotentialOverride,
+            mrdna_model_from_nadoc_parameterized,
+        )
+        override = CrossoverPotentialOverride.from_database("T0")
+        model = mrdna_model_from_nadoc_parameterized(design, override)
+
+        if _cancelled():
+            raise _Cancelled()
+
+        # Mark the stage running now (progress ETA counts from here).
+        job.stages[0].status = "running"
+        job.stages[0].started_at = time.time()
+        job.save(workspace_dir)
+
+        (jd / "output").mkdir(parents=True, exist_ok=True)
+        gpu = int(job.device) if str(job.device).isdigit() else 0
+        t0 = time.monotonic()
+        if job.fine_steps > 0:
+            # CURVATURE path: the real mrDNA multiresolution pipeline — coarse
+            # (5 bp/bead) → fine (1 bp/bead + local twist) → frozen-twist.  The fine
+            # stage is what develops loop/skip curvature; it writes numbered CG stages
+            # {stem}-N (+ an atomic tail we ignore).  NOTE: `model.simulate(coarse_steps=
+            # …)` does NOT do this — it silently runs a single coarse pass (the
+            # coarse_steps/fine_steps kwargs are swallowed by ArbdEngine).
+            from mrdna import multiresolution_simulation
+            try:
+                multiresolution_simulation(
+                    model, _SIM_STEM, directory=str(jd), gpu=gpu,
+                    coarse_steps=float(job.coarse_steps),
+                    fine_steps=float(job.fine_steps),
+                    coarse_output_period=float(min(job.output_period, job.coarse_steps)),
+                    fine_output_period=float(max(1, job.fine_steps // 2)),
+                )
+            except Exception as exc:  # noqa: BLE001
+                # The fine CG stages are written BEFORE the atomistic tail; if that
+                # tail (or a post-fine step) fails but the fine CG output exists,
+                # proceed with it rather than failing the whole job.
+                if _cancelled():
+                    raise
+                psf, _dcd = _sim_paths(jd)
+                if "-" not in psf.stem or not psf.exists():
+                    raise
+                logger.warning("mrdna job %s: multiresolution tail failed (%s); "
+                               "using the completed fine CG stage", job.job_id, exc)
+        else:
+            # COARSE path: a single 5 bp/bead pass (fast, global shape, no twist ⇒ no
+            # curvature).  The correct step kwarg is `num_steps` (not coarse_steps).
+            model.simulate(
+                output_name=_SIM_STEM, directory=str(jd),
+                num_steps=float(job.coarse_steps), timestep=200e-6,
+                output_period=float(job.output_period), gpu=gpu,
+            )
+        sim_seconds = time.monotonic() - t0
+
+        if _cancelled():
+            raise _Cancelled()
+
+        # Extract relaxed positions + CG beads and cache them for the display.
+        payload = extract_mrdna_results(design, jd)
+        (jd / "display.json").write_text(json.dumps({
+            "version":   _DISPLAY_VERSION,
+            "positions": payload["positions"],
+        }))
+        (jd / "beads.json").write_text(json.dumps({
+            "beads": payload["beads"],
+            "edges": payload["edges"],
+        }))
+        # Curvature report (designed vs simulated) — cached for the panel readout.
+        try:
+            from backend.core.mrdna_curvature import curvature_report
+            (jd / "curvature.json").write_text(json.dumps(
+                curvature_report(design, payload["positions"])))
+        except Exception:  # noqa: BLE001 — a curvature failure must not fail the job
+            logger.warning("mrdna job %s: curvature report failed", job.job_id, exc_info=True)
+
+        job.sim_seconds = round(sim_seconds, 2)
+        job.n_override = payload["n_override"]
+        job.n_beads = payload["n_beads"]
+        for st in job.stages:
+            st.status = "done"
+        job.status = MrdnaStatus.completed
+        job.error = None
+        job.arbd_pid = None
+        job.save(workspace_dir)
+        logger.info("mrdna job %s completed in %.1fs (%d beads)",
+                    job.job_id, sim_seconds, payload["n_beads"])
+
+    except _Cancelled:
+        job.status = MrdnaStatus.stopped
+        job.arbd_pid = None
+        for st in job.stages:
+            if st.status != "done":
+                st.status = "failed"
+        job.save(workspace_dir)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("mrdna job %s failed: %s", job.job_id, exc, exc_info=True)
+        # A killed ARBD child surfaces here as a generic error; if we asked to
+        # cancel, treat it as a stop rather than a failure.
+        if _cancelled():
+            job.status = MrdnaStatus.stopped
+        else:
+            job.status = MrdnaStatus.failed
+            job.error = str(exc)
+        job.arbd_pid = None
+        for st in job.stages:
+            if st.status != "done":
+                st.status = "failed"
+        job.save(workspace_dir)
+    finally:
+        _RUNNING.pop(job.job_id, None)
+
+
+class _Cancelled(Exception):
+    pass
+
+
+def start_job(job: MrdnaJob, workspace_dir: Path) -> None:
+    """Launch _run_job in a background daemon thread. Idempotent if running."""
+    if is_running(job.job_id):
+        return
+    handle = _RunningHandle(thread=threading.Thread(
+        target=_run_job, args=(job, workspace_dir),
+        name=f"mrdna-runner-{job.job_id}", daemon=True))
+    _RUNNING[job.job_id] = handle
+    handle.thread.start()
+
+
+def _pid_is_arbd(pid: int) -> bool:
+    try:
+        cmdline = (Path("/proc") / str(pid) / "cmdline").read_bytes().lower()
+    except OSError:
+        return False
+    return b"arbd" in cmdline
+
+
+def stop_job(job_id: str, workspace_dir: Path) -> bool:
+    """Stop a running mrDNA job.  Sets the cancel flag and kills the detached ARBD
+    child (found via /proc, self-verifying, or the persisted ``arbd_pid``) so the
+    blocked ``simulate()`` unwinds and the thread marks the job stopped.  Returns
+    True if a live job or orphan process was found."""
+    handle = _RUNNING.get(job_id)
+    live = handle is not None and handle.thread.is_alive()
+    if handle is not None:
+        handle.cancelled = True
+
+    try:
+        job = MrdnaJob.load(job_id, workspace_dir)
+    except Exception:  # noqa: BLE001
+        return live
+
+    pid = _external_arbd_pid(job, workspace_dir)
+    if pid is None and job.arbd_pid and _pid_is_arbd(job.arbd_pid):
+        pid = job.arbd_pid
+    if pid is not None:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+        live = True
+
+    if not live and job.status == MrdnaStatus.running:
+        # No live thread and no orphan process → just mark it stopped.
+        job.status = MrdnaStatus.stopped
+        job.arbd_pid = None
+        job.save(workspace_dir)
+    return live
+
+
+def reconcile_mrdna_status(job: MrdnaJob, workspace_dir: Path) -> MrdnaJob:
+    """Recover a detached job's status after the runner thread died (e.g. a
+    ``uvicorn --reload`` restart mid-run).  If the cached ``display.json`` exists the
+    run finished → ``completed``; if the ARBD child is gone and nothing was cached →
+    ``stopped``.  No-op unless the job is an orphaned ``running`` one."""
+    if job.status != MrdnaStatus.running:
+        return job
+    if is_running(job.job_id):
+        return job
+    jd = job.job_dir(workspace_dir)
+    if (jd / "display.json").exists():
+        job.status = MrdnaStatus.completed
+        for st in job.stages:
+            st.status = "done"
+        job.save(workspace_dir)
+        return job
+    if _external_arbd_pid(job, workspace_dir) is not None:
+        return job  # orphaned but ARBD still alive — keep running
+    job.status = MrdnaStatus.stopped
+    job.arbd_pid = None
+    for st in job.stages:
+        if st.status != "done":
+            st.status = "failed"
+    job.save(workspace_dir)
+    return job

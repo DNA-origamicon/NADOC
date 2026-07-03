@@ -192,6 +192,9 @@ import { initAnchorGlow } from './scene/anchor_glow.js'
 import { initOxdnaDisplay } from './ui/oxdna_display.js'
 import { mdVizApiAdapter } from './ui/md_viz_adapter.js'
 import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
+import { initMrdnaDisplay } from './ui/mrdna_display.js'
+import { initMrdnaJobsPanel } from './ui/mrdna_jobs_panel.js'
+import { initMrdnaConnections } from './scene/mrdna_connections.js'
 import { initOxdnaLive } from './ui/oxdna_live_controller.js'
 import { initMdEngines }   from './ui/md_engines.js'
 import { initEfieldGizmo } from './scene/efield_gizmo.js'
@@ -791,6 +794,9 @@ async function main() {
     onDrillLevel: selectionFilter.reflectDrillLevel,
     onNick: async ({ helixId, bpIndex, direction }) => {
       _clearStapleChecks()
+      // A nick is a topology change; drop the scaffold-routing indicator (the
+      // unified scaffold context menu's "Nick here" routes through here).
+      _clearScaffoldChecks()
       const result = await api.addNick({ helixId, bpIndex, direction })
       if (!result) {
         const err = store.getState().lastError
@@ -808,8 +814,9 @@ async function main() {
     onOverhangArrow: (entry, clientX, clientY) => {
       _showOverhangLengthDialog(entry, clientX, clientY)
     },
-    onScaffoldRightClick: (clientX, clientY, coneEntry) => {
-      _showScaffoldSplitCtx(clientX, clientY, coneEntry)
+    onScaffoldAssignSequence: (strandId) => {
+      // "Assign sequence…" in the unified scaffold context menu (selection_manager).
+      _scaffoldModal.openModal(strandId)
     },
     onCrossoverRightClick: async (xo, action) => {
       // Distinguish forced ligations (have three_prime_helix_id) from regular crossovers.
@@ -1823,6 +1830,10 @@ async function main() {
     // panel so it can show a "building…" spinner instead of looking frozen.
     onHeavyStatus: (d) => window.dispatchEvent(
       new CustomEvent('nadoc:oxdna-heavy-status', { detail: d })),
+    // Flexible ssDNA beads are excluded from the rigid mesh, so applyFemPositions
+    // never moves them — redraw them at the frame's simulated positions instead of
+    // leaving a stale geometric arc floating over the sim (null reverts to the arc).
+    onFrame: (u) => flexibleArcs.applySimPositions(u),
   })
   // When the scene representation changes while an oxDNA overlay is active, re-apply
   // the current frame to the freshly-built atomistic/surface mesh.
@@ -1869,6 +1880,7 @@ async function main() {
     },
     onHeavyStatus: (d) => window.dispatchEvent(
       new CustomEvent('nadoc:md-heavy-status', { detail: d })),
+    onFrame: (u) => flexibleArcs.applySimPositions(u),
   })
   window.addEventListener('nadoc:representation-change', () => {
     if (mdViz.isActive?.()) mdViz.reapplyForRepr()
@@ -1889,6 +1901,18 @@ async function main() {
       oxdnaAnchorsSetup?.applyConfig?.(cfg.anchors)
     },
   })
+  // mrDNA (coarse ARBD relaxation) — sibling of the oxDNA panel, single Run button.
+  // CG-beads mode is a STANDALONE rep: bead cloud (md_overlay InstancedMesh) +
+  // bond connections (line segments) with the native NADOC model hidden.
+  const mrdnaBeadOverlay = initMdOverlay(scene)
+  const mrdnaConnOverlay = initMrdnaConnections(scene)
+  const mrdnaDisplay = initMrdnaDisplay({
+    designRenderer, api,
+    beadOverlay:       mrdnaBeadOverlay,
+    connectionOverlay: mrdnaConnOverlay,
+    setDesignVisible:  (v) => _setDesignGeometryVisible(v),  // hoisted fn decl (defined below)
+  })
+  initMrdnaJobsPanel({ mrdnaDisplay, getWorkspacePath: () => _workspacePath })
   // (Editing OR seeking the design refetches the oxDNA/MD job lists so the out-of-date
   // ⚠ markers update immediately — driven by the client's `nadoc:design-changed` event
   // on every design sync; both panels self-listen, so no store subscription here.)
@@ -2477,51 +2501,8 @@ async function main() {
     extrudePanel: _extrudePanel,
   })
 
-  // ── Scaffold strand right-click context menu ────────────────────────────────
-  const _scafSplitCtx  = document.getElementById('scaffold-split-ctx-menu')
-  let _scafSplitTarget = null  // { strandId, helixId, bpPosition, direction }
-
-  function _showScaffoldSplitCtx(x, y, coneEntry) {
-    const { helix_id, bp_index, direction } = coneEntry.fromNuc
-    _scafSplitTarget = { strandId: coneEntry.strandId, helixId: helix_id, bpPosition: bp_index, direction }
-    if (_scafSplitCtx) {
-      _scafSplitCtx.style.left    = `${x}px`
-      _scafSplitCtx.style.top     = `${y}px`
-      _scafSplitCtx.style.display = 'block'
-    }
-  }
-  function _hideScaffoldSplitCtx() {
-    if (_scafSplitCtx) _scafSplitCtx.style.display = 'none'
-    _scafSplitTarget = null
-  }
-  document.addEventListener('pointerdown', e => {
-    if (_scafSplitCtx?.style.display !== 'none' && !_scafSplitCtx.contains(e.target)) _hideScaffoldSplitCtx()
-  })
-
-  document.getElementById('scaffold-split-btn')?.addEventListener('click', async () => {
-    const target = _scafSplitTarget
-    _hideScaffoldSplitCtx()
-    if (!target) return
-    _clearScaffoldChecks()
-    // Nicking the scaffold here splits it into two scaffold strands at the 3′
-    // side of the clicked nucleotide (same make_nick path as the staple nick menu).
-    const ok = await api.addNick({ helixId: target.helixId, bpIndex: target.bpPosition, direction: target.direction })
-    if (!ok) showToast('Nick failed: ' + (store.getState().lastError?.message ?? 'unknown'), { severity: 'error' })
-  })
-
-  document.getElementById('scaffold-assign-seq-btn')?.addEventListener('click', () => {
-    const target = _scafSplitTarget
-    _hideScaffoldSplitCtx()
-    if (!target) return
-    _scaffoldModal.openModal(target.strandId)
-  })
-
-  document.getElementById('scaffold-delete-btn')?.addEventListener('click', async () => {
-    const target = _scafSplitTarget
-    _hideScaffoldSplitCtx()
-    if (!target) return
-    await api.deleteStrand(target.strandId)
-  })
+  // Scaffold right-click now uses the unified scaffold context menu built in
+  // selection_manager.js (`_showScaffoldMenu`); the old raw-HTML menu was removed.
 
   // ── Overhang orientation context menu ────────────────────────────────────────
   // Builder lives in ui/overhang_orientation_menu.js (ISSUE-1 Phase 2a-orientation).
@@ -3120,7 +3101,7 @@ async function main() {
     'selection-filter-section', 'properties-section',
     'blunt-panel', 'deform-panel', 'strand-hist-section',
     'groups-panel', 'overhang-panel',
-    'oxdna-jobs-panel', 'md-panel',
+    'oxdna-jobs-panel', 'mrdna-jobs-panel', 'md-panel',
     'repr-options-section', 'reset-btn',
   ]
   let _savedDesignPanelDisplay = {}

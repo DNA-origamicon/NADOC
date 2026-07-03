@@ -54,6 +54,46 @@ def mrdna_tool_path() -> str:
 
 _MRDNA_TOOL_PATH = mrdna_tool_path()
 
+# WSL2 exposes the real GPU driver libs (libcuda.so) under /usr/lib/wsl/lib.
+_WSL_LIB_DIR = "/usr/lib/wsl/lib"
+
+
+def _is_wsl() -> bool:
+    """True when running under WSL (cheap local check; avoids importing engines)."""
+    if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
+        return True
+    try:
+        with open("/proc/version", encoding="utf-8", errors="ignore") as fh:
+            return "microsoft" in fh.read().lower()
+    except OSError:
+        return False
+
+
+def ensure_wsl_cuda_libs() -> None:
+    """Put WSL's GPU driver libs first on ``LD_LIBRARY_PATH`` so ARBD sees the GPU.
+
+    The classic WSL2 CUDA snag: a Linux-side NVIDIA driver package installs
+    ``/usr/lib/x86_64-linux-gnu/libcuda.so.1`` which **shadows** the real WSL
+    passthrough driver at ``/usr/lib/wsl/lib``.  ARBD then loads the desktop
+    ``libcuda`` and reports "Found 0 GPU(s)" even though ``nvidia-smi`` works.
+    Prepending ``/usr/lib/wsl/lib`` makes the loader find the correct WSL driver.
+    mrdna spawns ``arbd`` as a subprocess inheriting this process's environment, so
+    setting it here (before any simulate) fixes every ARBD launch.  No-op off WSL.
+    """
+    if not _is_wsl() or not os.path.isdir(_WSL_LIB_DIR):
+        return
+    cur = os.environ.get("LD_LIBRARY_PATH", "")
+    parts = cur.split(os.pathsep) if cur else []
+    if _WSL_LIB_DIR in parts:
+        return
+    os.environ["LD_LIBRARY_PATH"] = os.pathsep.join([_WSL_LIB_DIR, *parts]) if parts else _WSL_LIB_DIR
+
+
+# Apply immediately on import so any ARBD launch from the NADOC backend, the
+# /ws/mrdna-relax handler, the skip-twist relax, or the round-trip benchmark
+# inherits the corrected library path.
+ensure_wsl_cuda_libs()
+
 
 def _ensure_mrdna() -> None:
     """Add mrdna's install path to sys.path if not already importable."""
@@ -63,6 +103,75 @@ def _ensure_mrdna() -> None:
     except ImportError:
         if _MRDNA_TOOL_PATH not in sys.path:
             sys.path.insert(0, _MRDNA_TOOL_PATH)
+
+
+def find_mrdna() -> Optional[str]:
+    """Path of the installed mrdna Python package, or None if not installed.
+
+    Used by the "MD Engines" panel to show mrdna's status.  Two ways it can be
+    present: already importable in the running venv, or an editable checkout at
+    ``mrdna_tool_path()`` (what ``scripts/setup-mrdna.sh`` produces).  Returns a
+    human-meaningful path (the package dir) in both cases; never raises.
+    """
+    import importlib.util
+    try:
+        spec = importlib.util.find_spec("mrdna")
+        if spec is not None:
+            return os.path.dirname(spec.origin) if spec.origin else mrdna_tool_path()
+    except Exception:
+        pass
+    checkout = mrdna_tool_path()
+    if os.path.isdir(os.path.join(checkout, "mrdna")):
+        return checkout
+    return None
+
+
+# Where the download-finish flow builds ARBD (see engine_artifact.install_arbd_archive).
+_ARBD_SRC = os.path.expanduser("~/arbd-src")
+# Conventional installed locations NADOC looks for a *Linux* arbd binary in.
+_ARBD_INSTALL_LOCS = ("/usr/local/bin/arbd", os.path.expanduser("~/.local/bin/arbd"))
+# Where a successful build leaves the binary before it's installed onto PATH.
+_ARBD_BUILD_LOCS = (
+    os.path.join(_ARBD_SRC, "build", "arbd"),
+    os.path.join(_ARBD_SRC, "build", "bin", "arbd"),
+)
+
+
+def _executable(path: str) -> bool:
+    return os.path.isfile(path) and os.access(path, os.X_OK)
+
+
+def find_arbd() -> Optional[str]:
+    """Path of the *installed* ARBD binary (on PATH or a conventional loc), else None.
+
+    ARBD is the compiled Brownian-dynamics engine mrdna drives.  Installed to
+    ``/usr/local/bin/arbd`` (``sudo make install``) or ``~/.local/bin/arbd``
+    (no-password finish), or anywhere on PATH.  A binary sitting only in the build
+    tree (``~/arbd-src/build/arbd``) is NOT "installed" — see `find_arbd_build`.
+    Never raises.
+    """
+    import shutil
+    found = shutil.which("arbd")
+    if found:
+        return found
+    for loc in _ARBD_INSTALL_LOCS:
+        if _executable(loc):
+            return loc
+    return None
+
+
+def find_arbd_build() -> Optional[str]:
+    """Path of a *built-but-not-installed* ARBD binary in the build tree, else None.
+
+    After NADOC's download-finish flow runs cmake+make, the Linux binary sits at
+    ``~/arbd-src/build/arbd`` until the user installs it onto PATH.  The MD-Engines
+    guide uses this to detect the common WSL snag — "built on the Linux side but
+    the install step wasn't finished" — and offer a one-click no-password finish.
+    """
+    for loc in _ARBD_BUILD_LOCS:
+        if _executable(loc):
+            return loc
+    return None
 
 
 def mrdna_model_from_nadoc(design: Design, *, return_nt_key: bool = False, **model_params):
@@ -474,6 +583,165 @@ def nuc_pos_override_from_mrdna_coarse(
         f"[mrdna coarse spline] {n_helices_covered}/{len(h_ids)} helices | "
         f"{len(override)} override entries after crossover exclusion "
         f"({len(xover_keys)} crossover keys removed)",
+        flush=True,
+    )
+    return override
+
+
+def nuc_pos_override_display_from_coarse(
+    design: Design,
+    psf_path: str,
+    dcd_path: str,
+    frame: int = -1,
+    sigma_nt: float = 1.0,
+) -> "dict[tuple[str,int,str], np.ndarray]":
+    """DISPLAY reconstruction from the coarse stage — shows the ACTUAL relaxed shape.
+
+    Unlike ``nuc_pos_override_from_mrdna_coarse`` (which re-idealises: fixes the
+    axial spacing + twist to ideal B-DNA and captures only global axis *bending*,
+    so a mostly-straight bundle reconstructs to ~the design), this places each
+    nucleotide's backbone at HELIX_RADIUS around the **real relaxed helix axis**
+    (the cubic spline through the actual DCD bead positions, Kabsch-aligned into the
+    NADOC frame).  So local bends, breathing, and axial compression the relaxation
+    produced are visible.  Duplex radius + twist phase are still reconstructed from
+    ideal B-DNA (the coarse model carries one bead per bp, no per-strand backbone),
+    but anchored at the true relaxed axis point.  Crossover keys are KEPT (display
+    should move junctions too).  Physical-layer / display only.
+
+    Returns dict mapping (helix_id, bp_index, direction_str) → position in nm.
+    """
+    import sys
+    sys.path.insert(0, _MRDNA_TOOL_PATH)
+    import MDAnalysis as mda
+    from collections import defaultdict
+    from scipy.interpolate import CubicSpline
+    from scipy.ndimage import gaussian_filter1d
+
+    # ── Step 1: helix axis geometry ────────────────────────────────────────
+    helix_info: dict = {}
+    for h in design.helices:
+        ax_s = h.axis_start.to_array() * 10.0
+        ax_e = h.axis_end.to_array()   * 10.0
+        v = ax_e - ax_s
+        axis_hat = v / np.linalg.norm(v)
+        helix_info[h.id] = (ax_s, axis_hat, h.bp_start, h.length_bp,
+                             h.phase_offset, h.twist_per_bp_rad, h.direction)
+
+    h_ids     = list(helix_info.keys())
+    ax_s_arr  = np.array([helix_info[h][0] for h in h_ids])
+    axhat_arr = np.array([helix_info[h][1] for h in h_ids])
+
+    # ── Step 2: bead → (h_id, bp_idx) assignment from the initial coarse PDB ─
+    init_pdb   = psf_path.replace(".psf", ".pdb")
+    u_init     = mda.Universe(psf_path, init_pdb)
+    init_names = np.array([a.name for a in u_init.atoms])
+    dna_init_idx = np.where(init_names == 'DNA')[0]
+    dna_init_pos = u_init.atoms.positions[dna_init_idx].astype(float)   # NADOC frame, Å
+
+    n_dna     = len(dna_init_pos)
+    n_helices = len(h_ids)
+    perp = np.zeros((n_dna, n_helices))
+    proj = np.zeros((n_dna, n_helices))
+    for j in range(n_helices):
+        diff  = dna_init_pos - ax_s_arr[j]
+        axial = (diff * axhat_arr[j]).sum(axis=1)
+        perp_vec = diff - axial[:, None] * axhat_arr[j]
+        perp[:, j] = np.linalg.norm(perp_vec, axis=1)
+        proj[:, j] = axial
+    best_j    = perp.argmin(axis=1)
+    best_perp = perp[np.arange(n_dna), best_j]
+    best_proj = proj[np.arange(n_dna), best_j]
+
+    bp_idx_arr = np.zeros(n_dna, dtype=int)
+    for i in range(n_dna):
+        bp_start = helix_info[h_ids[best_j[i]]][2]
+        bp_idx_arr[i] = int(round(bp_start + best_proj[i] / (BDNA_RISE_PER_BP * 10.0)))
+
+    bp_to_pair: dict = {}
+    for pair_i in range(n_dna):
+        h_id      = h_ids[best_j[pair_i]]
+        bp_idx    = bp_idx_arr[pair_i]
+        bp_start  = helix_info[h_id][2]
+        length_bp = helix_info[h_id][3]
+        if bp_idx < bp_start or bp_idx >= bp_start + length_bp:
+            continue
+        pd  = best_perp[pair_i]
+        key = (h_id, bp_idx)
+        if key not in bp_to_pair or pd < bp_to_pair[key][1]:
+            bp_to_pair[key] = (pair_i, pd)
+
+    # ── Step 3: read the relaxed DCD frame + Kabsch-align into the NADOC frame ─
+    u = mda.Universe(psf_path, dcd_path)
+    if frame == -1:
+        u.trajectory[-1]
+    else:
+        u.trajectory[frame]
+    atom_names  = np.array([a.name for a in u.atoms])
+    dna_sim_idx = np.where(atom_names == 'DNA')[0]
+    dna_sim_pos = u.atoms.positions[dna_sim_idx].astype(float)     # drifted, Å
+
+    if len(dna_sim_pos) == n_dna and n_dna >= 3:
+        mc = dna_sim_pos.mean(axis=0)
+        tc = dna_init_pos.mean(axis=0)
+        H = (dna_sim_pos - mc).T @ (dna_init_pos - tc)
+        U, _, Vt = np.linalg.svd(H)
+        d = np.sign(np.linalg.det(Vt.T @ U.T))
+        R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T
+        dna_sim_pos = (dna_sim_pos - mc) @ R.T + tc               # aligned, Å
+
+    # ── Step 4: per-helix spline through ACTUAL positions; duplex reconstruction ─
+    helix_entries: dict = defaultdict(list)
+    for (h_id, bp_idx), (pair_i, _) in bp_to_pair.items():
+        helix_entries[h_id].append((bp_idx, pair_i))
+    for entries in helix_entries.values():
+        entries.sort(key=lambda x: x[0])
+
+    def _rot(v, axis, angle):
+        c, s = math.cos(angle), math.sin(angle)
+        return v * c + np.cross(axis, v) * s + axis * np.dot(axis, v) * (1.0 - c)
+
+    helix_radius_ang = HELIX_RADIUS * 10.0
+    override: dict[tuple, np.ndarray] = {}
+
+    for h_id, entries in helix_entries.items():
+        ax_s, ideal_axis_hat, bp_start, length_bp, phase_offset, twist, h_dir = \
+            helix_info[h_id]
+        x_hat, y_hat = _xy_frame(ideal_axis_hat)
+
+        bp_idxs = np.array([e[0] for e in entries])
+        raw_pos = np.array([dna_sim_pos[e[1]] for e in entries], dtype=float)  # ACTUAL
+        if len(raw_pos) >= 3 and sigma_nt > 0:
+            raw_pos = gaussian_filter1d(raw_pos, sigma=sigma_nt, axis=0, mode='nearest')
+        if len(bp_idxs) < 2:
+            continue
+
+        cs = CubicSpline(bp_idxs.astype(float), raw_pos, bc_type='not-a-knot')
+        t_lo, t_hi = float(bp_idxs[0]), float(bp_idxs[-1])
+
+        for bp_idx in range(bp_start, bp_start + length_bp):
+            t = float(np.clip(bp_idx, t_lo, t_hi))
+            local_i = bp_idx - bp_start
+
+            axis_pt = cs(t)                       # ACTUAL relaxed axis position (Å)
+            tangent = cs(t, 1)
+            tn = np.linalg.norm(tangent)
+            axis_hat = tangent / tn if tn > 1e-6 else ideal_axis_hat
+
+            fwd_angle = phase_offset + local_i * twist
+            ideal_fwd_rad = math.cos(fwd_angle) * x_hat + math.sin(fwd_angle) * y_hat
+            perp_comp = ideal_fwd_rad - np.dot(ideal_fwd_rad, axis_hat) * axis_hat
+            pn = np.linalg.norm(perp_comp)
+            fwd_rad = perp_comp / pn if pn > 1e-6 else ideal_fwd_rad
+
+            groove = (BDNA_MINOR_GROOVE_ANGLE_RAD if h_dir == Direction.FORWARD
+                      else -BDNA_MINOR_GROOVE_ANGLE_RAD)
+            override[(h_id, bp_idx, 'FORWARD')] = (axis_pt + helix_radius_ang * fwd_rad) / 10.0
+            rev_rad = _rot(fwd_rad, axis_hat, groove)
+            override[(h_id, bp_idx, 'REVERSE')] = (axis_pt + helix_radius_ang * rev_rad) / 10.0
+
+    print(
+        f"[mrdna coarse DISPLAY] {len(helix_entries)}/{len(h_ids)} helices | "
+        f"{len(override)} override entries (actual relaxed axis)",
         flush=True,
     )
     return override

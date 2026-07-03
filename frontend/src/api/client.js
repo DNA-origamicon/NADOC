@@ -1985,8 +1985,15 @@ export const lastErrorMessage    = ()            => store.getState().lastError?.
 export const oxdnaAvailable      = ()            => _oxdnaJSON('GET',  '/oxdna/available')
 /** MD-engine status report (oxDNA/NAMD/GROMACS/… availability + GPU + toolchain). */
 export const enginesStatus       = ()            => _oxdnaJSON('GET',  '/engines/status')
-/** Scan ~/Downloads for a user-downloaded NAMD tarball ({candidates, best}). */
-export const scanNamdDownload    = ()            => _oxdnaJSON('GET',  '/engines/namd/scan-download')
+/** List a directory for the "pick a downloaded file" navigator ({cwd, parent, entries}).
+ *  path omitted → opens at the user's Downloads folder; kind ('arbd'|'namd') highlights matches. */
+export const browseFiles         = (path, kind)  => {
+  const q = new URLSearchParams()
+  if (path) q.set('path', path)
+  if (kind) q.set('kind', kind)
+  const s = q.toString()
+  return _oxdnaJSON('GET', '/engines/browse' + (s ? `?${s}` : ''))
+}
 export const createOxdnaJob      = (body)        => _oxdnaJSON('POST', '/oxdna/jobs', body)
 /** Forecast free-disk-after for an oxDNA relaxation run (same body as createOxdnaJob). */
 export const estimateOxdnaDisk   = (body)        => _oxdnaJSON('POST', '/oxdna/jobs/estimate-disk', body)
@@ -2066,6 +2073,26 @@ export const updateOxdnaLiveField = (id, body)   => _oxdnaJSON('POST', `/oxdna/l
 export const reconfigureOxdnaLive = (id, body)   => _oxdnaJSON('POST', `/oxdna/live/${id}/reconfigure`, body)
 export const getOxdnaLiveFrame   = (id)          => _oxdnaJSON('GET',  `/oxdna/live/${id}/frame`)
 export const stopOxdnaLive       = (id)          => _oxdnaJSON('POST', `/oxdna/live/${id}/stop`)
+
+// ── mrDNA / ARBD coarse-grained relaxation jobs (routes_mrdna.py) ────────────
+// Sibling of the oxDNA job API, simplified to a single coarse ARBD stage (one
+// Run button).  Display-only; never mutates topology.  Reuse the same _oxdnaJSON
+// transport (design-sync-free JSON).
+export const mrdnaAvailable      = ()            => _oxdnaJSON('GET',  '/mrdna/available')
+export const createMrdnaJob      = (body)        => _oxdnaJSON('POST', '/mrdna/jobs', body)
+export const listMrdnaJobs       = ()            => _oxdnaJSON('GET',  '/mrdna/jobs')
+export const getMrdnaJob         = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}`)
+export const getMrdnaProgress    = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/progress`)
+export const getMrdnaErrorLog    = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/error-log`)
+export const startMrdnaJob       = (id)          => _oxdnaJSON('POST', `/mrdna/jobs/${id}/start`)
+export const stopMrdnaJob        = (id)          => _oxdnaJSON('POST', `/mrdna/jobs/${id}/stop`)
+export const deleteMrdnaJob      = (id)          => _oxdnaJSON('DELETE', `/mrdna/jobs/${id}`)
+export const getMrdnaDisplay     = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/display`)
+export const getMrdnaBeads       = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/beads`)
+/** Designed (analytic Dietz) vs simulated (mrDNA) curvature for a completed job. */
+export const getMrdnaCurvature   = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/curvature`)
+/** Analytic curvature of the ACTIVE design's loop/skip pattern (instant, no run). */
+export const getMrdnaAnalyticCurvature = ()      => _oxdnaJSON('GET',  '/mrdna/curvature/analytic')
 
 /** Create a NAMD MD job (routes_md.py).  Pass {oxdna_job_id} to seed the run
  *  from a completed oxDNA job's relaxed coordinates instead of ideal B-DNA. */
